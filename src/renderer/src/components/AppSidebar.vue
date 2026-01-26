@@ -1,7 +1,8 @@
 <template>
   <v-navigation-drawer permanent :rail="rail" :width="240">
     <template #prepend>
-      <v-toolbar density="compact">
+      <v-toolbar density="compact" color="primary" dark>
+        <v-icon v-show="!rail" class="mr-2">mdi-dna</v-icon>
         <v-toolbar-title v-show="!rail">Cases</v-toolbar-title>
         <v-spacer />
         <v-btn icon @click="toggleRail">

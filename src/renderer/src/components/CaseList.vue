@@ -83,6 +83,14 @@ const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 
 // Load cases from IPC
 const loadCases = async (): Promise<void> => {
+  // Guard for browser dev mode (no preload)
+  // eslint-disable-next-line no-undef
+  if (typeof window.api === 'undefined') {
+    // eslint-disable-next-line no-undef
+    console.warn('window.api not available - running outside Electron')
+    return
+  }
+
   loading.value = true
   try {
     // eslint-disable-next-line no-undef

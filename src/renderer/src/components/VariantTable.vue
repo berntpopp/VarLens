@@ -116,6 +116,14 @@ const headers = [
 // Load variants from backend
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const loadVariants = async (_options?: any): Promise<void> => {
+  // Guard for browser dev mode (no preload)
+  // eslint-disable-next-line no-undef
+  if (typeof window.api === 'undefined') {
+    // eslint-disable-next-line no-undef
+    console.warn('window.api not available - running outside Electron')
+    return
+  }
+
   loading.value = true
   try {
     // Build cursor cache key from current sort state
