@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 2 of 8 (Database Layer)
-Plan: 1 of TBD in current phase
+Plan: 2 of TBD in current phase
 Status: In progress
-Last activity: 2026-01-26 — Completed 02-01-PLAN.md
+Last activity: 2026-01-26 — Completed 02-02-PLAN.md
 
-Progress: [█░--------] 15% (Phase 1 complete, Phase 2 plan 1 complete)
+Progress: [██--------] 20% (Phase 1 complete, Phase 2 plans 1-2 complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 4m 44s
-- Total execution time: 0.24 hours
+- Total plans completed: 4
+- Average duration: 4m 29s
+- Total execution time: 0.30 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01    | 2     | 11m 3s | 5m 32s  |
-| 02    | 1     | 3m 10s | 3m 10s  |
+| 02    | 2     | 6m 41s | 3m 21s  |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4m 40s), 01-02 (6m 23s), 02-01 (3m 10s)
-- Trend: Faster execution for schema-focused plan
+- Last 5 plans: 01-01 (4m 40s), 01-02 (6m 23s), 02-01 (3m 10s), 02-02 (3m 31s)
+- Trend: Consistent execution, database plans faster than foundation
 
 *Updated after each plan completion*
 
@@ -59,6 +59,8 @@ Recent decisions affecting current work:
 | D012 | FTS5 with external content table | 02-01 | Data stored once, FTS references via content_rowid |
 | D013 | FTS5 triggers for index sync | 02-01 | Automatic index maintenance |
 | D014 | Object.setPrototypeOf for error classes | 02-01 | Proper instanceof checks |
+| D015 | Make runTransaction public instead of private | 02-02 | Enables variant batch operations and testing |
+| D016 | Test WAL mode with file-based temp database | 02-02 | In-memory dbs report 'memory' mode |
 
 ### Pending Todos
 
@@ -71,5 +73,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-26
-Stopped at: Completed 02-01-PLAN.md (Database Types, Errors, and Schema)
+Stopped at: Completed 02-02-PLAN.md (DatabaseService Implementation)
 Resume file: None
