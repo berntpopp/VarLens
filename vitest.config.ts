@@ -4,10 +4,7 @@ import vuetify from 'vite-plugin-vuetify'
 import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [
-    vue(),
-    vuetify({ autoImport: true })
-  ],
+  plugins: [vue(), vuetify({ autoImport: true })],
   test: {
     environment: 'happy-dom',
     include: ['tests/**/*.test.ts'],

@@ -38,3 +38,9 @@ npm-debug.log*
 tmp/
 temp/
 *.tmp
+
+# Coverage
+coverage/
+
+# TypeScript build info
+*.tsbuildinfo
