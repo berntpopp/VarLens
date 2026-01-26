@@ -75,6 +75,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
+    "stream-json": "^1.9.1",
     "vuetify": "^3.11.7"
   }
 }

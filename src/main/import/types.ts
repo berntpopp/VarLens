@@ -38,3 +38,9 @@ export interface FieldMapping {
 // Raw variant row from columnar format (before mapping)
 // This is a tuple: [value1, value2, ...] indexed by column
 export type RawVariantRow = (string | number | null | (string | number | null)[])[]
+
+// Data dictionaries for field value resolution
+export interface DataDictionaries {
+  gene: Record<string, string> // Gene ID -> symbol
+  impact: Record<string, string> // Impact code -> label
+}
