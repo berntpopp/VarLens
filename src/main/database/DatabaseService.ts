@@ -409,7 +409,13 @@ export class DatabaseService {
       params.push(`%${filter.gene_symbol}%`)
     }
 
-    if (filter.consequence !== undefined && filter.consequence !== '') {
+    // Handle multi-select consequences (OR logic)
+    if (filter.consequences !== undefined && filter.consequences.length > 0) {
+      const placeholders = filter.consequences.map(() => '?').join(', ')
+      conditions.push(`consequence IN (${placeholders})`)
+      params.push(...filter.consequences)
+    } else if (filter.consequence !== undefined && filter.consequence !== '') {
+      // Backwards compatibility for single consequence
       conditions.push('consequence = ?')
       params.push(filter.consequence)
     }

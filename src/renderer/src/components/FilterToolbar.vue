@@ -16,7 +16,22 @@
       @update:search="searchGeneSymbols"
     />
 
-    <!-- Consequence multi-select -->
+    <!-- Impact level quick presets -->
+    <v-chip-group v-model="selectedImpactPresets" multiple class="ml-2">
+      <v-chip
+        v-for="preset in impactPresets"
+        :key="preset.value"
+        :value="preset.value"
+        :color="preset.color"
+        filter
+        variant="outlined"
+        size="small"
+      >
+        {{ preset.label }}
+      </v-chip>
+    </v-chip-group>
+
+    <!-- Consequence multi-select (for specific consequences) -->
     <v-select
       v-model="filters.consequences"
       :items="filterOptions.consequences"
@@ -27,10 +42,10 @@
       variant="outlined"
       hide-details
       clearable
-      placeholder="Consequence..."
+      placeholder="More..."
       class="filter-input consequence-input ml-2"
       :class="{ 'filter-active': filters.consequences.length > 0 }"
-      style="max-width: 200px"
+      style="max-width: 150px"
     />
 
     <v-divider vertical class="mx-3" />
@@ -191,6 +206,16 @@ const caddPresets = [
   { label: '25', value: 25 }
 ]
 
+// Impact level presets for quick filtering
+const impactPresets = [
+  { label: 'HIGH', value: 'HIGH', color: 'error' },
+  { label: 'MOD', value: 'MODERATE', color: 'warning' },
+  { label: 'LOW', value: 'LOW', color: 'info' }
+]
+
+// Selected impact presets (multi-select)
+const selectedImpactPresets = ref<string[]>([])
+
 // Selected preset values (synced bidirectionally)
 const selectedAfPreset = ref<number | null>(null)
 const selectedCaddPreset = ref<number | null>(null)
@@ -199,6 +224,7 @@ const selectedCaddPreset = ref<number | null>(null)
 const hasActiveFilters = computed(() => {
   return (
     filters.value.geneSymbol !== '' ||
+    selectedImpactPresets.value.length > 0 ||
     filters.value.consequences.length > 0 ||
     filters.value.maxGnomadAf !== null ||
     filters.value.minCadd !== null
@@ -261,10 +287,10 @@ const emitFilters = () => {
     variantFilter.gene_symbol = filters.value.geneSymbol
   }
 
-  // Handle multiple consequences - database expects single value, so emit only first
-  // (Multi-select will be handled in Phase 07-02 with proper OR logic)
-  if (filters.value.consequences.length > 0) {
-    variantFilter.consequence = filters.value.consequences[0]
+  // Combine impact presets with specific consequences (OR logic)
+  const allConsequences = [...selectedImpactPresets.value, ...filters.value.consequences]
+  if (allConsequences.length > 0) {
+    variantFilter.consequences = [...new Set(allConsequences)] // Dedupe
   }
 
   if (filters.value.maxGnomadAf !== null) {
@@ -303,6 +329,11 @@ watch(selectedCaddPreset, (value) => {
   }
 })
 
+// Watch impact presets and emit filter changes
+watch(selectedImpactPresets, () => {
+  debouncedEmit()
+})
+
 // Watch text inputs and sync with preset selections
 watch(
   () => filters.value.maxGnomadAf,
@@ -338,6 +369,7 @@ const clearAllFilters = () => {
   filters.value.minCadd = null
   selectedAfPreset.value = null
   selectedCaddPreset.value = null
+  selectedImpactPresets.value = []
 }
 </script>
 

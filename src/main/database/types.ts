@@ -59,8 +59,10 @@ export interface VariantFilter {
   case_id: number
   /** Partial match filter on gene symbol */
   gene_symbol?: string
-  /** Exact match filter on consequence */
+  /** Exact match filter on consequence (single value, deprecated) */
   consequence?: string
+  /** Multi-select filter on consequences (OR logic) */
+  consequences?: string[]
   /** Maximum gnomAD allele frequency */
   gnomad_af_max?: number
   /** Minimum CADD score */

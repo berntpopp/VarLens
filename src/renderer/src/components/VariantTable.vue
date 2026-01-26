@@ -211,13 +211,14 @@ watch(
   { deep: true }
 )
 
-// Clear cache when filters change (CRITICAL per RESEARCH.md Pitfall 2)
+// Clear cache and reload when filters change (CRITICAL per RESEARCH.md Pitfall 2)
 watch(
   () => props.filters,
-  () => {
+  async () => {
     cursorCache.value.clear()
     page.value = 1
-    // loadVariants will be triggered by page change via @update:options
+    // Explicitly call loadVariants - page change alone won't trigger if already on page 1
+    await loadVariants()
   },
   { deep: true }
 )
