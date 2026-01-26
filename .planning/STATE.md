@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 7 of 8 (Filters)
-Plan: 1 of TBD in current phase
-Status: In progress
-Last activity: 2026-01-26 — Completed 07-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-01-26 — Completed 07-02-PLAN.md
 
-Progress: [███████---] 75% (6/8 phases complete)
+Progress: [████████--] 87.5% (7/8 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
-- Average duration: 4m 20s
-- Total execution time: 1.01 hours
+- Total plans completed: 15
+- Average duration: 4m 18s
+- Total execution time: 1.08 hours
 
 **By Phase:**
 
@@ -33,11 +33,11 @@ Progress: [███████---] 75% (6/8 phases complete)
 | 04    | 3     | 9m 6s | 3m 2s   |
 | 05    | 2     | 2m 33s | 1m 17s  |
 | 06    | 2     | 10m 10s | 5m 5s  |
-| 07    | 1     | 2m 58s | 2m 58s  |
+| 07    | 2     | 6m 58s | 3m 29s  |
 
 **Recent Trend:**
-- Last 5 plans: 05-01 (1m 16s), 05-02 (1m 17s), 06-02 (5m 39s), 06-01 (4m 31s), 07-01 (2m 58s)
-- Trend: Phase 07 starting strong with sub-3 minute filter UI completion
+- Last 5 plans: 05-02 (1m 17s), 06-02 (5m 39s), 06-01 (4m 31s), 07-01 (2m 58s), 07-02 (4m 0s)
+- Trend: Phase 07 complete in under 7 minutes total, maintaining velocity
 
 *Updated after each plan completion*
 
@@ -105,6 +105,11 @@ Recent decisions affecting current work:
 | D053 | Preset chips bidirectionally synced with text inputs | 07-01 | Clicking chip sets input, typing matching value selects chip |
 | D054 | Multi-select consequences emit only first value | 07-01 | OR logic deferred to 07-02, database expects single value |
 | D055 | Gene symbol filter uses FTS5 prefix matching | 07-01 | Fast autocomplete with relevance ranking via BM25 |
+| D056 | Filter state managed in App.vue rather than VariantTable | 07-02 | Enables coordination between FilterToolbar and VariantTable |
+| D057 | VariantTable emits counts to parent | 07-02 | Separation of concerns, toolbar doesn't need query access |
+| D058 | Unfiltered count fetched separately on case change | 07-02 | Efficient - only queries total once per case |
+| D059 | Cursor cache cleared on filter change | 07-02 | Critical for pagination correctness after filtering |
+| D060 | Filters clear on case switch | 07-02 | Different cases have different data domains |
 
 ### Pending Todos
 
@@ -116,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 21:11:24 UTC
-Stopped at: Completed 07-01-PLAN.md (Filter Toolbar UI)
+Last session: 2026-01-26 21:18:19 UTC
+Stopped at: Completed 07-02-PLAN.md (Filter Integration)
 Resume file: None
