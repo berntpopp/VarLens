@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3'
+import { registerIpcHandlers } from './ipc'
 
 function createWindow(): void {
   // Create the browser window.
@@ -71,6 +72,9 @@ if (!gotTheLock) {
     testDb.exec('CREATE TABLE test (id INTEGER PRIMARY KEY)')
     testDb.close()
     console.log('better-sqlite3 initialized successfully')
+
+    // Register IPC handlers
+    registerIpcHandlers()
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
