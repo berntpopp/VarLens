@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 4 of 8 (IPC Layer)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-01-26 — Completed 04-02-PLAN.md (Preload Bridge)
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-01-26 — Completed 04-03-PLAN.md (IPC Handlers)
 
-Progress: [████░-----] 45.0% (9/20 plans complete)
+Progress: [█████-----] 50.0% (10/20 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 4m 56s
-- Total execution time: 0.74 hours
+- Total plans completed: 10
+- Average duration: 4m 43s
+- Total execution time: 0.79 hours
 
 **By Phase:**
 
@@ -30,11 +30,11 @@ Progress: [████░-----] 45.0% (9/20 plans complete)
 | 01    | 2     | 11m 3s | 5m 32s  |
 | 02    | 3     | 10m 25s | 3m 28s  |
 | 03    | 2     | 16m 9s | 8m 5s  |
-| 04    | 2     | 6m 39s | 3m 20s  |
+| 04    | 3     | 9m 6s | 3m 2s   |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (3m 44s), 03-01 (2m 37s), 03-02 (13m 32s), 04-01 (3m 47s), 04-02 (2m 52s)
-- Trend: Phase 04 maintaining fast execution; IPC layer plans very efficient
+- Last 5 plans: 03-01 (2m 37s), 03-02 (13m 32s), 04-01 (3m 47s), 04-02 (2m 52s), 04-03 (2m 27s)
+- Trend: Phase 04 complete with excellent velocity; IPC layer averaging 3m 2s per plan
 
 *Updated after each plan completion*
 
@@ -78,6 +78,10 @@ Recent decisions affecting current work:
 | D029 | Remove electron-toolkit electronAPI in favor of our typed API | 04-02 | Simpler preload, fewer dependencies exposed to renderer |
 | D030 | Include src/shared/**/* in tsconfig.node.json | 04-02 | Enables proper TypeScript compilation for preload bridge |
 | D031 | onProgress returns cleanup function for memory leak prevention | 04-02 | Pattern prevents accumulating event listeners, follows React best practices |
+| D032 | DatabaseService singleton pattern for main process | 04-03 | Single database connection shared across all handlers via getDatabaseService() |
+| D033 | Handler self-registration via module imports | 04-03 | Handlers register channels on import, avoiding explicit registration boilerplate |
+| D034 | Progress throttling at 100ms intervals | 04-03 | Prevents overwhelming renderer with progress events during import |
+| D035 | Import directory persistence in settings.json | 04-03 | File dialog defaults to last directory for better UX |
 
 ### Pending Todos
 
@@ -89,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 17:52:15 UTC
-Stopped at: Completed 04-02-PLAN.md (Preload Bridge)
+Last session: 2026-01-26 17:58:07 UTC
+Stopped at: Completed 04-03-PLAN.md (IPC Handlers) - Phase 04 complete
 Resume file: None
