@@ -5,6 +5,9 @@
         <v-icon v-show="!rail" class="mr-2">mdi-dna</v-icon>
         <v-toolbar-title v-show="!rail">Cases</v-toolbar-title>
         <v-spacer />
+        <v-btn v-show="!rail" icon size="small" @click="$emit('import-click')">
+          <v-icon>mdi-plus</v-icon>
+        </v-btn>
         <v-btn icon @click="toggleRail">
           <v-icon>{{ rail ? 'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
         </v-btn>
@@ -17,6 +20,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+
+defineEmits<{
+  'import-click': []
+}>()
 
 const rail = ref(false)
 
