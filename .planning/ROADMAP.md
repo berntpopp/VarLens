@@ -114,10 +114,10 @@ Plans:
   3. Column sorting (single and multi-column) updates query
   4. All required columns visible: chr, pos, ref, alt, gene, consequence, gnomAD AF, CADD, ClinVar
   5. Formatted display: positions with commas, AF in scientific notation, colored ClinVar chips
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 06-01: TBD
+- [ ] 06-01-PLAN.md — Create VariantTable component with server-side pagination and formatted columns
 
 ### Phase 7: Filters
 **Goal**: Filter toolbar with gene, consequence, AF, CADD, and FTS5 search
@@ -161,7 +161,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 3. Import Service | 2/2 | Complete | 2026-01-26 |
 | 4. IPC Layer | 3/3 | Complete | 2026-01-26 |
 | 5. UI Shell + Cases | 2/2 | Complete | 2026-01-26 |
-| 6. Variant Table | 0/TBD | Not started | - |
+| 6. Variant Table | 0/1 | Planned | - |
 | 7. Filters | 0/TBD | Not started | - |
 | 8. Import UI + Polish | 0/TBD | Not started | - |
 
