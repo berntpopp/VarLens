@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** External collaborators can analyze variant data offline with data-dense UX
-**Current focus:** Phase 5 - UI Shell + Cases
+**Current focus:** Phase 6 - Variant Table
 
 ## Current Position
 
-Phase: 5 of 8 (UI Shell + Cases)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-01-26 — Completed 05-02-PLAN.md (Case Management UI)
+Phase: 6 of 8 (Variant Table)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-01-26 — Completed Phase 5 (UI Shell + Cases)
 
-Progress: [█████-----] 52.9% (4/8 phases complete, 2/3 plans in phase 5)
+Progress: [██████----] 62.5% (5/8 phases complete)
 
 ## Performance Metrics
 

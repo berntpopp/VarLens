@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Database Layer** - SQLite schema, FTS5, and DatabaseService
 - [x] **Phase 3: Import Service** - Streaming JSON parser and batch insert
 - [x] **Phase 4: IPC Layer** - Preload bridge and main process handlers
-- [ ] **Phase 5: UI Shell + Cases** - App layout and case management UI
+- [x] **Phase 5: UI Shell + Cases** - App layout and case management UI
 - [ ] **Phase 6: Variant Table** - Paginated data table with sorting
 - [ ] **Phase 7: Filters** - Filter controls and FTS5 search integration
 - [ ] **Phase 8: Import UI + Polish** - Import dialog and end-to-end verification
@@ -101,8 +101,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — App shell layout with collapsible sidebar and empty state
-- [ ] 05-02-PLAN.md — Case list with selection, context menu delete, and notifications
+- [x] 05-01-PLAN.md — App shell layout with collapsible sidebar and empty state
+- [x] 05-02-PLAN.md — Case list with selection, context menu delete, and notifications
 
 ### Phase 6: Variant Table
 **Goal**: Paginated variant table using Vuetify v-data-table-server
@@ -160,7 +160,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 2. Database Layer | 3/3 | Complete | 2026-01-26 |
 | 3. Import Service | 2/2 | Complete | 2026-01-26 |
 | 4. IPC Layer | 3/3 | Complete | 2026-01-26 |
-| 5. UI Shell + Cases | 0/2 | Not started | - |
+| 5. UI Shell + Cases | 2/2 | Complete | 2026-01-26 |
 | 6. Variant Table | 0/TBD | Not started | - |
 | 7. Filters | 0/TBD | Not started | - |
 | 8. Import UI + Polish | 0/TBD | Not started | - |

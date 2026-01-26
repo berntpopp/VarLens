@@ -45,11 +45,11 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [x] **IPC-06**: Variants query IPC handler
 - [x] **IPC-07**: Filter options IPC handler
 
-### UI - Cases
+### UI - Cases ✓
 
-- [ ] **CASE-01**: Case list component showing imported cases
-- [ ] **CASE-02**: Case selection updates variant table
-- [ ] **CASE-03**: Case deletion with confirmation
+- [x] **CASE-01**: Case list component showing imported cases
+- [x] **CASE-02**: Case selection updates variant table
+- [x] **CASE-03**: Case deletion with confirmation
 
 ### UI - Table
 
@@ -146,9 +146,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IPC-05 | Phase 4 | Complete |
 | IPC-06 | Phase 4 | Complete |
 | IPC-07 | Phase 4 | Complete |
-| CASE-01 | Phase 5 | Pending |
-| CASE-02 | Phase 5 | Pending |
-| CASE-03 | Phase 5 | Pending |
+| CASE-01 | Phase 5 | Complete |
+| CASE-02 | Phase 5 | Complete |
+| CASE-03 | Phase 5 | Complete |
 | TBL-01 | Phase 6 | Pending |
 | TBL-02 | Phase 6 | Pending |
 | TBL-03 | Phase 6 | Pending |
@@ -173,4 +173,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 — Phase 4 complete (26 requirements)*
+*Last updated: 2026-01-26 — Phase 5 complete (29 requirements)*
