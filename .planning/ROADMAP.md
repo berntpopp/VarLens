@@ -33,10 +33,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. `make test` runs Vitest with happy-dom environment
   4. `make typecheck` passes with zero TypeScript errors
   5. better-sqlite3 imports without native module errors
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md — Scaffold project, configure Vuetify 3, integrate better-sqlite3
+- [ ] 01-02-PLAN.md — Configure ESLint, Vitest, and Makefile
 
 ### Phase 2: Database Layer
 **Goal**: SQLite database with schema, FTS5, and complete DatabaseService API
@@ -149,7 +150,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/2 | Planned | - |
 | 2. Database Layer | 0/TBD | Not started | - |
 | 3. Import Service | 0/TBD | Not started | - |
 | 4. IPC Layer | 0/TBD | Not started | - |
