@@ -98,10 +98,11 @@ Plans:
   2. Clicking a case selects it and updates the main content area
   3. Delete button with confirmation removes case and its variants
   4. Empty state shown when no cases exist
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — App shell layout with collapsible sidebar and empty state
+- [ ] 05-02-PLAN.md — Case list with selection, context menu delete, and notifications
 
 ### Phase 6: Variant Table
 **Goal**: Paginated variant table using Vuetify v-data-table-server
@@ -159,7 +160,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 2. Database Layer | 3/3 | Complete | 2026-01-26 |
 | 3. Import Service | 2/2 | Complete | 2026-01-26 |
 | 4. IPC Layer | 3/3 | Complete | 2026-01-26 |
-| 5. UI Shell + Cases | 0/TBD | Not started | - |
+| 5. UI Shell + Cases | 0/2 | Not started | - |
 | 6. Variant Table | 0/TBD | Not started | - |
 | 7. Filters | 0/TBD | Not started | - |
 | 8. Import UI + Polish | 0/TBD | Not started | - |
