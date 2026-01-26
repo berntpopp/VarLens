@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation** - Scaffold project with electron-vite and configure tooling
 - [x] **Phase 2: Database Layer** - SQLite schema, FTS5, and DatabaseService
 - [x] **Phase 3: Import Service** - Streaming JSON parser and batch insert
-- [ ] **Phase 4: IPC Layer** - Preload bridge and main process handlers
+- [x] **Phase 4: IPC Layer** - Preload bridge and main process handlers
 - [ ] **Phase 5: UI Shell + Cases** - App layout and case management UI
 - [ ] **Phase 6: Variant Table** - Paginated data table with sorting
 - [ ] **Phase 7: Filters** - Filter controls and FTS5 search integration
@@ -85,9 +85,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Create shared IPC types and error handling infrastructure
-- [ ] 04-02-PLAN.md — Implement preload bridge and integrate IPC registration
-- [ ] 04-03-PLAN.md — Implement domain IPC handlers (cases, variants, import, system)
+- [x] 04-01-PLAN.md — Create shared IPC types and error handling infrastructure
+- [x] 04-02-PLAN.md — Implement preload bridge and integrate IPC registration
+- [x] 04-03-PLAN.md — Implement domain IPC handlers (cases, variants, import, system)
 
 ### Phase 5: UI Shell + Cases
 **Goal**: App layout with case sidebar that lists, selects, and deletes cases
@@ -158,7 +158,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Foundation | 2/2 | Complete | 2026-01-26 |
 | 2. Database Layer | 3/3 | Complete | 2026-01-26 |
 | 3. Import Service | 2/2 | Complete | 2026-01-26 |
-| 4. IPC Layer | 0/3 | Not started | - |
+| 4. IPC Layer | 3/3 | Complete | 2026-01-26 |
 | 5. UI Shell + Cases | 0/TBD | Not started | - |
 | 6. Variant Table | 0/TBD | Not started | - |
 | 7. Filters | 0/TBD | Not started | - |

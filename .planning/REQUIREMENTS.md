@@ -35,15 +35,15 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [x] **IMP-04**: Progress callback reporting (phase, count)
 - [x] **IMP-05**: Case creation on import with variant count update
 
-### IPC
+### IPC ✓
 
-- [ ] **IPC-01**: Preload script with contextBridge API
-- [ ] **IPC-02**: Type declarations for renderer API
-- [ ] **IPC-03**: File selection dialog handler
-- [ ] **IPC-04**: Import variants IPC handler with progress events
-- [ ] **IPC-05**: Cases list/delete IPC handlers
-- [ ] **IPC-06**: Variants query IPC handler
-- [ ] **IPC-07**: Filter options IPC handler
+- [x] **IPC-01**: Preload script with contextBridge API
+- [x] **IPC-02**: Type declarations for renderer API
+- [x] **IPC-03**: File selection dialog handler
+- [x] **IPC-04**: Import variants IPC handler with progress events
+- [x] **IPC-05**: Cases list/delete IPC handlers
+- [x] **IPC-06**: Variants query IPC handler
+- [x] **IPC-07**: Filter options IPC handler
 
 ### UI - Cases
 
@@ -139,13 +139,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IMP-03 | Phase 3 | Complete |
 | IMP-04 | Phase 3 | Complete |
 | IMP-05 | Phase 3 | Complete |
-| IPC-01 | Phase 4 | Pending |
-| IPC-02 | Phase 4 | Pending |
-| IPC-03 | Phase 4 | Pending |
-| IPC-04 | Phase 4 | Pending |
-| IPC-05 | Phase 4 | Pending |
-| IPC-06 | Phase 4 | Pending |
-| IPC-07 | Phase 4 | Pending |
+| IPC-01 | Phase 4 | Complete |
+| IPC-02 | Phase 4 | Complete |
+| IPC-03 | Phase 4 | Complete |
+| IPC-04 | Phase 4 | Complete |
+| IPC-05 | Phase 4 | Complete |
+| IPC-06 | Phase 4 | Complete |
+| IPC-07 | Phase 4 | Complete |
 | CASE-01 | Phase 5 | Pending |
 | CASE-02 | Phase 5 | Pending |
 | CASE-03 | Phase 5 | Pending |
@@ -173,4 +173,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 — Phase 3 complete (19 requirements)*
+*Last updated: 2026-01-26 — Phase 4 complete (26 requirements)*
