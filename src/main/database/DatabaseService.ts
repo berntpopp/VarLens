@@ -420,13 +420,15 @@ export class DatabaseService {
       params.push(filter.consequence)
     }
 
+    // Include NULL gnomAD AF (unknown could be rare) OR values <= threshold
     if (filter.gnomad_af_max !== undefined) {
       conditions.push('(gnomad_af IS NULL OR gnomad_af <= ?)')
       params.push(filter.gnomad_af_max)
     }
 
+    // Include NULL CADD (unknown could be damaging) OR values >= threshold
     if (filter.cadd_min !== undefined) {
-      conditions.push('(cadd IS NOT NULL AND cadd >= ?)')
+      conditions.push('(cadd IS NULL OR cadd >= ?)')
       params.push(filter.cadd_min)
     }
 

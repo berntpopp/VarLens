@@ -101,7 +101,7 @@
         </template>
         <span
           >Minimum CADD phred score. Higher = more likely deleterious (15+ suggested, 20+ high).
-          Variants without CADD scores are excluded.</span
+          Includes variants with unknown CADD (could be important).</span
         >
       </v-tooltip>
       <v-chip-group v-model="selectedCaddPreset" class="mr-2">
