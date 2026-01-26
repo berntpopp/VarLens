@@ -1,0 +1,176 @@
+# Requirements: Varlens
+
+**Defined:** 2026-01-26
+**Core Value:** External collaborators can analyze variant data offline with data-dense UX
+
+## v0.1 POC Requirements
+
+Requirements for proof-of-concept release. Each maps to roadmap phases.
+
+### Foundation
+
+- [ ] **FOUND-01**: Project scaffolded with electron-vite (Vue 3 + TypeScript template)
+- [ ] **FOUND-02**: Vuetify 3 installed and configured
+- [ ] **FOUND-03**: better-sqlite3 installed and rebuilt for Electron
+- [ ] **FOUND-04**: ESLint flat config with TypeScript and Vue rules
+- [ ] **FOUND-05**: Vitest configured with happy-dom environment
+- [ ] **FOUND-06**: Makefile with dev/build/lint/test/typecheck commands
+
+### Database
+
+- [ ] **DB-01**: SQLite schema created (cases, variants tables with indexes)
+- [ ] **DB-02**: FTS5 virtual table for gene/variant text search
+- [ ] **DB-03**: DatabaseService with case CRUD operations
+- [ ] **DB-04**: DatabaseService with variant batch insert
+- [ ] **DB-05**: DatabaseService with paginated variant query
+- [ ] **DB-06**: DatabaseService with filter support (gene, consequence, gnomAD AF, CADD)
+- [ ] **DB-07**: Prepared statement caching for performance
+- [ ] **DB-08**: Transaction wrapper for batch operations
+
+### Import
+
+- [ ] **IMP-01**: Gzipped JSON file reading with streaming
+- [ ] **IMP-02**: Memory-efficient JSON array parsing
+- [ ] **IMP-03**: Batch insert with configurable batch size
+- [ ] **IMP-04**: Progress callback reporting (phase, count)
+- [ ] **IMP-05**: Case creation on import with variant count update
+
+### IPC
+
+- [ ] **IPC-01**: Preload script with contextBridge API
+- [ ] **IPC-02**: Type declarations for renderer API
+- [ ] **IPC-03**: File selection dialog handler
+- [ ] **IPC-04**: Import variants IPC handler with progress events
+- [ ] **IPC-05**: Cases list/delete IPC handlers
+- [ ] **IPC-06**: Variants query IPC handler
+- [ ] **IPC-07**: Filter options IPC handler
+
+### UI — Cases
+
+- [ ] **CASE-01**: Case list component showing imported cases
+- [ ] **CASE-02**: Case selection updates variant table
+- [ ] **CASE-03**: Case deletion with confirmation
+
+### UI — Table
+
+- [ ] **TBL-01**: Variant table using v-data-table-server
+- [ ] **TBL-02**: Server-side pagination with page/itemsPerPage controls
+- [ ] **TBL-03**: Column sorting (multiple columns)
+- [ ] **TBL-04**: Display columns: chr, pos, ref, alt, gene, consequence, gnomAD AF, CADD, ClinVar
+- [ ] **TBL-05**: Formatted display (position with commas, AF in scientific notation, colored ClinVar chips)
+
+### UI — Filters
+
+- [ ] **FLT-01**: Gene symbol text filter with debounced input
+- [ ] **FLT-02**: Consequence dropdown filter populated from database
+- [ ] **FLT-03**: gnomAD AF maximum threshold filter
+- [ ] **FLT-04**: CADD minimum score filter
+- [ ] **FLT-05**: Clear filters button (visible when filters active)
+- [ ] **FLT-06**: FTS5 search integration for text queries
+
+### UI — Import
+
+- [ ] **UIMP-01**: Import dialog with case name input
+- [ ] **UIMP-02**: File selection for .json/.json.gz files
+- [ ] **UIMP-03**: Import progress indicator
+- [ ] **UIMP-04**: Error display on import failure
+- [ ] **UIMP-05**: Auto-select case after successful import
+
+## v0.2+ Requirements
+
+Deferred to future releases. Tracked but not in current roadmap.
+
+### Enhanced Features
+
+- **ENH-01**: Virtual gene panels (create, edit, apply)
+- **ENH-02**: Inheritance filters (de novo, recessive, dominant)
+- **ENH-03**: Compound het detection
+- **ENH-04**: Quality filters (read depth, allele fraction)
+- **ENH-05**: Dark/light theme toggle
+- **ENH-06**: Keyboard shortcuts
+
+### Statistics
+
+- **STAT-01**: Statistics dashboard
+- **STAT-02**: Variant counts by gene
+- **STAT-03**: Variant counts by consequence
+- **STAT-04**: Frequency distribution charts
+
+### Export
+
+- **EXP-01**: CSV/TSV export
+- **EXP-02**: Filtered variant export
+- **EXP-03**: PDF report generation
+
+## Out of Scope
+
+Explicitly excluded. Documented to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Real-time collaboration | Offline-first desktop app |
+| Cloud sync | Not in v0.x scope |
+| VCF import | JSON-only for POC |
+| CNV/SV analysis | SNV-focused for POC |
+| User authentication | Desktop app, single-user |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| FOUND-01 | TBD | Pending |
+| FOUND-02 | TBD | Pending |
+| FOUND-03 | TBD | Pending |
+| FOUND-04 | TBD | Pending |
+| FOUND-05 | TBD | Pending |
+| FOUND-06 | TBD | Pending |
+| DB-01 | TBD | Pending |
+| DB-02 | TBD | Pending |
+| DB-03 | TBD | Pending |
+| DB-04 | TBD | Pending |
+| DB-05 | TBD | Pending |
+| DB-06 | TBD | Pending |
+| DB-07 | TBD | Pending |
+| DB-08 | TBD | Pending |
+| IMP-01 | TBD | Pending |
+| IMP-02 | TBD | Pending |
+| IMP-03 | TBD | Pending |
+| IMP-04 | TBD | Pending |
+| IMP-05 | TBD | Pending |
+| IPC-01 | TBD | Pending |
+| IPC-02 | TBD | Pending |
+| IPC-03 | TBD | Pending |
+| IPC-04 | TBD | Pending |
+| IPC-05 | TBD | Pending |
+| IPC-06 | TBD | Pending |
+| IPC-07 | TBD | Pending |
+| CASE-01 | TBD | Pending |
+| CASE-02 | TBD | Pending |
+| CASE-03 | TBD | Pending |
+| TBL-01 | TBD | Pending |
+| TBL-02 | TBD | Pending |
+| TBL-03 | TBD | Pending |
+| TBL-04 | TBD | Pending |
+| TBL-05 | TBD | Pending |
+| FLT-01 | TBD | Pending |
+| FLT-02 | TBD | Pending |
+| FLT-03 | TBD | Pending |
+| FLT-04 | TBD | Pending |
+| FLT-05 | TBD | Pending |
+| FLT-06 | TBD | Pending |
+| UIMP-01 | TBD | Pending |
+| UIMP-02 | TBD | Pending |
+| UIMP-03 | TBD | Pending |
+| UIMP-04 | TBD | Pending |
+| UIMP-05 | TBD | Pending |
+
+**Coverage:**
+- v0.1 requirements: 40 total
+- Mapped to phases: 0
+- Unmapped: 40
+
+---
+*Requirements defined: 2026-01-26*
+*Last updated: 2026-01-26 after initial definition*
