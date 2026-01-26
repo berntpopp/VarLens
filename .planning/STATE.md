@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 5 of 8 (UI Shell + Cases)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-01-26 — Phase 4 (IPC Layer) verified and complete
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-26 — Completed 05-01-PLAN.md (App Shell Layout)
 
-Progress: [█████-----] 50.0% (4/8 phases complete)
+Progress: [█████-----] 50.0% (4/8 phases complete, 1/3 plans in phase 5)
 
 ## Performance Metrics
 
@@ -33,8 +33,8 @@ Progress: [█████-----] 50.0% (4/8 phases complete)
 | 04    | 3     | 9m 6s | 3m 2s   |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (2m 37s), 03-02 (13m 32s), 04-01 (3m 47s), 04-02 (2m 52s), 04-03 (2m 27s)
-- Trend: Phase 04 complete with excellent velocity; IPC layer averaging 3m 2s per plan
+- Last 5 plans: 03-02 (13m 32s), 04-01 (3m 47s), 04-02 (2m 52s), 04-03 (2m 27s), 05-01 (1m 16s)
+- Trend: Phase 05 started with fastest plan yet; UI shell layout complete
 
 *Updated after each plan completion*
 
@@ -82,6 +82,8 @@ Recent decisions affecting current work:
 | D033 | Handler self-registration via module imports | 04-03 | Handlers register channels on import, avoiding explicit registration boilerplate |
 | D034 | Progress throttling at 100ms intervals | 04-03 | Prevents overwhelming renderer with progress events during import |
 | D035 | Import directory persistence in settings.json | 04-03 | File dialog defaults to last directory for better UX |
+| D036 | Use permanent prop on v-navigation-drawer | 05-01 | Ensures v-main adjusts width automatically |
+| D037 | selectedCaseId typed as number or null | 05-01 | Matches database case.id type for direct comparison |
 
 ### Pending Todos
 
@@ -93,6 +95,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 18:05:00 UTC
-Stopped at: Phase 4 verified complete — ready to plan Phase 5
+Last session: 2026-01-26 18:17:33 UTC
+Stopped at: Completed 05-01-PLAN.md (App Shell Layout)
 Resume file: None
