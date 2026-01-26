@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Success Criteria** (what must be TRUE):
   1. `make dev` launches Electron window with Vue 3 + Vuetify rendering
   2. `make lint` passes with zero errors
-  3. `make test` runs Vitest with happy-dom environment
+  3. `make lint` passes with zero errors
   4. `make typecheck` passes with zero TypeScript errors
   5. better-sqlite3 imports without native module errors
 **Plans**: 2 plans
@@ -146,10 +146,11 @@ Plans:
   3. Progress indicator shows real-time import status
   4. Error messages display on import failure
   5. Newly imported case auto-selected and displayed in table
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD
+- [ ] 08-01-PLAN.md — Create ImportDialog component with progress, validation, and error handling
+- [ ] 08-02-PLAN.md — Integrate ImportDialog into App.vue with sidebar button and auto-selection
 
 ## Progress
 
@@ -165,7 +166,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 5. UI Shell + Cases | 2/2 | Complete | 2026-01-26 |
 | 6. Variant Table | 2/2 | Complete | 2026-01-26 |
 | 7. Filters | 2/2 | Complete | 2026-01-26 |
-| 8. Import UI + Polish | 0/TBD | Not started | - |
+| 8. Import UI + Polish | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-26*
