@@ -1,4 +1,4 @@
-import { ref, onBeforeUnmount } from 'vue'
+import { onBeforeUnmount } from 'vue'
 
 export function useDebounce<T extends (...args: Parameters<T>) => void>(
   fn: T,

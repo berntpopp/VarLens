@@ -36,6 +36,7 @@ export interface VariantsAPI {
     sortBy?: SortItem[]
   ) => Promise<PaginatedResult<Variant>>
   getFilterOptions: (caseId: number) => Promise<FilterOptions>
+  search: (caseId: number, query: string, limit?: number) => Promise<Variant[]>
 }
 
 export interface FilterOptions {

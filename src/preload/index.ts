@@ -26,7 +26,10 @@ const api = {
       sortBy?: SortItem[]
     ) => ipcRenderer.invoke('variants:query', caseId, filters, cursor, limit, sortBy),
 
-    getFilterOptions: (caseId: number) => ipcRenderer.invoke('variants:filterOptions', caseId)
+    getFilterOptions: (caseId: number) => ipcRenderer.invoke('variants:filterOptions', caseId),
+
+    search: (caseId: number, query: string, limit?: number) =>
+      ipcRenderer.invoke('variants:search', caseId, query, limit ?? 20)
   },
 
   import: {

@@ -6,7 +6,7 @@ import type { FilterOptions } from '../../../shared/types/api'
 
 /**
  * Variants IPC handlers
- * Channels: variants:query, variants:filterOptions
+ * Channels: variants:query, variants:filterOptions, variants:search
  */
 
 ipcMain.handle(
@@ -63,3 +63,17 @@ ipcMain.handle('variants:filterOptions', async (_event, caseId: number) => {
     return filterOptions
   })
 })
+
+/**
+ * FTS5 full-text search for gene symbol autocomplete (FLT-06).
+ * Uses DatabaseService.searchVariants() which performs prefix matching via FTS5.
+ */
+ipcMain.handle(
+  'variants:search',
+  async (_event, caseId: number, query: string, limit: number = 20) => {
+    return wrapHandler(async () => {
+      const db = getDatabaseService()
+      return db.searchVariants(caseId, query, limit)
+    })
+  }
+)
