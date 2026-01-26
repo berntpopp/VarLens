@@ -1,16 +1,25 @@
 <template>
   <v-app>
+    <AppSidebar>
+      <!-- Case list slot placeholder - will be populated in Plan 02 -->
+      <v-list density="compact">
+        <v-list-item title="Cases will appear here" />
+      </v-list>
+    </AppSidebar>
+
     <v-main>
-      <v-container>
-        <v-card class="mx-auto mt-10" max-width="600">
-          <v-card-title class="text-h4"> Varlens </v-card-title>
-          <v-card-text> Electron + Vue 3 + Vuetify 3 application ready. </v-card-text>
-        </v-card>
-      </v-container>
+      <!-- Conditional: EmptyState when no case selected, variant table later -->
+      <EmptyState v-if="!selectedCaseId" />
+      <!-- Future: VariantTable when case selected -->
     </v-main>
   </v-app>
 </template>
 
 <script setup lang="ts">
-// Varlens root component
+import { ref } from 'vue'
+import AppSidebar from './components/AppSidebar.vue'
+import EmptyState from './components/EmptyState.vue'
+
+// Case selection state - will be connected to CaseList events in Plan 02
+const selectedCaseId = ref<number | null>(null)
 </script>
