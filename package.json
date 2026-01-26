@@ -14,7 +14,9 @@
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@electron/rebuild": "^4.0.2",
     "@mdi/font": "^7.4.47",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.0.10",
     "@vitejs/plugin-vue": "^6.0.3",
     "electron": "^40.0.0",
@@ -55,6 +57,7 @@
     }
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
     "vuetify": "^3.11.7"
   }
 }

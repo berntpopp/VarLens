@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import Database from 'better-sqlite3'
 
 function createWindow(): void {
   // Create the browser window.
@@ -63,6 +64,12 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     // Set app user model id for windows
     electronApp.setAppUserModelId('com.varlens.app')
+
+    // Verify better-sqlite3 works (in-memory test)
+    const testDb = new Database(':memory:')
+    testDb.exec('CREATE TABLE test (id INTEGER PRIMARY KEY)')
+    testDb.close()
+    console.log('better-sqlite3 initialized successfully')
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
