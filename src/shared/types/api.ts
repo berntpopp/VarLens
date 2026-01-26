@@ -4,7 +4,8 @@ import type {
   Variant,
   VariantFilter,
   PaginationCursor,
-  PaginatedResult
+  PaginatedResult,
+  SortItem
 } from '../../main/database/types'
 import type { ProgressUpdate, ImportResult } from '../../main/import/types'
 import type { SerializableError } from './errors'
@@ -16,6 +17,7 @@ export type {
   VariantFilter,
   PaginationCursor,
   PaginatedResult,
+  SortItem,
   ProgressUpdate,
   ImportResult
 }
@@ -30,7 +32,8 @@ export interface VariantsAPI {
     caseId: number,
     filters: Omit<VariantFilter, 'case_id'>,
     cursor?: PaginationCursor,
-    limit?: number
+    limit?: number,
+    sortBy?: SortItem[]
   ) => Promise<PaginatedResult<Variant>>
   getFilterOptions: (caseId: number) => Promise<FilterOptions>
 }

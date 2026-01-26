@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { wrapHandler } from '../errorHandler'
 import { getDatabaseService } from '../../database'
-import type { VariantFilter, PaginationCursor } from '../../database/types'
+import type { VariantFilter, PaginationCursor, SortItem } from '../../database/types'
 import type { FilterOptions } from '../../../shared/types/api'
 
 /**
@@ -16,12 +16,13 @@ ipcMain.handle(
     caseId: number,
     filters: Omit<VariantFilter, 'case_id'>,
     cursor?: PaginationCursor,
-    limit?: number
+    limit?: number,
+    sortBy?: SortItem[]
   ) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
       const fullFilter: VariantFilter = { case_id: caseId, ...filters }
-      return db.getVariants(fullFilter, limit ?? 50, cursor)
+      return db.getVariants(fullFilter, limit ?? 50, cursor, sortBy)
     })
   }
 )

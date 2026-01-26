@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ProgressUpdate, VariantFilter, PaginationCursor } from '../shared/types'
+import type { ProgressUpdate, VariantFilter, PaginationCursor, SortItem } from '../shared/types'
 
 /**
  * Preload script - exposes typed API to renderer via contextBridge.
@@ -22,8 +22,9 @@ const api = {
       caseId: number,
       filters: Omit<VariantFilter, 'case_id'>,
       cursor?: PaginationCursor,
-      limit?: number
-    ) => ipcRenderer.invoke('variants:query', caseId, filters, cursor, limit),
+      limit?: number,
+      sortBy?: SortItem[]
+    ) => ipcRenderer.invoke('variants:query', caseId, filters, cursor, limit, sortBy),
 
     getFilterOptions: (caseId: number) => ipcRenderer.invoke('variants:filterOptions', caseId)
   },
