@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Import Service** - Streaming JSON parser and batch insert
 - [x] **Phase 4: IPC Layer** - Preload bridge and main process handlers
 - [x] **Phase 5: UI Shell + Cases** - App layout and case management UI
-- [ ] **Phase 6: Variant Table** - Paginated data table with sorting
+- [x] **Phase 6: Variant Table** - Paginated data table with sorting
 - [ ] **Phase 7: Filters** - Filter controls and FTS5 search integration
 - [ ] **Phase 8: Import UI + Polish** - Import dialog and end-to-end verification
 
@@ -117,8 +117,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-02-PLAN.md — Implement backend sorting support in DatabaseService and IPC layer
-- [ ] 06-01-PLAN.md — Create VariantTable component with server-side pagination and formatted columns
+- [x] 06-02-PLAN.md — Implement backend sorting support in DatabaseService and IPC layer
+- [x] 06-01-PLAN.md — Create VariantTable component with server-side pagination and formatted columns
 
 ### Phase 7: Filters
 **Goal**: Filter toolbar with gene, consequence, AF, CADD, and FTS5 search
@@ -162,7 +162,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 3. Import Service | 2/2 | Complete | 2026-01-26 |
 | 4. IPC Layer | 3/3 | Complete | 2026-01-26 |
 | 5. UI Shell + Cases | 2/2 | Complete | 2026-01-26 |
-| 6. Variant Table | 0/2 | Planned | - |
+| 6. Variant Table | 2/2 | Complete | 2026-01-26 |
 | 7. Filters | 0/TBD | Not started | - |
 | 8. Import UI + Polish | 0/TBD | Not started | - |
 

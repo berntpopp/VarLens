@@ -51,13 +51,13 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [x] **CASE-02**: Case selection updates variant table
 - [x] **CASE-03**: Case deletion with confirmation
 
-### UI - Table
+### UI - Table ✓
 
-- [ ] **TBL-01**: Variant table using v-data-table-server
-- [ ] **TBL-02**: Server-side pagination with page/itemsPerPage controls
-- [ ] **TBL-03**: Column sorting (multiple columns)
-- [ ] **TBL-04**: Display columns: chr, pos, ref, alt, gene, consequence, gnomAD AF, CADD, ClinVar
-- [ ] **TBL-05**: Formatted display (position with commas, AF in scientific notation, colored ClinVar chips)
+- [x] **TBL-01**: Variant table using v-data-table-server
+- [x] **TBL-02**: Server-side pagination with page/itemsPerPage controls
+- [x] **TBL-03**: Column sorting (multiple columns)
+- [x] **TBL-04**: Display columns: chr, pos, ref, alt, gene, consequence, gnomAD AF, CADD, ClinVar
+- [x] **TBL-05**: Formatted display (position with commas, AF in scientific notation, colored ClinVar chips)
 
 ### UI - Filters
 
@@ -149,11 +149,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CASE-01 | Phase 5 | Complete |
 | CASE-02 | Phase 5 | Complete |
 | CASE-03 | Phase 5 | Complete |
-| TBL-01 | Phase 6 | Pending |
-| TBL-02 | Phase 6 | Pending |
-| TBL-03 | Phase 6 | Pending |
-| TBL-04 | Phase 6 | Pending |
-| TBL-05 | Phase 6 | Pending |
+| TBL-01 | Phase 6 | Complete |
+| TBL-02 | Phase 6 | Complete |
+| TBL-03 | Phase 6 | Complete |
+| TBL-04 | Phase 6 | Complete |
+| TBL-05 | Phase 6 | Complete |
 | FLT-01 | Phase 7 | Pending |
 | FLT-02 | Phase 7 | Pending |
 | FLT-03 | Phase 7 | Pending |
@@ -173,4 +173,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 — Phase 5 complete (29 requirements)*
+*Last updated: 2026-01-26 — Phase 6 complete (34 requirements)*
