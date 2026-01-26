@@ -80,6 +80,7 @@ export async function wrapHandler<T>(handler: () => Promise<T>): Promise<T | Ser
   try {
     return await handler()
   } catch (error) {
+    console.error('IPC handler error:', error)
     return toSerializableError(error)
   }
 }

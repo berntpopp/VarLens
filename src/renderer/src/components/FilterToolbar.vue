@@ -171,12 +171,14 @@ interface Props {
   caseId: number
   filteredCount: number
   totalCount: number
+  hasSort?: boolean
 }
 
 const props = defineProps<Props>()
 
 interface Emits {
   (e: 'update:filters', filters: Omit<VariantFilter, 'case_id'>): void
+  (e: 'reset-sort'): void
 }
 
 const emit = defineEmits<Emits>()
@@ -246,7 +248,8 @@ const hasActiveFilters = computed(() => {
     selectedImpactPresets.value.length > 0 ||
     filters.value.consequences.length > 0 ||
     afActive ||
-    caddActive
+    caddActive ||
+    props.hasSort === true
   )
 })
 
@@ -380,7 +383,7 @@ watch(
   }
 )
 
-// Clear all filters
+// Clear all filters and reset sort
 const clearAllFilters = () => {
   filters.value.geneSymbol = ''
   filters.value.consequences = []
@@ -389,6 +392,8 @@ const clearAllFilters = () => {
   selectedAfPreset.value = null
   selectedCaddPreset.value = null
   selectedImpactPresets.value = []
+  // Also reset sort order in parent
+  emit('reset-sort')
 }
 </script>
 

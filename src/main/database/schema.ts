@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS variants (
   gnomad_af REAL,
   cadd REAL,
   clinvar TEXT,
+  gt_num TEXT,
+  func TEXT,
+  qual REAL,
+  hpo_sim_score REAL,
+  transcript TEXT,
+  cdna TEXT,
+  aa_change TEXT,
+  hpo_match TEXT,
+  moi TEXT,
   FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
 );
 `
@@ -91,19 +100,52 @@ END;
 `
 
 /**
+ * Migration: Add new columns to variants table if they don't exist
+ * This handles upgrading existing databases to the new schema
+ */
+const migrateVariantsTable = (db: Database.Database): void => {
+  // Get existing columns
+  const columns = db
+    .prepare("PRAGMA table_info(variants)")
+    .all() as { name: string }[]
+  const existingColumns = new Set(columns.map((c) => c.name))
+
+  // New columns to add (column_name, type, default)
+  const newColumns: [string, string][] = [
+    ['gt_num', 'TEXT'],
+    ['func', 'TEXT'],
+    ['qual', 'REAL'],
+    ['hpo_sim_score', 'REAL'],
+    ['transcript', 'TEXT'],
+    ['cdna', 'TEXT'],
+    ['aa_change', 'TEXT'],
+    ['hpo_match', 'TEXT'],
+    ['moi', 'TEXT']
+  ]
+
+  for (const [colName, colType] of newColumns) {
+    if (!existingColumns.has(colName)) {
+      db.exec(`ALTER TABLE variants ADD COLUMN ${colName} ${colType}`)
+    }
+  }
+}
+
+/**
  * Initialize the database schema
  *
  * Executes all schema creation SQL in order:
  * 1. Create tables (cases, variants)
- * 2. Create indexes on variants
- * 3. Create FTS5 virtual table
- * 4. Create FTS sync triggers
+ * 2. Run migrations for existing tables
+ * 3. Create indexes on variants
+ * 4. Create FTS5 virtual table
+ * 5. Create FTS sync triggers
  *
  * @param db - better-sqlite3 Database instance
  * @throws Error if schema creation fails
  */
 export function initializeSchema(db: Database.Database): void {
   db.exec(createTables)
+  migrateVariantsTable(db)
   db.exec(createIndexes)
   db.exec(createFTSTable)
   db.exec(createFTSTriggers)

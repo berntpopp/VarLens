@@ -71,6 +71,59 @@
     <template #[`item.consequence`]="{ value }">
       {{ (value ?? null) !== null ? value.replace(/_/g, ' ') : '-' }}
     </template>
+
+    <!-- GT (handle null) -->
+    <template #[`item.gt_num`]="{ value }">
+      {{ value ?? '-' }}
+    </template>
+
+    <!-- Func (handle null) -->
+    <template #[`item.func`]="{ value }">
+      {{ value ?? '-' }}
+    </template>
+
+    <!-- Qual score (handle null) -->
+    <template #[`item.qual`]="{ value }">
+      {{ value !== null ? value.toFixed(1) : '-' }}
+    </template>
+
+    <!-- Transcript (handle null) -->
+    <template #[`item.transcript`]="{ value }">
+      {{ value ?? '-' }}
+    </template>
+
+    <!-- cDNA (handle null) -->
+    <template #[`item.cdna`]="{ value }">
+      {{ value ?? '-' }}
+    </template>
+
+    <!-- AA Change (handle null) -->
+    <template #[`item.aa_change`]="{ value }">
+      {{ value ?? '-' }}
+    </template>
+
+    <!-- HPO Sim Score (handle null) -->
+    <template #[`item.hpo_sim_score`]="{ value }">
+      {{ value !== null ? value.toFixed(2) : '-' }}
+    </template>
+
+    <!-- HPO Match (handle null, truncate long text) -->
+    <template #[`item.hpo_match`]="{ value }">
+      <v-tooltip v-if="value && value.length > 30" location="top">
+        <template #activator="{ props: tooltipProps }">
+          <span v-bind="tooltipProps" class="text-truncate" style="max-width: 150px; display: inline-block;">
+            {{ value.substring(0, 30) }}...
+          </span>
+        </template>
+        <span>{{ value }}</span>
+      </v-tooltip>
+      <span v-else>{{ value ?? '-' }}</span>
+    </template>
+
+    <!-- MoI (handle null) -->
+    <template #[`item.moi`]="{ value }">
+      {{ value ?? '-' }}
+    </template>
   </v-data-table-server>
 </template>
 
@@ -93,6 +146,7 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:counts': [counts: { filtered: number; total: number }]
+  'update:hasSort': [hasSort: boolean]
 }>()
 
 // Table state - DO NOT mutate these in loadVariants handler (infinite loop)
@@ -113,13 +167,22 @@ const unfilteredCount = ref(0)
 const headers = [
   { title: 'Chr', key: 'chr', sortable: true },
   { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
-  { title: 'Ref', key: 'ref', sortable: false, width: '120px' },
-  { title: 'Alt', key: 'alt', sortable: false, width: '120px' },
+  { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
+  { title: 'Alt', key: 'alt', sortable: false, width: '100px' },
+  { title: 'GT', key: 'gt_num', sortable: true },
   { title: 'Gene', key: 'gene_symbol', sortable: true },
+  { title: 'Func', key: 'func', sortable: true },
   { title: 'Consequence', key: 'consequence', sortable: true },
+  { title: 'Transcript', key: 'transcript', sortable: true },
+  { title: 'cDNA', key: 'cdna', sortable: false },
+  { title: 'AA Change', key: 'aa_change', sortable: false },
   { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' as const },
   { title: 'CADD', key: 'cadd', sortable: true, align: 'end' as const },
-  { title: 'ClinVar', key: 'clinvar', sortable: true }
+  { title: 'Qual', key: 'qual', sortable: true, align: 'end' as const },
+  { title: 'ClinVar', key: 'clinvar', sortable: true },
+  { title: 'HPO Score', key: 'hpo_sim_score', sortable: true, align: 'end' as const },
+  { title: 'HPO Match', key: 'hpo_match', sortable: false },
+  { title: 'MoI', key: 'moi', sortable: true }
 ]
 
 // Load variants from backend
@@ -207,6 +270,8 @@ watch(
   () => {
     cursorCache.value.clear()
     page.value = 1
+    // Emit sort state for Clear button activation
+    emit('update:hasSort', sortBy.value.length > 0)
   },
   { deep: true }
 )
@@ -254,6 +319,14 @@ const getClinVarColor = (significance: string | null): string => {
   }
   return (colorMap[sig] ?? null) !== null ? colorMap[sig] : 'grey'
 }
+
+// Reset sort to default (no sorting)
+const resetSort = () => {
+  sortBy.value = []
+}
+
+// Expose resetSort for parent components
+defineExpose({ resetSort })
 </script>
 
 <style scoped>

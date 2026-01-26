@@ -7,17 +7,30 @@ export const COLUMN_INDICES = {
   POS: 10,
   REF: 11,
   ALT: 12,
+  QUAL: 14,
+  GT_NUM: 15,
+  FUNC: 20,
   IMPACT: 21,
   GENE: 24,
+  TRANSCRIPT: 28,
+  CDNA: 29,
+  AA_CHANGE: 30,
   CADD: 46,
   CLINVAR: 72,
-  GNOMAD_AF: 108
+  GNOMAD_AF: 108,
+  HPO_SIM_SCORE: 156,
+  HPO_MATCH: 157,
+  MOI: 162
 } as const
 
 // Data dictionaries (loaded from header at parse time)
 export interface DataDictionaries {
   gene: Record<string, string> // Gene ID -> symbol
   impact: Record<string, string> // Impact code -> label
+  transcript: Record<string, string> // Transcript ID -> name
+  hpoSimScore: Record<string, number> // ID -> score
+  hpoMatch: Record<string, string> // ID -> HPO terms string
+  moi: Record<string, string> // ID -> abbreviation (AD/AR)
 }
 
 // Static Impact dictionary (constant across files)

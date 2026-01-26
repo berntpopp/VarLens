@@ -43,4 +43,8 @@ export type RawVariantRow = (string | number | null | (string | number | null)[]
 export interface DataDictionaries {
   gene: Record<string, string> // Gene ID -> symbol
   impact: Record<string, string> // Impact code -> label
+  transcript: Record<string, string> // Transcript ID -> name
+  hpoSimScore: Record<string, number> // ID -> HPO similarity score
+  hpoMatch: Record<string, string> // ID -> HPO terms string
+  moi: Record<string, string> // ID -> mode of inheritance abbreviation
 }

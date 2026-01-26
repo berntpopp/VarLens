@@ -50,9 +50,57 @@ export class FieldMapper extends Transform {
           true,
           IMPACT_DICTIONARY
         ) as string | null,
-        gnomad_af: row[COLUMN_INDICES.GNOMAD_AF] as number | null,
-        cadd: row[COLUMN_INDICES.CADD] as number | null,
-        clinvar: row[COLUMN_INDICES.CLINVAR] as string | null
+        gnomad_af: this.extractValue(row, COLUMN_INDICES.GNOMAD_AF, selectedTranscript, false) as
+          | number
+          | null,
+        cadd: this.extractValue(row, COLUMN_INDICES.CADD, selectedTranscript, false) as
+          | number
+          | null,
+        clinvar: this.extractValue(row, COLUMN_INDICES.CLINVAR, selectedTranscript, false) as
+          | string
+          | null,
+        gt_num: this.extractValue(row, COLUMN_INDICES.GT_NUM, selectedTranscript, false) as
+          | string
+          | null,
+        func: this.extractValue(row, COLUMN_INDICES.FUNC, selectedTranscript, false) as
+          | string
+          | null,
+        qual: this.extractValue(row, COLUMN_INDICES.QUAL, selectedTranscript, false) as
+          | number
+          | null,
+        hpo_sim_score: this.extractNumericFromDict(
+          row,
+          COLUMN_INDICES.HPO_SIM_SCORE,
+          selectedTranscript,
+          this.dictionaries.hpoSimScore
+        ),
+        transcript: this.extractValue(
+          row,
+          COLUMN_INDICES.TRANSCRIPT,
+          selectedTranscript,
+          true,
+          this.dictionaries.transcript
+        ) as string | null,
+        cdna: this.extractValue(row, COLUMN_INDICES.CDNA, selectedTranscript, false) as
+          | string
+          | null,
+        aa_change: this.extractValue(row, COLUMN_INDICES.AA_CHANGE, selectedTranscript, false) as
+          | string
+          | null,
+        hpo_match: this.extractValue(
+          row,
+          COLUMN_INDICES.HPO_MATCH,
+          selectedTranscript,
+          true,
+          this.dictionaries.hpoMatch
+        ) as string | null,
+        moi: this.extractValue(
+          row,
+          COLUMN_INDICES.MOI,
+          selectedTranscript,
+          true,
+          this.dictionaries.moi
+        ) as string | null
       }
 
       // Validate required fields
@@ -84,9 +132,13 @@ export class FieldMapper extends Transform {
   ): string | number | null {
     const value = row[columnIndex]
 
-    // Handle multi-value arrays
+    // Handle multi-value arrays (may be nested)
     if (Array.isArray(value)) {
-      const selected = value[transcriptIndex] ?? value[0] ?? null
+      let selected = value[transcriptIndex] ?? value[0] ?? null
+      // Handle nested arrays - unwrap if the selected value is still an array
+      if (Array.isArray(selected)) {
+        selected = selected[0] ?? null
+      }
       if (useDictionary && dictionary) {
         return resolveDictionaryValue(selected, dictionary)
       }
@@ -99,6 +151,38 @@ export class FieldMapper extends Transform {
     }
 
     return value
+  }
+
+  /**
+   * Extract a numeric value using a dictionary that maps IDs to numbers.
+   * Used for HPO similarity score.
+   */
+  private extractNumericFromDict(
+    row: RawVariantRow,
+    columnIndex: number,
+    transcriptIndex: number,
+    dictionary: Record<string, number>
+  ): number | null {
+    const value = row[columnIndex]
+
+    // Handle multi-value arrays
+    let selected: unknown = value
+    if (Array.isArray(value)) {
+      selected = value[transcriptIndex] ?? value[0] ?? null
+      // Handle nested arrays
+      if (Array.isArray(selected)) {
+        selected = selected[0] ?? null
+      }
+    }
+
+    if (selected === null || selected === undefined) {
+      return null
+    }
+
+    // Look up in dictionary
+    const key = String(selected)
+    const result = dictionary[key]
+    return result !== undefined ? result : null
   }
 }
 

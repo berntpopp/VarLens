@@ -158,15 +158,23 @@ export class ImportService {
   /**
    * Extract data dictionaries from JSON header
    *
-   * Reads the header array and finds the Gene field's dataDictionary.
+   * Reads the header array and extracts dictionaries for fields that need resolution.
    * Uses pick + streamArray to parse header items.
    */
   private async extractDictionaries(filePath: string): Promise<DataDictionaries> {
     return new Promise((resolve, reject) => {
       const dictionaries: DataDictionaries = {
         gene: {},
-        impact: {}
+        impact: {},
+        transcript: {},
+        hpoSimScore: {},
+        hpoMatch: {},
+        moi: {}
       }
+
+      // Track which dictionaries we've found
+      const fieldsToExtract = new Set(['Gene', 'Transcript', 'HpoSimScore', 'HpoMatch', 'MoI'])
+      let foundCount = 0
 
       // First, get the case ID so we know the path
       this.extractCaseId(filePath)
@@ -179,14 +187,57 @@ export class ImportService {
 
           stream.on('data', (data: { key: number; value: Record<string, unknown> }) => {
             const headerItem = data.value
-            // Check if this is the Gene field
+            const fieldId = headerItem.id as string
+
             if (
-              headerItem.id === 'Gene' &&
+              fieldsToExtract.has(fieldId) &&
               headerItem.dataDictionary !== undefined &&
               headerItem.dataDictionary !== null
             ) {
-              dictionaries.gene = headerItem.dataDictionary as Record<string, string>
-              stream.destroy() // We have what we need
+              const rawDict = headerItem.dataDictionary as Record<string, unknown>
+
+              switch (fieldId) {
+                case 'Gene':
+                  dictionaries.gene = rawDict as Record<string, string>
+                  break
+                case 'Transcript':
+                  dictionaries.transcript = rawDict as Record<string, string>
+                  break
+                case 'HpoSimScore':
+                  // Dictionary maps ID -> score (number)
+                  dictionaries.hpoSimScore = rawDict as Record<string, number>
+                  break
+                case 'HpoMatch':
+                  // Dictionary maps ID -> array of HPO terms, join them
+                  for (const [key, value] of Object.entries(rawDict)) {
+                    if (Array.isArray(value) && value.length > 0) {
+                      dictionaries.hpoMatch[key] = value.join(', ')
+                    } else {
+                      dictionaries.hpoMatch[key] = ''
+                    }
+                  }
+                  break
+                case 'MoI':
+                  // Dictionary maps ID -> array of objects with abbreviation
+                  for (const [key, value] of Object.entries(rawDict)) {
+                    if (Array.isArray(value) && value.length > 0) {
+                      // Extract abbreviations from objects
+                      const abbrevs = value
+                        .map((obj: { abbreviation?: string }) => obj.abbreviation)
+                        .filter(Boolean)
+                      dictionaries.moi[key] = abbrevs.join(', ')
+                    } else {
+                      dictionaries.moi[key] = ''
+                    }
+                  }
+                  break
+              }
+
+              foundCount++
+              // Destroy stream once we have all needed dictionaries
+              if (foundCount >= fieldsToExtract.size) {
+                stream.destroy()
+              }
             }
           })
 

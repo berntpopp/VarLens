@@ -49,6 +49,24 @@ export interface Variant {
   cadd: number | null
   /** ClinVar classification, nullable */
   clinvar: string | null
+  /** Genotype (e.g., "0/1", "1/1"), nullable */
+  gt_num: string | null
+  /** Functional annotation, nullable */
+  func: string | null
+  /** Quality score, nullable */
+  qual: number | null
+  /** HPO similarity score, nullable */
+  hpo_sim_score: number | null
+  /** Transcript ID, nullable */
+  transcript: string | null
+  /** cDNA change notation, nullable */
+  cdna: string | null
+  /** Amino acid change notation, nullable */
+  aa_change: string | null
+  /** Matching HPO terms, nullable */
+  hpo_match: string | null
+  /** Mode of inheritance, nullable */
+  moi: string | null
 }
 
 /**

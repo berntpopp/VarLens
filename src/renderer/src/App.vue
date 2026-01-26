@@ -16,12 +16,16 @@
           :case-id="selectedCaseId"
           :filtered-count="filteredCount"
           :total-count="totalCount"
+          :has-sort="hasSort"
           @update:filters="handleFiltersUpdate"
+          @reset-sort="handleResetSort"
         />
         <VariantTable
+          ref="variantTableRef"
           :case-id="selectedCaseId"
           :filters="currentFilters"
           @update:counts="handleCountsUpdate"
+          @update:has-sort="handleSortUpdate"
         />
       </template>
     </v-main>
@@ -46,6 +50,7 @@ import type { VariantFilter } from '../../shared/types/api'
 const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
 const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
+const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
 
 // Case selection state
 const selectedCaseId = ref<number | null>(null)
@@ -55,6 +60,7 @@ const caseCount = ref(0)
 const currentFilters = ref<Omit<VariantFilter, 'case_id'>>({})
 const filteredCount = ref(0)
 const totalCount = ref(0)
+const hasSort = ref(false)
 
 const handleImportClick = (): void => {
   importDialogRef.value?.show()
@@ -97,13 +103,22 @@ const handleFiltersUpdate = (filters: Omit<VariantFilter, 'case_id'>): void => {
   currentFilters.value = filters
 }
 
+const handleResetSort = (): void => {
+  variantTableRef.value?.resetSort()
+}
+
 const handleCountsUpdate = (counts: { filtered: number; total: number }): void => {
   filteredCount.value = counts.filtered
   totalCount.value = counts.total
 }
 
-// Clear filters on case change
+const handleSortUpdate = (sortActive: boolean): void => {
+  hasSort.value = sortActive
+}
+
+// Clear filters and sort on case change
 watch(selectedCaseId, () => {
   currentFilters.value = {}
+  hasSort.value = false
 })
 </script>
