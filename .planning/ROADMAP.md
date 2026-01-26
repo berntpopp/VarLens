@@ -66,10 +66,11 @@ Plans:
   3. Progress callback fires with phase and count during import
   4. 65k variants import in under 30 seconds
   5. Case record created with correct variant_count
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — Create import types, field mapping config, and FieldMapper Transform
+- [ ] 03-02-PLAN.md — Create ImportService with streaming pipeline and integration tests
 
 ### Phase 4: IPC Layer
 **Goal**: Type-safe IPC bridge connecting renderer to main process services
@@ -152,9 +153,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 2/2 | ✓ Complete | 2026-01-26 |
-| 2. Database Layer | 3/3 | ✓ Complete | 2026-01-26 |
-| 3. Import Service | 0/TBD | Not started | - |
+| 1. Foundation | 2/2 | Complete | 2026-01-26 |
+| 2. Database Layer | 3/3 | Complete | 2026-01-26 |
+| 3. Import Service | 0/2 | Planned | - |
 | 4. IPC Layer | 0/TBD | Not started | - |
 | 5. UI Shell + Cases | 0/TBD | Not started | - |
 | 6. Variant Table | 0/TBD | Not started | - |
