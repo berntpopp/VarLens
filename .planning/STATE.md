@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 6 of 8 (Variant Table)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-01-26 — Completed Phase 5 (UI Shell + Cases)
+Plan: 2 of TBD in current phase
+Status: In progress
+Last activity: 2026-01-26 — Completed 06-02-PLAN.md (Backend Sorting)
 
 Progress: [██████----] 62.5% (5/8 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: 4m 22s
-- Total execution time: 0.80 hours
+- Total plans completed: 12
+- Average duration: 4m 28s
+- Total execution time: 0.89 hours
 
 **By Phase:**
 
@@ -32,10 +32,11 @@ Progress: [██████----] 62.5% (5/8 phases complete)
 | 03    | 2     | 16m 9s | 8m 5s  |
 | 04    | 3     | 9m 6s | 3m 2s   |
 | 05    | 2     | 2m 33s | 1m 17s  |
+| 06    | 1     | 5m 39s | 5m 39s  |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3m 47s), 04-02 (2m 52s), 04-03 (2m 27s), 05-01 (1m 16s), 05-02 (1m 17s)
-- Trend: Phase 05 maintaining fast pace with UI component development
+- Last 5 plans: 04-02 (2m 52s), 04-03 (2m 27s), 05-01 (1m 16s), 05-02 (1m 17s), 06-02 (5m 39s)
+- Trend: Phase 06 starting with moderate pace for backend sorting implementation
 
 *Updated after each plan completion*
 
@@ -89,6 +90,10 @@ Recent decisions affecting current work:
 | D039 | Delete dialog uses promise-based API exposed via defineExpose | 05-02 | Enables async/await pattern in calling code |
 | D040 | Case selection uses v-list select-strategy='single-leaf' | 05-02 | Vuetify built-in single selection with array binding |
 | D041 | ESLint no-undef suppression for window.api calls | 05-02 | window.api injected by preload, not in renderer scope |
+| D042 | Use ?? (nullish coalescing) for strict boolean expression compliance | 06-02 | Prevents unexpected coercion of empty strings |
+| D043 | Always append id as tiebreaker for stable pagination | 06-02 | Ensures deterministic row order for keyset pagination |
+| D044 | Validate cursor.sort_key matches current sort | 06-02 | Forces frontend to reset pagination when sort changes |
+| D045 | SORTABLE_COLUMNS whitelist prevents SQL injection | 06-02 | Only allows pre-approved column names in ORDER BY clause |
 
 ### Pending Todos
 
@@ -100,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 20:01:21 UTC
-Stopped at: Completed 05-02-SUMMARY.md (Case Management UI)
+Last session: 2026-01-26 20:05:49 UTC
+Stopped at: Completed 06-02-SUMMARY.md (Backend Sorting)
 Resume file: None
