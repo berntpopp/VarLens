@@ -9,12 +9,7 @@ import Database from 'better-sqlite3'
 import type { Database as DatabaseType, Statement } from 'better-sqlite3'
 import { initializeSchema } from './schema'
 import type { Case } from './types'
-import {
-  DatabaseError,
-  NotFoundError,
-  UniqueConstraintError,
-  TransactionError
-} from './errors'
+import { DatabaseError, NotFoundError, UniqueConstraintError, TransactionError } from './errors'
 
 /**
  * DatabaseService class
@@ -87,10 +82,7 @@ export class DatabaseService {
       const transactionFn = this.db.transaction(fn)
       return transactionFn()
     } catch (error) {
-      throw new TransactionError(
-        'Transaction failed',
-        error instanceof Error ? error : undefined
-      )
+      throw new TransactionError('Transaction failed', error instanceof Error ? error : undefined)
     }
   }
 
@@ -113,10 +105,7 @@ export class DatabaseService {
       return Number(result.lastInsertRowid)
     } catch (error) {
       // Check for unique constraint violation
-      if (
-        error instanceof Error &&
-        error.message.includes('UNIQUE constraint failed')
-      ) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
         throw new UniqueConstraintError('name', name)
       }
       throw new DatabaseError(
@@ -134,9 +123,7 @@ export class DatabaseService {
    * @throws NotFoundError if case does not exist
    */
   getCase(id: number): Case {
-    const result = this.stmt('SELECT * FROM cases WHERE id = ?').get(id) as
-      | Case
-      | undefined
+    const result = this.stmt('SELECT * FROM cases WHERE id = ?').get(id) as Case | undefined
 
     if (!result) {
       throw new NotFoundError('Case', id)
@@ -153,9 +140,7 @@ export class DatabaseService {
    * @throws NotFoundError if case does not exist
    */
   getCaseByName(name: string): Case {
-    const result = this.stmt('SELECT * FROM cases WHERE name = ?').get(name) as
-      | Case
-      | undefined
+    const result = this.stmt('SELECT * FROM cases WHERE name = ?').get(name) as Case | undefined
 
     if (!result) {
       throw new NotFoundError('Case', name)
@@ -181,9 +166,7 @@ export class DatabaseService {
    * @throws NotFoundError if case does not exist
    */
   updateCaseVariantCount(id: number, count: number): void {
-    const result = this.stmt(
-      'UPDATE cases SET variant_count = ? WHERE id = ?'
-    ).run(count, id)
+    const result = this.stmt('UPDATE cases SET variant_count = ? WHERE id = ?').run(count, id)
 
     if (result.changes === 0) {
       throw new NotFoundError('Case', id)
