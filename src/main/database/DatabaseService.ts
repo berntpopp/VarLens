@@ -8,7 +8,14 @@
 import Database from 'better-sqlite3'
 import type { Database as DatabaseType, Statement } from 'better-sqlite3'
 import { initializeSchema } from './schema'
-import type { Case, Variant, VariantFilter, PaginationCursor, PaginatedResult, SortItem } from './types'
+import type {
+  Case,
+  Variant,
+  VariantFilter,
+  PaginationCursor,
+  PaginatedResult,
+  SortItem
+} from './types'
 import { DatabaseError, NotFoundError, UniqueConstraintError, TransactionError } from './errors'
 
 /**
@@ -269,6 +276,113 @@ export class DatabaseService {
   }
 
   /**
+   * Build ORDER BY clause from sort items
+   *
+   * Handles NULL values per SQL standard:
+   * - ASC: NULLS LAST (non-null values first, then nulls)
+   * - DESC: NULLS FIRST (nulls first, then non-null values descending)
+   *
+   * Always appends id as tiebreaker for stable pagination.
+   *
+   * @param sortBy - Array of sort items (empty = default pos, id sort)
+   * @returns SQL ORDER BY clause without 'ORDER BY' prefix
+   */
+  private buildSortClause(sortBy?: SortItem[]): string {
+    if (!sortBy || sortBy.length === 0) {
+      // Default sort: pos ASC, id ASC
+      return 'pos ASC NULLS LAST, id ASC'
+    }
+
+    const clauses: string[] = []
+
+    for (const sort of sortBy) {
+      const sqlColumn = SORTABLE_COLUMNS[sort.key]
+      if (!sqlColumn) {
+        // Skip invalid column names (security: prevent SQL injection)
+        continue
+      }
+
+      const direction = sort.order === 'desc' ? 'DESC' : 'ASC'
+      const nulls = sort.order === 'desc' ? 'NULLS FIRST' : 'NULLS LAST'
+      clauses.push(`${sqlColumn} ${direction} ${nulls}`)
+    }
+
+    // If all columns were invalid, use default
+    if (clauses.length === 0) {
+      return 'pos ASC NULLS LAST, id ASC'
+    }
+
+    // Always add id as final tiebreaker for stable pagination
+    if (!clauses.some((c) => c.startsWith('id '))) {
+      clauses.push('id ASC')
+    }
+
+    return clauses.join(', ')
+  }
+
+  /**
+   * Build cursor condition for keyset pagination with dynamic sort
+   *
+   * For cursor-based pagination to work with any sort column:
+   * - ASC: (sort_col > cursor_val) OR (sort_col = cursor_val AND id > cursor_id)
+   * - DESC: (sort_col < cursor_val) OR (sort_col = cursor_val AND id > cursor_id)
+   * - NULL handling: IS NULL comes after/before non-null based on direction
+   *
+   * @param cursor - Current pagination cursor
+   * @param sortBy - Sort configuration (first item determines cursor column)
+   * @returns Object with condition SQL and params array
+   */
+  private buildCursorCondition(
+    cursor: PaginationCursor,
+    sortBy?: SortItem[]
+  ): { condition: string; params: (string | number | null)[] } {
+    const sortItem = sortBy?.[0]
+    const sortKey = sortItem?.key ?? 'pos'
+    const sortDirection = sortItem?.order ?? 'asc'
+    const sqlColumn = SORTABLE_COLUMNS[sortKey] ?? 'pos'
+
+    // Validate cursor matches expected sort
+    if (cursor.sort_key !== sortKey) {
+      // Cursor was built with different sort - should start fresh
+      // Return impossible condition that matches nothing
+      return { condition: '1 = 0', params: [] }
+    }
+
+    const params: (string | number | null)[] = []
+    let condition: string
+
+    if (cursor.sort_value === null) {
+      // Cursor is at a NULL value
+      if (sortDirection === 'asc') {
+        // ASC NULLS LAST: We're in the NULL section at the end
+        // Only get NULLs with higher id
+        condition = `(${sqlColumn} IS NULL AND id > ?)`
+        params.push(cursor.id)
+      } else {
+        // DESC NULLS FIRST: We're in the NULL section at the beginning
+        // Get NULLs with higher id, OR non-null values
+        condition = `(${sqlColumn} IS NULL AND id > ?) OR (${sqlColumn} IS NOT NULL)`
+        params.push(cursor.id)
+      }
+    } else {
+      // Cursor has a non-null value
+      const compareOp = sortDirection === 'desc' ? '<' : '>'
+
+      if (sortDirection === 'asc') {
+        // ASC NULLS LAST: value > cursor OR (value = cursor AND id > cursor_id) OR value IS NULL
+        condition = `(${sqlColumn} ${compareOp} ? OR (${sqlColumn} = ? AND id > ?) OR ${sqlColumn} IS NULL)`
+        params.push(cursor.sort_value, cursor.sort_value, cursor.id)
+      } else {
+        // DESC NULLS FIRST: value < cursor OR (value = cursor AND id > cursor_id)
+        condition = `(${sqlColumn} ${compareOp} ? OR (${sqlColumn} = ? AND id > ?))`
+        params.push(cursor.sort_value, cursor.sort_value, cursor.id)
+      }
+    }
+
+    return { condition, params }
+  }
+
+  /**
    * Get paginated variants with filtering (DB-05, DB-06)
    *
    * Supports cursor-based pagination with filters for gene_symbol, consequence,
@@ -310,32 +424,49 @@ export class DatabaseService {
       params.push(filter.cadd_min)
     }
 
-    // Build cursor condition
-    const cursorParams: (string | number)[] = []
-    if (cursor) {
-      conditions.push('(pos > ? OR (pos = ? AND id > ?))')
-      cursorParams.push(cursor.sort_value, cursor.sort_value, cursor.id)
-    }
+    // Build ORDER BY clause
+    const orderByClause = this.buildSortClause(sortBy)
 
-    const whereClause = conditions.join(' AND ')
+    // Get primary sort key for cursor
+    const primarySortKey = sortBy?.[0]?.key ?? 'pos'
 
-    // Execute count query (without cursor or limit)
-    const countSql = `SELECT COUNT(*) as count FROM variants WHERE ${conditions.filter((_, i) => i < conditions.length - (cursor ? 1 : 0)).join(' AND ')}`
+    // Execute count query (without cursor)
+    const countWhereClause = conditions.join(' AND ')
+    const countSql = `SELECT COUNT(*) as count FROM variants WHERE ${countWhereClause}`
     const countResult = this.db.prepare(countSql).get(...params) as { count: number }
     const total_count = countResult.count
 
+    // Build cursor condition if present
+    let cursorCondition = ''
+    let cursorParams: (string | number | null)[] = []
+    if (cursor) {
+      const cursorResult = this.buildCursorCondition(cursor, sortBy)
+      cursorCondition = cursorResult.condition
+      cursorParams = cursorResult.params
+    }
+
     // Execute data query with cursor and limit
-    const dataSql = `SELECT * FROM variants WHERE ${whereClause} ORDER BY pos, id LIMIT ?`
+    const dataConditions = cursor ? [...conditions, cursorCondition] : conditions
+    const dataWhereClause = dataConditions.join(' AND ')
+    const dataSql = `SELECT * FROM variants WHERE ${dataWhereClause} ORDER BY ${orderByClause} LIMIT ?`
     const dataParams = [...params, ...cursorParams, limit + 1]
     const results = this.db.prepare(dataSql).all(...dataParams) as Variant[]
 
     // Determine pagination state
     const has_more = results.length > limit
     const data = has_more ? results.slice(0, limit) : results
-    const next_cursor =
-      has_more && data.length > 0
-        ? { id: data[data.length - 1].id, sort_value: data[data.length - 1].pos }
-        : null
+
+    // Build next cursor from last item
+    let next_cursor: PaginationCursor | null = null
+    if (has_more && data.length > 0) {
+      const lastItem = data[data.length - 1]
+      const sortValue = lastItem[primarySortKey as keyof Variant]
+      next_cursor = {
+        id: lastItem.id,
+        sort_value: sortValue as number | string | null,
+        sort_key: primarySortKey
+      }
+    }
 
     return {
       data,
