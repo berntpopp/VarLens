@@ -56,7 +56,10 @@
         <template #activator="{ props: tooltipProps }">
           <span v-bind="tooltipProps" class="text-caption mr-2 cursor-help">Max AF:</span>
         </template>
-        <span>Maximum gnomAD allele frequency. Lower values filter for rarer variants.</span>
+        <span
+          >Maximum gnomAD allele frequency. Lower = rarer variants. Variants with unknown AF are
+          included.</span
+        >
       </v-tooltip>
       <v-chip-group v-model="selectedAfPreset" class="mr-2">
         <v-chip
@@ -97,8 +100,8 @@
           <span v-bind="tooltipProps" class="text-caption mr-2 cursor-help">Min CADD:</span>
         </template>
         <span
-          >Minimum CADD phred score. Higher values indicate more likely deleterious variants (15+
-          suggested, 20+ high confidence).</span
+          >Minimum CADD phred score. Higher = more likely deleterious (15+ suggested, 20+ high).
+          Variants without CADD scores are excluded.</span
         >
       </v-tooltip>
       <v-chip-group v-model="selectedCaddPreset" class="mr-2">
@@ -145,15 +148,16 @@
       <span class="ml-1 text-caption">variants</span>
     </v-chip>
 
-    <!-- Clear All button -->
+    <!-- Clear All button - always visible, disabled when no filters -->
     <v-btn
-      v-if="hasActiveFilters"
+      :disabled="!hasActiveFilters"
+      :color="hasActiveFilters ? 'error' : undefined"
       variant="text"
       size="small"
-      prepend-icon="mdi-close"
+      prepend-icon="mdi-filter-off"
       @click="clearAllFilters"
     >
-      Clear All
+      Clear
     </v-btn>
   </v-toolbar>
 </template>
@@ -228,17 +232,22 @@ const selectedCaddPreset = ref<number | null>(null)
 
 // Computed properties
 const hasActiveFilters = computed(() => {
+  const afActive =
+    filters.value.maxGnomadAf !== null &&
+    !Number.isNaN(filters.value.maxGnomadAf) &&
+    filters.value.maxGnomadAf > 0
+  const caddActive =
+    filters.value.minCadd !== null &&
+    !Number.isNaN(filters.value.minCadd) &&
+    filters.value.minCadd >= 0
+
   return (
     filters.value.geneSymbol !== '' ||
     selectedImpactPresets.value.length > 0 ||
     filters.value.consequences.length > 0 ||
-    filters.value.maxGnomadAf !== null ||
-    filters.value.minCadd !== null
+    afActive ||
+    caddActive
   )
-})
-
-const showTotalCount = computed(() => {
-  return props.filteredCount !== props.totalCount
 })
 
 // Load filter options on mount
@@ -299,12 +308,16 @@ const emitFilters = () => {
     variantFilter.consequences = [...new Set(allConsequences)] // Dedupe
   }
 
-  if (filters.value.maxGnomadAf !== null) {
-    variantFilter.gnomad_af_max = filters.value.maxGnomadAf
+  // Only include gnomAD AF if it's a valid positive number
+  const afValue = filters.value.maxGnomadAf
+  if (afValue !== null && !Number.isNaN(afValue) && afValue > 0) {
+    variantFilter.gnomad_af_max = afValue
   }
 
-  if (filters.value.minCadd !== null) {
-    variantFilter.cadd_min = filters.value.minCadd
+  // Only include CADD if it's a valid non-negative number
+  const caddValue = filters.value.minCadd
+  if (caddValue !== null && !Number.isNaN(caddValue) && caddValue >= 0) {
+    variantFilter.cadd_min = caddValue
   }
 
   emit('update:filters', variantFilter)
