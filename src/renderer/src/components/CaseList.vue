@@ -159,5 +159,16 @@ const handleDelete = async (): Promise<void> => {
   }
 }
 
+// Expose methods for parent to call after import
+const refreshCases = async (): Promise<void> => {
+  await loadCases()
+}
+
+const selectCase = (caseId: number): void => {
+  selected.value = [caseId]
+}
+
+defineExpose({ refreshCases, selectCase })
+
 onMounted(loadCases)
 </script>
