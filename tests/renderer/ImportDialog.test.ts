@@ -1,17 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import ImportDialog from '../../src/renderer/src/components/ImportDialog.vue'
-import type { ProgressUpdate, ImportResult } from '../../src/shared/types/api'
+import type { ImportResult } from '../../src/shared/types/api'
 import { ErrorCode } from '../../src/shared/types/errors'
 
 // Mock window.api
-let progressListener: ((progress: ProgressUpdate) => void) | null = null
-
 const mockApi = {
   import: {
     selectFile: vi.fn(),
     start: vi.fn(),
-    onProgress: vi.fn((callback: (progress: ProgressUpdate) => void) => {
-      progressListener = callback
+    onProgress: vi.fn(() => {
       return vi.fn() // Return cleanup function
     }),
     cancel: vi.fn()
@@ -30,7 +27,6 @@ describe('ImportDialog.vue', () => {
   beforeEach(() => {
     // Reset mocks
     vi.clearAllMocks()
-    progressListener = null
 
     // Default mock implementations
     mockApi.import.selectFile.mockResolvedValue('/path/to/sample.json.gz')
