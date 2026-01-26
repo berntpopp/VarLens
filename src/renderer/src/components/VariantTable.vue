@@ -13,6 +13,64 @@
     class="elevation-1"
     @update:options="loadVariants"
   >
+    <!-- Position with thousand separators -->
+    <template #[`item.pos`]="{ value }">
+      {{ formatPosition(value) }}
+    </template>
+
+    <!-- gnomAD AF in scientific notation -->
+    <template #[`item.gnomad_af`]="{ value }">
+      {{ formatScientific(value) }}
+    </template>
+
+    <!-- ClinVar colored chips -->
+    <template #[`item.clinvar`]="{ value }">
+      <v-chip v-if="value" :color="getClinVarColor(value)" size="small" label>
+        {{ value.replace(/_/g, ' ') }}
+      </v-chip>
+      <span v-else class="text-grey">-</span>
+    </template>
+
+    <!-- Ref allele with truncation and tooltip -->
+    <template #[`item.ref`]="{ value }">
+      <v-tooltip v-if="value.length > 20" location="top">
+        <template #activator="{ props: tooltipProps }">
+          <span v-bind="tooltipProps" class="text-truncate allele-cell">
+            {{ value.substring(0, 20) }}...
+          </span>
+        </template>
+        <span class="font-mono">{{ value }}</span>
+      </v-tooltip>
+      <span v-else class="font-mono">{{ value }}</span>
+    </template>
+
+    <!-- Alt allele with truncation and tooltip -->
+    <template #[`item.alt`]="{ value }">
+      <v-tooltip v-if="value.length > 20" location="top">
+        <template #activator="{ props: tooltipProps }">
+          <span v-bind="tooltipProps" class="text-truncate allele-cell">
+            {{ value.substring(0, 20) }}...
+          </span>
+        </template>
+        <span class="font-mono">{{ value }}</span>
+      </v-tooltip>
+      <span v-else class="font-mono">{{ value }}</span>
+    </template>
+
+    <!-- CADD score (handle null) -->
+    <template #[`item.cadd`]="{ value }">
+      {{ value !== null ? value.toFixed(1) : '-' }}
+    </template>
+
+    <!-- Gene symbol (handle null) -->
+    <template #[`item.gene_symbol`]="{ value }">
+      {{ value ?? '-' }}
+    </template>
+
+    <!-- Consequence (handle null) -->
+    <template #[`item.consequence`]="{ value }">
+      {{ (value ?? null) !== null ? value.replace(/_/g, ' ') : '-' }}
+    </template>
   </v-data-table-server>
 </template>
 
@@ -116,4 +174,53 @@ watch(
   },
   { deep: true }
 )
+
+// Formatting functions
+const formatPosition = (pos: number): string => {
+  return new Intl.NumberFormat('en-US').format(pos)
+}
+
+const formatScientific = (value: number | null): string => {
+  if (value === null) return '-'
+  if (value < 0.001 && value > 0) {
+    return new Intl.NumberFormat('en-US', {
+      notation: 'scientific',
+      maximumFractionDigits: 1
+    }).format(value)
+  }
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 4
+  }).format(value)
+}
+
+const getClinVarColor = (significance: string | null): string => {
+  if ((significance ?? null) === null) return 'grey'
+  // After null check, significance is guaranteed to be string
+  const sig = significance as string
+  const colorMap: Record<string, string> = {
+    Pathogenic: 'red',
+    Likely_pathogenic: 'red-lighten-1',
+    Uncertain_significance: 'amber',
+    Likely_benign: 'green-lighten-1',
+    Benign: 'green'
+  }
+  return (colorMap[sig] ?? null) !== null ? colorMap[sig] : 'grey'
+}
 </script>
+
+<style scoped>
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.allele-cell {
+  max-width: 120px;
+  display: inline-block;
+}
+
+.font-mono {
+  font-family: monospace;
+}
+</style>
