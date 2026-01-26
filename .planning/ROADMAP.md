@@ -130,10 +130,11 @@ Plans:
   3. gnomAD AF slider/input filters variants below threshold
   4. CADD minimum score filter excludes low-scoring variants
   5. Clear filters button appears when filters are active and resets all
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: TBD
+- [ ] 07-01-PLAN.md — Create FilterToolbar component with gene autocomplete, consequence dropdown, AF/CADD presets
+- [ ] 07-02-PLAN.md — Integrate FilterToolbar with VariantTable and App.vue
 
 ### Phase 8: Import UI + Polish
 **Goal**: Complete import dialog and end-to-end POC verification
@@ -163,7 +164,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 4. IPC Layer | 3/3 | Complete | 2026-01-26 |
 | 5. UI Shell + Cases | 2/2 | Complete | 2026-01-26 |
 | 6. Variant Table | 2/2 | Complete | 2026-01-26 |
-| 7. Filters | 0/TBD | Not started | - |
+| 7. Filters | 0/2 | Not started | - |
 | 8. Import UI + Polish | 0/TBD | Not started | - |
 
 ---
