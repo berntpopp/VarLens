@@ -14,6 +14,7 @@
       <template v-else>
         <FilterToolbar
           :case-id="selectedCaseId"
+          :case-name="selectedCaseName"
           :filtered-count="filteredCount"
           :total-count="totalCount"
           :has-sort="hasSort"
@@ -54,6 +55,7 @@ const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
 
 // Case selection state
 const selectedCaseId = ref<number | null>(null)
+const selectedCaseName = ref<string>('')
 const caseCount = ref(0)
 
 // Filter state (lifted to App for coordination)
@@ -84,8 +86,9 @@ const handleImportComplete = async (result: {
   )
 }
 
-const handleCaseSelected = (caseId: number): void => {
+const handleCaseSelected = (caseId: number, caseName: string): void => {
   selectedCaseId.value = caseId
+  selectedCaseName.value = caseName
 }
 
 const handleCasesLoaded = (count: number): void => {

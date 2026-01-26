@@ -60,6 +60,11 @@ const api = {
   system: {
     getVersion: () => ipcRenderer.invoke('system:version'),
     getUserDataPath: () => ipcRenderer.invoke('system:userDataPath')
+  },
+
+  export: {
+    variants: (caseId: number, filters: Omit<VariantFilter, 'case_id'>, caseName: string) =>
+      ipcRenderer.invoke('export:variants', caseId, filters, caseName)
   }
 }
 

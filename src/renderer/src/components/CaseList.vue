@@ -73,7 +73,7 @@ import DeleteCaseDialog from './DeleteCaseDialog.vue'
 import AppSnackbar from './AppSnackbar.vue'
 
 const emit = defineEmits<{
-  'case-selected': [caseId: number]
+  'case-selected': [caseId: number, caseName: string]
   'case-deleted': [caseId: number]
   'cases-loaded': [count: number]
 }>()
@@ -136,7 +136,8 @@ const formatDate = (timestamp: number): string => {
 // Watch selection changes and emit
 watch(selected, (newSelection) => {
   if (newSelection.length > 0) {
-    emit('case-selected', newSelection[0])
+    const selectedCase = cases.value.find((c) => c.id === newSelection[0])
+    emit('case-selected', newSelection[0], selectedCase?.name ?? '')
   }
 })
 

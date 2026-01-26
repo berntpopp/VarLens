@@ -10,6 +10,7 @@ export function registerIpcHandlers(): void {
   import('./handlers/variants')
   import('./handlers/import')
   import('./handlers/system')
+  import('./handlers/export')
 
   console.log('IPC handlers registered')
 }

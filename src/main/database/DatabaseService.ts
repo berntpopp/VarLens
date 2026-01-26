@@ -243,12 +243,31 @@ export class DatabaseService {
       console.log('DEBUG: First variant values:', JSON.stringify(v, null, 2))
       console.log('DEBUG: Parameter count expected: 19')
       const params = [
-        caseId, v.chr, v.pos, v.ref, v.alt, v.gene_symbol, v.consequence,
-        v.gnomad_af, v.cadd, v.clinvar, v.gt_num, v.func, v.qual,
-        v.hpo_sim_score, v.transcript, v.cdna, v.aa_change, v.hpo_match, v.moi
+        caseId,
+        v.chr,
+        v.pos,
+        v.ref,
+        v.alt,
+        v.gene_symbol,
+        v.consequence,
+        v.gnomad_af,
+        v.cadd,
+        v.clinvar,
+        v.gt_num,
+        v.func,
+        v.qual,
+        v.hpo_sim_score,
+        v.transcript,
+        v.cdna,
+        v.aa_change,
+        v.hpo_match,
+        v.moi
       ]
       console.log('DEBUG: Actual parameter count:', params.length)
-      console.log('DEBUG: Parameter types:', params.map(p => Array.isArray(p) ? 'ARRAY!' : typeof p))
+      console.log(
+        'DEBUG: Parameter types:',
+        params.map((p) => (Array.isArray(p) ? 'ARRAY!' : typeof p))
+      )
     }
 
     const insertBatch = this.db.transaction((batch: Omit<Variant, 'id' | 'case_id'>[]) => {
@@ -444,6 +463,20 @@ export class DatabaseService {
       params.push(filter.consequence)
     }
 
+    // Handle multi-select funcs (OR logic)
+    if (filter.funcs !== undefined && filter.funcs.length > 0) {
+      const placeholders = filter.funcs.map(() => '?').join(', ')
+      conditions.push(`func IN (${placeholders})`)
+      params.push(...filter.funcs)
+    }
+
+    // Handle multi-select clinvars (OR logic)
+    if (filter.clinvars !== undefined && filter.clinvars.length > 0) {
+      const placeholders = filter.clinvars.map(() => '?').join(', ')
+      conditions.push(`clinvar IN (${placeholders})`)
+      params.push(...filter.clinvars)
+    }
+
     // Include NULL gnomAD AF (unknown could be rare) OR values <= threshold
     if (filter.gnomad_af_max !== undefined) {
       conditions.push('(gnomad_af IS NULL OR gnomad_af <= ?)')
@@ -536,6 +569,61 @@ export class DatabaseService {
       .all(caseId, ftsQuery, limit) as Variant[]
 
     return results
+  }
+
+  /**
+   * Get all variants matching filter for export (no pagination)
+   *
+   * @param filter - Filter criteria including case_id (required)
+   * @returns Array of all matching variants
+   */
+  getAllVariantsForExport(filter: VariantFilter): Variant[] {
+    // Build dynamic WHERE clause (same logic as getVariants)
+    const conditions: string[] = ['case_id = ?']
+    const params: (string | number | null)[] = [filter.case_id]
+
+    if (filter.gene_symbol !== undefined && filter.gene_symbol !== '') {
+      conditions.push('gene_symbol LIKE ?')
+      params.push(`%${filter.gene_symbol}%`)
+    }
+
+    if (filter.consequences !== undefined && filter.consequences.length > 0) {
+      const placeholders = filter.consequences.map(() => '?').join(', ')
+      conditions.push(`consequence IN (${placeholders})`)
+      params.push(...filter.consequences)
+    } else if (filter.consequence !== undefined && filter.consequence !== '') {
+      conditions.push('consequence = ?')
+      params.push(filter.consequence)
+    }
+
+    // Handle multi-select funcs (OR logic)
+    if (filter.funcs !== undefined && filter.funcs.length > 0) {
+      const placeholders = filter.funcs.map(() => '?').join(', ')
+      conditions.push(`func IN (${placeholders})`)
+      params.push(...filter.funcs)
+    }
+
+    // Handle multi-select clinvars (OR logic)
+    if (filter.clinvars !== undefined && filter.clinvars.length > 0) {
+      const placeholders = filter.clinvars.map(() => '?').join(', ')
+      conditions.push(`clinvar IN (${placeholders})`)
+      params.push(...filter.clinvars)
+    }
+
+    if (filter.gnomad_af_max !== undefined) {
+      conditions.push('(gnomad_af IS NULL OR gnomad_af <= ?)')
+      params.push(filter.gnomad_af_max)
+    }
+
+    if (filter.cadd_min !== undefined) {
+      conditions.push('(cadd IS NULL OR cadd >= ?)')
+      params.push(filter.cadd_min)
+    }
+
+    const whereClause = conditions.join(' AND ')
+    const sql = `SELECT * FROM variants WHERE ${whereClause} ORDER BY chr, pos`
+
+    return this.db.prepare(sql).all(...params) as Variant[]
   }
 
   /**

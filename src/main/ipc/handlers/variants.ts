@@ -38,6 +38,20 @@ ipcMain.handle('variants:filterOptions', async (_event, caseId: number) => {
       )
       .all(caseId) as { consequence: string }[]
 
+    // Get distinct func values
+    const funcsResult = db.database
+      .prepare(
+        'SELECT DISTINCT func FROM variants WHERE case_id = ? AND func IS NOT NULL ORDER BY func'
+      )
+      .all(caseId) as { func: string }[]
+
+    // Get distinct ClinVar values
+    const clinvarsResult = db.database
+      .prepare(
+        'SELECT DISTINCT clinvar FROM variants WHERE case_id = ? AND clinvar IS NOT NULL ORDER BY clinvar'
+      )
+      .all(caseId) as { clinvar: string }[]
+
     // Get CADD range
     const caddRange = db.database
       .prepare(
@@ -54,6 +68,8 @@ ipcMain.handle('variants:filterOptions', async (_event, caseId: number) => {
 
     const filterOptions: FilterOptions = {
       consequences: consequencesResult.map((r) => r.consequence),
+      funcs: funcsResult.map((r) => r.func),
+      clinvars: clinvarsResult.map((r) => r.clinvar),
       minCadd: caddRange?.min_cadd ?? null,
       maxCadd: caddRange?.max_cadd ?? null,
       minGnomadAf: afRange?.min_af ?? null,

@@ -23,6 +23,7 @@
     "@electron/rebuild": "^4.0.2",
     "@mdi/font": "^7.4.47",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/file-saver": "^2.0.7",
     "@types/node": "^25.0.10",
     "@vitejs/plugin-vue": "^6.0.3",
     "@vitest/coverage-v8": "^4.0.18",
@@ -75,7 +76,9 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
+    "file-saver": "^2.0.5",
     "stream-json": "^1.9.1",
-    "vuetify": "^3.11.7"
+    "vuetify": "^3.11.7",
+    "xlsx": "^0.18.5"
   }
 }

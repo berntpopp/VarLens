@@ -105,9 +105,7 @@ END;
  */
 const migrateVariantsTable = (db: Database.Database): void => {
   // Get existing columns
-  const columns = db
-    .prepare("PRAGMA table_info(variants)")
-    .all() as { name: string }[]
+  const columns = db.prepare('PRAGMA table_info(variants)').all() as { name: string }[]
   const existingColumns = new Set(columns.map((c) => c.name))
 
   // New columns to add (column_name, type, default)

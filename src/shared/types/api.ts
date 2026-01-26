@@ -41,6 +41,8 @@ export interface VariantsAPI {
 
 export interface FilterOptions {
   consequences: string[]
+  funcs: string[]
+  clinvars: string[]
   minCadd: number | null
   maxCadd: number | null
   minGnomadAf: number | null

@@ -81,6 +81,10 @@ export interface VariantFilter {
   consequence?: string
   /** Multi-select filter on consequences (OR logic) */
   consequences?: string[]
+  /** Multi-select filter on func values (OR logic) */
+  funcs?: string[]
+  /** Multi-select filter on ClinVar values (OR logic) */
+  clinvars?: string[]
   /** Maximum gnomAD allele frequency */
   gnomad_af_max?: number
   /** Minimum CADD score */

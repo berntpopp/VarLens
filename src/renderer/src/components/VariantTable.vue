@@ -111,7 +111,11 @@
     <template #[`item.hpo_match`]="{ value }">
       <v-tooltip v-if="value && value.length > 30" location="top">
         <template #activator="{ props: tooltipProps }">
-          <span v-bind="tooltipProps" class="text-truncate" style="max-width: 150px; display: inline-block;">
+          <span
+            v-bind="tooltipProps"
+            class="text-truncate"
+            style="max-width: 150px; display: inline-block"
+          >
             {{ value.substring(0, 30) }}...
           </span>
         </template>
