@@ -5,11 +5,12 @@
         ref="caseListRef"
         @case-selected="handleCaseSelected"
         @case-deleted="handleCaseDeleted"
+        @cases-loaded="handleCasesLoaded"
       />
     </AppSidebar>
 
     <v-main>
-      <EmptyState v-if="!selectedCaseId" />
+      <EmptyState v-if="!selectedCaseId" :has-cases="caseCount > 0" @import="handleImportClick" />
       <template v-else>
         <FilterToolbar
           :case-id="selectedCaseId"
@@ -48,6 +49,7 @@ const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
 
 // Case selection state
 const selectedCaseId = ref<number | null>(null)
+const caseCount = ref(0)
 
 // Filter state (lifted to App for coordination)
 const currentFilters = ref<Omit<VariantFilter, 'case_id'>>({})
@@ -78,6 +80,10 @@ const handleImportComplete = async (result: {
 
 const handleCaseSelected = (caseId: number): void => {
   selectedCaseId.value = caseId
+}
+
+const handleCasesLoaded = (count: number): void => {
+  caseCount.value = count
 }
 
 const handleCaseDeleted = (caseId: number): void => {

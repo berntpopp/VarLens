@@ -37,7 +37,12 @@
 
     <!-- AF filter with presets -->
     <div class="filter-group d-flex align-center">
-      <span class="text-caption mr-2">Max AF:</span>
+      <v-tooltip location="top" max-width="250">
+        <template #activator="{ props: tooltipProps }">
+          <span v-bind="tooltipProps" class="text-caption mr-2 cursor-help">Max AF:</span>
+        </template>
+        <span>Maximum gnomAD allele frequency. Lower values filter for rarer variants.</span>
+      </v-tooltip>
       <v-chip-group v-model="selectedAfPreset" class="mr-2">
         <v-chip
           v-for="preset in afPresets"
@@ -72,7 +77,15 @@
 
     <!-- CADD filter with presets -->
     <div class="filter-group d-flex align-center">
-      <span class="text-caption mr-2">Min CADD:</span>
+      <v-tooltip location="top" max-width="250">
+        <template #activator="{ props: tooltipProps }">
+          <span v-bind="tooltipProps" class="text-caption mr-2 cursor-help">Min CADD:</span>
+        </template>
+        <span
+          >Minimum CADD phred score. Higher values indicate more likely deleterious variants (15+
+          suggested, 20+ high confidence).</span
+        >
+      </v-tooltip>
       <v-chip-group v-model="selectedCaddPreset" class="mr-2">
         <v-chip
           v-for="preset in caddPresets"
@@ -344,5 +357,10 @@ const clearAllFilters = () => {
 
 .filter-group {
   white-space: nowrap;
+}
+
+.cursor-help {
+  cursor: help;
+  border-bottom: 1px dotted currentColor;
 }
 </style>

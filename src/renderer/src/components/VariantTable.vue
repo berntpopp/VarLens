@@ -144,13 +144,17 @@ const loadVariants = async (_options?: any): Promise<void> => {
     const cursor = page.value === 1 ? undefined : cursorCache.value.get(cacheKey)
 
     // Call IPC with filters and sortBy parameters
+    // Convert reactive proxies to plain objects for IPC serialization
+    const plainFilters = JSON.parse(JSON.stringify(props.filters))
+    const plainSortBy = JSON.parse(JSON.stringify(sortBy.value))
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
     const result: PaginatedResult<Variant> = await (window as any).api.variants.query(
       props.caseId,
-      props.filters, // Use props.filters from parent
+      plainFilters,
       cursor,
       itemsPerPage.value,
-      sortBy.value
+      plainSortBy
     )
 
     // Update display state (ONLY mutate these in handler, never page/itemsPerPage/sortBy)

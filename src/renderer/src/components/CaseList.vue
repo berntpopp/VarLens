@@ -12,8 +12,16 @@
   <v-list v-model:selected="selected" density="compact" select-strategy="single-leaf">
     <!-- Empty state -->
     <v-list-item v-if="filteredCases.length === 0 && !loading">
-      <v-list-item-title class="text-grey">
-        {{ search ? 'No matching cases' : 'No cases imported' }}
+      <v-list-item-title class="text-grey text-center py-4">
+        <template v-if="search">
+          <v-icon class="mb-1">mdi-magnify</v-icon>
+          <div>No matching cases</div>
+        </template>
+        <template v-else>
+          <v-icon class="mb-1">mdi-folder-open-outline</v-icon>
+          <div>No cases yet</div>
+          <div class="text-caption mt-1">Click + to import</div>
+        </template>
       </v-list-item-title>
     </v-list-item>
 
@@ -24,7 +32,7 @@
       :value="caseItem.id"
       :title="caseItem.name"
       :subtitle="`${caseItem.variant_count.toLocaleString()} variants • ${formatDate(caseItem.created_at)}`"
-      active-color="primary"
+      color="primary"
       @contextmenu.prevent="handleContextMenu($event, caseItem)"
     >
       <template #prepend>
@@ -67,6 +75,7 @@ import AppSnackbar from './AppSnackbar.vue'
 const emit = defineEmits<{
   'case-selected': [caseId: number]
   'case-deleted': [caseId: number]
+  'cases-loaded': [count: number]
 }>()
 
 // State
@@ -95,6 +104,7 @@ const loadCases = async (): Promise<void> => {
   try {
     // eslint-disable-next-line no-undef
     cases.value = await window.api.cases.list()
+    emit('cases-loaded', cases.value.length)
   } finally {
     loading.value = false
   }

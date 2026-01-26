@@ -7,16 +7,34 @@
         <p class="text-body-1 mt-3 text-grey-darken-1">
           Analyze genetic variants with a data-dense interface designed for clinical review.
         </p>
+
         <v-divider class="my-6 mx-auto" style="max-width: 200px" />
-        <p class="text-body-2 text-grey">
-          <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>
-          Select a case from the sidebar to view variants
-        </p>
+
+        <!-- Show different content based on whether cases exist -->
+        <template v-if="hasCases">
+          <p class="text-body-2 text-grey">
+            <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>
+            Select a case from the sidebar to view variants
+          </p>
+        </template>
+        <template v-else>
+          <p class="text-body-2 text-grey mb-4">Get started by importing your first variant file</p>
+          <v-btn color="primary" size="large" prepend-icon="mdi-upload" @click="$emit('import')">
+            Import Variants
+          </v-btn>
+          <p class="text-caption text-grey mt-4">Supports .json and .json.gz files</p>
+        </template>
       </v-col>
     </v-row>
   </v-container>
 </template>
 
 <script setup lang="ts">
-// EmptyState: Welcome screen displayed when no case is selected
+defineProps<{
+  hasCases?: boolean
+}>()
+
+defineEmits<{
+  import: []
+}>()
 </script>
