@@ -78,6 +78,7 @@
 import { ref, watch } from 'vue'
 import type {
   Variant,
+  VariantFilter,
   PaginationCursor,
   PaginatedResult,
   SortItem
@@ -85,9 +86,14 @@ import type {
 
 interface Props {
   caseId: number
+  filters: Omit<VariantFilter, 'case_id'>
 }
 
 const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  'update:counts': [counts: { filtered: number; total: number }]
+}>()
 
 // Table state - DO NOT mutate these in loadVariants handler (infinite loop)
 const variants = ref<Variant[]>([])
@@ -99,6 +105,9 @@ const sortBy = ref<SortItem[]>([])
 
 // Cursor cache for pagination - keyed by "page-sortKey-sortOrder"
 const cursorCache = ref<Map<string, PaginationCursor>>(new Map())
+
+// Track unfiltered count for "X of Y" display
+const unfilteredCount = ref(0)
 
 // Headers definition
 const headers = [
@@ -134,11 +143,11 @@ const loadVariants = async (_options?: any): Promise<void> => {
     // Get cursor for requested page (undefined for page 1)
     const cursor = page.value === 1 ? undefined : cursorCache.value.get(cacheKey)
 
-    // Call IPC with sortBy parameter for backend sorting (Phase 06-02)
+    // Call IPC with filters and sortBy parameters
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
     const result: PaginatedResult<Variant> = await (window as any).api.variants.query(
       props.caseId,
-      {}, // No filters in Phase 6
+      props.filters, // Use props.filters from parent
       cursor,
       itemsPerPage.value,
       sortBy.value
@@ -147,6 +156,12 @@ const loadVariants = async (_options?: any): Promise<void> => {
     // Update display state (ONLY mutate these in handler, never page/itemsPerPage/sortBy)
     variants.value = result.data
     totalCount.value = result.total_count
+
+    // Emit counts to parent for toolbar display
+    emit('update:counts', {
+      filtered: result.total_count,
+      total: unfilteredCount.value
+    })
 
     // Cache next cursor if more results available
     if ((result.next_cursor ?? null) !== null && result.has_more) {
@@ -164,13 +179,22 @@ const loadVariants = async (_options?: any): Promise<void> => {
   }
 }
 
-// Clear cache when case changes
+// Fetch unfiltered count on case change
 watch(
   () => props.caseId,
-  () => {
-    cursorCache.value.clear()
-    page.value = 1
-  }
+  async (newCaseId) => {
+    if (newCaseId) {
+      // Clear cache and reset pagination
+      cursorCache.value.clear()
+      page.value = 1
+
+      // Fetch unfiltered count (query with empty filters)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
+      const result = await (window as any).api.variants.query(newCaseId, {}, undefined, 1, [])
+      unfilteredCount.value = result.total_count
+    }
+  },
+  { immediate: true }
 )
 
 // Clear cache when sort changes (sort change invalidates all cursors)
@@ -179,6 +203,17 @@ watch(
   () => {
     cursorCache.value.clear()
     page.value = 1
+  },
+  { deep: true }
+)
+
+// Clear cache when filters change (CRITICAL per RESEARCH.md Pitfall 2)
+watch(
+  () => props.filters,
+  () => {
+    cursorCache.value.clear()
+    page.value = 1
+    // loadVariants will be triggered by page change via @update:options
   },
   { deep: true }
 )
