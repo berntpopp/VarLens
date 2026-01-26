@@ -1,10 +1,6 @@
 <template>
-  <v-navigation-drawer
-    permanent
-    :rail="rail"
-    :width="240"
-  >
-    <template v-slot:prepend>
+  <v-navigation-drawer permanent :rail="rail" :width="240">
+    <template #prepend>
       <v-toolbar density="compact">
         <v-toolbar-title v-show="!rail">Cases</v-toolbar-title>
         <v-spacer />

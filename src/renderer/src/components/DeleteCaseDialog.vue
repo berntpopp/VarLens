@@ -3,8 +3,7 @@
     <v-card>
       <v-card-title>Delete Case?</v-card-title>
       <v-card-text>
-        Delete "{{ caseName }}"? This will remove all
-        {{ variantCount.toLocaleString() }} variants.
+        Delete "{{ caseName }}"? This will remove all {{ variantCount.toLocaleString() }} variants.
       </v-card-text>
       <v-card-actions>
         <v-spacer />

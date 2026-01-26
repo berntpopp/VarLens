@@ -1,10 +1,5 @@
 <template>
-  <v-snackbar
-    v-model="snackbar"
-    :color="color"
-    :timeout="3000"
-    location="bottom right"
-  >
+  <v-snackbar v-model="snackbar" :color="color" :timeout="3000" location="bottom right">
     {{ message }}
     <template #actions>
       <v-btn variant="text" @click="snackbar = false">Close</v-btn>

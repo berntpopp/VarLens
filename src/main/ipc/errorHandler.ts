@@ -20,7 +20,7 @@ export function toSerializableError(error: unknown): SerializableError {
     return {
       code: ErrorCode.UNIQUE_CONSTRAINT,
       message: error.message,
-      userMessage: error.message, // Already user-friendly
+      userMessage: error.message // Already user-friendly
     }
   }
 
@@ -43,7 +43,11 @@ export function toSerializableError(error: unknown): SerializableError {
   }
 
   // Handle file not found
-  if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+  if (
+    error instanceof Error &&
+    'code' in error &&
+    (error as NodeJS.ErrnoException).code === 'ENOENT'
+  ) {
     return {
       code: ErrorCode.FILE_NOT_FOUND,
       message: error.message,
@@ -72,9 +76,7 @@ export function toSerializableError(error: unknown): SerializableError {
  * Wrap an IPC handler function to catch errors and convert to serializable format.
  * Use this around all ipcMain.handle callbacks.
  */
-export async function wrapHandler<T>(
-  handler: () => Promise<T>
-): Promise<T | SerializableError> {
+export async function wrapHandler<T>(handler: () => Promise<T>): Promise<T | SerializableError> {
   try {
     return await handler()
   } catch (error) {

@@ -1,10 +1,24 @@
 // Import database and import types for reuse
-import type { Case, Variant, VariantFilter, PaginationCursor, PaginatedResult } from '../../main/database/types'
+import type {
+  Case,
+  Variant,
+  VariantFilter,
+  PaginationCursor,
+  PaginatedResult
+} from '../../main/database/types'
 import type { ProgressUpdate, ImportResult } from '../../main/import/types'
 import type { SerializableError } from './errors'
 
 // Re-export for convenience
-export type { Case, Variant, VariantFilter, PaginationCursor, PaginatedResult, ProgressUpdate, ImportResult }
+export type {
+  Case,
+  Variant,
+  VariantFilter,
+  PaginationCursor,
+  PaginatedResult,
+  ProgressUpdate,
+  ImportResult
+}
 
 export interface CasesAPI {
   list: () => Promise<Case[]>

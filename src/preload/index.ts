@@ -25,8 +25,7 @@ const api = {
       limit?: number
     ) => ipcRenderer.invoke('variants:query', caseId, filters, cursor, limit),
 
-    getFilterOptions: (caseId: number) =>
-      ipcRenderer.invoke('variants:filterOptions', caseId)
+    getFilterOptions: (caseId: number) => ipcRenderer.invoke('variants:filterOptions', caseId)
   },
 
   import: {

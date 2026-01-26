@@ -9,11 +9,7 @@
     class="mx-2 mt-2"
   />
 
-  <v-list
-    v-model:selected="selected"
-    density="compact"
-    select-strategy="single-leaf"
-  >
+  <v-list v-model:selected="selected" density="compact" select-strategy="single-leaf">
     <!-- Empty state -->
     <v-list-item v-if="filteredCases.length === 0 && !loading">
       <v-list-item-title class="text-grey">
@@ -40,7 +36,11 @@
   <!-- Context menu -->
   <v-menu
     v-model="contextMenu.show.value"
-    :style="{ position: 'fixed', left: contextMenu.x.value + 'px', top: contextMenu.y.value + 'px' }"
+    :style="{
+      position: 'fixed',
+      left: contextMenu.x.value + 'px',
+      top: contextMenu.y.value + 'px'
+    }"
     location-strategy="static"
   >
     <v-list density="compact">
@@ -85,6 +85,7 @@ const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 const loadCases = async (): Promise<void> => {
   loading.value = true
   try {
+    // eslint-disable-next-line no-undef
     cases.value = await window.api.cases.list()
   } finally {
     loading.value = false
@@ -133,12 +134,10 @@ const handleDelete = async (): Promise<void> => {
   if (!contextMenuCase.value) return
 
   const caseToDelete = contextMenuCase.value
-  const confirmed = await dialogRef.value?.show(
-    caseToDelete.name,
-    caseToDelete.variant_count
-  )
+  const confirmed = await dialogRef.value?.show(caseToDelete.name, caseToDelete.variant_count)
 
-  if (confirmed) {
+  if (confirmed === true) {
+    // eslint-disable-next-line no-undef
     await window.api.cases.delete(caseToDelete.id)
     emit('case-deleted', caseToDelete.id)
 
