@@ -132,12 +132,18 @@
 
     <v-spacer />
 
-    <!-- Result count -->
-    <span class="text-caption text-grey mr-4">
-      Showing {{ filteredCount.toLocaleString() }}
-      <template v-if="showTotalCount"> of {{ totalCount.toLocaleString() }} </template>
-      variants
-    </span>
+    <!-- Result count - always show X of Y format -->
+    <v-chip
+      :color="hasActiveFilters ? 'primary' : 'default'"
+      :variant="hasActiveFilters ? 'flat' : 'text'"
+      size="small"
+      class="mr-2"
+    >
+      <strong>{{ filteredCount.toLocaleString() }}</strong>
+      <span class="mx-1">/</span>
+      <span>{{ totalCount.toLocaleString() }}</span>
+      <span class="ml-1 text-caption">variants</span>
+    </v-chip>
 
     <!-- Clear All button -->
     <v-btn
