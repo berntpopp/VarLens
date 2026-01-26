@@ -118,22 +118,27 @@ export class ImportService {
 
   /**
    * Extract the case ID (top-level key) from JSON file
+   *
+   * Listens for 'keyValue' event from parser which contains the key name in value field
    */
   private async extractCaseId(filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const stream = createReadStream(filePath).pipe(createGunzip()).pipe(parser())
 
       let caseId: string | null = null
+      let depth = 0
 
       stream.on('data', (data: { name?: string; value?: unknown }) => {
-        // Look for the first top-level key
-        if (
-          data.name !== undefined &&
-          data.name !== '' &&
-          caseId === null &&
-          !data.name.includes('.')
-        ) {
-          caseId = data.name
+        // Track depth
+        if (data.name === 'startObject' || data.name === 'startArray') {
+          depth++
+        } else if (data.name === 'endObject' || data.name === 'endArray') {
+          depth--
+        }
+
+        // Look for first keyValue at depth 1 (top-level object key)
+        if (data.name === 'keyValue' && depth === 1 && caseId === null) {
+          caseId = String(data.value)
           stream.destroy() // Stop reading once we have the case ID
         }
       })
@@ -153,62 +158,45 @@ export class ImportService {
   /**
    * Extract data dictionaries from JSON header
    *
-   * Reads the header array to find fields with dataDictionary properties.
-   * Currently extracts Gene dictionary (ID -> symbol mapping).
+   * Reads the header array and finds the Gene field's dataDictionary.
+   * Uses pick + streamArray to parse header items.
    */
   private async extractDictionaries(filePath: string): Promise<DataDictionaries> {
     return new Promise((resolve, reject) => {
-      const stream = createReadStream(filePath).pipe(createGunzip()).pipe(parser())
-
       const dictionaries: DataDictionaries = {
         gene: {},
         impact: {}
       }
 
-      let headerPath = ''
-      let currentHeaderItem: Record<string, unknown> = {}
-      let inHeaderItem = false
+      // First, get the case ID so we know the path
+      this.extractCaseId(filePath)
+        .then((caseId) => {
+          const stream = createReadStream(filePath)
+            .pipe(createGunzip())
+            .pipe(parser())
+            .pipe(pick({ filter: `${caseId}.header` }))
+            .pipe(streamArray())
 
-      stream.on('data', (data: { name?: string; value?: unknown }) => {
-        if (data.name === undefined) return
+          stream.on('data', (data: { key: number; value: Record<string, unknown> }) => {
+            const headerItem = data.value
+            // Check if this is the Gene field
+            if (
+              headerItem.id === 'Gene' &&
+              headerItem.dataDictionary !== undefined &&
+              headerItem.dataDictionary !== null
+            ) {
+              dictionaries.gene = headerItem.dataDictionary as Record<string, string>
+              stream.destroy() // We have what we need
+            }
+          })
 
-        // Track when we're in a header item
-        if (data.name.match(/^\d+\.header\.\d+$/) !== null) {
-          inHeaderItem = true
-          headerPath = data.name
-          currentHeaderItem = {}
-        }
+          stream.on('close', () => {
+            resolve(dictionaries)
+          })
 
-        // Collect header item properties
-        if (inHeaderItem && data.name.startsWith(headerPath)) {
-          const propName = data.name.substring(headerPath.length + 1)
-          if (!propName.includes('.')) {
-            currentHeaderItem[propName] = data.value
-          }
-        }
-
-        // When we finish a header item, check if it's Gene field
-        if (
-          inHeaderItem &&
-          currentHeaderItem.id === 'Gene' &&
-          currentHeaderItem.dataDictionary !== undefined &&
-          currentHeaderItem.dataDictionary !== null
-        ) {
-          dictionaries.gene = currentHeaderItem.dataDictionary as Record<string, string>
-          stream.destroy() // We have what we need
-        }
-
-        // Check if we've moved past the header
-        if (data.name.match(/^\d+\.data$/) !== null) {
-          stream.destroy() // Stop reading - we're past the header
-        }
-      })
-
-      stream.on('close', () => {
-        resolve(dictionaries)
-      })
-
-      stream.on('error', reject)
+          stream.on('error', reject)
+        })
+        .catch(reject)
     })
   }
 }
