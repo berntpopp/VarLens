@@ -13,7 +13,7 @@ Varlens v0.1 POC validates the core Electron + Vue 3 + SQLite stack by deliverin
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Scaffold project with electron-vite and configure tooling
-- [ ] **Phase 2: Database Layer** - SQLite schema, FTS5, and DatabaseService
+- [x] **Phase 2: Database Layer** - SQLite schema, FTS5, and DatabaseService
 - [ ] **Phase 3: Import Service** - Streaming JSON parser and batch insert
 - [ ] **Phase 4: IPC Layer** - Preload bridge and main process handlers
 - [ ] **Phase 5: UI Shell + Cases** - App layout and case management UI
@@ -52,9 +52,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Create types, error classes, and schema definitions with FTS5
-- [ ] 02-02-PLAN.md — Create DatabaseService with initialization and case CRUD
-- [ ] 02-03-PLAN.md — Add variant batch insert, pagination, filters, and FTS5 search
+- [x] 02-01-PLAN.md — Create types, error classes, and schema definitions with FTS5
+- [x] 02-02-PLAN.md — Create DatabaseService with initialization and case CRUD
+- [x] 02-03-PLAN.md — Add variant batch insert, pagination, filters, and FTS5 search
 
 ### Phase 3: Import Service
 **Goal**: Import gzipped JSON files into database with progress reporting
@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | ✓ Complete | 2026-01-26 |
-| 2. Database Layer | 0/3 | Planned | - |
+| 2. Database Layer | 3/3 | ✓ Complete | 2026-01-26 |
 | 3. Import Service | 0/TBD | Not started | - |
 | 4. IPC Layer | 0/TBD | Not started | - |
 | 5. UI Shell + Cases | 0/TBD | Not started | - |

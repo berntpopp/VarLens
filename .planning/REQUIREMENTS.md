@@ -16,16 +16,16 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [x] **FOUND-05**: Vitest configured with happy-dom environment
 - [x] **FOUND-06**: Makefile with dev/build/lint/test/typecheck commands
 
-### Database
+### Database ✓
 
-- [ ] **DB-01**: SQLite schema created (cases, variants tables with indexes)
-- [ ] **DB-02**: FTS5 virtual table for gene/variant text search
-- [ ] **DB-03**: DatabaseService with case CRUD operations
-- [ ] **DB-04**: DatabaseService with variant batch insert
-- [ ] **DB-05**: DatabaseService with paginated variant query
-- [ ] **DB-06**: DatabaseService with filter support (gene, consequence, gnomAD AF, CADD)
-- [ ] **DB-07**: Prepared statement caching for performance
-- [ ] **DB-08**: Transaction wrapper for batch operations
+- [x] **DB-01**: SQLite schema created (cases, variants tables with indexes)
+- [x] **DB-02**: FTS5 virtual table for gene/variant text search
+- [x] **DB-03**: DatabaseService with case CRUD operations
+- [x] **DB-04**: DatabaseService with variant batch insert
+- [x] **DB-05**: DatabaseService with paginated variant query
+- [x] **DB-06**: DatabaseService with filter support (gene, consequence, gnomAD AF, CADD)
+- [x] **DB-07**: Prepared statement caching for performance
+- [x] **DB-08**: Transaction wrapper for batch operations
 
 ### Import
 
@@ -126,14 +126,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FOUND-04 | Phase 1 | Complete |
 | FOUND-05 | Phase 1 | Complete |
 | FOUND-06 | Phase 1 | Complete |
-| DB-01 | Phase 2 | Pending |
-| DB-02 | Phase 2 | Pending |
-| DB-03 | Phase 2 | Pending |
-| DB-04 | Phase 2 | Pending |
-| DB-05 | Phase 2 | Pending |
-| DB-06 | Phase 2 | Pending |
-| DB-07 | Phase 2 | Pending |
-| DB-08 | Phase 2 | Pending |
+| DB-01 | Phase 2 | Complete |
+| DB-02 | Phase 2 | Complete |
+| DB-03 | Phase 2 | Complete |
+| DB-04 | Phase 2 | Complete |
+| DB-05 | Phase 2 | Complete |
+| DB-06 | Phase 2 | Complete |
+| DB-07 | Phase 2 | Complete |
+| DB-08 | Phase 2 | Complete |
 | IMP-01 | Phase 3 | Pending |
 | IMP-02 | Phase 3 | Pending |
 | IMP-03 | Phase 3 | Pending |
@@ -173,4 +173,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 — Phase 1 complete (6 requirements)*
+*Last updated: 2026-01-26 — Phase 2 complete (14 requirements)*
