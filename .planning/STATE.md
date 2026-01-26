@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 8 of 8 (Import UI + Polish)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-01-26 — Completed Phase 7 (Filters)
+Plan: 1 of TBD in current phase
+Status: In progress
+Last activity: 2026-01-26 — Completed 08-01-PLAN.md
 
-Progress: [████████--] 87.5% (7/8 phases complete)
+Progress: [████████░-] 93.75% (15/16 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15
-- Average duration: 4m 18s
-- Total execution time: 1.08 hours
+- Total plans completed: 16
+- Average duration: 4m 17s
+- Total execution time: 1.14 hours
 
 **By Phase:**
 
@@ -34,10 +34,11 @@ Progress: [████████--] 87.5% (7/8 phases complete)
 | 05    | 2     | 2m 33s | 1m 17s  |
 | 06    | 2     | 10m 10s | 5m 5s  |
 | 07    | 2     | 6m 58s | 3m 29s  |
+| 08    | 1     | 4m 54s | 4m 54s  |
 
 **Recent Trend:**
-- Last 5 plans: 05-02 (1m 17s), 06-02 (5m 39s), 06-01 (4m 31s), 07-01 (2m 58s), 07-02 (4m 0s)
-- Trend: Phase 07 complete in under 7 minutes total, maintaining velocity
+- Last 5 plans: 06-02 (5m 39s), 06-01 (4m 31s), 07-01 (2m 58s), 07-02 (4m 0s), 08-01 (4m 54s)
+- Trend: Consistent velocity around 4-5 minutes per plan
 
 *Updated after each plan completion*
 
@@ -110,6 +111,9 @@ Recent decisions affecting current work:
 | D058 | Unfiltered count fetched separately on case change | 07-02 | Efficient - only queries total once per case |
 | D059 | Cursor cache cleared on filter change | 07-02 | Critical for pagination correctness after filtering |
 | D060 | Filters clear on case switch | 07-02 | Different cases have different data domains |
+| D061 | Use indeterminate progress bar for import | 08-01 | Backend doesn't provide total count upfront |
+| D062 | Simplify Vuetify component tests to avoid full rendering | 08-01 | Complex browser API mocks are brittle, test logic instead |
+| D063 | Auto-populate case name from filename | 08-01 | Reduces user input, filename usually sensible default |
 
 ### Pending Todos
 
@@ -121,6 +125,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 21:30:00 UTC
-Stopped at: Completed Phase 7 (Filters) - all plans executed and verified
+Last session: 2026-01-26 22:36:11 UTC
+Stopped at: Completed 08-01-PLAN.md (Import Dialog Component)
 Resume file: None
