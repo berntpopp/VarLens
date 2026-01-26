@@ -1,0 +1,1157 @@
+[
+  {
+    "id": "ID",
+    "title": "ID",
+    "description": "The internal variant ID",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "selectedTranscript",
+    "title": "Selected transcript",
+    "description": "The selected transcript index",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "transcriptID",
+    "title": "Transcript ID",
+    "description": "Internal transcript database ID",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "transcriptSelectable",
+    "title": "transcript selectable",
+    "description": "Boolean flag noting if transcript is selectable",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "#Comments",
+    "title": "#Comments",
+    "description": "Number of comments",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MostRecentComment",
+    "title": "LatestComment",
+    "description": "The comment entered most recently for the variant. ",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "ACMG Criteria",
+    "title": "ACMG Criteria",
+    "description": "Selected ACMG criteria",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "ACMG Version",
+    "title": "ACMG Version",
+    "description": "ACMG guideline used for variant classification",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "Update in data source",
+    "title": "Update in data source",
+    "description": "Are there updates in external data sources for this variant. An annotation update might be required to see new values.",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "Chr",
+    "title": "Chr",
+    "description": "Chromosome where the variant is located",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "Pos",
+    "title": "Pos",
+    "description": "Chromosomal position",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "Ref",
+    "title": "Ref",
+    "description": "Reference allele",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "Alt",
+    "title": "Alt",
+    "description": "Alternate allele",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "RegionInfo",
+    "title": "RegionInfo",
+    "description": "Additional region information",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "Qual-Index",
+    "title": "Qual-Index",
+    "description": "Phred-scaled quality score for person LB25-1468",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GTNum-Index",
+    "title": "GTNum-Index",
+    "description": "Genotype numeric for person LB25-1468",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "AltAF-Index",
+    "title": "AltAF-Index",
+    "description": "Alternative Allele Frequency for person LB25-1468",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "AltReads-Index",
+    "title": "AltReads-Index",
+    "description": "Allele Reads (Alt Alleles) for person LB25-1468",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "Reads-Index",
+    "title": "Reads-Index",
+    "description": "Allele Reads (Ref + Alt Alleles) for person LB25-1468",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "PhaseSet-Index",
+    "title": "PhaseSet-Index",
+    "description": "Variant phasing information for person LB25-1468",
+    "dataType": "STRING",
+    "fromMultiValue": false
+  },
+  {
+    "id": "Func",
+    "title": "Func",
+    "description": "Variant effect name as defined in the Sequence Ontology",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "Impact",
+    "title": "Impact",
+    "description": "Putative impact",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "AltFunc",
+    "title": "AltFunc",
+    "description": "Function in alternative transcript with higher or equal impact than selected transcript.",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "AltImpact",
+    "title": "AltImpact",
+    "description": "Impact in alternative transcript with higher or equal impact than selected transcript.",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "Gene",
+    "title": "Gene",
+    "description": "Gene where the variant is located",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "OMIM",
+    "title": "OMIM",
+    "description": "OMIM ID of the gene",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "HGNC",
+    "title": "HGNC",
+    "description": "HGNC ID of the gene",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "GeneComment",
+    "title": "GeneComment",
+    "description": "Comment specific to the gene. Edit in Gene Management.",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "Transcript",
+    "title": "Transcript",
+    "description": "Transcript accession (RefSeq)",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "cDNA",
+    "title": "cDNA",
+    "description": "Complementary DNA change",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "AAChange",
+    "title": "AAChange",
+    "description": "Amino acid change",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "SB",
+    "title": "SB",
+    "description": "Strand bias",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "SOR",
+    "title": "SOR",
+    "description": "Symmetric Odds Ratio of 2x2 contingency table to detect strand bias",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "ExonDist",
+    "title": "ExonDist",
+    "description": "Exon distance",
+    "dataType": "INTEGER",
+    "fromMultiValue": true
+  },
+  {
+    "id": "ExonIntronRank",
+    "title": "ExonIntronRank",
+    "description": "(Rank of intron/exon) / (Total number of introns/exons)",
+    "dataType": null,
+    "fromMultiValue": true
+  },
+  {
+    "id": "AionRank",
+    "title": "AionRank",
+    "description": "Variant ranking based on estimated relevance for the case using the selected transcript.",
+    "dataType": "INTEGER",
+    "fromMultiValue": true
+  },
+  {
+    "id": "AionBestRank",
+    "title": "AionBestRank",
+    "description": "Variant ranking based on estimated relevance for the case across all transcripts.",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "AionShortlist",
+    "title": "AionShortlist",
+    "description": "Variants labelled based on the relevance for reporting using the selected transcript.",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "AionBestShortlist",
+    "title": "AionBestShortlist",
+    "description": "Variants labelled based on the relevance for reporting, across all transcript.",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "AionAcmgClass",
+    "title": "AionAcmgClass",
+    "description": "Automatic ACMG classification using the selected transcript.",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "AionBestAcmgClass",
+    "title": "AionBestAcmgClass",
+    "description": "Automatic ACMG classification across all transcripts.",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "AionCH",
+    "title": "AionCH",
+    "description": "Indicates whether a variant is in Compound Heterozygosis (or suspected to be).",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "AionAcmg",
+    "title": "AionAcmg",
+    "description": "Suggested ACMG criteria using the selected transcript in relation to multiple possible diagnosis.",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "AionAcmgFailed",
+    "title": "AionAcmgUnapplied",
+    "description": "ACMG criteria not applied for a variant.",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "AionAcmgManual",
+    "title": "AionAcmgManual",
+    "description": "ACMG criteria remained for manual evaluation.",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "AionDisease",
+    "title": "AionDisease",
+    "description": "Curated diseases and MOI linked to a gene.",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "CADDPhredScore",
+    "title": "CADDPhredScore",
+    "description": "CADDScore scaled phred-like.",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "CaddHpoScore",
+    "title": "CaddHpoScore",
+    "description": "CADDPhredScore combined with HpoSimScore.",
+    "dataType": "FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "VarvisVariantScore",
+    "title": "VarvisVariantScore",
+    "description": "Varvis variant score.",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "VarvisVariantHpoScore",
+    "title": "VarvisVariantHpoScore",
+    "description": "VarvisVariantScore combined with HpoSimScore.",
+    "dataType": "FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "LocalRelevant",
+    "title": "LocalRelevant",
+    "description": "Number of persons with the same variant marked as being relevant, stored in local VARVIS database",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "LocalFound",
+    "title": "LocalFound",
+    "description": "Number of persons for which the same variant has been found in the local VARVIS instance",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "LocalFound-Hom",
+    "title": "LocalFound-Hom",
+    "description": "Number of persons for which the same variant has been found in the local VARVIS database and the variant is homozygous.",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "LocalAF",
+    "title": "LocalAF",
+    "description": "Matches of the variant in the local database as fraction of detections / total sequencing runs at this position. This value is updated daily, so it refers to all data available one day before the annotation.",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "LocalSig",
+    "title": "LocalSig",
+    "description": "Clinical significance of this variant stored in the local DB.",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "LocalFoundLit",
+    "title": "LocalFoundLit",
+    "description": "Number of persons with the same variant and associated with a publication. Subset of LocalFound. The hyperlink leads to total list of LocalFound.",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "LocalACMG",
+    "title": "LocalACMG",
+    "description": "Shows how often the variant has been previously reported based on ACMG criteria in the local DB.",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "AllexesRelevant",
+    "title": "AllexesRelevant",
+    "description": "Number of analyses in the Allexes DB where this variant is considered clinically relevant",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "AllexesFound",
+    "title": "AllexesFound",
+    "description": "Number of detections in the Allexes DB",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "AllexesFound-Hom",
+    "title": "AllexesFound-Hom",
+    "description": "Number of homozygous variants in the Allexes DB",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "AllexesSig",
+    "title": "AllexesSig",
+    "description": "The clinical significance provided by Allexes",
+    "dataType": "STRING",
+    "fromMultiValue": false
+  },
+  {
+    "id": "AllexesVariantLit",
+    "title": "AllexesVariantLit",
+    "description": "Total number of variant-associated publications in Allexes",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "AllexesGeneLit",
+    "title": "AllexesGeneLit",
+    "description": "Total number of gene-associated publications in Allexes",
+    "dataType": "INTEGER",
+    "fromMultiValue": true
+  },
+  {
+    "id": "MMindId",
+    "title": "MMindId",
+    "description": "The variant ID in Mastermind",
+    "dataType": "STRING",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MMindCount",
+    "title": "MMindCount",
+    "description": "Number of articles in Mastermind",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MaxEntScan-Ref",
+    "title": "MaxEntScan-Ref",
+    "description": "The MaxEntScan score for the reference allele at this authentic splice site.",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MaxEntScan-Alt",
+    "title": "MaxEntScan-Alt",
+    "description": "The MaxEntScan score for the alternative allele at this authentic splice site.",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MaxEntScan-DiffF",
+    "title": "MaxEntScan-DiffF",
+    "description": "The MaxEntScan score fraction between the reference and the alternative allele at this authentic splice site.",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "SpliceSiteFinder-Ref",
+    "title": "SpliceSiteFinder-Ref",
+    "description": "The SpliceSiteFinder score for the reference allele at this authentic splice site.",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "SpliceSiteFinder-Alt",
+    "title": "SpliceSiteFinder-Alt",
+    "description": "The SpliceSiteFinder score for the alternative allele at this authentic splice site.",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "SpliceSiteFinder-Diff",
+    "title": "SpliceSiteFinder-Diff",
+    "description": "The SpliceSiteFinder score difference between the reference and the alternative allele at this authentic splice site.",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "dbSNP",
+    "title": "dbSNP",
+    "description": "dbSNP Accession number",
+    "dataType": "STRING",
+    "fromMultiValue": false
+  },
+  {
+    "id": "ClinVSig",
+    "title": "ClinVSig",
+    "description": "ClinVar Clinical significance",
+    "dataType": "STRING",
+    "fromMultiValue": false
+  },
+  {
+    "id": "ClinVAcc",
+    "title": "ClinVAcc",
+    "description": "ClinVar Accession number",
+    "dataType": "STRING",
+    "fromMultiValue": false
+  },
+  {
+    "id": "ClinVarStatus",
+    "title": "ClinVarStatus",
+    "description": "ClinVarStatus",
+    "dataType": "STRING",
+    "fromMultiValue": false
+  },
+  {
+    "id": "ClinVSigSum",
+    "title": "ClinVSigSum",
+    "description": "ClinVSigSum",
+    "dataType": "STRING",
+    "fromMultiValue": false
+  },
+  {
+    "id": "SiftRank",
+    "title": "SiftRank",
+    "description": "SiftRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "LrtRank",
+    "title": "LrtRank",
+    "description": "LrtRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MutTasterRank",
+    "title": "MutTasterRank",
+    "description": "MutTasterRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MutAssessorRank",
+    "title": "MutAssessorRank",
+    "description": "MutAssessorRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "FathmmRank",
+    "title": "FathmmRank",
+    "description": "FathmmRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "ProveanRank",
+    "title": "ProveanRank",
+    "description": "ProveanRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MetaSvmRank",
+    "title": "MetaSvmRank",
+    "description": "MetaSvmRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MetaLrRank",
+    "title": "MetaLrRank",
+    "description": "MetaLrRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MCapRank",
+    "title": "MCapRank",
+    "description": "MCapRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MutPredRank",
+    "title": "MutPredRank",
+    "description": "MutPredRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "FathmmMklCodingRank",
+    "title": "FathmmMklCodingRank",
+    "description": "FathmmMklCodingRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "EigenPcRawRank",
+    "title": "EigenPcRawRank",
+    "description": "EigenPcRawRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GenoCanyonRank",
+    "title": "GenoCanyonRank",
+    "description": "GenoCanyonRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "IntFitConsRank",
+    "title": "IntFitConsRank",
+    "description": "IntFitConsRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GERP++RsRank",
+    "title": "GERP++RsRank",
+    "description": "GERP++RsRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "PhyloP20WayMammalRank",
+    "title": "PhyloP20WayMammalRank",
+    "description": "PhyloP20WayMammalRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "PhastCons20MWayMammalRank",
+    "title": "PhastCons20MWayMammalRank",
+    "description": "PhastCons20MWayMammalRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "SiPhy29WayLogOddsRank",
+    "title": "SiPhy29WayLogOddsRank",
+    "description": "SiPhy29WayLogOddsRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "BayesDelAddAfRank",
+    "title": "BayesDelAddAfRank",
+    "description": "BayesDelAddAfRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "BayesDelNoAfRank",
+    "title": "BayesDelNoAfRank",
+    "description": "BayesDelNoAfRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "InterproDomain",
+    "title": "InterproDomain",
+    "description": "InterproDomain",
+    "dataType": "STRING",
+    "fromMultiValue": false
+  },
+  {
+    "id": "MetaRnnRank",
+    "title": "MetaRnnRank",
+    "description": "MetaRnnRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "RevelRank",
+    "title": "RevelRank",
+    "description": "RevelRank",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "REVELScore",
+    "title": "REVELScore",
+    "description": "REVELScore",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "ScSnvAda",
+    "title": "ScSnvAda",
+    "description": "ScSnvAda",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "ScSnvRf",
+    "title": "ScSnvRf",
+    "description": "ScSnvRf",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomTotal",
+    "title": "GnomTotal",
+    "description": "GnomTotal",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMale",
+    "title": "GnomMale",
+    "description": "GnomMale",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomFemale",
+    "title": "GnomFemale",
+    "description": "GnomFemale",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomACount",
+    "title": "GnomACount",
+    "description": "GnomACount",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomHomInd",
+    "title": "GnomHomInd",
+    "description": "GnomHomInd",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomHemInd",
+    "title": "GnomHemInd",
+    "description": "GnomHemInd",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomPMaxFiltAF",
+    "title": "GnomPMaxFiltAF",
+    "description": "GnomPMaxFiltAF",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomAshkJ",
+    "title": "GnomAshkJ",
+    "description": "GnomAshkJ",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomFin",
+    "title": "GnomFin",
+    "description": "GnomFin",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomNFinEu",
+    "title": "GnomNFinEu",
+    "description": "GnomNFinEu",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomSAsia",
+    "title": "GnomSAsia",
+    "description": "GnomSAsia",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomEAsia",
+    "title": "GnomEAsia",
+    "description": "GnomEAsia",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomLat",
+    "title": "GnomLat",
+    "description": "GnomLat",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomAfr",
+    "title": "GnomAfr",
+    "description": "GnomAfr",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomOther",
+    "title": "GnomOther",
+    "description": "GnomOther",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomACount",
+    "title": "GnomMTHomACount",
+    "description": "Homoplasmic allele count: Count of individuals with a variant at heteroplasmy level >=0.95",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomAF",
+    "title": "GnomMTHomAF",
+    "description": "Homoplasmic allele frequency: Proportions of individuals with a variant at homoplasmy level >=0.95",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetACount",
+    "title": "GnomMTHetACount",
+    "description": "Heteroplasmic allele count: Count of individuals with a variant at heteroplasmy level 0.10=<0.95",
+    "dataType": "INTEGER",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetAF",
+    "title": "GnomMTHetAF",
+    "description": "Heteroplasmic allele frequency: Proportions of individuals with a variant at heteroplasmy level 0.10 - 0.95",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTMaxObsHet",
+    "title": "GnomMTMaxObsHet",
+    "description": "Maximum heteroplasmy level (range 0.10 - 1.00) observed across all individuals.",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomFin",
+    "title": "GnomMTHomFin",
+    "description": "Homoplasmic allele frequency Finish",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetFin",
+    "title": "GnomMTHetFin",
+    "description": "Heteroplasmic allele frequency Finish",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomNFinEu",
+    "title": "GnomMTHomNFinEu",
+    "description": "Homoplasmic allele frequency European (non-Finnish)",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetNFinEu",
+    "title": "GnomMTHetNFinEu",
+    "description": "Heteroplasmic allele frequency European (non-Finnish)",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomAshkJ",
+    "title": "GnomMTHomAshkJ",
+    "description": "Homoplasmic allele frequency Ashkenazi Jewish",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetAshkJ",
+    "title": "GnomMTHetAshkJ",
+    "description": "Heteroplasmic allele frequency Ashkenazi Jewish",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomEAsia",
+    "title": "GnomMTHomEAsia",
+    "description": "Homoplasmic allele frequency East Asian",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetEAsia",
+    "title": "GnomMTHetEAsia",
+    "description": "Heteroplasmic allele frequency East Asian",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomOther",
+    "title": "GnomMTHomOther",
+    "description": "Homoplasmic allele frequency Other",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetOther",
+    "title": "GnomMTHetOther",
+    "description": "Heteroplasmic allele frequency Other",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomLat",
+    "title": "GnomMTHomLat",
+    "description": "Homoplasmic allele frequency Latino/Admixed American",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetLat",
+    "title": "GnomMTHetLat",
+    "description": "Heteroplasmic allele frequency Latino/Admixed American",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomSAsia",
+    "title": "GnomMTHomSAsia",
+    "description": "Homoplasmic allele frequency South Asian",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetSAsia",
+    "title": "GnomMTHetSAsia",
+    "description": "Heteroplasmic allele frequency South Asian",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomAfr",
+    "title": "GnomMTHomAfr",
+    "description": "Homoplasmic allele frequency African/African American",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetAfr",
+    "title": "GnomMTHetAfr",
+    "description": "Heteroplasmic allele frequency African/African American",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomAmish",
+    "title": "GnomMTHomAmish",
+    "description": "Homoplasmic allele frequency Amish",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetAmish",
+    "title": "GnomMTHetAmish",
+    "description": "Heteroplasmic allele frequency Amish",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHomMEast",
+    "title": "GnomMTHomMEast",
+    "description": "Homoplasmic allele frequency Middle Eastern",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMTHetMEast",
+    "title": "GnomMTHetMEast",
+    "description": "Heteroplasmic allele frequency Middle Eastern",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "GnomMid",
+    "title": "GnomMid",
+    "description": "GnomMid",
+    "dataType": "FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "PhyloP470wayMammalsScore",
+    "title": "PhyloP470wayMammalsScore",
+    "description": "PhyloP470wayMammalsScore",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": false
+  },
+  {
+    "id": "ClinVMissenseFraction",
+    "title": "ClinVMissenseFraction",
+    "description": "ClinVMissenseFraction",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "ClinVBenignFraction",
+    "title": "ClinVBenignFraction",
+    "description": "ClinVBenignFraction",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "ClinVLofFraction",
+    "title": "ClinVLofFraction",
+    "description": "Fraction of loss-of-function variants in gene",
+    "dataType": "FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "ClinVVariantsGeneSum",
+    "title": "ClinVVariantsGeneSum",
+    "description": "Number of variants in gene by variant category",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "GnomGSynZ",
+    "title": "GnomGSynZ",
+    "description": "GnomGSynZ",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "GnomGSynOe",
+    "title": "GnomGSynOe",
+    "description": "GnomGSynOe",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "GnomGSynOeUp",
+    "title": "GnomGSynOeUp",
+    "description": "GnomGSynOeUp",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "GnomGMisZ",
+    "title": "GnomGMisZ",
+    "description": "GnomGMisZ",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "GnomGMisOe",
+    "title": "GnomGMisOe",
+    "description": "GnomGMisOe",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "GnomGMisOeUp",
+    "title": "GnomGMisOeUp",
+    "description": "GnomGMisOeUp",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "GnomGLofOe",
+    "title": "GnomGLofOe",
+    "description": "GnomGLofOe",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "GnomGLofOeUp",
+    "title": "GnomGLofOeUp",
+    "description": "GnomGLofOeUp",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "HpoSimScore",
+    "title": "HpoSimScore",
+    "description": "HpoSimScore",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "HpoMatch",
+    "title": "HpoMatch",
+    "description": "HpoMatch",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "#HpoMatch",
+    "title": "#HpoMatch",
+    "description": "#HpoMatch",
+    "dataType": "INTEGER",
+    "fromMultiValue": true
+  },
+  {
+    "id": "HpoMatchF",
+    "title": "HpoMatchF",
+    "description": "HpoMatchF",
+    "dataType": "SHORT_FLOAT",
+    "fromMultiValue": true
+  },
+  {
+    "id": "HPOTerms",
+    "title": "HPOTerms",
+    "description": "HPOTerms",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "HPODisease",
+    "title": "HPODisease",
+    "description": "HPODisease",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "MoI",
+    "title": "MoI",
+    "description": "MoI",
+    "dataType": "STRING",
+    "fromMultiValue": true
+  },
+  {
+    "id": "Filter",
+    "title": "Filter",
+    "description": "",
+    "dataType": null,
+    "fromMultiValue": false
+  },
+  {
+    "id": "overlappingGenes",
+    "title": "GenesOverlapping",
+    "description": "Overlapping genes",
+    "dataType": null,
+    "fromMultiValue": false
+  }
+]

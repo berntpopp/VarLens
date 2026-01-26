@@ -1,0 +1,166 @@
+All 165 column IDs:
+  0. ID
+  1. selectedTranscript
+  2. transcriptID
+  3. transcriptSelectable
+  4. #Comments
+  5. MostRecentComment
+  6. ACMG Criteria
+  7. ACMG Version
+  8. Update in data source
+  9. Chr
+ 10. Pos
+ 11. Ref
+ 12. Alt
+ 13. RegionInfo
+ 14. Qual-Index
+ 15. GTNum-Index
+ 16. AltAF-Index
+ 17. AltReads-Index
+ 18. Reads-Index
+ 19. PhaseSet-Index
+ 20. Func
+ 21. Impact
+ 22. AltFunc
+ 23. AltImpact
+ 24. Gene
+ 25. OMIM
+ 26. HGNC
+ 27. GeneComment
+ 28. Transcript
+ 29. cDNA
+ 30. AAChange
+ 31. SB
+ 32. SOR
+ 33. ExonDist
+ 34. ExonIntronRank
+ 35. AionRank
+ 36. AionBestRank
+ 37. AionShortlist
+ 38. AionBestShortlist
+ 39. AionAcmgClass
+ 40. AionBestAcmgClass
+ 41. AionCH
+ 42. AionAcmg
+ 43. AionAcmgFailed
+ 44. AionAcmgManual
+ 45. AionDisease
+ 46. CADDPhredScore
+ 47. CaddHpoScore
+ 48. VarvisVariantScore
+ 49. VarvisVariantHpoScore
+ 50. LocalRelevant
+ 51. LocalFound
+ 52. LocalFound-Hom
+ 53. LocalAF
+ 54. LocalSig
+ 55. LocalFoundLit
+ 56. LocalACMG
+ 57. AllexesRelevant
+ 58. AllexesFound
+ 59. AllexesFound-Hom
+ 60. AllexesSig
+ 61. AllexesVariantLit
+ 62. AllexesGeneLit
+ 63. MMindId
+ 64. MMindCount
+ 65. MaxEntScan-Ref
+ 66. MaxEntScan-Alt
+ 67. MaxEntScan-DiffF
+ 68. SpliceSiteFinder-Ref
+ 69. SpliceSiteFinder-Alt
+ 70. SpliceSiteFinder-Diff
+ 71. dbSNP
+ 72. ClinVSig
+ 73. ClinVAcc
+ 74. ClinVarStatus
+ 75. ClinVSigSum
+ 76. SiftRank
+ 77. LrtRank
+ 78. MutTasterRank
+ 79. MutAssessorRank
+ 80. FathmmRank
+ 81. ProveanRank
+ 82. MetaSvmRank
+ 83. MetaLrRank
+ 84. MCapRank
+ 85. MutPredRank
+ 86. FathmmMklCodingRank
+ 87. EigenPcRawRank
+ 88. GenoCanyonRank
+ 89. IntFitConsRank
+ 90. GERP++RsRank
+ 91. PhyloP20WayMammalRank
+ 92. PhastCons20MWayMammalRank
+ 93. SiPhy29WayLogOddsRank
+ 94. BayesDelAddAfRank
+ 95. BayesDelNoAfRank
+ 96. InterproDomain
+ 97. MetaRnnRank
+ 98. RevelRank
+ 99. REVELScore
+100. ScSnvAda
+101. ScSnvRf
+102. GnomTotal
+103. GnomMale
+104. GnomFemale
+105. GnomACount
+106. GnomHomInd
+107. GnomHemInd
+108. GnomPMaxFiltAF
+109. GnomAshkJ
+110. GnomFin
+111. GnomNFinEu
+112. GnomSAsia
+113. GnomEAsia
+114. GnomLat
+115. GnomAfr
+116. GnomOther
+117. GnomMTHomACount
+118. GnomMTHomAF
+119. GnomMTHetACount
+120. GnomMTHetAF
+121. GnomMTMaxObsHet
+122. GnomMTHomFin
+123. GnomMTHetFin
+124. GnomMTHomNFinEu
+125. GnomMTHetNFinEu
+126. GnomMTHomAshkJ
+127. GnomMTHetAshkJ
+128. GnomMTHomEAsia
+129. GnomMTHetEAsia
+130. GnomMTHomOther
+131. GnomMTHetOther
+132. GnomMTHomLat
+133. GnomMTHetLat
+134. GnomMTHomSAsia
+135. GnomMTHetSAsia
+136. GnomMTHomAfr
+137. GnomMTHetAfr
+138. GnomMTHomAmish
+139. GnomMTHetAmish
+140. GnomMTHomMEast
+141. GnomMTHetMEast
+142. GnomMid
+143. PhyloP470wayMammalsScore
+144. ClinVMissenseFraction
+145. ClinVBenignFraction
+146. ClinVLofFraction
+147. ClinVVariantsGeneSum
+148. GnomGSynZ
+149. GnomGSynOe
+150. GnomGSynOeUp
+151. GnomGMisZ
+152. GnomGMisOe
+153. GnomGMisOeUp
+154. GnomGLofOe
+155. GnomGLofOeUp
+156. HpoSimScore
+157. HpoMatch
+158. #HpoMatch
+159. HpoMatchF
+160. HPOTerms
+161. HPODisease
+162. MoI
+163. Filter
+164. overlappingGenes

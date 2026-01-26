@@ -7,7 +7,7 @@
 
 ## 📋 Executive Summary
 
-This document outlines the plan to build an **Electron-based desktop application** that enables external collaborators to analyze pre-filtered and annotated genetic variant data offline. The application will import JSON exports from the [varvis-download](https://github.com/LaborBerlin/varvis-download) CLI tool and provide a similar UI/UX to the varvis® web platform, using a local SQLite database for efficient querying and storage.
+This document outlines the plan to build an **Electron-based desktop application** that enables external collaborators to analyze pre-filtered and annotated genetic variant data offline. The application will import JSON exports from clinical genomics platforms and provide a data-dense UI optimized for variant analysis workflows, using a local SQLite database for efficient querying and storage.
 
 ---
 
@@ -15,7 +15,7 @@ This document outlines the plan to build an **Electron-based desktop application
 
 1. **Data Privacy**: Enable secure sharing of variant data without exposing login credentials
 2. **Offline-First**: Full functionality without internet connection
-3. **Familiar UX**: Mirror varvis® interface patterns for easy adoption
+3. **Familiar UX**: Data-dense interface optimized for clinical genomics workflows
 4. **Performance**: Efficient handling of large variant datasets on consumer hardware
 5. **Research-Friendly**: Support variant counting, filtering, and cohort analysis
 
@@ -35,7 +35,7 @@ This document outlines the plan to build an **Electron-based desktop application
 ### Key Insights
 
 - **Cutevariant** proves SQLite is excellent for variant data (VQL query language, indexed storage)
-- **varvis®** features: filtering by inheritance, phenotype (HPO), virtual gene panels, QC visualization
+- **Clinical platforms** typically include: filtering by inheritance, phenotype (HPO), virtual gene panels, QC visualization
 - **SQLite JSON1/JSONB** extension parses JSON at >1 GB/s, supports indexing on JSON properties
 - **FTS5** full-text search enables fast gene/variant name searching
 
@@ -453,7 +453,7 @@ jobs:
 -- Cases/Samples table
 CREATE TABLE cases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    case_id TEXT UNIQUE NOT NULL,          -- External ID from varvis
+    case_id TEXT UNIQUE NOT NULL,          -- External case/sample ID
     sample_id TEXT,
     analysis_type TEXT,                     -- SNV, CNV, SV, etc.
     import_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -500,7 +500,7 @@ CREATE TABLE variants (
     allele_fraction REAL,
 
     -- Full annotation data
-    annotations JSON,                       -- Complete JSON from varvis
+    annotations JSON,                       -- Complete annotation JSON blob
 
     -- Timestamps
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -674,7 +674,7 @@ WHERE variants_fts MATCH 'BRCA*';
 
 ## 🎨 UI/UX Design Guidelines
 
-### Layout Structure (inspired by varvis®)
+### Layout Structure
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -703,7 +703,7 @@ WHERE variants_fts MATCH 'BRCA*';
 ### Design Principles
 
 1. **Density**: Medical/research UX should be data-dense
-2. **Familiarity**: Follow varvis® patterns where possible
+2. **Familiarity**: Follow established clinical genomics UI patterns
 3. **Accessibility**: WCAG 2.1 AA compliance, keyboard navigation
 4. **Performance**: Virtual scrolling for large datasets
 5. **Dark Mode**: Essential for extended use
@@ -915,10 +915,6 @@ varlens/
 - [Vuetify 3 Documentation](https://vuetifyjs.com/)
 - [Vue 3 Composition API](https://vuejs.org/guide/extras/composition-api-faq.html)
 
-### varvis Integration
-- [varvis-download](https://github.com/LaborBerlin/varvis-download) - Data export CLI
-- [varvis® Official](https://www.varvis.com/) - Source platform
-
 ---
 
 ## ⚠️ Considerations & Risks
@@ -951,7 +947,7 @@ varlens/
 ## ✅ Next Steps
 
 1. ~~**Finalize project name**~~ - ✅ **Varlens** selected
-2. **Validate JSON structure** - Get sample export from varvis-download
+2. ~~**Validate JSON structure**~~ - ✅ Sample data extracted (see `test-data/`)
 3. **Create repository** - `github.com/LaborBerlin/varlens`
 4. **Initialize project** - electron-vite template with Vue 3 + Vuetify 3
 5. **Define JSON schema** - TypeScript interfaces for variant data
