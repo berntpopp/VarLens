@@ -5,3 +5,12 @@ declare module '*.vue' {
   const component: DefineComponent<{}, {}, any>
   export default component
 }
+
+// Window API types - exposed via preload bridge
+import type { WindowAPI } from '../../shared/types/api'
+
+declare global {
+  interface Window {
+    api: WindowAPI
+  }
+}

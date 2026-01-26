@@ -1,0 +1,156 @@
+<template>
+  <v-text-field
+    v-model="search"
+    prepend-inner-icon="mdi-magnify"
+    placeholder="Search cases..."
+    density="compact"
+    hide-details
+    clearable
+    class="mx-2 mt-2"
+  />
+
+  <v-list
+    v-model:selected="selected"
+    density="compact"
+    select-strategy="single-leaf"
+  >
+    <!-- Empty state -->
+    <v-list-item v-if="filteredCases.length === 0 && !loading">
+      <v-list-item-title class="text-grey">
+        {{ search ? 'No matching cases' : 'No cases imported' }}
+      </v-list-item-title>
+    </v-list-item>
+
+    <!-- Case items -->
+    <v-list-item
+      v-for="caseItem in filteredCases"
+      :key="caseItem.id"
+      :value="caseItem.id"
+      :title="caseItem.name"
+      :subtitle="`${caseItem.variant_count.toLocaleString()} variants • ${formatDate(caseItem.created_at)}`"
+      active-color="primary"
+      @contextmenu.prevent="handleContextMenu($event, caseItem)"
+    >
+      <template #prepend>
+        <v-icon>mdi-dna</v-icon>
+      </template>
+    </v-list-item>
+  </v-list>
+
+  <!-- Context menu -->
+  <v-menu
+    v-model="contextMenu.show.value"
+    :style="{ position: 'fixed', left: contextMenu.x.value + 'px', top: contextMenu.y.value + 'px' }"
+    location-strategy="static"
+  >
+    <v-list density="compact">
+      <v-list-item @click="handleDelete">
+        <template #prepend>
+          <v-icon>mdi-delete</v-icon>
+        </template>
+        <v-list-item-title>Delete</v-list-item-title>
+      </v-list-item>
+    </v-list>
+  </v-menu>
+
+  <DeleteCaseDialog ref="dialogRef" />
+  <AppSnackbar ref="snackbarRef" />
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import type { Case } from '../../../shared/types/api'
+import { useContextMenu } from '../composables/useContextMenu'
+import DeleteCaseDialog from './DeleteCaseDialog.vue'
+import AppSnackbar from './AppSnackbar.vue'
+
+const emit = defineEmits<{
+  'case-selected': [caseId: number]
+  'case-deleted': [caseId: number]
+}>()
+
+// State
+const cases = ref<Case[]>([])
+const loading = ref(false)
+const search = ref('')
+const selected = ref<number[]>([])
+const contextMenuCase = ref<Case | null>(null)
+const contextMenu = useContextMenu()
+
+// Component refs
+const dialogRef = ref<InstanceType<typeof DeleteCaseDialog> | null>(null)
+const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
+
+// Load cases from IPC
+const loadCases = async (): Promise<void> => {
+  loading.value = true
+  try {
+    cases.value = await window.api.cases.list()
+  } finally {
+    loading.value = false
+  }
+}
+
+// Filter cases by search term, sorted by created_at DESC
+const filteredCases = computed(() => {
+  let result = [...cases.value]
+
+  if (search.value) {
+    const query = search.value.toLowerCase()
+    result = result.filter((c) => c.name.toLowerCase().includes(query))
+  }
+
+  // Sort by created_at descending (newest first)
+  result.sort((a, b) => b.created_at - a.created_at)
+
+  return result
+})
+
+// Format date as "Jan 26" style
+const formatDate = (timestamp: number): string => {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric'
+  }).format(new Date(timestamp))
+}
+
+// Watch selection changes and emit
+watch(selected, (newSelection) => {
+  if (newSelection.length > 0) {
+    emit('case-selected', newSelection[0])
+  }
+})
+
+// Context menu handlers
+const handleContextMenu = (event: MouseEvent, caseItem: Case): void => {
+  contextMenuCase.value = caseItem
+  contextMenu.open(event)
+}
+
+const handleDelete = async (): Promise<void> => {
+  contextMenu.close()
+
+  if (!contextMenuCase.value) return
+
+  const caseToDelete = contextMenuCase.value
+  const confirmed = await dialogRef.value?.show(
+    caseToDelete.name,
+    caseToDelete.variant_count
+  )
+
+  if (confirmed) {
+    await window.api.cases.delete(caseToDelete.id)
+    emit('case-deleted', caseToDelete.id)
+
+    // If deleted case was selected, clear selection
+    if (selected.value.includes(caseToDelete.id)) {
+      selected.value = []
+    }
+
+    snackbarRef.value?.show(`Deleted "${caseToDelete.name}"`)
+    await loadCases()
+  }
+}
+
+onMounted(loadCases)
+</script>
