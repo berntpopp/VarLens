@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 6 of 8 (Variant Table)
-Plan: 2 of TBD in current phase
+Plan: 1 of 2 in current phase
 Status: In progress
-Last activity: 2026-01-26 — Completed 06-02-PLAN.md (Backend Sorting)
+Last activity: 2026-01-26 — Completed 06-01-PLAN.md (Variant Table UI)
 
 Progress: [██████----] 62.5% (5/8 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
-- Average duration: 4m 28s
-- Total execution time: 0.89 hours
+- Total plans completed: 13
+- Average duration: 4m 29s
+- Total execution time: 0.98 hours
 
 **By Phase:**
 
@@ -32,11 +32,11 @@ Progress: [██████----] 62.5% (5/8 phases complete)
 | 03    | 2     | 16m 9s | 8m 5s  |
 | 04    | 3     | 9m 6s | 3m 2s   |
 | 05    | 2     | 2m 33s | 1m 17s  |
-| 06    | 1     | 5m 39s | 5m 39s  |
+| 06    | 2     | 10m 10s | 5m 5s  |
 
 **Recent Trend:**
-- Last 5 plans: 04-02 (2m 52s), 04-03 (2m 27s), 05-01 (1m 16s), 05-02 (1m 17s), 06-02 (5m 39s)
-- Trend: Phase 06 starting with moderate pace for backend sorting implementation
+- Last 5 plans: 04-03 (2m 27s), 05-01 (1m 16s), 05-02 (1m 17s), 06-02 (5m 39s), 06-01 (4m 31s)
+- Trend: Phase 06 maintaining consistent 4-5 minute pace for UI components
 
 *Updated after each plan completion*
 
@@ -94,6 +94,11 @@ Recent decisions affecting current work:
 | D043 | Always append id as tiebreaker for stable pagination | 06-02 | Ensures deterministic row order for keyset pagination |
 | D044 | Validate cursor.sort_key matches current sort | 06-02 | Forces frontend to reset pagination when sort changes |
 | D045 | SORTABLE_COLUMNS whitelist prevents SQL injection | 06-02 | Only allows pre-approved column names in ORDER BY clause |
+| D046 | Dynamic slot syntax #[\`item.pos\`] for ESLint compliance | 06-01 | Prevents vue/valid-v-slot errors with slot names containing dots |
+| D047 | Scientific notation threshold for gnomAD AF < 0.001 | 06-01 | Prevents common frequencies showing as confusing scientific notation |
+| D048 | Truncate alleles at 20 characters with tooltip | 06-01 | Prevents horizontal table overflow on large indels |
+| D049 | Clinical color conventions for ClinVar chips | 06-01 | Red=pathogenic, green=benign, amber=VUS per clinical genetics conventions |
+| D050 | Cache key includes sort state for cursor invalidation | 06-01 | Ensures cursors invalidate when sort changes to prevent stale data |
 
 ### Pending Todos
 
@@ -105,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 20:05:49 UTC
-Stopped at: Completed 06-02-SUMMARY.md (Backend Sorting)
+Last session: 2026-01-26 20:46:51 UTC
+Stopped at: Completed 06-01-SUMMARY.md (Variant Table UI)
 Resume file: None
