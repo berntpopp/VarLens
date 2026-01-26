@@ -82,10 +82,12 @@ Plans:
   3. File selection dialog opens and returns path
   4. Import progress events stream to renderer
   5. Variant queries execute and return paginated results
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md — Create shared IPC types and error handling infrastructure
+- [ ] 04-02-PLAN.md — Implement preload bridge and integrate IPC registration
+- [ ] 04-03-PLAN.md — Implement domain IPC handlers (cases, variants, import, system)
 
 ### Phase 5: UI Shell + Cases
 **Goal**: App layout with case sidebar that lists, selects, and deletes cases
@@ -156,7 +158,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Foundation | 2/2 | Complete | 2026-01-26 |
 | 2. Database Layer | 3/3 | Complete | 2026-01-26 |
 | 3. Import Service | 2/2 | Complete | 2026-01-26 |
-| 4. IPC Layer | 0/TBD | Not started | - |
+| 4. IPC Layer | 0/3 | Not started | - |
 | 5. UI Shell + Cases | 0/TBD | Not started | - |
 | 6. Variant Table | 0/TBD | Not started | - |
 | 7. Filters | 0/TBD | Not started | - |
