@@ -105,18 +105,19 @@ Plans:
 - [x] 05-02-PLAN.md — Case list with selection, context menu delete, and notifications
 
 ### Phase 6: Variant Table
-**Goal**: Paginated variant table using Vuetify v-data-table-server
+**Goal**: Paginated variant table using Vuetify v-data-table-server with backend sorting
 **Depends on**: Phase 5
 **Requirements**: TBL-01, TBL-02, TBL-03, TBL-04, TBL-05
 **Success Criteria** (what must be TRUE):
   1. Table displays variants for selected case with server-side pagination
   2. Page navigation and items-per-page selector work correctly
-  3. Column sorting (single and multi-column) updates query
+  3. Column sorting (single and multi-column) updates query with backend support
   4. All required columns visible: chr, pos, ref, alt, gene, consequence, gnomAD AF, CADD, ClinVar
   5. Formatted display: positions with commas, AF in scientific notation, colored ClinVar chips
-**Plans**: 1 plan
+**Plans**: 2 plans
 
 Plans:
+- [ ] 06-02-PLAN.md — Implement backend sorting support in DatabaseService and IPC layer
 - [ ] 06-01-PLAN.md — Create VariantTable component with server-side pagination and formatted columns
 
 ### Phase 7: Filters
@@ -161,7 +162,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 3. Import Service | 2/2 | Complete | 2026-01-26 |
 | 4. IPC Layer | 3/3 | Complete | 2026-01-26 |
 | 5. UI Shell + Cases | 2/2 | Complete | 2026-01-26 |
-| 6. Variant Table | 0/1 | Planned | - |
+| 6. Variant Table | 0/2 | Planned | - |
 | 7. Filters | 0/TBD | Not started | - |
 | 8. Import UI + Polish | 0/TBD | Not started | - |
 
