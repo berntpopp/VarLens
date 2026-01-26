@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 5 of 8 (UI Shell + Cases)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-01-26 — Completed 05-01-PLAN.md (App Shell Layout)
+Last activity: 2026-01-26 — Completed 05-02-PLAN.md (Case Management UI)
 
-Progress: [█████-----] 50.0% (4/8 phases complete, 1/3 plans in phase 5)
+Progress: [█████-----] 52.9% (4/8 phases complete, 2/3 plans in phase 5)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: 4m 43s
-- Total execution time: 0.79 hours
+- Total plans completed: 11
+- Average duration: 4m 22s
+- Total execution time: 0.80 hours
 
 **By Phase:**
 
@@ -31,10 +31,11 @@ Progress: [█████-----] 50.0% (4/8 phases complete, 1/3 plans in phase 
 | 02    | 3     | 10m 25s | 3m 28s  |
 | 03    | 2     | 16m 9s | 8m 5s  |
 | 04    | 3     | 9m 6s | 3m 2s   |
+| 05    | 2     | 2m 33s | 1m 17s  |
 
 **Recent Trend:**
-- Last 5 plans: 03-02 (13m 32s), 04-01 (3m 47s), 04-02 (2m 52s), 04-03 (2m 27s), 05-01 (1m 16s)
-- Trend: Phase 05 started with fastest plan yet; UI shell layout complete
+- Last 5 plans: 04-01 (3m 47s), 04-02 (2m 52s), 04-03 (2m 27s), 05-01 (1m 16s), 05-02 (1m 17s)
+- Trend: Phase 05 maintaining fast pace with UI component development
 
 *Updated after each plan completion*
 
@@ -84,6 +85,10 @@ Recent decisions affecting current work:
 | D035 | Import directory persistence in settings.json | 04-03 | File dialog defaults to last directory for better UX |
 | D036 | Use permanent prop on v-navigation-drawer | 05-01 | Ensures v-main adjusts width automatically |
 | D037 | selectedCaseId typed as number or null | 05-01 | Matches database case.id type for direct comparison |
+| D038 | Context menu positioned at mouse coordinates using fixed positioning | 05-02 | Provides precise control over menu location |
+| D039 | Delete dialog uses promise-based API exposed via defineExpose | 05-02 | Enables async/await pattern in calling code |
+| D040 | Case selection uses v-list select-strategy='single-leaf' | 05-02 | Vuetify built-in single selection with array binding |
+| D041 | ESLint no-undef suppression for window.api calls | 05-02 | window.api injected by preload, not in renderer scope |
 
 ### Pending Todos
 
@@ -95,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 18:17:33 UTC
-Stopped at: Completed 05-01-PLAN.md (App Shell Layout)
+Last session: 2026-01-26 20:01:21 UTC
+Stopped at: Completed 05-02-SUMMARY.md (Case Management UI)
 Resume file: None
