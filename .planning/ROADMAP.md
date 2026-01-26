@@ -49,10 +49,12 @@ Plans:
   3. Variants can be inserted in batches within transactions
   4. Paginated queries return correct page/total counts
   5. FTS5 search on gene_symbol returns matching variants
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — Create types, error classes, and schema definitions with FTS5
+- [ ] 02-02-PLAN.md — Create DatabaseService with initialization and case CRUD
+- [ ] 02-03-PLAN.md — Add variant batch insert, pagination, filters, and FTS5 search
 
 ### Phase 3: Import Service
 **Goal**: Import gzipped JSON files into database with progress reporting
@@ -151,7 +153,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | ✓ Complete | 2026-01-26 |
-| 2. Database Layer | 0/TBD | Not started | - |
+| 2. Database Layer | 0/3 | Planned | - |
 | 3. Import Service | 0/TBD | Not started | - |
 | 4. IPC Layer | 0/TBD | Not started | - |
 | 5. UI Shell + Cases | 0/TBD | Not started | - |
