@@ -68,13 +68,13 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [x] **FLT-05**: Clear filters button (visible when filters active)
 - [x] **FLT-06**: FTS5 search integration for text queries
 
-### UI - Import
+### UI - Import ✓
 
-- [ ] **UIMP-01**: Import dialog with case name input
-- [ ] **UIMP-02**: File selection for .json/.json.gz files
-- [ ] **UIMP-03**: Import progress indicator
-- [ ] **UIMP-04**: Error display on import failure
-- [ ] **UIMP-05**: Auto-select case after successful import
+- [x] **UIMP-01**: Import dialog with case name input
+- [x] **UIMP-02**: File selection for .json/.json.gz files
+- [x] **UIMP-03**: Import progress indicator
+- [x] **UIMP-04**: Error display on import failure
+- [x] **UIMP-05**: Auto-select case after successful import
 
 ## v0.2+ Requirements
 
@@ -160,11 +160,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FLT-04 | Phase 7 | Complete |
 | FLT-05 | Phase 7 | Complete |
 | FLT-06 | Phase 7 | Complete |
-| UIMP-01 | Phase 8 | Pending |
-| UIMP-02 | Phase 8 | Pending |
-| UIMP-03 | Phase 8 | Pending |
-| UIMP-04 | Phase 8 | Pending |
-| UIMP-05 | Phase 8 | Pending |
+| UIMP-01 | Phase 8 | Complete |
+| UIMP-02 | Phase 8 | Complete |
+| UIMP-03 | Phase 8 | Complete |
+| UIMP-04 | Phase 8 | Complete |
+| UIMP-05 | Phase 8 | Complete |
 
 **Coverage:**
 - v0.1 requirements: 40 total
@@ -173,4 +173,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 — Phase 7 complete (40 requirements)*
+*Last updated: 2026-01-27 — Phase 8 complete (40 requirements, all complete)*

@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: UI Shell + Cases** - App layout and case management UI
 - [x] **Phase 6: Variant Table** - Paginated data table with sorting
 - [x] **Phase 7: Filters** - Filter controls and FTS5 search integration
-- [ ] **Phase 8: Import UI + Polish** - Import dialog and end-to-end verification
+- [x] **Phase 8: Import UI + Polish** - Import dialog and end-to-end verification
 
 ## Phase Details
 
@@ -149,8 +149,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Create ImportDialog component with progress, validation, and error handling
-- [ ] 08-02-PLAN.md — Integrate ImportDialog into App.vue with sidebar button and auto-selection
+- [x] 08-01-PLAN.md — Create ImportDialog component with progress, validation, and error handling
+- [x] 08-02-PLAN.md — Integrate ImportDialog into App.vue with sidebar button and auto-selection
 
 ## Progress
 
@@ -166,7 +166,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 5. UI Shell + Cases | 2/2 | Complete | 2026-01-26 |
 | 6. Variant Table | 2/2 | Complete | 2026-01-26 |
 | 7. Filters | 2/2 | Complete | 2026-01-26 |
-| 8. Import UI + Polish | 0/2 | Not started | - |
+| 8. Import UI + Polish | 2/2 | Complete | 2026-01-27 |
 
 ---
 *Roadmap created: 2026-01-26*

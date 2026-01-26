@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** External collaborators can analyze variant data offline with data-dense UX
-**Current focus:** Phase 8 - Import UI + Polish
+**Current focus:** Milestone v0.1 POC Complete
 
 ## Current Position
 
