@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 8 of 8 (Import UI + Polish)
-Plan: 1 of TBD in current phase
-Status: In progress
-Last activity: 2026-01-26 — Completed 08-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete (awaiting verification checkpoint)
+Last activity: 2026-01-26 — Completed 08-02-PLAN.md
 
-Progress: [████████░-] 93.75% (15/16 plans complete)
+Progress: [█████████-] 100% (17/17 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 16
-- Average duration: 4m 17s
-- Total execution time: 1.14 hours
+- Total plans completed: 17
+- Average duration: 4m 6s
+- Total execution time: 1.16 hours
 
 **By Phase:**
 
@@ -34,11 +34,11 @@ Progress: [████████░-] 93.75% (15/16 plans complete)
 | 05    | 2     | 2m 33s | 1m 17s  |
 | 06    | 2     | 10m 10s | 5m 5s  |
 | 07    | 2     | 6m 58s | 3m 29s  |
-| 08    | 1     | 4m 54s | 4m 54s  |
+| 08    | 2     | 5m 59s | 3m 0s   |
 
 **Recent Trend:**
-- Last 5 plans: 06-02 (5m 39s), 06-01 (4m 31s), 07-01 (2m 58s), 07-02 (4m 0s), 08-01 (4m 54s)
-- Trend: Consistent velocity around 4-5 minutes per plan
+- Last 5 plans: 06-01 (4m 31s), 07-01 (2m 58s), 07-02 (4m 0s), 08-01 (4m 54s), 08-02 (1m 5s)
+- Trend: Excellent velocity, sub-2 minute for focused integration task
 
 *Updated after each plan completion*
 
@@ -114,6 +114,9 @@ Recent decisions affecting current work:
 | D061 | Use indeterminate progress bar for import | 08-01 | Backend doesn't provide total count upfront |
 | D062 | Simplify Vuetify component tests to avoid full rendering | 08-01 | Complex browser API mocks are brittle, test logic instead |
 | D063 | Auto-populate case name from filename | 08-01 | Reduces user input, filename usually sensible default |
+| D064 | Import button visibility controlled by rail state | 08-02 | Collapsed sidebar hides import button to save space |
+| D065 | Component coordination via parent refs and exposed methods | 08-02 | Clear ownership pattern for multi-step flows |
+| D066 | Auto-select newly imported case | 08-02 | Natural UX - user expects to see imported data immediately |
 
 ### Pending Todos
 
@@ -125,6 +128,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 22:36:11 UTC
-Stopped at: Completed 08-01-PLAN.md (Import Dialog Component)
+Last session: 2026-01-26 23:46:02 UTC
+Stopped at: Completed 08-02-PLAN.md (Import Integration) - awaiting verification checkpoint
 Resume file: None
