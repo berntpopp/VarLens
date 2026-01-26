@@ -8,13 +8,13 @@ import App from '../../src/renderer/src/App.vue'
 const vuetify = createVuetify({ components, directives })
 
 describe('App.vue', () => {
-  it('renders Varlens title', () => {
+  it('renders VarLens title', () => {
     const wrapper = mount(App, {
       global: {
         plugins: [vuetify]
       }
     })
-    expect(wrapper.text()).toContain('Varlens')
+    expect(wrapper.text()).toContain('VarLens')
   })
 
   it('uses Vuetify v-app component', () => {
