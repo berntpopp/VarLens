@@ -7,14 +7,14 @@
 
 Requirements for proof-of-concept release. Each maps to roadmap phases.
 
-### Foundation
+### Foundation ✓
 
-- [ ] **FOUND-01**: Project scaffolded with electron-vite (Vue 3 + TypeScript template)
-- [ ] **FOUND-02**: Vuetify 3 installed and configured
-- [ ] **FOUND-03**: better-sqlite3 installed and rebuilt for Electron
-- [ ] **FOUND-04**: ESLint flat config with TypeScript and Vue rules
-- [ ] **FOUND-05**: Vitest configured with happy-dom environment
-- [ ] **FOUND-06**: Makefile with dev/build/lint/test/typecheck commands
+- [x] **FOUND-01**: Project scaffolded with electron-vite (Vue 3 + TypeScript template)
+- [x] **FOUND-02**: Vuetify 3 installed and configured
+- [x] **FOUND-03**: better-sqlite3 installed and rebuilt for Electron
+- [x] **FOUND-04**: ESLint flat config with TypeScript and Vue rules
+- [x] **FOUND-05**: Vitest configured with happy-dom environment
+- [x] **FOUND-06**: Makefile with dev/build/lint/test/typecheck commands
 
 ### Database
 
@@ -120,12 +120,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | Phase 1 | Pending |
-| FOUND-02 | Phase 1 | Pending |
-| FOUND-03 | Phase 1 | Pending |
-| FOUND-04 | Phase 1 | Pending |
-| FOUND-05 | Phase 1 | Pending |
-| FOUND-06 | Phase 1 | Pending |
+| FOUND-01 | Phase 1 | Complete |
+| FOUND-02 | Phase 1 | Complete |
+| FOUND-03 | Phase 1 | Complete |
+| FOUND-04 | Phase 1 | Complete |
+| FOUND-05 | Phase 1 | Complete |
+| FOUND-06 | Phase 1 | Complete |
 | DB-01 | Phase 2 | Pending |
 | DB-02 | Phase 2 | Pending |
 | DB-03 | Phase 2 | Pending |
@@ -173,4 +173,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 after roadmap creation*
+*Last updated: 2026-01-26 — Phase 1 complete (6 requirements)*

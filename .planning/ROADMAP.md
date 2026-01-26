@@ -12,7 +12,7 @@ Varlens v0.1 POC validates the core Electron + Vue 3 + SQLite stack by deliverin
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Scaffold project with electron-vite and configure tooling
+- [x] **Phase 1: Foundation** - Scaffold project with electron-vite and configure tooling
 - [ ] **Phase 2: Database Layer** - SQLite schema, FTS5, and DatabaseService
 - [ ] **Phase 3: Import Service** - Streaming JSON parser and batch insert
 - [ ] **Phase 4: IPC Layer** - Preload bridge and main process handlers
@@ -36,8 +36,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Scaffold project, configure Vuetify 3, integrate better-sqlite3
-- [ ] 01-02-PLAN.md — Configure ESLint, Vitest, and Makefile
+- [x] 01-01-PLAN.md — Scaffold project, configure Vuetify 3, integrate better-sqlite3
+- [x] 01-02-PLAN.md — Configure ESLint, Vitest, and Makefile
 
 ### Phase 2: Database Layer
 **Goal**: SQLite database with schema, FTS5, and complete DatabaseService API
@@ -150,7 +150,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/2 | Planned | - |
+| 1. Foundation | 2/2 | ✓ Complete | 2026-01-26 |
 | 2. Database Layer | 0/TBD | Not started | - |
 | 3. Import Service | 0/TBD | Not started | - |
 | 4. IPC Layer | 0/TBD | Not started | - |
