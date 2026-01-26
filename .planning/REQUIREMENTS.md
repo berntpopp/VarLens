@@ -45,13 +45,13 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [ ] **IPC-06**: Variants query IPC handler
 - [ ] **IPC-07**: Filter options IPC handler
 
-### UI — Cases
+### UI - Cases
 
 - [ ] **CASE-01**: Case list component showing imported cases
 - [ ] **CASE-02**: Case selection updates variant table
 - [ ] **CASE-03**: Case deletion with confirmation
 
-### UI — Table
+### UI - Table
 
 - [ ] **TBL-01**: Variant table using v-data-table-server
 - [ ] **TBL-02**: Server-side pagination with page/itemsPerPage controls
@@ -59,7 +59,7 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [ ] **TBL-04**: Display columns: chr, pos, ref, alt, gene, consequence, gnomAD AF, CADD, ClinVar
 - [ ] **TBL-05**: Formatted display (position with commas, AF in scientific notation, colored ClinVar chips)
 
-### UI — Filters
+### UI - Filters
 
 - [ ] **FLT-01**: Gene symbol text filter with debounced input
 - [ ] **FLT-02**: Consequence dropdown filter populated from database
@@ -68,7 +68,7 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [ ] **FLT-05**: Clear filters button (visible when filters active)
 - [ ] **FLT-06**: FTS5 search integration for text queries
 
-### UI — Import
+### UI - Import
 
 - [ ] **UIMP-01**: Import dialog with case name input
 - [ ] **UIMP-02**: File selection for .json/.json.gz files
@@ -120,57 +120,57 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | TBD | Pending |
-| FOUND-02 | TBD | Pending |
-| FOUND-03 | TBD | Pending |
-| FOUND-04 | TBD | Pending |
-| FOUND-05 | TBD | Pending |
-| FOUND-06 | TBD | Pending |
-| DB-01 | TBD | Pending |
-| DB-02 | TBD | Pending |
-| DB-03 | TBD | Pending |
-| DB-04 | TBD | Pending |
-| DB-05 | TBD | Pending |
-| DB-06 | TBD | Pending |
-| DB-07 | TBD | Pending |
-| DB-08 | TBD | Pending |
-| IMP-01 | TBD | Pending |
-| IMP-02 | TBD | Pending |
-| IMP-03 | TBD | Pending |
-| IMP-04 | TBD | Pending |
-| IMP-05 | TBD | Pending |
-| IPC-01 | TBD | Pending |
-| IPC-02 | TBD | Pending |
-| IPC-03 | TBD | Pending |
-| IPC-04 | TBD | Pending |
-| IPC-05 | TBD | Pending |
-| IPC-06 | TBD | Pending |
-| IPC-07 | TBD | Pending |
-| CASE-01 | TBD | Pending |
-| CASE-02 | TBD | Pending |
-| CASE-03 | TBD | Pending |
-| TBL-01 | TBD | Pending |
-| TBL-02 | TBD | Pending |
-| TBL-03 | TBD | Pending |
-| TBL-04 | TBD | Pending |
-| TBL-05 | TBD | Pending |
-| FLT-01 | TBD | Pending |
-| FLT-02 | TBD | Pending |
-| FLT-03 | TBD | Pending |
-| FLT-04 | TBD | Pending |
-| FLT-05 | TBD | Pending |
-| FLT-06 | TBD | Pending |
-| UIMP-01 | TBD | Pending |
-| UIMP-02 | TBD | Pending |
-| UIMP-03 | TBD | Pending |
-| UIMP-04 | TBD | Pending |
-| UIMP-05 | TBD | Pending |
+| FOUND-01 | Phase 1 | Pending |
+| FOUND-02 | Phase 1 | Pending |
+| FOUND-03 | Phase 1 | Pending |
+| FOUND-04 | Phase 1 | Pending |
+| FOUND-05 | Phase 1 | Pending |
+| FOUND-06 | Phase 1 | Pending |
+| DB-01 | Phase 2 | Pending |
+| DB-02 | Phase 2 | Pending |
+| DB-03 | Phase 2 | Pending |
+| DB-04 | Phase 2 | Pending |
+| DB-05 | Phase 2 | Pending |
+| DB-06 | Phase 2 | Pending |
+| DB-07 | Phase 2 | Pending |
+| DB-08 | Phase 2 | Pending |
+| IMP-01 | Phase 3 | Pending |
+| IMP-02 | Phase 3 | Pending |
+| IMP-03 | Phase 3 | Pending |
+| IMP-04 | Phase 3 | Pending |
+| IMP-05 | Phase 3 | Pending |
+| IPC-01 | Phase 4 | Pending |
+| IPC-02 | Phase 4 | Pending |
+| IPC-03 | Phase 4 | Pending |
+| IPC-04 | Phase 4 | Pending |
+| IPC-05 | Phase 4 | Pending |
+| IPC-06 | Phase 4 | Pending |
+| IPC-07 | Phase 4 | Pending |
+| CASE-01 | Phase 5 | Pending |
+| CASE-02 | Phase 5 | Pending |
+| CASE-03 | Phase 5 | Pending |
+| TBL-01 | Phase 6 | Pending |
+| TBL-02 | Phase 6 | Pending |
+| TBL-03 | Phase 6 | Pending |
+| TBL-04 | Phase 6 | Pending |
+| TBL-05 | Phase 6 | Pending |
+| FLT-01 | Phase 7 | Pending |
+| FLT-02 | Phase 7 | Pending |
+| FLT-03 | Phase 7 | Pending |
+| FLT-04 | Phase 7 | Pending |
+| FLT-05 | Phase 7 | Pending |
+| FLT-06 | Phase 7 | Pending |
+| UIMP-01 | Phase 8 | Pending |
+| UIMP-02 | Phase 8 | Pending |
+| UIMP-03 | Phase 8 | Pending |
+| UIMP-04 | Phase 8 | Pending |
+| UIMP-05 | Phase 8 | Pending |
 
 **Coverage:**
 - v0.1 requirements: 40 total
-- Mapped to phases: 0
-- Unmapped: 40
+- Mapped to phases: 40
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 after initial definition*
+*Last updated: 2026-01-26 after roadmap creation*
