@@ -70,13 +70,26 @@ export interface VariantFilter {
 }
 
 /**
+ * SortItem - defines a column sort specification
+ * Compatible with Vuetify v-data-table-server sortBy format
+ */
+export interface SortItem {
+  /** Column key to sort by */
+  key: string
+  /** Sort direction: 'asc' or 'desc' */
+  order: 'asc' | 'desc'
+}
+
+/**
  * PaginationCursor - cursor for keyset pagination
  */
 export interface PaginationCursor {
   /** Last row id */
   id: number
-  /** Value of sort column for keyset pagination */
-  sort_value: number | string
+  /** Value of primary sort column for keyset pagination */
+  sort_value: number | string | null
+  /** Column key being sorted (needed to resume correctly) */
+  sort_key: string
 }
 
 /**

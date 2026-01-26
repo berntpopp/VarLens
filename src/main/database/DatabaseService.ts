@@ -8,7 +8,7 @@
 import Database from 'better-sqlite3'
 import type { Database as DatabaseType, Statement } from 'better-sqlite3'
 import { initializeSchema } from './schema'
-import type { Case, Variant, VariantFilter, PaginationCursor, PaginatedResult } from './types'
+import type { Case, Variant, VariantFilter, PaginationCursor, PaginatedResult, SortItem } from './types'
 import { DatabaseError, NotFoundError, UniqueConstraintError, TransactionError } from './errors'
 
 /**
@@ -16,6 +16,20 @@ import { DatabaseError, NotFoundError, UniqueConstraintError, TransactionError }
  * Using 5000 rows per batch for optimal SQLite performance.
  */
 const BATCH_SIZE = 5000
+
+/**
+ * Columns that support sorting.
+ * Maps column keys to their SQL column names.
+ */
+const SORTABLE_COLUMNS: Record<string, string> = {
+  chr: 'chr',
+  pos: 'pos',
+  gene_symbol: 'gene_symbol',
+  consequence: 'consequence',
+  gnomad_af: 'gnomad_af',
+  cadd: 'cadd',
+  clinvar: 'clinvar'
+}
 
 /**
  * DatabaseService class
@@ -258,17 +272,19 @@ export class DatabaseService {
    * Get paginated variants with filtering (DB-05, DB-06)
    *
    * Supports cursor-based pagination with filters for gene_symbol, consequence,
-   * gnomAD AF, and CADD score.
+   * gnomAD AF, and CADD score. Also supports dynamic sorting.
    *
    * @param filter - Filter criteria including case_id (required)
    * @param limit - Maximum number of results to return
    * @param cursor - Optional cursor for pagination
+   * @param sortBy - Optional sort specification (defaults to pos ASC)
    * @returns Paginated result with variants, cursor, and total count
    */
   getVariants(
     filter: VariantFilter,
     limit: number,
-    cursor?: PaginationCursor
+    cursor?: PaginationCursor,
+    sortBy?: SortItem[]
   ): PaginatedResult<Variant> {
     // Build dynamic WHERE clause
     const conditions: string[] = ['case_id = ?']
