@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Scaffold project with electron-vite and configure tooling
 - [x] **Phase 2: Database Layer** - SQLite schema, FTS5, and DatabaseService
-- [ ] **Phase 3: Import Service** - Streaming JSON parser and batch insert
+- [x] **Phase 3: Import Service** - Streaming JSON parser and batch insert
 - [ ] **Phase 4: IPC Layer** - Preload bridge and main process handlers
 - [ ] **Phase 5: UI Shell + Cases** - App layout and case management UI
 - [ ] **Phase 6: Variant Table** - Paginated data table with sorting
@@ -69,8 +69,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Create import types, field mapping config, and FieldMapper Transform
-- [ ] 03-02-PLAN.md — Create ImportService with streaming pipeline and integration tests
+- [x] 03-01-PLAN.md — Create import types, field mapping config, and FieldMapper Transform
+- [x] 03-02-PLAN.md — Create ImportService with streaming pipeline and integration tests
 
 ### Phase 4: IPC Layer
 **Goal**: Type-safe IPC bridge connecting renderer to main process services
@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete | 2026-01-26 |
 | 2. Database Layer | 3/3 | Complete | 2026-01-26 |
-| 3. Import Service | 0/2 | Planned | - |
+| 3. Import Service | 2/2 | Complete | 2026-01-26 |
 | 4. IPC Layer | 0/TBD | Not started | - |
 | 5. UI Shell + Cases | 0/TBD | Not started | - |
 | 6. Variant Table | 0/TBD | Not started | - |

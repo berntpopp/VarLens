@@ -27,13 +27,13 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [x] **DB-07**: Prepared statement caching for performance
 - [x] **DB-08**: Transaction wrapper for batch operations
 
-### Import
+### Import ✓
 
-- [ ] **IMP-01**: Gzipped JSON file reading with streaming
-- [ ] **IMP-02**: Memory-efficient JSON array parsing
-- [ ] **IMP-03**: Batch insert with configurable batch size
-- [ ] **IMP-04**: Progress callback reporting (phase, count)
-- [ ] **IMP-05**: Case creation on import with variant count update
+- [x] **IMP-01**: Gzipped JSON file reading with streaming
+- [x] **IMP-02**: Memory-efficient JSON array parsing
+- [x] **IMP-03**: Batch insert with configurable batch size
+- [x] **IMP-04**: Progress callback reporting (phase, count)
+- [x] **IMP-05**: Case creation on import with variant count update
 
 ### IPC
 
@@ -134,11 +134,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DB-06 | Phase 2 | Complete |
 | DB-07 | Phase 2 | Complete |
 | DB-08 | Phase 2 | Complete |
-| IMP-01 | Phase 3 | Pending |
-| IMP-02 | Phase 3 | Pending |
-| IMP-03 | Phase 3 | Pending |
-| IMP-04 | Phase 3 | Pending |
-| IMP-05 | Phase 3 | Pending |
+| IMP-01 | Phase 3 | Complete |
+| IMP-02 | Phase 3 | Complete |
+| IMP-03 | Phase 3 | Complete |
+| IMP-04 | Phase 3 | Complete |
+| IMP-05 | Phase 3 | Complete |
 | IPC-01 | Phase 4 | Pending |
 | IPC-02 | Phase 4 | Pending |
 | IPC-03 | Phase 4 | Pending |
@@ -173,4 +173,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 — Phase 2 complete (14 requirements)*
+*Last updated: 2026-01-26 — Phase 3 complete (19 requirements)*
