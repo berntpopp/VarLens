@@ -1,7 +1,11 @@
 <template>
   <v-app>
-    <AppSidebar>
-      <CaseList @case-selected="handleCaseSelected" @case-deleted="handleCaseDeleted" />
+    <AppSidebar @import-click="handleImportClick">
+      <CaseList
+        ref="caseListRef"
+        @case-selected="handleCaseSelected"
+        @case-deleted="handleCaseDeleted"
+      />
     </AppSidebar>
 
     <v-main>
@@ -20,6 +24,9 @@
         />
       </template>
     </v-main>
+
+    <ImportDialog ref="importDialogRef" @import-complete="handleImportComplete" />
+    <AppSnackbar ref="snackbarRef" />
   </v-app>
 </template>
 
@@ -30,7 +37,14 @@ import CaseList from './components/CaseList.vue'
 import EmptyState from './components/EmptyState.vue'
 import VariantTable from './components/VariantTable.vue'
 import FilterToolbar from './components/FilterToolbar.vue'
+import ImportDialog from './components/ImportDialog.vue'
+import AppSnackbar from './components/AppSnackbar.vue'
 import type { VariantFilter } from '../../shared/types/api'
+
+// Component refs
+const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
+const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
+const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
 
 // Case selection state
 const selectedCaseId = ref<number | null>(null)
@@ -39,6 +53,28 @@ const selectedCaseId = ref<number | null>(null)
 const currentFilters = ref<Omit<VariantFilter, 'case_id'>>({})
 const filteredCount = ref(0)
 const totalCount = ref(0)
+
+const handleImportClick = (): void => {
+  importDialogRef.value?.show()
+}
+
+const handleImportComplete = async (result: {
+  caseId: number
+  variantCount: number
+  caseName: string
+}): Promise<void> => {
+  // Refresh case list to include new case
+  await caseListRef.value?.refreshCases()
+
+  // Auto-select the newly imported case
+  caseListRef.value?.selectCase(result.caseId)
+
+  // Show success snackbar
+  snackbarRef.value?.show(
+    `Case imported: ${result.caseName} (${result.variantCount.toLocaleString()} variants)`,
+    'success'
+  )
+}
 
 const handleCaseSelected = (caseId: number): void => {
   selectedCaseId.value = caseId
