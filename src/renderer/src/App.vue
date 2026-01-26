@@ -1,28 +1,20 @@
 <template>
-  <div id="app">
-    <h1>Varlens</h1>
-    <p>Electron + Vue 3 application ready.</p>
-  </div>
+  <v-app>
+    <v-main>
+      <v-container>
+        <v-card class="mx-auto mt-10" max-width="600">
+          <v-card-title class="text-h4">
+            Varlens
+          </v-card-title>
+          <v-card-text>
+            Electron + Vue 3 + Vuetify 3 application ready.
+          </v-card-text>
+        </v-card>
+      </v-container>
+    </v-main>
+  </v-app>
 </template>
 
 <script setup lang="ts">
 // Varlens root component
 </script>
-
-<style>
-body {
-  margin: 0;
-  padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-}
-
-#app {
-  text-align: center;
-  color: #2c3e50;
-}
-
-h1 {
-  font-size: 3em;
-  margin-bottom: 0.5em;
-}
-</style>
