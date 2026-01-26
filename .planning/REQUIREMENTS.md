@@ -59,14 +59,14 @@ Requirements for proof-of-concept release. Each maps to roadmap phases.
 - [x] **TBL-04**: Display columns: chr, pos, ref, alt, gene, consequence, gnomAD AF, CADD, ClinVar
 - [x] **TBL-05**: Formatted display (position with commas, AF in scientific notation, colored ClinVar chips)
 
-### UI - Filters
+### UI - Filters ✓
 
-- [ ] **FLT-01**: Gene symbol text filter with debounced input
-- [ ] **FLT-02**: Consequence dropdown filter populated from database
-- [ ] **FLT-03**: gnomAD AF maximum threshold filter
-- [ ] **FLT-04**: CADD minimum score filter
-- [ ] **FLT-05**: Clear filters button (visible when filters active)
-- [ ] **FLT-06**: FTS5 search integration for text queries
+- [x] **FLT-01**: Gene symbol text filter with debounced input
+- [x] **FLT-02**: Consequence dropdown filter populated from database
+- [x] **FLT-03**: gnomAD AF maximum threshold filter
+- [x] **FLT-04**: CADD minimum score filter
+- [x] **FLT-05**: Clear filters button (visible when filters active)
+- [x] **FLT-06**: FTS5 search integration for text queries
 
 ### UI - Import
 
@@ -154,12 +154,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TBL-03 | Phase 6 | Complete |
 | TBL-04 | Phase 6 | Complete |
 | TBL-05 | Phase 6 | Complete |
-| FLT-01 | Phase 7 | Pending |
-| FLT-02 | Phase 7 | Pending |
-| FLT-03 | Phase 7 | Pending |
-| FLT-04 | Phase 7 | Pending |
-| FLT-05 | Phase 7 | Pending |
-| FLT-06 | Phase 7 | Pending |
+| FLT-01 | Phase 7 | Complete |
+| FLT-02 | Phase 7 | Complete |
+| FLT-03 | Phase 7 | Complete |
+| FLT-04 | Phase 7 | Complete |
+| FLT-05 | Phase 7 | Complete |
+| FLT-06 | Phase 7 | Complete |
 | UIMP-01 | Phase 8 | Pending |
 | UIMP-02 | Phase 8 | Pending |
 | UIMP-03 | Phase 8 | Pending |
@@ -173,4 +173,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 — Phase 6 complete (34 requirements)*
+*Last updated: 2026-01-26 — Phase 7 complete (40 requirements)*

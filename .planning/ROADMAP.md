@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: IPC Layer** - Preload bridge and main process handlers
 - [x] **Phase 5: UI Shell + Cases** - App layout and case management UI
 - [x] **Phase 6: Variant Table** - Paginated data table with sorting
-- [ ] **Phase 7: Filters** - Filter controls and FTS5 search integration
+- [x] **Phase 7: Filters** - Filter controls and FTS5 search integration
 - [ ] **Phase 8: Import UI + Polish** - Import dialog and end-to-end verification
 
 ## Phase Details
@@ -133,8 +133,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Create FilterToolbar component with gene autocomplete, consequence dropdown, AF/CADD presets
-- [ ] 07-02-PLAN.md — Integrate FilterToolbar with VariantTable and App.vue
+- [x] 07-01-PLAN.md — Create FilterToolbar component with gene autocomplete, consequence dropdown, AF/CADD presets
+- [x] 07-02-PLAN.md — Integrate FilterToolbar with VariantTable and App.vue
 
 ### Phase 8: Import UI + Polish
 **Goal**: Complete import dialog and end-to-end POC verification
@@ -164,7 +164,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 4. IPC Layer | 3/3 | Complete | 2026-01-26 |
 | 5. UI Shell + Cases | 2/2 | Complete | 2026-01-26 |
 | 6. Variant Table | 2/2 | Complete | 2026-01-26 |
-| 7. Filters | 0/2 | Not started | - |
+| 7. Filters | 2/2 | Complete | 2026-01-26 |
 | 8. Import UI + Polish | 0/TBD | Not started | - |
 
 ---
