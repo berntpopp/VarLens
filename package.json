@@ -1,6 +1,6 @@
 {
   "name": "varlens",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Offline variant analysis tool for external collaborators",
   "main": "./out/main/index.js",
   "author": "Bernt Popp <bernt.popp@gmail.com>",
@@ -53,7 +53,8 @@
     "appId": "com.varlens.app",
     "productName": "Varlens",
     "asarUnpack": [
-      "**/*.node"
+      "**/*.node",
+      "node_modules/better-sqlite3/**/*"
     ],
     "files": [
       "out/**/*",
@@ -62,6 +63,7 @@
     "directories": {
       "output": "release"
     },
+    "afterPack": "./afterPack.js",
     "publish": {
       "provider": "github",
       "owner": "berntpopp",
