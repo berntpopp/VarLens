@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 ## Current Position
 
-Phase: 10 of 4 (Logging Infrastructure & Viewer)
-Plan: 2 of 2 complete
-Status: Phase complete — verified ✓
-Last activity: 2026-01-27 -- Phase 10 verified (14/14 must-haves passed)
+Phase: 11 of 4 (Trust Signals -- Disclaimer & FAQ)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-01-27 -- Completed 11-01-PLAN.md (Disclaimer Subsystem)
 
-Progress: [█████░░░░░] 50%
+Progress: [█████▓░░░░] 58%
 
 ### Phase Overview
 
@@ -22,7 +22,7 @@ Progress: [█████░░░░░] 50%
 |-------|------|--------|
 | 9 | Branding & Theme Foundation | ✓ Complete (2/2 plans) |
 | 10 | Logging Infrastructure & Viewer | ✓ Complete (2/2 plans) |
-| 11 | Trust Signals -- Disclaimer & FAQ | Not Started |
+| 11 | Trust Signals -- Disclaimer & FAQ | In Progress (1/2 plans) |
 | 12 | App Footer Integration | Not Started |
 
 ## Milestone History
@@ -32,8 +32,8 @@ Progress: [█████░░░░░] 50%
 ## Performance Metrics
 
 **v0.2.0 Progress:**
-- Plans completed: 4
-- Average duration: 6.5 min
+- Plans completed: 5
+- Average duration: 5.6 min
 - Phases complete: 2 of 4 (50%)
 
 ## Accumulated Context
@@ -79,6 +79,16 @@ Key architectural decisions carried forward:
 | Per-level counts from buffer | Compute from current entries array, not cumulative stats | Counts match visible filtered entries |
 | Temporary access mechanisms | Floating FAB + Ctrl+L until Phase 12 footer | Provides access during development before permanent UI |
 
+**v0.2.0 Decisions (Phase 11):**
+
+| Decision | Summary | Impact |
+|----------|---------|--------|
+| Vite define for __APP_VERSION__ | Use Vite define instead of import.meta.env for build-time version injection | Build-time constant with TypeScript declaration, cleaner usage pattern |
+| Simple version string equality | Store version string in localStorage, compare with equality (not semver parsing) | Lightweight version-gating sufficient for disclaimer reset |
+| Parent-controlled disclaimer check | App.vue controls timing of checkAndShow(), not DisclaimerDialog onMounted | Avoids component mounting timing issues |
+| persistent + scrim props | Use persistent + scrim for blocking modal (no hide-overlay or no-click-animation) | Correct Vuetify pattern for blocking dialogs |
+| Dual exposure methods | Expose checkAndShow() for version check and show() for manual re-open | Separation of concerns for version-gated vs unconditional display |
+
 ### v0.2.0 Design Notes
 
 - Footer (#E5AA94 background) integrates disclaimer status, FAQ trigger, and log viewer toggle
@@ -97,14 +107,14 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T09:30:00Z
-Stopped at: Phase 10 verified and complete
+Last session: 2026-01-27T10:22:00Z
+Stopped at: Completed 11-01-PLAN.md (Disclaimer Subsystem)
 Resume file: None
 
 ## Next Steps
 
-1. Plan and execute Phase 11 (Trust Signals -- Disclaimer & FAQ)
+1. Execute Plan 11-02 (FAQ Dialog) to complete Phase 11
 2. Complete Phase 12 (App Footer Integration) to wire everything together
 
 ---
-*Updated: 2026-01-27 after Phase 10 verification*
+*Updated: 2026-01-27 after completing Phase 11 Plan 01*
