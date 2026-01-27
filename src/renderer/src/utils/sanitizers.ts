@@ -30,17 +30,17 @@ export function sanitizeLogMessage(message: string): string {
   let sanitized = message
 
   // Quick pre-check for HGVS notation (contains '.' followed by digit)
-  if (/[cgpmn]\.\d/i.test(sanitized)) {
+  if (/[cgpmn]\.\d/i.test(sanitized) === true) {
     sanitized = sanitized.replace(HGVS_PATTERN, '[REDACTED:HGVS]')
   }
 
   // Quick pre-check for genomic coordinates (contains ':' with digits)
-  if (/:\d/.test(sanitized)) {
+  if (/:\d/.test(sanitized) === true) {
     sanitized = sanitized.replace(GENOMIC_COORD_PATTERN, '[REDACTED:COORD]')
   }
 
   // Quick pre-check for patient IDs (contains known prefixes)
-  if (/\b(PATIENT|SAMPLE|SUBJECT|ID)[_:-]/i.test(sanitized)) {
+  if (/\b(PATIENT|SAMPLE|SUBJECT|ID)[_:-]/i.test(sanitized) === true) {
     sanitized = sanitized.replace(PATIENT_ID_PATTERN, '[REDACTED:ID]')
   }
 
