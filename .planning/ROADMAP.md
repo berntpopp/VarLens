@@ -136,15 +136,15 @@ Plans:
 
 ## Phase 17: OMIM Data Extraction
 
-**Goal:** User sees OMIM disease associations inline in the variant table and can link directly to OMIM entries using extracted MIM numbers.
+**Goal:** User sees OMIM MIM numbers inline in the variant table and can link directly to OMIM entries using extracted MIM numbers.
 
-**Dependencies:** Phase 15 (external link infrastructure for OMIM link-out), Phase 16 (import pipeline must be stable before modifying field mapping)
+**Dependencies:** Phase 15 (external link infrastructure for OMIM link-out)
 
 **Plans:** 2 plans
 
 Plans:
-- [ ] 17-01-PLAN.md -- Schema extension and import pipeline field mapping for OMIM MIM number and disease name extraction
-- [ ] 17-02-PLAN.md -- Inline disease association display in variant table and enhanced OMIM link with MIM number
+- [ ] 17-01-PLAN.md -- Schema extension, FTS5 rebuild, and import pipeline field mapping for OMIM MIM number extraction from source column 25
+- [ ] 17-02-PLAN.md -- Dedicated OMIM column in variant table with clickable MIM number links and OMIM gene search link removal
 
 **Requirements:**
 - OMIM-01: Import pipeline extracts OMIM MIM numbers from variant annotation data
