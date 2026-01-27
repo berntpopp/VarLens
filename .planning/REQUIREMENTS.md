@@ -3,19 +3,90 @@
 **Defined:** 2026-01-27
 **Core Value:** External collaborators can analyze variant data offline with a data-dense UX for research use
 
-## v0.2.0 Requirements
+## v0.3.0 Requirements
+
+Requirements for cohort analysis, security, and import enhancements milestone.
+
+### Database Security
+
+- [ ] **DBSC-01**: App uses `better-sqlite3-multiple-ciphers` as drop-in replacement for `better-sqlite3` with SQLCipher encryption support
+- [ ] **DBSC-02**: Database accepts encryption key via PRAGMA key as the first operation after opening, before any schema initialization
+- [ ] **DBSC-03**: FTS5 virtual table creation occurs after PRAGMA key is set on encrypted databases
+- [ ] **DBSC-04**: User is prompted for a password when opening an encrypted database
+- [ ] **DBSC-05**: User can create a new encrypted database with a password
+- [ ] **DBSC-06**: User can change the password of an encrypted database via PRAGMA rekey
+- [ ] **DBSC-07**: All existing tests pass with the new database library on Windows, macOS, and Linux
+- [ ] **DBSC-08**: Build pipeline (electron-vite config, CI workflows, Makefile, package.json) updated for the new native module
+
+### Database Selection
+
+- [ ] **DBSL-01**: User can select an existing SQLite database file via file picker dialog
+- [ ] **DBSL-02**: User can create a new empty database via dialog
+- [ ] **DBSL-03**: User can switch between databases without restarting the app
+- [ ] **DBSL-04**: App displays the current database name/path in the UI
+- [ ] **DBSL-05**: Prepared statement cache is invalidated when switching databases to prevent stale handle crashes
+- [ ] **DBSL-06**: DatabaseService supports open/close/switch lifecycle (replaces hardcoded singleton)
+
+### External Links
+
+- [ ] **EXTL-01**: Variant table rows include clickable icon buttons for gnomAD, ClinVar, and OMIM
+- [ ] **EXTL-02**: gnomAD link opens variant page using `chr-pos-ref-alt` URL format in default browser
+- [ ] **EXTL-03**: ClinVar link opens search using `chr:pos:ref:alt` URL format in default browser
+- [ ] **EXTL-04**: OMIM link opens entry page using MIM number (when available) or gene search in default browser
+- [ ] **EXTL-05**: External link URLs are constructed with proper URL encoding of variant data components
+- [ ] **EXTL-06**: Shell openExternal domain allowlist is expanded to include gnomad.broadinstitute.org, ncbi.nlm.nih.gov, and omim.org
+
+### Batch Import
+
+- [ ] **BTCH-01**: User can select multiple JSON.gz files via multi-file picker dialog
+- [ ] **BTCH-02**: User can select a folder to import all JSON.gz files within it
+- [ ] **BTCH-03**: Batch import processes files sequentially with per-file error isolation (one failure does not abort the batch)
+- [ ] **BTCH-04**: Batch import displays aggregate progress across all files (current file N of M, overall percentage)
+- [ ] **BTCH-05**: Batch import shows a summary report on completion (files succeeded, failed, skipped)
+- [ ] **BTCH-06**: Duplicate case names during batch import are handled gracefully (skip, rename, or overwrite with user choice)
+
+### ZIP Import
+
+- [ ] **ZIMP-01**: User can select a password-protected ZIP file for import
+- [ ] **ZIMP-02**: User is prompted for the ZIP password before extraction
+- [ ] **ZIMP-03**: ZIP extraction writes to a temporary directory and cleans up after import completes or fails
+- [ ] **ZIMP-04**: ZIP extraction validates file paths to prevent Zip Slip path traversal attacks (reject `..`, absolute paths, UNC paths)
+- [ ] **ZIMP-05**: Extracted JSON.gz files are fed to the existing import pipeline (single or batch)
+
+### OMIM Data
+
+- [ ] **OMIM-01**: Import pipeline extracts OMIM MIM numbers from variant annotation data
+- [ ] **OMIM-02**: Import pipeline extracts OMIM disease names/associations from variant annotation data
+- [ ] **OMIM-03**: Variants table schema includes columns for OMIM MIM number and disease name
+- [ ] **OMIM-04**: OMIM disease associations are displayed inline in variant table rows
+- [ ] **OMIM-05**: OMIM external link uses direct MIM entry URL when MIM number is available (falls back to gene search)
+
+### Cohort Analysis
+
+- [ ] **CHRT-01**: App provides a distinct cohort analysis view/mode separate from single-case analysis (tab-based navigation)
+- [ ] **CHRT-02**: Cohort view displays an aggregated variant table across all imported cases (grouped by chr, pos, ref, alt)
+- [ ] **CHRT-03**: Cohort variant table shows carrier count per variant (number of cases carrying the variant)
+- [ ] **CHRT-04**: Cohort variant table shows cohort allele frequency per variant
+- [ ] **CHRT-05**: Cohort variant table shows het/hom breakdown per variant
+- [ ] **CHRT-06**: Cohort variant table provides per-case links (drill down from aggregated variant to individual case analyses)
+- [ ] **CHRT-07**: User can search for a specific variant or gene across the entire cohort
+- [ ] **CHRT-08**: Cohort search results show carrier summary (which cases carry the variant, zygosity, frequency)
+- [ ] **CHRT-09**: Cohort view includes gene-level aggregation (burden summary per gene across all cases)
+- [ ] **CHRT-10**: Cohort aggregation queries use proper composite indexes for performance on large datasets
+
+## v0.2.0 Requirements (Complete)
 
 Requirements for UI polish, branding, and trust signals milestone.
 
 ### App Chrome
 
 - [x] **CHRM-01**: App displays a top app bar with "VarLens" name and DNA icon across all views
-- [ ] **CHRM-02**: App displays a footer bar with version number accessible via popup menu
-- [ ] **CHRM-03**: Footer includes GitHub repository link as small icon button
-- [ ] **CHRM-04**: Footer includes license link as small icon button
-- [ ] **CHRM-05**: Footer includes disclaimer acknowledgment status indicator
-- [ ] **CHRM-06**: Footer includes FAQ dialog trigger button
-- [ ] **CHRM-07**: Footer includes log viewer toggle button with error count badge
+- [x] **CHRM-02**: App displays a footer bar with version number accessible via popup menu
+- [x] **CHRM-03**: Footer includes GitHub repository link as small icon button
+- [x] **CHRM-04**: Footer includes license link as small icon button
+- [x] **CHRM-05**: Footer includes disclaimer acknowledgment status indicator
+- [x] **CHRM-06**: Footer includes FAQ dialog trigger button
+- [x] **CHRM-07**: Footer includes log viewer toggle button with error count badge
 - [x] **CHRM-08**: App uses RequiForm warm palette (#a09588 primary, #E5AA94 footer background, #424242 secondary) via Vuetify theme config
 - [x] **CHRM-09**: All UI text uses "research" language -- no "clinical" references anywhere
 
@@ -49,13 +120,12 @@ Requirements for UI polish, branding, and trust signals milestone.
 
 Deferred to later milestones.
 
-### Core Features (v0.3+)
+### Core Features (v0.4+)
 
 - **FEAT-01**: Virtual gene panels for targeted variant filtering
 - **FEAT-02**: Advanced inheritance filters (de novo, compound het)
 - **FEAT-03**: Statistics dashboard with variant summary metrics
 - **FEAT-04**: PDF report generation
-- **FEAT-05**: External links integration (OMIM, ClinVar, gnomAD)
 
 ### Nice-to-Have (unscheduled)
 
@@ -69,23 +139,72 @@ Deferred to later milestones.
 |---------|--------|
 | Real-time collaboration | Offline-first desktop app |
 | Cloud sync | Not in v0.x scope |
-| VCF import | JSON-only for POC |
-| CNV/SV analysis | SNV-focused for POC |
+| VCF import | JSON-only for current scope |
+| CNV/SV analysis | SNV-focused for current scope |
 | User authentication | Desktop app, single-user |
-| Runtime branding config | Build-time JSON sufficient for v0.2.0; runtime override deferred |
 | Clinical diagnostic language | Research use only -- explicitly excluded |
+| Affected/unaffected cohort split | Requires case metadata schema; deferred to v0.4+ |
+| Cross-case variant comparison matrix | Complex UI; deferred to v0.4+ |
+| Cohort statistics charts | Tabular data sufficient for v0.3.0 |
+| Drag-and-drop import | Multi-file picker is sufficient for v0.3.0 |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| DBSC-01 | TBD | Pending |
+| DBSC-02 | TBD | Pending |
+| DBSC-03 | TBD | Pending |
+| DBSC-04 | TBD | Pending |
+| DBSC-05 | TBD | Pending |
+| DBSC-06 | TBD | Pending |
+| DBSC-07 | TBD | Pending |
+| DBSC-08 | TBD | Pending |
+| DBSL-01 | TBD | Pending |
+| DBSL-02 | TBD | Pending |
+| DBSL-03 | TBD | Pending |
+| DBSL-04 | TBD | Pending |
+| DBSL-05 | TBD | Pending |
+| DBSL-06 | TBD | Pending |
+| EXTL-01 | TBD | Pending |
+| EXTL-02 | TBD | Pending |
+| EXTL-03 | TBD | Pending |
+| EXTL-04 | TBD | Pending |
+| EXTL-05 | TBD | Pending |
+| EXTL-06 | TBD | Pending |
+| BTCH-01 | TBD | Pending |
+| BTCH-02 | TBD | Pending |
+| BTCH-03 | TBD | Pending |
+| BTCH-04 | TBD | Pending |
+| BTCH-05 | TBD | Pending |
+| BTCH-06 | TBD | Pending |
+| ZIMP-01 | TBD | Pending |
+| ZIMP-02 | TBD | Pending |
+| ZIMP-03 | TBD | Pending |
+| ZIMP-04 | TBD | Pending |
+| ZIMP-05 | TBD | Pending |
+| OMIM-01 | TBD | Pending |
+| OMIM-02 | TBD | Pending |
+| OMIM-03 | TBD | Pending |
+| OMIM-04 | TBD | Pending |
+| OMIM-05 | TBD | Pending |
+| CHRT-01 | TBD | Pending |
+| CHRT-02 | TBD | Pending |
+| CHRT-03 | TBD | Pending |
+| CHRT-04 | TBD | Pending |
+| CHRT-05 | TBD | Pending |
+| CHRT-06 | TBD | Pending |
+| CHRT-07 | TBD | Pending |
+| CHRT-08 | TBD | Pending |
+| CHRT-09 | TBD | Pending |
+| CHRT-10 | TBD | Pending |
 | CHRM-01 | Phase 9 | Complete |
-| CHRM-02 | Phase 12 | Pending |
-| CHRM-03 | Phase 12 | Pending |
-| CHRM-04 | Phase 12 | Pending |
-| CHRM-05 | Phase 12 | Pending |
-| CHRM-06 | Phase 12 | Pending |
-| CHRM-07 | Phase 12 | Pending |
+| CHRM-02 | Phase 12 | Complete |
+| CHRM-03 | Phase 12 | Complete |
+| CHRM-04 | Phase 12 | Complete |
+| CHRM-05 | Phase 12 | Complete |
+| CHRM-06 | Phase 12 | Complete |
+| CHRM-07 | Phase 12 | Complete |
 | CHRM-08 | Phase 9 | Complete |
 | CHRM-09 | Phase 9 | Complete |
 | TRST-01 | Phase 11 | Complete |
@@ -110,10 +229,10 @@ Deferred to later milestones.
 | LOG-11 | Phase 10 | Complete |
 
 **Coverage:**
-- v0.2.0 requirements: 29 total
-- Mapped to phases: 29
-- Unmapped: 0
+- v0.3.0 requirements: 40 total
+- Mapped to phases: 0 (awaiting roadmap)
+- v0.2.0 requirements: 29 total (all complete)
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after roadmap creation (phase traceability added)*
+*Last updated: 2026-01-27 after v0.3.0 requirements scoping*
