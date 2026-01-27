@@ -18,7 +18,7 @@ help: ## Show this help message
 # Development
 #---------------------------------------------------------------------------
 
-rebuild: ## Rebuild native modules for Electron (fixes better-sqlite3 version mismatch)
+rebuild: ## Rebuild native modules for Electron (fixes native module version mismatch)
 	npm run rebuild:electron
 
 rebuild-node: ## Rebuild native modules for Node.js (needed before running tests)

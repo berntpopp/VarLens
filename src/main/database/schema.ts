@@ -4,7 +4,7 @@
  * SQL schema for cases and variants tables with FTS5 full-text search.
  */
 
-import type Database from 'better-sqlite3'
+import type Database from 'better-sqlite3-multiple-ciphers'
 
 /**
  * SQL to create the cases and variants tables
@@ -138,7 +138,7 @@ const migrateVariantsTable = (db: Database.Database): void => {
  * 4. Create FTS5 virtual table
  * 5. Create FTS sync triggers
  *
- * @param db - better-sqlite3 Database instance
+ * @param db - better-sqlite3-multiple-ciphers Database instance
  * @throws Error if schema creation fails
  */
 export function initializeSchema(db: Database.Database): void {

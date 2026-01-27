@@ -2,11 +2,11 @@
  * DatabaseService - Core database service for Varlens
  *
  * Manages SQLite connection, schema initialization, and case CRUD operations.
- * Uses better-sqlite3 for synchronous database access with prepared statement caching.
+ * Uses better-sqlite3-multiple-ciphers for synchronous database access with prepared statement caching.
  */
 
-import Database from 'better-sqlite3'
-import type { Database as DatabaseType, Statement } from 'better-sqlite3'
+import Database from 'better-sqlite3-multiple-ciphers'
+import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from './schema'
 import type {
   Case,

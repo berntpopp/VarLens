@@ -1,7 +1,7 @@
 import { app, dialog, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import Database from 'better-sqlite3'
+import Database from 'better-sqlite3-multiple-ciphers'
 import { registerIpcHandlers } from './ipc'
 import { closeDatabaseService } from './database'
 
@@ -84,23 +84,23 @@ if (gotTheLock !== true) {
     // Set app user model id for windows
     electronApp.setAppUserModelId('com.varlens.app')
 
-    // Verify better-sqlite3 works (in-memory test)
+    // Verify better-sqlite3-multiple-ciphers works (in-memory test)
     try {
       const testDb = new Database(':memory:')
       testDb.exec('CREATE TABLE test (id INTEGER PRIMARY KEY)')
       testDb.close()
-      console.log('better-sqlite3 initialized successfully')
+      console.log('better-sqlite3-multiple-ciphers initialized successfully')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
       if (message.includes('NODE_MODULE_VERSION')) {
         console.error(
-          'better-sqlite3 native module version mismatch.\n' +
+          'better-sqlite3-multiple-ciphers native module version mismatch.\n' +
             'The native module was compiled for a different Node.js version.\n' +
             'Fix: run "npm run rebuild:electron" to recompile for Electron.\n' +
             `Original error: ${message}`
         )
       } else {
-        console.error('Failed to initialize better-sqlite3:', message)
+        console.error('Failed to initialize better-sqlite3-multiple-ciphers:', message)
       }
       app.quit()
       return
