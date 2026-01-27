@@ -100,6 +100,12 @@ Plans:
 
 **Dependencies:** Phase 10 (logging -- footer needs error count badge), Phase 11 (trust signals -- footer needs disclaimer status and FAQ trigger)
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 12-01-PLAN.md -- Secure shell IPC handler, structured version API, preload + type extensions
+- [ ] 12-02-PLAN.md -- AppFooter component with version menu, external links, status indicators, log toggle
+
 **Requirements:**
 - CHRM-02: App displays a footer bar with version number accessible via popup menu
 - CHRM-03: Footer includes GitHub repository link as small icon button
