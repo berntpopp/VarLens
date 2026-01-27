@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ProgressUpdate, VariantFilter, PaginationCursor, SortItem } from '../shared/types'
+import type {
+  ProgressUpdate,
+  VariantFilter,
+  PaginationCursor,
+  SortItem,
+  BatchProgress,
+  DuplicatePrompt,
+  DuplicateChoice
+} from '../shared/types'
 
 /**
  * Preload script - exposes typed API to renderer via contextBridge.
@@ -83,6 +91,36 @@ const api = {
     rekey: (newPassword: string) => ipcRenderer.invoke('database:rekey', newPassword),
     info: () => ipcRenderer.invoke('database:info'),
     recentList: () => ipcRenderer.invoke('database:recentList')
+  },
+
+  batchImport: {
+    selectFiles: () => ipcRenderer.invoke('batch-import:selectFiles'),
+    selectFolder: () => ipcRenderer.invoke('batch-import:selectFolder'),
+    start: (filePaths: string[]) => ipcRenderer.invoke('batch-import:start', filePaths),
+    cancel: () => ipcRenderer.invoke('batch-import:cancel'),
+
+    onProgress: (callback: (progress: BatchProgress) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: BatchProgress) => {
+        callback(progress)
+      }
+      ipcRenderer.on('batch-import:progress', handler)
+      return () => {
+        ipcRenderer.removeListener('batch-import:progress', handler)
+      }
+    },
+
+    onDuplicatePrompt: (callback: (prompt: DuplicatePrompt) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, prompt: DuplicatePrompt) => {
+        callback(prompt)
+      }
+      ipcRenderer.on('batch-import:duplicatePrompt', handler)
+      return () => {
+        ipcRenderer.removeListener('batch-import:duplicatePrompt', handler)
+      }
+    },
+
+    resolveDuplicate: (choice: DuplicateChoice, applyToAll: boolean) =>
+      ipcRenderer.invoke('batch-import:resolveDuplicate', choice, applyToAll)
   }
 }
 

@@ -48,3 +48,21 @@ export interface DataDictionaries {
   hpoMatch: Record<string, string> // ID -> HPO terms string
   moi: Record<string, string> // ID -> mode of inheritance abbreviation
 }
+
+// Batch import types
+export type DuplicateChoice = 'skip' | 'overwrite'
+
+export interface BatchImportOptions {
+  onBatchProgress?: (progress: {
+    currentIndex: number
+    totalFiles: number
+    fileName: string
+    overallPercent: number
+  }) => void
+  onFileProgress?: ProgressCallback
+  onDuplicateFound?: (
+    fileName: string,
+    caseName: string
+  ) => Promise<{ choice: DuplicateChoice; applyToAll: boolean }>
+  signal?: AbortSignal
+}

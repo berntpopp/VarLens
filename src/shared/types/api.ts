@@ -108,6 +108,51 @@ export interface DatabaseAPI {
   recentList: () => Promise<RecentDatabase[]>
 }
 
+// Batch import types
+export type BatchFileStatus = 'pending' | 'importing' | 'success' | 'failed' | 'skipped'
+
+export interface BatchFileDetail {
+  filePath: string
+  fileName: string
+  status: BatchFileStatus
+  caseName?: string
+  variantCount?: number
+  error?: string
+}
+
+export interface BatchProgress {
+  currentIndex: number // 0-based index of current file
+  totalFiles: number // Total files in batch
+  currentFileName: string // Name of file being processed
+  fileProgress?: ProgressUpdate // Per-file variant progress (reuse existing type)
+  overallPercent: number // 0-100 overall percentage
+}
+
+export interface BatchResult {
+  succeeded: number
+  failed: number
+  skipped: number
+  cancelled: boolean
+  details: BatchFileDetail[]
+}
+
+export type DuplicateChoice = 'skip' | 'overwrite'
+
+export interface DuplicatePrompt {
+  fileName: string
+  caseName: string
+}
+
+export interface BatchImportAPI {
+  selectFiles: () => Promise<string[]>
+  selectFolder: () => Promise<string[]> // Returns file paths found in folder
+  start: (filePaths: string[]) => Promise<BatchResult>
+  cancel: () => Promise<void>
+  onProgress: (callback: (progress: BatchProgress) => void) => () => void
+  onDuplicatePrompt: (callback: (prompt: DuplicatePrompt) => void) => () => void
+  resolveDuplicate: (choice: DuplicateChoice, applyToAll: boolean) => Promise<void>
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -116,4 +161,5 @@ export interface WindowAPI {
   export: ExportAPI
   shell: ShellAPI
   database: DatabaseAPI
+  batchImport: BatchImportAPI
 }
