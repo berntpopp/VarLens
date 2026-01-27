@@ -49,7 +49,7 @@ export class DatabaseManager {
       const newDb = new DatabaseService(dbPath, key)
 
       // If key provided, validate by attempting a simple query
-      if (key !== undefined && key !== '') {
+      if (key !== undefined && key.length > 0) {
         try {
           newDb.database.prepare('SELECT count(*) FROM sqlite_master').get()
         } catch (error) {
@@ -183,7 +183,7 @@ export class DatabaseManager {
       const newDb = new DatabaseService(newPath, key)
 
       // If key provided, validate by attempting a simple query
-      if (key !== undefined && key !== '') {
+      if (key !== undefined && key.length > 0) {
         try {
           newDb.database.prepare('SELECT count(*) FROM sqlite_master').get()
         } catch (error) {
@@ -268,7 +268,7 @@ export class DatabaseManager {
    * @returns Database info object, or null if no database is open
    */
   getCurrentInfo(): { path: string; name: string; encrypted: boolean } | null {
-    if (!this.currentDb || !this.currentPath) {
+    if (this.currentDb === null || this.currentPath === null) {
       return null
     }
 

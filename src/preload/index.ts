@@ -70,6 +70,18 @@ const api = {
 
   shell: {
     openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
+  },
+
+  database: {
+    selectFile: () => ipcRenderer.invoke('database:selectFile'),
+    selectSaveLocation: (defaultName: string) =>
+      ipcRenderer.invoke('database:selectSaveLocation', defaultName),
+    open: (path: string, password?: string) => ipcRenderer.invoke('database:open', path, password),
+    create: (path: string, password?: string) =>
+      ipcRenderer.invoke('database:create', path, password),
+    rekey: (newPassword: string) => ipcRenderer.invoke('database:rekey', newPassword),
+    info: () => ipcRenderer.invoke('database:info'),
+    recentList: () => ipcRenderer.invoke('database:recentList')
   }
 }
 

@@ -101,7 +101,7 @@ export class RecentDatabasesService {
     try {
       const json = readFileSync(this.settingsPath, 'utf-8')
       return JSON.parse(json) as SettingsData
-    } catch (error) {
+    } catch {
       // File doesn't exist or is invalid - return empty structure
       return { recentDatabases: [] }
     }
@@ -116,9 +116,9 @@ export class RecentDatabasesService {
     try {
       const json = JSON.stringify(data, null, 2)
       writeFileSync(this.settingsPath, json, 'utf-8')
-    } catch (error) {
-      console.error('Failed to save settings:', error)
+    } catch {
       // Non-fatal - recent list not critical to app function
+      // Silently ignore save errors
     }
   }
 }

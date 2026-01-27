@@ -1,5 +1,10 @@
 import { SerializableError, ErrorCode } from '../../shared/types/errors'
-import { DatabaseError, NotFoundError, UniqueConstraintError } from '../database/errors'
+import {
+  DatabaseError,
+  NotFoundError,
+  UniqueConstraintError,
+  WrongPasswordError
+} from '../database/errors'
 
 /**
  * Convert any error to a serializable format for IPC transport.
@@ -7,6 +12,14 @@ import { DatabaseError, NotFoundError, UniqueConstraintError } from '../database
  */
 export function toSerializableError(error: unknown): SerializableError {
   // Handle known database errors
+  if (error instanceof WrongPasswordError) {
+    return {
+      code: ErrorCode.WRONG_PASSWORD,
+      message: error.message,
+      userMessage: 'Incorrect password for encrypted database.'
+    }
+  }
+
   if (error instanceof NotFoundError) {
     return {
       code: ErrorCode.NOT_FOUND,

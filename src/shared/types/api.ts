@@ -78,6 +78,35 @@ export interface ExportAPI {
   ) => Promise<{ success: boolean; filePath?: string; error?: string }>
 }
 
+export interface DatabaseInfo {
+  path: string
+  name: string
+  encrypted: boolean
+}
+
+export interface DatabaseOpenResult {
+  success: boolean
+  needsPassword?: boolean
+  error?: string
+  info?: DatabaseInfo
+}
+
+export interface RecentDatabase {
+  path: string
+  name: string
+  lastOpened: number
+}
+
+export interface DatabaseAPI {
+  selectFile: () => Promise<string | null>
+  selectSaveLocation: (defaultName: string) => Promise<string | null>
+  open: (path: string, password?: string) => Promise<DatabaseOpenResult>
+  create: (path: string, password?: string) => Promise<DatabaseOpenResult>
+  rekey: (newPassword: string) => Promise<{ success: boolean; error?: string }>
+  info: () => Promise<DatabaseInfo | null>
+  recentList: () => Promise<RecentDatabase[]>
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -85,4 +114,5 @@ export interface WindowAPI {
   system: SystemAPI
   export: ExportAPI
   shell: ShellAPI
+  database: DatabaseAPI
 }
