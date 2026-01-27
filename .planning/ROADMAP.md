@@ -41,6 +41,12 @@ Plans:
 
 **Dependencies:** Phase 9 (theme must be applied so LogViewer uses correct palette)
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 10-01-PLAN.md -- Pinia log store with circular buffer, sanitizer utility, LogService facade
+- [ ] 10-02-PLAN.md -- LogViewer drawer UI with search, filtering, export, and app integration
+
 **Requirements:**
 - LOG-01: App has a LogService with debug/info/warn/error/critical log methods
 - LOG-02: Log entries are stored in a Pinia store with circular buffer (configurable max entries)
@@ -116,7 +122,7 @@ Plans:
 | Phase | Name | Status | Requirements |
 |-------|------|--------|--------------|
 | 9 | Branding & Theme Foundation | Planning Complete | CHRM-08, CHRM-09, CHRM-01 |
-| 10 | Logging Infrastructure & Viewer | Not Started | LOG-01 - LOG-11 |
+| 10 | Logging Infrastructure & Viewer | Planning Complete | LOG-01 - LOG-11 |
 | 11 | Trust Signals -- Disclaimer & FAQ | Not Started | TRST-01 - TRST-09 |
 | 12 | App Footer Integration | Not Started | CHRM-02 - CHRM-07 |
 
