@@ -23,7 +23,7 @@ interface Settings {
 
 function loadSettings(): Settings {
   try {
-    if (existsSync(settingsPath())) {
+    if (existsSync(settingsPath()) === true) {
       return JSON.parse(readFileSync(settingsPath(), 'utf8'))
     }
   } catch {
@@ -56,7 +56,7 @@ ipcMain.handle('import:selectFile', async () => {
     ]
   })
 
-  if (result.canceled || result.filePaths.length === 0) {
+  if (result.canceled === true || result.filePaths.length === 0) {
     return null
   }
 
@@ -112,7 +112,7 @@ ipcMain.handle('import:start', async (_event, filePath: string, caseName: string
 })
 
 ipcMain.handle('import:cancel', async () => {
-  if (currentAbortController) {
+  if (currentAbortController !== null) {
     currentAbortController.abort()
     currentAbortController = null
   }

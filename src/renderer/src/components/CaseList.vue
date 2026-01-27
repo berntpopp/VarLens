@@ -114,7 +114,7 @@ const loadCases = async (): Promise<void> => {
 const filteredCases = computed(() => {
   let result = [...cases.value]
 
-  if (search.value) {
+  if (search.value !== undefined && search.value !== '') {
     const query = search.value.toLowerCase()
     result = result.filter((c) => c.name.toLowerCase().includes(query))
   }
@@ -150,7 +150,7 @@ const handleContextMenu = (event: MouseEvent, caseItem: Case): void => {
 const handleDelete = async (): Promise<void> => {
   contextMenu.close()
 
-  if (!contextMenuCase.value) return
+  if (contextMenuCase.value === null || contextMenuCase.value === undefined) return
 
   const caseToDelete = contextMenuCase.value
   const confirmed = await dialogRef.value?.show(caseToDelete.name, caseToDelete.variant_count)
@@ -161,7 +161,7 @@ const handleDelete = async (): Promise<void> => {
     emit('case-deleted', caseToDelete.id)
 
     // If deleted case was selected, clear selection
-    if (selected.value.includes(caseToDelete.id)) {
+    if (selected.value.includes(caseToDelete.id) === true) {
       selected.value = []
     }
 

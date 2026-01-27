@@ -105,11 +105,17 @@ export class FieldMapper extends Transform {
 
       // Validate required fields
       if (
-        !mapped.chr ||
+        mapped.chr === undefined ||
+        mapped.chr === null ||
+        mapped.chr === '' ||
         mapped.pos === undefined ||
         mapped.pos === null ||
-        !mapped.ref ||
-        !mapped.alt
+        mapped.ref === undefined ||
+        mapped.ref === null ||
+        mapped.ref === '' ||
+        mapped.alt === undefined ||
+        mapped.alt === null ||
+        mapped.alt === ''
       ) {
         // Skip invalid variants - will be counted as skipped
         callback(null)
@@ -133,24 +139,29 @@ export class FieldMapper extends Transform {
     const value = row[columnIndex]
 
     // Handle multi-value arrays (may be nested)
-    if (Array.isArray(value)) {
-      let selected = value[transcriptIndex] ?? value[0] ?? null
+    const isValueArray: boolean = Array.isArray(value)
+    if (isValueArray) {
+      let selected =
+        (value as (string | number | null)[])[transcriptIndex] ??
+        (value as (string | number | null)[])[0] ??
+        null
       // Handle nested arrays - unwrap if the selected value is still an array
-      if (Array.isArray(selected)) {
-        selected = selected[0] ?? null
+      const isSelectedArray: boolean = Array.isArray(selected)
+      if (isSelectedArray) {
+        selected = (selected as unknown as (string | number | null)[])[0] ?? null
       }
-      if (useDictionary && dictionary) {
+      if (useDictionary && dictionary !== undefined) {
         return resolveDictionaryValue(selected, dictionary)
       }
       return selected
     }
 
     // Handle single values
-    if (useDictionary && dictionary) {
-      return resolveDictionaryValue(value, dictionary)
+    if (useDictionary && dictionary !== undefined) {
+      return resolveDictionaryValue(value as string | number | null, dictionary)
     }
 
-    return value
+    return value as string | number | null
   }
 
   /**
@@ -167,11 +178,13 @@ export class FieldMapper extends Transform {
 
     // Handle multi-value arrays
     let selected: unknown = value
-    if (Array.isArray(value)) {
-      selected = value[transcriptIndex] ?? value[0] ?? null
+    const isValueArray: boolean = Array.isArray(value)
+    if (isValueArray) {
+      selected = (value as unknown[])[transcriptIndex] ?? (value as unknown[])[0] ?? null
       // Handle nested arrays
-      if (Array.isArray(selected)) {
-        selected = selected[0] ?? null
+      const isSelectedArray: boolean = Array.isArray(selected)
+      if (isSelectedArray) {
+        selected = (selected as unknown[])[0] ?? null
       }
     }
 

@@ -2,8 +2,8 @@
   <v-app>
     <v-app-bar color="primary" density="compact" flat>
       <v-app-bar-nav-icon
-        @click="sidebarOpen = !sidebarOpen"
         aria-label="Toggle navigation sidebar"
+        @click="sidebarOpen = !sidebarOpen"
       />
       <v-icon icon="custom:varlens-dna" class="ml-2" size="small" />
       <v-app-bar-title class="ml-2 text-subtitle-1 font-weight-bold"> VarLens </v-app-bar-title>

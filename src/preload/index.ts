@@ -69,7 +69,7 @@ const api = {
 }
 
 // Expose to renderer via contextBridge (secure)
-if (process.contextIsolated) {
+if (process.contextIsolated === true) {
   try {
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {

@@ -254,7 +254,7 @@ const loadVariants = async (_options?: any): Promise<void> => {
 watch(
   () => props.caseId,
   async (newCaseId) => {
-    if (newCaseId) {
+    if (newCaseId !== undefined && newCaseId !== 0) {
       // Clear cache and reset pagination
       cursorCache.value.clear()
       page.value = 1

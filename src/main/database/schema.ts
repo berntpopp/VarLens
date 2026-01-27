@@ -122,7 +122,7 @@ const migrateVariantsTable = (db: Database.Database): void => {
   ]
 
   for (const [colName, colType] of newColumns) {
-    if (!existingColumns.has(colName)) {
+    if (existingColumns.has(colName) === false) {
       db.exec(`ALTER TABLE variants ADD COLUMN ${colName} ${colType}`)
     }
   }

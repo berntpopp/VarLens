@@ -90,6 +90,6 @@ export function resolveDictionaryValue(
   dictionary: Record<string, string> | null
 ): string | null {
   if (value === null || value === undefined) return null
-  if (!dictionary) return String(value)
+  if (dictionary === null) return String(value)
   return dictionary[String(value)] ?? String(value)
 }

@@ -4,25 +4,31 @@ import * as directives from 'vuetify/directives'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
 import { mdi } from 'vuetify/iconsets/mdi'
-import { h } from 'vue'
+import { h, type Component } from 'vue'
 import type { IconSet, IconProps } from 'vuetify'
 import DnaIcon from '../components/icons/DnaIcon.vue'
 
 // Custom icon set registration
-const customSvgNameToComponent: Record<string, any> = {
+const customSvgNameToComponent: Record<string, Component> = {
   'varlens-dna': DnaIcon
 }
 
 const custom: IconSet = {
-  component: (props: IconProps) => h(props.tag, [
-    h(customSvgNameToComponent[props.icon as string] || 'span', {
-      class: 'v-icon__svg',
-      style: {
-        width: '1em',
-        height: '1em'
-      }
-    })
-  ])
+  component: (props: IconProps) =>
+    h(props.tag, [
+      h(
+        customSvgNameToComponent[props.icon as string] !== undefined
+          ? customSvgNameToComponent[props.icon as string]
+          : 'span',
+        {
+          class: 'v-icon__svg',
+          style: {
+            width: '1em',
+            height: '1em'
+          }
+        }
+      )
+    ])
 }
 
 // Warm light theme with RequiForm palette

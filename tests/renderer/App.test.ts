@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
+import { createPinia } from 'pinia'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import App from '../../src/renderer/src/App.vue'
@@ -73,7 +74,7 @@ describe('App.vue', () => {
   it('renders VarLens title', () => {
     const wrapper = mount(App, {
       global: {
-        plugins: [vuetify]
+        plugins: [vuetify, createPinia()]
       }
     })
     expect(wrapper.text()).toContain('VarLens')
@@ -82,7 +83,7 @@ describe('App.vue', () => {
   it('uses Vuetify v-app component', () => {
     const wrapper = mount(App, {
       global: {
-        plugins: [vuetify]
+        plugins: [vuetify, createPinia()]
       }
     })
     expect(wrapper.find('.v-application').exists()).toBe(true)

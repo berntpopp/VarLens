@@ -65,7 +65,7 @@ export class ImportService {
       })
 
       // Handle cancellation
-      if (options.signal) {
+      if (options.signal !== undefined) {
         options.signal.addEventListener('abort', () => {
           fieldMapper.destroy(new Error('Import cancelled'))
         })
@@ -189,8 +189,9 @@ export class ImportService {
             const headerItem = data.value
             const fieldId = headerItem.id as string
 
+            const hasField: boolean = fieldsToExtract.has(fieldId)
             if (
-              fieldsToExtract.has(fieldId) &&
+              hasField &&
               headerItem.dataDictionary !== undefined &&
               headerItem.dataDictionary !== null
             ) {
@@ -210,8 +211,9 @@ export class ImportService {
                 case 'HpoMatch':
                   // Dictionary maps ID -> array of HPO terms, join them
                   for (const [key, value] of Object.entries(rawDict)) {
-                    if (Array.isArray(value) && value.length > 0) {
-                      dictionaries.hpoMatch[key] = value.join(', ')
+                    const isArray: boolean = Array.isArray(value)
+                    if (isArray && (value as unknown[]).length > 0) {
+                      dictionaries.hpoMatch[key] = (value as unknown[]).join(', ')
                     } else {
                       dictionaries.hpoMatch[key] = ''
                     }
@@ -220,9 +222,10 @@ export class ImportService {
                 case 'MoI':
                   // Dictionary maps ID -> array of objects with abbreviation
                   for (const [key, value] of Object.entries(rawDict)) {
-                    if (Array.isArray(value) && value.length > 0) {
+                    const isArray: boolean = Array.isArray(value)
+                    if (isArray && (value as unknown[]).length > 0) {
                       // Extract abbreviations from objects
-                      const abbrevs = value
+                      const abbrevs = (value as { abbreviation?: string }[])
                         .map((obj: { abbreviation?: string }) => obj.abbreviation)
                         .filter(Boolean)
                       dictionaries.moi[key] = abbrevs.join(', ')

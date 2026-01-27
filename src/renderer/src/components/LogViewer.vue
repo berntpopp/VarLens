@@ -1,87 +1,66 @@
 <template>
-  <v-navigation-drawer
-    v-model="isOpen"
-    location="bottom"
-    :temporary="true"
-    :scrim="false"
-    :height="'40vh'"
-    class="log-viewer-drawer"
-  >
-    <div class="d-flex flex-column fill-height">
-      <!-- Top toolbar -->
-      <v-toolbar density="compact" color="surface">
+  <Transition name="slide-up">
+    <div v-if="isOpen" class="log-viewer-panel d-flex flex-column">
+      <!-- Compact toolbar with stats and actions -->
+      <v-toolbar density="compact" color="surface" class="flex-grow-0">
         <v-toolbar-title class="text-subtitle-2">Log Viewer</v-toolbar-title>
 
         <v-spacer />
 
-        <!-- Buffer usage display -->
-        <div class="d-flex align-center px-4">
-          <v-progress-linear
-            :model-value="bufferUsage.percentage"
-            :color="bufferUsage.percentage > 90 ? 'warning' : 'primary'"
-            class="mr-2"
-            style="width: 120px"
-            height="8"
-          />
-          <span class="text-caption"> {{ bufferUsage.current }}/{{ bufferUsage.max }} </span>
-          <span v-if="stats.totalDropped > 0" class="text-caption text-warning ml-1">
+        <!-- Buffer + memory stats inline -->
+        <div class="d-flex align-center text-caption text-medium-emphasis mr-1">
+          <span>{{ bufferUsage.current }}/{{ bufferUsage.max }}</span>
+          <span v-if="stats.totalDropped > 0" class="text-warning ml-1">
             ({{ stats.totalDropped }} dropped)
           </span>
+          <span class="mx-2">|</span>
+          <span>Mem: {{ memoryUsage }}</span>
         </div>
 
         <!-- Action buttons -->
         <v-btn
           icon="mdi-download"
-          size="small"
+          size="x-small"
           variant="text"
           title="Download logs"
           @click="handleExport"
         />
         <v-btn
           icon="mdi-delete-outline"
-          size="small"
+          size="x-small"
           variant="text"
           title="Clear logs"
           @click="handleClear"
         />
-        <v-btn icon="mdi-close" size="small" variant="text" @click="isOpen = false" />
+        <v-btn icon="mdi-close" size="x-small" variant="text" @click="isOpen = false" />
       </v-toolbar>
 
-      <!-- Filter bar -->
-      <v-sheet class="pa-2" color="surface-variant">
-        <!-- Search field -->
+      <!-- Single-row filter bar: search + level chips -->
+      <div class="d-flex align-center px-2 py-1 bg-surface-variant flex-grow-0">
         <v-text-field
           v-model="searchInput"
           prepend-inner-icon="mdi-magnify"
-          placeholder="Search logs..."
+          placeholder="Search..."
           density="compact"
           hide-details
           variant="outlined"
           clearable
-          class="mb-2"
+          class="filter-search flex-grow-0 flex-shrink-0"
         />
-
-        <!-- Level filter chips -->
-        <div class="d-flex align-center gap-2">
-          <span class="text-caption text-medium-emphasis">Filter by level:</span>
-          <v-chip-group v-model="selectedLevels" multiple>
-            <v-chip
-              v-for="level in LOG_LEVELS"
-              :key="level"
-              filter
-              :value="level"
-              :color="LOG_LEVEL_COLORS[level]"
-              size="small"
-              variant="outlined"
-            >
-              {{ level }} ({{ bufferLevelCounts[level] || 0 }})
-            </v-chip>
-          </v-chip-group>
-        </div>
-
-        <!-- Memory usage -->
-        <div class="text-caption text-medium-emphasis mt-1">Memory: {{ memoryUsage }}</div>
-      </v-sheet>
+        <v-chip-group v-model="selectedLevels" multiple class="ml-2 flex-shrink-1">
+          <v-chip
+            v-for="level in LOG_LEVELS"
+            :key="level"
+            filter
+            :value="level"
+            :color="LOG_LEVEL_COLORS[level]"
+            size="x-small"
+            variant="outlined"
+          >
+            {{ level }} ({{ bufferLevelCounts[level] || 0 }})
+          </v-chip>
+        </v-chip-group>
+      </div>
 
       <!-- Log entries list -->
       <div class="flex-grow-1 position-relative overflow-hidden">
@@ -144,7 +123,7 @@
         </v-btn>
       </div>
     </div>
-  </v-navigation-drawer>
+  </Transition>
 </template>
 
 <script setup lang="ts">
@@ -246,7 +225,7 @@ function formatTimestamp(timestamp: number): string {
     minute: '2-digit',
     second: '2-digit',
     fractionalSecondDigits: 3
-  }).format(new Date(timestamp))
+  } as Intl.DateTimeFormatOptions).format(new Date(timestamp))
 }
 
 // Highlight search matches
@@ -310,7 +289,7 @@ function handleClear(): void {
 }
 
 // Memory polling
-let memoryInterval: ReturnType<typeof window.setInterval> | null = null
+let memoryInterval: number | null = null
 
 function updateMemoryUsage(): void {
   const perf = performance as { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }
@@ -325,7 +304,7 @@ function updateMemoryUsage(): void {
 
 onMounted(() => {
   updateMemoryUsage()
-  memoryInterval = window.setInterval(updateMemoryUsage, 5000)
+  memoryInterval = window.setInterval(updateMemoryUsage, 5000) as unknown as number
 })
 
 onBeforeUnmount(() => {
@@ -337,8 +316,16 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.log-viewer-drawer {
-  z-index: 2000;
+.log-viewer-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40vh;
+  z-index: 2010;
+  background: rgb(var(--v-theme-surface));
+  border-top: 1px solid rgba(var(--v-border-color), 0.2);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .log-entry {
@@ -353,8 +340,28 @@ onBeforeUnmount(() => {
   z-index: 10;
 }
 
+.filter-search {
+  width: 200px;
+  min-width: 120px;
+}
+
+.filter-search :deep(.v-field) {
+  font-size: 0.8125rem;
+}
+
 :deep(.bg-yellow) {
   background-color: #ffeb3b;
   padding: 0 2px;
+}
+
+/* Slide-up transition */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.2s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
 }
 </style>

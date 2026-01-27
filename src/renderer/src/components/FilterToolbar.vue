@@ -374,11 +374,11 @@ const selectedCaddPreset = ref<number | null>(null)
 const hasActiveFilters = computed(() => {
   const afActive =
     filters.value.maxGnomadAf !== null &&
-    !Number.isNaN(filters.value.maxGnomadAf) &&
+    Number.isNaN(filters.value.maxGnomadAf) === false &&
     filters.value.maxGnomadAf > 0
   const caddActive =
     filters.value.minCadd !== null &&
-    !Number.isNaN(filters.value.minCadd) &&
+    Number.isNaN(filters.value.minCadd) === false &&
     filters.value.minCadd >= 0
 
   return (
@@ -463,13 +463,13 @@ const emitFilters = () => {
 
   // Only include gnomAD AF if it's a valid positive number
   const afValue = filters.value.maxGnomadAf
-  if (afValue !== null && !Number.isNaN(afValue) && afValue > 0) {
+  if (afValue !== null && Number.isNaN(afValue) === false && afValue > 0) {
     variantFilter.gnomad_af_max = afValue
   }
 
   // Only include CADD if it's a valid non-negative number
   const caddValue = filters.value.minCadd
-  if (caddValue !== null && !Number.isNaN(caddValue) && caddValue >= 0) {
+  if (caddValue !== null && Number.isNaN(caddValue) === false && caddValue >= 0) {
     variantFilter.cadd_min = caddValue
   }
 
@@ -513,7 +513,7 @@ watch(
     if (value !== null) {
       // Check if value matches a preset
       const matchingPreset = afPresets.find((p) => p.value === value)
-      selectedAfPreset.value = matchingPreset ? matchingPreset.value : null
+      selectedAfPreset.value = matchingPreset !== undefined ? matchingPreset.value : null
     } else {
       selectedAfPreset.value = null
     }
@@ -526,7 +526,7 @@ watch(
     if (value !== null) {
       // Check if value matches a preset
       const matchingPreset = caddPresets.find((p) => p.value === value)
-      selectedCaddPreset.value = matchingPreset ? matchingPreset.value : null
+      selectedCaddPreset.value = matchingPreset !== undefined ? matchingPreset.value : null
     } else {
       selectedCaddPreset.value = null
     }
@@ -581,12 +581,12 @@ const exportToExcel = async () => {
     }
 
     const afValue = filters.value.maxGnomadAf
-    if (afValue !== null && !Number.isNaN(afValue) && afValue > 0) {
+    if (afValue !== null && Number.isNaN(afValue) === false && afValue > 0) {
       exportFilters.gnomad_af_max = afValue
     }
 
     const caddValue = filters.value.minCadd
-    if (caddValue !== null && !Number.isNaN(caddValue) && caddValue >= 0) {
+    if (caddValue !== null && Number.isNaN(caddValue) === false && caddValue >= 0) {
       exportFilters.cadd_min = caddValue
     }
 
@@ -597,7 +597,7 @@ const exportToExcel = async () => {
     const result = await (window as any).api.export.variants(
       props.caseId,
       exportFilters,
-      props.caseName || `case_${props.caseId}`
+      props.caseName !== '' ? props.caseName : `case_${props.caseId}`
     )
 
     // eslint-disable-next-line no-undef

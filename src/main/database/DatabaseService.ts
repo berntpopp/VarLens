@@ -87,7 +87,7 @@ export class DatabaseService {
    */
   private stmt(sql: string): Statement {
     let statement = this.statementCache.get(sql)
-    if (!statement) {
+    if (statement === undefined) {
       statement = this.db.prepare(sql)
       this.statementCache.set(sql, statement)
     }
@@ -132,7 +132,7 @@ export class DatabaseService {
       return Number(result.lastInsertRowid)
     } catch (error) {
       // Check for unique constraint violation
-      if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed') === true) {
         throw new UniqueConstraintError('name', name)
       }
       throw new DatabaseError(
@@ -266,7 +266,7 @@ export class DatabaseService {
       console.log('DEBUG: Actual parameter count:', params.length)
       console.log(
         'DEBUG: Parameter types:',
-        params.map((p) => (Array.isArray(p) ? 'ARRAY!' : typeof p))
+        params.map((p) => (Array.isArray(p) === true ? 'ARRAY!' : typeof p))
       )
     }
 
@@ -340,7 +340,7 @@ export class DatabaseService {
 
     for (const sort of sortBy) {
       const sqlColumn = SORTABLE_COLUMNS[sort.key]
-      if (!sqlColumn) {
+      if (sqlColumn === undefined) {
         // Skip invalid column names (security: prevent SQL injection)
         continue
       }
@@ -356,7 +356,7 @@ export class DatabaseService {
     }
 
     // Always add id as final tiebreaker for stable pagination
-    if (!clauses.some((c) => c.startsWith('id '))) {
+    if (clauses.some((c) => c.startsWith('id ')) === false) {
       clauses.push('id ASC')
     }
 

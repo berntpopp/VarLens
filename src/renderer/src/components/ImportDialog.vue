@@ -121,8 +121,8 @@ const extractCaseName = (path: string): string => {
     const backslashParts = path.split('\\')
     name = backslashParts[backslashParts.length - 1] ?? 'import'
   }
-  if (name.endsWith('.gz')) name = name.slice(0, -3)
-  if (name.endsWith('.json')) name = name.slice(0, -5)
+  if (name.endsWith('.gz') === true) name = name.slice(0, -3)
+  if (name.endsWith('.json') === true) name = name.slice(0, -5)
   return name
 }
 
@@ -165,7 +165,7 @@ const handleImport = async (): Promise<void> => {
 
 // Handle cancel/close
 const handleCancel = async (): Promise<void> => {
-  if (isImporting.value) {
+  if (isImporting.value === true) {
     // Cancel active import
     // eslint-disable-next-line no-undef
     await window.api.import.cancel()
@@ -210,7 +210,7 @@ const show = async (): Promise<void> => {
 // Setup IPC progress listener
 onMounted(() => {
   // eslint-disable-next-line no-undef
-  cleanupProgress = window.api.import.onProgress((update) => {
+  cleanupProgress = window.api.import.onProgress((update: ProgressUpdate) => {
     progress.value = update
   })
 })

@@ -224,29 +224,33 @@ describe('ImportService', () => {
   })
 
   describe('Performance Test', () => {
-    it.skipIf(!!process.env.CI)('should import 65k variants in under 60 seconds', async () => {
-      const startTime = Date.now()
+    it.skipIf(!!process.env.CI)(
+      'should import 65k variants in under 60 seconds',
+      { timeout: 90000 },
+      async () => {
+        const startTime = Date.now()
 
-      const result = await importService.importVariants(
-        'test-data/case-892-snv-annotations.json.gz',
-        {
-          caseName: 'Performance Test Case'
-        }
-      )
+        const result = await importService.importVariants(
+          'test-data/case-892-snv-annotations.json.gz',
+          {
+            caseName: 'Performance Test Case'
+          }
+        )
 
-      const duration = Date.now() - startTime
+        const duration = Date.now() - startTime
 
-      // Performance requirement: 65k variants in under 60 seconds
-      expect(duration).toBeLessThan(60000)
+        // Performance requirement: 65k variants in under 60 seconds
+        expect(duration).toBeLessThan(60000)
 
-      // Verify all variants were imported
-      expect(result.variantCount).toBeGreaterThan(60000)
-      expect(result.variantCount).toBeLessThan(70000)
+        // Verify all variants were imported
+        expect(result.variantCount).toBeGreaterThan(60000)
+        expect(result.variantCount).toBeLessThan(70000)
 
-      // Verify database has correct count
-      const dbCount = db.getVariantCount(result.caseId)
-      expect(dbCount).toBe(result.variantCount)
-    })
+        // Verify database has correct count
+        const dbCount = db.getVariantCount(result.caseId)
+        expect(dbCount).toBe(result.variantCount)
+      }
+    )
   })
 
   describe('Field Validation', () => {

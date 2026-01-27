@@ -28,10 +28,14 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
-  size?: string | number
-  color?: string
-}>(), {
-  size: 24
-})
+withDefaults(
+  defineProps<{
+    size?: string | number
+    color?: string
+  }>(),
+  {
+    size: 24,
+    color: undefined
+  }
+)
 </script>

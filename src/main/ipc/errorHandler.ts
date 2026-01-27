@@ -56,7 +56,10 @@ export function toSerializableError(error: unknown): SerializableError {
   }
 
   // Handle parse errors
-  if (error instanceof SyntaxError || (error instanceof Error && error.message.includes('parse'))) {
+  if (
+    error instanceof SyntaxError ||
+    (error instanceof Error && error.message.includes('parse') === true)
+  ) {
     return {
       code: ErrorCode.PARSE_ERROR,
       message: error instanceof Error ? error.message : String(error),

@@ -47,7 +47,7 @@ function createWindow(): void {
 // Single instance lock
 const gotTheLock = app.requestSingleInstanceLock()
 
-if (!gotTheLock) {
+if (gotTheLock !== true) {
   app.quit()
 } else {
   app.on('second-instance', () => {
@@ -55,7 +55,7 @@ if (!gotTheLock) {
     const allWindows = BrowserWindow.getAllWindows()
     if (allWindows.length > 0) {
       const mainWindow = allWindows[0]
-      if (mainWindow.isMinimized()) mainWindow.restore()
+      if (mainWindow.isMinimized() === true) mainWindow.restore()
       mainWindow.focus()
     }
   })

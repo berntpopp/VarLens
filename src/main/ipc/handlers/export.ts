@@ -59,7 +59,7 @@ ipcMain.handle(
       })
       console.log('Dialog result:', result)
 
-      if (result.canceled || !result.filePath) {
+      if (result.canceled === true || result.filePath === undefined || result.filePath === '') {
         return { success: false, error: 'Export cancelled' }
       }
 
