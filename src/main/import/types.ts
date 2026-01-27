@@ -53,6 +53,7 @@ export interface DataDictionaries {
 export type DuplicateChoice = 'skip' | 'overwrite'
 
 export interface BatchImportOptions {
+  duplicateStrategy: DuplicateChoice
   onBatchProgress?: (progress: {
     currentIndex: number
     totalFiles: number
@@ -60,9 +61,5 @@ export interface BatchImportOptions {
     overallPercent: number
   }) => void
   onFileProgress?: ProgressCallback
-  onDuplicateFound?: (
-    fileName: string,
-    caseName: string
-  ) => Promise<{ choice: DuplicateChoice; applyToAll: boolean }>
   signal?: AbortSignal
 }

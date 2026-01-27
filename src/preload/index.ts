@@ -5,8 +5,8 @@ import type {
   PaginationCursor,
   SortItem,
   BatchProgress,
-  DuplicatePrompt,
-  DuplicateChoice
+  DuplicateChoice,
+  DuplicateCheckResult
 } from '../shared/types'
 
 /**
@@ -96,7 +96,10 @@ const api = {
   batchImport: {
     selectFiles: () => ipcRenderer.invoke('batch-import:selectFiles'),
     selectFolder: () => ipcRenderer.invoke('batch-import:selectFolder'),
-    start: (filePaths: string[]) => ipcRenderer.invoke('batch-import:start', filePaths),
+    checkDuplicates: (filePaths: string[]): Promise<DuplicateCheckResult> =>
+      ipcRenderer.invoke('batch-import:checkDuplicates', filePaths),
+    start: (filePaths: string[], duplicateStrategy: DuplicateChoice) =>
+      ipcRenderer.invoke('batch-import:start', filePaths, duplicateStrategy),
     cancel: () => ipcRenderer.invoke('batch-import:cancel'),
 
     onProgress: (callback: (progress: BatchProgress) => void): (() => void) => {
@@ -107,20 +110,7 @@ const api = {
       return () => {
         ipcRenderer.removeListener('batch-import:progress', handler)
       }
-    },
-
-    onDuplicatePrompt: (callback: (prompt: DuplicatePrompt) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, prompt: DuplicatePrompt) => {
-        callback(prompt)
-      }
-      ipcRenderer.on('batch-import:duplicatePrompt', handler)
-      return () => {
-        ipcRenderer.removeListener('batch-import:duplicatePrompt', handler)
-      }
-    },
-
-    resolveDuplicate: (choice: DuplicateChoice, applyToAll: boolean) =>
-      ipcRenderer.invoke('batch-import:resolveDuplicate', choice, applyToAll)
+    }
   }
 }
 

@@ -9,4 +9,4 @@ export type {
   BatchImportOptions,
   DuplicateChoice
 } from './types'
-export type { BatchResult, BatchFileDetail } from './BatchImportService'
+export type { BatchResult, BatchFileDetail, DuplicateCheckItem } from './BatchImportService'

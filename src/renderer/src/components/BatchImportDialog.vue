@@ -4,6 +4,61 @@
       <v-card-title>Batch Import</v-card-title>
 
       <v-card-text>
+        <!-- Duplicate review phase (shown before import if duplicates found) -->
+        <div v-if="phase === 'duplicate-review'">
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            {{ duplicateCount }} of {{ fileCount }} selected files already exist as cases in the
+            database.
+          </v-alert>
+
+          <div class="text-body-2 font-weight-medium mb-2">How should duplicates be handled?</div>
+          <v-radio-group v-model="duplicateStrategy" class="mb-4">
+            <v-radio value="skip" color="primary">
+              <template #label>
+                <div>
+                  <strong>Skip duplicates</strong>
+                  <div class="text-caption text-medium-emphasis">
+                    Only import new files, leave existing cases unchanged
+                  </div>
+                </div>
+              </template>
+            </v-radio>
+            <v-radio value="overwrite" color="warning">
+              <template #label>
+                <div>
+                  <strong>Overwrite duplicates</strong>
+                  <div class="text-caption text-medium-emphasis">
+                    Replace existing cases with data from the selected files
+                  </div>
+                </div>
+              </template>
+            </v-radio>
+          </v-radio-group>
+
+          <v-divider class="mb-3" />
+          <div class="text-caption text-medium-emphasis mb-2">Files to import:</div>
+          <v-list density="compact" class="pa-0">
+            <v-list-item
+              v-for="(file, i) in duplicateCheckFiles"
+              :key="i"
+              :class="file.isDuplicate ? 'text-warning' : ''"
+            >
+              <template #prepend>
+                <v-icon v-if="file.isDuplicate" color="warning" size="small">
+                  mdi-alert-circle-outline
+                </v-icon>
+                <v-icon v-else color="success" size="small"> mdi-new-box </v-icon>
+              </template>
+              <v-list-item-title class="text-body-2">
+                {{ file.fileName }}
+                <span v-if="file.isDuplicate" class="text-caption text-warning ml-1">
+                  (exists)
+                </span>
+              </v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </div>
+
         <!-- Importing phase -->
         <div v-if="phase === 'importing'" class="mt-4">
           <div class="text-body-2 mb-2">
@@ -17,21 +72,6 @@
           </div>
         </div>
 
-        <!-- Duplicate prompt phase -->
-        <div v-if="phase === 'duplicate-prompt'">
-          <v-alert type="warning" class="mb-4">
-            A case named '{{ duplicatePrompt.caseName }}' already exists.
-          </v-alert>
-          <div class="text-body-2 mb-4">File: {{ duplicatePrompt.fileName }}</div>
-          <v-checkbox
-            v-model="applyToAll"
-            label="Apply this choice to all remaining duplicates"
-            density="compact"
-            hide-details
-            class="mb-4"
-          />
-        </div>
-
         <!-- Summary phase -->
         <div v-if="phase === 'summary'">
           <div class="d-flex gap-2 mb-4">
@@ -39,11 +79,11 @@
               <v-icon start>mdi-check-circle</v-icon>
               Succeeded: {{ summary.succeeded }}
             </v-chip>
-            <v-chip color="error" variant="flat">
+            <v-chip v-if="summary.failed > 0" color="error" variant="flat">
               <v-icon start>mdi-alert-circle</v-icon>
               Failed: {{ summary.failed }}
             </v-chip>
-            <v-chip color="secondary" variant="flat">
+            <v-chip v-if="summary.skipped > 0" color="secondary" variant="flat">
               <v-icon start>mdi-skip-next</v-icon>
               Skipped: {{ summary.skipped }}
             </v-chip>
@@ -87,16 +127,19 @@
 
       <v-card-actions>
         <v-spacer />
-        <!-- Cancel/Close button -->
-        <v-btn v-if="phase === 'importing' || phase === 'summary'" @click="handleCancel">
-          {{ phase === 'importing' ? 'Cancel' : 'Close' }}
+        <v-btn v-if="phase === 'duplicate-review'" variant="text" @click="closeDialog">
+          Cancel
         </v-btn>
-
-        <!-- Duplicate prompt buttons -->
-        <template v-if="phase === 'duplicate-prompt'">
-          <v-btn variant="outlined" @click="handleDuplicateChoice('skip')"> Skip </v-btn>
-          <v-btn color="warning" @click="handleDuplicateChoice('overwrite')"> Overwrite </v-btn>
-        </template>
+        <v-btn
+          v-if="phase === 'duplicate-review'"
+          color="primary"
+          variant="flat"
+          @click="confirmAndStartImport"
+        >
+          Start Import
+        </v-btn>
+        <v-btn v-if="phase === 'importing'" @click="handleCancel"> Cancel </v-btn>
+        <v-btn v-if="phase === 'summary'" @click="handleCancel"> Close </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -107,14 +150,23 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import type {
   BatchProgress,
   BatchResult,
-  DuplicatePrompt,
-  DuplicateChoice
+  DuplicateChoice,
+  DuplicateCheckItem
 } from '../../../shared/types/api'
 
-type Phase = 'idle' | 'importing' | 'duplicate-prompt' | 'summary'
+type Phase = 'idle' | 'duplicate-review' | 'importing' | 'summary'
 
 const dialog = ref(false)
 const phase = ref<Phase>('idle')
+
+// File selection state
+const selectedFilePaths = ref<string[]>([])
+
+// Duplicate check state
+const duplicateCheckFiles = ref<DuplicateCheckItem[]>([])
+const duplicateCount = ref(0)
+const fileCount = ref(0)
+const duplicateStrategy = ref<DuplicateChoice>('skip')
 
 // Progress state
 const currentIndex = ref(0)
@@ -122,10 +174,6 @@ const totalFiles = ref(0)
 const currentFileName = ref('')
 const overallPercent = ref(0)
 const variantCount = ref(0)
-
-// Duplicate prompt state
-const duplicatePrompt = ref<DuplicatePrompt>({ fileName: '', caseName: '' })
-const applyToAll = ref(false)
 
 // Summary state
 const summary = ref<BatchResult>({
@@ -136,23 +184,15 @@ const summary = ref<BatchResult>({
   details: []
 })
 
-// Cleanup functions for IPC listeners
+// Cleanup function for IPC listener
 let cleanupProgress: (() => void) | null = null
-let cleanupDuplicatePrompt: (() => void) | null = null
 
 /**
- * Show dialog and start import based on mode
+ * Show dialog and start the batch import flow
  */
 const show = async (mode: 'files' | 'folder'): Promise<void> => {
-  // Reset state
-  dialog.value = true
-  phase.value = 'importing'
-  currentIndex.value = 0
-  totalFiles.value = 0
-  currentFileName.value = ''
-  overallPercent.value = 0
-  variantCount.value = 0
-  applyToAll.value = false
+  // Reset all state
+  resetState()
 
   let filePaths: string[] = []
 
@@ -165,32 +205,53 @@ const show = async (mode: 'files' | 'folder'): Promise<void> => {
     filePaths = await window.api.batchImport.selectFolder()
   }
 
-  // Check if user cancelled or no files found
+  // User cancelled or no files found
   if (filePaths.length === 0) {
-    // User cancelled or no files found
-    dialog.value = false
     return
   }
 
-  // Start import
-  await startImport(filePaths)
+  selectedFilePaths.value = filePaths
+  fileCount.value = filePaths.length
+  dialog.value = true
+
+  // Check for duplicates before importing
+  // eslint-disable-next-line no-undef
+  const checkResult = await window.api.batchImport.checkDuplicates(filePaths)
+
+  if (checkResult.duplicateCount > 0) {
+    // Duplicates found — show review phase
+    duplicateCheckFiles.value = checkResult.files
+    duplicateCount.value = checkResult.duplicateCount
+    phase.value = 'duplicate-review'
+  } else {
+    // No duplicates — start importing immediately
+    phase.value = 'importing'
+    await startImport(filePaths, 'skip')
+  }
+}
+
+/**
+ * User confirmed strategy in duplicate-review phase, start import
+ */
+const confirmAndStartImport = async (): Promise<void> => {
+  phase.value = 'importing'
+  // Spread to plain array — Vue reactive Proxy can't be structured-cloned by Electron IPC
+  await startImport([...selectedFilePaths.value], duplicateStrategy.value)
 }
 
 /**
  * Start the batch import process
  */
-const startImport = async (filePaths: string[]): Promise<void> => {
+const startImport = async (filePaths: string[], strategy: DuplicateChoice): Promise<void> => {
   totalFiles.value = filePaths.length
 
   try {
     // eslint-disable-next-line no-undef
-    const result = await window.api.batchImport.start(filePaths)
+    const result = await window.api.batchImport.start(filePaths, strategy)
 
-    // Import complete - show summary
     summary.value = result
     phase.value = 'summary'
   } catch (error) {
-    // Show error summary
     summary.value = {
       succeeded: 0,
       failed: 1,
@@ -214,14 +275,11 @@ const startImport = async (filePaths: string[]): Promise<void> => {
  */
 const handleCancel = async (): Promise<void> => {
   if (phase.value === 'importing') {
-    // Cancel active import
     // eslint-disable-next-line no-undef
     await window.api.batchImport.cancel()
   } else if (phase.value === 'summary') {
-    // Close dialog and emit completion event
     dialog.value = false
 
-    // Emit batch import complete with total succeeded count
     if (summary.value.succeeded > 0) {
       emit('batch-import-complete', { totalImported: summary.value.succeeded })
     }
@@ -229,22 +287,32 @@ const handleCancel = async (): Promise<void> => {
 }
 
 /**
- * Handle duplicate choice (skip or overwrite)
+ * Close dialog without importing
  */
-const handleDuplicateChoice = async (choice: DuplicateChoice): Promise<void> => {
-  // eslint-disable-next-line no-undef
-  await window.api.batchImport.resolveDuplicate(choice, applyToAll.value)
+const closeDialog = (): void => {
+  dialog.value = false
+}
 
-  // Reset duplicate prompt state
-  applyToAll.value = false
-
-  // Return to importing phase
-  phase.value = 'importing'
+/**
+ * Reset all state for a fresh import
+ */
+const resetState = (): void => {
+  phase.value = 'idle'
+  selectedFilePaths.value = []
+  duplicateCheckFiles.value = []
+  duplicateCount.value = 0
+  fileCount.value = 0
+  duplicateStrategy.value = 'skip'
+  currentIndex.value = 0
+  totalFiles.value = 0
+  currentFileName.value = ''
+  overallPercent.value = 0
+  variantCount.value = 0
+  summary.value = { succeeded: 0, failed: 0, skipped: 0, cancelled: false, details: [] }
 }
 
 // Setup IPC listeners
 onMounted(() => {
-  // Progress listener
   // eslint-disable-next-line no-undef
   cleanupProgress = window.api.batchImport.onProgress((progress: BatchProgress) => {
     currentIndex.value = progress.currentIndex
@@ -252,24 +320,15 @@ onMounted(() => {
     currentFileName.value = progress.currentFileName
     overallPercent.value = progress.overallPercent
 
-    // Update variant count from file progress if available
     if (progress.fileProgress !== undefined) {
       variantCount.value = progress.fileProgress.count
     }
-  })
-
-  // Duplicate prompt listener
-  // eslint-disable-next-line no-undef
-  cleanupDuplicatePrompt = window.api.batchImport.onDuplicatePrompt((prompt: DuplicatePrompt) => {
-    duplicatePrompt.value = prompt
-    phase.value = 'duplicate-prompt'
   })
 })
 
 // Cleanup IPC listeners
 onUnmounted(() => {
   cleanupProgress?.()
-  cleanupDuplicatePrompt?.()
 })
 
 // Define emits

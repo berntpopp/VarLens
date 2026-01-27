@@ -138,19 +138,25 @@ export interface BatchResult {
 
 export type DuplicateChoice = 'skip' | 'overwrite'
 
-export interface DuplicatePrompt {
+export interface DuplicateCheckItem {
+  filePath: string
   fileName: string
   caseName: string
+  isDuplicate: boolean
+}
+
+export interface DuplicateCheckResult {
+  files: DuplicateCheckItem[]
+  duplicateCount: number
 }
 
 export interface BatchImportAPI {
   selectFiles: () => Promise<string[]>
-  selectFolder: () => Promise<string[]> // Returns file paths found in folder
-  start: (filePaths: string[]) => Promise<BatchResult>
+  selectFolder: () => Promise<string[]>
+  checkDuplicates: (filePaths: string[]) => Promise<DuplicateCheckResult>
+  start: (filePaths: string[], duplicateStrategy: DuplicateChoice) => Promise<BatchResult>
   cancel: () => Promise<void>
   onProgress: (callback: (progress: BatchProgress) => void) => () => void
-  onDuplicatePrompt: (callback: (prompt: DuplicatePrompt) => void) => () => void
-  resolveDuplicate: (choice: DuplicateChoice, applyToAll: boolean) => Promise<void>
 }
 
 export interface WindowAPI {

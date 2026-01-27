@@ -31,12 +31,9 @@ function isDomainAllowed(hostname: string): boolean {
   return allDomains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))
 }
 
-ipcMain.handle(
-  'shell:updateUserDomains',
-  async (_event, domains: string[]): Promise<void> => {
-    userDomains = domains
-  }
-)
+ipcMain.handle('shell:updateUserDomains', async (_event, domains: string[]): Promise<void> => {
+  userDomains = domains
+})
 
 ipcMain.handle(
   'shell:openExternal',

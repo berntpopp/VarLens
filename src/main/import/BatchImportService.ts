@@ -1,7 +1,7 @@
 import { DatabaseService } from '../database/DatabaseService'
 import { ImportService } from './ImportService'
 import { NotFoundError } from '../database/errors'
-import type { BatchImportOptions, DuplicateChoice } from './types'
+import type { BatchImportOptions } from './types'
 
 export interface BatchFileDetail {
   filePath: string
@@ -20,11 +20,18 @@ export interface BatchResult {
   details: BatchFileDetail[]
 }
 
+export interface DuplicateCheckItem {
+  filePath: string
+  fileName: string
+  caseName: string
+  isDuplicate: boolean
+}
+
 /**
  * BatchImportService - Orchestrates sequential import of multiple variant files
  *
- * Processes files one-by-one with error isolation, duplicate detection, and progress reporting.
- * Errors in individual files do not stop the batch - they're recorded and processing continues.
+ * Duplicate checking happens upfront via checkDuplicates(), before any import starts.
+ * The import loop applies the pre-determined strategy without mid-import prompts.
  */
 export class BatchImportService {
   private db: DatabaseService
@@ -36,11 +43,36 @@ export class BatchImportService {
   }
 
   /**
-   * Process multiple files sequentially
-   *
-   * @param filePaths - Array of file paths to import
-   * @param options - Batch import options with callbacks and cancellation signal
-   * @returns Batch result with counts and per-file details
+   * Check which files have duplicate case names in the database.
+   * Call this BEFORE processBatch() so the user can review and choose a strategy.
+   */
+  checkDuplicates(filePaths: string[]): { files: DuplicateCheckItem[]; duplicateCount: number } {
+    const files: DuplicateCheckItem[] = []
+    let duplicateCount = 0
+
+    for (const filePath of filePaths) {
+      const fileName = this.extractFileName(filePath)
+      const caseName = this.extractCaseName(fileName)
+
+      let isDuplicate = false
+      try {
+        this.db.getCaseByName(caseName)
+        isDuplicate = true
+        duplicateCount++
+      } catch (error) {
+        if (!(error instanceof NotFoundError)) {
+          throw error
+        }
+      }
+
+      files.push({ filePath, fileName, caseName, isDuplicate })
+    }
+
+    return { files, duplicateCount }
+  }
+
+  /**
+   * Process multiple files sequentially with a pre-determined duplicate strategy.
    */
   async processBatch(filePaths: string[], options: BatchImportOptions): Promise<BatchResult> {
     const result: BatchResult = {
@@ -51,17 +83,13 @@ export class BatchImportService {
       details: []
     }
 
-    // Track case names imported in this batch to prevent in-batch duplicates
+    // Track case names imported in this batch to detect in-batch duplicates
     const importedInBatch = new Set<string>()
-
-    // Track "apply to all" state for duplicate handling
-    let applyToAllChoice: DuplicateChoice | null = null
 
     for (let i = 0; i < filePaths.length; i++) {
       // Check for cancellation before processing each file
       if (options.signal?.aborted === true) {
         result.cancelled = true
-        // Mark remaining files as skipped
         for (let j = i; j < filePaths.length; j++) {
           const fileName = this.extractFileName(filePaths[j])
           result.details.push({
@@ -88,7 +116,6 @@ export class BatchImportService {
         overallPercent
       })
 
-      // Initialize file detail
       const fileDetail: BatchFileDetail = {
         filePath,
         fileName,
@@ -97,18 +124,17 @@ export class BatchImportService {
       }
 
       try {
-        // Check for duplicate case name in database
-        let isDuplicate = false
+        // Check for duplicate in database
         let existingCaseId: number | null = null
+        let isDuplicate = false
 
         try {
           const existingCase = this.db.getCaseByName(caseName)
           isDuplicate = true
           existingCaseId = existingCase.id
         } catch (error) {
-          // NotFoundError means no duplicate - this is the expected path
           if (!(error instanceof NotFoundError)) {
-            throw error // Rethrow unexpected errors
+            throw error
           }
         }
 
@@ -117,37 +143,16 @@ export class BatchImportService {
           isDuplicate = true
         }
 
-        // Handle duplicate if found
+        // Apply pre-determined strategy
         if (isDuplicate === true) {
-          let choice: DuplicateChoice
-
-          // Use "apply to all" choice if set
-          if (applyToAllChoice !== null) {
-            choice = applyToAllChoice
-          } else if (options.onDuplicateFound !== undefined) {
-            // Prompt user for choice
-            const response = await options.onDuplicateFound(fileName, caseName)
-            choice = response.choice
-
-            // Store choice if "apply to all" was selected
-            if (response.applyToAll === true) {
-              applyToAllChoice = response.choice
-            }
-          } else {
-            // No callback provided, default to skip
-            choice = 'skip'
-          }
-
-          if (choice === 'skip') {
+          if (options.duplicateStrategy === 'skip') {
             fileDetail.status = 'skipped'
             fileDetail.error = 'Duplicate case name'
             result.details.push(fileDetail)
             result.skipped++
             continue
-          } else if (choice === 'overwrite' && existingCaseId !== null) {
-            // Delete existing case before importing
+          } else if (options.duplicateStrategy === 'overwrite' && existingCaseId !== null) {
             this.db.deleteCase(existingCaseId)
-            // Remove from in-batch tracking if it was there
             importedInBatch.delete(caseName)
           }
         }
@@ -159,21 +164,16 @@ export class BatchImportService {
           signal: options.signal
         })
 
-        // Success
         fileDetail.status = 'success'
         fileDetail.variantCount = importResult.variantCount
         result.details.push(fileDetail)
         result.succeeded++
-
-        // Track this case name as imported in this batch
         importedInBatch.add(caseName)
       } catch (error) {
-        // File import failed - record error and continue to next file
         fileDetail.status = 'failed'
         fileDetail.error = error instanceof Error ? error.message : 'Unknown error during import'
         result.details.push(fileDetail)
         result.failed++
-        // Continue to next file - do not throw
       }
     }
 
@@ -189,14 +189,12 @@ export class BatchImportService {
     if (lastPart !== undefined && lastPart !== '') {
       return lastPart
     }
-    // Fallback for Windows paths
     const backslashParts = filePath.split('\\')
     return backslashParts[backslashParts.length - 1] ?? 'unknown'
   }
 
   /**
-   * Extract case name from file name
-   * Strip .gz and .json extensions
+   * Extract case name from file name (strip .gz and .json extensions)
    */
   private extractCaseName(fileName: string): string {
     let name = fileName

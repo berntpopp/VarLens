@@ -1,31 +1,20 @@
 import { ipcMain, dialog, BrowserWindow, app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs'
-import { wrapHandler } from '../errorHandler'
 import { getDatabaseService } from '../../database'
 import { ImportService, BatchImportService } from '../../import'
-import type {
-  BatchProgress,
-  BatchResult,
-  DuplicateChoice,
-  DuplicatePrompt
-} from '../../../shared/types/api'
+import type { DuplicateChoice } from '../../../shared/types/api'
 import type { ProgressUpdate } from '../../import/types'
 
 /**
  * Batch Import IPC handlers
- * Channels: batch-import:selectFiles, batch-import:selectFolder, batch-import:start,
- *           batch-import:cancel, batch-import:resolveDuplicate
- * Events: batch-import:progress, batch-import:duplicatePrompt
+ * Channels: batch-import:selectFiles, batch-import:selectFolder,
+ *           batch-import:checkDuplicates, batch-import:start, batch-import:cancel
+ * Events: batch-import:progress
  */
 
 // Track current batch import for cancellation
 let currentBatchAbortController: AbortController | null = null
-
-// Pending duplicate resolution promise
-let pendingDuplicateResolve:
-  | ((value: { choice: DuplicateChoice; applyToAll: boolean }) => void)
-  | null = null
 
 // Settings file for persisting last directory
 const settingsPath = () => join(app.getPath('userData'), 'settings.json')
@@ -114,7 +103,6 @@ ipcMain.handle('batch-import:selectFolder', async () => {
       .filter((entry) => {
         if (entry.isFile() === false) return false
         const name = entry.name.toLowerCase()
-        // Match .json, .json.gz, or .gz files
         return (
           name.endsWith('.json') === true ||
           name.endsWith('.json.gz') === true ||
@@ -131,90 +119,102 @@ ipcMain.handle('batch-import:selectFolder', async () => {
 })
 
 /**
- * Start batch import
+ * Check which files have duplicate case names in the database.
+ * Called before start() so user can review duplicates and choose a strategy.
  */
-ipcMain.handle('batch-import:start', async (_event, filePaths: string[]) => {
-  return wrapHandler(async () => {
+ipcMain.handle('batch-import:checkDuplicates', async (_event, filePaths: string[]) => {
+  try {
     const db = getDatabaseService()
     const importService = new ImportService(db)
     const batchImportService = new BatchImportService(db, importService)
+    const result = batchImportService.checkDuplicates(filePaths)
 
-    // Create abort controller for cancellation
-    currentBatchAbortController = new AbortController()
-
-    // Get main window for progress events
-    const mainWindow = BrowserWindow.getAllWindows()[0]
-
-    // Throttled batch progress emitter
-    let lastBatchEmitTime = 0
-
-    const onBatchProgress = (progress: {
-      currentIndex: number
-      totalFiles: number
-      fileName: string
-      overallPercent: number
-    }): void => {
-      const now = Date.now()
-      if (now - lastBatchEmitTime >= PROGRESS_THROTTLE_MS) {
-        lastBatchEmitTime = now
-
-        const batchProgress: BatchProgress = {
-          currentIndex: progress.currentIndex,
-          totalFiles: progress.totalFiles,
-          currentFileName: progress.fileName,
-          overallPercent: progress.overallPercent
-        }
-
-        mainWindow?.webContents.send('batch-import:progress', batchProgress)
-      }
+    // Return plain object (class instances may fail structured clone)
+    return {
+      files: result.files.map((f) => ({
+        filePath: f.filePath,
+        fileName: f.fileName,
+        caseName: f.caseName,
+        isDuplicate: f.isDuplicate
+      })),
+      duplicateCount: result.duplicateCount
     }
+  } catch (error) {
+    console.error('checkDuplicates error:', error)
+    return { files: [], duplicateCount: 0 }
+  }
+})
 
-    // Throttled file progress emitter
-    let lastFileEmitTime = 0
-    let currentFileProgress: ProgressUpdate | undefined
+/**
+ * Start batch import with a pre-determined duplicate strategy
+ */
+ipcMain.handle(
+  'batch-import:start',
+  async (_event, filePaths: string[], duplicateStrategy: DuplicateChoice) => {
+    try {
+      const db = getDatabaseService()
+      const importService = new ImportService(db)
+      const batchImportService = new BatchImportService(db, importService)
 
-    const onFileProgress = (progress: ProgressUpdate): void => {
-      currentFileProgress = progress
+      // Create abort controller for cancellation
+      currentBatchAbortController = new AbortController()
 
-      const now = Date.now()
-      if (now - lastFileEmitTime >= PROGRESS_THROTTLE_MS) {
-        lastFileEmitTime = now
+      // Get main window for progress events
+      const mainWindow = BrowserWindow.getAllWindows()[0]
 
-        // Emit batch progress with file progress included
-        if (mainWindow !== undefined) {
-          mainWindow.webContents.send('batch-import:progress', {
-            currentIndex: 0, // Will be updated by batch progress
+      // Throttled batch progress emitter
+      let lastBatchEmitTime = 0
+
+      const onBatchProgress = (progress: {
+        currentIndex: number
+        totalFiles: number
+        fileName: string
+        overallPercent: number
+      }): void => {
+        const now = Date.now()
+        if (now - lastBatchEmitTime >= PROGRESS_THROTTLE_MS) {
+          lastBatchEmitTime = now
+
+          mainWindow?.webContents.send('batch-import:progress', {
+            currentIndex: progress.currentIndex,
+            totalFiles: progress.totalFiles,
+            currentFileName: progress.fileName,
+            overallPercent: progress.overallPercent
+          })
+        }
+      }
+
+      // Throttled file progress emitter
+      let lastFileEmitTime = 0
+
+      const onFileProgress = (progress: ProgressUpdate): void => {
+        const now = Date.now()
+        if (now - lastFileEmitTime >= PROGRESS_THROTTLE_MS) {
+          lastFileEmitTime = now
+
+          mainWindow?.webContents.send('batch-import:progress', {
+            currentIndex: 0,
             totalFiles: filePaths.length,
             currentFileName: '',
             overallPercent: 0,
-            fileProgress: currentFileProgress
-          } as BatchProgress)
+            fileProgress: {
+              phase: progress.phase,
+              count: progress.count,
+              elapsed: progress.elapsed,
+              skipped: progress.skipped
+            }
+          })
         }
       }
-    }
 
-    // Duplicate prompt handler
-    const onDuplicateFound = async (
-      fileName: string,
-      caseName: string
-    ): Promise<{ choice: DuplicateChoice; applyToAll: boolean }> => {
-      return new Promise((resolve) => {
-        // Store resolve function for later call
-        pendingDuplicateResolve = resolve
-
-        // Send prompt to renderer
-        const prompt: DuplicatePrompt = { fileName, caseName }
-        mainWindow?.webContents.send('batch-import:duplicatePrompt', prompt)
-      })
-    }
-
-    try {
-      const result: BatchResult = await batchImportService.processBatch(filePaths, {
+      const result = await batchImportService.processBatch(filePaths, {
+        duplicateStrategy,
         onBatchProgress,
         onFileProgress,
-        onDuplicateFound,
         signal: currentBatchAbortController.signal
       })
+
+      currentBatchAbortController = null
 
       // Send final progress (100%)
       mainWindow?.webContents.send('batch-import:progress', {
@@ -222,15 +222,28 @@ ipcMain.handle('batch-import:start', async (_event, filePaths: string[]) => {
         totalFiles: filePaths.length,
         currentFileName: '',
         overallPercent: 100
-      } as BatchProgress)
+      })
 
-      return result
-    } finally {
+      // JSON round-trip guarantees IPC serializability
+      return JSON.parse(JSON.stringify(result))
+    } catch (error) {
       currentBatchAbortController = null
-      pendingDuplicateResolve = null
+      console.error('batch-import:start error:', error)
+      return {
+        succeeded: 0,
+        failed: filePaths.length,
+        skipped: 0,
+        cancelled: false,
+        details: filePaths.map((fp) => ({
+          filePath: fp,
+          fileName: fp.split('/').pop() ?? fp.split('\\').pop() ?? 'unknown',
+          status: 'failed' as const,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }))
+      }
     }
-  })
-})
+  }
+)
 
 /**
  * Cancel current batch import
@@ -241,16 +254,3 @@ ipcMain.handle('batch-import:cancel', async () => {
     currentBatchAbortController = null
   }
 })
-
-/**
- * Resolve duplicate choice
- */
-ipcMain.handle(
-  'batch-import:resolveDuplicate',
-  async (_event, choice: DuplicateChoice, applyToAll: boolean) => {
-    if (pendingDuplicateResolve !== null) {
-      pendingDuplicateResolve({ choice, applyToAll })
-      pendingDuplicateResolve = null
-    }
-  }
-)

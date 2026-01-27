@@ -14,16 +14,12 @@ import {
 describe('buildGnomadUrl', () => {
   it('returns correct URL for GRCh37', () => {
     const url = buildGnomadUrl('1', 12345, 'A', 'G', 'GRCh37')
-    expect(url).toBe(
-      'https://gnomad.broadinstitute.org/variant/1-12345-A-G?dataset=gnomad_r2_1'
-    )
+    expect(url).toBe('https://gnomad.broadinstitute.org/variant/1-12345-A-G?dataset=gnomad_r2_1')
   })
 
   it('returns correct URL for GRCh38', () => {
     const url = buildGnomadUrl('1', 12345, 'A', 'G', 'GRCh38')
-    expect(url).toBe(
-      'https://gnomad.broadinstitute.org/variant/1-12345-A-G?dataset=gnomad_r4'
-    )
+    expect(url).toBe('https://gnomad.broadinstitute.org/variant/1-12345-A-G?dataset=gnomad_r4')
   })
 
   it('returns null when chr is empty string', () => {
@@ -55,9 +51,7 @@ describe('buildGnomadUrl', () => {
 
   it('encodes ref/alt with special characters (deletion)', () => {
     const url = buildGnomadUrl('1', 12345, 'ATCG', 'A', 'GRCh37')
-    expect(url).toBe(
-      'https://gnomad.broadinstitute.org/variant/1-12345-ATCG-A?dataset=gnomad_r2_1'
-    )
+    expect(url).toBe('https://gnomad.broadinstitute.org/variant/1-12345-ATCG-A?dataset=gnomad_r2_1')
   })
 })
 
