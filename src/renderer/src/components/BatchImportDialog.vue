@@ -59,6 +59,50 @@
           </v-list>
         </div>
 
+        <!-- ZIP password phase -->
+        <div v-if="phase === 'zip-password'">
+          <div class="text-body-2 mb-4">This archive is password-protected.</div>
+          <v-text-field
+            v-model="zipPassword"
+            label="Password"
+            :type="showZipPassword ? 'text' : 'password'"
+            :append-inner-icon="showZipPassword ? 'mdi-eye-off' : 'mdi-eye'"
+            :error-messages="zipErrorMessage"
+            autofocus
+            @click:append-inner="showZipPassword = !showZipPassword"
+            @keyup.enter="handleZipUnlock"
+          />
+        </div>
+
+        <!-- ZIP preview phase -->
+        <div v-if="phase === 'zip-preview'">
+          <div class="text-body-2 mb-2">
+            {{ extractedFilePaths.length }} file{{ extractedFilePaths.length !== 1 ? 's' : '' }}
+            ready to import:
+          </div>
+          <v-list density="compact" class="pa-0 mb-3" max-height="300" style="overflow-y: auto">
+            <v-list-item v-for="(fp, i) in extractedFilePaths" :key="i">
+              <template #prepend>
+                <v-icon color="success" size="small">mdi-file-check</v-icon>
+              </template>
+              <v-list-item-title class="text-body-2">
+                {{ fp.split('/').pop() ?? fp.split('\\').pop() ?? fp }}
+              </v-list-item-title>
+            </v-list-item>
+          </v-list>
+          <v-alert
+            v-if="zipExtractionErrors.length > 0"
+            type="warning"
+            variant="tonal"
+            class="mb-3"
+          >
+            <div class="text-body-2 font-weight-medium mb-1">Extraction warnings:</div>
+            <div v-for="(err, i) in zipExtractionErrors" :key="i" class="text-caption">
+              {{ err }}
+            </div>
+          </v-alert>
+        </div>
+
         <!-- Importing phase -->
         <div v-if="phase === 'importing'" class="mt-4">
           <div class="text-body-2 mb-2">
@@ -138,6 +182,29 @@
         >
           Start Import
         </v-btn>
+        <v-btn v-if="phase === 'zip-password'" variant="text" @click="handleZipCancel">
+          Cancel
+        </v-btn>
+        <v-btn
+          v-if="phase === 'zip-password'"
+          color="primary"
+          variant="flat"
+          :loading="testingPassword"
+          @click="handleZipUnlock"
+        >
+          Unlock
+        </v-btn>
+        <v-btn v-if="phase === 'zip-preview'" variant="text" @click="handleZipCancel">
+          Cancel
+        </v-btn>
+        <v-btn
+          v-if="phase === 'zip-preview'"
+          color="primary"
+          variant="flat"
+          @click="startZipImport"
+        >
+          Start Import
+        </v-btn>
         <v-btn v-if="phase === 'importing'" @click="handleCancel"> Cancel </v-btn>
         <v-btn v-if="phase === 'summary'" @click="handleCancel"> Close </v-btn>
       </v-card-actions>
@@ -154,7 +221,7 @@ import type {
   DuplicateCheckItem
 } from '../../../shared/types/api'
 
-type Phase = 'idle' | 'duplicate-review' | 'importing' | 'summary'
+type Phase = 'idle' | 'duplicate-review' | 'importing' | 'summary' | 'zip-password' | 'zip-preview'
 
 const dialog = ref(false)
 const phase = ref<Phase>('idle')
@@ -167,6 +234,15 @@ const duplicateCheckFiles = ref<DuplicateCheckItem[]>([])
 const duplicateCount = ref(0)
 const fileCount = ref(0)
 const duplicateStrategy = ref<DuplicateChoice>('skip')
+
+// ZIP state
+const zipPath = ref('')
+const zipPassword = ref('')
+const showZipPassword = ref(false)
+const zipErrorMessage = ref('')
+const testingPassword = ref(false)
+const extractedFilePaths = ref<string[]>([])
+const zipExtractionErrors = ref<string[]>([])
 
 // Progress state
 const currentIndex = ref(0)
@@ -190,9 +266,25 @@ let cleanupProgress: (() => void) | null = null
 /**
  * Show dialog and start the batch import flow
  */
-const show = async (mode: 'files' | 'folder'): Promise<void> => {
+const show = async (mode: 'files' | 'folder' | 'zip'): Promise<void> => {
   // Reset all state
   resetState()
+
+  if (mode === 'zip') {
+    // eslint-disable-next-line no-undef
+    const result = await window.api.batchImport.selectZip()
+    if (result === null) return
+
+    zipPath.value = result.filePath
+    dialog.value = true
+
+    if (result.isEncrypted === true) {
+      phase.value = 'zip-password'
+    } else {
+      await extractAndPreview(result.filePath)
+    }
+    return
+  }
 
   let filePaths: string[] = []
 
@@ -271,6 +363,98 @@ const startImport = async (filePaths: string[], strategy: DuplicateChoice): Prom
 }
 
 /**
+ * Extract ZIP and show preview of files
+ */
+const extractAndPreview = async (zipFilePath: string, password?: string): Promise<void> => {
+  // eslint-disable-next-line no-undef
+  const result = await window.api.batchImport.extractZip(zipFilePath, password)
+  extractedFilePaths.value = result.files
+  zipExtractionErrors.value = result.errors
+
+  if (result.files.length === 0) {
+    zipErrorMessage.value = 'No importable files found in archive.'
+    if (result.errors.length > 0) {
+      zipErrorMessage.value += ' Errors: ' + result.errors.join('; ')
+    }
+    // eslint-disable-next-line no-undef
+    await window.api.batchImport.cleanupZipTemp()
+    return
+  }
+
+  phase.value = 'zip-preview'
+}
+
+/**
+ * Test ZIP password and extract if correct
+ */
+const handleZipUnlock = async (): Promise<void> => {
+  testingPassword.value = true
+  zipErrorMessage.value = ''
+
+  try {
+    // eslint-disable-next-line no-undef
+    const result = await window.api.batchImport.testZipPassword(zipPath.value, zipPassword.value)
+    if (result.success === true) {
+      await extractAndPreview(zipPath.value, zipPassword.value)
+    } else {
+      zipErrorMessage.value = 'Incorrect password. Please try again.'
+    }
+  } catch (error) {
+    zipErrorMessage.value = error instanceof Error ? error.message : 'Failed to test password'
+  } finally {
+    testingPassword.value = false
+  }
+}
+
+/**
+ * Start importing extracted ZIP files
+ */
+const startZipImport = async (): Promise<void> => {
+  phase.value = 'importing'
+  totalFiles.value = extractedFilePaths.value.length
+
+  try {
+    // Spread to plain array to avoid Vue reactive Proxy IPC issue
+    // eslint-disable-next-line no-undef
+    const batchResult = await window.api.batchImport.start(
+      [...extractedFilePaths.value],
+      'skip' // ZIP files are freshly extracted, no duplicates expected - default to skip
+    )
+    summary.value = batchResult
+    phase.value = 'summary'
+  } catch (error) {
+    summary.value = {
+      succeeded: 0,
+      failed: 1,
+      skipped: 0,
+      cancelled: false,
+      details: [
+        {
+          filePath: '',
+          fileName: 'ZIP Import',
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      ]
+    }
+    phase.value = 'summary'
+  } finally {
+    // Always clean up temp directory
+    // eslint-disable-next-line no-undef
+    await window.api.batchImport.cleanupZipTemp()
+  }
+}
+
+/**
+ * Cancel ZIP flow and clean up temp directory
+ */
+const handleZipCancel = async (): Promise<void> => {
+  // eslint-disable-next-line no-undef
+  await window.api.batchImport.cleanupZipTemp()
+  dialog.value = false
+}
+
+/**
  * Handle cancel/close button
  */
 const handleCancel = async (): Promise<void> => {
@@ -279,6 +463,9 @@ const handleCancel = async (): Promise<void> => {
     await window.api.batchImport.cancel()
   } else if (phase.value === 'summary') {
     dialog.value = false
+    // Cleanup temp directory in case it's a ZIP import (idempotent)
+    // eslint-disable-next-line no-undef
+    await window.api.batchImport.cleanupZipTemp()
 
     if (summary.value.succeeded > 0) {
       emit('batch-import-complete', { totalImported: summary.value.succeeded })
@@ -309,6 +496,13 @@ const resetState = (): void => {
   overallPercent.value = 0
   variantCount.value = 0
   summary.value = { succeeded: 0, failed: 0, skipped: 0, cancelled: false, details: [] }
+  zipPath.value = ''
+  zipPassword.value = ''
+  showZipPassword.value = false
+  zipErrorMessage.value = ''
+  testingPassword.value = false
+  extractedFilePaths.value = []
+  zipExtractionErrors.value = []
 }
 
 // Setup IPC listeners
