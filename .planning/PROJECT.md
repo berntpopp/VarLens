@@ -6,7 +6,7 @@ Varlens is an Electron-based desktop application for offline analysis of genetic
 
 ## Core Value
 
-External collaborators can analyze variant data offline with the same data-dense UX experience as clinical platforms, without needing credentials or internet access.
+External collaborators can analyze variant data offline with a data-dense UX experience designed for research use, without needing credentials or internet access.
 
 ## Requirements
 
@@ -24,7 +24,17 @@ External collaborators can analyze variant data offline with the same data-dense
 
 ### Active
 
-(None — starting v0.2 planning)
+#### v0.2.0 — UI Polish, Branding & Trust Signals
+
+- [ ] Top app bar with app name and DNA icon
+- [ ] Footer with version info, GitHub link, license link, disclaimer status, FAQ button, log viewer toggle (small icons)
+- [ ] Blocking research-use disclaimer dialog (acknowledged once per version, stored in localStorage)
+- [ ] FAQ dialog with searchable, categorized expansion panels (JSON-configurable)
+- [ ] Full-featured client-facing logging system (LogViewer drawer, level filtering, search, download, memory stats)
+- [ ] Branding with RequiForm warm palette (#a09588 primary, #E5AA94 footer, #424242 secondary)
+- [ ] JSON config files for FAQ content, disclaimer text, and log config (build-time)
+- [ ] Remove all "clinical" language — research use only throughout
+- [ ] Modern, consistent design matching reference tools (phentrieve, RequiForm, kidney-genetics-db)
 
 ### Out of Scope
 
@@ -55,6 +65,11 @@ External collaborators can analyze variant data offline with the same data-dense
 
 **Reference project:** [sqlite-search](https://github.com/berntpopp/sqlite-search) provided architecture template
 
+**v0.2.0 reference projects:**
+- [RequiForm](../RequiForm) — branding config JSON, warm palette (#a09588/#E5AA94), FAQ dialog, disclaimer, footer pattern
+- [phentrieve](../phentrieve) — disclaimer dialog with Pinia store, LogViewer drawer, FAQ view, footer with icon buttons
+- [kidney-genetics-db](../kidney-genetics-db) — footer with version popup, full logging system with sanitizer, log store
+
 ## Constraints
 
 - **Tech stack**: Electron + Vue 3 + Vuetify 3 + TypeScript + better-sqlite3 — established
@@ -76,5 +91,17 @@ External collaborators can analyze variant data offline with the same data-dense
 | ESLint 9 flat config | Future-proof configuration approach | ✓ Good — Works with Vue + TS |
 | happy-dom for tests | Faster than jsdom for component testing | ✓ Good — Quick test runs |
 
+## Current Milestone: v0.2.0 UI Polish & Trust Signals
+
+**Goal:** Add professional branding, research-use disclaimer, FAQ, client-facing logging, and app chrome (top bar + footer) to establish trust and usability for external collaborators.
+
+**Target features:**
+- App bar with branding + footer with version/links
+- Research-use disclaimer (blocking, per-version acknowledgment)
+- FAQ dialog (JSON-configurable, searchable)
+- Client-facing logging system (full-featured LogViewer)
+- RequiForm warm palette branding
+- Remove all "clinical" references
+
 ---
-*Last updated: 2026-01-27 after v0.1 milestone*
+*Last updated: 2026-01-27 after v0.2.0 milestone initialization*

@@ -4,17 +4,17 @@
 
 See: .planning/PROJECT.md (updated 2026-01-27)
 
-**Core value:** External collaborators can analyze variant data offline with data-dense UX
-**Current focus:** Planning next milestone (v0.2)
+**Core value:** External collaborators can analyze variant data offline with data-dense UX for research use
+**Current focus:** Milestone v0.2.0 — UI Polish & Trust Signals
 
 ## Current Position
 
-Phase: None — milestone complete
-Plan: None
-Status: Ready to plan
-Last activity: 2026-01-27 — v0.1 milestone complete
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-01-27 — Milestone v0.2.0 started
 
-Progress: [██████████] 100% — v0.1 shipped
+Progress: [░░░░░░░░░░] 0%
 
 ## Milestone History
 
@@ -45,16 +45,14 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: v0.1 milestone complete, ready for v0.2 planning
+Stopped at: Defining v0.2.0 requirements
 Resume file: None
 
 ## Next Steps
 
-Run `/gsd:new-milestone` to:
-1. Gather requirements for v0.2
-2. Research implementation approaches
-3. Create REQUIREMENTS.md
-4. Create ROADMAP.md
+1. Define REQUIREMENTS.md for v0.2.0
+2. Create ROADMAP.md with phase structure
+3. Run `/gsd:plan-phase [N]` to start execution
 
 ---
-*Updated: 2026-01-27 after v0.1 milestone completion*
+*Updated: 2026-01-27 after v0.2.0 milestone initialization*
