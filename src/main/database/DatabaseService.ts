@@ -47,6 +47,8 @@ const SORTABLE_COLUMNS: Record<string, string> = {
 export class DatabaseService {
   private db: DatabaseType
   private statementCache: Map<string, Statement>
+  private dbPath: string
+  private encrypted: boolean
 
   /**
    * Create a new DatabaseService instance
@@ -59,13 +61,16 @@ export class DatabaseService {
    * @throws DatabaseError if database initialization fails
    */
   constructor(dbPath: string = ':memory:', encryptionKey?: string) {
+    this.dbPath = dbPath
+    this.encrypted = encryptionKey !== undefined && encryptionKey !== ''
+
     try {
       this.db = new Database(dbPath)
       this.statementCache = new Map()
 
       // CRITICAL: Encryption key must be the FIRST pragma issued
       // before any other database operations including schema init
-      if (encryptionKey !== undefined && encryptionKey !== '') {
+      if (this.encrypted) {
         this.db.pragma(`key='${encryptionKey}'`)
       }
 
@@ -636,11 +641,59 @@ export class DatabaseService {
   }
 
   /**
+   * Clear the prepared statement cache
+   *
+   * Should be called before closing the database to release all prepared statements.
+   */
+  clearStatementCache(): void {
+    this.statementCache.clear()
+  }
+
+  /**
+   * Check if this database is encrypted
+   *
+   * @returns True if database was opened with an encryption key
+   */
+  isEncrypted(): boolean {
+    return this.encrypted
+  }
+
+  /**
+   * Get the path to the database file
+   *
+   * @returns Path to the database file
+   */
+  getPath(): string {
+    return this.dbPath
+  }
+
+  /**
+   * Change the encryption key for an encrypted database
+   *
+   * Note: This only works on already-encrypted databases.
+   * Cannot encrypt a plaintext database.
+   *
+   * @param newPassword - New encryption password
+   * @throws DatabaseError if rekey operation fails
+   */
+  rekey(newPassword: string): void {
+    try {
+      this.db.pragma(`rekey='${newPassword}'`)
+    } catch (error) {
+      throw new DatabaseError(
+        'Failed to change database encryption key',
+        error instanceof Error ? error : undefined
+      )
+    }
+  }
+
+  /**
    * Close the database connection
    *
    * Should be called when the application is shutting down.
    */
   close(): void {
+    this.clearStatementCache()
     this.db.close()
   }
 

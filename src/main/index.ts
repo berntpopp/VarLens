@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { registerIpcHandlers } from './ipc'
-import { closeDatabaseService } from './database'
+import { initDatabaseManager, closeDatabaseManager } from './database'
 
 // Global error handlers — surfaces crashes that would otherwise be silent on Windows
 process.on('uncaughtException', (error) => {
@@ -106,6 +106,9 @@ if (gotTheLock !== true) {
       return
     }
 
+    // Initialize database manager with default database
+    initDatabaseManager()
+
     // Register IPC handlers (await to catch load errors)
     await registerIpcHandlers()
 
@@ -127,7 +130,7 @@ if (gotTheLock !== true) {
 
   // Clean up database on quit
   app.on('before-quit', () => {
-    closeDatabaseService()
+    closeDatabaseManager()
   })
 
   // Quit when all windows are closed, except on macOS. There, it's common

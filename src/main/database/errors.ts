@@ -71,3 +71,33 @@ export class TransactionError extends DatabaseError {
     Object.setPrototypeOf(this, TransactionError.prototype)
   }
 }
+
+/**
+ * Error thrown when wrong password is provided for encrypted database
+ */
+export class WrongPasswordError extends DatabaseError {
+  /**
+   * Create a WrongPasswordError
+   */
+  constructor() {
+    super('Wrong password or database is not encrypted')
+    this.name = 'WrongPasswordError'
+    Object.setPrototypeOf(this, WrongPasswordError.prototype)
+  }
+}
+
+/**
+ * Error thrown for general encryption failures
+ */
+export class EncryptionError extends DatabaseError {
+  /**
+   * Create an EncryptionError
+   * @param message - Error message describing the encryption failure
+   * @param cause - Optional wrapped error
+   */
+  constructor(message: string, cause?: Error) {
+    super(message, cause)
+    this.name = 'EncryptionError'
+    Object.setPrototypeOf(this, EncryptionError.prototype)
+  }
+}
