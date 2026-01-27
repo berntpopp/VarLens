@@ -9,7 +9,16 @@ import { ipcMain, shell } from 'electron'
  */
 
 /** Domains allowed for external link opening */
-const ALLOWED_DOMAINS = ['github.com', 'opensource.org']
+const ALLOWED_DOMAINS = [
+  'github.com',
+  'opensource.org',
+  'gnomad.broadinstitute.org',
+  'ncbi.nlm.nih.gov',
+  'omim.org',
+  'genome.ucsc.edu',
+  'varsome.com',
+  'franklin.genoox.com'
+]
 
 /**
  * Check if hostname matches an allowed domain exactly or is a subdomain of it.
