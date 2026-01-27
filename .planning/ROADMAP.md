@@ -47,8 +47,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 14-01-PLAN.md -- DatabaseService lifecycle manager with open/close/switch, statement cache invalidation, IPC handlers
-- [ ] 14-02-PLAN.md -- Database picker UI, encrypted database password dialogs, current database indicator
+- [x] 14-01-PLAN.md -- DatabaseService lifecycle manager with open/close/switch, statement cache invalidation, IPC handlers
+- [x] 14-02-PLAN.md -- Database picker UI, encrypted database password dialogs, current database indicator
 
 **Requirements:**
 - DBSL-01: User can select an existing SQLite database file via file picker dialog
@@ -198,7 +198,7 @@ Plans:
 | Phase | Name | Status | Requirements |
 |-------|------|--------|--------------|
 | 13 | SQLCipher Foundation | Complete | DBSC-01, DBSC-02, DBSC-03, DBSC-07, DBSC-08 |
-| 14 | Database Selection & Encryption UX | Not Started | DBSL-01 - DBSL-06, DBSC-04, DBSC-05, DBSC-06 |
+| 14 | Database Selection & Encryption UX | Complete | DBSL-01 - DBSL-06, DBSC-04, DBSC-05, DBSC-06 |
 | 15 | External Links | Not Started | EXTL-01 - EXTL-06 |
 | 16 | Batch Import & ZIP Extraction | Not Started | BTCH-01 - BTCH-06, ZIMP-01 - ZIMP-05 |
 | 17 | OMIM Data Extraction | Not Started | OMIM-01 - OMIM-05 |
@@ -211,17 +211,17 @@ Plans:
 | DBSC-01 | Phase 13 | Complete |
 | DBSC-02 | Phase 13 | Complete |
 | DBSC-03 | Phase 13 | Complete |
-| DBSC-04 | Phase 14 | Pending |
-| DBSC-05 | Phase 14 | Pending |
-| DBSC-06 | Phase 14 | Pending |
+| DBSC-04 | Phase 14 | Complete |
+| DBSC-05 | Phase 14 | Complete |
+| DBSC-06 | Phase 14 | Complete |
 | DBSC-07 | Phase 13 | Complete |
 | DBSC-08 | Phase 13 | Complete |
-| DBSL-01 | Phase 14 | Pending |
-| DBSL-02 | Phase 14 | Pending |
-| DBSL-03 | Phase 14 | Pending |
-| DBSL-04 | Phase 14 | Pending |
-| DBSL-05 | Phase 14 | Pending |
-| DBSL-06 | Phase 14 | Pending |
+| DBSL-01 | Phase 14 | Complete |
+| DBSL-02 | Phase 14 | Complete |
+| DBSL-03 | Phase 14 | Complete |
+| DBSL-04 | Phase 14 | Complete |
+| DBSL-05 | Phase 14 | Complete |
+| DBSL-06 | Phase 14 | Complete |
 | EXTL-01 | Phase 15 | Pending |
 | EXTL-02 | Phase 15 | Pending |
 | EXTL-03 | Phase 15 | Pending |

@@ -12,20 +12,20 @@ Requirements for cohort analysis, security, and import enhancements milestone.
 - [x] **DBSC-01**: App uses `better-sqlite3-multiple-ciphers` as drop-in replacement for `better-sqlite3` with SQLCipher encryption support
 - [x] **DBSC-02**: Database accepts encryption key via PRAGMA key as the first operation after opening, before any schema initialization
 - [x] **DBSC-03**: FTS5 virtual table creation occurs after PRAGMA key is set on encrypted databases
-- [ ] **DBSC-04**: User is prompted for a password when opening an encrypted database
-- [ ] **DBSC-05**: User can create a new encrypted database with a password
-- [ ] **DBSC-06**: User can change the password of an encrypted database via PRAGMA rekey
+- [x] **DBSC-04**: User is prompted for a password when opening an encrypted database
+- [x] **DBSC-05**: User can create a new encrypted database with a password
+- [x] **DBSC-06**: User can change the password of an encrypted database via PRAGMA rekey
 - [x] **DBSC-07**: All existing tests pass with the new database library on Windows, macOS, and Linux
 - [x] **DBSC-08**: Build pipeline (electron-vite config, CI workflows, Makefile, package.json) updated for the new native module
 
 ### Database Selection
 
-- [ ] **DBSL-01**: User can select an existing SQLite database file via file picker dialog
-- [ ] **DBSL-02**: User can create a new empty database via dialog
-- [ ] **DBSL-03**: User can switch between databases without restarting the app
-- [ ] **DBSL-04**: App displays the current database name/path in the UI
-- [ ] **DBSL-05**: Prepared statement cache is invalidated when switching databases to prevent stale handle crashes
-- [ ] **DBSL-06**: DatabaseService supports open/close/switch lifecycle (replaces hardcoded singleton)
+- [x] **DBSL-01**: User can select an existing SQLite database file via file picker dialog
+- [x] **DBSL-02**: User can create a new empty database via dialog
+- [x] **DBSL-03**: User can switch between databases without restarting the app
+- [x] **DBSL-04**: App displays the current database name/path in the UI
+- [x] **DBSL-05**: Prepared statement cache is invalidated when switching databases to prevent stale handle crashes
+- [x] **DBSL-06**: DatabaseService supports open/close/switch lifecycle (replaces hardcoded singleton)
 
 ### External Links
 
