@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 ## Current Position
 
 Phase: 15 -- External Links
-Plan: --
-Status: Not started
-Last activity: 2026-01-27 -- Phase 14 verified and complete
+Plan: 01 of 2
+Status: In progress
+Last activity: 2026-01-27 -- Completed 15-01-PLAN.md
 
-Progress: ████░░░░░░░░░░░░░░░░ 4/12 plans (33%)
+Progress: █████░░░░░░░░░░░░░░░ 5/12 plans (42%)
 
 ## Milestone History
 
@@ -27,7 +27,7 @@ Progress: ████░░░░░░░░░░░░░░░░ 4/12 plan
 |-------|------|-------|--------|
 | 13 | SQLCipher Foundation | 2 | ✓ Complete |
 | 14 | Database Selection & Encryption UX | 2 | ✓ Complete (2/2) |
-| 15 | External Links | 2 | Not Started |
+| 15 | External Links | 2 | In Progress (1/2) |
 | 16 | Batch Import & ZIP Extraction | 2 | Not Started |
 | 17 | OMIM Data Extraction | 2 | Not Started |
 | 18 | Cohort Analysis | 2 | Not Started |
@@ -63,6 +63,11 @@ v0.3.0 decisions (accumulated during milestone):
 | 7 | Encryption detection via test SELECT query | SQLCipher doesn't mark file headers; only way to detect is attempt to query | 14 |
 | 8 | Keep backward-compatible getDatabaseService wrapper | All existing IPC handlers continue working unchanged; reduces refactoring risk | 14 |
 | 9 | Set VTooltip default contentClass to bg-secondary | Light gray tooltips unreadable on light backgrounds; dark background improves contrast globally | 14 |
+| 10 | Pure URL builders with primitive parameters | URL builders take individual parameters (chr, pos, ref, alt) not full Variant object for testability and reuse | 15 |
+| 11 | null return semantics for missing data | URL builders return null when data missing; UI layer interprets as "show dash placeholder, no link" | 15 |
+| 12 | ClinVar coordinate search for Phase 15 | Use chr:pos:ref:alt search since Variant lacks clinvar_id; ID-based links deferred to Phase 17+ | 15 |
+| 13 | OMIM gene search for Phase 15 | Use gene_symbol search since Variant lacks omim_mim_number; MIM-based links deferred to Phase 17 | 15 |
+| 14 | Explicit null checks for strict boolean expressions | @typescript-eslint/strict-boolean-expressions requires chr == null || chr === '' instead of !chr | 15 |
 
 ### Pending Todos
 
@@ -82,14 +87,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Phase 14 verified and complete, ready for Phase 15
+Stopped at: Completed 15-01-PLAN.md (External Links Foundation)
 Resume file: None
 
 ## Next Steps
 
-1. Plan Phase 15 (External Links)
-2. Execute Phase 15 plans
-3. Continue through phases 16-18
+1. Execute Phase 15-02 (External Links UI)
+2. Continue through phases 16-18
 
 ---
-*Updated: 2026-01-27 after Phase 14 verification and completion*
+*Updated: 2026-01-27 after completing Phase 15-01*
