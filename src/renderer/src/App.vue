@@ -45,6 +45,7 @@
     <ImportDialog ref="importDialogRef" @import-complete="handleImportComplete" />
     <AppSnackbar ref="snackbarRef" />
     <LogViewer v-model:open="logViewerOpen" />
+    <DisclaimerDialog ref="disclaimerRef" @acknowledged="handleDisclaimerAcknowledged" />
 
     <!-- Floating action button for log viewer (temporary until footer exists) -->
     <v-btn
@@ -72,6 +73,7 @@ import FilterToolbar from './components/FilterToolbar.vue'
 import ImportDialog from './components/ImportDialog.vue'
 import AppSnackbar from './components/AppSnackbar.vue'
 import LogViewer from './components/LogViewer.vue'
+import DisclaimerDialog from './components/DisclaimerDialog.vue'
 import { logService } from './services/LogService'
 import type { VariantFilter } from '../../shared/types/api'
 
@@ -80,6 +82,7 @@ const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
 const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
 const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
+const disclaimerRef = ref<InstanceType<typeof DisclaimerDialog> | null>(null)
 
 // Sidebar state
 const sidebarOpen = ref(true)
@@ -167,6 +170,10 @@ function handleKeydown(e: KeyboardEvent): void {
   }
 }
 
+const handleDisclaimerAcknowledged = (): void => {
+  logService.info('Research disclaimer acknowledged', 'App')
+}
+
 // Lifecycle: setup keyboard listener and seed demo logs
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
@@ -178,6 +185,9 @@ onMounted(() => {
     logService.info('Vuetify theme loaded', 'Plugins')
     logService.warn('No cases loaded yet', 'CaseList')
     logService.debug('Checking localStorage for saved preferences', 'Config')
+
+    // Check disclaimer acknowledgment on startup
+    disclaimerRef.value?.checkAndShow()
   }, 500)
 })
 
