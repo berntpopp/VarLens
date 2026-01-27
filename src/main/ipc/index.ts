@@ -4,14 +4,16 @@
  *
  * Handler modules self-register via ipcMain.handle() on import.
  */
-export function registerIpcHandlers(): void {
+export async function registerIpcHandlers(): Promise<void> {
   // Import handler modules - they register themselves as side effect
-  import('./handlers/cases')
-  import('./handlers/variants')
-  import('./handlers/import')
-  import('./handlers/system')
-  import('./handlers/export')
-  import('./handlers/shell')
+  await Promise.all([
+    import('./handlers/cases'),
+    import('./handlers/variants'),
+    import('./handlers/import'),
+    import('./handlers/system'),
+    import('./handlers/export'),
+    import('./handlers/shell')
+  ])
 
   console.log('IPC handlers registered')
 }

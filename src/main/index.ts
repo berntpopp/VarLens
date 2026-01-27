@@ -1,8 +1,25 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, dialog, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3'
 import { registerIpcHandlers } from './ipc'
+import { closeDatabaseService } from './database'
+
+// Global error handlers — surfaces crashes that would otherwise be silent on Windows
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error)
+  dialog.showErrorBox(
+    'VarLens — Unexpected Error',
+    `${error.name}: ${error.message}\n\n${error.stack ?? ''}`
+  )
+  app.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason)
+  const message = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason)
+  dialog.showErrorBox('VarLens — Unhandled Error', message)
+})
 
 function createWindow(): void {
   // Create the browser window.
@@ -63,7 +80,7 @@ if (gotTheLock !== true) {
   // This method will be called when Electron has finished
   // initialization and is ready to create browser windows.
   // Some APIs can only be used after this event occurs.
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId('com.varlens.app')
 
@@ -89,8 +106,8 @@ if (gotTheLock !== true) {
       return
     }
 
-    // Register IPC handlers
-    registerIpcHandlers()
+    // Register IPC handlers (await to catch load errors)
+    await registerIpcHandlers()
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
@@ -106,6 +123,11 @@ if (gotTheLock !== true) {
       // dock icon is clicked and there are no other windows open.
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
+  })
+
+  // Clean up database on quit
+  app.on('before-quit', () => {
+    closeDatabaseService()
   })
 
   // Quit when all windows are closed, except on macOS. There, it's common
