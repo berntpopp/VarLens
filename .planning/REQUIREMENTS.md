@@ -9,15 +9,15 @@ Requirements for UI polish, branding, and trust signals milestone.
 
 ### App Chrome
 
-- [ ] **CHRM-01**: App displays a top app bar with "VarLens" name and DNA icon across all views
+- [x] **CHRM-01**: App displays a top app bar with "VarLens" name and DNA icon across all views
 - [ ] **CHRM-02**: App displays a footer bar with version number accessible via popup menu
 - [ ] **CHRM-03**: Footer includes GitHub repository link as small icon button
 - [ ] **CHRM-04**: Footer includes license link as small icon button
 - [ ] **CHRM-05**: Footer includes disclaimer acknowledgment status indicator
 - [ ] **CHRM-06**: Footer includes FAQ dialog trigger button
 - [ ] **CHRM-07**: Footer includes log viewer toggle button with error count badge
-- [ ] **CHRM-08**: App uses RequiForm warm palette (#a09588 primary, #E5AA94 footer background, #424242 secondary) via Vuetify theme config
-- [ ] **CHRM-09**: All UI text uses "research" language -- no "clinical" references anywhere
+- [x] **CHRM-08**: App uses RequiForm warm palette (#a09588 primary, #E5AA94 footer background, #424242 secondary) via Vuetify theme config
+- [x] **CHRM-09**: All UI text uses "research" language -- no "clinical" references anywhere
 
 ### Trust Signals
 
@@ -79,15 +79,15 @@ Deferred to later milestones.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CHRM-01 | Phase 9 | Pending |
+| CHRM-01 | Phase 9 | Complete |
 | CHRM-02 | Phase 12 | Pending |
 | CHRM-03 | Phase 12 | Pending |
 | CHRM-04 | Phase 12 | Pending |
 | CHRM-05 | Phase 12 | Pending |
 | CHRM-06 | Phase 12 | Pending |
 | CHRM-07 | Phase 12 | Pending |
-| CHRM-08 | Phase 9 | Pending |
-| CHRM-09 | Phase 9 | Pending |
+| CHRM-08 | Phase 9 | Complete |
+| CHRM-09 | Phase 9 | Complete |
 | TRST-01 | Phase 11 | Pending |
 | TRST-02 | Phase 11 | Pending |
 | TRST-03 | Phase 11 | Pending |

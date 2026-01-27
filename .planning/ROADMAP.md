@@ -20,8 +20,8 @@ This milestone transforms Varlens from a bare POC into a professionally branded 
 **Plans:** 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md -- Warm palette theme config, custom DNA icon, monospace typography
-- [ ] 09-02-PLAN.md -- Branded app bar, sidebar refactor, language audit
+- [x] 09-01-PLAN.md -- Warm palette theme config, custom DNA icon, monospace typography
+- [x] 09-02-PLAN.md -- Branded app bar, sidebar refactor, language audit
 
 **Requirements:**
 - CHRM-08: App uses RequiForm warm palette (#a09588 primary, #E5AA94 footer background, #424242 secondary) via Vuetify theme config
@@ -121,7 +121,7 @@ Plans:
 
 | Phase | Name | Status | Requirements |
 |-------|------|--------|--------------|
-| 9 | Branding & Theme Foundation | Planning Complete | CHRM-08, CHRM-09, CHRM-01 |
+| 9 | Branding & Theme Foundation | ✓ Complete | CHRM-08, CHRM-09, CHRM-01 |
 | 10 | Logging Infrastructure & Viewer | Planning Complete | LOG-01 - LOG-11 |
 | 11 | Trust Signals -- Disclaimer & FAQ | Not Started | TRST-01 - TRST-09 |
 | 12 | App Footer Integration | Not Started | CHRM-02 - CHRM-07 |
@@ -130,15 +130,15 @@ Plans:
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CHRM-01 | Phase 9 | Pending |
+| CHRM-01 | Phase 9 | Complete |
 | CHRM-02 | Phase 12 | Pending |
 | CHRM-03 | Phase 12 | Pending |
 | CHRM-04 | Phase 12 | Pending |
 | CHRM-05 | Phase 12 | Pending |
 | CHRM-06 | Phase 12 | Pending |
 | CHRM-07 | Phase 12 | Pending |
-| CHRM-08 | Phase 9 | Pending |
-| CHRM-09 | Phase 9 | Pending |
+| CHRM-08 | Phase 9 | Complete |
+| CHRM-09 | Phase 9 | Complete |
 | TRST-01 | Phase 11 | Pending |
 | TRST-02 | Phase 11 | Pending |
 | TRST-03 | Phase 11 | Pending |
