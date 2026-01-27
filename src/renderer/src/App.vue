@@ -1,13 +1,26 @@
 <template>
   <v-app>
-    <AppSidebar @import-click="handleImportClick">
-      <CaseList
-        ref="caseListRef"
-        @case-selected="handleCaseSelected"
-        @case-deleted="handleCaseDeleted"
-        @cases-loaded="handleCasesLoaded"
+    <v-app-bar color="primary" density="compact" flat>
+      <v-app-bar-nav-icon
+        @click="sidebarOpen = !sidebarOpen"
+        aria-label="Toggle navigation sidebar"
       />
-    </AppSidebar>
+      <v-icon icon="custom:varlens-dna" class="ml-2" size="small" />
+      <v-app-bar-title class="ml-2 text-subtitle-1 font-weight-bold">
+        VarLens
+      </v-app-bar-title>
+    </v-app-bar>
+
+    <v-navigation-drawer v-model="sidebarOpen" :width="280">
+      <AppSidebar @import-click="handleImportClick">
+        <CaseList
+          ref="caseListRef"
+          @case-selected="handleCaseSelected"
+          @case-deleted="handleCaseDeleted"
+          @cases-loaded="handleCasesLoaded"
+        />
+      </AppSidebar>
+    </v-navigation-drawer>
 
     <v-main>
       <EmptyState v-if="!selectedCaseId" :has-cases="caseCount > 0" @import="handleImportClick" />
@@ -52,6 +65,9 @@ const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
 const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
 const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
+
+// Sidebar state
+const sidebarOpen = ref(true)
 
 // Case selection state
 const selectedCaseId = ref<number | null>(null)
