@@ -8,6 +8,10 @@
       <v-icon icon="custom:varlens-dna" class="ml-2" size="small" />
       <v-app-bar-title class="ml-2 text-subtitle-1 font-weight-bold"> VarLens </v-app-bar-title>
       <DatabasePicker @database-switched="handleDatabaseSwitched" @error="handleDatabaseError" />
+      <v-btn icon size="small" @click="externalLinksSettingsRef?.show()">
+        <v-icon>mdi-cog</v-icon>
+        <v-tooltip activator="parent" location="bottom">Settings</v-tooltip>
+      </v-btn>
     </v-app-bar>
 
     <v-navigation-drawer v-model="sidebarOpen" :width="280">
@@ -55,6 +59,7 @@
     <LogViewer v-model:open="logViewerOpen" />
     <DisclaimerDialog ref="disclaimerRef" @acknowledged="handleDisclaimerAcknowledged" />
     <FaqDialog ref="faqDialogRef" />
+    <ExternalLinksSettings ref="externalLinksSettingsRef" />
   </v-app>
 </template>
 
@@ -72,6 +77,7 @@ import AppFooter from './components/AppFooter.vue'
 import DisclaimerDialog from './components/DisclaimerDialog.vue'
 import FaqDialog from './components/FaqDialog.vue'
 import DatabasePicker from './components/DatabasePicker.vue'
+import ExternalLinksSettings from './components/ExternalLinksSettings.vue'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useVersionGating } from './composables/useVersionGating'
 import { useDatabaseStore } from './stores/databaseStore'
@@ -88,6 +94,7 @@ const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
 const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
 const disclaimerRef = ref<InstanceType<typeof DisclaimerDialog> | null>(null)
 const faqDialogRef = ref<InstanceType<typeof FaqDialog> | null>(null)
+const externalLinksSettingsRef = ref<InstanceType<typeof ExternalLinksSettings> | null>(null)
 
 // Sidebar state
 const sidebarOpen = ref(true)
