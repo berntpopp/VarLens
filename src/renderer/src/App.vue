@@ -19,6 +19,7 @@
         @import-click="handleImportClick"
         @batch-import-files="handleBatchImportFiles"
         @batch-import-folder="handleBatchImportFolder"
+        @batch-import-zip="handleBatchImportZip"
       >
         <CaseList
           ref="caseListRef"
@@ -136,6 +137,10 @@ const handleBatchImportFiles = (): void => {
 
 const handleBatchImportFolder = (): void => {
   batchImportDialogRef.value?.show('folder')
+}
+
+const handleBatchImportZip = (): void => {
+  batchImportDialogRef.value?.show('zip')
 }
 
 const handleImportComplete = async (result: {

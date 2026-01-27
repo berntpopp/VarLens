@@ -1,5 +1,7 @@
 export { ImportService } from './ImportService'
 export { BatchImportService } from './BatchImportService'
+export { ZipExtractor } from './ZipExtractor'
+export { TempDirectoryManager } from './TempDirectoryManager'
 export type {
   ImportOptions,
   ImportResult,
@@ -10,3 +12,4 @@ export type {
   DuplicateChoice
 } from './types'
 export type { BatchResult, BatchFileDetail, DuplicateCheckItem } from './BatchImportService'
+export type { ZipExtractionResult } from './ZipExtractor'

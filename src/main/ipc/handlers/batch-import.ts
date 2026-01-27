@@ -2,19 +2,25 @@ import { ipcMain, dialog, BrowserWindow, app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs'
 import { getDatabaseService } from '../../database'
-import { ImportService, BatchImportService } from '../../import'
+import { ImportService, BatchImportService, ZipExtractor, TempDirectoryManager } from '../../import'
 import type { DuplicateChoice } from '../../../shared/types/api'
 import type { ProgressUpdate } from '../../import/types'
 
 /**
  * Batch Import IPC handlers
  * Channels: batch-import:selectFiles, batch-import:selectFolder,
- *           batch-import:checkDuplicates, batch-import:start, batch-import:cancel
+ *           batch-import:checkDuplicates, batch-import:start, batch-import:cancel,
+ *           batch-import:selectZip, batch-import:testZipPassword,
+ *           batch-import:extractZip, batch-import:cleanupZipTemp
  * Events: batch-import:progress
  */
 
 // Track current batch import for cancellation
 let currentBatchAbortController: AbortController | null = null
+
+// ZIP extraction utilities
+const zipExtractor = new ZipExtractor()
+let zipTempManager: TempDirectoryManager | null = null
 
 // Settings file for persisting last directory
 const settingsPath = () => join(app.getPath('userData'), 'settings.json')
@@ -252,5 +258,101 @@ ipcMain.handle('batch-import:cancel', async () => {
   if (currentBatchAbortController !== null) {
     currentBatchAbortController.abort()
     currentBatchAbortController = null
+  }
+})
+
+/**
+ * Select a ZIP file for batch import
+ * Returns { filePath, isEncrypted } or null if cancelled
+ */
+ipcMain.handle('batch-import:selectZip', async () => {
+  try {
+    const settings = loadSettings()
+
+    const result = await dialog.showOpenDialog({
+      title: 'Select ZIP Archive to Import',
+      defaultPath: settings.lastImportDirectory,
+      properties: ['openFile'],
+      filters: [
+        { name: 'ZIP Archives', extensions: ['zip'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+
+    if (result.canceled === true || result.filePaths.length === 0) {
+      return null
+    }
+
+    const filePath = result.filePaths[0]
+
+    // Save directory for next time
+    const directory = filePath.substring(0, filePath.lastIndexOf('/'))
+    saveSettings({ ...settings, lastImportDirectory: directory })
+
+    const isEncrypted = zipExtractor.isEncrypted(filePath)
+
+    return JSON.parse(JSON.stringify({ filePath, isEncrypted }))
+  } catch (error) {
+    console.error('batch-import:selectZip error:', error)
+    return null
+  }
+})
+
+/**
+ * Test whether a password is correct for a ZIP file
+ */
+ipcMain.handle(
+  'batch-import:testZipPassword',
+  async (_event, zipPath: string, password: string) => {
+    try {
+      const success = zipExtractor.testPassword(zipPath, password)
+      return JSON.parse(JSON.stringify({ success }))
+    } catch (error) {
+      console.error('batch-import:testZipPassword error:', error)
+      return { success: false }
+    }
+  }
+)
+
+/**
+ * Extract a ZIP file to a temp directory
+ * Returns { files: string[], errors: string[] }
+ */
+ipcMain.handle('batch-import:extractZip', async (_event, zipPath: string, password?: string) => {
+  try {
+    // Clean up any previous temp directory
+    if (zipTempManager !== null) {
+      zipTempManager.cleanup()
+    }
+
+    zipTempManager = new TempDirectoryManager()
+    const targetDir = zipTempManager.create()
+
+    const result = zipExtractor.extract(zipPath, targetDir, password)
+
+    return JSON.parse(
+      JSON.stringify({
+        files: result.extractedFiles,
+        errors: result.errors
+      })
+    )
+  } catch (error) {
+    console.error('batch-import:extractZip error:', error)
+    // Clean up on error
+    if (zipTempManager !== null) {
+      zipTempManager.cleanup()
+      zipTempManager = null
+    }
+    return { files: [], errors: [error instanceof Error ? error.message : 'Extraction failed'] }
+  }
+})
+
+/**
+ * Clean up the temporary directory used for ZIP extraction
+ */
+ipcMain.handle('batch-import:cleanupZipTemp', async () => {
+  if (zipTempManager !== null) {
+    zipTempManager.cleanup()
+    zipTempManager = null
   }
 })

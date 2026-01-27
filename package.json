@@ -28,6 +28,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@electron/rebuild": "^4.0.2",
     "@mdi/font": "^7.4.47",
+    "@types/adm-zip": "^0.5.7",
     "@types/better-sqlite3": "^7.6.13",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^25.0.10",
@@ -100,6 +101,7 @@
   },
   "dependencies": {
     "@vueuse/core": "^14.1.0",
+    "adm-zip": "^0.5.16",
     "better-sqlite3-multiple-ciphers": "^12.6.2",
     "file-saver": "^2.0.5",
     "pinia": "^2.3.1",

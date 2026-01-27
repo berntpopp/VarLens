@@ -29,6 +29,12 @@
             </template>
             <v-list-item-title>Import Folder</v-list-item-title>
           </v-list-item>
+          <v-list-item @click="$emit('batch-import-zip')">
+            <template #prepend>
+              <v-icon>mdi-zip-box</v-icon>
+            </template>
+            <v-list-item-title>Import ZIP Archive</v-list-item-title>
+          </v-list-item>
         </v-list>
       </v-menu>
     </v-toolbar>
@@ -42,5 +48,6 @@ defineEmits<{
   'import-click': []
   'batch-import-files': []
   'batch-import-folder': []
+  'batch-import-zip': []
 }>()
 </script>

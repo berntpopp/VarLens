@@ -157,6 +157,10 @@ export interface BatchImportAPI {
   start: (filePaths: string[], duplicateStrategy: DuplicateChoice) => Promise<BatchResult>
   cancel: () => Promise<void>
   onProgress: (callback: (progress: BatchProgress) => void) => () => void
+  selectZip: () => Promise<{ filePath: string; isEncrypted: boolean } | null>
+  testZipPassword: (zipPath: string, password: string) => Promise<{ success: boolean }>
+  extractZip: (zipPath: string, password?: string) => Promise<{ files: string[]; errors: string[] }>
+  cleanupZipTemp: () => Promise<void>
 }
 
 export interface WindowAPI {

@@ -102,6 +102,13 @@ const api = {
       ipcRenderer.invoke('batch-import:start', filePaths, duplicateStrategy),
     cancel: () => ipcRenderer.invoke('batch-import:cancel'),
 
+    selectZip: () => ipcRenderer.invoke('batch-import:selectZip'),
+    testZipPassword: (zipPath: string, password: string) =>
+      ipcRenderer.invoke('batch-import:testZipPassword', zipPath, password),
+    extractZip: (zipPath: string, password?: string) =>
+      ipcRenderer.invoke('batch-import:extractZip', zipPath, password),
+    cleanupZipTemp: () => ipcRenderer.invoke('batch-import:cleanupZipTemp'),
+
     onProgress: (callback: (progress: BatchProgress) => void): (() => void) => {
       const handler = (_event: Electron.IpcRendererEvent, progress: BatchProgress) => {
         callback(progress)
