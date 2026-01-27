@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 ## Current Position
 
 Phase: 15 -- External Links
-Plan: 01 of 2
-Status: In progress
-Last activity: 2026-01-27 -- Completed 15-01-PLAN.md
+Plan: 02 of 2
+Status: Phase complete
+Last activity: 2026-01-27 -- Completed 15-02-PLAN.md
 
-Progress: █████░░░░░░░░░░░░░░░ 5/12 plans (42%)
+Progress: ██████░░░░░░░░░░░░░░ 6/12 plans (50%)
 
 ## Milestone History
 
@@ -27,7 +27,7 @@ Progress: █████░░░░░░░░░░░░░░░ 5/12 plan
 |-------|------|-------|--------|
 | 13 | SQLCipher Foundation | 2 | ✓ Complete |
 | 14 | Database Selection & Encryption UX | 2 | ✓ Complete (2/2) |
-| 15 | External Links | 2 | In Progress (1/2) |
+| 15 | External Links | 2 | ✓ Complete (2/2) |
 | 16 | Batch Import & ZIP Extraction | 2 | Not Started |
 | 17 | OMIM Data Extraction | 2 | Not Started |
 | 18 | Cohort Analysis | 2 | Not Started |
@@ -87,13 +87,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 15-01-PLAN.md (External Links Foundation)
+Stopped at: Completed 15-02-PLAN.md (External Links UI)
 Resume file: None
 
 ## Next Steps
 
-1. Execute Phase 15-02 (External Links UI)
+1. Execute Phase 16-01 (Batch Import Foundation)
 2. Continue through phases 16-18
 
 ---
-*Updated: 2026-01-27 after completing Phase 15-01*
+*Updated: 2026-01-27 after completing Phase 15-02 (Phase 15 complete)*
