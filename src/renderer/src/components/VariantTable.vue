@@ -14,12 +14,12 @@
       class="elevation-1"
       @update:options="loadVariants"
     >
-      <!-- Chromosome with UCSC Genome Browser link -->
+      <!-- Chromosome with dynamic link from store -->
       <template #[`item.chr`]="{ item, value }">
         <span
-          v-if="buildUcscUrl(value, item.pos, genomeBuild)"
+          v-if="getLinkForColumn('chr') && resolveLink(getLinkForColumn('chr')!.id, item)"
           class="external-link"
-          @click="openExternalLink(buildUcscUrl(value, item.pos, genomeBuild)!, $event)"
+          @click="openExternalLink(resolveLink(getLinkForColumn('chr')!.id, item)!, $event)"
         >
           {{ value }}
           <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
@@ -27,17 +27,12 @@
         <span v-else>{{ value }}</span>
       </template>
 
-      <!-- Position with thousand separators and gnomAD link -->
+      <!-- Position with thousand separators and dynamic link from store -->
       <template #[`item.pos`]="{ item, value }">
         <span
-          v-if="buildGnomadUrl(item.chr, value, item.ref, item.alt, genomeBuild)"
+          v-if="getLinkForColumn('pos') && resolveLink(getLinkForColumn('pos')!.id, item)"
           class="external-link genomic-coordinate"
-          @click="
-            openExternalLink(
-              buildGnomadUrl(item.chr, value, item.ref, item.alt, genomeBuild)!,
-              $event
-            )
-          "
+          @click="openExternalLink(resolveLink(getLinkForColumn('pos')!.id, item)!, $event)"
         >
           {{ formatPosition(value) }}
           <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
@@ -50,14 +45,16 @@
         {{ formatScientific(value) }}
       </template>
 
-      <!-- ClinVar colored chips with coordinate search link -->
+      <!-- ClinVar colored chips with dynamic link from store -->
       <template #[`item.clinvar`]="{ item, value }">
         <span
-          v-if="value && buildClinvarSearchUrl(item.chr, item.pos, item.ref, item.alt)"
-          class="external-link"
-          @click="
-            openExternalLink(buildClinvarSearchUrl(item.chr, item.pos, item.ref, item.alt)!, $event)
+          v-if="
+            value &&
+            getLinkForColumn('clinvar') &&
+            resolveLink(getLinkForColumn('clinvar')!.id, item)
           "
+          class="external-link"
+          @click="openExternalLink(resolveLink(getLinkForColumn('clinvar')!.id, item)!, $event)"
         >
           <v-chip :color="getClinVarColor(value)" size="small" label>
             {{ value.replace(/_/g, ' ') }}
@@ -101,12 +98,16 @@
         {{ value !== null ? value.toFixed(1) : '-' }}
       </template>
 
-      <!-- Gene symbol with OMIM gene search link -->
-      <template #[`item.gene_symbol`]="{ value }">
+      <!-- Gene symbol with dynamic link from store -->
+      <template #[`item.gene_symbol`]="{ item, value }">
         <span
-          v-if="value && buildOmimGeneSearchUrl(value)"
+          v-if="
+            value &&
+            getLinkForColumn('gene_symbol') &&
+            resolveLink(getLinkForColumn('gene_symbol')!.id, item)
+          "
           class="external-link gene-symbol"
-          @click="openExternalLink(buildOmimGeneSearchUrl(value)!, $event)"
+          @click="openExternalLink(resolveLink(getLinkForColumn('gene_symbol')!.id, item)!, $event)"
         >
           {{ value }}
           <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
@@ -176,35 +177,16 @@
         {{ value ?? '-' }}
       </template>
 
-      <!-- VarSome link -->
-      <template #[`item._varsome`]="{ item }">
+      <!-- Dynamic virtual link columns from store -->
+      <template
+        v-for="link in linksStore.virtualLinks"
+        :key="link.id"
+        #[`item._link_${link.id}`]="{ item }"
+      >
         <span
-          v-if="buildVarsomeUrl(item.chr, item.pos, item.ref, item.alt, genomeBuild)"
+          v-if="resolveLink(link.id, item)"
           class="external-link"
-          @click="
-            openExternalLink(
-              buildVarsomeUrl(item.chr, item.pos, item.ref, item.alt, genomeBuild)!,
-              $event
-            )
-          "
-        >
-          View
-          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
-        </span>
-        <span v-else class="text-grey">--</span>
-      </template>
-
-      <!-- Franklin link -->
-      <template #[`item._franklin`]="{ item }">
-        <span
-          v-if="buildFranklinUrl(item.chr, item.pos, item.ref, item.alt, genomeBuild)"
-          class="external-link"
-          @click="
-            openExternalLink(
-              buildFranklinUrl(item.chr, item.pos, item.ref, item.alt, genomeBuild)!,
-              $event
-            )
-          "
+          @click="openExternalLink(resolveLink(link.id, item)!, $event)"
         >
           View
           <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
@@ -225,7 +207,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import type {
   Variant,
   VariantFilter,
@@ -233,15 +215,8 @@ import type {
   PaginatedResult,
   SortItem
 } from '../../../shared/types/api'
-import {
-  buildGnomadUrl,
-  buildUcscUrl,
-  buildClinvarSearchUrl,
-  buildOmimGeneSearchUrl,
-  buildVarsomeUrl,
-  buildFranklinUrl,
-  type GenomeBuild
-} from '../utils/externalLinks'
+import { useExternalLinksStore, type ExternalLinkConfig } from '../stores/externalLinksStore'
+import { resolveUrlTemplate, type VariantLinkData } from '../utils/externalLinks'
 
 interface Props {
   caseId: number
@@ -254,6 +229,9 @@ const emit = defineEmits<{
   'update:counts': [counts: { filtered: number; total: number }]
   'update:hasSort': [hasSort: boolean]
 }>()
+
+// Initialize external links store
+const linksStore = useExternalLinksStore()
 
 // Table state - DO NOT mutate these in loadVariants handler (infinite loop)
 const variants = ref<Variant[]>([])
@@ -269,9 +247,6 @@ const cursorCache = ref<Map<string, PaginationCursor>>(new Map())
 // Track unfiltered count for "X of Y" display
 const unfilteredCount = ref(0)
 
-// Default genome build - will be derived from case metadata in a future phase
-const genomeBuild = ref<GenomeBuild>('GRCh37')
-
 // Snackbar state for error feedback
 const snackbar = ref({
   visible: false,
@@ -279,29 +254,60 @@ const snackbar = ref({
   color: 'error'
 })
 
-// Headers definition
-const headers = [
-  { title: 'Chr', key: 'chr', sortable: true },
-  { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
-  { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
-  { title: 'Alt', key: 'alt', sortable: false, width: '100px' },
-  { title: 'GT', key: 'gt_num', sortable: true },
-  { title: 'Gene', key: 'gene_symbol', sortable: true },
-  { title: 'Func', key: 'func', sortable: true },
-  { title: 'Consequence', key: 'consequence', sortable: true },
-  { title: 'Transcript', key: 'transcript', sortable: true },
-  { title: 'cDNA', key: 'cdna', sortable: false },
-  { title: 'AA Change', key: 'aa_change', sortable: false },
-  { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' as const },
-  { title: 'CADD', key: 'cadd', sortable: true, align: 'end' as const },
-  { title: 'Qual', key: 'qual', sortable: true, align: 'end' as const },
-  { title: 'ClinVar', key: 'clinvar', sortable: true },
-  { title: 'HPO Score', key: 'hpo_sim_score', sortable: true, align: 'end' as const },
-  { title: 'HPO Match', key: 'hpo_match', sortable: false },
-  { title: 'MoI', key: 'moi', sortable: true },
-  { title: 'VarSome', key: '_varsome', sortable: false, width: '80px' },
-  { title: 'Franklin', key: '_franklin', sortable: false, width: '80px' }
-]
+// Dynamic headers with virtual link columns from store
+const headers = computed(() => {
+  const baseHeaders = [
+    { title: 'Chr', key: 'chr', sortable: true },
+    { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
+    { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
+    { title: 'Alt', key: 'alt', sortable: false, width: '100px' },
+    { title: 'GT', key: 'gt_num', sortable: true },
+    { title: 'Gene', key: 'gene_symbol', sortable: true },
+    { title: 'Func', key: 'func', sortable: true },
+    { title: 'Consequence', key: 'consequence', sortable: true },
+    { title: 'Transcript', key: 'transcript', sortable: true },
+    { title: 'cDNA', key: 'cdna', sortable: false },
+    { title: 'AA Change', key: 'aa_change', sortable: false },
+    { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' as const },
+    { title: 'CADD', key: 'cadd', sortable: true, align: 'end' as const },
+    { title: 'Qual', key: 'qual', sortable: true, align: 'end' as const },
+    { title: 'ClinVar', key: 'clinvar', sortable: true },
+    { title: 'HPO Score', key: 'hpo_sim_score', sortable: true, align: 'end' as const },
+    { title: 'HPO Match', key: 'hpo_match', sortable: false },
+    { title: 'MoI', key: 'moi', sortable: true }
+  ]
+
+  // Add virtual column headers from store
+  for (const link of linksStore.virtualLinks) {
+    baseHeaders.push({ title: link.name, key: `_link_${link.id}`, sortable: false, width: '80px' })
+  }
+
+  return baseHeaders
+})
+
+// Helper functions for link resolution
+const getVariantLinkData = (item: Variant): VariantLinkData => ({
+  chr: item.chr,
+  pos: item.pos,
+  ref: item.ref,
+  alt: item.alt,
+  gene_symbol: item.gene_symbol ?? null
+})
+
+const resolveLink = (linkId: string, item: Variant): string | null => {
+  const link = linksStore.enabledLinks.find((l) => l.id === linkId)
+  if (link === undefined) return null
+  return resolveUrlTemplate(
+    link.urlTemplate,
+    getVariantLinkData(item),
+    linksStore.genomeBuild,
+    link.requiredFields
+  )
+}
+
+const getLinkForColumn = (column: string): ExternalLinkConfig | null => {
+  return linksStore.enabledLinks.find((l) => l.column === column) ?? null
+}
 
 // Open external link with visual feedback and error handling
 const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> => {
