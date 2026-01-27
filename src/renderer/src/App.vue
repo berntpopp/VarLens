@@ -42,29 +42,22 @@
       </template>
     </v-main>
 
+    <AppFooter
+      :disclaimer-acknowledged="disclaimerAcknowledged"
+      @toggle-log-viewer="logViewerOpen = !logViewerOpen"
+      @open-disclaimer="disclaimerRef?.show()"
+      @open-faq="faqDialogRef?.show()"
+    />
+
     <ImportDialog ref="importDialogRef" @import-complete="handleImportComplete" />
     <AppSnackbar ref="snackbarRef" />
     <LogViewer v-model:open="logViewerOpen" />
     <DisclaimerDialog ref="disclaimerRef" @acknowledged="handleDisclaimerAcknowledged" />
     <FaqDialog ref="faqDialogRef" />
-
-    <!-- Floating action button for log viewer (temporary until footer exists) -->
-    <v-btn
-      icon="mdi-console"
-      size="small"
-      color="grey-darken-2"
-      class="log-viewer-fab"
-      position="fixed"
-      location="bottom end"
-      style="bottom: 16px; right: 16px; z-index: 5"
-      :elevation="logViewerOpen ? 0 : 4"
-      @click="logViewerOpen = !logViewerOpen"
-    />
   </v-app>
 </template>
 
 <script setup lang="ts">
-/* global window */
 import { ref, watch, onMounted } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
@@ -74,9 +67,11 @@ import FilterToolbar from './components/FilterToolbar.vue'
 import ImportDialog from './components/ImportDialog.vue'
 import AppSnackbar from './components/AppSnackbar.vue'
 import LogViewer from './components/LogViewer.vue'
+import AppFooter from './components/AppFooter.vue'
 import DisclaimerDialog from './components/DisclaimerDialog.vue'
 import FaqDialog from './components/FaqDialog.vue'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
+import { useVersionGating } from './composables/useVersionGating'
 import { logService } from './services/LogService'
 import type { VariantFilter } from '../../shared/types/api'
 
@@ -93,6 +88,9 @@ const sidebarOpen = ref(true)
 
 // Log viewer state
 const logViewerOpen = ref(false)
+
+// Disclaimer acknowledgment state (reactive, passed to AppFooter)
+const disclaimerAcknowledged = ref(false)
 
 // Case selection state
 const selectedCaseId = ref<number | null>(null)
@@ -170,25 +168,23 @@ watch(selectedCaseId, () => {
 useKeyboardShortcuts({
   onDisclaimer: () => disclaimerRef.value?.show(),
   onFaq: () => faqDialogRef.value?.show(),
-  onLogViewer: () => { logViewerOpen.value = !logViewerOpen.value }
+  onLogViewer: () => {
+    logViewerOpen.value = !logViewerOpen.value
+  }
 })
 
 const handleDisclaimerAcknowledged = (): void => {
+  disclaimerAcknowledged.value = true
   logService.info('Research disclaimer acknowledged', 'App')
 }
 
-// Lifecycle: seed demo logs on mount
-onMounted(() => {
-  // Seed demo log entries after short delay
-  window.setTimeout(() => {
-    logService.info('Application started', 'App')
-    logService.debug('Vue app mounted successfully', 'App')
-    logService.info('Vuetify theme loaded', 'Plugins')
-    logService.warn('No cases loaded yet', 'CaseList')
-    logService.debug('Checking localStorage for saved preferences', 'Config')
+// Check initial disclaimer acknowledgment state
+const { needsAcknowledgment } = useVersionGating()
+disclaimerAcknowledged.value = !needsAcknowledgment()
 
-    // Check disclaimer acknowledgment on startup
-    disclaimerRef.value?.checkAndShow()
-  }, 500)
+// Lifecycle
+onMounted(() => {
+  // Check disclaimer acknowledgment on startup
+  disclaimerRef.value?.checkAndShow()
 })
 </script>

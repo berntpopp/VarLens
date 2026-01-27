@@ -68,10 +68,26 @@ if (gotTheLock !== true) {
     electronApp.setAppUserModelId('com.varlens.app')
 
     // Verify better-sqlite3 works (in-memory test)
-    const testDb = new Database(':memory:')
-    testDb.exec('CREATE TABLE test (id INTEGER PRIMARY KEY)')
-    testDb.close()
-    console.log('better-sqlite3 initialized successfully')
+    try {
+      const testDb = new Database(':memory:')
+      testDb.exec('CREATE TABLE test (id INTEGER PRIMARY KEY)')
+      testDb.close()
+      console.log('better-sqlite3 initialized successfully')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (message.includes('NODE_MODULE_VERSION')) {
+        console.error(
+          'better-sqlite3 native module version mismatch.\n' +
+            'The native module was compiled for a different Node.js version.\n' +
+            'Fix: run "npm run rebuild:electron" to recompile for Electron.\n' +
+            `Original error: ${message}`
+        )
+      } else {
+        console.error('Failed to initialize better-sqlite3:', message)
+      }
+      app.quit()
+      return
+    }
 
     // Register IPC handlers
     registerIpcHandlers()

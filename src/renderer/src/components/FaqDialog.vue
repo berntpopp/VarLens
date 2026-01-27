@@ -14,7 +14,11 @@
         />
 
         <template v-if="filteredFaq.length === 0">
-          <v-alert type="info" variant="tonal" text="No matching questions found. Try rephrasing your search." />
+          <v-alert
+            type="info"
+            variant="tonal"
+            text="No matching questions found. Try rephrasing your search."
+          />
         </template>
 
         <template v-else>
@@ -80,7 +84,7 @@ const filteredFaq = computed(() => {
 const groupedFaq = computed(() => {
   const groups: Record<string, FaqItem[]> = {}
   filteredFaq.value.forEach((item: FaqItem) => {
-    if (!groups[item.category]) {
+    if (groups[item.category] === undefined) {
       groups[item.category] = []
     }
     groups[item.category].push(item)

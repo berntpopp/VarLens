@@ -19,7 +19,10 @@ help: ## Show this help message
 #---------------------------------------------------------------------------
 
 rebuild: ## Rebuild native modules for Electron (fixes better-sqlite3 version mismatch)
-	npx electron-rebuild -f -w better-sqlite3
+	npm run rebuild:electron
+
+rebuild-node: ## Rebuild native modules for Node.js (needed before running tests)
+	npm run rebuild:node
 
 dev: rebuild ## Start development server with hot reload
 	npm run dev
@@ -97,7 +100,7 @@ ci-full: ## Run FULL CI pipeline (exactly mirrors GitHub Actions)
 	npm ci
 	@echo ""
 	@echo "Step 2/6: Rebuilding native modules for Node.js (tests need Node-compatible binaries)..."
-	npm rebuild better-sqlite3
+	npm run rebuild:node
 	@echo ""
 	@echo "Step 3/6: Running linter..."
 	npm run lint:check
@@ -109,7 +112,7 @@ ci-full: ## Run FULL CI pipeline (exactly mirrors GitHub Actions)
 	npm run test
 	@echo ""
 	@echo "Step 6/6: Rebuilding native modules for Electron..."
-	npm run postinstall
+	npm run rebuild:electron
 	@echo ""
 	@echo "=== CI Pipeline PASSED ==="
 

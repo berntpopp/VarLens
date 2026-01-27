@@ -42,7 +42,7 @@ jobs:
         run: npm ci
 
       - name: Rebuild native modules for Node.js (tests need Node-compatible binaries)
-        run: npm rebuild better-sqlite3
+        run: npm run rebuild:node
 
       - name: Run linter
         run: npm run lint:check
@@ -53,8 +53,8 @@ jobs:
       - name: Run tests
         run: npm run test
 
-      - name: Rebuild native modules for Electron
-        run: npm run postinstall
+      - name: Rebuild native modules for Electron (force compile from source)
+        run: npm run rebuild:electron
 
       - name: Build Electron app (test build)
         run: npm run dist
