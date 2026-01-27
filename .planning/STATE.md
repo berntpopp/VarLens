@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 ## Current Position
 
-Phase: 11 of 4 (Trust Signals -- Disclaimer & FAQ)
-Plan: 2 of 2 complete
-Status: Phase complete — verified ✓
-Last activity: 2026-01-27 -- Phase 11 verified (26/26 must-haves passed)
+Phase: 12 of 4 (App Footer Integration)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-01-27 -- Completed 12-01-PLAN.md
 
-Progress: [███████░░░] 75%
+Progress: [████████░░] 87.5%
 
 ### Phase Overview
 
@@ -23,7 +23,7 @@ Progress: [███████░░░] 75%
 | 9 | Branding & Theme Foundation | ✓ Complete (2/2 plans) |
 | 10 | Logging Infrastructure & Viewer | ✓ Complete (2/2 plans) |
 | 11 | Trust Signals -- Disclaimer & FAQ | ✓ Complete (2/2 plans) |
-| 12 | App Footer Integration | Not Started |
+| 12 | App Footer Integration | In Progress (1/2 plans) |
 
 ## Milestone History
 
@@ -32,8 +32,8 @@ Progress: [███████░░░] 75%
 ## Performance Metrics
 
 **v0.2.0 Progress:**
-- Plans completed: 6
-- Average duration: 4.8 min
+- Plans completed: 7
+- Average duration: 4.5 min
 - Phases complete: 3 of 4 (75%)
 
 ## Accumulated Context
@@ -93,6 +93,14 @@ Key architectural decisions carried forward:
 | Keyboard shortcuts | Ctrl+Shift+D (disclaimer), Ctrl+Shift+Q (FAQ), Ctrl+L (log viewer) | Consistent shortcut patterns for dev access before footer exists |
 | Search debounce 300ms | Reuse useDebounce composable for FAQ search | Performance optimization, consistent with log viewer
 
+**v0.2.0 Decisions (Phase 12):**
+
+| Decision | Summary | Impact |
+|----------|---------|--------|
+| HTTPS-only + domain whitelist | shell:openExternal validates protocol and hostname before opening | Security: prevents arbitrary URL opening from renderer |
+| Structured version object | system:version returns {app, electron} instead of bare string | Footer can display both app and Electron versions |
+| ExportAPI in WindowAPI | Added missing ExportAPI interface to WindowAPI type | Type completeness for all preload namespaces |
+
 ### v0.2.0 Design Notes
 
 - Footer (#E5AA94 background) integrates disclaimer status, FAQ trigger, and log viewer toggle
@@ -112,13 +120,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Phase 11 complete and verified
+Stopped at: Completed 12-01-PLAN.md
 Resume file: None
 
 ## Next Steps
 
-1. Complete Phase 12 (App Footer Integration) to wire trust signals and logging into footer
+1. Complete Phase 12 Plan 02 (App Footer Component) to wire trust signals and logging into footer
 2. v0.2.0 milestone complete after Phase 12
 
 ---
-*Updated: 2026-01-27 after completing Phase 11 Plan 02*
+*Updated: 2026-01-27 after completing Phase 12 Plan 01*
