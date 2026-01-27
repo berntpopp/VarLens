@@ -6,7 +6,7 @@ import { ipcMain, app } from 'electron'
  */
 
 ipcMain.handle('system:version', async () => {
-  return app.getVersion()
+  return { app: app.getVersion(), electron: process.versions.electron }
 })
 
 ipcMain.handle('system:userDataPath', async () => {
