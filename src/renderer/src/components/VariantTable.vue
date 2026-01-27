@@ -1,134 +1,227 @@
 <template>
-  <v-data-table-server
-    v-model:page="page"
-    v-model:items-per-page="itemsPerPage"
-    v-model:sort-by="sortBy"
-    :headers="headers"
-    :items="variants"
-    :items-length="totalCount"
-    :loading="loading"
-    :items-per-page-options="[25, 50, 100]"
-    density="compact"
-    multi-sort
-    class="elevation-1"
-    @update:options="loadVariants"
-  >
-    <!-- Position with thousand separators -->
-    <template #[`item.pos`]="{ value }">
-      <span class="genomic-coordinate">{{ formatPosition(value) }}</span>
-    </template>
+  <div>
+    <v-data-table-server
+      v-model:page="page"
+      v-model:items-per-page="itemsPerPage"
+      v-model:sort-by="sortBy"
+      :headers="headers"
+      :items="variants"
+      :items-length="totalCount"
+      :loading="loading"
+      :items-per-page-options="[25, 50, 100]"
+      density="compact"
+      multi-sort
+      class="elevation-1"
+      @update:options="loadVariants"
+    >
+      <!-- Chromosome with UCSC Genome Browser link -->
+      <template #[`item.chr`]="{ item, value }">
+        <span
+          v-if="buildUcscUrl(value, item.pos, genomeBuild)"
+          class="external-link"
+          @click="openExternalLink(buildUcscUrl(value, item.pos, genomeBuild)!, $event)"
+        >
+          {{ value }}
+          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+        </span>
+        <span v-else>{{ value }}</span>
+      </template>
 
-    <!-- gnomAD AF in scientific notation -->
-    <template #[`item.gnomad_af`]="{ value }">
-      {{ formatScientific(value) }}
-    </template>
+      <!-- Position with thousand separators and gnomAD link -->
+      <template #[`item.pos`]="{ item, value }">
+        <span
+          v-if="buildGnomadUrl(item.chr, value, item.ref, item.alt, genomeBuild)"
+          class="external-link genomic-coordinate"
+          @click="
+            openExternalLink(
+              buildGnomadUrl(item.chr, value, item.ref, item.alt, genomeBuild)!,
+              $event
+            )
+          "
+        >
+          {{ formatPosition(value) }}
+          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+        </span>
+        <span v-else class="genomic-coordinate">{{ formatPosition(value) }}</span>
+      </template>
 
-    <!-- ClinVar colored chips -->
-    <template #[`item.clinvar`]="{ value }">
-      <v-chip v-if="value" :color="getClinVarColor(value)" size="small" label>
-        {{ value.replace(/_/g, ' ') }}
-      </v-chip>
-      <span v-else class="text-grey">-</span>
-    </template>
+      <!-- gnomAD AF in scientific notation -->
+      <template #[`item.gnomad_af`]="{ value }">
+        {{ formatScientific(value) }}
+      </template>
 
-    <!-- Ref allele with truncation and tooltip -->
-    <template #[`item.ref`]="{ value }">
-      <v-tooltip v-if="value.length > 20" location="top">
-        <template #activator="{ props: tooltipProps }">
-          <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
-            {{ value.substring(0, 20) }}...
-          </span>
-        </template>
-        <span class="variant-data-mono">{{ value }}</span>
-      </v-tooltip>
-      <span v-else class="variant-data-mono">{{ value }}</span>
-    </template>
+      <!-- ClinVar colored chips with coordinate search link -->
+      <template #[`item.clinvar`]="{ item, value }">
+        <span
+          v-if="value && buildClinvarSearchUrl(item.chr, item.pos, item.ref, item.alt)"
+          class="external-link"
+          @click="
+            openExternalLink(buildClinvarSearchUrl(item.chr, item.pos, item.ref, item.alt)!, $event)
+          "
+        >
+          <v-chip :color="getClinVarColor(value)" size="small" label>
+            {{ value.replace(/_/g, ' ') }}
+          </v-chip>
+          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+        </span>
+        <v-chip v-else-if="value" :color="getClinVarColor(value)" size="small" label>
+          {{ value.replace(/_/g, ' ') }}
+        </v-chip>
+        <span v-else class="text-grey">--</span>
+      </template>
 
-    <!-- Alt allele with truncation and tooltip -->
-    <template #[`item.alt`]="{ value }">
-      <v-tooltip v-if="value.length > 20" location="top">
-        <template #activator="{ props: tooltipProps }">
-          <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
-            {{ value.substring(0, 20) }}...
-          </span>
-        </template>
-        <span class="variant-data-mono">{{ value }}</span>
-      </v-tooltip>
-      <span v-else class="variant-data-mono">{{ value }}</span>
-    </template>
+      <!-- Ref allele with truncation and tooltip -->
+      <template #[`item.ref`]="{ value }">
+        <v-tooltip v-if="value.length > 20" location="top">
+          <template #activator="{ props: tooltipProps }">
+            <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
+              {{ value.substring(0, 20) }}...
+            </span>
+          </template>
+          <span class="variant-data-mono">{{ value }}</span>
+        </v-tooltip>
+        <span v-else class="variant-data-mono">{{ value }}</span>
+      </template>
 
-    <!-- CADD score (handle null) -->
-    <template #[`item.cadd`]="{ value }">
-      {{ value !== null ? value.toFixed(1) : '-' }}
-    </template>
+      <!-- Alt allele with truncation and tooltip -->
+      <template #[`item.alt`]="{ value }">
+        <v-tooltip v-if="value.length > 20" location="top">
+          <template #activator="{ props: tooltipProps }">
+            <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
+              {{ value.substring(0, 20) }}...
+            </span>
+          </template>
+          <span class="variant-data-mono">{{ value }}</span>
+        </v-tooltip>
+        <span v-else class="variant-data-mono">{{ value }}</span>
+      </template>
 
-    <!-- Gene symbol (handle null) -->
-    <template #[`item.gene_symbol`]="{ value }">
-      <span class="gene-symbol">{{ value ?? '-' }}</span>
-    </template>
+      <!-- CADD score (handle null) -->
+      <template #[`item.cadd`]="{ value }">
+        {{ value !== null ? value.toFixed(1) : '-' }}
+      </template>
 
-    <!-- Consequence (handle null) -->
-    <template #[`item.consequence`]="{ value }">
-      {{ (value ?? null) !== null ? value.replace(/_/g, ' ') : '-' }}
-    </template>
+      <!-- Gene symbol with OMIM gene search link -->
+      <template #[`item.gene_symbol`]="{ value }">
+        <span
+          v-if="value && buildOmimGeneSearchUrl(value)"
+          class="external-link gene-symbol"
+          @click="openExternalLink(buildOmimGeneSearchUrl(value)!, $event)"
+        >
+          {{ value }}
+          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+        </span>
+        <span v-else class="gene-symbol">{{ value ?? '--' }}</span>
+      </template>
 
-    <!-- GT (handle null) -->
-    <template #[`item.gt_num`]="{ value }">
-      {{ value ?? '-' }}
-    </template>
+      <!-- Consequence (handle null) -->
+      <template #[`item.consequence`]="{ value }">
+        {{ (value ?? null) !== null ? value.replace(/_/g, ' ') : '-' }}
+      </template>
 
-    <!-- Func (handle null) -->
-    <template #[`item.func`]="{ value }">
-      {{ value ?? '-' }}
-    </template>
+      <!-- GT (handle null) -->
+      <template #[`item.gt_num`]="{ value }">
+        {{ value ?? '-' }}
+      </template>
 
-    <!-- Qual score (handle null) -->
-    <template #[`item.qual`]="{ value }">
-      {{ value !== null ? value.toFixed(1) : '-' }}
-    </template>
+      <!-- Func (handle null) -->
+      <template #[`item.func`]="{ value }">
+        {{ value ?? '-' }}
+      </template>
 
-    <!-- Transcript (handle null) -->
-    <template #[`item.transcript`]="{ value }">
-      <span class="variant-data-mono">{{ value ?? '-' }}</span>
-    </template>
+      <!-- Qual score (handle null) -->
+      <template #[`item.qual`]="{ value }">
+        {{ value !== null ? value.toFixed(1) : '-' }}
+      </template>
 
-    <!-- cDNA (handle null) -->
-    <template #[`item.cdna`]="{ value }">
-      <span class="hgvs-notation">{{ value ?? '-' }}</span>
-    </template>
+      <!-- Transcript (handle null) -->
+      <template #[`item.transcript`]="{ value }">
+        <span class="variant-data-mono">{{ value ?? '-' }}</span>
+      </template>
 
-    <!-- AA Change (handle null) -->
-    <template #[`item.aa_change`]="{ value }">
-      <span class="hgvs-notation">{{ value ?? '-' }}</span>
-    </template>
+      <!-- cDNA (handle null) -->
+      <template #[`item.cdna`]="{ value }">
+        <span class="hgvs-notation">{{ value ?? '-' }}</span>
+      </template>
 
-    <!-- HPO Sim Score (handle null) -->
-    <template #[`item.hpo_sim_score`]="{ value }">
-      {{ value !== null ? value.toFixed(2) : '-' }}
-    </template>
+      <!-- AA Change (handle null) -->
+      <template #[`item.aa_change`]="{ value }">
+        <span class="hgvs-notation">{{ value ?? '-' }}</span>
+      </template>
 
-    <!-- HPO Match (handle null, truncate long text) -->
-    <template #[`item.hpo_match`]="{ value }">
-      <v-tooltip v-if="value && value.length > 30" location="top">
-        <template #activator="{ props: tooltipProps }">
-          <span
-            v-bind="tooltipProps"
-            class="text-truncate"
-            style="max-width: 150px; display: inline-block"
-          >
-            {{ value.substring(0, 30) }}...
-          </span>
-        </template>
-        <span>{{ value }}</span>
-      </v-tooltip>
-      <span v-else>{{ value ?? '-' }}</span>
-    </template>
+      <!-- HPO Sim Score (handle null) -->
+      <template #[`item.hpo_sim_score`]="{ value }">
+        {{ value !== null ? value.toFixed(2) : '-' }}
+      </template>
 
-    <!-- MoI (handle null) -->
-    <template #[`item.moi`]="{ value }">
-      {{ value ?? '-' }}
-    </template>
-  </v-data-table-server>
+      <!-- HPO Match (handle null, truncate long text) -->
+      <template #[`item.hpo_match`]="{ value }">
+        <v-tooltip v-if="value && value.length > 30" location="top">
+          <template #activator="{ props: tooltipProps }">
+            <span
+              v-bind="tooltipProps"
+              class="text-truncate"
+              style="max-width: 150px; display: inline-block"
+            >
+              {{ value.substring(0, 30) }}...
+            </span>
+          </template>
+          <span>{{ value }}</span>
+        </v-tooltip>
+        <span v-else>{{ value ?? '-' }}</span>
+      </template>
+
+      <!-- MoI (handle null) -->
+      <template #[`item.moi`]="{ value }">
+        {{ value ?? '-' }}
+      </template>
+
+      <!-- VarSome link -->
+      <template #[`item._varsome`]="{ item }">
+        <span
+          v-if="buildVarsomeUrl(item.chr, item.pos, item.ref, item.alt, genomeBuild)"
+          class="external-link"
+          @click="
+            openExternalLink(
+              buildVarsomeUrl(item.chr, item.pos, item.ref, item.alt, genomeBuild)!,
+              $event
+            )
+          "
+        >
+          View
+          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+        </span>
+        <span v-else class="text-grey">--</span>
+      </template>
+
+      <!-- Franklin link -->
+      <template #[`item._franklin`]="{ item }">
+        <span
+          v-if="buildFranklinUrl(item.chr, item.pos, item.ref, item.alt, genomeBuild)"
+          class="external-link"
+          @click="
+            openExternalLink(
+              buildFranklinUrl(item.chr, item.pos, item.ref, item.alt, genomeBuild)!,
+              $event
+            )
+          "
+        >
+          View
+          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+        </span>
+        <span v-else class="text-grey">--</span>
+      </template>
+    </v-data-table-server>
+
+    <v-snackbar
+      v-model="snackbar.visible"
+      :color="snackbar.color"
+      :timeout="3000"
+      location="bottom"
+    >
+      {{ snackbar.message }}
+    </v-snackbar>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -140,6 +233,15 @@ import type {
   PaginatedResult,
   SortItem
 } from '../../../shared/types/api'
+import {
+  buildGnomadUrl,
+  buildUcscUrl,
+  buildClinvarSearchUrl,
+  buildOmimGeneSearchUrl,
+  buildVarsomeUrl,
+  buildFranklinUrl,
+  type GenomeBuild
+} from '../utils/externalLinks'
 
 interface Props {
   caseId: number
@@ -167,6 +269,16 @@ const cursorCache = ref<Map<string, PaginationCursor>>(new Map())
 // Track unfiltered count for "X of Y" display
 const unfilteredCount = ref(0)
 
+// Default genome build - will be derived from case metadata in a future phase
+const genomeBuild = ref<GenomeBuild>('GRCh37')
+
+// Snackbar state for error feedback
+const snackbar = ref({
+  visible: false,
+  message: '',
+  color: 'error'
+})
+
 // Headers definition
 const headers = [
   { title: 'Chr', key: 'chr', sortable: true },
@@ -186,8 +298,38 @@ const headers = [
   { title: 'ClinVar', key: 'clinvar', sortable: true },
   { title: 'HPO Score', key: 'hpo_sim_score', sortable: true, align: 'end' as const },
   { title: 'HPO Match', key: 'hpo_match', sortable: false },
-  { title: 'MoI', key: 'moi', sortable: true }
+  { title: 'MoI', key: 'moi', sortable: true },
+  { title: 'VarSome', key: '_varsome', sortable: false, width: '80px' },
+  { title: 'Franklin', key: '_franklin', sortable: false, width: '80px' }
 ]
+
+// Open external link with visual feedback and error handling
+const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> => {
+  if (!url) return
+
+  // Brief highlight on clicked element
+  const target = event?.currentTarget as HTMLElement
+  if (target !== null && target !== undefined) {
+    target.classList.add('external-link--clicked')
+    // eslint-disable-next-line no-undef
+    setTimeout(() => target.classList.remove('external-link--clicked'), 200)
+  }
+
+  // eslint-disable-next-line no-undef
+  if (typeof window.api !== 'undefined') {
+    try {
+      // eslint-disable-next-line no-undef
+      const result = await window.api.shell.openExternal(url)
+      if (!result.success) {
+        snackbar.value = { visible: true, message: 'Could not open link', color: 'error' }
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-undef
+      console.error('Failed to open external link:', error)
+      snackbar.value = { visible: true, message: 'Could not open link', color: 'error' }
+    }
+  }
+}
 
 // Load variants from backend
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -343,5 +485,27 @@ defineExpose({ resetSort })
 .allele-cell {
   max-width: 120px;
   display: inline-block;
+}
+
+.external-link {
+  cursor: pointer;
+  color: rgb(var(--v-theme-primary));
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.external-link:hover {
+  text-decoration: underline;
+}
+
+.external-link--clicked {
+  background-color: rgba(var(--v-theme-primary), 0.1);
+  border-radius: 2px;
+}
+
+.external-link__icon {
+  opacity: 0.6;
+  margin-left: 2px;
+  vertical-align: middle;
 }
 </style>
