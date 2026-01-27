@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 ## Current Position
 
 Phase: 9 of 4 (Branding & Theme Foundation)
-Plan: 1 of 1 complete
+Plan: 2 of 2 complete
 Status: Phase complete
-Last activity: 2026-01-27 -- Completed 09-01-PLAN.md
+Last activity: 2026-01-27 -- Completed 09-02-PLAN.md
 
-Progress: [██░░░░░░░░] 25%
+Progress: [██░░░░░░░░] 50%
 
 ### Phase Overview
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 9 | Branding & Theme Foundation | ✓ Complete (1/1 plans) |
+| 9 | Branding & Theme Foundation | ✓ Complete (2/2 plans) |
 | 10 | Logging Infrastructure & Viewer | Not Started |
 | 11 | Trust Signals -- Disclaimer & FAQ | Not Started |
 | 12 | App Footer Integration | Not Started |
@@ -32,8 +32,8 @@ Progress: [██░░░░░░░░] 25%
 ## Performance Metrics
 
 **v0.2.0 Progress:**
-- Plans completed: 1
-- Average duration: 2 min
+- Plans completed: 2
+- Average duration: 3.5 min
 - Phases complete: 1 of 4 (25%)
 
 ## Accumulated Context
@@ -59,6 +59,10 @@ Key architectural decisions carried forward:
 | Custom DNA icon | Unique varlens-dna SVG icon (not stock MDI) | Brand distinction in app bar |
 | Roboto Mono via CDN | Google Fonts for genomic data monospace | Technical data readability, can self-host later |
 | Global compact density | All components default to compact | Data-dense UI feel throughout app |
+| App bar branding | App bar is single source of VarLens branding (name + icon) | Consistent brand identity across all navigation states |
+| Sidebar as content panel | Sidebar controlled by app bar toggle, not independent branded element | Clear navigation hierarchy |
+| Research language | "research analysis", "pathogenicity classification" (not clinical terminology) | Consistent research positioning throughout UI |
+| Monospace for genomic data | Semantic utility classes for gene symbols, HGVS, coordinates | Enhanced readability of technical data |
 
 ### v0.2.0 Design Notes
 
@@ -78,8 +82,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T08:54:11Z
-Stopped at: Completed 09-01-PLAN.md (Phase 9 complete)
+Last session: 2026-01-27T10:03:00Z
+Stopped at: Completed 09-02-PLAN.md (Phase 9 complete)
 Resume file: None
 
 ## Next Steps
@@ -89,4 +93,4 @@ Resume file: None
 3. Complete Phase 12 (App Footer Integration) to wire everything together
 
 ---
-*Updated: 2026-01-27 after Phase 9 Plan 01 completion*
+*Updated: 2026-01-27 after Phase 9 Plan 02 completion*
