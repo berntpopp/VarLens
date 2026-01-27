@@ -25,6 +25,12 @@ const mockApi = {
   },
   export: {
     toExcel: vi.fn()
+  },
+  system: {
+    getVersion: vi.fn().mockResolvedValue({ app: '0.2.0', electron: '33.0.0' })
+  },
+  shell: {
+    openExternal: vi.fn().mockResolvedValue({ success: true })
   }
 }
 
@@ -45,10 +51,24 @@ Object.defineProperty(global, 'window', {
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn()
     })),
+    getComputedStyle: vi.fn().mockReturnValue({
+      getPropertyValue: vi.fn().mockReturnValue(''),
+      overflow: 'auto',
+      overflowY: 'auto',
+      overflowX: 'auto'
+    }),
     requestAnimationFrame: vi.fn((callback: FrameRequestCallback) => {
       return setTimeout(() => callback(performance.now()), 0) as unknown as number
     }),
     cancelAnimationFrame: vi.fn((id: number) => clearTimeout(id)),
+    localStorage: {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+      length: 0,
+      key: vi.fn().mockReturnValue(null)
+    },
     navigator: {
       userAgent:
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0'
