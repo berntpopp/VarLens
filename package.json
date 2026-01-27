@@ -65,7 +65,6 @@
     "directories": {
       "output": "release"
     },
-    "afterPack": "./afterPack.js",
     "publish": {
       "provider": "github",
       "owner": "berntpopp",
