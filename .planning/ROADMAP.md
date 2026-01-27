@@ -72,15 +72,16 @@ Plans:
 
 ## Phase 15: External Links
 
-**Goal:** User can open variant-specific pages on gnomAD, ClinVar, and OMIM directly from the variant table.
+**Goal:** User can open variant-specific pages on gnomAD, ClinVar, and OMIM directly from the variant table, with fully configurable link templates via a settings UI.
 
 **Dependencies:** None (architecturally independent; can be developed in parallel with Phase 14)
 
-**Plans:** 2 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] 15-01-PLAN.md -- URL builder utility functions for six genomic databases (eight functions including search variants) with unit tests and domain allowlist expansion
-- [ ] 15-02-PLAN.md -- Clickable data values in variant table columns as external links with visual indicators and error feedback
+- [x] 15-01-PLAN.md -- URL builder utility functions for six genomic databases (eight functions including search variants) with unit tests and domain allowlist expansion
+- [x] 15-02-PLAN.md -- Clickable data values in variant table columns as external links with visual indicators and error feedback
+- [x] 15-03-PLAN.md -- Configurable external links with Pinia store, settings dialog, URL template system, and dynamic domain allowlist sync
 
 **Requirements:**
 - EXTL-01: Variant table rows include clickable data values linking to gnomAD, ClinVar, and OMIM (the data IS the link, with external-link icon suffix)
@@ -199,7 +200,7 @@ Plans:
 |-------|------|--------|--------------|
 | 13 | SQLCipher Foundation | Complete | DBSC-01, DBSC-02, DBSC-03, DBSC-07, DBSC-08 |
 | 14 | Database Selection & Encryption UX | Complete | DBSL-01 - DBSL-06, DBSC-04, DBSC-05, DBSC-06 |
-| 15 | External Links | Not Started | EXTL-01 - EXTL-06 |
+| 15 | External Links | Complete | EXTL-01 - EXTL-06 |
 | 16 | Batch Import & ZIP Extraction | Not Started | BTCH-01 - BTCH-06, ZIMP-01 - ZIMP-05 |
 | 17 | OMIM Data Extraction | Not Started | OMIM-01 - OMIM-05 |
 | 18 | Cohort Analysis | Not Started | CHRT-01 - CHRT-10 |
@@ -222,12 +223,12 @@ Plans:
 | DBSL-04 | Phase 14 | Complete |
 | DBSL-05 | Phase 14 | Complete |
 | DBSL-06 | Phase 14 | Complete |
-| EXTL-01 | Phase 15 | Pending |
-| EXTL-02 | Phase 15 | Pending |
-| EXTL-03 | Phase 15 | Pending |
-| EXTL-04 | Phase 15 | Pending |
-| EXTL-05 | Phase 15 | Pending |
-| EXTL-06 | Phase 15 | Pending |
+| EXTL-01 | Phase 15 | Complete |
+| EXTL-02 | Phase 15 | Complete |
+| EXTL-03 | Phase 15 | Complete |
+| EXTL-04 | Phase 15 | Complete |
+| EXTL-05 | Phase 15 | Complete |
+| EXTL-06 | Phase 15 | Complete |
 | BTCH-01 | Phase 16 | Pending |
 | BTCH-02 | Phase 16 | Pending |
 | BTCH-03 | Phase 16 | Pending |
