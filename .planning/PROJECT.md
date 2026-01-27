@@ -21,41 +21,46 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 - ✓ Full-text search on gene symbols and variant annotations — v0.1
 - ✓ Manage cases (list imported cases, select, delete) — v0.1
 - ✓ Show import progress with real-time feedback — v0.1
+- ✓ Top app bar with app name and DNA icon — v0.2.0
+- ✓ Footer with version info, GitHub link, license link, disclaimer status, FAQ button, log viewer toggle — v0.2.0
+- ✓ Blocking research-use disclaimer dialog (per-version acknowledgment) — v0.2.0
+- ✓ FAQ dialog with searchable, categorized expansion panels (JSON-configurable) — v0.2.0
+- ✓ Full-featured client-facing logging system (LogViewer drawer, level filtering, search, download, memory stats) — v0.2.0
+- ✓ Branding with RequiForm warm palette — v0.2.0
+- ✓ JSON config files for FAQ content, disclaimer text, and log config — v0.2.0
+- ✓ Research-only language throughout UI — v0.2.0
 
 ### Active
 
-#### v0.2.0 — UI Polish, Branding & Trust Signals
+#### v0.3.0 — Cohort Analysis, Security & Import Enhancements
 
-- [ ] Top app bar with app name and DNA icon
-- [ ] Footer with version info, GitHub link, license link, disclaimer status, FAQ button, log viewer toggle (small icons)
-- [ ] Blocking research-use disclaimer dialog (acknowledged once per version, stored in localStorage)
-- [ ] FAQ dialog with searchable, categorized expansion panels (JSON-configurable)
-- [ ] Full-featured client-facing logging system (LogViewer drawer, level filtering, search, download, memory stats)
-- [ ] Branding with RequiForm warm palette (#a09588 primary, #E5AA94 footer, #424242 secondary)
-- [ ] JSON config files for FAQ content, disclaimer text, and log config (build-time)
-- [ ] Remove all "clinical" language — research use only throughout
-- [ ] Modern, consistent design matching reference tools (phentrieve, RequiForm, kidney-genetics-db)
+- [ ] Batch import from multiple JSON.gz files (multi-file picker + folder import)
+- [ ] Password-protected ZIP file import (decrypt and extract during import)
+- [ ] SQLCipher database encryption (password-gated database open/create)
+- [ ] Database selection and switching (choose/create/switch .sqlite files)
+- [ ] External links to ClinVar, gnomAD, OMIM from variant rows
+- [ ] OMIM disease associations surfaced from variant annotation data
+- [ ] Cohort analysis view with aggregated variant table across all cases
+- [ ] Cohort variant search (query variant/gene, see carrier summary across cohort)
+- [ ] Cohort summary stats (carrier count, allele frequency, het/hom breakdown, per-case links, gene-level aggregation)
 
 ### Out of Scope
 
-- Virtual gene panels — deferred to v0.2+
-- Advanced inheritance filters (de novo, compound het) — deferred to v0.2+
-- Statistics dashboard — deferred to v0.2+
-- PDF report generation — deferred to v0.2+
-- External links integration — deferred to v0.2+
-- Dark mode toggle — nice-to-have, not blocking POC
-- Keyboard shortcuts — nice-to-have, not blocking POC
+- Virtual gene panels — deferred to v0.4+
+- Advanced inheritance filters (de novo, compound het) — deferred to v0.4+
+- Statistics dashboard — deferred to v0.4+
+- PDF report generation — deferred to v0.4+
+- Dark mode toggle — nice-to-have, not blocking
 - Real-time collaboration — Offline-first desktop app
 - Cloud sync — Not in v0.x scope
-- VCF import — JSON-only for POC
-- CNV/SV analysis — SNV-focused for POC
-- User authentication — Desktop app, single-user
+- VCF import — JSON-only for current scope
+- CNV/SV analysis — SNV-focused for current scope
 
 ## Context
 
-**Current state:** Shipped v0.1 POC with 4,433 lines TypeScript/Vue across 121 files.
+**Current state:** Shipped v0.2.0 with professional branding, trust signals, logging, and app chrome on top of v0.1 POC.
 
-**Tech stack:** Electron + Vue 3 + Vuetify 3 + better-sqlite3 + FTS5
+**Tech stack:** Electron + Vue 3 + Vuetify 3 + better-sqlite3 + FTS5 (v0.3.0 will migrate to SQLCipher)
 
 **Test data:** `test-data/case-892-snv-annotations.json.gz` (65k variants), `test-data/case-892-snv-sample.json.gz` (251 variants)
 
@@ -72,7 +77,7 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 
 ## Constraints
 
-- **Tech stack**: Electron + Vue 3 + Vuetify 3 + TypeScript + better-sqlite3 — established
+- **Tech stack**: Electron + Vue 3 + Vuetify 3 + TypeScript + better-sqlite3 (migrating to SQLCipher in v0.3.0) — established
 - **Offline-first**: No network dependencies in core functionality
 - **Performance**: Import 65k variants in <30 seconds, table pagination <100ms
 - **Platform**: Primary development on Ubuntu, cross-platform target (Windows, macOS, Linux)
@@ -91,17 +96,17 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 | ESLint 9 flat config | Future-proof configuration approach | ✓ Good — Works with Vue + TS |
 | happy-dom for tests | Faster than jsdom for component testing | ✓ Good — Quick test runs |
 
-## Current Milestone: v0.2.0 UI Polish & Trust Signals
+## Current Milestone: v0.3.0 Cohort Analysis, Security & Import Enhancements
 
-**Goal:** Add professional branding, research-use disclaimer, FAQ, client-facing logging, and app chrome (top bar + footer) to establish trust and usability for external collaborators.
+**Goal:** Transform VarLens from a single-sample viewer into a cohort analysis platform with encrypted databases, batch import, external links, and cross-sample variant aggregation.
 
 **Target features:**
-- App bar with branding + footer with version/links
-- Research-use disclaimer (blocking, per-version acknowledgment)
-- FAQ dialog (JSON-configurable, searchable)
-- Client-facing logging system (full-featured LogViewer)
-- RequiForm warm palette branding
-- Remove all "clinical" references
+- Batch import (multi-file picker + folder import) with password-protected ZIP support
+- Database selection/switching and SQLCipher encryption for data at rest
+- External links to ClinVar, gnomAD, OMIM from variant rows
+- OMIM disease associations from variant annotation data
+- Cohort analysis view with aggregated variant table, search, and full summary statistics
+- DRY, KISS, SOLID principles with strict modularization
 
 ---
-*Last updated: 2026-01-27 after v0.2.0 milestone initialization*
+*Last updated: 2026-01-27 after v0.3.0 milestone initialization*
