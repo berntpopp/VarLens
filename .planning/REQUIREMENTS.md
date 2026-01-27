@@ -152,52 +152,52 @@ Deferred to later milestones.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DBSC-01 | TBD | Pending |
-| DBSC-02 | TBD | Pending |
-| DBSC-03 | TBD | Pending |
-| DBSC-04 | TBD | Pending |
-| DBSC-05 | TBD | Pending |
-| DBSC-06 | TBD | Pending |
-| DBSC-07 | TBD | Pending |
-| DBSC-08 | TBD | Pending |
-| DBSL-01 | TBD | Pending |
-| DBSL-02 | TBD | Pending |
-| DBSL-03 | TBD | Pending |
-| DBSL-04 | TBD | Pending |
-| DBSL-05 | TBD | Pending |
-| DBSL-06 | TBD | Pending |
-| EXTL-01 | TBD | Pending |
-| EXTL-02 | TBD | Pending |
-| EXTL-03 | TBD | Pending |
-| EXTL-04 | TBD | Pending |
-| EXTL-05 | TBD | Pending |
-| EXTL-06 | TBD | Pending |
-| BTCH-01 | TBD | Pending |
-| BTCH-02 | TBD | Pending |
-| BTCH-03 | TBD | Pending |
-| BTCH-04 | TBD | Pending |
-| BTCH-05 | TBD | Pending |
-| BTCH-06 | TBD | Pending |
-| ZIMP-01 | TBD | Pending |
-| ZIMP-02 | TBD | Pending |
-| ZIMP-03 | TBD | Pending |
-| ZIMP-04 | TBD | Pending |
-| ZIMP-05 | TBD | Pending |
-| OMIM-01 | TBD | Pending |
-| OMIM-02 | TBD | Pending |
-| OMIM-03 | TBD | Pending |
-| OMIM-04 | TBD | Pending |
-| OMIM-05 | TBD | Pending |
-| CHRT-01 | TBD | Pending |
-| CHRT-02 | TBD | Pending |
-| CHRT-03 | TBD | Pending |
-| CHRT-04 | TBD | Pending |
-| CHRT-05 | TBD | Pending |
-| CHRT-06 | TBD | Pending |
-| CHRT-07 | TBD | Pending |
-| CHRT-08 | TBD | Pending |
-| CHRT-09 | TBD | Pending |
-| CHRT-10 | TBD | Pending |
+| DBSC-01 | Phase 13 | Pending |
+| DBSC-02 | Phase 13 | Pending |
+| DBSC-03 | Phase 13 | Pending |
+| DBSC-04 | Phase 14 | Pending |
+| DBSC-05 | Phase 14 | Pending |
+| DBSC-06 | Phase 14 | Pending |
+| DBSC-07 | Phase 13 | Pending |
+| DBSC-08 | Phase 13 | Pending |
+| DBSL-01 | Phase 14 | Pending |
+| DBSL-02 | Phase 14 | Pending |
+| DBSL-03 | Phase 14 | Pending |
+| DBSL-04 | Phase 14 | Pending |
+| DBSL-05 | Phase 14 | Pending |
+| DBSL-06 | Phase 14 | Pending |
+| EXTL-01 | Phase 15 | Pending |
+| EXTL-02 | Phase 15 | Pending |
+| EXTL-03 | Phase 15 | Pending |
+| EXTL-04 | Phase 15 | Pending |
+| EXTL-05 | Phase 15 | Pending |
+| EXTL-06 | Phase 15 | Pending |
+| BTCH-01 | Phase 16 | Pending |
+| BTCH-02 | Phase 16 | Pending |
+| BTCH-03 | Phase 16 | Pending |
+| BTCH-04 | Phase 16 | Pending |
+| BTCH-05 | Phase 16 | Pending |
+| BTCH-06 | Phase 16 | Pending |
+| ZIMP-01 | Phase 16 | Pending |
+| ZIMP-02 | Phase 16 | Pending |
+| ZIMP-03 | Phase 16 | Pending |
+| ZIMP-04 | Phase 16 | Pending |
+| ZIMP-05 | Phase 16 | Pending |
+| OMIM-01 | Phase 17 | Pending |
+| OMIM-02 | Phase 17 | Pending |
+| OMIM-03 | Phase 17 | Pending |
+| OMIM-04 | Phase 17 | Pending |
+| OMIM-05 | Phase 17 | Pending |
+| CHRT-01 | Phase 18 | Pending |
+| CHRT-02 | Phase 18 | Pending |
+| CHRT-03 | Phase 18 | Pending |
+| CHRT-04 | Phase 18 | Pending |
+| CHRT-05 | Phase 18 | Pending |
+| CHRT-06 | Phase 18 | Pending |
+| CHRT-07 | Phase 18 | Pending |
+| CHRT-08 | Phase 18 | Pending |
+| CHRT-09 | Phase 18 | Pending |
+| CHRT-10 | Phase 18 | Pending |
 | CHRM-01 | Phase 9 | Complete |
 | CHRM-02 | Phase 12 | Complete |
 | CHRM-03 | Phase 12 | Complete |
@@ -230,9 +230,9 @@ Deferred to later milestones.
 
 **Coverage:**
 - v0.3.0 requirements: 40 total
-- Mapped to phases: 0 (awaiting roadmap)
+- Mapped to phases: 40/40 (all mapped)
 - v0.2.0 requirements: 29 total (all complete)
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after v0.3.0 requirements scoping*
+*Last updated: 2026-01-27 after v0.3.0 roadmap creation*

@@ -9,21 +9,34 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 13 -- SQLCipher Foundation
 Plan: --
-Status: Defining requirements
-Last activity: 2026-01-27 -- Milestone v0.3.0 started
+Status: Not started
+Last activity: 2026-01-27 -- Roadmap created for v0.3.0
+
+Progress: ░░░░░░░░░░░░░░░░░░░░ 0/6 phases (0%)
 
 ## Milestone History
 
 - **v0.1 POC** -- 8 phases, 17 plans -- shipped 2026-01-27
 - **v0.2.0 UI Polish & Trust Signals** -- 4 phases, 8 plans -- shipped 2026-01-27
 
+## v0.3.0 Phase Summary
+
+| Phase | Name | Plans | Status |
+|-------|------|-------|--------|
+| 13 | SQLCipher Foundation | 2 | Not Started |
+| 14 | Database Selection & Encryption UX | 2 | Not Started |
+| 15 | External Links | 2 | Not Started |
+| 16 | Batch Import & ZIP Extraction | 2 | Not Started |
+| 17 | OMIM Data Extraction | 2 | Not Started |
+| 18 | Cohort Analysis | 2 | Not Started |
+
 ## Accumulated Context
 
 ### Decisions
 
-All 66 decisions from v0.1 are archived in `.planning/milestones/v0.1-ROADMAP.md`.
+All decisions from v0.1 are archived in `.planning/milestones/v0.1-ROADMAP.md`.
 v0.2.0 decisions are archived in `.planning/milestones/v0.2.0-ROADMAP.md`.
 
 Key architectural decisions carried forward:
@@ -37,6 +50,12 @@ Key architectural decisions carried forward:
 | Warm palette theme | #a09588 primary, #424242 secondary | All UI components |
 | HTTPS-only + domain whitelist | shell:openExternal validates protocol and hostname | Security pattern for external links |
 
+v0.3.0 decisions (accumulated during milestone):
+
+| # | Decision | Rationale | Phase |
+|---|----------|-----------|-------|
+| -- | -- | -- | -- |
+
 ### Pending Todos
 
 None yet.
@@ -45,17 +64,24 @@ None yet.
 
 None.
 
+### Research Flags
+
+- Phase 13: Verify `better-sqlite3-multiple-ciphers` v12.6.2 prebuilt binaries for Electron 40 on all 3 platforms
+- Phase 14: Verify PRAGMA rekey behavior for in-place encryption of existing unencrypted databases
+- Phase 17: Investigate source JSON annotation file to identify OMIM column indices (MIM number, disease name)
+- Phase 18: Performance profiling with 50+ cases for cohort aggregation queries
+
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Milestone v0.3.0 initialization
+Stopped at: Roadmap created, ready for phase planning
 Resume file: None
 
 ## Next Steps
 
-1. Research domain ecosystem for new features (optional)
-2. Define requirements for v0.3.0
-3. Create roadmap
+1. Plan Phase 13 (SQLCipher Foundation)
+2. Execute Phase 13 plans
+3. Continue through phases 14-18
 
 ---
-*Updated: 2026-01-27 after milestone v0.3.0 initialization*
+*Updated: 2026-01-27 after v0.3.0 roadmap creation*

@@ -1,131 +1,195 @@
-# Roadmap: Varlens v0.2.0
+# Roadmap: Varlens v0.3.0
 
-**Milestone:** v0.2.0 -- UI Polish, Branding & Trust Signals
-**Phases:** 4 (Phase 9-12, continuing from v0.1 Phase 8)
-**Requirements:** 29 v1 requirements across 3 categories
+**Milestone:** v0.3.0 -- Cohort Analysis, Security & Import Enhancements
+**Phases:** 6 (Phase 13-18, continuing from v0.2.0 Phase 12)
+**Requirements:** 40 v1 requirements across 7 categories
 **Depth:** Balanced
 
 ## Overview
 
-This milestone transforms Varlens from a bare POC into a professionally branded research tool with trust signals. The work delivers a warm-palette visual identity, a blocking research-use disclaimer, a searchable FAQ, a full-featured logging system, and a footer bar that integrates access to all of these. Phases are ordered by dependency: visual foundation first, then independent subsystems (logging, trust signals), then the footer that wires them together.
+This milestone transforms Varlens from a single-sample viewer into a cohort analysis platform. The work delivers SQLCipher database encryption, database selection/switching, batch import with password-protected ZIP support, external links to genomic databases, OMIM disease associations, and cross-case cohort analysis with variant aggregation. Phases are ordered by dependency chain: the native module swap is highest risk and foundational, database lifecycle enables multi-file workflows, import infrastructure enables cohort analysis, and external links / OMIM are independent enhancements that slot in between.
 
 ---
 
-## Phase 9: Branding & Theme Foundation
+## Phase 13: SQLCipher Foundation
 
-**Goal:** App presents a consistent, professional visual identity with warm palette and research-appropriate language across all views.
+**Goal:** App uses the encrypted database library with all existing functionality preserved across all three platforms -- no user-facing changes yet, but the encryption infrastructure is in place.
 
 **Dependencies:** None (foundation for all subsequent phases)
 
 **Plans:** 2 plans
 
 Plans:
-- [x] 09-01-PLAN.md -- Warm palette theme config, custom DNA icon, monospace typography
-- [x] 09-02-PLAN.md -- Branded app bar, sidebar refactor, language audit
+- [ ] 13-01-PLAN.md -- Native module swap from better-sqlite3 to better-sqlite3-multiple-ciphers with full build pipeline update
+- [ ] 13-02-PLAN.md -- PRAGMA key integration into DatabaseService constructor with FTS5 ordering, encrypted database tests
 
 **Requirements:**
-- CHRM-08: App uses RequiForm warm palette (#a09588 primary, #E5AA94 footer background, #424242 secondary) via Vuetify theme config
-- CHRM-09: All UI text uses "research" language -- no "clinical" references anywhere
-- CHRM-01: App displays a top app bar with "VarLens" name and DNA icon across all views
+- DBSC-01: App uses `better-sqlite3-multiple-ciphers` as drop-in replacement for `better-sqlite3` with SQLCipher encryption support
+- DBSC-02: Database accepts encryption key via PRAGMA key as the first operation after opening, before any schema initialization
+- DBSC-03: FTS5 virtual table creation occurs after PRAGMA key is set on encrypted databases
+- DBSC-07: All existing tests pass with the new database library on Windows, macOS, and Linux
+- DBSC-08: Build pipeline (electron-vite config, CI workflows, Makefile, package.json) updated for the new native module
 
 **Success Criteria:**
-1. User sees a warm-toned color scheme (#a09588 primary, #424242 secondary) applied consistently across all existing views -- sidebar, dialogs, tables, and toolbars all reflect the palette
-2. User sees a top app bar with "VarLens" text and a DNA icon that persists across all navigation states (case list, variant table, empty state)
-3. User finds zero instances of "clinical", "diagnostic", or "patient" language anywhere in the UI -- all text uses "research", "analysis", or "collaborator" framing instead
+1. User can launch the app and use all existing features (import, query, filter, search) identically to v0.2.0 -- the library swap is invisible
+2. All existing tests pass on Windows, macOS, and Linux CI runners with the new native module
+3. An encrypted database can be created programmatically, reopened with the correct key, and queried (including FTS5 search) without errors
+4. The build pipeline produces installable packages on all three platforms
 
 ---
 
-## Phase 10: Logging Infrastructure & Viewer
+## Phase 14: Database Selection & Encryption UX
 
-**Goal:** User has access to a full-featured log viewer that surfaces app activity, errors, and memory usage, backed by a robust logging service with data sanitization.
+**Goal:** User can create, open, switch, and encrypt databases through the UI without restarting the app.
 
-**Dependencies:** Phase 9 (theme must be applied so LogViewer uses correct palette)
+**Dependencies:** Phase 13 (SQLCipher library must be in place)
 
 **Plans:** 2 plans
 
 Plans:
-- [x] 10-01-PLAN.md -- Pinia log store with circular buffer, sanitizer utility, LogService facade
-- [x] 10-02-PLAN.md -- LogViewer drawer UI with search, filtering, export, and app integration
+- [ ] 14-01-PLAN.md -- DatabaseService lifecycle manager with open/close/switch, statement cache invalidation, IPC handlers
+- [ ] 14-02-PLAN.md -- Database picker UI, encrypted database password dialogs, current database indicator
 
 **Requirements:**
-- LOG-01: App has a LogService with debug/info/warn/error/critical log methods
-- LOG-02: Log entries are stored in a Pinia store with circular buffer (configurable max entries)
-- LOG-03: Log store tracks statistics (total received, dropped, per-level counts)
-- LOG-10: Log configuration (max entries, level) is stored in localStorage and configurable via JSON
-- LOG-11: Log sanitizer redacts sensitive genetic/medical data (HGVS notation, patient identifiers, genomic coordinates)
-- LOG-04: User can open a LogViewer drawer from the footer button
-- LOG-05: LogViewer supports full-text search across log messages
-- LOG-06: LogViewer supports filtering by log level (multi-select)
-- LOG-07: User can download logs as JSON export
-- LOG-08: User can clear all logs from the viewer
-- LOG-09: LogViewer displays memory usage statistics
+- DBSL-01: User can select an existing SQLite database file via file picker dialog
+- DBSL-02: User can create a new empty database via dialog
+- DBSL-03: User can switch between databases without restarting the app
+- DBSL-04: App displays the current database name/path in the UI
+- DBSL-05: Prepared statement cache is invalidated when switching databases to prevent stale handle crashes
+- DBSL-06: DatabaseService supports open/close/switch lifecycle (replaces hardcoded singleton)
+- DBSC-04: User is prompted for a password when opening an encrypted database
+- DBSC-05: User can create a new encrypted database with a password
+- DBSC-06: User can change the password of an encrypted database via PRAGMA rekey
 
 **Success Criteria:**
-1. User can open a LogViewer drawer (temporarily via a dev shortcut or floating button until footer exists in Phase 12) that displays a scrollable list of log entries with timestamps, levels, and messages
-2. User can search log messages by text and filter by one or more log levels (debug, info, warn, error, critical), with results updating in real time
-3. User can download all current logs as a JSON file and can clear the log buffer, with the viewer reflecting the empty state immediately
-4. User observes that sensitive data (HGVS notation like "c.123A>G", genomic coordinates, patient identifiers) is automatically redacted in log messages -- replaced with "[REDACTED]" or equivalent placeholder
-5. User can see memory usage statistics and log buffer statistics (total entries received, entries dropped, per-level counts) displayed in the LogViewer
+1. User can open a file picker, select an existing .sqlite database file, and the app loads its cases and variants without restarting
+2. User can create a new empty database from the UI, and it becomes the active database ready for imports
+3. User can switch between two databases back and forth, and variant data reflects the correct database each time with no crashes or stale data
+4. User sees the current database name/path displayed in the UI at all times
+5. User is prompted for a password when opening an encrypted database, can create a new encrypted database with a password, and can change the password of an open encrypted database
 
 ---
 
-## Phase 11: Trust Signals -- Disclaimer & FAQ
+## Phase 15: External Links
 
-**Goal:** User encounters clear research-use-only framing on first launch and can access detailed FAQ content at any time, building confidence that the tool is transparent about its limitations.
+**Goal:** User can open variant-specific pages on gnomAD, ClinVar, and OMIM directly from the variant table.
 
-**Dependencies:** Phase 9 (theme palette for dialog styling)
+**Dependencies:** None (architecturally independent; can be developed in parallel with Phase 14)
 
 **Plans:** 2 plans
 
 Plans:
-- [x] 11-01-PLAN.md -- Blocking disclaimer dialog with JSON config, version-gated persistence, VueUse setup
-- [x] 11-02-PLAN.md -- Searchable FAQ dialog with categorized expansion panels, keyboard shortcuts composable
+- [ ] 15-01-PLAN.md -- External link URL builders with proper encoding and shell openExternal domain allowlist expansion
+- [ ] 15-02-PLAN.md -- Clickable icon buttons in variant table rows with conditional visibility
 
 **Requirements:**
-- TRST-09: Disclaimer text is configurable via JSON file
-- TRST-01: User sees a blocking disclaimer dialog on first launch stating research-use-only purpose
-- TRST-02: Disclaimer dialog lists specific limitations (not diagnostic, must be verified, no doctor-patient relationship)
-- TRST-03: User must acknowledge disclaimer before accessing the app
-- TRST-04: Disclaimer acknowledgment persists per app version in localStorage
-- TRST-05: User can re-open disclaimer from footer button at any time
-- TRST-08: FAQ content is loaded from a JSON configuration file (faqConfig.json)
-- TRST-06: User can open FAQ dialog from footer button
-- TRST-07: FAQ dialog displays searchable, categorized Q&A in expansion panels
+- EXTL-01: Variant table rows include clickable icon buttons for gnomAD, ClinVar, and OMIM
+- EXTL-02: gnomAD link opens variant page using `chr-pos-ref-alt` URL format in default browser
+- EXTL-03: ClinVar link opens search using `chr:pos:ref:alt` URL format in default browser
+- EXTL-04: OMIM link opens entry page using MIM number (when available) or gene search in default browser
+- EXTL-05: External link URLs are constructed with proper URL encoding of variant data components
+- EXTL-06: Shell openExternal domain allowlist is expanded to include gnomad.broadinstitute.org, ncbi.nlm.nih.gov, and omim.org
 
 **Success Criteria:**
-1. User sees a blocking disclaimer dialog on first launch that lists specific limitations (research-use-only, not diagnostic, must be independently verified, no doctor-patient relationship) and cannot access the app until acknowledging it
-2. User who has previously acknowledged the disclaimer for the current app version does not see the disclaimer again on subsequent launches -- but does see it again after a version upgrade
-3. User can re-open the disclaimer dialog at any time (temporarily via keyboard shortcut or temporary button until footer exists in Phase 12)
-4. User can open an FAQ dialog that shows categorized questions in expansion panels, with a search box that filters Q&A entries in real time, and the content matches what is defined in faqConfig.json
+1. User sees small icon buttons (gnomAD, ClinVar, OMIM) in each variant row of the variant table
+2. User clicks the gnomAD icon and the correct variant page opens in the default browser using the chr-pos-ref-alt URL format
+3. User clicks the ClinVar icon and the correct ClinVar search opens in the default browser
+4. User clicks the OMIM icon and either the direct MIM entry page or a gene search opens in the default browser, depending on available data
+5. No non-allowlisted domains can be opened through the external link mechanism
 
 ---
 
-## Phase 12: App Footer Integration
+## Phase 16: Batch Import & ZIP Extraction
 
-**Goal:** User has a persistent footer bar that provides one-click access to version info, external links, disclaimer status, FAQ, and log viewer -- tying together all v0.2.0 subsystems into a cohesive app chrome.
+**Goal:** User can import multiple case files at once -- from multi-file selection, folder selection, or a password-protected ZIP archive -- with per-file progress and error isolation.
 
-**Dependencies:** Phase 10 (logging -- footer needs error count badge), Phase 11 (trust signals -- footer needs disclaimer status and FAQ trigger)
+**Dependencies:** Phase 14 (database lifecycle must support stable connections for sequential imports)
 
 **Plans:** 2 plans
 
 Plans:
-- [ ] 12-01-PLAN.md -- Secure shell IPC handler, structured version API, preload + type extensions
-- [ ] 12-02-PLAN.md -- AppFooter component with version menu, external links, status indicators, log toggle
+- [ ] 16-01-PLAN.md -- BatchImportOrchestrator with multi-file picker, folder selection, sequential processing, aggregate progress, and summary report
+- [ ] 16-02-PLAN.md -- ZipExtractor with password prompt, temp directory extraction, Zip Slip prevention, and pipeline integration
 
 **Requirements:**
-- CHRM-02: App displays a footer bar with version number accessible via popup menu
-- CHRM-03: Footer includes GitHub repository link as small icon button
-- CHRM-04: Footer includes license link as small icon button
-- CHRM-05: Footer includes disclaimer acknowledgment status indicator
-- CHRM-06: Footer includes FAQ dialog trigger button
-- CHRM-07: Footer includes log viewer toggle button with error count badge
+- BTCH-01: User can select multiple JSON.gz files via multi-file picker dialog
+- BTCH-02: User can select a folder to import all JSON.gz files within it
+- BTCH-03: Batch import processes files sequentially with per-file error isolation (one failure does not abort the batch)
+- BTCH-04: Batch import displays aggregate progress across all files (current file N of M, overall percentage)
+- BTCH-05: Batch import shows a summary report on completion (files succeeded, failed, skipped)
+- BTCH-06: Duplicate case names during batch import are handled gracefully (skip, rename, or overwrite with user choice)
+- ZIMP-01: User can select a password-protected ZIP file for import
+- ZIMP-02: User is prompted for the ZIP password before extraction
+- ZIMP-03: ZIP extraction writes to a temporary directory and cleans up after import completes or fails
+- ZIMP-04: ZIP extraction validates file paths to prevent Zip Slip path traversal attacks (reject `..`, absolute paths, UNC paths)
+- ZIMP-05: Extracted JSON.gz files are fed to the existing import pipeline (single or batch)
 
 **Success Criteria:**
-1. User sees a persistent footer bar (with #E5AA94 warm background) at the bottom of every view, containing small icon buttons that do not crowd the main content area
-2. User can click a version element in the footer to see a popup menu displaying the current app version number
-3. User can click icon buttons in the footer to open the GitHub repository and license page in their default browser
-4. User can see at a glance whether the disclaimer has been acknowledged (visual indicator in footer), click a button to re-open the disclaimer, and click another button to open the FAQ dialog
-5. User can click a log viewer toggle button in the footer that shows a badge with the current error count (0 when no errors), and clicking it opens/closes the LogViewer drawer
+1. User can select multiple JSON.gz files via a file picker and all selected files are imported sequentially, with progress showing "File N of M" and overall percentage
+2. User can select a folder and all JSON.gz files within it are discovered and imported
+3. If one file in a batch fails (malformed JSON, duplicate case), the remaining files continue importing and the user sees a summary report showing which files succeeded, failed, or were skipped
+4. User can select a password-protected ZIP file, enter the password, and the contained JSON.gz files are extracted and imported with temp files cleaned up afterward
+5. A ZIP file containing path traversal entries (../) is rejected with a clear error, and no files are written outside the temp directory
+
+---
+
+## Phase 17: OMIM Data Extraction
+
+**Goal:** User sees OMIM disease associations inline in the variant table and can link directly to OMIM entries using extracted MIM numbers.
+
+**Dependencies:** Phase 15 (external link infrastructure for OMIM link-out), Phase 16 (import pipeline must be stable before modifying field mapping)
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 17-01-PLAN.md -- Schema extension and import pipeline field mapping for OMIM MIM number and disease name extraction
+- [ ] 17-02-PLAN.md -- Inline disease association display in variant table and enhanced OMIM link with MIM number
+
+**Requirements:**
+- OMIM-01: Import pipeline extracts OMIM MIM numbers from variant annotation data
+- OMIM-02: Import pipeline extracts OMIM disease names/associations from variant annotation data
+- OMIM-03: Variants table schema includes columns for OMIM MIM number and disease name
+- OMIM-04: OMIM disease associations are displayed inline in variant table rows
+- OMIM-05: OMIM external link uses direct MIM entry URL when MIM number is available (falls back to gene search)
+
+**Success Criteria:**
+1. After importing a case file that contains OMIM annotation data, the user sees MIM numbers and disease names in dedicated columns of the variant table
+2. User can see disease association text inline in variant rows without needing to click through to an external site
+3. When a MIM number is available for a variant, clicking the OMIM link opens the direct MIM entry page (not a search page)
+4. Variants without OMIM data show no disease association and the OMIM link falls back to a gene search
+
+---
+
+## Phase 18: Cohort Analysis
+
+**Goal:** User can analyze variants across all imported cases in a dedicated cohort view with aggregated statistics, carrier counts, and gene-level burden summaries.
+
+**Dependencies:** Phase 16 (batch import must be working so multiple cases exist for testing), Phase 17 (OMIM data enriches cohort display)
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 18-01-PLAN.md -- Cohort SQL views, IPC handlers, composite indexes, and CohortView with aggregated variant table
+- [ ] 18-02-PLAN.md -- Cohort search, carrier summary, gene-level burden aggregation, and per-case drill-down
+
+**Requirements:**
+- CHRT-01: App provides a distinct cohort analysis view/mode separate from single-case analysis (tab-based navigation)
+- CHRT-02: Cohort view displays an aggregated variant table across all imported cases (grouped by chr, pos, ref, alt)
+- CHRT-03: Cohort variant table shows carrier count per variant (number of cases carrying the variant)
+- CHRT-04: Cohort variant table shows cohort allele frequency per variant
+- CHRT-05: Cohort variant table shows het/hom breakdown per variant
+- CHRT-06: Cohort variant table provides per-case links (drill down from aggregated variant to individual case analyses)
+- CHRT-07: User can search for a specific variant or gene across the entire cohort
+- CHRT-08: Cohort search results show carrier summary (which cases carry the variant, zygosity, frequency)
+- CHRT-09: Cohort view includes gene-level aggregation (burden summary per gene across all cases)
+- CHRT-10: Cohort aggregation queries use proper composite indexes for performance on large datasets
+
+**Success Criteria:**
+1. User can navigate to a distinct cohort analysis view via tab-based navigation, separate from the single-case variant table
+2. User sees an aggregated variant table showing each unique variant (chr, pos, ref, alt) with carrier count, cohort allele frequency, and het/hom breakdown across all imported cases
+3. User can click on a variant in the cohort table to see which specific cases carry it (per-case drill-down) with individual case zygosity
+4. User can search for a gene or variant across the entire cohort and see a carrier summary showing which cases carry it and at what frequency
+5. User can view a gene-level burden summary showing aggregate variant counts per gene across all cases
 
 ---
 
@@ -133,47 +197,66 @@ Plans:
 
 | Phase | Name | Status | Requirements |
 |-------|------|--------|--------------|
-| 9 | Branding & Theme Foundation | ✓ Complete | CHRM-08, CHRM-09, CHRM-01 |
-| 10 | Logging Infrastructure & Viewer | ✓ Complete | LOG-01 - LOG-11 |
-| 11 | Trust Signals -- Disclaimer & FAQ | ✓ Complete | TRST-01 - TRST-09 |
-| 12 | App Footer Integration | Not Started | CHRM-02 - CHRM-07 |
+| 13 | SQLCipher Foundation | Not Started | DBSC-01, DBSC-02, DBSC-03, DBSC-07, DBSC-08 |
+| 14 | Database Selection & Encryption UX | Not Started | DBSL-01 - DBSL-06, DBSC-04, DBSC-05, DBSC-06 |
+| 15 | External Links | Not Started | EXTL-01 - EXTL-06 |
+| 16 | Batch Import & ZIP Extraction | Not Started | BTCH-01 - BTCH-06, ZIMP-01 - ZIMP-05 |
+| 17 | OMIM Data Extraction | Not Started | OMIM-01 - OMIM-05 |
+| 18 | Cohort Analysis | Not Started | CHRT-01 - CHRT-10 |
 
 ## Coverage
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CHRM-01 | Phase 9 | Complete |
-| CHRM-02 | Phase 12 | Pending |
-| CHRM-03 | Phase 12 | Pending |
-| CHRM-04 | Phase 12 | Pending |
-| CHRM-05 | Phase 12 | Pending |
-| CHRM-06 | Phase 12 | Pending |
-| CHRM-07 | Phase 12 | Pending |
-| CHRM-08 | Phase 9 | Complete |
-| CHRM-09 | Phase 9 | Complete |
-| TRST-01 | Phase 11 | Complete |
-| TRST-02 | Phase 11 | Complete |
-| TRST-03 | Phase 11 | Complete |
-| TRST-04 | Phase 11 | Complete |
-| TRST-05 | Phase 11 | Complete |
-| TRST-06 | Phase 11 | Complete |
-| TRST-07 | Phase 11 | Complete |
-| TRST-08 | Phase 11 | Complete |
-| TRST-09 | Phase 11 | Complete |
-| LOG-01 | Phase 10 | Complete |
-| LOG-02 | Phase 10 | Complete |
-| LOG-03 | Phase 10 | Complete |
-| LOG-04 | Phase 10 | Complete |
-| LOG-05 | Phase 10 | Complete |
-| LOG-06 | Phase 10 | Complete |
-| LOG-07 | Phase 10 | Complete |
-| LOG-08 | Phase 10 | Complete |
-| LOG-09 | Phase 10 | Complete |
-| LOG-10 | Phase 10 | Complete |
-| LOG-11 | Phase 10 | Complete |
+| DBSC-01 | Phase 13 | Pending |
+| DBSC-02 | Phase 13 | Pending |
+| DBSC-03 | Phase 13 | Pending |
+| DBSC-04 | Phase 14 | Pending |
+| DBSC-05 | Phase 14 | Pending |
+| DBSC-06 | Phase 14 | Pending |
+| DBSC-07 | Phase 13 | Pending |
+| DBSC-08 | Phase 13 | Pending |
+| DBSL-01 | Phase 14 | Pending |
+| DBSL-02 | Phase 14 | Pending |
+| DBSL-03 | Phase 14 | Pending |
+| DBSL-04 | Phase 14 | Pending |
+| DBSL-05 | Phase 14 | Pending |
+| DBSL-06 | Phase 14 | Pending |
+| EXTL-01 | Phase 15 | Pending |
+| EXTL-02 | Phase 15 | Pending |
+| EXTL-03 | Phase 15 | Pending |
+| EXTL-04 | Phase 15 | Pending |
+| EXTL-05 | Phase 15 | Pending |
+| EXTL-06 | Phase 15 | Pending |
+| BTCH-01 | Phase 16 | Pending |
+| BTCH-02 | Phase 16 | Pending |
+| BTCH-03 | Phase 16 | Pending |
+| BTCH-04 | Phase 16 | Pending |
+| BTCH-05 | Phase 16 | Pending |
+| BTCH-06 | Phase 16 | Pending |
+| ZIMP-01 | Phase 16 | Pending |
+| ZIMP-02 | Phase 16 | Pending |
+| ZIMP-03 | Phase 16 | Pending |
+| ZIMP-04 | Phase 16 | Pending |
+| ZIMP-05 | Phase 16 | Pending |
+| OMIM-01 | Phase 17 | Pending |
+| OMIM-02 | Phase 17 | Pending |
+| OMIM-03 | Phase 17 | Pending |
+| OMIM-04 | Phase 17 | Pending |
+| OMIM-05 | Phase 17 | Pending |
+| CHRT-01 | Phase 18 | Pending |
+| CHRT-02 | Phase 18 | Pending |
+| CHRT-03 | Phase 18 | Pending |
+| CHRT-04 | Phase 18 | Pending |
+| CHRT-05 | Phase 18 | Pending |
+| CHRT-06 | Phase 18 | Pending |
+| CHRT-07 | Phase 18 | Pending |
+| CHRT-08 | Phase 18 | Pending |
+| CHRT-09 | Phase 18 | Pending |
+| CHRT-10 | Phase 18 | Pending |
 
-**Total: 29/29 requirements mapped. No orphans.**
+**Total: 40/40 requirements mapped. No orphans.**
 
 ---
 *Roadmap created: 2026-01-27*
-*Milestone: v0.2.0 -- UI Polish, Branding & Trust Signals*
+*Milestone: v0.3.0 -- Cohort Analysis, Security & Import Enhancements*
