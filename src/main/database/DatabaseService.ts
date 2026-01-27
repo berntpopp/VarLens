@@ -483,9 +483,9 @@ export class DatabaseService {
       params.push(filter.gnomad_af_max)
     }
 
-    // Include NULL CADD (unknown could be damaging) OR values >= threshold
+    // Exclude NULL CADD when filtering by minimum - only show variants with known CADD >= threshold
     if (filter.cadd_min !== undefined) {
-      conditions.push('(cadd IS NULL OR cadd >= ?)')
+      conditions.push('cadd >= ?')
       params.push(filter.cadd_min)
     }
 
@@ -616,7 +616,7 @@ export class DatabaseService {
     }
 
     if (filter.cadd_min !== undefined) {
-      conditions.push('(cadd IS NULL OR cadd >= ?)')
+      conditions.push('cadd >= ?')
       params.push(filter.cadd_min)
     }
 

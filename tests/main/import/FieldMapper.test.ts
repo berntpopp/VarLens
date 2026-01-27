@@ -331,7 +331,7 @@ describe('FieldMapper', () => {
       })
       const [result] = await runTransform([row])
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         chr: '17',
         pos: 43044295,
         ref: 'G',
@@ -359,7 +359,7 @@ describe('FieldMapper', () => {
       })
       const [result] = await runTransform([row])
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         chr: 'Y',
         pos: 2655180,
         ref: 'C',

@@ -1,4 +1,4 @@
-.PHONY: help dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci
+.PHONY: help dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -82,10 +82,37 @@ test-coverage: ## Run tests with coverage report
 	npm run test:coverage
 
 #---------------------------------------------------------------------------
-# CI / Full Checks
+# CI / Full Checks (mirrors GitHub Actions exactly)
 #---------------------------------------------------------------------------
 
 ci: lint-check typecheck test ## Run all CI checks (lint, typecheck, test)
+
+ci-full: ## Run FULL CI pipeline (exactly mirrors GitHub Actions)
+	@echo "=== CI Pipeline (mirrors GitHub Actions build.yml) ==="
+	@echo ""
+	@echo "Step 1/5: Installing dependencies..."
+	npm ci
+	@echo ""
+	@echo "Step 2/5: Running linter..."
+	npm run lint:check
+	@echo ""
+	@echo "Step 3/5: Running type check..."
+	npm run typecheck
+	@echo ""
+	@echo "Step 4/5: Running tests (before Electron rebuild)..."
+	npm run test
+	@echo ""
+	@echo "Step 5/5: Rebuilding native modules for Electron..."
+	npm run postinstall
+	@echo ""
+	@echo "=== CI Pipeline PASSED ==="
+
+ci-build: ci-full ## Run full CI + build (like GitHub Actions with dist)
+	@echo ""
+	@echo "Step 6/6: Building Electron app..."
+	CSC_IDENTITY_AUTO_DISCOVERY=false npm run dist
+	@echo ""
+	@echo "=== CI + Build PASSED ==="
 
 all: ci build ## Run CI checks and build
 

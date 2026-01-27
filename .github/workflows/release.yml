@@ -19,6 +19,9 @@ jobs:
         os: [windows-latest, ubuntu-latest, macos-latest]
 
     steps:
+      - name: Configure git line endings
+        run: git config --global core.autocrlf false
+
       - name: Checkout code
         uses: actions/checkout@v6
 
@@ -37,11 +40,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native modules
-        run: npm run postinstall
-
-      - name: Run tests
+      - name: Run tests (before Electron rebuild)
         run: npm run test
+
+      - name: Rebuild native modules for Electron
+        run: npm run postinstall
 
       - name: Build and publish
         run: npm run dist
