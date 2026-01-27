@@ -95,7 +95,7 @@ function validate(): boolean {
   }
 
   if (encrypt.value) {
-    if (!password.value) {
+    if (password.value.length === 0) {
       passwordError.value = 'Password is required'
       return false
     }
@@ -120,20 +120,23 @@ async function selectLocation(): Promise<void> {
       : `${databaseName.value}.sqlite`
     const path = await databaseStore.selectSaveLocation(fileName)
 
-    if (!path) {
+    if (path === null) {
       // User cancelled
       creating.value = false
       return
     }
 
     // Create database
-    const result = await databaseStore.createDatabase(path, encrypt.value ? password.value : undefined)
+    const result = await databaseStore.createDatabase(
+      path,
+      encrypt.value ? password.value : undefined
+    )
 
     if (result.success) {
       hide()
       emit('database-created')
     } else {
-      passwordError.value = result.error || 'Failed to create database'
+      passwordError.value = result.error ?? 'Failed to create database'
     }
   } finally {
     creating.value = false

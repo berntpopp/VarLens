@@ -7,6 +7,7 @@
       />
       <v-icon icon="custom:varlens-dna" class="ml-2" size="small" />
       <v-app-bar-title class="ml-2 text-subtitle-1 font-weight-bold"> VarLens </v-app-bar-title>
+      <DatabasePicker @database-switched="handleDatabaseSwitched" @error="handleDatabaseError" />
     </v-app-bar>
 
     <v-navigation-drawer v-model="sidebarOpen" :width="280">
@@ -70,10 +71,15 @@ import LogViewer from './components/LogViewer.vue'
 import AppFooter from './components/AppFooter.vue'
 import DisclaimerDialog from './components/DisclaimerDialog.vue'
 import FaqDialog from './components/FaqDialog.vue'
+import DatabasePicker from './components/DatabasePicker.vue'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useVersionGating } from './composables/useVersionGating'
+import { useDatabaseStore } from './stores/databaseStore'
 import { logService } from './services/LogService'
 import type { VariantFilter } from '../../shared/types/api'
+
+// Initialize database store
+const databaseStore = useDatabaseStore()
 
 // Component refs
 const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
@@ -164,6 +170,19 @@ watch(selectedCaseId, () => {
   hasSort.value = false
 })
 
+// Clear UI state when database path changes
+watch(
+  () => databaseStore.currentPath,
+  () => {
+    selectedCaseId.value = null
+    selectedCaseName.value = ''
+    currentFilters.value = {}
+    filteredCount.value = 0
+    totalCount.value = 0
+    hasSort.value = false
+  }
+)
+
 // Setup keyboard shortcuts
 useKeyboardShortcuts({
   onDisclaimer: () => disclaimerRef.value?.show(),
@@ -178,12 +197,38 @@ const handleDisclaimerAcknowledged = (): void => {
   logService.info('Research disclaimer acknowledged', 'App')
 }
 
+const handleDatabaseSwitched = async (): Promise<void> => {
+  // Clear current case selection
+  selectedCaseId.value = null
+  selectedCaseName.value = ''
+
+  // Clear filters and counts
+  currentFilters.value = {}
+  filteredCount.value = 0
+  totalCount.value = 0
+  hasSort.value = false
+
+  // Refresh case list with new database
+  await caseListRef.value?.refreshCases()
+
+  // Show success snackbar
+  snackbarRef.value?.show(`Switched to ${databaseStore.currentName}`, 'success')
+}
+
+const handleDatabaseError = (message: string): void => {
+  // Show error snackbar
+  snackbarRef.value?.show(message, 'error')
+}
+
 // Check initial disclaimer acknowledgment state
 const { needsAcknowledgment } = useVersionGating()
 disclaimerAcknowledged.value = !needsAcknowledgment()
 
 // Lifecycle
-onMounted(() => {
+onMounted(async () => {
+  // Load current database info
+  await databaseStore.fetchInfo()
+
   // Check disclaimer acknowledgment on startup
   disclaimerRef.value?.checkAndShow()
 })

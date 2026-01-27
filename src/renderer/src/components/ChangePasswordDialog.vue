@@ -67,7 +67,7 @@ function hide(): void {
 function validate(): boolean {
   passwordError.value = ''
 
-  if (!newPassword.value) {
+  if (newPassword.value.length === 0) {
     passwordError.value = 'Password is required'
     return false
   }
@@ -92,7 +92,7 @@ async function submit(): Promise<void> {
       hide()
       emit('password-changed')
     } else {
-      passwordError.value = result.error || 'Failed to change password'
+      passwordError.value = result.error ?? 'Failed to change password'
     }
   } finally {
     submitting.value = false

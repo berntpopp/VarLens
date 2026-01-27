@@ -11,7 +11,12 @@
               width="2"
               class="mr-2"
             />
-            <v-icon v-else-if="databaseStore.isEncrypted" icon="mdi-lock" size="small" class="mr-2" />
+            <v-icon
+              v-else-if="databaseStore.isEncrypted"
+              icon="mdi-lock"
+              size="small"
+              class="mr-2"
+            />
             <span class="text-body-2">{{ databaseStore.currentName || 'No database' }}</span>
           </v-btn>
         </template>
@@ -35,7 +40,9 @@
         </v-list-item>
       </template>
       <v-list-item v-else disabled>
-        <v-list-item-title class="text-caption text-disabled">No recent databases</v-list-item-title>
+        <v-list-item-title class="text-caption text-disabled"
+          >No recent databases</v-list-item-title
+        >
       </v-list-item>
 
       <v-divider />
@@ -101,12 +108,12 @@ const emit = defineEmits<{
 async function handleOpenRecent(path: string): Promise<void> {
   const result = await databaseStore.openDatabase(path)
 
-  if (result.needsPassword) {
+  if (result.needsPassword === true) {
     pendingOpenPath.value = path
     passwordDialogRef.value?.show(handlePasswordSubmit)
   } else if (result.success) {
     emit('database-switched')
-  } else if (result.error) {
+  } else if (result.error !== undefined) {
     emit('error', result.error)
   }
 }
@@ -114,17 +121,17 @@ async function handleOpenRecent(path: string): Promise<void> {
 async function handleOpen(): Promise<void> {
   const result = await databaseStore.selectAndOpenFile()
 
-  if (!result) {
+  if (result === null) {
     // User cancelled
     return
   }
 
-  if (result.needsPassword && result.info) {
+  if (result.needsPassword === true && result.info !== undefined) {
     pendingOpenPath.value = result.info.path
     passwordDialogRef.value?.show(handlePasswordSubmit)
   } else if (result.success) {
     emit('database-switched')
-  } else if (result.error) {
+  } else if (result.error !== undefined) {
     emit('error', result.error)
   }
 }
@@ -137,8 +144,10 @@ function handleChangePassword(): void {
   changePasswordDialogRef.value?.show()
 }
 
-async function handlePasswordSubmit(password: string): Promise<{ success: boolean; error?: string }> {
-  if (!pendingOpenPath.value) {
+async function handlePasswordSubmit(
+  password: string
+): Promise<{ success: boolean; error?: string }> {
+  if (pendingOpenPath.value === null) {
     return { success: false, error: 'No pending path' }
   }
 

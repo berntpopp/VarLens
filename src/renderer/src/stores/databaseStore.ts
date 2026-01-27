@@ -67,7 +67,7 @@ export const useDatabaseStore = defineStore('database', () => {
 
   async function selectAndOpenFile(): Promise<DatabaseOpenResult | null> {
     const path = await window.api.database.selectFile()
-    if (!path) {
+    if (path === null) {
       return null
     }
     return await openDatabase(path)
@@ -77,7 +77,9 @@ export const useDatabaseStore = defineStore('database', () => {
     return await window.api.database.selectSaveLocation(defaultName)
   }
 
-  async function changePassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
+  async function changePassword(
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> {
     return await window.api.database.rekey(newPassword)
   }
 

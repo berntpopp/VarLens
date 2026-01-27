@@ -34,7 +34,8 @@ const errorMessage = ref('')
 const submitting = ref(false)
 
 // Callback stored when dialog is shown
-let onSubmitCallback: ((password: string) => Promise<{ success: boolean; error?: string }>) | null = null
+let onSubmitCallback: ((password: string) => Promise<{ success: boolean; error?: string }>) | null =
+  null
 
 // Exposed methods
 function show(onSubmit: (password: string) => Promise<{ success: boolean; error?: string }>): void {
@@ -52,7 +53,7 @@ function hide(): void {
 }
 
 async function submit(): Promise<void> {
-  if (!onSubmitCallback) return
+  if (onSubmitCallback === null) return
 
   submitting.value = true
   errorMessage.value = ''
@@ -64,7 +65,7 @@ async function submit(): Promise<void> {
     } else if (result.error === 'WRONG_PASSWORD') {
       errorMessage.value = 'Incorrect password. Please try again.'
     } else {
-      errorMessage.value = result.error || 'Failed to unlock database'
+      errorMessage.value = result.error ?? 'Failed to unlock database'
     }
   } finally {
     submitting.value = false
