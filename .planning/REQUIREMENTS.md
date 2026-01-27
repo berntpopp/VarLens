@@ -17,7 +17,7 @@ Requirements for UI polish, branding, and trust signals milestone.
 - [ ] **CHRM-06**: Footer includes FAQ dialog trigger button
 - [ ] **CHRM-07**: Footer includes log viewer toggle button with error count badge
 - [ ] **CHRM-08**: App uses RequiForm warm palette (#a09588 primary, #E5AA94 footer background, #424242 secondary) via Vuetify theme config
-- [ ] **CHRM-09**: All UI text uses "research" language — no "clinical" references anywhere
+- [ ] **CHRM-09**: All UI text uses "research" language -- no "clinical" references anywhere
 
 ### Trust Signals
 
@@ -73,47 +73,47 @@ Deferred to later milestones.
 | CNV/SV analysis | SNV-focused for POC |
 | User authentication | Desktop app, single-user |
 | Runtime branding config | Build-time JSON sufficient for v0.2.0; runtime override deferred |
-| Clinical diagnostic language | Research use only — explicitly excluded |
+| Clinical diagnostic language | Research use only -- explicitly excluded |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CHRM-01 | — | Pending |
-| CHRM-02 | — | Pending |
-| CHRM-03 | — | Pending |
-| CHRM-04 | — | Pending |
-| CHRM-05 | — | Pending |
-| CHRM-06 | — | Pending |
-| CHRM-07 | — | Pending |
-| CHRM-08 | — | Pending |
-| CHRM-09 | — | Pending |
-| TRST-01 | — | Pending |
-| TRST-02 | — | Pending |
-| TRST-03 | — | Pending |
-| TRST-04 | — | Pending |
-| TRST-05 | — | Pending |
-| TRST-06 | — | Pending |
-| TRST-07 | — | Pending |
-| TRST-08 | — | Pending |
-| TRST-09 | — | Pending |
-| LOG-01 | — | Pending |
-| LOG-02 | — | Pending |
-| LOG-03 | — | Pending |
-| LOG-04 | — | Pending |
-| LOG-05 | — | Pending |
-| LOG-06 | — | Pending |
-| LOG-07 | — | Pending |
-| LOG-08 | — | Pending |
-| LOG-09 | — | Pending |
-| LOG-10 | — | Pending |
-| LOG-11 | — | Pending |
+| CHRM-01 | Phase 9 | Pending |
+| CHRM-02 | Phase 12 | Pending |
+| CHRM-03 | Phase 12 | Pending |
+| CHRM-04 | Phase 12 | Pending |
+| CHRM-05 | Phase 12 | Pending |
+| CHRM-06 | Phase 12 | Pending |
+| CHRM-07 | Phase 12 | Pending |
+| CHRM-08 | Phase 9 | Pending |
+| CHRM-09 | Phase 9 | Pending |
+| TRST-01 | Phase 11 | Pending |
+| TRST-02 | Phase 11 | Pending |
+| TRST-03 | Phase 11 | Pending |
+| TRST-04 | Phase 11 | Pending |
+| TRST-05 | Phase 11 | Pending |
+| TRST-06 | Phase 11 | Pending |
+| TRST-07 | Phase 11 | Pending |
+| TRST-08 | Phase 11 | Pending |
+| TRST-09 | Phase 11 | Pending |
+| LOG-01 | Phase 10 | Pending |
+| LOG-02 | Phase 10 | Pending |
+| LOG-03 | Phase 10 | Pending |
+| LOG-04 | Phase 10 | Pending |
+| LOG-05 | Phase 10 | Pending |
+| LOG-06 | Phase 10 | Pending |
+| LOG-07 | Phase 10 | Pending |
+| LOG-08 | Phase 10 | Pending |
+| LOG-09 | Phase 10 | Pending |
+| LOG-10 | Phase 10 | Pending |
+| LOG-11 | Phase 10 | Pending |
 
 **Coverage:**
 - v0.2.0 requirements: 29 total
-- Mapped to phases: 0
-- Unmapped: 29 (pending roadmap creation)
+- Mapped to phases: 29
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after initial definition*
+*Last updated: 2026-01-27 after roadmap creation (phase traceability added)*
