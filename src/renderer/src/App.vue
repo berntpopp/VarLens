@@ -6,9 +6,7 @@
         aria-label="Toggle navigation sidebar"
       />
       <v-icon icon="custom:varlens-dna" class="ml-2" size="small" />
-      <v-app-bar-title class="ml-2 text-subtitle-1 font-weight-bold">
-        VarLens
-      </v-app-bar-title>
+      <v-app-bar-title class="ml-2 text-subtitle-1 font-weight-bold"> VarLens </v-app-bar-title>
     </v-app-bar>
 
     <v-navigation-drawer v-model="sidebarOpen" :width="280">
@@ -46,11 +44,26 @@
 
     <ImportDialog ref="importDialogRef" @import-complete="handleImportComplete" />
     <AppSnackbar ref="snackbarRef" />
+    <LogViewer v-model:open="logViewerOpen" />
+
+    <!-- Floating action button for log viewer (temporary until footer exists) -->
+    <v-btn
+      icon="mdi-console"
+      size="small"
+      color="grey-darken-2"
+      class="log-viewer-fab"
+      position="fixed"
+      location="bottom end"
+      style="bottom: 16px; right: 16px; z-index: 5"
+      :elevation="logViewerOpen ? 0 : 4"
+      @click="logViewerOpen = !logViewerOpen"
+    />
   </v-app>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+/* global window */
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
 import EmptyState from './components/EmptyState.vue'
@@ -58,6 +71,8 @@ import VariantTable from './components/VariantTable.vue'
 import FilterToolbar from './components/FilterToolbar.vue'
 import ImportDialog from './components/ImportDialog.vue'
 import AppSnackbar from './components/AppSnackbar.vue'
+import LogViewer from './components/LogViewer.vue'
+import { logService } from './services/LogService'
 import type { VariantFilter } from '../../shared/types/api'
 
 // Component refs
@@ -68,6 +83,9 @@ const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
 
 // Sidebar state
 const sidebarOpen = ref(true)
+
+// Log viewer state
+const logViewerOpen = ref(false)
 
 // Case selection state
 const selectedCaseId = ref<number | null>(null)
@@ -139,5 +157,31 @@ const handleSortUpdate = (sortActive: boolean): void => {
 watch(selectedCaseId, () => {
   currentFilters.value = {}
   hasSort.value = false
+})
+
+// Keyboard shortcut handler for Ctrl+L
+function handleKeydown(e: KeyboardEvent): void {
+  if (e.ctrlKey === true && e.key === 'l') {
+    e.preventDefault() // prevent browser address bar focus
+    logViewerOpen.value = logViewerOpen.value === false
+  }
+}
+
+// Lifecycle: setup keyboard listener and seed demo logs
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+
+  // Seed demo log entries after short delay
+  window.setTimeout(() => {
+    logService.info('Application started', 'App')
+    logService.debug('Vue app mounted successfully', 'App')
+    logService.info('Vuetify theme loaded', 'Plugins')
+    logService.warn('No cases loaded yet', 'CaseList')
+    logService.debug('Checking localStorage for saved preferences', 'Config')
+  }, 500)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 </script>
