@@ -5,6 +5,10 @@ import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [vue(), vuetify({ autoImport: true })],
+  define: {
+    // Provide version for tests - matches electron.vite.config.ts
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || '0.0.0')
+  },
   test: {
     testTimeout: process.env.CI ? 120_000 : 30_000,
     environment: 'happy-dom',
