@@ -15,7 +15,7 @@
   >
     <!-- Position with thousand separators -->
     <template #[`item.pos`]="{ value }">
-      {{ formatPosition(value) }}
+      <span class="genomic-coordinate">{{ formatPosition(value) }}</span>
     </template>
 
     <!-- gnomAD AF in scientific notation -->
@@ -35,26 +35,26 @@
     <template #[`item.ref`]="{ value }">
       <v-tooltip v-if="value.length > 20" location="top">
         <template #activator="{ props: tooltipProps }">
-          <span v-bind="tooltipProps" class="text-truncate allele-cell">
+          <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
             {{ value.substring(0, 20) }}...
           </span>
         </template>
-        <span class="font-mono">{{ value }}</span>
+        <span class="variant-data-mono">{{ value }}</span>
       </v-tooltip>
-      <span v-else class="font-mono">{{ value }}</span>
+      <span v-else class="variant-data-mono">{{ value }}</span>
     </template>
 
     <!-- Alt allele with truncation and tooltip -->
     <template #[`item.alt`]="{ value }">
       <v-tooltip v-if="value.length > 20" location="top">
         <template #activator="{ props: tooltipProps }">
-          <span v-bind="tooltipProps" class="text-truncate allele-cell">
+          <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
             {{ value.substring(0, 20) }}...
           </span>
         </template>
-        <span class="font-mono">{{ value }}</span>
+        <span class="variant-data-mono">{{ value }}</span>
       </v-tooltip>
-      <span v-else class="font-mono">{{ value }}</span>
+      <span v-else class="variant-data-mono">{{ value }}</span>
     </template>
 
     <!-- CADD score (handle null) -->
@@ -64,7 +64,7 @@
 
     <!-- Gene symbol (handle null) -->
     <template #[`item.gene_symbol`]="{ value }">
-      {{ value ?? '-' }}
+      <span class="gene-symbol">{{ value ?? '-' }}</span>
     </template>
 
     <!-- Consequence (handle null) -->
@@ -89,17 +89,17 @@
 
     <!-- Transcript (handle null) -->
     <template #[`item.transcript`]="{ value }">
-      {{ value ?? '-' }}
+      <span class="variant-data-mono">{{ value ?? '-' }}</span>
     </template>
 
     <!-- cDNA (handle null) -->
     <template #[`item.cdna`]="{ value }">
-      {{ value ?? '-' }}
+      <span class="hgvs-notation">{{ value ?? '-' }}</span>
     </template>
 
     <!-- AA Change (handle null) -->
     <template #[`item.aa_change`]="{ value }">
-      {{ value ?? '-' }}
+      <span class="hgvs-notation">{{ value ?? '-' }}</span>
     </template>
 
     <!-- HPO Sim Score (handle null) -->
@@ -343,9 +343,5 @@ defineExpose({ resetSort })
 .allele-cell {
   max-width: 120px;
   display: inline-block;
-}
-
-.font-mono {
-  font-family: monospace;
 }
 </style>

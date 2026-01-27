@@ -120,8 +120,8 @@
               >
             </template>
             <span
-              >Filter by ClinVar clinical significance: Pathogenic, Likely pathogenic, VUS, Benign,
-              etc.</span
+              >Filter by ClinVar pathogenicity classification: Pathogenic, Likely pathogenic, VUS,
+              Benign, etc.</span
             >
           </v-tooltip>
         </div>
