@@ -75,6 +75,12 @@ Plans:
 
 **Dependencies:** Phase 9 (theme palette for dialog styling)
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 11-01-PLAN.md -- Blocking disclaimer dialog with JSON config, version-gated persistence, VueUse setup
+- [ ] 11-02-PLAN.md -- Searchable FAQ dialog with categorized expansion panels, keyboard shortcuts composable
+
 **Requirements:**
 - TRST-09: Disclaimer text is configurable via JSON file
 - TRST-01: User sees a blocking disclaimer dialog on first launch stating research-use-only purpose
