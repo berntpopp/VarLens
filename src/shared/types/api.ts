@@ -68,6 +68,7 @@ export interface ShellOpenExternalResult {
 
 export interface ShellAPI {
   openExternal: (url: string) => Promise<ShellOpenExternalResult>
+  updateDomains: (domains: string[]) => Promise<void>
 }
 
 export interface ExportAPI {

@@ -69,7 +69,8 @@ const api = {
   },
 
   shell: {
-    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
+    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+    updateDomains: (domains: string[]) => ipcRenderer.invoke('shell:updateUserDomains', domains)
   },
 
   database: {

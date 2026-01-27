@@ -8,7 +8,7 @@ import { ipcMain, shell } from 'electron'
  * Only HTTPS URLs on whitelisted domains are allowed.
  */
 
-/** Domains allowed for external link opening */
+/** Built-in domains allowed for external link opening */
 const ALLOWED_DOMAINS = [
   'github.com',
   'opensource.org',
@@ -20,12 +20,23 @@ const ALLOWED_DOMAINS = [
   'franklin.genoox.com'
 ]
 
+/** User-configured domains (synced from renderer store) */
+let userDomains: string[] = []
+
 /**
  * Check if hostname matches an allowed domain exactly or is a subdomain of it.
  */
 function isDomainAllowed(hostname: string): boolean {
-  return ALLOWED_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))
+  const allDomains = [...ALLOWED_DOMAINS, ...userDomains]
+  return allDomains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))
 }
+
+ipcMain.handle(
+  'shell:updateUserDomains',
+  async (_event, domains: string[]): Promise<void> => {
+    userDomains = domains
+  }
+)
 
 ipcMain.handle(
   'shell:openExternal',

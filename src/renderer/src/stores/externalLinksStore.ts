@@ -120,9 +120,7 @@ function loadLinks(): ExternalLinkConfig[] {
       }
 
       // Remove any built-in links that no longer exist in defaults
-      const result = merged.filter(
-        (link) => !link.isBuiltIn || defaultIds.has(link.id)
-      )
+      const result = merged.filter((link) => !link.isBuiltIn || defaultIds.has(link.id))
 
       return result
     }
@@ -194,9 +192,7 @@ export const useExternalLinksStore = defineStore('externalLinks', () => {
     }
   }
 
-  function addCustomLink(
-    config: Omit<ExternalLinkConfig, 'id' | 'isBuiltIn'>
-  ): void {
+  function addCustomLink(config: Omit<ExternalLinkConfig, 'id' | 'isBuiltIn'>): void {
     const id = crypto.randomUUID()
     links.value.push({
       ...config,
@@ -223,7 +219,6 @@ export const useExternalLinksStore = defineStore('externalLinks', () => {
   function syncDomains(): void {
     if (typeof window.api === 'undefined') return
     const domains = configuredDomains.value
-    // @ts-expect-error - updateDomains will be added to shell API in Task 6
     window.api.shell.updateDomains(domains)
   }
 
