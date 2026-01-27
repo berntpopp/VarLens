@@ -96,6 +96,7 @@
     }
   },
   "dependencies": {
+    "@vueuse/core": "^14.1.0",
     "better-sqlite3": "^12.6.2",
     "file-saver": "^2.0.5",
     "pinia": "^2.3.1",

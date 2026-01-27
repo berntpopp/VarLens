@@ -1,0 +1,33 @@
+{
+  "title": "Research Use Only",
+  "introduction": "VarLens is a research analysis tool designed for the exploration of genomic variant data. Before proceeding, please be aware of the following important limitations.",
+  "limitations": [
+    {
+      "icon": "mdi-flask-outline",
+      "title": "Not for Diagnostic Use",
+      "text": "This tool is intended for research purposes only and has not been validated for clinical diagnostic use. Results must not be used for medical decision-making."
+    },
+    {
+      "icon": "mdi-shield-check-outline",
+      "title": "Independent Verification Required",
+      "text": "All findings and classifications should be independently verified using validated methods before being considered in any context."
+    },
+    {
+      "icon": "mdi-account-off-outline",
+      "title": "No Doctor-Patient Relationship",
+      "text": "Use of this tool does not establish a doctor-patient or clinician-subject relationship. No medical advice is provided."
+    },
+    {
+      "icon": "mdi-alert-circle-outline",
+      "title": "Data Limitations",
+      "text": "Variant annotations may contain artifacts, incomplete data, or errors inherent in reference databases. Pathogenicity classifications are informational only."
+    },
+    {
+      "icon": "mdi-school-outline",
+      "title": "Professional Expertise Required",
+      "text": "Interpretation of genomic variant data requires appropriate training in genetics and genomics. This tool is designed for use by qualified researchers."
+    }
+  ],
+  "footer": "By continuing, you acknowledge these limitations and agree to use VarLens for research purposes only.",
+  "acknowledgeButtonText": "I Understand — Continue"
+}
