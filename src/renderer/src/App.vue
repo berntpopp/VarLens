@@ -15,7 +15,11 @@
     </v-app-bar>
 
     <v-navigation-drawer v-model="sidebarOpen" :width="280">
-      <AppSidebar @import-click="handleImportClick">
+      <AppSidebar
+        @import-click="handleImportClick"
+        @batch-import-files="handleBatchImportFiles"
+        @batch-import-folder="handleBatchImportFolder"
+      >
         <CaseList
           ref="caseListRef"
           @case-selected="handleCaseSelected"
@@ -55,6 +59,10 @@
     />
 
     <ImportDialog ref="importDialogRef" @import-complete="handleImportComplete" />
+    <BatchImportDialog
+      ref="batchImportDialogRef"
+      @batch-import-complete="handleBatchImportComplete"
+    />
     <AppSnackbar ref="snackbarRef" />
     <LogViewer v-model:open="logViewerOpen" />
     <DisclaimerDialog ref="disclaimerRef" @acknowledged="handleDisclaimerAcknowledged" />
@@ -71,6 +79,7 @@ import EmptyState from './components/EmptyState.vue'
 import VariantTable from './components/VariantTable.vue'
 import FilterToolbar from './components/FilterToolbar.vue'
 import ImportDialog from './components/ImportDialog.vue'
+import BatchImportDialog from './components/BatchImportDialog.vue'
 import AppSnackbar from './components/AppSnackbar.vue'
 import LogViewer from './components/LogViewer.vue'
 import AppFooter from './components/AppFooter.vue'
@@ -89,6 +98,7 @@ const databaseStore = useDatabaseStore()
 
 // Component refs
 const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
+const batchImportDialogRef = ref<InstanceType<typeof BatchImportDialog> | null>(null)
 const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
 const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
@@ -120,6 +130,14 @@ const handleImportClick = (): void => {
   importDialogRef.value?.show()
 }
 
+const handleBatchImportFiles = (): void => {
+  batchImportDialogRef.value?.show('files')
+}
+
+const handleBatchImportFolder = (): void => {
+  batchImportDialogRef.value?.show('folder')
+}
+
 const handleImportComplete = async (result: {
   caseId: number
   variantCount: number
@@ -136,6 +154,18 @@ const handleImportComplete = async (result: {
     `Case imported: ${result.caseName} (${result.variantCount.toLocaleString()} variants)`,
     'success'
   )
+}
+
+const handleBatchImportComplete = async (result: { totalImported: number }): Promise<void> => {
+  // Refresh case list to include new cases
+  await caseListRef.value?.refreshCases()
+
+  // Show success snackbar
+  const message =
+    result.totalImported === 1
+      ? 'Batch import complete: 1 case imported'
+      : `Batch import complete: ${result.totalImported} cases imported`
+  snackbarRef.value?.show(message, 'success')
 }
 
 const handleCaseSelected = (caseId: number, caseName: string): void => {
