@@ -20,8 +20,8 @@ This milestone transforms Varlens from a single-sample viewer into a cohort anal
 **Plans:** 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Native module swap from better-sqlite3 to better-sqlite3-multiple-ciphers with full build pipeline update
-- [ ] 13-02-PLAN.md -- PRAGMA key integration into DatabaseService constructor with FTS5 ordering, encrypted database tests
+- [x] 13-01-PLAN.md -- Native module swap from better-sqlite3 to better-sqlite3-multiple-ciphers with full build pipeline update
+- [x] 13-02-PLAN.md -- PRAGMA key integration into DatabaseService constructor with FTS5 ordering, encrypted database tests
 
 **Requirements:**
 - DBSC-01: App uses `better-sqlite3-multiple-ciphers` as drop-in replacement for `better-sqlite3` with SQLCipher encryption support
@@ -197,7 +197,7 @@ Plans:
 
 | Phase | Name | Status | Requirements |
 |-------|------|--------|--------------|
-| 13 | SQLCipher Foundation | Not Started | DBSC-01, DBSC-02, DBSC-03, DBSC-07, DBSC-08 |
+| 13 | SQLCipher Foundation | Complete | DBSC-01, DBSC-02, DBSC-03, DBSC-07, DBSC-08 |
 | 14 | Database Selection & Encryption UX | Not Started | DBSL-01 - DBSL-06, DBSC-04, DBSC-05, DBSC-06 |
 | 15 | External Links | Not Started | EXTL-01 - EXTL-06 |
 | 16 | Batch Import & ZIP Extraction | Not Started | BTCH-01 - BTCH-06, ZIMP-01 - ZIMP-05 |
@@ -208,14 +208,14 @@ Plans:
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DBSC-01 | Phase 13 | Pending |
-| DBSC-02 | Phase 13 | Pending |
-| DBSC-03 | Phase 13 | Pending |
+| DBSC-01 | Phase 13 | Complete |
+| DBSC-02 | Phase 13 | Complete |
+| DBSC-03 | Phase 13 | Complete |
 | DBSC-04 | Phase 14 | Pending |
 | DBSC-05 | Phase 14 | Pending |
 | DBSC-06 | Phase 14 | Pending |
-| DBSC-07 | Phase 13 | Pending |
-| DBSC-08 | Phase 13 | Pending |
+| DBSC-07 | Phase 13 | Complete |
+| DBSC-08 | Phase 13 | Complete |
 | DBSL-01 | Phase 14 | Pending |
 | DBSL-02 | Phase 14 | Pending |
 | DBSL-03 | Phase 14 | Pending |

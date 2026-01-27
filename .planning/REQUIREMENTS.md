@@ -9,14 +9,14 @@ Requirements for cohort analysis, security, and import enhancements milestone.
 
 ### Database Security
 
-- [ ] **DBSC-01**: App uses `better-sqlite3-multiple-ciphers` as drop-in replacement for `better-sqlite3` with SQLCipher encryption support
-- [ ] **DBSC-02**: Database accepts encryption key via PRAGMA key as the first operation after opening, before any schema initialization
-- [ ] **DBSC-03**: FTS5 virtual table creation occurs after PRAGMA key is set on encrypted databases
+- [x] **DBSC-01**: App uses `better-sqlite3-multiple-ciphers` as drop-in replacement for `better-sqlite3` with SQLCipher encryption support
+- [x] **DBSC-02**: Database accepts encryption key via PRAGMA key as the first operation after opening, before any schema initialization
+- [x] **DBSC-03**: FTS5 virtual table creation occurs after PRAGMA key is set on encrypted databases
 - [ ] **DBSC-04**: User is prompted for a password when opening an encrypted database
 - [ ] **DBSC-05**: User can create a new encrypted database with a password
 - [ ] **DBSC-06**: User can change the password of an encrypted database via PRAGMA rekey
-- [ ] **DBSC-07**: All existing tests pass with the new database library on Windows, macOS, and Linux
-- [ ] **DBSC-08**: Build pipeline (electron-vite config, CI workflows, Makefile, package.json) updated for the new native module
+- [x] **DBSC-07**: All existing tests pass with the new database library on Windows, macOS, and Linux
+- [x] **DBSC-08**: Build pipeline (electron-vite config, CI workflows, Makefile, package.json) updated for the new native module
 
 ### Database Selection
 
@@ -152,14 +152,14 @@ Deferred to later milestones.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DBSC-01 | Phase 13 | Pending |
-| DBSC-02 | Phase 13 | Pending |
-| DBSC-03 | Phase 13 | Pending |
+| DBSC-01 | Phase 13 | Complete |
+| DBSC-02 | Phase 13 | Complete |
+| DBSC-03 | Phase 13 | Complete |
 | DBSC-04 | Phase 14 | Pending |
 | DBSC-05 | Phase 14 | Pending |
 | DBSC-06 | Phase 14 | Pending |
-| DBSC-07 | Phase 13 | Pending |
-| DBSC-08 | Phase 13 | Pending |
+| DBSC-07 | Phase 13 | Complete |
+| DBSC-08 | Phase 13 | Complete |
 | DBSL-01 | Phase 14 | Pending |
 | DBSL-02 | Phase 14 | Pending |
 | DBSL-03 | Phase 14 | Pending |
