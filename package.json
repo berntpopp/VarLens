@@ -13,9 +13,9 @@
     "dist:win": "electron-vite build && electron-builder --win --publish onTag",
     "dist:mac": "electron-vite build && electron-builder --mac --publish onTag",
     "dist:linux": "electron-vite build && electron-builder --linux --publish onTag",
-    "postinstall": "npx @electron/rebuild -f -w better-sqlite3",
-    "rebuild:electron": "npx @electron/rebuild -f -w better-sqlite3",
-    "rebuild:node": "npm rebuild better-sqlite3",
+    "postinstall": "npx @electron/rebuild -f -w better-sqlite3-multiple-ciphers",
+    "rebuild:electron": "npx @electron/rebuild -f -w better-sqlite3-multiple-ciphers",
+    "rebuild:node": "npm rebuild better-sqlite3-multiple-ciphers",
     "lint": "eslint . --fix",
     "lint:check": "eslint .",
     "test": "vitest run",
@@ -56,11 +56,11 @@
     "productName": "Varlens",
     "npmRebuild": false,
     "asarUnpack": [
-      "node_modules/better-sqlite3/**/*"
+      "node_modules/better-sqlite3-multiple-ciphers/**/*"
     ],
     "files": [
       "out/**/*",
-      "node_modules/better-sqlite3/**/*"
+      "node_modules/better-sqlite3-multiple-ciphers/**/*"
     ],
     "directories": {
       "output": "release"
@@ -100,7 +100,7 @@
   },
   "dependencies": {
     "@vueuse/core": "^14.1.0",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3-multiple-ciphers": "^12.6.2",
     "file-saver": "^2.0.5",
     "pinia": "^2.3.1",
     "stream-json": "^1.9.1",
