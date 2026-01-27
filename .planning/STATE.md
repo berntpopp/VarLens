@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 ## Current Position
 
 Phase: 15 -- External Links
-Plan: 02 of 2
+Plan: 03 of 3
 Status: Phase complete
-Last activity: 2026-01-27 -- Completed 15-02-PLAN.md
+Last activity: 2026-01-27 -- Completed 15-03-PLAN.md
 
-Progress: ██████░░░░░░░░░░░░░░ 6/12 plans (50%)
+Progress: ███████░░░░░░░░░░░░░ 7/13 plans (54%)
 
 ## Milestone History
 
@@ -27,7 +27,7 @@ Progress: ██████░░░░░░░░░░░░░░ 6/12 plan
 |-------|------|-------|--------|
 | 13 | SQLCipher Foundation | 2 | ✓ Complete |
 | 14 | Database Selection & Encryption UX | 2 | ✓ Complete (2/2) |
-| 15 | External Links | 2 | ✓ Complete (2/2) |
+| 15 | External Links | 3 | ✓ Complete (3/3) |
 | 16 | Batch Import & ZIP Extraction | 2 | Not Started |
 | 17 | OMIM Data Extraction | 2 | Not Started |
 | 18 | Cohort Analysis | 2 | Not Started |
@@ -68,6 +68,11 @@ v0.3.0 decisions (accumulated during milestone):
 | 12 | ClinVar coordinate search for Phase 15 | Use chr:pos:ref:alt search since Variant lacks clinvar_id; ID-based links deferred to Phase 17+ | 15 |
 | 13 | OMIM gene search for Phase 15 | Use gene_symbol search since Variant lacks omim_mim_number; MIM-based links deferred to Phase 17 | 15 |
 | 14 | Explicit null checks for strict boolean expressions | @typescript-eslint/strict-boolean-expressions requires chr == null || chr === '' instead of !chr | 15 |
+| 15 | URL template system for external links | Use {variable} syntax with regex replacement for configurable links; supports 10 variables including derived ones | 15 |
+| 16 | Store genome build in externalLinksStore | Genome build affects multiple links and should be user-configurable; moved from VariantTable component state | 15 |
+| 17 | Defaults merging on localStorage load | Merge stored links with built-in defaults to handle app updates with new default links | 15 |
+| 18 | Domain extraction via dummy substitution | Extract domains from URL templates by replacing variables with dummy values then parsing with URL constructor | 15 |
+| 19 | Dynamic v-data-table headers from store | Virtual link columns computed dynamically; headers are reactive to store changes | 15 |
 
 ### Pending Todos
 
@@ -87,7 +92,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 15-02-PLAN.md (External Links UI)
+Stopped at: Completed 15-03-PLAN.md (Configurable External Links)
 Resume file: None
 
 ## Next Steps
@@ -96,4 +101,4 @@ Resume file: None
 2. Continue through phases 16-18
 
 ---
-*Updated: 2026-01-27 after completing Phase 15-02 (Phase 15 complete)*
+*Updated: 2026-01-27 after completing Phase 15-03 (Phase 15 complete - 3 plans)*
