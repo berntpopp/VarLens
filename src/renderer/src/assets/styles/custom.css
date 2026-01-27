@@ -1,0 +1,25 @@
+/* Monospace font for technical genomic data */
+.variant-data-mono {
+  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-size: 0.875rem;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.gene-symbol {
+  font-family: 'Roboto Mono', monospace;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.hgvs-notation {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.8125rem;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.genomic-coordinate {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
