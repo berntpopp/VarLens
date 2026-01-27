@@ -57,8 +57,25 @@ export interface ImportAPI {
 }
 
 export interface SystemAPI {
-  getVersion: () => Promise<string>
+  getVersion: () => Promise<{ app: string; electron: string }>
   getUserDataPath: () => Promise<string>
+}
+
+export interface ShellOpenExternalResult {
+  success: boolean
+  error?: string
+}
+
+export interface ShellAPI {
+  openExternal: (url: string) => Promise<ShellOpenExternalResult>
+}
+
+export interface ExportAPI {
+  variants: (
+    caseId: number,
+    filters: Omit<VariantFilter, 'case_id'>,
+    caseName: string
+  ) => Promise<{ success: boolean; filePath?: string; error?: string }>
 }
 
 export interface WindowAPI {
@@ -66,4 +83,6 @@ export interface WindowAPI {
   variants: VariantsAPI
   import: ImportAPI
   system: SystemAPI
+  export: ExportAPI
+  shell: ShellAPI
 }

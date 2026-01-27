@@ -9,6 +9,7 @@ import type { ProgressUpdate, VariantFilter, PaginationCursor, SortItem } from '
  * - variants:query, variants:filterOptions
  * - import:selectFile, import:start, import:progress, import:cancel
  * - system:version, system:userDataPath
+ * - shell:openExternal
  */
 
 const api = {
@@ -65,6 +66,10 @@ const api = {
   export: {
     variants: (caseId: number, filters: Omit<VariantFilter, 'case_id'>, caseName: string) =>
       ipcRenderer.invoke('export:variants', caseId, filters, caseName)
+  },
+
+  shell: {
+    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
   }
 }
 
