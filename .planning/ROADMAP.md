@@ -79,8 +79,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 15-01-PLAN.md -- External link URL builders with proper encoding and shell openExternal domain allowlist expansion
-- [ ] 15-02-PLAN.md -- Clickable icon buttons in variant table rows with conditional visibility
+- [ ] 15-01-PLAN.md -- URL builder utility functions for six genomic databases with unit tests and domain allowlist expansion
+- [ ] 15-02-PLAN.md -- Clickable data values in variant table columns as external links with visual indicators and error feedback
 
 **Requirements:**
 - EXTL-01: Variant table rows include clickable icon buttons for gnomAD, ClinVar, and OMIM
