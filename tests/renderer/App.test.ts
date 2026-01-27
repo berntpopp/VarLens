@@ -30,7 +30,8 @@ const mockApi = {
     getVersion: vi.fn().mockResolvedValue({ app: '0.2.0', electron: '33.0.0' })
   },
   shell: {
-    openExternal: vi.fn().mockResolvedValue({ success: true })
+    openExternal: vi.fn().mockResolvedValue({ success: true }),
+    updateDomains: vi.fn().mockResolvedValue(undefined)
   }
 }
 

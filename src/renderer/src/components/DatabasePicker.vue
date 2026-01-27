@@ -1,26 +1,20 @@
 <template>
   <v-menu>
     <template #activator="{ props }">
-      <v-tooltip :text="databaseStore.currentPath || 'No database'">
-        <template #activator="{ props: tooltipProps }">
-          <v-btn variant="text" v-bind="{ ...props, ...tooltipProps }" class="text-none">
-            <v-progress-circular
-              v-if="databaseStore.isLoading"
-              indeterminate
-              size="16"
-              width="2"
-              class="mr-2"
-            />
-            <v-icon
-              v-else-if="databaseStore.isEncrypted"
-              icon="mdi-lock"
-              size="small"
-              class="mr-2"
-            />
-            <span class="text-body-2">{{ databaseStore.currentName || 'No database' }}</span>
-          </v-btn>
-        </template>
-      </v-tooltip>
+      <v-btn variant="text" v-bind="props" class="text-none">
+        <v-progress-circular
+          v-if="databaseStore.isLoading"
+          indeterminate
+          size="16"
+          width="2"
+          class="mr-2"
+        />
+        <v-icon v-else-if="databaseStore.isEncrypted" icon="mdi-lock" size="small" class="mr-2" />
+        <span class="text-body-2">{{ databaseStore.currentName || 'No database' }}</span>
+        <v-tooltip activator="parent" location="bottom">
+          {{ databaseStore.currentPath || 'No database' }}
+        </v-tooltip>
+      </v-btn>
     </template>
 
     <v-list>

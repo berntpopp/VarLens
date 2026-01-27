@@ -47,15 +47,17 @@
           aria-label="Open FAQ"
           @click="openFAQ"
         />
-        <v-badge :content="errorCount" :model-value="errorCount > 0" color="error" overlap>
-          <v-btn
-            icon="mdi-console"
-            size="small"
-            variant="text"
-            aria-label="Toggle log viewer"
-            @click="toggleLogViewer"
-          />
-        </v-badge>
+        <v-btn
+          icon
+          size="small"
+          variant="text"
+          aria-label="Toggle log viewer"
+          @click="toggleLogViewer"
+        >
+          <v-badge :content="errorCount" :model-value="errorCount > 0" color="error" floating>
+            <v-icon>mdi-console</v-icon>
+          </v-badge>
+        </v-btn>
       </div>
     </div>
   </v-footer>
