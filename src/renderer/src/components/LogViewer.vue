@@ -90,6 +90,7 @@
                 >
                   {{ item.level }}
                 </v-chip>
+                <!-- eslint-disable-next-line vue/no-v-html -- safe: text and search term are HTML-escaped before interpolation -->
                 <span class="text-body-2" v-html="highlightSearch(item.message)" />
               </div>
               <!-- Second line: timestamp + source -->
@@ -229,13 +230,27 @@ function formatTimestamp(timestamp: number): string {
 }
 
 // Highlight search matches
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function highlightSearch(text: string): string {
+  const escaped = escapeHtml(text)
   if (debouncedSearch.value === '') {
-    return text
+    return escaped
   }
 
-  const regex = new RegExp(`(${debouncedSearch.value})`, 'gi')
-  return text.replace(regex, '<mark class="bg-yellow">$1</mark>')
+  const safeSearch = escapeHtml(debouncedSearch.value)
+  const regex = new RegExp(`(${escapeRegExp(safeSearch)})`, 'gi')
+  return escaped.replace(regex, '<mark class="bg-yellow">$1</mark>')
 }
 
 // Handle scroll
