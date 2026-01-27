@@ -44,8 +44,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 10-01-PLAN.md -- Pinia log store with circular buffer, sanitizer utility, LogService facade
-- [ ] 10-02-PLAN.md -- LogViewer drawer UI with search, filtering, export, and app integration
+- [x] 10-01-PLAN.md -- Pinia log store with circular buffer, sanitizer utility, LogService facade
+- [x] 10-02-PLAN.md -- LogViewer drawer UI with search, filtering, export, and app integration
 
 **Requirements:**
 - LOG-01: App has a LogService with debug/info/warn/error/critical log methods
@@ -122,7 +122,7 @@ Plans:
 | Phase | Name | Status | Requirements |
 |-------|------|--------|--------------|
 | 9 | Branding & Theme Foundation | ✓ Complete | CHRM-08, CHRM-09, CHRM-01 |
-| 10 | Logging Infrastructure & Viewer | Planning Complete | LOG-01 - LOG-11 |
+| 10 | Logging Infrastructure & Viewer | ✓ Complete | LOG-01 - LOG-11 |
 | 11 | Trust Signals -- Disclaimer & FAQ | Not Started | TRST-01 - TRST-09 |
 | 12 | App Footer Integration | Not Started | CHRM-02 - CHRM-07 |
 
@@ -148,17 +148,17 @@ Plans:
 | TRST-07 | Phase 11 | Pending |
 | TRST-08 | Phase 11 | Pending |
 | TRST-09 | Phase 11 | Pending |
-| LOG-01 | Phase 10 | Pending |
-| LOG-02 | Phase 10 | Pending |
-| LOG-03 | Phase 10 | Pending |
-| LOG-04 | Phase 10 | Pending |
-| LOG-05 | Phase 10 | Pending |
-| LOG-06 | Phase 10 | Pending |
-| LOG-07 | Phase 10 | Pending |
-| LOG-08 | Phase 10 | Pending |
-| LOG-09 | Phase 10 | Pending |
-| LOG-10 | Phase 10 | Pending |
-| LOG-11 | Phase 10 | Pending |
+| LOG-01 | Phase 10 | Complete |
+| LOG-02 | Phase 10 | Complete |
+| LOG-03 | Phase 10 | Complete |
+| LOG-04 | Phase 10 | Complete |
+| LOG-05 | Phase 10 | Complete |
+| LOG-06 | Phase 10 | Complete |
+| LOG-07 | Phase 10 | Complete |
+| LOG-08 | Phase 10 | Complete |
+| LOG-09 | Phase 10 | Complete |
+| LOG-10 | Phase 10 | Complete |
+| LOG-11 | Phase 10 | Complete |
 
 **Total: 29/29 requirements mapped. No orphans.**
 

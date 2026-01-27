@@ -33,17 +33,17 @@ Requirements for UI polish, branding, and trust signals milestone.
 
 ### Logging
 
-- [ ] **LOG-01**: App has a LogService with debug/info/warn/error/critical log methods
-- [ ] **LOG-02**: Log entries are stored in a Pinia store with circular buffer (configurable max entries)
-- [ ] **LOG-03**: Log store tracks statistics (total received, dropped, per-level counts)
-- [ ] **LOG-04**: User can open a LogViewer drawer from the footer button
-- [ ] **LOG-05**: LogViewer supports full-text search across log messages
-- [ ] **LOG-06**: LogViewer supports filtering by log level (multi-select)
-- [ ] **LOG-07**: User can download logs as JSON export
-- [ ] **LOG-08**: User can clear all logs from the viewer
-- [ ] **LOG-09**: LogViewer displays memory usage statistics
-- [ ] **LOG-10**: Log configuration (max entries, level) is stored in localStorage and configurable via JSON
-- [ ] **LOG-11**: Log sanitizer redacts sensitive genetic/medical data (HGVS notation, patient identifiers, genomic coordinates)
+- [x] **LOG-01**: App has a LogService with debug/info/warn/error/critical log methods
+- [x] **LOG-02**: Log entries are stored in a Pinia store with circular buffer (configurable max entries)
+- [x] **LOG-03**: Log store tracks statistics (total received, dropped, per-level counts)
+- [x] **LOG-04**: User can open a LogViewer drawer from the footer button
+- [x] **LOG-05**: LogViewer supports full-text search across log messages
+- [x] **LOG-06**: LogViewer supports filtering by log level (multi-select)
+- [x] **LOG-07**: User can download logs as JSON export
+- [x] **LOG-08**: User can clear all logs from the viewer
+- [x] **LOG-09**: LogViewer displays memory usage statistics
+- [x] **LOG-10**: Log configuration (max entries, level) is stored in localStorage and configurable via JSON
+- [x] **LOG-11**: Log sanitizer redacts sensitive genetic/medical data (HGVS notation, patient identifiers, genomic coordinates)
 
 ## Future Requirements
 
@@ -97,17 +97,17 @@ Deferred to later milestones.
 | TRST-07 | Phase 11 | Pending |
 | TRST-08 | Phase 11 | Pending |
 | TRST-09 | Phase 11 | Pending |
-| LOG-01 | Phase 10 | Pending |
-| LOG-02 | Phase 10 | Pending |
-| LOG-03 | Phase 10 | Pending |
-| LOG-04 | Phase 10 | Pending |
-| LOG-05 | Phase 10 | Pending |
-| LOG-06 | Phase 10 | Pending |
-| LOG-07 | Phase 10 | Pending |
-| LOG-08 | Phase 10 | Pending |
-| LOG-09 | Phase 10 | Pending |
-| LOG-10 | Phase 10 | Pending |
-| LOG-11 | Phase 10 | Pending |
+| LOG-01 | Phase 10 | Complete |
+| LOG-02 | Phase 10 | Complete |
+| LOG-03 | Phase 10 | Complete |
+| LOG-04 | Phase 10 | Complete |
+| LOG-05 | Phase 10 | Complete |
+| LOG-06 | Phase 10 | Complete |
+| LOG-07 | Phase 10 | Complete |
+| LOG-08 | Phase 10 | Complete |
+| LOG-09 | Phase 10 | Complete |
+| LOG-10 | Phase 10 | Complete |
+| LOG-11 | Phase 10 | Complete |
 
 **Coverage:**
 - v0.2.0 requirements: 29 total
