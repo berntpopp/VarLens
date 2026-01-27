@@ -9,6 +9,10 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder --publish onTag",
+    "dist:win": "electron-vite build && electron-builder --win --publish onTag",
+    "dist:mac": "electron-vite build && electron-builder --mac --publish onTag",
+    "dist:linux": "electron-vite build && electron-builder --linux --publish onTag",
     "postinstall": "electron-builder install-app-deps",
     "lint": "eslint . --fix",
     "lint:check": "eslint .",
@@ -55,23 +59,40 @@
       "out/**/*",
       "node_modules/better-sqlite3/**/*"
     ],
+    "directories": {
+      "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "berntpopp",
+      "repo": "varlens",
+      "releaseType": "draft"
+    },
     "mac": {
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "win": {
       "target": [
         "nsis",
         "zip"
-      ]
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "linux": {
       "target": [
         "AppImage",
         "deb"
-      ]
+      ],
+      "artifactName": "${productName}-${version}.${ext}",
+      "category": "Science"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   },
   "dependencies": {

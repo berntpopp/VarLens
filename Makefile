@@ -1,4 +1,4 @@
-.PHONY: help dev build preview lint lint-check test test-watch test-coverage typecheck package clean install all ci
+.PHONY: help dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -30,6 +30,18 @@ preview: ## Preview production build locally
 
 build: ## Build for production
 	npm run build
+
+dist: ## Build and package for current platform (for releases)
+	npm run dist
+
+dist-linux: ## Build and package for Linux only
+	npm run dist:linux
+
+dist-mac: ## Build and package for macOS only
+	npm run dist:mac
+
+dist-win: ## Build and package for Windows only
+	npm run dist:win
 
 package: build ## Package app for all platforms (mac, win, linux)
 	npx electron-builder --mac --win --linux
@@ -85,7 +97,7 @@ install: ## Install dependencies and rebuild native modules
 	npm install
 
 clean: ## Clean build artifacts
-	rm -rf out dist node_modules/.vite
+	rm -rf out dist release node_modules/.vite
 
 clean-all: clean ## Clean everything including node_modules
 	rm -rf node_modules
