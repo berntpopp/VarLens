@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 ## Current Position
 
 Phase: 11 of 4 (Trust Signals -- Disclaimer & FAQ)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-01-27 -- Completed 11-01-PLAN.md (Disclaimer Subsystem)
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-01-27 -- Completed 11-02-PLAN.md (FAQ Dialog & Keyboard Shortcuts)
 
-Progress: [█████▓░░░░] 58%
+Progress: [██████░░░░] 66%
 
 ### Phase Overview
 
@@ -22,7 +22,7 @@ Progress: [█████▓░░░░] 58%
 |-------|------|--------|
 | 9 | Branding & Theme Foundation | ✓ Complete (2/2 plans) |
 | 10 | Logging Infrastructure & Viewer | ✓ Complete (2/2 plans) |
-| 11 | Trust Signals -- Disclaimer & FAQ | In Progress (1/2 plans) |
+| 11 | Trust Signals -- Disclaimer & FAQ | ✓ Complete (2/2 plans) |
 | 12 | App Footer Integration | Not Started |
 
 ## Milestone History
@@ -32,9 +32,9 @@ Progress: [█████▓░░░░] 58%
 ## Performance Metrics
 
 **v0.2.0 Progress:**
-- Plans completed: 5
-- Average duration: 5.6 min
-- Phases complete: 2 of 4 (50%)
+- Plans completed: 6
+- Average duration: 4.8 min
+- Phases complete: 3 of 4 (75%)
 
 ## Accumulated Context
 
@@ -88,6 +88,10 @@ Key architectural decisions carried forward:
 | Parent-controlled disclaimer check | App.vue controls timing of checkAndShow(), not DisclaimerDialog onMounted | Avoids component mounting timing issues |
 | persistent + scrim props | Use persistent + scrim for blocking modal (no hide-overlay or no-click-animation) | Correct Vuetify pattern for blocking dialogs |
 | Dual exposure methods | Expose checkAndShow() for version check and show() for manual re-open | Separation of concerns for version-gated vs unconditional display |
+| VueUse onKeyStroke | onKeyStroke from VueUse for keyboard handling instead of manual window listeners | Cleaner API, automatic cleanup, better key combination handling |
+| FAQ categories | General (3), Data (3), Interpretation (2), Limitations (2), Privacy (2) | Structured FAQ content covering all user concerns |
+| Keyboard shortcuts | Ctrl+Shift+D (disclaimer), Ctrl+Shift+Q (FAQ), Ctrl+L (log viewer) | Consistent shortcut patterns for dev access before footer exists |
+| Search debounce 300ms | Reuse useDebounce composable for FAQ search | Performance optimization, consistent with log viewer
 
 ### v0.2.0 Design Notes
 
@@ -107,14 +111,14 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T10:22:00Z
-Stopped at: Completed 11-01-PLAN.md (Disclaimer Subsystem)
+Last session: 2026-01-27T13:45:44Z
+Stopped at: Completed 11-02-PLAN.md (FAQ Dialog & Keyboard Shortcuts)
 Resume file: None
 
 ## Next Steps
 
-1. Execute Plan 11-02 (FAQ Dialog) to complete Phase 11
-2. Complete Phase 12 (App Footer Integration) to wire everything together
+1. Complete Phase 12 (App Footer Integration) to wire trust signals and logging into footer
+2. v0.2.0 milestone complete after Phase 12
 
 ---
-*Updated: 2026-01-27 after completing Phase 11 Plan 01*
+*Updated: 2026-01-27 after completing Phase 11 Plan 02*
