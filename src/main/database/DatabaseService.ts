@@ -53,12 +53,21 @@ export class DatabaseService {
    *
    * @param dbPath - Path to SQLite database file. Defaults to ':memory:' for testing.
    *                 In production, pass app.getPath('userData') + '/varlens.db'
+   * @param encryptionKey - Optional encryption key. When provided, PRAGMA key is issued
+   *                        as the first operation after opening the database connection.
+   *                        Required for opening or creating encrypted databases.
    * @throws DatabaseError if database initialization fails
    */
-  constructor(dbPath: string = ':memory:') {
+  constructor(dbPath: string = ':memory:', encryptionKey?: string) {
     try {
       this.db = new Database(dbPath)
       this.statementCache = new Map()
+
+      // CRITICAL: Encryption key must be the FIRST pragma issued
+      // before any other database operations including schema init
+      if (encryptionKey) {
+        this.db.pragma(`key='${encryptionKey}'`)
+      }
 
       // Enable WAL mode for better concurrent read performance
       this.db.pragma('journal_mode = WAL')
@@ -66,7 +75,7 @@ export class DatabaseService {
       // Enable foreign key constraints
       this.db.pragma('foreign_keys = ON')
 
-      // Initialize database schema
+      // Initialize database schema (tables, indexes, FTS5)
       initializeSchema(this.db)
     } catch (error) {
       throw new DatabaseError(
