@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 ## Current Position
 
 Phase: 14 -- Database Selection & Encryption UX
-Plan: --
-Status: Not started
-Last activity: 2026-01-27 -- Phase 13 verified and complete
+Plan: 1 of 2
+Status: In progress
+Last activity: 2026-01-27 -- Completed 14-01-PLAN.md
 
-Progress: ██░░░░░░░░░░░░░░░░░░ 2/12 plans (17%)
+Progress: ███░░░░░░░░░░░░░░░░░ 3/12 plans (25%)
 
 ## Milestone History
 
@@ -26,7 +26,7 @@ Progress: ██░░░░░░░░░░░░░░░░░░ 2/12 plan
 | Phase | Name | Plans | Status |
 |-------|------|-------|--------|
 | 13 | SQLCipher Foundation | 2 | ✓ Complete |
-| 14 | Database Selection & Encryption UX | 2 | Not Started |
+| 14 | Database Selection & Encryption UX | 2 | In Progress (1/2) |
 | 15 | External Links | 2 | Not Started |
 | 16 | Batch Import & ZIP Extraction | 2 | Not Started |
 | 17 | OMIM Data Extraction | 2 | Not Started |
@@ -58,6 +58,10 @@ v0.3.0 decisions (accumulated during milestone):
 | 2 | Keep @types/better-sqlite3 devDependency | TypeScript types are compatible with both libraries (same API surface) | 13 |
 | 3 | String interpolation for PRAGMA key acceptable in Phase 13 | Test-only usage with hardcoded keys; Phase 14 must sanitize user-provided keys | 13 |
 | 4 | PRAGMA key ordering: key → WAL → foreign keys → schema | Encryption key must be first operation after opening database connection | 13 |
+| 5 | Use simple JSON file for recent databases persistence | Avoid electron-store (ESM-only) to keep build simple; JSON sufficient for this use case | 14 |
+| 6 | Implement rollback pattern in switchDatabase | User should never lose database connection on failed switch; critical for robustness | 14 |
+| 7 | Encryption detection via test SELECT query | SQLCipher doesn't mark file headers; only way to detect is attempt to query | 14 |
+| 8 | Keep backward-compatible getDatabaseService wrapper | All existing IPC handlers continue working unchanged; reduces refactoring risk | 14 |
 
 ### Pending Todos
 
@@ -77,14 +81,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Phase 13 verified and complete, ready for Phase 14
+Stopped at: Completed 14-01-PLAN.md execution
 Resume file: None
 
 ## Next Steps
 
-1. Plan Phase 14 (Database Selection & Encryption UX)
-2. Execute Phase 14 plans
-3. Continue through phases 15-18
+1. Execute Phase 14-02 (Database Selection UI)
+2. Continue through phases 15-18
 
 ---
-*Updated: 2026-01-27 after Phase 13 execution and verification*
+*Updated: 2026-01-27 after Phase 14-01 execution*
