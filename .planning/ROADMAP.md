@@ -79,22 +79,22 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 15-01-PLAN.md -- URL builder utility functions for six genomic databases with unit tests and domain allowlist expansion
+- [ ] 15-01-PLAN.md -- URL builder utility functions for six genomic databases (eight functions including search variants) with unit tests and domain allowlist expansion
 - [ ] 15-02-PLAN.md -- Clickable data values in variant table columns as external links with visual indicators and error feedback
 
 **Requirements:**
-- EXTL-01: Variant table rows include clickable icon buttons for gnomAD, ClinVar, and OMIM
+- EXTL-01: Variant table rows include clickable data values linking to gnomAD, ClinVar, and OMIM (the data IS the link, with external-link icon suffix)
 - EXTL-02: gnomAD link opens variant page using `chr-pos-ref-alt` URL format in default browser
-- EXTL-03: ClinVar link opens search using `chr:pos:ref:alt` URL format in default browser
-- EXTL-04: OMIM link opens entry page using MIM number (when available) or gene search in default browser
+- EXTL-03: ClinVar link opens coordinate search using `chr:pos:ref:alt` URL format in default browser (ClinVar ID-based link deferred to Phase 17 when clinvar_id field is added)
+- EXTL-04: OMIM link opens gene search using gene symbol in default browser (direct MIM entry link deferred to Phase 17 when omim_mim_number field is added)
 - EXTL-05: External link URLs are constructed with proper URL encoding of variant data components
 - EXTL-06: Shell openExternal domain allowlist is expanded to include gnomad.broadinstitute.org, ncbi.nlm.nih.gov, and omim.org
 
 **Success Criteria:**
-1. User sees small icon buttons (gnomAD, ClinVar, OMIM) in each variant row of the variant table
-2. User clicks the gnomAD icon and the correct variant page opens in the default browser using the chr-pos-ref-alt URL format
-3. User clicks the ClinVar icon and the correct ClinVar search opens in the default browser
-4. User clicks the OMIM icon and either the direct MIM entry page or a gene search opens in the default browser, depending on available data
+1. User sees clickable data values (position, chr, ClinVar significance, gene symbol) in the variant table with external-link icon suffixes
+2. User clicks the position value and the correct gnomAD variant page opens in the default browser using the chr-pos-ref-alt URL format
+3. User clicks the ClinVar significance chip and a ClinVar coordinate search opens in the default browser using chr:pos:ref:alt format
+4. User clicks the gene symbol and an OMIM gene search opens in the default browser
 5. No non-allowlisted domains can be opened through the external link mechanism
 
 ---
