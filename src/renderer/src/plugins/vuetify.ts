@@ -122,6 +122,9 @@ export default createVuetify({
     },
     VCard: {
       elevation: 2
+    },
+    VTooltip: {
+      contentClass: 'bg-secondary'
     }
   }
 })
