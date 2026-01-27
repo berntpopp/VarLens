@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 ## Current Position
 
-Phase: 9 of 4 (Branding & Theme Foundation)
-Plan: 2 of 2 complete
-Status: Phase verified ✓
-Last activity: 2026-01-27 -- Phase 9 verified (9/9 must-haves passed)
+Phase: 10 of 4 (Logging Infrastructure & Viewer)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-01-27 -- Completed 10-01-PLAN.md
 
-Progress: [██░░░░░░░░] 25%
+Progress: [███░░░░░░░] 30%
 
 ### Phase Overview
 
 | Phase | Name | Status |
 |-------|------|--------|
 | 9 | Branding & Theme Foundation | ✓ Complete (2/2 plans) |
-| 10 | Logging Infrastructure & Viewer | Not Started |
+| 10 | Logging Infrastructure & Viewer | In Progress (1/2 plans) |
 | 11 | Trust Signals -- Disclaimer & FAQ | Not Started |
 | 12 | App Footer Integration | Not Started |
 
@@ -32,8 +32,8 @@ Progress: [██░░░░░░░░] 25%
 ## Performance Metrics
 
 **v0.2.0 Progress:**
-- Plans completed: 2
-- Average duration: 3.5 min
+- Plans completed: 3
+- Average duration: 5.3 min
 - Phases complete: 1 of 4 (25%)
 
 ## Accumulated Context
@@ -64,6 +64,16 @@ Key architectural decisions carried forward:
 | Research language | "research analysis", "pathogenicity classification" (not clinical terminology) | Consistent research positioning throughout UI |
 | Monospace for genomic data | Semantic utility classes for gene symbols, HGVS, coordinates | Enhanced readability of technical data |
 
+**v0.2.0 Decisions (Phase 10-01):**
+
+| Decision | Summary | Impact |
+|----------|---------|--------|
+| Lazy store initialization | getStore() function with null check instead of module-level useLogStore() | Prevents Pinia timing issues where stores accessed before Pinia installed |
+| Capture-time sanitization | Sanitize in LogService.log() before adding to store | Sensitive data never enters store or localStorage, reducing security risk |
+| Circular buffer stats | Keep totalReceived/totalDropped cumulative even when clearing entries | Full usage history preserved for debugging |
+| Setup store pattern | defineStore with setup function (ref/computed/actions) | Better TypeScript inference and composition patterns |
+| Quick pre-checks | Simple regex pre-checks before expensive full patterns | Performance optimization for high-frequency logging |
+
 ### v0.2.0 Design Notes
 
 - Footer (#E5AA94 background) integrates disclaimer status, FAQ trigger, and log viewer toggle
@@ -82,15 +92,15 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T10:03:00Z
-Stopped at: Completed 09-02-PLAN.md (Phase 9 complete)
+Last session: 2026-01-27T09:09:30Z
+Stopped at: Completed 10-01-PLAN.md (Phase 10 Plan 1)
 Resume file: None
 
 ## Next Steps
 
-1. Continue with Phase 10 (Logging Infrastructure & Viewer)
+1. Continue with Phase 10 Plan 02 (LogViewer UI component)
 2. Execute Phase 11 (Trust Signals -- Disclaimer & FAQ)
 3. Complete Phase 12 (App Footer Integration) to wire everything together
 
 ---
-*Updated: 2026-01-27 after Phase 9 Plan 02 completion*
+*Updated: 2026-01-27 after Phase 10 Plan 01 completion*
