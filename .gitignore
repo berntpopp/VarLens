@@ -40,6 +40,9 @@ tmp/
 temp/
 *.tmp
 
+# AppImage extraction artifacts
+squashfs-root/
+
 # Coverage
 coverage/
 
