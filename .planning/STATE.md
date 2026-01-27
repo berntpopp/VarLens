@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 ## Current Position
 
 Phase: 14 -- Database Selection & Encryption UX
-Plan: 1 of 2
-Status: In progress
-Last activity: 2026-01-27 -- Completed 14-01-PLAN.md
+Plan: 2 of 2
+Status: Complete
+Last activity: 2026-01-27 -- Completed 14-02-PLAN.md
 
-Progress: ███░░░░░░░░░░░░░░░░░ 3/12 plans (25%)
+Progress: ████░░░░░░░░░░░░░░░░ 4/12 plans (33%)
 
 ## Milestone History
 
@@ -26,7 +26,7 @@ Progress: ███░░░░░░░░░░░░░░░░░ 3/12 plan
 | Phase | Name | Plans | Status |
 |-------|------|-------|--------|
 | 13 | SQLCipher Foundation | 2 | ✓ Complete |
-| 14 | Database Selection & Encryption UX | 2 | In Progress (1/2) |
+| 14 | Database Selection & Encryption UX | 2 | ✓ Complete (2/2) |
 | 15 | External Links | 2 | Not Started |
 | 16 | Batch Import & ZIP Extraction | 2 | Not Started |
 | 17 | OMIM Data Extraction | 2 | Not Started |
@@ -62,6 +62,7 @@ v0.3.0 decisions (accumulated during milestone):
 | 6 | Implement rollback pattern in switchDatabase | User should never lose database connection on failed switch; critical for robustness | 14 |
 | 7 | Encryption detection via test SELECT query | SQLCipher doesn't mark file headers; only way to detect is attempt to query | 14 |
 | 8 | Keep backward-compatible getDatabaseService wrapper | All existing IPC handlers continue working unchanged; reduces refactoring risk | 14 |
+| 9 | Set VTooltip default contentClass to bg-secondary | Light gray tooltips unreadable on light backgrounds; dark background improves contrast globally | 14 |
 
 ### Pending Todos
 
@@ -81,13 +82,14 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 14-01-PLAN.md execution
+Stopped at: Completed Phase 14 (Database Selection & Encryption UX)
 Resume file: None
 
 ## Next Steps
 
-1. Execute Phase 14-02 (Database Selection UI)
-2. Continue through phases 15-18
+1. Verify Phase 14 completion (database selection UI, encryption workflows)
+2. Plan and execute Phase 15 (External Links)
+3. Continue through phases 16-18
 
 ---
-*Updated: 2026-01-27 after Phase 14-01 execution*
+*Updated: 2026-01-27 after Phase 14-02 execution (Phase 14 complete)*
