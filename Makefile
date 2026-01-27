@@ -1,4 +1,4 @@
-.PHONY: help dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build
+.PHONY: help rebuild dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -18,7 +18,10 @@ help: ## Show this help message
 # Development
 #---------------------------------------------------------------------------
 
-dev: ## Start development server with hot reload
+rebuild: ## Rebuild native modules for Electron (fixes better-sqlite3 version mismatch)
+	npx electron-rebuild -f -w better-sqlite3
+
+dev: rebuild ## Start development server with hot reload
 	npm run dev
 
 preview: ## Preview production build locally
