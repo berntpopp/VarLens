@@ -41,13 +41,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Rebuild native modules for Node.js (tests need Node-compatible binaries)
+        run: npm rebuild better-sqlite3
+
       - name: Run linter
         run: npm run lint:check
 
       - name: Run type check
         run: npm run typecheck
 
-      - name: Run tests (before Electron rebuild)
+      - name: Run tests
         run: npm run test
 
       - name: Rebuild native modules for Electron

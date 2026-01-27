@@ -90,19 +90,22 @@ ci: lint-check typecheck test ## Run all CI checks (lint, typecheck, test)
 ci-full: ## Run FULL CI pipeline (exactly mirrors GitHub Actions)
 	@echo "=== CI Pipeline (mirrors GitHub Actions build.yml) ==="
 	@echo ""
-	@echo "Step 1/5: Installing dependencies..."
+	@echo "Step 1/6: Installing dependencies..."
 	npm ci
 	@echo ""
-	@echo "Step 2/5: Running linter..."
+	@echo "Step 2/6: Rebuilding native modules for Node.js (tests need Node-compatible binaries)..."
+	npm rebuild better-sqlite3
+	@echo ""
+	@echo "Step 3/6: Running linter..."
 	npm run lint:check
 	@echo ""
-	@echo "Step 3/5: Running type check..."
+	@echo "Step 4/6: Running type check..."
 	npm run typecheck
 	@echo ""
-	@echo "Step 4/5: Running tests (before Electron rebuild)..."
+	@echo "Step 5/6: Running tests..."
 	npm run test
 	@echo ""
-	@echo "Step 5/5: Rebuilding native modules for Electron..."
+	@echo "Step 6/6: Rebuilding native modules for Electron..."
 	npm run postinstall
 	@echo ""
 	@echo "=== CI Pipeline PASSED ==="

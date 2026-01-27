@@ -28,28 +28,44 @@ const mockApi = {
 }
 
 // Inject mock API and browser APIs into global window
-global.window = {
-  ...global.window,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  api: mockApi as any,
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-  matchMedia: vi.fn().mockImplementation((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
+Object.defineProperty(global, 'window', {
+  value: {
+    ...global.window,
+    api: mockApi,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn()
-  })),
-  requestAnimationFrame: vi.fn((callback: FrameRequestCallback) => {
-    return setTimeout(() => callback(performance.now()), 0) as unknown as number
-  }),
-  cancelAnimationFrame: vi.fn((id: number) => clearTimeout(id))
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} as any
+    matchMedia: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    })),
+    requestAnimationFrame: vi.fn((callback: FrameRequestCallback) => {
+      return setTimeout(() => callback(performance.now()), 0) as unknown as number
+    }),
+    cancelAnimationFrame: vi.fn((id: number) => clearTimeout(id)),
+    navigator: {
+      userAgent:
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0'
+    }
+  },
+  writable: true,
+  configurable: true
+})
+
+// Also ensure navigator is available at global level
+Object.defineProperty(global, 'navigator', {
+  value: {
+    userAgent:
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0'
+  },
+  writable: true,
+  configurable: true
+})
 
 const vuetify = createVuetify({ components, directives })
 
