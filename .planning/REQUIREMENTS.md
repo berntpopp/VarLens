@@ -21,15 +21,15 @@ Requirements for UI polish, branding, and trust signals milestone.
 
 ### Trust Signals
 
-- [ ] **TRST-01**: User sees a blocking disclaimer dialog on first launch stating research-use-only purpose
-- [ ] **TRST-02**: Disclaimer dialog lists specific limitations (not diagnostic, must be verified, no doctor-patient relationship)
-- [ ] **TRST-03**: User must acknowledge disclaimer before accessing the app
-- [ ] **TRST-04**: Disclaimer acknowledgment persists per app version in localStorage
-- [ ] **TRST-05**: User can re-open disclaimer from footer button at any time
-- [ ] **TRST-06**: User can open FAQ dialog from footer button
-- [ ] **TRST-07**: FAQ dialog displays searchable, categorized Q&A in expansion panels
-- [ ] **TRST-08**: FAQ content is loaded from a JSON configuration file (faqConfig.json)
-- [ ] **TRST-09**: Disclaimer text is configurable via JSON file
+- [x] **TRST-01**: User sees a blocking disclaimer dialog on first launch stating research-use-only purpose
+- [x] **TRST-02**: Disclaimer dialog lists specific limitations (not diagnostic, must be verified, no doctor-patient relationship)
+- [x] **TRST-03**: User must acknowledge disclaimer before accessing the app
+- [x] **TRST-04**: Disclaimer acknowledgment persists per app version in localStorage
+- [x] **TRST-05**: User can re-open disclaimer from footer button at any time
+- [x] **TRST-06**: User can open FAQ dialog from footer button
+- [x] **TRST-07**: FAQ dialog displays searchable, categorized Q&A in expansion panels
+- [x] **TRST-08**: FAQ content is loaded from a JSON configuration file (faqConfig.json)
+- [x] **TRST-09**: Disclaimer text is configurable via JSON file
 
 ### Logging
 
@@ -88,15 +88,15 @@ Deferred to later milestones.
 | CHRM-07 | Phase 12 | Pending |
 | CHRM-08 | Phase 9 | Complete |
 | CHRM-09 | Phase 9 | Complete |
-| TRST-01 | Phase 11 | Pending |
-| TRST-02 | Phase 11 | Pending |
-| TRST-03 | Phase 11 | Pending |
-| TRST-04 | Phase 11 | Pending |
-| TRST-05 | Phase 11 | Pending |
-| TRST-06 | Phase 11 | Pending |
-| TRST-07 | Phase 11 | Pending |
-| TRST-08 | Phase 11 | Pending |
-| TRST-09 | Phase 11 | Pending |
+| TRST-01 | Phase 11 | Complete |
+| TRST-02 | Phase 11 | Complete |
+| TRST-03 | Phase 11 | Complete |
+| TRST-04 | Phase 11 | Complete |
+| TRST-05 | Phase 11 | Complete |
+| TRST-06 | Phase 11 | Complete |
+| TRST-07 | Phase 11 | Complete |
+| TRST-08 | Phase 11 | Complete |
+| TRST-09 | Phase 11 | Complete |
 | LOG-01 | Phase 10 | Complete |
 | LOG-02 | Phase 10 | Complete |
 | LOG-03 | Phase 10 | Complete |

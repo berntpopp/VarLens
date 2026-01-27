@@ -78,8 +78,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 11-01-PLAN.md -- Blocking disclaimer dialog with JSON config, version-gated persistence, VueUse setup
-- [ ] 11-02-PLAN.md -- Searchable FAQ dialog with categorized expansion panels, keyboard shortcuts composable
+- [x] 11-01-PLAN.md -- Blocking disclaimer dialog with JSON config, version-gated persistence, VueUse setup
+- [x] 11-02-PLAN.md -- Searchable FAQ dialog with categorized expansion panels, keyboard shortcuts composable
 
 **Requirements:**
 - TRST-09: Disclaimer text is configurable via JSON file
@@ -135,7 +135,7 @@ Plans:
 |-------|------|--------|--------------|
 | 9 | Branding & Theme Foundation | ✓ Complete | CHRM-08, CHRM-09, CHRM-01 |
 | 10 | Logging Infrastructure & Viewer | ✓ Complete | LOG-01 - LOG-11 |
-| 11 | Trust Signals -- Disclaimer & FAQ | Not Started | TRST-01 - TRST-09 |
+| 11 | Trust Signals -- Disclaimer & FAQ | ✓ Complete | TRST-01 - TRST-09 |
 | 12 | App Footer Integration | Not Started | CHRM-02 - CHRM-07 |
 
 ## Coverage
@@ -151,15 +151,15 @@ Plans:
 | CHRM-07 | Phase 12 | Pending |
 | CHRM-08 | Phase 9 | Complete |
 | CHRM-09 | Phase 9 | Complete |
-| TRST-01 | Phase 11 | Pending |
-| TRST-02 | Phase 11 | Pending |
-| TRST-03 | Phase 11 | Pending |
-| TRST-04 | Phase 11 | Pending |
-| TRST-05 | Phase 11 | Pending |
-| TRST-06 | Phase 11 | Pending |
-| TRST-07 | Phase 11 | Pending |
-| TRST-08 | Phase 11 | Pending |
-| TRST-09 | Phase 11 | Pending |
+| TRST-01 | Phase 11 | Complete |
+| TRST-02 | Phase 11 | Complete |
+| TRST-03 | Phase 11 | Complete |
+| TRST-04 | Phase 11 | Complete |
+| TRST-05 | Phase 11 | Complete |
+| TRST-06 | Phase 11 | Complete |
+| TRST-07 | Phase 11 | Complete |
+| TRST-08 | Phase 11 | Complete |
+| TRST-09 | Phase 11 | Complete |
 | LOG-01 | Phase 10 | Complete |
 | LOG-02 | Phase 10 | Complete |
 | LOG-03 | Phase 10 | Complete |
