@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 ## Current Position
 
-Phase: 15 -- External Links
-Plan: 03 of 3
+Phase: 16 -- Batch Import & ZIP Extraction
+Plan: 02 of 2
 Status: Phase complete
-Last activity: 2026-01-27 -- Completed 15-03-PLAN.md
+Last activity: 2026-01-28 -- Completed 16-02-PLAN.md
 
-Progress: ███████░░░░░░░░░░░░░ 7/13 plans (54%)
+Progress: █████████░░░░░░░░░░░ 9/13 plans (69%)
 
 ## Milestone History
 
@@ -28,7 +28,7 @@ Progress: ███████░░░░░░░░░░░░░ 7/13 plan
 | 13 | SQLCipher Foundation | 2 | ✓ Complete |
 | 14 | Database Selection & Encryption UX | 2 | ✓ Complete (2/2) |
 | 15 | External Links | 3 | ✓ Complete (3/3) |
-| 16 | Batch Import & ZIP Extraction | 2 | Not Started |
+| 16 | Batch Import & ZIP Extraction | 2 | ✓ Complete (2/2) |
 | 17 | OMIM Data Extraction | 2 | Not Started |
 | 18 | Cohort Analysis | 2 | Not Started |
 
@@ -73,6 +73,10 @@ v0.3.0 decisions (accumulated during milestone):
 | 17 | Defaults merging on localStorage load | Merge stored links with built-in defaults to handle app updates with new default links | 15 |
 | 18 | Domain extraction via dummy substitution | Extract domains from URL templates by replacing variables with dummy values then parsing with URL constructor | 15 |
 | 19 | Dynamic v-data-table headers from store | Virtual link columns computed dynamically; headers are reactive to store changes | 15 |
+| 20 | Use adm-zip (pure JS) for ZIP extraction | No native rebuild needed, works across platforms, sufficient for variant file archives | 16 |
+| 21 | Default duplicate strategy 'skip' for ZIP imports | Freshly extracted temp files won't have name collisions; skip is safest default | 16 |
+| 22 | Type cast for adm-zip password API | @types/adm-zip lags behind runtime API; cast is safe and well-documented | 16 |
+| 23 | Idempotent cleanupZipTemp on all exit paths | Ensures no orphaned temp directories even on error or unexpected dialog close | 16 |
 
 ### Pending Todos
 
@@ -91,14 +95,14 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27
-Stopped at: Completed 15-03-PLAN.md (Configurable External Links)
+Last session: 2026-01-28
+Stopped at: Completed 16-02-PLAN.md (Phase 16 complete - Batch Import & ZIP Extraction)
 Resume file: None
 
 ## Next Steps
 
-1. Execute Phase 16-01 (Batch Import Foundation)
-2. Continue through phases 16-18
+1. Execute Phase 17-01 (OMIM Data Extraction)
+2. Continue through phases 17-18
 
 ---
-*Updated: 2026-01-27 after completing Phase 15-03 (Phase 15 complete - 3 plans)*
+*Updated: 2026-01-28 after completing Phase 16-02 (Phase 16 complete - 2 plans)*
