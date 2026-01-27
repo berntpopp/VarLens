@@ -6,6 +6,7 @@ import { resolve } from 'path'
 export default defineConfig({
   plugins: [vue(), vuetify({ autoImport: true })],
   test: {
+    testTimeout: process.env.CI ? 120_000 : 30_000,
     environment: 'happy-dom',
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],
