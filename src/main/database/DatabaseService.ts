@@ -65,7 +65,7 @@ export class DatabaseService {
 
       // CRITICAL: Encryption key must be the FIRST pragma issued
       // before any other database operations including schema init
-      if (encryptionKey) {
+      if (encryptionKey !== undefined && encryptionKey !== '') {
         this.db.pragma(`key='${encryptionKey}'`)
       }
 
