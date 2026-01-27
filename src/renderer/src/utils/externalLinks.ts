@@ -32,7 +32,16 @@ export function buildGnomadUrl(
   build: GenomeBuild
 ): string | null {
   // Strict checks: treat empty string, 0, null, undefined as missing
-  if (!chr || !pos || pos <= 0 || !ref || !alt) {
+  if (
+    chr == null ||
+    chr === '' ||
+    pos == null ||
+    pos <= 0 ||
+    ref == null ||
+    ref === '' ||
+    alt == null ||
+    alt === ''
+  ) {
     return null
   }
 
@@ -53,7 +62,7 @@ export function buildGnomadUrl(
  * @note For future use when ClinVar ID is available in schema (Phase 17+)
  */
 export function buildClinvarUrl(clinvarId: string | null): string | null {
-  if (!clinvarId) {
+  if (clinvarId == null || clinvarId === '') {
     return null
   }
 
@@ -76,7 +85,16 @@ export function buildClinvarSearchUrl(
   ref: string | null,
   alt: string | null
 ): string | null {
-  if (!chr || !pos || pos <= 0 || !ref || !alt) {
+  if (
+    chr == null ||
+    chr === '' ||
+    pos == null ||
+    pos <= 0 ||
+    ref == null ||
+    ref === '' ||
+    alt == null ||
+    alt === ''
+  ) {
     return null
   }
 
@@ -94,7 +112,7 @@ export function buildClinvarSearchUrl(
  * @note For future use when MIM number is available in schema (Phase 17)
  */
 export function buildOmimUrl(mimNumber: string | null): string | null {
-  if (!mimNumber) {
+  if (mimNumber == null || mimNumber === '') {
     return null
   }
 
@@ -109,7 +127,7 @@ export function buildOmimUrl(mimNumber: string | null): string | null {
  * @note Primary OMIM link for Phase 15 (Variant interface has gene_symbol)
  */
 export function buildOmimGeneSearchUrl(geneSymbol: string | null): string | null {
-  if (!geneSymbol) {
+  if (geneSymbol == null || geneSymbol === '') {
     return null
   }
 
@@ -129,7 +147,7 @@ export function buildUcscUrl(
   pos: number | null,
   build: GenomeBuild
 ): string | null {
-  if (!chr || !pos || pos <= 0) {
+  if (chr == null || chr === '' || pos == null || pos <= 0) {
     return null
   }
 
@@ -163,7 +181,16 @@ export function buildVarsomeUrl(
   alt: string | null,
   build: GenomeBuild
 ): string | null {
-  if (!chr || !pos || pos <= 0 || !ref || !alt) {
+  if (
+    chr == null ||
+    chr === '' ||
+    pos == null ||
+    pos <= 0 ||
+    ref == null ||
+    ref === '' ||
+    alt == null ||
+    alt === ''
+  ) {
     return null
   }
 
@@ -194,7 +221,16 @@ export function buildFranklinUrl(
   alt: string | null,
   build: GenomeBuild
 ): string | null {
-  if (!chr || !pos || pos <= 0 || !ref || !alt) {
+  if (
+    chr == null ||
+    chr === '' ||
+    pos == null ||
+    pos <= 0 ||
+    ref == null ||
+    ref === '' ||
+    alt == null ||
+    alt === ''
+  ) {
     return null
   }
 
