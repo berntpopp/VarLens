@@ -46,6 +46,7 @@
     <AppSnackbar ref="snackbarRef" />
     <LogViewer v-model:open="logViewerOpen" />
     <DisclaimerDialog ref="disclaimerRef" @acknowledged="handleDisclaimerAcknowledged" />
+    <FaqDialog ref="faqDialogRef" />
 
     <!-- Floating action button for log viewer (temporary until footer exists) -->
     <v-btn
@@ -64,7 +65,7 @@
 
 <script setup lang="ts">
 /* global window */
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
 import EmptyState from './components/EmptyState.vue'
@@ -74,6 +75,8 @@ import ImportDialog from './components/ImportDialog.vue'
 import AppSnackbar from './components/AppSnackbar.vue'
 import LogViewer from './components/LogViewer.vue'
 import DisclaimerDialog from './components/DisclaimerDialog.vue'
+import FaqDialog from './components/FaqDialog.vue'
+import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { logService } from './services/LogService'
 import type { VariantFilter } from '../../shared/types/api'
 
@@ -83,6 +86,7 @@ const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
 const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
 const disclaimerRef = ref<InstanceType<typeof DisclaimerDialog> | null>(null)
+const faqDialogRef = ref<InstanceType<typeof FaqDialog> | null>(null)
 
 // Sidebar state
 const sidebarOpen = ref(true)
@@ -162,22 +166,19 @@ watch(selectedCaseId, () => {
   hasSort.value = false
 })
 
-// Keyboard shortcut handler for Ctrl+L
-function handleKeydown(e: KeyboardEvent): void {
-  if (e.ctrlKey === true && e.key === 'l') {
-    e.preventDefault() // prevent browser address bar focus
-    logViewerOpen.value = logViewerOpen.value === false
-  }
-}
+// Setup keyboard shortcuts
+useKeyboardShortcuts({
+  onDisclaimer: () => disclaimerRef.value?.show(),
+  onFaq: () => faqDialogRef.value?.show(),
+  onLogViewer: () => { logViewerOpen.value = !logViewerOpen.value }
+})
 
 const handleDisclaimerAcknowledged = (): void => {
   logService.info('Research disclaimer acknowledged', 'App')
 }
 
-// Lifecycle: setup keyboard listener and seed demo logs
+// Lifecycle: seed demo logs on mount
 onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-
   // Seed demo log entries after short delay
   window.setTimeout(() => {
     logService.info('Application started', 'App')
@@ -189,9 +190,5 @@ onMounted(() => {
     // Check disclaimer acknowledgment on startup
     disclaimerRef.value?.checkAndShow()
   }, 500)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeydown)
 })
 </script>
