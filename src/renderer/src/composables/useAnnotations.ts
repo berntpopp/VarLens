@@ -262,6 +262,47 @@ export function useAnnotations() {
     await upsertPerCaseComment(caseId, variantId, chr, pos, ref, alt, null)
   }
 
+  // Set ACMG classification with optimistic update
+  async function setAcmgClassification(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    classification: AcmgClassification | null
+  ): Promise<void> {
+    const key = variantKey(chr, pos, ref, alt)
+    const current = annotationCache.value.get(key)
+    const previousClassification = current?.global?.acmg_classification ?? null
+
+    // Optimistic update
+    if (current) {
+      current.global = {
+        ...current.global,
+        acmg_classification: classification
+      } as VariantAnnotation
+    }
+
+    try {
+      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+        acmg_classification: classification
+      })
+      // Update cache with server response
+      annotationCache.value.set(key, {
+        global: updated,
+        perCase: current?.perCase ?? null
+      })
+    } catch (error) {
+      console.error('Failed to set ACMG classification:', error)
+      // Revert optimistic update
+      if (current) {
+        current.global = {
+          ...current.global,
+          acmg_classification: previousClassification
+        } as VariantAnnotation
+      }
+    }
+  }
+
   // Clear cache (call on case switch)
   function clearCache(): void {
     annotationCache.value.clear()
@@ -282,7 +323,8 @@ export function useAnnotations() {
     upsertGlobalComment,
     upsertPerCaseComment,
     deleteGlobalComment,
-    deletePerCaseComment
+    deletePerCaseComment,
+    setAcmgClassification
   }
 }
 
