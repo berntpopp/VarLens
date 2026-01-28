@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 20 of 24 (Annotation Core)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-01-28 - Completed Phase 19 (Database Foundation) with verification
+Plan: 1 of TBD
+Status: In progress
+Last activity: 2026-01-28 - Completed 20-01 (Annotation Backend)
 
-Progress: [████░░░░░░░░░░░░░░░░] 19/24 phases (79% complete, v0.4.0 in progress)
+Progress: [████░░░░░░░░░░░░░░░░] 20/24 phases (83% complete, v0.4.0 in progress)
 
 ## Milestone History
 
@@ -31,8 +31,8 @@ Progress: [████░░░░░░░░░░░░░░░░] 19/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 2
-- Total execution time: 24.5 minutes (8.5 + 16)
+- Total plans completed: 3
+- Total execution time: 29.5 minutes (8.5 + 16 + 5)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -40,7 +40,7 @@ Progress: [████░░░░░░░░░░░░░░░░] 19/24 p
 | Phase | Plans | Status | Notes |
 |-------|-------|--------|-------|
 | 19. Database Foundation | 2/2 | Complete | Schema + migrations + encrypted DB tests |
-| 20. Annotation Core | TBD | Not started | IPC + CRUD |
+| 20. Annotation Core | 1/TBD | In progress | Plan 01: Backend CRUD + IPC (5min) |
 | 21. API Service Layer | TBD | Not started | VEP + HPO clients |
 | 22. Case Metadata | TBD | Not started | Status + cohorts + HPO |
 | 23. Side Panel UI | TBD | Not started | Drawer + tabs + UI |
@@ -64,6 +64,8 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | PRAGMA user_version migrations | Version-tracked schema upgrades, no migrations table | v0.4.0+ schema evolution |
 | Separate global/per-case annotations | variant_annotations has no FK to variants | Annotations persist across cases |
 | Temp file testing pattern | Real encrypted temp DBs with cleanup for SQLCipher tests | Test patterns for encrypted databases |
+| Atomic annotation upsert | INSERT ON CONFLICT DO UPDATE with COALESCE | Race-free partial updates (20-01) |
+| Boolean to INTEGER conversion | IPC layer converts boolean to 0/1 for SQLite | Clear separation of concerns (20-01) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -89,9 +91,9 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-28 - Phase 19 execution and verification
-Stopped at: Phase 19 complete with verification passed
+Last session: 2026-01-28 - Phase 20 Plan 01 execution
+Stopped at: Completed 20-01-PLAN.md (Annotation Backend)
 Resume file: None
 
 ---
-*Next step: `/gsd:discuss-phase 20` or `/gsd:plan-phase 20` for Annotation Core*
+*Next step: Continue Phase 20 planning/execution or move to Phase 21*
