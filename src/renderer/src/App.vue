@@ -31,25 +31,42 @@
     </v-navigation-drawer>
 
     <v-main>
-      <EmptyState v-if="!selectedCaseId" :has-cases="caseCount > 0" @import="handleImportClick" />
-      <template v-else>
-        <FilterToolbar
-          :case-id="selectedCaseId"
-          :case-name="selectedCaseName"
-          :filtered-count="filteredCount"
-          :total-count="totalCount"
-          :has-sort="hasSort"
-          @update:filters="handleFiltersUpdate"
-          @reset-sort="handleResetSort"
-        />
-        <VariantTable
-          ref="variantTableRef"
-          :case-id="selectedCaseId"
-          :filters="currentFilters"
-          @update:counts="handleCountsUpdate"
-          @update:has-sort="handleSortUpdate"
-        />
-      </template>
+      <v-tabs v-model="activeTab" bg-color="surface-variant" density="compact" class="border-b">
+        <v-tab value="case" prepend-icon="mdi-account">Case Analysis</v-tab>
+        <v-tab value="cohort" prepend-icon="mdi-account-group">Cohort Analysis</v-tab>
+      </v-tabs>
+
+      <v-window v-model="activeTab">
+        <v-window-item value="case">
+          <EmptyState
+            v-if="!selectedCaseId"
+            :has-cases="caseCount > 0"
+            @import="handleImportClick"
+          />
+          <template v-else>
+            <FilterToolbar
+              :case-id="selectedCaseId"
+              :case-name="selectedCaseName"
+              :filtered-count="filteredCount"
+              :total-count="totalCount"
+              :has-sort="hasSort"
+              @update:filters="handleFiltersUpdate"
+              @reset-sort="handleResetSort"
+            />
+            <VariantTable
+              ref="variantTableRef"
+              :case-id="selectedCaseId"
+              :filters="currentFilters"
+              @update:counts="handleCountsUpdate"
+              @update:has-sort="handleSortUpdate"
+            />
+          </template>
+        </v-window-item>
+
+        <v-window-item value="cohort">
+          <CohortView ref="cohortViewRef" />
+        </v-window-item>
+      </v-window>
     </v-main>
 
     <AppFooter
@@ -88,6 +105,7 @@ import DisclaimerDialog from './components/DisclaimerDialog.vue'
 import FaqDialog from './components/FaqDialog.vue'
 import DatabasePicker from './components/DatabasePicker.vue'
 import ExternalLinksSettings from './components/ExternalLinksSettings.vue'
+import CohortView from './components/CohortView.vue'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useVersionGating } from './composables/useVersionGating'
 import { useDatabaseStore } from './stores/databaseStore'
@@ -106,6 +124,7 @@ const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
 const disclaimerRef = ref<InstanceType<typeof DisclaimerDialog> | null>(null)
 const faqDialogRef = ref<InstanceType<typeof FaqDialog> | null>(null)
 const externalLinksSettingsRef = ref<InstanceType<typeof ExternalLinksSettings> | null>(null)
+const cohortViewRef = ref<InstanceType<typeof CohortView> | null>(null)
 
 // Sidebar state
 const sidebarOpen = ref(true)
@@ -115,6 +134,9 @@ const logViewerOpen = ref(false)
 
 // Disclaimer acknowledgment state (reactive, passed to AppFooter)
 const disclaimerAcknowledged = ref(false)
+
+// Tab state
+const activeTab = ref<'case' | 'cohort'>('case')
 
 // Case selection state
 const selectedCaseId = ref<number | null>(null)
@@ -212,6 +234,13 @@ watch(selectedCaseId, () => {
   hasSort.value = false
 })
 
+// Refresh cohort data when switching to cohort tab
+watch(activeTab, async (newTab) => {
+  if (newTab === 'cohort') {
+    await cohortViewRef.value?.refresh()
+  }
+})
+
 // Clear UI state when database path changes
 watch(
   () => databaseStore.currentPath,
@@ -222,6 +251,7 @@ watch(
     filteredCount.value = 0
     totalCount.value = 0
     hasSort.value = false
+    activeTab.value = 'case'
   }
 )
 
