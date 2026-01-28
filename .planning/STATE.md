@@ -73,6 +73,8 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Delete as null-upsert wrapper | Delete comment methods call upsert with null | Preserves other annotation fields (20-03) |
 | Emit-based component communication | AcmgMenu/CommentDialog emit events, caller handles persistence | Clean separation, testable components (20-04) |
 | Slot-based activator pattern | Menu uses slot for custom activator element | Flexible UI integration (20-04) |
+| Per-case starred and ACMG | Stars and ACMG classification stored in case_variant_annotations, not variant_annotations | Different cases can classify same variant differently (post-UAT fix) |
+| Schema migration v3 | Added starred, acmg_classification, acmg_evidence columns to case_variant_annotations | Supports per-case annotation workflow |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -93,14 +95,14 @@ None yet (v0.4.0 just started).
 **v0.4.0 critical considerations:**
 - ✅ Foreign keys verified ON with test guard (Phase 19-02)
 - ✅ Schema migration tested on encrypted databases (Phase 19-02)
+- ✅ ACMG and starred are per-case (post-UAT design change, migration v3)
 - VEP API platform transition in 2026 may break response parsing
-- ACMG evidence vs classification model must be correct upfront (cannot easily retrofit)
 
 ## Session Continuity
 
-Last session: 2026-01-28 - Phase 20 Plan 04 execution
-Stopped at: Completed 20-04-PLAN.md (ACMG Menu and Comment Dialog UI)
+Last session: 2026-01-28 - Phase 20 UAT and design fix
+Stopped at: Completed Phase 20 with per-case starred/ACMG fix (schema migration v3)
 Resume file: None
 
 ---
-*Next step: Phase 21 (API Service Layer) or Phase 22 (Case Metadata)*
+*Next step: Phase 21 (API Service Layer)*
