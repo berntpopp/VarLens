@@ -2,7 +2,7 @@
  * Tests for VepApiClient
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import nock from 'nock'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { tmpdir } from 'os'

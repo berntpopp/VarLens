@@ -74,7 +74,17 @@ export class VepApiClient {
 
     // Retry handling for 429 responses with exponential backoff
     this.limiter.on('failed', async (error, jobInfo) => {
-      if (error && error.message && error.message.includes('429') && jobInfo.retryCount < 3) {
+      // Check if error has a message property containing '429'
+      const errorMessage =
+        error !== null &&
+        error !== undefined &&
+        typeof error === 'object' &&
+        'message' in error &&
+        typeof (error as { message: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : ''
+
+      if (errorMessage.includes('429') && jobInfo.retryCount < 3) {
         // Exponential backoff: 1s, 2s, 4s
         const delay = Math.min(1000 * Math.pow(2, jobInfo.retryCount), 8000)
         // Add jitter: 50-100% of delay to spread retries
@@ -160,7 +170,13 @@ export class VepApiClient {
       }
 
       // Handle validation errors
-      if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      if (
+        error !== null &&
+        error !== undefined &&
+        typeof error === 'object' &&
+        'name' in error &&
+        error.name === 'ZodError'
+      ) {
         return {
           success: false,
           error: 'Invalid VEP response format',
@@ -204,7 +220,7 @@ export class VepApiClient {
 
     // Check for rate limit response
     if (response.status === 429) {
-      const retryAfter = response.headers.get('Retry-After') || 'unknown'
+      const retryAfter = response.headers.get('Retry-After') ?? 'unknown'
       throw new Error(`429:${retryAfter}`)
     }
 
@@ -261,12 +277,12 @@ export class VepApiClient {
     if (!transcripts || transcripts.length === 0) return null
 
     // Priority 1: MANE Select transcript (clinically preferred)
-    const maneSelect = transcripts.find((tc) => tc.mane_select)
-    if (maneSelect) return maneSelect
+    const maneSelect = transcripts.find((tc) => tc.mane_select !== undefined)
+    if (maneSelect !== undefined) return maneSelect
 
     // Priority 2: Canonical transcript
     const canonical = transcripts.find((tc) => tc.canonical === 1)
-    if (canonical) return canonical
+    if (canonical !== undefined) return canonical
 
     // Priority 3: First transcript
     return transcripts[0]
