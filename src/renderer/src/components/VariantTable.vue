@@ -115,6 +115,19 @@
         <span v-else class="gene-symbol">{{ value ?? '--' }}</span>
       </template>
 
+      <!-- OMIM MIM number with clickable link to OMIM entry -->
+      <template #[`item.omim_mim_number`]="{ value }">
+        <span
+          v-if="value && buildOmimEntryUrl(value)"
+          class="external-link"
+          @click="openExternalLink(buildOmimEntryUrl(value)!, $event)"
+        >
+          {{ value }}
+          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+        </span>
+        <span v-else class="text-grey">&mdash;</span>
+      </template>
+
       <!-- Consequence (handle null) -->
       <template #[`item.consequence`]="{ value }">
         {{ (value ?? null) !== null ? value.replace(/_/g, ' ') : '-' }}
@@ -216,7 +229,7 @@ import type {
   SortItem
 } from '../../../shared/types/api'
 import { useExternalLinksStore, type ExternalLinkConfig } from '../stores/externalLinksStore'
-import { resolveUrlTemplate, type VariantLinkData } from '../utils/externalLinks'
+import { resolveUrlTemplate, buildOmimUrl, type VariantLinkData } from '../utils/externalLinks'
 
 interface Props {
   caseId: number
@@ -263,6 +276,7 @@ const headers = computed(() => {
     { title: 'Alt', key: 'alt', sortable: false, width: '100px' },
     { title: 'GT', key: 'gt_num', sortable: true },
     { title: 'Gene', key: 'gene_symbol', sortable: true },
+    { title: 'OMIM', key: 'omim_mim_number', sortable: true, width: '100px' },
     { title: 'Func', key: 'func', sortable: true },
     { title: 'Consequence', key: 'consequence', sortable: true },
     { title: 'Transcript', key: 'transcript', sortable: true },
@@ -291,8 +305,13 @@ const getVariantLinkData = (item: Variant): VariantLinkData => ({
   pos: item.pos,
   ref: item.ref,
   alt: item.alt,
-  gene_symbol: item.gene_symbol ?? null
+  gene_symbol: item.gene_symbol ?? null,
+  mim_number: item.omim_mim_number ?? null
 })
+
+const buildOmimEntryUrl = (mimNumber: string | null): string | null => {
+  return buildOmimUrl(mimNumber)
+}
 
 const resolveLink = (linkId: string, item: Variant): string | null => {
   const link = linksStore.enabledLinks.find((l) => l.id === linkId)

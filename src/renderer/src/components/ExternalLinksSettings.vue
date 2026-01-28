@@ -293,6 +293,7 @@ const getColumnLabel = (column: LinkColumn): string => {
     chr: 'Chr',
     clinvar: 'ClinVar',
     gene_symbol: 'Gene',
+    omim_mim_number: 'OMIM',
     virtual: 'Column'
   }
   return labels[column]
