@@ -27,43 +27,40 @@ function getVepClient(): VepApiClient {
  * Fetch VEP annotation for a variant
  * Checks network status and returns cached data if offline
  */
-ipcMain.handle(
-  'vep:fetch',
-  async (_event, chr: string, pos: number, ref: string, alt: string) => {
-    return wrapHandler(async () => {
-      const client = getVepClient()
-      const isOnline = networkStatus.getStatus()
+ipcMain.handle('vep:fetch', async (_event, chr: string, pos: number, ref: string, alt: string) => {
+  return wrapHandler(async () => {
+    const client = getVepClient()
+    const isOnline = networkStatus.getStatus()
 
-      // If offline, try to get cached data
-      if (!isOnline) {
-        const normalizedChr = normalizeChromosome(chr)
-        const cacheKey = `vep:${normalizedChr}:${pos}:${ref}:${alt}`
-        const cached = client.getCached(cacheKey)
+    // If offline, try to get cached data
+    if (!isOnline) {
+      const normalizedChr = normalizeChromosome(chr)
+      const cacheKey = `vep:${normalizedChr}:${pos}:${ref}:${alt}`
+      const cached = client.getCached(cacheKey)
 
-        if (cached) {
-          return {
-            success: true,
-            data: cached.data,
-            cacheInfo: {
-              cached: true,
-              cachedAt: cached.createdAt
-            }
-          }
-        }
-
-        // No cache available while offline
+      if (cached) {
         return {
-          success: false,
-          error: 'No network connection and no cached data available',
-          offline: true
+          success: true,
+          data: cached.data,
+          cacheInfo: {
+            cached: true,
+            cachedAt: cached.createdAt
+          }
         }
       }
 
-      // Online - fetch normally (will use cache if available)
-      return await client.fetchVariantAnnotation(chr, pos, ref, alt)
-    })
-  }
-)
+      // No cache available while offline
+      return {
+        success: false,
+        error: 'No network connection and no cached data available',
+        offline: true
+      }
+    }
+
+    // Online - fetch normally (will use cache if available)
+    return await client.fetchVariantAnnotation(chr, pos, ref, alt)
+  })
+})
 
 /**
  * Cancel pending VEP request

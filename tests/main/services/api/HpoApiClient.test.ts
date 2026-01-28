@@ -85,12 +85,7 @@ describe('HpoApiClient', () => {
     nock('https://clinicaltables.nlm.nih.gov')
       .get('/api/hpo/v3/search')
       .query({ terms: 'ataxia', count: '20', df: 'id,name' })
-      .reply(200, [
-        1,
-        ['HP:0001251'],
-        null,
-        [['HP:0001251', 'Ataxia']]
-      ])
+      .reply(200, [1, ['HP:0001251'], null, [['HP:0001251', 'Ataxia']]])
 
     const result1 = await client.search('ataxia')
     expect(result1.success).toBe(true)
@@ -148,12 +143,7 @@ describe('HpoApiClient', () => {
     nock('https://clinicaltables.nlm.nih.gov')
       .get('/api/hpo/v3/search')
       .query({ terms: 'tremor', count: '20', df: 'id,name' })
-      .reply(200, [
-        1,
-        ['HP:0001337'],
-        null,
-        [['HP:0001337', 'Tremor']]
-      ])
+      .reply(200, [1, ['HP:0001337'], null, [['HP:0001337', 'Tremor']]])
 
     await client.search('tremor')
 

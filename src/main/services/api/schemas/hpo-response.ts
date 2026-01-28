@@ -14,7 +14,7 @@ import { z } from 'zod'
  */
 export const HpoTermTupleSchema = z.tuple([
   z.string(), // HPO ID (e.g., "HP:0001250")
-  z.string(), // Term name (e.g., "Seizure")
+  z.string() // Term name (e.g., "Seizure")
 ])
 
 /**
@@ -25,7 +25,7 @@ export const HpoAutocompleteResponseSchema = z.tuple([
   z.number(), // Total count of matching terms
   z.array(z.string()), // Array of HPO IDs (for quick lookup)
   z.null(), // Extra data (always null for HPO API)
-  z.array(HpoTermTupleSchema), // Array of [id, name] tuples
+  z.array(HpoTermTupleSchema) // Array of [id, name] tuples
 ])
 
 export type HpoAutocompleteResponse = z.infer<typeof HpoAutocompleteResponseSchema>
