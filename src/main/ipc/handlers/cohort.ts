@@ -24,3 +24,22 @@ ipcMain.handle('cohort:summary', async (_event) => {
     return cohortService.getCohortSummary()
   })
 })
+
+ipcMain.handle(
+  'cohort:carriers',
+  async (_event, chr: string, pos: number, ref: string, alt: string) => {
+    return wrapHandler(async () => {
+      const db = getDatabaseService()
+      const cohortService = new CohortService(db.database)
+      return cohortService.getCarriers(chr, pos, ref, alt)
+    })
+  }
+)
+
+ipcMain.handle('cohort:geneBurden', async (_event) => {
+  return wrapHandler(async () => {
+    const db = getDatabaseService()
+    const cohortService = new CohortService(db.database)
+    return cohortService.getGeneBurden()
+  })
+})

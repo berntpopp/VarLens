@@ -9,7 +9,13 @@ import type {
 } from '../../main/database/types'
 import type { ProgressUpdate, ImportResult } from '../../main/import/types'
 import type { SerializableError } from './errors'
-import type { CohortVariant, CohortSummary, CohortSearchParams } from './cohort'
+import type {
+  CohortVariant,
+  CohortSummary,
+  CohortSearchParams,
+  CohortCarrier,
+  GeneBurden
+} from './cohort'
 
 // Re-export for convenience
 export type {
@@ -172,6 +178,8 @@ export interface CohortAPI {
     params: CohortSearchParams
   ) => Promise<{ data: CohortVariant[]; total_count: number }>
   getSummary: () => Promise<CohortSummary>
+  getCarriers: (chr: string, pos: number, ref: string, alt: string) => Promise<CohortCarrier[]>
+  getGeneBurden: () => Promise<GeneBurden[]>
 }
 
 export interface WindowAPI {

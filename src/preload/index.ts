@@ -123,7 +123,10 @@ const api = {
 
   cohort: {
     getVariants: (params: CohortSearchParams) => ipcRenderer.invoke('cohort:variants', params),
-    getSummary: () => ipcRenderer.invoke('cohort:summary')
+    getSummary: () => ipcRenderer.invoke('cohort:summary'),
+    getCarriers: (chr: string, pos: number, ref: string, alt: string) =>
+      ipcRenderer.invoke('cohort:carriers', chr, pos, ref, alt),
+    getGeneBurden: () => ipcRenderer.invoke('cohort:geneBurden')
   }
 }
 

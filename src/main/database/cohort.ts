@@ -6,7 +6,13 @@
 
 import type Database from 'better-sqlite3-multiple-ciphers'
 import type { Statement } from 'better-sqlite3-multiple-ciphers'
-import type { CohortVariant, CohortSummary, CohortSearchParams } from '../../shared/types/cohort'
+import type {
+  CohortVariant,
+  CohortSummary,
+  CohortSearchParams,
+  CohortCarrier,
+  GeneBurden
+} from '../../shared/types/cohort'
 
 /**
  * Sortable columns for cohort queries
@@ -74,15 +80,50 @@ export class CohortService {
       return { data: [], total_count: 0 }
     }
 
-    // Build WHERE clause for search
+    // Build WHERE clause for search with hybrid strategy
     const whereConditions: string[] = []
     const params_array: (string | number)[] = []
 
     if (params.search_term !== undefined && params.search_term !== '') {
-      // Simple search on gene_symbol or chr:pos format
-      whereConditions.push('(gene_symbol LIKE ? OR chr || ":" || pos LIKE ?)')
-      const searchPattern = `%${params.search_term}%`
-      params_array.push(searchPattern, searchPattern)
+      const term = params.search_term.trim()
+
+      // Pattern detection for search strategy
+      const geneSymbolPattern = /^[A-Z][A-Z0-9]+$/i
+      const genomicPosPattern = /^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i
+      const hgvsPattern = /^[cp]\./
+
+      if (geneSymbolPattern.test(term)) {
+        // Gene symbol search via FTS5
+        // Escape FTS5 special characters by wrapping in double quotes
+        let ftsQuery = term
+        if (term.includes('-') || term.includes('*') || term.includes('"')) {
+          // Escape internal quotes and wrap in quotes
+          ftsQuery = `"${term.replace(/"/g, '""')}"`
+        }
+        // Append * for prefix matching
+        ftsQuery = `${ftsQuery}*`
+        whereConditions.push('id IN (SELECT rowid FROM variants_fts WHERE gene_symbol MATCH ?)')
+        params_array.push(ftsQuery)
+      } else if (genomicPosPattern.test(term)) {
+        // Genomic position search (chr:pos)
+        const match = term.match(genomicPosPattern)
+        if (match !== null) {
+          const chr = match[1] // Already normalized (no 'chr' prefix)
+          const pos = parseInt(match[2], 10)
+          whereConditions.push('chr = ? AND pos = ?')
+          params_array.push(chr, pos)
+        }
+      } else if (hgvsPattern.test(term)) {
+        // HGVS notation search
+        const searchPattern = `%${term}%`
+        whereConditions.push('(cdna LIKE ? OR aa_change LIKE ?)')
+        params_array.push(searchPattern, searchPattern)
+      } else {
+        // Fallback: broad LIKE search
+        const searchPattern = `%${term}%`
+        whereConditions.push('(gene_symbol LIKE ? OR cdna LIKE ? OR aa_change LIKE ?)')
+        params_array.push(searchPattern, searchPattern, searchPattern)
+      }
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
@@ -167,7 +208,9 @@ export class CohortService {
 
     // Genes with variants
     const genesResult = this.db
-      .prepare('SELECT COUNT(DISTINCT gene_symbol) as count FROM variants WHERE gene_symbol IS NOT NULL')
+      .prepare(
+        'SELECT COUNT(DISTINCT gene_symbol) as count FROM variants WHERE gene_symbol IS NOT NULL'
+      )
       .get() as { count: number }
     const genesWithVariants = genesResult.count
 
@@ -181,6 +224,58 @@ export class CohortService {
       avg_variants_per_case: avgVariantsPerCase,
       genes_with_variants: genesWithVariants
     }
+  }
+
+  /**
+   * Get carriers for a specific variant
+   *
+   * Returns individual cases carrying the variant with case name and zygosity.
+   *
+   * @param chr - Chromosome
+   * @param pos - Genomic position
+   * @param ref - Reference allele
+   * @param alt - Alternate allele
+   * @returns Array of carriers with case ID, name, and genotype
+   */
+  getCarriers(chr: string, pos: number, ref: string, alt: string): CohortCarrier[] {
+    const sql = `
+      SELECT
+        v.case_id,
+        c.name as case_name,
+        v.gt_num
+      FROM variants v
+      JOIN cases c ON v.case_id = c.id
+      WHERE v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?
+      ORDER BY c.name
+    `
+
+    const stmt = this.getStatement(sql)
+    return stmt.all(chr, pos, ref, alt) as CohortCarrier[]
+  }
+
+  /**
+   * Get gene-level burden analysis
+   *
+   * Returns per-gene aggregation showing variant counts and affected case counts.
+   *
+   * @returns Array of gene burden data sorted by affected cases descending
+   */
+  getGeneBurden(): GeneBurden[] {
+    const sql = `
+      SELECT
+        gene_symbol,
+        COUNT(*) as variant_count,
+        COUNT(DISTINCT chr || ':' || pos || ':' || ref || ':' || alt) as unique_variant_count,
+        COUNT(DISTINCT case_id) as affected_case_count,
+        (SELECT COUNT(*) FROM cases) as total_cases
+      FROM variants
+      WHERE gene_symbol IS NOT NULL AND gene_symbol != ''
+      GROUP BY gene_symbol
+      ORDER BY affected_case_count DESC, variant_count DESC
+    `
+
+    const stmt = this.getStatement(sql)
+    return stmt.all() as GeneBurden[]
   }
 
   /**
