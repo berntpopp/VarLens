@@ -41,7 +41,7 @@ Transforms Varlens from a single-sample viewer into a cohort analysis platform w
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 19: Database Foundation** - Schema, migration, encrypted DB testing ✓
-- [ ] **Phase 20: Annotation Core** - IPC handlers, comments, stars, ACMG classification
+- [x] **Phase 20: Annotation Core** - IPC handlers, comments, stars, ACMG classification ✓
 - [ ] **Phase 21: API Service Layer** - VEP + HPO clients, caching, rate limiting, offline detection
 - [ ] **Phase 22: Case Metadata** - Status, cohorts, HPO terms, UI
 - [ ] **Phase 23: Side Panel UI** - Drawer, tabs, annotation editing, VEP display, external links
@@ -90,8 +90,8 @@ Plans:
 Plans:
 - [x] 20-01-PLAN.md — Backend: IPC handlers + DatabaseService annotation methods ✓
 - [x] 20-02-PLAN.md — Frontend: VariantTable star + ACMG columns, useAnnotations composable ✓
-- [ ] 20-03-PLAN.md — Gap closure: Extend useAnnotations with comment and ACMG mutation methods
-- [ ] 20-04-PLAN.md — Gap closure: AcmgMenu and CommentDialog UI components
+- [x] 20-03-PLAN.md — Gap closure: Extend useAnnotations with comment and ACMG mutation methods ✓
+- [x] 20-04-PLAN.md — Gap closure: AcmgMenu and CommentDialog UI components ✓
 
 ### Phase 21: API Service Layer
 **Goal**: VEP and HPO API clients provide enriched annotation data with SQLite caching, rate limiting, and graceful offline degradation.
@@ -186,11 +186,11 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 19. Database Foundation | 2/2 | ✓ Complete | 2026-01-28 |
-| 20. Annotation Core | 2/4 | In progress | - |
+| 20. Annotation Core | 4/4 | ✓ Complete | 2026-01-28 |
 | 21. API Service Layer | 0/3 | Ready | - |
 | 22. Case Metadata | 0/TBD | Not started | - |
 | 23. Side Panel UI | 0/TBD | Not started | - |
 | 24. Custom Tags + HPO Autocomplete | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-01-28 — Phase 20 gap closure plans added*
+*Last updated: 2026-01-28 — Phase 20 complete*

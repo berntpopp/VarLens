@@ -9,19 +9,19 @@ Requirements for v0.4.0 — Variant Annotation & Case Metadata. Each maps to roa
 
 ### Annotation Storage
 
-- [ ] **ANNOT-01**: User can add a global comment to any variant (persists across all cases containing that variant)
-- [ ] **ANNOT-02**: User can add a per-case comment to a variant (specific to one case's context)
-- [ ] **ANNOT-03**: User can edit and delete existing comments (global and per-case)
-- [ ] **ANNOT-04**: All comments display creation and last-updated timestamps
-- [ ] **ANNOT-05**: User can star/flag a variant to mark it as interesting (toggle on/off)
-- [ ] **ANNOT-06**: User can assign ACMG 5-tier classification to a variant (Pathogenic, Likely Pathogenic, VUS, Likely Benign, Benign)
-- [ ] **ANNOT-07**: ACMG classification displays with color-coded badges in variant table rows
+- [x] **ANNOT-01**: User can add a global comment to any variant (persists across all cases containing that variant)
+- [x] **ANNOT-02**: User can add a per-case comment to a variant (specific to one case's context)
+- [x] **ANNOT-03**: User can edit and delete existing comments (global and per-case)
+- [x] **ANNOT-04**: All comments display creation and last-updated timestamps
+- [x] **ANNOT-05**: User can star/flag a variant to mark it as interesting (toggle on/off)
+- [x] **ANNOT-06**: User can assign ACMG 5-tier classification to a variant (Pathogenic, Likely Pathogenic, VUS, Likely Benign, Benign)
+- [x] **ANNOT-07**: ACMG classification displays with color-coded badges in variant table rows
 - [ ] **ANNOT-08**: User can create custom tags with name and color
 - [ ] **ANNOT-09**: User can assign multiple custom tags to any variant (per-case)
 - [ ] **ANNOT-10**: User can manage tags (rename, delete, recolor) in a settings view
 - [ ] **ANNOT-11**: User can filter variant table by star/flag status, ACMG classification, and custom tags
-- [ ] **ANNOT-12**: Annotations are preserved when database is closed and reopened
-- [ ] **ANNOT-13**: Deleting a case cascades deletion of that case's per-case annotations
+- [x] **ANNOT-12**: Annotations are preserved when database is closed and reopened
+- [x] **ANNOT-13**: Deleting a case cascades deletion of that case's per-case annotations
 
 ### Variant Details Panel
 
@@ -104,19 +104,19 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ANNOT-01 | Phase 20 | Pending |
-| ANNOT-02 | Phase 20 | Pending |
-| ANNOT-03 | Phase 20 | Pending |
-| ANNOT-04 | Phase 20 | Pending |
-| ANNOT-05 | Phase 20 | Pending |
-| ANNOT-06 | Phase 20 | Pending |
-| ANNOT-07 | Phase 20 | Pending |
+| ANNOT-01 | Phase 20 | Complete |
+| ANNOT-02 | Phase 20 | Complete |
+| ANNOT-03 | Phase 20 | Complete |
+| ANNOT-04 | Phase 20 | Complete |
+| ANNOT-05 | Phase 20 | Complete |
+| ANNOT-06 | Phase 20 | Complete |
+| ANNOT-07 | Phase 20 | Complete |
 | ANNOT-08 | Phase 24 | Pending |
 | ANNOT-09 | Phase 24 | Pending |
 | ANNOT-10 | Phase 24 | Pending |
 | ANNOT-11 | Phase 24 | Pending |
-| ANNOT-12 | Phase 20 | Pending |
-| ANNOT-13 | Phase 20 | Pending |
+| ANNOT-12 | Phase 20 | Complete |
+| ANNOT-13 | Phase 20 | Complete |
 | PANEL-01 | Phase 23 | Pending |
 | PANEL-02 | Phase 23 | Pending |
 | PANEL-03 | Phase 21 | Pending |
@@ -160,4 +160,4 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-28 — Phase 19 requirements marked complete*
+*Last updated: 2026-01-28 — Phase 20 requirements marked complete*
