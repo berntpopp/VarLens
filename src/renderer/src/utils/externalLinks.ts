@@ -251,6 +251,7 @@ export interface VariantLinkData {
   ref: string | null
   alt: string | null
   gene_symbol: string | null
+  mim_number: string | null // OMIM MIM number for direct entry links
 }
 
 /**
@@ -273,7 +274,8 @@ export function resolveUrlTemplate(
     pos: data.pos,
     ref: data.ref,
     alt: data.alt,
-    gene: data.gene_symbol
+    gene: data.gene_symbol,
+    mim_number: data.mim_number
   }
 
   // Check required fields are present and valid
@@ -296,6 +298,7 @@ export function resolveUrlTemplate(
     ref: encodeURIComponent(data.ref ?? ''),
     alt: encodeURIComponent(data.alt ?? ''),
     gene: encodeURIComponent(data.gene_symbol ?? ''),
+    mim_number: encodeURIComponent(data.mim_number ?? ''),
     build: build,
     build_ucsc: buildUcsc,
     dataset_gnomad: datasetGnomad,

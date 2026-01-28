@@ -10,7 +10,7 @@ import type { GenomeBuild } from '../utils/externalLinks'
 const STORAGE_KEY = 'varlens_external_links'
 
 /** Where a link appears in the variant table */
-export type LinkColumn = 'pos' | 'chr' | 'clinvar' | 'gene_symbol' | 'virtual'
+export type LinkColumn = 'pos' | 'chr' | 'clinvar' | 'gene_symbol' | 'omim_mim_number' | 'virtual'
 
 /** Configuration for a single external link */
 export interface ExternalLinkConfig {
@@ -61,15 +61,6 @@ function getDefaultLinks(): ExternalLinkConfig[] {
       urlTemplate: 'https://www.ncbi.nlm.nih.gov/clinvar/?term={chr}%3A{pos}%3A{ref}%3A{alt}',
       column: 'clinvar',
       requiredFields: ['chr', 'pos', 'ref', 'alt'],
-      enabled: true,
-      isBuiltIn: true
-    },
-    {
-      id: 'omim',
-      name: 'OMIM',
-      urlTemplate: 'https://omim.org/search?search={gene}',
-      column: 'gene_symbol',
-      requiredFields: ['gene'],
       enabled: true,
       isBuiltIn: true
     },
