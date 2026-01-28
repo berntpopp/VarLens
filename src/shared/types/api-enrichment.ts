@@ -4,7 +4,10 @@
  * Used for VEP and HPO API responses in IPC communication
  */
 
-import type { VepResponse } from '../../main/services/api/schemas/vep-response'
+import type {
+  VepResponse,
+  VepTranscriptConsequence
+} from '../../main/services/api/schemas/vep-response'
 import type { HpoTerm } from '../../main/services/api/schemas/hpo-response'
 
 /**
@@ -27,6 +30,8 @@ export type VepFetchResult =
       success: true
       data: VepResponse
       cacheInfo: CacheInfo
+      preferredTranscript: VepTranscriptConsequence | null
+      allTranscripts: VepTranscriptConsequence[]
     }
   | {
       success: false
