@@ -132,10 +132,12 @@ Plans:
   6. Case metadata (status, cohorts, HPO terms) displays in case list and case header
   7. Deleting a case cascades deletion of its metadata, cohort links, and phenotype associations
 
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 22-01: TBD
+- [ ] 22-01-PLAN.md — Backend: DatabaseService + IPC handlers for case metadata, cohorts, HPO terms
+- [ ] 22-02-PLAN.md — Frontend: useCaseMetadata composable, StatusSelector, CohortCombobox
+- [ ] 22-03-PLAN.md — UI Integration: CaseMetadataCard, HpoTermSelector, CaseList enhancement
 
 ### Phase 23: Side Panel UI
 **Goal**: Variant details side panel displays all database annotations, comments, ACMG classification, VEP enrichment, and external links with edit capabilities.
@@ -188,9 +190,9 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | 19. Database Foundation | 2/2 | ✓ Complete | 2026-01-28 |
 | 20. Annotation Core | 4/4 | ✓ Complete | 2026-01-28 |
 | 21. API Service Layer | 0/3 | Ready | - |
-| 22. Case Metadata | 0/TBD | Not started | - |
+| 22. Case Metadata | 0/3 | Ready | - |
 | 23. Side Panel UI | 0/TBD | Not started | - |
 | 24. Custom Tags + HPO Autocomplete | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-01-28 — Phase 20 complete*
+*Last updated: 2026-01-28 — Phase 22 plans created*
