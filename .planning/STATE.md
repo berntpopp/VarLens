@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 21 of 24 (API Service Layer) → VERIFIED ✓
-Plan: 3 of 3
+Plan: 3 of 3 + post-phase UI polish
 Status: Phase verified and complete
-Last activity: 2026-01-29 - Phase 21 verified (7/7 success criteria)
+Last activity: 2026-01-29 - Added online/offline indicator to footer
 
 Progress: [████░░░░░░░░░░░░░░░░] 21/24 phases (87.5% complete, v0.4.0 in progress)
 
@@ -93,6 +93,7 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Offline-first cache access | IPC handlers check NetworkStatus, return cached data if offline | Graceful degradation without errors (21-03) |
 | Courtesy rate limiting for HPO | 200ms delay (5 req/sec) despite no documented limits | Good API citizenship (21-03) |
 | Min 2 chars for HPO search | Return empty array for queries < 2 characters | Prevents excessive API calls, matches autocomplete UX (21-03) |
+| navigator.onLine for renderer | Use browser API instead of IPC for network status in UI | Simpler, event-based updates, no IPC overhead (21 post-phase) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
