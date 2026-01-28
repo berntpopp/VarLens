@@ -11,8 +11,13 @@
 
 import Bottleneck from 'bottleneck'
 import { ApiCache } from './ApiCache'
-import { VepResponseSchema, type VepResponse } from './schemas/vep-response'
+import {
+  VepResponseSchema,
+  type VepResponse,
+  type VepTranscriptConsequence
+} from './schemas/vep-response'
 import type { VepFetchResult } from '../../../shared/types/api-enrichment'
+import { getSpliceAIMaxDelta } from './clinical-thresholds'
 
 /**
  * Normalize chromosome identifier for consistent cache keys
@@ -34,6 +39,19 @@ export function normalizeChromosome(chr: string): string {
   }
 
   return normalized
+}
+
+/**
+ * Extracted prediction scores from VEP transcript
+ * Used for UI display in side panel
+ */
+export interface ExtractedScores {
+  cadd_phred?: number
+  revel_score?: number
+  spliceai_max_delta?: number
+  sift_prediction?: string
+  polyphen_prediction?: string
+  gnomad_af?: number
 }
 
 export class VepApiClient {
@@ -96,7 +114,9 @@ export class VepApiClient {
           cacheInfo: {
             cached: true,
             cachedAt: cached.createdAt
-          }
+          },
+          preferredTranscript: this.selectPreferredTranscript(data),
+          allTranscripts: this.getAllTranscripts(data)
         }
       } catch (error) {
         // Cache entry corrupted, continue to fetch fresh data
@@ -129,7 +149,9 @@ export class VepApiClient {
         cacheInfo: {
           cached: false,
           cachedAt: null
-        }
+        },
+        preferredTranscript: this.selectPreferredTranscript(data),
+        allTranscripts: this.getAllTranscripts(data)
       }
     } catch (error) {
       // Re-throw AbortError to signal cancellation
@@ -165,7 +187,7 @@ export class VepApiClient {
   private async makeVepRequest(
     chr: string,
     pos: number,
-    ref: string,
+    _ref: string,
     alt: string,
     signal: AbortSignal
   ): Promise<unknown> {
@@ -224,6 +246,66 @@ export class VepApiClient {
       }
     } catch {
       return null
+    }
+  }
+
+  /**
+   * Select preferred transcript from VEP response
+   * Prioritizes MANE Select, then canonical, then first transcript
+   *
+   * @param response - VEP response array
+   * @returns Preferred transcript or null if no transcripts available
+   */
+  selectPreferredTranscript(response: VepResponse): VepTranscriptConsequence | null {
+    const transcripts = response[0]?.transcript_consequences
+    if (!transcripts || transcripts.length === 0) return null
+
+    // Priority 1: MANE Select transcript (clinically preferred)
+    const maneSelect = transcripts.find((tc) => tc.mane_select)
+    if (maneSelect) return maneSelect
+
+    // Priority 2: Canonical transcript
+    const canonical = transcripts.find((tc) => tc.canonical === 1)
+    if (canonical) return canonical
+
+    // Priority 3: First transcript
+    return transcripts[0]
+  }
+
+  /**
+   * Get all transcripts from VEP response
+   * For UI dropdown to show all available transcripts
+   *
+   * @param response - VEP response array
+   * @returns Array of all transcripts
+   */
+  getAllTranscripts(response: VepResponse): VepTranscriptConsequence[] {
+    return response[0]?.transcript_consequences || []
+  }
+
+  /**
+   * Extract prediction scores from transcript
+   * Calculates SpliceAI max delta from 4 individual delta scores
+   *
+   * @param transcript - VEP transcript consequence
+   * @returns Object with available scores (undefined for missing)
+   */
+  extractScores(transcript: VepTranscriptConsequence): ExtractedScores {
+    // Calculate SpliceAI max delta from 4 individual delta scores
+    const spliceai_max_delta = getSpliceAIMaxDelta(
+      transcript.spliceai_pred_ds_ag,
+      transcript.spliceai_pred_ds_al,
+      transcript.spliceai_pred_ds_dg,
+      transcript.spliceai_pred_ds_dl
+    )
+
+    return {
+      cadd_phred: transcript.cadd_phred,
+      revel_score: transcript.revel_score,
+      spliceai_max_delta,
+      sift_prediction: transcript.sift_prediction,
+      polyphen_prediction: transcript.polyphen_prediction,
+      gnomad_af: transcript.gnomad_af
     }
   }
 
