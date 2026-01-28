@@ -29,23 +29,39 @@
 
       <!-- ACMG classification column -->
       <template #[`item.acmg`]="{ item }">
-        <v-tooltip
-          v-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
-          location="top"
-        >
-          <template #activator="{ props: tooltipProps }">
+        <AcmgMenu @select="(c) => handleAcmgSelect(item, c)">
+          <template #activator="{ props: menuProps }">
             <v-chip
-              v-bind="tooltipProps"
+              v-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
+              v-bind="menuProps"
               :color="ACMG_COLORS[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]"
               size="x-small"
               label
+              class="cursor-pointer"
             >
               {{ ACMG_ABBREV[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!] }}
             </v-chip>
+            <v-btn
+              v-else
+              v-bind="menuProps"
+              icon="mdi-tag-plus-outline"
+              size="x-small"
+              variant="text"
+              color="grey-lighten-1"
+            />
           </template>
-          {{ getAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}
-        </v-tooltip>
-        <span v-else class="text-grey-lighten-2">--</span>
+        </AcmgMenu>
+      </template>
+
+      <!-- Comment column -->
+      <template #[`item.comment`]="{ item }">
+        <v-icon
+          :icon="hasAnyComment(item) ? 'mdi-comment-text' : 'mdi-comment-text-outline'"
+          :color="hasAnyComment(item) ? 'primary' : 'grey-lighten-1'"
+          size="default"
+          class="cursor-pointer"
+          @click.stop="openCommentDialog(item)"
+        />
       </template>
 
       <!-- Chromosome with dynamic link from store -->
@@ -250,6 +266,33 @@
     >
       {{ snackbar.message }}
     </v-snackbar>
+
+    <CommentDialog
+      v-model="commentDialogOpen"
+      :global-comment="
+        selectedVariantForComment
+          ? getGlobalComment(
+              selectedVariantForComment.chr,
+              selectedVariantForComment.pos,
+              selectedVariantForComment.ref,
+              selectedVariantForComment.alt
+            )
+          : null
+      "
+      :per-case-comment="
+        selectedVariantForComment
+          ? getPerCaseComment(
+              selectedVariantForComment.chr,
+              selectedVariantForComment.pos,
+              selectedVariantForComment.ref,
+              selectedVariantForComment.alt
+            )
+          : null
+      "
+      :global-timestamps="getGlobalTimestamps(selectedVariantForComment)"
+      :per-case-timestamps="getPerCaseTimestamps(selectedVariantForComment)"
+      @save="handleCommentSave"
+    />
   </div>
 </template>
 
@@ -265,6 +308,9 @@ import type {
 import { useExternalLinksStore, type ExternalLinkConfig } from '../stores/externalLinksStore'
 import { resolveUrlTemplate, buildOmimUrl, type VariantLinkData } from '../utils/externalLinks'
 import { useAnnotations, ACMG_COLORS, ACMG_ABBREV } from '../composables/useAnnotations'
+import type { AcmgClassification } from '../../../main/database/types'
+import AcmgMenu from './AcmgMenu.vue'
+import CommentDialog from './CommentDialog.vue'
 
 interface Props {
   caseId: number
@@ -282,8 +328,19 @@ const emit = defineEmits<{
 const linksStore = useExternalLinksStore()
 
 // Initialize annotations composable
-const { isStarred, getAcmgClassification, loadAnnotationsBatch, toggleGlobalStar, clearCache } =
-  useAnnotations()
+const {
+  isStarred,
+  getAcmgClassification,
+  loadAnnotationsBatch,
+  toggleGlobalStar,
+  clearCache,
+  setAcmgClassification,
+  getGlobalComment,
+  getPerCaseComment,
+  upsertGlobalComment,
+  upsertPerCaseComment,
+  getAnnotations
+} = useAnnotations()
 
 // Table state - DO NOT mutate these in loadVariants handler (infinite loop)
 const variants = ref<Variant[]>([])
@@ -306,11 +363,16 @@ const snackbar = ref({
   color: 'error'
 })
 
+// Comment dialog state
+const commentDialogOpen = ref(false)
+const selectedVariantForComment = ref<Variant | null>(null)
+
 // Dynamic headers with virtual link columns from store
 const headers = computed(() => {
   const baseHeaders = [
     { title: '', key: 'starred', sortable: false, width: '48px', align: 'center' as const },
     { title: 'ACMG', key: 'acmg', sortable: false, width: '64px', align: 'center' as const },
+    { title: '', key: 'comment', sortable: false, width: '48px', align: 'center' as const },
     { title: 'Chr', key: 'chr', sortable: true },
     { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
     { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
@@ -400,6 +462,69 @@ const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> 
 // Handle star toggle
 const handleStarToggle = async (item: Variant): Promise<void> => {
   await toggleGlobalStar(item.chr, item.pos, item.ref, item.alt)
+}
+
+// Check if variant has any comment
+const hasAnyComment = (item: Variant): boolean => {
+  const globalComment = getGlobalComment(item.chr, item.pos, item.ref, item.alt)
+  const perCaseComment = getPerCaseComment(item.chr, item.pos, item.ref, item.alt)
+  return (
+    (globalComment !== null && globalComment !== '') ||
+    (perCaseComment !== null && perCaseComment !== '')
+  )
+}
+
+// Open comment dialog for variant
+const openCommentDialog = (item: Variant) => {
+  selectedVariantForComment.value = item
+  commentDialogOpen.value = true
+}
+
+// Handle ACMG selection
+const handleAcmgSelect = async (
+  item: Variant,
+  classification: AcmgClassification | null
+): Promise<void> => {
+  await setAcmgClassification(item.chr, item.pos, item.ref, item.alt, classification)
+}
+
+// Handle comment save
+const handleCommentSave = async (data: {
+  globalComment: string | null
+  perCaseComment: string | null
+  globalChanged: boolean
+  perCaseChanged: boolean
+}): Promise<void> => {
+  if (!selectedVariantForComment.value) return
+  const v = selectedVariantForComment.value
+
+  if (data.globalChanged) {
+    await upsertGlobalComment(v.chr, v.pos, v.ref, v.alt, data.globalComment)
+  }
+  if (data.perCaseChanged) {
+    await upsertPerCaseComment(props.caseId, v.id, v.chr, v.pos, v.ref, v.alt, data.perCaseComment)
+  }
+
+  commentDialogOpen.value = false
+}
+
+// Get timestamps from cache
+const getGlobalTimestamps = (
+  item: Variant | null
+): { created_at: number; updated_at: number } | null => {
+  if (!item) return null
+  const annotations = getAnnotations(item.chr, item.pos, item.ref, item.alt)
+  if (!annotations?.global) return null
+  return { created_at: annotations.global.created_at, updated_at: annotations.global.updated_at }
+}
+
+const getPerCaseTimestamps = (
+  item: Variant | null
+): { created_at: number; updated_at: number } | null => {
+  if (!item) return null
+  const annotations = getAnnotations(item.chr, item.pos, item.ref, item.alt)
+  if (!annotations?.perCase) return null
+  return { created_at: annotations.perCase.created_at, updated_at: annotations.perCase.updated_at }
 }
 
 // Load variants from backend
