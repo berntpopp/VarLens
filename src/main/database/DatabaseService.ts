@@ -843,14 +843,18 @@ export class DatabaseService {
     ref: string,
     alt: string,
     updates: Partial<
-      Pick<VariantAnnotation, 'global_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'>
+      Pick<
+        VariantAnnotation,
+        'global_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'
+      >
     >
   ): VariantAnnotation {
     return this.runTransaction(() => {
       const now = Date.now()
 
       // Atomic upsert using INSERT ON CONFLICT
-      const result = this.stmt(`
+      const result = this.stmt(
+        `
         INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(chr, pos, ref, alt) DO UPDATE SET
@@ -860,7 +864,8 @@ export class DatabaseService {
           acmg_evidence = COALESCE(excluded.acmg_evidence, acmg_evidence),
           updated_at = excluded.updated_at
         RETURNING *
-      `).get(
+      `
+      ).get(
         chr,
         pos,
         ref,
@@ -888,12 +893,9 @@ export class DatabaseService {
    * @param alt - Alternate allele
    */
   deleteGlobalAnnotation(chr: string, pos: number, ref: string, alt: string): void {
-    this.stmt('DELETE FROM variant_annotations WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?').run(
-      chr,
-      pos,
-      ref,
-      alt
-    )
+    this.stmt(
+      'DELETE FROM variant_annotations WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
+    ).run(chr, pos, ref, alt)
   }
 
   /**
@@ -931,14 +933,16 @@ export class DatabaseService {
       const now = Date.now()
 
       // Atomic upsert using INSERT ON CONFLICT
-      const result = this.stmt(`
+      const result = this.stmt(
+        `
         INSERT INTO case_variant_annotations (case_id, variant_id, per_case_comment, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(case_id, variant_id) DO UPDATE SET
           per_case_comment = COALESCE(excluded.per_case_comment, per_case_comment),
           updated_at = excluded.updated_at
         RETURNING *
-      `).get(caseId, variantId, updates.per_case_comment ?? null, now, now) as CaseVariantAnnotation
+      `
+      ).get(caseId, variantId, updates.per_case_comment ?? null, now, now) as CaseVariantAnnotation
 
       return result
     })

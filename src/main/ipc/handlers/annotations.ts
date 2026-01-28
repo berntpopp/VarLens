@@ -1,10 +1,7 @@
 import { ipcMain } from 'electron'
 import { wrapHandler } from '../errorHandler'
 import { getDatabaseService } from '../../database'
-import type {
-  VariantAnnotation,
-  CaseVariantAnnotation
-} from '../../database/types'
+import type { VariantAnnotation, CaseVariantAnnotation } from '../../database/types'
 
 /**
  * Annotations IPC handlers
@@ -57,7 +54,10 @@ ipcMain.handle(
 
       // Convert boolean starred to 0/1 for SQLite INTEGER column
       const dbUpdates: Partial<
-        Pick<VariantAnnotation, 'global_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'>
+        Pick<
+          VariantAnnotation,
+          'global_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'
+        >
       > = {
         global_comment: updates.global_comment,
         acmg_classification: updates.acmg_classification,
@@ -90,15 +90,12 @@ ipcMain.handle(
 /**
  * Get per-case annotation for a variant
  */
-ipcMain.handle(
-  'annotations:getPerCase',
-  async (_event, caseId: number, variantId: number) => {
-    return wrapHandler(async () => {
-      const db = getDatabaseService()
-      return db.getPerCaseAnnotation(caseId, variantId)
-    })
-  }
-)
+ipcMain.handle('annotations:getPerCase', async (_event, caseId: number, variantId: number) => {
+  return wrapHandler(async () => {
+    const db = getDatabaseService()
+    return db.getPerCaseAnnotation(caseId, variantId)
+  })
+})
 
 /**
  * Upsert per-case annotation for a variant

@@ -199,9 +199,9 @@ describe('Schema Migrations', () => {
         .run(caseId, 'affected', 'Test notes', Date.now(), Date.now())
 
       // Verify metadata exists
-      let count = service.database
-        .prepare('SELECT COUNT(*) as count FROM case_metadata')
-        .get() as { count: number }
+      let count = service.database.prepare('SELECT COUNT(*) as count FROM case_metadata').get() as {
+        count: number
+      }
       expect(count.count).toBe(1)
 
       // Delete case
@@ -303,7 +303,9 @@ describe('Schema Migrations', () => {
       service.database.prepare('DELETE FROM cases WHERE id = ?').run(caseId)
 
       // Verify tag link was cascaded
-      tagLinkCount = service.database.prepare('SELECT COUNT(*) as count FROM variant_tags').get() as {
+      tagLinkCount = service.database
+        .prepare('SELECT COUNT(*) as count FROM variant_tags')
+        .get() as {
         count: number
       }
       expect(tagLinkCount.count).toBe(0)
@@ -380,9 +382,9 @@ describe('Schema Migrations', () => {
         .run(caseId, variantId, tagId, Date.now())
 
       // Verify tag link exists
-      let count = service.database
-        .prepare('SELECT COUNT(*) as count FROM variant_tags')
-        .get() as { count: number }
+      let count = service.database.prepare('SELECT COUNT(*) as count FROM variant_tags').get() as {
+        count: number
+      }
       expect(count.count).toBe(1)
 
       // Delete tag
