@@ -853,15 +853,17 @@ export class DatabaseService {
       const now = Date.now()
 
       // Atomic upsert using INSERT ON CONFLICT
+      // For INSERT: use IFNULL to default starred to 0 (satisfies NOT NULL constraint)
+      // For UPDATE: use IFNULL to preserve existing value when null is passed
       const result = this.stmt(
         `
         INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, IFNULL(?, 0), ?, ?, ?, ?)
         ON CONFLICT(chr, pos, ref, alt) DO UPDATE SET
-          global_comment = COALESCE(excluded.global_comment, global_comment),
-          starred = COALESCE(excluded.starred, starred),
-          acmg_classification = COALESCE(excluded.acmg_classification, acmg_classification),
-          acmg_evidence = COALESCE(excluded.acmg_evidence, acmg_evidence),
+          global_comment = IFNULL(?, global_comment),
+          starred = IFNULL(?, starred),
+          acmg_classification = IFNULL(?, acmg_classification),
+          acmg_evidence = IFNULL(?, acmg_evidence),
           updated_at = excluded.updated_at
         RETURNING *
       `
@@ -871,11 +873,16 @@ export class DatabaseService {
         ref,
         alt,
         updates.global_comment ?? null,
-        updates.starred ?? null,
+        updates.starred !== undefined ? (updates.starred ? 1 : 0) : null,
         updates.acmg_classification ?? null,
         updates.acmg_evidence ?? null,
         now,
-        now
+        now,
+        // Parameters for UPDATE IFNULL (same values, passed again for UPDATE clause)
+        updates.global_comment ?? null,
+        updates.starred !== undefined ? (updates.starred ? 1 : 0) : null,
+        updates.acmg_classification ?? null,
+        updates.acmg_evidence ?? null
       ) as VariantAnnotation
 
       return result
