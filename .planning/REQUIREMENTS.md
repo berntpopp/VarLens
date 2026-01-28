@@ -52,12 +52,12 @@ Requirements for v0.4.0 — Variant Annotation & Case Metadata. Each maps to roa
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: New annotation tables created automatically when opening existing databases (schema migration)
-- [ ] **INFRA-02**: Schema migration works correctly on SQLCipher-encrypted databases
+- [x] **INFRA-01**: New annotation tables created automatically when opening existing databases (schema migration)
+- [x] **INFRA-02**: Schema migration works correctly on SQLCipher-encrypted databases
 - [ ] **INFRA-03**: All API calls (VEP, HPO) are proxied through Electron main process (not renderer)
 - [ ] **INFRA-04**: App detects online/offline status and adjusts API feature availability accordingly
 - [ ] **INFRA-05**: External link domains (PubTator, LitVar, UCSC, Decipher, Franklin, HPO browser) added to shell.openExternal allowlist
-- [ ] **INFRA-06**: All user-entered data (comments, tags, HPO terms) uses parameterized SQL queries (no injection risk)
+- [x] **INFRA-06**: All user-entered data (comments, tags, HPO terms) uses parameterized SQL queries (no injection risk)
 
 ## Future Requirements
 
@@ -138,12 +138,12 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 | META-09 | Phase 22 | Pending |
 | META-10 | Phase 21 | Pending |
 | META-11 | Phase 22 | Pending |
-| INFRA-01 | Phase 19 | Pending |
-| INFRA-02 | Phase 19 | Pending |
+| INFRA-01 | Phase 19 | Complete |
+| INFRA-02 | Phase 19 | Complete |
 | INFRA-03 | Phase 21 | Pending |
 | INFRA-04 | Phase 21 | Pending |
 | INFRA-05 | Phase 23 | Pending |
-| INFRA-06 | Phase 19 | Pending |
+| INFRA-06 | Phase 19 | Complete |
 
 **Coverage:**
 - v0.4.0 requirements: 40 total
@@ -160,4 +160,4 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-28 after roadmap creation*
+*Last updated: 2026-01-28 — Phase 19 requirements marked complete*
