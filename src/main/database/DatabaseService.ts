@@ -15,7 +15,9 @@ import type {
   VariantFilter,
   PaginationCursor,
   PaginatedResult,
-  SortItem
+  SortItem,
+  VariantAnnotation,
+  CaseVariantAnnotation
 } from './types'
 import { DatabaseError, NotFoundError, UniqueConstraintError, TransactionError } from './errors'
 
@@ -798,6 +800,199 @@ export class DatabaseService {
         error instanceof Error ? error : undefined
       )
     }
+  }
+
+  /**
+   * Get global annotation for a variant by chr:pos:ref:alt key
+   *
+   * @param chr - Chromosome
+   * @param pos - Position
+   * @param ref - Reference allele
+   * @param alt - Alternate allele
+   * @returns VariantAnnotation or null if not found
+   */
+  getGlobalAnnotation(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ): VariantAnnotation | null {
+    const result = this.stmt(
+      'SELECT * FROM variant_annotations WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
+    ).get(chr, pos, ref, alt) as VariantAnnotation | undefined
+
+    return result ?? null
+  }
+
+  /**
+   * Upsert global annotation for a variant (atomic operation)
+   *
+   * Uses INSERT ON CONFLICT to avoid race conditions.
+   * Only updates fields provided in updates object (COALESCE pattern).
+   *
+   * @param chr - Chromosome
+   * @param pos - Position
+   * @param ref - Reference allele
+   * @param alt - Alternate allele
+   * @param updates - Partial annotation updates
+   * @returns Updated or inserted VariantAnnotation
+   */
+  upsertGlobalAnnotation(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    updates: Partial<
+      Pick<VariantAnnotation, 'global_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'>
+    >
+  ): VariantAnnotation {
+    return this.runTransaction(() => {
+      const now = Date.now()
+
+      // Atomic upsert using INSERT ON CONFLICT
+      const result = this.stmt(`
+        INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(chr, pos, ref, alt) DO UPDATE SET
+          global_comment = COALESCE(excluded.global_comment, global_comment),
+          starred = COALESCE(excluded.starred, starred),
+          acmg_classification = COALESCE(excluded.acmg_classification, acmg_classification),
+          acmg_evidence = COALESCE(excluded.acmg_evidence, acmg_evidence),
+          updated_at = excluded.updated_at
+        RETURNING *
+      `).get(
+        chr,
+        pos,
+        ref,
+        alt,
+        updates.global_comment ?? null,
+        updates.starred ?? null,
+        updates.acmg_classification ?? null,
+        updates.acmg_evidence ?? null,
+        now,
+        now
+      ) as VariantAnnotation
+
+      return result
+    })
+  }
+
+  /**
+   * Delete global annotation for a variant
+   *
+   * Idempotent - no error if annotation doesn't exist.
+   *
+   * @param chr - Chromosome
+   * @param pos - Position
+   * @param ref - Reference allele
+   * @param alt - Alternate allele
+   */
+  deleteGlobalAnnotation(chr: string, pos: number, ref: string, alt: string): void {
+    this.stmt('DELETE FROM variant_annotations WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?').run(
+      chr,
+      pos,
+      ref,
+      alt
+    )
+  }
+
+  /**
+   * Get per-case annotation for a variant
+   *
+   * @param caseId - Case ID
+   * @param variantId - Variant ID
+   * @returns CaseVariantAnnotation or null if not found
+   */
+  getPerCaseAnnotation(caseId: number, variantId: number): CaseVariantAnnotation | null {
+    const result = this.stmt(
+      'SELECT * FROM case_variant_annotations WHERE case_id = ? AND variant_id = ?'
+    ).get(caseId, variantId) as CaseVariantAnnotation | undefined
+
+    return result ?? null
+  }
+
+  /**
+   * Upsert per-case annotation for a variant (atomic operation)
+   *
+   * Uses INSERT ON CONFLICT to avoid race conditions.
+   * Only updates fields provided in updates object (COALESCE pattern).
+   *
+   * @param caseId - Case ID
+   * @param variantId - Variant ID
+   * @param updates - Partial annotation updates
+   * @returns Updated or inserted CaseVariantAnnotation
+   */
+  upsertPerCaseAnnotation(
+    caseId: number,
+    variantId: number,
+    updates: Partial<Pick<CaseVariantAnnotation, 'per_case_comment'>>
+  ): CaseVariantAnnotation {
+    return this.runTransaction(() => {
+      const now = Date.now()
+
+      // Atomic upsert using INSERT ON CONFLICT
+      const result = this.stmt(`
+        INSERT INTO case_variant_annotations (case_id, variant_id, per_case_comment, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(case_id, variant_id) DO UPDATE SET
+          per_case_comment = COALESCE(excluded.per_case_comment, per_case_comment),
+          updated_at = excluded.updated_at
+        RETURNING *
+      `).get(caseId, variantId, updates.per_case_comment ?? null, now, now) as CaseVariantAnnotation
+
+      return result
+    })
+  }
+
+  /**
+   * Delete per-case annotation for a variant
+   *
+   * Idempotent - no error if annotation doesn't exist.
+   *
+   * @param caseId - Case ID
+   * @param variantId - Variant ID
+   */
+  deletePerCaseAnnotation(caseId: number, variantId: number): void {
+    this.stmt('DELETE FROM case_variant_annotations WHERE case_id = ? AND variant_id = ?').run(
+      caseId,
+      variantId
+    )
+  }
+
+  /**
+   * Get all annotations for a variant in context (global + per-case)
+   *
+   * Returns both global annotation (by chr:pos:ref:alt) and per-case annotation
+   * (by case_id + variant_id) in a single query result.
+   *
+   * @param caseId - Case ID
+   * @param chr - Chromosome
+   * @param pos - Position
+   * @param ref - Reference allele
+   * @param alt - Alternate allele
+   * @returns Object with global and perCase annotations (null if not found)
+   */
+  getAnnotationsForVariant(
+    caseId: number,
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ): { global: VariantAnnotation | null; perCase: CaseVariantAnnotation | null } {
+    // First get variant_id for this case + variant coordinates
+    const variant = this.stmt(
+      'SELECT id FROM variants WHERE case_id = ? AND chr = ? AND pos = ? AND ref = ? AND alt = ?'
+    ).get(caseId, chr, pos, ref, alt) as { id: number } | undefined
+
+    const variantId = variant?.id
+
+    // Get global annotation
+    const global = this.getGlobalAnnotation(chr, pos, ref, alt)
+
+    // Get per-case annotation if variant exists in this case
+    const perCase = variantId !== undefined ? this.getPerCaseAnnotation(caseId, variantId) : null
+
+    return { global, perCase }
   }
 
   /**
