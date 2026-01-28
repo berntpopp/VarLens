@@ -109,8 +109,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 16-01-PLAN.md -- BatchImportOrchestrator with multi-file picker, folder selection, sequential processing, aggregate progress, and summary report
-- [ ] 16-02-PLAN.md -- ZipExtractor with password prompt, temp directory extraction, Zip Slip prevention, and pipeline integration
+- [x] 16-01-PLAN.md -- BatchImportOrchestrator with multi-file picker, folder selection, sequential processing, aggregate progress, and summary report
+- [x] 16-02-PLAN.md -- ZipExtractor with password prompt, temp directory extraction, Zip Slip prevention, and pipeline integration
 
 **Requirements:**
 - BTCH-01: User can select multiple JSON.gz files via multi-file picker dialog
@@ -201,7 +201,7 @@ Plans:
 | 13 | SQLCipher Foundation | Complete | DBSC-01, DBSC-02, DBSC-03, DBSC-07, DBSC-08 |
 | 14 | Database Selection & Encryption UX | Complete | DBSL-01 - DBSL-06, DBSC-04, DBSC-05, DBSC-06 |
 | 15 | External Links | Complete | EXTL-01 - EXTL-06 |
-| 16 | Batch Import & ZIP Extraction | Not Started | BTCH-01 - BTCH-06, ZIMP-01 - ZIMP-05 |
+| 16 | Batch Import & ZIP Extraction | Complete | BTCH-01 - BTCH-06, ZIMP-01 - ZIMP-05 |
 | 17 | OMIM Data Extraction | Not Started | OMIM-01 - OMIM-05 |
 | 18 | Cohort Analysis | Not Started | CHRT-01 - CHRT-10 |
 
@@ -229,17 +229,17 @@ Plans:
 | EXTL-04 | Phase 15 | Complete |
 | EXTL-05 | Phase 15 | Complete |
 | EXTL-06 | Phase 15 | Complete |
-| BTCH-01 | Phase 16 | Pending |
-| BTCH-02 | Phase 16 | Pending |
-| BTCH-03 | Phase 16 | Pending |
-| BTCH-04 | Phase 16 | Pending |
-| BTCH-05 | Phase 16 | Pending |
-| BTCH-06 | Phase 16 | Pending |
-| ZIMP-01 | Phase 16 | Pending |
-| ZIMP-02 | Phase 16 | Pending |
-| ZIMP-03 | Phase 16 | Pending |
-| ZIMP-04 | Phase 16 | Pending |
-| ZIMP-05 | Phase 16 | Pending |
+| BTCH-01 | Phase 16 | Complete |
+| BTCH-02 | Phase 16 | Complete |
+| BTCH-03 | Phase 16 | Complete |
+| BTCH-04 | Phase 16 | Complete |
+| BTCH-05 | Phase 16 | Complete |
+| BTCH-06 | Phase 16 | Complete |
+| ZIMP-01 | Phase 16 | Complete |
+| ZIMP-02 | Phase 16 | Complete |
+| ZIMP-03 | Phase 16 | Complete |
+| ZIMP-04 | Phase 16 | Complete |
+| ZIMP-05 | Phase 16 | Complete |
 | OMIM-01 | Phase 17 | Pending |
 | OMIM-02 | Phase 17 | Pending |
 | OMIM-03 | Phase 17 | Pending |

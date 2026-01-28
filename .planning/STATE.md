@@ -77,6 +77,9 @@ v0.3.0 decisions (accumulated during milestone):
 | 21 | Default duplicate strategy 'skip' for ZIP imports | Freshly extracted temp files won't have name collisions; skip is safest default | 16 |
 | 22 | Type cast for adm-zip password API | @types/adm-zip lags behind runtime API; cast is safe and well-documented | 16 |
 | 23 | Idempotent cleanupZipTemp on all exit paths | Ensures no orphaned temp directories even on error or unexpected dialog close | 16 |
+| 24 | getData(password) over extractAllTo for ZIP | extractAllTo/extractEntryTo trigger uncaught async zlib errors crashing Electron; getData is synchronous and catchable | 16 |
+| 25 | Check both encrypted/encripted header properties | @types/adm-zip declares legacy typo "encripted" but runtime uses "encrypted"; check both for compatibility | 16 |
+| 26 | Remove app.exit(1) from uncaughtException handler | Non-fatal errors (e.g., zlib) should show dialog but not kill the app | 16 |
 
 ### Pending Todos
 
