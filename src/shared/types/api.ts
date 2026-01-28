@@ -9,6 +9,7 @@ import type {
 } from '../../main/database/types'
 import type { ProgressUpdate, ImportResult } from '../../main/import/types'
 import type { SerializableError } from './errors'
+import type { CohortVariant, CohortSummary, CohortSearchParams } from './cohort'
 
 // Re-export for convenience
 export type {
@@ -19,7 +20,10 @@ export type {
   PaginatedResult,
   SortItem,
   ProgressUpdate,
-  ImportResult
+  ImportResult,
+  CohortVariant,
+  CohortSummary,
+  CohortSearchParams
 }
 
 export interface CasesAPI {
@@ -163,6 +167,13 @@ export interface BatchImportAPI {
   cleanupZipTemp: () => Promise<void>
 }
 
+export interface CohortAPI {
+  getVariants: (
+    params: CohortSearchParams
+  ) => Promise<{ data: CohortVariant[]; total_count: number }>
+  getSummary: () => Promise<CohortSummary>
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -172,4 +183,5 @@ export interface WindowAPI {
   shell: ShellAPI
   database: DatabaseAPI
   batchImport: BatchImportAPI
+  cohort: CohortAPI
 }

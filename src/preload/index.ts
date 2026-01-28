@@ -6,7 +6,8 @@ import type {
   SortItem,
   BatchProgress,
   DuplicateChoice,
-  DuplicateCheckResult
+  DuplicateCheckResult,
+  CohortSearchParams
 } from '../shared/types'
 
 /**
@@ -118,6 +119,11 @@ const api = {
         ipcRenderer.removeListener('batch-import:progress', handler)
       }
     }
+  },
+
+  cohort: {
+    getVariants: (params: CohortSearchParams) => ipcRenderer.invoke('cohort:variants', params),
+    getSummary: () => ipcRenderer.invoke('cohort:summary')
   }
 }
 

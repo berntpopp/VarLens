@@ -53,6 +53,7 @@ CREATE INDEX IF NOT EXISTS idx_variants_case_id ON variants(case_id);
 CREATE INDEX IF NOT EXISTS idx_variants_gene ON variants(gene_symbol);
 CREATE INDEX IF NOT EXISTS idx_variants_pos ON variants(chr, pos);
 CREATE INDEX IF NOT EXISTS idx_variants_filters ON variants(gnomad_af, cadd);
+CREATE INDEX IF NOT EXISTS idx_variants_chr_pos_ref_alt ON variants(chr, pos, ref, alt);
 `
 
 /**

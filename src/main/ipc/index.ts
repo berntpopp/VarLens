@@ -14,7 +14,8 @@ export async function registerIpcHandlers(): Promise<void> {
     import('./handlers/export'),
     import('./handlers/shell'),
     import('./handlers/database'),
-    import('./handlers/batch-import')
+    import('./handlers/batch-import'),
+    import('./handlers/cohort')
   ])
 
   console.log('IPC handlers registered')

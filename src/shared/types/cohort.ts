@@ -1,0 +1,93 @@
+/**
+ * Cohort analysis types for Varlens
+ *
+ * Types for aggregated variant analysis across multiple cases.
+ */
+
+/**
+ * Aggregated variant across all cases in the cohort
+ */
+export interface CohortVariant {
+  /** Chromosome */
+  chr: string
+  /** Genomic position */
+  pos: number
+  /** Reference allele */
+  ref: string
+  /** Alternate allele */
+  alt: string
+  /** Gene symbol (nullable) */
+  gene_symbol: string | null
+  /** Number of cases carrying this variant */
+  carrier_count: number
+  /** Total number of cases in database */
+  total_cases: number
+  /** Allele frequency across cohort (carrier_count / total_cases) */
+  cohort_frequency: number
+  /** Number of heterozygous carriers */
+  het_count: number
+  /** Number of homozygous carriers */
+  hom_count: number
+  /** Composite key for stable v-data-table tracking: "chr:pos:ref:alt" */
+  variant_key: string
+}
+
+/**
+ * Individual case carrying a specific variant (for drill-down)
+ */
+export interface CohortCarrier {
+  /** Case ID */
+  case_id: number
+  /** Case name */
+  case_name: string
+  /** Genotype (e.g., "0/1", "1/1") */
+  gt_num: string
+}
+
+/**
+ * Cohort-level summary statistics
+ */
+export interface CohortSummary {
+  /** Total number of cases in database */
+  total_cases: number
+  /** Total variant observations (sum across all cases) */
+  total_variants: number
+  /** Number of unique variants (distinct chr:pos:ref:alt) */
+  unique_variants: number
+  /** Average variants per case */
+  avg_variants_per_case: number
+  /** Number of distinct genes with variants */
+  genes_with_variants: number
+}
+
+/**
+ * Gene-level burden analysis (for Plan 02)
+ */
+export interface GeneBurden {
+  /** Gene symbol */
+  gene_symbol: string
+  /** Total variant observations in this gene */
+  variant_count: number
+  /** Number of unique variants in this gene */
+  unique_variant_count: number
+  /** Number of cases with variants in this gene */
+  affected_case_count: number
+  /** Total cases in cohort */
+  total_cases: number
+}
+
+/**
+ * Search/filter parameters for cohort queries
+ */
+export interface CohortSearchParams {
+  /** Search term (gene symbol, chr:pos) */
+  search_term?: string
+  /** Column to sort by */
+  sort_by?: string
+  /** Sort direction */
+  sort_order?: 'asc' | 'desc'
+  /** Page size */
+  limit?: number
+  /** Offset for pagination */
+  offset?: number
+}
