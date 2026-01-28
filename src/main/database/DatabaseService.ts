@@ -8,6 +8,7 @@
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from './schema'
+import { runMigrations } from './migrations'
 import type {
   Case,
   Variant,
@@ -82,6 +83,9 @@ export class DatabaseService {
 
       // Initialize database schema (tables, indexes, FTS5)
       initializeSchema(this.db)
+
+      // Run version-tracked migrations for v0.4.0+ features
+      runMigrations(this.db)
     } catch (error) {
       throw new DatabaseError(
         `Failed to initialize database at ${dbPath}`,

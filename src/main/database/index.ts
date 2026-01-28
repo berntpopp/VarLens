@@ -78,7 +78,24 @@ export { DatabaseManager }
 export { RecentDatabasesService }
 
 // Types
-export type { Case, Variant, VariantFilter, PaginationCursor, PaginatedResult } from './types'
+export type {
+  Case,
+  Variant,
+  VariantFilter,
+  PaginationCursor,
+  PaginatedResult,
+  AcmgClassification,
+  AcmgEvidence,
+  VariantAnnotation,
+  CaseVariantAnnotation,
+  CaseMetadata,
+  CohortGroup,
+  CaseCohortLink,
+  ApiCache,
+  Tag,
+  VariantTag,
+  CaseHpoTerm
+} from './types'
 
 // Errors
 export {
