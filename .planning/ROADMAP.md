@@ -88,7 +88,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 20-01-PLAN.md — Backend: IPC handlers + DatabaseService annotation methods
+- [x] 20-01-PLAN.md — Backend: IPC handlers + DatabaseService annotation methods ✓
 - [ ] 20-02-PLAN.md — Frontend: VariantTable star + ACMG columns, useAnnotations composable
 
 ### Phase 21: API Service Layer
@@ -107,10 +107,12 @@ Plans:
   6. Cached API data displays with "Cached data from [date]" indicator to user
   7. All API calls are proxied through Electron main process (not renderer) with no API keys in renderer code
 
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 21-01: TBD
+- [ ] 21-01-PLAN.md — API infrastructure: ApiCache, NetworkStatus, zod schemas, clinical thresholds
+- [ ] 21-02-PLAN.md — VEP API client with rate limiting, caching, MANE Select transcript
+- [ ] 21-03-PLAN.md — HPO API client, VEP/HPO IPC handlers, preload API
 
 ### Phase 22: Case Metadata
 **Goal**: Users can assign status, cohort groups, and HPO phenotype terms to cases for stratification and phenotype-driven analysis.
@@ -182,11 +184,11 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 19. Database Foundation | 2/2 | ✓ Complete | 2026-01-28 |
-| 20. Annotation Core | 0/2 | Ready | - |
-| 21. API Service Layer | 0/TBD | Not started | - |
+| 20. Annotation Core | 1/2 | In progress | - |
+| 21. API Service Layer | 0/3 | Ready | - |
 | 22. Case Metadata | 0/TBD | Not started | - |
 | 23. Side Panel UI | 0/TBD | Not started | - |
 | 24. Custom Tags + HPO Autocomplete | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-01-28 — Phase 20 planned*
+*Last updated: 2026-01-28 — Phase 21 planned*
