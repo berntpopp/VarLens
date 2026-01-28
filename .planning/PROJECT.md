@@ -42,7 +42,16 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 
 ### Active
 
-(No active milestone -- planning next milestone)
+**Current Milestone: v0.4.0 — Variant Annotation & Case Metadata**
+
+**Goal:** Transform Varlens from a read-only viewer into an active analysis workbench with variant annotation, classification, enriched detail views, and structured case metadata.
+
+**Target features:**
+- Variant comments (global + per-case notes with timestamps)
+- Variant marking (star/flag + ACMG 5-tier classification + custom user-defined tags, timestamped)
+- Variant details side panel (all DB scores, live Ensembl VEP API fetch, links to PubTator/LitVar/UCSC/Decipher/Franklin, graceful offline degradation)
+- Case metadata (affected/unaffected status, cohort group assignment with arbitrary naming + suggestions, HPO phenotype terms via API-based searchable ontology)
+- Offline-first maintained (API-dependent features degrade gracefully when offline)
 
 ### Out of Scope
 
@@ -56,14 +65,14 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 - VCF import — JSON-only for current scope
 - CNV/SV analysis — SNV-focused for current scope
 - OMIM disease name extraction — deferred from v0.3.0 (MIM numbers delivered)
-- Affected/unaffected cohort split — requires case metadata schema; deferred to v0.4+
+- Affected/unaffected cohort split — now addressed in v0.4.0 case metadata
 - Cross-case variant comparison matrix — complex UI; deferred to v0.4+
 - Cohort statistics charts — tabular data sufficient for v0.3.0
 - Drag-and-drop import — multi-file picker is sufficient
 
 ## Context
 
-**Current state:** Shipped v0.3.0 with SQLCipher encryption, database selection/switching, batch import with ZIP support, external genomic database links, OMIM MIM numbers, and cohort analysis with aggregated variant table, search, gene burden, and drill-down navigation.
+**Current state:** Shipped v0.3.0. Starting v0.4.0 milestone focused on variant annotation workflows (comments, flags, ACMG classification, custom tags), variant details side panel with live API enrichment, and case metadata (status, cohorts, HPO phenotypes).
 
 **Tech stack:** Electron 40 + Vue 3 + Vuetify 3 + better-sqlite3-multiple-ciphers (SQLCipher) + FTS5 + TypeScript + electron-vite
 
@@ -114,4 +123,4 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 | Lazy carrier loading in cohort | Load on expand, cache in Map | ✓ Good — Fast UI |
 
 ---
-*Last updated: 2026-01-28 after v0.3.0 milestone*
+*Last updated: 2026-01-28 after v0.4.0 milestone start*

@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** External collaborators can analyze variant data offline with data-dense UX for research use
-**Current focus:** Planning next milestone
+**Current focus:** v0.4.0 — Variant Annotation & Case Metadata
 
 ## Current Position
 
-Phase: Milestone complete
-Plan: N/A
-Status: Ready to plan next milestone
-Last activity: 2026-01-28 -- v0.3.0 milestone complete
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-01-28 — Milestone v0.4.0 started
 
-Progress: All phases complete
+Progress: Not started
 
 ## Milestone History
 
@@ -57,27 +57,19 @@ None.
 
 - Performance profiling with 50+ cases for cohort aggregation queries
 - Franklin URL format verification (LOW confidence)
-- OMIM disease name extraction for future milestone
+- Ensembl VEP REST API rate limits and response format for variant annotation
+- HPO ontology API availability and response structure
+- PubTator/LitVar API integration patterns
 
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: v0.3.0 milestone completed and archived
+Stopped at: v0.4.0 milestone started, defining requirements
 Resume file: None
 
 ## Next Steps
 
-**v0.3.0 milestone shipped.** Next milestone planning needed.
-
-Run `/gsd:new-milestone` to start next milestone (questioning -> research -> requirements -> roadmap).
-
-Consider for next milestone:
-1. OMIM disease name extraction (deferred from v0.3.0)
-2. Performance profiling with 50+ cases
-3. Virtual gene panels for targeted variant filtering
-4. Advanced inheritance filters (de novo, compound het)
-5. Statistics dashboard with variant summary metrics
-6. E2E tests for cohort search and drill-down navigation
+**v0.4.0 milestone started.** Research → Requirements → Roadmap in progress.
 
 ---
-*Updated: 2026-01-28 after v0.3.0 milestone completion*
+*Updated: 2026-01-28 after v0.4.0 milestone start*
