@@ -14,54 +14,51 @@
       class="elevation-1"
       @update:options="loadVariants"
     >
-      <!-- Star toggle column -->
-      <template #[`item.starred`]="{ item }">
-        <v-icon
-          :icon="
-            isStarred(item.chr, item.pos, item.ref, item.alt) ? 'mdi-star' : 'mdi-star-outline'
-          "
-          :color="isStarred(item.chr, item.pos, item.ref, item.alt) ? 'amber' : 'grey-lighten-1'"
-          size="default"
-          class="cursor-pointer"
-          @click.stop="handleStarToggle(item)"
-        />
-      </template>
-
-      <!-- ACMG classification column -->
-      <template #[`item.acmg`]="{ item }">
-        <AcmgMenu @select="(c) => handleAcmgSelect(item, c)">
-          <template #activator="{ props: menuProps }">
-            <v-chip
-              v-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
-              v-bind="menuProps"
-              :color="ACMG_COLORS[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]"
-              size="x-small"
-              label
-              class="cursor-pointer"
-            >
-              {{ ACMG_ABBREV[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!] }}
-            </v-chip>
-            <v-btn
-              v-else
-              v-bind="menuProps"
-              icon="mdi-tag-plus-outline"
-              size="x-small"
-              variant="text"
-              color="grey-lighten-1"
-            />
-          </template>
-        </AcmgMenu>
-      </template>
-
-      <!-- Comment column -->
-      <template #[`item.comment`]="{ item }">
-        <v-icon
-          :icon="hasAnyComment(item) ? 'mdi-comment-text' : 'mdi-comment-text-outline'"
-          :color="hasAnyComment(item) ? 'primary' : 'grey-lighten-1'"
-          size="default"
-          class="cursor-pointer"
-          @click.stop="openCommentDialog(item)"
-        />
+      <!-- Annotations column (star, ACMG, comment) -->
+      <template #[`item.annotations`]="{ item }">
+        <div class="d-flex align-center ga-1">
+          <!-- Star toggle -->
+          <v-icon
+            :icon="
+              isStarred(item.chr, item.pos, item.ref, item.alt) ? 'mdi-star' : 'mdi-star-outline'
+            "
+            :color="isStarred(item.chr, item.pos, item.ref, item.alt) ? 'amber' : 'grey-lighten-1'"
+            size="small"
+            class="cursor-pointer"
+            @click.stop="handleStarToggle(item)"
+          />
+          <!-- ACMG classification -->
+          <AcmgMenu @select="(c) => handleAcmgSelect(item, c)">
+            <template #activator="{ props: menuProps }">
+              <v-chip
+                v-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
+                v-bind="menuProps"
+                :color="ACMG_COLORS[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]"
+                size="x-small"
+                label
+                class="cursor-pointer"
+              >
+                {{ ACMG_ABBREV[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!] }}
+              </v-chip>
+              <v-icon
+                v-else
+                v-bind="menuProps"
+                icon="mdi-tag-plus-outline"
+                size="small"
+                color="grey-lighten-1"
+                class="cursor-pointer"
+              />
+            </template>
+          </AcmgMenu>
+          <!-- Comment -->
+          <v-icon
+            :icon="hasAnyComment(item) ? 'mdi-comment-text' : 'mdi-comment-text-outline'"
+            :color="hasAnyComment(item) ? 'primary' : 'grey-lighten-1'"
+            size="small"
+            class="cursor-pointer"
+            @click.stop="openCommentDialog(item)"
+          />
+        </div>
       </template>
 
       <!-- Chromosome with dynamic link from store -->
@@ -370,9 +367,7 @@ const selectedVariantForComment = ref<Variant | null>(null)
 // Dynamic headers with virtual link columns from store
 const headers = computed(() => {
   const baseHeaders = [
-    { title: '', key: 'starred', sortable: false, width: '48px', align: 'center' as const },
-    { title: 'ACMG', key: 'acmg', sortable: false, width: '64px', align: 'center' as const },
-    { title: '', key: 'comment', sortable: false, width: '48px', align: 'center' as const },
+    { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' as const },
     { title: 'Chr', key: 'chr', sortable: true },
     { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
     { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
