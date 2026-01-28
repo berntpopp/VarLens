@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** External collaborators can analyze variant data offline with data-dense UX for research use
-**Current focus:** Phase 21 - API Service Layer
+**Current focus:** Phase 22 - Case Metadata
 
 ## Current Position
 
-Phase: 21 of 24 (API Service Layer)
+Phase: 21 of 24 (API Service Layer) → VERIFIED ✓
 Plan: 3 of 3
-Status: Phase complete
-Last activity: 2026-01-29 - Completed 21-03-PLAN.md (HPO API client and IPC layer)
+Status: Phase verified and complete
+Last activity: 2026-01-29 - Phase 21 verified (7/7 success criteria)
 
 Progress: [████░░░░░░░░░░░░░░░░] 21/24 phases (87.5% complete, v0.4.0 in progress)
 

@@ -27,14 +27,14 @@ Requirements for v0.4.0 — Variant Annotation & Case Metadata. Each maps to roa
 
 - [ ] **PANEL-01**: User can click a variant row to open a details side panel (right drawer)
 - [ ] **PANEL-02**: Side panel displays all annotation scores from the database (CADD, REVEL, SpliceAI, gnomAD AF, etc.)
-- [ ] **PANEL-03**: Side panel provides live Ensembl VEP API enrichment for the selected variant (consequence predictions, additional scores)
-- [ ] **PANEL-04**: VEP API responses are cached in SQLite with configurable TTL to avoid redundant requests
+- [x] **PANEL-03**: Side panel provides live Ensembl VEP API enrichment for the selected variant (consequence predictions, additional scores)
+- [x] **PANEL-04**: VEP API responses are cached in SQLite with configurable TTL to avoid redundant requests
 - [ ] **PANEL-05**: Side panel shows external link buttons to PubTator, LitVar, UCSC Genome Browser, Decipher, and Franklin (in addition to existing gnomAD, ClinVar, OMIM)
 - [ ] **PANEL-06**: Side panel includes copy-to-clipboard buttons for HGVS notation, chr:pos:ref:alt, and rsID
-- [ ] **PANEL-07**: When offline, side panel shows database annotations and displays "API enrichment unavailable — offline" message instead of VEP data
-- [ ] **PANEL-08**: When VEP API returns cached data, side panel shows "Cached data from [date]" indicator
-- [ ] **PANEL-09**: Side panel shows loading skeleton while VEP API request is in flight
-- [ ] **PANEL-10**: VEP API requests respect rate limits (max 15 req/sec) with exponential backoff on 429 responses
+- [x] **PANEL-07**: When offline, side panel shows database annotations and displays "API enrichment unavailable — offline" message instead of VEP data
+- [x] **PANEL-08**: When VEP API returns cached data, side panel shows "Cached data from [date]" indicator
+- [x] **PANEL-09**: Side panel shows loading skeleton while VEP API request is in flight
+- [x] **PANEL-10**: VEP API requests respect rate limits (max 15 req/sec) with exponential backoff on 429 responses
 
 ### Case Metadata
 
@@ -43,19 +43,19 @@ Requirements for v0.4.0 — Variant Annotation & Case Metadata. Each maps to roa
 - [ ] **META-03**: Cohort group names autocomplete from previously created groups
 - [ ] **META-04**: User can create new cohort groups with name and optional description
 - [ ] **META-05**: User can assign a case to multiple cohort groups
-- [ ] **META-06**: User can add HPO phenotype terms to a case via searchable autocomplete (API-powered)
-- [ ] **META-07**: HPO autocomplete searches by term name, ID, and synonyms
+- [x] **META-06**: User can add HPO phenotype terms to a case via searchable autocomplete (API-powered)
+- [x] **META-07**: HPO autocomplete searches by term name, ID, and synonyms
 - [ ] **META-08**: User can remove HPO terms from a case
 - [ ] **META-09**: Case metadata (status, cohorts, HPO terms) displays in the case list and case header
-- [ ] **META-10**: When HPO API is unavailable (offline), user sees "HPO search unavailable — offline" message
+- [x] **META-10**: When HPO API is unavailable (offline), user sees "HPO search unavailable — offline" message
 - [ ] **META-11**: Deleting a case cascades deletion of its metadata, cohort links, and phenotype associations
 
 ### Infrastructure
 
 - [x] **INFRA-01**: New annotation tables created automatically when opening existing databases (schema migration)
 - [x] **INFRA-02**: Schema migration works correctly on SQLCipher-encrypted databases
-- [ ] **INFRA-03**: All API calls (VEP, HPO) are proxied through Electron main process (not renderer)
-- [ ] **INFRA-04**: App detects online/offline status and adjusts API feature availability accordingly
+- [x] **INFRA-03**: All API calls (VEP, HPO) are proxied through Electron main process (not renderer)
+- [x] **INFRA-04**: App detects online/offline status and adjusts API feature availability accordingly
 - [ ] **INFRA-05**: External link domains (PubTator, LitVar, UCSC, Decipher, Franklin, HPO browser) added to shell.openExternal allowlist
 - [x] **INFRA-06**: All user-entered data (comments, tags, HPO terms) uses parameterized SQL queries (no injection risk)
 
@@ -119,29 +119,29 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 | ANNOT-13 | Phase 20 | Complete |
 | PANEL-01 | Phase 23 | Pending |
 | PANEL-02 | Phase 23 | Pending |
-| PANEL-03 | Phase 21 | Pending |
-| PANEL-04 | Phase 21 | Pending |
+| PANEL-03 | Phase 21 | Complete |
+| PANEL-04 | Phase 21 | Complete |
 | PANEL-05 | Phase 23 | Pending |
 | PANEL-06 | Phase 23 | Pending |
-| PANEL-07 | Phase 21 | Pending |
-| PANEL-08 | Phase 21 | Pending |
-| PANEL-09 | Phase 21 | Pending |
-| PANEL-10 | Phase 21 | Pending |
+| PANEL-07 | Phase 21 | Complete |
+| PANEL-08 | Phase 21 | Complete |
+| PANEL-09 | Phase 21 | Complete |
+| PANEL-10 | Phase 21 | Complete |
 | META-01 | Phase 22 | Pending |
 | META-02 | Phase 22 | Pending |
 | META-03 | Phase 22 | Pending |
 | META-04 | Phase 22 | Pending |
 | META-05 | Phase 22 | Pending |
-| META-06 | Phase 24 | Pending |
-| META-07 | Phase 24 | Pending |
+| META-06 | Phase 21 | Complete |
+| META-07 | Phase 21 | Complete |
 | META-08 | Phase 22 | Pending |
 | META-09 | Phase 22 | Pending |
-| META-10 | Phase 21 | Pending |
+| META-10 | Phase 21 | Complete |
 | META-11 | Phase 22 | Pending |
 | INFRA-01 | Phase 19 | Complete |
 | INFRA-02 | Phase 19 | Complete |
-| INFRA-03 | Phase 21 | Pending |
-| INFRA-04 | Phase 21 | Pending |
+| INFRA-03 | Phase 21 | Complete |
+| INFRA-04 | Phase 21 | Complete |
 | INFRA-05 | Phase 23 | Pending |
 | INFRA-06 | Phase 19 | Complete |
 

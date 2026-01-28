@@ -42,7 +42,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 19: Database Foundation** - Schema, migration, encrypted DB testing ✓
 - [x] **Phase 20: Annotation Core** - IPC handlers, comments, stars, ACMG classification ✓
-- [ ] **Phase 21: API Service Layer** - VEP + HPO clients, caching, rate limiting, offline detection
+- [x] **Phase 21: API Service Layer** - VEP + HPO clients, caching, rate limiting, offline detection ✓
 - [ ] **Phase 22: Case Metadata** - Status, cohorts, HPO terms, UI
 - [ ] **Phase 23: Side Panel UI** - Drawer, tabs, annotation editing, VEP display, external links
 - [ ] **Phase 24: Custom Tags + HPO Autocomplete** - Tag management, HPO search component
@@ -112,9 +112,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 21-01-PLAN.md — API infrastructure: ApiCache, NetworkStatus, zod schemas, clinical thresholds
-- [ ] 21-02-PLAN.md — VEP API client with rate limiting, caching, MANE Select transcript
-- [ ] 21-03-PLAN.md — HPO API client, VEP/HPO IPC handlers, preload API
+- [x] 21-01-PLAN.md — API infrastructure: ApiCache, NetworkStatus, zod schemas, clinical thresholds ✓
+- [x] 21-02-PLAN.md — VEP API client with rate limiting, caching, MANE Select transcript ✓
+- [x] 21-03-PLAN.md — HPO API client, VEP/HPO IPC handlers, preload API ✓
 
 ### Phase 22: Case Metadata
 **Goal**: Users can assign status, cohort groups, and HPO phenotype terms to cases for stratification and phenotype-driven analysis.
@@ -193,10 +193,10 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 |-------|----------------|--------|-----------|
 | 19. Database Foundation | 2/2 | ✓ Complete | 2026-01-28 |
 | 20. Annotation Core | 4/4 | ✓ Complete | 2026-01-28 |
-| 21. API Service Layer | 0/3 | Ready | - |
+| 21. API Service Layer | 3/3 | ✓ Complete | 2026-01-29 |
 | 22. Case Metadata | 0/3 | Ready | - |
-| 23. Side Panel UI | 0/3 | Planned | - |
+| 23. Side Panel UI | 0/3 | Ready | - |
 | 24. Custom Tags + HPO Autocomplete | 0/3 | Planned | - |
 
 ---
-*Last updated: 2026-01-29 — Phase 24 plans created*
+*Last updated: 2026-01-29 — Phase 21 complete*
