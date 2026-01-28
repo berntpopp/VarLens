@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 21 of 24 (API Service Layer)
-Plan: 1 of 1
+Plan: 2 of 2
 Status: Phase complete
-Last activity: 2026-01-28 - Completed 21-01-PLAN.md (API infrastructure)
+Last activity: 2026-01-28 - Completed 21-02-PLAN.md (VEP API client)
 
 Progress: [████░░░░░░░░░░░░░░░░] 21/24 phases (87.5% complete, v0.4.0 in progress)
 
@@ -31,8 +31,8 @@ Progress: [████░░░░░░░░░░░░░░░░] 21/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 7
-- Total execution time: 50.9 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7)
+- Total plans completed: 8
+- Total execution time: 56.9 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -41,7 +41,7 @@ Progress: [████░░░░░░░░░░░░░░░░] 21/24 p
 |-------|-------|--------|-------|
 | 19. Database Foundation | 2/2 | Complete | Schema + migrations + encrypted DB tests |
 | 20. Annotation Core | 4/4 + UAT | Complete | 01: Backend, 02: UI Display, 03: Mutation Methods, 04: ACMG/Comment UI + post-UAT: per-case stars/ACMG, global indicators, cohort mode |
-| 21. API Service Layer | 1/1 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status) |
+| 21. API Service Layer | 2/2 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status), 02: VEP API client (rate limiting, MANE Select) |
 | 22. Case Metadata | TBD | Not started | Status + cohorts + HPO |
 | 23. Side Panel UI | TBD | Not started | Drawer + tabs + UI |
 | 24. Custom Tags + HPO | TBD | Not started | Tags + autocomplete |
@@ -84,6 +84,11 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Prepared statements for cache | SQL prepared once in constructor | Avoids reparsing overhead (21-01) |
 | Clinical thresholds from ACMG | CADD >= 20, REVEL >= 0.644, SpliceAI >= 0.2 | Evidence-based score classification (21-01) |
 | NetworkStatus singleton | Point-in-time net.isOnline() checks | Offline-first API pattern (21-01) |
+| Bottleneck rate limiting | 15 req/sec (67ms minTime), 55k req/hour reservoir | Prevents Ensembl API overload (21-02) |
+| Exponential backoff on 429 | 1s, 2s, 4s with 50-100% jitter, max 3 retries | Spreads retry traffic, avoids thundering herd (21-02) |
+| Request cancellation | AbortController aborts pending requests | Prevents wasted API calls and stale data (21-02) |
+| Chromosome normalization | Remove chr prefix, standardize MT | Consistent cache keys across notation variations (21-02) |
+| MANE Select prioritization | MANE Select > canonical > first transcript | Clinical best practice for transcript selection (21-02) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -109,9 +114,9 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-28 - Phase 21 Plan 01
-Stopped at: Completed 21-01-PLAN.md - API infrastructure layer complete
+Last session: 2026-01-28 - Phase 21 Plan 02
+Stopped at: Completed 21-02-PLAN.md - VEP API client with rate limiting and MANE Select
 Resume file: None
 
 ---
-*Next step: Phase 22 (Case Metadata) or Phase 22+ (VEP/HPO API clients)*
+*Next step: Phase 21-03 (VEP IPC Handler) or Phase 22 (Case Metadata)*
