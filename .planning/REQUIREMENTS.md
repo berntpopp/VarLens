@@ -29,29 +29,29 @@ Requirements for cohort analysis, security, and import enhancements milestone.
 
 ### External Links
 
-- [ ] **EXTL-01**: Variant table rows include clickable icon buttons for gnomAD, ClinVar, and OMIM
-- [ ] **EXTL-02**: gnomAD link opens variant page using `chr-pos-ref-alt` URL format in default browser
-- [ ] **EXTL-03**: ClinVar link opens search using `chr:pos:ref:alt` URL format in default browser
-- [ ] **EXTL-04**: OMIM link opens entry page using MIM number (when available) or gene search in default browser
-- [ ] **EXTL-05**: External link URLs are constructed with proper URL encoding of variant data components
-- [ ] **EXTL-06**: Shell openExternal domain allowlist is expanded to include gnomad.broadinstitute.org, ncbi.nlm.nih.gov, and omim.org
+- [x] **EXTL-01**: Variant table rows include clickable icon buttons for gnomAD, ClinVar, and OMIM
+- [x] **EXTL-02**: gnomAD link opens variant page using `chr-pos-ref-alt` URL format in default browser
+- [x] **EXTL-03**: ClinVar link opens search using `chr:pos:ref:alt` URL format in default browser
+- [x] **EXTL-04**: OMIM link opens entry page using MIM number (when available) or gene search in default browser
+- [x] **EXTL-05**: External link URLs are constructed with proper URL encoding of variant data components
+- [x] **EXTL-06**: Shell openExternal domain allowlist is expanded to include gnomad.broadinstitute.org, ncbi.nlm.nih.gov, and omim.org
 
 ### Batch Import
 
-- [ ] **BTCH-01**: User can select multiple JSON.gz files via multi-file picker dialog
-- [ ] **BTCH-02**: User can select a folder to import all JSON.gz files within it
-- [ ] **BTCH-03**: Batch import processes files sequentially with per-file error isolation (one failure does not abort the batch)
-- [ ] **BTCH-04**: Batch import displays aggregate progress across all files (current file N of M, overall percentage)
-- [ ] **BTCH-05**: Batch import shows a summary report on completion (files succeeded, failed, skipped)
-- [ ] **BTCH-06**: Duplicate case names during batch import are handled gracefully (skip, rename, or overwrite with user choice)
+- [x] **BTCH-01**: User can select multiple JSON.gz files via multi-file picker dialog
+- [x] **BTCH-02**: User can select a folder to import all JSON.gz files within it
+- [x] **BTCH-03**: Batch import processes files sequentially with per-file error isolation (one failure does not abort the batch)
+- [x] **BTCH-04**: Batch import displays aggregate progress across all files (current file N of M, overall percentage)
+- [x] **BTCH-05**: Batch import shows a summary report on completion (files succeeded, failed, skipped)
+- [x] **BTCH-06**: Duplicate case names during batch import are handled gracefully (skip, rename, or overwrite with user choice)
 
 ### ZIP Import
 
-- [ ] **ZIMP-01**: User can select a password-protected ZIP file for import
-- [ ] **ZIMP-02**: User is prompted for the ZIP password before extraction
-- [ ] **ZIMP-03**: ZIP extraction writes to a temporary directory and cleans up after import completes or fails
-- [ ] **ZIMP-04**: ZIP extraction validates file paths to prevent Zip Slip path traversal attacks (reject `..`, absolute paths, UNC paths)
-- [ ] **ZIMP-05**: Extracted JSON.gz files are fed to the existing import pipeline (single or batch)
+- [x] **ZIMP-01**: User can select a password-protected ZIP file for import
+- [x] **ZIMP-02**: User is prompted for the ZIP password before extraction
+- [x] **ZIMP-03**: ZIP extraction writes to a temporary directory and cleans up after import completes or fails
+- [x] **ZIMP-04**: ZIP extraction validates file paths to prevent Zip Slip path traversal attacks (reject `..`, absolute paths, UNC paths)
+- [x] **ZIMP-05**: Extracted JSON.gz files are fed to the existing import pipeline (single or batch)
 
 ### OMIM Data
 
@@ -63,16 +63,16 @@ Requirements for cohort analysis, security, and import enhancements milestone.
 
 ### Cohort Analysis
 
-- [ ] **CHRT-01**: App provides a distinct cohort analysis view/mode separate from single-case analysis (tab-based navigation)
-- [ ] **CHRT-02**: Cohort view displays an aggregated variant table across all imported cases (grouped by chr, pos, ref, alt)
-- [ ] **CHRT-03**: Cohort variant table shows carrier count per variant (number of cases carrying the variant)
-- [ ] **CHRT-04**: Cohort variant table shows cohort allele frequency per variant
-- [ ] **CHRT-05**: Cohort variant table shows het/hom breakdown per variant
-- [ ] **CHRT-06**: Cohort variant table provides per-case links (drill down from aggregated variant to individual case analyses)
-- [ ] **CHRT-07**: User can search for a specific variant or gene across the entire cohort
-- [ ] **CHRT-08**: Cohort search results show carrier summary (which cases carry the variant, zygosity, frequency)
-- [ ] **CHRT-09**: Cohort view includes gene-level aggregation (burden summary per gene across all cases)
-- [ ] **CHRT-10**: Cohort aggregation queries use proper composite indexes for performance on large datasets
+- [x] **CHRT-01**: App provides a distinct cohort analysis view/mode separate from single-case analysis (tab-based navigation)
+- [x] **CHRT-02**: Cohort view displays an aggregated variant table across all imported cases (grouped by chr, pos, ref, alt)
+- [x] **CHRT-03**: Cohort variant table shows carrier count per variant (number of cases carrying the variant)
+- [x] **CHRT-04**: Cohort variant table shows cohort allele frequency per variant
+- [x] **CHRT-05**: Cohort variant table shows het/hom breakdown per variant
+- [x] **CHRT-06**: Cohort variant table provides per-case links (drill down from aggregated variant to individual case analyses)
+- [x] **CHRT-07**: User can search for a specific variant or gene across the entire cohort
+- [x] **CHRT-08**: Cohort search results show carrier summary (which cases carry the variant, zygosity, frequency)
+- [x] **CHRT-09**: Cohort view includes gene-level aggregation (burden summary per gene across all cases)
+- [x] **CHRT-10**: Cohort aggregation queries use proper composite indexes for performance on large datasets
 
 ## v0.2.0 Requirements (Complete)
 
@@ -155,49 +155,49 @@ Deferred to later milestones.
 | DBSC-01 | Phase 13 | Complete |
 | DBSC-02 | Phase 13 | Complete |
 | DBSC-03 | Phase 13 | Complete |
-| DBSC-04 | Phase 14 | Pending |
-| DBSC-05 | Phase 14 | Pending |
-| DBSC-06 | Phase 14 | Pending |
+| DBSC-04 | Phase 14 | Complete |
+| DBSC-05 | Phase 14 | Complete |
+| DBSC-06 | Phase 14 | Complete |
 | DBSC-07 | Phase 13 | Complete |
 | DBSC-08 | Phase 13 | Complete |
-| DBSL-01 | Phase 14 | Pending |
-| DBSL-02 | Phase 14 | Pending |
-| DBSL-03 | Phase 14 | Pending |
-| DBSL-04 | Phase 14 | Pending |
-| DBSL-05 | Phase 14 | Pending |
-| DBSL-06 | Phase 14 | Pending |
-| EXTL-01 | Phase 15 | Pending |
-| EXTL-02 | Phase 15 | Pending |
-| EXTL-03 | Phase 15 | Pending |
-| EXTL-04 | Phase 15 | Pending |
-| EXTL-05 | Phase 15 | Pending |
-| EXTL-06 | Phase 15 | Pending |
-| BTCH-01 | Phase 16 | Pending |
-| BTCH-02 | Phase 16 | Pending |
-| BTCH-03 | Phase 16 | Pending |
-| BTCH-04 | Phase 16 | Pending |
-| BTCH-05 | Phase 16 | Pending |
-| BTCH-06 | Phase 16 | Pending |
-| ZIMP-01 | Phase 16 | Pending |
-| ZIMP-02 | Phase 16 | Pending |
-| ZIMP-03 | Phase 16 | Pending |
-| ZIMP-04 | Phase 16 | Pending |
-| ZIMP-05 | Phase 16 | Pending |
+| DBSL-01 | Phase 14 | Complete |
+| DBSL-02 | Phase 14 | Complete |
+| DBSL-03 | Phase 14 | Complete |
+| DBSL-04 | Phase 14 | Complete |
+| DBSL-05 | Phase 14 | Complete |
+| DBSL-06 | Phase 14 | Complete |
+| EXTL-01 | Phase 15 | Complete |
+| EXTL-02 | Phase 15 | Complete |
+| EXTL-03 | Phase 15 | Complete |
+| EXTL-04 | Phase 15 | Complete |
+| EXTL-05 | Phase 15 | Complete |
+| EXTL-06 | Phase 15 | Complete |
+| BTCH-01 | Phase 16 | Complete |
+| BTCH-02 | Phase 16 | Complete |
+| BTCH-03 | Phase 16 | Complete |
+| BTCH-04 | Phase 16 | Complete |
+| BTCH-05 | Phase 16 | Complete |
+| BTCH-06 | Phase 16 | Complete |
+| ZIMP-01 | Phase 16 | Complete |
+| ZIMP-02 | Phase 16 | Complete |
+| ZIMP-03 | Phase 16 | Complete |
+| ZIMP-04 | Phase 16 | Complete |
+| ZIMP-05 | Phase 16 | Complete |
 | OMIM-01 | Phase 17 | Complete |
 | OMIM-02 | Phase 17 | Complete |
 | OMIM-03 | Phase 17 | Complete |
 | OMIM-04 | Phase 17 | Complete |
 | OMIM-05 | Phase 17 | Complete |
-| CHRT-01 | Phase 18 | Pending |
-| CHRT-02 | Phase 18 | Pending |
-| CHRT-03 | Phase 18 | Pending |
-| CHRT-04 | Phase 18 | Pending |
-| CHRT-05 | Phase 18 | Pending |
-| CHRT-06 | Phase 18 | Pending |
-| CHRT-07 | Phase 18 | Pending |
-| CHRT-08 | Phase 18 | Pending |
-| CHRT-09 | Phase 18 | Pending |
-| CHRT-10 | Phase 18 | Pending |
+| CHRT-01 | Phase 18 | Complete |
+| CHRT-02 | Phase 18 | Complete |
+| CHRT-03 | Phase 18 | Complete |
+| CHRT-04 | Phase 18 | Complete |
+| CHRT-05 | Phase 18 | Complete |
+| CHRT-06 | Phase 18 | Complete |
+| CHRT-07 | Phase 18 | Complete |
+| CHRT-08 | Phase 18 | Complete |
+| CHRT-09 | Phase 18 | Complete |
+| CHRT-10 | Phase 18 | Complete |
 | CHRM-01 | Phase 9 | Complete |
 | CHRM-02 | Phase 12 | Complete |
 | CHRM-03 | Phase 12 | Complete |

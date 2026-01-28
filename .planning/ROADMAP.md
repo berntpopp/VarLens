@@ -143,8 +143,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 17-01-PLAN.md -- Schema extension, FTS5 rebuild, and import pipeline field mapping for OMIM MIM number extraction from source column 25
-- [ ] 17-02-PLAN.md -- Dedicated OMIM column in variant table with clickable MIM number links and OMIM gene search link removal
+- [x] 17-01-PLAN.md -- Schema extension, FTS5 rebuild, and import pipeline field mapping for OMIM MIM number extraction from source column 25
+- [x] 17-02-PLAN.md -- Dedicated OMIM column in variant table with clickable MIM number links and OMIM gene search link removal
 
 **Requirements:**
 - OMIM-01: Import pipeline extracts OMIM MIM numbers from variant annotation data
@@ -170,8 +170,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 18-01-PLAN.md -- Cohort SQL views, IPC handlers, composite indexes, and CohortView with aggregated variant table
-- [ ] 18-02-PLAN.md -- Cohort search, carrier summary, gene-level burden aggregation, and per-case drill-down
+- [x] 18-01-PLAN.md -- Cohort SQL views, IPC handlers, composite indexes, and CohortView with aggregated variant table
+- [x] 18-02-PLAN.md -- Cohort search, carrier summary, gene-level burden aggregation, and per-case drill-down
 
 **Requirements:**
 - CHRT-01: App provides a distinct cohort analysis view/mode separate from single-case analysis (tab-based navigation)
@@ -203,7 +203,7 @@ Plans:
 | 15 | External Links | Complete | EXTL-01 - EXTL-06 |
 | 16 | Batch Import & ZIP Extraction | Complete | BTCH-01 - BTCH-06, ZIMP-01 - ZIMP-05 |
 | 17 | OMIM Data Extraction | Complete | OMIM-01 - OMIM-05 |
-| 18 | Cohort Analysis | Not Started | CHRT-01 - CHRT-10 |
+| 18 | Cohort Analysis | Complete | CHRT-01 - CHRT-10 |
 
 ## Coverage
 
@@ -245,16 +245,16 @@ Plans:
 | OMIM-03 | Phase 17 | Complete |
 | OMIM-04 | Phase 17 | Complete |
 | OMIM-05 | Phase 17 | Complete |
-| CHRT-01 | Phase 18 | Pending |
-| CHRT-02 | Phase 18 | Pending |
-| CHRT-03 | Phase 18 | Pending |
-| CHRT-04 | Phase 18 | Pending |
-| CHRT-05 | Phase 18 | Pending |
-| CHRT-06 | Phase 18 | Pending |
-| CHRT-07 | Phase 18 | Pending |
-| CHRT-08 | Phase 18 | Pending |
-| CHRT-09 | Phase 18 | Pending |
-| CHRT-10 | Phase 18 | Pending |
+| CHRT-01 | Phase 18 | Complete |
+| CHRT-02 | Phase 18 | Complete |
+| CHRT-03 | Phase 18 | Complete |
+| CHRT-04 | Phase 18 | Complete |
+| CHRT-05 | Phase 18 | Complete |
+| CHRT-06 | Phase 18 | Complete |
+| CHRT-07 | Phase 18 | Complete |
+| CHRT-08 | Phase 18 | Complete |
+| CHRT-09 | Phase 18 | Complete |
+| CHRT-10 | Phase 18 | Complete |
 
 **Total: 40/40 requirements mapped. No orphans.**
 
