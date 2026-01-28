@@ -17,7 +17,10 @@ import type {
   PaginatedResult,
   SortItem,
   VariantAnnotation,
-  CaseVariantAnnotation
+  CaseVariantAnnotation,
+  CaseMetadata,
+  CohortGroup,
+  CaseHpoTerm
 } from './types'
 import { DatabaseError, NotFoundError, UniqueConstraintError, TransactionError } from './errors'
 
@@ -1029,6 +1032,238 @@ export class DatabaseService {
     const perCase = variantId !== undefined ? this.getPerCaseAnnotation(caseId, variantId) : null
 
     return { global, perCase }
+  }
+
+  // ============================================================
+  // Case Metadata Operations
+  // ============================================================
+
+  /**
+   * Get case metadata by case ID
+   *
+   * @param caseId - Case ID
+   * @returns CaseMetadata or null if not found
+   */
+  getCaseMetadata(caseId: number): CaseMetadata | null {
+    const result = this.stmt('SELECT * FROM case_metadata WHERE case_id = ?').get(
+      caseId
+    ) as CaseMetadata | undefined
+
+    return result ?? null
+  }
+
+  /**
+   * Upsert case metadata (atomic operation)
+   *
+   * Uses INSERT ON CONFLICT to avoid race conditions.
+   * Only updates fields provided in updates object (COALESCE pattern).
+   *
+   * @param caseId - Case ID
+   * @param updates - Partial metadata updates
+   * @returns Updated or inserted CaseMetadata
+   */
+  upsertCaseMetadata(
+    caseId: number,
+    updates: { affected_status?: string | null; notes?: string | null }
+  ): CaseMetadata {
+    return this.runTransaction(() => {
+      const now = Date.now()
+
+      const result = this.stmt(
+        `
+        INSERT INTO case_metadata (case_id, affected_status, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(case_id) DO UPDATE SET
+          affected_status = COALESCE(excluded.affected_status, affected_status),
+          notes = COALESCE(excluded.notes, notes),
+          updated_at = excluded.updated_at
+        RETURNING *
+      `
+      ).get(
+        caseId,
+        updates.affected_status ?? null,
+        updates.notes ?? null,
+        now,
+        now
+      ) as CaseMetadata
+
+      return result
+    })
+  }
+
+  // ============================================================
+  // Cohort Group Operations
+  // ============================================================
+
+  /**
+   * List all cohort groups ordered by name
+   *
+   * @returns Array of all cohort groups
+   */
+  listCohortGroups(): CohortGroup[] {
+    return this.stmt('SELECT * FROM cohort_groups ORDER BY name').all() as CohortGroup[]
+  }
+
+  /**
+   * Create a new cohort group
+   *
+   * @param name - Cohort name
+   * @param description - Optional description
+   * @returns Created CohortGroup
+   */
+  createCohortGroup(name: string, description?: string | null): CohortGroup {
+    const now = Date.now()
+    const result = this.stmt(
+      'INSERT INTO cohort_groups (name, description, created_at) VALUES (?, ?, ?) RETURNING *'
+    ).get(name, description ?? null, now) as CohortGroup
+
+    return result
+  }
+
+  /**
+   * Delete a cohort group
+   *
+   * Note: CASCADE handles automatic deletion of case_cohort_links
+   *
+   * @param cohortId - Cohort ID
+   */
+  deleteCohortGroup(cohortId: number): void {
+    this.stmt('DELETE FROM cohort_groups WHERE id = ?').run(cohortId)
+  }
+
+  /**
+   * Get cohort group by name
+   *
+   * @param name - Cohort name
+   * @returns CohortGroup or null if not found
+   */
+  getCohortGroupByName(name: string): CohortGroup | null {
+    const result = this.stmt('SELECT * FROM cohort_groups WHERE name = ?').get(
+      name
+    ) as CohortGroup | undefined
+
+    return result ?? null
+  }
+
+  // ============================================================
+  // Case-Cohort Link Operations
+  // ============================================================
+
+  /**
+   * Get all cohorts for a case
+   *
+   * @param caseId - Case ID
+   * @returns Array of cohort groups
+   */
+  getCaseCohorts(caseId: number): CohortGroup[] {
+    return this.stmt(
+      `
+      SELECT cg.* FROM cohort_groups cg
+      JOIN case_cohort_links ccl ON cg.id = ccl.cohort_id
+      WHERE ccl.case_id = ?
+      ORDER BY cg.name
+    `
+    ).all(caseId) as CohortGroup[]
+  }
+
+  /**
+   * Assign a case to a cohort
+   *
+   * Idempotent - no error if link already exists
+   *
+   * @param caseId - Case ID
+   * @param cohortId - Cohort ID
+   */
+  assignCaseCohort(caseId: number, cohortId: number): void {
+    this.stmt(
+      'INSERT INTO case_cohort_links (case_id, cohort_id) VALUES (?, ?) ON CONFLICT DO NOTHING'
+    ).run(caseId, cohortId)
+  }
+
+  /**
+   * Remove a case from a cohort
+   *
+   * Idempotent - no error if link doesn't exist
+   *
+   * @param caseId - Case ID
+   * @param cohortId - Cohort ID
+   */
+  removeCaseCohort(caseId: number, cohortId: number): void {
+    this.stmt('DELETE FROM case_cohort_links WHERE case_id = ? AND cohort_id = ?').run(
+      caseId,
+      cohortId
+    )
+  }
+
+  /**
+   * Replace all cohort assignments for a case (atomic operation)
+   *
+   * @param caseId - Case ID
+   * @param cohortIds - Array of cohort IDs
+   */
+  setCaseCohorts(caseId: number, cohortIds: number[]): void {
+    this.runTransaction(() => {
+      // Delete existing assignments
+      this.stmt('DELETE FROM case_cohort_links WHERE case_id = ?').run(caseId)
+
+      // Insert new assignments
+      const insert = this.stmt(
+        'INSERT INTO case_cohort_links (case_id, cohort_id) VALUES (?, ?)'
+      )
+      for (const cohortId of cohortIds) {
+        insert.run(caseId, cohortId)
+      }
+    })
+  }
+
+  // ============================================================
+  // Case HPO Term Operations
+  // ============================================================
+
+  /**
+   * Get all HPO terms for a case
+   *
+   * @param caseId - Case ID
+   * @returns Array of HPO terms
+   */
+  getCaseHpoTerms(caseId: number): CaseHpoTerm[] {
+    return this.stmt('SELECT * FROM case_hpo_terms WHERE case_id = ? ORDER BY hpo_id').all(
+      caseId
+    ) as CaseHpoTerm[]
+  }
+
+  /**
+   * Assign HPO term to case (upserts to update label)
+   *
+   * @param caseId - Case ID
+   * @param hpoId - HPO ID (e.g., "HP:0001250")
+   * @param hpoLabel - HPO label
+   * @returns Created or updated CaseHpoTerm
+   */
+  assignCaseHpoTerm(caseId: number, hpoId: string, hpoLabel: string): CaseHpoTerm {
+    const now = Date.now()
+    const result = this.stmt(
+      `
+      INSERT INTO case_hpo_terms (case_id, hpo_id, hpo_label, created_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(case_id, hpo_id) DO UPDATE SET hpo_label = excluded.hpo_label
+      RETURNING *
+    `
+    ).get(caseId, hpoId, hpoLabel, now) as CaseHpoTerm
+
+    return result
+  }
+
+  /**
+   * Remove HPO term from case
+   *
+   * Idempotent - no error if term doesn't exist
+   *
+   * @param caseId - Case ID
+   * @param hpoId - HPO ID
+   */
+  removeCaseHpoTerm(caseId: number, hpoId: string): void {
+    this.stmt('DELETE FROM case_hpo_terms WHERE case_id = ? AND hpo_id = ?').run(caseId, hpoId)
   }
 
   /**
