@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 20 of 24 (Annotation Core)
-Plan: 3 of TBD
-Status: In progress
-Last activity: 2026-01-28 - Completed 20-03 (Annotation Mutation Methods)
+Plan: 4 of 4
+Status: Phase complete
+Last activity: 2026-01-28 - Completed 20-04 (ACMG Menu and Comment Dialog UI)
 
 Progress: [████░░░░░░░░░░░░░░░░] 20/24 phases (83% complete, v0.4.0 in progress)
 
@@ -21,7 +21,7 @@ Progress: [████░░░░░░░░░░░░░░░░] 20/24 p
 - **v0.1 POC** - 8 phases, 17 plans - shipped 2026-01-27
 - **v0.2.0 UI Polish & Trust Signals** - 4 phases, 8 plans - shipped 2026-01-27
 - **v0.3.0 Cohort Analysis, Security & Import Enhancements** - 6 phases, 13 plans - shipped 2026-01-28
-- **v0.4.0 Variant Annotation & Case Metadata** - 6 phases (19-24), 2 plans complete - in progress
+- **v0.4.0 Variant Annotation & Case Metadata** - 6 phases (19-24), 6 plans complete - in progress
 
 ## Performance Metrics
 
@@ -31,8 +31,8 @@ Progress: [████░░░░░░░░░░░░░░░░] 20/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 5
-- Total execution time: 37.9 minutes (8.5 + 16 + 5 + 4.4 + 4)
+- Total plans completed: 6
+- Total execution time: 43.9 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -40,7 +40,7 @@ Progress: [████░░░░░░░░░░░░░░░░] 20/24 p
 | Phase | Plans | Status | Notes |
 |-------|-------|--------|-------|
 | 19. Database Foundation | 2/2 | Complete | Schema + migrations + encrypted DB tests |
-| 20. Annotation Core | 3/TBD | In progress | 01: Backend (5min), 02: UI Display (4min), 03: Mutation Methods (4min) |
+| 20. Annotation Core | 4/4 | Complete | 01: Backend (5min), 02: UI Display (4min), 03: Mutation Methods (4min), 04: ACMG/Comment UI (6min) |
 | 21. API Service Layer | TBD | Not started | VEP + HPO clients |
 | 22. Case Metadata | TBD | Not started | Status + cohorts + HPO |
 | 23. Side Panel UI | TBD | Not started | Drawer + tabs + UI |
@@ -71,6 +71,8 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Bulk annotation loading | Load all visible variants in parallel via Promise.all() | Minimizes IPC overhead (20-02) |
 | variantId as parameter for per-case | Per-case methods require variantId from caller (item.id) | Avoids extra lookup IPC (20-03) |
 | Delete as null-upsert wrapper | Delete comment methods call upsert with null | Preserves other annotation fields (20-03) |
+| Emit-based component communication | AcmgMenu/CommentDialog emit events, caller handles persistence | Clean separation, testable components (20-04) |
+| Slot-based activator pattern | Menu uses slot for custom activator element | Flexible UI integration (20-04) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -96,9 +98,9 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-28 - Phase 20 Plan 03 execution
-Stopped at: Completed 20-03-PLAN.md (Annotation Mutation Methods)
+Last session: 2026-01-28 - Phase 20 Plan 04 execution
+Stopped at: Completed 20-04-PLAN.md (ACMG Menu and Comment Dialog UI)
 Resume file: None
 
 ---
-*Next step: Continue Phase 20 with gap closure plans (comment UI, ACMG dropdown) or move to Phase 21*
+*Next step: Phase 21 (API Service Layer) or Phase 22 (Case Metadata)*
