@@ -139,3 +139,179 @@ export interface PaginatedResult<T> {
   /** Total count of matching items */
   total_count: number
 }
+
+/**
+ * ACMG Classification - 5-tier variant pathogenicity classification
+ */
+export type AcmgClassification =
+  | 'Pathogenic'
+  | 'Likely Pathogenic'
+  | 'VUS'
+  | 'Likely Benign'
+  | 'Benign'
+
+/**
+ * ACMG Evidence - Structure for acmg_evidence JSON field
+ */
+export interface AcmgEvidence {
+  /** Pathogenic evidence codes (e.g., ['PVS1', 'PS1', 'PM2']) */
+  pathogenic: string[]
+  /** Benign evidence codes (e.g., ['BA1', 'BS2']) */
+  benign: string[]
+  /** Evidence notes */
+  notes: string
+  /** Unix timestamp of classification date in milliseconds */
+  classification_date: number
+}
+
+/**
+ * VariantAnnotation - Global annotations keyed by chr:pos:ref:alt
+ */
+export interface VariantAnnotation {
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
+  id: number
+  /** Chromosome */
+  chr: string
+  /** Genomic position */
+  pos: number
+  /** Reference allele */
+  ref: string
+  /** Alternate allele */
+  alt: string
+  /** Global comment for this variant */
+  global_comment: string | null
+  /** Star flag (0 or 1, SQLite boolean) */
+  starred: number
+  /** ACMG classification */
+  acmg_classification: AcmgClassification | null
+  /** ACMG evidence (JSON string of AcmgEvidence) */
+  acmg_evidence: string | null
+  /** Unix timestamp in milliseconds */
+  created_at: number
+  /** Unix timestamp in milliseconds */
+  updated_at: number
+}
+
+/**
+ * CaseVariantAnnotation - Per-case annotations
+ */
+export interface CaseVariantAnnotation {
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
+  id: number
+  /** Foreign key to cases table */
+  case_id: number
+  /** Foreign key to variants table */
+  variant_id: number
+  /** Per-case comment */
+  per_case_comment: string | null
+  /** Unix timestamp in milliseconds */
+  created_at: number
+  /** Unix timestamp in milliseconds */
+  updated_at: number
+}
+
+/**
+ * CaseMetadata - Case status and notes
+ */
+export interface CaseMetadata {
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
+  id: number
+  /** Foreign key to cases table */
+  case_id: number
+  /** Affected status */
+  affected_status: 'affected' | 'unaffected' | 'unknown' | null
+  /** Case notes */
+  notes: string | null
+  /** Unix timestamp in milliseconds */
+  created_at: number
+  /** Unix timestamp in milliseconds */
+  updated_at: number
+}
+
+/**
+ * CohortGroup - User-defined cohort definitions
+ */
+export interface CohortGroup {
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
+  id: number
+  /** Cohort name */
+  name: string
+  /** Cohort description */
+  description: string | null
+  /** Unix timestamp in milliseconds */
+  created_at: number
+}
+
+/**
+ * CaseCohortLink - Case-to-cohort junction
+ */
+export interface CaseCohortLink {
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
+  id: number
+  /** Foreign key to cases table */
+  case_id: number
+  /** Foreign key to cohort_groups table */
+  cohort_id: number
+}
+
+/**
+ * ApiCache - VEP/HPO response caching
+ */
+export interface ApiCache {
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
+  id: number
+  /** Cache key */
+  cache_key: string
+  /** Response data (JSON string) */
+  response_data: string
+  /** Unix timestamp in milliseconds */
+  created_at: number
+  /** Unix timestamp in milliseconds */
+  expires_at: number
+}
+
+/**
+ * Tag - Custom tag definitions
+ */
+export interface Tag {
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
+  id: number
+  /** Tag name */
+  name: string
+  /** Tag color (hex color) */
+  color: string
+  /** Unix timestamp in milliseconds */
+  created_at: number
+}
+
+/**
+ * VariantTag - Per-case tag assignments
+ */
+export interface VariantTag {
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
+  id: number
+  /** Foreign key to cases table */
+  case_id: number
+  /** Foreign key to variants table */
+  variant_id: number
+  /** Foreign key to tags table */
+  tag_id: number
+  /** Unix timestamp in milliseconds */
+  created_at: number
+}
+
+/**
+ * CaseHpoTerm - HPO term assignments to cases
+ */
+export interface CaseHpoTerm {
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
+  id: number
+  /** Foreign key to cases table */
+  case_id: number
+  /** HPO ID (e.g., "HP:0001250") */
+  hpo_id: string
+  /** HPO label */
+  hpo_label: string
+  /** Unix timestamp in milliseconds */
+  created_at: number
+}
