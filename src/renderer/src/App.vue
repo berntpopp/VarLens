@@ -64,7 +64,7 @@
         </v-window-item>
 
         <v-window-item value="cohort">
-          <CohortView ref="cohortViewRef" />
+          <CohortView ref="cohortViewRef" @navigate-to-case="handleNavigateToCase" />
         </v-window-item>
       </v-window>
     </v-main>
@@ -226,6 +226,40 @@ const handleCountsUpdate = (counts: { filtered: number; total: number }): void =
 
 const handleSortUpdate = (sortActive: boolean): void => {
   hasSort.value = sortActive
+}
+
+// Handle navigation from cohort to case
+const handleNavigateToCase = async (payload: {
+  caseId: number
+  chr: string
+  pos: number
+  ref: string
+  alt: string
+}): Promise<void> => {
+  // Guard for browser dev mode (no preload)
+  // eslint-disable-next-line no-undef
+  if (typeof window.api === 'undefined') {
+    return
+  }
+
+  // Switch to case tab
+  activeTab.value = 'case'
+
+  // Set selected case ID
+  selectedCaseId.value = payload.caseId
+
+  // Look up case name from the case list
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
+    const cases = await (window as any).api.cases.list()
+    const selectedCase = cases.find((c: { id: number }) => c.id === payload.caseId)
+    if (selectedCase !== undefined) {
+      selectedCaseName.value = selectedCase.name
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-undef
+    console.error('Failed to fetch case name:', error)
+  }
 }
 
 // Clear filters and sort on case change

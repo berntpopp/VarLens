@@ -1,5 +1,18 @@
 <template>
   <div>
+    <!-- Search bar -->
+    <v-text-field
+      v-model="searchTerm"
+      prepend-inner-icon="mdi-magnify"
+      placeholder="Search by gene, position (chr:pos), or HGVS notation..."
+      clearable
+      density="compact"
+      variant="outlined"
+      hide-details
+      class="mb-3"
+      @update:model-value="handleSearchChange"
+    />
+
     <v-data-table-server
       v-model:items-per-page="itemsPerPage"
       v-model:sort-by="sortBy"
@@ -10,8 +23,10 @@
       :items-per-page-options="[25, 50, 100]"
       item-value="variant_key"
       density="compact"
+      show-expand
       class="elevation-1"
       @update:options="handleTableOptions"
+      @update:expanded="handleExpanded"
     >
       <!-- Chromosome -->
       <template #[`item.chr`]="{ value }">
@@ -75,13 +90,61 @@
           <template v-else> {{ item.het_count }} het </template>
         </span>
       </template>
+
+      <!-- Expandable row with carrier details -->
+      <template #expanded-row="{ columns, item }">
+        <tr>
+          <td :colspan="columns.length" class="pa-0">
+            <v-table density="compact" class="nested-carriers-table bg-surface-variant">
+              <thead>
+                <tr>
+                  <th class="text-left">Case</th>
+                  <th class="text-left">Zygosity</th>
+                  <th class="text-left">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="carrier in carrierMap.get(item.variant_key)" :key="carrier.case_id">
+                  <td>{{ carrier.case_name }}</td>
+                  <td>
+                    <v-chip
+                      size="x-small"
+                      :color="isHomozygous(carrier.gt_num) ? 'error' : 'warning'"
+                      label
+                    >
+                      {{ formatZygosity(carrier.gt_num) }}
+                    </v-chip>
+                  </td>
+                  <td>
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      prepend-icon="mdi-open-in-app"
+                      @click="handleNavigateToCase(carrier.case_id, item)"
+                    >
+                      View in Case
+                    </v-btn>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </td>
+        </tr>
+      </template>
     </v-data-table-server>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type { CohortVariant } from '../../../shared/types/cohort'
+import type { CohortVariant, CohortCarrier } from '../../../shared/types/cohort'
+
+// Emit for navigation
+const emit = defineEmits<{
+  'navigate-to-case': [
+    payload: { caseId: number; chr: string; pos: number; ref: string; alt: string }
+  ]
+}>()
 
 // Table state
 const cohortVariants = ref<CohortVariant[]>([])
@@ -90,8 +153,17 @@ const loading = ref(false)
 const itemsPerPage = ref(50)
 const sortBy = ref<{ key: string; order: 'asc' | 'desc' }[]>([])
 
+// Search state
+const searchTerm = ref('')
+// eslint-disable-next-line no-undef
+let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Carrier state (lazy-loaded per variant)
+const carrierMap = ref<Map<string, CohortCarrier[]>>(new Map())
+
 // Current query parameters
 const currentParams = ref({
+  search_term: undefined as string | undefined,
   sort_by: undefined as string | undefined,
   sort_order: 'desc' as 'asc' | 'desc',
   limit: 50,
@@ -109,6 +181,23 @@ const headers = [
   { title: 'Frequency', key: 'cohort_frequency', sortable: true, align: 'end' as const },
   { title: 'Het / Hom', key: 'het_count', sortable: true }
 ]
+
+// Handle search change with debounce
+const handleSearchChange = (value: string | null): void => {
+  // Clear existing timeout
+  if (searchDebounceTimeout !== null) {
+    // eslint-disable-next-line no-undef
+    clearTimeout(searchDebounceTimeout)
+  }
+
+  // Set new timeout for 300ms debounce
+  // eslint-disable-next-line no-undef
+  searchDebounceTimeout = setTimeout(() => {
+    currentParams.value.search_term = value == null || value === '' ? undefined : value
+    currentParams.value.offset = 0 // Reset to first page on search
+    void loadCohortVariants()
+  }, 300)
+}
 
 // Load cohort variants from backend
 const loadCohortVariants = async (): Promise<void> => {
@@ -156,6 +245,61 @@ const handleTableOptions = async (options: any): Promise<void> => {
   }
 
   await loadCohortVariants()
+}
+
+// Handle row expansion - lazy load carriers
+const handleExpanded = async (value: { value: boolean; item: CohortVariant }[]): Promise<void> => {
+  // Find newly expanded rows
+  for (const { value: isExpanded, item } of value) {
+    if (isExpanded && !carrierMap.value.has(item.variant_key)) {
+      // Lazy load carriers for this variant
+      await loadCarriers(item)
+    }
+  }
+}
+
+// Load carriers for a specific variant
+const loadCarriers = async (variant: CohortVariant): Promise<void> => {
+  // Guard for browser dev mode (no preload)
+  // eslint-disable-next-line no-undef
+  if (typeof window.api === 'undefined') {
+    return
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
+    const carriers = await (window as any).api.cohort.getCarriers(
+      variant.chr,
+      variant.pos,
+      variant.ref,
+      variant.alt
+    )
+    carrierMap.value.set(variant.variant_key, carriers)
+  } catch (error) {
+    // eslint-disable-next-line no-undef
+    console.error('Failed to load carriers:', error)
+    carrierMap.value.set(variant.variant_key, [])
+  }
+}
+
+// Zygosity helper functions
+const isHomozygous = (gt: string): boolean => {
+  return gt.includes('1/1') || gt.includes('1|1')
+}
+
+const formatZygosity = (gt: string): string => {
+  return isHomozygous(gt) ? 'hom' : 'het'
+}
+
+// Handle navigation to case
+const handleNavigateToCase = (caseId: number, variant: CohortVariant): void => {
+  emit('navigate-to-case', {
+    caseId,
+    chr: variant.chr,
+    pos: variant.pos,
+    ref: variant.ref,
+    alt: variant.alt
+  })
 }
 
 // Formatting functions
