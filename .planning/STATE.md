@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 ## Current Position
 
-Phase: 16 -- Batch Import & ZIP Extraction
-Plan: 02 of 2
-Status: Phase complete
-Last activity: 2026-01-28 -- Completed 16-02-PLAN.md
+Phase: 17 -- OMIM Data Extraction
+Plan: 01 of 2
+Status: In progress
+Last activity: 2026-01-28 -- Completed 17-01-PLAN.md
 
-Progress: █████████░░░░░░░░░░░ 9/13 plans (69%)
+Progress: ██████████░░░░░░░░░░ 10/13 plans (77%)
 
 ## Milestone History
 
@@ -29,7 +29,7 @@ Progress: █████████░░░░░░░░░░░ 9/13 plan
 | 14 | Database Selection & Encryption UX | 2 | ✓ Complete (2/2) |
 | 15 | External Links | 3 | ✓ Complete (3/3) |
 | 16 | Batch Import & ZIP Extraction | 2 | ✓ Complete (2/2) |
-| 17 | OMIM Data Extraction | 2 | Not Started |
+| 17 | OMIM Data Extraction | 2 | In Progress (1/2) |
 | 18 | Cohort Analysis | 2 | Not Started |
 
 ## Accumulated Context
@@ -80,6 +80,9 @@ v0.3.0 decisions (accumulated during milestone):
 | 24 | getData(password) over extractAllTo for ZIP | extractAllTo/extractEntryTo trigger uncaught async zlib errors crashing Electron; getData is synchronous and catchable | 16 |
 | 25 | Check both encrypted/encripted header properties | @types/adm-zip declares legacy typo "encripted" but runtime uses "encrypted"; check both for compatibility | 16 |
 | 26 | Remove app.exit(1) from uncaughtException handler | Non-fatal errors (e.g., zlib) should show dialog but not kill the app | 16 |
+| 27 | OMIM extraction uses selected transcript pattern without dictionary | OMIM MIM numbers are plain strings, not coded IDs; follows same multi-value pattern as gene_symbol | 17 |
+| 28 | FTS5 rebuild strategy for schema upgrades | DROP and recreate FTS5 table/triggers on schema changes; IF NOT EXISTS doesn't update existing virtual tables | 17 |
+| 29 | Legacy FTS5 definitions for backward compatibility | Preserve old FTS5 schema for databases without omim_mim_number column to prevent crashes | 17 |
 
 ### Pending Todos
 
@@ -99,13 +102,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Completed 16-02-PLAN.md (Phase 16 complete - Batch Import & ZIP Extraction)
+Stopped at: Completed 17-01-PLAN.md (Phase 17 in progress - OMIM Data Extraction)
 Resume file: None
 
 ## Next Steps
 
-1. Execute Phase 17-01 (OMIM Data Extraction)
-2. Continue through phases 17-18
+1. Execute Phase 17-02 (OMIM Links)
+2. Continue through phase 18
 
 ---
-*Updated: 2026-01-28 after completing Phase 16-02 (Phase 16 complete - 2 plans)*
+*Updated: 2026-01-28 after completing Phase 17-01 (Phase 17 plan 1 of 2 - OMIM backend extraction)*
