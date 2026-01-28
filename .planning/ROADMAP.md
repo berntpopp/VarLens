@@ -165,7 +165,7 @@ Plans:
 ### Phase 24: Custom Tags + HPO Autocomplete
 **Goal**: Users can create custom tags with colors, assign to variants, filter by tags, and search HPO terms with autocomplete.
 
-**Depends on**: Phase 19 (tags schema), Phase 21 (HPO API client)
+**Depends on**: Phase 19 (tags schema), Phase 23 (side panel for tag assignment UI)
 
 **Requirements**: ANNOT-08, ANNOT-09, ANNOT-10, ANNOT-11, META-06, META-07
 
@@ -177,10 +177,12 @@ Plans:
   5. HPO term autocomplete displays matching terms with ID, name, and synonyms as user types (min 2 characters)
   6. HPO term search works offline using bundled HPO JSON (16k terms, fallback when API unavailable)
 
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 24-01: TBD
+- [ ] 24-01-PLAN.md — Backend: Tag IPC handlers, useTags composable, useHpoBundled composable, bundled HPO JSON
+- [ ] 24-02-PLAN.md — Tag management: TagManagementDialog, ColorSwatchPicker, settings integration
+- [ ] 24-03-PLAN.md — UI integration: FilterToolbar tag filter, TagsSection in side panel, HpoAutocomplete component
 
 ## Progress
 
@@ -194,7 +196,7 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | 21. API Service Layer | 0/3 | Ready | - |
 | 22. Case Metadata | 0/3 | Ready | - |
 | 23. Side Panel UI | 0/3 | Planned | - |
-| 24. Custom Tags + HPO Autocomplete | 0/TBD | Not started | - |
+| 24. Custom Tags + HPO Autocomplete | 0/3 | Planned | - |
 
 ---
-*Last updated: 2026-01-29 — Phase 23 plans created*
+*Last updated: 2026-01-29 — Phase 24 plans created*
