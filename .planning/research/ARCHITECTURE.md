@@ -1,863 +1,1249 @@
-# Architecture Patterns
+# Architecture Research
 
-**Domain:** Electron desktop app for genetic variant analysis (v0.3.0 features)
-**Researched:** 2026-01-27
-**Overall confidence:** HIGH
+**Domain:** Variant annotation, classification, API enrichment, case metadata for Electron desktop app
+**Researched:** 2026-01-28
+**Confidence:** HIGH
 
 ## Executive Summary
 
-This document maps how v0.3.0 features -- cohort analysis, SQLCipher encryption, batch import, database selection, external links, and OMIM data extraction -- integrate with the existing Varlens architecture. The existing codebase has a clean three-layer architecture (main process database/IPC, preload bridge, renderer Vue SPA) that accommodates these features through well-defined extension points. The most architecturally disruptive change is the SQLCipher migration, which replaces the core `better-sqlite3` dependency and affects the database singleton lifecycle. All other features are additive extensions to existing patterns.
+This architecture integrates variant annotation (comments, flags, ACMG classifications, tags) and case metadata (status, cohort groups, HPO terms) into Varlens' existing Electron + Vue 3 + SQLite stack. The core pattern follows existing conventions: HTTP API calls in main process via dedicated service layer, new SQLite tables with foreign keys, new IPC handlers following `domain:action` naming, Pinia stores for state management, and Vue components for UI.
 
----
+**Key architectural decisions:**
+1. **API Proxy in Main Process**: HTTP calls (VEP, HPO) live in new `ApiService` class in main process with offline caching
+2. **Side Panel as Vuetify Drawer**: Right-side v-navigation-drawer with persistent state in Pinia store
+3. **Annotation Storage**: New SQLite tables (`variant_annotations`, `case_metadata`, `cohort_groups`) with foreign keys and triggers
+4. **Graceful Degradation**: API failures fall back to cache or show "offline" UI states
+5. **Schema Migration**: Existing `migrateVariantsTable` pattern extended for new tables with column-existence checks
 
-## Current Architecture (v0.2.0)
-
-### Component Map
-
-```
-Renderer (Vue 3 + Vuetify 3)
-  App.vue
-    +-- AppSidebar > CaseList
-    +-- FilterToolbar
-    +-- VariantTable (v-data-table-server)
-    +-- ImportDialog
-    +-- EmptyState
-    +-- AppFooter, DisclaimerDialog, FaqDialog, LogViewer
-
-Preload (contextBridge)
-  api.cases.{list, delete}
-  api.variants.{query, getFilterOptions, search}
-  api.import.{selectFile, start, onProgress, cancel}
-  api.export.{variants}
-  api.system.{getVersion, getUserDataPath}
-  api.shell.{openExternal}
-
-Main Process
-  index.ts                 -- App lifecycle, BrowserWindow, global error handlers
-  database/
-    index.ts               -- Singleton DatabaseService factory (hardcoded path)
-    DatabaseService.ts     -- SQLite operations, prepared statement cache, transactions
-    schema.ts              -- DDL (cases, variants, FTS5, triggers, migrations)
-    types.ts               -- Case, Variant, VariantFilter, PaginationCursor interfaces
-    errors.ts              -- DatabaseError, NotFoundError, UniqueConstraintError
-  import/
-    ImportService.ts       -- Streaming gzip JSON pipeline
-    transforms/            -- FieldMapper, BatchAccumulator (Transform streams)
-    config/fieldMapping.ts -- Column indices, dictionaries, static mappings
-  ipc/
-    index.ts               -- Handler registration (dynamic import)
-    errorHandler.ts        -- wrapHandler, toSerializableError
-    handlers/              -- cases.ts, variants.ts, import.ts, export.ts, shell.ts, system.ts
-```
-
-### Key Architectural Characteristics
-
-1. **Database singleton**: `getDatabaseService()` creates one `DatabaseService` at `app.getPath('userData')/varlens.db`. No mechanism to close and reopen with a different path.
-2. **IPC channel convention**: `domain:action` naming (e.g., `cases:list`, `variants:query`).
-3. **Error handling**: All IPC handlers wrapped with `wrapHandler()` converting to `SerializableError`.
-4. **Import pipeline**: Streaming Transform pipeline (readStream -> gunzip -> parser -> pick -> streamArray -> FieldMapper -> BatchAccumulator). Single-file processing with AbortController cancellation.
-5. **Security**: Context isolation enabled, sandbox=true, `shell:openExternal` whitelist restricted to `github.com` and `opensource.org`.
-6. **Progress**: Main -> renderer via `webContents.send('import:progress', ...)` with 100ms throttle.
-
----
-
-## Recommended Architecture for v0.3.0
-
-### Overview of Changes
-
-| Feature | Layer Affected | Change Type |
-|---------|---------------|-------------|
-| SQLCipher | Main (database) | **Replace** better-sqlite3 with better-sqlite3-multiple-ciphers |
-| Database selection | Main (database, ipc) + Preload + Renderer | **New** lifecycle management, file dialogs, UI |
-| Batch import | Main (import, ipc) + Preload + Renderer | **Extend** existing import pipeline |
-| ZIP extraction | Main (import) | **New** pre-processing step before existing pipeline |
-| Cohort analysis | Main (database, ipc) + Preload + Renderer | **New** queries, IPC channels, Vue views |
-| External links | Renderer + Main (shell) | **Extend** shell handler whitelist, renderer URL builders |
-| OMIM extraction | Main (import) + database schema | **Extend** field mapping, schema |
-
-### Component Boundaries
+## System Overview
 
 ```
-Renderer (MODIFIED)
-  App.vue (add routing or tab switching for cohort view)
-    +-- [existing components]
-    +-- NEW: CohortView
-    |     +-- CohortSummary (stats cards)
-    |     +-- CohortVariantTable (aggregated v-data-table-server)
-    |     +-- CohortSearch (gene/variant search across all cases)
-    +-- NEW: DatabaseSelector (toolbar or dialog)
-    +-- MODIFIED: ImportDialog -> BatchImportDialog (multi-file + ZIP)
-    +-- MODIFIED: VariantTable (add external link icons per row)
+┌─────────────────────────────────────────────────────────────────────┐
+│                         RENDERER PROCESS                              │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ Vue 3 Components                                              │   │
+│  │  - VariantTable (existing, enhanced with flag/class icons)   │   │
+│  │  - VariantDetailsPanel (NEW: side drawer)                    │   │
+│  │  - CaseMetadataDialog (NEW: case status/cohort/HPO editor)   │   │
+│  │  - AnnotationEditor (NEW: comments/flags/tags/ACMG)          │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ Pinia Stores                                                  │   │
+│  │  - annotationsStore (NEW: variant annotations state)         │   │
+│  │  - caseMetadataStore (NEW: case metadata state)              │   │
+│  │  - sidePanelStore (NEW: drawer visibility, selected variant) │   │
+│  │  - databaseStore (existing)                                  │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                              │                                        │
+│                              │ IPC (via contextBridge)                │
+└──────────────────────────────┼────────────────────────────────────────┘
+                               │
+┌──────────────────────────────┼────────────────────────────────────────┐
+│                         MAIN PROCESS                                  │
+│  ┌──────────────────────────▼────────────────────────────────────┐   │
+│  │ IPC Handlers (src/main/ipc/handlers/)                         │   │
+│  │  - annotations.ts (NEW: CRUD for annotations)                 │   │
+│  │  - api-proxy.ts (NEW: VEP/HPO API calls)                      │   │
+│  │  - case-metadata.ts (NEW: case metadata CRUD)                 │   │
+│  └───────────┬────────────────────────────────┬──────────────────┘   │
+│              │                                │                       │
+│  ┌───────────▼────────────────┐   ┌──────────▼──────────────────┐   │
+│  │ DatabaseService (existing) │   │ ApiService (NEW)             │   │
+│  │  - New methods for          │   │  - VEP client                │   │
+│  │    annotation CRUD          │   │  - HPO client                │   │
+│  │  - New methods for          │   │  - SQLite cache (api_cache)  │   │
+│  │    case metadata CRUD       │   │  - Offline degradation logic │   │
+│  └───────────┬────────────────┘   └─────────────────────────────┘   │
+│              │                                                        │
+│  ┌───────────▼────────────────────────────────────────────────────┐ │
+│  │ SQLite Database (better-sqlite3-multiple-ciphers)              │ │
+│  │  - cases (existing)                                            │ │
+│  │  - variants (existing)                                         │ │
+│  │  - variant_annotations (NEW)                                   │ │
+│  │  - case_metadata (NEW)                                         │ │
+│  │  - cohort_groups (NEW)                                         │ │
+│  │  - api_cache (NEW)                                             │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────┘
 
-Preload (EXTENDED)
-  api.cases.{list, delete}                          -- existing
-  api.variants.{query, getFilterOptions, search}    -- existing
-  api.import.{selectFile, start, onProgress, cancel} -- MODIFIED (batch)
-  api.export.{variants}                             -- existing
-  api.system.{getVersion, getUserDataPath}           -- existing
-  api.shell.{openExternal}                          -- existing (expanded whitelist)
-  NEW: api.database.{select, create, getCurrent, open, close}
-  NEW: api.import.{selectFiles, selectFolder, startBatch, batchProgress}
-  NEW: api.cohort.{summary, variants, search, geneAggregation}
-
-Main Process (MODIFIED + EXTENDED)
-  database/
-    index.ts               -- MODIFIED: Lifecycle manager (open/close/switch)
-    DatabaseService.ts     -- MODIFIED: Constructor accepts key parameter
-    schema.ts              -- MODIFIED: Add OMIM columns, cohort views
-    types.ts               -- MODIFIED: Add CohortVariant, CohortSummary types
-    errors.ts              -- MODIFIED: Add EncryptionError
-  import/
-    ImportService.ts       -- MODIFIED: Accept file list, orchestrate batch
-    NEW: ZipExtractor.ts   -- ZIP password extraction to temp directory
-    transforms/            -- Existing (no changes needed)
-    config/fieldMapping.ts -- MODIFIED: Add OMIM column indices
-  ipc/handlers/
-    NEW: database.ts       -- database:select, database:create, database:open, database:close
-    NEW: cohort.ts         -- cohort:summary, cohort:variants, cohort:search
-    MODIFIED: import.ts    -- import:selectFiles, import:startBatch, import:batchProgress
-    MODIFIED: shell.ts     -- Expand ALLOWED_DOMAINS
+External Services (main process HTTP only):
+  - Ensembl VEP REST API (https://rest.ensembl.org)
+  - HPO API (https://clinicaltables.nlm.nih.gov)
 ```
 
----
+## New Components
 
-## Feature Integration Details
+### 1. API Client Layer (Main Process)
 
-### 1. SQLCipher: Replacing better-sqlite3
+**Location:** `src/main/services/ApiService.ts`
 
-**Confidence: HIGH** -- `better-sqlite3-multiple-ciphers@12.6.2` has Electron 40 prebuilt binaries (verified via GitHub releases page).
+**Responsibilities:**
+- HTTP API calls to Ensembl VEP and HPO ontology API
+- SQLite-based response caching with TTL
+- Offline degradation (return cached data or null)
+- Rate limiting to respect API quotas
 
-**The migration:**
+**Why main process?**
+- Security: Renderer process is sandboxed and untrusted
+- Node.js access: Built-in `https` module for requests
+- SQLite access: Direct cache storage in database
+- Following Electron best practices (see [Security | Electron](https://www.electronjs.org/docs/latest/tutorial/security))
 
-The package `better-sqlite3-multiple-ciphers` is a drop-in fork of `better-sqlite3` with identical API plus two additional methods: `.key(Buffer)` and `.rekey(Buffer)`. The migration is:
-
-1. Replace `better-sqlite3` with `better-sqlite3-multiple-ciphers` in `package.json`
-2. Update all import statements: `import Database from 'better-sqlite3-multiple-ciphers'`
-3. Update `electron.vite.config.ts` external: `['better-sqlite3-multiple-ciphers']`
-4. Update `electron-builder` config: `asarUnpack` and `files` patterns
-5. Update `@electron/rebuild` target: `-w better-sqlite3-multiple-ciphers`
-6. Update Makefile rebuild targets
-
-**Encryption lifecycle in DatabaseService constructor:**
-
+**Implementation pattern:**
 ```typescript
-// New constructor signature
-constructor(dbPath: string = ':memory:', key?: string) {
-  this.db = new Database(dbPath)
+export class ApiService {
+  constructor(private db: DatabaseType) {}
 
-  if (key) {
-    // MUST be set before ANY SQL operations
-    this.db.pragma(`cipher='sqlcipher'`)
-    this.db.pragma(`legacy=4`)
-    this.db.pragma(`key='${key}'`)
-  }
+  async fetchVepAnnotation(chr: string, pos: number, ref: string, alt: string): Promise<VepAnnotation | null> {
+    // 1. Check cache first
+    const cached = this.getCachedVep(chr, pos, ref, alt)
+    if (cached && !this.isCacheExpired(cached.timestamp)) {
+      return cached.data
+    }
 
-  // Enable WAL mode, foreign keys, initialize schema (AFTER key)
-  this.db.pragma('journal_mode = WAL')
-  this.db.pragma('foreign_keys = ON')
-  initializeSchema(this.db)
-}
-```
-
-**Critical constraint:** The `PRAGMA key` must be the very first operation after opening the database connection, before any other PRAGMA or SQL statement. This means the encryption key must be provided at construction time, not after.
-
-**Migrating existing unencrypted databases:** Use `PRAGMA rekey='newpassword'` after opening without a key. To decrypt, use `PRAGMA rekey=''`.
-
-**Build system changes:**
-
-| File | Current | New |
-|------|---------|-----|
-| `package.json` dependencies | `"better-sqlite3": "^12.6.2"` | `"better-sqlite3-multiple-ciphers": "^12.6.2"` |
-| `package.json` devDependencies | `"@types/better-sqlite3": "^7.6.13"` | Same (types are compatible) |
-| `package.json` postinstall | `npx @electron/rebuild -f -w better-sqlite3` | `npx @electron/rebuild -f -w better-sqlite3-multiple-ciphers` |
-| `package.json` build.asarUnpack | `["**/*.node"]` or `["node_modules/better-sqlite3/**/*"]` | `["node_modules/better-sqlite3-multiple-ciphers/**/*"]` |
-| `electron.vite.config.ts` | `external: ['better-sqlite3']` | `external: ['better-sqlite3-multiple-ciphers']` |
-| `Makefile` rebuild targets | References better-sqlite3 | References better-sqlite3-multiple-ciphers |
-
-**Risk assessment:** LOW risk. The fork is API-compatible with better-sqlite3, has prebuilt binaries for Electron 40, and the same @types/better-sqlite3 types work. The main risk is the native module compilation pipeline -- must verify CI/CD builds pass on all three platforms.
-
-### 2. Database Selection and Switching
-
-**Confidence: HIGH** -- Follows patterns from sqlite-search reference project.
-
-**Current state:** `getDatabaseService()` in `src/main/database/index.ts` is a singleton with hardcoded path `app.getPath('userData')/varlens.db`. No ability to switch databases.
-
-**Required changes to database/index.ts:**
-
-```typescript
-// Transform from simple singleton to lifecycle manager
-let databaseService: DatabaseService | null = null
-let currentDbPath: string | null = null
-let currentDbKey: string | undefined = undefined
-
-export function getDatabaseService(): DatabaseService {
-  if (!databaseService) {
-    throw new Error('No database is open. Call openDatabase() first.')
-  }
-  return databaseService
-}
-
-export function openDatabase(dbPath: string, key?: string): DatabaseService {
-  // Close existing connection if open
-  if (databaseService) {
-    closeDatabaseService()
-  }
-
-  databaseService = new DatabaseService(dbPath, key)
-  currentDbPath = dbPath
-  currentDbKey = key
-  return databaseService
-}
-
-export function closeDatabaseService(): void {
-  if (databaseService) {
-    databaseService.close()
-    databaseService = null
-    currentDbPath = null
-    currentDbKey = undefined
-  }
-}
-
-export function getCurrentDbPath(): string | null {
-  return currentDbPath
-}
-```
-
-**New IPC channels:**
-
-| Channel | Direction | Signature | Purpose |
-|---------|-----------|-----------|---------|
-| `database:select` | invoke | `() => string \| null` | Show file picker for .db/.sqlite files |
-| `database:create` | invoke | `(path?: string) => string` | Create new database (optional save dialog) |
-| `database:open` | invoke | `(path: string, key?: string) => { success: boolean }` | Open database with optional key |
-| `database:close` | invoke | `() => void` | Close current database |
-| `database:getCurrent` | invoke | `() => { path: string \| null, encrypted: boolean }` | Get current database info |
-| `database:rekey` | invoke | `(currentKey?: string, newKey?: string) => { success: boolean }` | Change/add/remove encryption |
-
-**Renderer impact:** The `App.vue` needs awareness of database connection state. Recommend a Pinia store (`databaseStore`) that tracks:
-- `isOpen: boolean`
-- `path: string | null`
-- `isEncrypted: boolean`
-- `lastOpened: string[]` (recent files list)
-
-**File dialog filter:**
-```typescript
-filters: [
-  { name: 'VarLens Database', extensions: ['db', 'sqlite', 'sqlite3'] },
-  { name: 'All Files', extensions: ['*'] }
-]
-```
-
-**Settings persistence:** Extend the existing `settings.json` (already used for `lastImportDirectory`) to include:
-- `lastDatabasePath`: Last opened database path
-- `recentDatabases`: Array of recently opened database paths
-
-### 3. ZIP Extraction
-
-**Confidence: HIGH** -- `unzipper` npm package supports password-protected ZIP extraction.
-
-**Architecture decision:** ZIP extraction is a pre-processing step before the existing import pipeline. It extracts `.json.gz` files from a password-protected ZIP to a temp directory, then the existing `ImportService` processes each file normally.
-
-**New component: `ZipExtractor`**
-
-```
-Location: src/main/import/ZipExtractor.ts
-
-Responsibilities:
-  - Accept ZIP file path and password
-  - Extract all .json.gz files to temp directory (app.getPath('temp'))
-  - Return list of extracted file paths
-  - Clean up temp files after import completes (or on error)
-  - Report extraction progress
-
-Dependencies:
-  - unzipper (npm package) -- supports password-protected ZIPs
-  - fs/promises for temp directory management
-  - path for path resolution
-```
-
-**Data flow:**
-
-```
-User selects .zip file
-  -> IPC: import:selectFile (modified to accept .zip extension)
-  -> User provides ZIP password (dialog in renderer)
-  -> IPC: import:startBatch or import:start
-  -> ZipExtractor.extract(zipPath, password) -> tempDir with .json.gz files
-  -> ImportService.importVariants(each file) -> sequential processing
-  -> ZipExtractor.cleanup(tempDir) -> remove temp files
-```
-
-**Password handling:** The ZIP password is provided by the user in the renderer and passed to the main process via IPC. It is never stored -- only held in memory during the extraction operation. This is distinct from the SQLCipher database key.
-
-**Temp directory strategy:**
-```typescript
-import { mkdtemp, rm } from 'fs/promises'
-import { join } from 'path'
-import { app } from 'electron'
-
-const tempDir = await mkdtemp(join(app.getPath('temp'), 'varlens-import-'))
-// ... extract and import ...
-await rm(tempDir, { recursive: true, force: true })
-```
-
-### 4. Batch Import Orchestration
-
-**Confidence: HIGH** -- Extends existing ImportService with sequential file processing.
-
-**Decision: Sequential, not parallel.** SQLite is single-writer. Parallel imports would contend for write locks and provide no performance benefit. Sequential processing with aggregate progress reporting is the correct pattern.
-
-**Modified import flow:**
-
-```
-Current (single file):
-  selectFile -> start(filePath, caseName) -> progress events -> result
-
-New (batch):
-  selectFiles/selectFolder -> list of files
-  startBatch(files[], caseNames[]) -> for each file:
-    -> start(file, caseName)
-    -> individual progress
-    -> file complete
-  -> batch complete with aggregate result
-```
-
-**New IPC channels:**
-
-| Channel | Direction | Signature | Purpose |
-|---------|-----------|-----------|---------|
-| `import:selectFiles` | invoke | `() => string[] \| null` | Multi-file picker (JSON.gz files) |
-| `import:selectFolder` | invoke | `() => string \| null` | Folder picker, scans for .json.gz files |
-| `import:startBatch` | invoke | `(files: BatchImportFile[]) => BatchImportResult` | Sequential batch import |
-| `import:batchProgress` | event | `(progress: BatchProgressUpdate) => void` | Aggregate batch progress |
-
-**BatchImportFile type:**
-```typescript
-interface BatchImportFile {
-  filePath: string
-  caseName: string       // User-provided or auto-derived from filename
-  isFromZip?: boolean    // If extracted from ZIP
-}
-```
-
-**BatchProgressUpdate type:**
-```typescript
-interface BatchProgressUpdate {
-  phase: 'extracting' | 'importing' | 'complete'
-  currentFile: string
-  currentFileIndex: number
-  totalFiles: number
-  currentFileProgress?: ProgressUpdate  // Reuse existing ProgressUpdate
-  completedFiles: { caseName: string; variantCount: number }[]
-  errors: { caseName: string; error: string }[]
-}
-```
-
-**Orchestration in ImportService:**
-```typescript
-// New method in ImportService
-async importBatch(
-  files: BatchImportFile[],
-  options: BatchImportOptions
-): Promise<BatchImportResult> {
-  const results: ImportResult[] = []
-  const errors: { file: string; error: string }[] = []
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i]
-    options.onBatchProgress?.({
-      phase: 'importing',
-      currentFile: file.caseName,
-      currentFileIndex: i,
-      totalFiles: files.length,
-      completedFiles: results.map(r => ({ caseName: r.caseName, variantCount: r.variantCount })),
-      errors
-    })
-
+    // 2. Make API call with error handling
     try {
-      const result = await this.importVariants(file.filePath, {
-        caseName: file.caseName,
-        onProgress: options.onFileProgress,
-        signal: options.signal
-      })
-      results.push(result)
+      const response = await this.httpRequest('https://rest.ensembl.org/vep/...')
+      // 3. Store in cache
+      this.cacheVepResponse(chr, pos, ref, alt, response)
+      return response
     } catch (error) {
-      errors.push({ file: file.caseName, error: String(error) })
-      // Continue with next file (don't abort batch on single failure)
+      // 4. Offline degradation: return stale cache or null
+      return cached?.data ?? null
+    }
+  }
+}
+```
+
+### 2. Annotation Storage (Main Process)
+
+**Location:** `src/main/database/annotations.ts`
+
+**Responsibilities:**
+- CRUD operations for variant annotations
+- CRUD operations for case metadata
+- Join queries for variant table enhancement
+
+**Methods to add to DatabaseService:**
+```typescript
+// Variant annotations
+getAnnotationsForVariant(variantId: number): VariantAnnotation | null
+createOrUpdateAnnotation(variantId: number, annotation: AnnotationInput): void
+deleteAnnotation(variantId: number): void
+listAnnotationsForCase(caseId: number): VariantAnnotation[]
+
+// Case metadata
+getCaseMetadata(caseId: number): CaseMetadata | null
+updateCaseMetadata(caseId: number, metadata: CaseMetadataInput): void
+addCohortGroup(name: string): number
+listCohortGroups(): CohortGroup[]
+linkCaseToGroups(caseId: number, groupIds: number[]): void
+```
+
+### 3. Side Panel Component (Renderer)
+
+**Location:** `src/renderer/src/components/VariantDetailsPanel.vue`
+
+**Responsibilities:**
+- Display variant details with API enrichment (VEP, HPO)
+- Show/edit annotations (comments, flags, ACMG, tags)
+- Loading states for API calls
+- Offline fallback UI
+
+**Component architecture:**
+- Vuetify `v-navigation-drawer` with `permanent` prop for persistent visibility
+- State managed in `sidePanelStore` (selected variant ID, drawer open/closed)
+- Tabs for "Details" / "Annotations" / "API Data"
+- Form inputs for annotation editing with Pinia action calls
+
+**Pattern from search:** [Navigation drawer component — Vuetify](https://vuetifyjs.com/en/components/navigation-drawers/)
+
+### 4. Case Metadata UI (Renderer)
+
+**Location:** `src/renderer/src/components/CaseMetadataDialog.vue`
+
+**Responsibilities:**
+- Edit case status (e.g., "In Progress", "Complete", "Archived")
+- Assign case to cohort groups (multi-select)
+- Add/remove HPO terms for phenotype annotation
+
+**UI Pattern:**
+- v-dialog triggered from case list actions
+- Form with v-select (status), v-autocomplete (cohort groups), v-combobox (HPO terms)
+- HPO autocomplete uses API proxy for term search
+
+### 5. Annotation Indicators (Renderer Enhancement)
+
+**Location:** `src/renderer/src/components/VariantTable.vue` (modify existing)
+
+**Enhancement:**
+- Add icon columns for star/flag/classification status
+- Join annotation data in variant query
+- Click handlers open side panel
+
+**Visual pattern:**
+```
+| Chr | Pos | ... | Gene | ⭐ | 🚩 | ACMG | ... |
+|  1  | 123 | ... | BRCA1| ⭐ | 🚩 |  P   | ... |
+```
+
+## Component Responsibilities
+
+| Component | Layer | Responsibility |
+|-----------|-------|----------------|
+| `ApiService` | Main | HTTP API calls, caching, offline degradation |
+| `DatabaseService` (extended) | Main | Annotation CRUD, case metadata CRUD |
+| `annotations.ts` (handler) | Main IPC | IPC handlers for annotation operations |
+| `api-proxy.ts` (handler) | Main IPC | IPC handlers for VEP/HPO requests |
+| `case-metadata.ts` (handler) | Main IPC | IPC handlers for case metadata |
+| `annotationsStore` | Renderer Pinia | Annotation state, optimistic updates |
+| `caseMetadataStore` | Renderer Pinia | Case metadata state |
+| `sidePanelStore` | Renderer Pinia | Drawer visibility, selected variant |
+| `VariantDetailsPanel.vue` | Renderer | Side drawer with variant details + API data |
+| `AnnotationEditor.vue` | Renderer | Form for comments/flags/tags/ACMG |
+| `CaseMetadataDialog.vue` | Renderer | Dialog for case status/cohort/HPO |
+| `VariantTable.vue` (modified) | Renderer | Add annotation indicator columns |
+
+## Recommended Project Structure
+
+```
+src/
+├── main/
+│   ├── services/
+│   │   ├── ApiService.ts                 (NEW: VEP + HPO API client)
+│   │   ├── DatabaseManager.ts             (existing)
+│   │   └── RecentDatabasesService.ts      (existing)
+│   ├── database/
+│   │   ├── DatabaseService.ts             (extend: annotation methods)
+│   │   ├── schema.ts                      (extend: new tables)
+│   │   ├── annotations.ts                 (NEW: annotation queries)
+│   │   └── types.ts                       (extend: new types)
+│   ├── ipc/
+│   │   └── handlers/
+│   │       ├── annotations.ts             (NEW: annotation IPC)
+│   │       ├── api-proxy.ts               (NEW: API proxy IPC)
+│   │       └── case-metadata.ts           (NEW: metadata IPC)
+│   └── index.ts                           (register new handlers)
+├── renderer/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── VariantDetailsPanel.vue    (NEW: side drawer)
+│   │   │   ├── AnnotationEditor.vue       (NEW: annotation form)
+│   │   │   ├── CaseMetadataDialog.vue     (NEW: metadata editor)
+│   │   │   ├── AcmgClassificationForm.vue (NEW: ACMG criteria form)
+│   │   │   └── VariantTable.vue           (modify: add indicators)
+│   │   ├── stores/
+│   │   │   ├── annotationsStore.ts        (NEW)
+│   │   │   ├── caseMetadataStore.ts       (NEW)
+│   │   │   └── sidePanelStore.ts          (NEW)
+│   │   └── composables/
+│   │       └── useApiData.ts              (NEW: API fetch composable)
+└── shared/
+    └── types/
+        ├── annotations.ts                  (NEW: annotation types)
+        ├── case-metadata.ts                (NEW: metadata types)
+        └── api.ts                          (extend: VEP/HPO types)
+```
+
+## Architectural Patterns
+
+### API Proxy Pattern (Main Process)
+
+**Pattern:** All HTTP API calls originate from main process via dedicated service
+
+**Rationale:**
+- Security: Renderer is sandboxed with no direct network access
+- Centralized caching: Single SQLite cache for all API responses
+- Offline support: Main process controls degradation logic
+- Rate limiting: Centralized control over API request frequency
+
+**Implementation:**
+```typescript
+// src/main/services/ApiService.ts
+export class ApiService {
+  private cacheDb: Database.Database
+  private vepBaseUrl = 'https://rest.ensembl.org'
+  private hpoBaseUrl = 'https://clinicaltables.nlm.nih.gov'
+
+  constructor(db: Database.Database) {
+    this.cacheDb = db
+    this.initializeCacheTable()
+  }
+
+  private initializeCacheTable(): void {
+    this.cacheDb.exec(`
+      CREATE TABLE IF NOT EXISTS api_cache (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service TEXT NOT NULL,  -- 'vep' or 'hpo'
+        cache_key TEXT NOT NULL UNIQUE,
+        response_data TEXT NOT NULL,  -- JSON blob
+        cached_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_cache_lookup
+        ON api_cache(service, cache_key);
+      CREATE INDEX IF NOT EXISTS idx_cache_expiry
+        ON api_cache(expires_at);
+    `)
+  }
+
+  async fetchVepAnnotation(
+    chr: string, pos: number, ref: string, alt: string
+  ): Promise<VepResponse | null> {
+    const cacheKey = `${chr}:${pos}:${ref}:${alt}`
+
+    // Check cache
+    const cached = this.getCached('vep', cacheKey)
+    if (cached && Date.now() < cached.expires_at) {
+      return JSON.parse(cached.response_data)
+    }
+
+    // Fetch from API
+    try {
+      const url = `${this.vepBaseUrl}/vep/human/region/${chr}:${pos}-${pos}/${alt}`
+      const response = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (!response.ok) {
+        throw new Error(`VEP API returned ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      // Cache for 30 days
+      this.cacheResponse('vep', cacheKey, data, 30 * 24 * 60 * 60 * 1000)
+
+      return data
+    } catch (error) {
+      console.warn('VEP API failed, using stale cache:', error)
+      // Return stale cache if available
+      return cached ? JSON.parse(cached.response_data) : null
     }
   }
 
-  return { results, errors, totalFiles: files.length }
+  async searchHpoTerms(query: string): Promise<HpoTerm[]> {
+    const cacheKey = `search:${query}`
+
+    const cached = this.getCached('hpo', cacheKey)
+    if (cached && Date.now() < cached.expires_at) {
+      return JSON.parse(cached.response_data)
+    }
+
+    try {
+      const url = `${this.hpoBaseUrl}/api/hpo/v3/search?terms=${encodeURIComponent(query)}`
+      const response = await fetch(url)
+      const data = await response.json()
+
+      // Cache for 7 days (ontology is relatively stable)
+      this.cacheResponse('hpo', cacheKey, data, 7 * 24 * 60 * 60 * 1000)
+
+      return data
+    } catch (error) {
+      console.warn('HPO API failed, using stale cache:', error)
+      return cached ? JSON.parse(cached.response_data) : []
+    }
+  }
+
+  private getCached(service: string, cacheKey: string) {
+    return this.cacheDb
+      .prepare('SELECT * FROM api_cache WHERE service = ? AND cache_key = ?')
+      .get(service, cacheKey) as CachedResponse | undefined
+  }
+
+  private cacheResponse(
+    service: string,
+    cacheKey: string,
+    data: any,
+    ttlMs: number
+  ): void {
+    const now = Date.now()
+    this.cacheDb
+      .prepare(`
+        INSERT OR REPLACE INTO api_cache
+          (service, cache_key, response_data, cached_at, expires_at)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      .run(service, cacheKey, JSON.stringify(data), now, now + ttlMs)
+  }
 }
 ```
 
-**Error handling for batch:** Individual file failures should NOT abort the entire batch. Each file import is independent. The batch result reports per-file success/failure.
-
-**Case naming strategy for batch:**
-- Auto-derive from filename: `case-892-snv-annotations.json.gz` -> `case-892-snv-annotations`
-- Check for duplicates before starting batch
-- Allow user to edit names in batch import dialog before starting
-
-### 5. Cohort Analysis Queries
-
-**Confidence: MEDIUM** -- SQL patterns are well-understood; specific query performance with large datasets needs validation.
-
-**Core question:** Do we need new tables/views, or can we query the existing `variants` table with cross-case aggregation?
-
-**Recommendation:** Use SQL views for cohort aggregation, not materialized tables. Views are automatically kept in sync and avoid data duplication. If performance becomes an issue with large cohorts, add indexes or consider materialized views as an optimization.
-
-**New SQL views:**
-
-```sql
--- Cohort variant aggregation: group by genomic position + alleles
-CREATE VIEW IF NOT EXISTS cohort_variants AS
-SELECT
-  chr,
-  pos,
-  ref,
-  alt,
-  gene_symbol,
-  consequence,
-  gnomad_af,
-  cadd,
-  clinvar,
-  COUNT(DISTINCT case_id) AS carrier_count,
-  COUNT(*) AS total_observations,
-  SUM(CASE WHEN gt_num = '1/1' OR gt_num = '1|1' THEN 1 ELSE 0 END) AS hom_count,
-  SUM(CASE WHEN gt_num = '0/1' OR gt_num = '1/0' OR gt_num = '0|1' OR gt_num = '1|0' THEN 1 ELSE 0 END) AS het_count,
-  GROUP_CONCAT(DISTINCT case_id) AS case_ids,
-  func,
-  transcript,
-  cdna,
-  aa_change
-FROM variants
-GROUP BY chr, pos, ref, alt;
-
--- Gene-level aggregation
-CREATE VIEW IF NOT EXISTS cohort_genes AS
-SELECT
-  gene_symbol,
-  COUNT(DISTINCT chr || ':' || pos || ':' || ref || ':' || alt) AS variant_count,
-  COUNT(DISTINCT case_id) AS carrier_count,
-  MAX(cadd) AS max_cadd,
-  MIN(gnomad_af) AS min_gnomad_af,
-  GROUP_CONCAT(DISTINCT consequence) AS consequences,
-  GROUP_CONCAT(DISTINCT clinvar) AS clinvar_values
-FROM variants
-WHERE gene_symbol IS NOT NULL
-GROUP BY gene_symbol;
-```
-
-**New IPC channels:**
-
-| Channel | Direction | Signature | Purpose |
-|---------|-----------|-----------|---------|
-| `cohort:summary` | invoke | `() => CohortSummary` | Get aggregate cohort statistics |
-| `cohort:variants` | invoke | `(filters, cursor, limit, sortBy) => PaginatedResult<CohortVariant>` | Paginated cohort variant query |
-| `cohort:search` | invoke | `(query: string, limit?: number) => CohortVariant[]` | Search genes/variants across cohort |
-| `cohort:geneAggregation` | invoke | `(filters, cursor, limit) => PaginatedResult<CohortGene>` | Gene-level summary |
-| `cohort:caseBreakdown` | invoke | `(chr, pos, ref, alt) => CaseBreakdown[]` | Per-case details for a specific variant |
-
-**New types:**
-
+**IPC Handler:**
 ```typescript
-interface CohortSummary {
-  totalCases: number
-  totalVariants: number
-  uniqueVariants: number
-  uniqueGenes: number
-  // Distribution stats
-  variantsPerCase: { min: number; max: number; median: number; mean: number }
-}
+// src/main/ipc/handlers/api-proxy.ts
+import { ipcMain } from 'electron'
+import { wrapHandler } from '../errorHandler'
+import { getApiService } from '../../services/ApiService'
 
-interface CohortVariant {
-  chr: string
-  pos: number
-  ref: string
-  alt: string
-  gene_symbol: string | null
-  consequence: string | null
-  gnomad_af: number | null
-  cadd: number | null
-  clinvar: string | null
-  carrier_count: number
-  total_observations: number
-  het_count: number
-  hom_count: number
-  case_ids: string  // Comma-separated
-  func: string | null
-  transcript: string | null
-  cdna: string | null
-  aa_change: string | null
-}
+ipcMain.handle(
+  'api:vep',
+  async (_event, chr: string, pos: number, ref: string, alt: string) => {
+    return wrapHandler(async () => {
+      const api = getApiService()
+      return await api.fetchVepAnnotation(chr, pos, ref, alt)
+    })
+  }
+)
 
-interface CohortGene {
-  gene_symbol: string
-  variant_count: number
-  carrier_count: number
-  max_cadd: number | null
-  min_gnomad_af: number | null
-  consequences: string
-  clinvar_values: string | null
-}
-
-interface CaseBreakdown {
-  case_id: number
-  case_name: string
-  gt_num: string | null
-  qual: number | null
-  hpo_sim_score: number | null
-}
+ipcMain.handle('api:hpoSearch', async (_event, query: string) => {
+  return wrapHandler(async () => {
+    const api = getApiService()
+    return await api.searchHpoTerms(query)
+  })
+})
 ```
 
-**DatabaseService extensions:**
+**Pattern sources:**
+- [Security | Electron](https://www.electronjs.org/docs/latest/tutorial/security): "It is paramount that you do not enable Node.js integration in any renderer"
+- [Advanced Electron.js architecture - LogRocket Blog](https://blog.logrocket.com/advanced-electron-js-architecture/): Backend in separate process for long-running operations
+
+### Offline Degradation Pattern
+
+**Pattern:** Three-tier fallback for API-dependent features
+
+**Tiers:**
+1. **Fresh data**: API call succeeds, cache updated, full features enabled
+2. **Stale cache**: API call fails, return cached data with timestamp, show "Last updated: X days ago"
+3. **No data**: No cache available, show "Offline — feature unavailable" with explanation
+
+**Implementation:**
 ```typescript
-// Add to DatabaseService class
-getCohortSummary(): CohortSummary { ... }
-getCohortVariants(filter, limit, cursor?, sortBy?): PaginatedResult<CohortVariant> { ... }
-searchCohortVariants(query: string, limit?: number): CohortVariant[] { ... }
-getCohortGeneAggregation(filter, limit, cursor?): PaginatedResult<CohortGene> { ... }
-getCaseBreakdown(chr, pos, ref, alt): CaseBreakdown[] { ... }
-```
+// Renderer composable
+export function useApiData(variantId: number) {
+  const data = ref<VepAnnotation | null>(null)
+  const status = ref<'fresh' | 'stale' | 'offline'>('offline')
+  const cachedAt = ref<number | null>(null)
 
-**Performance considerations:**
-- The `cohort_variants` view aggregates across ALL cases. With 10-20 cases of 65k variants each, this is 650k-1.3M rows. The GROUP BY on `(chr, pos, ref, alt)` should be efficient with the existing `idx_variants_pos` index.
-- Add a composite index for cohort queries: `CREATE INDEX idx_variants_cohort ON variants(chr, pos, ref, alt, case_id)`
-- Consider adding `CASE WHEN` for genotype classification in the view to avoid string pattern matching at query time.
-- If views are too slow, materialize them as tables and rebuild after each import.
+  async function fetch() {
+    const result = await window.api.vep.fetch(variantId)
+    if (result) {
+      data.value = result.data
+      status.value = result.isCached ? 'stale' : 'fresh'
+      cachedAt.value = result.cachedAt
+    } else {
+      status.value = 'offline'
+    }
+  }
 
-### 6. External Links
-
-**Confidence: HIGH** -- URL patterns are well-documented and stable.
-
-**Architecture decision:** URL generation belongs in the **renderer** (pure string formatting based on variant data already in memory). The main process `shell:openExternal` handler already exists but needs its domain whitelist expanded.
-
-**URL builders (renderer-side utility):**
-
-```typescript
-// Location: src/renderer/src/utils/externalLinks.ts
-
-export const externalLinks = {
-  gnomAD: (chr: string, pos: number, ref: string, alt: string, dataset = 'gnomad_r4') =>
-    `https://gnomad.broadinstitute.org/variant/${chr}-${pos}-${ref}-${alt}?dataset=${dataset}`,
-
-  clinvar: (chr: string, pos: number, ref: string, alt: string) =>
-    `https://www.ncbi.nlm.nih.gov/clinvar/?term=${chr}-${pos}-${ref}-${alt}`,
-
-  omim: (mimNumber: string) =>
-    `https://www.omim.org/entry/${mimNumber}`,
-
-  omimSearch: (geneSymbol: string) =>
-    `https://www.omim.org/search?search=${encodeURIComponent(geneSymbol)}`,
-
-  ucscBrowser: (chr: string, pos: number) =>
-    `https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr${chr}:${pos}-${pos}`
+  return { data, status, cachedAt, fetch }
 }
 ```
 
-**Shell handler whitelist expansion:**
-
-```typescript
-// MODIFIED: src/main/ipc/handlers/shell.ts
-const ALLOWED_DOMAINS = [
-  'github.com',
-  'opensource.org',
-  // NEW for v0.3.0:
-  'gnomad.broadinstitute.org',
-  'ncbi.nlm.nih.gov',        // ClinVar
-  'omim.org',                  // OMIM
-  'genome.ucsc.edu'            // UCSC Genome Browser
-]
-```
-
-**VariantTable integration:** Add icon buttons to each row for external links. Vuetify `v-btn` with `icon` prop and tooltip. Links open via `window.api.shell.openExternal(url)`.
-
+**UI pattern:**
 ```vue
-<!-- New column in VariantTable headers -->
-{ title: 'Links', key: 'actions', sortable: false, width: '100px' }
+<v-alert v-if="status === 'stale'" type="info" dense>
+  Using cached data from {{ formatDate(cachedAt) }}
+</v-alert>
+<v-alert v-else-if="status === 'offline'" type="warning" dense>
+  Variant annotation unavailable (offline)
+</v-alert>
+```
 
-<!-- New slot in template -->
-<template #[`item.actions`]="{ item }">
-  <v-btn icon size="x-small" @click="openGnomAD(item)">
-    <v-icon size="small">mdi-open-in-new</v-icon>
-    <v-tooltip activator="parent">gnomAD</v-tooltip>
-  </v-btn>
-  <v-btn icon size="x-small" @click="openClinVar(item)">
-    <v-icon size="small">mdi-hospital-box</v-icon>
-    <v-tooltip activator="parent">ClinVar</v-tooltip>
-  </v-btn>
+**Pattern source:** [Graceful Degradation: Keeping Your App Functional When Things Go South - DEV Community](https://dev.to/lovestaco/graceful-degradation-keeping-your-app-functional-when-things-go-south-jgj)
+
+### Annotation Storage Pattern
+
+**Pattern:** Separate annotation table with variant_id foreign key, optimistic UI updates
+
+**Schema design:**
+- Global annotations apply to variant across all cases
+- Per-case annotations reference both case_id and variant_id
+- UNIQUE constraint on (case_id, variant_id) for per-case annotations
+
+**Implementation:**
+```typescript
+// Mixed model: some annotations are global, some are per-case
+export interface VariantAnnotation {
+  id: number
+  variant_id: number  // FK to variants.id
+  case_id: number | null  // NULL = global, non-NULL = per-case
+
+  // User annotations
+  comment: string | null
+  starred: boolean
+  flagged: boolean
+  tags: string | null  // JSON array
+
+  // ACMG classification
+  acmg_classification: 'pathogenic' | 'likely_pathogenic' | 'uncertain' | 'likely_benign' | 'benign' | null
+  acmg_criteria: string | null  // JSON object with criteria codes
+
+  // Metadata
+  created_at: number
+  updated_at: number
+}
+```
+
+**Pinia store pattern (Elm Architecture inspired):**
+```typescript
+// src/renderer/src/stores/annotationsStore.ts
+export const useAnnotationsStore = defineStore('annotations', () => {
+  // State
+  const annotations = ref<Map<number, VariantAnnotation>>(new Map())
+  const loading = ref(false)
+
+  // Actions
+  async function loadForCase(caseId: number) {
+    loading.value = true
+    try {
+      const list = await window.api.annotations.listForCase(caseId)
+      for (const ann of list) {
+        annotations.value.set(ann.variant_id, ann)
+      }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function updateAnnotation(variantId: number, updates: Partial<AnnotationInput>) {
+    // Optimistic update
+    const current = annotations.value.get(variantId)
+    const optimistic = { ...current, ...updates }
+    annotations.value.set(variantId, optimistic)
+
+    try {
+      const saved = await window.api.annotations.update(variantId, updates)
+      annotations.value.set(variantId, saved)
+    } catch (error) {
+      // Rollback on failure
+      if (current) {
+        annotations.value.set(variantId, current)
+      }
+      throw error
+    }
+  }
+
+  // Getters
+  function getForVariant(variantId: number) {
+    return annotations.value.get(variantId) ?? null
+  }
+
+  return { annotations, loading, loadForCase, updateAnnotation, getForVariant }
+})
+```
+
+**Pattern source:** [How to Write Better Pinia Stores with the Elm Pattern | alexop.dev](https://alexop.dev/posts/tea-architecture-pinia-private-store-pattern/)
+
+### Side Panel Architecture
+
+**Pattern:** Vuetify v-navigation-drawer with persistent state in Pinia store
+
+**Component structure:**
+```vue
+<template>
+  <v-navigation-drawer
+    v-model="sidePanelStore.isOpen"
+    :width="600"
+    location="right"
+    temporary
+  >
+    <v-toolbar color="secondary" density="compact">
+      <v-toolbar-title>Variant Details</v-toolbar-title>
+      <v-spacer />
+      <v-btn icon @click="sidePanelStore.close()">
+        <v-icon>mdi-close</v-icon>
+      </v-btn>
+    </v-toolbar>
+
+    <v-tabs v-model="activeTab">
+      <v-tab value="details">Details</v-tab>
+      <v-tab value="annotations">Annotations</v-tab>
+      <v-tab value="api">API Data</v-tab>
+    </v-tabs>
+
+    <v-window v-model="activeTab">
+      <v-window-item value="details">
+        <variant-details-view :variant="selectedVariant" />
+      </v-window-item>
+      <v-window-item value="annotations">
+        <annotation-editor :variant-id="selectedVariant.id" />
+      </v-window-item>
+      <v-window-item value="api">
+        <api-enrichment-view :variant="selectedVariant" />
+      </v-window-item>
+    </v-window>
+  </v-navigation-drawer>
 </template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useSidePanelStore } from '@/stores/sidePanelStore'
+
+const sidePanelStore = useSidePanelStore()
+const activeTab = ref('details')
+
+const selectedVariant = computed(() => sidePanelStore.selectedVariant)
+</script>
 ```
 
-### 7. OMIM Data Extraction
+**Store pattern:**
+```typescript
+export const useSidePanelStore = defineStore('sidePanel', () => {
+  const isOpen = ref(false)
+  const selectedVariantId = ref<number | null>(null)
 
-**Confidence: MEDIUM** -- Depends on what OMIM data exists in the source JSON annotation files.
+  function open(variantId: number) {
+    selectedVariantId.value = variantId
+    isOpen.value = true
+  }
 
-**The question:** Where does OMIM data live in the source JSON? Looking at the existing `COLUMN_INDICES` in `fieldMapping.ts`, there is no OMIM-specific column currently mapped. The annotation data likely contains OMIM MIM numbers embedded in other annotation fields or in unmapped columns at higher indices.
+  function close() {
+    isOpen.value = false
+    // Keep selectedVariantId for reopen
+  }
 
-**Two possible approaches:**
+  return { isOpen, selectedVariantId, open, close }
+})
+```
 
-**Approach A: Extract at import time (recommended)**
-- Add new column indices to `fieldMapping.ts` for OMIM data (MIM number, disease name)
-- Add columns to variants table: `omim_mim TEXT`, `omim_disease TEXT`
-- Extract during FieldMapper transform, same as gene_symbol and other dictionary-resolved fields
-- This requires investigation of the actual JSON structure to identify which column index contains OMIM data
+**Pattern source:** [Navigation drawer component — Vuetify](https://vuetifyjs.com/en/components/navigation-drawers/)
 
-**Approach B: Parse from existing fields at query time**
-- If OMIM MIM numbers are embedded in existing fields (e.g., in `hpo_match` or another annotation field), parse them out at query time
-- Less clean but doesn't require re-importing existing data
+## Data Flow
 
-**Schema changes for OMIM (Approach A):**
+### Annotation Flow
+
+```
+User clicks star icon in VariantTable
+  ↓
+VariantTable emits 'toggle-star' event with variant ID
+  ↓
+Parent component calls annotationsStore.toggleStar(variantId)
+  ↓
+Pinia action performs optimistic update (star immediately)
+  ↓
+IPC call: window.api.annotations.update(variantId, { starred: true })
+  ↓
+Main process: annotations handler receives request
+  ↓
+DatabaseService.updateAnnotation() writes to SQLite
+  ↓
+IPC returns updated annotation
+  ↓
+Pinia action confirms optimistic update or rolls back
+  ↓
+VariantTable reactively updates star icon
+```
+
+### API Enrichment Flow
+
+```
+User clicks variant row in VariantTable
+  ↓
+VariantTable calls sidePanelStore.open(variant.id)
+  ↓
+VariantDetailsPanel becomes visible
+  ↓
+Component lifecycle hook calls useApiData(variant.id).fetch()
+  ↓
+IPC call: window.api.vep.fetch(chr, pos, ref, alt)
+  ↓
+Main process: ApiService.fetchVepAnnotation()
+  ↓
+ApiService checks SQLite cache first
+  ↓
+If cache miss or expired: HTTP request to rest.ensembl.org
+  ↓
+Response cached in SQLite with TTL
+  ↓
+IPC returns { data, isCached, cachedAt }
+  ↓
+Component updates UI:
+  - Fresh data: show full annotation
+  - Stale cache: show annotation + "cached" badge
+  - No data: show "offline" message
+```
+
+### Case Metadata Flow
+
+```
+User opens case list, clicks "Edit Metadata" on case
+  ↓
+CaseList opens CaseMetadataDialog(caseId)
+  ↓
+Dialog loads: caseMetadataStore.loadForCase(caseId)
+  ↓
+IPC call: window.api.caseMetadata.get(caseId)
+  ↓
+Main process: DatabaseService.getCaseMetadata(caseId)
+  ↓
+SQLite query joins case_metadata + cohort_groups
+  ↓
+Dialog displays form with current status/cohorts/HPO terms
+  ↓
+User edits, clicks Save
+  ↓
+Store action: caseMetadataStore.update(caseId, updates)
+  ↓
+IPC call: window.api.caseMetadata.update(caseId, updates)
+  ↓
+Main process: DatabaseService.updateCaseMetadata()
+  ↓
+SQLite transaction updates case_metadata + links
+  ↓
+IPC returns success
+  ↓
+Store updates local state, dialog closes
+```
+
+## Schema Design
+
+### Variant Annotations Schema
 
 ```sql
--- Migration: Add OMIM columns
-ALTER TABLE variants ADD COLUMN omim_mim TEXT;
-ALTER TABLE variants ADD COLUMN omim_disease TEXT;
+-- Annotations can be global (case_id = NULL) or per-case (case_id = non-NULL)
+-- UNIQUE constraint ensures one annotation per variant per case
+CREATE TABLE IF NOT EXISTS variant_annotations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  variant_id INTEGER NOT NULL,
+  case_id INTEGER,  -- NULL = global annotation
 
--- Index for OMIM lookup
-CREATE INDEX IF NOT EXISTS idx_variants_omim ON variants(omim_mim);
+  -- User annotations
+  comment TEXT,
+  starred BOOLEAN NOT NULL DEFAULT 0,
+  flagged BOOLEAN NOT NULL DEFAULT 0,
+  tags TEXT,  -- JSON array: ["candidate", "reviewed"]
+
+  -- ACMG classification
+  acmg_classification TEXT CHECK(acmg_classification IN (
+    'pathogenic', 'likely_pathogenic', 'uncertain_significance',
+    'likely_benign', 'benign'
+  )),
+  acmg_criteria TEXT,  -- JSON object: {"PVS1": true, "PM2": true, ...}
+
+  -- Metadata
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+
+  FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE,
+  FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  UNIQUE(variant_id, case_id)  -- One annotation per variant per case
+);
+
+CREATE INDEX IF NOT EXISTS idx_annotations_variant
+  ON variant_annotations(variant_id);
+CREATE INDEX IF NOT EXISTS idx_annotations_case
+  ON variant_annotations(case_id);
+CREATE INDEX IF NOT EXISTS idx_annotations_starred
+  ON variant_annotations(starred) WHERE starred = 1;
+CREATE INDEX IF NOT EXISTS idx_annotations_flagged
+  ON variant_annotations(flagged) WHERE flagged = 1;
+CREATE INDEX IF NOT EXISTS idx_annotations_classification
+  ON variant_annotations(acmg_classification)
+  WHERE acmg_classification IS NOT NULL;
 ```
 
-**Migration strategy:** The existing `migrateVariantsTable()` function in `schema.ts` already handles adding new columns to existing databases. Add `omim_mim` and `omim_disease` to the `newColumns` array. Existing imported cases will have NULL values for these columns.
+**Design rationale:**
+- `variant_id` required, `case_id` nullable → supports both global and per-case annotations
+- Boolean flags (starred, flagged) → simple, indexable for filtering
+- JSON columns (tags, acmg_criteria) → flexible storage for lists/objects
+- CHECK constraint on acmg_classification → enforces valid ACMG terms
+- ON DELETE CASCADE → annotations auto-deleted when variant/case deleted
+- Partial indexes on flags/classification → efficient filtering queries
 
-**Phase-specific research needed:** Before implementation, must investigate the actual source JSON file format to determine the column index for OMIM data. This requires opening a test data file and examining the header to find OMIM-related fields.
-
----
-
-## Data Flow Changes
-
-### Current (v0.2.0) Data Flow
-
-```
-                    File System
-                        |
-                  [.json.gz file]
-                        |
-                  ImportService
-                  (streaming pipeline)
-                        |
-                  DatabaseService
-                  (varlens.db - hardcoded)
-                        |
-                  IPC Handler
-                        |
-                  contextBridge
-                        |
-                  Vue Components
+**ACMG criteria storage example:**
+```json
+{
+  "PVS1": { "applied": true, "note": "Predicted null variant" },
+  "PM2": { "applied": true, "note": "Absent from gnomAD" },
+  "PP3": { "applied": true, "note": "CADD 28.4" },
+  "classification_date": "2026-01-28",
+  "classified_by": "user@example.com"
+}
 ```
 
-### New (v0.3.0) Data Flow
-
-```
-                    File System
-                        |
-              +---------+---------+
-              |                   |
-        [.json.gz files]     [.zip file]
-              |                   |
-              |             ZipExtractor
-              |             (password decrypt)
-              |                   |
-              |             [temp .json.gz files]
-              |                   |
-              +------- merge -----+
-                        |
-              BatchImportOrchestrator
-              (sequential file processing)
-                        |
-              ImportService (per file)
-              (existing streaming pipeline)
-                        |
-        +-------DatabaseService-------+
-        |       (with SQLCipher key)  |
-        |                             |
-  Single-case queries          Cohort aggregation
-  (existing IPC channels)     (new IPC channels)
-        |                             |
-  contextBridge              contextBridge
-        |                             |
-  VariantTable +              CohortView +
-  ExternalLinks               CohortVariantTable
-```
-
----
-
-## Database Schema Changes
-
-### New Columns
-
-| Table | Column | Type | Purpose |
-|-------|--------|------|---------|
-| variants | omim_mim | TEXT | OMIM MIM number |
-| variants | omim_disease | TEXT | OMIM disease name |
-
-### New Indexes
+### Case Metadata Schema
 
 ```sql
-CREATE INDEX IF NOT EXISTS idx_variants_cohort ON variants(chr, pos, ref, alt, case_id);
-CREATE INDEX IF NOT EXISTS idx_variants_omim ON variants(omim_mim);
-CREATE INDEX IF NOT EXISTS idx_variants_gene_case ON variants(gene_symbol, case_id);
+-- Case-level metadata for status tracking and phenotype annotation
+CREATE TABLE IF NOT EXISTS case_metadata (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  case_id INTEGER NOT NULL UNIQUE,
+
+  -- Case status
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN (
+    'active', 'in_progress', 'complete', 'archived', 'on_hold'
+  )),
+
+  -- Phenotype annotation (HPO terms)
+  hpo_terms TEXT,  -- JSON array: ["HP:0000001", "HP:0000002"]
+
+  -- Metadata
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+
+  FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_case_metadata_status
+  ON case_metadata(status);
+
+-- Cohort groups (user-defined arbitrary groupings)
+CREATE TABLE IF NOT EXISTS cohort_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  created_at INTEGER NOT NULL
+);
+
+-- Many-to-many: cases can belong to multiple cohort groups
+CREATE TABLE IF NOT EXISTS case_cohort_links (
+  case_id INTEGER NOT NULL,
+  cohort_group_id INTEGER NOT NULL,
+  added_at INTEGER NOT NULL,
+
+  PRIMARY KEY (case_id, cohort_group_id),
+  FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  FOREIGN KEY (cohort_group_id) REFERENCES cohort_groups(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_cohort_links_group
+  ON case_cohort_links(cohort_group_id);
 ```
 
-### New Views
+**Design rationale:**
+- `case_metadata` 1:1 with cases → separate table keeps cases table clean
+- `status` CHECK constraint → enforces valid status values
+- `hpo_terms` JSON array → stores HPO IDs (resolved to labels via API)
+- `cohort_groups` separate table → user-defined groups with descriptions
+- `case_cohort_links` junction table → many-to-many relationship
+- Arbitrary cohort naming → user can create "Family A", "Cardiac Cases", etc.
+
+**HPO terms storage example:**
+```json
+["HP:0001250", "HP:0002104", "HP:0001252"]
+```
+(Resolved via HPO API to labels like "Seizure", "Apnea", "Hypotonia")
+
+### API Cache Schema
 
 ```sql
--- cohort_variants view (see Section 5 above)
--- cohort_genes view (see Section 5 above)
+CREATE TABLE IF NOT EXISTS api_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  service TEXT NOT NULL,  -- 'vep' or 'hpo'
+  cache_key TEXT NOT NULL,
+  response_data TEXT NOT NULL,  -- JSON blob
+  cached_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+
+  UNIQUE(service, cache_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cache_lookup
+  ON api_cache(service, cache_key);
+CREATE INDEX IF NOT EXISTS idx_cache_expiry
+  ON api_cache(expires_at);
+
+-- Cleanup trigger for expired cache (optional, can also be manual)
+CREATE TRIGGER IF NOT EXISTS cleanup_expired_cache
+AFTER INSERT ON api_cache
+BEGIN
+  DELETE FROM api_cache WHERE expires_at < unixepoch() * 1000;
+END;
 ```
 
-### Schema Migration Strategy
+**Design rationale:**
+- Generic cache for multiple services (VEP, HPO)
+- `cache_key` varies by service (e.g., "chr:pos:ref:alt" for VEP, "search:term" for HPO)
+- `response_data` as JSON TEXT → flexible storage, no schema changes needed
+- TTL-based expiration → stale cache detection
+- Trigger auto-cleanup → prevents unbounded growth
 
-The existing migration system in `schema.ts` uses `PRAGMA table_info` to detect missing columns and `ALTER TABLE ADD COLUMN` to add them. This pattern works for all v0.3.0 schema changes:
+### Migration Strategy
 
-1. New columns added via existing `migrateVariantsTable()` pattern
-2. New indexes added in `createIndexes` SQL (idempotent with `IF NOT EXISTS`)
-3. New views added after indexes (idempotent with `IF NOT EXISTS`)
-4. FTS triggers do NOT need modification (FTS still indexes gene_symbol + consequence)
+**Pattern:** Extend existing `migrateVariantsTable` pattern in `schema.ts`
 
----
+**Implementation:**
+```typescript
+// src/main/database/schema.ts
 
-## New IPC Channel Summary
+/**
+ * Migration: Add annotation tables if they don't exist
+ */
+const migrateAnnotationTables = (db: Database.Database): void => {
+  // Check if tables exist
+  const tables = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table'"
+  ).all() as { name: string }[]
+  const existingTables = new Set(tables.map(t => t.name))
 
-Following the existing `domain:action` naming convention:
+  // Create variant_annotations if missing
+  if (!existingTables.has('variant_annotations')) {
+    db.exec(`
+      CREATE TABLE variant_annotations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        variant_id INTEGER NOT NULL,
+        case_id INTEGER,
+        comment TEXT,
+        starred BOOLEAN NOT NULL DEFAULT 0,
+        flagged BOOLEAN NOT NULL DEFAULT 0,
+        tags TEXT,
+        acmg_classification TEXT CHECK(acmg_classification IN (
+          'pathogenic', 'likely_pathogenic', 'uncertain_significance',
+          'likely_benign', 'benign'
+        )),
+        acmg_criteria TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE,
+        FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+        UNIQUE(variant_id, case_id)
+      );
 
-### database domain (new)
+      CREATE INDEX idx_annotations_variant ON variant_annotations(variant_id);
+      CREATE INDEX idx_annotations_case ON variant_annotations(case_id);
+      CREATE INDEX idx_annotations_starred ON variant_annotations(starred) WHERE starred = 1;
+      CREATE INDEX idx_annotations_flagged ON variant_annotations(flagged) WHERE flagged = 1;
+    `)
+    console.log('Created variant_annotations table')
+  }
 
-| Channel | Type | Signature |
-|---------|------|-----------|
-| `database:select` | invoke | `() => string \| null` |
-| `database:create` | invoke | `(path?: string) => string` |
-| `database:open` | invoke | `(path: string, key?: string) => { success, path, encrypted }` |
-| `database:close` | invoke | `() => void` |
-| `database:getCurrent` | invoke | `() => { path: string \| null, encrypted: boolean }` |
-| `database:rekey` | invoke | `(currentKey?: string, newKey?: string) => { success }` |
+  // Create case_metadata if missing
+  if (!existingTables.has('case_metadata')) {
+    db.exec(`
+      CREATE TABLE case_metadata (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN (
+          'active', 'in_progress', 'complete', 'archived', 'on_hold'
+        )),
+        hpo_terms TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+      );
 
-### import domain (extended)
+      CREATE INDEX idx_case_metadata_status ON case_metadata(status);
+    `)
+    console.log('Created case_metadata table')
+  }
 
-| Channel | Type | Signature | Status |
-|---------|------|-----------|--------|
-| `import:selectFile` | invoke | `() => string \| null` | Existing (modify filters) |
-| `import:selectFiles` | invoke | `() => string[] \| null` | New |
-| `import:selectFolder` | invoke | `() => string \| null` | New |
-| `import:start` | invoke | `(filePath, caseName) => ImportResult` | Existing |
-| `import:startBatch` | invoke | `(files: BatchImportFile[]) => BatchImportResult` | New |
-| `import:progress` | event | `ProgressUpdate` | Existing |
-| `import:batchProgress` | event | `BatchProgressUpdate` | New |
-| `import:cancel` | invoke | `() => void` | Existing |
+  // Create cohort_groups if missing
+  if (!existingTables.has('cohort_groups')) {
+    db.exec(`
+      CREATE TABLE cohort_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        created_at INTEGER NOT NULL
+      );
 
-### cohort domain (new)
+      CREATE TABLE case_cohort_links (
+        case_id INTEGER NOT NULL,
+        cohort_group_id INTEGER NOT NULL,
+        added_at INTEGER NOT NULL,
+        PRIMARY KEY (case_id, cohort_group_id),
+        FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+        FOREIGN KEY (cohort_group_id) REFERENCES cohort_groups(id) ON DELETE CASCADE
+      );
 
-| Channel | Type | Signature |
-|---------|------|-----------|
-| `cohort:summary` | invoke | `() => CohortSummary` |
-| `cohort:variants` | invoke | `(filters, cursor?, limit?, sortBy?) => PaginatedResult<CohortVariant>` |
-| `cohort:search` | invoke | `(query: string, limit?) => CohortVariant[]` |
-| `cohort:geneAggregation` | invoke | `(filters, cursor?, limit?) => PaginatedResult<CohortGene>` |
-| `cohort:caseBreakdown` | invoke | `(chr, pos, ref, alt) => CaseBreakdown[]` |
+      CREATE INDEX idx_cohort_links_group ON case_cohort_links(cohort_group_id);
+    `)
+    console.log('Created cohort_groups and case_cohort_links tables')
+  }
 
----
+  // Create api_cache if missing
+  if (!existingTables.has('api_cache')) {
+    db.exec(`
+      CREATE TABLE api_cache (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service TEXT NOT NULL,
+        cache_key TEXT NOT NULL,
+        response_data TEXT NOT NULL,
+        cached_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        UNIQUE(service, cache_key)
+      );
 
-## Suggested Build Order
+      CREATE INDEX idx_cache_lookup ON api_cache(service, cache_key);
+      CREATE INDEX idx_cache_expiry ON api_cache(expires_at);
+    `)
+    console.log('Created api_cache table')
+  }
+}
 
-Based on dependency analysis:
-
-### Phase Order Rationale
-
-```
-1. SQLCipher migration       -- Foundation: everything else builds on this
-2. Database selection         -- Depends on: SQLCipher (encryption-aware lifecycle)
-3. External links             -- Independent: renderer-only + shell whitelist
-4. OMIM data extraction       -- Depends on: understanding source data format
-5. Batch import + ZIP         -- Depends on: database lifecycle (open/close)
-6. Cohort analysis            -- Depends on: multiple cases in database (batch import)
-7. Integration & polish       -- Depends on: all above
-```
-
-**Why this order:**
-
-- **SQLCipher first** because it replaces the core dependency. Every subsequent feature uses the database through this library. Get the foundation right.
-- **Database selection second** because batch import and cohort analysis both need the ability to manage database lifecycle (open, close, switch).
-- **External links third** because they are independent, renderer-focused, and provide immediate user value with minimal architectural risk.
-- **OMIM fourth** because it requires investigating the source JSON format and modifying the import pipeline. Doing this before batch import means single-file import can validate OMIM extraction.
-- **Batch import fifth** because it extends the existing import pipeline. The cohort analysis feature needs multiple cases imported to be testable.
-- **Cohort analysis last** because it depends on having multiple cases in the database, which requires batch import to be convenient. It's the most complex new feature and benefits from all infrastructure being in place.
-
----
-
-## Anti-Patterns to Avoid
-
-### Anti-Pattern 1: Parallel SQLite Writes
-
-**What:** Trying to import multiple files in parallel to speed up batch import.
-**Why bad:** SQLite is single-writer. Parallel writes cause `SQLITE_BUSY` errors and actually slow down due to lock contention.
-**Instead:** Sequential import with aggregate progress reporting.
-
-### Anti-Pattern 2: Storing Encryption Key
-
-**What:** Persisting the database encryption key to disk (settings.json, localStorage).
-**Why bad:** Defeats the purpose of encryption. Anyone with disk access can read the key.
-**Instead:** Prompt user for key on each database open. Keep key only in memory during session.
-
-### Anti-Pattern 3: Cohort Queries Without Indexes
-
-**What:** Running GROUP BY across all variants without a covering index.
-**Why bad:** With 1M+ rows, unindexed aggregation queries will take seconds.
-**Instead:** Add `idx_variants_cohort` composite index before implementing cohort views.
-
-### Anti-Pattern 4: Mounting Views on CohortVariantTable
-
-**What:** Using the existing VariantTable component for cohort display.
-**Why bad:** CohortVariant has different columns (carrier_count, het_count, hom_count) that VariantTable doesn't know about. Forcing it creates conditional complexity.
-**Instead:** Create a separate `CohortVariantTable` component. Extract shared formatting helpers (formatScientific, getClinVarColor) into a composable.
-
-### Anti-Pattern 5: ZIP Password in IPC Logs
-
-**What:** Logging ZIP passwords in console.log during import.
-**Why bad:** Passwords appear in DevTools and log files.
-**Instead:** Never log passwords. Use placeholder strings in debug output.
-
----
-
-## Scalability Considerations
-
-| Concern | Current (1-3 cases) | At 20 cases | At 100 cases |
-|---------|---------------------|-------------|--------------|
-| Import time | ~20s per 65k file | Batch: ~7 min | Batch: ~35 min |
-| DB size | ~50MB | ~500MB | ~2.5GB |
-| Cohort query | N/A | <500ms with index | May need materialized views |
-| FTS search | <50ms | <100ms | <200ms |
-| Memory | ~200MB | ~300MB | ~500MB |
-
----
-
-## Renderer Routing/Navigation
-
-The current app has no routing -- it's a single view with sidebar case list + variant table. Adding cohort analysis requires navigation between views.
-
-**Recommendation: Tab-based navigation, not vue-router.**
-
-Cohort analysis is a second "mode" of the same app, not a separate page. Use a `v-tabs` component in the app bar or main content area:
-
-```
-[Cases]  [Cohort]
+export function initializeSchema(db: Database.Database): void {
+  db.exec(createTables)
+  migrateVariantsTable(db)
+  migrateAnnotationTables(db)  // NEW: Add annotation tables
+  db.exec(createIndexes)
+  // ... rest of existing schema init
+}
 ```
 
-- **Cases tab**: Current UI (CaseList sidebar + VariantTable)
-- **Cohort tab**: New CohortView (CohortSummary + CohortVariantTable)
+**Migration strategy:**
+1. **Table existence check**: Query `sqlite_master` before creating tables
+2. **Additive only**: New tables/columns added, never removed (backwards compatible)
+3. **Foreign key constraints**: Enforce referential integrity
+4. **Safe for existing databases**: Opening old database auto-upgrades schema
+5. **No data loss**: Existing cases/variants unaffected
 
-This avoids adding vue-router as a dependency for just two views and keeps the single-window Electron architecture simple.
+**Pattern source:** [SQLite Versioning and Migration Strategies for Evolving Applications](https://www.sqliteforum.com/p/sqlite-versioning-and-migration-strategies)
 
----
+## Integration Points
+
+### External Services
+
+| Service | Base URL | Purpose | Rate Limit | Cache TTL |
+|---------|----------|---------|------------|-----------|
+| Ensembl VEP | `https://rest.ensembl.org` | Variant consequence prediction | 15 req/sec | 30 days |
+| HPO API | `https://clinicaltables.nlm.nih.gov` | Phenotype term search | No published limit | 7 days |
+
+**VEP API documentation:** [Ensembl Rest API - POST vep/:species/region](https://rest.ensembl.org/documentation/info/vep_region_post)
+
+**HPO API documentation:** [API for HPO (The Human Phenotype Ontology)](https://clinicaltables.nlm.nih.gov/apidoc/hpo/v3/doc.html)
+
+**Rate limiting implementation:**
+```typescript
+export class ApiService {
+  private lastVepRequest = 0
+  private readonly VEP_MIN_INTERVAL = 1000 / 15  // 15 req/sec = 66ms between requests
+
+  async fetchVepAnnotation(...): Promise<VepResponse | null> {
+    // Rate limiting
+    const now = Date.now()
+    const timeSinceLastRequest = now - this.lastVepRequest
+    if (timeSinceLastRequest < this.VEP_MIN_INTERVAL) {
+      await sleep(this.VEP_MIN_INTERVAL - timeSinceLastRequest)
+    }
+    this.lastVepRequest = Date.now()
+
+    // ... rest of fetch logic
+  }
+}
+```
+
+### Internal Boundaries
+
+**Component communication:**
+```
+VariantTable.vue
+  ├─> annotationsStore (read: display indicators)
+  ├─> sidePanelStore (write: open panel on click)
+  └─> IPC: window.api.variants.query (existing)
+
+VariantDetailsPanel.vue
+  ├─> sidePanelStore (read: selected variant)
+  ├─> annotationsStore (read/write: edit annotations)
+  └─> IPC: window.api.vep.fetch, window.api.hpo.search
+
+CaseMetadataDialog.vue
+  ├─> caseMetadataStore (read/write: edit metadata)
+  └─> IPC: window.api.caseMetadata.*
+
+AnnotationEditor.vue
+  ├─> annotationsStore (write: save annotations)
+  └─> IPC: window.api.annotations.update
+```
+
+**IPC channel naming (extends existing `domain:action` pattern):**
+```
+annotations:list
+annotations:get
+annotations:create
+annotations:update
+annotations:delete
+
+api:vep
+api:hpoSearch
+api:hpoGetTerm
+
+case-metadata:get
+case-metadata:update
+case-metadata:listCohortGroups
+case-metadata:createCohortGroup
+case-metadata:linkToCohorts
+```
+
+**Preload API extension:**
+```typescript
+// src/preload/index.ts (extend existing API object)
+
+const api = {
+  // ... existing APIs
+
+  annotations: {
+    list: (caseId: number) => ipcRenderer.invoke('annotations:list', caseId),
+    get: (variantId: number, caseId: number) =>
+      ipcRenderer.invoke('annotations:get', variantId, caseId),
+    update: (variantId: number, caseId: number, data: AnnotationInput) =>
+      ipcRenderer.invoke('annotations:update', variantId, caseId, data),
+    delete: (variantId: number, caseId: number) =>
+      ipcRenderer.invoke('annotations:delete', variantId, caseId)
+  },
+
+  apiProxy: {
+    vep: (chr: string, pos: number, ref: string, alt: string) =>
+      ipcRenderer.invoke('api:vep', chr, pos, ref, alt),
+    hpoSearch: (query: string) =>
+      ipcRenderer.invoke('api:hpoSearch', query),
+    hpoGetTerm: (hpoId: string) =>
+      ipcRenderer.invoke('api:hpoGetTerm', hpoId)
+  },
+
+  caseMetadata: {
+    get: (caseId: number) => ipcRenderer.invoke('case-metadata:get', caseId),
+    update: (caseId: number, data: CaseMetadataInput) =>
+      ipcRenderer.invoke('case-metadata:update', caseId, data),
+    listCohortGroups: () => ipcRenderer.invoke('case-metadata:listCohortGroups'),
+    createCohortGroup: (name: string, description: string) =>
+      ipcRenderer.invoke('case-metadata:createCohortGroup', name, description),
+    linkToCohorts: (caseId: number, groupIds: number[]) =>
+      ipcRenderer.invoke('case-metadata:linkToCohorts', caseId, groupIds)
+  }
+}
+```
+
+## Build Order
+
+**Recommended implementation sequence (informed by dependencies):**
+
+### Phase 1: Database Foundation
+1. Extend `schema.ts` with annotation tables
+2. Add `migrateAnnotationTables()` function
+3. Add annotation CRUD methods to `DatabaseService`
+4. Test migration on existing database
+
+**Why first:** All other features depend on database schema
+
+### Phase 2: API Service Layer
+1. Create `ApiService.ts` with VEP + HPO clients
+2. Implement cache table and cache logic
+3. Add rate limiting
+4. Create IPC handlers in `api-proxy.ts`
+5. Extend preload API
+
+**Why second:** Side panel needs API data before it can be useful
+
+### Phase 3: Annotation Storage
+1. Create IPC handlers in `annotations.ts`
+2. Add annotation methods to `DatabaseService`
+3. Extend preload API with annotation methods
+4. Create shared types in `src/shared/types/annotations.ts`
+
+**Why third:** UI components need backend endpoints
+
+### Phase 4: Pinia Stores
+1. Create `annotationsStore.ts`
+2. Create `caseMetadataStore.ts`
+3. Create `sidePanelStore.ts`
+
+**Why fourth:** Components bind to stores, so stores must exist first
+
+### Phase 5: UI Components (Parallel)
+1. **VariantDetailsPanel.vue** - Side drawer with tabs
+2. **AnnotationEditor.vue** - Comment/flag/tag/ACMG form
+3. **AcmgClassificationForm.vue** - ACMG criteria checklist
+4. **CaseMetadataDialog.vue** - Case status/cohort/HPO editor
+5. **ApiEnrichmentView.vue** - VEP/HPO data display
+
+**Why fifth:** Components can be built in parallel once stores exist
+
+### Phase 6: VariantTable Integration
+1. Modify `VariantTable.vue` to join annotation data
+2. Add indicator columns (star, flag, classification)
+3. Add click handlers to open side panel
+4. Update IPC query to include annotation join
+
+**Why last:** Requires all other pieces to be functional
+
+### Phase 7: Case Metadata Integration
+1. Create `case-metadata.ts` IPC handlers
+2. Add case metadata CRUD to `DatabaseService`
+3. Add cohort group management UI in case list
+4. Add HPO term autocomplete in metadata dialog
+
+**Dependencies:**
+- Phase 2 → Phase 1 (API needs cache tables)
+- Phase 3 → Phase 1 (Annotations need schema)
+- Phase 4 → Phase 2, 3 (Stores need IPC endpoints)
+- Phase 5 → Phase 4 (Components need stores)
+- Phase 6 → Phase 5 (Table integration needs side panel)
+- Phase 7 → Phase 2, 3 (Metadata needs API + storage)
+
+## Architectural Trade-offs
+
+### Decision: API Calls in Main Process
+
+**Alternatives considered:**
+1. Renderer-side fetch (rejected: violates sandbox security)
+2. External proxy server (rejected: offline requirement)
+3. Main process with SQLite cache (chosen)
+
+**Trade-offs:**
+- **Pro:** Secure, offline-capable, centralized caching
+- **Pro:** Follows Electron best practices
+- **Con:** Additional IPC overhead for API calls
+- **Con:** Main process must handle HTTP errors
+
+**Mitigation:** Cache aggressively (30-day TTL for VEP, 7-day for HPO), graceful degradation UI
+
+### Decision: Side Panel as Vuetify Drawer
+
+**Alternatives considered:**
+1. Modal dialog (rejected: blocks workflow)
+2. Split pane (rejected: complex resize logic)
+3. Right drawer (chosen)
+
+**Trade-offs:**
+- **Pro:** Non-blocking, standard Vuetify pattern
+- **Pro:** Persistent during navigation (stays open)
+- **Con:** Reduces table width when open
+- **Con:** Mobile support requires different layout
+
+**Mitigation:** Temporary drawer (overlays table), responsive breakpoints for mobile
+
+### Decision: Global + Per-Case Annotations
+
+**Alternatives considered:**
+1. Global only (rejected: can't track per-case status)
+2. Per-case only (rejected: duplicates work across cases)
+3. Hybrid (chosen)
+
+**Trade-offs:**
+- **Pro:** Flexibility (global for reference, per-case for analysis)
+- **Pro:** Avoids duplication of common annotations
+- **Con:** More complex query logic (need to merge global + per-case)
+- **Con:** UI must expose both annotation levels
+
+**Mitigation:** UI defaults to per-case, shows global as read-only context
+
+### Decision: JSON Storage for Tags and ACMG Criteria
+
+**Alternatives considered:**
+1. Separate tables (rejected: over-normalized for variable data)
+2. JSON columns (chosen)
+
+**Trade-offs:**
+- **Pro:** Flexible schema (tags/criteria can evolve)
+- **Pro:** Simpler queries (single row fetch)
+- **Con:** Cannot efficiently query/filter by specific tag
+- **Con:** JSON parsing overhead
+
+**Mitigation:** Partial indexes on boolean flags (starred, flagged), filter UI in renderer
 
 ## Sources
 
-- [better-sqlite3-multiple-ciphers GitHub](https://github.com/m4heshd/better-sqlite3-multiple-ciphers) -- API-compatible fork with SQLCipher support
-- [better-sqlite3-multiple-ciphers v12.6.2 release](https://github.com/m4heshd/better-sqlite3-multiple-ciphers/releases) -- Electron 40 prebuilt binaries confirmed
-- [SQLite3 Multiple Ciphers documentation](https://utelle.github.io/SQLite3MultipleCiphers/) -- PRAGMA key/rekey/cipher usage
-- [better-sqlite3-multiple-ciphers API docs](https://github.com/m4heshd/better-sqlite3-multiple-ciphers/blob/master/docs/api.md) -- key() and rekey() methods
-- [unzipper npm package](https://www.npmjs.com/package/unzipper) -- Password-protected ZIP extraction
-- [Electron dialog API](https://www.electronjs.org/docs/latest/api/dialog) -- showOpenDialog for file/folder selection
-- [gnomAD browser](https://gnomad.broadinstitute.org/) -- Variant URL format: `/variant/{chr}-{pos}-{ref}-{alt}`
-- [ClinVar search help](https://www.ncbi.nlm.nih.gov/clinvar/docs/help/) -- gnomAD-format search: `chr-pos-ref-alt`
-- [OMIM external links](https://www.omim.org/help/external) -- Entry URL format: `/entry/{MIM_number}`
-- [SQLite aggregate functions](https://www.sqlitetutorial.net/sqlite-aggregate-functions/) -- GROUP BY, COUNT, GROUP_CONCAT patterns
+**Electron Security:**
+- [Security | Electron](https://www.electronjs.org/docs/latest/tutorial/security)
+- [Advanced Electron.js architecture - LogRocket Blog](https://blog.logrocket.com/advanced-electron-js-architecture/)
+- [Inter-Process Communication | Electron](https://www.electronjs.org/docs/latest/tutorial/ipc)
+
+**API Integration:**
+- [Ensembl Rest API - POST vep/:species/region](https://rest.ensembl.org/documentation/info/vep_region_post)
+- [API for HPO (The Human Phenotype Ontology)](https://clinicaltables.nlm.nih.gov/apidoc/hpo/v3/doc.html)
+- [Standards and Guidelines for the Interpretation of Sequence Variants: A Joint Consensus Recommendation of the American College of Medical Genetics and Genomics and the Association for Molecular Pathology - PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC4544753/)
+
+**UI Patterns:**
+- [Navigation drawer component — Vuetify](https://vuetifyjs.com/en/components/navigation-drawers/)
+- [How to Write Better Pinia Stores with the Elm Pattern | alexop.dev](https://alexop.dev/posts/tea-architecture-pinia-private-store-pattern/)
+- [Leveraging Pinia to simplify complex Vue state management - LogRocket Blog](https://blog.logrocket.com/complex-vue-3-state-management-pinia/)
+
+**Database Design:**
+- [SQLite Foreign Key Support](https://sqlite.org/foreignkeys.html)
+- [SQLite Versioning and Migration Strategies for Evolving Applications](https://www.sqliteforum.com/p/sqlite-versioning-and-migration-strategies)
+- [ALTER TABLE](https://sqlite.org/lang_altertable.html)
+
+**Offline Architecture:**
+- [Graceful Degradation: Keeping Your App Functional When Things Go South - DEV Community](https://dev.to/lovestaco/graceful-degradation-keeping-your-app-functional-when-things-go-south-jgj)
+- [Cache Dynamic Assets Offline in Electron Apps | by Julian Rubisch | Better Programming](https://betterprogramming.pub/caching-dynamic-assets-offline-in-electron-apps-797232f18ec8)

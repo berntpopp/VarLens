@@ -1,210 +1,400 @@
-# Domain Pitfalls
+# Domain Pitfalls: Variant Annotation & Case Metadata (v0.4.0)
 
-**Domain:** Adding SQLCipher encryption, cohort analysis, batch import, and external links to an existing Electron + better-sqlite3 desktop app (Varlens v0.3.0)
-**Researched:** 2026-01-27
-**Overall confidence:** HIGH (most pitfalls verified with multiple sources and cross-referenced against current codebase)
+**Domain:** Variant annotation, ACMG classification, API enrichment, case metadata for Electron desktop app
+**Milestone:** v0.4.0 — Adding annotation workflows, classifications, live APIs, and case metadata
+**Researched:** 2026-01-28
+**Overall confidence:** HIGH (all pitfalls sourced from official docs, peer-reviewed publications, or verified against existing codebase)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, data loss, or security vulnerabilities. These must be addressed before or during the phase they affect.
+Mistakes that cause rewrites, data loss, security vulnerabilities, or production-breaking failures. These must be addressed before or during the phase they affect.
 
 ---
 
-### Pitfall 1: Swapping better-sqlite3 for better-sqlite3-multiple-ciphers Breaks the Entire Build Pipeline
+### Pitfall 1: Foreign Keys Not Enabled = Silent Data Corruption
 
-**What goes wrong:** The project currently uses `better-sqlite3` v12.6.2 with a carefully tuned native module rebuild workflow: `postinstall` runs `@electron/rebuild -f -w better-sqlite3`, `npmRebuild: false` in electron-builder config, `asarUnpack` for `.node` files, and a dual rebuild workflow (Node.js for tests, Electron for packaging). Swapping to `better-sqlite3-multiple-ciphers` requires updating **every single reference** across `package.json` (postinstall, rebuild:electron, rebuild:node scripts), `electron.vite.config.ts` (rollupOptions.external), the electron-builder `asarUnpack` and `files` globs, both CI workflows (`build.yml` and `release.yml`), and the Linux CI step that installs `libsqlite3-dev`. Missing any one of these causes silent build failures or runtime crashes.
+**What goes wrong:**
+Adding annotation tables (comments, tags, classifications) with foreign key constraints to `case_id` or `variant_id` appears to work, but deletions leave orphaned annotation records. When users delete a case, variant comments and classifications for that case remain in the database, inflating database size and causing confusing "ghost" annotations.
 
-**Why it happens:** The current codebase has at least 8 places that reference `better-sqlite3` by name:
-1. `package.json` dependencies
-2. `package.json` postinstall script: `npx @electron/rebuild -f -w better-sqlite3`
-3. `package.json` rebuild:electron script
-4. `package.json` rebuild:node script: `npm rebuild better-sqlite3`
-5. `electron.vite.config.ts` rollupOptions.external: `['better-sqlite3']`
-6. `package.json` build.asarUnpack: `node_modules/better-sqlite3/**/*`
-7. `package.json` build.files: `node_modules/better-sqlite3/**/*`
-8. Source code import: `import Database from 'better-sqlite3'`
-
-Developers often update the dependency and source imports but forget the build configuration, leading to the old module being externalized by Vite or unpacked by electron-builder while the new module is ignored.
+**Why it happens:**
+SQLite disables foreign key enforcement **by default** for backward compatibility. The existing Varlens codebase enables `PRAGMA foreign_keys = ON` in DatabaseService.ts (line 81), but this is **per-connection**. If any new code path opens a database connection without this pragma, orphaned rows will accumulate silently.
 
 **Consequences:**
-- Runtime crash: `MODULE_NOT_FOUND` for `better-sqlite3` (Vite externalized it but the package no longer exists)
-- Packaging failure: `.node` native binary not extracted from ASAR, causing `ENOENT` at runtime
-- CI failure on all 3 platforms
-- Dual-rebuild workflow breaks if `rebuild:node` still targets old package name
+- Database grows unexpectedly after case deletions
+- Query results return annotations for non-existent cases
+- Count mismatch between annotations and active cases
+- Users see "ghost" comments/tags for deleted variants
 
 **Prevention:**
-1. Create a migration checklist before starting. Grep for every occurrence of `better-sqlite3` in the entire repository: `grep -r "better-sqlite3" --include="*.ts" --include="*.json" --include="*.yml" --include="*.js"`
-2. Update all references atomically in a single commit
-3. Verify the CI matrix passes on all 3 platforms before merging
-4. Test the dual rebuild workflow: `npm run rebuild:node && npm test && npm run rebuild:electron && npm run dist`
+- Verify `PRAGMA foreign_keys = ON` executes immediately after opening connection, before any schema operations
+- Add integration test: delete case with annotations → verify annotation rows cascade delete
+- Document in schema comments: "foreign_keys pragma REQUIRED, see DatabaseService.ts"
+- Consider adding `CHECK (case_id IS NOT NULL)` constraints as defense-in-depth
+- Index foreign keys: `CREATE INDEX idx_comments_variant_id ON variant_comments(variant_id)`
 
-**Detection:** CI build fails on the first PR that swaps the dependency. If CI is not run, the app will crash on startup with a native module error.
+**Warning signs:**
+- Database grows unexpectedly after case deletions
+- Query results return annotations for non-existent cases
+- `SELECT COUNT(*) FROM variant_comments WHERE variant_id NOT IN (SELECT id FROM variants)` returns non-zero
 
-**Confidence:** HIGH -- verified against current codebase files and [better-sqlite3-multiple-ciphers troubleshooting docs](https://github.com/m4heshd/better-sqlite3-multiple-ciphers/blob/master/docs/troubleshooting.md).
+**Phase to address:** Phase 1 (Schema Design) — before creating any annotation tables
+**Recovery cost:** MEDIUM — requires scanning all annotation tables and deleting orphaned rows manually
+
+**Source:** [SQLite Foreign Keys](https://sqlite.org/foreignkeys.html), [SQLite Foreign Key Support](https://tangenttechnologies.ca/blog/sqlite-foreign-key/)
 
 ---
 
-### Pitfall 2: FTS5 Virtual Tables Fail When PRAGMA key Is Not Called Before Schema Initialization
+### Pitfall 2: Ensembl VEP Platform Transition Breaking Changes (2026)
 
-**What goes wrong:** The current `DatabaseService` constructor initializes the schema immediately after creating the database connection: `new Database(dbPath)` followed by `initializeSchema(this.db)`. The schema includes FTS5 virtual tables (`variants_fts`) and FTS5 triggers. With an encrypted database, `PRAGMA key` must be executed **before** any schema operations, including creating or accessing FTS5 virtual tables. If the key is set after schema init, or if the schema init runs before the key, all operations will fail with "file is encrypted or is not a database."
+**What goes wrong:**
+VEP API response format changes break parsing in production. Ensembl is transitioning to a new platform (beta.ensembl.org) in early 2026, with the current API receiving its **final update at release e!116**. After that, the old API remains available but frozen — no new genome builds, no format updates. A breaking change already occurred: `maf` (minor allele frequency) was renamed to `af` (allele frequency) to match the downloadable VEP tool.
 
-**Why it happens:** The [SQLite3 Multiple Ciphers FAQ](https://utelle.github.io/SQLite3MultipleCiphers/docs/faq/faq_overview/) explicitly states that FTS5 extensions retrieve the FTS5 API pointer via a SELECT statement, and this will fail if `PRAGMA key` was not executed first. The current constructor does not have any key-setting step because the database is currently unencrypted. Adding encryption requires inserting a key step between connection creation and schema initialization -- a change to the constructor's flow that is easy to overlook.
+**Why it happens:**
+Ensembl is migrating to a new architecture. The old REST API (rest.ensembl.org) will eventually redirect users to the new platform. API response formats may differ. Field names change without semantic versioning. The app assumes response schema stability.
 
 **Consequences:**
-- Encrypted databases cannot be opened at all
-- FTS5 table creation fails silently or with cryptic "not a database" errors
-- FTS5 triggers that fire on INSERT will cause variant imports to fail on encrypted databases
+- VEP API calls return 200 OK but parsing throws unexpected field errors
+- Missing fields in variant details panel after VEP fetch
+- Logs show `SyntaxError: Unexpected token` or `Cannot read property 'X' of undefined`
+- Users lose access to enrichment data
+- Emergency patch required
 
 **Prevention:**
-1. Modify `DatabaseService` constructor to accept an optional key parameter
-2. Call `this.db.pragma('key = "..."')` immediately after `new Database(dbPath)` and before any other pragma or schema operation
-3. Add a test that creates an encrypted in-memory database, sets the key, initializes the schema (including FTS5), inserts data, and verifies FTS5 search works
-4. Order of operations must be: `new Database()` -> `PRAGMA key` -> `PRAGMA journal_mode` -> `PRAGMA foreign_keys` -> `initializeSchema()`
+- Use response validation: parse VEP JSON with schema validation (zod, ajv) to detect unexpected formats
+- Log schema validation failures with full response body (sanitized) for debugging
+- Implement feature flag: `USE_NEW_VEP_API` to toggle between old and new endpoints during transition
+- Monitor Ensembl changelog: https://github.com/Ensembl/ensembl-rest/wiki/Change-log
+- Cache VEP responses with version/endpoint metadata for debugging after-the-fact
+- Build graceful degradation: if parse fails, show raw JSON in details panel instead of crashing
+- Subscribe to Ensembl mailing list for API change announcements
 
-**Detection:** Tests that use `:memory:` databases without encryption will pass. Only tests against encrypted file-based databases will catch this. Add specific encrypted database tests early.
+**Warning signs:**
+- VEP API calls return 200 OK but parsing throws errors
+- Missing fields in variant details panel after VEP fetch
+- Console shows unexpected field names in responses
+- Integration tests start failing without code changes
 
-**Confidence:** HIGH -- verified via [SQLite3 Multiple Ciphers documentation](https://utelle.github.io/SQLite3MultipleCiphers/) and the current `DatabaseService.ts` constructor logic.
+**Phase to address:** Phase 3 (API Integration) + ongoing monitoring
+**Recovery cost:** HIGH — if not caught early, users lose access to enrichment data; requires emergency patch
+
+**Source:** [Ensembl Platform Transition 2026](https://www.ensembl.info/2025/12/02/updates-to-programmatic-access-to-ensembl-and-transitioning-to-the-new-ensembl-platform/), [Ensembl REST Change log](https://github.com/Ensembl/ensembl-rest/wiki/Change-log)
 
 ---
 
-### Pitfall 3: Prepared Statement Cache Becomes Invalid When Switching Databases
+### Pitfall 3: VEP Rate Limiting Without Exponential Backoff = Cascade Failures
 
-**What goes wrong:** The current `DatabaseService` uses a `Map<string, Statement>` as a prepared statement cache (the `stmt()` method). When the user switches databases (opening a different `.db` file), all cached `Statement` objects become invalid because they are bound to the old database connection. Using stale statements causes segmentation faults or "database connection is closed" errors -- hard crashes with no graceful recovery.
+**What goes wrong:**
+User opens side panel for 10 variants rapidly → all 10 VEP requests fire simultaneously → server returns 429 Too Many Requests → app retries all 10 immediately → more 429s → infinite retry loop until user force-quits app.
 
-**Why it happens:** better-sqlite3 prepared statements are native C++ objects tied to a specific `sqlite3*` connection handle. When `db.close()` is called, all statements associated with that connection are finalized. The JavaScript `Statement` objects still exist in the cache `Map`, but their underlying native handles are destroyed. Any call to `.run()`, `.get()`, or `.all()` on these stale statements will crash the process.
+**Why it happens:**
+Ensembl VEP REST API enforces **15 requests/second, 55,000 requests/hour** (averages to 15/sec). When rate limit exceeded:
+- **403 Forbidden** = submitting far too many requests
+- **429 Too Many Requests** = rate-limited (includes `Retry-After` header in seconds)
 
-The current architecture uses a singleton pattern (`getDatabaseService()` in `database/index.ts`) that creates one `DatabaseService` for the entire app lifetime. Switching databases means closing this singleton and creating a new one -- but any IPC handler or import service that captured a reference to the old service (or its statements) will use the dead connection.
+Without request queuing and exponential backoff, concurrent requests trigger rate limits, and naive retry logic amplifies the problem.
 
 **Consequences:**
-- Process crash (SIGSEGV / native crash) when using a stale prepared statement
-- Silent data corruption if the old connection is not properly closed
-- Race conditions if an import is in progress when the user switches databases
+- Network tab shows bursts of 10+ VEP requests in <1 second
+- Console logs show repeated 429 errors
+- Exponentially growing request queue (memory leak)
+- UI becomes unresponsive during VEP fetch storms
+- User must force-quit application
 
 **Prevention:**
-1. When closing a `DatabaseService`, clear the statement cache explicitly: `this.statementCache.clear()` in `close()`
-2. In `database/index.ts`, when switching databases, set `databaseService = null` FIRST, then close the old service, then create the new one
-3. Add a guard: if an import is in progress (tracked via `currentAbortController` in the import handler), reject the database switch request
-4. All IPC handlers must call `getDatabaseService()` per-invocation (which they already do), never cache the service reference. Verify this pattern holds for any new handlers
-5. Consider adding an `isClosed` flag to `DatabaseService` that causes all methods to throw a clear error instead of segfaulting
+- Implement request queue: max 10 requests/second (buffer below 15/sec limit)
+- Respect `Retry-After` header on 429 responses (mandatory per HTTP spec)
+- Use exponential backoff: 1s, 2s, 4s, 8s for retries after 429
+- Debounce side panel open: wait 300ms before firing VEP request (user may close panel quickly)
+- AbortController: cancel in-flight request when user closes side panel or switches variants
+- Show user-visible rate limit state: "Ensembl rate limit reached, retrying in 5s..."
+- Maximum retry limit: fail after 3 attempts, show error message
 
-**Detection:** This bug only manifests when the user actually switches databases at runtime. Manual testing with database switching while data is loaded is required. Add an integration test that opens DB A, prepares statements, closes DB A, opens DB B, and verifies old statements throw rather than crash.
+**Warning signs:**
+- Network tab shows bursts of many VEP requests in <1 second
+- Console logs show repeated 429 errors
+- Memory usage grows during enrichment fetching
+- UI becomes unresponsive when clicking through variants quickly
 
-**Confidence:** HIGH -- verified via [better-sqlite3 API docs](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md) which state that after `db.close()` no statements can be created or executed, and via the current codebase showing the statement cache in `DatabaseService.ts`.
+**Phase to address:** Phase 3 (API Integration)
+**Recovery cost:** HIGH — impacts user trust; requires hotfix to stop retry storms
+
+**Source:** [Ensembl Rate Limits](https://github.com/Ensembl/ensembl-rest/wiki/Rate-Limits), [VEP API Issues](https://github.com/Ensembl/ensembl-rest/issues/353)
 
 ---
 
-### Pitfall 4: ZIP Extraction Path Traversal (Zip Slip) Allows File Overwrite Outside Target Directory
+### Pitfall 4: HPO Term Obsoletion = Broken Phenotype Tags
 
-**What goes wrong:** When extracting password-protected ZIP files containing case data, a maliciously crafted ZIP archive can contain entries with paths like `../../../etc/important_file` or `..\..\AppData\important_file`. If the extraction code does not validate that resolved paths stay within the target extraction directory, files can be written to arbitrary locations on the filesystem. This is particularly dangerous in an Electron app running with the user's full filesystem permissions.
+**What goes wrong:**
+User adds HPO term "HP:0001234" to a case in 2025. HPO updates in 2026 mark it obsolete with replacement "HP:0005678". User's stored term no longer resolves in API queries, causing "Term not found" errors in phenotype display.
 
-**Why it happens:** This is the well-documented [Zip Slip vulnerability](https://security.snyk.io/research/zip-slip-vulnerability). Common Node.js ZIP libraries have historically been vulnerable:
-- `adm-zip` before v0.4.9 was vulnerable (CVE-2018-1002204)
-- `jszip` before v2.7.0/v3.8.0 was vulnerable (CVE-2022-48285)
-- Many extraction libraries do not validate paths by default
-
-Developers assume ZIP entry names are safe filenames, but the ZIP format allows any string as an entry name, including directory traversal sequences.
+**Why it happens:**
+HPO ontology evolves continuously. Terms are deprecated/obsoleted when definitions change or duplicates are merged. Best practice: terms are never deleted (IDs persist), but marked `owl:deprecated = true` with `term replaced by` annotations. However, API queries for obsolete terms may return empty results or error responses.
 
 **Consequences:**
-- Arbitrary file overwrite on the user's system
-- Potential code execution if overwriting executables or configuration files
-- On Windows, UNC paths (`\\server\share\...`) in ZIP entries can trigger SMB connections
+- HPO API returns 404 or empty results for previously valid terms
+- Phenotype labels display as "HP:XXXXXXX" (ID only) without human-readable text
+- User reports: "Phenotype disappeared from case metadata"
+- Loss of phenotype context for case interpretation
 
 **Prevention:**
-1. After resolving each entry's extraction path, verify it starts with the intended target directory:
-   ```typescript
-   const resolved = path.resolve(targetDir, entry.fileName);
-   if (!resolved.startsWith(path.resolve(targetDir) + path.sep)) {
-     throw new Error('Path traversal detected in ZIP entry');
-   }
-   ```
-2. Reject entries containing `..` path segments
-3. Reject entries with absolute paths
-4. On Windows, also reject UNC paths (entries starting with `\\`)
-5. Set a maximum decompressed size limit per file and total to prevent zip bombs
-6. Use `unzipper` (streaming, password-protected ZIP support) rather than `adm-zip` (synchronous, blocks event loop)
-7. Validate entry count (reject ZIPs with more than a reasonable number of entries)
+- Store HPO terms with metadata: `{ hpo_id, label, version, created_at, obsolete }`
+- Implement validation on case edit: query HPO API to check if stored term is obsolete
+- Show warning UI: "This term is obsolete. Suggested replacement: [new term]"
+- Batch validation: background task to check all stored HPO terms against current ontology
+- Log HPO version used: store ontology release date for audit trail
+- Allow users to manually update obsolete terms (don't auto-replace — may change meaning)
+- Cache term metadata locally: reduces API calls, provides offline fallback
 
-**Detection:** Static analysis tools like Snyk or npm audit can flag vulnerable ZIP library versions. Add a test with a crafted ZIP containing traversal paths to verify rejection.
+**Warning signs:**
+- HPO API returns 404 or empty results for previously valid terms
+- Phenotype labels display as IDs without human-readable text
+- Users report missing phenotypes
+- Validation batch job reports obsolete terms
 
-**Confidence:** HIGH -- well-documented vulnerability with [multiple CVEs](https://security.snyk.io/research/zip-slip-vulnerability) and [Node.js-specific proof of concepts](https://github.com/GPUkiller/ZipSlipNodeJS).
+**Phase to address:** Phase 2 (Schema Design) + Phase 4 (Case Metadata UI)
+**Recovery cost:** MEDIUM — requires manual review of all stored terms, user intervention to update
+
+**Source:** [HPO Obsoletion](https://github.com/obophenotype/human-phenotype-ontology/wiki/Obsoletion), [Ontology Obsoletion Guide](https://incatools.github.io/ontology-access-kit/guide/obsoletion.html)
 
 ---
 
-### Pitfall 5: shell.openExternal with Expanded Domain Allowlist Creates RCE Vectors
+### Pitfall 5: ACMG Evidence vs. Classification Conflation
 
-**What goes wrong:** The current `shell.ts` handler has a restrictive domain allowlist (`github.com`, `opensource.org`) and validates HTTPS-only. V0.3.0 will add external links to genomic databases (ClinVar, gnomAD, OMIM, UniProt, Ensembl, UCSC, etc.), requiring expanding the allowlist significantly. Each new domain is an attack surface. More critically, if the validation logic is relaxed (e.g., switching from allowlist to blocklist, or allowing `http:` for some domains), it opens multiple RCE vectors documented by [Benjamin Altpeter](https://benjamin-altpeter.de/shell-openexternal-dangers/):
+**What goes wrong:**
+Database schema stores `acmg_classification` as single enum: `{pathogenic, likely_pathogenic, vus, likely_benign, benign}`. User marks variant with PM2 (absent in population DB) and PP3 (computational pathogenic) evidence, expecting VUS. App auto-calculates "Likely Pathogenic" based on rules. Six months later, user learns PM2 should be downweighted to PM2_Supporting per ClinGen 2025 update. All historical classifications are now wrong, but evidence codes weren't stored — only the final label.
 
-- `file://` scheme: executes local files
-- `\\server\share\program.exe`: opens remote executables on Windows via SMB
-- `ms-msdt:` and other Windows protocol handlers: system command execution
-- `.desktop` files on Linux via `xdg-open`: arbitrary command execution
-
-**Why it happens:** Developers see the current secure pattern and think "just add more domains to the list." But the real risk is:
-1. Constructing URLs from user-controlled data (e.g., building a ClinVar URL from a variant's clinvar field without sanitizing the value)
-2. URL injection through malformed variant data that was imported from an untrusted source
-3. Open redirect vulnerabilities on allowlisted domains that could redirect to malicious URIs
+**Why it happens:**
+ACMG classification is a **rules-based inference** from evidence codes (PS1, PM2, PP3, BS1, BP4, etc.), not a direct property. Storing only the final classification discards:
+- Which evidence codes were applied
+- Strength of each code (e.g., PM2 vs PM2_Supporting)
+- Why conflicting evidence was resolved a certain way
+- Whether classification was auto-calculated or user-overridden
 
 **Consequences:**
-- Remote code execution on the user's machine
-- Data exfiltration via crafted URLs
-- Phishing through open redirect chains
+- Users ask: "Why is this variant classified as X?" — no answer in database
+- Classification changes after app update, confusing users
+- Cannot reproduce classification decision from 6 months ago
+- Conflicting evidence not visible in UI (e.g., BS3_Moderate vs PP3 contradiction)
+- Cannot retroactively apply updated ACMG guidelines
 
 **Prevention:**
-1. Keep the allowlist approach -- never switch to a blocklist
-2. Build external URLs in the main process from validated components, not by passing raw URLs from the renderer:
-   ```typescript
-   // GOOD: Main process builds URL from validated gene symbol
-   const url = `https://www.ncbi.nlm.nih.gov/clinvar/?term=${encodeURIComponent(validatedTerm)}`
+- **Separate tables:** `variant_acmg_evidence` (many evidence codes per variant) and `variant_acmg_classification` (derived/override)
+- Evidence schema: `{ variant_id, case_id, evidence_code, strength, applied_at, applied_by, rationale_text }`
+- UI: Show evidence codes with strength badges; allow adding/removing individual codes
+- Classification algorithm: re-compute on-demand from evidence table; allow user override with audit log
+- Store version: ACMG guidelines version (2015 baseline, ClinGen updates 2020-2025)
+- Allow recomputation: "Recalculate all classifications with updated ACMG rules" batch operation
+- Timestamp everything: evidence application, classification changes, guideline version
 
-   // BAD: Renderer passes arbitrary URL string
-   shell.openExternal(untrustedUrl)
-   ```
-3. Validate that the final URL after construction still matches the allowlist
-4. URL-encode all variable components to prevent injection
-5. Normalize URLs before validation (handle punycode, percent-encoding tricks)
-6. Test with adversarial inputs: `javascript:`, `data:`, `file:`, `\\`, `%00`, etc.
+**Warning signs:**
+- Schema has only `classification` column, no `evidence_codes` table
+- Users ask why variant classified as X, no provenance available
+- Classification UI allows picking tier directly without evidence
+- Cannot answer "what evidence supports this classification?"
 
-**Detection:** Security review of every URL template added. Automated test that attempts to open disallowed protocols and domains through the IPC handler.
+**Phase to address:** Phase 1 (Schema Design) — **MUST GET RIGHT UPFRONT**
+**Recovery cost:** **CRITICAL** — requires data migration, re-annotation of all variants; may lose historical context permanently
 
-**Confidence:** HIGH -- verified via [Electron security documentation](https://www.electronjs.org/docs/latest/tutorial/security) and [documented real-world CVEs](https://benjamin-altpeter.de/shell-openexternal-dangers/) in Jitsi Meet Electron, Wire Desktop, and others.
+**Source:** [ACMG Guidelines Overview](https://pmc.ncbi.nlm.nih.gov/articles/PMC6885382/), [ACMG PM2/PP3 Issues](https://help.emg.illumina.com/emedgene-analyze-manual/variant_page/evidence_section/individual-acmg-criteria-evaluation)
 
 ---
 
-### Pitfall 6: Migrating Existing Unencrypted Databases to Encrypted Format Loses Data
+### Pitfall 6: Race Conditions: User Clicks 5 Variants in 2 Seconds
 
-**What goes wrong:** When adding SQLCipher support, the app must handle existing users who already have an unencrypted `varlens.db` with imported cases and variants. SQLCipher cannot encrypt a database in-place -- it requires creating a new encrypted database and copying all data. If the migration fails mid-way (disk full, crash, power loss), the user loses both the original and the encrypted copy.
+**What goes wrong:**
+User clicks variant A → side panel opens → VEP request fires (500ms latency). User clicks variant B → new side panel opens → VEP request fires. VEP response for A arrives **after** B's response → side panel shows variant B's position but variant A's consequence annotations.
 
-**Why it happens:** The [official SQLCipher migration approach](https://discuss.zetetic.net/t/how-to-encrypt-a-plaintext-sqlite-database-to-use-sqlcipher-and-avoid-file-is-encrypted-or-is-not-a-database-errors/868) uses `ATTACH` and `sqlcipher_export()` to copy data from an unencrypted database to a new encrypted one. This is a multi-step process:
-1. Open the unencrypted database
-2. Attach a new encrypted database
-3. Export all data to the encrypted copy
-4. Close both
-5. Replace the old file with the new one
-
-Steps 4-5 are the danger zone. If the process crashes after step 3 but before step 5, you have two databases and the app does not know which to use on restart.
+**Why it happens:**
+Network requests don't complete in order. Fast user interaction triggers multiple concurrent API calls. Without request cancellation and response tracking, stale responses overwrite fresh data.
 
 **Consequences:**
-- Complete data loss for existing users if migration fails without rollback
-- Corrupted state where the app tries to open an encrypted database without a key, or an unencrypted database with a key
-- User confusion if the app silently switches between encrypted and unencrypted modes
+- Side panel flickers between different variants' data
+- Data mismatch: variant position in header doesn't match consequence in body
+- User confusion and loss of trust
+- Debugging nightmare: race conditions are timing-dependent
 
 **Prevention:**
-1. Use a safe migration pattern with atomic rename:
-   - Export to `varlens.db.encrypted` (new file)
-   - Verify the new file can be opened with the key and contains the expected data (row count check)
-   - Rename `varlens.db` to `varlens.db.backup`
-   - Rename `varlens.db.encrypted` to `varlens.db`
-   - Only delete `varlens.db.backup` after successful verification
-2. Keep the backup for at least one app session
-3. Add a migration state flag (in a separate file, not the database) to track progress and resume on crash
-4. Consider making encryption opt-in for v0.3.0 and mandatory in a later version, reducing migration pressure
-5. Test with large databases (hundreds of thousands of variants) to ensure migration does not timeout or run out of memory
+- **AbortController pattern:** cancel previous VEP request when new variant selected
+  ```typescript
+  let currentAbortController: AbortController | null = null
 
-**Detection:** Test the migration path with both success and simulated failure (disk full, permission denied). Test with databases from v0.2.0 to ensure backward compatibility.
+  async function fetchVepData(variant) {
+    if (currentAbortController) currentAbortController.abort()
+    currentAbortController = new AbortController()
+    const response = await fetch(url, { signal: currentAbortController.signal })
+    // ... parse response
+  }
+  ```
+- Request ID tracking: assign unique ID to each request, discard responses with stale IDs
+- Loading state management: show spinner until correct response arrives, don't flash stale data
+- Debounce: wait 200ms after variant selection before firing API request (gives user time to skip through)
+- Clear previous data immediately when new variant selected
 
-**Confidence:** MEDIUM -- the migration approach is well-documented for SQLCipher, but the specific behavior of `better-sqlite3-multiple-ciphers` with `ATTACH` and `sqlcipher_export()` has not been verified against the library's docs. The `key()` and `rekey()` API methods may offer a simpler path that needs investigation.
+**Warning signs:**
+- Side panel flickers between different variants' data
+- Console shows "Request aborted" warnings (good sign if implemented!)
+- Data mismatch between header and body
+- Users report seeing wrong data briefly
+
+**Phase to address:** Phase 3 (API Integration)
+**Recovery cost:** LOW — cosmetic bug, but confusing UX; easy to fix with AbortController
+
+**Source:** [Handling API Race Conditions in React](https://sebastienlorber.com/handling-api-request-race-conditions-in-react), [AbortController for Race Conditions](https://www.cloudthat.com/resources/blog/safeguarding-network-requests-for-handling-race-conditions-with-abortcontroller)
+
+---
+
+### Pitfall 7: Schema Migration on Encrypted DB Without Testing
+
+**What goes wrong:**
+Adding new tables (`variant_comments`, `variant_tags`) works in dev (unencrypted :memory: DB). Deploy to production → migration fails on encrypted database with cryptic error: "file is not a database" or "database disk image is malformed". Migration partially completes → database corrupted → user loses all data.
+
+**Why it happens:**
+SQLCipher-encrypted databases have different failure modes than plain SQLite:
+- Wrong password → "file is not a database" error
+- Schema migration runs before `PRAGMA key` → reads encrypted bytes as corrupted plain SQLite
+- ALTER TABLE on encrypted DB without WAL mode → locking issues
+
+Existing Varlens code correctly sets `PRAGMA key` **first** (DatabaseService.ts line 74), but new migration code paths might bypass this.
+
+**Consequences:**
+- Migration succeeds in CI (Node.js tests use :memory:) but fails in packaged Electron app
+- Error: "file is not a database" during schema upgrade
+- Database becomes unusable after version update
+- User data loss without backup
+
+**Prevention:**
+- Test all schema migrations on **encrypted** test database (not just :memory:)
+- Migration test fixture: create encrypted .db file, run migration, verify schema
+- Backup before migration: copy .db file to .db.backup before ALTER TABLE
+- Atomic migrations: wrap in transaction, rollback on error
+- Validate encryption after migration: `PRAGMA cipher_integrity_check`
+- Document: "All schema changes must test with encrypted DB"
+- Integration test: encrypted DB with v0.3.0 schema → run migration → verify v0.4.0 schema
+
+**Warning signs:**
+- Migration succeeds in CI but fails in packaged app
+- Users report "file is not a database" after update
+- Database corruption after version upgrade
+- Cannot open previously working databases
+
+**Phase to address:** Phase 1 (Schema Design) — before any new tables
+**Recovery cost:** **CRITICAL** — data loss; requires restore from backup (if user has one)
+
+**Source:** [SQLite3 Multiple Ciphers Docs](https://utelle.github.io/SQLite3MultipleCiphers/), [SQLite Encryption Best Practices](https://dev.to/stephenc222/basic-security-practices-for-sqlite-safeguarding-your-data-23lh)
+
+---
+
+### Pitfall 8: Offline Detection False Positives
+
+**What goes wrong:**
+App uses `navigator.onLine` to detect offline state. Developer's laptop has VirtualBox running with Host-Only Network adapter → `navigator.onLine` returns true → app attempts VEP API call → hangs for 30 seconds → timeout error → "Failed to load variant details" (but internet was available).
+
+**Why it happens:**
+`navigator.onLine` only detects network interface state, not actual internet connectivity. Returns true if:
+- Any network adapter is "connected" (even virtual adapters)
+- Computer is on LAN without internet gateway
+- Captive portal blocks external requests
+
+Electron's `net.isOnline()` has same limitations. False positives are common.
+
+**Consequences:**
+- Users report: "App says I'm online but enrichment doesn't work"
+- VEP requests timeout frequently despite working internet
+- App becomes unresponsive for 30s when opening side panel
+- Poor user experience during demos/presentations
+
+**Prevention:**
+- Implement real connectivity check: lightweight ping to Ensembl status endpoint or example.com
+- Cache connectivity status: check every 30 seconds, not per-request
+- Timeout aggressively: 5-10 second timeout for VEP requests (not 30s default)
+- Graceful degradation UI: if VEP fails, show "Offline or API unavailable" + cached data
+- Don't block UI: show offline banner, but allow browsing cached variants
+- User override: "Force offline mode" setting for presentations/demos
+- Show connectivity indicator in UI: green/yellow/red dot with tooltip
+
+**Warning signs:**
+- Users report online status mismatch
+- VEP requests timeout despite working internet
+- Long pauses when opening side panel
+- Virtual network adapters causing false positives
+
+**Phase to address:** Phase 3 (API Integration) — before VEP fetch implementation
+**Recovery cost:** LOW — UX annoyance, easily fixed with better detection logic
+
+**Source:** [Electron Online/Offline Detection](https://www.electronjs.org/docs/latest/tutorial/online-offline-events), [navigator.onLine Limitations](https://github.com/electron/electron/issues/6633)
+
+---
+
+### Pitfall 9: Case-Insensitive Tag Duplicates
+
+**What goes wrong:**
+User adds tag "Candidate" to variant 1. Later adds tag "candidate" to variant 2. Tag list shows both "Candidate" and "candidate". Tag filter dropdown shows duplicates. Clicking "Candidate" filter finds only variants tagged exactly "Candidate", missing those tagged "candidate".
+
+**Why it happens:**
+SQLite text comparisons are case-sensitive by default (unless using COLLATE NOCASE). User-generated tags proliferate with slight case variations: "JavaScript", "Javascript", "javascript", "JAVASCRIPT".
+
+**Consequences:**
+- Tag dropdown shows "candidate", "Candidate", "CANDIDATE" as separate entries
+- Tag search returns incomplete results
+- Tag count doesn't match user's expectation (hidden duplicates)
+- Database clutter with near-duplicates
+
+**Prevention:**
+- Normalize tags at input: lowercase all tags before storing (consistent casing)
+- Alternative: store `tag_normalized` (lowercase) and `tag_display` (user's original case)
+- Schema: `CREATE UNIQUE INDEX idx_tag_normalized ON tags(LOWER(tag_name))`
+- UI: autocomplete suggests existing tags case-insensitively ("cand..." shows "Candidate")
+- Migration: deduplicate existing tags with LOWER() GROUP BY, preserve most recent casing
+- Validation: reject tag creation if normalized version exists
+
+**Warning signs:**
+- Tag dropdown shows case variations as separate entries
+- Tag search returns incomplete results
+- User confusion about "duplicate" tags
+- Database query shows multiple rows for similar tag names
+
+**Phase to address:** Phase 2 (Schema Design) — before tags table creation
+**Recovery cost:** MEDIUM — requires data migration to deduplicate tags, may lose user's preferred casing
+
+**Source:** [Tag Case Sensitivity Issues](https://github.com/shaarli/Shaarli/issues/146), [Tags Case Sensitivity Discussion](https://github.com/11ty/eleventy/discussions/1461)
+
+---
+
+### Pitfall 10: Renderer Process API Key Exposure
+
+**What goes wrong:**
+Developer stores VEP API key in renderer process (Vuex/Pinia store) for convenience. User opens DevTools (Ctrl+Shift+I) → inspects Vuex state → copies API key → uses it for their own projects → quota exhausted → production app stops working.
+
+**Why it happens:**
+Electron renderer process runs Chromium with DevTools enabled (even in production builds unless explicitly disabled). All renderer JavaScript state is inspectable. Storing secrets in renderer = exposing them to users.
+
+**Consequences:**
+- API keys visible in Vuex/Pinia DevTools inspector
+- API keys in renderer bundle.js (visible via source maps)
+- User reports: "I found this key in your app, is it supposed to be there?"
+- Quota abuse from leaked keys
+- Must rotate keys and update all installations
+
+**Prevention:**
+- **NEVER store API keys in renderer process** — even encrypted (encryption key would be in JS)
+- Store API keys in main process: use Electron's `safeStorage` API for OS-level credential storage
+- IPC pattern: renderer requests enrichment via `api.enrichment.fetchVep(variant)` → main process fetches with stored key → returns sanitized result
+- Environment variables: API keys in .env file, loaded in main process only (never bundled by Vite)
+- Document: "Renderer process is untrusted. All secrets in main process only."
+- Disable DevTools in production: `webPreferences: { devTools: false }` (but impacts debugging)
+
+**Warning signs:**
+- API keys visible in Vuex/Pinia DevTools inspector
+- API keys in renderer bundle.js (grep for key patterns)
+- Source maps expose key values
+- User reports finding keys in app
+
+**Phase to address:** Phase 0 (Architecture) — before any API integration
+**Recovery cost:** **CRITICAL** — if key leaks, must rotate key, update all installations; potential quota abuse
+
+**Source:** [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage), [Electron Security Best Practices](https://www.electronjs.org/docs/latest/tutorial/security)
 
 ---
 
@@ -214,154 +404,210 @@ Mistakes that cause delays, rework, or degraded user experience. These should be
 
 ---
 
-### Pitfall 7: Cohort Aggregation Queries Block the Main Process and Freeze the UI
+### Pitfall 11: Embedding Variant Data in Annotation Records
 
-**What goes wrong:** Cohort analysis requires aggregating data across multiple cases -- for example, counting variant frequency across all cases, computing average allele frequencies per gene, or finding shared variants. These aggregate queries with `GROUP BY` across large datasets (hundreds of thousands of rows across many cases) are computationally expensive. Since `better-sqlite3` is synchronous and runs in Electron's main process, a long-running aggregation query blocks the entire event loop, freezing the UI and making the app unresponsive.
+**What goes wrong:**
+Store full variant data in comment/tag records: `{ comment_id, variant_json: {...}, comment_text }`. When variant annotations update, denormalized copies are stale. User sees outdated gnomAD AF in comment context.
 
-**Why it happens:** The current architecture runs all database operations synchronously in the main process (by design -- `better-sqlite3` is synchronous). For single-case queries with cursor pagination, this works well because each query returns quickly. But cohort aggregation queries that scan across all variants in all cases cannot be paginated in the same way -- they need to process the full dataset to produce aggregate results.
-
-A query like `SELECT gene_symbol, COUNT(*) as case_count, AVG(gnomad_af) FROM variants GROUP BY gene_symbol` across 50 cases with 10K variants each (500K rows total) could take several seconds, during which the UI is completely frozen.
+**Why it happens:**
+Developers want to show variant context with annotations (chr:pos, gene) and think copying variant data is simpler than joining tables.
 
 **Consequences:**
-- App appears hung during cohort analysis
-- Users may force-quit the app, potentially corrupting the database
-- Electron may show "page not responsive" dialogs on Windows/Linux
+- Database bloat: variant data duplicated in every annotation
+- Stale data: variant updates don't propagate to annotations
+- Maintenance burden: must update all annotation copies when variant changes
+- Query complexity: cannot easily filter by variant properties across annotations
 
 **Prevention:**
-1. Pre-compute aggregation results using materialized summary tables (insert-time aggregation):
-   - When a case is imported, update summary tables (e.g., `gene_variant_counts`, `variant_frequency`)
-   - Cohort queries read from pre-computed tables instead of scanning raw variants
-2. If real-time aggregation is needed, break queries into chunks and yield to the event loop between chunks
-3. Consider using `worker_threads` for heavy aggregation (note: there is a [known Electron bug](https://github.com/electron/electron/issues/43513) with better-sqlite3 in worker threads -- verify this is resolved for Electron 40)
-4. Add appropriate indexes for aggregation queries:
-   - `CREATE INDEX idx_variants_gene_case ON variants(gene_symbol, case_id)`
-   - Use `EXPLAIN QUERY PLAN` to verify index usage
-5. Set `PRAGMA cache_size` and `PRAGMA mmap_size` for better read performance during aggregation
-6. Show a progress indicator for cohort operations that may take more than 500ms
+- Store only `variant_id` foreign key in annotation tables
+- Join with variants table for display: `SELECT comments.*, variants.* FROM comments JOIN variants ON comments.variant_id = variants.id`
+- Cache frequently accessed variant data in memory (Vue computed, not database)
 
-**Detection:** Performance test with realistic data volumes (50+ cases, 10K+ variants each). Profile query execution time with `EXPLAIN QUERY PLAN` and wall-clock timing.
-
-**Confidence:** HIGH -- verified against the current synchronous architecture in `DatabaseService.ts` and [SQLite performance documentation](https://sqlite.org/optoverview.html).
+**Phase to address:** Phase 1 (Schema Design)
+**Recovery cost:** MEDIUM — requires schema refactoring, data migration
 
 ---
 
-### Pitfall 8: Cross-Platform Native Module Compilation Fails for better-sqlite3-multiple-ciphers
+### Pitfall 12: Global Comments Without Per-Case Context
 
-**What goes wrong:** `better-sqlite3-multiple-ciphers` has a larger native code footprint than `better-sqlite3` because it bundles SQLite3 Multiple Ciphers (which includes OpenSSL crypto). The current CI installs `libsqlite3-dev` on Linux, but the encrypted variant may need additional system dependencies (OpenSSL development headers) or have different compilation requirements. Windows requires Visual Studio Build Tools with C++ workload. macOS may need specific SDK versions.
+**What goes wrong:**
+One comment table for all cases. User adds "Likely pathogenic" comment globally → comment appears in all cases, even those with different zygosity/context.
 
-**Why it happens:** The current `build.yml` Linux step installs:
-```yaml
-sudo apt-get install -y libsqlite3-dev build-essential
+**Why it happens:**
+Context collapse. Variant interpretation depends on case context (phenotype, family history, zygosity). Same variant may be pathogenic in one case, benign in another.
+
+**Consequences:**
+- Comments show in wrong context
+- User confusion: "Why does this case have that comment?"
+- Cannot distinguish global notes from case-specific interpretation
+- Loss of case-specific context
+
+**Prevention:**
+- Separate `global_comments` (variant-level) and `case_comments` (variant + case)
+- Schema: `case_comments { variant_id, case_id, comment_text }`, `global_comments { variant_id, comment_text }`
+- UI shows both, clearly labeled: "Global notes" section + "Case-specific notes" section
+- Allow converting global comment to case-specific and vice versa
+
+**Phase to address:** Phase 2 (Annotation Data Models)
+**Recovery cost:** LOW — schema extension, UI update, no data loss
+
+---
+
+### Pitfall 13: No Timestamp on Classification Changes
+
+**What goes wrong:**
+Classification stored as single value: `acmg_classification = 'pathogenic'`. No history. User changes classification → previous value lost forever. Cannot answer "When did this classification change?" or "Who changed it?".
+
+**Why it happens:**
+Developers focus on current state, forget audit trail requirements. UPDATE statements overwrite previous values without history.
+
+**Consequences:**
+- Cannot answer temporal questions: "When did we classify this as pathogenic?"
+- Cannot answer provenance questions: "Who made this classification?"
+- Cannot revert accidental changes
+- Loss of classification evolution context
+- Compliance issues: some clinical labs require audit trails
+
+**Prevention:**
+- Append-only audit log: `classification_history` table with `{variant_id, classification, evidence_codes, timestamp, user_id, notes}`
+- Never UPDATE classification — always INSERT new row
+- Current classification = most recent row in history table
+- UI shows classification timeline: "VUS (2025-01-01) → Likely Pathogenic (2025-06-15) → Pathogenic (2026-01-20)"
+- Allow reverting to previous classification
+
+**Phase to address:** Phase 2 (Annotation Data Models)
+**Recovery cost:** MEDIUM — requires schema redesign, migration if classifications already exist
+
+---
+
+### Pitfall 14: Blocking UI During API Calls
+
+**What goes wrong:**
+Side panel freezes while VEP request in flight (no loading state). User thinks app crashed. Clicks repeatedly → multiple requests → rate limit hit.
+
+**Why it happens:**
+Developers forget to show loading state, assume API is fast enough to not need it. Network variability means requests can take 0.1s to 10s.
+
+**Consequences:**
+- User thinks app crashed
+- Multiple redundant requests (rate limiting)
+- Poor perceived performance even when actual response time is good
+- User frustration
+
+**Prevention:**
+- Immediate loading state (skeleton screen) when side panel opens
+- Show "Loading enrichment data..." message
+- Debounce clicks: ignore rapid clicking during loading
+- Show timeout countdown: "Loading... (5s remaining)"
+- Graceful timeout: show error after 10s with retry button
+- Cancel button: allow user to abort slow requests
+
+**Phase to address:** Phase 4 (Side Panel UI)
+**Recovery cost:** LOW — UI polish, no data model changes
+
+---
+
+### Pitfall 15: N+1 Query Pattern in Side Panel
+
+**What goes wrong:**
+Side panel shows variant + 10 external links. Each link requires extracting IDs from variant JSON fields:
+```typescript
+for (const variant of selectedVariants) {
+  const gene = await db.prepare('SELECT gene_symbol FROM variants WHERE id = ?').get(variant.id)
+  const clinvar = await db.prepare('SELECT clinvar FROM variants WHERE id = ?').get(variant.id)
+  // ... 10 more queries
+}
 ```
-This is sufficient for `better-sqlite3` which uses its bundled SQLite. But `better-sqlite3-multiple-ciphers` bundles SQLite3 Multiple Ciphers which may need `libssl-dev` for OpenSSL. The compilation flags and requirements differ per platform. Additionally, the [troubleshooting docs](https://github.com/m4heshd/better-sqlite3-multiple-ciphers/blob/master/docs/troubleshooting.md) note that spaces in the project path cause compilation failures on Windows (node-gyp issue).
 
 **Consequences:**
-- CI builds fail on one or more platforms
-- Release pipeline blocked until all 3 platforms compile successfully
-- May need to add platform-specific compilation steps
+- 12 queries per variant
+- Opening side panel for 5 variants = 60 queries (slow)
+- Database bottleneck
+- UI lag
 
 **Prevention:**
-1. Test compilation on all 3 platforms FIRST, before writing any feature code
-2. Check if `better-sqlite3-multiple-ciphers` provides prebuilt binaries for Electron 40 (check [releases page](https://github.com/m4heshd/better-sqlite3-multiple-ciphers/releases))
-3. If prebuilds exist, `@electron/rebuild` may download them instead of compiling from source -- but verify this works with the current `@electron/rebuild` version (v4.0.2)
-4. For Linux CI: add `libssl-dev` to the apt-get install list
-5. For Windows CI: ensure the GitHub Actions runner has the C++ build tools (it does by default, but verify)
-6. For macOS CI: test on both Intel and ARM runners if supporting both architectures
-7. Run the full `npm ci && npm run rebuild:node && npm test && npm run rebuild:electron && npm run dist` sequence on all 3 platforms before merging the dependency swap PR
+- Single query with all fields: `SELECT id, gene_symbol, clinvar, ... FROM variants WHERE id IN (?, ?, ?, ?, ?)`
+- Fetch complete variant object once, destructure needed fields
+- Cache variant data: don't re-query on every side panel render
 
-**Detection:** The CI matrix (`build.yml`) will immediately surface platform-specific compilation failures. Run the dependency swap as the first PR in the milestone.
-
-**Confidence:** MEDIUM -- prebuilt binary availability for Electron 40 is not confirmed. The latest [better-sqlite3-multiple-ciphers release](https://github.com/m4heshd/better-sqlite3-multiple-ciphers/releases) (v12.6.2) supports Electron but specific version coverage needs verification.
+**Phase to address:** Phase 4 (Side Panel UI)
+**Recovery cost:** LOW — query optimization, no schema changes
 
 ---
 
-### Pitfall 9: Batch Import of Multiple Files Has No Per-File Error Isolation
+### Pitfall 16: Rendering 1000 HPO Terms in Autocomplete Dropdown
 
-**What goes wrong:** The current import system handles one file at a time with an `AbortController` for cancellation and case rollback on failure (deleting the case if import fails). Batch import of multiple files introduces a new failure mode: File 3 of 10 fails, but files 1-2 already imported successfully. Without proper isolation, the error from file 3 could cause:
-- All 10 imports to be rolled back (losing files 1-2)
-- The batch to abort entirely (files 4-10 never attempted)
-- Inconsistent state (some files imported, some not, unclear which)
+**What goes wrong:**
+HPO API returns 1000 matching terms for query "syndrome". Rendering all in dropdown → UI freezes for 2 seconds.
 
-**Why it happens:** The current `ImportService.importVariants()` method creates a case, imports variants, and on error deletes the case. This per-file rollback is correct for single-file import. But a batch import wrapper that calls this method in a loop needs its own error handling strategy. The natural instinct is to use a single `try/catch` around the loop, which causes the entire batch to abort on the first failure.
+**Why it happens:**
+Vuetify v-autocomplete doesn't virtualize by default. DOM node count explodes. Browser struggles to render and handle scroll.
 
 **Consequences:**
-- Users must manually retry failed files from a batch
-- No clear feedback about which files succeeded and which failed
-- If a ZIP contains 20 files and file 5 has a parsing error, the user may think nothing imported
+- UI freezes during HPO search
+- Poor user experience
+- Browser memory spikes
+- Slow typing response
 
 **Prevention:**
-1. Process each file independently with its own try/catch
-2. Return a per-file result array:
-   ```typescript
-   interface BatchResult {
-     results: Array<{
-       fileName: string
-       status: 'success' | 'error'
-       caseId?: number
-       variantCount?: number
-       error?: string
-     }>
-     summary: { succeeded: number; failed: number; total: number }
-   }
-   ```
-3. Continue processing remaining files after a failure (do not abort the batch)
-4. Allow the user to cancel the entire batch (abort all remaining files)
-5. Send progress updates per-file, not just per-variant: "File 3/10: importing variants... (2,450 of 8,000)"
-6. Clean up failed files (delete case) but keep successful ones
+- Limit results: show first 50 terms + "... 950 more, refine search" message
+- Use virtual scrolling (v-virtual-scroll) for large lists
+- Debounce search input: wait 300ms after typing before querying API
+- Show "Too many results, please refine search" when count > 100
+- Progressive loading: show first 50, load more on scroll
 
-**Detection:** Test with a batch where one file is intentionally malformed. Verify that other files in the batch are still imported correctly.
-
-**Confidence:** HIGH -- verified against the current `ImportService.ts` error handling pattern and the current `import:start` IPC handler which tracks only a single `AbortController`.
+**Phase to address:** Phase 4 (Case Metadata UI)
+**Recovery cost:** LOW — UI optimization, no data model changes
 
 ---
 
-### Pitfall 10: Database Singleton Does Not Support Multiple Open Databases for Cohort Comparison
+### Pitfall 17: Recomputing ACMG Classification on Every Render
 
-**What goes wrong:** The current architecture uses a singleton `DatabaseService` pointing to a single `varlens.db` file. Cohort analysis across encrypted databases that are provided as separate files (e.g., from a password-protected ZIP) requires either:
-- Importing all case data into the single database (current approach, extended)
-- Opening multiple databases simultaneously using SQLite's `ATTACH`
+**What goes wrong:**
+Variant table row component computes ACMG badge color from evidence codes in render function → recomputes 100 times per pagination load.
 
-If the design assumes `ATTACH`, the singleton pattern breaks. If the design imports into a single DB, the migration/encryption story becomes more complex (all data in one encrypted file vs. separate encrypted files per distribution).
-
-**Why it happens:** The `getDatabaseService()` function in `database/index.ts` creates one `DatabaseService` and returns it for the app's lifetime. There is no mechanism to attach additional databases or manage multiple connections. The `DatabaseService` constructor hardcodes the connection setup with no support for `ATTACH DATABASE`.
+**Why it happens:**
+Classification algorithm runs in hot path (O(n) per row). Wasted CPU on repeated computation of unchanging data.
 
 **Consequences:**
-- Architectural dead-end if cohort analysis requires cross-database queries
-- Performance issues if all cases are imported into a single large database file
-- Confusion about the data model: "Is each encrypted ZIP a separate database, or does everything go into one?"
+- Slow table rendering
+- UI lag during pagination
+- Unnecessary CPU usage
+- Poor performance with large result sets
 
 **Prevention:**
-1. Decide the data model early: single database (import all cases into one `varlens.db`) vs. multi-database (attach external encrypted databases for analysis)
-2. Single-database approach (recommended for v0.3.0): import data from encrypted ZIPs into the main `varlens.db`. Encryption is only for transport (ZIP encryption), not for the local database. This avoids the `ATTACH` complexity entirely
-3. If local database encryption is needed, it applies to the single `varlens.db` -- not per-case databases
-4. Document the architecture decision before implementing
+- Compute once in database query: `SELECT variant.*, calculate_acmg(variant_id) as acmg_classification FROM variants`
+- Or memoize with Vue computed property: cache result until evidence codes change
+- Or precompute during evidence insertion: update classification immediately when evidence changes
+- Store computed classification in database (with timestamp for cache invalidation)
 
-**Detection:** This is a design pitfall, not a code bug. It manifests as a late-stage realization that the architecture does not support the intended workflow. Address during design/planning, not during coding.
-
-**Confidence:** MEDIUM -- depends on product requirements that are not fully specified. The single-database approach is simpler and consistent with the current architecture.
+**Phase to address:** Phase 5 (Performance Optimization)
+**Recovery cost:** LOW — optimization, no schema changes needed
 
 ---
 
-### Pitfall 11: Electron IPC Serialization Overhead Degrades Cohort Analysis UX
+### Pitfall 18: Integration with Existing External Links
 
-**What goes wrong:** Cohort analysis results (aggregated variant frequencies, shared variant lists, gene-level statistics across cases) can be large data payloads. Electron IPC uses structured clone to serialize data between main and renderer processes. For large result sets (e.g., 20,000 gene aggregations across 50 cases), the serialization/deserialization overhead can add 100-500ms of latency on top of the query time, making the UI feel sluggish.
+**What goes wrong:**
+Existing system has external links to ClinVar, gnomAD, OMIM via shell.openExternal with HTTPS-only + domain allowlist (shell.ts). New VEP enrichment adds links to Ensembl, HPO website. Developers forget to update allowlist → links in side panel fail silently.
 
-**Why it happens:** The current `variants:query` IPC handler returns paginated results (typically 50-100 rows per page), keeping IPC payloads small. Cohort aggregation queries return summary data for the entire dataset, not paginated subsets. If a naive approach returns all aggregation results in a single IPC call, the payload can be megabytes.
+**Why it happens:**
+Allowlist is in separate file (src/main/ipc/handlers/shell.ts). New features add link sources without updating security configuration.
 
 **Consequences:**
-- Sluggish cohort analysis UI, especially with many cases
-- Renderer process may stall during deserialization of large payloads
-- Memory spikes in both main and renderer processes
+- "View in Ensembl" links fail with "Domain not allowed" error
+- HPO phenotype links don't open
+- User confusion
+- Incomplete feature delivery
 
 **Prevention:**
-1. Paginate cohort results just like variant results -- use cursor-based pagination for aggregation results
-2. Return summary statistics separately from detailed data (two IPC calls: one for totals, one for paginated details)
-3. Use IPC for metadata, and consider using shared memory (`SharedArrayBuffer`) only if payloads consistently exceed 1MB (unlikely for aggregation summaries)
-4. Profile actual payload sizes with realistic data before optimizing
+- Document allowlist update in roadmap: "Phase 3: Add ensembl.org, hpo.jax.org to shell.ts allowlist"
+- Add test: verify all API domains in allowlist before integration phase completes
+- Code review checklist: "Did you update shell.ts allowlist?"
+- Consider dynamic allowlist: load from config file, allow user additions
 
-**Detection:** Performance profiling with Chrome DevTools (Electron's built-in) during cohort analysis. Measure IPC roundtrip time separately from query time.
-
-**Confidence:** MEDIUM -- potential issue but depends on actual data volumes. May not be a problem with small cohorts (<10 cases).
+**Phase to address:** Phase 3 (API Integration) — before VEP/HPO links
+**Recovery cost:** LOW — one-line config change, but easily forgotten
 
 ---
 
@@ -371,143 +617,361 @@ Mistakes that cause annoyance or minor technical debt. Addressable during implem
 
 ---
 
-### Pitfall 12: better-sqlite3-multiple-ciphers TypeScript Types Diverge from better-sqlite3
+### Pitfall 19: CORS Doesn't Apply in Main Process (Developer Confusion)
 
-**What goes wrong:** The project uses `@types/better-sqlite3` (v7.6.13) for TypeScript types. `better-sqlite3-multiple-ciphers` adds methods (`key()`, `rekey()`, cipher-related PRAGMAs) that are not in the standard type definitions. Developers must either extend the types, use `@ts-ignore` comments, or find community type definitions. Additionally, the import path changes from `better-sqlite3` to `better-sqlite3-multiple-ciphers`, which the `@types/better-sqlite3` package may not cover.
+**What goes wrong:**
+VEP API calls from main process work fine. Developer tries debugging from renderer process console → CORS errors appear → confusion about why "API doesn't work".
 
-**Why it happens:** TypeScript type definitions for the encrypted variant are maintained separately (if at all). The `@types/better-sqlite3` package will not include encryption-specific methods.
+**Why it happens:**
+CORS is a browser security feature. Main process is Node.js, no CORS restrictions. Renderer process is Chromium, enforces CORS. Developers forget this distinction.
+
+**Consequences:**
+- Developer confusion during debugging
+- Time wasted investigating "CORS issues" that don't exist in production
+- Temptation to disable CORS (bad security practice)
 
 **Prevention:**
-1. Create a local type declaration file (`src/main/database/better-sqlite3-mc.d.ts`) that extends the base types with encryption methods
-2. Use `paths` in `tsconfig.json` to alias the import if needed
-3. Check if `better-sqlite3-multiple-ciphers` ships its own type definitions (some versions do)
+- Document: "All HTTP requests in main process via IPC handlers, never in renderer"
+- Enforce IPC pattern in code review
+- Add linting rule: warn on fetch/axios in renderer code
+- Comment in code: "// Renderer process: CORS applies. Always use IPC for API calls."
 
-**Detection:** TypeScript compiler errors during `npm run typecheck`. Easy to fix but annoying if not planned for.
+**Phase to address:** Phase 0 (Architecture) — documentation/convention
+**Recovery cost:** NONE — developer education, no code changes needed
 
-**Confidence:** HIGH -- the current `package.json` shows `@types/better-sqlite3` as a devDependency and source code uses typed imports.
+**Source:** [Electron CORS in Main Process](https://m-t-a.medium.com/avoiding-cors-in-electron-sending-requests-through-ipc-28ad9407aac0), [CORS Errors 2026](https://medium.com/engineering-playbook/cors-errors-killed-our-launch-heres-what-i-wish-i-knew-7c84da40f91b)
 
 ---
 
-### Pitfall 13: ZIP Bomb Exhausts Memory or Disk When Extracting Large Archives
+### Pitfall 20: FTS5 Doesn't Index New Annotation Tables Automatically
 
-**What goes wrong:** A zip bomb is a small compressed file that expands to an enormous size when extracted. For example, a 42KB ZIP file can expand to 4.5 petabytes. Even modest zip bombs (1MB compressed, 10GB expanded) can exhaust disk space or memory. If the batch import feature extracts ZIP files without size limits, a malicious or accidentally oversized archive can crash the app or fill the user's disk.
+**What goes wrong:**
+New tables (`variant_comments`, `variant_tags`) need text search. Developer forgets to add FTS5 index → tag/comment search doesn't work.
 
-**Why it happens:** Developers focus on the happy path (reasonable ZIP files with case data) and do not consider adversarial inputs. The decompression ratio of ZIP can be extreme (1000:1 or more).
+**Why it happens:**
+Existing FTS5 table (`variants_fts`) only indexes variants table. FTS5 indexes must be created explicitly per table.
+
+**Consequences:**
+- Tag search returns no results
+- Comment search doesn't work
+- Users expect search to work, confusion when it doesn't
+- Feature feels incomplete
 
 **Prevention:**
-1. Check uncompressed size from ZIP central directory before extracting (if available -- note that this header can be spoofed)
-2. Track bytes written during extraction and abort if total exceeds a reasonable limit (e.g., 5GB)
-3. Track per-entry decompressed size and abort if any single entry exceeds a limit (e.g., 500MB)
-4. Limit total number of entries in the archive (e.g., 1000 files max)
-5. Use streaming extraction (`unzipper`) to avoid loading the entire archive into memory
-6. Show extraction progress to the user so they can cancel suspicious operations
+- Checklist in Phase 1: "Does this text column need FTS? Add to schema.ts createFTSTable."
+- Create separate FTS tables: `variant_comments_fts`, `variant_tags_fts`
+- Add FTS triggers for INSERT/UPDATE/DELETE on annotation tables
+- Test: insert comment with text, search for that text, verify result returned
 
-**Detection:** Test with a small zip bomb (e.g., 1MB -> 1GB expansion). Verify the extraction aborts before disk fills up.
-
-**Confidence:** HIGH -- well-documented attack vector, especially relevant since the feature accepts user-provided ZIP files.
+**Phase to address:** Phase 1 (Schema Design) — during table creation
+**Recovery cost:** LOW — add FTS table and triggers, no data loss
 
 ---
 
-### Pitfall 14: External Link URL Templates Are Brittle Across Genomic Databases
+### Pitfall 21: Side Panel Obscures Selected Variant Row
 
-**What goes wrong:** Building external links to genomic databases (ClinVar, gnomAD, Ensembl, UCSC Genome Browser, OMIM, UniProt) requires constructing URLs from variant data. Each database has its own URL format, query parameter conventions, and identifier requirements. URL formats change when databases update their web interfaces (e.g., gnomAD v2 vs v3 vs v4 URLs are different). Hardcoded URL templates break silently when databases update.
+**What goes wrong:**
+User selects variant row 50 in table → side panel opens on right → scrolls row 50 out of view → user forgets which variant selected.
 
-**Why it happens:** Genomic database URLs are not standardized:
-- ClinVar: `https://www.ncbi.nlm.nih.gov/clinvar/?term={gene}` or by accession
-- gnomAD: `https://gnomad.broadinstitute.org/variant/{chr}-{pos}-{ref}-{alt}?dataset=gnomad_r4`
-- Ensembl: `https://www.ensembl.org/Homo_sapiens/Variation/Explore?v={rsid}` (requires rsID, not chr:pos)
-- UCSC: `https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr{chr}:{pos}-{pos}`
+**Why it happens:**
+Contextual disorientation. Side panel takes screen space, table reflows, scroll position changes.
 
-Some require data the app may not have (rsID for Ensembl), some require specific genome builds (GRCh38 vs GRCh37).
+**Consequences:**
+- User loses context of which variant they're viewing
+- Closes panel → "Wait, which variant was I looking at?"
+- Must re-scan table to find selected row
+- Poor UX for deep analysis workflows
 
 **Prevention:**
-1. Define URL templates as configuration, not hardcoded strings:
-   ```typescript
-   const LINK_TEMPLATES = {
-     clinvar: { template: 'https://...', requires: ['gene_symbol'] },
-     gnomad: { template: 'https://...', requires: ['chr', 'pos', 'ref', 'alt'] }
-   }
-   ```
-2. Only show links when the required data fields are present and non-null
-3. Validate constructed URLs before allowing them to be opened
-4. Consider a "link health check" in development (fetch HEAD to verify URLs resolve)
-5. Version the URL templates so they can be updated without code changes
+- Sticky header in table highlights selected row even when scrolled
+- Side panel header shows variant ID + position (chr:pos) for context
+- "Jump back to variant" button scrolls table to selected row
+- Consider slide-over panel instead of push (doesn't reflow table)
+- Highlight selected row with distinct color, keep in viewport
 
-**Detection:** Manual testing of each external link type with real variant data. Broken links return 404 but the app does not know (opens in external browser). Consider showing a "link may not work" tooltip for databases with known instability.
-
-**Confidence:** MEDIUM -- based on domain knowledge of genomic database URL patterns. Specific URLs need verification against current database versions.
+**Phase to address:** Phase 4 (Side Panel UI)
+**Recovery cost:** LOW — UI polish, UX improvement
 
 ---
 
-### Pitfall 15: WAL Mode Journal Files Are Not Cleaned Up When Switching Databases
+### Pitfall 22: No Undo for ACMG Classification
 
-**What goes wrong:** SQLite WAL (Write-Ahead Logging) mode creates `-wal` and `-shm` companion files alongside the main `.db` file. The current `DatabaseService` enables WAL mode. When switching databases, if the old database is not properly checkpointed before closing, the `-wal` file may contain uncommitted data. If the user copies or moves the `.db` file without the companion files, data is lost.
+**What goes wrong:**
+User adds PM2 evidence code by mistake → classification changes to Likely Pathogenic → clicks away → realizes mistake → no undo button.
 
-**Why it happens:** `db.close()` in better-sqlite3 performs a checkpoint automatically, but only if there are no other connections to the database. In the current singleton architecture, this should work correctly. However, if database switching introduces any timing where the old connection is not fully closed before the new one opens (or if the same file is re-opened), WAL files may not be properly cleaned up.
+**Why it happens:**
+Developers implement save/apply but forget undo/cancel. Permanent data changes without confirmation.
+
+**Consequences:**
+- User frustration
+- Must manually remove wrong evidence code
+- Loss of trust in app
+- Requires re-entering correct evidence
 
 **Prevention:**
-1. Call `PRAGMA wal_checkpoint(TRUNCATE)` before closing a database connection to force WAL cleanup
-2. After closing, verify that `-wal` and `-shm` files are removed (or at least empty)
-3. When switching databases, follow this sequence: checkpoint -> close -> verify cleanup -> open new
-4. Document that `.db` files should be copied with their companion files
+- Confirmation dialog before applying ACMG changes: "Add PM2 evidence? This will change classification to Likely Pathogenic. [Cancel] [Apply]"
+- Undo stack: last 10 classification actions stored in memory, "Undo" button in side panel
+- Audit log shows full history: revert to previous classification from log view
+- Cancel button: discard unsaved evidence changes
 
-**Detection:** Check for orphaned `-wal` and `-shm` files after database switch operations. The current test in `DatabaseService.test.ts` already cleans up WAL files in the `afterEach` block, which is good practice.
-
-**Confidence:** MEDIUM -- the current close logic is simple (`this.db.close()`), and better-sqlite3 handles checkpointing on close. This becomes a real issue only with rapid database switching or improper close sequences.
+**Phase to address:** Phase 5 (UX Polish)
+**Recovery cost:** LOW — UI feature, no data model changes
 
 ---
 
-## Phase-Specific Warnings
+### Pitfall 23: Loading State: "Loading..." vs "Offline"
 
-| Phase Topic | Likely Pitfall | Mitigation | Priority |
-|---|---|---|---|
-| SQLCipher migration | Build pipeline breakage (Pitfall 1) | Atomic dependency swap with full CI verification | CRITICAL -- do first |
-| SQLCipher migration | FTS5 + PRAGMA key ordering (Pitfall 2) | Add encryption key step before schema init | CRITICAL |
-| SQLCipher migration | Existing DB migration data loss (Pitfall 6) | Safe migration with backup and atomic rename | CRITICAL |
-| SQLCipher migration | Cross-platform compilation (Pitfall 8) | Test all 3 platforms before writing features | HIGH |
-| SQLCipher migration | TypeScript types divergence (Pitfall 12) | Create local type declarations | LOW |
-| Database switching | Statement cache invalidation (Pitfall 3) | Clear cache on close, guard against stale refs | CRITICAL |
-| Database switching | Singleton architecture (Pitfall 10) | Decide data model (single vs multi DB) early | HIGH |
-| Database switching | WAL cleanup (Pitfall 15) | Checkpoint before close | MEDIUM |
-| Batch import (ZIP) | Path traversal / Zip Slip (Pitfall 4) | Validate all extracted paths | CRITICAL |
-| Batch import (ZIP) | ZIP bomb (Pitfall 13) | Size limits on extraction | HIGH |
-| Batch import (ZIP) | Per-file error isolation (Pitfall 9) | Independent try/catch per file | HIGH |
-| Cohort analysis | Main process blocking (Pitfall 7) | Pre-computed summary tables or chunked queries | HIGH |
-| Cohort analysis | IPC payload size (Pitfall 11) | Paginate aggregation results | MEDIUM |
-| External links | shell.openExternal RCE (Pitfall 5) | Allowlist + server-side URL construction | CRITICAL |
-| External links | Brittle URL templates (Pitfall 14) | Configurable templates with data validation | LOW |
+**What goes wrong:**
+VEP request times out → shows generic "Loading..." spinner forever.
+
+**Why it happens:**
+Developers implement loading state but forget error/offline states. Single loading indicator for all failure modes.
+
+**Consequences:**
+- User doesn't know if app is frozen, API is down, or network is offline
+- Must guess whether to wait or close app
+- Poor UX clarity
+
+**Prevention:**
+- Timeout after 10 seconds → "Failed to load enrichment data. [Retry] [View offline version]"
+- Detect offline: show "Offline – showing cached data only" banner
+- Distinguish errors: "Ensembl API rate limited (retry in 5s)" vs "Network error" vs "Invalid response"
+- Use specific error messages based on HTTP status codes
+
+**Phase to address:** Phase 4 (Side Panel UI)
+**Recovery cost:** LOW — UI polish, error handling improvement
+
+---
+
+### Pitfall 24: Tag Color Coding Without Accessibility
+
+**What goes wrong:**
+Tags colored by type: red = pathogenic, green = benign, blue = custom. Colorblind users can't distinguish.
+
+**Why it happens:**
+8% of male users have red-green colorblindness. Developers test with normal color vision only.
+
+**Consequences:**
+- Colorblind users cannot distinguish tag types
+- Violates WCAG accessibility guidelines
+- Poor user experience for accessibility
+
+**Prevention:**
+- Icons + color: red X icon for pathogenic, green check for benign
+- Text prefix: "[P] Pathogenic" not just red background
+- WCAG contrast: ensure 4.5:1 contrast ratio for text on colored backgrounds
+- Test with colorblind simulators (browser extensions)
+- Provide high-contrast mode option
+
+**Phase to address:** Phase 5 (UX Polish)
+**Recovery cost:** LOW — UI styling, accessibility improvement
+
+---
+
+### Pitfall 25: SQL Injection via Custom Tag Names
+
+**What goes wrong:**
+User-entered tag name inserted into dynamic SQL:
+```typescript
+db.exec(`INSERT INTO tags (name) VALUES ('${userInput}')`)
+```
+
+User input: `'); DROP TABLE variants; --` executes malicious SQL.
+
+**Why it happens:**
+Developer forgets parameterized queries. Uses string interpolation for convenience.
+
+**Consequences:**
+- SQL injection vulnerability
+- Potential data loss (DROP TABLE)
+- Security breach
+
+**Prevention:**
+- Use parameterized queries ALWAYS: `db.prepare('INSERT INTO tags (name) VALUES (?)').run(userInput)`
+- Never use string interpolation for SQL values
+- Existing Varlens code uses prepared statements correctly — maintain this pattern
+- Code review: flag any string interpolation in SQL
+
+**Phase to address:** Phase 0 (Security) — all SQL must use parameterized queries
+**Recovery cost:** CRITICAL — security vulnerability, requires immediate fix
+
+---
+
+### Pitfall 26: HPO API Response Injection
+
+**What goes wrong:**
+HPO API returns term labels with HTML entities: `"Microcephaly <i>(small head)</i>"`. Rendering in Vue template without sanitization → XSS if API compromised.
+
+**Why it happens:**
+Trust external API responses. Assume API data is safe. Render with v-html without sanitization.
+
+**Consequences:**
+- XSS vulnerability if API compromised
+- Attacker controls HPO API → injects `<script>` tags → steals data
+- Security breach
+
+**Prevention:**
+- Sanitize all API responses: strip HTML tags or use DOMPurify
+- Render with Vue's text interpolation (`{{ label }}`) not v-html
+- If HTML needed, use DOMPurify: `v-html="sanitize(label)"`
+- Never trust external API data
+
+**Phase to address:** Phase 3 (API Integration) — all API response rendering
+**Recovery cost:** LOW — add sanitization layer, minimal code changes
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+Features that appear complete in demo but break in production:
+
+- [ ] **VEP timeout handling:** Works on fast network, hangs on slow hotel WiFi → add 5-10s timeout
+- [ ] **HPO term search with unicode:** Works for English terms, fails on "café" or "naïve" → ensure FTS5 tokenizer handles diacritics
+- [ ] **ACMG conflicting evidence:** UI shows PM2 + BP4, but classification algorithm doesn't resolve conflict → implement conflict resolution rules
+- [ ] **Case deletion with 1000 variants:** Works with 10 variants, freezes with 1000 (FK cascade delete slow) → add loading dialog
+- [ ] **Tag autocomplete with 500 tags:** Works with 10 tags, dropdown unresponsive with 500 → limit results or virtualize
+- [ ] **Offline → online transition:** App goes offline → shows cached data. Goes back online → doesn't retry failed VEP requests → add "Refresh enrichment" button
+- [ ] **Multi-user tag conflicts (future):** Single-user works. Multiple users editing same DB → last write wins, no conflict resolution → document single-user constraint
+- [ ] **ACMG version migration:** Works with 2015 rules. ClinGen publishes 2027 update → no way to toggle versions → add version selector
+
+---
+
+## Recovery Strategies
+
+### If VEP API Changes Break Production
+
+1. **Immediate:** Disable VEP enrichment via feature flag (add to config.json)
+2. **Hotfix:** Update response parser to handle new format + old format (backward compatible)
+3. **Validation:** Add integration test that fetches real VEP API response and validates schema
+4. **Prevention:** Subscribe to Ensembl mailing list for API change announcements
+
+### If Foreign Keys Weren't Enabled
+
+1. **Detect:** Run query: `SELECT COUNT(*) FROM variant_comments WHERE variant_id NOT IN (SELECT id FROM variants)`
+2. **Backup:** `cp database.db database.db.before-cleanup`
+3. **Clean:** `DELETE FROM variant_comments WHERE variant_id NOT IN (SELECT id FROM variants)`
+4. **Enable:** Verify `PRAGMA foreign_keys` returns `1`
+5. **Test:** Delete test case, verify annotations cascade delete
+
+### If Encrypted DB Migration Fails
+
+1. **Don't panic:** Database is likely intact, migration just didn't complete
+2. **Backup:** Copy .db file before any recovery attempts
+3. **Verify encryption:** `sqlite3 database.db "PRAGMA cipher_version"` — if fails, encryption corrupted
+4. **Rollback migration:** Restore from backup, run app with old schema version
+5. **Test migration:** Create encrypted test DB, run migration script manually, verify with `PRAGMA integrity_check`
+6. **Retry:** Deploy fixed migration, test on backup copy first
+
+### If HPO Terms Become Obsolete
+
+1. **Detect:** Background job queries stored HPO IDs against API, logs obsolete terms
+2. **Notify:** Show warning banner: "X cases have obsolete HPO terms. [Review]"
+3. **Manual review:** Provide UI to review obsolete terms, suggest replacements, allow bulk update
+4. **Document:** "Reviewed obsolete HPO terms on [date]" audit log entry
+
+---
+
+## Pitfall-to-Phase Mapping
+
+| Phase | Critical Pitfalls to Address |
+|-------|------------------------------|
+| **Phase 0: Architecture** | #10 (API key security), #19 (IPC pattern) |
+| **Phase 1: Schema Design** | #1 (Foreign keys), #5 (ACMG data model), #7 (Encrypted migration), #9 (Tag normalization), #11 (Denormalization), #20 (FTS5) |
+| **Phase 2: Annotation Data Models** | #4 (HPO obsoletion), #12 (Global vs case comments), #13 (Timestamp audit) |
+| **Phase 3: API Integration** | #2 (VEP breaking changes), #3 (Rate limiting), #6 (Race conditions), #8 (Offline detection), #18 (Allowlist update), #26 (Response sanitization) |
+| **Phase 4: Side Panel UI** | #14 (Loading states), #15 (N+1 queries), #21 (Panel obscures row), #23 (Error messages) |
+| **Phase 5: Case Metadata UI** | #16 (HPO autocomplete performance), #24 (Accessibility) |
+| **Phase 6: UX Polish** | #17 (Recomputation), #22 (Undo), #24 (Color coding) |
+| **Ongoing** | Monitor Ensembl changelog, HPO updates, security advisories |
+
+---
+
+## Key Takeaways
+
+1. **Foreign keys OFF by default = highest-risk pitfall.** Test with encrypted DB immediately.
+2. **Ensembl VEP platform transition = production-breaking change in 2026.** Monitor changelog, validate responses.
+3. **ACMG data model = get it right upfront.** Evidence codes ≠ classification. Store separately.
+4. **Race conditions = inevitable with fast user interactions.** Use AbortController + request IDs.
+5. **Offline detection = unreliable.** Implement real connectivity checks, graceful degradation.
+6. **API keys in renderer = security breach.** Main process only, use safeStorage.
+7. **HPO terms evolve = stored IDs can become obsolete.** Validate periodically, show warnings.
+8. **Schema migrations on encrypted DB = different failure modes.** Test with encryption enabled.
+9. **Tag normalization = prevent duplicate chaos.** Lowercase + unique index from day 1.
+10. **UX polish = loading states, undo, accessibility.** "Looks done" ≠ production-ready.
 
 ---
 
 ## Sources
 
-### SQLCipher / Native Module Migration
-- [better-sqlite3-multiple-ciphers GitHub](https://github.com/m4heshd/better-sqlite3-multiple-ciphers) -- PRIMARY
-- [better-sqlite3-multiple-ciphers troubleshooting](https://github.com/m4heshd/better-sqlite3-multiple-ciphers/blob/master/docs/troubleshooting.md) -- PRIMARY
-- [SQLite3 Multiple Ciphers documentation](https://utelle.github.io/SQLite3MultipleCiphers/) -- PRIMARY
-- [SQLite3 Multiple Ciphers FAQ](https://utelle.github.io/SQLite3MultipleCiphers/docs/faq/faq_overview/) -- PRIMARY
-- [better-sqlite3 API docs](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md) -- PRIMARY
-- [NODE_MODULE_VERSION mismatch issue](https://github.com/m4heshd/better-sqlite3-multiple-ciphers/issues/55) -- SECONDARY
-- [Electron support issue](https://github.com/m4heshd/better-sqlite3-multiple-ciphers/issues/5) -- SECONDARY
-- [SQLCipher unencrypted-to-encrypted migration](https://discuss.zetetic.net/t/how-to-encrypt-a-plaintext-sqlite-database-to-use-sqlcipher-and-avoid-file-is-encrypted-or-is-not-a-database-errors/868) -- PRIMARY
+### API Reliability & Rate Limits
+- [Ensembl REST API Rate Limits](https://github.com/Ensembl/ensembl-rest/wiki/Rate-Limits) — PRIMARY
+- [Ensembl Platform Transition 2026](https://www.ensembl.info/2025/12/02/updates-to-programmatic-access-to-ensembl-and-transitioning-to-the-new-ensembl-platform/) — PRIMARY
+- [Ensembl REST Change Log](https://github.com/Ensembl/ensembl-rest/wiki/Change-log) — PRIMARY
+- [VEP API Issues](https://github.com/Ensembl/ensembl-rest/issues/353) — SECONDARY
+- [HPO API Documentation](https://clinicaltables.nlm.nih.gov/apidoc/hpo/v3/doc.html) — PRIMARY
 
-### ZIP Security
-- [Zip Slip vulnerability research by Snyk](https://security.snyk.io/research/zip-slip-vulnerability) -- PRIMARY
-- [Node.js Zip Slip protection guide](https://medium.com/intrinsic-blog/protecting-node-js-applications-from-zip-slip-b24a37811c10) -- SECONDARY
-- [jszip CVE-2022-48285](https://security.snyk.io/vuln/SNYK-JS-JSZIP-3188562) -- SECONDARY
-- [Node.js CVE-2025-23084 directory traversal](https://security.snyk.io/vuln/SNYK-UPSTREAM-NODE-8651420) -- SECONDARY
+### ACMG Classification
+- [ACMG Guidelines 2015](https://pmc.ncbi.nlm.nih.gov/articles/PMC4544753/) — PRIMARY
+- [ACMG Guidelines Specifications](https://pmc.ncbi.nlm.nih.gov/articles/PMC6885382/) — PRIMARY
+- [ACMG PM2/PP3 Interpretation Issues](https://help.emg.illumina.com/emedgene-analyze-manual/variant_page/evidence_section/individual-acmg-criteria-evaluation) — PRIMARY
+- [ACMG Evidence Criteria](https://www.acgs.uk.com/media/11631/uk-practice-guidelines-for-variant-classification-v4-01-2020.pdf) — SECONDARY
 
-### Electron Security
-- [Electron security documentation](https://www.electronjs.org/docs/latest/tutorial/security) -- PRIMARY
-- [shell.openExternal dangers by Benjamin Altpeter](https://benjamin-altpeter.de/shell-openexternal-dangers/) -- PRIMARY
-- [Electron APIs misuse by Doyensec](https://blog.doyensec.com/2021/02/16/electron-apis-misuse.html) -- SECONDARY
+### Database & Schema Migration
+- [SQLite Foreign Keys](https://sqlite.org/foreignkeys.html) — PRIMARY
+- [SQLite Foreign Key Support](https://tangenttechnologies.ca/blog/sqlite-foreign-key/) — PRIMARY
+- [SQLite3 Multiple Ciphers](https://utelle.github.io/SQLite3MultipleCiphers/) — PRIMARY
+- [SQLite Encryption Best Practices](https://dev.to/stephenc222/basic-security-practices-for-sqlite-safeguarding-your-data-23lh) — SECONDARY
+- [SQLite Versioning and Migration](https://www.sqliteforum.com/p/sqlite-versioning-and-migration-strategies) — SECONDARY
 
-### SQLite Performance
-- [SQLite query optimizer overview](https://sqlite.org/optoverview.html) -- PRIMARY
-- [SQLite performance tuning (phiresky)](https://phiresky.github.io/blog/2020/sqlite-performance-tuning/) -- SECONDARY
-- [SQLite built-in aggregate functions](https://sqlite.org/lang_aggfunc.html) -- PRIMARY
+### Electron Security & IPC
+- [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage) — PRIMARY
+- [Electron Security Tutorial](https://www.electronjs.org/docs/latest/tutorial/security) — PRIMARY
+- [Electron CORS in Main Process](https://m-t-a.medium.com/avoiding-cors-in-electron-sending-requests-through-ipc-28ad9407aac0) — SECONDARY
+- [CORS Errors and Common Mistakes (2026)](https://medium.com/engineering-playbook/cors-errors-killed-our-launch-heres-what-i-wish-i-knew-7c84da40f91b) — SECONDARY
 
-### Electron Native Modules / CI
-- [Electron native module usage](https://www.electronjs.org/docs/latest/tutorial/using-native-node-modules) -- PRIMARY
-- [electron-builder multi-platform build](https://www.electron.build/multi-platform-build.html) -- PRIMARY
-- [Electron worker_threads bug with better-sqlite3](https://github.com/electron/electron/issues/43513) -- SECONDARY
+### Offline Detection & Network Status
+- [Electron Online/Offline Events](https://www.electronjs.org/docs/latest/tutorial/online-offline-events) — PRIMARY
+- [navigator.onLine Limitations](https://github.com/electron/electron/issues/6633) — SECONDARY
+- [net.isOnline() Documentation](https://github.com/electron/electron/issues/48561) — SECONDARY
+
+### Race Conditions & API Request Management
+- [Handling API Race Conditions in React](https://sebastienlorber.com/handling-api-request-race-conditions-in-react) — PRIMARY
+- [AbortController for Race Conditions](https://www.cloudthat.com/resources/blog/safeguarding-network-requests-for-handling-race-conditions-with-abortcontroller) — PRIMARY
+- [React Router Race Conditions](https://reactrouter.com/explanation/race-conditions) — SECONDARY
+
+### HPO Ontology Management
+- [HPO Obsoletion Guidelines](https://github.com/obophenotype/human-phenotype-ontology/wiki/Obsoletion) — PRIMARY
+- [Ontology Obsoletion Best Practices](https://incatools.github.io/ontology-access-kit/guide/obsoletion.html) — PRIMARY
+- [HPO Expansion 2019](https://academic.oup.com/nar/article/47/D1/D1018/5198478) — SECONDARY
+
+### Tag Management & Normalization
+- [Tag Case Sensitivity Issues](https://github.com/shaarli/Shaarli/issues/146) — SECONDARY
+- [Tags Case Sensitivity Discussion](https://github.com/11ty/eleventy/discussions/1461) — SECONDARY
+- [Duplicate Tag Keys](https://github.com/aws/aws-cdk/issues/26253) — SECONDARY
+
+### Performance & Annotation Tools
+- [Variant Annotation Performance Study](https://pmc.ncbi.nlm.nih.gov/articles/PMC9577137/) — SECONDARY
+- [Ultrafast Variant Annotation (VarNote)](https://genome.cshlp.org/content/30/12/1789.full) — SECONDARY
+- [vcfanno Performance](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-016-0973-5) — SECONDARY
+
+---
+
+**Confidence Assessment:** HIGH
+
+All critical pitfalls sourced from:
+- Official documentation (Ensembl, HPO, SQLite, Electron) — PRIMARY sources
+- Peer-reviewed publications (ACMG guidelines) — PRIMARY sources
+- Real-world issue reports (GitHub issues) — SECONDARY verification
+- Existing Varlens codebase analysis (schema.ts, DatabaseService.ts, shell.ts) — PRIMARY verification
+
+**Limitations:**
+- VEP API format changes beyond 2026 e!116 not documented yet (MEDIUM confidence on future specifics)
+- HPO API rate limits not officially published (MEDIUM confidence based on NLM service patterns)
+- Performance benchmarks for 50+ cases not measured (noted in PROJECT.md as known gap)
+
+**Recommended Next Steps:**
+1. Create integration test suite for encrypted database migrations (Phase 1)
+2. Subscribe to Ensembl API mailing list for change notifications (Phase 3)
+3. Build VEP response schema validator with zod (Phase 3)
+4. Document IPC pattern enforcement in code review checklist (Phase 0)
+5. Set up HPO term validation background job (Phase 2)
