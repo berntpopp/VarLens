@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 21 of 24 (API Service Layer)
-Plan: 2 of 2
+Plan: 3 of 3
 Status: Phase complete
-Last activity: 2026-01-28 - Completed 21-02-PLAN.md (VEP API client)
+Last activity: 2026-01-29 - Completed 21-03-PLAN.md (HPO API client and IPC layer)
 
 Progress: [████░░░░░░░░░░░░░░░░] 21/24 phases (87.5% complete, v0.4.0 in progress)
 
@@ -31,8 +31,8 @@ Progress: [████░░░░░░░░░░░░░░░░] 21/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 8
-- Total execution time: 56.9 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6)
+- Total plans completed: 9
+- Total execution time: 64.9 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -41,7 +41,7 @@ Progress: [████░░░░░░░░░░░░░░░░] 21/24 p
 |-------|-------|--------|-------|
 | 19. Database Foundation | 2/2 | Complete | Schema + migrations + encrypted DB tests |
 | 20. Annotation Core | 4/4 + UAT | Complete | 01: Backend, 02: UI Display, 03: Mutation Methods, 04: ACMG/Comment UI + post-UAT: per-case stars/ACMG, global indicators, cohort mode |
-| 21. API Service Layer | 2/2 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status), 02: VEP API client (rate limiting, MANE Select) |
+| 21. API Service Layer | 3/3 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status), 02: VEP API client (rate limiting, MANE Select), 03: HPO API client + IPC handlers |
 | 22. Case Metadata | TBD | Not started | Status + cohorts + HPO |
 | 23. Side Panel UI | TBD | Not started | Drawer + tabs + UI |
 | 24. Custom Tags + HPO | TBD | Not started | Tags + autocomplete |
@@ -89,6 +89,10 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Request cancellation | AbortController aborts pending requests | Prevents wasted API calls and stale data (21-02) |
 | Chromosome normalization | Remove chr prefix, standardize MT | Consistent cache keys across notation variations (21-02) |
 | MANE Select prioritization | MANE Select > canonical > first transcript | Clinical best practice for transcript selection (21-02) |
+| Lazy singleton IPC handlers | API clients created on first IPC call, not at startup | Avoids database dependency at initialization (21-03) |
+| Offline-first cache access | IPC handlers check NetworkStatus, return cached data if offline | Graceful degradation without errors (21-03) |
+| Courtesy rate limiting for HPO | 200ms delay (5 req/sec) despite no documented limits | Good API citizenship (21-03) |
+| Min 2 chars for HPO search | Return empty array for queries < 2 characters | Prevents excessive API calls, matches autocomplete UX (21-03) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -114,9 +118,9 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-28 - Phase 21 Plan 02
-Stopped at: Completed 21-02-PLAN.md - VEP API client with rate limiting and MANE Select
+Last session: 2026-01-29 - Phase 21 Plan 03
+Stopped at: Completed 21-03-PLAN.md - HPO API client and IPC layer
 Resume file: None
 
 ---
-*Next step: Phase 21-03 (VEP IPC Handler) or Phase 22 (Case Metadata)*
+*Next step: Phase 22 (Case Metadata)*
