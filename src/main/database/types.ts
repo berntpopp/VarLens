@@ -41,6 +41,8 @@ export interface Variant {
   alt: string
   /** Gene symbol, nullable */
   gene_symbol: string | null
+  /** OMIM MIM number for the gene, nullable */
+  omim_mim_number: string | null
   /** Variant consequence, nullable */
   consequence: string | null
   /** gnomAD allele frequency, nullable */
