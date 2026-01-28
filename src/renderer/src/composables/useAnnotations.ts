@@ -46,6 +46,13 @@ export function useAnnotations() {
     return cached.perCase?.starred === 1 || false
   }
 
+  // Check if variant is globally starred
+  function isGlobalStarred(chr: string, pos: number, ref: string, alt: string): boolean {
+    const cached = getAnnotations(chr, pos, ref, alt)
+    if (!cached) return false
+    return cached.global?.starred === 1 || false
+  }
+
   // Check if loading
   function isLoading(chr: string, pos: number, ref: string, alt: string): boolean {
     return loadingStates.value.get(variantKey(chr, pos, ref, alt)) ?? false
@@ -60,6 +67,17 @@ export function useAnnotations() {
   ): AcmgClassification | null {
     const cached = getAnnotations(chr, pos, ref, alt)
     return cached?.perCase?.acmg_classification ?? null
+  }
+
+  // Get global ACMG classification
+  function getGlobalAcmgClassification(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ): AcmgClassification | null {
+    const cached = getAnnotations(chr, pos, ref, alt)
+    return cached?.global?.acmg_classification ?? null
   }
 
   // Load annotations for a variant (call on row visible or expand)
@@ -144,6 +162,124 @@ export function useAnnotations() {
       .map((v) => loadAnnotations(caseId, v.chr, v.pos, v.ref, v.alt))
 
     await Promise.all(promises)
+  }
+
+  // Load global annotations only (for cohort mode - no caseId needed)
+  async function loadGlobalAnnotations(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ): Promise<void> {
+    const key = variantKey(chr, pos, ref, alt)
+
+    // Skip if already cached or loading
+    if (annotationCache.value.has(key) || loadingStates.value.get(key) === true) {
+      return
+    }
+
+    loadingStates.value.set(key, true)
+    try {
+      const global = await window.api.annotations.getGlobal(chr, pos, ref, alt)
+      annotationCache.value.set(key, { global, perCase: null })
+    } catch (error) {
+      console.error('Failed to load global annotations:', error)
+    } finally {
+      loadingStates.value.set(key, false)
+    }
+  }
+
+  // Bulk load global annotations for cohort mode
+  async function loadGlobalAnnotationsBatch(
+    variants: Array<{ chr: string; pos: number; ref: string; alt: string }>
+  ): Promise<void> {
+    const promises = variants
+      .filter((v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)))
+      .map((v) => loadGlobalAnnotations(v.chr, v.pos, v.ref, v.alt))
+
+    await Promise.all(promises)
+  }
+
+  // Toggle global star (for cohort mode)
+  async function toggleGlobalStar(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ): Promise<void> {
+    const key = variantKey(chr, pos, ref, alt)
+    const current = annotationCache.value.get(key)
+    const currentStarred = current?.global?.starred === 1
+    const newStarred = !currentStarred
+
+    // Optimistic update
+    if (current) {
+      current.global = {
+        ...current.global,
+        starred: newStarred ? 1 : 0
+      } as VariantAnnotation
+    }
+
+    try {
+      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+        starred: newStarred
+      })
+      // Update cache with server response
+      annotationCache.value.set(key, {
+        global: updated,
+        perCase: current?.perCase ?? null
+      })
+    } catch (error) {
+      console.error('Failed to toggle global star:', error)
+      // Revert optimistic update
+      if (current) {
+        current.global = {
+          ...current.global,
+          starred: currentStarred ? 1 : 0
+        } as VariantAnnotation
+      }
+    }
+  }
+
+  // Set global ACMG classification (for cohort mode)
+  async function setGlobalAcmgClassification(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    classification: AcmgClassification | null
+  ): Promise<void> {
+    const key = variantKey(chr, pos, ref, alt)
+    const current = annotationCache.value.get(key)
+    const previousClassification = current?.global?.acmg_classification ?? null
+
+    // Optimistic update
+    if (current) {
+      current.global = {
+        ...current.global,
+        acmg_classification: classification
+      } as VariantAnnotation
+    }
+
+    try {
+      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+        acmg_classification: classification
+      })
+      // Update cache with server response
+      annotationCache.value.set(key, {
+        global: updated,
+        perCase: current?.perCase ?? null
+      })
+    } catch (error) {
+      console.error('Failed to set global ACMG classification:', error)
+      // Revert optimistic update
+      if (current) {
+        current.global = {
+          ...current.global,
+          acmg_classification: previousClassification
+        } as VariantAnnotation
+      }
+    }
   }
 
   // Get global comment from cache
@@ -320,11 +456,16 @@ export function useAnnotations() {
   return {
     getAnnotations,
     isStarred,
+    isGlobalStarred,
     isLoading,
     getAcmgClassification,
+    getGlobalAcmgClassification,
     loadAnnotations,
     loadAnnotationsBatch,
+    loadGlobalAnnotations,
+    loadGlobalAnnotationsBatch,
     toggleStar,
+    toggleGlobalStar,
     clearCache,
     getGlobalComment,
     getPerCaseComment,
@@ -332,7 +473,8 @@ export function useAnnotations() {
     upsertPerCaseComment,
     deleteGlobalComment,
     deletePerCaseComment,
-    setAcmgClassification
+    setAcmgClassification,
+    setGlobalAcmgClassification
   }
 }
 

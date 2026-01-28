@@ -28,6 +28,64 @@
       class="elevation-1"
       @update:options="handleTableOptions"
     >
+      <!-- Annotations column (global star, ACMG, comment) -->
+      <template #[`item.annotations`]="{ item }">
+        <div class="d-flex align-center ga-1">
+          <!-- Global star toggle -->
+          <v-icon
+            :icon="
+              isGlobalStarred(item.chr, item.pos, item.ref, item.alt)
+                ? 'mdi-star'
+                : 'mdi-star-outline'
+            "
+            :color="isGlobalStarred(item.chr, item.pos, item.ref, item.alt) ? 'warning' : undefined"
+            size="small"
+            class="cursor-pointer"
+            @click.stop="handleGlobalStarToggle(item)"
+          />
+          <!-- Global ACMG classification -->
+          <AcmgMenu @select="(c) => handleGlobalAcmgSelect(item, c)">
+            <template #activator="{ props: menuProps }">
+              <v-chip
+                v-if="getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
+                v-bind="menuProps"
+                size="x-small"
+                :color="
+                  ACMG_COLORS[getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]
+                "
+                label
+                class="cursor-pointer"
+              >
+                {{
+                  ACMG_ABBREV[getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]
+                }}
+              </v-chip>
+              <v-icon
+                v-else
+                v-bind="menuProps"
+                icon="mdi-tag-outline"
+                size="small"
+                class="cursor-pointer"
+              />
+            </template>
+          </AcmgMenu>
+          <!-- Global comment -->
+          <v-icon
+            :icon="
+              getGlobalComment(item.chr, item.pos, item.ref, item.alt)
+                ? 'mdi-comment'
+                : 'mdi-comment-outline'
+            "
+            :color="
+              getGlobalComment(item.chr, item.pos, item.ref, item.alt) ? 'primary' : undefined
+            "
+            size="small"
+            class="cursor-pointer"
+            @click.stop="openCommentDialog(item)"
+          />
+        </div>
+      </template>
+
       <!-- Chromosome -->
       <template #[`item.chr`]="{ value }">
         <span>{{ value }}</span>
@@ -142,12 +200,35 @@
         </tr>
       </template>
     </v-data-table-server>
+
+    <!-- Comment dialog for global comments (cohort mode - global only) -->
+    <CommentDialog
+      v-model="commentDialogOpen"
+      :global-comment="
+        selectedVariantForComment
+          ? getGlobalComment(
+              selectedVariantForComment.chr,
+              selectedVariantForComment.pos,
+              selectedVariantForComment.ref,
+              selectedVariantForComment.alt
+            )
+          : null
+      "
+      :per-case-comment="null"
+      :global-timestamps="getGlobalTimestamps(selectedVariantForComment)"
+      :per-case-timestamps="null"
+      @save="handleCommentSave"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import type { CohortVariant, CohortCarrier } from '../../../shared/types/cohort'
+import type { AcmgClassification } from '../../../main/database/types'
+import { useAnnotations, ACMG_COLORS, ACMG_ABBREV } from '../composables/useAnnotations'
+import AcmgMenu from './AcmgMenu.vue'
+import CommentDialog from './CommentDialog.vue'
 
 // Emit for navigation
 const emit = defineEmits<{
@@ -164,12 +245,28 @@ const emit = defineEmits<{
   ]
 }>()
 
+// Initialize annotations composable (global methods for cohort mode)
+const {
+  isGlobalStarred,
+  getGlobalAcmgClassification,
+  loadGlobalAnnotationsBatch,
+  toggleGlobalStar,
+  setGlobalAcmgClassification,
+  getGlobalComment,
+  upsertGlobalComment,
+  getAnnotations
+} = useAnnotations()
+
 // Table state
 const cohortVariants = ref<CohortVariant[]>([])
 const totalCount = ref(0)
 const loading = ref(false)
 const itemsPerPage = ref(50)
 const sortBy = ref<{ key: string; order: 'asc' | 'desc' }[]>([])
+
+// Comment dialog state
+const commentDialogOpen = ref(false)
+const selectedVariantForComment = ref<CohortVariant | null>(null)
 
 // Search state
 const searchTerm = ref('')
@@ -193,6 +290,7 @@ const currentParams = ref({
 
 // Table headers
 const headers = [
+  { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' as const },
   { title: 'Chr', key: 'chr', sortable: true },
   { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
   { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
@@ -282,6 +380,15 @@ const handleTableOptions = async (options: any): Promise<void> => {
   await loadCohortVariants()
 }
 
+// Watch cohortVariants and load global annotations for visible rows
+watch(cohortVariants, async (variants) => {
+  if (variants.length > 0) {
+    await loadGlobalAnnotationsBatch(
+      variants.map((v) => ({ chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }))
+    )
+  }
+})
+
 // Watch expanded rows and lazy-load carriers for newly expanded ones
 watch(expandedRows, async (keys) => {
   for (const key of keys) {
@@ -348,6 +455,51 @@ const formatPosition = (pos: number): string => {
 
 const formatPercentage = (value: number): string => {
   return `${(value * 100).toFixed(1)}%`
+}
+
+// Global annotation handlers
+const handleGlobalStarToggle = async (item: CohortVariant): Promise<void> => {
+  await toggleGlobalStar(item.chr, item.pos, item.ref, item.alt)
+}
+
+const handleGlobalAcmgSelect = async (
+  item: CohortVariant,
+  classification: AcmgClassification | null
+): Promise<void> => {
+  await setGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt, classification)
+}
+
+const openCommentDialog = (item: CohortVariant): void => {
+  selectedVariantForComment.value = item
+  commentDialogOpen.value = true
+}
+
+// Get global timestamps for comment dialog
+const getGlobalTimestamps = (
+  item: CohortVariant | null
+): { created_at: number; updated_at: number } | null => {
+  if (!item) return null
+  const annotations = getAnnotations(item.chr, item.pos, item.ref, item.alt)
+  if (!annotations?.global) return null
+  return { created_at: annotations.global.created_at, updated_at: annotations.global.updated_at }
+}
+
+// Handle comment save (cohort mode - global only)
+const handleCommentSave = async (data: {
+  globalComment: string | null
+  perCaseComment: string | null
+  globalChanged: boolean
+  perCaseChanged: boolean
+}): Promise<void> => {
+  if (selectedVariantForComment.value === null) return
+  const item = selectedVariantForComment.value
+
+  // In cohort mode, only save global comments
+  if (data.globalChanged) {
+    await upsertGlobalComment(item.chr, item.pos, item.ref, item.alt, data.globalComment)
+  }
+
+  commentDialogOpen.value = false
 }
 
 // Refresh function (called by parent when switching tabs or after imports)

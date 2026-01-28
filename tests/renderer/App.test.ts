@@ -7,31 +7,69 @@ import * as directives from 'vuetify/directives'
 import App from '../../src/renderer/src/App.vue'
 
 // Mock window.api for all components that need it
+// This must match the API structure in src/preload/index.ts
 const mockApi = {
   cases: {
     list: vi.fn().mockResolvedValue([]),
-    getAll: vi.fn().mockResolvedValue([]),
-    delete: vi.fn()
-  },
-  import: {
-    selectFile: vi.fn(),
-    start: vi.fn(),
-    onProgress: vi.fn(() => vi.fn()),
-    cancel: vi.fn()
+    delete: vi.fn().mockResolvedValue(undefined)
   },
   variants: {
-    get: vi.fn().mockResolvedValue({ data: [], total: 0, filtered: 0 }),
-    count: vi.fn().mockResolvedValue(0)
+    query: vi.fn().mockResolvedValue({ data: [], total_count: 0, has_more: false }),
+    getFilterOptions: vi.fn().mockResolvedValue({ consequences: [], genes: [] }),
+    search: vi.fn().mockResolvedValue([])
   },
-  export: {
-    toExcel: vi.fn()
+  import: {
+    selectFile: vi.fn().mockResolvedValue(null),
+    start: vi.fn().mockResolvedValue({ success: true }),
+    onProgress: vi.fn(() => vi.fn()), // Returns cleanup function
+    cancel: vi.fn().mockResolvedValue(undefined)
+  },
+  batchImport: {
+    selectFiles: vi.fn().mockResolvedValue([]),
+    selectFolder: vi.fn().mockResolvedValue([]),
+    checkDuplicates: vi.fn().mockResolvedValue({ duplicates: [], newFiles: [] }),
+    start: vi.fn().mockResolvedValue({ success: true, imported: 0, failed: 0 }),
+    cancel: vi.fn().mockResolvedValue(undefined),
+    selectZip: vi.fn().mockResolvedValue(null),
+    testZipPassword: vi.fn().mockResolvedValue({ valid: false }),
+    extractZip: vi.fn().mockResolvedValue({ success: false }),
+    cleanupZipTemp: vi.fn().mockResolvedValue(undefined),
+    onProgress: vi.fn(() => vi.fn()) // Returns cleanup function
   },
   system: {
-    getVersion: vi.fn().mockResolvedValue({ app: '0.2.0', electron: '33.0.0' })
+    getVersion: vi.fn().mockResolvedValue({ app: '0.2.0', electron: '33.0.0' }),
+    getUserDataPath: vi.fn().mockResolvedValue('/mock/user/data')
+  },
+  export: {
+    variants: vi.fn().mockResolvedValue({ success: true })
   },
   shell: {
     openExternal: vi.fn().mockResolvedValue({ success: true }),
     updateDomains: vi.fn().mockResolvedValue(undefined)
+  },
+  database: {
+    selectFile: vi.fn().mockResolvedValue(null),
+    selectSaveLocation: vi.fn().mockResolvedValue(null),
+    open: vi.fn().mockResolvedValue({ success: false }),
+    create: vi.fn().mockResolvedValue({ success: false }),
+    rekey: vi.fn().mockResolvedValue({ success: false }),
+    info: vi.fn().mockResolvedValue(null),
+    recentList: vi.fn().mockResolvedValue([])
+  },
+  cohort: {
+    getVariants: vi.fn().mockResolvedValue({ data: [], total_count: 0 }),
+    getSummary: vi.fn().mockResolvedValue({ totalCases: 0, totalVariants: 0 }),
+    getCarriers: vi.fn().mockResolvedValue([]),
+    getGeneBurden: vi.fn().mockResolvedValue([])
+  },
+  annotations: {
+    getGlobal: vi.fn().mockResolvedValue(null),
+    upsertGlobal: vi.fn().mockResolvedValue({}),
+    deleteGlobal: vi.fn().mockResolvedValue(undefined),
+    getPerCase: vi.fn().mockResolvedValue(null),
+    upsertPerCase: vi.fn().mockResolvedValue({}),
+    deletePerCase: vi.fn().mockResolvedValue(undefined),
+    getForVariant: vi.fn().mockResolvedValue({ global: null, perCase: null })
   }
 }
 

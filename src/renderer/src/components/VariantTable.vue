@@ -17,47 +17,140 @@
       <!-- Annotations column (star, ACMG, comment) -->
       <template #[`item.annotations`]="{ item }">
         <div class="d-flex align-center ga-1">
-          <!-- Star toggle -->
-          <v-icon
-            :icon="
-              isStarred(item.chr, item.pos, item.ref, item.alt) ? 'mdi-star' : 'mdi-star-outline'
-            "
-            :color="isStarred(item.chr, item.pos, item.ref, item.alt) ? 'amber' : 'grey-lighten-1'"
-            size="small"
-            class="cursor-pointer"
-            @click.stop="handleStarToggle(item)"
-          />
-          <!-- ACMG classification -->
+          <!-- Star toggle (per-case, with global indicator ring) -->
+          <v-tooltip location="top">
+            <template #activator="{ props: tooltipProps }">
+              <span
+                v-bind="tooltipProps"
+                class="annotation-icon-wrapper"
+                :class="{ 'has-global': isGlobalStarred(item.chr, item.pos, item.ref, item.alt) }"
+              >
+                <v-icon
+                  :icon="
+                    isStarred(item.chr, item.pos, item.ref, item.alt)
+                      ? 'mdi-star'
+                      : 'mdi-star-outline'
+                  "
+                  :color="
+                    isStarred(item.chr, item.pos, item.ref, item.alt) ? 'amber' : 'grey-lighten-1'
+                  "
+                  size="small"
+                  class="cursor-pointer"
+                  @click.stop="handleStarToggle(item)"
+                />
+              </span>
+            </template>
+            <span
+              v-if="
+                isGlobalStarred(item.chr, item.pos, item.ref, item.alt) &&
+                isStarred(item.chr, item.pos, item.ref, item.alt)
+              "
+            >
+              Starred (case + global)
+            </span>
+            <span v-else-if="isGlobalStarred(item.chr, item.pos, item.ref, item.alt)">
+              Global star (click to add case star)
+            </span>
+            <span v-else-if="isStarred(item.chr, item.pos, item.ref, item.alt)">
+              Starred for this case
+            </span>
+            <span v-else>Click to star</span>
+          </v-tooltip>
+          <!-- ACMG classification (per-case, with global indicator border) -->
           <AcmgMenu @select="(c) => handleAcmgSelect(item, c)">
             <template #activator="{ props: menuProps }">
-              <v-chip
-                v-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
-                v-bind="menuProps"
-                :color="ACMG_COLORS[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]"
-                size="x-small"
-                label
-                class="cursor-pointer"
-              >
-                {{ ACMG_ABBREV[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!] }}
-              </v-chip>
-              <v-icon
-                v-else
-                v-bind="menuProps"
-                icon="mdi-tag-plus-outline"
-                size="small"
-                color="grey-lighten-1"
-                class="cursor-pointer"
-              />
+              <v-tooltip location="top">
+                <template #activator="{ props: tooltipPropsAcmg }">
+                  <span
+                    v-bind="{ ...menuProps, ...tooltipPropsAcmg }"
+                    class="annotation-icon-wrapper"
+                    :class="{
+                      'has-global': getGlobalAcmgClassification(
+                        item.chr,
+                        item.pos,
+                        item.ref,
+                        item.alt
+                      )
+                    }"
+                  >
+                    <v-chip
+                      v-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
+                      :color="
+                        ACMG_COLORS[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]
+                      "
+                      size="x-small"
+                      label
+                      class="cursor-pointer"
+                    >
+                      {{
+                        ACMG_ABBREV[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]
+                      }}
+                    </v-chip>
+                    <v-icon
+                      v-else
+                      icon="mdi-tag-plus-outline"
+                      size="small"
+                      color="grey-lighten-1"
+                      class="cursor-pointer"
+                    />
+                  </span>
+                </template>
+                <span
+                  v-if="
+                    getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt) &&
+                    getAcmgClassification(item.chr, item.pos, item.ref, item.alt)
+                  "
+                >
+                  Case: {{ getAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}<br />
+                  Global: {{ getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}
+                </span>
+                <span
+                  v-else-if="getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
+                >
+                  Global: {{ getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)
+                  }}<br />
+                  (click to set case classification)
+                </span>
+                <span v-else-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)">
+                  {{ getAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}
+                </span>
+                <span v-else>Set ACMG classification</span>
+              </v-tooltip>
             </template>
           </AcmgMenu>
-          <!-- Comment -->
-          <v-icon
-            :icon="hasAnyComment(item) ? 'mdi-comment-text' : 'mdi-comment-text-outline'"
-            :color="hasAnyComment(item) ? 'primary' : 'grey-lighten-1'"
-            size="small"
-            class="cursor-pointer"
-            @click.stop="openCommentDialog(item)"
-          />
+          <!-- Comment (with global indicator) -->
+          <v-tooltip location="top">
+            <template #activator="{ props: tooltipProps }">
+              <span
+                v-bind="tooltipProps"
+                class="annotation-icon-wrapper"
+                :class="{ 'has-global': getGlobalComment(item.chr, item.pos, item.ref, item.alt) }"
+              >
+                <v-icon
+                  :icon="hasAnyComment(item) ? 'mdi-comment-text' : 'mdi-comment-text-outline'"
+                  :color="hasAnyComment(item) ? 'primary' : 'grey-lighten-1'"
+                  size="small"
+                  class="cursor-pointer"
+                  @click.stop="openCommentDialog(item)"
+                />
+              </span>
+            </template>
+            <span
+              v-if="
+                getGlobalComment(item.chr, item.pos, item.ref, item.alt) &&
+                getPerCaseComment(item.chr, item.pos, item.ref, item.alt)
+              "
+            >
+              Has global + case comments
+            </span>
+            <span v-else-if="getGlobalComment(item.chr, item.pos, item.ref, item.alt)">
+              Has global comment
+            </span>
+            <span v-else-if="getPerCaseComment(item.chr, item.pos, item.ref, item.alt)">
+              Has case comment
+            </span>
+            <span v-else>Add comment</span>
+          </v-tooltip>
         </div>
       </template>
 
@@ -327,7 +420,9 @@ const linksStore = useExternalLinksStore()
 // Initialize annotations composable
 const {
   isStarred,
+  isGlobalStarred,
   getAcmgClassification,
+  getGlobalAcmgClassification,
   loadAnnotationsBatch,
   toggleStar,
   clearCache,
@@ -724,5 +819,37 @@ defineExpose({ resetSort })
 
 .cursor-pointer {
   cursor: pointer;
+}
+
+.genomic-coordinate {
+  font-variant-numeric: tabular-nums;
+}
+
+.gene-symbol {
+  font-weight: 500;
+}
+
+.hgvs-notation {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85em;
+}
+
+.variant-data-mono {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85em;
+}
+
+/* Global annotation indicator - subtle ring/border */
+.annotation-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 2px;
+  transition: box-shadow 0.15s ease;
+}
+
+.annotation-icon-wrapper.has-global {
+  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.4);
 }
 </style>

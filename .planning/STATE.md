@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 20 of 24 (Annotation Core)
-Plan: 4 of 4
-Status: Phase complete
-Last activity: 2026-01-28 - Completed 20-04 (ACMG Menu and Comment Dialog UI)
+Plan: 4 of 4 + post-UAT enhancements
+Status: Phase complete with UAT refinements
+Last activity: 2026-01-29 - Added global annotation indicators + cohort mode annotations
 
 Progress: [████░░░░░░░░░░░░░░░░] 20/24 phases (83% complete, v0.4.0 in progress)
 
@@ -40,7 +40,7 @@ Progress: [████░░░░░░░░░░░░░░░░] 20/24 p
 | Phase | Plans | Status | Notes |
 |-------|-------|--------|-------|
 | 19. Database Foundation | 2/2 | Complete | Schema + migrations + encrypted DB tests |
-| 20. Annotation Core | 4/4 | Complete | 01: Backend (5min), 02: UI Display (4min), 03: Mutation Methods (4min), 04: ACMG/Comment UI (6min) |
+| 20. Annotation Core | 4/4 + UAT | Complete | 01: Backend, 02: UI Display, 03: Mutation Methods, 04: ACMG/Comment UI + post-UAT: per-case stars/ACMG, global indicators, cohort mode |
 | 21. API Service Layer | TBD | Not started | VEP + HPO clients |
 | 22. Case Metadata | TBD | Not started | Status + cohorts + HPO |
 | 23. Side Panel UI | TBD | Not started | Drawer + tabs + UI |
@@ -75,6 +75,10 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Slot-based activator pattern | Menu uses slot for custom activator element | Flexible UI integration (20-04) |
 | Per-case starred and ACMG | Stars and ACMG classification stored in case_variant_annotations, not variant_annotations | Different cases can classify same variant differently (post-UAT fix) |
 | Schema migration v3 | Added starred, acmg_classification, acmg_evidence columns to case_variant_annotations | Supports per-case annotation workflow |
+| Global annotation visibility | Global annotations show in Case mode with ring indicator (box-shadow) | Users see global context when analyzing cases |
+| Cohort mode global annotations | CohortTable has star/ACMG/comment controls for global annotations | Consistent annotation UX across views |
+| Ring indicator for global | `.has-global` CSS class with `box-shadow: 0 0 0 2px rgba(primary, 0.4)` | Subtle visual distinction without clutter |
+| Consolidated annotation column | Star, ACMG, Comment in single column with `ga-1` gap | Compact table layout |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -100,8 +104,8 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-28 - Phase 20 UAT and design fix
-Stopped at: Completed Phase 20 with per-case starred/ACMG fix (schema migration v3)
+Last session: 2026-01-29 - Phase 20 post-UAT enhancements
+Stopped at: Added global annotation indicators in Case mode + full annotation support in Cohort mode
 Resume file: None
 
 ---

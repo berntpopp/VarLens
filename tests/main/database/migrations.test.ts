@@ -118,7 +118,7 @@ describe('Schema Migrations', () => {
       service.close()
     })
 
-    it('sets PRAGMA user_version to 2 after migration', () => {
+    it('sets PRAGMA user_version to 3 after migration', () => {
       const dbPath = tempDbPath()
       const encryptionKey = 'version-test-key'
 
@@ -128,7 +128,7 @@ describe('Schema Migrations', () => {
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(2)
+      expect(versionResult.user_version).toBe(3)
 
       service.close()
 
@@ -138,7 +138,7 @@ describe('Schema Migrations', () => {
       const versionAfterReopen = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionAfterReopen.user_version).toBe(2)
+      expect(versionAfterReopen.user_version).toBe(3)
 
       service.close()
     })
@@ -465,7 +465,7 @@ describe('Schema Migrations', () => {
       let versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(2)
+      expect(versionResult.user_version).toBe(3)
 
       service.close()
 
@@ -485,7 +485,7 @@ describe('Schema Migrations', () => {
       versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(2)
+      expect(versionResult.user_version).toBe(3)
 
       service.close()
     })
@@ -519,7 +519,7 @@ describe('Schema Migrations', () => {
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(2)
+      expect(versionResult.user_version).toBe(3)
 
       service.close()
     })
