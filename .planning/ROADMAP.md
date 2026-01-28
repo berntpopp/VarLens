@@ -63,10 +63,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. ACMG classification model separates evidence storage from final classification (supports provenance tracking)
   5. All annotation writes use parameterized SQL queries (injection-proof)
 
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 19-01: TBD
+- [ ] 19-01-PLAN.md — Schema additions, migration system with PRAGMA user_version, TypeScript types
+- [ ] 19-02-PLAN.md — Migration tests on encrypted databases, cascade delete verification
 
 ### Phase 20: Annotation Core
 **Goal**: Users can annotate variants with comments, stars/flags, and ACMG classification with persistent storage.
@@ -179,7 +180,7 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 19. Database Foundation | 0/TBD | Not started | - |
+| 19. Database Foundation | 0/2 | Planned | - |
 | 20. Annotation Core | 0/TBD | Not started | - |
 | 21. API Service Layer | 0/TBD | Not started | - |
 | 22. Case Metadata | 0/TBD | Not started | - |
@@ -187,4 +188,4 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | 24. Custom Tags + HPO Autocomplete | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-01-28 — v0.4.0 roadmap created*
+*Last updated: 2026-01-28 — Phase 19 planned*
