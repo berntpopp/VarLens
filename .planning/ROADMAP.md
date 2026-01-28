@@ -85,10 +85,11 @@ Plans:
   6. ACMG classification displays with color-coded badges in variant table rows
   7. Deleting a case cascades deletion of that case's per-case annotations without orphaned records
 
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 20-01: TBD
+- [ ] 20-01-PLAN.md — Backend: IPC handlers + DatabaseService annotation methods
+- [ ] 20-02-PLAN.md — Frontend: VariantTable star + ACMG columns, useAnnotations composable
 
 ### Phase 21: API Service Layer
 **Goal**: VEP and HPO API clients provide enriched annotation data with SQLite caching, rate limiting, and graceful offline degradation.
@@ -181,11 +182,11 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 19. Database Foundation | 2/2 | ✓ Complete | 2026-01-28 |
-| 20. Annotation Core | 0/TBD | Not started | - |
+| 20. Annotation Core | 0/2 | Ready | - |
 | 21. API Service Layer | 0/TBD | Not started | - |
 | 22. Case Metadata | 0/TBD | Not started | - |
 | 23. Side Panel UI | 0/TBD | Not started | - |
 | 24. Custom Tags + HPO Autocomplete | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-01-28 — Phase 19 complete*
+*Last updated: 2026-01-28 — Phase 20 planned*
