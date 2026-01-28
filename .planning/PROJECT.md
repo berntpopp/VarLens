@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Varlens is an Electron-based desktop application for offline analysis of genetic variant data. It enables external collaborators to analyze pre-filtered and annotated genetic variant data without exposing login credentials, using a local SQLite database with FTS5 search for efficient querying and storage.
+Varlens is an Electron-based desktop application for offline analysis of genetic variant data. It enables external collaborators to analyze pre-filtered and annotated genetic variant data without exposing login credentials, using a local SQLCipher-encrypted SQLite database with FTS5 search for efficient querying and storage. It supports single-case and cross-case cohort analysis with external genomic database links.
 
 ## Core Value
 
@@ -29,20 +29,20 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 - ✓ Branding with RequiForm warm palette — v0.2.0
 - ✓ JSON config files for FAQ content, disclaimer text, and log config — v0.2.0
 - ✓ Research-only language throughout UI — v0.2.0
+- ✓ SQLCipher database encryption (password-gated database open/create) — v0.3.0
+- ✓ Database selection and switching (choose/create/switch .sqlite files) — v0.3.0
+- ✓ Batch import from multiple JSON.gz files (multi-file picker + folder import) — v0.3.0
+- ✓ Password-protected ZIP file import (decrypt and extract during import) — v0.3.0
+- ✓ External links to ClinVar, gnomAD, OMIM from variant rows — v0.3.0
+- ✓ Configurable external link URL templates with settings UI — v0.3.0
+- ✓ OMIM MIM number extraction and inline display with clickable links — v0.3.0
+- ✓ Cohort analysis view with aggregated variant table across all cases — v0.3.0
+- ✓ Cohort variant search (query variant/gene, see carrier summary across cohort) — v0.3.0
+- ✓ Cohort summary stats (carrier count, allele frequency, het/hom breakdown, per-case links, gene-level aggregation) — v0.3.0
 
 ### Active
 
-#### v0.3.0 — Cohort Analysis, Security & Import Enhancements
-
-- [ ] Batch import from multiple JSON.gz files (multi-file picker + folder import)
-- [ ] Password-protected ZIP file import (decrypt and extract during import)
-- [ ] SQLCipher database encryption (password-gated database open/create)
-- [ ] Database selection and switching (choose/create/switch .sqlite files)
-- [ ] External links to ClinVar, gnomAD, OMIM from variant rows
-- [ ] OMIM disease associations surfaced from variant annotation data
-- [ ] Cohort analysis view with aggregated variant table across all cases
-- [ ] Cohort variant search (query variant/gene, see carrier summary across cohort)
-- [ ] Cohort summary stats (carrier count, allele frequency, het/hom breakdown, per-case links, gene-level aggregation)
+(No active milestone -- planning next milestone)
 
 ### Out of Scope
 
@@ -55,32 +55,41 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 - Cloud sync — Not in v0.x scope
 - VCF import — JSON-only for current scope
 - CNV/SV analysis — SNV-focused for current scope
+- OMIM disease name extraction — deferred from v0.3.0 (MIM numbers delivered)
+- Affected/unaffected cohort split — requires case metadata schema; deferred to v0.4+
+- Cross-case variant comparison matrix — complex UI; deferred to v0.4+
+- Cohort statistics charts — tabular data sufficient for v0.3.0
+- Drag-and-drop import — multi-file picker is sufficient
 
 ## Context
 
-**Current state:** Shipped v0.2.0 with professional branding, trust signals, logging, and app chrome on top of v0.1 POC.
+**Current state:** Shipped v0.3.0 with SQLCipher encryption, database selection/switching, batch import with ZIP support, external genomic database links, OMIM MIM numbers, and cohort analysis with aggregated variant table, search, gene burden, and drill-down navigation.
 
-**Tech stack:** Electron + Vue 3 + Vuetify 3 + better-sqlite3 + FTS5 (v0.3.0 will migrate to SQLCipher)
+**Tech stack:** Electron 40 + Vue 3 + Vuetify 3 + better-sqlite3-multiple-ciphers (SQLCipher) + FTS5 + TypeScript + electron-vite
+
+**Codebase:** 11,402 lines of TypeScript/Vue across 104+ files. 9 IPC handler modules, 42+ channels.
 
 **Test data:** `test-data/case-892-snv-annotations.json.gz` (65k variants), `test-data/case-892-snv-sample.json.gz` (251 variants)
 
 **Performance validated:**
 - Import: 65k variants in ~20-32 seconds (target: <30s)
 - Pagination: <100ms query response
+- Cohort aggregation: Composite index on (chr, pos, ref, alt) for GROUP BY performance
 
-**Reference project:** [sqlite-search](https://github.com/berntpopp/sqlite-search) provided architecture template
-
-**v0.2.0 reference projects:**
-- [RequiForm](../RequiForm) — branding config JSON, warm palette (#a09588/#E5AA94), FAQ dialog, disclaimer, footer pattern
-- [phentrieve](../phentrieve) — disclaimer dialog with Pinia store, LogViewer drawer, FAQ view, footer with icon buttons
-- [kidney-genetics-db](../kidney-genetics-db) — footer with version popup, full logging system with sanitizer, log store
+**Known issues / tech debt:**
+- OMIM disease name extraction deferred (MIM numbers only)
+- Cohort performance not profiled with 50+ cases
+- No E2E tests for cohort search and drill-down
+- Franklin URL format has LOW confidence
+- Debug console.log in DatabaseService (info-level)
 
 ## Constraints
 
-- **Tech stack**: Electron + Vue 3 + Vuetify 3 + TypeScript + better-sqlite3 (migrating to SQLCipher in v0.3.0) — established
+- **Tech stack**: Electron 40 + Vue 3 + Vuetify 3 + TypeScript + better-sqlite3-multiple-ciphers — established
 - **Offline-first**: No network dependencies in core functionality
 - **Performance**: Import 65k variants in <30 seconds, table pagination <100ms
 - **Platform**: Primary development on Ubuntu, cross-platform target (Windows, macOS, Linux)
+- **Security**: HTTPS-only + domain allowlist for shell.openExternal; SQLCipher for data at rest
 
 ## Key Decisions
 
@@ -95,18 +104,14 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 | snake_case for DB properties | Matches SQLite column naming conventions | ✓ Good — Clean mapping |
 | ESLint 9 flat config | Future-proof configuration approach | ✓ Good — Works with Vue + TS |
 | happy-dom for tests | Faster than jsdom for component testing | ✓ Good — Quick test runs |
-
-## Current Milestone: v0.3.0 Cohort Analysis, Security & Import Enhancements
-
-**Goal:** Transform VarLens from a single-sample viewer into a cohort analysis platform with encrypted databases, batch import, external links, and cross-sample variant aggregation.
-
-**Target features:**
-- Batch import (multi-file picker + folder import) with password-protected ZIP support
-- Database selection/switching and SQLCipher encryption for data at rest
-- External links to ClinVar, gnomAD, OMIM from variant rows
-- OMIM disease associations from variant annotation data
-- Cohort analysis view with aggregated variant table, search, and full summary statistics
-- DRY, KISS, SOLID principles with strict modularization
+| better-sqlite3-multiple-ciphers | SQLCipher encryption with same API surface | ✓ Good — Zero-change library swap |
+| DatabaseManager lifecycle pattern | Open/close/switch with rollback safety | ✓ Good — Reliable switching |
+| URL template system for external links | User-configurable links with variable substitution | ✓ Good — Extensible |
+| adm-zip (pure JS) for ZIP extraction | No native rebuild, cross-platform | ✓ Good — Works everywhere |
+| FTS5 rebuild for schema upgrades | DROP and recreate ensures all columns indexed | ✓ Good — Backward compatible |
+| LIMIT/OFFSET for cohort pagination | GROUP BY makes cursor pagination complex | ✓ Good — Simple, sufficient |
+| Tab navigation for cohort analysis | Different workflow from single-case | ✓ Good — Clear UX |
+| Lazy carrier loading in cohort | Load on expand, cache in Map | ✓ Good — Fast UI |
 
 ---
-*Last updated: 2026-01-27 after v0.3.0 milestone initialization*
+*Last updated: 2026-01-28 after v0.3.0 milestone*
