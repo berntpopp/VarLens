@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 ## Current Position
 
 Phase: 17 -- OMIM Data Extraction
-Plan: 01 of 2
-Status: In progress
-Last activity: 2026-01-28 -- Completed 17-01-PLAN.md
+Plan: 02 of 2
+Status: Phase complete
+Last activity: 2026-01-28 -- Completed 17-02-PLAN.md
 
-Progress: ██████████░░░░░░░░░░ 10/13 plans (77%)
+Progress: ███████████░░░░░░░░░ 11/13 plans (85%)
 
 ## Milestone History
 
@@ -29,7 +29,7 @@ Progress: ██████████░░░░░░░░░░ 10/13 pla
 | 14 | Database Selection & Encryption UX | 2 | ✓ Complete (2/2) |
 | 15 | External Links | 3 | ✓ Complete (3/3) |
 | 16 | Batch Import & ZIP Extraction | 2 | ✓ Complete (2/2) |
-| 17 | OMIM Data Extraction | 2 | In Progress (1/2) |
+| 17 | OMIM Data Extraction | 2 | ✓ Complete (2/2) |
 | 18 | Cohort Analysis | 2 | Not Started |
 
 ## Accumulated Context
@@ -83,6 +83,8 @@ v0.3.0 decisions (accumulated during milestone):
 | 27 | OMIM extraction uses selected transcript pattern without dictionary | OMIM MIM numbers are plain strings, not coded IDs; follows same multi-value pattern as gene_symbol | 17 |
 | 28 | FTS5 rebuild strategy for schema upgrades | DROP and recreate FTS5 table/triggers on schema changes; IF NOT EXISTS doesn't update existing virtual tables | 17 |
 | 29 | Legacy FTS5 definitions for backward compatibility | Preserve old FTS5 schema for databases without omim_mim_number column to prevent crashes | 17 |
+| 30 | OMIM link uses dedicated inline pattern not template system | MIM number is authoritative single identifier; simpler UX with direct buildOmimUrl than configurable template | 17 |
+| 31 | Remove OMIM gene search link from defaults | Users see exact OMIM entry when MIM available, nothing when absent; no generic gene search fallback | 17 |
 
 ### Pending Todos
 
@@ -102,13 +104,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Completed 17-01-PLAN.md (Phase 17 in progress - OMIM Data Extraction)
+Stopped at: Completed 17-02-PLAN.md (Phase 17 complete - OMIM Data Extraction)
 Resume file: None
 
 ## Next Steps
 
-1. Execute Phase 17-02 (OMIM Links)
-2. Continue through phase 18
+1. Execute Phase 18-01 (Cohort aggregation backend)
+2. Execute Phase 18-02 (Cohort analysis UI)
 
 ---
-*Updated: 2026-01-28 after completing Phase 17-01 (Phase 17 plan 1 of 2 - OMIM backend extraction)*
+*Updated: 2026-01-28 after completing Phase 17-02 (Phase 17 plan 2 of 2 - OMIM UI display)*
