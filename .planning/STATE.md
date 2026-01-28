@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** External collaborators can analyze variant data offline with data-dense UX for research use
-**Current focus:** Phase 20 - Annotation Core
+**Current focus:** Phase 21 - API Service Layer
 
 ## Current Position
 
-Phase: 20 of 24 (Annotation Core)
-Plan: 4 of 4 + post-UAT enhancements
-Status: Phase complete with UAT refinements
-Last activity: 2026-01-29 - Added global annotation indicators + cohort mode annotations
+Phase: 21 of 24 (API Service Layer)
+Plan: 1 of 1
+Status: Phase complete
+Last activity: 2026-01-28 - Completed 21-01-PLAN.md (API infrastructure)
 
-Progress: [████░░░░░░░░░░░░░░░░] 20/24 phases (83% complete, v0.4.0 in progress)
+Progress: [████░░░░░░░░░░░░░░░░] 21/24 phases (87.5% complete, v0.4.0 in progress)
 
 ## Milestone History
 
@@ -31,8 +31,8 @@ Progress: [████░░░░░░░░░░░░░░░░] 20/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 6
-- Total execution time: 43.9 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6)
+- Total plans completed: 7
+- Total execution time: 50.9 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -41,7 +41,7 @@ Progress: [████░░░░░░░░░░░░░░░░] 20/24 p
 |-------|-------|--------|-------|
 | 19. Database Foundation | 2/2 | Complete | Schema + migrations + encrypted DB tests |
 | 20. Annotation Core | 4/4 + UAT | Complete | 01: Backend, 02: UI Display, 03: Mutation Methods, 04: ACMG/Comment UI + post-UAT: per-case stars/ACMG, global indicators, cohort mode |
-| 21. API Service Layer | TBD | Not started | VEP + HPO clients |
+| 21. API Service Layer | 1/1 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status) |
 | 22. Case Metadata | TBD | Not started | Status + cohorts + HPO |
 | 23. Side Panel UI | TBD | Not started | Drawer + tabs + UI |
 | 24. Custom Tags + HPO | TBD | Not started | Tags + autocomplete |
@@ -79,6 +79,11 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Cohort mode global annotations | CohortTable has star/ACMG/comment controls for global annotations | Consistent annotation UX across views |
 | Ring indicator for global | `.has-global` CSS class with `box-shadow: 0 0 0 2px rgba(primary, 0.4)` | Subtle visual distinction without clutter |
 | Consolidated annotation column | Star, ACMG, Comment in single column with `ga-1` gap | Compact table layout |
+| Zod for API validation | TypeScript-first schema library with automatic type inference | Runtime type safety for VEP/HPO responses (21-01) |
+| TTL jitter in ApiCache | ±10% randomization prevents thundering herd | 30-day TTL becomes 27-33 days (21-01) |
+| Prepared statements for cache | SQL prepared once in constructor | Avoids reparsing overhead (21-01) |
+| Clinical thresholds from ACMG | CADD >= 20, REVEL >= 0.644, SpliceAI >= 0.2 | Evidence-based score classification (21-01) |
+| NetworkStatus singleton | Point-in-time net.isOnline() checks | Offline-first API pattern (21-01) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -104,9 +109,9 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 20 post-UAT enhancements
-Stopped at: Added global annotation indicators in Case mode + full annotation support in Cohort mode
+Last session: 2026-01-28 - Phase 21 Plan 01
+Stopped at: Completed 21-01-PLAN.md - API infrastructure layer complete
 Resume file: None
 
 ---
-*Next step: Phase 21 (API Service Layer)*
+*Next step: Phase 22 (Case Metadata) or Phase 22+ (VEP/HPO API clients)*
