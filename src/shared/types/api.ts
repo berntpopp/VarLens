@@ -195,6 +195,9 @@ export interface GlobalAnnotationUpdates {
 
 export interface PerCaseAnnotationUpdates {
   per_case_comment?: string | null
+  starred?: boolean
+  acmg_classification?: AcmgClassification | null
+  acmg_evidence?: string | null
 }
 
 export interface VariantAnnotationsResult {

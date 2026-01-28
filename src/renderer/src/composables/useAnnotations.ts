@@ -39,11 +39,11 @@ export function useAnnotations() {
     return annotationCache.value.get(variantKey(chr, pos, ref, alt))
   }
 
-  // Check if variant is starred (global OR per-case)
+  // Check if variant is starred (per-case)
   function isStarred(chr: string, pos: number, ref: string, alt: string): boolean {
     const cached = getAnnotations(chr, pos, ref, alt)
     if (!cached) return false
-    return cached.global?.starred === 1 || false
+    return cached.perCase?.starred === 1 || false
   }
 
   // Check if loading
@@ -51,7 +51,7 @@ export function useAnnotations() {
     return loadingStates.value.get(variantKey(chr, pos, ref, alt)) ?? false
   }
 
-  // Get ACMG classification
+  // Get ACMG classification (per-case)
   function getAcmgClassification(
     chr: string,
     pos: number,
@@ -59,7 +59,7 @@ export function useAnnotations() {
     alt: string
   ): AcmgClassification | null {
     const cached = getAnnotations(chr, pos, ref, alt)
-    return cached?.global?.acmg_classification ?? null
+    return cached?.perCase?.acmg_classification ?? null
   }
 
   // Load annotations for a variant (call on row visible or expand)
@@ -88,8 +88,10 @@ export function useAnnotations() {
     }
   }
 
-  // Toggle global star
-  async function toggleGlobalStar(
+  // Toggle star (per-case)
+  async function toggleStar(
+    caseId: number,
+    variantId: number,
     chr: string,
     pos: number,
     ref: string,
@@ -97,34 +99,36 @@ export function useAnnotations() {
   ): Promise<void> {
     const key = variantKey(chr, pos, ref, alt)
     const current = annotationCache.value.get(key)
-    const currentStarred = current?.global?.starred === 1
+    const currentStarred = current?.perCase?.starred === 1
     const newStarred = !currentStarred
 
     // Optimistic update
     if (current) {
-      current.global = {
-        ...current.global,
-        starred: newStarred ? 1 : 0
-      } as VariantAnnotation
+      current.perCase = {
+        ...current.perCase,
+        starred: newStarred ? 1 : 0,
+        case_id: caseId,
+        variant_id: variantId
+      } as CaseVariantAnnotation
     }
 
     try {
-      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+      const updated = await window.api.annotations.upsertPerCase(caseId, variantId, {
         starred: newStarred
       })
       // Update cache with server response
       annotationCache.value.set(key, {
-        global: updated,
-        perCase: current?.perCase ?? null
+        global: current?.global ?? null,
+        perCase: updated
       })
     } catch (error) {
       console.error('Failed to toggle star:', error)
       // Revert optimistic update
       if (current) {
-        current.global = {
-          ...current.global,
+        current.perCase = {
+          ...current.perCase,
           starred: currentStarred ? 1 : 0
-        } as VariantAnnotation
+        } as CaseVariantAnnotation
       }
     }
   }
@@ -262,8 +266,10 @@ export function useAnnotations() {
     await upsertPerCaseComment(caseId, variantId, chr, pos, ref, alt, null)
   }
 
-  // Set ACMG classification with optimistic update
+  // Set ACMG classification with optimistic update (per-case)
   async function setAcmgClassification(
+    caseId: number,
+    variantId: number,
     chr: string,
     pos: number,
     ref: string,
@@ -272,33 +278,35 @@ export function useAnnotations() {
   ): Promise<void> {
     const key = variantKey(chr, pos, ref, alt)
     const current = annotationCache.value.get(key)
-    const previousClassification = current?.global?.acmg_classification ?? null
+    const previousClassification = current?.perCase?.acmg_classification ?? null
 
     // Optimistic update
     if (current) {
-      current.global = {
-        ...current.global,
-        acmg_classification: classification
-      } as VariantAnnotation
+      current.perCase = {
+        ...current.perCase,
+        acmg_classification: classification,
+        case_id: caseId,
+        variant_id: variantId
+      } as CaseVariantAnnotation
     }
 
     try {
-      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+      const updated = await window.api.annotations.upsertPerCase(caseId, variantId, {
         acmg_classification: classification
       })
       // Update cache with server response
       annotationCache.value.set(key, {
-        global: updated,
-        perCase: current?.perCase ?? null
+        global: current?.global ?? null,
+        perCase: updated
       })
     } catch (error) {
       console.error('Failed to set ACMG classification:', error)
       // Revert optimistic update
       if (current) {
-        current.global = {
-          ...current.global,
+        current.perCase = {
+          ...current.perCase,
           acmg_classification: previousClassification
-        } as VariantAnnotation
+        } as CaseVariantAnnotation
       }
     }
   }
@@ -316,7 +324,7 @@ export function useAnnotations() {
     getAcmgClassification,
     loadAnnotations,
     loadAnnotationsBatch,
-    toggleGlobalStar,
+    toggleStar,
     clearCache,
     getGlobalComment,
     getPerCaseComment,

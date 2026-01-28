@@ -204,6 +204,12 @@ export interface CaseVariantAnnotation {
   variant_id: number
   /** Per-case comment */
   per_case_comment: string | null
+  /** Star flag (0 or 1, SQLite boolean) - per-case */
+  starred: number
+  /** ACMG classification - per-case */
+  acmg_classification: AcmgClassification | null
+  /** ACMG evidence (JSON string of AcmgEvidence) - per-case */
+  acmg_evidence: string | null
   /** Unix timestamp in milliseconds */
   created_at: number
   /** Unix timestamp in milliseconds */

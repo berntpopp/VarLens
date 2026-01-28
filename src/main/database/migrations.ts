@@ -179,4 +179,21 @@ export function runMigrations(db: Database.Database): void {
     // Update version to 2
     db.exec('PRAGMA user_version = 2')
   }
+
+  // v0.4.0 schema fix: Move starred and ACMG to per-case
+  if (currentVersion < 3) {
+    db.exec(`
+      -- Add starred and ACMG columns to case_variant_annotations (per-case)
+      ALTER TABLE case_variant_annotations ADD COLUMN starred INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE case_variant_annotations ADD COLUMN acmg_classification TEXT;
+      ALTER TABLE case_variant_annotations ADD COLUMN acmg_evidence TEXT;
+
+      -- Create index for starred filter
+      CREATE INDEX IF NOT EXISTS idx_case_variant_annotations_starred
+        ON case_variant_annotations(starred) WHERE starred = 1;
+    `)
+
+    // Update version to 3
+    db.exec('PRAGMA user_version = 3')
+  }
 }

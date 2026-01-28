@@ -924,7 +924,8 @@ export class DatabaseService {
    * Upsert per-case annotation for a variant (atomic operation)
    *
    * Uses INSERT ON CONFLICT to avoid race conditions.
-   * Only updates fields provided in updates object (COALESCE pattern).
+   * Only updates fields provided in updates object (IFNULL pattern).
+   * Starred and ACMG are per-case, not global.
    *
    * @param caseId - Case ID
    * @param variantId - Variant ID
@@ -934,22 +935,46 @@ export class DatabaseService {
   upsertPerCaseAnnotation(
     caseId: number,
     variantId: number,
-    updates: Partial<Pick<CaseVariantAnnotation, 'per_case_comment'>>
+    updates: Partial<
+      Pick<
+        CaseVariantAnnotation,
+        'per_case_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'
+      >
+    >
   ): CaseVariantAnnotation {
     return this.runTransaction(() => {
       const now = Date.now()
 
       // Atomic upsert using INSERT ON CONFLICT
+      // For INSERT: use IFNULL to default starred to 0 (satisfies NOT NULL constraint)
+      // For UPDATE: use IFNULL to preserve existing value when null is passed
       const result = this.stmt(
         `
-        INSERT INTO case_variant_annotations (case_id, variant_id, per_case_comment, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO case_variant_annotations (case_id, variant_id, per_case_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
+        VALUES (?, ?, ?, IFNULL(?, 0), ?, ?, ?, ?)
         ON CONFLICT(case_id, variant_id) DO UPDATE SET
-          per_case_comment = COALESCE(excluded.per_case_comment, per_case_comment),
+          per_case_comment = IFNULL(?, per_case_comment),
+          starred = IFNULL(?, starred),
+          acmg_classification = IFNULL(?, acmg_classification),
+          acmg_evidence = IFNULL(?, acmg_evidence),
           updated_at = excluded.updated_at
         RETURNING *
       `
-      ).get(caseId, variantId, updates.per_case_comment ?? null, now, now) as CaseVariantAnnotation
+      ).get(
+        caseId,
+        variantId,
+        updates.per_case_comment ?? null,
+        updates.starred !== undefined ? (updates.starred ? 1 : 0) : null,
+        updates.acmg_classification ?? null,
+        updates.acmg_evidence ?? null,
+        now,
+        now,
+        // Parameters for UPDATE IFNULL (same values, passed again for UPDATE clause)
+        updates.per_case_comment ?? null,
+        updates.starred !== undefined ? (updates.starred ? 1 : 0) : null,
+        updates.acmg_classification ?? null,
+        updates.acmg_evidence ?? null
+      ) as CaseVariantAnnotation
 
       return result
     })

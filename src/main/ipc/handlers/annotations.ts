@@ -21,6 +21,9 @@ interface GlobalAnnotationUpdates {
 // Type for per-case annotation updates from renderer
 interface PerCaseAnnotationUpdates {
   per_case_comment?: string | null
+  starred?: boolean
+  acmg_classification?: CaseVariantAnnotation['acmg_classification']
+  acmg_evidence?: string | null
 }
 
 /**
@@ -99,6 +102,7 @@ ipcMain.handle('annotations:getPerCase', async (_event, caseId: number, variantI
 
 /**
  * Upsert per-case annotation for a variant
+ * Handles per_case_comment, starred, acmg_classification, acmg_evidence
  */
 ipcMain.handle(
   'annotations:upsertPerCase',
@@ -106,8 +110,20 @@ ipcMain.handle(
     return wrapHandler(async () => {
       const db = getDatabaseService()
 
-      const dbUpdates: Partial<Pick<CaseVariantAnnotation, 'per_case_comment'>> = {
-        per_case_comment: updates.per_case_comment
+      const dbUpdates: Partial<
+        Pick<
+          CaseVariantAnnotation,
+          'per_case_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'
+        >
+      > = {
+        per_case_comment: updates.per_case_comment,
+        acmg_classification: updates.acmg_classification,
+        acmg_evidence: updates.acmg_evidence
+      }
+
+      // Convert boolean starred to 0/1 for SQLite INTEGER column
+      if (updates.starred !== undefined) {
+        dbUpdates.starred = updates.starred ? 1 : 0
       }
 
       return db.upsertPerCaseAnnotation(caseId, variantId, dbUpdates)

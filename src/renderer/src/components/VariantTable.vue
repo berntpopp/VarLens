@@ -332,7 +332,7 @@ const {
   isStarred,
   getAcmgClassification,
   loadAnnotationsBatch,
-  toggleGlobalStar,
+  toggleStar,
   clearCache,
   setAcmgClassification,
   getGlobalComment,
@@ -459,9 +459,9 @@ const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> 
   }
 }
 
-// Handle star toggle
+// Handle star toggle (per-case)
 const handleStarToggle = async (item: Variant): Promise<void> => {
-  await toggleGlobalStar(item.chr, item.pos, item.ref, item.alt)
+  await toggleStar(props.caseId, item.id, item.chr, item.pos, item.ref, item.alt)
 }
 
 // Check if variant has any comment
@@ -480,12 +480,20 @@ const openCommentDialog = (item: Variant) => {
   commentDialogOpen.value = true
 }
 
-// Handle ACMG selection
+// Handle ACMG selection (per-case)
 const handleAcmgSelect = async (
   item: Variant,
   classification: AcmgClassification | null
 ): Promise<void> => {
-  await setAcmgClassification(item.chr, item.pos, item.ref, item.alt, classification)
+  await setAcmgClassification(
+    props.caseId,
+    item.id,
+    item.chr,
+    item.pos,
+    item.ref,
+    item.alt,
+    classification
+  )
 }
 
 // Handle comment save
