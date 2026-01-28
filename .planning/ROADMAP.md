@@ -202,7 +202,7 @@ Plans:
 | 14 | Database Selection & Encryption UX | Complete | DBSL-01 - DBSL-06, DBSC-04, DBSC-05, DBSC-06 |
 | 15 | External Links | Complete | EXTL-01 - EXTL-06 |
 | 16 | Batch Import & ZIP Extraction | Complete | BTCH-01 - BTCH-06, ZIMP-01 - ZIMP-05 |
-| 17 | OMIM Data Extraction | Not Started | OMIM-01 - OMIM-05 |
+| 17 | OMIM Data Extraction | Complete | OMIM-01 - OMIM-05 |
 | 18 | Cohort Analysis | Not Started | CHRT-01 - CHRT-10 |
 
 ## Coverage
@@ -240,11 +240,11 @@ Plans:
 | ZIMP-03 | Phase 16 | Complete |
 | ZIMP-04 | Phase 16 | Complete |
 | ZIMP-05 | Phase 16 | Complete |
-| OMIM-01 | Phase 17 | Pending |
-| OMIM-02 | Phase 17 | Pending |
-| OMIM-03 | Phase 17 | Pending |
-| OMIM-04 | Phase 17 | Pending |
-| OMIM-05 | Phase 17 | Pending |
+| OMIM-01 | Phase 17 | Complete |
+| OMIM-02 | Phase 17 | Complete |
+| OMIM-03 | Phase 17 | Complete |
+| OMIM-04 | Phase 17 | Complete |
+| OMIM-05 | Phase 17 | Complete |
 | CHRT-01 | Phase 18 | Pending |
 | CHRT-02 | Phase 18 | Pending |
 | CHRT-03 | Phase 18 | Pending |

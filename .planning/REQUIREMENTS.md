@@ -55,11 +55,11 @@ Requirements for cohort analysis, security, and import enhancements milestone.
 
 ### OMIM Data
 
-- [ ] **OMIM-01**: Import pipeline extracts OMIM MIM numbers from variant annotation data
-- [ ] **OMIM-02**: Import pipeline extracts OMIM disease names/associations from variant annotation data
-- [ ] **OMIM-03**: Variants table schema includes columns for OMIM MIM number and disease name
-- [ ] **OMIM-04**: OMIM disease associations are displayed inline in variant table rows
-- [ ] **OMIM-05**: OMIM external link uses direct MIM entry URL when MIM number is available (falls back to gene search)
+- [x] **OMIM-01**: Import pipeline extracts OMIM MIM numbers from variant annotation data
+- [x] **OMIM-02**: Import pipeline extracts OMIM disease names/associations from variant annotation data
+- [x] **OMIM-03**: Variants table schema includes columns for OMIM MIM number and disease name
+- [x] **OMIM-04**: OMIM disease associations are displayed inline in variant table rows
+- [x] **OMIM-05**: OMIM external link uses direct MIM entry URL when MIM number is available (falls back to gene search)
 
 ### Cohort Analysis
 
@@ -183,11 +183,11 @@ Deferred to later milestones.
 | ZIMP-03 | Phase 16 | Pending |
 | ZIMP-04 | Phase 16 | Pending |
 | ZIMP-05 | Phase 16 | Pending |
-| OMIM-01 | Phase 17 | Pending |
-| OMIM-02 | Phase 17 | Pending |
-| OMIM-03 | Phase 17 | Pending |
-| OMIM-04 | Phase 17 | Pending |
-| OMIM-05 | Phase 17 | Pending |
+| OMIM-01 | Phase 17 | Complete |
+| OMIM-02 | Phase 17 | Complete |
+| OMIM-03 | Phase 17 | Complete |
+| OMIM-04 | Phase 17 | Complete |
+| OMIM-05 | Phase 17 | Complete |
 | CHRT-01 | Phase 18 | Pending |
 | CHRT-02 | Phase 18 | Pending |
 | CHRT-03 | Phase 18 | Pending |
