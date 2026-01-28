@@ -1,0 +1,237 @@
+/**
+ * VEP API client with rate limiting, caching, and request cancellation
+ *
+ * Fetches variant annotations from Ensembl VEP REST API with:
+ * - Bottleneck rate limiting (15 req/sec, 55k req/hour)
+ * - SQLite caching with 30-day TTL
+ * - Request cancellation for rapid variant selection
+ * - Zod response validation
+ * - Exponential backoff retry on 429 (1s, 2s, 4s)
+ */
+
+import Bottleneck from 'bottleneck'
+import { ApiCache } from './ApiCache'
+import { VepResponseSchema, type VepResponse } from './schemas/vep-response'
+import type { VepFetchResult } from '../../../shared/types/api-enrichment'
+
+/**
+ * Normalize chromosome identifier for consistent cache keys
+ * Removes 'chr' prefix and standardizes mitochondrial chromosome
+ *
+ * @example
+ * normalizeChromosome('chr1') => '1'
+ * normalizeChromosome('chrX') => 'X'
+ * normalizeChromosome('chrM') => 'MT'
+ * normalizeChromosome('mt') => 'MT'
+ */
+export function normalizeChromosome(chr: string): string {
+  // Remove 'chr' prefix if present
+  let normalized = chr.replace(/^chr/i, '')
+
+  // Standardize mitochondrial chromosome to MT
+  if (normalized.toLowerCase() === 'm' || normalized.toLowerCase() === 'mt') {
+    normalized = 'MT'
+  }
+
+  return normalized
+}
+
+export class VepApiClient {
+  private cache: ApiCache
+  private limiter: Bottleneck
+  private abortController: AbortController | undefined
+  private readonly baseUrl = 'https://rest.ensembl.org'
+
+  constructor(cache: ApiCache) {
+    this.cache = cache
+
+    // Configure Bottleneck for VEP rate limits
+    this.limiter = new Bottleneck({
+      reservoir: 55000, // 55k requests per hour (Ensembl limit)
+      reservoirRefreshAmount: 55000,
+      reservoirRefreshInterval: 60 * 60 * 1000, // hourly refresh
+      maxConcurrent: 1, // serialize requests for predictability
+      minTime: 67 // 67ms between requests = ~15 req/sec
+    })
+
+    // Retry handling for 429 responses with exponential backoff
+    this.limiter.on('failed', async (error, jobInfo) => {
+      if (error && error.message && error.message.includes('429') && jobInfo.retryCount < 3) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.min(1000 * Math.pow(2, jobInfo.retryCount), 8000)
+        // Add jitter: 50-100% of delay to spread retries
+        return Math.floor(delay * (0.5 + Math.random() * 0.5))
+      }
+      return null // Don't retry for other errors
+    })
+  }
+
+  /**
+   * Fetch variant annotation from VEP API or cache
+   *
+   * @param chr - Chromosome (1-22, X, Y, MT, or chr-prefixed)
+   * @param pos - Genomic position (1-based)
+   * @param ref - Reference allele
+   * @param alt - Alternate allele
+   * @returns VepFetchResult with parsed data or error
+   */
+  async fetchVariantAnnotation(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ): Promise<VepFetchResult> {
+    // Generate normalized cache key
+    const normalizedChr = normalizeChromosome(chr)
+    const cacheKey = `vep:${normalizedChr}:${pos}:${ref}:${alt}`
+
+    // Check cache first
+    const cached = this.cache.get(cacheKey)
+    if (cached) {
+      try {
+        const data = VepResponseSchema.parse(JSON.parse(cached.data))
+        return {
+          success: true,
+          data,
+          cacheInfo: {
+            cached: true,
+            cachedAt: cached.createdAt
+          }
+        }
+      } catch (error) {
+        // Cache entry corrupted, continue to fetch fresh data
+        console.warn('Corrupted cache entry for', cacheKey, error)
+      }
+    }
+
+    // Cancel any pending request
+    this.cancelPendingRequest()
+
+    // Create new AbortController for this request
+    this.abortController = new AbortController()
+    const signal = this.abortController.signal
+
+    try {
+      // Schedule request with rate limiting
+      const rawResponse = await this.limiter.schedule(() =>
+        this.makeVepRequest(normalizedChr, pos, ref, alt, signal)
+      )
+
+      // Validate response with zod
+      const data = VepResponseSchema.parse(rawResponse)
+
+      // Cache response with 30-day TTL (actual 27-33 with jitter)
+      this.cache.set(cacheKey, JSON.stringify(rawResponse), 30)
+
+      return {
+        success: true,
+        data,
+        cacheInfo: {
+          cached: false,
+          cachedAt: null
+        }
+      }
+    } catch (error) {
+      // Re-throw AbortError to signal cancellation
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error
+      }
+
+      // Handle validation errors
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+        return {
+          success: false,
+          error: 'Invalid VEP response format',
+          offline: false
+        }
+      }
+
+      // Handle other errors
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        offline: false
+      }
+    }
+  }
+
+  /**
+   * Make HTTP request to VEP REST API
+   *
+   * @private
+   * @throws Error on 429 (for retry handling)
+   * @throws Error on non-OK response
+   */
+  private async makeVepRequest(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    signal: AbortSignal
+  ): Promise<unknown> {
+    // Use GET endpoint for single variants (more reliable than POST)
+    // URL format: /vep/human/region/{chr}:{start}:{end}/{allele}
+    const url = `${this.baseUrl}/vep/human/region/${chr}:${pos}:${pos}/${alt}?content-type=application/json`
+
+    const response = await fetch(url, {
+      signal,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+
+    // Check for rate limit response
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After') || 'unknown'
+      throw new Error(`429:${retryAfter}`)
+    }
+
+    // Check for other errors
+    if (!response.ok) {
+      throw new Error(`VEP API error: ${response.status}`)
+    }
+
+    return await response.json()
+  }
+
+  /**
+   * Cancel any pending VEP request
+   * Called when user selects a new variant before previous request completes
+   */
+  cancelPendingRequest(): void {
+    if (this.abortController) {
+      this.abortController.abort()
+      this.abortController = undefined
+    }
+  }
+
+  /**
+   * Get cached VEP response by cache key
+   * For IPC handler to check cache when offline
+   *
+   * @param cacheKey - Cache key (e.g., "vep:1:100:A:T")
+   * @returns Parsed VepResponse and creation timestamp, or null if not cached
+   */
+  getCached(cacheKey: string): { data: VepResponse; createdAt: number } | null {
+    const cached = this.cache.get(cacheKey)
+    if (!cached) return null
+
+    try {
+      const data = VepResponseSchema.parse(JSON.parse(cached.data))
+      return {
+        data,
+        createdAt: cached.createdAt
+      }
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Clear all cached VEP responses
+   * For settings page "Clear VEP cache" button
+   */
+  clearCache(): void {
+    this.cache.clearByPrefix('vep:')
+  }
+}
