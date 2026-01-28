@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 ## Current Position
 
 Phase: 18 -- Cohort Analysis
-Plan: 01 of 2
-Status: In progress
-Last activity: 2026-01-28 -- Completed 18-01-PLAN.md
+Plan: 2 of 2
+Status: Phase complete
+Last activity: 2026-01-28 -- Completed 18-02-PLAN.md
 
-Progress: ████████████░░░░░░░░ 12/13 plans (92%)
+Progress: █████████████░░░░░░░ 13/13 plans (100%)
 
 ## Milestone History
 
@@ -30,7 +30,7 @@ Progress: ████████████░░░░░░░░ 12/13 pla
 | 15 | External Links | 3 | ✓ Complete (3/3) |
 | 16 | Batch Import & ZIP Extraction | 2 | ✓ Complete (2/2) |
 | 17 | OMIM Data Extraction | 2 | ✓ Complete (2/2) |
-| 18 | Cohort Analysis | 2 | In Progress (1/2) |
+| 18 | Cohort Analysis | 2 | ✓ Complete (2/2) |
 
 ## Accumulated Context
 
@@ -89,6 +89,10 @@ v0.3.0 decisions (accumulated during milestone):
 | 33 | Composite index on (chr, pos, ref, alt) | Essential for GROUP BY performance in cohort aggregation queries | 18 |
 | 34 | variant_key as composite string for v-data-table | Stable unique key for Vuetify item tracking; built in SQL as chr:pos:ref:alt | 18 |
 | 35 | Separate tab for cohort analysis | Cohort is fundamentally different workflow from single-case; tab navigation clearer than mode toggle | 18 |
+| 36 | FTS5 for gene symbol search with escaping | Gene symbols can contain special FTS5 characters (e.g., BRCA-1); wrap terms with -, *, or " in double quotes to treat as literals | 18 |
+| 37 | Lazy loading of carrier data | Load carriers only when row expands to minimize queries; cache in Map for instant subsequent expansions | 18 |
+| 38 | Navigate to case tab without variant pre-filtering | Switch to case with full variant list; user can search if needed; simpler than automatic filtering | 18 |
+| 39 | 300ms search debounce | Prevent flooding backend with queries while typing; UX standard for search input | 18 |
 
 ### Pending Todos
 
@@ -108,12 +112,19 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Completed 18-01-PLAN.md (Cohort analysis foundation - aggregation backend and tab navigation)
+Stopped at: Completed 18-02-PLAN.md (Phase 18 complete - Cohort analysis with search, drill-down, dashboard, gene burden)
 Resume file: None
 
 ## Next Steps
 
-1. Execute Phase 18-02 (Cohort analysis UI enhancements - dashboard, gene burden, drill-down)
+**Phase 18 complete.** Milestone v0.3.0 complete (all 6 phases, 13 plans).
+
+**v0.3.0 ready for testing and release.**
+
+Next milestone planning (v0.4.0 or later) should consider:
+1. Performance profiling with 50+ cases (Research flag from Phase 18)
+2. E2E tests for cohort search and drill-down navigation
+3. Additional cohort analysis features (variant filtering, export, etc.)
 
 ---
-*Updated: 2026-01-28 after completing Phase 18-01 (Phase 18 plan 1 of 2 - Cohort analysis foundation)*
+*Updated: 2026-01-28 after completing Phase 18-02 (Phase 18 plan 2 of 2 - Cohort analysis UI enhancements)*
