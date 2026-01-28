@@ -66,3 +66,8 @@ make dist             # build + package for current platform
 - ESLint + Prettier, strict TypeScript
 - IPC channels use `domain:action` naming (e.g., `cases:list`, `variants:query`)
 - Vue components use `<script setup lang="ts">` with Composition API
+
+## UI / Vuetify Theme Notes
+
+- **NEVER use `surface-variant` for background colors** — the warm palette theme makes it white-on-white invisible (`surface-variant` #f5f2ef vs `surface` #faf8f6). Use `bg-grey-lighten-3` for subtle contrast (nested tables, expanded rows) or `secondary` (#424242) for strong contrast (tabs, toolbars)
+- Vuetify 3 `v-data-table-server` expand API uses `v-model:expanded` which emits an array of item keys (strings), NOT `{ value, item }` objects

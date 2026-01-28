@@ -16,9 +16,10 @@
     <v-data-table-server
       v-model:items-per-page="itemsPerPage"
       v-model:sort-by="sortBy"
+      v-model:expanded="expandedRows"
       :headers="headers"
       :items="cohortVariants"
-      :items-length="totalCount"
+      :items-length="totalCount ?? 0"
       :loading="loading"
       :items-per-page-options="[25, 50, 100]"
       item-value="variant_key"
@@ -26,7 +27,6 @@
       show-expand
       class="elevation-1"
       @update:options="handleTableOptions"
-      @update:expanded="handleExpanded"
     >
       <!-- Chromosome -->
       <template #[`item.chr`]="{ value }">
@@ -69,6 +69,16 @@
         <span class="gene-symbol">{{ value ?? '--' }}</span>
       </template>
 
+      <!-- cDNA HGVS -->
+      <template #[`item.cdna`]="{ value }">
+        <span class="variant-data-mono">{{ value ?? '--' }}</span>
+      </template>
+
+      <!-- Protein change -->
+      <template #[`item.aa_change`]="{ value }">
+        <span class="variant-data-mono">{{ value ?? '--' }}</span>
+      </template>
+
       <!-- Carrier count as chip with "N / total" format -->
       <template #[`item.carrier_count`]="{ item }">
         <v-chip size="small" color="primary" label>
@@ -95,7 +105,7 @@
       <template #expanded-row="{ columns, item }">
         <tr>
           <td :colspan="columns.length" class="pa-0">
-            <v-table density="compact" class="nested-carriers-table bg-surface-variant">
+            <v-table density="compact" class="nested-carriers-table bg-grey-lighten-3">
               <thead>
                 <tr>
                   <th class="text-left">Case</th>
@@ -136,13 +146,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import type { CohortVariant, CohortCarrier } from '../../../shared/types/cohort'
 
 // Emit for navigation
 const emit = defineEmits<{
   'navigate-to-case': [
-    payload: { caseId: number; chr: string; pos: number; ref: string; alt: string }
+    payload: {
+      caseId: number
+      chr: string
+      pos: number
+      ref: string
+      alt: string
+      geneSymbol: string | null
+      cdna: string | null
+    }
   ]
 }>()
 
@@ -157,6 +175,9 @@ const sortBy = ref<{ key: string; order: 'asc' | 'desc' }[]>([])
 const searchTerm = ref('')
 // eslint-disable-next-line no-undef
 let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Expand state
+const expandedRows = ref<string[]>([])
 
 // Carrier state (lazy-loaded per variant)
 const carrierMap = ref<Map<string, CohortCarrier[]>>(new Map())
@@ -177,6 +198,8 @@ const headers = [
   { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
   { title: 'Alt', key: 'alt', sortable: false, width: '100px' },
   { title: 'Gene', key: 'gene_symbol', sortable: true },
+  { title: 'c.', key: 'cdna', sortable: false },
+  { title: 'p.', key: 'aa_change', sortable: false },
   { title: 'Carriers', key: 'carrier_count', sortable: true, align: 'end' as const },
   { title: 'Frequency', key: 'cohort_frequency', sortable: true, align: 'end' as const },
   { title: 'Het / Hom', key: 'het_count', sortable: true }
@@ -211,10 +234,22 @@ const loadCohortVariants = async (): Promise<void> => {
 
   loading.value = true
   try {
+    // Build a plain object with no undefined values (IPC structured clone rejects undefined)
+    const ipcParams: Record<string, string | number> = {
+      limit: currentParams.value.limit,
+      offset: currentParams.value.offset,
+      sort_order: currentParams.value.sort_order
+    }
+    if (currentParams.value.search_term !== undefined) {
+      ipcParams.search_term = currentParams.value.search_term
+    }
+    if (currentParams.value.sort_by !== undefined) {
+      ipcParams.sort_by = currentParams.value.sort_by
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
-    const result = await (window as any).api.cohort.getVariants(currentParams.value)
-    cohortVariants.value = result.data
-    totalCount.value = result.total_count
+    const result = await (window as any).api.cohort.getVariants(ipcParams)
+    cohortVariants.value = result.data ?? []
+    totalCount.value = result.total_count ?? 0
   } catch (error) {
     // eslint-disable-next-line no-undef
     console.error('Failed to load cohort variants:', error)
@@ -247,16 +282,18 @@ const handleTableOptions = async (options: any): Promise<void> => {
   await loadCohortVariants()
 }
 
-// Handle row expansion - lazy load carriers
-const handleExpanded = async (value: { value: boolean; item: CohortVariant }[]): Promise<void> => {
-  // Find newly expanded rows
-  for (const { value: isExpanded, item } of value) {
-    if (isExpanded && !carrierMap.value.has(item.variant_key)) {
-      // Lazy load carriers for this variant
-      await loadCarriers(item)
+// Watch expanded rows and lazy-load carriers for newly expanded ones
+watch(expandedRows, async (keys) => {
+  for (const key of keys) {
+    if (!carrierMap.value.has(key)) {
+      // Find the variant by key and load carriers
+      const variant = cohortVariants.value.find((v) => v.variant_key === key)
+      if (variant !== undefined) {
+        await loadCarriers(variant)
+      }
     }
   }
-}
+})
 
 // Load carriers for a specific variant
 const loadCarriers = async (variant: CohortVariant): Promise<void> => {
@@ -298,7 +335,9 @@ const handleNavigateToCase = (caseId: number, variant: CohortVariant): void => {
     chr: variant.chr,
     pos: variant.pos,
     ref: variant.ref,
-    alt: variant.alt
+    alt: variant.alt,
+    geneSymbol: variant.gene_symbol,
+    cdna: variant.cdna
   })
 }
 

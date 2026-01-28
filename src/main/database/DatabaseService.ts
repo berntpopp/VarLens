@@ -380,6 +380,65 @@ export class DatabaseService {
   }
 
   /**
+   * Build a WHERE condition for a general search query.
+   *
+   * Supports boolean operators (AND/OR/NOT) and detects query type per token:
+   * - Variant key (chr:pos:ref:alt) → exact match on all four columns
+   * - Genomic position (chr:pos) → direct column match
+   * - HGVS notation (c./p.) → LIKE on cdna/aa_change columns
+   * - Default → FTS5 full-text search on gene_symbol/consequence
+   */
+  private buildSearchCondition(query: string, params: (string | number | null)[]): string {
+    const term = query.trim()
+
+    // Check for boolean operators
+    const hasBooleanOps = /\b(AND|OR|NOT)\b/.test(term)
+
+    if (!hasBooleanOps) {
+      return this.buildSingleSearchToken(term, params)
+    }
+
+    // Split on boolean operators, preserving them as tokens
+    const parts = term
+      .split(/\b(AND|OR|NOT)\b/)
+      .map((p) => p.trim())
+      .filter((p) => p !== '')
+
+    const sqlParts: string[] = []
+    for (const part of parts) {
+      if (part === 'AND') {
+        sqlParts.push('AND')
+      } else if (part === 'OR') {
+        sqlParts.push('OR')
+      } else if (part === 'NOT') {
+        sqlParts.push('AND NOT')
+      } else {
+        sqlParts.push(this.buildSingleSearchToken(part, params))
+      }
+    }
+
+    return `(${sqlParts.join(' ')})`
+  }
+
+  /**
+   * Build a WHERE fragment for a single search token (no boolean operators).
+   */
+  private buildSingleSearchToken(token: string, params: (string | number | null)[]): string {
+    // HGVS notation: starts with c. or p.
+    const hgvsPattern = /^[cp]\./
+    if (hgvsPattern.test(token)) {
+      const searchPattern = `%${token}%`
+      params.push(searchPattern, searchPattern)
+      return '(cdna LIKE ? OR aa_change LIKE ?)'
+    }
+
+    // Default: FTS5 full-text search (gene symbol, consequence, OMIM)
+    const ftsQuery = `"${token.replace(/"/g, '""')}"*`
+    params.push(ftsQuery)
+    return 'id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ?)'
+  }
+
+  /**
    * Build cursor condition for keyset pagination with dynamic sort
    *
    * For cursor-based pagination to work with any sort column:
@@ -503,6 +562,30 @@ export class DatabaseService {
     if (filter.cadd_min !== undefined) {
       conditions.push('cadd >= ?')
       params.push(filter.cadd_min)
+    }
+
+    // General search query (hybrid: position, HGVS, or FTS5)
+    if (filter.search_query != null && filter.search_query !== '') {
+      const searchCondition = this.buildSearchCondition(filter.search_query, params)
+      conditions.push(searchCondition)
+    }
+
+    // Exact variant coordinate filters (for cohort → case navigation)
+    if (filter.chr != null && filter.chr !== '') {
+      conditions.push('chr = ?')
+      params.push(filter.chr)
+    }
+    if (filter.pos != null) {
+      conditions.push('pos = ?')
+      params.push(filter.pos)
+    }
+    if (filter.ref != null && filter.ref !== '') {
+      conditions.push('ref = ?')
+      params.push(filter.ref)
+    }
+    if (filter.alt != null && filter.alt !== '') {
+      conditions.push('alt = ?')
+      params.push(filter.alt)
     }
 
     // Build ORDER BY clause
@@ -634,6 +717,30 @@ export class DatabaseService {
     if (filter.cadd_min !== undefined) {
       conditions.push('cadd >= ?')
       params.push(filter.cadd_min)
+    }
+
+    // General search query (hybrid: position, HGVS, or FTS5)
+    if (filter.search_query != null && filter.search_query !== '') {
+      const searchCondition = this.buildSearchCondition(filter.search_query, params)
+      conditions.push(searchCondition)
+    }
+
+    // Exact variant coordinate filters (for cohort → case navigation)
+    if (filter.chr != null && filter.chr !== '') {
+      conditions.push('chr = ?')
+      params.push(filter.chr)
+    }
+    if (filter.pos != null) {
+      conditions.push('pos = ?')
+      params.push(filter.pos)
+    }
+    if (filter.ref != null && filter.ref !== '') {
+      conditions.push('ref = ?')
+      params.push(filter.ref)
+    }
+    if (filter.alt != null && filter.alt !== '') {
+      conditions.push('alt = ?')
+      params.push(filter.alt)
     }
 
     const whereClause = conditions.join(' AND ')

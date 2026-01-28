@@ -2,6 +2,27 @@
   <div class="filter-toolbar-container">
     <!-- Main filter bar -->
     <v-toolbar density="default" flat class="filter-toolbar px-3 py-3">
+      <!-- GENERAL SEARCH GROUP -->
+      <div class="filter-section search-section">
+        <div class="section-label">
+          <v-icon size="small" class="mr-1">mdi-magnify</v-icon>
+          <span>Search</span>
+        </div>
+        <v-text-field
+          v-model="filters.searchQuery"
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+          placeholder="Gene, chr:pos, c./p. HGVS..."
+          prepend-inner-icon="mdi-magnify"
+          class="filter-input"
+          :class="{ 'filter-active': filters.searchQuery !== '' }"
+        />
+      </div>
+
+      <v-divider vertical class="mx-2 divider-subtle" />
+
       <!-- GENE SEARCH GROUP -->
       <div class="filter-section gene-section">
         <div class="section-label">
@@ -303,6 +324,7 @@ interface Props {
   filteredCount: number
   totalCount: number
   hasSort?: boolean
+  initialSearch?: string
 }
 
 const props = defineProps<Props>()
@@ -319,6 +341,7 @@ const emit = defineEmits<Emits>()
 
 // Filter state
 const filters = ref({
+  searchQuery: '',
   geneSymbol: '',
   consequences: [] as string[],
   funcs: [] as string[],
@@ -382,6 +405,7 @@ const hasActiveFilters = computed(() => {
     filters.value.minCadd >= 0
 
   return (
+    filters.value.searchQuery !== '' ||
     filters.value.geneSymbol !== '' ||
     selectedImpactPresets.value.length > 0 ||
     filters.value.consequences.length > 0 ||
@@ -392,6 +416,17 @@ const hasActiveFilters = computed(() => {
     props.hasSort === true
   )
 })
+
+// Watch initialSearch prop to pre-populate search from cohort navigation
+watch(
+  () => props.initialSearch,
+  (newSearch) => {
+    if (newSearch !== undefined && newSearch !== '') {
+      filters.value.searchQuery = newSearch
+    }
+  },
+  { immediate: true }
+)
 
 // Load filter options on mount
 onMounted(async () => {
@@ -440,6 +475,10 @@ const searchGeneSymbols = async (query: string) => {
 // Emit filter updates with debounce
 const emitFilters = () => {
   const variantFilter: Omit<VariantFilter, 'case_id'> = {}
+
+  if (filters.value.searchQuery !== '') {
+    variantFilter.search_query = filters.value.searchQuery
+  }
 
   if (filters.value.geneSymbol !== '') {
     variantFilter.gene_symbol = filters.value.geneSymbol
@@ -535,6 +574,7 @@ watch(
 
 // Clear all filters and reset sort
 const clearAllFilters = () => {
+  filters.value.searchQuery = ''
   filters.value.geneSymbol = ''
   filters.value.consequences = []
   filters.value.funcs = []
@@ -562,6 +602,10 @@ const exportToExcel = async () => {
   try {
     // Build current filter state
     const exportFilters: Omit<VariantFilter, 'case_id'> = {}
+
+    if (filters.value.searchQuery !== '') {
+      exportFilters.search_query = filters.value.searchQuery
+    }
 
     if (filters.value.geneSymbol !== '') {
       exportFilters.gene_symbol = filters.value.geneSymbol
@@ -654,6 +698,14 @@ const exportToExcel = async () => {
   border-radius: 8px;
   background: rgba(var(--v-theme-on-surface), 0.03);
   min-width: fit-content;
+}
+
+.search-section {
+  min-width: 200px;
+}
+
+.search-section .filter-input {
+  width: 100%;
 }
 
 .gene-section {

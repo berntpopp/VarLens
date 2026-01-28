@@ -31,7 +31,7 @@
     </v-navigation-drawer>
 
     <v-main>
-      <v-tabs v-model="activeTab" bg-color="surface-variant" density="compact" class="border-b">
+      <v-tabs v-model="activeTab" bg-color="secondary" density="compact" class="border-b">
         <v-tab value="case" prepend-icon="mdi-account">Case Analysis</v-tab>
         <v-tab value="cohort" prepend-icon="mdi-account-group">Cohort Analysis</v-tab>
       </v-tabs>
@@ -50,6 +50,7 @@
               :filtered-count="filteredCount"
               :total-count="totalCount"
               :has-sort="hasSort"
+              :initial-search="initialSearch"
               @update:filters="handleFiltersUpdate"
               @reset-sort="handleResetSort"
             />
@@ -148,6 +149,7 @@ const currentFilters = ref<Omit<VariantFilter, 'case_id'>>({})
 const filteredCount = ref(0)
 const totalCount = ref(0)
 const hasSort = ref(false)
+const initialSearch = ref<string | undefined>(undefined)
 
 const handleImportClick = (): void => {
   importDialogRef.value?.show()
@@ -213,6 +215,10 @@ const handleCaseDeleted = (caseId: number): void => {
 
 const handleFiltersUpdate = (filters: Omit<VariantFilter, 'case_id'>): void => {
   currentFilters.value = filters
+  // Clear initialSearch once the search filter has been applied (prevent re-applying on re-render)
+  if (initialSearch.value !== undefined && filters.search_query != null) {
+    initialSearch.value = undefined
+  }
 }
 
 const handleResetSort = (): void => {
@@ -235,12 +241,29 @@ const handleNavigateToCase = async (payload: {
   pos: number
   ref: string
   alt: string
+  geneSymbol: string | null
+  cdna: string | null
 }): Promise<void> => {
   // Guard for browser dev mode (no preload)
   // eslint-disable-next-line no-undef
   if (typeof window.api === 'undefined') {
     return
   }
+
+  // Build a human-readable search from gene symbol and/or cDNA notation
+  // e.g. "BRCA1 AND c.4308T>C" or just "BRCA1" or just "c.4308T>C"
+  const parts: string[] = []
+  if (payload.geneSymbol != null && payload.geneSymbol !== '') {
+    parts.push(payload.geneSymbol)
+  }
+  if (payload.cdna != null && payload.cdna !== '') {
+    parts.push(payload.cdna)
+  }
+  const variantSearch = parts.length > 0 ? parts.join(' AND ') : undefined
+
+  // Set the initial search BEFORE switching case (so the watch on selectedCaseId
+  // clears filters but initialSearch survives via the immediate watcher in FilterToolbar)
+  initialSearch.value = variantSearch
 
   // Switch to case tab
   activeTab.value = 'case'
@@ -262,7 +285,7 @@ const handleNavigateToCase = async (payload: {
   }
 }
 
-// Clear filters and sort on case change
+// Clear filters and sort on case change (initialSearch survives for cohort navigation)
 watch(selectedCaseId, () => {
   currentFilters.value = {}
   hasSort.value = false

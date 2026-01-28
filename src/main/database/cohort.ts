@@ -86,43 +86,17 @@ export class CohortService {
 
     if (params.search_term !== undefined && params.search_term !== '') {
       const term = params.search_term.trim()
+      const hasBooleanOps = /\b(AND|OR|NOT)\b/.test(term)
 
-      // Pattern detection for search strategy
-      const geneSymbolPattern = /^[A-Z][A-Z0-9]+$/i
-      const genomicPosPattern = /^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i
-      const hgvsPattern = /^[cp]\./
-
-      if (geneSymbolPattern.test(term)) {
-        // Gene symbol search via FTS5
-        // Escape FTS5 special characters by wrapping in double quotes
-        let ftsQuery = term
-        if (term.includes('-') || term.includes('*') || term.includes('"')) {
-          // Escape internal quotes and wrap in quotes
-          ftsQuery = `"${term.replace(/"/g, '""')}"`
-        }
-        // Append * for prefix matching
-        ftsQuery = `${ftsQuery}*`
-        whereConditions.push('id IN (SELECT rowid FROM variants_fts WHERE gene_symbol MATCH ?)')
-        params_array.push(ftsQuery)
-      } else if (genomicPosPattern.test(term)) {
-        // Genomic position search (chr:pos)
-        const match = term.match(genomicPosPattern)
-        if (match !== null) {
-          const chr = match[1] // Already normalized (no 'chr' prefix)
-          const pos = parseInt(match[2], 10)
-          whereConditions.push('chr = ? AND pos = ?')
-          params_array.push(chr, pos)
-        }
-      } else if (hgvsPattern.test(term)) {
-        // HGVS notation search
-        const searchPattern = `%${term}%`
-        whereConditions.push('(cdna LIKE ? OR aa_change LIKE ?)')
-        params_array.push(searchPattern, searchPattern)
+      if (!hasBooleanOps) {
+        // Single-term search — detect type and use best strategy
+        const singleCondition = this.buildSingleTermCondition(term, params_array)
+        whereConditions.push(singleCondition)
       } else {
-        // Fallback: broad LIKE search
-        const searchPattern = `%${term}%`
-        whereConditions.push('(gene_symbol LIKE ? OR cdna LIKE ? OR aa_change LIKE ?)')
-        params_array.push(searchPattern, searchPattern, searchPattern)
+        // Multi-term boolean search — split on AND/OR/NOT, classify each token,
+        // build SQL-level boolean combining FTS5 and LIKE conditions
+        const sqlCondition = this.buildBooleanSearchCondition(term, params_array)
+        whereConditions.push(sqlCondition)
       }
     }
 
@@ -135,22 +109,34 @@ export class CohortService {
       orderByClause = `ORDER BY ${sortBy} ${direction}, pos ASC`
     }
 
-    // Main aggregation query
+    // Main aggregation query — uses CTE to deduplicate per case before counting
     const sql = `
+      WITH deduped AS (
+        SELECT
+          chr, pos, ref, alt, case_id,
+          MAX(gene_symbol) as gene_symbol,
+          MAX(cdna) as cdna,
+          MAX(aa_change) as aa_change,
+          MAX(gt_num) as gt_num
+        FROM variants
+        ${whereClause}
+        GROUP BY chr, pos, ref, alt, case_id
+      )
       SELECT
         chr,
         pos,
         ref,
         alt,
         MAX(gene_symbol) as gene_symbol,
-        COUNT(DISTINCT case_id) as carrier_count,
+        MAX(cdna) as cdna,
+        MAX(aa_change) as aa_change,
+        COUNT(*) as carrier_count,
         ${totalCases} as total_cases,
-        CAST(COUNT(DISTINCT case_id) AS REAL) / ${totalCases} as cohort_frequency,
+        CAST(COUNT(*) AS REAL) / ${totalCases} as cohort_frequency,
         SUM(CASE WHEN gt_num IN ('0/1', '1/0', '0|1', '1|0') THEN 1 ELSE 0 END) as het_count,
         SUM(CASE WHEN gt_num IN ('1/1', '1|1') THEN 1 ELSE 0 END) as hom_count,
         chr || ':' || pos || ':' || ref || ':' || alt as variant_key
-      FROM variants
-      ${whereClause}
+      FROM deduped
       GROUP BY chr, pos, ref, alt
       ${orderByClause}
       LIMIT ? OFFSET ?
@@ -178,6 +164,63 @@ export class CohortService {
       data: results,
       total_count: totalCount
     }
+  }
+
+  /**
+   * Build a SQL condition for a single search token.
+   * Detects genomic position, HGVS, or gene/text and returns the appropriate WHERE fragment.
+   */
+  private buildSingleTermCondition(token: string, params_array: (string | number)[]): string {
+    const genomicPosPattern = /^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i
+    const hgvsPattern = /^[cp]\./
+
+    if (genomicPosPattern.test(token)) {
+      const match = token.match(genomicPosPattern)
+      if (match !== null) {
+        params_array.push(match[1], parseInt(match[2], 10))
+        return '(chr = ? AND pos = ?)'
+      }
+    }
+
+    if (hgvsPattern.test(token)) {
+      const searchPattern = `%${token}%`
+      params_array.push(searchPattern, searchPattern)
+      return '(cdna LIKE ? OR aa_change LIKE ?)'
+    }
+
+    // Default: FTS5 for gene symbol / consequence / general text
+    const ftsQuery = `"${token.replace(/"/g, '""')}"*`
+    params_array.push(ftsQuery)
+    return 'id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ?)'
+  }
+
+  /**
+   * Build a SQL boolean expression from a search string containing AND/OR/NOT.
+   * Each token is classified independently (FTS5 for genes, LIKE for HGVS, etc.)
+   * and combined with SQL AND/OR/NOT at the WHERE level.
+   */
+  private buildBooleanSearchCondition(term: string, params_array: (string | number)[]): string {
+    // Split preserving operators as separate tokens
+    const parts = term
+      .split(/\b(AND|OR|NOT)\b/)
+      .map((p) => p.trim())
+      .filter((p) => p !== '')
+
+    const sqlParts: string[] = []
+    for (const part of parts) {
+      if (part === 'AND') {
+        sqlParts.push('AND')
+      } else if (part === 'OR') {
+        sqlParts.push('OR')
+      } else if (part === 'NOT') {
+        sqlParts.push('AND NOT')
+      } else {
+        // Classify and build condition for this token
+        sqlParts.push(this.buildSingleTermCondition(part, params_array))
+      }
+    }
+
+    return `(${sqlParts.join(' ')})`
   }
 
   /**
@@ -242,10 +285,11 @@ export class CohortService {
       SELECT
         v.case_id,
         c.name as case_name,
-        v.gt_num
+        MAX(v.gt_num) as gt_num
       FROM variants v
       JOIN cases c ON v.case_id = c.id
       WHERE v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?
+      GROUP BY v.case_id, c.name
       ORDER BY c.name
     `
 

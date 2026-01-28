@@ -18,6 +18,10 @@ export interface CohortVariant {
   alt: string
   /** Gene symbol (nullable) */
   gene_symbol: string | null
+  /** cDNA HGVS notation (nullable) */
+  cdna: string | null
+  /** Protein change HGVS notation (nullable) */
+  aa_change: string | null
   /** Number of cases carrying this variant */
   carrier_count: number
   /** Total number of cases in database */

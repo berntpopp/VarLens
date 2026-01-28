@@ -93,6 +93,14 @@ export interface VariantFilter {
   cadd_min?: number
   /** FTS5 full-text search query */
   search_query?: string
+  /** Exact chromosome match (for variant navigation) */
+  chr?: string
+  /** Exact position match (for variant navigation) */
+  pos?: number
+  /** Exact ref allele match (for variant navigation) */
+  ref?: string
+  /** Exact alt allele match (for variant navigation) */
+  alt?: string
 }
 
 /**
