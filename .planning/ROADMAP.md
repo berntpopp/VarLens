@@ -140,25 +140,27 @@ Plans:
 - [ ] 22-03-PLAN.md — UI Integration: CaseMetadataCard, HpoTermSelector, CaseList enhancement
 
 ### Phase 23: Side Panel UI
-**Goal**: Variant details side panel displays all database annotations, comments, ACMG classification, VEP enrichment, and external links with edit capabilities.
+**Goal**: Variant details side panel displays all database annotations, comments, ACMG classification, and external links with edit capabilities.
 
-**Depends on**: Phase 20 (annotation backend), Phase 21 (API layer)
+**Depends on**: Phase 20 (annotation backend)
 
 **Requirements**: PANEL-01, PANEL-02, PANEL-05, PANEL-06, ANNOT-03, ANNOT-04, ANNOT-07, INFRA-05
 
 **Success Criteria** (what must be TRUE):
   1. User can click a variant row to open a details side panel (right drawer, persistent during navigation)
-  2. Side panel displays all annotation scores from database (CADD, REVEL, SpliceAI, gnomAD AF, etc.)
-  3. Side panel shows VEP API enrichment data with loading skeleton while request is in flight
-  4. Side panel provides external link buttons to PubTator, LitVar, UCSC Genome Browser, Decipher, and Franklin (with shell.openExternal allowlist updated)
-  5. Side panel includes copy-to-clipboard buttons for HGVS notation, chr:pos:ref:alt, and rsID
-  6. User can edit and delete comments directly from side panel with immediate UI update
-  7. ACMG classification displays with color-coded badge and is editable via dropdown
+  2. Side panel displays all annotation scores from database (CADD, gnomAD AF)
+  3. Side panel provides external link buttons to PubTator, LitVar, UCSC Genome Browser, Decipher, ClinGen, and Ensembl (with shell.openExternal allowlist updated)
+  4. Side panel includes copy-to-clipboard buttons for HGVS notation, chr:pos:ref:alt, and genomic position
+  5. User can edit and delete comments directly from side panel with inline editing and immediate UI update
+  6. ACMG classification displays with color-coded badge and is editable via dropdown
+  7. Panel width is resizable and preference persists across sessions
 
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 23-01: TBD
+- [ ] 23-01-PLAN.md — Panel infrastructure: resizable drawer, close behaviors, row click integration
+- [ ] 23-02-PLAN.md — Content sections: variant identity, score chips, external links, copy-to-clipboard
+- [ ] 23-03-PLAN.md — Comments editing, ACMG editing, shell domain allowlist
 
 ### Phase 24: Custom Tags + HPO Autocomplete
 **Goal**: Users can create custom tags with colors, assign to variants, filter by tags, and search HPO terms with autocomplete.
@@ -191,8 +193,8 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | 20. Annotation Core | 4/4 | ✓ Complete | 2026-01-28 |
 | 21. API Service Layer | 0/3 | Ready | - |
 | 22. Case Metadata | 0/3 | Ready | - |
-| 23. Side Panel UI | 0/TBD | Not started | - |
+| 23. Side Panel UI | 0/3 | Planned | - |
 | 24. Custom Tags + HPO Autocomplete | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-01-28 — Phase 22 plans created*
+*Last updated: 2026-01-29 — Phase 23 plans created*
