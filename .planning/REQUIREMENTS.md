@@ -104,52 +104,60 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ANNOT-01 | Phase 19-20 | Pending |
-| ANNOT-02 | Phase 19-20 | Pending |
-| ANNOT-03 | Phase 19-20 | Pending |
-| ANNOT-04 | Phase 19-20 | Pending |
-| ANNOT-05 | Phase 19-20 | Pending |
-| ANNOT-06 | Phase 19-20 | Pending |
-| ANNOT-07 | Phase 19-20 | Pending |
-| ANNOT-08 | Phase 19-20 | Pending |
-| ANNOT-09 | Phase 19-20 | Pending |
-| ANNOT-10 | Phase 19-20 | Pending |
-| ANNOT-11 | Phase 19-20 | Pending |
-| ANNOT-12 | Phase 19-20 | Pending |
-| ANNOT-13 | Phase 19-20 | Pending |
-| PANEL-01 | Phase 19-20 | Pending |
-| PANEL-02 | Phase 19-20 | Pending |
-| PANEL-03 | Phase 19-20 | Pending |
-| PANEL-04 | Phase 19-20 | Pending |
-| PANEL-05 | Phase 19-20 | Pending |
-| PANEL-06 | Phase 19-20 | Pending |
-| PANEL-07 | Phase 19-20 | Pending |
-| PANEL-08 | Phase 19-20 | Pending |
-| PANEL-09 | Phase 19-20 | Pending |
-| PANEL-10 | Phase 19-20 | Pending |
-| META-01 | Phase 19-20 | Pending |
-| META-02 | Phase 19-20 | Pending |
-| META-03 | Phase 19-20 | Pending |
-| META-04 | Phase 19-20 | Pending |
-| META-05 | Phase 19-20 | Pending |
-| META-06 | Phase 19-20 | Pending |
-| META-07 | Phase 19-20 | Pending |
-| META-08 | Phase 19-20 | Pending |
-| META-09 | Phase 19-20 | Pending |
-| META-10 | Phase 19-20 | Pending |
-| META-11 | Phase 19-20 | Pending |
-| INFRA-01 | Phase 19-20 | Pending |
-| INFRA-02 | Phase 19-20 | Pending |
-| INFRA-03 | Phase 19-20 | Pending |
-| INFRA-04 | Phase 19-20 | Pending |
-| INFRA-05 | Phase 19-20 | Pending |
-| INFRA-06 | Phase 19-20 | Pending |
+| ANNOT-01 | Phase 20 | Pending |
+| ANNOT-02 | Phase 20 | Pending |
+| ANNOT-03 | Phase 20 | Pending |
+| ANNOT-04 | Phase 20 | Pending |
+| ANNOT-05 | Phase 20 | Pending |
+| ANNOT-06 | Phase 20 | Pending |
+| ANNOT-07 | Phase 20 | Pending |
+| ANNOT-08 | Phase 24 | Pending |
+| ANNOT-09 | Phase 24 | Pending |
+| ANNOT-10 | Phase 24 | Pending |
+| ANNOT-11 | Phase 24 | Pending |
+| ANNOT-12 | Phase 20 | Pending |
+| ANNOT-13 | Phase 20 | Pending |
+| PANEL-01 | Phase 23 | Pending |
+| PANEL-02 | Phase 23 | Pending |
+| PANEL-03 | Phase 21 | Pending |
+| PANEL-04 | Phase 21 | Pending |
+| PANEL-05 | Phase 23 | Pending |
+| PANEL-06 | Phase 23 | Pending |
+| PANEL-07 | Phase 21 | Pending |
+| PANEL-08 | Phase 21 | Pending |
+| PANEL-09 | Phase 21 | Pending |
+| PANEL-10 | Phase 21 | Pending |
+| META-01 | Phase 22 | Pending |
+| META-02 | Phase 22 | Pending |
+| META-03 | Phase 22 | Pending |
+| META-04 | Phase 22 | Pending |
+| META-05 | Phase 22 | Pending |
+| META-06 | Phase 24 | Pending |
+| META-07 | Phase 24 | Pending |
+| META-08 | Phase 22 | Pending |
+| META-09 | Phase 22 | Pending |
+| META-10 | Phase 21 | Pending |
+| META-11 | Phase 22 | Pending |
+| INFRA-01 | Phase 19 | Pending |
+| INFRA-02 | Phase 19 | Pending |
+| INFRA-03 | Phase 21 | Pending |
+| INFRA-04 | Phase 21 | Pending |
+| INFRA-05 | Phase 23 | Pending |
+| INFRA-06 | Phase 19 | Pending |
 
 **Coverage:**
 - v0.4.0 requirements: 40 total
-- Mapped to phases: 0 (awaiting roadmap)
-- Unmapped: 40 ⚠️
+- Mapped to phases: 40/40 (100%)
+- Unmapped: 0
+
+**Requirement Distribution:**
+- Phase 19 (Database Foundation): 3 requirements (INFRA-01, INFRA-02, INFRA-06)
+- Phase 20 (Annotation Core): 9 requirements (ANNOT-01 to ANNOT-07, ANNOT-12, ANNOT-13)
+- Phase 21 (API Service Layer): 11 requirements (PANEL-03, PANEL-04, PANEL-07, PANEL-08, PANEL-09, PANEL-10, META-10, INFRA-03, INFRA-04)
+- Phase 22 (Case Metadata): 8 requirements (META-01 to META-05, META-08, META-09, META-11)
+- Phase 23 (Side Panel UI): 7 requirements (PANEL-01, PANEL-02, PANEL-05, PANEL-06, ANNOT-03, ANNOT-04, ANNOT-07, INFRA-05)
+- Phase 24 (Custom Tags + HPO Autocomplete): 6 requirements (ANNOT-08 to ANNOT-11, META-06, META-07)
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-28 after initial definition*
+*Last updated: 2026-01-28 after roadmap creation*
