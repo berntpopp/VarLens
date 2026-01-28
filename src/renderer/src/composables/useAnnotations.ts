@@ -73,7 +73,7 @@ export function useAnnotations() {
     const key = variantKey(chr, pos, ref, alt)
 
     // Skip if already cached or loading
-    if (annotationCache.value.has(key) || loadingStates.value.get(key)) {
+    if (annotationCache.value.has(key) || loadingStates.value.get(key) === true) {
       return
     }
 

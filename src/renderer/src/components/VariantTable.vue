@@ -14,6 +14,40 @@
       class="elevation-1"
       @update:options="loadVariants"
     >
+      <!-- Star toggle column -->
+      <template #[`item.starred`]="{ item }">
+        <v-icon
+          :icon="
+            isStarred(item.chr, item.pos, item.ref, item.alt) ? 'mdi-star' : 'mdi-star-outline'
+          "
+          :color="isStarred(item.chr, item.pos, item.ref, item.alt) ? 'amber' : 'grey-lighten-1'"
+          size="default"
+          class="cursor-pointer"
+          @click.stop="handleStarToggle(item)"
+        />
+      </template>
+
+      <!-- ACMG classification column -->
+      <template #[`item.acmg`]="{ item }">
+        <v-tooltip
+          v-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
+          location="top"
+        >
+          <template #activator="{ props: tooltipProps }">
+            <v-chip
+              v-bind="tooltipProps"
+              :color="ACMG_COLORS[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]"
+              size="x-small"
+              label
+            >
+              {{ ACMG_ABBREV[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!] }}
+            </v-chip>
+          </template>
+          {{ getAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}
+        </v-tooltip>
+        <span v-else class="text-grey-lighten-2">--</span>
+      </template>
+
       <!-- Chromosome with dynamic link from store -->
       <template #[`item.chr`]="{ item, value }">
         <span
@@ -230,6 +264,7 @@ import type {
 } from '../../../shared/types/api'
 import { useExternalLinksStore, type ExternalLinkConfig } from '../stores/externalLinksStore'
 import { resolveUrlTemplate, buildOmimUrl, type VariantLinkData } from '../utils/externalLinks'
+import { useAnnotations, ACMG_COLORS, ACMG_ABBREV } from '../composables/useAnnotations'
 
 interface Props {
   caseId: number
@@ -245,6 +280,10 @@ const emit = defineEmits<{
 
 // Initialize external links store
 const linksStore = useExternalLinksStore()
+
+// Initialize annotations composable
+const { isStarred, getAcmgClassification, loadAnnotationsBatch, toggleGlobalStar, clearCache } =
+  useAnnotations()
 
 // Table state - DO NOT mutate these in loadVariants handler (infinite loop)
 const variants = ref<Variant[]>([])
@@ -270,6 +309,8 @@ const snackbar = ref({
 // Dynamic headers with virtual link columns from store
 const headers = computed(() => {
   const baseHeaders = [
+    { title: '', key: 'starred', sortable: false, width: '48px', align: 'center' as const },
+    { title: 'ACMG', key: 'acmg', sortable: false, width: '64px', align: 'center' as const },
     { title: 'Chr', key: 'chr', sortable: true },
     { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
     { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
@@ -356,6 +397,11 @@ const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> 
   }
 }
 
+// Handle star toggle
+const handleStarToggle = async (item: Variant): Promise<void> => {
+  await toggleGlobalStar(item.chr, item.pos, item.ref, item.alt)
+}
+
 // Load variants from backend
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const loadVariants = async (_options?: any): Promise<void> => {
@@ -426,6 +472,9 @@ watch(
       cursorCache.value.clear()
       page.value = 1
 
+      // Clear annotation cache on case switch
+      clearCache()
+
       // Fetch unfiltered count (query with empty filters)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
       const result = await (window as any).api.variants.query(newCaseId, {}, undefined, 1, [])
@@ -457,6 +506,17 @@ watch(
     await loadVariants()
   },
   { deep: true }
+)
+
+// Load annotations when variants change
+watch(
+  variants,
+  async (newVariants) => {
+    if (newVariants.length > 0 && props.caseId !== undefined && props.caseId !== 0) {
+      await loadAnnotationsBatch(props.caseId, newVariants)
+    }
+  },
+  { immediate: true }
 )
 
 // Formatting functions
@@ -532,5 +592,9 @@ defineExpose({ resetSort })
   opacity: 0.6;
   margin-left: 2px;
   vertical-align: middle;
+}
+
+.cursor-pointer {
+  cursor: pointer;
 }
 </style>
