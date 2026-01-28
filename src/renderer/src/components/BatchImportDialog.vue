@@ -366,22 +366,28 @@ const startImport = async (filePaths: string[], strategy: DuplicateChoice): Prom
  * Extract ZIP and show preview of files
  */
 const extractAndPreview = async (zipFilePath: string, password?: string): Promise<void> => {
-  // eslint-disable-next-line no-undef
-  const result = await window.api.batchImport.extractZip(zipFilePath, password)
-  extractedFilePaths.value = result.files
-  zipExtractionErrors.value = result.errors
+  try {
+    // eslint-disable-next-line no-undef
+    const result = await window.api.batchImport.extractZip(zipFilePath, password)
+    extractedFilePaths.value = result.files
+    zipExtractionErrors.value = result.errors
 
-  if (result.files.length === 0) {
-    zipErrorMessage.value = 'No importable files found in archive.'
-    if (result.errors.length > 0) {
-      zipErrorMessage.value += ' Errors: ' + result.errors.join('; ')
+    if (result.files.length === 0) {
+      zipErrorMessage.value = 'No importable files found in archive.'
+      if (result.errors.length > 0) {
+        zipErrorMessage.value += ' Errors: ' + result.errors.join('; ')
+      }
+      // eslint-disable-next-line no-undef
+      await window.api.batchImport.cleanupZipTemp()
+      return
     }
+
+    phase.value = 'zip-preview'
+  } catch (error) {
+    zipErrorMessage.value = error instanceof Error ? error.message : 'Failed to extract archive'
     // eslint-disable-next-line no-undef
     await window.api.batchImport.cleanupZipTemp()
-    return
   }
-
-  phase.value = 'zip-preview'
 }
 
 /**

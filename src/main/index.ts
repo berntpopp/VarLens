@@ -8,11 +8,12 @@ import { initDatabaseManager, closeDatabaseManager } from './database'
 // Global error handlers — surfaces crashes that would otherwise be silent on Windows
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error)
+  // Show error dialog but do NOT exit — let the app continue for non-fatal errors
+  // (e.g., zlib errors from ZIP extraction should not kill the entire app)
   dialog.showErrorBox(
     'VarLens — Unexpected Error',
     `${error.name}: ${error.message}\n\n${error.stack ?? ''}`
   )
-  app.exit(1)
 })
 
 process.on('unhandledRejection', (reason) => {
