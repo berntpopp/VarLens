@@ -15,7 +15,6 @@ interface CacheEntry {
 }
 
 export class ApiCache {
-  private db: Database.Database
   private getStmt: Database.Statement
   private setStmt: Database.Statement
   private deleteByPrefixStmt: Database.Statement
@@ -23,8 +22,6 @@ export class ApiCache {
   private getCacheStatsStmt: Database.Statement
 
   constructor(db: Database.Database) {
-    this.db = db
-
     // Prepare statements for performance - avoid reparsing SQL on each call
     this.getStmt = db.prepare(`
       SELECT response_data, created_at
@@ -70,7 +67,7 @@ export class ApiCache {
 
     return {
       data: result.response_data,
-      createdAt: result.created_at,
+      createdAt: result.created_at
     }
   }
 
@@ -128,9 +125,9 @@ export class ApiCache {
     }
 
     return {
-      vepCount: result.vep_count || 0,
-      hpoCount: result.hpo_count || 0,
-      totalBytes: result.total_bytes || 0,
+      vepCount: result.vep_count ?? 0,
+      hpoCount: result.hpo_count ?? 0,
+      totalBytes: result.total_bytes ?? 0
     }
   }
 }

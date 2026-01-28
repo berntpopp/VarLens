@@ -3,14 +3,10 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import {
-  VepResponseSchema,
-  VepResponseItemSchema,
-  VepTranscriptConsequenceSchema,
-} from '../../../../src/main/services/api/schemas/vep-response'
+import { VepResponseSchema } from '../../../../src/main/services/api/schemas/vep-response'
 import {
   HpoAutocompleteResponseSchema,
-  HpoTermTupleSchema,
+  HpoTermTupleSchema
 } from '../../../../src/main/services/api/schemas/hpo-response'
 
 describe('VEP Response Schemas', () => {
@@ -26,11 +22,11 @@ describe('VEP Response Schemas', () => {
             impact: 'MODERATE' as const,
             cadd_phred: 25.3,
             revel_score: 0.85,
-            gnomad_af: 0.0001,
-          },
+            gnomad_af: 0.0001
+          }
         ],
-        most_severe_consequence: 'missense_variant',
-      },
+        most_severe_consequence: 'missense_variant'
+      }
     ]
 
     const result = VepResponseSchema.parse(sampleResponse)
@@ -44,10 +40,10 @@ describe('VEP Response Schemas', () => {
   it('should parse VEP response with missing optional fields', () => {
     const minimalResponse = [
       {
-        input: '1:200:G:C',
+        input: '1:200:G:C'
         // No transcript_consequences - intergenic variant
         // No most_severe_consequence
-      },
+      }
     ]
 
     const result = VepResponseSchema.parse(minimalResponse)
@@ -70,10 +66,10 @@ describe('VEP Response Schemas', () => {
             spliceai_pred_ds_ag: 0.95,
             spliceai_pred_ds_al: 0.02,
             spliceai_pred_ds_dg: 0.01,
-            spliceai_pred_ds_dl: 0.88,
-          },
-        ],
-      },
+            spliceai_pred_ds_dl: 0.88
+          }
+        ]
+      }
     ]
 
     const result = VepResponseSchema.parse(spliceAIResponse)
@@ -92,10 +88,10 @@ describe('VEP Response Schemas', () => {
             gene_symbol: 'BRCA2',
             consequence_terms: ['missense_variant'],
             mane_select: 'ENST00000456789.1',
-            canonical: 1,
-          },
-        ],
-      },
+            canonical: 1
+          }
+        ]
+      }
     ]
 
     const result = VepResponseSchema.parse(maneResponse)
@@ -108,8 +104,8 @@ describe('VEP Response Schemas', () => {
     const malformedResponse = [
       {
         // Missing required 'input' field
-        transcript_consequences: [],
-      },
+        transcript_consequences: []
+      }
     ]
 
     expect(() => VepResponseSchema.parse(malformedResponse)).toThrow()
@@ -123,10 +119,10 @@ describe('VEP Response Schemas', () => {
           {
             transcript_id: 'ENST00000123456',
             consequence_terms: ['missense_variant'],
-            impact: 'INVALID', // Not in enum
-          },
-        ],
-      },
+            impact: 'INVALID' // Not in enum
+          }
+        ]
+      }
     ]
 
     expect(() => VepResponseSchema.parse(invalidImpact)).toThrow()
@@ -142,8 +138,8 @@ describe('HPO Autocomplete Response Schema', () => {
       [
         ['HP:0001250', 'Seizure'],
         ['HP:0002104', 'Apnea'],
-        ['HP:0012469', 'Infantile spasms'],
-      ], // terms
+        ['HP:0012469', 'Infantile spasms']
+      ] // terms
     ]
 
     const result = HpoAutocompleteResponseSchema.parse(sampleResponse)
@@ -159,7 +155,7 @@ describe('HPO Autocomplete Response Schema', () => {
       0, // no results
       [], // empty id array
       null,
-      [], // empty terms array
+      [] // empty terms array
     ]
 
     const result = HpoAutocompleteResponseSchema.parse(emptyResponse)
@@ -172,7 +168,7 @@ describe('HPO Autocomplete Response Schema', () => {
     const wrongStructure = {
       // Object instead of tuple
       count: 3,
-      terms: [['HP:0001250', 'Seizure']],
+      terms: [['HP:0001250', 'Seizure']]
     }
 
     expect(() => HpoAutocompleteResponseSchema.parse(wrongStructure)).toThrow()
@@ -184,8 +180,8 @@ describe('HPO Autocomplete Response Schema', () => {
       ['HP:0001250'],
       null,
       [
-        ['HP:0001250'], // Missing name (should be 2-element tuple)
-      ],
+        ['HP:0001250'] // Missing name (should be 2-element tuple)
+      ]
     ]
 
     expect(() => HpoAutocompleteResponseSchema.parse(malformedTerms)).toThrow()

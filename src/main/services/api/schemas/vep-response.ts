@@ -61,7 +61,7 @@ export const VepTranscriptConsequenceSchema = z.object({
   /** gnomAD exomes allele frequency */
   gnomad_exomes_af: z.number().optional(),
   /** gnomAD genomes allele frequency */
-  gnomad_genomes_af: z.number().optional(),
+  gnomad_genomes_af: z.number().optional()
 })
 
 export type VepTranscriptConsequence = z.infer<typeof VepTranscriptConsequenceSchema>
@@ -74,9 +74,9 @@ export const VepColocatedVariantSchema = z.object({
   /** rsID from dbSNP (e.g., rs123456) */
   id: z.string().optional(),
   /** Allele frequencies from various sources */
-  frequencies: z.record(z.number()).optional(),
+  frequencies: z.record(z.string(), z.number()).optional(),
   /** ClinVar clinical significance */
-  clin_sig: z.array(z.string()).optional(),
+  clin_sig: z.array(z.string()).optional()
 })
 
 export type VepColocatedVariant = z.infer<typeof VepColocatedVariantSchema>
@@ -95,7 +95,7 @@ export const VepResponseItemSchema = z.object({
   /** Array of colocated variants (dbSNP, ClinVar, etc.) */
   colocated_variants: z.array(VepColocatedVariantSchema).optional(),
   /** Most severe consequence term for this variant */
-  most_severe_consequence: z.string().optional(),
+  most_severe_consequence: z.string().optional()
 })
 
 export type VepResponseItem = z.infer<typeof VepResponseItemSchema>
