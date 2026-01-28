@@ -142,6 +142,126 @@ export function useAnnotations() {
     await Promise.all(promises)
   }
 
+  // Get global comment from cache
+  function getGlobalComment(chr: string, pos: number, ref: string, alt: string): string | null {
+    const cached = getAnnotations(chr, pos, ref, alt)
+    return cached?.global?.global_comment ?? null
+  }
+
+  // Get per-case comment from cache
+  function getPerCaseComment(chr: string, pos: number, ref: string, alt: string): string | null {
+    const cached = getAnnotations(chr, pos, ref, alt)
+    return cached?.perCase?.per_case_comment ?? null
+  }
+
+  // Upsert global comment with optimistic update
+  async function upsertGlobalComment(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    comment: string | null
+  ): Promise<void> {
+    const key = variantKey(chr, pos, ref, alt)
+    const current = annotationCache.value.get(key)
+    const previousComment = current?.global?.global_comment ?? null
+
+    // Optimistic update
+    if (current) {
+      current.global = {
+        ...current.global,
+        global_comment: comment
+      } as VariantAnnotation
+    }
+
+    try {
+      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+        global_comment: comment
+      })
+      // Update cache with server response
+      annotationCache.value.set(key, {
+        global: updated,
+        perCase: current?.perCase ?? null
+      })
+    } catch (error) {
+      console.error('Failed to upsert global comment:', error)
+      // Revert optimistic update
+      if (current) {
+        current.global = {
+          ...current.global,
+          global_comment: previousComment
+        } as VariantAnnotation
+      }
+    }
+  }
+
+  // Upsert per-case comment with optimistic update
+  async function upsertPerCaseComment(
+    caseId: number,
+    variantId: number,
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    comment: string | null
+  ): Promise<void> {
+    const key = variantKey(chr, pos, ref, alt)
+    const current = annotationCache.value.get(key)
+    const previousComment = current?.perCase?.per_case_comment ?? null
+
+    // Optimistic update
+    if (current) {
+      current.perCase = {
+        ...current.perCase,
+        per_case_comment: comment,
+        case_id: caseId,
+        variant_id: variantId
+      } as CaseVariantAnnotation
+    }
+
+    try {
+      const updated = await window.api.annotations.upsertPerCase(caseId, variantId, {
+        per_case_comment: comment
+      })
+      // Update cache with server response
+      annotationCache.value.set(key, {
+        global: current?.global ?? null,
+        perCase: updated
+      })
+    } catch (error) {
+      console.error('Failed to upsert per-case comment:', error)
+      // Revert optimistic update
+      if (current) {
+        current.perCase = {
+          ...current.perCase,
+          per_case_comment: previousComment
+        } as CaseVariantAnnotation
+      }
+    }
+  }
+
+  // Delete global comment (sets to null, preserves other fields)
+  async function deleteGlobalComment(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ): Promise<void> {
+    await upsertGlobalComment(chr, pos, ref, alt, null)
+  }
+
+  // Delete per-case comment (sets to null, preserves other fields)
+  async function deletePerCaseComment(
+    caseId: number,
+    variantId: number,
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ): Promise<void> {
+    await upsertPerCaseComment(caseId, variantId, chr, pos, ref, alt, null)
+  }
+
   // Clear cache (call on case switch)
   function clearCache(): void {
     annotationCache.value.clear()
@@ -156,7 +276,13 @@ export function useAnnotations() {
     loadAnnotations,
     loadAnnotationsBatch,
     toggleGlobalStar,
-    clearCache
+    clearCache,
+    getGlobalComment,
+    getPerCaseComment,
+    upsertGlobalComment,
+    upsertPerCaseComment,
+    deleteGlobalComment,
+    deletePerCaseComment
   }
 }
 
