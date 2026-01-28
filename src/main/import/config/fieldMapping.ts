@@ -12,6 +12,7 @@ export const COLUMN_INDICES = {
   FUNC: 20,
   IMPACT: 21,
   GENE: 24,
+  OMIM: 25,
   TRANSCRIPT: 28,
   CDNA: 29,
   AA_CHANGE: 30,
@@ -53,6 +54,13 @@ export const FIELD_MAPPINGS: FieldMapping[] = [
     target: 'gene_symbol',
     isMultiValue: true,
     hasDictionary: true
+  },
+  {
+    source: 'OMIM',
+    sourceIndex: 25,
+    target: 'omim_mim_number',
+    isMultiValue: true,
+    hasDictionary: false
   },
   {
     source: 'Impact',

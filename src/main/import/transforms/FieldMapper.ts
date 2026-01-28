@@ -43,6 +43,13 @@ export class FieldMapper extends Transform {
           true,
           this.dictionaries.gene
         ) as string | null,
+        omim_mim_number: this.extractValue(
+          row,
+          COLUMN_INDICES.OMIM,
+          selectedTranscript,
+          false,
+          undefined
+        ) as string | null,
         consequence: this.extractValue(
           row,
           COLUMN_INDICES.IMPACT,

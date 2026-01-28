@@ -246,8 +246,8 @@ export class DatabaseService {
     this.getCase(caseId)
 
     const insert = this.stmt(`
-      INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, hpo_match, moi)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, omim_mim_number, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, hpo_match, moi)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     // Log first variant for debugging
@@ -255,7 +255,7 @@ export class DatabaseService {
       const v = variants[0]
       console.log('DEBUG: First variant keys:', Object.keys(v))
       console.log('DEBUG: First variant values:', JSON.stringify(v, null, 2))
-      console.log('DEBUG: Parameter count expected: 19')
+      console.log('DEBUG: Parameter count expected: 20')
       const params = [
         caseId,
         v.chr,
@@ -263,6 +263,7 @@ export class DatabaseService {
         v.ref,
         v.alt,
         v.gene_symbol,
+        v.omim_mim_number,
         v.consequence,
         v.gnomad_af,
         v.cadd,
@@ -293,6 +294,7 @@ export class DatabaseService {
           v.ref,
           v.alt,
           v.gene_symbol,
+          v.omim_mim_number,
           v.consequence,
           v.gnomad_af,
           v.cadd,
