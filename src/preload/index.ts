@@ -7,7 +7,9 @@ import type {
   BatchProgress,
   DuplicateChoice,
   DuplicateCheckResult,
-  CohortSearchParams
+  CohortSearchParams,
+  GlobalAnnotationUpdates,
+  PerCaseAnnotationUpdates
 } from '../shared/types'
 
 /**
@@ -127,6 +129,34 @@ const api = {
     getCarriers: (chr: string, pos: number, ref: string, alt: string) =>
       ipcRenderer.invoke('cohort:carriers', chr, pos, ref, alt),
     getGeneBurden: () => ipcRenderer.invoke('cohort:geneBurden')
+  },
+
+  annotations: {
+    getGlobal: (chr: string, pos: number, ref: string, alt: string) =>
+      ipcRenderer.invoke('annotations:getGlobal', chr, pos, ref, alt),
+
+    upsertGlobal: (
+      chr: string,
+      pos: number,
+      ref: string,
+      alt: string,
+      updates: GlobalAnnotationUpdates
+    ) => ipcRenderer.invoke('annotations:upsertGlobal', chr, pos, ref, alt, updates),
+
+    deleteGlobal: (chr: string, pos: number, ref: string, alt: string) =>
+      ipcRenderer.invoke('annotations:deleteGlobal', chr, pos, ref, alt),
+
+    getPerCase: (caseId: number, variantId: number) =>
+      ipcRenderer.invoke('annotations:getPerCase', caseId, variantId),
+
+    upsertPerCase: (caseId: number, variantId: number, updates: PerCaseAnnotationUpdates) =>
+      ipcRenderer.invoke('annotations:upsertPerCase', caseId, variantId, updates),
+
+    deletePerCase: (caseId: number, variantId: number) =>
+      ipcRenderer.invoke('annotations:deletePerCase', caseId, variantId),
+
+    getForVariant: (caseId: number, chr: string, pos: number, ref: string, alt: string) =>
+      ipcRenderer.invoke('annotations:getForVariant', caseId, chr, pos, ref, alt)
   }
 }
 

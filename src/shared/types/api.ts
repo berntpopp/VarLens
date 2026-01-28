@@ -5,7 +5,10 @@ import type {
   VariantFilter,
   PaginationCursor,
   PaginatedResult,
-  SortItem
+  SortItem,
+  VariantAnnotation,
+  CaseVariantAnnotation,
+  AcmgClassification
 } from '../../main/database/types'
 import type { ProgressUpdate, ImportResult } from '../../main/import/types'
 import type { SerializableError } from './errors'
@@ -182,6 +185,54 @@ export interface CohortAPI {
   getGeneBurden: () => Promise<GeneBurden[]>
 }
 
+// Annotation update types
+export interface GlobalAnnotationUpdates {
+  global_comment?: string | null
+  starred?: boolean
+  acmg_classification?: AcmgClassification | null
+  acmg_evidence?: string | null
+}
+
+export interface PerCaseAnnotationUpdates {
+  per_case_comment?: string | null
+}
+
+export interface VariantAnnotationsResult {
+  global: VariantAnnotation | null
+  perCase: CaseVariantAnnotation | null
+}
+
+export interface AnnotationsAPI {
+  getGlobal: (
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ) => Promise<VariantAnnotation | null>
+  upsertGlobal: (
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    updates: GlobalAnnotationUpdates
+  ) => Promise<VariantAnnotation>
+  deleteGlobal: (chr: string, pos: number, ref: string, alt: string) => Promise<void>
+  getPerCase: (caseId: number, variantId: number) => Promise<CaseVariantAnnotation | null>
+  upsertPerCase: (
+    caseId: number,
+    variantId: number,
+    updates: PerCaseAnnotationUpdates
+  ) => Promise<CaseVariantAnnotation>
+  deletePerCase: (caseId: number, variantId: number) => Promise<void>
+  getForVariant: (
+    caseId: number,
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ) => Promise<VariantAnnotationsResult>
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -192,4 +243,5 @@ export interface WindowAPI {
   database: DatabaseAPI
   batchImport: BatchImportAPI
   cohort: CohortAPI
+  annotations: AnnotationsAPI
 }
