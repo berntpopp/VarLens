@@ -19,6 +19,7 @@ import type {
   CohortCarrier,
   GeneBurden
 } from './cohort'
+import type { VepFetchResult, HpoSearchResult, CacheSizeInfo, CacheInfo } from './api-enrichment'
 
 // Re-export for convenience
 export type {
@@ -32,7 +33,11 @@ export type {
   ImportResult,
   CohortVariant,
   CohortSummary,
-  CohortSearchParams
+  CohortSearchParams,
+  VepFetchResult,
+  HpoSearchResult,
+  CacheSizeInfo,
+  CacheInfo
 }
 
 export interface CasesAPI {
@@ -236,6 +241,18 @@ export interface AnnotationsAPI {
   ) => Promise<VariantAnnotationsResult>
 }
 
+export interface VepAPI {
+  fetch: (chr: string, pos: number, ref: string, alt: string) => Promise<VepFetchResult>
+  cancel: () => Promise<void>
+  clearCache: () => Promise<{ success: boolean }>
+  getCacheStats: () => Promise<CacheSizeInfo>
+}
+
+export interface HpoAPI {
+  search: (query: string, maxResults?: number) => Promise<HpoSearchResult>
+  clearCache: () => Promise<{ success: boolean }>
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -247,4 +264,6 @@ export interface WindowAPI {
   batchImport: BatchImportAPI
   cohort: CohortAPI
   annotations: AnnotationsAPI
+  vep: VepAPI
+  hpo: HpoAPI
 }

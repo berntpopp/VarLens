@@ -157,6 +157,20 @@ const api = {
 
     getForVariant: (caseId: number, chr: string, pos: number, ref: string, alt: string) =>
       ipcRenderer.invoke('annotations:getForVariant', caseId, chr, pos, ref, alt)
+  },
+
+  vep: {
+    fetch: (chr: string, pos: number, ref: string, alt: string) =>
+      ipcRenderer.invoke('vep:fetch', chr, pos, ref, alt),
+    cancel: () => ipcRenderer.invoke('vep:cancel'),
+    clearCache: () => ipcRenderer.invoke('vep:clearCache'),
+    getCacheStats: () => ipcRenderer.invoke('vep:getCacheStats')
+  },
+
+  hpo: {
+    search: (query: string, maxResults?: number) =>
+      ipcRenderer.invoke('hpo:search', query, maxResults),
+    clearCache: () => ipcRenderer.invoke('hpo:clearCache')
   }
 }
 
