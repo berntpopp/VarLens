@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 19 of 24 (Database Foundation)
-Plan: Ready to plan
-Status: Not started
-Last activity: 2026-01-28 - v0.4.0 roadmap created
+Plan: 1 of 1 complete
+Status: Phase complete
+Last activity: 2026-01-28 - Completed 19-01-PLAN.md (v0.4.0 annotation schema)
 
-Progress: [████░░░░░░░░░░░░░░░░] 18/24 phases (75% milestone v0.3.0 complete, starting v0.4.0)
+Progress: [████░░░░░░░░░░░░░░░░] 19/24 phases (79% complete, v0.4.0 in progress)
 
 ## Milestone History
 
 - **v0.1 POC** - 8 phases, 17 plans - shipped 2026-01-27
 - **v0.2.0 UI Polish & Trust Signals** - 4 phases, 8 plans - shipped 2026-01-27
 - **v0.3.0 Cohort Analysis, Security & Import Enhancements** - 6 phases, 13 plans - shipped 2026-01-28
-- **v0.4.0 Variant Annotation & Case Metadata** - 6 phases (19-24), 0 plans complete - in progress
+- **v0.4.0 Variant Annotation & Case Metadata** - 6 phases (19-24), 1 plan complete - in progress
 
 ## Performance Metrics
 
@@ -30,16 +30,16 @@ Progress: [████░░░░░░░░░░░░░░░░] 18/24 p
 - Total execution time: ~2 days
 - Phases completed: 6 phases (13-18)
 
-**v0.4.0 Velocity (starting):**
-- Total plans completed: 0
-- Total execution time: 0 hours
+**v0.4.0 Velocity (in progress):**
+- Total plans completed: 1
+- Total execution time: 8.5 minutes
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
 
 | Phase | Plans | Status | Notes |
 |-------|-------|--------|-------|
-| 19. Database Foundation | TBD | Not started | Schema + migration |
+| 19. Database Foundation | 1/1 | Complete | Schema + PRAGMA user_version migrations |
 | 20. Annotation Core | TBD | Not started | IPC + CRUD |
 | 21. API Service Layer | TBD | Not started | VEP + HPO clients |
 | 22. Case Metadata | TBD | Not started | Status + cohorts + HPO |
@@ -61,6 +61,8 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Warm palette theme | #a09588 primary, #424242 secondary | All UI components |
 | URL template system | User-configurable external links | Extensible links |
 | DatabaseManager lifecycle | Open/close/switch with rollback safety | Database management |
+| PRAGMA user_version migrations | Version-tracked schema upgrades, no migrations table | v0.4.0+ schema evolution |
+| Separate global/per-case annotations | variant_annotations has no FK to variants | Annotations persist across cases |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -86,9 +88,9 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-28 - Roadmap creation
-Stopped at: v0.4.0 ROADMAP.md and STATE.md created, ready to plan Phase 19
+Last session: 2026-01-28 - Phase 19 Plan 01 execution
+Stopped at: Completed 19-01-PLAN.md (v0.4.0 annotation schema with migrations)
 Resume file: None
 
 ---
-*Next step: `/gsd:plan-phase 19` to create execution plan for Database Foundation*
+*Next step: `/gsd:plan-phase 20` to create execution plan for Annotation Storage*
