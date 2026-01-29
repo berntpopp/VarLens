@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 
 ## Current Position
 
-Phase: 21 of 24 (API Service Layer) → VERIFIED ✓
-Plan: 3 of 3 + post-phase UI polish
-Status: Phase verified and complete
-Last activity: 2026-01-29 - Added online/offline indicator to footer
+Phase: 22 of 24 (Case Metadata)
+Plan: 1 of 3
+Status: In progress
+Last activity: 2026-01-29 - Completed 22-01-PLAN.md (Case Metadata Backend)
 
 Progress: [████░░░░░░░░░░░░░░░░] 21/24 phases (87.5% complete, v0.4.0 in progress)
 
@@ -31,8 +31,8 @@ Progress: [████░░░░░░░░░░░░░░░░] 21/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 9
-- Total execution time: 64.9 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8)
+- Total plans completed: 10
+- Total execution time: 68 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -42,7 +42,7 @@ Progress: [████░░░░░░░░░░░░░░░░] 21/24 p
 | 19. Database Foundation | 2/2 | Complete | Schema + migrations + encrypted DB tests |
 | 20. Annotation Core | 4/4 + UAT | Complete | 01: Backend, 02: UI Display, 03: Mutation Methods, 04: ACMG/Comment UI + post-UAT: per-case stars/ACMG, global indicators, cohort mode |
 | 21. API Service Layer | 3/3 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status), 02: VEP API client (rate limiting, MANE Select), 03: HPO API client + IPC handlers |
-| 22. Case Metadata | TBD | Not started | Status + cohorts + HPO |
+| 22. Case Metadata | 1/3 | In progress | 01: Backend (DatabaseService + IPC + preload API) |
 | 23. Side Panel UI | TBD | Not started | Drawer + tabs + UI |
 | 24. Custom Tags + HPO | TBD | Not started | Tags + autocomplete |
 
@@ -94,6 +94,9 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Courtesy rate limiting for HPO | 200ms delay (5 req/sec) despite no documented limits | Good API citizenship (21-03) |
 | Min 2 chars for HPO search | Return empty array for queries < 2 characters | Prevents excessive API calls, matches autocomplete UX (21-03) |
 | navigator.onLine for renderer | Use browser API instead of IPC for network status in UI | Simpler, event-based updates, no IPC overhead (21 post-phase) |
+| Case metadata atomic upsert | Same COALESCE pattern as annotations for case_metadata updates | Consistent patterns, race-free partial updates (22-01) |
+| setCaseCohorts bulk replace | Delete all + insert new in transaction vs incremental diff | Simpler API, atomic cohort list replacement (22-01) |
+| HPO term label updates | Upsert updates hpo_label on conflict | Keeps labels current with ontology changes (22-01) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -119,9 +122,9 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 21 Plan 03
-Stopped at: Completed 21-03-PLAN.md - HPO API client and IPC layer
+Last session: 2026-01-29 - Phase 22 Plan 01
+Stopped at: Completed 22-01-PLAN.md - Case Metadata Backend
 Resume file: None
 
 ---
-*Next step: Phase 22 (Case Metadata)*
+*Next step: Phase 22-02 (Side Panel Container) or Phase 22-03 (Case Metadata UI)*
