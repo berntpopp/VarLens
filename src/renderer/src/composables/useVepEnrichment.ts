@@ -1,21 +1,48 @@
 /**
- * Composable for VEP enrichment data management
+ * Composable for variant enrichment data management
  *
- * Provides reactive VEP data state per variant with IPC-backed API calls.
- * Used by VariantDetailsPanel to fetch and display VEP enrichment data.
+ * Fetches data from multiple APIs in parallel:
+ * - Ensembl VEP (SIFT, PolyPhen, CADD, consequences, rsID)
+ * - myvariant.info (REVEL, AlphaMissense)
+ * - SpliceAI Lookup (SpliceAI delta scores)
+ *
+ * Used by VariantDetailsPanel to fetch and display enrichment data.
  */
 
 import { ref, computed } from 'vue'
-import type { VepFetchResult } from '../../../shared/types/api-enrichment'
+import type {
+  VepFetchResult,
+  MyVariantFetchResult,
+  SpliceAIFetchResult,
+  MyVariantScores,
+  SpliceAIScores
+} from '../../../shared/types/api-enrichment'
 import type {
   VepTranscriptConsequence,
   VepColocatedVariant
 } from '../../../main/services/api/schemas/vep-response'
 
 export function useVepEnrichment() {
+  // VEP data
   const vepData = ref<VepFetchResult | null>(null)
-  const isLoading = ref(false)
-  const error = ref<string | null>(null)
+  const vepLoading = ref(false)
+  const vepError = ref<string | null>(null)
+
+  // MyVariant data (REVEL, AlphaMissense)
+  const myvariantData = ref<MyVariantFetchResult | null>(null)
+  const myvariantLoading = ref(false)
+
+  // SpliceAI data
+  const spliceaiData = ref<SpliceAIFetchResult | null>(null)
+  const spliceaiLoading = ref(false)
+
+  // Combined loading state
+  const isLoading = computed(
+    () => vepLoading.value || myvariantLoading.value || spliceaiLoading.value
+  )
+
+  // Combined error
+  const error = computed(() => vepError.value)
 
   // Computed properties from vepData
   const isOffline = computed(() => {
@@ -31,7 +58,7 @@ export function useVepEnrichment() {
   const cachedAt = computed<Date | null>(() => {
     if (vepData.value === null || !vepData.value.success) return null
     if (vepData.value.cacheInfo.cachedAt === null) return null
-    return new Date(vepData.value.cacheInfo.cachedAt * 1000) // Unix timestamp to Date
+    return new Date(vepData.value.cacheInfo.cachedAt * 1000)
   })
 
   // Get preferred transcript with scores
@@ -54,39 +81,97 @@ export function useVepEnrichment() {
     return vepData.value.data[0].most_severe_consequence ?? null
   })
 
+  // MyVariant scores
+  const myvariantScores = computed<MyVariantScores | null>(() => {
+    if (myvariantData.value === null || !myvariantData.value.success) return null
+    return myvariantData.value.scores
+  })
+
+  // SpliceAI scores
+  const spliceaiScores = computed<SpliceAIScores | null>(() => {
+    if (spliceaiData.value === null || !spliceaiData.value.success) return null
+    return spliceaiData.value.scores
+  })
+
+  // Convenience getters for specific scores
+  const revelScore = computed<number | null>(() => myvariantScores.value?.revel_score ?? null)
+  const alphamissenseScore = computed<number | null>(
+    () => myvariantScores.value?.alphamissense_score ?? null
+  )
+  const spliceaiMaxDelta = computed<number | null>(() => spliceaiScores.value?.max_delta ?? null)
+
   /**
-   * Fetch VEP data for a variant
+   * Fetch all enrichment data for a variant in parallel
    */
   async function fetchVep(chr: string, pos: number, ref: string, alt: string): Promise<void> {
-    isLoading.value = true
-    error.value = null
+    // Reset state
+    vepLoading.value = true
+    myvariantLoading.value = true
+    spliceaiLoading.value = true
+    vepError.value = null
     vepData.value = null
+    myvariantData.value = null
+    spliceaiData.value = null
 
-    try {
-      const result = await window.api.vep.fetch(chr, pos, ref, alt)
-      vepData.value = result
+    // Fetch all APIs in parallel
+    const [vepResult, myvariantResult, spliceaiResult] = await Promise.allSettled([
+      window.api.vep.fetch(chr, pos, ref, alt),
+      window.api.myvariant.fetch(chr, pos, ref, alt),
+      window.api.spliceai.fetch(chr, pos, ref, alt)
+    ])
 
-      if (!result.success) {
-        error.value = result.error
+    // Process VEP result
+    if (vepResult.status === 'fulfilled') {
+      vepData.value = vepResult.value
+      if (!vepResult.value.success) {
+        vepError.value = vepResult.value.error
       }
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Unknown error'
-      vepData.value = null
-    } finally {
-      isLoading.value = false
+    } else {
+      vepError.value = vepResult.reason?.message ?? 'VEP fetch failed'
     }
+    vepLoading.value = false
+
+    // Process myvariant result
+    if (myvariantResult.status === 'fulfilled') {
+      myvariantData.value = myvariantResult.value
+    }
+    myvariantLoading.value = false
+
+    // Process SpliceAI result
+    if (spliceaiResult.status === 'fulfilled') {
+      spliceaiData.value = spliceaiResult.value
+    }
+    spliceaiLoading.value = false
   }
 
   return {
+    // VEP data
     vepData,
-    isLoading,
-    error,
+    vepLoading,
+    vepError,
     isOffline,
     isCached,
     cachedAt,
     preferredTranscript,
     colocatedVariants,
     mostSevereConsequence,
+
+    // MyVariant data
+    myvariantData,
+    myvariantLoading,
+    myvariantScores,
+    revelScore,
+    alphamissenseScore,
+
+    // SpliceAI data
+    spliceaiData,
+    spliceaiLoading,
+    spliceaiScores,
+    spliceaiMaxDelta,
+
+    // Combined
+    isLoading,
+    error,
     fetchVep
   }
 }

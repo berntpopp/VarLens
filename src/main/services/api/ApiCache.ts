@@ -97,7 +97,7 @@ export class ApiCache {
    * @param prefix - Key prefix ('vep:' or 'hpo:')
    * @returns Number of entries deleted
    */
-  clearByPrefix(prefix: 'vep:' | 'hpo:'): number {
+  clearByPrefix(prefix: 'vep:' | 'hpo:' | 'myvariant:' | 'spliceai:'): number {
     const result = this.deleteByPrefixStmt.run(`${prefix}%`)
     return result.changes
   }

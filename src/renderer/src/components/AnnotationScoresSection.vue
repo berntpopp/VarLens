@@ -21,65 +21,79 @@
       </v-chip>
     </div>
 
-    <!-- VEP enrichment scores -->
-    <div v-if="vepLoading" class="text-caption text-grey">
+    <!-- API enrichment scores -->
+    <div v-if="isLoading" class="text-caption text-grey">
       <v-progress-circular indeterminate size="16" width="2" class="mr-1" />
-      Loading VEP data...
+      Loading enrichment data...
     </div>
 
-    <div v-else-if="isOffline" class="text-caption text-warning">VEP unavailable - offline</div>
+    <div v-else-if="isOffline" class="text-caption text-warning">
+      Enrichment unavailable - offline
+    </div>
 
-    <div v-else-if="preferredTranscript" class="d-flex flex-wrap ga-1">
-      <!-- REVEL -->
-      <v-chip
-        v-if="preferredTranscript.revel_score !== undefined"
-        :color="getScoreColor('revel', preferredTranscript.revel_score)"
-        size="small"
-        label
-      >
+    <div v-else class="d-flex flex-wrap ga-1">
+      <!-- REVEL (from myvariant.info) -->
+      <v-chip v-if="revelScore !== null" :color="getRevelColor(revelScore)" size="small" label>
         <span class="font-weight-medium">REVEL</span>
-        <span class="ml-1">{{ formatScoreValue('revel', preferredTranscript.revel_score) }}</span>
+        <span class="ml-1">{{ revelScore.toFixed(2) }}</span>
       </v-chip>
 
-      <!-- SpliceAI max delta -->
+      <!-- SpliceAI (from Broad Institute API) -->
       <v-chip
-        v-if="spliceAiMaxDelta !== null"
-        :color="getScoreColor('spliceai', spliceAiMaxDelta)"
+        v-if="spliceaiMaxDelta !== null"
+        :color="getSpliceAIColor(spliceaiMaxDelta)"
         size="small"
         label
       >
         <span class="font-weight-medium">SpliceAI</span>
-        <span class="ml-1">{{ formatScoreValue('spliceai', spliceAiMaxDelta) }}</span>
+        <span class="ml-1">{{ spliceaiMaxDelta.toFixed(2) }}</span>
       </v-chip>
 
-      <!-- SIFT -->
+      <!-- SIFT (from VEP) -->
       <v-chip
-        v-if="preferredTranscript.sift_score !== undefined"
+        v-if="preferredTranscript?.sift_score !== undefined"
         :color="getSiftColor(preferredTranscript.sift_score)"
         size="small"
         label
       >
         <span class="font-weight-medium">SIFT</span>
-        <span class="ml-1">{{ formatScoreValue('sift', preferredTranscript.sift_score) }}</span>
+        <span class="ml-1">{{ preferredTranscript.sift_score.toFixed(2) }}</span>
       </v-chip>
 
-      <!-- PolyPhen -->
+      <!-- PolyPhen (from VEP) -->
       <v-chip
-        v-if="preferredTranscript.polyphen_score !== undefined"
+        v-if="preferredTranscript?.polyphen_score !== undefined"
         :color="getPolyPhenColor(preferredTranscript.polyphen_score)"
         size="small"
         label
       >
         <span class="font-weight-medium">PolyPhen</span>
-        <span class="ml-1">{{
-          formatScoreValue('polyphen', preferredTranscript.polyphen_score)
-        }}</span>
+        <span class="ml-1">{{ preferredTranscript.polyphen_score.toFixed(2) }}</span>
+      </v-chip>
+
+      <!-- AlphaMissense (from myvariant.info) -->
+      <v-chip
+        v-if="alphamissenseScore !== null"
+        :color="getAlphaMissenseColor(alphamissenseScore)"
+        size="small"
+        label
+      >
+        <span class="font-weight-medium">AlphaMissense</span>
+        <span class="ml-1">{{ alphamissenseScore.toFixed(2) }}</span>
       </v-chip>
     </div>
 
-    <div v-else-if="isFullVariant" class="text-caption text-grey">VEP data unavailable</div>
+    <!-- No scores available message -->
+    <div
+      v-if="!isLoading && !isOffline && !hasAnyScore && isFullVariant"
+      class="text-caption text-grey mt-1"
+    >
+      No additional scores available for this variant
+    </div>
 
-    <div v-else class="text-caption text-grey">Scores available in Case Analysis mode</div>
+    <div v-if="!isFullVariant && !isLoading" class="text-caption text-grey">
+      Scores available in Case Analysis mode
+    </div>
   </div>
 </template>
 
@@ -95,12 +109,20 @@ interface Props {
   preferredTranscript?: VepTranscriptConsequence | null
   vepLoading?: boolean
   isOffline?: boolean
+  revelScore?: number | null
+  alphamissenseScore?: number | null
+  spliceaiMaxDelta?: number | null
+  isLoading?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   preferredTranscript: null,
   vepLoading: false,
-  isOffline: false
+  isOffline: false,
+  revelScore: null,
+  alphamissenseScore: null,
+  spliceaiMaxDelta: null,
+  isLoading: false
 })
 
 /**
@@ -110,20 +132,32 @@ const isFullVariant = computed(() => {
   return 'cadd' in props.variant
 })
 
-// Calculate SpliceAI max delta from 4 delta scores
-const spliceAiMaxDelta = computed(() => {
-  if (props.preferredTranscript === null) return null
-  const t = props.preferredTranscript
-  const deltas = [
-    t.spliceai_pred_ds_ag,
-    t.spliceai_pred_ds_al,
-    t.spliceai_pred_ds_dg,
-    t.spliceai_pred_ds_dl
-  ].filter((d): d is number => d !== undefined)
-
-  if (deltas.length === 0) return null
-  return Math.max(...deltas)
+/**
+ * Check if any enrichment score is available
+ */
+const hasAnyScore = computed(() => {
+  return (
+    props.revelScore !== null ||
+    props.spliceaiMaxDelta !== null ||
+    props.alphamissenseScore !== null ||
+    props.preferredTranscript?.sift_score !== undefined ||
+    props.preferredTranscript?.polyphen_score !== undefined
+  )
 })
+
+// REVEL: higher is more pathogenic (>=0.644 likely pathogenic per ClinGen)
+function getRevelColor(score: number): string {
+  if (score >= 0.644) return 'error'
+  if (score >= 0.5) return 'warning'
+  return 'success'
+}
+
+// SpliceAI: higher is more likely splice-altering (>=0.2 high recall, >=0.5 high precision)
+function getSpliceAIColor(score: number): string {
+  if (score >= 0.5) return 'error'
+  if (score >= 0.2) return 'warning'
+  return 'success'
+}
 
 // SIFT: lower is more deleterious (<=0.05 deleterious)
 function getSiftColor(score: number): string {
@@ -136,6 +170,13 @@ function getSiftColor(score: number): string {
 function getPolyPhenColor(score: number): string {
   if (score >= 0.85) return 'error'
   if (score >= 0.5) return 'warning'
+  return 'success'
+}
+
+// AlphaMissense: higher is more pathogenic (>=0.564 likely pathogenic per paper)
+function getAlphaMissenseColor(score: number): string {
+  if (score >= 0.564) return 'error'
+  if (score >= 0.34) return 'warning'
   return 'success'
 }
 </script>

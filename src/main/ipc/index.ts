@@ -19,6 +19,8 @@ export async function registerIpcHandlers(): Promise<void> {
     import('./handlers/annotations'),
     import('./handlers/vep'),
     import('./handlers/hpo'),
+    import('./handlers/myvariant'),
+    import('./handlers/spliceai'),
     import('./handlers/case-metadata'),
     import('./handlers/tags')
   ])

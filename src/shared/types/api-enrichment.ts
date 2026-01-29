@@ -66,3 +66,67 @@ export interface CacheSizeInfo {
   /** Total size in bytes */
   totalBytes: number
 }
+
+/**
+ * MyVariant.info scores from dbnsfp
+ */
+export interface MyVariantScores {
+  revel_score: number | null
+  cadd_phred: number | null
+  sift_score: number | null
+  sift_pred: string | null
+  polyphen_score: number | null
+  polyphen_pred: string | null
+  alphamissense_score: number | null
+  alphamissense_pred: string | null
+}
+
+/**
+ * MyVariant.info API fetch result
+ */
+export type MyVariantFetchResult =
+  | {
+      success: true
+      scores: MyVariantScores
+      cacheInfo: CacheInfo
+    }
+  | {
+      success: false
+      error: string
+      offline: boolean
+    }
+
+/**
+ * SpliceAI scores from Broad Institute API
+ */
+export interface SpliceAIScores {
+  /** Maximum delta score across all 4 types */
+  max_delta: number
+  /** Acceptor Gain delta score */
+  ds_ag: number
+  /** Acceptor Loss delta score */
+  ds_al: number
+  /** Donor Gain delta score */
+  ds_dg: number
+  /** Donor Loss delta score */
+  ds_dl: number
+  /** Gene name */
+  gene: string | null
+  /** Transcript ID */
+  transcript: string | null
+}
+
+/**
+ * SpliceAI API fetch result
+ */
+export type SpliceAIFetchResult =
+  | {
+      success: true
+      scores: SpliceAIScores
+      cacheInfo: CacheInfo
+    }
+  | {
+      success: false
+      error: string
+      offline: boolean
+    }

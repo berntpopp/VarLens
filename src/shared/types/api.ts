@@ -23,7 +23,14 @@ import type {
   CohortCarrier,
   GeneBurden
 } from './cohort'
-import type { VepFetchResult, HpoSearchResult, CacheSizeInfo, CacheInfo } from './api-enrichment'
+import type {
+  VepFetchResult,
+  HpoSearchResult,
+  CacheSizeInfo,
+  CacheInfo,
+  MyVariantFetchResult,
+  SpliceAIFetchResult
+} from './api-enrichment'
 
 // Re-export for convenience
 export type {
@@ -261,6 +268,16 @@ export interface HpoAPI {
   clearCache: () => Promise<{ success: boolean }>
 }
 
+export interface MyVariantAPI {
+  fetch: (chr: string, pos: number, ref: string, alt: string) => Promise<MyVariantFetchResult>
+  clearCache: () => Promise<{ success: boolean }>
+}
+
+export interface SpliceAIAPI {
+  fetch: (chr: string, pos: number, ref: string, alt: string) => Promise<SpliceAIFetchResult>
+  clearCache: () => Promise<{ success: boolean }>
+}
+
 // Case metadata types
 export type AffectedStatus = 'affected' | 'unaffected' | 'unknown'
 
@@ -326,6 +343,8 @@ export interface WindowAPI {
   annotations: AnnotationsAPI
   vep: VepAPI
   hpo: HpoAPI
+  myvariant: MyVariantAPI
+  spliceai: SpliceAIAPI
   caseMetadata: CaseMetadataAPI
   tags: TagsAPI
 }

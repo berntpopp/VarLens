@@ -39,6 +39,10 @@
             :preferred-transcript="preferredTranscript"
             :vep-loading="vepLoading"
             :is-offline="isOffline"
+            :revel-score="revelScore"
+            :alphamissense-score="alphamissenseScore"
+            :spliceai-max-delta="spliceaiMaxDelta"
+            :is-loading="isLoading"
             class="mb-4"
           />
 
@@ -143,15 +147,19 @@ const {
   setGlobalAcmgClassification
 } = useAnnotations()
 
-// Use VEP enrichment composable
+// Use VEP enrichment composable (fetches VEP, myvariant.info, and SpliceAI in parallel)
 const {
-  isLoading: vepLoading,
+  vepLoading,
   isOffline,
   isCached,
   cachedAt,
   preferredTranscript,
   colocatedVariants,
   mostSevereConsequence,
+  revelScore,
+  alphamissenseScore,
+  spliceaiMaxDelta,
+  isLoading,
   fetchVep
 } = useVepEnrichment()
 

@@ -174,6 +174,18 @@ const api = {
     clearCache: () => ipcRenderer.invoke('hpo:clearCache')
   },
 
+  myvariant: {
+    fetch: (chr: string, pos: number, ref: string, alt: string) =>
+      ipcRenderer.invoke('myvariant:fetch', chr, pos, ref, alt),
+    clearCache: () => ipcRenderer.invoke('myvariant:clearCache')
+  },
+
+  spliceai: {
+    fetch: (chr: string, pos: number, ref: string, alt: string) =>
+      ipcRenderer.invoke('spliceai:fetch', chr, pos, ref, alt),
+    clearCache: () => ipcRenderer.invoke('spliceai:clearCache')
+  },
+
   caseMetadata: {
     get: (caseId: number) => ipcRenderer.invoke('case-metadata:get', caseId),
 
