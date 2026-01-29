@@ -55,10 +55,7 @@
             variant="tonal"
             size="small"
             prepend-icon="mdi-filter-off"
-            @click="
-              searchTerm = ''
-              handleSearchChange('')
-            "
+            @click="searchTerm = ''; handleSearchChange('')"
           >
             Clear
           </v-btn>
