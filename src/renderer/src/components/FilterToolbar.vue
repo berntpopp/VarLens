@@ -261,6 +261,63 @@
         </div>
       </div>
 
+      <v-divider vertical class="mx-2 divider-subtle" />
+
+      <!-- TAGS GROUP -->
+      <div class="filter-section tags-section">
+        <div class="section-label">
+          <v-icon size="small" class="mr-1">mdi-tag-multiple</v-icon>
+          <span>Tags</span>
+          <v-tooltip location="top" max-width="280">
+            <template #activator="{ props: tooltipProps }">
+              <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
+                >mdi-information-outline</v-icon
+              >
+            </template>
+            <span
+              >Filter by variant tags. Selecting multiple tags shows variants with ANY of the
+              selected tags (OR logic).</span
+            >
+          </v-tooltip>
+        </div>
+        <v-select
+          v-model="filters.tagIds"
+          :items="availableTags"
+          item-title="name"
+          item-value="id"
+          multiple
+          chips
+          closable-chips
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+          placeholder="Select..."
+          class="filter-input tags-select"
+          :class="{ 'filter-active': filters.tagIds.length > 0 }"
+        >
+          <template #chip="{ item }">
+            <v-chip
+              closable
+              size="small"
+              :color="(item.raw as Tag).color"
+              variant="flat"
+              @click:close="removeTagFilter((item.raw as Tag).id)"
+            >
+              {{ (item.raw as Tag).name }}
+            </v-chip>
+          </template>
+          <template #item="{ item, props: itemProps }">
+            <v-list-item v-bind="itemProps" :title="undefined">
+              <template #prepend>
+                <v-icon :color="(item.raw as Tag).color" size="small">mdi-circle</v-icon>
+              </template>
+              <v-list-item-title>{{ (item.raw as Tag).name }}</v-list-item-title>
+            </v-list-item>
+          </template>
+        </v-select>
+      </div>
+
       <v-spacer />
 
       <!-- RESULTS & ACTIONS -->
@@ -316,7 +373,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useDebounce } from '../composables/useDebounce'
-import type { VariantFilter, Variant } from '../../../shared/types/api'
+import { useTags } from '../composables/useTags'
+import type { VariantFilter, Variant, Tag } from '../../../shared/types/api'
 
 interface Props {
   caseId: number
@@ -339,6 +397,9 @@ interface Emits {
 
 const emit = defineEmits<Emits>()
 
+// Tags composable
+const { loadTags, getTags } = useTags()
+
 // Filter state
 const filters = ref({
   searchQuery: '',
@@ -347,8 +408,12 @@ const filters = ref({
   funcs: [] as string[],
   clinvars: [] as string[],
   maxGnomadAf: null as number | null,
-  minCadd: null as number | null
+  minCadd: null as number | null,
+  tagIds: [] as number[]
 })
+
+// Available tags for filter
+const availableTags = computed(() => getTags())
 
 // Filter options loaded from database
 const filterOptions = ref({
@@ -413,9 +478,15 @@ const hasActiveFilters = computed(() => {
     filters.value.clinvars.length > 0 ||
     afActive ||
     caddActive ||
+    filters.value.tagIds.length > 0 ||
     props.hasSort === true
   )
 })
+
+// Remove a tag from the filter
+const removeTagFilter = (tagId: number) => {
+  filters.value.tagIds = filters.value.tagIds.filter((id) => id !== tagId)
+}
 
 // Watch initialSearch prop to pre-populate search from cohort navigation
 watch(
@@ -439,8 +510,13 @@ onMounted(async () => {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
-    filterOptions.value = await (window as any).api.variants.getFilterOptions(props.caseId)
+    // Load filter options and tags in parallel
+    const [options] = await Promise.all([
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
+      (window as any).api.variants.getFilterOptions(props.caseId),
+      loadTags()
+    ])
+    filterOptions.value = options
   } catch (error) {
     // eslint-disable-next-line no-undef
     console.error('Failed to load filter options:', error)
@@ -512,6 +588,11 @@ const emitFilters = () => {
     variantFilter.cadd_min = caddValue
   }
 
+  // Add tag filter
+  if (filters.value.tagIds.length > 0) {
+    variantFilter.tag_ids = filters.value.tagIds
+  }
+
   emit('update:filters', variantFilter)
 }
 
@@ -581,6 +662,7 @@ const clearAllFilters = () => {
   filters.value.clinvars = []
   filters.value.maxGnomadAf = null
   filters.value.minCadd = null
+  filters.value.tagIds = []
   selectedAfPreset.value = null
   selectedCaddPreset.value = null
   selectedImpactPresets.value = []
@@ -632,6 +714,10 @@ const exportToExcel = async () => {
     const caddValue = filters.value.minCadd
     if (caddValue !== null && Number.isNaN(caddValue) === false && caddValue >= 0) {
       exportFilters.cadd_min = caddValue
+    }
+
+    if (filters.value.tagIds.length > 0) {
+      exportFilters.tag_ids = filters.value.tagIds
     }
 
     // eslint-disable-next-line no-undef
@@ -727,6 +813,11 @@ const exportToExcel = async () => {
 
 .clinvar-section .clinvar-select {
   min-width: 140px;
+  max-width: 180px;
+}
+
+.tags-section .tags-select {
+  min-width: 120px;
   max-width: 180px;
 }
 

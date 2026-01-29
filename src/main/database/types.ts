@@ -101,6 +101,8 @@ export interface VariantFilter {
   ref?: string
   /** Exact alt allele match (for variant navigation) */
   alt?: string
+  /** Filter by tag IDs (OR logic) */
+  tag_ids?: number[]
 }
 
 /**
