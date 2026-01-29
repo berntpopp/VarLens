@@ -1,5 +1,17 @@
 <template>
   <div>
+    <!-- Column visibility menu toolbar -->
+    <div class="d-flex align-center justify-end mb-2">
+      <ColumnVisibilityMenu
+        :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
+        :visible-columns="visibleHeaders.map((h) => h.key)"
+        table-id="cohort-table"
+        @toggle:column="toggleColumnVisibility"
+        @reorder="setColumnOrder"
+        @reset="resetToDefaults"
+      />
+    </div>
+
     <!-- Search bar -->
     <v-text-field
       v-model="searchTerm"
@@ -17,7 +29,7 @@
       v-model:items-per-page="itemsPerPage"
       v-model:sort-by="sortBy"
       v-model:expanded="expandedRows"
-      :headers="headers"
+      :headers="visibleHeaders"
       :items="cohortVariants"
       :items-length="totalCount ?? 0"
       :loading="loading"
@@ -224,12 +236,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import type { CohortVariant, CohortCarrier } from '../../../shared/types/cohort'
 import type { AcmgClassification } from '../../../main/database/types'
 import { useAnnotations, ACMG_COLORS, ACMG_ABBREV } from '../composables/useAnnotations'
+import { useColumnPreferences } from '../composables/useColumnPreferences'
 import AcmgMenu from './AcmgMenu.vue'
 import CommentDialog from './CommentDialog.vue'
+import ColumnVisibilityMenu from './ColumnVisibilityMenu.vue'
 
 // Emit for navigation and row click
 const emit = defineEmits<{
@@ -258,6 +272,10 @@ const {
   upsertGlobalComment,
   getAnnotations
 } = useAnnotations()
+
+// Initialize column preferences
+const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
+  useColumnPreferences('cohort-table')
 
 // Table state
 const cohortVariants = ref<CohortVariant[]>([])
@@ -290,8 +308,8 @@ const currentParams = ref({
   offset: 0
 })
 
-// Table headers
-const headers = [
+// Base headers definition
+const baseHeaders = [
   { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' as const },
   { title: 'Chr', key: 'chr', sortable: true },
   { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
@@ -304,6 +322,26 @@ const headers = [
   { title: 'Frequency', key: 'cohort_frequency', sortable: true, align: 'end' as const },
   { title: 'Het / Hom', key: 'het_count', sortable: true }
 ]
+
+// Ordered columns based on user preferences
+const orderedColumns = computed(() => {
+  if (prefs.value.order.length > 0) {
+    return [...baseHeaders].sort((a, b) => {
+      const aIdx = prefs.value.order.indexOf(a.key)
+      const bIdx = prefs.value.order.indexOf(b.key)
+      if (aIdx === -1 && bIdx === -1) return 0
+      if (aIdx === -1) return 1
+      if (bIdx === -1) return -1
+      return aIdx - bIdx
+    })
+  }
+  return baseHeaders
+})
+
+// Visible headers based on user preferences
+const visibleHeaders = computed(() => {
+  return orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false)
+})
 
 // Handle search change with debounce
 const handleSearchChange = (value: string | null): void => {
@@ -546,5 +584,18 @@ defineExpose({ refresh })
 /* Clickable table rows */
 :deep(.v-data-table tbody tr) {
   cursor: pointer;
+}
+
+/* Column max-width with ellipsis and horizontal scroll */
+:deep(.v-data-table th),
+:deep(.v-data-table td) {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:deep(.v-table__wrapper) {
+  overflow-x: auto;
 }
 </style>
