@@ -192,7 +192,7 @@ Plans:
 
 **Depends on**: Phase 24 (filter infrastructure exists)
 
-**Requirements**: [To be mapped during planning]
+**Requirements**: UX improvement phase (no explicit requirements)
 
 **Success Criteria** (what must be TRUE):
   1. User can sort columns by clicking headers, drag columns to reorder, and hide/show columns via menu
@@ -206,10 +206,13 @@ Plans:
   9. Columns have max-width with text overflow ellipsis and hover tooltip for full content
   10. Case metadata (status, cohort, phenotypes) accessible via button in banner bar (Case mode only), opens as modal
 
-**Plans**: 0 plans
+**Plans**: 4 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 25 to break down)
+- [ ] 25-01-PLAN.md — Composables infrastructure: useColumnPreferences, useFilterPreferences, vuedraggable install
+- [ ] 25-02-PLAN.md — Column visibility menu: ColumnVisibilityMenu component, VariantTable/CohortTable integration
+- [ ] 25-03-PLAN.md — Sticky positioning and filter groups: sticky tabs/filters, draggable filter groups with persistence
+- [ ] 25-04-PLAN.md — Cohort filter parity, CaseMetadataModal, Settings reset options
 
 ## Progress
 
@@ -224,7 +227,7 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24 → 25
 | 22. Case Metadata | 3/3 | ✓ Complete | 2026-01-29 |
 | 23. Side Panel UI | 4/4 | ✓ Complete | 2026-01-29 |
 | 24. Custom Tags + HPO Autocomplete | 4/4 | ✓ Complete | 2026-01-29 |
-| 25. Table UX & Filter Persistence | 0/? | Not started | - |
+| 25. Table UX & Filter Persistence | 0/4 | Planned | - |
 
 ---
-*Last updated: 2026-01-29 — Phase 25 added (Table UX & Filter Persistence)*
+*Last updated: 2026-01-29 — Phase 25 planned (4 plans in 3 waves)*
