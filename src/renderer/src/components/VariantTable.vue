@@ -1,7 +1,7 @@
 <template>
   <div>
     <!-- Column visibility menu toolbar -->
-    <div class="d-flex justify-end pa-2">
+    <div class="d-flex justify-end px-2 py-1">
       <ColumnVisibilityMenu
         :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
         :visible-columns="visibleHeaders.map((h) => h.key)"

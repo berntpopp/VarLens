@@ -32,12 +32,13 @@
                   <v-btn
                     size="x-small"
                     variant="text"
+                    density="compact"
                     :icon="group.active ? 'mdi-chevron-down' : 'mdi-chevron-right'"
                     @click="toggleFilterGroupActive(group.id)"
                   />
                 </div>
 
-                <div v-show="group.active" class="filter-group-content">
+                <div v-if="group.active" class="filter-group-content">
                   <!-- GENERAL SEARCH GROUP -->
                   <div v-if="group.id === 'search'" class="filter-section search-section">
                     <div class="section-label">
@@ -855,18 +856,19 @@ const exportToExcel = async () => {
 .filter-toolbar-container {
   border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
   background: rgb(var(--v-theme-surface));
-  min-height: 100px;
 }
 
 .filter-toolbar {
   background: transparent !important;
-  min-height: 96px !important;
   height: auto !important;
+  align-items: flex-start !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
 }
 
 .filter-groups-wrapper {
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   flex: 1;
   min-width: 0;
   gap: 4px;
@@ -875,40 +877,46 @@ const exportToExcel = async () => {
 .filter-groups-scroll {
   flex: 1;
   overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
+  scrollbar-width: thin;
   min-width: 0;
 }
 
 .filter-groups-scroll::-webkit-scrollbar {
-  display: none;
+  height: 6px;
+}
+
+.filter-groups-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
 }
 
 .filter-groups-container {
   display: flex;
   flex-direction: row;
-  gap: 8px;
-  min-width: max-content;
+  gap: 6px;
   padding: 2px;
 }
 
 .filter-section-wrapper {
-  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 2px;
   border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  padding: 4px;
 }
 
 .filter-section-wrapper.collapsed {
-  min-width: auto;
+  padding: 4px 8px;
 }
 
 .filter-group-header {
-  position: absolute;
-  top: 2px;
-  right: 4px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  z-index: 1;
+  gap: 0;
+  padding-top: 2px;
 }
 
 .drag-handle {
@@ -926,25 +934,24 @@ const exportToExcel = async () => {
 }
 
 .filter-group-content {
-  width: 100%;
+  flex: 1;
 }
 
 .scroll-arrow {
   flex-shrink: 0;
+  align-self: center;
 }
 
 .filter-section {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  background: rgba(var(--v-theme-on-surface), 0.03);
+  padding: 0 4px;
   min-width: fit-content;
 }
 
 .search-section {
-  min-width: 200px;
+  min-width: 160px;
 }
 
 .search-section .filter-input {
@@ -952,7 +959,7 @@ const exportToExcel = async () => {
 }
 
 .gene-section {
-  min-width: 220px;
+  min-width: 160px;
 }
 
 .gene-section .filter-input {
@@ -1031,16 +1038,12 @@ const exportToExcel = async () => {
   padding: 4px 8px;
   border-radius: 8px;
   background: rgba(var(--v-theme-on-surface), 0.03);
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
-/* Responsive adjustments */
-@media (max-width: 1400px) {
-  .filter-section {
-    padding: 2px 6px;
-  }
-
-  .gene-section {
-    min-width: 180px;
-  }
+/* Collapsed filter group - just show small indicator */
+.filter-section-wrapper.collapsed .filter-group-header {
+  flex-direction: row;
 }
 </style>

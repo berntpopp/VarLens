@@ -80,7 +80,7 @@
           />
           <template v-else>
             <div class="sticky-filter-bar">
-              <div class="d-flex align-center px-3 py-2 bg-grey-lighten-4">
+              <div class="case-header d-flex align-center px-3 py-1 border-b">
                 <span class="text-subtitle-2 font-weight-medium">{{ selectedCaseName }}</span>
                 <CaseMetadataModal :case-id="selectedCaseId" :case-name="selectedCaseName" class="ml-2" />
               </div>
@@ -474,5 +474,15 @@ onMounted(async () => {
   top: 48px; /* Height of tabs bar (compact density) */
   z-index: 3;
   background: rgb(var(--v-theme-surface));
+}
+
+.case-header {
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+}
+
+/* Remove default padding from v-window-item */
+:deep(.v-window-item) {
+  padding: 0 !important;
 }
 </style>
