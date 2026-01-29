@@ -1,18 +1,9 @@
 <template>
   <div class="filter-toolbar-container">
     <!-- Main filter bar -->
-    <v-toolbar density="default" flat class="filter-toolbar px-3 py-3">
-      <!-- Filter groups wrapper with scroll arrows -->
+    <v-toolbar density="default" flat class="filter-toolbar px-3 py-2">
+      <!-- Filter groups wrapper -->
       <div class="filter-groups-wrapper">
-        <v-btn
-          v-if="canScrollLeft"
-          icon="mdi-chevron-left"
-          size="x-small"
-          variant="text"
-          class="scroll-arrow scroll-arrow-left"
-          @click="scrollLeft"
-        />
-
         <div ref="scrollContainer" class="filter-groups-scroll">
           <draggable
             v-model="orderedFilterGroups"
@@ -361,8 +352,8 @@
         />
       </div>
 
-      <!-- RESULTS & ACTIONS -->
-      <div class="results-section d-flex align-center ga-2 ml-auto">
+      <!-- RESULTS & ACTIONS (2x2 grid) -->
+      <div class="results-section ml-auto">
         <v-chip
           :color="hasActiveFilters ? 'primary' : 'default'"
           :variant="hasActiveFilters ? 'flat' : 'tonal'"
@@ -385,8 +376,6 @@
         >
           Clear
         </v-btn>
-
-        <v-divider vertical class="divider-subtle" />
 
         <!-- Column visibility menu -->
         <ColumnVisibilityMenu
@@ -924,24 +913,17 @@ const exportToExcel = async () => {
 .filter-groups-scroll {
   flex: 1;
   overflow-x: auto;
-  scrollbar-width: thin;
+  overflow-y: hidden;
   min-width: 0;
-}
-
-.filter-groups-scroll::-webkit-scrollbar {
-  height: 6px;
-}
-
-.filter-groups-scroll::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
+  scrollbar-width: thin;
 }
 
 .filter-groups-container {
   display: flex;
-  flex-direction: row;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
   padding: 2px;
+  width: max-content;
 }
 
 .filter-section-wrapper {
@@ -1082,7 +1064,10 @@ const exportToExcel = async () => {
 }
 
 .results-section {
-  padding: 4px 8px;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px;
+  padding: 6px;
   border-radius: 8px;
   background: rgba(var(--v-theme-on-surface), 0.03);
   flex-shrink: 0;
