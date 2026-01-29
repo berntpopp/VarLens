@@ -79,7 +79,7 @@
             @import="handleImportClick"
           />
           <template v-else>
-            <div class="sticky-filter-bar">
+            <div class="filter-bar-container">
               <div class="case-header d-flex align-center px-3 py-1 border-b">
                 <span class="text-subtitle-2 font-weight-medium">{{ selectedCaseName }}</span>
                 <CaseMetadataModal :case-id="selectedCaseId" :case-name="selectedCaseName" class="ml-2" />
@@ -469,10 +469,7 @@ onMounted(async () => {
   background: rgb(var(--v-theme-secondary));
 }
 
-.sticky-filter-bar {
-  position: sticky;
-  top: 48px; /* Height of tabs bar (compact density) */
-  z-index: 3;
+.filter-bar-container {
   background: rgb(var(--v-theme-surface));
 }
 
@@ -481,26 +478,9 @@ onMounted(async () => {
   border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
 }
 
-/* Remove default padding from v-window and v-window-item */
-:deep(.v-window) {
-  padding: 0 !important;
-}
-
-:deep(.v-window-item) {
-  padding: 0 !important;
-}
-
-:deep(.v-window__container) {
-  padding: 0 !important;
-}
-
-/* Ensure v-main has no extra padding */
-:deep(.v-main__wrap) {
-  padding: 0 !important;
-}
-
-/* Remove any margin/padding from v-window that creates white space */
-.v-main :deep(.v-window) {
-  margin-top: 0 !important;
+/* Remove v-main automatic padding-top from app-bar */
+:deep(.v-main) {
+  --v-layout-top: 0px !important;
+  padding-top: 48px !important; /* Only app-bar height */
 }
 </style>
