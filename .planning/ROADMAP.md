@@ -135,9 +135,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 22-01-PLAN.md — Backend: DatabaseService + IPC handlers for case metadata, cohorts, HPO terms
-- [ ] 22-02-PLAN.md — Frontend: useCaseMetadata composable, StatusSelector, CohortCombobox
-- [ ] 22-03-PLAN.md — UI Integration: CaseMetadataCard, HpoTermSelector, CaseList enhancement
+- [x] 22-01-PLAN.md — Backend: DatabaseService + IPC handlers for case metadata, cohorts, HPO terms ✓
+- [x] 22-02-PLAN.md — Frontend: useCaseMetadata composable, StatusSelector, CohortCombobox ✓
+- [x] 22-03-PLAN.md — UI Integration: CaseMetadataCard, HpoTermSelector, CaseList enhancement ✓
 
 ### Phase 23: Side Panel UI
 **Goal**: Variant details side panel displays all database annotations, comments, ACMG classification, and external links with edit capabilities.

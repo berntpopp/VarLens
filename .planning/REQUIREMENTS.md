@@ -38,17 +38,17 @@ Requirements for v0.4.0 — Variant Annotation & Case Metadata. Each maps to roa
 
 ### Case Metadata
 
-- [ ] **META-01**: User can set affected/unaffected/unknown status for each case
-- [ ] **META-02**: User can assign cases to cohort groups with arbitrary user-defined names
-- [ ] **META-03**: Cohort group names autocomplete from previously created groups
-- [ ] **META-04**: User can create new cohort groups with name and optional description
-- [ ] **META-05**: User can assign a case to multiple cohort groups
+- [x] **META-01**: User can set affected/unaffected/unknown status for each case
+- [x] **META-02**: User can assign cases to cohort groups with arbitrary user-defined names
+- [x] **META-03**: Cohort group names autocomplete from previously created groups
+- [x] **META-04**: User can create new cohort groups with name and optional description
+- [x] **META-05**: User can assign a case to multiple cohort groups
 - [x] **META-06**: User can add HPO phenotype terms to a case via searchable autocomplete (API-powered)
 - [x] **META-07**: HPO autocomplete searches by term name, ID, and synonyms
-- [ ] **META-08**: User can remove HPO terms from a case
-- [ ] **META-09**: Case metadata (status, cohorts, HPO terms) displays in the case list and case header
+- [x] **META-08**: User can remove HPO terms from a case
+- [x] **META-09**: Case metadata (status, cohorts, HPO terms) displays in the case list and case header
 - [x] **META-10**: When HPO API is unavailable (offline), user sees "HPO search unavailable — offline" message
-- [ ] **META-11**: Deleting a case cascades deletion of its metadata, cohort links, and phenotype associations
+- [x] **META-11**: Deleting a case cascades deletion of its metadata, cohort links, and phenotype associations
 
 ### Infrastructure
 
@@ -127,17 +127,17 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 | PANEL-08 | Phase 21 | Complete |
 | PANEL-09 | Phase 21 | Complete |
 | PANEL-10 | Phase 21 | Complete |
-| META-01 | Phase 22 | Pending |
-| META-02 | Phase 22 | Pending |
-| META-03 | Phase 22 | Pending |
-| META-04 | Phase 22 | Pending |
-| META-05 | Phase 22 | Pending |
+| META-01 | Phase 22 | Complete |
+| META-02 | Phase 22 | Complete |
+| META-03 | Phase 22 | Complete |
+| META-04 | Phase 22 | Complete |
+| META-05 | Phase 22 | Complete |
 | META-06 | Phase 21 | Complete |
 | META-07 | Phase 21 | Complete |
-| META-08 | Phase 22 | Pending |
-| META-09 | Phase 22 | Pending |
+| META-08 | Phase 22 | Complete |
+| META-09 | Phase 22 | Complete |
 | META-10 | Phase 21 | Complete |
-| META-11 | Phase 22 | Pending |
+| META-11 | Phase 22 | Complete |
 | INFRA-01 | Phase 19 | Complete |
 | INFRA-02 | Phase 19 | Complete |
 | INFRA-03 | Phase 21 | Complete |
@@ -160,4 +160,4 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-29 — Phase 23 requirements marked complete*
+*Last updated: 2026-01-29 — Phase 22 requirements marked complete*
