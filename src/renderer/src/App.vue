@@ -26,6 +26,20 @@
             title="Custom Tags"
             @click="tagManagementDialogRef?.show()"
           />
+          <v-divider class="my-1" />
+          <v-list-subheader>Reset Preferences</v-list-subheader>
+          <v-list-item
+            prepend-icon="mdi-table-column"
+            title="Reset Columns"
+            subtitle="Restore default column visibility and order"
+            @click="handleResetColumns"
+          />
+          <v-list-item
+            prepend-icon="mdi-filter-off"
+            title="Reset Filters"
+            subtitle="Restore default filter group arrangement"
+            @click="handleResetFilters"
+          />
         </v-list>
       </v-menu>
     </v-app-bar>
@@ -77,7 +91,9 @@
                 @reset-sort="handleResetSort"
               />
             </div>
-            <CaseMetadataCard :case-id="selectedCaseId" />
+            <div class="d-flex align-center justify-space-between px-3 py-2">
+              <CaseMetadataModal :case-id="selectedCaseId" :case-name="selectedCaseName" />
+            </div>
             <VariantTable
               ref="variantTableRef"
               :case-id="selectedCaseId"
@@ -146,11 +162,13 @@ import ExternalLinksSettings from './components/ExternalLinksSettings.vue'
 import TagManagementDialog from './components/TagManagementDialog.vue'
 import CohortView from './components/CohortView.vue'
 import VariantDetailsPanel from './components/VariantDetailsPanel.vue'
-import CaseMetadataCard from './components/CaseMetadataCard.vue'
+import CaseMetadataModal from './components/CaseMetadataModal.vue'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useVersionGating } from './composables/useVersionGating'
 import { useDatabaseStore } from './stores/databaseStore'
 import { useCaseMetadata } from './composables/useCaseMetadata'
+import { useColumnPreferences } from './composables/useColumnPreferences'
+import { useFilterPreferences } from './composables/useFilterPreferences'
 import { logService } from './services/LogService'
 import type { VariantFilter, Variant } from '../../shared/types/api'
 import type { CohortVariant } from '../../shared/types/cohort'
@@ -160,6 +178,20 @@ const databaseStore = useDatabaseStore()
 
 // Initialize case metadata composable for cache clearing
 const { clearCache: clearMetadataCache } = useCaseMetadata()
+
+// Initialize preference reset functions
+const { resetToDefaults: resetVariantColumns } = useColumnPreferences('variant-table')
+const { resetToDefaults: resetCohortColumns } = useColumnPreferences('cohort-table')
+const { resetToDefaults: resetFilterPreferences } = useFilterPreferences()
+
+const handleResetColumns = () => {
+  resetVariantColumns()
+  resetCohortColumns()
+}
+
+const handleResetFilters = () => {
+  resetFilterPreferences()
+}
 
 // Component refs
 const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
