@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** External collaborators can analyze variant data offline with data-dense UX for research use
-**Current focus:** v0.4.0 complete - ready for milestone audit
+**Current focus:** v0.4.0 Phase 25 - Table UX & Filter Persistence
 
 ## Current Position
 
-Phase: 24 of 24 (Custom Tags + HPO Autocomplete)
-Plan: 4 of 4
-Status: Phase verified ✓
-Last activity: 2026-01-29 - Phase 24 verified (6/6 must-haves)
+Phase: 25 of 25 (Table UX & Filter Persistence)
+Plan: 0 of ?
+Status: Not planned yet
+Last activity: 2026-01-29 - Phase 25 added to v0.4.0
 
-Progress: [████████████████████] 24/24 phases (100% complete, v0.4.0 ready for audit)
+Progress: [████████████████████] 24/25 phases (96% complete, Phase 25 pending)
 
 ## Milestone History
 
 - **v0.1 POC** - 8 phases, 17 plans - shipped 2026-01-27
 - **v0.2.0 UI Polish & Trust Signals** - 4 phases, 8 plans - shipped 2026-01-27
 - **v0.3.0 Cohort Analysis, Security & Import Enhancements** - 6 phases, 13 plans - shipped 2026-01-28
-- **v0.4.0 Variant Annotation & Case Metadata** - 6 phases (19-24), 22 plans - complete
+- **v0.4.0 Variant Annotation & Case Metadata** - 7 phases (19-25), 22+ plans - in progress
 
 ## Performance Metrics
 
@@ -45,6 +45,7 @@ Progress: [████████████████████] 24/24 p
 | 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (HpoTermSelector, CaseMetadataCard, enhanced CaseList) |
 | 23. Side Panel UI | 4/4 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration), 04: VEP Enrichment Gap Closure (useVepEnrichment, rsID, REVEL/SpliceAI/SIFT/PolyPhen scores, consequence badges) |
 | 24. Custom Tags + HPO | 4/4 | Complete | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON), 02: Settings UI (TagManagementDialog, ColorSwatchPicker, settings menu), 03: Variant UI Integration (FilterToolbar tag filter, TagsSection, HpoAutocomplete), 04: Gap Closure (tag_ids filter in DatabaseService) |
+| 25. Table UX & Filter | 0/? | Not started | Column management, sticky filters, filter groups, cohort filters, case metadata modal |
 
 ## Accumulated Context
 
@@ -150,9 +151,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 24 verified
-Stopped at: Phase 24 verified, v0.4.0 milestone complete
+Last session: 2026-01-29 - Phase 25 added
+Stopped at: Phase 25 added, ready for planning
 Resume file: None
 
 ---
-*v0.4.0 complete - ready for milestone audit*
+*v0.4.0 extended with Phase 25 - Table UX & Filter Persistence*

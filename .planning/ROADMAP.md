@@ -5,7 +5,7 @@
 - ✅ **v0.1 POC** - Phases 1-8 (shipped 2026-01-27)
 - ✅ **v0.2.0 UI Polish & Trust Signals** - Phases 9-12 (shipped 2026-01-27)
 - ✅ **v0.3.0 Cohort Analysis, Security & Import Enhancements** - Phases 13-18 (shipped 2026-01-28)
-- 🚧 **v0.4.0 Variant Annotation & Case Metadata** - Phases 19-24 (in progress)
+- 🚧 **v0.4.0 Variant Annotation & Case Metadata** - Phases 19-25 (in progress)
 
 ## Phases
 
@@ -35,7 +35,7 @@ Transforms Varlens from a single-sample viewer into a cohort analysis platform w
 **Milestone Goal:** Transform Varlens from a read-only viewer into an active analysis workbench with variant annotation, classification, enriched detail views, and structured case metadata.
 
 **Phase Numbering:**
-- Integer phases (19-24): Planned milestone work
+- Integer phases (19-25): Planned milestone work
 - Decimal phases (e.g., 19.1, 19.2): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
@@ -46,6 +46,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 22: Case Metadata** - Status, cohorts, HPO terms, UI ✓
 - [x] **Phase 23: Side Panel UI** - Drawer, tabs, annotation editing, VEP display, external links ✓
 - [x] **Phase 24: Custom Tags + HPO Autocomplete** - Tag management, HPO search component ✓
+- [ ] **Phase 25: Table UX & Filter Persistence** - Column management, sticky filters, filter groups, cohort filters, case metadata modal
 
 ## Phase Details
 
@@ -186,10 +187,34 @@ Plans:
 - [x] 24-03-PLAN.md — UI integration: FilterToolbar tag filter, TagsSection in side panel, HpoAutocomplete component ✓
 - [x] 24-04-PLAN.md — Gap closure: Fix tag_ids filter handling in DatabaseService (backend ignores tag filter) ✓
 
+### Phase 25: Table UX & Filter Persistence
+**Goal**: Variant tables have professional-grade UX with sortable/draggable/hideable columns, sticky filter bar, filter groups with persistence, consistent filtering across Case/Cohort views, and streamlined case metadata access.
+
+**Depends on**: Phase 24 (filter infrastructure exists)
+
+**Requirements**: [To be mapped during planning]
+
+**Success Criteria** (what must be TRUE):
+  1. User can sort columns by clicking headers, drag columns to reorder, and hide/show columns via menu
+  2. Column preferences (order, visibility, width) persist across sessions in localStorage
+  3. User can reset column preferences to defaults via Settings
+  4. Table has proper horizontal scroll to see all columns without layout breaking
+  5. Filter bar and Case/Cohort tab menu remain sticky (fixed) during vertical scroll
+  6. Filter groups can be dragged to reorder, deactivated/activated with state persisted
+  7. Filter groups have explicit IDs and names, with reset option in Settings
+  8. Cohort Analysis has same filter UI as Case Analysis (consistent UX)
+  9. Columns have max-width with text overflow ellipsis and hover tooltip for full content
+  10. Case metadata (status, cohort, phenotypes) accessible via button in banner bar (Case mode only), opens as modal
+
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 25 to break down)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
+Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24 → 25
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -199,6 +224,7 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | 22. Case Metadata | 3/3 | ✓ Complete | 2026-01-29 |
 | 23. Side Panel UI | 4/4 | ✓ Complete | 2026-01-29 |
 | 24. Custom Tags + HPO Autocomplete | 4/4 | ✓ Complete | 2026-01-29 |
+| 25. Table UX & Filter Persistence | 0/? | Not started | - |
 
 ---
-*Last updated: 2026-01-29 — Phase 24 complete (all 4 plans executed, gap closure verified)*
+*Last updated: 2026-01-29 — Phase 25 added (Table UX & Filter Persistence)*
