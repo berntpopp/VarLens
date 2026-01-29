@@ -1,8 +1,9 @@
 <template>
   <v-menu :close-on-content-click="false" max-width="350">
     <template #activator="{ props }">
-      <v-btn v-bind="props" icon="mdi-table-column" size="small" variant="text">
-        <v-tooltip activator="parent" location="bottom">Columns</v-tooltip>
+      <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-table-column">
+        Columns
+        <v-tooltip activator="parent" location="bottom">Show/hide and reorder columns</v-tooltip>
       </v-btn>
     </template>
     <v-card>

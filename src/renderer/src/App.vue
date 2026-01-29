@@ -80,6 +80,10 @@
           />
           <template v-else>
             <div class="sticky-filter-bar">
+              <div class="d-flex align-center px-3 py-2 bg-grey-lighten-4">
+                <span class="text-subtitle-2 font-weight-medium">{{ selectedCaseName }}</span>
+                <CaseMetadataModal :case-id="selectedCaseId" :case-name="selectedCaseName" class="ml-2" />
+              </div>
               <FilterToolbar
                 :case-id="selectedCaseId"
                 :case-name="selectedCaseName"
@@ -90,9 +94,6 @@
                 @update:filters="handleFiltersUpdate"
                 @reset-sort="handleResetSort"
               />
-            </div>
-            <div class="d-flex align-center justify-space-between px-3 py-2">
-              <CaseMetadataModal :case-id="selectedCaseId" :case-name="selectedCaseName" />
             </div>
             <VariantTable
               ref="variantTableRef"
