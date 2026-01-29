@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 24 of 24 (Custom Tags + HPO Autocomplete)
-Plan: 3 of 3
-Status: Phase complete
-Last activity: 2026-01-29 - Completed 24-03 (Variant UI Integration)
+Plan: 4 of 4 (gap closure)
+Status: Phase complete (including gap closure)
+Last activity: 2026-01-29 - Completed 24-04 (Tag Filter Backend Gap Closure)
 
 Progress: [████████████████████] 24/24 phases (100% complete, v0.4.0 ready for release)
 
@@ -31,8 +31,8 @@ Progress: [████████████████████] 24/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (completed):**
-- Total plans completed: 22
-- Total execution time: 128 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6)
+- Total plans completed: 23 (including gap closure)
+- Total execution time: 131 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6 + 3)
 - Phases completed: 6 phases (19-24)
 
 **By Phase:**
@@ -44,7 +44,7 @@ Progress: [████████████████████] 24/24 p
 | 21. API Service Layer | 3/3 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status), 02: VEP API client (rate limiting, MANE Select), 03: HPO API client + IPC handlers |
 | 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (HpoTermSelector, CaseMetadataCard, enhanced CaseList) |
 | 23. Side Panel UI | 4/4 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration), 04: VEP Enrichment Gap Closure (useVepEnrichment, rsID, REVEL/SpliceAI/SIFT/PolyPhen scores, consequence badges) |
-| 24. Custom Tags + HPO | 3/3 | Complete | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON), 02: Settings UI (TagManagementDialog, ColorSwatchPicker, settings menu), 03: Variant UI Integration (FilterToolbar tag filter, TagsSection, HpoAutocomplete) |
+| 24. Custom Tags + HPO | 4/4 | Complete | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON), 02: Settings UI (TagManagementDialog, ColorSwatchPicker, settings menu), 03: Variant UI Integration (FilterToolbar tag filter, TagsSection, HpoAutocomplete), 04: Gap Closure (tag_ids filter in DatabaseService) |
 
 ## Accumulated Context
 
@@ -124,6 +124,7 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Settings menu dropdown pattern | Settings button opens v-menu with External Links and Custom Tags options | Scalable pattern for future settings (24-02) |
 | Tag filter OR logic | Multi-select tag filter shows variants with ANY selected tag | User expectation for filter behavior (24-03) |
 | HpoAutocomplete clear after select | Selected term clears after emit for reuse pattern | Better UX for adding multiple HPO terms (24-03) |
+| Subquery for junction filtering | Use IN (SELECT ... FROM variant_tags WHERE ...) for tag filtering | Avoids duplicate rows, maintains query structure (24-04) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -150,7 +151,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-29 - Phase 24
-Stopped at: Completed 24-03-PLAN.md (Variant UI Integration)
+Stopped at: Completed 24-04-PLAN.md (Tag Filter Backend Gap Closure)
 Resume file: None
 
 ---
