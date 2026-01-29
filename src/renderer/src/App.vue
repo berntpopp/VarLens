@@ -8,10 +8,26 @@
       <v-icon icon="custom:varlens-dna" class="ml-2" size="small" />
       <v-app-bar-title class="ml-2 text-subtitle-1 font-weight-bold"> VarLens </v-app-bar-title>
       <DatabasePicker @database-switched="handleDatabaseSwitched" @error="handleDatabaseError" />
-      <v-btn icon size="small" @click="externalLinksSettingsRef?.show()">
-        <v-icon>mdi-cog</v-icon>
-        <v-tooltip activator="parent" location="bottom">Settings</v-tooltip>
-      </v-btn>
+      <v-menu>
+        <template #activator="{ props }">
+          <v-btn icon size="small" v-bind="props">
+            <v-icon>mdi-cog</v-icon>
+            <v-tooltip activator="parent" location="bottom">Settings</v-tooltip>
+          </v-btn>
+        </template>
+        <v-list density="compact">
+          <v-list-item
+            prepend-icon="mdi-link"
+            title="External Links"
+            @click="externalLinksSettingsRef?.show()"
+          />
+          <v-list-item
+            prepend-icon="mdi-tag-multiple"
+            title="Custom Tags"
+            @click="tagManagementDialogRef?.show()"
+          />
+        </v-list>
+      </v-menu>
     </v-app-bar>
 
     <v-navigation-drawer v-model="sidebarOpen" :width="280">
@@ -100,6 +116,7 @@
     <DisclaimerDialog ref="disclaimerRef" @acknowledged="handleDisclaimerAcknowledged" />
     <FaqDialog ref="faqDialogRef" />
     <ExternalLinksSettings ref="externalLinksSettingsRef" />
+    <TagManagementDialog ref="tagManagementDialogRef" />
   </v-app>
 </template>
 
@@ -119,6 +136,7 @@ import DisclaimerDialog from './components/DisclaimerDialog.vue'
 import FaqDialog from './components/FaqDialog.vue'
 import DatabasePicker from './components/DatabasePicker.vue'
 import ExternalLinksSettings from './components/ExternalLinksSettings.vue'
+import TagManagementDialog from './components/TagManagementDialog.vue'
 import CohortView from './components/CohortView.vue'
 import VariantDetailsPanel from './components/VariantDetailsPanel.vue'
 import CaseMetadataCard from './components/CaseMetadataCard.vue'
@@ -145,6 +163,7 @@ const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
 const disclaimerRef = ref<InstanceType<typeof DisclaimerDialog> | null>(null)
 const faqDialogRef = ref<InstanceType<typeof FaqDialog> | null>(null)
 const externalLinksSettingsRef = ref<InstanceType<typeof ExternalLinksSettings> | null>(null)
+const tagManagementDialogRef = ref<InstanceType<typeof TagManagementDialog> | null>(null)
 const cohortViewRef = ref<InstanceType<typeof CohortView> | null>(null)
 
 // Sidebar state
