@@ -1,6 +1,12 @@
 <template>
-  <div>
+  <div class="table-container">
+    <!-- Top scrollbar (synced with table) -->
+    <div ref="topScrollbarRef" class="top-scrollbar-container" @scroll="handleTopScroll">
+      <div ref="topScrollbarInnerRef" class="top-scrollbar-inner"></div>
+    </div>
+
     <v-data-table-server
+      ref="dataTableRef"
       v-model:page="page"
       v-model:items-per-page="itemsPerPage"
       v-model:sort-by="sortBy"
@@ -388,7 +394,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type {
   Variant,
   VariantFilter,
@@ -437,9 +443,22 @@ const {
   getAnnotations
 } = useAnnotations()
 
-// Initialize column preferences
-const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
-  useColumnPreferences('variant-table')
+// Initialize column preferences (only prefs needed here, management is in FilterToolbar)
+const { prefs } = useColumnPreferences('variant-table')
+
+// Scroll sync refs
+const topScrollbarRef = ref<HTMLElement | null>(null)
+const topScrollbarInnerRef = ref<HTMLElement | null>(null)
+const dataTableRef = ref<InstanceType<typeof import('vuetify/components').VDataTableServer> | null>(
+  null
+)
+let tableWrapperEl: HTMLElement | null = null
+let isSyncingScroll = false
+
+// Middle mouse button drag scrolling state
+let isMiddleMouseDragging = false
+let middleMouseStartX = 0
+let middleMouseScrollLeft = 0
 
 // Table state - DO NOT mutate these in loadVariants handler (infinite loop)
 const variants = ref<Variant[]>([])
@@ -811,6 +830,110 @@ const resetSort = () => {
   sortBy.value = []
 }
 
+// --- Scroll sync and middle mouse button handling ---
+
+// Handle top scrollbar scroll - sync to table
+const handleTopScroll = () => {
+  if (isSyncingScroll || !tableWrapperEl || !topScrollbarRef.value) return
+  isSyncingScroll = true
+  tableWrapperEl.scrollLeft = topScrollbarRef.value.scrollLeft
+  isSyncingScroll = false
+}
+
+// Handle table scroll - sync to top scrollbar
+const handleTableScroll = () => {
+  if (isSyncingScroll || !tableWrapperEl || !topScrollbarRef.value) return
+  isSyncingScroll = true
+  topScrollbarRef.value.scrollLeft = tableWrapperEl.scrollLeft
+  isSyncingScroll = false
+}
+
+// Update top scrollbar width to match table content
+const updateTopScrollbarWidth = () => {
+  if (!tableWrapperEl || !topScrollbarInnerRef.value) return
+  topScrollbarInnerRef.value.style.width = `${tableWrapperEl.scrollWidth}px`
+}
+
+// Middle mouse button handlers
+const handleMouseDown = (e: MouseEvent) => {
+  if (e.button === 1 && tableWrapperEl) {
+    // Middle mouse button
+    e.preventDefault()
+    isMiddleMouseDragging = true
+    middleMouseStartX = e.pageX - tableWrapperEl.offsetLeft
+    middleMouseScrollLeft = tableWrapperEl.scrollLeft
+    tableWrapperEl.style.cursor = 'grabbing'
+  }
+}
+
+const handleMouseMove = (e: MouseEvent) => {
+  if (!isMiddleMouseDragging || !tableWrapperEl) return
+  e.preventDefault()
+  const x = e.pageX - tableWrapperEl.offsetLeft
+  const walk = (x - middleMouseStartX) * 2 // Multiply for faster scroll
+  tableWrapperEl.scrollLeft = middleMouseScrollLeft - walk
+}
+
+const handleMouseUp = () => {
+  if (isMiddleMouseDragging && tableWrapperEl) {
+    isMiddleMouseDragging = false
+    tableWrapperEl.style.cursor = ''
+  }
+}
+
+// Prevent default middle-click behavior (auto-scroll)
+const handleAuxClick = (e: MouseEvent) => {
+  if (e.button === 1) {
+    e.preventDefault()
+  }
+}
+
+// Setup scroll sync and middle mouse drag
+onMounted(async () => {
+  await nextTick()
+
+  // Find the table wrapper element
+
+  const tableEl = dataTableRef.value?.$el as HTMLElement | undefined
+  if (tableEl) {
+    tableWrapperEl = tableEl.querySelector('.v-table__wrapper') as HTMLElement | null
+
+    if (tableWrapperEl) {
+      // Sync scroll events
+      tableWrapperEl.addEventListener('scroll', handleTableScroll)
+
+      // Middle mouse button handlers
+      tableWrapperEl.addEventListener('mousedown', handleMouseDown)
+      // eslint-disable-next-line no-undef
+      document.addEventListener('mousemove', handleMouseMove)
+      // eslint-disable-next-line no-undef
+      document.addEventListener('mouseup', handleMouseUp)
+      tableWrapperEl.addEventListener('auxclick', handleAuxClick)
+
+      // Update top scrollbar width
+      updateTopScrollbarWidth()
+
+      // Use ResizeObserver to keep scrollbar width in sync
+      const resizeObserver = new ResizeObserver(() => {
+        updateTopScrollbarWidth()
+      })
+      resizeObserver.observe(tableWrapperEl)
+    }
+  }
+})
+
+onBeforeUnmount(() => {
+  if (tableWrapperEl) {
+    tableWrapperEl.removeEventListener('scroll', handleTableScroll)
+    tableWrapperEl.removeEventListener('mousedown', handleMouseDown)
+    tableWrapperEl.removeEventListener('auxclick', handleAuxClick)
+  }
+  // eslint-disable-next-line no-undef
+  document.removeEventListener('mousemove', handleMouseMove)
+  // eslint-disable-next-line no-undef
+  document.removeEventListener('mouseup', handleMouseUp)
+})
+
 // Expose resetSort for parent components
 defineExpose({
   resetSort,
@@ -819,6 +942,41 @@ defineExpose({
 </script>
 
 <style scoped>
+/* Table container with top scrollbar */
+.table-container {
+  position: relative;
+}
+
+.top-scrollbar-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+}
+
+.top-scrollbar-inner {
+  height: 1px;
+}
+
+/* Custom scrollbar styling for top scrollbar */
+.top-scrollbar-container::-webkit-scrollbar {
+  height: 10px;
+}
+
+.top-scrollbar-container::-webkit-scrollbar-track {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.top-scrollbar-container::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 5px;
+}
+
+.top-scrollbar-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--v-theme-on-surface), 0.35);
+}
+
 .text-truncate {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -905,5 +1063,23 @@ defineExpose({
 /* Ensure table can scroll horizontally when columns overflow */
 :deep(.v-table__wrapper) {
   overflow-x: auto;
+}
+
+/* Style bottom scrollbar to match top scrollbar */
+:deep(.v-table__wrapper)::-webkit-scrollbar {
+  height: 10px;
+}
+
+:deep(.v-table__wrapper)::-webkit-scrollbar-track {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+:deep(.v-table__wrapper)::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 5px;
+}
+
+:deep(.v-table__wrapper)::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--v-theme-on-surface), 0.35);
 }
 </style>

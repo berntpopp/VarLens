@@ -3,7 +3,9 @@
     <template #activator="{ props }">
       <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-filter-cog">
         Filters
-        <v-tooltip activator="parent" location="bottom">Show/hide and reorder filter groups</v-tooltip>
+        <v-tooltip activator="parent" location="bottom"
+          >Show/hide and reorder filter groups</v-tooltip
+        >
       </v-btn>
     </template>
     <v-card>

@@ -47,7 +47,11 @@
                 </div>
 
                 <!-- Collapsed label (rotated 90 degrees) -->
-                <div v-if="!group.expanded" class="collapsed-label" @click="toggleFilterGroupExpanded(group.id)">
+                <div
+                  v-if="!group.expanded"
+                  class="collapsed-label"
+                  @click="toggleFilterGroupExpanded(group.id)"
+                >
                   <span>{{ filterGroupLabels[group.id] || group.id }}</span>
                 </div>
 

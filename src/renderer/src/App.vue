@@ -82,7 +82,11 @@
             <div class="filter-bar-container">
               <div class="case-header d-flex align-center px-3 py-1 border-b">
                 <span class="text-subtitle-2 font-weight-medium">{{ selectedCaseName }}</span>
-                <CaseMetadataModal :case-id="selectedCaseId" :case-name="selectedCaseName" class="ml-2" />
+                <CaseMetadataModal
+                  :case-id="selectedCaseId"
+                  :case-name="selectedCaseName"
+                  class="ml-2"
+                />
               </div>
               <FilterToolbar
                 :case-id="selectedCaseId"

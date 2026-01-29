@@ -142,9 +142,7 @@ export function useFilterPreferences() {
    */
   const toggleFilterGroupExpanded = (id: string): void => {
     const currentGroups = mergeWithDefaults()
-    const updated = currentGroups.map((g) =>
-      g.id === id ? { ...g, expanded: !g.expanded } : g
-    )
+    const updated = currentGroups.map((g) => (g.id === id ? { ...g, expanded: !g.expanded } : g))
     storedPrefs.value.groups = updated
   }
 
@@ -154,9 +152,7 @@ export function useFilterPreferences() {
    */
   const toggleFilterGroupVisible = (id: string): void => {
     const currentGroups = mergeWithDefaults()
-    const updated = currentGroups.map((g) =>
-      g.id === id ? { ...g, visible: !g.visible } : g
-    )
+    const updated = currentGroups.map((g) => (g.id === id ? { ...g, visible: !g.visible } : g))
     storedPrefs.value.groups = updated
   }
 
@@ -166,9 +162,7 @@ export function useFilterPreferences() {
    */
   const hideFilterGroup = (id: string): void => {
     const currentGroups = mergeWithDefaults()
-    const updated = currentGroups.map((g) =>
-      g.id === id ? { ...g, visible: false } : g
-    )
+    const updated = currentGroups.map((g) => (g.id === id ? { ...g, visible: false } : g))
     storedPrefs.value.groups = updated
   }
 
