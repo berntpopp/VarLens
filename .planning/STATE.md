@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 22 of 24 (Case Metadata)
-Plan: 2 of 3
-Status: In progress
-Last activity: 2026-01-29 - Completed 22-02-PLAN.md (Case Metadata Composable & UI)
+Plan: 3 of 3
+Status: Phase complete
+Last activity: 2026-01-29 - Completed 22-03-PLAN.md (Case Metadata UI Integration)
 
-Progress: [████░░░░░░░░░░░░░░░░] 21/24 phases (87.5% complete, v0.4.0 in progress)
+Progress: [████░░░░░░░░░░░░░░░░] 22/24 phases (91.7% complete, v0.4.0 in progress)
 
 ## Milestone History
 
@@ -31,8 +31,8 @@ Progress: [████░░░░░░░░░░░░░░░░] 21/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 12
-- Total execution time: 77 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3)
+- Total plans completed: 15
+- Total execution time: 83 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 6)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -42,8 +42,8 @@ Progress: [████░░░░░░░░░░░░░░░░] 21/24 p
 | 19. Database Foundation | 2/2 | Complete | Schema + migrations + encrypted DB tests |
 | 20. Annotation Core | 4/4 + UAT | Complete | 01: Backend, 02: UI Display, 03: Mutation Methods, 04: ACMG/Comment UI + post-UAT: per-case stars/ACMG, global indicators, cohort mode |
 | 21. API Service Layer | 3/3 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status), 02: VEP API client (rate limiting, MANE Select), 03: HPO API client + IPC handlers |
-| 22. Case Metadata | 2/3 | In progress | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox) |
-| 23. Side Panel UI | 1/3 | In progress | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration) |
+| 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (CaseList with metadata display) |
+| 23. Side Panel UI | 3/3 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration) |
 | 24. Custom Tags + HPO | TBD | Not started | Tags + autocomplete |
 
 ## Accumulated Context
@@ -105,6 +105,10 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Close behaviors | X button, Escape key, tab navigation all close panel | Multiple exit paths for better UX (23-01) |
 | Tab-switch cleanup | Watch activeTab to close panel and clear selectedPanelVariant | Avoid stale data when switching Case/Cohort (23-01) |
 | Row-click event chain | @click:row emits to parent, parent sets panel state | Standard Vue emit pattern, testable (23-01) |
+| InlineEditableText UX | Click-to-edit with hover pencil, blur saves, Escape cancels | Reusable pattern for inline editing (23-03) |
+| Comment delete confirmation | Dialog with global/case target before deletion | Prevent accidental comment loss (23-03) |
+| ACMG dual display | Per-case in case mode, global hint shown below if exists | Clear hierarchy of classifications (23-03) |
+| Shell domain allowlist | DECIPHER, ClinGen, Ensembl added to ALLOWED_DOMAINS | Security validation for new external links (23-03) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -130,9 +134,9 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 22 Plan 02
-Stopped at: Completed 22-02-PLAN.md - Case Metadata Composable & UI
+Last session: 2026-01-29 - Phase 23 Plan 03
+Stopped at: Completed 23-03-PLAN.md - Comments and ACMG Editing
 Resume file: None
 
 ---
-*Next step: Phase 22-03 (Case Metadata UI) or Phase 23 (Side Panel UI)*
+*Next step: Phase 24 (Custom Tags + HPO)*
