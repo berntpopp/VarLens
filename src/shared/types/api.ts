@@ -8,7 +8,10 @@ import type {
   SortItem,
   VariantAnnotation,
   CaseVariantAnnotation,
-  AcmgClassification
+  AcmgClassification,
+  CaseMetadata,
+  CohortGroup,
+  CaseHpoTerm
 } from '../../main/database/types'
 import type { ProgressUpdate, ImportResult } from '../../main/import/types'
 import type { SerializableError } from './errors'
@@ -37,7 +40,10 @@ export type {
   VepFetchResult,
   HpoSearchResult,
   CacheSizeInfo,
-  CacheInfo
+  CacheInfo,
+  CaseMetadata,
+  CohortGroup,
+  CaseHpoTerm
 }
 
 export interface CasesAPI {
@@ -253,6 +259,43 @@ export interface HpoAPI {
   clearCache: () => Promise<{ success: boolean }>
 }
 
+// Case metadata types
+export type AffectedStatus = 'affected' | 'unaffected' | 'unknown'
+
+export interface CaseMetadataUpdates {
+  affected_status?: AffectedStatus | null
+  notes?: string | null
+}
+
+export interface FullCaseMetadata {
+  metadata: CaseMetadata | null
+  cohorts: CohortGroup[]
+  hpoTerms: CaseHpoTerm[]
+}
+
+export interface CaseMetadataAPI {
+  get: (caseId: number) => Promise<CaseMetadata | null>
+  upsert: (caseId: number, updates: CaseMetadataUpdates) => Promise<CaseMetadata>
+  getFullMetadata: (caseId: number) => Promise<FullCaseMetadata>
+
+  // Cohort groups
+  listCohorts: () => Promise<CohortGroup[]>
+  createCohort: (name: string, description?: string | null) => Promise<CohortGroup>
+  deleteCohort: (cohortId: number) => Promise<void>
+  getCohortByName: (name: string) => Promise<CohortGroup | null>
+
+  // Case-cohort links
+  getCaseCohorts: (caseId: number) => Promise<CohortGroup[]>
+  assignCohort: (caseId: number, cohortId: number) => Promise<void>
+  removeCohort: (caseId: number, cohortId: number) => Promise<void>
+  setCohorts: (caseId: number, cohortIds: number[]) => Promise<void>
+
+  // HPO terms
+  getHpoTerms: (caseId: number) => Promise<CaseHpoTerm[]>
+  assignHpoTerm: (caseId: number, hpoId: string, hpoLabel: string) => Promise<CaseHpoTerm>
+  removeHpoTerm: (caseId: number, hpoId: string) => Promise<void>
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -266,4 +309,5 @@ export interface WindowAPI {
   annotations: AnnotationsAPI
   vep: VepAPI
   hpo: HpoAPI
+  caseMetadata: CaseMetadataAPI
 }

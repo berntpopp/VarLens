@@ -9,7 +9,8 @@ import type {
   DuplicateCheckResult,
   CohortSearchParams,
   GlobalAnnotationUpdates,
-  PerCaseAnnotationUpdates
+  PerCaseAnnotationUpdates,
+  CaseMetadataUpdates
 } from '../shared/types'
 
 /**
@@ -171,6 +172,47 @@ const api = {
     search: (query: string, maxResults?: number) =>
       ipcRenderer.invoke('hpo:search', query, maxResults),
     clearCache: () => ipcRenderer.invoke('hpo:clearCache')
+  },
+
+  caseMetadata: {
+    get: (caseId: number) => ipcRenderer.invoke('case-metadata:get', caseId),
+
+    upsert: (caseId: number, updates: CaseMetadataUpdates) =>
+      ipcRenderer.invoke('case-metadata:upsert', caseId, updates),
+
+    getFullMetadata: (caseId: number) =>
+      ipcRenderer.invoke('case-metadata:getFullMetadata', caseId),
+
+    // Cohort groups
+    listCohorts: () => ipcRenderer.invoke('case-metadata:listCohorts'),
+
+    createCohort: (name: string, description?: string | null) =>
+      ipcRenderer.invoke('case-metadata:createCohort', name, description),
+
+    deleteCohort: (cohortId: number) => ipcRenderer.invoke('case-metadata:deleteCohort', cohortId),
+
+    getCohortByName: (name: string) => ipcRenderer.invoke('case-metadata:getCohortByName', name),
+
+    // Case-cohort links
+    getCaseCohorts: (caseId: number) => ipcRenderer.invoke('case-metadata:getCaseCohorts', caseId),
+
+    assignCohort: (caseId: number, cohortId: number) =>
+      ipcRenderer.invoke('case-metadata:assignCohort', caseId, cohortId),
+
+    removeCohort: (caseId: number, cohortId: number) =>
+      ipcRenderer.invoke('case-metadata:removeCohort', caseId, cohortId),
+
+    setCohorts: (caseId: number, cohortIds: number[]) =>
+      ipcRenderer.invoke('case-metadata:setCohorts', caseId, cohortIds),
+
+    // HPO terms
+    getHpoTerms: (caseId: number) => ipcRenderer.invoke('case-metadata:getHpoTerms', caseId),
+
+    assignHpoTerm: (caseId: number, hpoId: string, hpoLabel: string) =>
+      ipcRenderer.invoke('case-metadata:assignHpoTerm', caseId, hpoId, hpoLabel),
+
+    removeHpoTerm: (caseId: number, hpoId: string) =>
+      ipcRenderer.invoke('case-metadata:removeHpoTerm', caseId, hpoId)
   }
 }
 
