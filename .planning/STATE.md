@@ -31,8 +31,8 @@ Progress: [████████████████████] 23/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 19
-- Total execution time: 113 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7)
+- Total plans completed: 20
+- Total execution time: 118 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -43,7 +43,7 @@ Progress: [████████████████████] 23/24 p
 | 20. Annotation Core | 4/4 + UAT | Complete | 01: Backend, 02: UI Display, 03: Mutation Methods, 04: ACMG/Comment UI + post-UAT: per-case stars/ACMG, global indicators, cohort mode |
 | 21. API Service Layer | 3/3 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status), 02: VEP API client (rate limiting, MANE Select), 03: HPO API client + IPC handlers |
 | 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (HpoTermSelector, CaseMetadataCard, enhanced CaseList) |
-| 23. Side Panel UI | 3/3 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration) |
+| 23. Side Panel UI | 4/4 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration), 04: VEP Enrichment Gap Closure (useVepEnrichment, rsID, REVEL/SpliceAI/SIFT/PolyPhen scores, consequence badges) |
 | 24. Custom Tags + HPO | 1/TBD | In progress | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON) |
 
 ## Accumulated Context
@@ -112,6 +112,11 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Comment delete confirmation | Dialog with global/case target before deletion | Prevent accidental comment loss (23-03) |
 | ACMG dual display | Per-case in case mode, global hint shown below if exists | Clear hierarchy of classifications (23-03) |
 | Shell domain allowlist | DECIPHER, ClinGen, Ensembl added to ALLOWED_DOMAINS | Security validation for new external links (23-03) |
+| SIFT low-bad color logic | <=0.05 deleterious = error, <=0.1 = warning, >0.1 = success | Lower scores are more deleterious (23-04) |
+| PolyPhen high-bad color logic | >=0.85 damaging = error, >=0.5 = warning, <0.5 = success | Higher scores are more damaging (23-04) |
+| SpliceAI max delta display | Display max of 4 delta scores (AG, AL, DG, DL) | Compact single-chip display (23-04) |
+| rsID from colocated_variants | First variant with id starting with 'rs' | VEP enrichment integration (23-04) |
+| Consequence badge colors | frameshift/stop/splice = error, missense/inframe = warning, other = grey | Severity-based color coding (23-04) |
 | Variant tags per-case | variant_tags uses (case_id, variant_id, tag_id) composite unique constraint | Same variant can have different tags in different cases (24-01) |
 | Bundled HPO JSON | 19,407 terms from HPO release 2026-01-08 for offline search | Client-side search without API dependency (24-01) |
 | Lazy-load HPO on first search | HPO JSON loaded via dynamic import() on first search, not app start | Faster initial load, deferred overhead (24-01) |
@@ -141,8 +146,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 24
-Stopped at: Completed 24-01-PLAN.md (Backend Infrastructure)
+Last session: 2026-01-29 - Phase 23 gap closure
+Stopped at: Completed 23-04-PLAN.md (VEP Enrichment Integration)
 Resume file: None
 
 ---
