@@ -209,7 +209,12 @@ export class VepApiClient {
   ): Promise<unknown> {
     // Use GET endpoint for single variants (more reliable than POST)
     // URL format: /vep/human/region/{chr}:{start}:{end}/{allele}
-    const url = `${this.baseUrl}/vep/human/region/${chr}:${pos}:${pos}/${alt}?content-type=application/json`
+    // Add parameters for prediction scores:
+    // - CADD=1: Request CADD phred scores
+    // - sift=b: Request SIFT prediction and score (b = both)
+    // - polyphen=b: Request PolyPhen prediction and score (b = both)
+    // Note: REVEL and SpliceAI are NOT available via REST API (require VEP plugins)
+    const url = `${this.baseUrl}/vep/human/region/${chr}:${pos}:${pos}/${alt}?content-type=application/json&CADD=1&sift=b&polyphen=b`
 
     const response = await fetch(url, {
       signal,
