@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 25 of 25 (Table UX & Filter Persistence)
-Plan: 0 of ?
-Status: Not planned yet
-Last activity: 2026-01-29 - Phase 25 added to v0.4.0
+Plan: 1 of ?
+Status: In progress
+Last activity: 2026-01-29 - Completed 25-01-PLAN.md
 
-Progress: [████████████████████] 24/25 phases (96% complete, Phase 25 pending)
+Progress: [████████████████████] 24/25 phases (96% complete, Phase 25 in progress)
 
 ## Milestone History
 
@@ -30,10 +30,10 @@ Progress: [████████████████████] 24/25 p
 - Total execution time: ~2 days
 - Phases completed: 6 phases (13-18)
 
-**v0.4.0 Velocity (completed):**
-- Total plans completed: 23 (including gap closure)
-- Total execution time: 131 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6 + 3)
-- Phases completed: 6 phases (19-24)
+**v0.4.0 Velocity (in progress):**
+- Total plans completed: 24 (including gap closure)
+- Total execution time: 133 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6 + 3 + 2)
+- Phases completed: 6 phases (19-24), Phase 25 in progress
 
 **By Phase:**
 
@@ -45,7 +45,7 @@ Progress: [████████████████████] 24/25 p
 | 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (HpoTermSelector, CaseMetadataCard, enhanced CaseList) |
 | 23. Side Panel UI | 4/4 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration), 04: VEP Enrichment Gap Closure (useVepEnrichment, rsID, REVEL/SpliceAI/SIFT/PolyPhen scores, consequence badges) |
 | 24. Custom Tags + HPO | 4/4 | Complete | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON), 02: Settings UI (TagManagementDialog, ColorSwatchPicker, settings menu), 03: Variant UI Integration (FilterToolbar tag filter, TagsSection, HpoAutocomplete), 04: Gap Closure (tag_ids filter in DatabaseService) |
-| 25. Table UX & Filter | 0/? | Not started | Column management, sticky filters, filter groups, cohort filters, case metadata modal |
+| 25. Table UX & Filter | 1/? | In progress | 01: Composables Infrastructure (useColumnPreferences, useFilterPreferences, vuedraggable) |
 
 ## Accumulated Context
 
@@ -126,6 +126,10 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Tag filter OR logic | Multi-select tag filter shows variants with ANY selected tag | User expectation for filter behavior (24-03) |
 | HpoAutocomplete clear after select | Selected term clears after emit for reuse pattern | Better UX for adding multiple HPO terms (24-03) |
 | Subquery for junction filtering | Use IN (SELECT ... FROM variant_tags WHERE ...) for tag filtering | Avoids duplicate rows, maintains query structure (24-04) |
+| varlens_ localStorage prefix | Use 'varlens_' prefix with underscore separator for all localStorage keys | Consistent naming convention (25-01) |
+| Column preference persistence | useColumnPreferences composable with VueUse useStorage for reactive persistence | Global column preferences across all cases/cohorts (25-01) |
+| Filter group persistence | useFilterPreferences composable with 8 default groups, auto-merge new groups | Draggable filter group order and active state (25-01) |
+| Width clamping for columns | 60-500px range for column widths | Readability minimum, prevents extreme sizes (25-01) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -151,8 +155,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 25 added
-Stopped at: Phase 25 added, ready for planning
+Last session: 2026-01-29 - Phase 25 Plan 01 completed
+Stopped at: Completed 25-01-PLAN.md (Composables Infrastructure)
 Resume file: None
 
 ---
