@@ -155,12 +155,13 @@ Plans:
   6. ACMG classification displays with color-coded badge and is editable via dropdown
   7. Panel width is resizable and preference persists across sessions
 
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [x] 23-01-PLAN.md — Panel infrastructure: resizable drawer, close behaviors, row click integration ✓
 - [x] 23-02-PLAN.md — Content sections: variant identity, score chips, external links, copy-to-clipboard ✓
 - [x] 23-03-PLAN.md — Comments editing, ACMG editing, shell domain allowlist ✓
+- [x] 23-04-PLAN.md — Gap closure: VEP enrichment integration (rsID, REVEL, SpliceAI, SIFT, PolyPhen) ✓
 
 ### Phase 24: Custom Tags + HPO Autocomplete
 **Goal**: Users can create custom tags with colors, assign to variants, filter by tags, and search HPO terms with autocomplete.
@@ -180,8 +181,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 24-01-PLAN.md — Backend: Tag IPC handlers, useTags composable, useHpoBundled composable, bundled HPO JSON
-- [ ] 24-02-PLAN.md — Tag management: TagManagementDialog, ColorSwatchPicker, settings integration
+- [x] 24-01-PLAN.md — Backend: Tag IPC handlers, useTags composable, useHpoBundled composable, bundled HPO JSON ✓
+- [x] 24-02-PLAN.md — Tag management: TagManagementDialog, ColorSwatchPicker, settings integration ✓
 - [ ] 24-03-PLAN.md — UI integration: FilterToolbar tag filter, TagsSection in side panel, HpoAutocomplete component
 
 ## Progress
@@ -195,8 +196,8 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | 20. Annotation Core | 4/4 | ✓ Complete | 2026-01-28 |
 | 21. API Service Layer | 3/3 | ✓ Complete | 2026-01-29 |
 | 22. Case Metadata | 3/3 | ✓ Complete | 2026-01-29 |
-| 23. Side Panel UI | 3/3 | ✓ Complete | 2026-01-29 |
-| 24. Custom Tags + HPO Autocomplete | 0/3 | Ready | - |
+| 23. Side Panel UI | 4/4 | ✓ Complete | 2026-01-29 |
+| 24. Custom Tags + HPO Autocomplete | 2/3 | ◆ In Progress | - |
 
 ---
-*Last updated: 2026-01-29 — Phase 23 complete*
+*Last updated: 2026-01-29 — Phase 24 in progress (2/3 plans complete)*
