@@ -12,18 +12,56 @@
       />
     </div>
 
-    <!-- Search bar -->
-    <v-text-field
-      v-model="searchTerm"
-      prepend-inner-icon="mdi-magnify"
-      placeholder="Search by gene, position (chr:pos), or HGVS notation..."
-      clearable
-      density="compact"
-      variant="outlined"
-      hide-details
-      class="mb-3"
-      @update:model-value="handleSearchChange"
-    />
+    <!-- Search bar with FilterToolbar-like styling -->
+    <div class="filter-toolbar-container">
+      <v-toolbar density="default" flat class="filter-toolbar px-3 py-3">
+        <div class="filter-section search-section">
+          <div class="section-label">
+            <v-icon size="small" class="mr-1">mdi-magnify</v-icon>
+            <span>Search</span>
+          </div>
+          <v-text-field
+            v-model="searchTerm"
+            prepend-inner-icon="mdi-magnify"
+            placeholder="Gene, position (chr:pos), or HGVS..."
+            clearable
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="filter-input"
+            :class="{ 'filter-active': searchTerm !== '' }"
+            @update:model-value="handleSearchChange"
+          />
+        </div>
+
+        <v-spacer />
+
+        <!-- Results count -->
+        <div class="results-section d-flex align-center ga-2">
+          <v-chip
+            :color="searchTerm !== '' ? 'primary' : 'default'"
+            :variant="searchTerm !== '' ? 'flat' : 'tonal'"
+            size="small"
+            class="results-chip"
+          >
+            <v-icon start size="small">mdi-filter-variant</v-icon>
+            <strong>{{ totalCount?.toLocaleString() ?? '0' }}</strong>
+            <span class="mx-1 text-medium-emphasis">variants</span>
+          </v-chip>
+
+          <v-btn
+            v-if="searchTerm !== ''"
+            color="error"
+            variant="tonal"
+            size="small"
+            prepend-icon="mdi-filter-off"
+            @click="searchTerm = ''; handleSearchChange('')"
+          >
+            Clear
+          </v-btn>
+        </div>
+      </v-toolbar>
+    </div>
 
     <v-data-table-server
       v-model:items-per-page="itemsPerPage"
@@ -597,5 +635,64 @@ defineExpose({ refresh })
 
 :deep(.v-table__wrapper) {
   overflow-x: auto;
+}
+
+/* FilterToolbar-like styling for visual consistency */
+.filter-toolbar-container {
+  position: sticky;
+  top: 48px; /* Below tabs */
+  z-index: 3;
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+  background: rgb(var(--v-theme-surface));
+}
+
+.filter-toolbar {
+  background: transparent !important;
+  min-height: 80px !important;
+  height: auto !important;
+}
+
+.filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  min-width: fit-content;
+}
+
+.search-section {
+  min-width: 280px;
+}
+
+.section-label {
+  display: flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  white-space: nowrap;
+}
+
+.filter-input.filter-active :deep(.v-field) {
+  border-color: rgb(var(--v-theme-primary));
+  border-width: 2px;
+}
+
+.filter-input :deep(.v-field) {
+  border-radius: 6px;
+}
+
+.results-section {
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+}
+
+.results-chip {
+  font-size: 0.85rem;
 }
 </style>
