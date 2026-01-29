@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Varlens is an Electron-based desktop application for offline analysis of genetic variant data. It enables external collaborators to analyze pre-filtered and annotated genetic variant data without exposing login credentials, using a local SQLCipher-encrypted SQLite database with FTS5 search for efficient querying and storage. It supports single-case and cross-case cohort analysis with external genomic database links.
+Varlens is an Electron-based desktop application for offline analysis of genetic variant data. It enables external collaborators to analyze pre-filtered and annotated genetic variant data without exposing login credentials, using a local SQLCipher-encrypted SQLite database with FTS5 search for efficient querying and storage. It supports single-case and cross-case cohort analysis with external genomic database links, variant annotation (comments, stars, ACMG classification, custom tags), case metadata management (status, cohorts, HPO phenotypes), and live API enrichment with offline fallback.
 
 ## Core Value
 
@@ -39,19 +39,31 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 - ✓ Cohort analysis view with aggregated variant table across all cases — v0.3.0
 - ✓ Cohort variant search (query variant/gene, see carrier summary across cohort) — v0.3.0
 - ✓ Cohort summary stats (carrier count, allele frequency, het/hom breakdown, per-case links, gene-level aggregation) — v0.3.0
+- ✓ Global and per-case variant comments with timestamps — v0.4.0
+- ✓ Variant star/flag toggle with per-case support — v0.4.0
+- ✓ ACMG 5-tier classification (Pathogenic to Benign) with color-coded badges — v0.4.0
+- ✓ Custom tags with color management and settings UI — v0.4.0
+- ✓ Variant details side panel with resizable drawer — v0.4.0
+- ✓ Live Ensembl VEP API enrichment with SQLite caching (30-day TTL) — v0.4.0
+- ✓ External links to PubTator, LitVar, UCSC, Decipher, ClinGen, Ensembl — v0.4.0
+- ✓ Copy-to-clipboard for HGVS, coordinates, rsID — v0.4.0
+- ✓ Case metadata: affected/unaffected status — v0.4.0
+- ✓ Case cohort group assignment with autocomplete — v0.4.0
+- ✓ HPO phenotype terms via API-powered autocomplete + bundled offline fallback — v0.4.0
+- ✓ Column visibility menu with drag-to-reorder — v0.4.0
+- ✓ Draggable filter groups with persistence — v0.4.0
+- ✓ Offline-first API degradation (VEP, HPO show unavailable message) — v0.4.0
 
 ### Active
 
-**Current Milestone: v0.4.0 — Variant Annotation & Case Metadata**
+**Next Milestone: v0.5.0 — Planning**
 
-**Goal:** Transform Varlens from a read-only viewer into an active analysis workbench with variant annotation, classification, enriched detail views, and structured case metadata.
-
-**Target features:**
-- Variant comments (global + per-case notes with timestamps)
-- Variant marking (star/flag + ACMG 5-tier classification + custom user-defined tags, timestamped)
-- Variant details side panel (all DB scores, live Ensembl VEP API fetch, links to PubTator/LitVar/UCSC/Decipher/Franklin, graceful offline degradation)
-- Case metadata (affected/unaffected status, cohort group assignment with arbitrary naming + suggestions, HPO phenotype terms via API-based searchable ontology)
-- Offline-first maintained (API-dependent features degrade gracefully when offline)
+Planning next milestone scope. Candidates:
+- Virtual gene panels for targeted variant filtering
+- Advanced inheritance filters (de novo, compound het) with pedigree support
+- Statistics dashboard with variant summary metrics
+- Automated ACMG classification engine
+- Annotation export (ClinVar submission format)
 
 ### Out of Scope
 
@@ -72,11 +84,11 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 
 ## Context
 
-**Current state:** Shipped v0.3.0. Starting v0.4.0 milestone focused on variant annotation workflows (comments, flags, ACMG classification, custom tags), variant details side panel with live API enrichment, and case metadata (status, cohorts, HPO phenotypes).
+**Current state:** Shipped v0.4.0. Full annotation workbench with comments, stars, ACMG classification, custom tags, side panel with VEP enrichment, and case metadata with HPO phenotypes.
 
-**Tech stack:** Electron 40 + Vue 3 + Vuetify 3 + better-sqlite3-multiple-ciphers (SQLCipher) + FTS5 + TypeScript + electron-vite
+**Tech stack:** Electron 40 + Vue 3 + Vuetify 3 + better-sqlite3-multiple-ciphers (SQLCipher) + FTS5 + TypeScript + electron-vite + Bottleneck (rate limiting) + Zod (API validation)
 
-**Codebase:** 11,402 lines of TypeScript/Vue across 104+ files. 9 IPC handler modules, 42+ channels.
+**Codebase:** 21,411 lines of TypeScript/Vue across 177+ files. 12 IPC handler modules, 60+ channels.
 
 **Test data:** `test-data/case-892-snv-annotations.json.gz` (65k variants), `test-data/case-892-snv-sample.json.gz` (251 variants)
 
@@ -84,13 +96,14 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 - Import: 65k variants in ~20-32 seconds (target: <30s)
 - Pagination: <100ms query response
 - Cohort aggregation: Composite index on (chr, pos, ref, alt) for GROUP BY performance
+- VEP API: 15 req/sec rate limiting with exponential backoff
 
 **Known issues / tech debt:**
 - OMIM disease name extraction deferred (MIM numbers only)
 - Cohort performance not profiled with 50+ cases
-- No E2E tests for cohort search and drill-down
 - Franklin URL format has LOW confidence
 - Debug console.log in DatabaseService (info-level)
+- VEP API platform transition in 2026 may break response parsing
 
 ## Constraints
 
@@ -123,4 +136,4 @@ External collaborators can analyze variant data offline with a data-dense UX exp
 | Lazy carrier loading in cohort | Load on expand, cache in Map | ✓ Good — Fast UI |
 
 ---
-*Last updated: 2026-01-28 after v0.4.0 milestone start*
+*Last updated: 2026-01-29 after v0.4.0 milestone*

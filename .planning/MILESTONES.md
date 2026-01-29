@@ -1,5 +1,34 @@
 # Project Milestones: Varlens
 
+## v0.4.0 Variant Annotation & Case Metadata (Shipped: 2026-01-29)
+
+**Delivered:** Active analysis workbench with variant annotation (comments, stars, ACMG classification, custom tags), variant details side panel with live VEP API enrichment, and case metadata (status, cohorts, HPO phenotypes).
+
+**Phases completed:** 19-25 (27 plans total)
+
+**Key accomplishments:**
+
+- Variant annotation system with global/per-case comments, star/flag, ACMG 5-tier classification, and custom tags with color management
+- Variant details side panel with resizable drawer, annotation scores, external links (PubTator, LitVar, UCSC, Decipher, ClinGen, Ensembl), and copy-to-clipboard
+- Live Ensembl VEP API enrichment with SQLite caching (30-day TTL), rate limiting (15 req/sec), and graceful offline degradation
+- Case metadata with affected/unaffected status, cohort group assignment, and HPO phenotype terms via API-powered autocomplete
+- Bundled HPO ontology (19,407 terms) for offline phenotype search
+- Professional table UX with column preferences, draggable filter groups, sticky positioning, and Settings reset options
+
+**Stats:**
+
+- 73 files created/modified (+89,992 / -393 lines)
+- 21,411 lines of TypeScript/Vue (current total)
+- 7 phases, 27 plans, 142+ decisions documented
+- 2 days (2026-01-28 → 2026-01-29)
+- 66 commits
+
+**Git range:** `0c4d6ec` (feat(19-01)) → `825eeb6` (feat(25))
+
+**What's next:** Virtual gene panels, inheritance filters, statistics dashboard, automated ACMG classification, pedigree/trio analysis
+
+---
+
 ## v0.3.0 Cohort Analysis, Security & Import Enhancements (Shipped: 2026-01-28)
 
 **Delivered:** Transforms Varlens from a single-sample viewer into a cohort analysis platform with SQLCipher database encryption, database selection/switching, batch import with ZIP support, external genomic database links, OMIM MIM number integration, and cross-case cohort analysis with aggregated statistics.
@@ -76,4 +105,4 @@
 
 ---
 
-*Last updated: 2026-01-28 after v0.3.0 milestone*
+*Last updated: 2026-01-29 after v0.4.0 milestone*
