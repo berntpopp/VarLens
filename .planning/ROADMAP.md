@@ -45,7 +45,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 21: API Service Layer** - VEP + HPO clients, caching, rate limiting, offline detection ✓
 - [x] **Phase 22: Case Metadata** - Status, cohorts, HPO terms, UI ✓
 - [x] **Phase 23: Side Panel UI** - Drawer, tabs, annotation editing, VEP display, external links ✓
-- [ ] **Phase 24: Custom Tags + HPO Autocomplete** - Tag management, HPO search component
+- [ ] **Phase 24: Custom Tags + HPO Autocomplete** - Tag management, HPO search component (gap closure in progress)
 
 ## Phase Details
 
@@ -178,12 +178,13 @@ Plans:
   5. HPO term autocomplete displays matching terms with ID, name, and synonyms as user types (min 2 characters)
   6. HPO term search works offline using bundled HPO JSON (16k terms, fallback when API unavailable)
 
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [x] 24-01-PLAN.md — Backend: Tag IPC handlers, useTags composable, useHpoBundled composable, bundled HPO JSON ✓
 - [x] 24-02-PLAN.md — Tag management: TagManagementDialog, ColorSwatchPicker, settings integration ✓
-- [ ] 24-03-PLAN.md — UI integration: FilterToolbar tag filter, TagsSection in side panel, HpoAutocomplete component
+- [x] 24-03-PLAN.md — UI integration: FilterToolbar tag filter, TagsSection in side panel, HpoAutocomplete component ✓
+- [ ] 24-04-PLAN.md — Gap closure: Fix tag_ids filter handling in DatabaseService (backend ignores tag filter)
 
 ## Progress
 
@@ -197,7 +198,7 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | 21. API Service Layer | 3/3 | ✓ Complete | 2026-01-29 |
 | 22. Case Metadata | 3/3 | ✓ Complete | 2026-01-29 |
 | 23. Side Panel UI | 4/4 | ✓ Complete | 2026-01-29 |
-| 24. Custom Tags + HPO Autocomplete | 2/3 | ◆ In Progress | - |
+| 24. Custom Tags + HPO Autocomplete | 3/4 | ◆ Gap Closure | - |
 
 ---
-*Last updated: 2026-01-29 — Phase 24 in progress (2/3 plans complete)*
+*Last updated: 2026-01-29 — Phase 24 gap closure plan created (3/4 plans complete, 1 gap closure pending)*
