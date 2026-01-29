@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 24 of 24 (Custom Tags + HPO Autocomplete)
-Plan: 1 of TBD
+Plan: 2 of 3
 Status: In progress
-Last activity: 2026-01-29 - Completed 24-01 (Backend Infrastructure)
+Last activity: 2026-01-29 - Completed 24-02 (Settings UI)
 
 Progress: [████████████████████] 23/24 phases (95.8% complete, v0.4.0 in progress)
 
@@ -31,8 +31,8 @@ Progress: [████████████████████] 23/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 20
-- Total execution time: 118 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5)
+- Total plans completed: 21
+- Total execution time: 122 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -44,7 +44,7 @@ Progress: [████████████████████] 23/24 p
 | 21. API Service Layer | 3/3 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status), 02: VEP API client (rate limiting, MANE Select), 03: HPO API client + IPC handlers |
 | 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (HpoTermSelector, CaseMetadataCard, enhanced CaseList) |
 | 23. Side Panel UI | 4/4 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration), 04: VEP Enrichment Gap Closure (useVepEnrichment, rsID, REVEL/SpliceAI/SIFT/PolyPhen scores, consequence badges) |
-| 24. Custom Tags + HPO | 1/TBD | In progress | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON) |
+| 24. Custom Tags + HPO | 2/3 | In progress | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON), 02: Settings UI (TagManagementDialog, ColorSwatchPicker, settings menu) |
 
 ## Accumulated Context
 
@@ -121,6 +121,7 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Bundled HPO JSON | 19,407 terms from HPO release 2026-01-08 for offline search | Client-side search without API dependency (24-01) |
 | Lazy-load HPO on first search | HPO JSON loaded via dynamic import() on first search, not app start | Faster initial load, deferred overhead (24-01) |
 | Intelligent HPO search sorting | Exact ID > ID prefix > exact name > name prefix > alphabetical | Better search relevance (24-01) |
+| Settings menu dropdown pattern | Settings button opens v-menu with External Links and Custom Tags options | Scalable pattern for future settings (24-02) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -146,9 +147,9 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 23 gap closure
-Stopped at: Completed 23-04-PLAN.md (VEP Enrichment Integration)
+Last session: 2026-01-29 - Phase 24
+Stopped at: Completed 24-02-PLAN.md (Settings UI)
 Resume file: None
 
 ---
-*Next step: Phase 24 Plan 02 (Settings UI) or Plan 03 (Variant UI Integration)*
+*Next step: Phase 24 Plan 03 (Variant UI Integration)*
