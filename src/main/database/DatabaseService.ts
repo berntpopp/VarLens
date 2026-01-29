@@ -598,6 +598,15 @@ export class DatabaseService {
       params.push(filter.alt)
     }
 
+    // Filter by tag IDs (OR logic - variants with ANY of the selected tags)
+    if (filter.tag_ids !== undefined && filter.tag_ids.length > 0) {
+      const placeholders = filter.tag_ids.map(() => '?').join(', ')
+      conditions.push(
+        `id IN (SELECT variant_id FROM variant_tags WHERE case_id = ? AND tag_id IN (${placeholders}))`
+      )
+      params.push(filter.case_id, ...filter.tag_ids)
+    }
+
     // Build ORDER BY clause
     const orderByClause = this.buildSortClause(sortBy)
 
@@ -751,6 +760,15 @@ export class DatabaseService {
     if (filter.alt != null && filter.alt !== '') {
       conditions.push('alt = ?')
       params.push(filter.alt)
+    }
+
+    // Filter by tag IDs (OR logic - variants with ANY of the selected tags)
+    if (filter.tag_ids !== undefined && filter.tag_ids.length > 0) {
+      const placeholders = filter.tag_ids.map(() => '?').join(', ')
+      conditions.push(
+        `id IN (SELECT variant_id FROM variant_tags WHERE case_id = ? AND tag_id IN (${placeholders}))`
+      )
+      params.push(filter.case_id, ...filter.tag_ids)
     }
 
     const whereClause = conditions.join(' AND ')
