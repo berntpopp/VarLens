@@ -2,320 +2,362 @@
   <div class="filter-toolbar-container">
     <!-- Main filter bar -->
     <v-toolbar density="default" flat class="filter-toolbar px-3 py-3">
-      <!-- GENERAL SEARCH GROUP -->
-      <div class="filter-section search-section">
-        <div class="section-label">
-          <v-icon size="small" class="mr-1">mdi-magnify</v-icon>
-          <span>Search</span>
-        </div>
-        <v-text-field
-          v-model="filters.searchQuery"
-          density="compact"
-          variant="outlined"
-          hide-details
-          clearable
-          placeholder="Gene, chr:pos, c./p. HGVS..."
-          prepend-inner-icon="mdi-magnify"
-          class="filter-input"
-          :class="{ 'filter-active': filters.searchQuery !== '' }"
+      <!-- Filter groups wrapper with scroll arrows -->
+      <div class="filter-groups-wrapper">
+        <v-btn
+          v-if="canScrollLeft"
+          icon="mdi-chevron-left"
+          size="x-small"
+          variant="text"
+          class="scroll-arrow scroll-arrow-left"
+          @click="scrollLeft"
         />
-      </div>
 
-      <v-divider vertical class="mx-2 divider-subtle" />
+        <div ref="scrollContainer" class="filter-groups-scroll">
+          <draggable
+            v-model="orderedFilterGroups"
+            class="filter-groups-container"
+            item-key="id"
+            :animation="200"
+            handle=".drag-handle"
+          >
+            <template #item="{ element: group }">
+              <div
+                class="filter-section-wrapper"
+                :class="{ collapsed: !group.active }"
+                :data-filter-id="group.id"
+              >
+                <div class="filter-group-header">
+                  <v-icon class="drag-handle" size="x-small">mdi-drag-vertical</v-icon>
+                  <v-btn
+                    size="x-small"
+                    variant="text"
+                    :icon="group.active ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+                    @click="toggleFilterGroupActive(group.id)"
+                  />
+                </div>
 
-      <!-- GENE SEARCH GROUP -->
-      <div class="filter-section gene-section">
-        <div class="section-label">
-          <v-icon size="small" class="mr-1">mdi-dna</v-icon>
-          <span>Gene</span>
+                <div v-show="group.active" class="filter-group-content">
+                  <!-- GENERAL SEARCH GROUP -->
+                  <div v-if="group.id === 'search'" class="filter-section search-section">
+                    <div class="section-label">
+                      <v-icon size="small" class="mr-1">mdi-magnify</v-icon>
+                      <span>Search</span>
+                    </div>
+                    <v-text-field
+                      v-model="filters.searchQuery"
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                      clearable
+                      placeholder="Gene, chr:pos, c./p. HGVS..."
+                      prepend-inner-icon="mdi-magnify"
+                      class="filter-input"
+                      :class="{ 'filter-active': filters.searchQuery !== '' }"
+                    />
+                  </div>
+
+                  <!-- GENE SEARCH GROUP -->
+                  <div v-if="group.id === 'gene'" class="filter-section gene-section">
+                    <div class="section-label">
+                      <v-icon size="small" class="mr-1">mdi-dna</v-icon>
+                      <span>Gene</span>
+                    </div>
+                    <v-autocomplete
+                      v-model="filters.geneSymbol"
+                      :items="geneSymbolSuggestions"
+                      :loading="loadingSuggestions"
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                      clearable
+                      placeholder="Search gene symbol (e.g. BRCA1)"
+                      prepend-inner-icon="mdi-magnify"
+                      class="filter-input"
+                      :class="{ 'filter-active': filters.geneSymbol !== '' }"
+                      @update:search="searchGeneSymbols"
+                    />
+                  </div>
+
+                  <!-- VARIANT EFFECT GROUP -->
+                  <div v-if="group.id === 'impact'" class="filter-section effect-section">
+                    <div class="section-label">
+                      <v-icon size="small" class="mr-1">mdi-flash</v-icon>
+                      <span>Impact</span>
+                      <v-tooltip location="top" max-width="280">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
+                            >mdi-information-outline</v-icon
+                          >
+                        </template>
+                        <span
+                          >Filter by predicted variant impact. HIGH: loss of function. MODERATE:
+                          missense. LOW: synonymous.</span
+                        >
+                      </v-tooltip>
+                    </div>
+                    <div class="d-flex align-center ga-1">
+                      <v-chip-group v-model="selectedImpactPresets" multiple>
+                        <v-chip
+                          v-for="preset in impactPresets"
+                          :key="preset.value"
+                          :value="preset.value"
+                          :color="preset.color"
+                          filter
+                          variant="outlined"
+                          size="small"
+                        >
+                          {{ preset.label }}
+                        </v-chip>
+                      </v-chip-group>
+                      <v-select
+                        v-model="filters.consequences"
+                        :items="filterOptions.consequences"
+                        multiple
+                        chips
+                        closable-chips
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        clearable
+                        placeholder="Specific..."
+                        class="filter-input consequence-select"
+                        :class="{ 'filter-active': filters.consequences.length > 0 }"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- FUNCTIONAL ANNOTATION GROUP -->
+                  <div v-if="group.id === 'function'" class="filter-section func-section">
+                    <div class="section-label">
+                      <v-icon size="small" class="mr-1">mdi-function</v-icon>
+                      <span>Function</span>
+                      <v-tooltip location="top" max-width="280">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
+                            >mdi-information-outline</v-icon
+                          >
+                        </template>
+                        <span
+                          >Filter by functional annotation: exonic, intronic, UTR, intergenic,
+                          etc.</span
+                        >
+                      </v-tooltip>
+                    </div>
+                    <v-select
+                      v-model="filters.funcs"
+                      :items="filterOptions.funcs"
+                      multiple
+                      chips
+                      closable-chips
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                      clearable
+                      placeholder="Select..."
+                      class="filter-input func-select"
+                      :class="{ 'filter-active': filters.funcs.length > 0 }"
+                    />
+                  </div>
+
+                  <!-- CLINVAR GROUP -->
+                  <div v-if="group.id === 'clinvar'" class="filter-section clinvar-section">
+                    <div class="section-label">
+                      <v-icon size="small" class="mr-1">mdi-hospital-box</v-icon>
+                      <span>ClinVar</span>
+                      <v-tooltip location="top" max-width="280">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
+                            >mdi-information-outline</v-icon
+                          >
+                        </template>
+                        <span
+                          >Filter by ClinVar pathogenicity classification: Pathogenic, Likely
+                          pathogenic, VUS, Benign, etc.</span
+                        >
+                      </v-tooltip>
+                    </div>
+                    <v-select
+                      v-model="filters.clinvars"
+                      :items="filterOptions.clinvars"
+                      multiple
+                      chips
+                      closable-chips
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                      clearable
+                      placeholder="Select..."
+                      class="filter-input clinvar-select"
+                      :class="{ 'filter-active': filters.clinvars.length > 0 }"
+                    />
+                  </div>
+
+                  <!-- POPULATION FREQUENCY GROUP -->
+                  <div v-if="group.id === 'frequency'" class="filter-section frequency-section">
+                    <div class="section-label">
+                      <v-icon size="small" class="mr-1">mdi-account-group</v-icon>
+                      <span>Frequency</span>
+                      <v-tooltip location="top" max-width="280">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
+                            >mdi-information-outline</v-icon
+                          >
+                        </template>
+                        <span
+                          >Maximum gnomAD allele frequency. Lower = rarer in population. Unknown
+                          frequencies are included.</span
+                        >
+                      </v-tooltip>
+                    </div>
+                    <div class="d-flex align-center ga-1">
+                      <v-chip-group v-model="selectedAfPreset">
+                        <v-chip
+                          v-for="preset in afPresets"
+                          :key="preset.value"
+                          :value="preset.value"
+                          filter
+                          variant="outlined"
+                          size="small"
+                          color="teal"
+                        >
+                          {{ preset.label }}
+                        </v-chip>
+                      </v-chip-group>
+                      <v-text-field
+                        v-model.number="filters.maxGnomadAf"
+                        type="number"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        clearable
+                        placeholder="Custom"
+                        class="filter-input custom-input"
+                        :class="{ 'filter-active': filters.maxGnomadAf !== null }"
+                        step="0.0001"
+                        min="0"
+                        max="1"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- PATHOGENICITY GROUP -->
+                  <div v-if="group.id === 'cadd'" class="filter-section pathogenicity-section">
+                    <div class="section-label">
+                      <v-icon size="small" class="mr-1">mdi-alert-circle</v-icon>
+                      <span>CADD</span>
+                      <v-tooltip location="top" max-width="280">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
+                            >mdi-information-outline</v-icon
+                          >
+                        </template>
+                        <span
+                          >Minimum CADD phred score. Higher = more likely deleterious. 15+ moderate,
+                          20+ high, 25+ very high. Unknown CADD included.</span
+                        >
+                      </v-tooltip>
+                    </div>
+                    <div class="d-flex align-center ga-1">
+                      <v-chip-group v-model="selectedCaddPreset">
+                        <v-chip
+                          v-for="preset in caddPresets"
+                          :key="preset.value"
+                          :value="preset.value"
+                          filter
+                          variant="outlined"
+                          size="small"
+                          color="deep-purple"
+                        >
+                          {{ preset.label }}
+                        </v-chip>
+                      </v-chip-group>
+                      <v-text-field
+                        v-model.number="filters.minCadd"
+                        type="number"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        clearable
+                        placeholder="Custom"
+                        class="filter-input custom-input"
+                        :class="{ 'filter-active': filters.minCadd !== null }"
+                        step="1"
+                        min="0"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- TAGS GROUP -->
+                  <div v-if="group.id === 'tags'" class="filter-section tags-section">
+                    <div class="section-label">
+                      <v-icon size="small" class="mr-1">mdi-tag-multiple</v-icon>
+                      <span>Tags</span>
+                      <v-tooltip location="top" max-width="280">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
+                            >mdi-information-outline</v-icon
+                          >
+                        </template>
+                        <span
+                          >Filter by variant tags. Selecting multiple tags shows variants with ANY
+                          of the selected tags (OR logic).</span
+                        >
+                      </v-tooltip>
+                    </div>
+                    <v-select
+                      v-model="filters.tagIds"
+                      :items="availableTags"
+                      item-title="name"
+                      item-value="id"
+                      multiple
+                      chips
+                      closable-chips
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                      clearable
+                      placeholder="Select..."
+                      class="filter-input tags-select"
+                      :class="{ 'filter-active': filters.tagIds.length > 0 }"
+                    >
+                      <template #chip="{ item }">
+                        <v-chip
+                          closable
+                          size="small"
+                          :color="(item.raw as Tag).color"
+                          variant="flat"
+                          @click:close="removeTagFilter((item.raw as Tag).id)"
+                        >
+                          {{ (item.raw as Tag).name }}
+                        </v-chip>
+                      </template>
+                      <template #item="{ item, props: itemProps }">
+                        <v-list-item v-bind="itemProps" :title="undefined">
+                          <template #prepend>
+                            <v-icon :color="(item.raw as Tag).color" size="small"
+                              >mdi-circle</v-icon
+                            >
+                          </template>
+                          <v-list-item-title>{{ (item.raw as Tag).name }}</v-list-item-title>
+                        </v-list-item>
+                      </template>
+                    </v-select>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </draggable>
         </div>
-        <v-autocomplete
-          v-model="filters.geneSymbol"
-          :items="geneSymbolSuggestions"
-          :loading="loadingSuggestions"
-          density="compact"
-          variant="outlined"
-          hide-details
-          clearable
-          placeholder="Search gene symbol (e.g. BRCA1)"
-          prepend-inner-icon="mdi-magnify"
-          class="filter-input"
-          :class="{ 'filter-active': filters.geneSymbol !== '' }"
-          @update:search="searchGeneSymbols"
+
+        <v-btn
+          v-if="canScrollRight"
+          icon="mdi-chevron-right"
+          size="x-small"
+          variant="text"
+          class="scroll-arrow scroll-arrow-right"
+          @click="scrollRight"
         />
-      </div>
-
-      <v-divider vertical class="mx-2 divider-subtle" />
-
-      <!-- VARIANT EFFECT GROUP -->
-      <div class="filter-section effect-section">
-        <div class="section-label">
-          <v-icon size="small" class="mr-1">mdi-flash</v-icon>
-          <span>Impact</span>
-          <v-tooltip location="top" max-width="280">
-            <template #activator="{ props: tooltipProps }">
-              <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
-                >mdi-information-outline</v-icon
-              >
-            </template>
-            <span
-              >Filter by predicted variant impact. HIGH: loss of function. MODERATE: missense. LOW:
-              synonymous.</span
-            >
-          </v-tooltip>
-        </div>
-        <div class="d-flex align-center ga-1">
-          <v-chip-group v-model="selectedImpactPresets" multiple>
-            <v-chip
-              v-for="preset in impactPresets"
-              :key="preset.value"
-              :value="preset.value"
-              :color="preset.color"
-              filter
-              variant="outlined"
-              size="small"
-            >
-              {{ preset.label }}
-            </v-chip>
-          </v-chip-group>
-          <v-select
-            v-model="filters.consequences"
-            :items="filterOptions.consequences"
-            multiple
-            chips
-            closable-chips
-            density="compact"
-            variant="outlined"
-            hide-details
-            clearable
-            placeholder="Specific..."
-            class="filter-input consequence-select"
-            :class="{ 'filter-active': filters.consequences.length > 0 }"
-          />
-        </div>
-      </div>
-
-      <v-divider vertical class="mx-2 divider-subtle" />
-
-      <!-- FUNCTIONAL ANNOTATION GROUP -->
-      <div class="filter-section func-section">
-        <div class="section-label">
-          <v-icon size="small" class="mr-1">mdi-function</v-icon>
-          <span>Function</span>
-          <v-tooltip location="top" max-width="280">
-            <template #activator="{ props: tooltipProps }">
-              <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
-                >mdi-information-outline</v-icon
-              >
-            </template>
-            <span>Filter by functional annotation: exonic, intronic, UTR, intergenic, etc.</span>
-          </v-tooltip>
-        </div>
-        <v-select
-          v-model="filters.funcs"
-          :items="filterOptions.funcs"
-          multiple
-          chips
-          closable-chips
-          density="compact"
-          variant="outlined"
-          hide-details
-          clearable
-          placeholder="Select..."
-          class="filter-input func-select"
-          :class="{ 'filter-active': filters.funcs.length > 0 }"
-        />
-      </div>
-
-      <v-divider vertical class="mx-2 divider-subtle" />
-
-      <!-- CLINVAR GROUP -->
-      <div class="filter-section clinvar-section">
-        <div class="section-label">
-          <v-icon size="small" class="mr-1">mdi-hospital-box</v-icon>
-          <span>ClinVar</span>
-          <v-tooltip location="top" max-width="280">
-            <template #activator="{ props: tooltipProps }">
-              <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
-                >mdi-information-outline</v-icon
-              >
-            </template>
-            <span
-              >Filter by ClinVar pathogenicity classification: Pathogenic, Likely pathogenic, VUS,
-              Benign, etc.</span
-            >
-          </v-tooltip>
-        </div>
-        <v-select
-          v-model="filters.clinvars"
-          :items="filterOptions.clinvars"
-          multiple
-          chips
-          closable-chips
-          density="compact"
-          variant="outlined"
-          hide-details
-          clearable
-          placeholder="Select..."
-          class="filter-input clinvar-select"
-          :class="{ 'filter-active': filters.clinvars.length > 0 }"
-        />
-      </div>
-
-      <v-divider vertical class="mx-2 divider-subtle" />
-
-      <!-- POPULATION FREQUENCY GROUP -->
-      <div class="filter-section frequency-section">
-        <div class="section-label">
-          <v-icon size="small" class="mr-1">mdi-account-group</v-icon>
-          <span>Frequency</span>
-          <v-tooltip location="top" max-width="280">
-            <template #activator="{ props: tooltipProps }">
-              <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
-                >mdi-information-outline</v-icon
-              >
-            </template>
-            <span
-              >Maximum gnomAD allele frequency. Lower = rarer in population. Unknown frequencies are
-              included.</span
-            >
-          </v-tooltip>
-        </div>
-        <div class="d-flex align-center ga-1">
-          <v-chip-group v-model="selectedAfPreset">
-            <v-chip
-              v-for="preset in afPresets"
-              :key="preset.value"
-              :value="preset.value"
-              filter
-              variant="outlined"
-              size="small"
-              color="teal"
-            >
-              {{ preset.label }}
-            </v-chip>
-          </v-chip-group>
-          <v-text-field
-            v-model.number="filters.maxGnomadAf"
-            type="number"
-            density="compact"
-            variant="outlined"
-            hide-details
-            clearable
-            placeholder="Custom"
-            class="filter-input custom-input"
-            :class="{ 'filter-active': filters.maxGnomadAf !== null }"
-            step="0.0001"
-            min="0"
-            max="1"
-          />
-        </div>
-      </div>
-
-      <v-divider vertical class="mx-2 divider-subtle" />
-
-      <!-- PATHOGENICITY GROUP -->
-      <div class="filter-section pathogenicity-section">
-        <div class="section-label">
-          <v-icon size="small" class="mr-1">mdi-alert-circle</v-icon>
-          <span>CADD</span>
-          <v-tooltip location="top" max-width="280">
-            <template #activator="{ props: tooltipProps }">
-              <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
-                >mdi-information-outline</v-icon
-              >
-            </template>
-            <span
-              >Minimum CADD phred score. Higher = more likely deleterious. 15+ moderate, 20+ high,
-              25+ very high. Unknown CADD included.</span
-            >
-          </v-tooltip>
-        </div>
-        <div class="d-flex align-center ga-1">
-          <v-chip-group v-model="selectedCaddPreset">
-            <v-chip
-              v-for="preset in caddPresets"
-              :key="preset.value"
-              :value="preset.value"
-              filter
-              variant="outlined"
-              size="small"
-              color="deep-purple"
-            >
-              {{ preset.label }}
-            </v-chip>
-          </v-chip-group>
-          <v-text-field
-            v-model.number="filters.minCadd"
-            type="number"
-            density="compact"
-            variant="outlined"
-            hide-details
-            clearable
-            placeholder="Custom"
-            class="filter-input custom-input"
-            :class="{ 'filter-active': filters.minCadd !== null }"
-            step="1"
-            min="0"
-          />
-        </div>
-      </div>
-
-      <v-divider vertical class="mx-2 divider-subtle" />
-
-      <!-- TAGS GROUP -->
-      <div class="filter-section tags-section">
-        <div class="section-label">
-          <v-icon size="small" class="mr-1">mdi-tag-multiple</v-icon>
-          <span>Tags</span>
-          <v-tooltip location="top" max-width="280">
-            <template #activator="{ props: tooltipProps }">
-              <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
-                >mdi-information-outline</v-icon
-              >
-            </template>
-            <span
-              >Filter by variant tags. Selecting multiple tags shows variants with ANY of the
-              selected tags (OR logic).</span
-            >
-          </v-tooltip>
-        </div>
-        <v-select
-          v-model="filters.tagIds"
-          :items="availableTags"
-          item-title="name"
-          item-value="id"
-          multiple
-          chips
-          closable-chips
-          density="compact"
-          variant="outlined"
-          hide-details
-          clearable
-          placeholder="Select..."
-          class="filter-input tags-select"
-          :class="{ 'filter-active': filters.tagIds.length > 0 }"
-        >
-          <template #chip="{ item }">
-            <v-chip
-              closable
-              size="small"
-              :color="(item.raw as Tag).color"
-              variant="flat"
-              @click:close="removeTagFilter((item.raw as Tag).id)"
-            >
-              {{ (item.raw as Tag).name }}
-            </v-chip>
-          </template>
-          <template #item="{ item, props: itemProps }">
-            <v-list-item v-bind="itemProps" :title="undefined">
-              <template #prepend>
-                <v-icon :color="(item.raw as Tag).color" size="small">mdi-circle</v-icon>
-              </template>
-              <v-list-item-title>{{ (item.raw as Tag).name }}</v-list-item-title>
-            </v-list-item>
-          </template>
-        </v-select>
       </div>
 
       <v-spacer />
@@ -371,9 +413,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import draggable from 'vuedraggable'
 import { useDebounce } from '../composables/useDebounce'
 import { useTags } from '../composables/useTags'
+import { useFilterPreferences } from '../composables/useFilterPreferences'
 import type { VariantFilter, Variant, Tag } from '../../../shared/types/api'
 
 interface Props {
@@ -399,6 +443,40 @@ const emit = defineEmits<Emits>()
 
 // Tags composable
 const { loadTags, getTags } = useTags()
+
+// Filter preferences composable
+const { filterGroups, setFilterGroupOrder, toggleFilterGroupActive } = useFilterPreferences()
+
+// Horizontal scroll state
+const scrollContainer = ref<HTMLElement | null>(null)
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+
+// Ordered filter groups with two-way binding for draggable
+const orderedFilterGroups = computed({
+  get: () => filterGroups.value,
+  set: (newOrder) => {
+    setFilterGroupOrder(newOrder.map((g) => g.id))
+  }
+})
+
+// Update scroll button visibility
+const updateScrollButtons = () => {
+  if (!scrollContainer.value) return
+  const el = scrollContainer.value
+  canScrollLeft.value = el.scrollLeft > 0
+  canScrollRight.value = el.scrollLeft < el.scrollWidth - el.clientWidth - 1
+}
+
+// Scroll left
+const scrollLeft = () => {
+  scrollContainer.value?.scrollBy({ left: -200, behavior: 'smooth' })
+}
+
+// Scroll right
+const scrollRight = () => {
+  scrollContainer.value?.scrollBy({ left: 200, behavior: 'smooth' })
+}
 
 // Filter state
 const filters = ref({
@@ -521,6 +599,18 @@ onMounted(async () => {
     // eslint-disable-next-line no-undef
     console.error('Failed to load filter options:', error)
   }
+
+  // Setup scroll listeners
+  scrollContainer.value?.addEventListener('scroll', updateScrollButtons)
+  // eslint-disable-next-line no-undef
+  window.addEventListener('resize', updateScrollButtons)
+  updateScrollButtons()
+})
+
+onBeforeUnmount(() => {
+  scrollContainer.value?.removeEventListener('scroll', updateScrollButtons)
+  // eslint-disable-next-line no-undef
+  window.removeEventListener('resize', updateScrollButtons)
 })
 
 // Gene symbol autocomplete using FTS5 search (FLT-06 implementation)
@@ -765,15 +855,82 @@ const exportToExcel = async () => {
 .filter-toolbar-container {
   border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
   background: rgb(var(--v-theme-surface));
-  overflow-x: auto;
   min-height: 100px;
 }
 
 .filter-toolbar {
   background: transparent !important;
-  min-width: max-content;
   min-height: 96px !important;
   height: auto !important;
+}
+
+.filter-groups-wrapper {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+
+.filter-groups-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.filter-groups-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-groups-container {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  min-width: max-content;
+  padding: 2px;
+}
+
+.filter-section-wrapper {
+  position: relative;
+  border-radius: 8px;
+}
+
+.filter-section-wrapper.collapsed {
+  min-width: auto;
+}
+
+.filter-group-header {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 1;
+}
+
+.drag-handle {
+  cursor: grab;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+
+.drag-handle:hover {
+  opacity: 0.8;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.filter-group-content {
+  width: 100%;
+}
+
+.scroll-arrow {
+  flex-shrink: 0;
 }
 
 .filter-section {
