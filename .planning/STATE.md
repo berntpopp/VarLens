@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** External collaborators can analyze variant data offline with data-dense UX for research use
-**Current focus:** v0.4.0 Phase 25 - Table UX & Filter Persistence
+**Current focus:** v0.4.0 SHIPPED - All phases complete
 
 ## Current Position
 
@@ -21,7 +21,7 @@ Progress: [█████████████████████] 25/2
 - **v0.1 POC** - 8 phases, 17 plans - shipped 2026-01-27
 - **v0.2.0 UI Polish & Trust Signals** - 4 phases, 8 plans - shipped 2026-01-27
 - **v0.3.0 Cohort Analysis, Security & Import Enhancements** - 6 phases, 13 plans - shipped 2026-01-28
-- **v0.4.0 Variant Annotation & Case Metadata** - 7 phases (19-25), 22+ plans - in progress
+- **v0.4.0 Variant Annotation & Case Metadata** - 7 phases (19-25), 27 plans - shipped 2026-01-29
 
 ## Performance Metrics
 
@@ -172,4 +172,4 @@ Resume file: None
 **v0.4.0 COMPLETE!** All 7 phases (19-25), 27 plans shipped in 146 minutes.
 
 ---
-*v0.4.0 extended with Phase 25 - Table UX & Filter Persistence*
+*v0.4.0 SHIPPED 2026-01-29 — All 7 phases, 27 plans complete*

@@ -5,7 +5,7 @@
 - ✅ **v0.1 POC** - Phases 1-8 (shipped 2026-01-27)
 - ✅ **v0.2.0 UI Polish & Trust Signals** - Phases 9-12 (shipped 2026-01-27)
 - ✅ **v0.3.0 Cohort Analysis, Security & Import Enhancements** - Phases 13-18 (shipped 2026-01-28)
-- 🚧 **v0.4.0 Variant Annotation & Case Metadata** - Phases 19-25 (in progress)
+- ✅ **v0.4.0 Variant Annotation & Case Metadata** - Phases 19-25 (shipped 2026-01-29)
 
 ## Phases
 
@@ -30,7 +30,7 @@ Transforms Varlens from a single-sample viewer into a cohort analysis platform w
 
 </details>
 
-### 🚧 v0.4.0 Variant Annotation & Case Metadata (In Progress)
+### ✅ v0.4.0 Variant Annotation & Case Metadata (SHIPPED 2026-01-29)
 
 **Milestone Goal:** Transform Varlens from a read-only viewer into an active analysis workbench with variant annotation, classification, enriched detail views, and structured case metadata.
 
@@ -46,7 +46,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 22: Case Metadata** - Status, cohorts, HPO terms, UI ✓
 - [x] **Phase 23: Side Panel UI** - Drawer, tabs, annotation editing, VEP display, external links ✓
 - [x] **Phase 24: Custom Tags + HPO Autocomplete** - Tag management, HPO search component ✓
-- [ ] **Phase 25: Table UX & Filter Persistence** - Column management, sticky filters, filter groups, cohort filters, case metadata modal
+- [x] **Phase 25: Table UX & Filter Persistence** - Column management, sticky filters, filter groups, cohort filters, case metadata modal ✓
 
 ## Phase Details
 
@@ -209,10 +209,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Composables infrastructure: useColumnPreferences, useFilterPreferences, vuedraggable install
-- [ ] 25-02-PLAN.md — Column visibility menu: ColumnVisibilityMenu component, VariantTable/CohortTable integration
-- [ ] 25-03-PLAN.md — Sticky positioning and filter groups: sticky tabs/filters, draggable filter groups with persistence
-- [ ] 25-04-PLAN.md — Cohort filter parity, CaseMetadataModal, Settings reset options
+- [x] 25-01-PLAN.md — Composables infrastructure: useColumnPreferences, useFilterPreferences, vuedraggable install ✓
+- [x] 25-02-PLAN.md — Column visibility menu: ColumnVisibilityMenu component, VariantTable/CohortTable integration ✓
+- [x] 25-03-PLAN.md — Sticky positioning and filter groups: sticky tabs/filters, draggable filter groups with persistence ✓
+- [x] 25-04-PLAN.md — Cohort filter parity, CaseMetadataModal, Settings reset options ✓
 
 ## Progress
 
@@ -227,7 +227,7 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24 → 25
 | 22. Case Metadata | 3/3 | ✓ Complete | 2026-01-29 |
 | 23. Side Panel UI | 4/4 | ✓ Complete | 2026-01-29 |
 | 24. Custom Tags + HPO Autocomplete | 4/4 | ✓ Complete | 2026-01-29 |
-| 25. Table UX & Filter Persistence | 0/4 | Planned | - |
+| 25. Table UX & Filter Persistence | 4/4 | ✓ Complete | 2026-01-29 |
 
 ---
-*Last updated: 2026-01-29 — Phase 25 planned (4 plans in 3 waves)*
+*Last updated: 2026-01-29 — v0.4.0 SHIPPED (all 7 phases complete)*
