@@ -56,7 +56,7 @@ export function useFilterPreferences() {
    * append them at the end with active=true
    */
   const mergeWithDefaults = (): FilterGroupPreference[] => {
-    const stored = storedPrefs.value.groups || []
+    const stored = storedPrefs.value.groups ?? []
     const storedIds = new Set(stored.map((g) => g.id))
 
     // Find missing default groups
@@ -111,9 +111,7 @@ export function useFilterPreferences() {
    */
   const toggleFilterGroupActive = (id: string): void => {
     const currentGroups = mergeWithDefaults()
-    const updated = currentGroups.map((g) =>
-      g.id === id ? { ...g, active: !g.active } : g
-    )
+    const updated = currentGroups.map((g) => (g.id === id ? { ...g, active: !g.active } : g))
     storedPrefs.value.groups = updated
   }
 
