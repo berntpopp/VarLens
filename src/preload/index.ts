@@ -213,6 +213,33 @@ const api = {
 
     removeHpoTerm: (caseId: number, hpoId: string) =>
       ipcRenderer.invoke('case-metadata:removeHpoTerm', caseId, hpoId)
+  },
+
+  tags: {
+    // Tag CRUD
+    list: () => ipcRenderer.invoke('tags:list'),
+
+    create: (name: string, color: string) => ipcRenderer.invoke('tags:create', name, color),
+
+    update: (id: number, updates: { name?: string; color?: string }) =>
+      ipcRenderer.invoke('tags:update', id, updates),
+
+    delete: (id: number) => ipcRenderer.invoke('tags:delete', id),
+
+    getUsageCount: (tagId: number) => ipcRenderer.invoke('tags:getUsageCount', tagId),
+
+    // Variant tag assignments
+    getVariantTags: (caseId: number, variantId: number) =>
+      ipcRenderer.invoke('tags:getVariantTags', caseId, variantId),
+
+    assignVariantTag: (caseId: number, variantId: number, tagId: number) =>
+      ipcRenderer.invoke('tags:assignVariantTag', caseId, variantId, tagId),
+
+    removeVariantTag: (caseId: number, variantId: number, tagId: number) =>
+      ipcRenderer.invoke('tags:removeVariantTag', caseId, variantId, tagId),
+
+    setVariantTags: (caseId: number, variantId: number, tagIds: number[]) =>
+      ipcRenderer.invoke('tags:setVariantTags', caseId, variantId, tagIds)
   }
 }
 

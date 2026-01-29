@@ -11,7 +11,8 @@ import type {
   AcmgClassification,
   CaseMetadata,
   CohortGroup,
-  CaseHpoTerm
+  CaseHpoTerm,
+  Tag
 } from '../../main/database/types'
 import type { ProgressUpdate, ImportResult } from '../../main/import/types'
 import type { SerializableError } from './errors'
@@ -43,7 +44,8 @@ export type {
   CacheInfo,
   CaseMetadata,
   CohortGroup,
-  CaseHpoTerm
+  CaseHpoTerm,
+  Tag
 }
 
 export interface CasesAPI {
@@ -296,6 +298,21 @@ export interface CaseMetadataAPI {
   removeHpoTerm: (caseId: number, hpoId: string) => Promise<void>
 }
 
+export interface TagsAPI {
+  // Tag CRUD
+  list: () => Promise<Tag[]>
+  create: (name: string, color: string) => Promise<Tag>
+  update: (id: number, updates: { name?: string; color?: string }) => Promise<Tag>
+  delete: (id: number) => Promise<void>
+  getUsageCount: (tagId: number) => Promise<number>
+
+  // Variant tag assignments
+  getVariantTags: (caseId: number, variantId: number) => Promise<Tag[]>
+  assignVariantTag: (caseId: number, variantId: number, tagId: number) => Promise<void>
+  removeVariantTag: (caseId: number, variantId: number, tagId: number) => Promise<void>
+  setVariantTags: (caseId: number, variantId: number, tagIds: number[]) => Promise<void>
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -310,4 +327,5 @@ export interface WindowAPI {
   vep: VepAPI
   hpo: HpoAPI
   caseMetadata: CaseMetadataAPI
+  tags: TagsAPI
 }

@@ -20,7 +20,8 @@ import type {
   CaseVariantAnnotation,
   CaseMetadata,
   CohortGroup,
-  CaseHpoTerm
+  CaseHpoTerm,
+  Tag
 } from './types'
 import { DatabaseError, NotFoundError, UniqueConstraintError, TransactionError } from './errors'
 
@@ -1262,6 +1263,219 @@ export class DatabaseService {
    */
   removeCaseHpoTerm(caseId: number, hpoId: string): void {
     this.stmt('DELETE FROM case_hpo_terms WHERE case_id = ? AND hpo_id = ?').run(caseId, hpoId)
+  }
+
+  // ============================================================
+  // Tag Operations
+  // ============================================================
+
+  /**
+   * List all tags ordered by name
+   *
+   * @returns Array of all tags
+   */
+  listTags(): Tag[] {
+    return this.stmt('SELECT * FROM tags ORDER BY name').all() as Tag[]
+  }
+
+  /**
+   * Create a new tag
+   *
+   * @param name - Tag name
+   * @param color - Tag color (hex color)
+   * @returns Created Tag
+   * @throws UniqueConstraintError if tag name already exists
+   */
+  createTag(name: string, color: string): Tag {
+    try {
+      const now = Date.now()
+      const result = this.stmt(
+        'INSERT INTO tags (name, color, created_at) VALUES (?, ?, ?) RETURNING *'
+      ).get(name, color, now) as Tag
+
+      return result
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed') === true) {
+        throw new UniqueConstraintError('name', name)
+      }
+      throw new DatabaseError(
+        `Failed to create tag: ${name}`,
+        error instanceof Error ? error : undefined
+      )
+    }
+  }
+
+  /**
+   * Update a tag
+   *
+   * @param id - Tag ID
+   * @param updates - Partial tag updates
+   * @returns Updated Tag
+   * @throws NotFoundError if tag does not exist
+   * @throws UniqueConstraintError if new name already exists
+   */
+  updateTag(id: number, updates: { name?: string; color?: string }): Tag {
+    try {
+      // First verify tag exists
+      const existing = this.stmt('SELECT * FROM tags WHERE id = ?').get(id) as Tag | undefined
+      if (!existing) {
+        throw new NotFoundError('Tag', id)
+      }
+
+      // Build update query dynamically
+      const setClauses: string[] = []
+      const params: (string | number)[] = []
+
+      if (updates.name !== undefined) {
+        setClauses.push('name = ?')
+        params.push(updates.name)
+      }
+      if (updates.color !== undefined) {
+        setClauses.push('color = ?')
+        params.push(updates.color)
+      }
+
+      if (setClauses.length === 0) {
+        return existing
+      }
+
+      params.push(id)
+      const sql = `UPDATE tags SET ${setClauses.join(', ')} WHERE id = ? RETURNING *`
+      const result = this.db.prepare(sql).get(...params) as Tag
+
+      return result
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        throw error
+      }
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed') === true) {
+        throw new UniqueConstraintError('name', updates.name ?? '')
+      }
+      throw new DatabaseError(
+        `Failed to update tag: ${id}`,
+        error instanceof Error ? error : undefined
+      )
+    }
+  }
+
+  /**
+   * Delete a tag
+   *
+   * Note: CASCADE handles automatic deletion of variant_tags
+   *
+   * @param id - Tag ID
+   * @throws NotFoundError if tag does not exist
+   */
+  deleteTag(id: number): void {
+    const result = this.stmt('DELETE FROM tags WHERE id = ?').run(id)
+    if (result.changes === 0) {
+      throw new NotFoundError('Tag', id)
+    }
+  }
+
+  /**
+   * Get tag by ID
+   *
+   * @param id - Tag ID
+   * @returns Tag or null if not found
+   */
+  getTag(id: number): Tag | null {
+    const result = this.stmt('SELECT * FROM tags WHERE id = ?').get(id) as Tag | undefined
+    return result ?? null
+  }
+
+  /**
+   * Get tag usage count (number of variant-tag assignments)
+   *
+   * @param tagId - Tag ID
+   * @returns Usage count
+   */
+  getTagUsageCount(tagId: number): number {
+    const result = this.stmt('SELECT COUNT(*) as count FROM variant_tags WHERE tag_id = ?').get(
+      tagId
+    ) as { count: number }
+    return result.count
+  }
+
+  // ============================================================
+  // Variant Tag Operations
+  // ============================================================
+
+  /**
+   * Get all tags for a case-variant pair
+   *
+   * @param caseId - Case ID
+   * @param variantId - Variant ID
+   * @returns Array of tags assigned to the variant
+   */
+  getVariantTags(caseId: number, variantId: number): Tag[] {
+    return this.stmt(
+      `
+      SELECT t.* FROM tags t
+      JOIN variant_tags vt ON t.id = vt.tag_id
+      WHERE vt.case_id = ? AND vt.variant_id = ?
+      ORDER BY t.name
+    `
+    ).all(caseId, variantId) as Tag[]
+  }
+
+  /**
+   * Assign a tag to a case-variant pair
+   *
+   * Idempotent - no error if already assigned
+   *
+   * @param caseId - Case ID
+   * @param variantId - Variant ID
+   * @param tagId - Tag ID
+   */
+  assignVariantTag(caseId: number, variantId: number, tagId: number): void {
+    const now = Date.now()
+    this.stmt(
+      'INSERT INTO variant_tags (case_id, variant_id, tag_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING'
+    ).run(caseId, variantId, tagId, now)
+  }
+
+  /**
+   * Remove a tag from a case-variant pair
+   *
+   * Idempotent - no error if not assigned
+   *
+   * @param caseId - Case ID
+   * @param variantId - Variant ID
+   * @param tagId - Tag ID
+   */
+  removeVariantTag(caseId: number, variantId: number, tagId: number): void {
+    this.stmt('DELETE FROM variant_tags WHERE case_id = ? AND variant_id = ? AND tag_id = ?').run(
+      caseId,
+      variantId,
+      tagId
+    )
+  }
+
+  /**
+   * Replace all tag assignments for a case-variant pair (atomic operation)
+   *
+   * @param caseId - Case ID
+   * @param variantId - Variant ID
+   * @param tagIds - Array of tag IDs
+   */
+  setVariantTags(caseId: number, variantId: number, tagIds: number[]): void {
+    this.runTransaction(() => {
+      // Delete existing assignments
+      this.stmt('DELETE FROM variant_tags WHERE case_id = ? AND variant_id = ?').run(
+        caseId,
+        variantId
+      )
+
+      // Insert new assignments
+      const now = Date.now()
+      const insert = this.stmt(
+        'INSERT INTO variant_tags (case_id, variant_id, tag_id, created_at) VALUES (?, ?, ?, ?)'
+      )
+      for (const tagId of tagIds) {
+        insert.run(caseId, variantId, tagId, now)
+      }
+    })
   }
 
   /**
