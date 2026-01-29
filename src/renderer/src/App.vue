@@ -54,6 +54,7 @@
               @update:filters="handleFiltersUpdate"
               @reset-sort="handleResetSort"
             />
+            <CaseMetadataCard :case-id="selectedCaseId" />
             <VariantTable
               ref="variantTableRef"
               :case-id="selectedCaseId"
@@ -120,15 +121,20 @@ import DatabasePicker from './components/DatabasePicker.vue'
 import ExternalLinksSettings from './components/ExternalLinksSettings.vue'
 import CohortView from './components/CohortView.vue'
 import VariantDetailsPanel from './components/VariantDetailsPanel.vue'
+import CaseMetadataCard from './components/CaseMetadataCard.vue'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useVersionGating } from './composables/useVersionGating'
 import { useDatabaseStore } from './stores/databaseStore'
+import { useCaseMetadata } from './composables/useCaseMetadata'
 import { logService } from './services/LogService'
 import type { VariantFilter, Variant } from '../../shared/types/api'
 import type { CohortVariant } from '../../shared/types/cohort'
 
 // Initialize database store
 const databaseStore = useDatabaseStore()
+
+// Initialize case metadata composable for cache clearing
+const { clearCache: clearMetadataCache } = useCaseMetadata()
 
 // Component refs
 const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
@@ -366,6 +372,9 @@ const handleDatabaseSwitched = async (): Promise<void> => {
   filteredCount.value = 0
   totalCount.value = 0
   hasSort.value = false
+
+  // Clear metadata cache
+  clearMetadataCache()
 
   // Refresh case list with new database
   await caseListRef.value?.refreshCases()

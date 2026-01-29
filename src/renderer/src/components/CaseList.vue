@@ -30,13 +30,41 @@
       v-for="caseItem in filteredCases"
       :key="caseItem.id"
       :value="caseItem.id"
-      :title="caseItem.name"
-      :subtitle="`${caseItem.variant_count.toLocaleString()} variants • ${formatDate(caseItem.created_at)}`"
       color="primary"
       @contextmenu.prevent="handleContextMenu($event, caseItem)"
     >
       <template #prepend>
-        <v-icon>mdi-dna</v-icon>
+        <!-- Status icon -->
+        <v-icon
+          :icon="getCaseStatusIcon(caseItem.id)"
+          :color="getCaseStatusColor(caseItem.id)"
+          size="small"
+          class="mr-2"
+        />
+      </template>
+
+      <v-list-item-title>{{ caseItem.name }}</v-list-item-title>
+      <v-list-item-subtitle>
+        {{ caseItem.variant_count.toLocaleString() }} variants •
+        {{ formatDate(caseItem.created_at) }}
+      </v-list-item-subtitle>
+
+      <!-- Cohort chips (show max 3, then +N more) -->
+      <template #append>
+        <div class="d-flex ga-1">
+          <v-chip
+            v-for="cohort in getCaseCohorts(caseItem.id).slice(0, 3)"
+            :key="cohort.id"
+            :color="getCohortColor(cohort.name)"
+            size="x-small"
+            label
+          >
+            {{ cohort.name }}
+          </v-chip>
+          <v-chip v-if="getCaseCohorts(caseItem.id).length > 3" size="x-small" color="grey" label>
+            +{{ getCaseCohorts(caseItem.id).length - 3 }}
+          </v-chip>
+        </div>
       </template>
     </v-list-item>
   </v-list>
@@ -67,8 +95,14 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import type { Case } from '../../../shared/types/api'
+import type { Case, CohortGroup } from '../../../shared/types/api'
 import { useContextMenu } from '../composables/useContextMenu'
+import {
+  useCaseMetadata,
+  STATUS_ICONS,
+  STATUS_COLORS,
+  getCohortColor
+} from '../composables/useCaseMetadata'
 import DeleteCaseDialog from './DeleteCaseDialog.vue'
 import AppSnackbar from './AppSnackbar.vue'
 
@@ -85,6 +119,9 @@ const search = ref('')
 const selected = ref<number[]>([])
 const contextMenuCase = ref<Case | null>(null)
 const contextMenu = useContextMenu()
+
+// Initialize case metadata composable
+const { loadMetadata, getMetadata, loadCohortGroups } = useCaseMetadata()
 
 // Component refs
 const dialogRef = ref<InstanceType<typeof DeleteCaseDialog> | null>(null)
@@ -105,6 +142,10 @@ const loadCases = async (): Promise<void> => {
     // eslint-disable-next-line no-undef
     cases.value = await window.api.cases.list()
     emit('cases-loaded', cases.value.length)
+
+    // Load metadata for all cases
+    await loadCohortGroups()
+    await Promise.all(cases.value.map((c) => loadMetadata(c.id)))
   } finally {
     loading.value = false
   }
@@ -168,6 +209,24 @@ const handleDelete = async (): Promise<void> => {
     snackbarRef.value?.show(`Deleted "${caseToDelete.name}"`)
     await loadCases()
   }
+}
+
+// Helper functions for metadata display
+function getCaseStatusIcon(caseId: number): string {
+  const metadata = getMetadata(caseId)
+  const status = metadata?.metadata?.affected_status ?? 'unknown'
+  return STATUS_ICONS[status]
+}
+
+function getCaseStatusColor(caseId: number): string {
+  const metadata = getMetadata(caseId)
+  const status = metadata?.metadata?.affected_status ?? 'unknown'
+  return STATUS_COLORS[status]
+}
+
+function getCaseCohorts(caseId: number): CohortGroup[] {
+  const metadata = getMetadata(caseId)
+  return metadata?.cohorts ?? []
 }
 
 // Expose methods for parent to call after import
