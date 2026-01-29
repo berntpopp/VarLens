@@ -1,10 +1,22 @@
 <template>
   <div>
+    <!-- Column visibility menu toolbar -->
+    <div class="d-flex justify-end pa-2">
+      <ColumnVisibilityMenu
+        :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
+        :visible-columns="visibleHeaders.map((h) => h.key)"
+        table-id="variant-table"
+        @toggle:column="toggleColumnVisibility"
+        @reorder="setColumnOrder"
+        @reset="resetToDefaults"
+      />
+    </div>
+
     <v-data-table-server
       v-model:page="page"
       v-model:items-per-page="itemsPerPage"
       v-model:sort-by="sortBy"
-      :headers="headers"
+      :headers="visibleHeaders"
       :items="variants"
       :items-length="totalCount"
       :loading="loading"
@@ -400,8 +412,10 @@ import { useExternalLinksStore, type ExternalLinkConfig } from '../stores/extern
 import { resolveUrlTemplate, buildOmimUrl, type VariantLinkData } from '../utils/externalLinks'
 import { useAnnotations, ACMG_COLORS, ACMG_ABBREV } from '../composables/useAnnotations'
 import type { AcmgClassification } from '../../../main/database/types'
+import { useColumnPreferences } from '../composables/useColumnPreferences'
 import AcmgMenu from './AcmgMenu.vue'
 import CommentDialog from './CommentDialog.vue'
+import ColumnVisibilityMenu from './ColumnVisibilityMenu.vue'
 
 interface Props {
   caseId: number
@@ -436,6 +450,10 @@ const {
   getAnnotations
 } = useAnnotations()
 
+// Initialize column preferences
+const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
+  useColumnPreferences('variant-table')
+
 // Table state - DO NOT mutate these in loadVariants handler (infinite loop)
 const variants = ref<Variant[]>([])
 const totalCount = ref(0)
@@ -461,37 +479,62 @@ const snackbar = ref({
 const commentDialogOpen = ref(false)
 const selectedVariantForComment = ref<Variant | null>(null)
 
+// Base headers definition (without virtual links)
+const baseHeaders = [
+  { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' as const },
+  { title: 'Chr', key: 'chr', sortable: true },
+  { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
+  { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
+  { title: 'Alt', key: 'alt', sortable: false, width: '100px' },
+  { title: 'GT', key: 'gt_num', sortable: true },
+  { title: 'Gene', key: 'gene_symbol', sortable: true },
+  { title: 'OMIM', key: 'omim_mim_number', sortable: true, width: '100px' },
+  { title: 'Func', key: 'func', sortable: true },
+  { title: 'Consequence', key: 'consequence', sortable: true },
+  { title: 'Transcript', key: 'transcript', sortable: true },
+  { title: 'cDNA', key: 'cdna', sortable: false },
+  { title: 'AA Change', key: 'aa_change', sortable: false },
+  { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' as const },
+  { title: 'CADD', key: 'cadd', sortable: true, align: 'end' as const },
+  { title: 'Qual', key: 'qual', sortable: true, align: 'end' as const },
+  { title: 'ClinVar', key: 'clinvar', sortable: true },
+  { title: 'HPO Score', key: 'hpo_sim_score', sortable: true, align: 'end' as const },
+  { title: 'HPO Match', key: 'hpo_match', sortable: false },
+  { title: 'MoI', key: 'moi', sortable: true }
+]
+
 // Dynamic headers with virtual link columns from store
 const headers = computed(() => {
-  const baseHeaders = [
-    { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' as const },
-    { title: 'Chr', key: 'chr', sortable: true },
-    { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
-    { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
-    { title: 'Alt', key: 'alt', sortable: false, width: '100px' },
-    { title: 'GT', key: 'gt_num', sortable: true },
-    { title: 'Gene', key: 'gene_symbol', sortable: true },
-    { title: 'OMIM', key: 'omim_mim_number', sortable: true, width: '100px' },
-    { title: 'Func', key: 'func', sortable: true },
-    { title: 'Consequence', key: 'consequence', sortable: true },
-    { title: 'Transcript', key: 'transcript', sortable: true },
-    { title: 'cDNA', key: 'cdna', sortable: false },
-    { title: 'AA Change', key: 'aa_change', sortable: false },
-    { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' as const },
-    { title: 'CADD', key: 'cadd', sortable: true, align: 'end' as const },
-    { title: 'Qual', key: 'qual', sortable: true, align: 'end' as const },
-    { title: 'ClinVar', key: 'clinvar', sortable: true },
-    { title: 'HPO Score', key: 'hpo_sim_score', sortable: true, align: 'end' as const },
-    { title: 'HPO Match', key: 'hpo_match', sortable: false },
-    { title: 'MoI', key: 'moi', sortable: true }
-  ]
+  const allHeaders = [...baseHeaders]
 
   // Add virtual column headers from store
   for (const link of linksStore.virtualLinks) {
-    baseHeaders.push({ title: link.name, key: `_link_${link.id}`, sortable: false, width: '80px' })
+    allHeaders.push({ title: link.name, key: `_link_${link.id}`, sortable: false, width: '80px' })
   }
 
-  return baseHeaders
+  return allHeaders
+})
+
+// Ordered columns based on user preferences
+const orderedColumns = computed(() => {
+  const base = headers.value
+  if (prefs.value.order.length > 0) {
+    // Sort by saved order, items not in order go to end
+    return [...base].sort((a, b) => {
+      const aIdx = prefs.value.order.indexOf(a.key)
+      const bIdx = prefs.value.order.indexOf(b.key)
+      if (aIdx === -1 && bIdx === -1) return 0
+      if (aIdx === -1) return 1
+      if (bIdx === -1) return -1
+      return aIdx - bIdx
+    })
+  }
+  return base
+})
+
+// Visible headers based on user preferences
+const visibleHeaders = computed(() => {
+  return orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false)
 })
 
 // Helper functions for link resolution
@@ -858,5 +901,19 @@ defineExpose({ resetSort })
 /* Clickable table rows */
 :deep(.v-data-table tbody tr) {
   cursor: pointer;
+}
+
+/* Column max-width with ellipsis and horizontal scroll */
+:deep(.v-data-table th),
+:deep(.v-data-table td) {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ensure table can scroll horizontally when columns overflow */
+:deep(.v-table__wrapper) {
+  overflow-x: auto;
 }
 </style>
