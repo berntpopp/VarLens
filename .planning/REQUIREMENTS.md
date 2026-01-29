@@ -16,10 +16,10 @@ Requirements for v0.4.0 — Variant Annotation & Case Metadata. Each maps to roa
 - [x] **ANNOT-05**: User can star/flag a variant to mark it as interesting (toggle on/off)
 - [x] **ANNOT-06**: User can assign ACMG 5-tier classification to a variant (Pathogenic, Likely Pathogenic, VUS, Likely Benign, Benign)
 - [x] **ANNOT-07**: ACMG classification displays with color-coded badges in variant table rows
-- [ ] **ANNOT-08**: User can create custom tags with name and color
-- [ ] **ANNOT-09**: User can assign multiple custom tags to any variant (per-case)
-- [ ] **ANNOT-10**: User can manage tags (rename, delete, recolor) in a settings view
-- [ ] **ANNOT-11**: User can filter variant table by star/flag status, ACMG classification, and custom tags
+- [x] **ANNOT-08**: User can create custom tags with name and color
+- [x] **ANNOT-09**: User can assign multiple custom tags to any variant (per-case)
+- [x] **ANNOT-10**: User can manage tags (rename, delete, recolor) in a settings view
+- [x] **ANNOT-11**: User can filter variant table by star/flag status, ACMG classification, and custom tags
 - [x] **ANNOT-12**: Annotations are preserved when database is closed and reopened
 - [x] **ANNOT-13**: Deleting a case cascades deletion of that case's per-case annotations
 
