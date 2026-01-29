@@ -1,12 +1,7 @@
 <template>
   <v-dialog v-model="open" max-width="600px">
     <template #activator="{ props }">
-      <v-btn
-        v-bind="props"
-        variant="tonal"
-        size="small"
-        prepend-icon="mdi-information-outline"
-      >
+      <v-btn v-bind="props" variant="tonal" size="small" prepend-icon="mdi-information-outline">
         Case Info
       </v-btn>
     </template>
