@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 25 of 25 (Table UX & Filter Persistence)
-Plan: 3 of 4 complete
-Status: In progress
-Last activity: 2026-01-29 - Completed 25-03-PLAN.md
+Plan: 4 of 4 complete
+Status: Phase complete
+Last activity: 2026-01-29 - Completed 25-04-PLAN.md
 
-Progress: [████████████████████] 24/25 phases (96% complete, Phase 25 in progress)
+Progress: [█████████████████████] 25/25 phases (100% complete - v0.4.0 done!)
 
 ## Milestone History
 
@@ -30,10 +30,10 @@ Progress: [████████████████████] 24/25 p
 - Total execution time: ~2 days
 - Phases completed: 6 phases (13-18)
 
-**v0.4.0 Velocity (in progress):**
-- Total plans completed: 26 (including gap closure)
-- Total execution time: 144 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6 + 3 + 2 + 5 + 6)
-- Phases completed: 6 phases (19-24), Phase 25 in progress
+**v0.4.0 Velocity (complete):**
+- Total plans completed: 27 (including gap closure)
+- Total execution time: 146 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6 + 3 + 2 + 5 + 6 + 2)
+- Phases completed: 7 phases (19-25)
 
 **By Phase:**
 
@@ -45,7 +45,7 @@ Progress: [████████████████████] 24/25 p
 | 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (HpoTermSelector, CaseMetadataCard, enhanced CaseList) |
 | 23. Side Panel UI | 4/4 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration), 04: VEP Enrichment Gap Closure (useVepEnrichment, rsID, REVEL/SpliceAI/SIFT/PolyPhen scores, consequence badges) |
 | 24. Custom Tags + HPO | 4/4 | Complete | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON), 02: Settings UI (TagManagementDialog, ColorSwatchPicker, settings menu), 03: Variant UI Integration (FilterToolbar tag filter, TagsSection, HpoAutocomplete), 04: Gap Closure (tag_ids filter in DatabaseService) |
-| 25. Table UX & Filter | 3/4 | In progress | 01: Composables Infrastructure (useColumnPreferences, useFilterPreferences, vuedraggable), 02: Column Visibility Menu (ColumnVisibilityMenu, VariantTable/CohortTable integration, drag-to-reorder), 03: Sticky Tabs and Draggable Filters (sticky positioning, draggable filter groups, horizontal scroll) |
+| 25. Table UX & Filter | 4/4 | Complete | 01: Composables Infrastructure (useColumnPreferences, useFilterPreferences, vuedraggable), 02: Column Visibility Menu (ColumnVisibilityMenu, VariantTable/CohortTable integration, drag-to-reorder), 03: Sticky Tabs and Draggable Filters (sticky positioning, draggable filter groups, horizontal scroll), 04: Case Metadata Modal & Settings (CaseMetadataModal, Reset Columns/Filters, Cohort filter styling) |
 
 ## Accumulated Context
 
@@ -137,6 +137,9 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Filter bar top offset | 48px (tab height) for sticky positioning | Positions filter bar directly below tabs (25-03) |
 | Drag handle for filter reorder | Dedicated drag-handle class on icon for vuedraggable | Precise drag control without interfering with filter interaction (25-03) |
 | Hidden scrollbar with arrow buttons | Native scrollbar hidden via CSS, custom arrow buttons for navigation | Cleaner horizontal scroll UX (25-03) |
+| Modal for case metadata | CaseMetadataModal replaces always-visible CaseMetadataCard | Reduces visual clutter, on-demand access (25-04) |
+| Reset preferences in Settings | Reset Columns and Reset Filters options in Settings menu | Power users can restore defaults easily (25-04) |
+| Cohort filter visual consistency | CohortTable search bar styled to match FilterToolbar | Consistent UX across Case and Cohort Analysis (25-04) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -162,9 +165,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 25 Plan 03 completed
-Stopped at: Completed 25-03-PLAN.md (Sticky Tabs and Draggable Filters)
+Last session: 2026-01-29 - Phase 25 Plan 04 completed
+Stopped at: Completed 25-04-PLAN.md (Case Metadata Modal & Settings)
 Resume file: None
+
+**v0.4.0 COMPLETE!** All 7 phases (19-25), 27 plans shipped in 146 minutes.
 
 ---
 *v0.4.0 extended with Phase 25 - Table UX & Filter Persistence*
