@@ -13,11 +13,16 @@ const ALLOWED_DOMAINS = [
   'github.com',
   'opensource.org',
   'gnomad.broadinstitute.org',
-  'ncbi.nlm.nih.gov',
+  'ncbi.nlm.nih.gov', // Covers PubTator, LitVar, ClinVar
   'omim.org',
   'genome.ucsc.edu',
   'varsome.com',
-  'franklin.genoox.com'
+  'franklin.genoox.com',
+  // New for Phase 23
+  'deciphergenomics.org', // DECIPHER
+  'clinicalgenome.org', // ClinGen
+  'ensembl.org', // Ensembl
+  'grch37.ensembl.org' // Ensembl GRCh37 subdomain
 ]
 
 /** User-configured domains (synced from renderer store) */
