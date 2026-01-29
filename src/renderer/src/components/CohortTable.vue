@@ -27,6 +27,7 @@
       show-expand
       class="elevation-1"
       @update:options="handleTableOptions"
+      @click:row="(_event: unknown, { item }: { item: CohortVariant }) => emit('row-click', item)"
     >
       <!-- Annotations column (global star, ACMG, comment) -->
       <template #[`item.annotations`]="{ item }">
@@ -230,7 +231,7 @@ import { useAnnotations, ACMG_COLORS, ACMG_ABBREV } from '../composables/useAnno
 import AcmgMenu from './AcmgMenu.vue'
 import CommentDialog from './CommentDialog.vue'
 
-// Emit for navigation
+// Emit for navigation and row click
 const emit = defineEmits<{
   'navigate-to-case': [
     payload: {
@@ -243,6 +244,7 @@ const emit = defineEmits<{
       cdna: string | null
     }
   ]
+  'row-click': [variant: CohortVariant]
 }>()
 
 // Initialize annotations composable (global methods for cohort mode)
@@ -539,5 +541,10 @@ defineExpose({ refresh })
 .variant-data-mono {
   font-family: 'Courier New', monospace;
   font-size: 0.85em;
+}
+
+/* Clickable table rows */
+:deep(.v-data-table tbody tr) {
+  cursor: pointer;
 }
 </style>

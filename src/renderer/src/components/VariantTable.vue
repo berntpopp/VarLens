@@ -13,6 +13,7 @@
       multi-sort
       class="elevation-1"
       @update:options="loadVariants"
+      @click:row="(_event: unknown, { item }: { item: Variant }) => emit('row-click', item)"
     >
       <!-- Annotations column (star, ACMG, comment) -->
       <template #[`item.annotations`]="{ item }">
@@ -412,6 +413,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:counts': [counts: { filtered: number; total: number }]
   'update:hasSort': [hasSort: boolean]
+  'row-click': [variant: Variant]
 }>()
 
 // Initialize external links store
@@ -851,5 +853,10 @@ defineExpose({ resetSort })
 
 .annotation-icon-wrapper.has-global {
   box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.4);
+}
+
+/* Clickable table rows */
+:deep(.v-data-table tbody tr) {
+  cursor: pointer;
 }
 </style>

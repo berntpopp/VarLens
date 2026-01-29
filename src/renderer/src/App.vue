@@ -60,15 +60,27 @@
               :filters="currentFilters"
               @update:counts="handleCountsUpdate"
               @update:has-sort="handleSortUpdate"
+              @row-click="handleVariantRowClick"
             />
           </template>
         </v-window-item>
 
         <v-window-item value="cohort">
-          <CohortView ref="cohortViewRef" @navigate-to-case="handleNavigateToCase" />
+          <CohortView
+            ref="cohortViewRef"
+            @navigate-to-case="handleNavigateToCase"
+            @row-click="handleVariantRowClick"
+          />
         </v-window-item>
       </v-window>
     </v-main>
+
+    <VariantDetailsPanel
+      v-model:open="panelOpen"
+      :variant="selectedPanelVariant"
+      :case-id="activeTab === 'case' ? selectedCaseId : null"
+      :mode="panelMode"
+    />
 
     <AppFooter
       :disclaimer-acknowledged="disclaimerAcknowledged"
@@ -91,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
 import EmptyState from './components/EmptyState.vue'
@@ -107,11 +119,13 @@ import FaqDialog from './components/FaqDialog.vue'
 import DatabasePicker from './components/DatabasePicker.vue'
 import ExternalLinksSettings from './components/ExternalLinksSettings.vue'
 import CohortView from './components/CohortView.vue'
+import VariantDetailsPanel from './components/VariantDetailsPanel.vue'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useVersionGating } from './composables/useVersionGating'
 import { useDatabaseStore } from './stores/databaseStore'
 import { logService } from './services/LogService'
-import type { VariantFilter } from '../../shared/types/api'
+import type { VariantFilter, Variant } from '../../shared/types/api'
+import type { CohortVariant } from '../../shared/types/cohort'
 
 // Initialize database store
 const databaseStore = useDatabaseStore()
@@ -144,12 +158,19 @@ const selectedCaseId = ref<number | null>(null)
 const selectedCaseName = ref<string>('')
 const caseCount = ref(0)
 
+// Panel state
+const panelOpen = ref(false)
+const selectedPanelVariant = ref<Variant | CohortVariant | null>(null)
+
 // Filter state (lifted to App for coordination)
 const currentFilters = ref<Omit<VariantFilter, 'case_id'>>({})
 const filteredCount = ref(0)
 const totalCount = ref(0)
 const hasSort = ref(false)
 const initialSearch = ref<string | undefined>(undefined)
+
+// Computed panel mode
+const panelMode = computed(() => (activeTab.value === 'case' ? 'case' : 'cohort'))
 
 const handleImportClick = (): void => {
   importDialogRef.value?.show()
@@ -234,6 +255,12 @@ const handleSortUpdate = (sortActive: boolean): void => {
   hasSort.value = sortActive
 }
 
+// Handle variant row click from tables
+const handleVariantRowClick = (variant: Variant | CohortVariant): void => {
+  selectedPanelVariant.value = variant
+  panelOpen.value = true
+}
+
 // Handle navigation from cohort to case
 const handleNavigateToCase = async (payload: {
   caseId: number
@@ -292,7 +319,10 @@ watch(selectedCaseId, () => {
 })
 
 // Refresh cohort data when switching to cohort tab
+// Also close panel on tab switch
 watch(activeTab, async (newTab) => {
+  panelOpen.value = false
+  selectedPanelVariant.value = null
   if (newTab === 'cohort') {
     await cohortViewRef.value?.refresh()
   }
