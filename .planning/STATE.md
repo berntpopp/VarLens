@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 25 of 25 (Table UX & Filter Persistence)
-Plan: 1 of ?
+Plan: 2 of 4 complete
 Status: In progress
-Last activity: 2026-01-29 - Completed 25-01-PLAN.md
+Last activity: 2026-01-29 - Completed 25-02-PLAN.md
 
 Progress: [████████████████████] 24/25 phases (96% complete, Phase 25 in progress)
 
@@ -31,8 +31,8 @@ Progress: [████████████████████] 24/25 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 24 (including gap closure)
-- Total execution time: 133 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6 + 3 + 2)
+- Total plans completed: 25 (including gap closure)
+- Total execution time: 138 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6 + 3 + 2 + 5)
 - Phases completed: 6 phases (19-24), Phase 25 in progress
 
 **By Phase:**
@@ -45,7 +45,7 @@ Progress: [████████████████████] 24/25 p
 | 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (HpoTermSelector, CaseMetadataCard, enhanced CaseList) |
 | 23. Side Panel UI | 4/4 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration), 04: VEP Enrichment Gap Closure (useVepEnrichment, rsID, REVEL/SpliceAI/SIFT/PolyPhen scores, consequence badges) |
 | 24. Custom Tags + HPO | 4/4 | Complete | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON), 02: Settings UI (TagManagementDialog, ColorSwatchPicker, settings menu), 03: Variant UI Integration (FilterToolbar tag filter, TagsSection, HpoAutocomplete), 04: Gap Closure (tag_ids filter in DatabaseService) |
-| 25. Table UX & Filter | 1/? | In progress | 01: Composables Infrastructure (useColumnPreferences, useFilterPreferences, vuedraggable) |
+| 25. Table UX & Filter | 2/4 | In progress | 01: Composables Infrastructure (useColumnPreferences, useFilterPreferences, vuedraggable), 02: Column Visibility Menu (ColumnVisibilityMenu, VariantTable/CohortTable integration, drag-to-reorder) |
 
 ## Accumulated Context
 
@@ -130,6 +130,9 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Column preference persistence | useColumnPreferences composable with VueUse useStorage for reactive persistence | Global column preferences across all cases/cohorts (25-01) |
 | Filter group persistence | useFilterPreferences composable with 8 default groups, auto-merge new groups | Draggable filter group order and active state (25-01) |
 | Width clamping for columns | 60-500px range for column widths | Readability minimum, prevents extreme sizes (25-01) |
+| Menu-based column reordering | Drag items in ColumnVisibilityMenu, not table headers | Avoids complex DOM manipulation on v-data-table-server (25-02) |
+| Per-table column preferences | variant-table and cohort-table have separate localStorage keys | Different table structures benefit from independent preferences (25-02) |
+| Column max-width 200px | th/td max-width with ellipsis truncation | Balances readability with horizontal scroll efficiency (25-02) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -155,8 +158,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 25 Plan 01 completed
-Stopped at: Completed 25-01-PLAN.md (Composables Infrastructure)
+Last session: 2026-01-29 - Phase 25 Plan 02 completed
+Stopped at: Completed 25-02-PLAN.md (Column Visibility Menu)
 Resume file: None
 
 ---
