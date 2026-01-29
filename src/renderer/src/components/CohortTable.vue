@@ -1,20 +1,8 @@
 <template>
   <div>
-    <!-- Column visibility menu toolbar -->
-    <div class="d-flex align-center justify-end mb-2">
-      <ColumnVisibilityMenu
-        :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
-        :visible-columns="visibleHeaders.map((h) => h.key)"
-        table-id="cohort-table"
-        @toggle:column="toggleColumnVisibility"
-        @reorder="setColumnOrder"
-        @reset="resetToDefaults"
-      />
-    </div>
-
     <!-- Search bar with FilterToolbar-like styling -->
     <div class="filter-toolbar-container">
-      <v-toolbar density="default" flat class="filter-toolbar px-3 py-3">
+      <v-toolbar density="default" flat class="filter-toolbar px-3 py-2">
         <div class="filter-section search-section">
           <div class="section-label">
             <v-icon size="small" class="mr-1">mdi-magnify</v-icon>
@@ -34,10 +22,8 @@
           />
         </div>
 
-        <v-spacer />
-
-        <!-- Results count -->
-        <div class="results-section d-flex align-center ga-2">
+        <!-- Results & Actions (3x2 grid like FilterToolbar) -->
+        <div class="results-section ml-auto">
           <v-chip
             :color="searchTerm !== '' ? 'primary' : 'default'"
             :variant="searchTerm !== '' ? 'flat' : 'tonal'"
@@ -50,15 +36,33 @@
           </v-chip>
 
           <v-btn
-            v-if="searchTerm !== ''"
-            color="error"
-            variant="tonal"
+            :disabled="searchTerm === ''"
+            :color="searchTerm !== '' ? 'error' : undefined"
+            :variant="searchTerm !== '' ? 'tonal' : 'text'"
             size="small"
             prepend-icon="mdi-filter-off"
             @click="searchTerm = ''; handleSearchChange('')"
           >
             Clear
           </v-btn>
+
+          <!-- Placeholder for filter menu (cohort has simpler filtering) -->
+          <div class="placeholder-cell"></div>
+
+          <ColumnVisibilityMenu
+            :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
+            :visible-columns="visibleHeaders.map((h) => h.key)"
+            table-id="cohort-table"
+            @toggle:column="toggleColumnVisibility"
+            @reorder="setColumnOrder"
+            @reset="resetToDefaults"
+          />
+
+          <!-- Placeholder for export (not implemented for cohort yet) -->
+          <div class="placeholder-cell"></div>
+
+          <!-- Empty cell to complete grid -->
+          <div class="placeholder-cell"></div>
         </div>
       </v-toolbar>
     </div>
@@ -648,8 +652,10 @@ defineExpose({ refresh })
 
 .filter-toolbar {
   background: transparent !important;
-  min-height: 80px !important;
   height: auto !important;
+  align-items: flex-start !important;
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
 }
 
 .filter-section {
@@ -687,12 +693,21 @@ defineExpose({ refresh })
 }
 
 .results-section {
-  padding: 4px 8px;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 6px;
+  padding: 8px 10px;
   border-radius: 8px;
   background: rgba(var(--v-theme-on-surface), 0.03);
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .results-chip {
   font-size: 0.85rem;
+}
+
+.placeholder-cell {
+  /* Empty cell placeholder for grid alignment */
 }
 </style>

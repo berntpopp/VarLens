@@ -4,6 +4,15 @@
     <v-toolbar density="default" flat class="filter-toolbar px-3 py-2">
       <!-- Filter groups wrapper -->
       <div class="filter-groups-wrapper">
+        <v-btn
+          v-if="canScrollLeft"
+          icon="mdi-chevron-left"
+          size="x-small"
+          variant="text"
+          class="scroll-arrow"
+          @click="scrollLeft"
+        />
+
         <div ref="scrollContainer" class="filter-groups-scroll">
           <draggable
             v-model="orderedFilterGroups"
@@ -15,7 +24,7 @@
             <template #item="{ element: group }">
               <div
                 class="filter-section-wrapper"
-                :class="{ collapsed: !group.active }"
+                :class="{ collapsed: !group.expanded }"
                 :data-filter-id="group.id"
               >
                 <div class="filter-group-header">
@@ -24,12 +33,25 @@
                     size="x-small"
                     variant="text"
                     density="compact"
-                    :icon="group.active ? 'mdi-chevron-down' : 'mdi-chevron-right'"
-                    @click="toggleFilterGroupActive(group.id)"
+                    :icon="group.expanded ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+                    @click="toggleFilterGroupExpanded(group.id)"
+                  />
+                  <v-btn
+                    size="x-small"
+                    variant="text"
+                    density="compact"
+                    icon="mdi-close"
+                    class="close-btn"
+                    @click="hideFilterGroup(group.id)"
                   />
                 </div>
 
-                <div v-if="group.active" class="filter-group-content">
+                <!-- Collapsed label (rotated 90 degrees) -->
+                <div v-if="!group.expanded" class="collapsed-label" @click="toggleFilterGroupExpanded(group.id)">
+                  <span>{{ filterGroupLabels[group.id] || group.id }}</span>
+                </div>
+
+                <div v-if="group.expanded" class="filter-group-content">
                   <!-- GENERAL SEARCH GROUP -->
                   <div v-if="group.id === 'search'" class="filter-section search-section">
                     <div class="section-label">
@@ -377,6 +399,16 @@
           Clear
         </v-btn>
 
+        <!-- Filter visibility menu -->
+        <FilterVisibilityMenu
+          :filter-groups="filterGroupsWithLabels"
+          @toggle-visible="toggleFilterGroupVisible"
+          @toggle-expand="toggleFilterGroupExpanded"
+          @reorder="handleFilterReorder"
+          @reset="resetFilterDefaults"
+          @show-all="showAllFilters"
+        />
+
         <!-- Column visibility menu -->
         <ColumnVisibilityMenu
           v-if="columns && columns.length > 0"
@@ -419,6 +451,7 @@ import { useTags } from '../composables/useTags'
 import { useFilterPreferences } from '../composables/useFilterPreferences'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import ColumnVisibilityMenu from './ColumnVisibilityMenu.vue'
+import FilterVisibilityMenu from './FilterVisibilityMenu.vue'
 import type { VariantFilter, Variant, Tag } from '../../../shared/types/api'
 
 interface ColumnDef {
@@ -452,7 +485,21 @@ const emit = defineEmits<Emits>()
 const { loadTags, getTags } = useTags()
 
 // Filter preferences composable
-const { filterGroups, setFilterGroupOrder, toggleFilterGroupActive } = useFilterPreferences()
+const {
+  filterGroups,
+  visibleFilterGroups,
+  setFilterGroupOrder,
+  toggleFilterGroupExpanded,
+  toggleFilterGroupVisible,
+  hideFilterGroup,
+  resetToDefaults: resetFilterDefaults,
+  showAll: showAllFilters
+} = useFilterPreferences()
+
+// Handle filter reorder from menu
+const handleFilterReorder = (groups: { id: string; label: string; visible: boolean }[]) => {
+  setFilterGroupOrder(groups.map((g) => g.id))
+}
 
 // Column preferences composable
 const {
@@ -484,14 +531,36 @@ const visibleColumnKeys = computed(() => {
     .map((h) => h.key)
 })
 
+// Filter group labels for menu
+const filterGroupLabels: Record<string, string> = {
+  search: 'Search',
+  gene: 'Gene',
+  impact: 'Impact',
+  function: 'Function',
+  clinvar: 'ClinVar',
+  frequency: 'Frequency',
+  cadd: 'CADD',
+  tags: 'Tags'
+}
+
+// Filter groups with labels for FilterVisibilityMenu (all groups, not just visible)
+const filterGroupsWithLabels = computed(() =>
+  filterGroups.value.map((g) => ({
+    id: g.id,
+    label: filterGroupLabels[g.id] || g.id,
+    visible: g.visible,
+    expanded: g.expanded
+  }))
+)
+
 // Horizontal scroll state
 const scrollContainer = ref<HTMLElement | null>(null)
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
 
-// Ordered filter groups with two-way binding for draggable
+// Ordered filter groups with two-way binding for draggable (only visible ones)
 const orderedFilterGroups = computed({
-  get: () => filterGroups.value,
+  get: () => visibleFilterGroups.value,
   set: (newOrder) => {
     setFilterGroupOrder(newOrder.map((g) => g.id))
   }
@@ -898,8 +967,8 @@ const exportToExcel = async () => {
   background: transparent !important;
   height: auto !important;
   align-items: flex-start !important;
-  padding-top: 8px !important;
-  padding-bottom: 8px !important;
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
 }
 
 .filter-groups-wrapper {
@@ -913,7 +982,7 @@ const exportToExcel = async () => {
 .filter-groups-scroll {
   flex: 1;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   min-width: 0;
   scrollbar-width: thin;
 }
@@ -922,7 +991,7 @@ const exportToExcel = async () => {
   display: flex;
   flex-wrap: nowrap;
   gap: 4px;
-  padding: 2px;
+  padding: 4px 2px;
   width: max-content;
 }
 
@@ -933,11 +1002,30 @@ const exportToExcel = async () => {
   gap: 2px;
   border-radius: 8px;
   background: rgba(var(--v-theme-on-surface), 0.03);
-  padding: 4px;
+  padding: 6px;
 }
 
 .filter-section-wrapper.collapsed {
-  padding: 4px 8px;
+  padding: 6px 4px;
+  min-height: 60px;
+}
+
+.collapsed-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  cursor: pointer;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+
+.collapsed-label:hover {
+  color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
 .filter-group-header {
@@ -1065,9 +1153,9 @@ const exportToExcel = async () => {
 
 .results-section {
   display: grid;
-  grid-template-columns: auto auto;
-  gap: 4px;
-  padding: 6px;
+  grid-template-columns: auto auto auto;
+  gap: 6px;
+  padding: 8px 10px;
   border-radius: 8px;
   background: rgba(var(--v-theme-on-surface), 0.03);
   flex-shrink: 0;
