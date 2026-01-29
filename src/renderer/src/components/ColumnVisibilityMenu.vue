@@ -47,7 +47,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits } from 'vue'
 import draggable from 'vuedraggable'
 
 interface Column {
@@ -68,7 +67,10 @@ const emit = defineEmits<{
 }>()
 
 const handleReorder = (newOrder: Column[]) => {
-  emit('reorder', newOrder.map((c) => c.key))
+  emit(
+    'reorder',
+    newOrder.map((c) => c.key)
+  )
 }
 </script>
 
