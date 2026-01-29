@@ -31,7 +31,7 @@ export function getScoreColor(scoreName: string, value: number | null): string {
   if (value === null || value === undefined) return 'grey'
 
   const threshold = SCORE_THRESHOLDS[scoreName.toLowerCase()]
-  if (!threshold) return 'grey'
+  if (threshold === undefined) return 'grey'
 
   if (threshold.direction === 'high-bad') {
     if (value >= threshold.red) return 'error'
