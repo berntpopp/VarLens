@@ -21,24 +21,79 @@
 
       <v-divider />
 
-      <!-- Scrollable content area (placeholder for now) -->
+      <!-- Scrollable content area -->
       <div class="flex-grow-1 overflow-y-auto pa-3">
-        <div v-if="variant" class="text-body-2">
-          <strong>{{ variant.gene_symbol ?? 'Unknown' }}</strong>
-          <div>{{ variant.chr }}:{{ variant.pos }}</div>
-          <div>{{ variant.ref }} > {{ variant.alt }}</div>
-        </div>
-        <div v-else class="text-grey text-center">No variant selected</div>
+        <template v-if="variant">
+          <!-- Section 1: Variant Identity -->
+          <VariantIdentitySection :variant="variant" class="mb-4" />
+
+          <v-divider class="mb-4" />
+
+          <!-- Section 2: Annotation Scores -->
+          <AnnotationScoresSection :variant="variant" class="mb-4" />
+
+          <v-divider class="mb-4" />
+
+          <!-- Section 3: ACMG Classification -->
+          <div class="acmg-section mb-4">
+            <div class="text-subtitle-2 mb-2">ACMG Classification</div>
+            <AcmgMenu @select="handleAcmgSelect">
+              <template #activator="{ props: menuProps }">
+                <v-chip
+                  v-if="currentAcmgClassification !== null"
+                  v-bind="menuProps"
+                  :color="ACMG_COLORS[currentAcmgClassification]"
+                  label
+                  class="cursor-pointer"
+                >
+                  {{ currentAcmgClassification }}
+                </v-chip>
+                <v-btn
+                  v-else
+                  v-bind="menuProps"
+                  variant="outlined"
+                  size="small"
+                  prepend-icon="mdi-tag-plus"
+                >
+                  Set Classification
+                </v-btn>
+              </template>
+            </AcmgMenu>
+            <div v-if="hasGlobalAcmg && mode === 'case'" class="text-caption text-grey mt-1">
+              Global: {{ globalAcmgClassification }}
+            </div>
+          </div>
+
+          <v-divider class="mb-4" />
+
+          <!-- Section 4: Comments -->
+          <CommentsSection :variant="variant" :case-id="caseId" :mode="mode" class="mb-4" />
+
+          <v-divider class="mb-4" />
+
+          <!-- Section 5: External Links -->
+          <ExternalLinksSection :variant="variant" />
+        </template>
+
+        <div v-else class="text-grey text-center mt-4">Select a variant to view details</div>
       </div>
     </v-card>
   </v-navigation-drawer>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+/* global window */
+import { onMounted, onUnmounted, computed, watch } from 'vue'
 import { usePanelResize } from '../composables/usePanelResize'
+import { useAnnotations, ACMG_COLORS } from '../composables/useAnnotations'
+import VariantIdentitySection from './VariantIdentitySection.vue'
+import AnnotationScoresSection from './AnnotationScoresSection.vue'
+import ExternalLinksSection from './ExternalLinksSection.vue'
+import CommentsSection from './CommentsSection.vue'
+import AcmgMenu from './AcmgMenu.vue'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
+import type { AcmgClassification } from '../../../main/database/types'
 
 interface Props {
   open: boolean
@@ -56,6 +111,103 @@ const emit = defineEmits<{
 // Use panel resize composable
 const { panelWidth, startResize } = usePanelResize()
 
+// Use annotations composable
+const {
+  loadAnnotations,
+  loadGlobalAnnotations,
+  getAcmgClassification,
+  getGlobalAcmgClassification,
+  setAcmgClassification,
+  setGlobalAcmgClassification
+} = useAnnotations()
+
+// Current ACMG classification (per-case in case mode, global in cohort mode)
+const currentAcmgClassification = computed<AcmgClassification | null>(() => {
+  if (props.variant === null) return null
+
+  if (props.mode === 'case') {
+    return getAcmgClassification(
+      props.variant.chr,
+      props.variant.pos,
+      props.variant.ref,
+      props.variant.alt
+    )
+  } else {
+    return getGlobalAcmgClassification(
+      props.variant.chr,
+      props.variant.pos,
+      props.variant.ref,
+      props.variant.alt
+    )
+  }
+})
+
+// Global ACMG classification (for showing in case mode)
+const globalAcmgClassification = computed<AcmgClassification | null>(() => {
+  if (props.variant === null) return null
+
+  return getGlobalAcmgClassification(
+    props.variant.chr,
+    props.variant.pos,
+    props.variant.ref,
+    props.variant.alt
+  )
+})
+
+// Check if global ACMG exists
+const hasGlobalAcmg = computed(() => {
+  return globalAcmgClassification.value !== null
+})
+
+// Handle ACMG selection
+const handleAcmgSelect = async (classification: AcmgClassification | null) => {
+  if (props.variant === null) return
+
+  if (props.mode === 'case' && props.caseId !== null) {
+    // Per-case classification
+    const variantId = (props.variant as Variant).id
+    await setAcmgClassification(
+      props.caseId,
+      variantId,
+      props.variant.chr,
+      props.variant.pos,
+      props.variant.ref,
+      props.variant.alt,
+      classification
+    )
+  } else {
+    // Global classification (cohort mode)
+    await setGlobalAcmgClassification(
+      props.variant.chr,
+      props.variant.pos,
+      props.variant.ref,
+      props.variant.alt,
+      classification
+    )
+  }
+}
+
+// Load annotations when variant changes
+watch(
+  () => props.variant,
+  async (newVariant) => {
+    if (newVariant !== null) {
+      if (props.mode === 'case' && props.caseId !== null) {
+        await loadAnnotations(
+          props.caseId,
+          newVariant.chr,
+          newVariant.pos,
+          newVariant.ref,
+          newVariant.alt
+        )
+      } else {
+        await loadGlobalAnnotations(newVariant.chr, newVariant.pos, newVariant.ref, newVariant.alt)
+      }
+    }
+  },
+  { immediate: true }
+)
+
 // Handle Escape key to close panel
 const handleKeydown = (e: KeyboardEvent): void => {
   if (e.key === 'Escape' && props.open) {
@@ -65,13 +217,11 @@ const handleKeydown = (e: KeyboardEvent): void => {
 
 // Add Escape listener on mount
 onMounted(() => {
-  // eslint-disable-next-line no-undef
   window.addEventListener('keydown', handleKeydown)
 })
 
 // Clean up Escape listener on unmount
 onUnmounted(() => {
-  // eslint-disable-next-line no-undef
   window.removeEventListener('keydown', handleKeydown)
 })
 </script>
@@ -90,5 +240,9 @@ onUnmounted(() => {
 
 .resize-handle:hover {
   background: rgba(var(--v-theme-primary), 0.2);
+}
+
+.cursor-pointer {
+  cursor: pointer;
 }
 </style>
