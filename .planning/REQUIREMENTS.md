@@ -25,12 +25,12 @@ Requirements for v0.4.0 — Variant Annotation & Case Metadata. Each maps to roa
 
 ### Variant Details Panel
 
-- [ ] **PANEL-01**: User can click a variant row to open a details side panel (right drawer)
-- [ ] **PANEL-02**: Side panel displays all annotation scores from the database (CADD, REVEL, SpliceAI, gnomAD AF, etc.)
+- [x] **PANEL-01**: User can click a variant row to open a details side panel (right drawer)
+- [x] **PANEL-02**: Side panel displays all annotation scores from the database (CADD, REVEL, SpliceAI, gnomAD AF, etc.)
 - [x] **PANEL-03**: Side panel provides live Ensembl VEP API enrichment for the selected variant (consequence predictions, additional scores)
 - [x] **PANEL-04**: VEP API responses are cached in SQLite with configurable TTL to avoid redundant requests
-- [ ] **PANEL-05**: Side panel shows external link buttons to PubTator, LitVar, UCSC Genome Browser, Decipher, and Franklin (in addition to existing gnomAD, ClinVar, OMIM)
-- [ ] **PANEL-06**: Side panel includes copy-to-clipboard buttons for HGVS notation, chr:pos:ref:alt, and rsID
+- [x] **PANEL-05**: Side panel shows external link buttons to PubTator, LitVar, UCSC Genome Browser, Decipher, and Franklin (in addition to existing gnomAD, ClinVar, OMIM)
+- [x] **PANEL-06**: Side panel includes copy-to-clipboard buttons for HGVS notation, chr:pos:ref:alt, and rsID
 - [x] **PANEL-07**: When offline, side panel shows database annotations and displays "API enrichment unavailable — offline" message instead of VEP data
 - [x] **PANEL-08**: When VEP API returns cached data, side panel shows "Cached data from [date]" indicator
 - [x] **PANEL-09**: Side panel shows loading skeleton while VEP API request is in flight
@@ -56,7 +56,7 @@ Requirements for v0.4.0 — Variant Annotation & Case Metadata. Each maps to roa
 - [x] **INFRA-02**: Schema migration works correctly on SQLCipher-encrypted databases
 - [x] **INFRA-03**: All API calls (VEP, HPO) are proxied through Electron main process (not renderer)
 - [x] **INFRA-04**: App detects online/offline status and adjusts API feature availability accordingly
-- [ ] **INFRA-05**: External link domains (PubTator, LitVar, UCSC, Decipher, Franklin, HPO browser) added to shell.openExternal allowlist
+- [x] **INFRA-05**: External link domains (PubTator, LitVar, UCSC, Decipher, Franklin, HPO browser) added to shell.openExternal allowlist
 - [x] **INFRA-06**: All user-entered data (comments, tags, HPO terms) uses parameterized SQL queries (no injection risk)
 
 ## Future Requirements
@@ -117,12 +117,12 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 | ANNOT-11 | Phase 24 | Pending |
 | ANNOT-12 | Phase 20 | Complete |
 | ANNOT-13 | Phase 20 | Complete |
-| PANEL-01 | Phase 23 | Pending |
-| PANEL-02 | Phase 23 | Pending |
+| PANEL-01 | Phase 23 | Complete |
+| PANEL-02 | Phase 23 | Complete |
 | PANEL-03 | Phase 21 | Complete |
 | PANEL-04 | Phase 21 | Complete |
-| PANEL-05 | Phase 23 | Pending |
-| PANEL-06 | Phase 23 | Pending |
+| PANEL-05 | Phase 23 | Complete |
+| PANEL-06 | Phase 23 | Complete |
 | PANEL-07 | Phase 21 | Complete |
 | PANEL-08 | Phase 21 | Complete |
 | PANEL-09 | Phase 21 | Complete |
@@ -142,7 +142,7 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 | INFRA-02 | Phase 19 | Complete |
 | INFRA-03 | Phase 21 | Complete |
 | INFRA-04 | Phase 21 | Complete |
-| INFRA-05 | Phase 23 | Pending |
+| INFRA-05 | Phase 23 | Complete |
 | INFRA-06 | Phase 19 | Complete |
 
 **Coverage:**
@@ -160,4 +160,4 @@ Deferred to v0.5+ milestones. Tracked but not in current roadmap.
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-28 — Phase 20 requirements marked complete*
+*Last updated: 2026-01-29 — Phase 23 requirements marked complete*

@@ -43,8 +43,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 19: Database Foundation** - Schema, migration, encrypted DB testing ✓
 - [x] **Phase 20: Annotation Core** - IPC handlers, comments, stars, ACMG classification ✓
 - [x] **Phase 21: API Service Layer** - VEP + HPO clients, caching, rate limiting, offline detection ✓
-- [ ] **Phase 22: Case Metadata** - Status, cohorts, HPO terms, UI
-- [ ] **Phase 23: Side Panel UI** - Drawer, tabs, annotation editing, VEP display, external links
+- [x] **Phase 22: Case Metadata** - Status, cohorts, HPO terms, UI ✓
+- [x] **Phase 23: Side Panel UI** - Drawer, tabs, annotation editing, VEP display, external links ✓
 - [ ] **Phase 24: Custom Tags + HPO Autocomplete** - Tag management, HPO search component
 
 ## Phase Details
@@ -158,9 +158,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 23-01-PLAN.md — Panel infrastructure: resizable drawer, close behaviors, row click integration
-- [ ] 23-02-PLAN.md — Content sections: variant identity, score chips, external links, copy-to-clipboard
-- [ ] 23-03-PLAN.md — Comments editing, ACMG editing, shell domain allowlist
+- [x] 23-01-PLAN.md — Panel infrastructure: resizable drawer, close behaviors, row click integration ✓
+- [x] 23-02-PLAN.md — Content sections: variant identity, score chips, external links, copy-to-clipboard ✓
+- [x] 23-03-PLAN.md — Comments editing, ACMG editing, shell domain allowlist ✓
 
 ### Phase 24: Custom Tags + HPO Autocomplete
 **Goal**: Users can create custom tags with colors, assign to variants, filter by tags, and search HPO terms with autocomplete.
@@ -194,9 +194,9 @@ Phases execute in numeric order: 19 → 20 → 21 → 22 → 23 → 24
 | 19. Database Foundation | 2/2 | ✓ Complete | 2026-01-28 |
 | 20. Annotation Core | 4/4 | ✓ Complete | 2026-01-28 |
 | 21. API Service Layer | 3/3 | ✓ Complete | 2026-01-29 |
-| 22. Case Metadata | 0/3 | Ready | - |
-| 23. Side Panel UI | 0/3 | Ready | - |
-| 24. Custom Tags + HPO Autocomplete | 0/3 | Planned | - |
+| 22. Case Metadata | 3/3 | ✓ Complete | 2026-01-29 |
+| 23. Side Panel UI | 3/3 | ✓ Complete | 2026-01-29 |
+| 24. Custom Tags + HPO Autocomplete | 0/3 | Ready | - |
 
 ---
-*Last updated: 2026-01-29 — Phase 21 complete*
+*Last updated: 2026-01-29 — Phase 23 complete*
