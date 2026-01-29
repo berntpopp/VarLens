@@ -111,6 +111,7 @@
     "markdown-it": "^14.1.0",
     "pinia": "^2.3.1",
     "stream-json": "^1.9.1",
+    "vuedraggable": "^4.1.0",
     "vuetify": "^3.11.7",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
