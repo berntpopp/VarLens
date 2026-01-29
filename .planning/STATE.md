@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 
 ## Current Position
 
-Phase: 23 of 24 (Side Panel UI) → VERIFIED ✓
-Plan: 3 of 3
-Status: Phase verified and complete
-Last activity: 2026-01-29 - Completed Phase 23 (Side Panel UI)
+Phase: 24 of 24 (Custom Tags + HPO Autocomplete)
+Plan: 1 of TBD
+Status: In progress
+Last activity: 2026-01-29 - Completed 24-01 (Backend Infrastructure)
 
 Progress: [████████████████████] 23/24 phases (95.8% complete, v0.4.0 in progress)
 
@@ -21,7 +21,7 @@ Progress: [████████████████████] 23/24 p
 - **v0.1 POC** - 8 phases, 17 plans - shipped 2026-01-27
 - **v0.2.0 UI Polish & Trust Signals** - 4 phases, 8 plans - shipped 2026-01-27
 - **v0.3.0 Cohort Analysis, Security & Import Enhancements** - 6 phases, 13 plans - shipped 2026-01-28
-- **v0.4.0 Variant Annotation & Case Metadata** - 6 phases (19-24), 6 plans complete - in progress
+- **v0.4.0 Variant Annotation & Case Metadata** - 6 phases (19-24), in progress
 
 ## Performance Metrics
 
@@ -31,8 +31,8 @@ Progress: [████████████████████] 23/24 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 18
-- Total execution time: 106 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6)
+- Total plans completed: 19
+- Total execution time: 113 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7)
 - Phases planned: 6 phases (19-24)
 
 **By Phase:**
@@ -44,7 +44,7 @@ Progress: [████████████████████] 23/24 p
 | 21. API Service Layer | 3/3 | Complete | 01: API infrastructure (cache, schemas, thresholds, network status), 02: VEP API client (rate limiting, MANE Select), 03: HPO API client + IPC handlers |
 | 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (HpoTermSelector, CaseMetadataCard, enhanced CaseList) |
 | 23. Side Panel UI | 3/3 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration) |
-| 24. Custom Tags + HPO | TBD | Not started | Tags + autocomplete |
+| 24. Custom Tags + HPO | 1/TBD | In progress | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON) |
 
 ## Accumulated Context
 
@@ -112,6 +112,10 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Comment delete confirmation | Dialog with global/case target before deletion | Prevent accidental comment loss (23-03) |
 | ACMG dual display | Per-case in case mode, global hint shown below if exists | Clear hierarchy of classifications (23-03) |
 | Shell domain allowlist | DECIPHER, ClinGen, Ensembl added to ALLOWED_DOMAINS | Security validation for new external links (23-03) |
+| Variant tags per-case | variant_tags uses (case_id, variant_id, tag_id) composite unique constraint | Same variant can have different tags in different cases (24-01) |
+| Bundled HPO JSON | 19,407 terms from HPO release 2026-01-08 for offline search | Client-side search without API dependency (24-01) |
+| Lazy-load HPO on first search | HPO JSON loaded via dynamic import() on first search, not app start | Faster initial load, deferred overhead (24-01) |
+| Intelligent HPO search sorting | Exact ID > ID prefix > exact name > name prefix > alphabetical | Better search relevance (24-01) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -120,7 +124,7 @@ Recent decisions from v0.3.0 affecting v0.4.0:
 
 ### Pending Todos
 
-None yet (v0.4.0 just started).
+None.
 
 ### Blockers/Concerns
 
@@ -137,9 +141,9 @@ None yet (v0.4.0 just started).
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 23
-Stopped at: Completed Phase 23 (Side Panel UI) - all 3 plans verified
+Last session: 2026-01-29 - Phase 24
+Stopped at: Completed 24-01-PLAN.md (Backend Infrastructure)
 Resume file: None
 
 ---
-*Next step: Phase 24 (Custom Tags + HPO Autocomplete)*
+*Next step: Phase 24 Plan 02 (Settings UI) or Plan 03 (Variant UI Integration)*
