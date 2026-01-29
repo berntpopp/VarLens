@@ -1045,9 +1045,9 @@ export class DatabaseService {
    * @returns CaseMetadata or null if not found
    */
   getCaseMetadata(caseId: number): CaseMetadata | null {
-    const result = this.stmt('SELECT * FROM case_metadata WHERE case_id = ?').get(
-      caseId
-    ) as CaseMetadata | undefined
+    const result = this.stmt('SELECT * FROM case_metadata WHERE case_id = ?').get(caseId) as
+      | CaseMetadata
+      | undefined
 
     return result ?? null
   }
@@ -1138,9 +1138,9 @@ export class DatabaseService {
    * @returns CohortGroup or null if not found
    */
   getCohortGroupByName(name: string): CohortGroup | null {
-    const result = this.stmt('SELECT * FROM cohort_groups WHERE name = ?').get(
-      name
-    ) as CohortGroup | undefined
+    const result = this.stmt('SELECT * FROM cohort_groups WHERE name = ?').get(name) as
+      | CohortGroup
+      | undefined
 
     return result ?? null
   }
@@ -1207,9 +1207,7 @@ export class DatabaseService {
       this.stmt('DELETE FROM case_cohort_links WHERE case_id = ?').run(caseId)
 
       // Insert new assignments
-      const insert = this.stmt(
-        'INSERT INTO case_cohort_links (case_id, cohort_id) VALUES (?, ?)'
-      )
+      const insert = this.stmt('INSERT INTO case_cohort_links (case_id, cohort_id) VALUES (?, ?)')
       for (const cohortId of cohortIds) {
         insert.run(caseId, cohortId)
       }
