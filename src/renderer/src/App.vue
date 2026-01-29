@@ -481,8 +481,26 @@ onMounted(async () => {
   border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
 }
 
-/* Remove default padding from v-window-item */
+/* Remove default padding from v-window and v-window-item */
+:deep(.v-window) {
+  padding: 0 !important;
+}
+
 :deep(.v-window-item) {
   padding: 0 !important;
+}
+
+:deep(.v-window__container) {
+  padding: 0 !important;
+}
+
+/* Ensure v-main has no extra padding */
+:deep(.v-main__wrap) {
+  padding: 0 !important;
+}
+
+/* Remove any margin/padding from v-window that creates white space */
+.v-main :deep(.v-window) {
+  margin-top: 0 !important;
 }
 </style>

@@ -361,10 +361,8 @@
         />
       </div>
 
-      <v-spacer />
-
       <!-- RESULTS & ACTIONS -->
-      <div class="results-section d-flex align-center ga-2">
+      <div class="results-section d-flex align-center ga-2 ml-auto">
         <v-chip
           :color="hasActiveFilters ? 'primary' : 'default'"
           :variant="hasActiveFilters ? 'flat' : 'tonal'"
