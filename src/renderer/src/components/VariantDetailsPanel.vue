@@ -25,12 +25,33 @@
       <div class="flex-grow-1 overflow-y-auto pa-3">
         <template v-if="variant">
           <!-- Section 1: Variant Identity -->
-          <VariantIdentitySection :variant="variant" class="mb-4" />
+          <VariantIdentitySection
+            :variant="variant"
+            :colocated-variants="colocatedVariants"
+            class="mb-4"
+          />
 
           <v-divider class="mb-4" />
 
           <!-- Section 2: Annotation Scores -->
-          <AnnotationScoresSection :variant="variant" class="mb-4" />
+          <AnnotationScoresSection
+            :variant="variant"
+            :preferred-transcript="preferredTranscript"
+            :vep-loading="vepLoading"
+            :is-offline="isOffline"
+            class="mb-4"
+          />
+
+          <!-- VEP metadata (consequence + cache indicator) -->
+          <div v-if="mostSevereConsequence" class="text-caption mb-2">
+            <v-chip size="x-small" :color="getConsequenceColor(mostSevereConsequence)" label>
+              {{ formatConsequence(mostSevereConsequence) }}
+            </v-chip>
+          </div>
+
+          <div v-if="isCached && cachedAt" class="text-caption text-grey mb-2">
+            Cached from {{ cachedAt.toLocaleDateString() }}
+          </div>
 
           <v-divider class="mb-4" />
 
@@ -86,6 +107,7 @@
 import { onMounted, onUnmounted, computed, watch } from 'vue'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useAnnotations, ACMG_COLORS } from '../composables/useAnnotations'
+import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
 import AnnotationScoresSection from './AnnotationScoresSection.vue'
 import ExternalLinksSection from './ExternalLinksSection.vue'
@@ -120,6 +142,18 @@ const {
   setAcmgClassification,
   setGlobalAcmgClassification
 } = useAnnotations()
+
+// Use VEP enrichment composable
+const {
+  isLoading: vepLoading,
+  isOffline,
+  isCached,
+  cachedAt,
+  preferredTranscript,
+  colocatedVariants,
+  mostSevereConsequence,
+  fetchVep
+} = useVepEnrichment()
 
 // Current ACMG classification (per-case in case mode, global in cohort mode)
 const currentAcmgClassification = computed<AcmgClassification | null>(() => {
@@ -192,6 +226,7 @@ watch(
   () => props.variant,
   async (newVariant) => {
     if (newVariant !== null) {
+      // Load annotations
       if (props.mode === 'case' && props.caseId !== null) {
         await loadAnnotations(
           props.caseId,
@@ -203,10 +238,33 @@ watch(
       } else {
         await loadGlobalAnnotations(newVariant.chr, newVariant.pos, newVariant.ref, newVariant.alt)
       }
+
+      // Fetch VEP enrichment
+      await fetchVep(newVariant.chr, newVariant.pos, newVariant.ref, newVariant.alt)
     }
   },
   { immediate: true }
 )
+
+// Helper functions for consequence formatting
+function getConsequenceColor(consequence: string): string {
+  if (
+    consequence.includes('frameshift') ||
+    consequence.includes('stop_gained') ||
+    consequence.includes('splice_donor') ||
+    consequence.includes('splice_acceptor')
+  ) {
+    return 'error'
+  }
+  if (consequence.includes('missense') || consequence.includes('inframe')) {
+    return 'warning'
+  }
+  return 'grey'
+}
+
+function formatConsequence(consequence: string): string {
+  return consequence.replace(/_/g, ' ')
+}
 
 // Handle Escape key to close panel
 const handleKeydown = (e: KeyboardEvent): void => {

@@ -43,18 +43,16 @@
       </v-tooltip>
     </div>
 
-    <!-- rsID - Not available in current schema, will come from VEP enrichment in Phase 21 -->
+    <!-- rsID - From VEP colocated_variants -->
     <div class="d-flex align-center mt-2">
       <span class="text-caption text-grey">rsID:</span>
-      <span class="ml-1 text-grey">N/A</span>
-      <v-tooltip location="top">
-        <template #activator="{ props: tooltipProps }">
-          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 text-grey"
-            >mdi-information-outline</v-icon
-          >
-        </template>
-        rsID will be available with VEP enrichment (Phase 21)
-      </v-tooltip>
+      <template v-if="rsId">
+        <span class="ml-1 variant-data-mono">{{ rsId }}</span>
+        <v-btn icon size="x-small" variant="text" @click="copyRsId">
+          <v-icon size="small">{{ rsIdCopied ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+        </v-btn>
+      </template>
+      <span v-else class="ml-1 text-grey">N/A</span>
     </div>
   </div>
 </template>
@@ -64,12 +62,16 @@ import { computed } from 'vue'
 import { useClipboard } from '../composables/useClipboard'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
+import type { VepColocatedVariant } from '../../../main/services/api/schemas/vep-response'
 
 interface Props {
   variant: Variant | CohortVariant
+  colocatedVariants?: VepColocatedVariant[]
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  colocatedVariants: () => []
+})
 
 /**
  * Check if variant is a full Variant (not CohortVariant)
@@ -82,6 +84,15 @@ const isFullVariant = computed(() => {
 const { copy: copyHgvsText, copied: hgvsCopied } = useClipboard()
 const { copy: copyPositionText, copied: positionCopied } = useClipboard()
 const { copy: copyVariantText, copied: variantCopied } = useClipboard()
+const { copy: copyRsIdText, copied: rsIdCopied } = useClipboard()
+
+// Compute rsID from colocatedVariants
+const rsId = computed(() => {
+  if (props.colocatedVariants.length === 0) return null
+  // Find first colocated variant with id starting with "rs"
+  const rsVariant = props.colocatedVariants.find((v) => v.id !== undefined && v.id.startsWith('rs'))
+  return rsVariant?.id ?? null
+})
 
 /**
  * Format position with thousand separators
@@ -113,6 +124,15 @@ async function copyPosition(): Promise<void> {
 async function copyVariant(): Promise<void> {
   const variantNotation = `${props.variant.chr}:${props.variant.pos}:${props.variant.ref}:${props.variant.alt}`
   await copyVariantText(variantNotation)
+}
+
+/**
+ * Copy rsID to clipboard
+ */
+async function copyRsId(): Promise<void> {
+  if (rsId.value !== null) {
+    await copyRsIdText(rsId.value)
+  }
 }
 </script>
 
