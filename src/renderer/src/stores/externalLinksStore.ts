@@ -82,6 +82,53 @@ function getDefaultLinks(): ExternalLinkConfig[] {
       requiredFields: ['chr', 'pos', 'ref', 'alt'],
       enabled: true,
       isBuiltIn: true
+    },
+    {
+      id: 'pubtator',
+      name: 'PubTator',
+      urlTemplate: 'https://www.ncbi.nlm.nih.gov/research/pubtator3/docsum?text={gene}',
+      column: 'virtual',
+      requiredFields: ['gene'],
+      enabled: true,
+      isBuiltIn: true
+    },
+    {
+      id: 'litvar',
+      name: 'LitVar',
+      urlTemplate:
+        'https://www.ncbi.nlm.nih.gov/research/litvar2/docsum?text={chr}:{pos}:{ref}:{alt}',
+      column: 'virtual',
+      requiredFields: ['chr', 'pos', 'ref', 'alt'],
+      enabled: true,
+      isBuiltIn: true
+    },
+    {
+      id: 'decipher',
+      name: 'DECIPHER',
+      urlTemplate: 'https://www.deciphergenomics.org/gene/{gene}/overview/clinical-info',
+      column: 'virtual',
+      requiredFields: ['gene'],
+      enabled: true,
+      isBuiltIn: true
+    },
+    {
+      id: 'clingen',
+      name: 'ClinGen',
+      urlTemplate: 'https://search.clinicalgenome.org/kb/genes/{gene}',
+      column: 'virtual',
+      requiredFields: ['gene'],
+      enabled: true,
+      isBuiltIn: true
+    },
+    {
+      id: 'ensembl',
+      name: 'Ensembl',
+      urlTemplate:
+        'https://grch37.ensembl.org/Homo_sapiens/Location/View?r={chr}:{pos_start}-{pos_end}',
+      column: 'virtual',
+      requiredFields: ['chr', 'pos'],
+      enabled: true,
+      isBuiltIn: true
     }
   ]
 }
