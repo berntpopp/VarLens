@@ -388,6 +388,17 @@
 
         <v-divider vertical class="divider-subtle" />
 
+        <!-- Column visibility menu -->
+        <ColumnVisibilityMenu
+          v-if="columns && columns.length > 0"
+          :columns="orderedColumns"
+          :visible-columns="visibleColumnKeys"
+          table-id="variant-table"
+          @toggle:column="toggleColumnVisibility"
+          @reorder="setColumnOrder"
+          @reset="resetColumnDefaults"
+        />
+
         <!-- Export to Excel button -->
         <v-tooltip location="top">
           <template #activator="{ props: tooltipProps }">
@@ -417,7 +428,14 @@ import draggable from 'vuedraggable'
 import { useDebounce } from '../composables/useDebounce'
 import { useTags } from '../composables/useTags'
 import { useFilterPreferences } from '../composables/useFilterPreferences'
+import { useColumnPreferences } from '../composables/useColumnPreferences'
+import ColumnVisibilityMenu from './ColumnVisibilityMenu.vue'
 import type { VariantFilter, Variant, Tag } from '../../../shared/types/api'
+
+interface ColumnDef {
+  key: string
+  title: string
+}
 
 interface Props {
   caseId: number
@@ -426,6 +444,7 @@ interface Props {
   totalCount: number
   hasSort?: boolean
   initialSearch?: string
+  columns?: ColumnDef[]
 }
 
 const props = defineProps<Props>()
@@ -445,6 +464,36 @@ const { loadTags, getTags } = useTags()
 
 // Filter preferences composable
 const { filterGroups, setFilterGroupOrder, toggleFilterGroupActive } = useFilterPreferences()
+
+// Column preferences composable
+const {
+  prefs: columnPrefs,
+  resetToDefaults: resetColumnDefaults,
+  toggleColumnVisibility,
+  setColumnOrder
+} = useColumnPreferences('variant-table')
+
+// Computed columns for ColumnVisibilityMenu
+const orderedColumns = computed(() => {
+  if (!props.columns) return []
+  if (columnPrefs.value.order.length > 0) {
+    return [...props.columns].sort((a, b) => {
+      const aIdx = columnPrefs.value.order.indexOf(a.key)
+      const bIdx = columnPrefs.value.order.indexOf(b.key)
+      if (aIdx === -1 && bIdx === -1) return 0
+      if (aIdx === -1) return 1
+      if (bIdx === -1) return -1
+      return aIdx - bIdx
+    })
+  }
+  return props.columns
+})
+
+const visibleColumnKeys = computed(() => {
+  return orderedColumns.value
+    .filter((h) => columnPrefs.value.visibility[h.key] !== false)
+    .map((h) => h.key)
+})
 
 // Horizontal scroll state
 const scrollContainer = ref<HTMLElement | null>(null)

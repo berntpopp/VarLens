@@ -91,6 +91,7 @@
                 :total-count="totalCount"
                 :has-sort="hasSort"
                 :initial-search="initialSearch"
+                :columns="variantTableRef?.columns"
                 @update:filters="handleFiltersUpdate"
                 @reset-sort="handleResetSort"
               />

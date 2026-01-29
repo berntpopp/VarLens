@@ -1,17 +1,5 @@
 <template>
   <div>
-    <!-- Column visibility menu toolbar -->
-    <div class="d-flex justify-end px-2 py-1">
-      <ColumnVisibilityMenu
-        :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
-        :visible-columns="visibleHeaders.map((h) => h.key)"
-        table-id="variant-table"
-        @toggle:column="toggleColumnVisibility"
-        @reorder="setColumnOrder"
-        @reset="resetToDefaults"
-      />
-    </div>
-
     <v-data-table-server
       v-model:page="page"
       v-model:items-per-page="itemsPerPage"
@@ -415,7 +403,6 @@ import type { AcmgClassification } from '../../../main/database/types'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import AcmgMenu from './AcmgMenu.vue'
 import CommentDialog from './CommentDialog.vue'
-import ColumnVisibilityMenu from './ColumnVisibilityMenu.vue'
 
 interface Props {
   caseId: number
@@ -825,7 +812,10 @@ const resetSort = () => {
 }
 
 // Expose resetSort for parent components
-defineExpose({ resetSort })
+defineExpose({
+  resetSort,
+  columns: computed(() => headers.value.map((h) => ({ key: h.key, title: h.title })))
+})
 </script>
 
 <style scoped>
