@@ -47,7 +47,12 @@
     </v-navigation-drawer>
 
     <v-main>
-      <v-tabs v-model="activeTab" bg-color="secondary" density="compact" class="border-b sticky-tabs">
+      <v-tabs
+        v-model="activeTab"
+        bg-color="secondary"
+        density="compact"
+        class="border-b sticky-tabs"
+      >
         <v-tab value="case" prepend-icon="mdi-account">Case Analysis</v-tab>
         <v-tab value="cohort" prepend-icon="mdi-account-group">Cohort Analysis</v-tab>
       </v-tabs>

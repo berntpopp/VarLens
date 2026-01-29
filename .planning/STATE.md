@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 25 of 25 (Table UX & Filter Persistence)
-Plan: 2 of 4 complete
+Plan: 3 of 4 complete
 Status: In progress
-Last activity: 2026-01-29 - Completed 25-02-PLAN.md
+Last activity: 2026-01-29 - Completed 25-03-PLAN.md
 
 Progress: [████████████████████] 24/25 phases (96% complete, Phase 25 in progress)
 
@@ -31,8 +31,8 @@ Progress: [████████████████████] 24/25 p
 - Phases completed: 6 phases (13-18)
 
 **v0.4.0 Velocity (in progress):**
-- Total plans completed: 25 (including gap closure)
-- Total execution time: 138 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6 + 3 + 2 + 5)
+- Total plans completed: 26 (including gap closure)
+- Total execution time: 144 minutes (8.5 + 16 + 5 + 4.4 + 4 + 6 + 7 + 6 + 8 + 3 + 6 + 3 + 5 + 6 + 6 + 6 + 6 + 7 + 5 + 4 + 6 + 3 + 2 + 5 + 6)
 - Phases completed: 6 phases (19-24), Phase 25 in progress
 
 **By Phase:**
@@ -45,7 +45,7 @@ Progress: [████████████████████] 24/25 p
 | 22. Case Metadata | 3/3 | Complete | 01: Backend (DatabaseService + IPC + preload API), 02: Composable & UI components (useCaseMetadata, StatusSelector, CohortCombobox), 03: UI Integration (HpoTermSelector, CaseMetadataCard, enhanced CaseList) |
 | 23. Side Panel UI | 4/4 | Complete | 01: Panel Infrastructure (usePanelResize, VariantDetailsPanel, row-click integration), 02: Section Components (VariantIdentity, AnnotationScores, ExternalLinks), 03: Comments & ACMG Editing (InlineEditableText, CommentsSection, ACMG menu integration), 04: VEP Enrichment Gap Closure (useVepEnrichment, rsID, REVEL/SpliceAI/SIFT/PolyPhen scores, consequence badges) |
 | 24. Custom Tags + HPO | 4/4 | Complete | 01: Backend Infrastructure (tags IPC, useTags, useHpoBundled, HPO JSON), 02: Settings UI (TagManagementDialog, ColorSwatchPicker, settings menu), 03: Variant UI Integration (FilterToolbar tag filter, TagsSection, HpoAutocomplete), 04: Gap Closure (tag_ids filter in DatabaseService) |
-| 25. Table UX & Filter | 2/4 | In progress | 01: Composables Infrastructure (useColumnPreferences, useFilterPreferences, vuedraggable), 02: Column Visibility Menu (ColumnVisibilityMenu, VariantTable/CohortTable integration, drag-to-reorder) |
+| 25. Table UX & Filter | 3/4 | In progress | 01: Composables Infrastructure (useColumnPreferences, useFilterPreferences, vuedraggable), 02: Column Visibility Menu (ColumnVisibilityMenu, VariantTable/CohortTable integration, drag-to-reorder), 03: Sticky Tabs and Draggable Filters (sticky positioning, draggable filter groups, horizontal scroll) |
 
 ## Accumulated Context
 
@@ -133,6 +133,10 @@ All decisions archived in milestone roadmaps. Key architectural decisions carrie
 | Menu-based column reordering | Drag items in ColumnVisibilityMenu, not table headers | Avoids complex DOM manipulation on v-data-table-server (25-02) |
 | Per-table column preferences | variant-table and cohort-table have separate localStorage keys | Different table structures benefit from independent preferences (25-02) |
 | Column max-width 200px | th/td max-width with ellipsis truncation | Balances readability with horizontal scroll efficiency (25-02) |
+| Sticky positioning z-index | Tabs z-4, filter bar z-3, below Vuetify dialogs (1000+) | Proper layering for sticky UI elements (25-03) |
+| Filter bar top offset | 48px (tab height) for sticky positioning | Positions filter bar directly below tabs (25-03) |
+| Drag handle for filter reorder | Dedicated drag-handle class on icon for vuedraggable | Precise drag control without interfering with filter interaction (25-03) |
+| Hidden scrollbar with arrow buttons | Native scrollbar hidden via CSS, custom arrow buttons for navigation | Cleaner horizontal scroll UX (25-03) |
 
 Recent decisions from v0.3.0 affecting v0.4.0:
 - FTS5 rebuild for schema upgrades ensures all columns indexed
@@ -158,8 +162,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29 - Phase 25 Plan 02 completed
-Stopped at: Completed 25-02-PLAN.md (Column Visibility Menu)
+Last session: 2026-01-29 - Phase 25 Plan 03 completed
+Stopped at: Completed 25-03-PLAN.md (Sticky Tabs and Draggable Filters)
 Resume file: None
 
 ---
