@@ -47,7 +47,7 @@
     </v-navigation-drawer>
 
     <v-main>
-      <v-tabs v-model="activeTab" bg-color="secondary" density="compact" class="border-b">
+      <v-tabs v-model="activeTab" bg-color="secondary" density="compact" class="border-b sticky-tabs">
         <v-tab value="case" prepend-icon="mdi-account">Case Analysis</v-tab>
         <v-tab value="cohort" prepend-icon="mdi-account-group">Cohort Analysis</v-tab>
       </v-tabs>
@@ -60,16 +60,18 @@
             @import="handleImportClick"
           />
           <template v-else>
-            <FilterToolbar
-              :case-id="selectedCaseId"
-              :case-name="selectedCaseName"
-              :filtered-count="filteredCount"
-              :total-count="totalCount"
-              :has-sort="hasSort"
-              :initial-search="initialSearch"
-              @update:filters="handleFiltersUpdate"
-              @reset-sort="handleResetSort"
-            />
+            <div class="sticky-filter-bar">
+              <FilterToolbar
+                :case-id="selectedCaseId"
+                :case-name="selectedCaseName"
+                :filtered-count="filteredCount"
+                :total-count="totalCount"
+                :has-sort="hasSort"
+                :initial-search="initialSearch"
+                @update:filters="handleFiltersUpdate"
+                @reset-sort="handleResetSort"
+              />
+            </div>
             <CaseMetadataCard :case-id="selectedCaseId" />
             <VariantTable
               ref="variantTableRef"
@@ -420,3 +422,19 @@ onMounted(async () => {
   disclaimerRef.value?.checkAndShow()
 })
 </script>
+
+<style scoped>
+.sticky-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: rgb(var(--v-theme-secondary));
+}
+
+.sticky-filter-bar {
+  position: sticky;
+  top: 48px; /* Height of tabs bar (compact density) */
+  z-index: 3;
+  background: rgb(var(--v-theme-surface));
+}
+</style>
