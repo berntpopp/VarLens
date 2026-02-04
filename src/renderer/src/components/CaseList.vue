@@ -30,12 +30,25 @@
       v-for="caseItem in filteredCases"
       :key="caseItem.id"
       :value="caseItem.id"
+      :class="{ 'multi-selected': isMultiSelected(caseItem.id) }"
       color="primary"
+      @click="handleCaseClick($event, caseItem)"
       @contextmenu.prevent="handleContextMenu($event, caseItem)"
     >
       <template #prepend>
-        <!-- Status icon -->
+        <!-- Multi-select checkbox when in multi-select mode -->
         <v-icon
+          v-if="isMultiSelectMode"
+          :icon="
+            isMultiSelected(caseItem.id) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'
+          "
+          :color="isMultiSelected(caseItem.id) ? 'primary' : 'grey'"
+          size="small"
+          class="mr-2"
+        />
+        <!-- Status icon when not in multi-select mode -->
+        <v-icon
+          v-else
           :icon="getCaseStatusIcon(caseItem.id)"
           :color="getCaseStatusColor(caseItem.id)"
           size="small"
@@ -80,11 +93,26 @@
     location-strategy="static"
   >
     <v-list density="compact">
+      <!-- Delete selected when multi-select active -->
+      <v-list-item v-if="isMultiSelectMode" @click="handleDeleteSelected">
+        <template #prepend>
+          <v-icon color="error">mdi-delete</v-icon>
+        </template>
+        <v-list-item-title>Delete {{ multiSelectedCount }} Selected</v-list-item-title>
+      </v-list-item>
+      <!-- Single delete option -->
       <v-list-item @click="handleDelete">
         <template #prepend>
           <v-icon>mdi-delete</v-icon>
         </template>
         <v-list-item-title>Delete</v-list-item-title>
+      </v-list-item>
+      <!-- Clear selection when multi-select active -->
+      <v-list-item v-if="isMultiSelectMode" @click="clearMultiSelect">
+        <template #prepend>
+          <v-icon>mdi-selection-off</v-icon>
+        </template>
+        <v-list-item-title>Clear Selection</v-list-item-title>
       </v-list-item>
     </v-list>
   </v-menu>
@@ -119,6 +147,12 @@ const search = ref('')
 const selected = ref<number[]>([])
 const contextMenuCase = ref<Case | null>(null)
 const contextMenu = useContextMenu()
+
+// Multi-select state
+const multiSelected = ref<Set<number>>(new Set())
+const isMultiSelectMode = computed(() => multiSelected.value.size > 0)
+const multiSelectedCount = computed(() => multiSelected.value.size)
+const isMultiSelected = (id: number): boolean => multiSelected.value.has(id)
 
 // Initialize case metadata composable
 const { loadMetadata, getMetadata, loadCohortGroups } = useCaseMetadata()
@@ -182,6 +216,34 @@ watch(selected, (newSelection) => {
   }
 })
 
+// Click handler for Ctrl+click multi-select
+const handleCaseClick = (event: MouseEvent | KeyboardEvent, caseItem: Case): void => {
+  if (event.ctrlKey || event.metaKey) {
+    // Toggle multi-select
+    event.preventDefault()
+    event.stopPropagation()
+    const newSet = new Set(multiSelected.value)
+    if (newSet.has(caseItem.id)) {
+      newSet.delete(caseItem.id)
+    } else {
+      newSet.add(caseItem.id)
+    }
+    multiSelected.value = newSet
+  } else {
+    // Clear multi-select on regular click
+    if (multiSelected.value.size > 0) {
+      multiSelected.value = new Set()
+    }
+    // Let v-list handle single selection via v-model:selected
+  }
+}
+
+// Clear multi-select helper
+const clearMultiSelect = (): void => {
+  contextMenu.close()
+  multiSelected.value = new Set()
+}
+
 // Context menu handlers
 const handleContextMenu = (event: MouseEvent, caseItem: Case): void => {
   contextMenuCase.value = caseItem
@@ -206,7 +268,50 @@ const handleDelete = async (): Promise<void> => {
       selected.value = []
     }
 
+    // Remove from multi-select if present
+    if (multiSelected.value.has(caseToDelete.id)) {
+      const newSet = new Set(multiSelected.value)
+      newSet.delete(caseToDelete.id)
+      multiSelected.value = newSet
+    }
+
     snackbarRef.value?.show(`Deleted "${caseToDelete.name}"`)
+    await loadCases()
+  }
+}
+
+const handleDeleteSelected = async (): Promise<void> => {
+  contextMenu.close()
+
+  const ids = Array.from(multiSelected.value)
+  if (ids.length === 0) return
+
+  // Calculate total variant count for confirmation
+  const totalVariants = ids.reduce((sum, id) => {
+    const caseItem = cases.value.find((c) => c.id === id)
+    return sum + (caseItem?.variant_count ?? 0)
+  }, 0)
+
+  const confirmed = await dialogRef.value?.showBatch(ids.length, totalVariants)
+
+  if (confirmed === true) {
+    // eslint-disable-next-line no-undef
+    const deleted = await window.api.cases.deleteBatch(ids)
+
+    // Emit deleted event for each case
+    for (const id of ids) {
+      emit('case-deleted', id)
+    }
+
+    // Clear single selection if it was deleted
+    if (selected.value.length > 0 && ids.includes(selected.value[0])) {
+      selected.value = []
+    }
+
+    // Clear multi-select
+    multiSelected.value = new Set()
+
+    snackbarRef.value?.show(`Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`)
     await loadCases()
   }
 }
@@ -242,3 +347,9 @@ defineExpose({ refreshCases, selectCase })
 
 onMounted(loadCases)
 </script>
+
+<style scoped>
+.multi-selected {
+  background-color: rgba(var(--v-theme-primary), 0.12) !important;
+}
+</style>

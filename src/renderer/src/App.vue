@@ -40,6 +40,15 @@
             subtitle="Restore default filter group arrangement"
             @click="handleResetFilters"
           />
+          <v-divider class="my-1" />
+          <v-list-subheader>Danger Zone</v-list-subheader>
+          <v-list-item @click="handleDeleteAllCases">
+            <template #prepend>
+              <v-icon color="error">mdi-delete-sweep</v-icon>
+            </template>
+            <v-list-item-title>Delete All Cases</v-list-item-title>
+            <v-list-item-subtitle>Remove all cases from database</v-list-item-subtitle>
+          </v-list-item>
         </v-list>
       </v-menu>
     </v-app-bar>
@@ -146,6 +155,7 @@
     <FaqDialog ref="faqDialogRef" />
     <ExternalLinksSettings ref="externalLinksSettingsRef" />
     <TagManagementDialog ref="tagManagementDialogRef" />
+    <DeleteAllCasesDialog ref="deleteAllCasesDialogRef" />
   </v-app>
 </template>
 
@@ -166,6 +176,7 @@ import FaqDialog from './components/FaqDialog.vue'
 import DatabasePicker from './components/DatabasePicker.vue'
 import ExternalLinksSettings from './components/ExternalLinksSettings.vue'
 import TagManagementDialog from './components/TagManagementDialog.vue'
+import DeleteAllCasesDialog from './components/DeleteAllCasesDialog.vue'
 import CohortView from './components/CohortView.vue'
 import VariantDetailsPanel from './components/VariantDetailsPanel.vue'
 import CaseMetadataModal from './components/CaseMetadataModal.vue'
@@ -199,6 +210,31 @@ const handleResetFilters = () => {
   resetFilterPreferences()
 }
 
+const handleDeleteAllCases = async () => {
+  // Guard for browser dev mode (no preload)
+  // eslint-disable-next-line no-undef
+  if (typeof window.api === 'undefined') {
+    return
+  }
+
+  const confirmed = await deleteAllCasesDialogRef.value?.show(caseCount.value)
+
+  if (confirmed === true) {
+    // eslint-disable-next-line no-undef
+    const deleted = await window.api.cases.deleteAll()
+
+    // Clear selection if current case was deleted
+    selectedCaseId.value = null
+    selectedCaseName.value = ''
+
+    // Refresh case list
+    await caseListRef.value?.refreshCases()
+
+    // Show success snackbar
+    snackbarRef.value?.show(`Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`, 'success')
+  }
+}
+
 // Component refs
 const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
 const batchImportDialogRef = ref<InstanceType<typeof BatchImportDialog> | null>(null)
@@ -209,6 +245,7 @@ const disclaimerRef = ref<InstanceType<typeof DisclaimerDialog> | null>(null)
 const faqDialogRef = ref<InstanceType<typeof FaqDialog> | null>(null)
 const externalLinksSettingsRef = ref<InstanceType<typeof ExternalLinksSettings> | null>(null)
 const tagManagementDialogRef = ref<InstanceType<typeof TagManagementDialog> | null>(null)
+const deleteAllCasesDialogRef = ref<InstanceType<typeof DeleteAllCasesDialog> | null>(null)
 const cohortViewRef = ref<InstanceType<typeof CohortView> | null>(null)
 
 // Sidebar state

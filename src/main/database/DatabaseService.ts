@@ -241,6 +241,36 @@ export class DatabaseService {
   }
 
   /**
+   * Delete all cases from the database
+   *
+   * Note: ON DELETE CASCADE in schema handles automatic variant deletion.
+   *
+   * @returns Number of cases deleted
+   */
+  deleteAllCases(): number {
+    const result = this.stmt('DELETE FROM cases').run()
+    return result.changes
+  }
+
+  /**
+   * Delete multiple cases by ID
+   *
+   * Note: ON DELETE CASCADE in schema handles automatic variant deletion.
+   *
+   * @param ids - Array of case IDs to delete
+   * @returns Number of cases deleted
+   */
+  deleteCasesBatch(ids: number[]): number {
+    if (ids.length === 0) return 0
+
+    return this.runTransaction(() => {
+      const placeholders = ids.map(() => '?').join(',')
+      const result = this.db.prepare(`DELETE FROM cases WHERE id IN (${placeholders})`).run(...ids)
+      return result.changes
+    })
+  }
+
+  /**
    * Insert variants in batches within transactions (DB-04)
    *
    * Processes variants in batches of BATCH_SIZE for optimal SQLite performance.

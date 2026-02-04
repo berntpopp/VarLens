@@ -1,9 +1,16 @@
 <template>
   <v-dialog v-model="dialog" max-width="400">
     <v-card>
-      <v-card-title>Delete Case?</v-card-title>
+      <v-card-title>{{ isBatchMode ? 'Delete Cases?' : 'Delete Case?' }}</v-card-title>
       <v-card-text>
-        Delete "{{ caseName }}"? This will remove all {{ variantCount.toLocaleString() }} variants.
+        <template v-if="isBatchMode">
+          Delete {{ caseCount }} {{ caseCount === 1 ? 'case' : 'cases' }}? This will remove all
+          {{ variantCount.toLocaleString() }} variants.
+        </template>
+        <template v-else>
+          Delete "{{ caseName }}"? This will remove all
+          {{ variantCount.toLocaleString() }} variants.
+        </template>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
@@ -20,11 +27,27 @@ import { ref } from 'vue'
 const dialog = ref(false)
 const caseName = ref('')
 const variantCount = ref(0)
+const isBatchMode = ref(false)
+const caseCount = ref(0)
 let resolvePromise: ((value: boolean) => void) | null = null
 
 const show = (name: string, count: number): Promise<boolean> => {
   caseName.value = name
   variantCount.value = count
+  isBatchMode.value = false
+  caseCount.value = 1
+  dialog.value = true
+
+  return new Promise((resolve) => {
+    resolvePromise = resolve
+  })
+}
+
+const showBatch = (cases: number, variants: number): Promise<boolean> => {
+  caseCount.value = cases
+  variantCount.value = variants
+  isBatchMode.value = true
+  caseName.value = ''
   dialog.value = true
 
   return new Promise((resolve) => {
@@ -44,5 +67,5 @@ const cancel = (): void => {
   resolvePromise = null
 }
 
-defineExpose({ show })
+defineExpose({ show, showBatch })
 </script>

@@ -58,6 +58,8 @@ export type {
 export interface CasesAPI {
   list: () => Promise<Case[]>
   delete: (id: number) => Promise<void>
+  deleteAll: () => Promise<number>
+  deleteBatch: (ids: number[]) => Promise<number>
 }
 
 export interface VariantsAPI {

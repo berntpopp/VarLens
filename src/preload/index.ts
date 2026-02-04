@@ -27,7 +27,9 @@ import type {
 const api = {
   cases: {
     list: () => ipcRenderer.invoke('cases:list'),
-    delete: (id: number) => ipcRenderer.invoke('cases:delete', id)
+    delete: (id: number) => ipcRenderer.invoke('cases:delete', id),
+    deleteAll: (): Promise<number> => ipcRenderer.invoke('cases:deleteAll'),
+    deleteBatch: (ids: number[]): Promise<number> => ipcRenderer.invoke('cases:deleteBatch', ids)
   },
 
   variants: {
