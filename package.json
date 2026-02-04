@@ -107,7 +107,7 @@
     }
   },
   "dependencies": {
-    "@vueuse/core": "^14.1.0",
+    "@vueuse/core": "^14.2.0",
     "adm-zip": "^0.5.16",
     "better-sqlite3-multiple-ciphers": "^12.6.2",
     "bottleneck": "^2.19.5",
