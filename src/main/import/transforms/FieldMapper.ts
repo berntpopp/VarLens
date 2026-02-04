@@ -94,13 +94,6 @@ export class FieldMapper extends Transform {
         aa_change: this.extractValue(row, COLUMN_INDICES.AA_CHANGE, selectedTranscript, false) as
           | string
           | null,
-        hpo_match: this.extractValue(
-          row,
-          COLUMN_INDICES.HPO_MATCH,
-          selectedTranscript,
-          true,
-          this.dictionaries.hpoMatch
-        ) as string | null,
         moi: this.extractValue(
           row,
           COLUMN_INDICES.MOI,

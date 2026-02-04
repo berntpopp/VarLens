@@ -256,44 +256,9 @@ export class DatabaseService {
     this.getCase(caseId)
 
     const insert = this.stmt(`
-      INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, omim_mim_number, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, hpo_match, moi)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, omim_mim_number, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, moi)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-
-    // Log first variant for debugging
-    if (variants.length > 0) {
-      const v = variants[0]
-      console.log('DEBUG: First variant keys:', Object.keys(v))
-      console.log('DEBUG: First variant values:', JSON.stringify(v, null, 2))
-      console.log('DEBUG: Parameter count expected: 20')
-      const params = [
-        caseId,
-        v.chr,
-        v.pos,
-        v.ref,
-        v.alt,
-        v.gene_symbol,
-        v.omim_mim_number,
-        v.consequence,
-        v.gnomad_af,
-        v.cadd,
-        v.clinvar,
-        v.gt_num,
-        v.func,
-        v.qual,
-        v.hpo_sim_score,
-        v.transcript,
-        v.cdna,
-        v.aa_change,
-        v.hpo_match,
-        v.moi
-      ]
-      console.log('DEBUG: Actual parameter count:', params.length)
-      console.log(
-        'DEBUG: Parameter types:',
-        params.map((p) => (Array.isArray(p) === true ? 'ARRAY!' : typeof p))
-      )
-    }
 
     const insertBatch = this.db.transaction((batch: Omit<Variant, 'id' | 'case_id'>[]) => {
       for (const v of batch) {
@@ -316,7 +281,6 @@ export class DatabaseService {
           v.transcript,
           v.cdna,
           v.aa_change,
-          v.hpo_match,
           v.moi
         )
       }

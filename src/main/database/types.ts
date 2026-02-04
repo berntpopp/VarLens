@@ -65,8 +65,6 @@ export interface Variant {
   cdna: string | null
   /** Amino acid change notation, nullable */
   aa_change: string | null
-  /** Matching HPO terms, nullable */
-  hpo_match: string | null
   /** Mode of inheritance, nullable */
   moi: string | null
 }

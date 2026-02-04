@@ -20,7 +20,6 @@ export const COLUMN_INDICES = {
   CLINVAR: 72,
   GNOMAD_AF: 108,
   HPO_SIM_SCORE: 156,
-  HPO_MATCH: 157,
   MOI: 162
 } as const
 
@@ -30,7 +29,6 @@ export interface DataDictionaries {
   impact: Record<string, string> // Impact code -> label
   transcript: Record<string, string> // Transcript ID -> name
   hpoSimScore: Record<string, number> // ID -> score
-  hpoMatch: Record<string, string> // ID -> HPO terms string
   moi: Record<string, string> // ID -> abbreviation (AD/AR)
 }
 

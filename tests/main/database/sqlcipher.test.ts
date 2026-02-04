@@ -81,7 +81,6 @@ describe('SQLCipher Encryption', () => {
           transcript: 'NM_001.1',
           cdna: 'c.100A>G',
           aa_change: 'p.Lys33Arg',
-          hpo_match: null,
           moi: null
         }
       ])
@@ -142,8 +141,8 @@ describe('SQLCipher Encryption', () => {
       // Insert a variant with searchable gene_symbol
       service.database
         .prepare(
-          `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, hpo_match, moi)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, moi)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           caseId,
@@ -163,7 +162,6 @@ describe('SQLCipher Encryption', () => {
           'NM_007294.3',
           'c.5266G>A',
           'p.Gly1756Ser',
-          null,
           null
         )
 
@@ -187,8 +185,8 @@ describe('SQLCipher Encryption', () => {
 
       service.database
         .prepare(
-          `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, hpo_match, moi)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, moi)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           caseId,
@@ -208,7 +206,6 @@ describe('SQLCipher Encryption', () => {
           'NM_000059.3',
           'c.9097del',
           'p.Thr3033fs',
-          null,
           null
         )
 

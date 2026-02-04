@@ -85,9 +85,13 @@
     "win": {
       "target": [
         "nsis",
+        "portable",
         "zip"
       ],
       "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.exe"
     },
     "linux": {
       "target": [
@@ -113,7 +117,10 @@
     "stream-json": "^1.9.1",
     "vuedraggable": "^4.1.0",
     "vuetify": "^3.11.8",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^4.3.6"
+  },
+  "overrides": {
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

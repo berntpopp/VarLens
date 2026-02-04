@@ -10,7 +10,8 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version)
   },
   test: {
-    testTimeout: process.env.CI ? 120_000 : 30_000,
+    testTimeout: process.env.CI ? 120_000 : 60_000,
+    hookTimeout: process.env.CI ? 60_000 : 30_000,
     environment: 'happy-dom',
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],

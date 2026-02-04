@@ -63,8 +63,8 @@ describe('Schema Migrations', () => {
   function insertTestVariant(service: DatabaseService, caseId: number): number {
     const result = service.database
       .prepare(
-        `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, hpo_match, moi)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, moi)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         caseId,
@@ -84,7 +84,6 @@ describe('Schema Migrations', () => {
         'NM_001.1',
         'c.100A>G',
         'p.Lys33Arg',
-        null,
         null
       )
     return Number(result.lastInsertRowid)

@@ -315,23 +315,6 @@
         {{ value !== null ? value.toFixed(2) : '-' }}
       </template>
 
-      <!-- HPO Match (handle null, truncate long text) -->
-      <template #[`item.hpo_match`]="{ value }">
-        <v-tooltip v-if="value && value.length > 30" location="top">
-          <template #activator="{ props: tooltipProps }">
-            <span
-              v-bind="tooltipProps"
-              class="text-truncate"
-              style="max-width: 150px; display: inline-block"
-            >
-              {{ value.substring(0, 30) }}...
-            </span>
-          </template>
-          <span>{{ value }}</span>
-        </v-tooltip>
-        <span v-else>{{ value ?? '-' }}</span>
-      </template>
-
       <!-- MoI (handle null) -->
       <template #[`item.moi`]="{ value }">
         {{ value ?? '-' }}
@@ -505,7 +488,6 @@ const baseHeaders = [
   { title: 'Qual', key: 'qual', sortable: true, align: 'end' as const },
   { title: 'ClinVar', key: 'clinvar', sortable: true },
   { title: 'HPO Score', key: 'hpo_sim_score', sortable: true, align: 'end' as const },
-  { title: 'HPO Match', key: 'hpo_match', sortable: false },
   { title: 'MoI', key: 'moi', sortable: true }
 ]
 

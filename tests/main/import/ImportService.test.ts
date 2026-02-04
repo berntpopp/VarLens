@@ -4,6 +4,8 @@
  * Uses real test data files:
  * - case-892-snv-sample.json.gz (251 variants - fast tests)
  * - case-892-snv-annotations.json.gz (~65k variants - performance test)
+ *
+ * @vitest-environment node
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -288,6 +290,97 @@ describe('ImportService', () => {
       if (variant.cadd !== null) {
         expect(typeof variant.cadd).toBe('number')
       }
+    })
+  })
+
+  describe('Object Format Import (New Export Format)', () => {
+    it('should import variants from object format file', async () => {
+      const result = await importService.importVariants('test-data/LB26-0434_Skelett.json.gz', {
+        caseName: 'Object Format Test'
+      })
+
+      expect(result.caseId).toBeGreaterThan(0)
+      expect(result.variantCount).toBe(3293)
+      expect(result.skipped).toBe(0)
+      expect(result.errors).toEqual([])
+
+      // Verify case was created
+      const caseRecord = db.getCase(result.caseId)
+      expect(caseRecord.name).toBe('Object Format Test')
+      expect(caseRecord.variant_count).toBe(3293)
+    })
+
+    it('should correctly map gene symbols from object format', async () => {
+      const result = await importService.importVariants('test-data/LB26-0434_Skelett.json.gz', {
+        caseName: 'Object Format Gene Test'
+      })
+
+      const variants = db.getVariants({ case_id: result.caseId }, 100)
+      const variantsWithGenes = variants.data.filter((v) => v.gene_symbol !== null)
+
+      expect(variantsWithGenes.length).toBeGreaterThan(0)
+      for (const variant of variantsWithGenes) {
+        expect(typeof variant.gene_symbol).toBe('string')
+      }
+    })
+
+    it('should convert moi array to comma-separated abbreviations', async () => {
+      const result = await importService.importVariants('test-data/LB26-0434.json.gz', {
+        caseName: 'Object Format MOI Test'
+      })
+
+      const variants = db.getVariants({ case_id: result.caseId }, 1000)
+      const variantsWithMoi = variants.data.filter((v) => v.moi !== null)
+
+      expect(variantsWithMoi.length).toBeGreaterThan(0)
+      for (const variant of variantsWithMoi) {
+        expect(typeof variant.moi).toBe('string')
+        // Should contain comma-separated values (e.g., "AR", "AD", "AR, AD")
+        expect(variant.moi!.length).toBeGreaterThan(0)
+      }
+    })
+
+    it('should map all expected fields from object format', async () => {
+      const result = await importService.importVariants('test-data/LB26-0434_Skelett.json.gz', {
+        caseName: 'Object Format Fields Test'
+      })
+
+      const variants = db.getVariants({ case_id: result.caseId }, 10)
+      const variant = variants.data[0]
+
+      // Required fields
+      expect(variant.chr).toBeTruthy()
+      expect(variant.pos).toBeGreaterThan(0)
+      expect(variant.ref).toBeTruthy()
+      expect(variant.alt).toBeTruthy()
+
+      // Optional fields should be mapped (may be null)
+      expect('gene_symbol' in variant).toBe(true)
+      expect('omim_mim_number' in variant).toBe(true)
+      expect('consequence' in variant).toBe(true)
+      expect('gnomad_af' in variant).toBe(true)
+      expect('cadd' in variant).toBe(true)
+      expect('clinvar' in variant).toBe(true)
+      expect('gt_num' in variant).toBe(true)
+      expect('func' in variant).toBe(true)
+      expect('qual' in variant).toBe(true)
+      expect('hpo_sim_score' in variant).toBe(true)
+      expect('transcript' in variant).toBe(true)
+      expect('cdna' in variant).toBe(true)
+      expect('aa_change' in variant).toBe(true)
+      expect('moi' in variant).toBe(true)
+    })
+
+    it('should handle large object format file', { timeout: 120000 }, async () => {
+      const result = await importService.importVariants('test-data/LB26-0434.json.gz', {
+        caseName: 'Object Format Large Test'
+      })
+
+      expect(result.variantCount).toBe(63551)
+      expect(result.skipped).toBe(0)
+
+      const dbCount = db.getVariantCount(result.caseId)
+      expect(dbCount).toBe(63551)
     })
   })
 })

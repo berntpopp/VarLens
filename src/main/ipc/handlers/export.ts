@@ -28,7 +28,6 @@ const EXPORT_COLUMNS = [
   { key: 'qual', header: 'Quality' },
   { key: 'clinvar', header: 'ClinVar' },
   { key: 'hpo_sim_score', header: 'HPO Score' },
-  { key: 'hpo_match', header: 'HPO Match' },
   { key: 'moi', header: 'Mode of Inheritance' }
 ]
 
@@ -91,7 +90,7 @@ ipcMain.handle(
 
       // Set column widths
       ws['!cols'] = EXPORT_COLUMNS.map((col) => ({
-        wch: col.key === 'hpo_match' ? 40 : col.key === 'aa_change' ? 20 : 15
+        wch: col.key === 'aa_change' ? 20 : 15
       }))
 
       const wb = XLSX.utils.book_new()

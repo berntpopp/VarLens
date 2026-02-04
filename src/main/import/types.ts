@@ -45,7 +45,6 @@ export interface DataDictionaries {
   impact: Record<string, string> // Impact code -> label
   transcript: Record<string, string> // Transcript ID -> name
   hpoSimScore: Record<string, number> // ID -> HPO similarity score
-  hpoMatch: Record<string, string> // ID -> HPO terms string
   moi: Record<string, string> // ID -> mode of inheritance abbreviation
 }
 
