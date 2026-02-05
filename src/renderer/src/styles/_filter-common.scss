@@ -1,0 +1,123 @@
+/**
+ * Shared filter styles - import in FilterToolbar.vue and CohortTable.vue
+ * Following DRY principle for consistent filter UI across views
+ */
+
+// Filter section wrapper
+.filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  min-width: fit-content;
+}
+
+// Filter label with icon
+.section-label {
+  display: flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  white-space: nowrap;
+  margin-bottom: 2px;
+
+  .v-icon {
+    opacity: 0.7;
+  }
+}
+
+// Info icon in labels
+.info-icon {
+  opacity: 0.5;
+  cursor: help;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+// Active filter highlight
+.filter-input.filter-active :deep(.v-field) {
+  border-color: rgb(var(--v-theme-primary));
+  border-width: 2px;
+  background: rgba(var(--v-theme-primary), 0.04);
+}
+
+.filter-input :deep(.v-field) {
+  border-radius: 6px;
+}
+
+.filter-input :deep(.v-field__input) {
+  font-size: 0.85rem;
+}
+
+// Custom numeric input width
+.custom-input {
+  max-width: 90px;
+  flex-shrink: 0;
+}
+
+// Applied filters summary bar
+.applied-filters-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 16px;
+  background: rgba(var(--v-theme-primary), 0.04);
+  border-top: 1px solid rgba(var(--v-border-color), 0.08);
+
+  .v-chip {
+    max-width: 200px;
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}
+
+// Results chip styling
+.results-chip {
+  font-size: 0.85rem;
+}
+
+// Filter groups container - horizontal scrollable
+.filter-groups-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: clip;
+  min-width: 0;
+  scrollbar-width: thin;
+  padding-top: 4px;
+}
+
+.filter-groups-container {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 4px 2px;
+  width: max-content;
+}
+
+// Chip group styling in filter sections
+.filter-section :deep(.v-chip-group) {
+  flex-wrap: nowrap;
+}
+
+.filter-section :deep(.v-chip) {
+  margin: 2px;
+}
+
+// Preset chips with custom input layout
+.preset-with-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

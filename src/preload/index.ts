@@ -79,7 +79,8 @@ const api = {
 
   export: {
     variants: (caseId: number, filters: Omit<VariantFilter, 'case_id'>, caseName: string) =>
-      ipcRenderer.invoke('export:variants', caseId, filters, caseName)
+      ipcRenderer.invoke('export:variants', caseId, filters, caseName),
+    cohort: (params: CohortSearchParams) => ipcRenderer.invoke('export:cohort', params)
   },
 
   shell: {

@@ -112,6 +112,9 @@ export interface ExportAPI {
     filters: Omit<VariantFilter, 'case_id'>,
     caseName: string
   ) => Promise<{ success: boolean; filePath?: string; error?: string }>
+  cohort: (
+    params: CohortSearchParams
+  ) => Promise<{ success: boolean; filePath?: string; error?: string }>
 }
 
 export interface DatabaseInfo {

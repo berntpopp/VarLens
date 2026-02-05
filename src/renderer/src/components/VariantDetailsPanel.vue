@@ -4,6 +4,7 @@
     location="right"
     temporary
     :persistent="true"
+    :scrim="false"
     :width="panelWidth"
     @update:model-value="emit('update:open', $event)"
   >

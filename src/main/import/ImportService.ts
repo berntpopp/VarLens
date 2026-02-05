@@ -12,8 +12,11 @@ import type { ImportOptions, ImportResult, DataDictionaries } from './types'
 
 /**
  * Detected file format types
+ * - columnar: { "<caseId>": { "header": [...], "data": [[...]] } }
+ * - object: { "metadata": {...}, "samples": { "<sampleId>": { "variants": [...] } } }
+ * - simple: { "variants": [...], ... } - direct variants array at top level
  */
-type FileFormat = 'columnar' | 'object'
+type FileFormat = 'columnar' | 'object' | 'simple'
 
 /**
  * Format detection result
@@ -73,6 +76,10 @@ export class ImportService {
       // Route to appropriate parser
       if (formatInfo.format === 'object') {
         return await this.importObjectFormat(filePath, options, formatInfo, startTime)
+      }
+
+      if (formatInfo.format === 'simple') {
+        return await this.importSimpleFormat(filePath, options, startTime)
       }
 
       // Default: columnar format
@@ -252,11 +259,90 @@ export class ImportService {
   }
 
   /**
+   * Import variants from simple format (top-level variants array)
+   *
+   * Structure: { "person_id": ..., "lims_id": ..., "variants": [...] }
+   */
+  private async importSimpleFormat(
+    filePath: string,
+    options: ImportOptions,
+    startTime: number
+  ): Promise<ImportResult> {
+    let caseId: number | null = null
+
+    try {
+      // Get file size for case metadata
+      const fileStats = statSync(filePath)
+      const fileSize = fileStats.size
+
+      // Create case record
+      caseId = this.db.createCase(options.caseName, filePath, fileSize)
+
+      // Create pipeline stages
+      const batchSize = options.batchSize ?? this.defaultBatchSize
+      const objectMapper = createObjectFormatMapper()
+      const batchAccumulator = createBatchAccumulator({
+        caseId,
+        batchSize,
+        db: this.db,
+        onProgress: options.onProgress,
+        startTime
+      })
+
+      // Handle cancellation
+      if (options.signal !== undefined) {
+        options.signal.addEventListener('abort', () => {
+          objectMapper.destroy(new Error('Import cancelled'))
+        })
+      }
+
+      // Build the pipeline for simple format
+      // Structure: { ..., "variants": [...] }
+      await pipeline(
+        createReadStream(filePath),
+        createGunzip(),
+        parser(),
+        pick({ filter: 'variants' }),
+        streamArray(),
+        objectMapper,
+        batchAccumulator
+      )
+
+      // Get final statistics
+      const variantCount = batchAccumulator.inserted
+      const skipped = batchAccumulator.skippedCount
+      const elapsed = Date.now() - startTime
+
+      // Update case with final variant count
+      this.db.updateCaseVariantCount(caseId, variantCount)
+
+      return {
+        caseId,
+        variantCount,
+        skipped,
+        errors: [],
+        elapsed
+      }
+    } catch (error) {
+      // Rollback case creation on failure
+      if (caseId !== null) {
+        try {
+          this.db.deleteCase(caseId)
+        } catch (rollbackError) {
+          console.error('Failed to rollback case creation:', rollbackError)
+        }
+      }
+      throw error
+    }
+  }
+
+  /**
    * Detect the file format by examining top-level keys
    *
    * Returns format type and the relevant case key:
    * - Columnar: first top-level key is the case ID
    * - Object: has 'metadata' and 'samples' keys, extracts first sample ID
+   * - Simple: has 'variants' key at top level
    */
   private async detectFormat(filePath: string): Promise<FormatInfo> {
     return new Promise((resolve, reject) => {
@@ -299,6 +385,12 @@ export class ImportService {
         if (data.name === 'keyValue' && depth === 1) {
           topLevelKeys.push(String(data.value))
 
+          // Check for simple format: top-level 'variants' array
+          if (topLevelKeys.includes('variants')) {
+            resolveFormat('simple', 'variants')
+            return
+          }
+
           // Check for object format markers
           if (topLevelKeys.includes('metadata') && topLevelKeys.includes('samples')) {
             // Object format - need to extract sample ID
@@ -309,16 +401,6 @@ export class ImportService {
                 resolve({ format: 'object', caseKey: sampleId })
               })
               .catch(reject)
-            return
-          }
-
-          // If first key is neither 'metadata' nor 'samples', it's columnar format
-          if (
-            topLevelKeys.length === 1 &&
-            topLevelKeys[0] !== 'metadata' &&
-            topLevelKeys[0] !== 'samples'
-          ) {
-            resolveFormat('columnar', topLevelKeys[0])
             return
           }
         }
@@ -333,7 +415,10 @@ export class ImportService {
         }
 
         // Determine format based on collected keys
-        if (topLevelKeys.includes('metadata') || topLevelKeys.includes('samples')) {
+        if (topLevelKeys.includes('variants')) {
+          // Simple format - top-level variants array
+          resolveFormat('simple', 'variants')
+        } else if (topLevelKeys.includes('metadata') || topLevelKeys.includes('samples')) {
           // Object format - need to extract sample ID
           resolved = true
           this.extractFirstSampleId(filePath)
@@ -342,6 +427,7 @@ export class ImportService {
             })
             .catch(reject)
         } else {
+          // Default: columnar format (first key is the case ID)
           resolveFormat('columnar', topLevelKeys[0])
         }
       })

@@ -1,7 +1,13 @@
 <template>
   <div class="filter-toolbar-container">
     <!-- Main filter bar -->
-    <v-toolbar density="default" flat class="filter-toolbar px-3 py-2">
+    <v-toolbar
+      density="default"
+      flat
+      class="filter-toolbar px-3 py-2"
+      role="toolbar"
+      aria-label="Variant filters"
+    >
       <!-- Filter groups wrapper -->
       <div class="filter-groups-wrapper">
         <v-btn
@@ -26,6 +32,8 @@
                 class="filter-section-wrapper"
                 :class="{ collapsed: !group.expanded }"
                 :data-filter-id="group.id"
+                role="group"
+                :aria-label="(filterGroupLabels[group.id] || group.id) + ' filter'"
               >
                 <div class="filter-group-header">
                   <v-icon class="drag-handle" size="x-small">mdi-drag-vertical</v-icon>
@@ -34,25 +42,27 @@
                     variant="text"
                     density="compact"
                     :icon="group.expanded ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+                    :aria-label="group.expanded ? 'Collapse filter' : 'Expand filter'"
                     @click="toggleFilterGroupExpanded(group.id)"
-                  />
-                  <v-btn
-                    size="x-small"
-                    variant="text"
-                    density="compact"
-                    icon="mdi-close"
-                    class="close-btn"
-                    @click="hideFilterGroup(group.id)"
                   />
                 </div>
 
-                <!-- Collapsed label (rotated 90 degrees) -->
+                <!-- Collapsed label (rotated 90 degrees) with active indicator -->
                 <div
                   v-if="!group.expanded"
                   class="collapsed-label"
                   @click="toggleFilterGroupExpanded(group.id)"
                 >
-                  <span>{{ filterGroupLabels[group.id] || group.id }}</span>
+                  <v-badge
+                    v-if="isFilterGroupActive(group.id)"
+                    dot
+                    color="primary"
+                    offset-x="-2"
+                    offset-y="-2"
+                  >
+                    <span>{{ filterGroupLabels[group.id] || group.id }}</span>
+                  </v-badge>
+                  <span v-else>{{ filterGroupLabels[group.id] || group.id }}</span>
                 </div>
 
                 <div v-if="group.expanded" class="filter-group-content">
@@ -145,11 +155,11 @@
                     </div>
                   </div>
 
-                  <!-- FUNCTIONAL ANNOTATION GROUP -->
+                  <!-- FUNCTIONAL ANNOTATION GROUP (Grouped Multi-Select) -->
                   <div v-if="group.id === 'function'" class="filter-section func-section">
                     <div class="section-label">
                       <v-icon size="small" class="mr-1">mdi-function</v-icon>
-                      <span>Function</span>
+                      <span>Consequence</span>
                       <v-tooltip location="top" max-width="280">
                         <template #activator="{ props: tooltipProps }">
                           <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon"
@@ -157,28 +167,23 @@
                           >
                         </template>
                         <span
-                          >Filter by functional annotation: exonic, intronic, UTR, intergenic,
-                          etc.</span
+                          >Filter by variant consequence: truncating (stop gained, frameshift),
+                          missense, splice, non-coding, etc. Select groups or individual
+                          types.</span
                         >
                       </v-tooltip>
                     </div>
-                    <v-select
+                    <GroupedMultiSelect
                       v-model="filters.funcs"
-                      :items="filterOptions.funcs"
-                      multiple
-                      chips
-                      closable-chips
-                      density="compact"
-                      variant="outlined"
-                      hide-details
-                      clearable
+                      :config="consequenceGroups"
+                      :available-values="filterOptions.funcs"
+                      label="Consequence"
                       placeholder="Select..."
-                      class="filter-input func-select"
-                      :class="{ 'filter-active': filters.funcs.length > 0 }"
+                      icon="mdi-function"
                     />
                   </div>
 
-                  <!-- CLINVAR GROUP -->
+                  <!-- CLINVAR GROUP (Grouped Multi-Select) -->
                   <div v-if="group.id === 'clinvar'" class="filter-section clinvar-section">
                     <div class="section-label">
                       <v-icon size="small" class="mr-1">mdi-hospital-box</v-icon>
@@ -190,24 +195,18 @@
                           >
                         </template>
                         <span
-                          >Filter by ClinVar pathogenicity classification: Pathogenic, Likely
-                          pathogenic, VUS, Benign, etc.</span
+                          >Filter by ClinVar pathogenicity: select groups (Pathogenic, VUS, Benign)
+                          or individual classifications.</span
                         >
                       </v-tooltip>
                     </div>
-                    <v-select
+                    <GroupedMultiSelect
                       v-model="filters.clinvars"
-                      :items="filterOptions.clinvars"
-                      multiple
-                      chips
-                      closable-chips
-                      density="compact"
-                      variant="outlined"
-                      hide-details
-                      clearable
+                      :config="clinvarGroups"
+                      :available-values="filterOptions.clinvars"
+                      label="ClinVar"
                       placeholder="Select..."
-                      class="filter-input clinvar-select"
-                      :class="{ 'filter-active': filters.clinvars.length > 0 }"
+                      icon="mdi-hospital-box"
                     />
                   </div>
 
@@ -406,6 +405,7 @@
         <!-- Filter visibility menu -->
         <FilterVisibilityMenu
           :filter-groups="filterGroupsWithLabels"
+          :active-filter-count="activeFilterCount"
           @toggle-visible="toggleFilterGroupVisible"
           @toggle-expand="toggleFilterGroupExpanded"
           @reorder="handleFilterReorder"
@@ -444,6 +444,27 @@
         </v-tooltip>
       </div>
     </v-toolbar>
+
+    <!-- Applied Filters Summary Bar -->
+    <div v-if="activeFiltersList.length > 0" class="applied-filters-bar">
+      <span class="text-caption text-medium-emphasis mr-2">Active:</span>
+      <v-chip
+        v-for="filter in activeFiltersList"
+        :key="filter.id"
+        size="small"
+        closable
+        variant="tonal"
+        color="primary"
+        class="mr-1"
+        @click:close="clearFilter(filter.id)"
+      >
+        <span class="font-weight-medium">{{ filter.label }}:</span>
+        <span class="ml-1">{{ filter.value }}</span>
+      </v-chip>
+      <v-btn variant="text" size="x-small" color="error" class="ml-1" @click="clearAllFilters">
+        Clear all
+      </v-btn>
+    </div>
   </div>
 </template>
 
@@ -456,6 +477,8 @@ import { useFilterPreferences } from '../composables/useFilterPreferences'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import ColumnVisibilityMenu from './ColumnVisibilityMenu.vue'
 import FilterVisibilityMenu from './FilterVisibilityMenu.vue'
+import GroupedMultiSelect from './GroupedMultiSelect.vue'
+import { consequenceGroups, clinvarGroups } from '../config/filterGroups'
 import type { VariantFilter, Variant, Tag } from '../../../shared/types/api'
 
 interface ColumnDef {
@@ -495,7 +518,6 @@ const {
   setFilterGroupOrder,
   toggleFilterGroupExpanded,
   toggleFilterGroupVisible,
-  hideFilterGroup,
   resetToDefaults: resetFilterDefaults,
   showAll: showAllFilters
 } = useFilterPreferences()
@@ -671,6 +693,163 @@ const hasActiveFilters = computed(() => {
   )
 })
 
+// Active filter count for badge
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (filters.value.searchQuery !== '') count++
+  if (filters.value.geneSymbol !== '') count++
+  if (selectedImpactPresets.value.length > 0) count++
+  if (filters.value.consequences.length > 0) count++
+  if (filters.value.funcs.length > 0) count++
+  if (filters.value.clinvars.length > 0) count++
+  if (
+    filters.value.maxGnomadAf !== null &&
+    !Number.isNaN(filters.value.maxGnomadAf) &&
+    filters.value.maxGnomadAf > 0
+  )
+    count++
+  if (
+    filters.value.minCadd !== null &&
+    !Number.isNaN(filters.value.minCadd) &&
+    filters.value.minCadd >= 0
+  )
+    count++
+  if (filters.value.tagIds.length > 0) count++
+  return count
+})
+
+// Active filters as chip data for summary bar
+interface ActiveFilter {
+  id: string
+  label: string
+  value: string
+}
+
+const activeFiltersList = computed<ActiveFilter[]>(() => {
+  const list: ActiveFilter[] = []
+
+  if (filters.value.searchQuery !== '') {
+    list.push({ id: 'search', label: 'Search', value: filters.value.searchQuery })
+  }
+  if (filters.value.geneSymbol !== '') {
+    list.push({ id: 'gene', label: 'Gene', value: filters.value.geneSymbol })
+  }
+  if (selectedImpactPresets.value.length > 0) {
+    list.push({ id: 'impact', label: 'Impact', value: selectedImpactPresets.value.join(', ') })
+  }
+  if (filters.value.consequences.length > 0) {
+    list.push({
+      id: 'consequences',
+      label: 'Consequences',
+      value: `${filters.value.consequences.length} selected`
+    })
+  }
+  if (filters.value.funcs.length > 0) {
+    list.push({
+      id: 'funcs',
+      label: 'Consequence',
+      value: `${filters.value.funcs.length} selected`
+    })
+  }
+  if (filters.value.clinvars.length > 0) {
+    list.push({
+      id: 'clinvars',
+      label: 'ClinVar',
+      value: `${filters.value.clinvars.length} selected`
+    })
+  }
+  if (
+    filters.value.maxGnomadAf !== null &&
+    !Number.isNaN(filters.value.maxGnomadAf) &&
+    filters.value.maxGnomadAf > 0
+  ) {
+    const pct = (filters.value.maxGnomadAf * 100).toFixed(2)
+    list.push({ id: 'frequency', label: 'AF ≤', value: `${pct}%` })
+  }
+  if (
+    filters.value.minCadd !== null &&
+    !Number.isNaN(filters.value.minCadd) &&
+    filters.value.minCadd >= 0
+  ) {
+    list.push({ id: 'cadd', label: 'CADD ≥', value: String(filters.value.minCadd) })
+  }
+  if (filters.value.tagIds.length > 0) {
+    const tagNames = availableTags.value
+      .filter((t) => filters.value.tagIds.includes(t.id))
+      .map((t) => t.name)
+    list.push({ id: 'tags', label: 'Tags', value: tagNames.join(', ') })
+  }
+
+  return list
+})
+
+// Check if a specific filter group has active filters (for collapsed indicator)
+const isFilterGroupActive = (groupId: string): boolean => {
+  switch (groupId) {
+    case 'search':
+      return filters.value.searchQuery !== ''
+    case 'gene':
+      return filters.value.geneSymbol !== ''
+    case 'impact':
+      return selectedImpactPresets.value.length > 0 || filters.value.consequences.length > 0
+    case 'function':
+      return filters.value.funcs.length > 0
+    case 'clinvar':
+      return filters.value.clinvars.length > 0
+    case 'frequency':
+      return (
+        filters.value.maxGnomadAf !== null &&
+        !Number.isNaN(filters.value.maxGnomadAf) &&
+        filters.value.maxGnomadAf > 0
+      )
+    case 'cadd':
+      return (
+        filters.value.minCadd !== null &&
+        !Number.isNaN(filters.value.minCadd) &&
+        filters.value.minCadd >= 0
+      )
+    case 'tags':
+      return filters.value.tagIds.length > 0
+    default:
+      return false
+  }
+}
+
+// Clear a specific filter by ID
+const clearFilter = (filterId: string): void => {
+  switch (filterId) {
+    case 'search':
+      filters.value.searchQuery = ''
+      break
+    case 'gene':
+      filters.value.geneSymbol = ''
+      break
+    case 'impact':
+      selectedImpactPresets.value = []
+      break
+    case 'consequences':
+      filters.value.consequences = []
+      break
+    case 'funcs':
+      filters.value.funcs = []
+      break
+    case 'clinvars':
+      filters.value.clinvars = []
+      break
+    case 'frequency':
+      filters.value.maxGnomadAf = null
+      selectedAfPreset.value = null
+      break
+    case 'cadd':
+      filters.value.minCadd = null
+      selectedCaddPreset.value = null
+      break
+    case 'tags':
+      filters.value.tagIds = []
+      break
+  }
+}
+
 // Remove a tag from the filter
 const removeTagFilter = (tagId: number) => {
   filters.value.tagIds = filters.value.tagIds.filter((id) => id !== tagId)
@@ -685,6 +864,43 @@ watch(
     }
   },
   { immediate: true }
+)
+
+// Watch caseId prop and reset filters when case changes
+watch(
+  () => props.caseId,
+  async (newCaseId, oldCaseId) => {
+    if (newCaseId !== oldCaseId && oldCaseId !== undefined) {
+      // Reset all filters when switching cases
+      filters.value.searchQuery = ''
+      filters.value.geneSymbol = ''
+      filters.value.consequences = []
+      filters.value.funcs = []
+      filters.value.clinvars = []
+      filters.value.maxGnomadAf = null
+      filters.value.minCadd = null
+      filters.value.tagIds = []
+      selectedAfPreset.value = null
+      selectedCaddPreset.value = null
+      selectedImpactPresets.value = []
+
+      // Emit reset filters immediately (bypass debounce for case switch)
+      emit('update:filters', {})
+
+      // Reload filter options for the new case
+      // eslint-disable-next-line no-undef
+      if (typeof window.api !== 'undefined') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
+          const options = await (window as any).api.variants.getFilterOptions(newCaseId)
+          filterOptions.value = options
+        } catch (error) {
+          // eslint-disable-next-line no-undef
+          console.error('Failed to load filter options for new case:', error)
+        }
+      }
+    }
+  }
 )
 
 // Load filter options on mount
@@ -962,6 +1178,9 @@ const exportToExcel = async () => {
 </script>
 
 <style scoped>
+/* Import shared filter styles for DRY principle */
+@import '../styles/_filter-common.scss';
+
 .filter-toolbar-container {
   border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
   background: rgb(var(--v-theme-surface));
@@ -986,16 +1205,18 @@ const exportToExcel = async () => {
 .filter-groups-scroll {
   flex: 1;
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: clip;
   min-width: 0;
   scrollbar-width: thin;
+  /* Add top padding to prevent clipping of filter labels */
+  padding-top: 4px;
 }
 
 .filter-groups-container {
   display: flex;
   flex-wrap: nowrap;
   gap: 4px;
-  padding: 4px 2px;
+  padding: 6px 2px 4px 2px;
   width: max-content;
 }
 
@@ -1067,7 +1288,7 @@ const exportToExcel = async () => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 0 4px;
+  padding: 2px 4px 0 4px;
   min-width: fit-content;
 }
 
@@ -1091,14 +1312,12 @@ const exportToExcel = async () => {
   max-width: 130px;
 }
 
-.func-section .func-select {
-  min-width: 120px;
-  max-width: 160px;
+.func-section {
+  min-width: 140px;
 }
 
-.clinvar-section .clinvar-select {
+.clinvar-section {
   min-width: 140px;
-  max-width: 180px;
 }
 
 .tags-section .tags-select {
@@ -1119,6 +1338,7 @@ const exportToExcel = async () => {
   letter-spacing: 0.5px;
   color: rgba(var(--v-theme-on-surface), 0.6);
   white-space: nowrap;
+  margin-top: 2px;
 }
 
 .section-label .v-icon {
@@ -1141,6 +1361,19 @@ const exportToExcel = async () => {
 .filter-input.filter-active :deep(.v-field) {
   border-color: rgb(var(--v-theme-primary));
   border-width: 2px;
+  background: rgba(var(--v-theme-primary), 0.04);
+}
+
+/* Visual indicator for active filters - adds checkmark icon */
+.filter-input.filter-active :deep(.v-field__prepend-inner .v-icon)::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  background: rgb(var(--v-theme-primary));
+  border-radius: 50%;
 }
 
 .filter-input :deep(.v-field) {
@@ -1169,5 +1402,26 @@ const exportToExcel = async () => {
 /* Collapsed filter group - just show small indicator */
 .filter-section-wrapper.collapsed .filter-group-header {
   flex-direction: row;
+}
+
+/* Applied filters summary bar */
+.applied-filters-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 16px;
+  background: rgba(var(--v-theme-primary), 0.04);
+  border-top: 1px solid rgba(var(--v-border-color), 0.08);
+}
+
+.applied-filters-bar .v-chip {
+  max-width: 200px;
+}
+
+.applied-filters-bar .v-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

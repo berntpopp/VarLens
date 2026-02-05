@@ -3,6 +3,13 @@
     <template #activator="{ props }">
       <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-filter-cog">
         Filters
+        <v-badge
+          v-if="activeFilterCount !== undefined && activeFilterCount > 0"
+          :content="activeFilterCount"
+          color="primary"
+          inline
+          class="ml-1"
+        />
         <v-tooltip activator="parent" location="bottom"
           >Show/hide and reorder filter groups</v-tooltip
         >
@@ -76,6 +83,7 @@ interface FilterGroup {
 
 defineProps<{
   filterGroups: FilterGroup[]
+  activeFilterCount?: number
 }>()
 
 const emit = defineEmits<{

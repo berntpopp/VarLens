@@ -23,3 +23,94 @@
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* ========================================
+   Accessibility Improvements
+   ======================================== */
+
+/* Enhanced focus visibility for all interactive elements */
+*:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary)) !important;
+  outline-offset: 2px !important;
+}
+
+/* Focus ring for buttons */
+.v-btn:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary)) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px rgba(var(--v-theme-primary), 0.2) !important;
+}
+
+/* Focus ring for text inputs */
+.v-field--focused {
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.15) !important;
+}
+
+/* Focus ring for chips */
+.v-chip:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary)) !important;
+  outline-offset: 1px !important;
+}
+
+/* Focus ring for table rows (keyboard navigation) */
+.v-data-table tbody tr:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary)) !important;
+  outline-offset: 2px !important;
+  background-color: rgba(var(--v-theme-primary), 0.08) !important;
+}
+
+/* Improved skip link for accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: rgb(var(--v-theme-primary));
+  color: white;
+  padding: 8px 16px;
+  z-index: 100;
+  transition: top 0.2s ease;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* ========================================
+   ClinVar Badge Improvements
+   ======================================== */
+
+/* Ensure ClinVar chips have adequate contrast */
+.v-chip.text-white {
+  font-weight: 500;
+}
+
+/* Better contrast for pathogenic/likely pathogenic badges */
+.clinvar-pathogenic {
+  background-color: #c62828 !important;
+  color: white !important;
+  font-weight: 500;
+}
+
+.clinvar-likely-pathogenic {
+  background-color: #ef6c00 !important;
+  color: white !important;
+  font-weight: 500;
+}
+
+.clinvar-uncertain {
+  background-color: #fbc02d !important;
+  color: #1a1a1a !important;
+  font-weight: 500;
+}
+
+.clinvar-likely-benign {
+  background-color: #7cb342 !important;
+  color: white !important;
+  font-weight: 500;
+}
+
+.clinvar-benign {
+  background-color: #388e3c !important;
+  color: white !important;
+  font-weight: 500;
+}

@@ -34,6 +34,22 @@ export interface CohortVariant {
   hom_count: number
   /** Composite key for stable v-data-table tracking: "chr:pos:ref:alt" */
   variant_key: string
+
+  // Annotation columns (aggregated: MAX value across carriers)
+  /** Impact level: HIGH, MODERATE, LOW, MODIFIER (nullable) */
+  consequence: string | null
+  /** Functional consequence type (nullable) */
+  func: string | null
+  /** ClinVar clinical significance (nullable) */
+  clinvar: string | null
+  /** gnomAD allele frequency (nullable) */
+  gnomad_af: number | null
+  /** CADD phred score (nullable) */
+  cadd_phred: number | null
+  /** Transcript ID (nullable) */
+  transcript: string | null
+  /** OMIM ID (nullable) */
+  omim_id: string | null
 }
 
 /**
@@ -94,4 +110,22 @@ export interface CohortSearchParams {
   limit?: number
   /** Offset for pagination */
   offset?: number
+
+  // Filter parameters (matching case analysis filters)
+  /** Gene symbol exact match */
+  gene_symbol?: string
+  /** Impact levels to include (HIGH, MODERATE, LOW) */
+  consequences?: string[]
+  /** Functional consequence types to include */
+  funcs?: string[]
+  /** ClinVar classifications to include */
+  clinvars?: string[]
+  /** Maximum gnomAD allele frequency */
+  gnomad_af_max?: number
+  /** Minimum CADD phred score */
+  cadd_min?: number
+  /** Minimum cohort frequency (carrier_count / total_cases) */
+  cohort_frequency_min?: number
+  /** Minimum carrier count */
+  carrier_count_min?: number
 }

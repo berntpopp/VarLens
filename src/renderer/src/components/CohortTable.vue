@@ -1,52 +1,299 @@
 <template>
   <div>
-    <!-- Search bar with FilterToolbar-like styling -->
+    <!-- Filter toolbar matching Case Analysis styling -->
     <div class="filter-toolbar-container">
       <v-toolbar density="default" flat class="filter-toolbar px-3 py-2">
-        <div class="filter-section search-section">
-          <div class="section-label">
-            <v-icon size="small" class="mr-1">mdi-magnify</v-icon>
-            <span>Search</span>
+        <!-- Filter groups wrapper -->
+        <div class="filter-groups-scroll">
+          <div class="filter-groups-container">
+            <!-- Search filter -->
+            <div class="filter-section search-section">
+              <div class="section-label">
+                <v-icon size="small" class="mr-1">mdi-magnify</v-icon>
+                <span>Search</span>
+              </div>
+              <v-text-field
+                v-model="searchTerm"
+                prepend-inner-icon="mdi-magnify"
+                placeholder="Gene, position, HGVS..."
+                clearable
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="filter-input"
+                :class="{ 'filter-active': searchTerm !== '' }"
+                @update:model-value="handleSearchChange"
+              />
+            </div>
+
+            <!-- Gene filter -->
+            <div class="filter-section gene-section">
+              <div class="section-label">
+                <v-icon size="small" class="mr-1">mdi-dna</v-icon>
+                <span>Gene</span>
+              </div>
+              <v-text-field
+                v-model="filters.geneSymbol"
+                prepend-inner-icon="mdi-magnify"
+                placeholder="Gene symbol..."
+                clearable
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="filter-input"
+                :class="{ 'filter-active': filters.geneSymbol !== '' }"
+                @update:model-value="debouncedApplyFilters"
+              />
+            </div>
+
+            <!-- Impact filter -->
+            <div class="filter-section impact-section">
+              <div class="section-label">
+                <v-icon size="small" class="mr-1">mdi-flash</v-icon>
+                <span>Impact</span>
+              </div>
+              <v-chip-group v-model="selectedImpactPresets" multiple>
+                <v-chip
+                  v-for="preset in impactPresets"
+                  :key="preset.value"
+                  :value="preset.value"
+                  :color="preset.color"
+                  filter
+                  variant="outlined"
+                  size="small"
+                >
+                  {{ preset.label }}
+                </v-chip>
+              </v-chip-group>
+            </div>
+
+            <!-- Function/Consequence filter (GroupedMultiSelect matching FilterToolbar) -->
+            <div class="filter-section func-section">
+              <div class="section-label">
+                <v-icon size="small" class="mr-1">mdi-function</v-icon>
+                <span>Consequence</span>
+                <v-tooltip location="top" max-width="280">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon">
+                      mdi-information-outline
+                    </v-icon>
+                  </template>
+                  <span>
+                    Filter by variant consequence: truncating (stop gained, frameshift), missense,
+                    splice, non-coding, etc. Select groups or individual types.
+                  </span>
+                </v-tooltip>
+              </div>
+              <GroupedMultiSelect
+                v-model="filters.funcs"
+                :config="consequenceGroups"
+                label="Consequence"
+                placeholder="Select..."
+                icon="mdi-function"
+              />
+            </div>
+
+            <!-- ClinVar filter (GroupedMultiSelect matching FilterToolbar) -->
+            <div class="filter-section clinvar-section">
+              <div class="section-label">
+                <v-icon size="small" class="mr-1">mdi-hospital-box</v-icon>
+                <span>ClinVar</span>
+                <v-tooltip location="top" max-width="280">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon">
+                      mdi-information-outline
+                    </v-icon>
+                  </template>
+                  <span>
+                    Filter by ClinVar pathogenicity: select groups (Pathogenic, VUS, Benign) or
+                    individual classifications.
+                  </span>
+                </v-tooltip>
+              </div>
+              <GroupedMultiSelect
+                v-model="filters.clinvars"
+                :config="clinvarGroups"
+                label="ClinVar"
+                placeholder="Select..."
+                icon="mdi-hospital-box"
+              />
+            </div>
+
+            <!-- Cohort Frequency filter (unique to cohort) -->
+            <div class="filter-section cohort-freq-section">
+              <div class="section-label">
+                <v-icon size="small" class="mr-1">mdi-account-group</v-icon>
+                <span>Cohort Freq</span>
+                <v-tooltip location="top" max-width="280">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon">
+                      mdi-information-outline
+                    </v-icon>
+                  </template>
+                  <span>
+                    Minimum frequency within the cohort. Higher values = more common variants.
+                  </span>
+                </v-tooltip>
+              </div>
+              <div class="preset-with-custom">
+                <v-chip-group v-model="selectedCohortFreqPreset">
+                  <v-chip
+                    v-for="preset in cohortFreqPresets"
+                    :key="preset.value"
+                    :value="preset.value"
+                    filter
+                    variant="outlined"
+                    size="small"
+                    color="purple"
+                  >
+                    {{ preset.label }}
+                  </v-chip>
+                </v-chip-group>
+                <v-text-field
+                  v-model.number="customCohortFreq"
+                  type="number"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  clearable
+                  placeholder="Custom %"
+                  class="filter-input custom-input"
+                  :class="{ 'filter-active': customCohortFreq != null }"
+                  step="1"
+                  min="0"
+                  max="100"
+                  @update:model-value="handleCustomCohortFreqChange"
+                />
+              </div>
+            </div>
+
+            <!-- gnomAD Frequency filter -->
+            <div class="filter-section frequency-section">
+              <div class="section-label">
+                <v-icon size="small" class="mr-1">mdi-earth</v-icon>
+                <span>gnomAD AF</span>
+                <v-tooltip location="top" max-width="280">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon">
+                      mdi-information-outline
+                    </v-icon>
+                  </template>
+                  <span> Maximum allele frequency in gnomAD. Lower values = rarer variants. </span>
+                </v-tooltip>
+              </div>
+              <div class="preset-with-custom">
+                <v-chip-group v-model="selectedAfPreset">
+                  <v-chip
+                    v-for="preset in afPresets"
+                    :key="preset.value"
+                    :value="preset.value"
+                    filter
+                    variant="outlined"
+                    size="small"
+                    color="teal"
+                  >
+                    {{ preset.label }}
+                  </v-chip>
+                </v-chip-group>
+                <v-text-field
+                  v-model.number="customGnomadAf"
+                  type="number"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  clearable
+                  placeholder="Custom %"
+                  class="filter-input custom-input"
+                  :class="{ 'filter-active': customGnomadAf != null }"
+                  step="0.001"
+                  min="0"
+                  max="100"
+                  @update:model-value="handleCustomGnomadAfChange"
+                />
+              </div>
+            </div>
+
+            <!-- CADD filter -->
+            <div class="filter-section cadd-section">
+              <div class="section-label">
+                <v-icon size="small" class="mr-1">mdi-alert-circle</v-icon>
+                <span>CADD</span>
+                <v-tooltip location="top" max-width="280">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" size="x-small" class="ml-1 info-icon">
+                      mdi-information-outline
+                    </v-icon>
+                  </template>
+                  <span>
+                    Minimum CADD phred score. Higher scores = more likely deleterious. Typical
+                    thresholds: 15 (top 3%), 20 (top 1%), 25 (top 0.3%).
+                  </span>
+                </v-tooltip>
+              </div>
+              <div class="preset-with-custom">
+                <v-chip-group v-model="selectedCaddPreset">
+                  <v-chip
+                    v-for="preset in caddPresets"
+                    :key="preset.value"
+                    :value="preset.value"
+                    filter
+                    variant="outlined"
+                    size="small"
+                    color="deep-purple"
+                  >
+                    {{ preset.label }}
+                  </v-chip>
+                </v-chip-group>
+                <v-text-field
+                  v-model.number="customCadd"
+                  type="number"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  clearable
+                  placeholder="Custom"
+                  class="filter-input custom-input"
+                  :class="{ 'filter-active': customCadd != null }"
+                  step="1"
+                  min="0"
+                  max="60"
+                  @update:model-value="handleCustomCaddChange"
+                />
+              </div>
+            </div>
           </div>
-          <v-text-field
-            v-model="searchTerm"
-            prepend-inner-icon="mdi-magnify"
-            placeholder="Gene, position (chr:pos), or HGVS..."
-            clearable
-            density="compact"
-            variant="outlined"
-            hide-details
-            class="filter-input"
-            :class="{ 'filter-active': searchTerm !== '' }"
-            @update:model-value="handleSearchChange"
-          />
         </div>
 
-        <!-- Results & Actions (3x2 grid like FilterToolbar) -->
+        <!-- Results & Actions (matching FilterToolbar layout) -->
         <div class="results-section ml-auto">
           <v-chip
-            :color="searchTerm !== '' ? 'primary' : 'default'"
-            :variant="searchTerm !== '' ? 'flat' : 'tonal'"
+            :color="hasActiveFilters ? 'primary' : 'default'"
+            :variant="hasActiveFilters ? 'flat' : 'tonal'"
             size="small"
             class="results-chip"
           >
             <v-icon start size="small">mdi-filter-variant</v-icon>
             <strong>{{ totalCount?.toLocaleString() ?? '0' }}</strong>
-            <span class="mx-1 text-medium-emphasis">variants</span>
+            <template v-if="cohortSummary && hasActiveFilters">
+              <span class="mx-1 text-medium-emphasis">/</span>
+              <span class="text-medium-emphasis">{{
+                cohortSummary.unique_variants?.toLocaleString() ?? '0'
+              }}</span>
+            </template>
           </v-chip>
 
           <v-btn
-            :disabled="searchTerm === ''"
-            :color="searchTerm !== '' ? 'error' : undefined"
-            :variant="searchTerm !== '' ? 'tonal' : 'text'"
+            :disabled="!hasActiveFilters"
+            :color="hasActiveFilters ? 'error' : undefined"
+            :variant="hasActiveFilters ? 'tonal' : 'text'"
             size="small"
             prepend-icon="mdi-filter-off"
-            @click="clearSearch"
+            @click="clearAllFilters"
           >
             Clear
           </v-btn>
 
-          <!-- Placeholder for filter menu (cohort has simpler filtering) -->
+          <!-- Placeholder for filter visibility menu -->
           <div class="placeholder-cell"></div>
 
           <ColumnVisibilityMenu
@@ -58,13 +305,50 @@
             @reset="resetToDefaults"
           />
 
-          <!-- Placeholder for export (not implemented for cohort yet) -->
-          <div class="placeholder-cell"></div>
+          <!-- Export button -->
+          <v-tooltip location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                :disabled="totalCount === 0 || exporting"
+                :loading="exporting"
+                color="success"
+                variant="tonal"
+                size="small"
+                prepend-icon="mdi-microsoft-excel"
+                @click="exportToExcel"
+              >
+                Export
+              </v-btn>
+            </template>
+            <span>Export cohort variants to Excel</span>
+          </v-tooltip>
 
           <!-- Empty cell to complete grid -->
           <div class="placeholder-cell"></div>
         </div>
       </v-toolbar>
+
+      <!-- Applied Filters Summary Bar (matching FilterToolbar) -->
+      <div v-if="activeFiltersList.length > 0" class="applied-filters-bar">
+        <span class="text-caption text-medium-emphasis mr-2">Active:</span>
+        <v-chip
+          v-for="filter in activeFiltersList"
+          :key="filter.id"
+          size="small"
+          closable
+          variant="tonal"
+          color="primary"
+          class="mr-1"
+          @click:close="clearFilter(filter.id)"
+        >
+          <span class="font-weight-medium">{{ filter.label }}:</span>
+          <span class="ml-1">{{ filter.value }}</span>
+        </v-chip>
+        <v-btn variant="text" size="x-small" color="error" class="ml-1" @click="clearAllFilters">
+          Clear all
+        </v-btn>
+      </div>
     </div>
 
     <!-- Top scrollbar (synced with table) -->
@@ -86,8 +370,9 @@
       density="compact"
       show-expand
       class="elevation-1"
+      :row-props="getRowProps"
       @update:options="handleTableOptions"
-      @click:row="(_event: unknown, { item }: { item: CohortVariant }) => emit('row-click', item)"
+      @click:row="handleRowClick"
     >
       <!-- Annotations column (global star, ACMG, comment) -->
       <template #[`item.annotations`]="{ item }">
@@ -198,6 +483,48 @@
         <span class="variant-data-mono">{{ value ?? '--' }}</span>
       </template>
 
+      <!-- Impact/Consequence with color coding -->
+      <template #[`item.consequence`]="{ value }">
+        <v-chip v-if="value" :color="getImpactColor(value)" size="x-small" label>
+          {{ value }}
+        </v-chip>
+        <span v-else class="text-medium-emphasis">--</span>
+      </template>
+
+      <!-- Functional consequence -->
+      <template #[`item.func`]="{ value }">
+        <span>{{ value ?? '--' }}</span>
+      </template>
+
+      <!-- ClinVar with color coding -->
+      <template #[`item.clinvar`]="{ value }">
+        <v-chip v-if="value" :color="getClinvarColor(value)" size="x-small" label>
+          {{ value }}
+        </v-chip>
+        <span v-else class="text-medium-emphasis">--</span>
+      </template>
+
+      <!-- gnomAD allele frequency -->
+      <template #[`item.gnomad_af`]="{ value }">
+        <span v-if="value !== null && value !== undefined" class="genomic-coordinate">
+          {{ formatScientific(value) }}
+        </span>
+        <span v-else class="text-medium-emphasis">--</span>
+      </template>
+
+      <!-- CADD phred score -->
+      <template #[`item.cadd_phred`]="{ value }">
+        <v-chip
+          v-if="value !== null && value !== undefined"
+          :color="getCaddColor(value)"
+          size="x-small"
+          label
+        >
+          {{ value.toFixed(1) }}
+        </v-chip>
+        <span v-else class="text-medium-emphasis">--</span>
+      </template>
+
       <!-- Carrier count as chip with "N / total" format -->
       <template #[`item.carrier_count`]="{ item }">
         <v-chip size="small" color="primary" label>
@@ -280,18 +607,31 @@
       :per-case-timestamps="null"
       @save="handleCommentSave"
     />
+
+    <!-- Snackbar for user feedback -->
+    <v-snackbar
+      v-model="snackbar.visible"
+      :color="snackbar.color"
+      :timeout="4000"
+      location="bottom right"
+    >
+      {{ snackbar.message }}
+    </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount, computed, nextTick } from 'vue'
+import { useDebounce } from '../composables/useDebounce'
 import type { CohortVariant, CohortCarrier } from '../../../shared/types/cohort'
 import type { AcmgClassification } from '../../../main/database/types'
 import { useAnnotations, ACMG_COLORS, ACMG_ABBREV } from '../composables/useAnnotations'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
+import { consequenceGroups, clinvarGroups } from '../config/filterGroups'
 import AcmgMenu from './AcmgMenu.vue'
 import CommentDialog from './CommentDialog.vue'
 import ColumnVisibilityMenu from './ColumnVisibilityMenu.vue'
+import GroupedMultiSelect from './GroupedMultiSelect.vue'
 
 // Emit for navigation and row click
 const emit = defineEmits<{
@@ -343,6 +683,7 @@ let middleMouseScrollLeft = 0
 const cohortVariants = ref<CohortVariant[]>([])
 const totalCount = ref(0)
 const loading = ref(false)
+const exporting = ref(false)
 const itemsPerPage = ref(50)
 const sortBy = ref<{ key: string; order: 'asc' | 'desc' }[]>([])
 
@@ -355,33 +696,231 @@ const searchTerm = ref('')
 // eslint-disable-next-line no-undef
 let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null
 
+// Selected row tracking for highlighting
+const selectedVariantKey = ref<string | null>(null)
+
 // Expand state
 const expandedRows = ref<string[]>([])
 
 // Carrier state (lazy-loaded per variant)
 const carrierMap = ref<Map<string, CohortCarrier[]>>(new Map())
 
-// Current query parameters
+// Current query parameters - extended with filter parameters
 const currentParams = ref({
   search_term: undefined as string | undefined,
   sort_by: undefined as string | undefined,
   sort_order: 'desc' as 'asc' | 'desc',
   limit: 50,
-  offset: 0
+  offset: 0,
+  // Filter parameters
+  gene_symbol: undefined as string | undefined,
+  consequences: undefined as string[] | undefined,
+  funcs: undefined as string[] | undefined,
+  clinvars: undefined as string[] | undefined,
+  gnomad_af_max: undefined as number | undefined,
+  cadd_min: undefined as number | undefined,
+  cohort_frequency_min: undefined as number | undefined,
+  carrier_count_min: undefined as number | undefined
 })
 
-// Base headers definition
+// Filter state for UI binding
+const filters = ref({
+  geneSymbol: '',
+  consequences: [] as string[],
+  funcs: [] as string[],
+  clinvars: [] as string[],
+  maxGnomadAf: null as number | null,
+  minCadd: null as number | null,
+  minCohortFrequency: null as number | null,
+  minCarriers: null as number | null
+})
+
+// Note: Function and ClinVar options now use GroupedMultiSelect with filterGroups.ts config
+// This follows DRY principle - single source of truth for filter options
+
+// Impact presets matching Case Analysis
+const impactPresets = [
+  { label: 'HIGH', value: 'HIGH', color: 'error' },
+  { label: 'MOD', value: 'MODERATE', color: 'warning' },
+  { label: 'LOW', value: 'LOW', color: 'info' }
+]
+
+// Cohort frequency presets
+const cohortFreqPresets = [
+  { label: '≥50%', value: 0.5 },
+  { label: '≥25%', value: 0.25 },
+  { label: '≥10%', value: 0.1 }
+]
+
+// gnomAD AF presets matching Case Analysis
+const afPresets = [
+  { label: '1%', value: 0.01 },
+  { label: '0.1%', value: 0.001 },
+  { label: '0.01%', value: 0.0001 }
+]
+
+// CADD presets matching Case Analysis
+const caddPresets = [
+  { label: '15', value: 15 },
+  { label: '20', value: 20 },
+  { label: '25', value: 25 }
+]
+
+// Selected presets for UI sync
+const selectedImpactPresets = ref<string[]>([])
+const selectedCohortFreqPreset = ref<number | null>(null)
+const selectedAfPreset = ref<number | null>(null)
+const selectedCaddPreset = ref<number | null>(null)
+
+// Custom numeric input state (in user-friendly units: percentages for freq/AF)
+const customCohortFreq = ref<number | null>(null) // Percentage (0-100)
+const customGnomadAf = ref<number | null>(null) // Percentage (0-100)
+const customCadd = ref<number | null>(null) // Raw CADD score
+
+// Cohort summary for total count display
+const cohortSummary = ref<{ total_cases: number; unique_variants: number } | null>(null)
+
+// Snackbar state for user feedback
+const snackbar = ref({ visible: false, message: '', color: 'success' })
+
+// Computed: has active filters (includes presets)
+const hasActiveFilters = computed(() => {
+  const afActive =
+    filters.value.maxGnomadAf !== null &&
+    Number.isNaN(filters.value.maxGnomadAf) === false &&
+    filters.value.maxGnomadAf > 0
+  const caddActive =
+    filters.value.minCadd !== null &&
+    Number.isNaN(filters.value.minCadd) === false &&
+    filters.value.minCadd >= 0
+  const cohortFreqActive =
+    filters.value.minCohortFrequency !== null &&
+    Number.isNaN(filters.value.minCohortFrequency) === false &&
+    filters.value.minCohortFrequency > 0
+
+  return (
+    searchTerm.value !== '' ||
+    filters.value.geneSymbol !== '' ||
+    filters.value.consequences.length > 0 ||
+    filters.value.funcs.length > 0 ||
+    filters.value.clinvars.length > 0 ||
+    afActive ||
+    caddActive ||
+    cohortFreqActive ||
+    (filters.value.minCarriers !== null && filters.value.minCarriers > 0) ||
+    // Preset selections
+    selectedImpactPresets.value.length > 0 ||
+    selectedCohortFreqPreset.value !== null ||
+    selectedAfPreset.value !== null ||
+    selectedCaddPreset.value !== null
+  )
+})
+
+// Active filters as chip data for summary bar (matching FilterToolbar)
+interface ActiveFilter {
+  id: string
+  label: string
+  value: string
+}
+
+const activeFiltersList = computed<ActiveFilter[]>(() => {
+  const list: ActiveFilter[] = []
+
+  if (searchTerm.value !== '') {
+    list.push({ id: 'search', label: 'Search', value: searchTerm.value })
+  }
+  if (filters.value.geneSymbol !== '') {
+    list.push({ id: 'gene', label: 'Gene', value: filters.value.geneSymbol })
+  }
+  if (selectedImpactPresets.value.length > 0) {
+    list.push({ id: 'impact', label: 'Impact', value: selectedImpactPresets.value.join(', ') })
+  }
+  if (filters.value.funcs.length > 0) {
+    list.push({ id: 'funcs', label: 'Function', value: `${filters.value.funcs.length} selected` })
+  }
+  if (filters.value.clinvars.length > 0) {
+    list.push({
+      id: 'clinvars',
+      label: 'ClinVar',
+      value: `${filters.value.clinvars.length} selected`
+    })
+  }
+  if (
+    selectedAfPreset.value !== null ||
+    (filters.value.maxGnomadAf !== null && filters.value.maxGnomadAf > 0)
+  ) {
+    const pct = ((filters.value.maxGnomadAf ?? 0) * 100).toFixed(2)
+    list.push({ id: 'frequency', label: 'AF ≤', value: `${pct}%` })
+  }
+  if (
+    selectedCaddPreset.value !== null ||
+    (filters.value.minCadd !== null && filters.value.minCadd >= 0)
+  ) {
+    list.push({ id: 'cadd', label: 'CADD ≥', value: String(filters.value.minCadd ?? 0) })
+  }
+  if (
+    selectedCohortFreqPreset.value !== null ||
+    (filters.value.minCohortFrequency !== null && filters.value.minCohortFrequency > 0)
+  ) {
+    const pct = ((filters.value.minCohortFrequency ?? 0) * 100).toFixed(1)
+    list.push({ id: 'cohortFreq', label: 'Cohort ≥', value: `${pct}%` })
+  }
+
+  return list
+})
+
+// Clear a specific filter by ID
+const clearFilter = (filterId: string): void => {
+  switch (filterId) {
+    case 'search':
+      searchTerm.value = ''
+      currentParams.value.search_term = undefined
+      break
+    case 'gene':
+      filters.value.geneSymbol = ''
+      break
+    case 'impact':
+      selectedImpactPresets.value = []
+      break
+    case 'funcs':
+      filters.value.funcs = []
+      break
+    case 'clinvars':
+      filters.value.clinvars = []
+      break
+    case 'frequency':
+      filters.value.maxGnomadAf = null
+      selectedAfPreset.value = null
+      break
+    case 'cadd':
+      filters.value.minCadd = null
+      selectedCaddPreset.value = null
+      break
+    case 'cohortFreq':
+      filters.value.minCohortFrequency = null
+      selectedCohortFreqPreset.value = null
+      break
+  }
+  void loadCohortVariants()
+}
+
+// Base headers definition - matching Case Analysis columns where applicable
 const baseHeaders = [
   { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' as const },
   { title: 'Chr', key: 'chr', sortable: true },
   { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
-  { title: 'Ref', key: 'ref', sortable: false, width: '100px' },
-  { title: 'Alt', key: 'alt', sortable: false, width: '100px' },
+  { title: 'Ref', key: 'ref', sortable: false, width: '80px' },
+  { title: 'Alt', key: 'alt', sortable: false, width: '80px' },
   { title: 'Gene', key: 'gene_symbol', sortable: true },
   { title: 'c.', key: 'cdna', sortable: false },
   { title: 'p.', key: 'aa_change', sortable: false },
+  { title: 'Impact', key: 'consequence', sortable: true },
+  { title: 'Func', key: 'func', sortable: true },
+  { title: 'ClinVar', key: 'clinvar', sortable: true },
+  { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' as const },
+  { title: 'CADD', key: 'cadd_phred', sortable: true, align: 'end' as const },
   { title: 'Carriers', key: 'carrier_count', sortable: true, align: 'end' as const },
-  { title: 'Frequency', key: 'cohort_frequency', sortable: true, align: 'end' as const },
+  { title: 'Cohort Freq', key: 'cohort_frequency', sortable: true, align: 'end' as const },
   { title: 'Het / Hom', key: 'het_count', sortable: true }
 ]
 
@@ -405,12 +944,6 @@ const visibleHeaders = computed(() => {
   return orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false)
 })
 
-// Clear search term and reset search
-const clearSearch = (): void => {
-  searchTerm.value = ''
-  handleSearchChange('')
-}
-
 // Handle search change with debounce
 const handleSearchChange = (value: string | null): void => {
   // Clear existing timeout
@@ -428,6 +961,24 @@ const handleSearchChange = (value: string | null): void => {
   }, 300)
 }
 
+// Load cohort summary for total count display
+const loadCohortSummary = async (): Promise<void> => {
+  // Guard for browser dev mode (no preload)
+  // eslint-disable-next-line no-undef
+  if (typeof window.api === 'undefined') {
+    return
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
+    const summary = await (window as any).api.cohort.getSummary()
+    cohortSummary.value = summary
+  } catch (error) {
+    // eslint-disable-next-line no-undef
+    console.error('Failed to load cohort summary:', error)
+  }
+}
+
 // Load cohort variants from backend
 const loadCohortVariants = async (): Promise<void> => {
   // Guard for browser dev mode (no preload)
@@ -441,7 +992,8 @@ const loadCohortVariants = async (): Promise<void> => {
   loading.value = true
   try {
     // Build a plain object with no undefined values (IPC structured clone rejects undefined)
-    const ipcParams: Record<string, string | number> = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ipcParams: Record<string, any> = {
       limit: currentParams.value.limit,
       offset: currentParams.value.offset,
       sort_order: currentParams.value.sort_order
@@ -452,8 +1004,38 @@ const loadCohortVariants = async (): Promise<void> => {
     if (currentParams.value.sort_by !== undefined) {
       ipcParams.sort_by = currentParams.value.sort_by
     }
+    // Filter parameters - spread arrays to convert Vue Proxy to plain arrays for IPC
+    if (currentParams.value.gene_symbol !== undefined) {
+      ipcParams.gene_symbol = currentParams.value.gene_symbol
+    }
+    if (
+      currentParams.value.consequences !== undefined &&
+      currentParams.value.consequences.length > 0
+    ) {
+      ipcParams.consequences = [...currentParams.value.consequences]
+    }
+    if (currentParams.value.funcs !== undefined && currentParams.value.funcs.length > 0) {
+      ipcParams.funcs = [...currentParams.value.funcs]
+    }
+    if (currentParams.value.clinvars !== undefined && currentParams.value.clinvars.length > 0) {
+      ipcParams.clinvars = [...currentParams.value.clinvars]
+    }
+    if (currentParams.value.gnomad_af_max !== undefined) {
+      ipcParams.gnomad_af_max = currentParams.value.gnomad_af_max
+    }
+    if (currentParams.value.cadd_min !== undefined) {
+      ipcParams.cadd_min = currentParams.value.cadd_min
+    }
+    if (currentParams.value.cohort_frequency_min !== undefined) {
+      ipcParams.cohort_frequency_min = currentParams.value.cohort_frequency_min
+    }
+    if (currentParams.value.carrier_count_min !== undefined) {
+      ipcParams.carrier_count_min = currentParams.value.carrier_count_min
+    }
+    // Deep clone to strip all Vue Proxy objects before IPC (structured clone requires plain objects)
+    const plainParams = globalThis.structuredClone(ipcParams)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
-    const result = await (window as any).api.cohort.getVariants(ipcParams)
+    const result = await (window as any).api.cohort.getVariants(plainParams)
     cohortVariants.value = result.data ?? []
     totalCount.value = result.total_count ?? 0
   } catch (error) {
@@ -465,6 +1047,209 @@ const loadCohortVariants = async (): Promise<void> => {
     loading.value = false
   }
 }
+
+// Apply filters with debounce
+const applyFilters = (): void => {
+  // Sync filter state to currentParams
+  currentParams.value.gene_symbol =
+    filters.value.geneSymbol !== '' ? filters.value.geneSymbol : undefined
+  currentParams.value.consequences =
+    selectedImpactPresets.value.length > 0 ? selectedImpactPresets.value : undefined
+  currentParams.value.funcs = filters.value.funcs.length > 0 ? filters.value.funcs : undefined
+  currentParams.value.clinvars =
+    filters.value.clinvars.length > 0 ? filters.value.clinvars : undefined
+  currentParams.value.gnomad_af_max =
+    filters.value.maxGnomadAf !== null && filters.value.maxGnomadAf > 0
+      ? filters.value.maxGnomadAf
+      : undefined
+  currentParams.value.cadd_min =
+    filters.value.minCadd !== null && filters.value.minCadd >= 0 ? filters.value.minCadd : undefined
+  currentParams.value.cohort_frequency_min =
+    filters.value.minCohortFrequency !== null && filters.value.minCohortFrequency > 0
+      ? filters.value.minCohortFrequency
+      : undefined
+  currentParams.value.carrier_count_min =
+    filters.value.minCarriers !== null && filters.value.minCarriers > 0
+      ? filters.value.minCarriers
+      : undefined
+  currentParams.value.offset = 0 // Reset pagination
+  void loadCohortVariants()
+}
+
+// Clear all filters
+const clearAllFilters = (): void => {
+  searchTerm.value = ''
+  filters.value.geneSymbol = ''
+  filters.value.consequences = []
+  filters.value.funcs = []
+  filters.value.clinvars = []
+  filters.value.maxGnomadAf = null
+  filters.value.minCadd = null
+  filters.value.minCohortFrequency = null
+  filters.value.minCarriers = null
+  selectedImpactPresets.value = []
+  selectedCohortFreqPreset.value = null
+  selectedAfPreset.value = null
+  selectedCaddPreset.value = null
+  currentParams.value.search_term = undefined
+  currentParams.value.gene_symbol = undefined
+  currentParams.value.consequences = undefined
+  currentParams.value.funcs = undefined
+  currentParams.value.clinvars = undefined
+  currentParams.value.gnomad_af_max = undefined
+  currentParams.value.cadd_min = undefined
+  currentParams.value.cohort_frequency_min = undefined
+  currentParams.value.carrier_count_min = undefined
+  currentParams.value.offset = 0
+  void loadCohortVariants()
+}
+
+// Export to Excel
+const exportToExcel = async (): Promise<void> => {
+  // Guard for browser dev mode (no preload)
+  // eslint-disable-next-line no-undef
+  if (typeof window.api === 'undefined') {
+    // eslint-disable-next-line no-undef
+    console.warn('window.api not available - running outside Electron')
+    return
+  }
+
+  exporting.value = true
+  try {
+    // Build export params with current filters
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const exportParams: Record<string, any> = {}
+
+    if (currentParams.value.search_term !== undefined) {
+      exportParams.search_term = currentParams.value.search_term
+    }
+    if (currentParams.value.gene_symbol !== undefined) {
+      exportParams.gene_symbol = currentParams.value.gene_symbol
+    }
+    if (currentParams.value.consequences !== undefined) {
+      exportParams.consequences = [...currentParams.value.consequences]
+    }
+    if (currentParams.value.funcs !== undefined) {
+      exportParams.funcs = [...currentParams.value.funcs]
+    }
+    if (currentParams.value.clinvars !== undefined) {
+      exportParams.clinvars = [...currentParams.value.clinvars]
+    }
+    if (currentParams.value.gnomad_af_max !== undefined) {
+      exportParams.gnomad_af_max = currentParams.value.gnomad_af_max
+    }
+    if (currentParams.value.cadd_min !== undefined) {
+      exportParams.cadd_min = currentParams.value.cadd_min
+    }
+    if (currentParams.value.cohort_frequency_min !== undefined) {
+      exportParams.cohort_frequency_min = currentParams.value.cohort_frequency_min
+    }
+    if (currentParams.value.carrier_count_min !== undefined) {
+      exportParams.carrier_count_min = currentParams.value.carrier_count_min
+    }
+
+    // Deep clone to strip all Vue Proxy objects before IPC
+    const plainExportParams = globalThis.structuredClone(exportParams)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
+    const result = await (window as any).api.export.cohort(plainExportParams)
+
+    if (result !== null && result !== undefined && 'code' in result) {
+      // Show error to user
+      snackbar.value = {
+        visible: true,
+        message: `Export failed: ${result.message ?? result.userMessage ?? 'Unknown error'}`,
+        color: 'error'
+      }
+    } else if (result !== null && result !== undefined && result.success === true) {
+      // Show success to user
+      snackbar.value = {
+        visible: true,
+        message: `Exported to ${result.filePath}`,
+        color: 'success'
+      }
+    }
+  } finally {
+    exporting.value = false
+  }
+}
+
+// Debounced filter application
+const { debouncedFn: debouncedApplyFilters } = useDebounce(applyFilters, 300)
+
+// Watch filter state and apply with debounce
+watch(filters, () => debouncedApplyFilters(), { deep: true })
+
+// Watch preset selections and sync with filter state
+watch(selectedImpactPresets, () => debouncedApplyFilters())
+watch(selectedCohortFreqPreset, (value) => {
+  filters.value.minCohortFrequency = value
+})
+watch(selectedAfPreset, (value) => {
+  filters.value.maxGnomadAf = value
+})
+watch(selectedCaddPreset, (value) => {
+  filters.value.minCadd = value
+  // Clear custom input when preset is selected
+  if (value !== null) {
+    customCadd.value = null
+  }
+})
+
+// Custom input handlers - convert from user-friendly units to filter values
+// Note: v-text-field emits string values even with v-model.number
+const handleCustomCohortFreqChange = (value: string | number | null): void => {
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  if (numValue !== null && !Number.isNaN(numValue) && numValue > 0) {
+    // Convert percentage (0-100) to decimal (0-1)
+    filters.value.minCohortFrequency = numValue / 100
+    selectedCohortFreqPreset.value = null // Clear preset when custom is used
+  } else {
+    // If cleared or invalid, only clear the filter if no preset is active
+    if (selectedCohortFreqPreset.value === null) {
+      filters.value.minCohortFrequency = null
+    }
+  }
+}
+
+const handleCustomGnomadAfChange = (value: string | number | null): void => {
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  if (numValue !== null && !Number.isNaN(numValue) && numValue > 0) {
+    // Convert percentage (0-100) to decimal (0-1)
+    filters.value.maxGnomadAf = numValue / 100
+    selectedAfPreset.value = null // Clear preset when custom is used
+  } else {
+    // If cleared or invalid, only clear the filter if no preset is active
+    if (selectedAfPreset.value === null) {
+      filters.value.maxGnomadAf = null
+    }
+  }
+}
+
+const handleCustomCaddChange = (value: string | number | null): void => {
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  if (numValue !== null && !Number.isNaN(numValue) && numValue >= 0) {
+    filters.value.minCadd = numValue
+    selectedCaddPreset.value = null // Clear preset when custom is used
+  } else {
+    // If cleared or invalid, only clear the filter if no preset is active
+    if (selectedCaddPreset.value === null) {
+      filters.value.minCadd = null
+    }
+  }
+}
+
+// Also clear custom inputs when presets are selected (bidirectional sync)
+watch(selectedCohortFreqPreset, (value) => {
+  if (value !== null) {
+    customCohortFreq.value = null
+  }
+})
+
+watch(selectedAfPreset, (value) => {
+  if (value !== null) {
+    customGnomadAf.value = null
+  }
+})
 
 // Handle table options update (pagination, sorting)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -534,6 +1319,29 @@ const loadCarriers = async (variant: CohortVariant): Promise<void> => {
   }
 }
 
+// Row click handler - track selection and emit event
+const handleRowClick = (_event: unknown, { item }: { item: CohortVariant }): void => {
+  selectedVariantKey.value = item.variant_key
+  emit('row-click', item)
+}
+
+// Row props for zebra striping and selection highlighting
+const getRowProps = ({ item, index }: { item: CohortVariant; index: number }) => {
+  const classes: string[] = []
+
+  // Zebra striping
+  if (index % 2 === 1) {
+    classes.push('variant-row--striped')
+  }
+
+  // Selection highlight
+  if (item.variant_key === selectedVariantKey.value) {
+    classes.push('variant-row--selected')
+  }
+
+  return { class: classes.join(' ') }
+}
+
 // Zygosity helper functions
 const isHomozygous = (gt: string): boolean => {
   return gt.includes('1/1') || gt.includes('1|1')
@@ -563,6 +1371,46 @@ const formatPosition = (pos: number): string => {
 
 const formatPercentage = (value: number): string => {
   return `${(value * 100).toFixed(1)}%`
+}
+
+const formatScientific = (value: number): string => {
+  if (value === 0) return '0'
+  if (value >= 0.01) return value.toFixed(4)
+  return value.toExponential(1)
+}
+
+// Color helper functions matching Case Analysis
+const getImpactColor = (impact: string): string => {
+  switch (impact) {
+    case 'HIGH':
+      return 'error'
+    case 'MODERATE':
+      return 'warning'
+    case 'LOW':
+      return 'info'
+    case 'MODIFIER':
+      return 'grey'
+    default:
+      return 'grey'
+  }
+}
+
+const getClinvarColor = (clinvar: string): string => {
+  const lower = clinvar.toLowerCase()
+  if (lower.includes('pathogenic') && !lower.includes('benign')) return 'error'
+  if (lower.includes('likely pathogenic')) return 'orange'
+  if (lower.includes('uncertain') || lower.includes('vus')) return 'warning'
+  if (lower.includes('likely benign')) return 'light-green'
+  if (lower.includes('benign')) return 'success'
+  return 'grey'
+}
+
+const getCaddColor = (cadd: number): string => {
+  if (cadd >= 25) return 'error'
+  if (cadd >= 20) return 'orange'
+  if (cadd >= 15) return 'warning'
+  if (cadd >= 10) return 'info'
+  return 'grey'
 }
 
 // Global annotation handlers
@@ -612,6 +1460,8 @@ const handleCommentSave = async (data: {
 
 // Refresh function (called by parent when switching tabs or after imports)
 const refresh = async (): Promise<void> => {
+  // Reload summary in parallel with variants
+  void loadCohortSummary()
   await loadCohortVariants()
 }
 
@@ -673,6 +1523,8 @@ const handleAuxClick = (e: MouseEvent) => {
 
 // Load data on mount and setup scroll handling
 onMounted(async () => {
+  // Load cohort summary for total count display (parallel with variants)
+  void loadCohortSummary()
   await loadCohortVariants()
 
   await nextTick()
@@ -719,6 +1571,9 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
+/* Import shared filter styles for DRY principle */
+@import '../styles/_filter-common.scss';
+
 /* Top scrollbar (synced with table) */
 .top-scrollbar-container {
   overflow-x: auto;
@@ -773,9 +1628,35 @@ defineExpose({ refresh })
   font-size: 0.85em;
 }
 
-/* Clickable table rows */
+/* Clickable table rows with improved hover */
 :deep(.v-data-table tbody tr) {
   cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+/* Zebra striping for better scanability */
+:deep(.v-data-table tbody tr.variant-row--striped) {
+  background-color: rgba(var(--v-theme-on-surface), 0.035);
+}
+
+/* Selected row highlighting - prominent with left accent border */
+:deep(.v-data-table tbody tr.variant-row--selected) {
+  background-color: rgba(var(--v-theme-primary), 0.12) !important;
+  border-left: 4px solid rgb(var(--v-theme-primary)) !important;
+}
+
+:deep(.v-data-table tbody tr.variant-row--selected td:first-child) {
+  padding-left: calc(16px - 4px);
+}
+
+/* Hover state - visible but subtle */
+:deep(.v-data-table tbody tr:hover) {
+  background-color: rgba(var(--v-theme-primary), 0.08) !important;
+}
+
+/* Selected + hover - slightly darker */
+:deep(.v-data-table tbody tr.variant-row--selected:hover) {
+  background-color: rgba(var(--v-theme-primary), 0.18) !important;
 }
 
 /* Column max-width with ellipsis and horizontal scroll */
@@ -826,18 +1707,73 @@ defineExpose({ refresh })
   padding-bottom: 16px !important;
 }
 
+/* Filter groups container - horizontal scrollable */
+.filter-groups-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: clip;
+  min-width: 0;
+  scrollbar-width: thin;
+  padding-top: 4px;
+}
+
+.filter-groups-container {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 4px 2px;
+  width: max-content;
+}
+
 .filter-section {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   border-radius: 8px;
   background: rgba(var(--v-theme-on-surface), 0.03);
   min-width: fit-content;
 }
 
 .search-section {
-  min-width: 280px;
+  min-width: 180px;
+}
+
+.search-section .filter-input {
+  width: 100%;
+}
+
+.gene-section {
+  min-width: 140px;
+}
+
+.gene-section .filter-input {
+  width: 100%;
+}
+
+.impact-section,
+.cohort-freq-section,
+.frequency-section,
+.cadd-section {
+  min-width: fit-content;
+}
+
+.func-section {
+  min-width: 140px;
+}
+
+.func-section .func-select {
+  min-width: 120px;
+  max-width: 160px;
+}
+
+.clinvar-section {
+  min-width: 140px;
+}
+
+.clinvar-section .clinvar-select {
+  min-width: 120px;
+  max-width: 160px;
 }
 
 .section-label {
@@ -849,15 +1785,25 @@ defineExpose({ refresh })
   letter-spacing: 0.5px;
   color: rgba(var(--v-theme-on-surface), 0.6);
   white-space: nowrap;
+  margin-bottom: 2px;
+}
+
+.section-label .v-icon {
+  opacity: 0.7;
 }
 
 .filter-input.filter-active :deep(.v-field) {
   border-color: rgb(var(--v-theme-primary));
   border-width: 2px;
+  background: rgba(var(--v-theme-primary), 0.04);
 }
 
 .filter-input :deep(.v-field) {
   border-radius: 6px;
+}
+
+.filter-input :deep(.v-field__input) {
+  font-size: 0.85rem;
 }
 
 .results-section {
@@ -877,5 +1823,35 @@ defineExpose({ refresh })
 
 .placeholder-cell {
   /* Empty cell placeholder for grid alignment */
+}
+
+/* Chip group styling in filter sections */
+.filter-section :deep(.v-chip-group) {
+  flex-wrap: nowrap;
+}
+
+.filter-section :deep(.v-chip) {
+  margin: 2px;
+}
+
+/* Applied filters summary bar (matching FilterToolbar) */
+.applied-filters-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 16px;
+  background: rgba(var(--v-theme-primary), 0.04);
+  border-top: 1px solid rgba(var(--v-border-color), 0.08);
+}
+
+.applied-filters-bar .v-chip {
+  max-width: 200px;
+}
+
+.applied-filters-bar .v-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

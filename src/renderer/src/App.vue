@@ -1,8 +1,13 @@
 <template>
   <v-app>
     <v-app-bar color="primary" density="compact" flat>
-      <v-app-bar-nav-icon
-        aria-label="Toggle navigation sidebar"
+      <v-btn
+        :icon="sidebarOpen ? 'mdi-chevron-double-left' : 'mdi-chevron-double-right'"
+        variant="text"
+        size="small"
+        :aria-label="sidebarOpen ? 'Close sidebar' : 'Open sidebar'"
+        :aria-expanded="sidebarOpen"
+        class="sidebar-toggle-btn"
         @click="sidebarOpen = !sidebarOpen"
       />
       <v-icon icon="custom:varlens-dna" class="ml-2" size="small" />
@@ -53,7 +58,7 @@
       </v-menu>
     </v-app-bar>
 
-    <v-navigation-drawer v-model="sidebarOpen" :width="280">
+    <v-navigation-drawer v-model="sidebarOpen" :width="280" :scrim="false">
       <AppSidebar
         @import-click="handleImportClick"
         @batch-import-files="handleBatchImportFiles"
@@ -328,6 +333,8 @@ const handleBatchImportComplete = async (result: { totalImported: number }): Pro
 const handleCaseSelected = (caseId: number, caseName: string): void => {
   selectedCaseId.value = caseId
   selectedCaseName.value = caseName
+  // Auto-close sidebar on case selection (Material Design pattern)
+  sidebarOpen.value = false
 }
 
 const handleCasesLoaded = (count: number): void => {
@@ -524,5 +531,10 @@ onMounted(async () => {
 :deep(.v-main) {
   --v-layout-top: 0px !important;
   padding-top: 48px !important; /* Only app-bar height */
+}
+
+/* Sidebar toggle button animation */
+.sidebar-toggle-btn :deep(.v-icon) {
+  transition: transform 0.2s ease-in-out;
 }
 </style>

@@ -1,342 +1,369 @@
 <template>
   <div class="table-container">
-    <!-- Top scrollbar (synced with table) -->
-    <div ref="topScrollbarRef" class="top-scrollbar-container" @scroll="handleTopScroll">
-      <div ref="topScrollbarInnerRef" class="top-scrollbar-inner"></div>
-    </div>
+    <!-- Loading skeleton for initial load -->
+    <v-skeleton-loader
+      v-if="loading && variants.length === 0"
+      type="table-heading, table-row@10"
+      class="variant-table-skeleton"
+    />
 
-    <v-data-table-server
-      ref="dataTableRef"
-      v-model:page="page"
-      v-model:items-per-page="itemsPerPage"
-      v-model:sort-by="sortBy"
-      :headers="visibleHeaders"
-      :items="variants"
-      :items-length="totalCount"
-      :loading="loading"
-      :items-per-page-options="[25, 50, 100]"
-      density="compact"
-      multi-sort
-      class="elevation-1"
-      @update:options="loadVariants"
-      @click:row="(_event: unknown, { item }: { item: Variant }) => emit('row-click', item)"
-    >
-      <!-- Annotations column (star, ACMG, comment) -->
-      <template #[`item.annotations`]="{ item }">
-        <div class="d-flex align-center ga-1">
-          <!-- Star toggle (per-case, with global indicator ring) -->
-          <v-tooltip location="top">
-            <template #activator="{ props: tooltipProps }">
+    <template v-else>
+      <!-- Top scrollbar (synced with table) -->
+      <div ref="topScrollbarRef" class="top-scrollbar-container" @scroll="handleTopScroll">
+        <div ref="topScrollbarInnerRef" class="top-scrollbar-inner"></div>
+      </div>
+
+      <v-data-table-server
+        ref="dataTableRef"
+        v-model:page="page"
+        v-model:items-per-page="itemsPerPage"
+        v-model:sort-by="sortBy"
+        :headers="visibleHeaders"
+        :items="variants"
+        :items-length="totalCount"
+        :loading="loading"
+        :items-per-page-options="[25, 50, 100]"
+        density="compact"
+        multi-sort
+        class="elevation-1"
+        :row-props="getRowProps"
+        @update:options="loadVariants"
+        @click:row="handleRowClick"
+      >
+        <!-- Annotations column (star, ACMG, comment) -->
+        <template #[`item.annotations`]="{ item }">
+          <div class="d-flex align-center ga-1">
+            <!-- Star toggle (per-case, with global indicator ring) -->
+            <v-tooltip location="top">
+              <template #activator="{ props: tooltipProps }">
+                <span
+                  v-bind="tooltipProps"
+                  class="annotation-icon-wrapper"
+                  :class="{ 'has-global': isGlobalStarred(item.chr, item.pos, item.ref, item.alt) }"
+                >
+                  <v-icon
+                    :icon="
+                      isStarred(item.chr, item.pos, item.ref, item.alt)
+                        ? 'mdi-star'
+                        : 'mdi-star-outline'
+                    "
+                    :color="
+                      isStarred(item.chr, item.pos, item.ref, item.alt) ? 'amber' : 'grey-lighten-1'
+                    "
+                    size="small"
+                    class="cursor-pointer"
+                    @click.stop="handleStarToggle(item)"
+                  />
+                </span>
+              </template>
               <span
-                v-bind="tooltipProps"
-                class="annotation-icon-wrapper"
-                :class="{ 'has-global': isGlobalStarred(item.chr, item.pos, item.ref, item.alt) }"
+                v-if="
+                  isGlobalStarred(item.chr, item.pos, item.ref, item.alt) &&
+                  isStarred(item.chr, item.pos, item.ref, item.alt)
+                "
               >
-                <v-icon
-                  :icon="
-                    isStarred(item.chr, item.pos, item.ref, item.alt)
-                      ? 'mdi-star'
-                      : 'mdi-star-outline'
-                  "
-                  :color="
-                    isStarred(item.chr, item.pos, item.ref, item.alt) ? 'amber' : 'grey-lighten-1'
-                  "
-                  size="small"
-                  class="cursor-pointer"
-                  @click.stop="handleStarToggle(item)"
-                />
+                Starred (case + global)
               </span>
-            </template>
-            <span
-              v-if="
-                isGlobalStarred(item.chr, item.pos, item.ref, item.alt) &&
-                isStarred(item.chr, item.pos, item.ref, item.alt)
-              "
-            >
-              Starred (case + global)
-            </span>
-            <span v-else-if="isGlobalStarred(item.chr, item.pos, item.ref, item.alt)">
-              Global star (click to add case star)
-            </span>
-            <span v-else-if="isStarred(item.chr, item.pos, item.ref, item.alt)">
-              Starred for this case
-            </span>
-            <span v-else>Click to star</span>
-          </v-tooltip>
-          <!-- ACMG classification (per-case, with global indicator border) -->
-          <AcmgMenu @select="(c) => handleAcmgSelect(item, c)">
-            <template #activator="{ props: menuProps }">
-              <v-tooltip location="top">
-                <template #activator="{ props: tooltipPropsAcmg }">
-                  <span
-                    v-bind="{ ...menuProps, ...tooltipPropsAcmg }"
-                    class="annotation-icon-wrapper"
-                    :class="{
-                      'has-global': getGlobalAcmgClassification(
-                        item.chr,
-                        item.pos,
-                        item.ref,
-                        item.alt
-                      )
-                    }"
-                  >
-                    <v-chip
-                      v-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
-                      :color="
-                        ACMG_COLORS[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]
-                      "
-                      size="x-small"
-                      label
-                      class="cursor-pointer"
+              <span v-else-if="isGlobalStarred(item.chr, item.pos, item.ref, item.alt)">
+                Global star (click to add case star)
+              </span>
+              <span v-else-if="isStarred(item.chr, item.pos, item.ref, item.alt)">
+                Starred for this case
+              </span>
+              <span v-else>Click to star</span>
+            </v-tooltip>
+            <!-- ACMG classification (per-case, with global indicator border) -->
+            <AcmgMenu @select="(c) => handleAcmgSelect(item, c)">
+              <template #activator="{ props: menuProps }">
+                <v-tooltip location="top">
+                  <template #activator="{ props: tooltipPropsAcmg }">
+                    <span
+                      v-bind="{ ...menuProps, ...tooltipPropsAcmg }"
+                      class="annotation-icon-wrapper"
+                      :class="{
+                        'has-global': getGlobalAcmgClassification(
+                          item.chr,
+                          item.pos,
+                          item.ref,
+                          item.alt
+                        )
+                      }"
                     >
-                      {{
-                        ACMG_ABBREV[getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!]
-                      }}
-                    </v-chip>
-                    <v-icon
-                      v-else
-                      icon="mdi-tag-plus-outline"
-                      size="small"
-                      color="grey-lighten-1"
-                      class="cursor-pointer"
-                    />
+                      <v-chip
+                        v-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
+                        :color="
+                          ACMG_COLORS[
+                            getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!
+                          ]
+                        "
+                        size="x-small"
+                        label
+                        class="cursor-pointer"
+                      >
+                        {{
+                          ACMG_ABBREV[
+                            getAcmgClassification(item.chr, item.pos, item.ref, item.alt)!
+                          ]
+                        }}
+                      </v-chip>
+                      <v-icon
+                        v-else
+                        icon="mdi-tag-plus-outline"
+                        size="small"
+                        color="grey-lighten-1"
+                        class="cursor-pointer"
+                      />
+                    </span>
+                  </template>
+                  <span
+                    v-if="
+                      getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt) &&
+                      getAcmgClassification(item.chr, item.pos, item.ref, item.alt)
+                    "
+                  >
+                    Case: {{ getAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}<br />
+                    Global:
+                    {{ getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}
                   </span>
-                </template>
+                  <span
+                    v-else-if="getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
+                  >
+                    Global: {{ getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)
+                    }}<br />
+                    (click to set case classification)
+                  </span>
+                  <span v-else-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)">
+                    {{ getAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}
+                  </span>
+                  <span v-else>Set ACMG classification</span>
+                </v-tooltip>
+              </template>
+            </AcmgMenu>
+            <!-- Comment (with global indicator) -->
+            <v-tooltip location="top">
+              <template #activator="{ props: tooltipProps }">
                 <span
-                  v-if="
-                    getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt) &&
-                    getAcmgClassification(item.chr, item.pos, item.ref, item.alt)
-                  "
+                  v-bind="tooltipProps"
+                  class="annotation-icon-wrapper"
+                  :class="{
+                    'has-global': getGlobalComment(item.chr, item.pos, item.ref, item.alt)
+                  }"
                 >
-                  Case: {{ getAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}<br />
-                  Global: {{ getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}
+                  <v-icon
+                    :icon="hasAnyComment(item) ? 'mdi-comment-text' : 'mdi-comment-text-outline'"
+                    :color="hasAnyComment(item) ? 'primary' : 'grey-lighten-1'"
+                    size="small"
+                    class="cursor-pointer"
+                    @click.stop="openCommentDialog(item)"
+                  />
                 </span>
-                <span
-                  v-else-if="getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
-                >
-                  Global: {{ getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)
-                  }}<br />
-                  (click to set case classification)
-                </span>
-                <span v-else-if="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)">
-                  {{ getAcmgClassification(item.chr, item.pos, item.ref, item.alt) }}
-                </span>
-                <span v-else>Set ACMG classification</span>
-              </v-tooltip>
-            </template>
-          </AcmgMenu>
-          <!-- Comment (with global indicator) -->
-          <v-tooltip location="top">
-            <template #activator="{ props: tooltipProps }">
+              </template>
               <span
-                v-bind="tooltipProps"
-                class="annotation-icon-wrapper"
-                :class="{ 'has-global': getGlobalComment(item.chr, item.pos, item.ref, item.alt) }"
+                v-if="
+                  getGlobalComment(item.chr, item.pos, item.ref, item.alt) &&
+                  getPerCaseComment(item.chr, item.pos, item.ref, item.alt)
+                "
               >
-                <v-icon
-                  :icon="hasAnyComment(item) ? 'mdi-comment-text' : 'mdi-comment-text-outline'"
-                  :color="hasAnyComment(item) ? 'primary' : 'grey-lighten-1'"
-                  size="small"
-                  class="cursor-pointer"
-                  @click.stop="openCommentDialog(item)"
-                />
+                Has global + case comments
               </span>
-            </template>
-            <span
-              v-if="
-                getGlobalComment(item.chr, item.pos, item.ref, item.alt) &&
-                getPerCaseComment(item.chr, item.pos, item.ref, item.alt)
-              "
-            >
-              Has global + case comments
-            </span>
-            <span v-else-if="getGlobalComment(item.chr, item.pos, item.ref, item.alt)">
-              Has global comment
-            </span>
-            <span v-else-if="getPerCaseComment(item.chr, item.pos, item.ref, item.alt)">
-              Has case comment
-            </span>
-            <span v-else>Add comment</span>
-          </v-tooltip>
-        </div>
-      </template>
+              <span v-else-if="getGlobalComment(item.chr, item.pos, item.ref, item.alt)">
+                Has global comment
+              </span>
+              <span v-else-if="getPerCaseComment(item.chr, item.pos, item.ref, item.alt)">
+                Has case comment
+              </span>
+              <span v-else>Add comment</span>
+            </v-tooltip>
+          </div>
+        </template>
 
-      <!-- Chromosome with dynamic link from store -->
-      <template #[`item.chr`]="{ item, value }">
-        <span
-          v-if="getLinkForColumn('chr') && resolveLink(getLinkForColumn('chr')!.id, item)"
-          class="external-link"
-          @click="openExternalLink(resolveLink(getLinkForColumn('chr')!.id, item)!, $event)"
-        >
-          {{ value }}
-          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
-        </span>
-        <span v-else>{{ value }}</span>
-      </template>
+        <!-- Chromosome with dynamic link from store -->
+        <template #[`item.chr`]="{ item, value }">
+          <span
+            v-if="getLinkForColumn('chr') && resolveLink(getLinkForColumn('chr')!.id, item)"
+            class="external-link"
+            @click="openExternalLink(resolveLink(getLinkForColumn('chr')!.id, item)!, $event)"
+          >
+            {{ value }}
+            <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+          </span>
+          <span v-else>{{ value }}</span>
+        </template>
 
-      <!-- Position with thousand separators and dynamic link from store -->
-      <template #[`item.pos`]="{ item, value }">
-        <span
-          v-if="getLinkForColumn('pos') && resolveLink(getLinkForColumn('pos')!.id, item)"
-          class="external-link genomic-coordinate"
-          @click="openExternalLink(resolveLink(getLinkForColumn('pos')!.id, item)!, $event)"
-        >
-          {{ formatPosition(value) }}
-          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
-        </span>
-        <span v-else class="genomic-coordinate">{{ formatPosition(value) }}</span>
-      </template>
+        <!-- Position with thousand separators and dynamic link from store -->
+        <template #[`item.pos`]="{ item, value }">
+          <span
+            v-if="getLinkForColumn('pos') && resolveLink(getLinkForColumn('pos')!.id, item)"
+            class="external-link genomic-coordinate"
+            @click="openExternalLink(resolveLink(getLinkForColumn('pos')!.id, item)!, $event)"
+          >
+            {{ formatPosition(value) }}
+            <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+          </span>
+          <span v-else class="genomic-coordinate">{{ formatPosition(value) }}</span>
+        </template>
 
-      <!-- gnomAD AF in scientific notation -->
-      <template #[`item.gnomad_af`]="{ value }">
-        {{ formatScientific(value) }}
-      </template>
+        <!-- gnomAD AF in scientific notation -->
+        <template #[`item.gnomad_af`]="{ value }">
+          {{ formatScientific(value) }}
+        </template>
 
-      <!-- ClinVar colored chips with dynamic link from store -->
-      <template #[`item.clinvar`]="{ item, value }">
-        <span
-          v-if="
-            value &&
-            getLinkForColumn('clinvar') &&
-            resolveLink(getLinkForColumn('clinvar')!.id, item)
-          "
-          class="external-link"
-          @click="openExternalLink(resolveLink(getLinkForColumn('clinvar')!.id, item)!, $event)"
-        >
-          <v-chip :color="getClinVarColor(value)" size="small" label>
+        <!-- ClinVar colored chips with dynamic link from store -->
+        <template #[`item.clinvar`]="{ item, value }">
+          <span
+            v-if="
+              value &&
+              getLinkForColumn('clinvar') &&
+              resolveLink(getLinkForColumn('clinvar')!.id, item)
+            "
+            class="external-link"
+            @click="openExternalLink(resolveLink(getLinkForColumn('clinvar')!.id, item)!, $event)"
+          >
+            <v-chip :color="getClinVarColor(value)" size="small" label>
+              {{ value.replace(/_/g, ' ') }}
+            </v-chip>
+            <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+          </span>
+          <v-chip v-else-if="value" :color="getClinVarColor(value)" size="small" label>
             {{ value.replace(/_/g, ' ') }}
           </v-chip>
-          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
-        </span>
-        <v-chip v-else-if="value" :color="getClinVarColor(value)" size="small" label>
-          {{ value.replace(/_/g, ' ') }}
-        </v-chip>
-        <span v-else class="text-grey">--</span>
-      </template>
+          <span v-else class="text-grey">--</span>
+        </template>
 
-      <!-- Ref allele with truncation and tooltip -->
-      <template #[`item.ref`]="{ value }">
-        <v-tooltip v-if="value.length > 20" location="top">
-          <template #activator="{ props: tooltipProps }">
-            <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
-              {{ value.substring(0, 20) }}...
-            </span>
-          </template>
-          <span class="variant-data-mono">{{ value }}</span>
-        </v-tooltip>
-        <span v-else class="variant-data-mono">{{ value }}</span>
-      </template>
+        <!-- Ref allele with truncation and tooltip -->
+        <template #[`item.ref`]="{ value }">
+          <v-tooltip v-if="value.length > 20" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
+                {{ value.substring(0, 20) }}...
+              </span>
+            </template>
+            <span class="variant-data-mono">{{ value }}</span>
+          </v-tooltip>
+          <span v-else class="variant-data-mono">{{ value }}</span>
+        </template>
 
-      <!-- Alt allele with truncation and tooltip -->
-      <template #[`item.alt`]="{ value }">
-        <v-tooltip v-if="value.length > 20" location="top">
-          <template #activator="{ props: tooltipProps }">
-            <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
-              {{ value.substring(0, 20) }}...
-            </span>
-          </template>
-          <span class="variant-data-mono">{{ value }}</span>
-        </v-tooltip>
-        <span v-else class="variant-data-mono">{{ value }}</span>
-      </template>
+        <!-- Alt allele with truncation and tooltip -->
+        <template #[`item.alt`]="{ value }">
+          <v-tooltip v-if="value.length > 20" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
+                {{ value.substring(0, 20) }}...
+              </span>
+            </template>
+            <span class="variant-data-mono">{{ value }}</span>
+          </v-tooltip>
+          <span v-else class="variant-data-mono">{{ value }}</span>
+        </template>
 
-      <!-- CADD score (handle null) -->
-      <template #[`item.cadd`]="{ value }">
-        {{ value !== null ? value.toFixed(1) : '-' }}
-      </template>
+        <!-- CADD score (handle null) -->
+        <template #[`item.cadd`]="{ value }">
+          {{ value !== null ? value.toFixed(1) : '-' }}
+        </template>
 
-      <!-- Gene symbol with dynamic link from store -->
-      <template #[`item.gene_symbol`]="{ item, value }">
-        <span
-          v-if="
-            value &&
-            getLinkForColumn('gene_symbol') &&
-            resolveLink(getLinkForColumn('gene_symbol')!.id, item)
-          "
-          class="external-link gene-symbol"
-          @click="openExternalLink(resolveLink(getLinkForColumn('gene_symbol')!.id, item)!, $event)"
+        <!-- Gene symbol with dynamic link from store -->
+        <template #[`item.gene_symbol`]="{ item, value }">
+          <span
+            v-if="
+              value &&
+              getLinkForColumn('gene_symbol') &&
+              resolveLink(getLinkForColumn('gene_symbol')!.id, item)
+            "
+            class="external-link gene-symbol"
+            @click="
+              openExternalLink(resolveLink(getLinkForColumn('gene_symbol')!.id, item)!, $event)
+            "
+          >
+            {{ value }}
+            <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+          </span>
+          <span v-else class="gene-symbol">{{ value ?? '--' }}</span>
+        </template>
+
+        <!-- OMIM MIM number with clickable link to OMIM entry -->
+        <template #[`item.omim_mim_number`]="{ value }">
+          <span
+            v-if="value && buildOmimEntryUrl(value)"
+            class="external-link"
+            @click="openExternalLink(buildOmimEntryUrl(value)!, $event)"
+          >
+            {{ value }}
+            <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+          </span>
+          <span v-else class="text-grey">&mdash;</span>
+        </template>
+
+        <!-- Consequence (handle null) -->
+        <template #[`item.consequence`]="{ value }">
+          {{ (value ?? null) !== null ? value.replace(/_/g, ' ') : '-' }}
+        </template>
+
+        <!-- GT (handle null) -->
+        <template #[`item.gt_num`]="{ value }">
+          {{ value ?? '-' }}
+        </template>
+
+        <!-- Func (handle null) with human-readable formatting -->
+        <template #[`item.func`]="{ value }">
+          <v-tooltip v-if="value" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <span v-bind="tooltipProps" class="consequence-cell">
+                {{ formatConsequence(value) }}
+              </span>
+            </template>
+            <span class="text-caption">{{ value }}</span>
+          </v-tooltip>
+          <span v-else>-</span>
+        </template>
+
+        <!-- Qual score (handle null) -->
+        <template #[`item.qual`]="{ value }">
+          {{ value !== null ? value.toFixed(1) : '-' }}
+        </template>
+
+        <!-- Transcript (handle null) -->
+        <template #[`item.transcript`]="{ value }">
+          <span class="variant-data-mono">{{ value ?? '-' }}</span>
+        </template>
+
+        <!-- cDNA (handle null) -->
+        <template #[`item.cdna`]="{ value }">
+          <span class="hgvs-notation">{{ value ?? '-' }}</span>
+        </template>
+
+        <!-- AA Change (handle null) -->
+        <template #[`item.aa_change`]="{ value }">
+          <span class="hgvs-notation">{{ value ?? '-' }}</span>
+        </template>
+
+        <!-- HPO Sim Score (handle null) -->
+        <template #[`item.hpo_sim_score`]="{ value }">
+          {{ value !== null ? value.toFixed(2) : '-' }}
+        </template>
+
+        <!-- MoI (handle null) -->
+        <template #[`item.moi`]="{ value }">
+          {{ value ?? '-' }}
+        </template>
+
+        <!-- Dynamic virtual link columns from store -->
+        <template
+          v-for="link in linksStore.virtualLinks"
+          :key="link.id"
+          #[`item._link_${link.id}`]="{ item }"
         >
-          {{ value }}
-          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
-        </span>
-        <span v-else class="gene-symbol">{{ value ?? '--' }}</span>
-      </template>
-
-      <!-- OMIM MIM number with clickable link to OMIM entry -->
-      <template #[`item.omim_mim_number`]="{ value }">
-        <span
-          v-if="value && buildOmimEntryUrl(value)"
-          class="external-link"
-          @click="openExternalLink(buildOmimEntryUrl(value)!, $event)"
-        >
-          {{ value }}
-          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
-        </span>
-        <span v-else class="text-grey">&mdash;</span>
-      </template>
-
-      <!-- Consequence (handle null) -->
-      <template #[`item.consequence`]="{ value }">
-        {{ (value ?? null) !== null ? value.replace(/_/g, ' ') : '-' }}
-      </template>
-
-      <!-- GT (handle null) -->
-      <template #[`item.gt_num`]="{ value }">
-        {{ value ?? '-' }}
-      </template>
-
-      <!-- Func (handle null) -->
-      <template #[`item.func`]="{ value }">
-        {{ value ?? '-' }}
-      </template>
-
-      <!-- Qual score (handle null) -->
-      <template #[`item.qual`]="{ value }">
-        {{ value !== null ? value.toFixed(1) : '-' }}
-      </template>
-
-      <!-- Transcript (handle null) -->
-      <template #[`item.transcript`]="{ value }">
-        <span class="variant-data-mono">{{ value ?? '-' }}</span>
-      </template>
-
-      <!-- cDNA (handle null) -->
-      <template #[`item.cdna`]="{ value }">
-        <span class="hgvs-notation">{{ value ?? '-' }}</span>
-      </template>
-
-      <!-- AA Change (handle null) -->
-      <template #[`item.aa_change`]="{ value }">
-        <span class="hgvs-notation">{{ value ?? '-' }}</span>
-      </template>
-
-      <!-- HPO Sim Score (handle null) -->
-      <template #[`item.hpo_sim_score`]="{ value }">
-        {{ value !== null ? value.toFixed(2) : '-' }}
-      </template>
-
-      <!-- MoI (handle null) -->
-      <template #[`item.moi`]="{ value }">
-        {{ value ?? '-' }}
-      </template>
-
-      <!-- Dynamic virtual link columns from store -->
-      <template
-        v-for="link in linksStore.virtualLinks"
-        :key="link.id"
-        #[`item._link_${link.id}`]="{ item }"
-      >
-        <span
-          v-if="resolveLink(link.id, item)"
-          class="external-link"
-          @click="openExternalLink(resolveLink(link.id, item)!, $event)"
-        >
-          View
-          <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
-        </span>
-        <span v-else class="text-grey">--</span>
-      </template>
-    </v-data-table-server>
+          <span
+            v-if="resolveLink(link.id, item)"
+            class="external-link"
+            @click="openExternalLink(resolveLink(link.id, item)!, $event)"
+          >
+            View
+            <v-icon size="x-small" class="external-link__icon">mdi-open-in-new</v-icon>
+          </span>
+          <span v-else class="text-grey">--</span>
+        </template>
+      </v-data-table-server>
+    </template>
 
     <v-snackbar
       v-model="snackbar.visible"
@@ -390,6 +417,7 @@ import { resolveUrlTemplate, buildOmimUrl, type VariantLinkData } from '../utils
 import { useAnnotations, ACMG_COLORS, ACMG_ABBREV } from '../composables/useAnnotations'
 import type { AcmgClassification } from '../../../main/database/types'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
+import { formatConsequence } from '../utils/formatters'
 import AcmgMenu from './AcmgMenu.vue'
 import CommentDialog from './CommentDialog.vue'
 
@@ -467,6 +495,9 @@ const snackbar = ref({
 // Comment dialog state
 const commentDialogOpen = ref(false)
 const selectedVariantForComment = ref<Variant | null>(null)
+
+// Selected row tracking for highlighting
+const selectedVariantId = ref<number | null>(null)
 
 // Base headers definition (without virtual links)
 const baseHeaders = [
@@ -580,6 +611,29 @@ const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> 
       snackbar.value = { visible: true, message: 'Could not open link', color: 'error' }
     }
   }
+}
+
+// Row click handler - track selection and emit event
+const handleRowClick = (_event: unknown, { item }: { item: Variant }): void => {
+  selectedVariantId.value = item.id
+  emit('row-click', item)
+}
+
+// Row props for zebra striping and selection highlighting
+const getRowProps = ({ item, index }: { item: Variant; index: number }) => {
+  const classes: string[] = []
+
+  // Zebra striping
+  if (index % 2 === 1) {
+    classes.push('variant-row--striped')
+  }
+
+  // Selection highlight
+  if (item.id === selectedVariantId.value) {
+    classes.push('variant-row--selected')
+  }
+
+  return { class: classes.join(' ') }
 }
 
 // Handle star toggle (per-case)
@@ -723,6 +777,9 @@ const loadVariants = async (_options?: any): Promise<void> => {
 watch(
   () => props.caseId,
   async (newCaseId) => {
+    // Clear selection on case change
+    selectedVariantId.value = null
+
     if (newCaseId !== undefined && newCaseId !== 0) {
       // Clear cache and reset pagination
       cursorCache.value.clear()
@@ -929,6 +986,15 @@ defineExpose({
   position: relative;
 }
 
+/* Loading skeleton */
+.variant-table-skeleton {
+  padding: 16px;
+}
+
+.variant-table-skeleton :deep(.v-skeleton-loader__bone) {
+  margin-bottom: 8px;
+}
+
 .top-scrollbar-container {
   overflow-x: auto;
   overflow-y: hidden;
@@ -1028,9 +1094,35 @@ defineExpose({
   box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.4);
 }
 
-/* Clickable table rows */
+/* Clickable table rows with improved hover */
 :deep(.v-data-table tbody tr) {
   cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+/* Zebra striping for better scanability */
+:deep(.v-data-table tbody tr.variant-row--striped) {
+  background-color: rgba(var(--v-theme-on-surface), 0.035);
+}
+
+/* Selected row highlighting - prominent with left accent border */
+:deep(.v-data-table tbody tr.variant-row--selected) {
+  background-color: rgba(var(--v-theme-primary), 0.12) !important;
+  border-left: 4px solid rgb(var(--v-theme-primary)) !important;
+}
+
+:deep(.v-data-table tbody tr.variant-row--selected td:first-child) {
+  padding-left: calc(16px - 4px);
+}
+
+/* Hover state - visible but subtle */
+:deep(.v-data-table tbody tr:hover) {
+  background-color: rgba(var(--v-theme-primary), 0.08) !important;
+}
+
+/* Selected + hover - slightly darker */
+:deep(.v-data-table tbody tr.variant-row--selected:hover) {
+  background-color: rgba(var(--v-theme-primary), 0.18) !important;
 }
 
 /* Column max-width with ellipsis and horizontal scroll */

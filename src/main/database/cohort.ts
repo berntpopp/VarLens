@@ -25,7 +25,12 @@ const SORTABLE_COLUMNS: Record<string, string> = {
   carrier_count: 'carrier_count',
   cohort_frequency: 'cohort_frequency',
   het_count: 'het_count',
-  hom_count: 'hom_count'
+  hom_count: 'hom_count',
+  consequence: 'consequence',
+  func: 'func',
+  clinvar: 'clinvar',
+  gnomad_af: 'gnomad_af',
+  cadd_phred: 'cadd_phred'
 }
 
 /**
@@ -80,10 +85,11 @@ export class CohortService {
       return { data: [], total_count: 0 }
     }
 
-    // Build WHERE clause for search with hybrid strategy
+    // Build WHERE clause for search and filters
     const whereConditions: string[] = []
     const params_array: (string | number)[] = []
 
+    // Search term handling with hybrid strategy
     if (params.search_term !== undefined && params.search_term !== '') {
       const term = params.search_term.trim()
       const hasBooleanOps = /\b(AND|OR|NOT)\b/.test(term)
@@ -100,7 +106,63 @@ export class CohortService {
       }
     }
 
+    // Gene symbol filter (exact match)
+    if (params.gene_symbol !== undefined && params.gene_symbol !== '') {
+      whereConditions.push('gene_symbol = ?')
+      params_array.push(params.gene_symbol)
+    }
+
+    // Consequence/Impact filter (IN clause)
+    if (params.consequences !== undefined && params.consequences.length > 0) {
+      const placeholders = params.consequences.map(() => '?').join(', ')
+      whereConditions.push(`consequence IN (${placeholders})`)
+      params_array.push(...params.consequences)
+    }
+
+    // Func filter (IN clause)
+    if (params.funcs !== undefined && params.funcs.length > 0) {
+      const placeholders = params.funcs.map(() => '?').join(', ')
+      whereConditions.push(`func IN (${placeholders})`)
+      params_array.push(...params.funcs)
+    }
+
+    // ClinVar filter (IN clause with LIKE for partial matches)
+    if (params.clinvars !== undefined && params.clinvars.length > 0) {
+      const clinvarConditions = params.clinvars.map(() => 'clinvar LIKE ?').join(' OR ')
+      whereConditions.push(`(${clinvarConditions})`)
+      params_array.push(...params.clinvars.map((c) => `%${c}%`))
+    }
+
+    // gnomAD AF max filter
+    if (params.gnomad_af_max !== undefined && params.gnomad_af_max > 0) {
+      whereConditions.push('(gnomad_af IS NULL OR gnomad_af <= ?)')
+      params_array.push(params.gnomad_af_max)
+    }
+
+    // CADD min filter (>= 0 allows filtering for any non-null CADD score)
+    if (params.cadd_min !== undefined && params.cadd_min >= 0) {
+      whereConditions.push('cadd >= ?')
+      params_array.push(params.cadd_min)
+    }
+
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
+
+    // Build HAVING clause for aggregate filters (applied after GROUP BY)
+    const havingConditions: string[] = []
+    const havingParams: number[] = []
+
+    if (params.carrier_count_min !== undefined && params.carrier_count_min > 0) {
+      havingConditions.push('COUNT(*) >= ?')
+      havingParams.push(params.carrier_count_min)
+    }
+
+    if (params.cohort_frequency_min !== undefined && params.cohort_frequency_min > 0) {
+      havingConditions.push(`CAST(COUNT(*) AS REAL) / ${totalCases} >= ?`)
+      havingParams.push(params.cohort_frequency_min)
+    }
+
+    const havingClause =
+      havingConditions.length > 0 ? `HAVING ${havingConditions.join(' AND ')}` : ''
 
     // Build ORDER BY clause
     let orderByClause = 'ORDER BY carrier_count DESC, pos ASC'
@@ -110,6 +172,7 @@ export class CohortService {
     }
 
     // Main aggregation query — uses CTE to deduplicate per case before counting
+    // Includes annotation columns (MAX to get representative value)
     const sql = `
       WITH deduped AS (
         SELECT
@@ -117,7 +180,14 @@ export class CohortService {
           MAX(gene_symbol) as gene_symbol,
           MAX(cdna) as cdna,
           MAX(aa_change) as aa_change,
-          MAX(gt_num) as gt_num
+          MAX(gt_num) as gt_num,
+          MAX(consequence) as consequence,
+          MAX(func) as func,
+          MAX(clinvar) as clinvar,
+          MAX(gnomad_af) as gnomad_af,
+          MAX(cadd) as cadd,
+          MAX(transcript) as transcript,
+          MAX(omim_mim_number) as omim_id
         FROM variants
         ${whereClause}
         GROUP BY chr, pos, ref, alt, case_id
@@ -135,17 +205,25 @@ export class CohortService {
         CAST(COUNT(*) AS REAL) / ${totalCases} as cohort_frequency,
         SUM(CASE WHEN gt_num IN ('0/1', '1/0', '0|1', '1|0') THEN 1 ELSE 0 END) as het_count,
         SUM(CASE WHEN gt_num IN ('1/1', '1|1') THEN 1 ELSE 0 END) as hom_count,
-        chr || ':' || pos || ':' || ref || ':' || alt as variant_key
+        chr || ':' || pos || ':' || ref || ':' || alt as variant_key,
+        MAX(consequence) as consequence,
+        MAX(func) as func,
+        MAX(clinvar) as clinvar,
+        MAX(gnomad_af) as gnomad_af,
+        MAX(cadd) as cadd_phred,
+        MAX(transcript) as transcript,
+        MAX(omim_id) as omim_id
       FROM deduped
       GROUP BY chr, pos, ref, alt
+      ${havingClause}
       ${orderByClause}
       LIMIT ? OFFSET ?
     `
 
     const stmt = this.getStatement(sql)
-    const results = stmt.all(...params_array, limit, offset) as CohortVariant[]
+    const results = stmt.all(...params_array, ...havingParams, limit, offset) as CohortVariant[]
 
-    // Get total count (same query without LIMIT/OFFSET)
+    // Get total count (same query without LIMIT/OFFSET, includes HAVING for cohort filters)
     const countSql = `
       SELECT COUNT(*) as count
       FROM (
@@ -153,11 +231,12 @@ export class CohortService {
         FROM variants
         ${whereClause}
         GROUP BY chr, pos, ref, alt
+        ${havingClause}
       )
     `
 
     const countStmt = this.getStatement(countSql)
-    const countResult = countStmt.get(...params_array) as { count: number }
+    const countResult = countStmt.get(...params_array, ...havingParams) as { count: number }
     const totalCount = countResult.count
 
     return {
