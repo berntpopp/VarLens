@@ -115,13 +115,13 @@
     }
   },
   "dependencies": {
-    "@vueuse/core": "^14.2.0",
+    "@vueuse/core": "^14.2.1",
     "adm-zip": "^0.5.16",
     "better-sqlite3-multiple-ciphers": "^12.6.2",
     "bottleneck": "^2.19.5",
     "electron-log": "^5.4.3",
     "file-saver": "^2.0.5",
-    "markdown-it": "^14.1.0",
+    "markdown-it": "^14.1.1",
     "pinia": "^3.0.4",
     "stream-json": "^1.9.1",
     "vuedraggable": "^4.1.0",
