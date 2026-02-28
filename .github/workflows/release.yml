@@ -146,7 +146,7 @@ jobs:
       - name: Upload unsigned artifacts for signing
         if: vars.SIGNPATH_ORGANIZATION_ID != ''
         id: upload-unsigned
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: windows-unsigned
           path: release/*.exe
