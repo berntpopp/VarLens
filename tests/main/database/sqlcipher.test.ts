@@ -280,6 +280,41 @@ describe('SQLCipher Encryption', () => {
     })
   })
 
+  describe('SQL injection prevention', () => {
+    it('should handle passwords containing single quotes', () => {
+      const dbPath = tempDbPath()
+      try {
+        const db = new DatabaseService(dbPath, "it's_secure")
+        expect(db.isEncrypted()).toBe(true)
+        db.close()
+
+        // Reopen with same password
+        const db2 = new DatabaseService(dbPath, "it's_secure")
+        expect(db2.isEncrypted()).toBe(true)
+        db2.close()
+      } finally {
+        cleanupTempFile(dbPath)
+      }
+    })
+
+    it('should handle rekey with single quotes in new password', () => {
+      const dbPath = tempDbPath()
+      try {
+        const db = new DatabaseService(dbPath, 'initial')
+        // Rekey requires DELETE journal mode (WAL not supported for rekey)
+        db.database.pragma('journal_mode = DELETE')
+        db.rekey("new'password")
+        db.close()
+
+        const db2 = new DatabaseService(dbPath, "new'password")
+        expect(db2.isEncrypted()).toBe(true)
+        db2.close()
+      } finally {
+        cleanupTempFile(dbPath)
+      }
+    })
+  })
+
   describe('PRAGMA key ordering', () => {
     it('verifies PRAGMA key is issued before WAL mode and foreign keys', () => {
       const dbPath = tempDbPath()

@@ -88,7 +88,8 @@ export class DatabaseService {
       // CRITICAL: Encryption key must be the FIRST pragma issued
       // before any other database operations including schema init
       if (this.encrypted) {
-        this.db.pragma(`key='${encryptionKey}'`)
+        const safeKey = encryptionKey!.split("'").join("''")
+        this.db.pragma(`key='${safeKey}'`)
       }
 
       // Enable WAL mode for better concurrent read performance
@@ -268,7 +269,8 @@ export class DatabaseService {
    */
   rekey(newPassword: string): void {
     try {
-      this.db.pragma(`rekey='${newPassword}'`)
+      const safePassword = newPassword.split("'").join("''")
+      this.db.pragma(`rekey='${safePassword}'`)
     } catch (error) {
       throw new DatabaseError(
         'Failed to change database encryption key',
