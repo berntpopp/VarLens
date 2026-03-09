@@ -214,4 +214,141 @@ describe('AuthService', () => {
       expect(changed).toBe(false)
     })
   })
+
+  describe('auth edge cases', () => {
+    beforeEach(async () => {
+      await authService.createFirstUser('admin1', 'Admin', 'adminpass')
+    })
+
+    it('should handle deactivated user login', async () => {
+      await authService.createUser('user1', 'User One', 'pass123', 'admin1')
+      // Verify user can log in before deactivation
+      const beforeResult = await authService.authenticate('user1', 'pass123')
+      expect(beforeResult.success).toBe(true)
+
+      await authService.deactivateUser('user1')
+
+      // Verify user cannot log in after deactivation
+      const afterResult = await authService.authenticate('user1', 'pass123')
+      expect(afterResult.success).toBe(false)
+      expect(afterResult.user).toBeNull()
+    })
+
+    it('should enforce must_change_password flag', async () => {
+      const created = await authService.createUser('user1', 'User One', 'temppass', 'admin1')
+      expect(created.must_change_password).toBe(1)
+
+      // Verify the flag is also reflected in the database
+      const user = authService.getUser('user1')
+      expect(user?.must_change_password).toBe(1)
+
+      // Verify the flag is returned in auth result
+      const authResult = await authService.authenticate('user1', 'temppass')
+      expect(authResult.success).toBe(true)
+      expect(authResult.mustChangePassword).toBe(true)
+
+      // After changing password, must_change_password should be cleared
+      await authService.changePassword('user1', 'temppass', 'newpass')
+      const updatedUser = authService.getUser('user1')
+      expect(updatedUser?.must_change_password).toBe(0)
+
+      const authAfterChange = await authService.authenticate('user1', 'newpass')
+      expect(authAfterChange.mustChangePassword).toBe(false)
+    })
+
+    it('should list all users correctly', async () => {
+      await authService.createUser('user1', 'User One', 'pass1', 'admin1')
+      await authService.createUser('user2', 'User Two', 'pass2', 'admin1')
+      await authService.createUser('user3', 'User Three', 'pass3', 'admin1')
+
+      const users = authService.listUsers()
+      expect(users).toHaveLength(4) // admin + 3 users
+      const usernames = users.map((u) => u.username)
+      expect(usernames).toContain('admin1')
+      expect(usernames).toContain('user1')
+      expect(usernames).toContain('user2')
+      expect(usernames).toContain('user3')
+
+      // Verify no password hashes are exposed
+      for (const u of users) {
+        expect((u as Record<string, unknown>).password_hash).toBeUndefined()
+      }
+
+      // Verify roles are correct
+      const admin = users.find((u) => u.username === 'admin1')
+      expect(admin?.role).toBe('admin')
+      const regularUser = users.find((u) => u.username === 'user1')
+      expect(regularUser?.role).toBe('user')
+    })
+
+    it('should handle changing password with wrong old password', async () => {
+      await authService.createUser('user1', 'User One', 'realpass', 'admin1')
+
+      const changed = await authService.changePassword('user1', 'wrongpass', 'newpass')
+      expect(changed).toBe(false)
+
+      // Verify old password still works
+      const result = await authService.authenticate('user1', 'realpass')
+      expect(result.success).toBe(true)
+
+      // Verify the attempted new password does not work
+      const badResult = await authService.authenticate('user1', 'newpass')
+      expect(badResult.success).toBe(false)
+    })
+
+    it('should handle creating duplicate username', async () => {
+      await authService.createUser('user1', 'User One', 'pass1', 'admin1')
+      await expect(
+        authService.createUser('user1', 'User One Again', 'pass2', 'admin1')
+      ).rejects.toThrow(/UNIQUE constraint failed/)
+    })
+
+    it('should handle lockout recovery after lockout duration', async () => {
+      await authService.createUser('user1', 'User One', 'pass123', 'admin1')
+
+      // Trigger lockout with 5 failed attempts
+      for (let i = 0; i < 5; i++) {
+        await authService.authenticate('user1', 'wrongpass')
+      }
+
+      // Verify the user is locked
+      const lockedUser = authService.getUser('user1')
+      expect(lockedUser?.failed_login_count).toBe(5)
+      expect(lockedUser?.locked_until).not.toBeNull()
+
+      // Verify locked user cannot authenticate even with correct password
+      const lockedResult = await authService.authenticate('user1', 'pass123')
+      expect(lockedResult.success).toBe(false)
+
+      // Simulate lockout expiration by setting locked_until to the past
+      db.prepare(
+        "UPDATE users SET locked_until = datetime('now', '-1 hour') WHERE username = ?"
+      ).run('user1')
+
+      // Verify user can now log in after lockout expires
+      const recoveredResult = await authService.authenticate('user1', 'pass123')
+      expect(recoveredResult.success).toBe(true)
+      expect(recoveredResult.user?.username).toBe('user1')
+    })
+
+    it('should reset failed count on successful login', async () => {
+      await authService.createUser('user1', 'User One', 'pass123', 'admin1')
+
+      // Accumulate some failed attempts (but not enough to lock out)
+      await authService.authenticate('user1', 'wrong1')
+      await authService.authenticate('user1', 'wrong2')
+      await authService.authenticate('user1', 'wrong3')
+
+      const beforeUser = authService.getUser('user1')
+      expect(beforeUser?.failed_login_count).toBe(3)
+
+      // Successful login should reset the counter
+      const result = await authService.authenticate('user1', 'pass123')
+      expect(result.success).toBe(true)
+
+      const afterUser = authService.getUser('user1')
+      expect(afterUser?.failed_login_count).toBe(0)
+      expect(afterUser?.locked_until).toBeNull()
+    })
+  })
 })

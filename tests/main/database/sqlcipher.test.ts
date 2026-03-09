@@ -19,6 +19,7 @@ import { join } from 'path'
 import { unlinkSync, existsSync } from 'fs'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { DatabaseService } from '../../../src/main/database'
+import { DatabaseError } from '../../../src/main/database/errors'
 
 describe('SQLCipher Encryption', () => {
   // Track temp files for cleanup
@@ -312,6 +313,177 @@ describe('SQLCipher Encryption', () => {
       } finally {
         cleanupTempFile(dbPath)
       }
+    })
+  })
+
+  describe('encryption edge cases', () => {
+    it('should handle empty password string', () => {
+      const dbPath = tempDbPath()
+
+      // Empty string means unencrypted (constructor checks encryptionKey !== '')
+      const service = new DatabaseService(dbPath, '')
+      expect(service.isEncrypted()).toBe(false)
+
+      service.cases.createCase('empty-pw-case', '/path/to/file.vcf', 512)
+      const cases = service.cases.getAllCases()
+      expect(cases).toHaveLength(1)
+      expect(cases[0].name).toBe('empty-pw-case')
+
+      service.close()
+
+      // Reopen without key — should work since it was unencrypted
+      const service2 = new DatabaseService(dbPath)
+      const cases2 = service2.cases.getAllCases()
+      expect(cases2).toHaveLength(1)
+      service2.close()
+    })
+
+    it('should handle unicode characters in password', () => {
+      const dbPath = tempDbPath()
+      const unicodeKey = '密码пароль🔑κωδικός'
+
+      const service = new DatabaseService(dbPath, unicodeKey)
+      expect(service.isEncrypted()).toBe(true)
+      service.cases.createCase('unicode-pw-case', '/path/to/file.vcf', 256)
+      service.close()
+
+      // Reopen with same unicode key
+      const service2 = new DatabaseService(dbPath, unicodeKey)
+      const cases = service2.cases.getAllCases()
+      expect(cases).toHaveLength(1)
+      expect(cases[0].name).toBe('unicode-pw-case')
+      service2.close()
+    })
+
+    it('should handle very long passwords (1000+ chars)', () => {
+      const dbPath = tempDbPath()
+      const longKey = 'A'.repeat(1500)
+
+      const service = new DatabaseService(dbPath, longKey)
+      expect(service.isEncrypted()).toBe(true)
+      service.cases.createCase('long-pw-case', '/path/to/file.vcf', 128)
+      service.close()
+
+      // Reopen with the same long key
+      const service2 = new DatabaseService(dbPath, longKey)
+      const cases = service2.cases.getAllCases()
+      expect(cases).toHaveLength(1)
+      expect(cases[0].name).toBe('long-pw-case')
+      service2.close()
+    })
+
+    it('should handle special characters: backslash and emoji', () => {
+      const dbPath1 = tempDbPath()
+      const dbPath2 = tempDbPath()
+
+      // Backslash password
+      const backslashKey = 'pass\\word\\with\\backslashes'
+      const svc1 = new DatabaseService(dbPath1, backslashKey)
+      expect(svc1.isEncrypted()).toBe(true)
+      svc1.cases.createCase('backslash-case', '/path/to/file.vcf', 64)
+      svc1.close()
+
+      const svc1b = new DatabaseService(dbPath1, backslashKey)
+      expect(svc1b.cases.getAllCases()).toHaveLength(1)
+      svc1b.close()
+
+      // Emoji password
+      const emojiKey = '🔐🗝️🛡️💻🧬'
+      const svc2 = new DatabaseService(dbPath2, emojiKey)
+      expect(svc2.isEncrypted()).toBe(true)
+      svc2.cases.createCase('emoji-case', '/path/to/file.vcf', 64)
+      svc2.close()
+
+      const svc2b = new DatabaseService(dbPath2, emojiKey)
+      expect(svc2b.cases.getAllCases()).toHaveLength(1)
+      svc2b.close()
+    })
+
+    it('should reject null byte in password (SQLite PRAGMA limitation)', () => {
+      const dbPath = tempDbPath()
+      const nullByteKey = 'pass\x00word'
+
+      // Null bytes truncate the PRAGMA string, causing a SQL parse error
+      expect(() => {
+        new DatabaseService(dbPath, nullByteKey)
+      }).toThrow()
+    })
+
+    it('should fail with wrong password and throw DatabaseError', () => {
+      const dbPath = tempDbPath()
+      const correctKey = 'correct-encryption-key'
+      const wrongKey = 'wrong-encryption-key'
+
+      // Create encrypted database with data
+      const service = new DatabaseService(dbPath, correctKey)
+      service.cases.createCase('protected-case', '/path/to/file.vcf', 512)
+      service.close()
+
+      // Opening with wrong key should throw DatabaseError
+      expect(() => {
+        new DatabaseService(dbPath, wrongKey)
+      }).toThrow()
+
+      // Verify it throws a DatabaseError specifically
+      try {
+        new DatabaseService(dbPath, wrongKey)
+        // Should not reach here
+        expect.unreachable('Should have thrown')
+      } catch (error) {
+        expect(error).toBeInstanceOf(DatabaseError)
+      }
+    })
+
+    it('should rekey from encrypted to unencrypted', () => {
+      const dbPath = tempDbPath()
+      const originalKey = 'original-key'
+
+      // Create encrypted database
+      const service = new DatabaseService(dbPath, originalKey)
+      service.cases.createCase('rekey-to-plain', '/path/to/file.vcf', 256)
+
+      // Switch to DELETE journal mode (WAL not supported for rekey)
+      service.database.pragma('journal_mode = DELETE')
+
+      // Rekey to empty string removes encryption
+      service.database.pragma("rekey=''")
+      service.close()
+
+      // Should now be openable without any key
+      const service2 = new DatabaseService(dbPath)
+      const cases = service2.cases.getAllCases()
+      expect(cases).toHaveLength(1)
+      expect(cases[0].name).toBe('rekey-to-plain')
+      service2.close()
+    })
+
+    it('should rekey from unencrypted to encrypted', () => {
+      const dbPath = tempDbPath()
+      const newKey = 'new-encryption-key'
+
+      // Create unencrypted database
+      const service = new DatabaseService(dbPath)
+      service.cases.createCase('rekey-to-encrypted', '/path/to/file.vcf', 256)
+
+      // Switch to DELETE journal mode (WAL not supported for rekey)
+      service.database.pragma('journal_mode = DELETE')
+
+      // Rekey to add encryption
+      const safeKey = newKey.split("'").join("''")
+      service.database.pragma(`rekey='${safeKey}'`)
+      service.close()
+
+      // Should now require the key
+      const service2 = new DatabaseService(dbPath, newKey)
+      const cases = service2.cases.getAllCases()
+      expect(cases).toHaveLength(1)
+      expect(cases[0].name).toBe('rekey-to-encrypted')
+      service2.close()
+
+      // Opening without key should fail
+      expect(() => {
+        new DatabaseService(dbPath)
+      }).toThrow()
     })
   })
 
