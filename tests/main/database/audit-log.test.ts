@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import type { Statement } from 'better-sqlite3-multiple-ciphers'
 import { DatabaseService } from '../../../src/main/database'
 import { AuditLogRepository } from '../../../src/main/database/AuditLogRepository'
 import { createKysely } from '../../../src/main/database/kysely'
@@ -10,11 +9,7 @@ describe('AuditLogRepository', () => {
 
   beforeEach(() => {
     service = new DatabaseService(':memory:')
-    repo = new AuditLogRepository(
-      service.database,
-      createKysely(service.database),
-      new Map<string, Statement>()
-    )
+    repo = new AuditLogRepository(service.database, createKysely(service.database))
   })
 
   afterEach(() => {

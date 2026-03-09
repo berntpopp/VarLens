@@ -264,9 +264,7 @@ describe('useCohortData', () => {
 
     await result.fetchVariants({ limit: 50, sort_order: 'desc' })
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      'window.api not available - running outside Electron'
-    )
+    expect(consoleWarnSpy).toHaveBeenCalledWith('API not available - running outside Electron')
     expect(result.variants.value).toEqual([])
     expect(result.totalCount.value).toBe(0)
 

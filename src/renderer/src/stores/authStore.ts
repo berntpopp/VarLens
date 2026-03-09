@@ -28,6 +28,9 @@ export const useAuthStore = defineStore('auth', () => {
     username: string,
     password: string
   ): Promise<{ success: boolean; mustChangePassword?: boolean; locked?: boolean }> {
+    if (typeof window === 'undefined' || typeof window.api === 'undefined') {
+      return { success: false }
+    }
     const result = await window.api.auth.login(username, password)
     if (result.success === true && result.user !== null && result.user !== undefined) {
       currentUser.value = result.user
@@ -37,6 +40,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function logout(): void {
     currentUser.value = null
+    if (typeof window === 'undefined' || typeof window.api === 'undefined') return
     window.api.auth.logout()
   }
 

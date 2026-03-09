@@ -67,13 +67,10 @@ test('app launches with Vue Router and renders correctly', async ({}, testInfo) 
 
     // Verify sidebar is accessible
     const sidebar = window.locator('.v-navigation-drawer--left')
-    const sidebarVisible = await sidebar.isVisible()
+    await expect(sidebar).toBeVisible()
 
     // Take final screenshot
     await window.screenshot({ path: testInfo.outputPath('05-final-state.png') })
-
-    // Basic smoke: we got here without crashing = router works
-    expect(sidebarVisible !== undefined).toBe(true)
   } finally {
     if (app) await app.close()
   }

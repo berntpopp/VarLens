@@ -1,13 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock electron
-const mockHandle = vi.fn()
-vi.mock('electron', () => ({
-  ipcMain: {
-    handle: mockHandle
-  }
-}))
-
 // Mock AutoUpdater service
 const mockCheckForUpdates = vi.fn()
 const mockDownloadUpdate = vi.fn()
@@ -22,22 +14,17 @@ vi.mock('../../../src/main/services/AutoUpdater', () => ({
 }))
 
 describe('Updater IPC handlers', () => {
+  const mockHandle = vi.fn()
+  const mockIpcMain = { handle: mockHandle }
+
   beforeEach(async () => {
     vi.clearAllMocks()
-    vi.resetModules()
-    vi.doMock('electron', () => ({
-      ipcMain: {
-        handle: mockHandle
-      }
-    }))
-    vi.doMock('../../../src/main/services/AutoUpdater', () => ({
-      checkForUpdates: mockCheckForUpdates,
-      downloadUpdate: mockDownloadUpdate,
-      installUpdate: mockInstallUpdate,
-      getUpdateStatus: mockGetUpdateStatus
-    }))
-    // Import to trigger self-registration
-    await import('../../../src/main/ipc/handlers/updater')
+    const { registerUpdaterHandlers } = await import('../../../src/main/ipc/handlers/updater')
+    registerUpdaterHandlers({
+      ipcMain: mockIpcMain as never,
+      getDb: () => null as never,
+      getDbManager: () => null as never
+    })
   })
 
   it('registers updater:check handler', () => {

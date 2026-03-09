@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
-import type { Statement } from 'better-sqlite3-multiple-ciphers'
 import { BaseRepository } from '../../../src/main/database/BaseRepository'
 import { createKysely } from '../../../src/main/database/kysely'
+import type { Kysely } from 'kysely'
+import type { VarlensDatabase } from '../../../src/shared/types/database-schema'
 
 class TestRepository extends BaseRepository {
   createTable(): void {
@@ -10,33 +11,33 @@ class TestRepository extends BaseRepository {
   }
 
   insert(name: string): number {
-    const result = this.stmt('INSERT INTO test_items (name) VALUES (?)').run(name)
+    const result = this.db.prepare('INSERT INTO test_items (name) VALUES (?)').run(name)
     return Number(result.lastInsertRowid)
   }
 
   get(id: number): { id: number; name: string } | undefined {
-    return this.stmt('SELECT * FROM test_items WHERE id = ?').get(id) as
+    return this.db.prepare('SELECT * FROM test_items WHERE id = ?').get(id) as
       | { id: number; name: string }
       | undefined
   }
 
   insertTwo(name1: string, name2: string): void {
     this.runTransaction(() => {
-      this.stmt('INSERT INTO test_items (name) VALUES (?)').run(name1)
-      this.stmt('INSERT INTO test_items (name) VALUES (?)').run(name2)
+      this.db.prepare('INSERT INTO test_items (name) VALUES (?)').run(name1)
+      this.db.prepare('INSERT INTO test_items (name) VALUES (?)').run(name2)
     })
   }
 }
 
 describe('BaseRepository', () => {
   let db: Database.Database
-  let cache: Map<string, Statement>
+  let kysely: Kysely<VarlensDatabase>
   let repo: TestRepository
 
   beforeEach(() => {
     db = new Database(':memory:')
-    cache = new Map()
-    repo = new TestRepository(db, createKysely(db), cache)
+    kysely = createKysely(db)
+    repo = new TestRepository(db, kysely)
     repo.createTable()
   })
 
@@ -44,10 +45,10 @@ describe('BaseRepository', () => {
     db.close()
   })
 
-  it('caches prepared statements', () => {
-    repo.insert('a')
-    repo.insert('b')
-    expect(cache.size).toBe(1)
+  it('inserts and retrieves records via db.prepare', () => {
+    const id = repo.insert('a')
+    const row = repo.get(id)
+    expect(row?.name).toBe('a')
   })
 
   it('runs transactions atomically', () => {
