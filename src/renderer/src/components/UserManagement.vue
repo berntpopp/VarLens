@@ -113,10 +113,24 @@ onMounted(loadUsers)
     </v-card-title>
 
     <v-card-text>
-      <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable @click:close="error = ''">
+      <v-alert
+        v-if="error"
+        type="error"
+        variant="tonal"
+        class="mb-4"
+        closable
+        @click:close="error = ''"
+      >
         {{ error }}
       </v-alert>
-      <v-alert v-if="success" type="success" variant="tonal" class="mb-4" closable @click:close="success = ''">
+      <v-alert
+        v-if="success"
+        type="success"
+        variant="tonal"
+        class="mb-4"
+        closable
+        @click:close="success = ''"
+      >
         {{ success }}
       </v-alert>
 
@@ -175,7 +189,12 @@ onMounted(loadUsers)
         <v-card-text>
           <v-form @submit.prevent="handleCreateUser">
             <v-text-field v-model="newUsername" label="Username" variant="outlined" class="mb-2" />
-            <v-text-field v-model="newDisplayName" label="Display Name" variant="outlined" class="mb-2" />
+            <v-text-field
+              v-model="newDisplayName"
+              label="Display Name"
+              variant="outlined"
+              class="mb-2"
+            />
             <v-text-field
               v-model="newTempPassword"
               type="password"
@@ -184,7 +203,13 @@ onMounted(loadUsers)
               variant="outlined"
               class="mb-2"
             />
-            <v-btn type="submit" color="primary" block :loading="loading" :disabled="!newUsername || !newTempPassword">
+            <v-btn
+              type="submit"
+              color="primary"
+              block
+              :loading="loading"
+              :disabled="!newUsername || !newTempPassword"
+            >
               Create User
             </v-btn>
           </v-form>
@@ -205,7 +230,13 @@ onMounted(loadUsers)
               variant="outlined"
               class="mb-2"
             />
-            <v-btn type="submit" color="primary" block :loading="loading" :disabled="!resetPassword">
+            <v-btn
+              type="submit"
+              color="primary"
+              block
+              :loading="loading"
+              :disabled="!resetPassword"
+            >
               Reset Password
             </v-btn>
           </v-form>

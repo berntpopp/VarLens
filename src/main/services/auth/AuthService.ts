@@ -53,9 +53,9 @@ export class AuthService {
     password: string
   ): Promise<{ id: number; username: string; role: string; recoveryKey: string }> {
     // Check no admin exists
-    const existing = this.db
-      .prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
-      .get() as { id: number } | undefined
+    const existing = this.db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get() as
+      | { id: number }
+      | undefined
 
     if (existing) throw new Error('Admin user already exists')
 
@@ -70,7 +70,9 @@ export class AuthService {
 
     // Enable accounts
     this.db
-      .prepare("INSERT OR REPLACE INTO database_settings (key, value) VALUES ('accounts_enabled', 'true')")
+      .prepare(
+        "INSERT OR REPLACE INTO database_settings (key, value) VALUES ('accounts_enabled', 'true')"
+      )
       .run()
 
     const result = this.db
@@ -96,7 +98,11 @@ export class AuthService {
     if (!user) return { success: false, user: null }
 
     // Check lockout
-    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    if (
+      user.locked_until !== null &&
+      user.locked_until !== '' &&
+      new Date(user.locked_until) > new Date()
+    ) {
       return { success: false, user: null, locked: true }
     }
 
@@ -122,7 +128,8 @@ export class AuthService {
       .prepare('UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = ?')
       .run(user.id)
 
-    const { password_hash: _, ...safeUser } = user
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password_hash: _hash, ...safeUser } = user
     return {
       success: true,
       user: safeUser,
@@ -161,10 +168,9 @@ export class AuthService {
   }
 
   listUsers(): Omit<User, 'password_hash'>[] {
-    const users = this.db
-      .prepare('SELECT * FROM users ORDER BY created_at')
-      .all() as User[]
-    return users.map(({ password_hash: _, ...u }) => u)
+    const users = this.db.prepare('SELECT * FROM users ORDER BY created_at').all() as User[]
+
+    return users.map(({ password_hash: _hash, ...u }) => u)
   }
 
   async deactivateUser(username: string): Promise<void> {
@@ -185,10 +191,14 @@ export class AuthService {
       .run(passwordHash, username)
   }
 
-  async changePassword(username: string, oldPassword: string, newPassword: string): Promise<boolean> {
-    const user = this.db
-      .prepare('SELECT * FROM users WHERE username = ?')
-      .get(username) as User | undefined
+  async changePassword(
+    username: string,
+    oldPassword: string,
+    newPassword: string
+  ): Promise<boolean> {
+    const user = this.db.prepare('SELECT * FROM users WHERE username = ?').get(username) as
+      | User
+      | undefined
 
     if (!user) return false
 

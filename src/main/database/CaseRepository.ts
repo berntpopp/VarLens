@@ -56,9 +56,7 @@ export class CaseRepository extends BaseRepository {
   }
 
   deleteCase(id: number): void {
-    const result = this.execRun(
-      this.kysely.deleteFrom('cases').where('id', '=', id)
-    )
+    const result = this.execRun(this.kysely.deleteFrom('cases').where('id', '=', id))
     if (result.changes === 0) throw new NotFoundError('Case', id)
   }
 
@@ -69,9 +67,7 @@ export class CaseRepository extends BaseRepository {
   deleteCasesBatch(ids: number[]): number {
     if (ids.length === 0) return 0
     return this.runTransaction(() => {
-      const result = this.execRun(
-        this.kysely.deleteFrom('cases').where('id', 'in', ids)
-      )
+      const result = this.execRun(this.kysely.deleteFrom('cases').where('id', 'in', ids))
       return result.changes
     })
   }

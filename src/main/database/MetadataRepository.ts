@@ -242,9 +242,7 @@ export class MetadataRepository extends BaseRepository {
   }
 
   deleteCaseComment(commentId: number): void {
-    const result = this.execRun(
-      this.kysely.deleteFrom('case_comments').where('id', '=', commentId)
-    )
+    const result = this.execRun(this.kysely.deleteFrom('case_comments').where('id', '=', commentId))
     if (result.changes === 0) {
       throw new NotFoundError('CaseComment', commentId)
     }
@@ -256,11 +254,7 @@ export class MetadataRepository extends BaseRepository {
 
   listMetricDefinitions(): MetricDefinition[] {
     return this.execAll<MetricDefinition>(
-      this.kysely
-        .selectFrom('metric_definitions')
-        .selectAll()
-        .orderBy('category')
-        .orderBy('name')
+      this.kysely.selectFrom('metric_definitions').selectAll().orderBy('category').orderBy('name')
     )
   }
 
@@ -455,11 +449,7 @@ export class MetadataRepository extends BaseRepository {
   /** Get all distinct external ID types across all cases */
   getDistinctExternalIdTypes(): string[] {
     const rows = this.execAll<{ id_type: string }>(
-      this.kysely
-        .selectFrom('case_external_ids')
-        .select('id_type')
-        .distinct()
-        .orderBy('id_type')
+      this.kysely.selectFrom('case_external_ids').select('id_type').distinct().orderBy('id_type')
     )
     return rows.map((r) => r.id_type)
   }
