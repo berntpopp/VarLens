@@ -2,6 +2,14 @@ import { ipcMain } from 'electron'
 import { wrapHandler } from '../errorHandler'
 import { getDatabaseService } from '../../database'
 import { readFile } from 'node:fs/promises'
+import {
+  GeneListIdSchema,
+  GeneListCreateSchema,
+  GeneListSetGenesSchema,
+  RegionFileCreateSchema,
+  BedImportSchema
+} from '../../../shared/types/ipc-schemas'
+import { mainLogger } from '../../services/MainLogger'
 
 /**
  * Gene Lists and Region Files IPC handlers
@@ -18,33 +26,67 @@ ipcMain.handle('gene-lists:list', async () => {
   })
 })
 
-ipcMain.handle('gene-lists:create', async (_event, name: string, description?: string | null) => {
+ipcMain.handle('gene-lists:create', async (_event, name: unknown, description?: unknown) => {
   return wrapHandler(async () => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = GeneListCreateSchema.safeParse({ name, description })
+    if (!validated.success) {
+      mainLogger.error(`Invalid gene-lists:create params: ${validated.error.message}`, 'gene-lists')
+      throw new Error('Invalid gene list parameters')
+    }
+
     const db = getDatabaseService()
-    return db.geneLists.createGeneList(name, description)
+    return db.geneLists.createGeneList(validated.data.name, validated.data.description)
   })
 })
 
-ipcMain.handle('gene-lists:delete', async (_event, id: number) => {
+ipcMain.handle('gene-lists:delete', async (_event, id: unknown) => {
   return wrapHandler(async () => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = GeneListIdSchema.safeParse(id)
+    if (!validated.success) {
+      mainLogger.error(`Invalid gene-lists:delete id: ${validated.error.message}`, 'gene-lists')
+      throw new Error('Invalid gene list ID')
+    }
+
     const db = getDatabaseService()
-    db.geneLists.deleteGeneList(id)
+    db.geneLists.deleteGeneList(validated.data)
     return undefined
   })
 })
 
-ipcMain.handle('gene-lists:getGenes', async (_event, listId: number) => {
+ipcMain.handle('gene-lists:getGenes', async (_event, listId: unknown) => {
   return wrapHandler(async () => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = GeneListIdSchema.safeParse(listId)
+    if (!validated.success) {
+      mainLogger.error(
+        `Invalid gene-lists:getGenes listId: ${validated.error.message}`,
+        'gene-lists'
+      )
+      throw new Error('Invalid gene list ID')
+    }
+
     const db = getDatabaseService()
-    return db.geneLists.getGeneListGenes(listId)
+    return db.geneLists.getGeneListGenes(validated.data)
   })
 })
 
-ipcMain.handle('gene-lists:setGenes', async (_event, listId: number, genes: string[]) => {
+ipcMain.handle('gene-lists:setGenes', async (_event, listId: unknown, genes: unknown) => {
   return wrapHandler(async () => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = GeneListSetGenesSchema.safeParse({ listId, genes })
+    if (!validated.success) {
+      mainLogger.error(
+        `Invalid gene-lists:setGenes params: ${validated.error.message}`,
+        'gene-lists'
+      )
+      throw new Error('Invalid gene list parameters')
+    }
+
     const db = getDatabaseService()
-    db.geneLists.setGeneListGenes(listId, genes)
-    return db.geneLists.getGeneListGenes(listId)
+    db.geneLists.setGeneListGenes(validated.data.listId, validated.data.genes)
+    return db.geneLists.getGeneListGenes(validated.data.listId)
   })
 })
 
@@ -59,24 +101,51 @@ ipcMain.handle('region-files:list', async () => {
   })
 })
 
-ipcMain.handle('region-files:create', async (_event, name: string, description: string | null) => {
+ipcMain.handle('region-files:create', async (_event, name: unknown, description: unknown) => {
   return wrapHandler(async () => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = RegionFileCreateSchema.safeParse({ name, description })
+    if (!validated.success) {
+      mainLogger.error(
+        `Invalid region-files:create params: ${validated.error.message}`,
+        'gene-lists'
+      )
+      throw new Error('Invalid region file parameters')
+    }
+
     const db = getDatabaseService()
-    return db.geneLists.createRegionFile(name, description)
+    return db.geneLists.createRegionFile(validated.data.name, validated.data.description)
   })
 })
 
-ipcMain.handle('region-files:delete', async (_event, id: number) => {
+ipcMain.handle('region-files:delete', async (_event, id: unknown) => {
   return wrapHandler(async () => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = GeneListIdSchema.safeParse(id)
+    if (!validated.success) {
+      mainLogger.error(`Invalid region-files:delete id: ${validated.error.message}`, 'gene-lists')
+      throw new Error('Invalid region file ID')
+    }
+
     const db = getDatabaseService()
-    db.geneLists.deleteRegionFile(id)
+    db.geneLists.deleteRegionFile(validated.data)
     return undefined
   })
 })
 
-ipcMain.handle('region-files:importBed', async (_event, fileId: number, filePath: string) => {
+ipcMain.handle('region-files:importBed', async (_event, fileId: unknown, filePath: unknown) => {
   return wrapHandler(async () => {
-    const content = await readFile(filePath, 'utf-8')
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = BedImportSchema.safeParse({ fileId, filePath })
+    if (!validated.success) {
+      mainLogger.error(
+        `Invalid region-files:importBed params: ${validated.error.message}`,
+        'gene-lists'
+      )
+      throw new Error('Invalid BED import parameters')
+    }
+
+    const content = await readFile(validated.data.filePath, 'utf-8')
     const entries: Array<{ chr: string; start: number; end: number; label?: string }> = []
 
     for (const line of content.split('\n')) {
@@ -105,6 +174,6 @@ ipcMain.handle('region-files:importBed', async (_event, fileId: number, filePath
     }
 
     const db = getDatabaseService()
-    return db.geneLists.importBedEntries(fileId, entries)
+    return db.geneLists.importBedEntries(validated.data.fileId, entries)
   })
 })

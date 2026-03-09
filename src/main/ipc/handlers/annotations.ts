@@ -2,6 +2,14 @@ import { ipcMain } from 'electron'
 import { wrapHandler } from '../errorHandler'
 import { getDatabaseService } from '../../database'
 import type { VariantAnnotation, CaseVariantAnnotation } from '../../database/types'
+import {
+  VariantCoordsSchema,
+  GlobalAnnotationUpdatesSchema,
+  PerCaseAnnotationUpdatesSchema,
+  CaseVariantIdSchema,
+  CaseIdSchema
+} from '../../../shared/types/ipc-schemas'
+import { mainLogger } from '../../services/MainLogger'
 
 /**
  * Annotations IPC handlers
@@ -10,33 +18,30 @@ import type { VariantAnnotation, CaseVariantAnnotation } from '../../database/ty
  *           annotations:getForVariant
  */
 
-// Type for global annotation updates from renderer
-interface GlobalAnnotationUpdates {
-  global_comment?: string | null
-  starred?: boolean
-  acmg_classification?: VariantAnnotation['acmg_classification']
-  acmg_evidence?: string | null
-  user_name?: string // for audit trail only
-}
-
-// Type for per-case annotation updates from renderer
-interface PerCaseAnnotationUpdates {
-  per_case_comment?: string | null
-  starred?: boolean
-  acmg_classification?: CaseVariantAnnotation['acmg_classification']
-  acmg_evidence?: string | null
-  user_name?: string // for audit trail only
-}
-
 /**
  * Get global annotation for a variant
  */
 ipcMain.handle(
   'annotations:getGlobal',
-  async (_event, chr: string, pos: number, ref: string, alt: string) => {
+  async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown) => {
     return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid annotations:getGlobal coords: ${validated.error.message}`,
+          'annotations'
+        )
+        throw new Error('Invalid variant coordinates')
+      }
+
       const db = getDatabaseService()
-      return db.annotations.getGlobalAnnotation(chr, pos, ref, alt)
+      return db.annotations.getGlobalAnnotation(
+        validated.data.chr,
+        validated.data.pos,
+        validated.data.ref,
+        validated.data.alt
+      )
     })
   }
 )
@@ -46,22 +51,35 @@ ipcMain.handle(
  */
 ipcMain.handle(
   'annotations:upsertGlobal',
-  async (
-    _event,
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string,
-    updates: GlobalAnnotationUpdates
-  ) => {
+  async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown, updates: unknown) => {
     return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validatedCoords = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+      if (!validatedCoords.success) {
+        mainLogger.error(
+          `Invalid annotations:upsertGlobal coords: ${validatedCoords.error.message}`,
+          'annotations'
+        )
+        throw new Error('Invalid variant coordinates')
+      }
+
+      const validatedUpdates = GlobalAnnotationUpdatesSchema.safeParse(updates)
+      if (!validatedUpdates.success) {
+        mainLogger.error(
+          `Invalid annotations:upsertGlobal updates: ${validatedUpdates.error.message}`,
+          'annotations'
+        )
+        throw new Error('Invalid annotation updates')
+      }
+
       const db = getDatabaseService()
+      const { chr: vChr, pos: vPos, ref: vRef, alt: vAlt } = validatedCoords.data
 
       // Extract user_name before building db updates
-      const { user_name, ...annotationUpdates } = updates
+      const { user_name, ...annotationUpdates } = validatedUpdates.data
 
       // Read current state before upsert for audit trail
-      const oldAnnotation = db.annotations.getGlobalAnnotation(chr, pos, ref, alt)
+      const oldAnnotation = db.annotations.getGlobalAnnotation(vChr, vPos, vRef, vAlt)
 
       // Build dbUpdates only with keys actually provided
       const dbUpdates: Partial<
@@ -84,10 +102,10 @@ ipcMain.handle(
         dbUpdates.starred = annotationUpdates.starred ? 1 : 0
       }
 
-      const result = db.annotations.upsertGlobalAnnotation(chr, pos, ref, alt, dbUpdates)
+      const result = db.annotations.upsertGlobalAnnotation(vChr, vPos, vRef, vAlt, dbUpdates)
 
       // Audit logging
-      const entityKey = `${chr}:${pos}:${ref}:${alt}`
+      const entityKey = `${vChr}:${vPos}:${vRef}:${vAlt}`
       if (annotationUpdates.acmg_classification !== undefined) {
         db.auditLog.appendEntry({
           action_type: 'acmg_classify',
@@ -135,10 +153,25 @@ ipcMain.handle(
  */
 ipcMain.handle(
   'annotations:deleteGlobal',
-  async (_event, chr: string, pos: number, ref: string, alt: string) => {
+  async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown) => {
     return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid annotations:deleteGlobal coords: ${validated.error.message}`,
+          'annotations'
+        )
+        throw new Error('Invalid variant coordinates')
+      }
+
       const db = getDatabaseService()
-      db.annotations.deleteGlobalAnnotation(chr, pos, ref, alt)
+      db.annotations.deleteGlobalAnnotation(
+        validated.data.chr,
+        validated.data.pos,
+        validated.data.ref,
+        validated.data.alt
+      )
       return undefined
     })
   }
@@ -147,10 +180,20 @@ ipcMain.handle(
 /**
  * Get per-case annotation for a variant
  */
-ipcMain.handle('annotations:getPerCase', async (_event, caseId: number, variantId: number) => {
+ipcMain.handle('annotations:getPerCase', async (_event, caseId: unknown, variantId: unknown) => {
   return wrapHandler(async () => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = CaseVariantIdSchema.safeParse({ caseId, variantId })
+    if (!validated.success) {
+      mainLogger.error(
+        `Invalid annotations:getPerCase params: ${validated.error.message}`,
+        'annotations'
+      )
+      throw new Error('Invalid case/variant ID')
+    }
+
     const db = getDatabaseService()
-    return db.annotations.getPerCaseAnnotation(caseId, variantId)
+    return db.annotations.getPerCaseAnnotation(validated.data.caseId, validated.data.variantId)
   })
 })
 
@@ -160,15 +203,36 @@ ipcMain.handle('annotations:getPerCase', async (_event, caseId: number, variantI
  */
 ipcMain.handle(
   'annotations:upsertPerCase',
-  async (_event, caseId: number, variantId: number, updates: PerCaseAnnotationUpdates) => {
+  async (_event, caseId: unknown, variantId: unknown, updates: unknown) => {
     return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validatedIds = CaseVariantIdSchema.safeParse({ caseId, variantId })
+      if (!validatedIds.success) {
+        mainLogger.error(
+          `Invalid annotations:upsertPerCase ids: ${validatedIds.error.message}`,
+          'annotations'
+        )
+        throw new Error('Invalid case/variant ID')
+      }
+
+      const validatedUpdates = PerCaseAnnotationUpdatesSchema.safeParse(updates)
+      if (!validatedUpdates.success) {
+        mainLogger.error(
+          `Invalid annotations:upsertPerCase updates: ${validatedUpdates.error.message}`,
+          'annotations'
+        )
+        throw new Error('Invalid annotation updates')
+      }
+
       const db = getDatabaseService()
+      const vCaseId = validatedIds.data.caseId
+      const vVariantId = validatedIds.data.variantId
 
       // Extract user_name before building db updates
-      const { user_name, ...annotationUpdates } = updates
+      const { user_name, ...annotationUpdates } = validatedUpdates.data
 
       // Read current state before upsert for audit trail
-      const oldAnnotation = db.annotations.getPerCaseAnnotation(caseId, variantId)
+      const oldAnnotation = db.annotations.getPerCaseAnnotation(vCaseId, vVariantId)
 
       // Build dbUpdates only with keys actually provided
       const dbUpdates: Partial<
@@ -191,10 +255,10 @@ ipcMain.handle(
         dbUpdates.starred = annotationUpdates.starred ? 1 : 0
       }
 
-      const result = db.annotations.upsertPerCaseAnnotation(caseId, variantId, dbUpdates)
+      const result = db.annotations.upsertPerCaseAnnotation(vCaseId, vVariantId, dbUpdates)
 
       // Audit logging
-      const entityKey = `case:${caseId}:variant:${variantId}`
+      const entityKey = `case:${vCaseId}:variant:${vVariantId}`
       if (annotationUpdates.acmg_classification !== undefined) {
         db.auditLog.appendEntry({
           action_type: 'acmg_classify',
@@ -240,10 +304,20 @@ ipcMain.handle(
 /**
  * Delete per-case annotation for a variant
  */
-ipcMain.handle('annotations:deletePerCase', async (_event, caseId: number, variantId: number) => {
+ipcMain.handle('annotations:deletePerCase', async (_event, caseId: unknown, variantId: unknown) => {
   return wrapHandler(async () => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = CaseVariantIdSchema.safeParse({ caseId, variantId })
+    if (!validated.success) {
+      mainLogger.error(
+        `Invalid annotations:deletePerCase params: ${validated.error.message}`,
+        'annotations'
+      )
+      throw new Error('Invalid case/variant ID')
+    }
+
     const db = getDatabaseService()
-    db.annotations.deletePerCaseAnnotation(caseId, variantId)
+    db.annotations.deletePerCaseAnnotation(validated.data.caseId, validated.data.variantId)
     return undefined
   })
 })
@@ -253,10 +327,35 @@ ipcMain.handle('annotations:deletePerCase', async (_event, caseId: number, varia
  */
 ipcMain.handle(
   'annotations:getForVariant',
-  async (_event, caseId: number, chr: string, pos: number, ref: string, alt: string) => {
+  async (_event, caseId: unknown, chr: unknown, pos: unknown, ref: unknown, alt: unknown) => {
     return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validatedCaseId = CaseIdSchema.safeParse(caseId)
+      if (!validatedCaseId.success) {
+        mainLogger.error(
+          `Invalid annotations:getForVariant caseId: ${validatedCaseId.error.message}`,
+          'annotations'
+        )
+        throw new Error('Invalid case ID')
+      }
+
+      const validatedCoords = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+      if (!validatedCoords.success) {
+        mainLogger.error(
+          `Invalid annotations:getForVariant coords: ${validatedCoords.error.message}`,
+          'annotations'
+        )
+        throw new Error('Invalid variant coordinates')
+      }
+
       const db = getDatabaseService()
-      return db.annotations.getAnnotationsForVariant(caseId, chr, pos, ref, alt)
+      return db.annotations.getAnnotationsForVariant(
+        validatedCaseId.data,
+        validatedCoords.data.chr,
+        validatedCoords.data.pos,
+        validatedCoords.data.ref,
+        validatedCoords.data.alt
+      )
     })
   }
 )

@@ -235,6 +235,241 @@ export const CaseIdSchema = z.number().int().positive()
  */
 export const LimitSchema = z.number().int().positive().max(1000)
 
+// ============================================================
+// Tag Schemas
+// ============================================================
+
+/**
+ * Schema for tag ID validation
+ */
+export const TagIdSchema = z.number().int().positive()
+
+/**
+ * Schema for tag creation
+ */
+export const TagCreateSchema = z.object({
+  name: z.string().min(1).max(100),
+  color: z.string().min(4).max(9) // e.g., #fff or #ffffff
+})
+
+/**
+ * Schema for tag update
+ */
+export const TagUpdateSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  color: z.string().min(4).max(9).optional()
+})
+
+/**
+ * Schema for variant tag assignment (caseId, variantId, tagId)
+ */
+export const VariantTagAssignSchema = z.object({
+  caseId: z.number().int().positive(),
+  variantId: z.number().int().positive(),
+  tagId: z.number().int().positive()
+})
+
+/**
+ * Schema for setting multiple tags on a variant
+ */
+export const VariantTagSetSchema = z.object({
+  caseId: z.number().int().positive(),
+  variantId: z.number().int().positive(),
+  tagIds: z.array(z.number().int().positive())
+})
+
+// ============================================================
+// Annotation Schemas
+// ============================================================
+
+/**
+ * Schema for variant coordinates (chr, pos, ref, alt)
+ */
+export const VariantCoordsSchema = z.object({
+  chr: z.string().min(1),
+  pos: z.number().int().positive(),
+  ref: z.string().min(1),
+  alt: z.string().min(1)
+})
+
+/**
+ * Valid ACMG classification values
+ */
+const AcmgClassificationSchema = z
+  .enum(['Pathogenic', 'Likely Pathogenic', 'VUS', 'Likely Benign', 'Benign'])
+  .nullish()
+  .transform((val) => val ?? undefined)
+
+/**
+ * Schema for global annotation updates
+ */
+export const GlobalAnnotationUpdatesSchema = z.object({
+  global_comment: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined),
+  starred: z.boolean().optional(),
+  acmg_classification: AcmgClassificationSchema,
+  acmg_evidence: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined),
+  user_name: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined)
+})
+
+/**
+ * Schema for per-case annotation updates
+ */
+export const PerCaseAnnotationUpdatesSchema = z.object({
+  per_case_comment: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined),
+  starred: z.boolean().optional(),
+  acmg_classification: AcmgClassificationSchema,
+  acmg_evidence: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined),
+  user_name: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined)
+})
+
+/**
+ * Schema for case ID + variant ID pair
+ */
+export const CaseVariantIdSchema = z.object({
+  caseId: z.number().int().positive(),
+  variantId: z.number().int().positive()
+})
+
+// ============================================================
+// Auth Schemas
+// ============================================================
+
+/**
+ * Schema for username validation
+ */
+export const UsernameSchema = z.string().min(1).max(100)
+
+/**
+ * Schema for password validation (min 4 characters)
+ */
+export const PasswordSchema = z.string().min(4).max(256)
+
+/**
+ * Schema for login parameters
+ */
+export const LoginParamsSchema = z.object({
+  username: UsernameSchema,
+  password: z.string().min(1).max(256) // login allows any non-empty password
+})
+
+/**
+ * Schema for user creation
+ */
+export const CreateUserSchema = z.object({
+  username: UsernameSchema,
+  displayName: z.string().min(1).max(200),
+  tempPassword: PasswordSchema
+})
+
+/**
+ * Schema for password change
+ */
+export const ChangePasswordSchema = z.object({
+  oldPassword: z.string().min(1).max(256),
+  newPassword: PasswordSchema
+})
+
+// ============================================================
+// Database Schemas
+// ============================================================
+
+/**
+ * Schema for file path validation
+ */
+export const FilePathSchema = z.string().min(1).max(1024)
+
+/**
+ * Schema for database open parameters
+ */
+export const DatabaseOpenSchema = z.object({
+  path: FilePathSchema,
+  password: z.string().max(256).optional()
+})
+
+/**
+ * Schema for database create parameters
+ */
+export const DatabaseCreateSchema = z.object({
+  path: FilePathSchema,
+  password: z.string().max(256).optional()
+})
+
+/**
+ * Schema for database rekey (new encryption key)
+ */
+export const DatabaseRekeySchema = z.object({
+  newPassword: z.string().max(256)
+})
+
+// ============================================================
+// Gene List Schemas
+// ============================================================
+
+/**
+ * Schema for gene list ID
+ */
+export const GeneListIdSchema = z.number().int().positive()
+
+/**
+ * Schema for gene list creation
+ */
+export const GeneListCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined)
+})
+
+/**
+ * Schema for setting genes in a gene list
+ */
+export const GeneListSetGenesSchema = z.object({
+  listId: z.number().int().positive(),
+  genes: z.array(z.string().min(1).max(50)).max(50000)
+})
+
+/**
+ * Schema for region file creation
+ */
+export const RegionFileCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined)
+})
+
+/**
+ * Schema for BED file import
+ */
+export const BedImportSchema = z.object({
+  fileId: z.number().int().positive(),
+  filePath: FilePathSchema
+})
+
+// ============================================================
+// Association Schemas
+// ============================================================
+
 /**
  * Schema for association analysis config
  * Matches AssociationConfig in src/main/statistics/types.ts
