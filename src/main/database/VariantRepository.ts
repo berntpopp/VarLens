@@ -1,3 +1,4 @@
+import { sql } from 'kysely'
 import { BaseRepository } from './BaseRepository'
 import type { CaseRepository } from './CaseRepository'
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
@@ -155,126 +156,25 @@ export class VariantRepository extends BaseRepository {
   }
 
   getVariantCount(caseId: number): number {
-    const result = this.stmt('SELECT COUNT(*) as count FROM variants WHERE case_id = ?').get(
-      caseId
-    ) as { count: number }
-    return result.count
+    const result = this.execFirst<{ count: number }>(
+      this.kysely
+        .selectFrom('variants')
+        .select(({ fn }) => fn.countAll<number>().as('count'))
+        .where('case_id', '=', caseId)
+    )
+    return result?.count ?? 0
   }
 
-  private buildSortClause(sortBy?: SortItem[]): string {
-    if (!sortBy || sortBy.length === 0) {
-      return 'pos ASC NULLS LAST, id ASC'
-    }
+  // ── Shared filter builder (DRY) ──────────────────────────────
 
-    const clauses: string[] = []
-    for (const sort of sortBy) {
-      const sqlColumn = SORTABLE_COLUMNS[sort.key]
-      if (sqlColumn === undefined) {
-        mainLogger.warn(`Invalid sort column rejected: ${sort.key}`, 'VariantRepository')
-        continue
-      }
-      const direction = sort.order === 'desc' ? 'DESC' : 'ASC'
-      const nulls = sort.order === 'desc' ? 'NULLS FIRST' : 'NULLS LAST'
-      clauses.push(`${sqlColumn} ${direction} ${nulls}`)
-    }
-
-    if (clauses.length === 0) {
-      return 'pos ASC NULLS LAST, id ASC'
-    }
-
-    if (clauses.some((c) => c.startsWith('id ')) === false) {
-      clauses.push('id ASC')
-    }
-
-    return clauses.join(', ')
-  }
-
-  private buildSearchCondition(query: string, params: (string | number | null)[]): string {
-    const term = query.trim()
-    const hasBooleanOps = /\b(AND|OR|NOT)\b/.test(term)
-
-    if (!hasBooleanOps) {
-      return this.buildSingleSearchToken(term, params)
-    }
-
-    const parts = term
-      .split(/\b(AND|OR|NOT)\b/)
-      .map((p) => p.trim())
-      .filter((p) => p !== '')
-
-    const sqlParts: string[] = []
-    for (const part of parts) {
-      if (part === 'AND') {
-        sqlParts.push('AND')
-      } else if (part === 'OR') {
-        sqlParts.push('OR')
-      } else if (part === 'NOT') {
-        sqlParts.push('AND NOT')
-      } else {
-        sqlParts.push(this.buildSingleSearchToken(part, params))
-      }
-    }
-
-    return `(${sqlParts.join(' ')})`
-  }
-
-  private buildSingleSearchToken(token: string, params: (string | number | null)[]): string {
-    const hgvsPattern = /^[cp]\./
-    if (hgvsPattern.test(token)) {
-      const searchPattern = `%${token}%`
-      params.push(searchPattern, searchPattern)
-      return '(cdna LIKE ? OR aa_change LIKE ?)'
-    }
-
-    const ftsQuery = `"${token.replace(/"/g, '""')}"*`
-    params.push(ftsQuery)
-    return 'id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ?)'
-  }
-
-  private buildCursorCondition(
-    cursor: PaginationCursor,
-    sortBy?: SortItem[]
-  ): { condition: string; params: (string | number | null)[] } {
-    const sortItem = sortBy?.[0]
-    const sortKey = sortItem?.key ?? 'pos'
-    const sortDirection = sortItem?.order ?? 'asc'
-    const sqlColumn = SORTABLE_COLUMNS[sortKey] ?? 'pos'
-
-    if (cursor.sort_key !== sortKey) {
-      return { condition: '1 = 0', params: [] }
-    }
-
-    const params: (string | number | null)[] = []
-    let condition: string
-
-    if (cursor.sort_value === null) {
-      if (sortDirection === 'asc') {
-        condition = `(${sqlColumn} IS NULL AND id > ?)`
-        params.push(cursor.id)
-      } else {
-        condition = `(${sqlColumn} IS NULL AND id > ?) OR (${sqlColumn} IS NOT NULL)`
-        params.push(cursor.id)
-      }
-    } else {
-      const compareOp = sortDirection === 'desc' ? '<' : '>'
-      if (sortDirection === 'asc') {
-        condition = `(${sqlColumn} ${compareOp} ? OR (${sqlColumn} = ? AND id > ?) OR ${sqlColumn} IS NULL)`
-        params.push(cursor.sort_value, cursor.sort_value, cursor.id)
-      } else {
-        condition = `(${sqlColumn} ${compareOp} ? OR (${sqlColumn} = ? AND id > ?))`
-        params.push(cursor.sort_value, cursor.sort_value, cursor.id)
-      }
-    }
-
-    return { condition, params }
-  }
-
-  getVariants(
-    filter: VariantFilter,
-    limit: number,
-    cursor?: PaginationCursor,
-    sortBy?: SortItem[]
-  ): PaginatedResult<Variant> {
+  /**
+   * Build WHERE conditions and parameters from a VariantFilter.
+   * Used by both getVariants() and getAllVariantsForExport() to avoid duplication.
+   */
+  private buildFilterConditions(filter: VariantFilter): {
+    conditions: string[]
+    params: (string | number | null)[]
+  } {
     const conditions: string[] = ['case_id = ?']
     const params: (string | number | null)[] = [filter.case_id]
 
@@ -385,6 +285,129 @@ export class VariantRepository extends BaseRepository {
       }
     }
 
+    return { conditions, params }
+  }
+
+  // ── Sort / search / cursor helpers ───────────────────────────
+
+  private buildSortClause(sortBy?: SortItem[]): string {
+    if (!sortBy || sortBy.length === 0) {
+      return 'pos ASC NULLS LAST, id ASC'
+    }
+
+    const clauses: string[] = []
+    for (const sort of sortBy) {
+      const sqlColumn = SORTABLE_COLUMNS[sort.key]
+      if (sqlColumn === undefined) {
+        mainLogger.warn(`Invalid sort column rejected: ${sort.key}`, 'VariantRepository')
+        continue
+      }
+      const direction = sort.order === 'desc' ? 'DESC' : 'ASC'
+      const nulls = sort.order === 'desc' ? 'NULLS FIRST' : 'NULLS LAST'
+      clauses.push(`${sqlColumn} ${direction} ${nulls}`)
+    }
+
+    if (clauses.length === 0) {
+      return 'pos ASC NULLS LAST, id ASC'
+    }
+
+    if (clauses.some((c) => c.startsWith('id ')) === false) {
+      clauses.push('id ASC')
+    }
+
+    return clauses.join(', ')
+  }
+
+  private buildSearchCondition(query: string, params: (string | number | null)[]): string {
+    const term = query.trim()
+    const hasBooleanOps = /\b(AND|OR|NOT)\b/.test(term)
+
+    if (!hasBooleanOps) {
+      return this.buildSingleSearchToken(term, params)
+    }
+
+    const parts = term
+      .split(/\b(AND|OR|NOT)\b/)
+      .map((p) => p.trim())
+      .filter((p) => p !== '')
+
+    const sqlParts: string[] = []
+    for (const part of parts) {
+      if (part === 'AND') {
+        sqlParts.push('AND')
+      } else if (part === 'OR') {
+        sqlParts.push('OR')
+      } else if (part === 'NOT') {
+        sqlParts.push('AND NOT')
+      } else {
+        sqlParts.push(this.buildSingleSearchToken(part, params))
+      }
+    }
+
+    return `(${sqlParts.join(' ')})`
+  }
+
+  private buildSingleSearchToken(token: string, params: (string | number | null)[]): string {
+    const hgvsPattern = /^[cp]\./
+    if (hgvsPattern.test(token)) {
+      const searchPattern = `%${token}%`
+      params.push(searchPattern, searchPattern)
+      return '(cdna LIKE ? OR aa_change LIKE ?)'
+    }
+
+    const ftsQuery = `"${token.replace(/"/g, '""')}"*`
+    params.push(ftsQuery)
+    return 'id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ?)'
+  }
+
+  private buildCursorCondition(
+    cursor: PaginationCursor,
+    sortBy?: SortItem[]
+  ): { condition: string; params: (string | number | null)[] } {
+    const sortItem = sortBy?.[0]
+    const sortKey = sortItem?.key ?? 'pos'
+    const sortDirection = sortItem?.order ?? 'asc'
+    const sqlColumn = SORTABLE_COLUMNS[sortKey] ?? 'pos'
+
+    if (cursor.sort_key !== sortKey) {
+      return { condition: '1 = 0', params: [] }
+    }
+
+    const params: (string | number | null)[] = []
+    let condition: string
+
+    if (cursor.sort_value === null) {
+      if (sortDirection === 'asc') {
+        condition = `(${sqlColumn} IS NULL AND id > ?)`
+        params.push(cursor.id)
+      } else {
+        condition = `(${sqlColumn} IS NULL AND id > ?) OR (${sqlColumn} IS NOT NULL)`
+        params.push(cursor.id)
+      }
+    } else {
+      const compareOp = sortDirection === 'desc' ? '<' : '>'
+      if (sortDirection === 'asc') {
+        condition = `(${sqlColumn} ${compareOp} ? OR (${sqlColumn} = ? AND id > ?) OR ${sqlColumn} IS NULL)`
+        params.push(cursor.sort_value, cursor.sort_value, cursor.id)
+      } else {
+        condition = `(${sqlColumn} ${compareOp} ? OR (${sqlColumn} = ? AND id > ?))`
+        params.push(cursor.sort_value, cursor.sort_value, cursor.id)
+      }
+    }
+
+    return { condition, params }
+  }
+
+  // ── Query methods ────────────────────────────────────────────
+
+  getVariants(
+    filter: VariantFilter,
+    limit: number,
+    cursor?: PaginationCursor,
+    sortBy?: SortItem[]
+  ): PaginatedResult<Variant> {
+    const { conditions, params } = this.buildFilterConditions(filter)
+
     const orderByClause = this.buildSortClause(sortBy)
     const primarySortKey =
       (sortBy && sortBy.find((item) => SORTABLE_COLUMNS[item.key] !== undefined))?.key ?? 'pos'
@@ -443,149 +466,79 @@ export class VariantRepository extends BaseRepository {
   }
 
   getGeneSymbols(caseId: number, query: string, limit: number = 50): string[] {
-    const results = this.db
-      .prepare(
-        `
-      SELECT DISTINCT gene_symbol
-      FROM variants
-      WHERE case_id = ? AND gene_symbol LIKE ?
-      ORDER BY gene_symbol
-      LIMIT ?
-    `
-      )
-      .all(caseId, `%${query}%`, limit) as Array<{ gene_symbol: string | null }>
-    return results.map((r) => r.gene_symbol).filter((g): g is string => g !== null)
+    const results = this.execAll<{ gene_symbol: string }>(
+      this.kysely
+        .selectFrom('variants')
+        .select('gene_symbol')
+        .distinct()
+        .where('case_id', '=', caseId)
+        .where('gene_symbol', 'like', `%${query}%`)
+        .where('gene_symbol', 'is not', null)
+        .orderBy('gene_symbol')
+        .limit(limit)
+    )
+    return results.map((r) => r.gene_symbol)
   }
 
   getAllVariantsForExport(filter: VariantFilter): Variant[] {
-    const conditions: string[] = ['case_id = ?']
-    const params: (string | number | null)[] = [filter.case_id]
-
-    if (filter.gene_symbol !== undefined && filter.gene_symbol !== '') {
-      conditions.push('gene_symbol LIKE ?')
-      params.push(`%${filter.gene_symbol}%`)
-    }
-
-    if (filter.consequences !== undefined && filter.consequences.length > 0) {
-      const placeholders = filter.consequences.map(() => '?').join(', ')
-      conditions.push(`consequence IN (${placeholders})`)
-      params.push(...filter.consequences)
-    } else if (filter.consequence !== undefined && filter.consequence !== '') {
-      conditions.push('consequence = ?')
-      params.push(filter.consequence)
-    }
-
-    if (filter.funcs !== undefined && filter.funcs.length > 0) {
-      const placeholders = filter.funcs.map(() => '?').join(', ')
-      conditions.push(`func IN (${placeholders})`)
-      params.push(...filter.funcs)
-    }
-
-    if (filter.clinvars !== undefined && filter.clinvars.length > 0) {
-      const placeholders = filter.clinvars.map(() => '?').join(', ')
-      conditions.push(`clinvar IN (${placeholders})`)
-      params.push(...filter.clinvars)
-    }
-
-    if (filter.gnomad_af_max !== undefined) {
-      conditions.push('(gnomad_af IS NULL OR gnomad_af <= ?)')
-      params.push(filter.gnomad_af_max)
-    }
-
-    if (filter.cadd_min !== undefined) {
-      conditions.push('(cadd IS NULL OR cadd >= ?)')
-      params.push(filter.cadd_min)
-    }
-
-    if (filter.search_query != null && filter.search_query !== '') {
-      const searchCondition = this.buildSearchCondition(filter.search_query, params)
-      conditions.push(searchCondition)
-    }
-
-    if (filter.chr != null && filter.chr !== '') {
-      conditions.push('chr = ?')
-      params.push(filter.chr)
-    }
-    if (filter.pos != null) {
-      conditions.push('pos = ?')
-      params.push(filter.pos)
-    }
-    if (filter.ref != null && filter.ref !== '') {
-      conditions.push('ref = ?')
-      params.push(filter.ref)
-    }
-    if (filter.alt != null && filter.alt !== '') {
-      conditions.push('alt = ?')
-      params.push(filter.alt)
-    }
-
-    if (filter.tag_ids !== undefined && filter.tag_ids.length > 0) {
-      const placeholders = filter.tag_ids.map(() => '?').join(', ')
-      conditions.push(
-        `id IN (SELECT variant_id FROM variant_tags WHERE case_id = ? AND tag_id IN (${placeholders}))`
-      )
-      params.push(filter.case_id, ...filter.tag_ids)
-    }
-
-    if (filter.starred_only === true) {
-      conditions.push(
-        `id IN (SELECT variant_id FROM case_variant_annotations WHERE case_id = ? AND starred = 1)`
-      )
-      params.push(filter.case_id)
-    }
-
-    if (filter.has_comment === true) {
-      conditions.push(
-        `(id IN (SELECT variant_id FROM case_variant_annotations WHERE case_id = ? AND per_case_comment IS NOT NULL AND per_case_comment != '')
-          OR EXISTS (
-            SELECT 1 FROM variant_annotations va
-            WHERE va.chr = variants.chr AND va.pos = variants.pos
-              AND va.ref = variants.ref AND va.alt = variants.alt
-              AND va.global_comment IS NOT NULL AND va.global_comment != ''
-          ))`
-      )
-      params.push(filter.case_id)
-    }
-
-    if (filter.acmg_classifications !== undefined && filter.acmg_classifications.length > 0) {
-      const placeholders = filter.acmg_classifications.map(() => '?').join(', ')
-      conditions.push(
-        `id IN (SELECT variant_id FROM case_variant_annotations WHERE case_id = ? AND acmg_classification IN (${placeholders}))`
-      )
-      params.push(filter.case_id, ...filter.acmg_classifications)
-    }
-
+    const { conditions, params } = this.buildFilterConditions(filter)
     const whereClause = conditions.join(' AND ')
-    const sql = `SELECT * FROM variants WHERE ${whereClause} ORDER BY chr, pos`
-    return this.db.prepare(sql).all(...params) as Variant[]
+    const querySql = `SELECT * FROM variants WHERE ${whereClause} ORDER BY chr, pos`
+    return this.db.prepare(querySql).all(...params) as Variant[]
   }
 
   getFilterOptions(caseId: number): FilterOptions {
-    const consequences = (
-      this.stmt(
-        'SELECT DISTINCT consequence FROM variants WHERE case_id = ? AND consequence IS NOT NULL ORDER BY consequence'
-      ).all(caseId) as { consequence: string }[]
+    const consequences = this.execAll<{ consequence: string }>(
+      this.kysely
+        .selectFrom('variants')
+        .select('consequence')
+        .distinct()
+        .where('case_id', '=', caseId)
+        .where('consequence', 'is not', null)
+        .orderBy('consequence')
     ).map((r) => r.consequence)
 
-    const funcs = (
-      this.stmt(
-        'SELECT DISTINCT func FROM variants WHERE case_id = ? AND func IS NOT NULL ORDER BY func'
-      ).all(caseId) as { func: string }[]
+    const funcs = this.execAll<{ func: string }>(
+      this.kysely
+        .selectFrom('variants')
+        .select('func')
+        .distinct()
+        .where('case_id', '=', caseId)
+        .where('func', 'is not', null)
+        .orderBy('func')
     ).map((r) => r.func)
 
-    const clinvars = (
-      this.stmt(
-        'SELECT DISTINCT clinvar FROM variants WHERE case_id = ? AND clinvar IS NOT NULL ORDER BY clinvar'
-      ).all(caseId) as { clinvar: string }[]
+    const clinvars = this.execAll<{ clinvar: string }>(
+      this.kysely
+        .selectFrom('variants')
+        .select('clinvar')
+        .distinct()
+        .where('case_id', '=', caseId)
+        .where('clinvar', 'is not', null)
+        .orderBy('clinvar')
     ).map((r) => r.clinvar)
 
-    const caddRange = this.stmt(
-      'SELECT MIN(cadd) as min_cadd, MAX(cadd) as max_cadd FROM variants WHERE case_id = ? AND cadd IS NOT NULL'
-    ).get(caseId) as { min_cadd: number | null; max_cadd: number | null } | undefined
+    const caddRange = this.execFirst<{ min_cadd: number | null; max_cadd: number | null }>(
+      this.kysely
+        .selectFrom('variants')
+        .select(({ fn }) => [
+          fn.min('cadd').as('min_cadd'),
+          fn.max('cadd').as('max_cadd')
+        ])
+        .where('case_id', '=', caseId)
+        .where('cadd', 'is not', null)
+    )
 
-    const afRange = this.stmt(
-      'SELECT MIN(gnomad_af) as min_af, MAX(gnomad_af) as max_af FROM variants WHERE case_id = ? AND gnomad_af IS NOT NULL'
-    ).get(caseId) as { min_af: number | null; max_af: number | null } | undefined
+    const afRange = this.execFirst<{ min_af: number | null; max_af: number | null }>(
+      this.kysely
+        .selectFrom('variants')
+        .select(({ fn }) => [
+          fn.min('gnomad_af').as('min_af'),
+          fn.max('gnomad_af').as('max_af')
+        ])
+        .where('case_id', '=', caseId)
+        .where('gnomad_af', 'is not', null)
+    )
 
     return {
       consequences,
