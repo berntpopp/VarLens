@@ -350,5 +350,25 @@ describe('AuthService', () => {
       expect(afterUser?.failed_login_count).toBe(0)
       expect(afterUser?.locked_until).toBeNull()
     })
+
+    it('should handle concurrent login attempts', async () => {
+      await authService.createUser('user1', 'User One', 'pass123', 'admin1')
+
+      // Fire two login attempts concurrently
+      const [result1, result2] = await Promise.all([
+        authService.authenticate('user1', 'pass123'),
+        authService.authenticate('user1', 'pass123')
+      ])
+
+      // Both should succeed without errors
+      expect(result1.success).toBe(true)
+      expect(result2.success).toBe(true)
+      expect(result1.user?.username).toBe('user1')
+      expect(result2.user?.username).toBe('user1')
+
+      // Failed count should remain at 0
+      const user = authService.getUser('user1')
+      expect(user?.failed_login_count).toBe(0)
+    })
   })
 })
