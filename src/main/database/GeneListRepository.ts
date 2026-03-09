@@ -65,15 +65,14 @@ export class GeneListRepository extends BaseRepository {
   setGeneListGenes(listId: number, genes: string[]): void {
     this.runTransaction(() => {
       this.execRun(this.kysely.deleteFrom('gene_list_items').where('gene_list_id', '=', listId))
+      // Prepare statement once outside the loop for O(1) compilation overhead
+      const insertStmt = this.db.prepare(
+        'INSERT OR IGNORE INTO gene_list_items (gene_list_id, gene_symbol) VALUES (?, ?)'
+      )
       for (const gene of genes) {
         const trimmed = gene.trim().toUpperCase()
         if (trimmed !== '') {
-          this.execRun(
-            this.kysely
-              .insertInto('gene_list_items')
-              .values({ gene_list_id: listId, gene_symbol: trimmed })
-              .onConflict((oc) => oc.doNothing())
-          )
+          insertStmt.run(listId, trimmed)
         }
       }
       this.execRun(

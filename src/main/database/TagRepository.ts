@@ -115,12 +115,12 @@ export class TagRepository extends BaseRepository {
           .where('variant_id', '=', variantId)
       )
       const now = Date.now()
+      // Prepare statement once outside the loop to avoid repeated compilation
+      const insertStmt = this.db.prepare(
+        'INSERT INTO variant_tags (case_id, variant_id, tag_id, created_at) VALUES (?, ?, ?, ?)'
+      )
       for (const tagId of tagIds) {
-        this.execRun(
-          this.kysely
-            .insertInto('variant_tags')
-            .values({ case_id: caseId, variant_id: variantId, tag_id: tagId, created_at: now })
-        )
+        insertStmt.run(caseId, variantId, tagId, now)
       }
     })
   }

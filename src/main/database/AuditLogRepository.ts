@@ -48,8 +48,7 @@ export class AuditLogRepository extends BaseRepository {
   }
 
   query(filter: AuditQueryFilter): AuditQueryResult {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let baseQuery = this.kysely.selectFrom('audit_log') as any
+    let baseQuery = this.kysely.selectFrom('audit_log')
 
     if (filter.action_type) {
       baseQuery = baseQuery.where('action_type', '=', filter.action_type)
@@ -68,9 +67,7 @@ export class AuditLogRepository extends BaseRepository {
     }
 
     const countResult = this.execFirst<{ count: number }>(
-      baseQuery.select(({ fn }: { fn: { countAll: <T>() => { as: (alias: string) => T } } }) =>
-        fn.countAll<number>().as('count')
-      )
+      baseQuery.select(({ fn }) => fn.countAll<number>().as('count'))
     )
     const total_count = countResult?.count ?? 0
 
