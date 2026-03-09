@@ -40,6 +40,6 @@ describe('Migration v8: age and date_of_birth', () => {
 
   it('sets schema version to latest after all migrations', () => {
     const result = db.pragma('user_version') as Array<{ user_version: number }>
-    expect(result[0].user_version).toBe(11)
+    expect(result[0].user_version).toBe(12)
   })
 })

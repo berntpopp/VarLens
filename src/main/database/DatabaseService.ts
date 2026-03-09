@@ -23,6 +23,7 @@ import { VariantRepository } from './VariantRepository'
 import { DatabaseOverviewService } from './DatabaseOverviewService'
 import { AuditLogRepository } from './AuditLogRepository'
 import { GeneListRepository } from './GeneListRepository'
+import { AuthService } from '../services/auth'
 
 /**
  * DatabaseService class
@@ -47,6 +48,8 @@ export class DatabaseService {
   private _overview: DatabaseOverviewService
   private _auditLog: AuditLogRepository
   private _geneLists: GeneListRepository
+  private _auth: AuthService
+  private _currentUser: { id: number; username: string; role: string } | null = null
 
   /**
    * Create a new DatabaseService instance
@@ -106,6 +109,7 @@ export class DatabaseService {
       this._overview = new DatabaseOverviewService(this.db, this._kysely, this.statementCache)
       this._auditLog = new AuditLogRepository(this.db, this._kysely, this.statementCache)
       this._geneLists = new GeneListRepository(this.db, this._kysely, this.statementCache)
+      this._auth = new AuthService(this.db)
 
       // Clean up expired API cache entries on startup
       this.db.prepare('DELETE FROM api_cache WHERE expires_at < ?').run(Date.now())
@@ -153,6 +157,22 @@ export class DatabaseService {
 
   get geneLists(): GeneListRepository {
     return this._geneLists
+  }
+
+  get auth(): AuthService {
+    return this._auth
+  }
+
+  get user(): { id: number; username: string; role: string } | null {
+    return this._currentUser
+  }
+
+  setCurrentUser(user: { id: number; username: string; role: string } | null): void {
+    this._currentUser = user
+  }
+
+  isAccountsEnabled(): boolean {
+    return this._auth.isAccountsEnabled()
   }
 
   // ── Utility methods ─────────────────────────────────────────

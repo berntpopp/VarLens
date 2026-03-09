@@ -422,6 +422,22 @@ const api = {
         ipcRenderer.removeListener('updater:status', handler)
       }
     }
+  },
+
+  auth: {
+    login: (username: string, password: string) =>
+      ipcRenderer.invoke('auth:login', username, password),
+    logout: () => ipcRenderer.invoke('auth:logout'),
+    currentUser: () => ipcRenderer.invoke('auth:currentUser'),
+    isAccountsEnabled: () => ipcRenderer.invoke('auth:isAccountsEnabled'),
+    createUser: (username: string, displayName: string, tempPassword: string) =>
+      ipcRenderer.invoke('auth:createUser', username, displayName, tempPassword),
+    listUsers: () => ipcRenderer.invoke('auth:listUsers'),
+    deactivateUser: (username: string) => ipcRenderer.invoke('auth:deactivateUser', username),
+    resetPassword: (username: string, newPassword: string) =>
+      ipcRenderer.invoke('auth:resetPassword', username, newPassword),
+    changePassword: (oldPassword: string, newPassword: string) =>
+      ipcRenderer.invoke('auth:changePassword', oldPassword, newPassword)
   }
 }
 
