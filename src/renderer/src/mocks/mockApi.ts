@@ -802,5 +802,17 @@ export const mockApi: WindowAPI = {
   audit: {
     getByEntity: async () => [],
     query: async () => ({ data: [], total_count: 0 })
+  },
+
+  auth: {
+    login: async () => ({ success: true, user: { id: 1, username: 'demo', role: 'admin' } }),
+    logout: async () => {},
+    currentUser: async () => ({ id: 1, username: 'demo', role: 'admin' }),
+    isAccountsEnabled: async () => false,
+    createUser: async () => {},
+    listUsers: async () => [],
+    deactivateUser: async () => {},
+    resetPassword: async () => {},
+    changePassword: async () => {}
   }
 }

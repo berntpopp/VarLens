@@ -116,7 +116,7 @@ export function registerGeneListHandlers({ ipcMain, getDb }: HandlerDependencies
       }
 
       const db = getDb()
-      return db.geneLists.createRegionFile(validated.data.name, validated.data.description)
+      return db.geneLists.createRegionFile(validated.data.name, validated.data.description ?? null)
     })
   })
 

@@ -68,9 +68,9 @@ type VuetifyInternalColumn = any
 interface Props {
   /** The Vuetify internal column object from the header slot */
   headerColumn: VuetifyInternalColumn
-  /** Function to get the sort icon for a column (Vuetify returns IconValue which includes component types) */
+  /** Function to get the sort icon for a column (Vuetify returns IconValue - complex union type) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getSortIcon: (column: VuetifyInternalColumn) => string | (new (...args: any[]) => any)
+  getSortIcon: (...args: any[]) => any
   /** Function to toggle sort on a column */
   toggleSort: (column: VuetifyInternalColumn) => void
   /** Function to check if a column is sorted */

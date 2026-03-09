@@ -536,7 +536,16 @@ export interface AuthAPI {
   isAccountsEnabled: () => Promise<boolean>
   createUser: (username: string, displayName: string, tempPassword: string) => Promise<void>
   listUsers: () => Promise<
-    Array<{ id: number; username: string; display_name: string; role: string; active: number }>
+    Array<{
+      id: number
+      username: string
+      display_name: string | null
+      role: string
+      is_active: number
+      must_change_password: number
+      failed_login_count: number
+      created_at: string
+    }>
   >
   deactivateUser: (username: string) => Promise<void>
   resetPassword: (username: string, newPassword: string) => Promise<void>
