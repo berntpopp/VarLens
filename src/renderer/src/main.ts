@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import vuetify from './plugins/vuetify'
+import router from './router'
 import './assets/styles/main.scss'
 import type { WindowAPI } from '../../shared/types/api'
 
@@ -23,6 +24,7 @@ async function bootstrap(): Promise<void> {
 
   // Register Pinia first so stores work in components and services
   app.use(createPinia())
+  app.use(router)
   app.use(vuetify)
   app.mount('#app')
 }

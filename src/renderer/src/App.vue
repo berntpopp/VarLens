@@ -166,49 +166,7 @@
     </v-navigation-drawer>
 
     <v-main>
-      <v-window v-model="activeTab">
-        <v-window-item value="case">
-          <EmptyState
-            v-if="!selectedCaseId"
-            :has-cases="caseCount > 0"
-            @import="handleImportClick"
-          />
-          <div v-else class="case-content">
-            <div class="filter-bar-container">
-              <FilterToolbar
-                ref="filterToolbarRef"
-                :case-id="selectedCaseId"
-                :case-name="selectedCaseName"
-                :filtered-count="filteredCount"
-                :total-count="totalCount"
-                :has-sort="hasSort"
-                :initial-search="initialSearch"
-                :columns="variantTableRef?.columns"
-                @update:filters="handleFiltersUpdate"
-                @reset-sort="handleResetSort"
-                @export-success="handleExportSuccess"
-                @export-error="handleExportError"
-              />
-            </div>
-            <VariantTable
-              ref="variantTableRef"
-              :case-id="selectedCaseId"
-              :filters="currentFilters"
-              @update:counts="handleCountsUpdate"
-              @update:has-sort="handleSortUpdate"
-              @row-click="handleVariantRowClick"
-            />
-          </div>
-        </v-window-item>
-
-        <v-window-item value="cohort">
-          <CohortView
-            ref="cohortViewRef"
-            @navigate-to-case="handleNavigateToCase"
-            @row-click="handleVariantRowClick"
-          />
-        </v-window-item>
-      </v-window>
+      <router-view />
     </v-main>
 
     <VariantDetailsPanel
@@ -252,11 +210,9 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
-import EmptyState from './components/EmptyState.vue'
-import VariantTable from './components/VariantTable.vue'
-import FilterToolbar from './components/FilterToolbar.vue'
 import ImportDialog from './components/ImportDialog.vue'
 import BatchImportDialog from './components/BatchImportDialog.vue'
 import AppSnackbar from './components/AppSnackbar.vue'
@@ -269,7 +225,6 @@ import DatabasePicker from './components/DatabasePicker.vue'
 import ExternalLinksSettings from './components/ExternalLinksSettings.vue'
 import TagManagementDialog from './components/TagManagementDialog.vue'
 import DeleteAllCasesDialog from './components/DeleteAllCasesDialog.vue'
-import CohortView from './components/CohortView.vue'
 import VariantDetailsPanel from './components/VariantDetailsPanel.vue'
 import CaseMetadataModal from './components/CaseMetadataModal.vue'
 import { usePanelResize } from './composables/usePanelResize'
@@ -282,8 +237,32 @@ import { useColumnPreferences } from './composables/useColumnPreferences'
 import { useFilterPreferences } from './composables/useFilterPreferences'
 import { useResponsiveLayout } from './composables/useResponsiveLayout'
 import { logService } from './services/LogService'
-import type { VariantFilter, Variant, AffectedStatus, CaseSex } from '../../shared/types/api'
-import type { CohortVariant } from '../../shared/types/cohort'
+import { useAppState } from './composables/useAppState'
+import type { AffectedStatus, CaseSex } from '../../shared/types/api'
+
+const router = useRouter()
+
+// Shared state from composable
+const {
+  selectedCaseId,
+  selectedCaseName,
+  selectedVariantCount,
+  selectedCreatedAt,
+  caseCount,
+  activeTab,
+  sidebarOpen,
+  currentFilters,
+  filteredCount,
+  totalCount,
+  hasSort,
+  panelOpen,
+  selectedPanelVariant,
+  panelMode,
+  variantTableRef,
+  filterToolbarRef,
+  cohortViewRef,
+  setSnackbarHandler
+} = useAppState()
 
 // Initialize responsive layout
 const { tier, showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
@@ -321,7 +300,6 @@ const handleResetFilters = () => {
 }
 
 const handleDeleteAllCases = async () => {
-  // Guard for browser dev mode (no preload)
   // eslint-disable-next-line no-undef
   if (typeof window.api === 'undefined') {
     return
@@ -333,24 +311,20 @@ const handleDeleteAllCases = async () => {
     // eslint-disable-next-line no-undef
     const deleted = await window.api.cases.deleteAll()
 
-    // Clear selection if current case was deleted
     selectedCaseId.value = null
     selectedCaseName.value = ''
 
-    // Refresh case list
     await caseListRef.value?.refreshCases()
 
-    // Show success snackbar
     snackbarRef.value?.show(`Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`, 'success')
   }
 }
 
-// Component refs
+// Component refs (local to App.vue shell)
 const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
 const batchImportDialogRef = ref<InstanceType<typeof BatchImportDialog> | null>(null)
 const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
-const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
 const disclaimerRef = ref<InstanceType<typeof DisclaimerDialog> | null>(null)
 const faqDialogRef = ref<InstanceType<typeof FaqDialog> | null>(null)
 const externalLinksSettingsRef = ref<InstanceType<typeof ExternalLinksSettings> | null>(null)
@@ -358,11 +332,11 @@ const tagManagementDialogRef = ref<InstanceType<typeof TagManagementDialog> | nu
 const deleteAllCasesDialogRef = ref<InstanceType<typeof DeleteAllCasesDialog> | null>(null)
 const databaseOverviewDialogRef = ref<InstanceType<typeof DatabaseOverviewDialog> | null>(null)
 const caseMetadataModalRef = ref<InstanceType<typeof CaseMetadataModal> | null>(null)
-const cohortViewRef = ref<InstanceType<typeof CohortView> | null>(null)
-const filterToolbarRef = ref<InstanceType<typeof FilterToolbar> | null>(null)
 
-// Sidebar state
-const sidebarOpen = ref(true)
+// Register snackbar handler for cross-component communication
+setSnackbarHandler((message: string, type: string, options?: Record<string, unknown>) => {
+  snackbarRef.value?.show(message, type, options)
+})
 
 // Sidebar resize
 const {
@@ -384,38 +358,15 @@ const {
 // Log viewer state
 const logViewerOpen = ref(false)
 
-// Disclaimer acknowledgment state (reactive, passed to AppFooter)
+// Disclaimer acknowledgment state
 const disclaimerAcknowledged = ref(false)
-
-// Tab state
-const activeTab = ref<'case' | 'cohort'>('case')
-
-// Case selection state
-const selectedCaseId = ref<number | null>(null)
-const selectedCaseName = ref<string>('')
-const selectedVariantCount = ref(0)
-const selectedCreatedAt = ref(0)
-const caseCount = ref(0)
-
-// Panel state
-const panelOpen = ref(false)
-const selectedPanelVariant = ref<Variant | CohortVariant | null>(null)
-
-// Filter state (lifted to App for coordination)
-const currentFilters = ref<Omit<VariantFilter, 'case_id'>>({})
-const filteredCount = ref(0)
-const totalCount = ref(0)
-const hasSort = ref(false)
-const initialSearch = ref<string | undefined>(undefined)
-
-// Computed panel mode
-const panelMode = computed(() => (activeTab.value === 'case' ? 'case' : 'cohort'))
 
 const handleHomeClick = (): void => {
   selectedCaseId.value = null
   selectedCaseName.value = ''
   activeTab.value = 'case'
   sidebarOpen.value = true
+  router.push('/case')
 }
 
 const handleImportClick = (): void => {
@@ -439,13 +390,8 @@ const handleImportComplete = async (result: {
   variantCount: number
   caseName: string
 }): Promise<void> => {
-  // Refresh case list to include new case
   await caseListRef.value?.refreshCases()
-
-  // Auto-select the newly imported case
   caseListRef.value?.selectCase(result.caseId)
-
-  // Show success snackbar
   snackbarRef.value?.show(
     `Case imported: ${result.caseName} (${result.variantCount.toLocaleString()} variants)`,
     'success'
@@ -453,10 +399,7 @@ const handleImportComplete = async (result: {
 }
 
 const handleBatchImportComplete = async (result: { totalImported: number }): Promise<void> => {
-  // Refresh case list to include new cases
   await caseListRef.value?.refreshCases()
-
-  // Show success snackbar
   const message =
     result.totalImported === 1
       ? 'Batch import complete: 1 case imported'
@@ -474,9 +417,9 @@ const handleCaseSelected = (
   selectedCaseName.value = caseName
   selectedVariantCount.value = variantCount
   selectedCreatedAt.value = createdAt
-  // Switch to case view and auto-close sidebar on case selection
   activeTab.value = 'case'
   sidebarOpen.value = false
+  router.push('/case')
 }
 
 const handleEditCase = (
@@ -497,121 +440,28 @@ const handleCasesLoaded = (count: number): void => {
 }
 
 const handleCaseDeleted = (caseId: number): void => {
-  // If deleted case was selected, clear selection
   if (selectedCaseId.value === caseId) {
     selectedCaseId.value = null
   }
 }
 
-const handleFiltersUpdate = (filters: Omit<VariantFilter, 'case_id'>): void => {
-  currentFilters.value = filters
-  // Clear initialSearch once the search filter has been applied (prevent re-applying on re-render)
-  if (initialSearch.value !== undefined && filters.search_query != null) {
-    initialSearch.value = undefined
-  }
-}
-
-const handleResetSort = (): void => {
-  variantTableRef.value?.resetSort()
-}
-
-const handleCountsUpdate = (counts: { filtered: number; total: number }): void => {
-  filteredCount.value = counts.filtered
-  totalCount.value = counts.total
-}
-
-const handleSortUpdate = (sortActive: boolean): void => {
-  hasSort.value = sortActive
-}
-
-const handleExportSuccess = (data: {
-  filePath: string
-  action: { text: string; callback: () => void }
-}): void => {
-  snackbarRef.value?.show(`Exported to ${data.filePath}`, 'success', {
-    timeout: 3000,
-    action: data.action
-  })
-}
-
-const handleExportError = (error: string): void => {
-  snackbarRef.value?.show(`Export failed: ${error}`, 'error', {
-    timeout: -1
-  })
-}
-
-// Handle variant row click from tables
-const handleVariantRowClick = (variant: Variant | CohortVariant): void => {
-  selectedPanelVariant.value = variant
-  panelOpen.value = true
-}
-
-// Handle navigation from cohort to case
-const handleNavigateToCase = async (payload: {
-  caseId: number
-  chr: string
-  pos: number
-  ref: string
-  alt: string
-  geneSymbol: string | null
-  cdna: string | null
-}): Promise<void> => {
-  // Guard for browser dev mode (no preload)
-  // eslint-disable-next-line no-undef
-  if (typeof window.api === 'undefined') {
-    return
-  }
-
-  // Build a human-readable search from gene symbol and/or cDNA notation
-  // e.g. "BRCA1 AND c.4308T>C" or just "BRCA1" or just "c.4308T>C"
-  const parts: string[] = []
-  if (payload.geneSymbol != null && payload.geneSymbol !== '') {
-    parts.push(payload.geneSymbol)
-  }
-  if (payload.cdna != null && payload.cdna !== '') {
-    parts.push(payload.cdna)
-  }
-  const variantSearch = parts.length > 0 ? parts.join(' AND ') : undefined
-
-  // Set the initial search BEFORE switching case (so the watch on selectedCaseId
-  // clears filters but initialSearch survives via the immediate watcher in FilterToolbar)
-  initialSearch.value = variantSearch
-
-  // Switch to case tab
-  activeTab.value = 'case'
-
-  // Set selected case ID
-  selectedCaseId.value = payload.caseId
-
-  // Look up case name from the case list
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
-    const cases = await (window as any).api.cases.list()
-    const selectedCase = cases.find((c: { id: number }) => c.id === payload.caseId)
-    if (selectedCase !== undefined) {
-      selectedCaseName.value = selectedCase.name
-    }
-  } catch (error) {
-    // eslint-disable-next-line no-undef
-    console.error('Failed to fetch case name:', error)
-  }
-}
-
-// Clear filters and sort on case change (initialSearch survives for cohort navigation)
-watch(selectedCaseId, () => {
-  currentFilters.value = {}
-  hasSort.value = false
-})
-
-// Refresh cohort data when switching to cohort tab
-// Also close panel on tab switch
+// Sync activeTab with router
 watch(activeTab, async (newTab) => {
   panelOpen.value = false
   selectedPanelVariant.value = null
   if (newTab === 'cohort') {
     sidebarOpen.value = false
+    router.push('/cohort')
     await cohortViewRef.value?.refresh()
+  } else {
+    router.push('/case')
   }
+})
+
+// Clear filters on case change
+watch(selectedCaseId, () => {
+  currentFilters.value = {}
+  hasSort.value = false
 })
 
 // Clear UI state when database path changes
@@ -645,28 +495,18 @@ const handleDisclaimerAcknowledged = (): void => {
 }
 
 const handleDatabaseSwitched = async (): Promise<void> => {
-  // Clear current case selection
   selectedCaseId.value = null
   selectedCaseName.value = ''
-
-  // Clear filters and counts
   currentFilters.value = {}
   filteredCount.value = 0
   totalCount.value = 0
   hasSort.value = false
-
-  // Clear metadata cache
   clearMetadataCache()
-
-  // Refresh case list with new database
   await caseListRef.value?.refreshCases()
-
-  // Show success snackbar
   snackbarRef.value?.show(`Switched to ${databaseStore.currentName}`, 'success')
 }
 
 const handleDatabaseError = (message: string): void => {
-  // Show error snackbar
   snackbarRef.value?.show(message, 'error')
 }
 
@@ -676,13 +516,8 @@ disclaimerAcknowledged.value = !needsAcknowledgment()
 
 // Lifecycle
 onMounted(async () => {
-  // Initialize main process log listener
   logService.setupMainProcessListener()
-
-  // Load current database info
   await databaseStore.fetchInfo()
-
-  // Check disclaimer acknowledgment on startup
   disclaimerRef.value?.checkAndShow()
 })
 </script>
@@ -743,21 +578,18 @@ onMounted(async () => {
   opacity: 0.7;
 }
 
-/* Case content fills available height */
 .case-content {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 48px - 32px); /* viewport minus app-bar minus footer */
+  height: calc(100vh - 48px - 32px);
   overflow: hidden;
 }
 
-/* Remove v-main automatic padding-top from app-bar */
 :deep(.v-main) {
   --v-layout-top: 0px !important;
-  padding-top: 48px !important; /* Only app-bar height */
+  padding-top: 48px !important;
 }
 
-/* Ensure v-window and v-window-item fill available height */
 :deep(.v-window) {
   height: 100%;
 }
@@ -770,12 +602,10 @@ onMounted(async () => {
   height: 100%;
 }
 
-/* Sidebar toggle button animation */
 .sidebar-toggle-btn :deep(.v-icon) {
   transition: transform 0.2s ease-in-out;
 }
 
-/* Sidebar resize handle */
 .sidebar-resize-handle {
   position: absolute;
   right: 0;
