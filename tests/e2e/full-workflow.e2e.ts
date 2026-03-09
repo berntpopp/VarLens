@@ -103,11 +103,6 @@ test.describe('Case View', () => {
     await caseBtn.click()
     await window.waitForTimeout(300)
 
-    // Should show welcome message (case is selected from previous test,
-    // so check current state)
-    const welcomeText = window.locator('text=Welcome to VarLens')
-    const hasWelcome = await welcomeText.isVisible().catch(() => false)
-
     // Take screenshot of whatever state we're in
     await window.screenshot({ path: testInfo.outputPath('empty-state.png') })
 
