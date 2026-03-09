@@ -35,11 +35,11 @@ describe('DatabaseService transcript methods', () => {
 
   beforeEach(() => {
     db = new DatabaseService(':memory:')
-    caseId = db.createCase('test', '/test.json', 100)
-    db.insertVariantsBatch(caseId, [makeVariant()])
+    caseId = db.cases.createCase('test', '/test.json', 100)
+    db.variants.insertVariantsBatch(caseId, [makeVariant()])
 
     // Get the variant ID
-    const variants = db.getVariants({ case_id: caseId }, 10)
+    const variants = db.variants.getVariants({ case_id: caseId }, 10)
     variantId = variants.data[0].id
 
     // Insert multiple transcript rows for testing
@@ -88,30 +88,32 @@ describe('DatabaseService transcript methods', () => {
 
   describe('getVariantTranscripts', () => {
     it('should return all transcripts for a variant', () => {
-      const transcripts = db.getVariantTranscripts(variantId)
+      const transcripts = db.transcripts.getVariantTranscripts(variantId)
       expect(transcripts).toHaveLength(3)
     })
 
     it('should return selected transcript first', () => {
-      const transcripts = db.getVariantTranscripts(variantId)
+      const transcripts = db.transcripts.getVariantTranscripts(variantId)
       expect(transcripts[0].transcript_id).toBe('NM_007294.4')
       expect(transcripts[0].is_selected).toBe(true)
     })
 
     it('should return empty array for variant with no transcripts', () => {
-      db.insertVariantsBatch(caseId, [makeVariant({ transcript: null, chr: '2', pos: 999 })])
-      const variants = db.getVariants({ case_id: caseId }, 10)
+      db.variants.insertVariantsBatch(caseId, [
+        makeVariant({ transcript: null, chr: '2', pos: 999 })
+      ])
+      const variants = db.variants.getVariants({ case_id: caseId }, 10)
       const otherVariant = variants.data.find((v) => v.chr === '2')!
-      const transcripts = db.getVariantTranscripts(otherVariant.id)
+      const transcripts = db.transcripts.getVariantTranscripts(otherVariant.id)
       expect(transcripts).toHaveLength(0)
     })
   })
 
   describe('switchSelectedTranscript', () => {
     it('should update is_selected flags', () => {
-      db.switchSelectedTranscript(variantId, 'NM_007299.4')
+      db.transcripts.switchSelectedTranscript(variantId, 'NM_007299.4')
 
-      const transcripts = db.getVariantTranscripts(variantId)
+      const transcripts = db.transcripts.getVariantTranscripts(variantId)
       const selected = transcripts.find((t) => t.is_selected)
       expect(selected!.transcript_id).toBe('NM_007299.4')
 
@@ -120,9 +122,9 @@ describe('DatabaseService transcript methods', () => {
     })
 
     it('should update denormalized fields on variants table', () => {
-      db.switchSelectedTranscript(variantId, 'NM_007299.4')
+      db.transcripts.switchSelectedTranscript(variantId, 'NM_007299.4')
 
-      const variants = db.getVariants({ case_id: caseId }, 10)
+      const variants = db.variants.getVariants({ case_id: caseId }, 10)
       const v = variants.data[0]
       expect(v.transcript).toBe('NM_007299.4')
       expect(v.consequence).toBe('synonymous_variant')
@@ -132,9 +134,9 @@ describe('DatabaseService transcript methods', () => {
 
     it('should be atomic (transaction)', () => {
       // Switching to non-existent transcript should throw and leave state unchanged
-      expect(() => db.switchSelectedTranscript(variantId, 'FAKE_TRANSCRIPT')).toThrow()
+      expect(() => db.transcripts.switchSelectedTranscript(variantId, 'FAKE_TRANSCRIPT')).toThrow()
 
-      const transcripts = db.getVariantTranscripts(variantId)
+      const transcripts = db.transcripts.getVariantTranscripts(variantId)
       const selected = transcripts.find((t) => t.is_selected)
       expect(selected!.transcript_id).toBe('NM_007294.4')
     })

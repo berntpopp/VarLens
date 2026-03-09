@@ -113,14 +113,14 @@ describe('DatabaseService', () => {
 
   describe('createCase', () => {
     it('creates case and returns id', () => {
-      const id = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const id = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
 
       expect(id).toBeGreaterThan(0)
     })
 
     it('stores all case fields correctly', () => {
-      const id = service.createCase('test-case', '/path/to/file.vcf', 1024)
-      const createdCase = service.getCase(id)
+      const id = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
+      const createdCase = service.cases.getCase(id)
 
       expect(createdCase.id).toBe(id)
       expect(createdCase.name).toBe('test-case')
@@ -130,19 +130,19 @@ describe('DatabaseService', () => {
     })
 
     it('throws UniqueConstraintError on duplicate name', () => {
-      service.createCase('duplicate-name', '/path/to/file1.vcf', 1024)
+      service.cases.createCase('duplicate-name', '/path/to/file1.vcf', 1024)
 
       expect(() => {
-        service.createCase('duplicate-name', '/path/to/file2.vcf', 2048)
+        service.cases.createCase('duplicate-name', '/path/to/file2.vcf', 2048)
       }).toThrow(UniqueConstraintError)
     })
 
     it('sets created_at timestamp', () => {
       const beforeCreate = Date.now()
-      const id = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const id = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
       const afterCreate = Date.now()
 
-      const createdCase = service.getCase(id)
+      const createdCase = service.cases.getCase(id)
 
       expect(createdCase.created_at).toBeGreaterThanOrEqual(beforeCreate)
       expect(createdCase.created_at).toBeLessThanOrEqual(afterCreate)
@@ -151,8 +151,8 @@ describe('DatabaseService', () => {
 
   describe('getCase', () => {
     it('retrieves existing case by id', () => {
-      const id = service.createCase('test-case', '/path/to/file.vcf', 1024)
-      const retrievedCase = service.getCase(id)
+      const id = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
+      const retrievedCase = service.cases.getCase(id)
 
       expect(retrievedCase.id).toBe(id)
       expect(retrievedCase.name).toBe('test-case')
@@ -160,13 +160,13 @@ describe('DatabaseService', () => {
 
     it('throws NotFoundError for non-existent id', () => {
       expect(() => {
-        service.getCase(99999)
+        service.cases.getCase(99999)
       }).toThrow(NotFoundError)
     })
 
     it('returns correct Case type with all properties', () => {
-      const id = service.createCase('test-case', '/path/to/file.vcf', 1024)
-      const retrievedCase = service.getCase(id)
+      const id = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
+      const retrievedCase = service.cases.getCase(id)
 
       expect(retrievedCase).toHaveProperty('id')
       expect(retrievedCase).toHaveProperty('name')
@@ -179,8 +179,8 @@ describe('DatabaseService', () => {
 
   describe('getCaseByName', () => {
     it('retrieves existing case by name', () => {
-      const id = service.createCase('find-by-name', '/path/to/file.vcf', 1024)
-      const retrievedCase = service.getCaseByName('find-by-name')
+      const id = service.cases.createCase('find-by-name', '/path/to/file.vcf', 1024)
+      const retrievedCase = service.cases.getCaseByName('find-by-name')
 
       expect(retrievedCase.id).toBe(id)
       expect(retrievedCase.name).toBe('find-by-name')
@@ -188,28 +188,28 @@ describe('DatabaseService', () => {
 
     it('throws NotFoundError for non-existent name', () => {
       expect(() => {
-        service.getCaseByName('nonexistent')
+        service.cases.getCaseByName('nonexistent')
       }).toThrow(NotFoundError)
     })
   })
 
   describe('getAllCases', () => {
     it('returns empty array when no cases', () => {
-      const cases = service.getAllCases()
+      const cases = service.cases.getAllCases()
 
       expect(cases).toEqual([])
     })
 
     it('returns all cases ordered by created_at desc', async () => {
       // Create cases with small delays to ensure different timestamps
-      service.createCase('case-1', '/path/to/file1.vcf', 1024)
+      service.cases.createCase('case-1', '/path/to/file1.vcf', 1024)
       // Small delay to ensure different timestamp
       await new Promise((resolve) => setTimeout(resolve, 10))
-      service.createCase('case-2', '/path/to/file2.vcf', 2048)
+      service.cases.createCase('case-2', '/path/to/file2.vcf', 2048)
       await new Promise((resolve) => setTimeout(resolve, 10))
-      service.createCase('case-3', '/path/to/file3.vcf', 3072)
+      service.cases.createCase('case-3', '/path/to/file3.vcf', 3072)
 
-      const cases = service.getAllCases()
+      const cases = service.cases.getAllCases()
 
       expect(cases.length).toBe(3)
       // Newest first
@@ -219,10 +219,10 @@ describe('DatabaseService', () => {
     })
 
     it('includes variant_count in results', () => {
-      const id = service.createCase('test-case', '/path/to/file.vcf', 1024)
-      service.updateCaseVariantCount(id, 150)
+      const id = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
+      service.cases.updateCaseVariantCount(id, 150)
 
-      const cases = service.getAllCases()
+      const cases = service.cases.getAllCases()
 
       expect(cases[0].variant_count).toBe(150)
     })
@@ -230,41 +230,41 @@ describe('DatabaseService', () => {
 
   describe('updateCaseVariantCount', () => {
     it('updates variant count', () => {
-      const id = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const id = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
 
-      service.updateCaseVariantCount(id, 500)
+      service.cases.updateCaseVariantCount(id, 500)
 
-      const updatedCase = service.getCase(id)
+      const updatedCase = service.cases.getCase(id)
       expect(updatedCase.variant_count).toBe(500)
     })
 
     it('throws NotFoundError for non-existent case', () => {
       expect(() => {
-        service.updateCaseVariantCount(99999, 100)
+        service.cases.updateCaseVariantCount(99999, 100)
       }).toThrow(NotFoundError)
     })
   })
 
   describe('deleteCase', () => {
     it('deletes existing case', () => {
-      const id = service.createCase('to-delete', '/path/to/file.vcf', 1024)
+      const id = service.cases.createCase('to-delete', '/path/to/file.vcf', 1024)
 
-      service.deleteCase(id)
+      service.cases.deleteCase(id)
 
       expect(() => {
-        service.getCase(id)
+        service.cases.getCase(id)
       }).toThrow(NotFoundError)
     })
 
     it('throws NotFoundError for non-existent id', () => {
       expect(() => {
-        service.deleteCase(99999)
+        service.cases.deleteCase(99999)
       }).toThrow(NotFoundError)
     })
 
     it('cascades delete to variants', () => {
       // Create case
-      const caseId = service.createCase('with-variants', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('with-variants', '/path/to/file.vcf', 1024)
 
       // Insert variants directly using the database instance
       service.database
@@ -286,7 +286,7 @@ describe('DatabaseService', () => {
       expect(beforeDelete.count).toBe(2)
 
       // Delete case
-      service.deleteCase(caseId)
+      service.cases.deleteCase(caseId)
 
       // Verify variants are deleted
       const afterDelete = service.database
@@ -299,27 +299,27 @@ describe('DatabaseService', () => {
   describe('runTransaction', () => {
     it('commits successful transaction', () => {
       const result = service.runTransaction(() => {
-        const id = service.createCase('tx-case', '/path/to/file.vcf', 1024)
+        const id = service.cases.createCase('tx-case', '/path/to/file.vcf', 1024)
         return id
       })
 
       expect(result).toBeGreaterThan(0)
-      const createdCase = service.getCase(result)
+      const createdCase = service.cases.getCase(result)
       expect(createdCase.name).toBe('tx-case')
     })
 
     it('rolls back failed transaction', () => {
       expect(() => {
         service.runTransaction(() => {
-          service.createCase('tx-case-1', '/path/to/file1.vcf', 1024)
+          service.cases.createCase('tx-case-1', '/path/to/file1.vcf', 1024)
           // This should fail due to unique constraint
-          service.createCase('tx-case-1', '/path/to/file2.vcf', 2048)
+          service.cases.createCase('tx-case-1', '/path/to/file2.vcf', 2048)
         })
       }).toThrow(TransactionError)
 
       // First case should not exist due to rollback
       expect(() => {
-        service.getCaseByName('tx-case-1')
+        service.cases.getCaseByName('tx-case-1')
       }).toThrow(NotFoundError)
     })
 
@@ -336,19 +336,19 @@ describe('DatabaseService', () => {
     it('reuses prepared statements for same SQL', () => {
       // This is implicitly tested by ensuring repeated operations work correctly
       for (let i = 0; i < 5; i++) {
-        service.createCase(`case-${i}`, `/path/to/file${i}.vcf`, 1024)
+        service.cases.createCase(`case-${i}`, `/path/to/file${i}.vcf`, 1024)
       }
 
-      const cases = service.getAllCases()
+      const cases = service.cases.getAllCases()
       expect(cases.length).toBe(5)
     })
   })
 
   describe('Case Comments', () => {
     it('creates and lists comments for a case', () => {
-      const caseId = service.createCase('comment-test', '/path/test.vcf', 1024)
+      const caseId = service.cases.createCase('comment-test', '/path/test.vcf', 1024)
 
-      const comment = service.createCaseComment(
+      const comment = service.metadata.createCaseComment(
         caseId,
         'Clinical Note',
         'Patient presents with seizures'
@@ -360,9 +360,9 @@ describe('DatabaseService', () => {
       expect(comment.created_at).toBeGreaterThan(0)
       expect(comment.updated_at).toBeNull()
 
-      service.createCaseComment(caseId, 'Lab Result', 'WBC elevated')
+      service.metadata.createCaseComment(caseId, 'Lab Result', 'WBC elevated')
 
-      const comments = service.listCaseComments(caseId)
+      const comments = service.metadata.listCaseComments(caseId)
       expect(comments).toHaveLength(2)
       // Newest first
       expect(comments[0].category).toBe('Lab Result')
@@ -370,37 +370,41 @@ describe('DatabaseService', () => {
     })
 
     it('updates a comment and sets updated_at', () => {
-      const caseId = service.createCase('update-comment-test', '/path/test.vcf', 1024)
-      const comment = service.createCaseComment(caseId, 'Interpretation', 'Initial assessment')
+      const caseId = service.cases.createCase('update-comment-test', '/path/test.vcf', 1024)
+      const comment = service.metadata.createCaseComment(
+        caseId,
+        'Interpretation',
+        'Initial assessment'
+      )
 
-      const updated = service.updateCaseComment(comment.id, 'Revised assessment')
+      const updated = service.metadata.updateCaseComment(comment.id, 'Revised assessment')
       expect(updated.content).toBe('Revised assessment')
       expect(updated.updated_at).not.toBeNull()
       expect(updated.updated_at!).toBeGreaterThanOrEqual(updated.created_at)
     })
 
     it('deletes a comment', () => {
-      const caseId = service.createCase('delete-comment-test', '/path/test.vcf', 1024)
-      const comment = service.createCaseComment(caseId, 'Follow-up', 'Schedule MRI')
+      const caseId = service.cases.createCase('delete-comment-test', '/path/test.vcf', 1024)
+      const comment = service.metadata.createCaseComment(caseId, 'Follow-up', 'Schedule MRI')
 
-      service.deleteCaseComment(comment.id)
+      service.metadata.deleteCaseComment(comment.id)
 
-      const comments = service.listCaseComments(caseId)
+      const comments = service.metadata.listCaseComments(caseId)
       expect(comments).toHaveLength(0)
     })
 
     it('throws NotFoundError when updating non-existent comment', () => {
-      expect(() => service.updateCaseComment(99999, 'nope')).toThrow(NotFoundError)
+      expect(() => service.metadata.updateCaseComment(99999, 'nope')).toThrow(NotFoundError)
     })
 
     it('throws NotFoundError when deleting non-existent comment', () => {
-      expect(() => service.deleteCaseComment(99999)).toThrow(NotFoundError)
+      expect(() => service.metadata.deleteCaseComment(99999)).toThrow(NotFoundError)
     })
   })
 
   describe('Case Metrics', () => {
     it('lists predefined metric definitions', () => {
-      const definitions = service.listMetricDefinitions()
+      const definitions = service.metadata.listMetricDefinitions()
       expect(definitions.length).toBeGreaterThan(100)
 
       const hb = definitions.find((d) => d.name === 'Hemoglobin (Hb)')
@@ -412,37 +416,42 @@ describe('DatabaseService', () => {
     })
 
     it('creates a user-defined metric definition', () => {
-      const custom = service.createMetricDefinition('Custom Score', 'numeric', 'points', 'Custom')
+      const custom = service.metadata.createMetricDefinition(
+        'Custom Score',
+        'numeric',
+        'points',
+        'Custom'
+      )
       expect(custom.id).toBeGreaterThan(0)
       expect(custom.name).toBe('Custom Score')
       expect(custom.is_predefined).toBe(0)
     })
 
     it('upserts a numeric metric value for a case', () => {
-      const caseId = service.createCase('metric-test', '/path/test.vcf', 1024)
-      const definitions = service.listMetricDefinitions()
+      const caseId = service.cases.createCase('metric-test', '/path/test.vcf', 1024)
+      const definitions = service.metadata.listMetricDefinitions()
       const hb = definitions.find((d) => d.name === 'Hemoglobin (Hb)')!
 
-      const metric = service.upsertCaseMetric(caseId, hb.id, { numeric_value: 13.5 })
+      const metric = service.metadata.upsertCaseMetric(caseId, hb.id, { numeric_value: 13.5 })
       expect(metric.case_id).toBe(caseId)
       expect(metric.metric_id).toBe(hb.id)
       expect(metric.numeric_value).toBe(13.5)
 
-      const updated = service.upsertCaseMetric(caseId, hb.id, { numeric_value: 14.0 })
+      const updated = service.metadata.upsertCaseMetric(caseId, hb.id, { numeric_value: 14.0 })
       expect(updated.numeric_value).toBe(14.0)
       expect(updated.id).toBe(metric.id)
     })
 
     it('lists case metrics with definitions joined', () => {
-      const caseId = service.createCase('metric-list-test', '/path/test.vcf', 1024)
-      const definitions = service.listMetricDefinitions()
+      const caseId = service.cases.createCase('metric-list-test', '/path/test.vcf', 1024)
+      const definitions = service.metadata.listMetricDefinitions()
       const hb = definitions.find((d) => d.name === 'Hemoglobin (Hb)')!
       const wbc = definitions.find((d) => d.name === 'White Blood Cell Count (WBC)')!
 
-      service.upsertCaseMetric(caseId, hb.id, { numeric_value: 13.5 })
-      service.upsertCaseMetric(caseId, wbc.id, { numeric_value: 7.2 })
+      service.metadata.upsertCaseMetric(caseId, hb.id, { numeric_value: 13.5 })
+      service.metadata.upsertCaseMetric(caseId, wbc.id, { numeric_value: 7.2 })
 
-      const metrics = service.listCaseMetrics(caseId)
+      const metrics = service.metadata.listCaseMetrics(caseId)
       expect(metrics).toHaveLength(2)
       expect(metrics[0].name).toBeDefined()
       expect(metrics[0].unit).toBeDefined()
@@ -450,27 +459,27 @@ describe('DatabaseService', () => {
     })
 
     it('deletes a case metric value', () => {
-      const caseId = service.createCase('metric-delete-test', '/path/test.vcf', 1024)
-      const definitions = service.listMetricDefinitions()
+      const caseId = service.cases.createCase('metric-delete-test', '/path/test.vcf', 1024)
+      const definitions = service.metadata.listMetricDefinitions()
       const hb = definitions.find((d) => d.name === 'Hemoglobin (Hb)')!
 
-      service.upsertCaseMetric(caseId, hb.id, { numeric_value: 13.5 })
-      service.deleteCaseMetric(caseId, hb.id)
+      service.metadata.upsertCaseMetric(caseId, hb.id, { numeric_value: 13.5 })
+      service.metadata.deleteCaseMetric(caseId, hb.id)
 
-      const metrics = service.listCaseMetrics(caseId)
+      const metrics = service.metadata.listCaseMetrics(caseId)
       expect(metrics).toHaveLength(0)
     })
 
     it('supports text and date metric values', () => {
-      const caseId = service.createCase('metric-types-test', '/path/test.vcf', 1024)
-      const definitions = service.listMetricDefinitions()
+      const caseId = service.cases.createCase('metric-types-test', '/path/test.vcf', 1024)
+      const definitions = service.metadata.listMetricDefinitions()
       const ethnicity = definitions.find((d) => d.name === 'Ethnicity')!
       const dodDef = definitions.find((d) => d.name === 'Date of Diagnosis')!
 
-      service.upsertCaseMetric(caseId, ethnicity.id, { text_value: 'European' })
-      service.upsertCaseMetric(caseId, dodDef.id, { date_value: '1990-05-15' })
+      service.metadata.upsertCaseMetric(caseId, ethnicity.id, { text_value: 'European' })
+      service.metadata.upsertCaseMetric(caseId, dodDef.id, { date_value: '1990-05-15' })
 
-      const metrics = service.listCaseMetrics(caseId)
+      const metrics = service.metadata.listCaseMetrics(caseId)
       const ethMetric = metrics.find((m) => m.name === 'Ethnicity')!
       const dodMetric = metrics.find((m) => m.name === 'Date of Diagnosis')!
 
@@ -487,7 +496,7 @@ describe('DatabaseService', () => {
 
     it('should use the same underlying connection', async () => {
       // Insert via raw SQL
-      service.createCase('kysely-test', '/path', 100)
+      service.cases.createCase('kysely-test', '/path', 100)
       // Read via Kysely — verifies shared connection
       const result = await service.kysely.selectFrom('cases').selectAll().execute()
       expect(result).toHaveLength(1)

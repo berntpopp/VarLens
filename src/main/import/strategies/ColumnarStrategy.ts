@@ -66,7 +66,7 @@ export class ColumnarStrategy implements ImportStrategy {
     const elapsed = Date.now() - startTime
 
     // Update case with final variant count
-    db.updateCaseVariantCount(caseId, variantCount)
+    db.cases.updateCaseVariantCount(caseId, variantCount)
 
     return {
       caseId,

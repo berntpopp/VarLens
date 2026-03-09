@@ -22,7 +22,7 @@ import { getDatabaseService } from '../../database'
 ipcMain.handle('case-metadata:get', async (_event, caseId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getCaseMetadata(caseId)
+    return db.metadata.getCaseMetadata(caseId)
   })
 })
 
@@ -38,7 +38,7 @@ ipcMain.handle(
   ) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.upsertCaseMetadata(caseId, updates)
+      return db.metadata.upsertCaseMetadata(caseId, updates)
     })
   }
 )
@@ -53,7 +53,7 @@ ipcMain.handle(
 ipcMain.handle('case-metadata:listCohorts', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.listCohortGroups()
+    return db.metadata.listCohortGroups()
   })
 })
 
@@ -65,7 +65,7 @@ ipcMain.handle(
   async (_event, name: string, description?: string | null) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.createCohortGroup(name, description)
+      return db.metadata.createCohortGroup(name, description)
     })
   }
 )
@@ -78,7 +78,7 @@ ipcMain.handle(
   async (_event, cohortId: number, updates: { name?: string; description?: string | null }) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.updateCohortGroup(cohortId, updates)
+      return db.metadata.updateCohortGroup(cohortId, updates)
     })
   }
 )
@@ -89,7 +89,7 @@ ipcMain.handle(
 ipcMain.handle('case-metadata:deleteCohort', async (_event, cohortId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.deleteCohortGroup(cohortId)
+    db.metadata.deleteCohortGroup(cohortId)
     return undefined
   })
 })
@@ -100,7 +100,7 @@ ipcMain.handle('case-metadata:deleteCohort', async (_event, cohortId: number) =>
 ipcMain.handle('case-metadata:getCohortByName', async (_event, name: string) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getCohortGroupByName(name)
+    return db.metadata.getCohortGroupByName(name)
   })
 })
 
@@ -114,7 +114,7 @@ ipcMain.handle('case-metadata:getCohortByName', async (_event, name: string) => 
 ipcMain.handle('case-metadata:getCaseCohorts', async (_event, caseId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getCaseCohorts(caseId)
+    return db.metadata.getCaseCohorts(caseId)
   })
 })
 
@@ -124,7 +124,7 @@ ipcMain.handle('case-metadata:getCaseCohorts', async (_event, caseId: number) =>
 ipcMain.handle('case-metadata:assignCohort', async (_event, caseId: number, cohortId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.assignCaseCohort(caseId, cohortId)
+    db.metadata.assignCaseCohort(caseId, cohortId)
     return undefined
   })
 })
@@ -135,7 +135,7 @@ ipcMain.handle('case-metadata:assignCohort', async (_event, caseId: number, coho
 ipcMain.handle('case-metadata:removeCohort', async (_event, caseId: number, cohortId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.removeCaseCohort(caseId, cohortId)
+    db.metadata.removeCaseCohort(caseId, cohortId)
     return undefined
   })
 })
@@ -146,7 +146,7 @@ ipcMain.handle('case-metadata:removeCohort', async (_event, caseId: number, coho
 ipcMain.handle('case-metadata:setCohorts', async (_event, caseId: number, cohortIds: number[]) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.setCaseCohorts(caseId, cohortIds)
+    db.metadata.setCaseCohorts(caseId, cohortIds)
     return undefined
   })
 })
@@ -161,7 +161,7 @@ ipcMain.handle('case-metadata:setCohorts', async (_event, caseId: number, cohort
 ipcMain.handle('case-metadata:getHpoTerms', async (_event, caseId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getCaseHpoTerms(caseId)
+    return db.metadata.getCaseHpoTerms(caseId)
   })
 })
 
@@ -173,7 +173,7 @@ ipcMain.handle(
   async (_event, caseId: number, hpoId: string, hpoLabel: string) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.assignCaseHpoTerm(caseId, hpoId, hpoLabel)
+      return db.metadata.assignCaseHpoTerm(caseId, hpoId, hpoLabel)
     })
   }
 )
@@ -184,7 +184,7 @@ ipcMain.handle(
 ipcMain.handle('case-metadata:removeHpoTerm', async (_event, caseId: number, hpoId: string) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.removeCaseHpoTerm(caseId, hpoId)
+    db.metadata.removeCaseHpoTerm(caseId, hpoId)
     return undefined
   })
 })
@@ -199,7 +199,7 @@ ipcMain.handle('case-metadata:removeHpoTerm', async (_event, caseId: number, hpo
 ipcMain.handle('case-metadata:getDataInfo', async (_event, caseId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getCaseDataInfo(caseId)
+    return db.metadata.getCaseDataInfo(caseId)
   })
 })
 
@@ -225,7 +225,7 @@ ipcMain.handle(
   ) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.upsertCaseDataInfo(caseId, updates)
+      return db.metadata.upsertCaseDataInfo(caseId, updates)
     })
   }
 )
@@ -237,7 +237,7 @@ ipcMain.handle(
 ipcMain.handle('case-metadata:listExternalIds', async (_event, caseId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.listCaseExternalIds(caseId)
+    return db.metadata.listCaseExternalIds(caseId)
   })
 })
 
@@ -246,7 +246,7 @@ ipcMain.handle(
   async (_event, caseId: number, idType: string, idValue: string) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.upsertCaseExternalId(caseId, idType, idValue)
+      return db.metadata.upsertCaseExternalId(caseId, idType, idValue)
     })
   }
 )
@@ -254,21 +254,21 @@ ipcMain.handle(
 ipcMain.handle('case-metadata:distinctPlatforms', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getDistinctPlatforms()
+    return db.metadata.getDistinctPlatforms()
   })
 })
 
 ipcMain.handle('case-metadata:distinctExternalIdTypes', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getDistinctExternalIdTypes()
+    return db.metadata.getDistinctExternalIdTypes()
   })
 })
 
 ipcMain.handle('case-metadata:deleteExternalId', async (_event, caseId: number, idType: string) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.deleteCaseExternalId(caseId, idType)
+    db.metadata.deleteCaseExternalId(caseId, idType)
     return undefined
   })
 })
@@ -284,13 +284,13 @@ ipcMain.handle('case-metadata:getFullMetadata', async (_event, caseId: number) =
   return wrapHandler(async () => {
     const db = getDatabaseService()
     return {
-      metadata: db.getCaseMetadata(caseId),
-      cohorts: db.getCaseCohorts(caseId),
-      hpoTerms: db.getCaseHpoTerms(caseId),
-      comments: db.listCaseComments(caseId),
-      metrics: db.listCaseMetrics(caseId),
-      dataInfo: db.getCaseDataInfo(caseId),
-      externalIds: db.listCaseExternalIds(caseId)
+      metadata: db.metadata.getCaseMetadata(caseId),
+      cohorts: db.metadata.getCaseCohorts(caseId),
+      hpoTerms: db.metadata.getCaseHpoTerms(caseId),
+      comments: db.metadata.listCaseComments(caseId),
+      metrics: db.metadata.listCaseMetrics(caseId),
+      dataInfo: db.metadata.getCaseDataInfo(caseId),
+      externalIds: db.metadata.listCaseExternalIds(caseId)
     }
   })
 })

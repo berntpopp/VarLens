@@ -79,7 +79,7 @@ ipcMain.handle(
 
       // Get all variants matching the current filters (no pagination)
       const fullFilter: VariantFilter = { ...filters, case_id: caseId }
-      const variants = db.getAllVariantsForExport(fullFilter)
+      const variants = db.variants.getAllVariantsForExport(fullFilter)
 
       // Convert variants to worksheet data
       const headers = EXPORT_COLUMNS.map((col) => col.header)

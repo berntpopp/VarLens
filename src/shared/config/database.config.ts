@@ -10,5 +10,5 @@ export const DATABASE_CONFIG = {
   /** API cache TTL in days */
   CACHE_TTL_DAYS: 30,
   /** Max recent databases in history */
-  MAX_RECENT_DATABASES: 5,
+  MAX_RECENT_DATABASES: 5
 } as const

@@ -12,7 +12,7 @@ import { getDatabaseService } from '../../database'
 ipcMain.handle('case-metrics:listDefinitions', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.listMetricDefinitions()
+    return db.metadata.listMetricDefinitions()
   })
 })
 
@@ -27,7 +27,7 @@ ipcMain.handle(
   ) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.createMetricDefinition(name, valueType, unit, category)
+      return db.metadata.createMetricDefinition(name, valueType, unit, category)
     })
   }
 )
@@ -35,7 +35,7 @@ ipcMain.handle(
 ipcMain.handle('case-metrics:listForCase', async (_event, caseId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.listCaseMetrics(caseId)
+    return db.metadata.listCaseMetrics(caseId)
   })
 })
 
@@ -49,7 +49,7 @@ ipcMain.handle(
   ) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.upsertCaseMetric(caseId, metricId, value)
+      return db.metadata.upsertCaseMetric(caseId, metricId, value)
     })
   }
 )
@@ -57,7 +57,7 @@ ipcMain.handle(
 ipcMain.handle('case-metrics:delete', async (_event, caseId: number, metricId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.deleteCaseMetric(caseId, metricId)
+    db.metadata.deleteCaseMetric(caseId, metricId)
     return undefined
   })
 })

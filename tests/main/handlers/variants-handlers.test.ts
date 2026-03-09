@@ -103,7 +103,7 @@ describe('variant IPC handlers', () => {
       })
 
       const filter: VariantFilter = { case_id: caseId }
-      const result = db.getVariants(filter, 50)
+      const result = db.variants.getVariants(filter, 50)
 
       // Snapshot captures structure - detects IPC contract changes
       expect(result).toMatchSnapshot()
@@ -123,7 +123,7 @@ describe('variant IPC handlers', () => {
       }
 
       const filter: VariantFilter = { case_id: caseId }
-      const result = db.getVariants(filter, 3)
+      const result = db.variants.getVariants(filter, 3)
 
       expect(result.data.length).toBe(3)
       expect(result.total_count).toBe(10)
@@ -136,7 +136,7 @@ describe('variant IPC handlers', () => {
       insertVariant(caseId, '1', 200, 'G', 'A')
 
       const filter: VariantFilter = { case_id: caseId }
-      const result = db.getVariants(filter, 50, undefined, [{ key: 'pos', order: 'asc' }])
+      const result = db.variants.getVariants(filter, 50, undefined, [{ key: 'pos', order: 'asc' }])
 
       expect(result.data[0].pos).toBe(100)
       expect(result.data[1].pos).toBe(200)
@@ -160,7 +160,7 @@ describe('variant IPC handlers', () => {
         consequences: ['HIGH'],
         gnomad_af_max: 0.01
       }
-      const result = db.getVariants(filter, 50)
+      const result = db.variants.getVariants(filter, 50)
 
       expect(result.total_count).toBe(1)
       expect(result.data[0].gene_symbol).toBe('BRCA1')
@@ -276,7 +276,7 @@ describe('variant IPC handlers', () => {
         consequence: 'HIGH'
       })
 
-      const result = db.searchVariants(caseId, 'BRCA', 20)
+      const result = db.variants.searchVariants(caseId, 'BRCA', 20)
 
       // Snapshot captures structure
       expect(result).toMatchSnapshot()
@@ -294,7 +294,7 @@ describe('variant IPC handlers', () => {
       insertVariant(caseId, '2', 200, 'C', 'T', { gene_symbol: 'BRCA2' })
       insertVariant(caseId, '3', 300, 'G', 'A', { gene_symbol: 'TP53' })
 
-      const result = db.searchVariants(caseId, 'BR', 20)
+      const result = db.variants.searchVariants(caseId, 'BR', 20)
 
       expect(result.length).toBe(2)
       const geneSymbols = result.map((v) => v.gene_symbol)
@@ -310,7 +310,7 @@ describe('variant IPC handlers', () => {
         })
       }
 
-      const result = db.searchVariants(caseId, 'GENE', 3)
+      const result = db.variants.searchVariants(caseId, 'GENE', 3)
 
       expect(result.length).toBe(3)
     })

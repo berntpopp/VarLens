@@ -15,7 +15,7 @@ import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 ipcMain.handle('transcripts:list', async (_event, variantId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getVariantTranscripts(variantId)
+    return db.transcripts.getVariantTranscripts(variantId)
   })
 })
 
@@ -25,7 +25,7 @@ ipcMain.handle('transcripts:list', async (_event, variantId: number) => {
 ipcMain.handle('transcripts:switch', async (_event, variantId: number, transcriptId: string) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.switchSelectedTranscript(variantId, transcriptId)
+    db.transcripts.switchSelectedTranscript(variantId, transcriptId)
     return { success: true }
   })
 })
@@ -39,7 +39,7 @@ ipcMain.handle(
   async (_event, variantId: number, transcript: TranscriptInsertRow) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      db.insertTranscriptAndSwitch(variantId, transcript)
+      db.transcripts.insertTranscriptAndSwitch(variantId, transcript)
       return { success: true }
     })
   }

@@ -151,7 +151,7 @@ describe('Schema Migrations', () => {
       const service = new DatabaseService(dbPath, encryptionKey)
 
       // Create case and variant
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
       const variantId = insertTestVariant(service, caseId)
 
       // Insert case_variant_annotation
@@ -187,7 +187,7 @@ describe('Schema Migrations', () => {
       const service = new DatabaseService(dbPath, encryptionKey)
 
       // Create case
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
 
       // Insert case_metadata
       service.database
@@ -222,7 +222,7 @@ describe('Schema Migrations', () => {
       const service = new DatabaseService(dbPath, encryptionKey)
 
       // Create case
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
 
       // Create cohort_group
       const cohortResult = service.database
@@ -272,7 +272,7 @@ describe('Schema Migrations', () => {
       const service = new DatabaseService(dbPath, encryptionKey)
 
       // Create case and variant
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
       const variantId = insertTestVariant(service, caseId)
 
       // Create tag
@@ -325,7 +325,7 @@ describe('Schema Migrations', () => {
       const service = new DatabaseService(dbPath, encryptionKey)
 
       // Create case
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
 
       // Insert HPO term
       service.database
@@ -360,7 +360,7 @@ describe('Schema Migrations', () => {
       const service = new DatabaseService(dbPath, encryptionKey)
 
       // Create case and variant
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
       const variantId = insertTestVariant(service, caseId)
 
       // Create tag
@@ -405,7 +405,7 @@ describe('Schema Migrations', () => {
       const service = new DatabaseService(dbPath, encryptionKey)
 
       // Create case
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
 
       // Create cohort_group
       const cohortResult = service.database
@@ -628,7 +628,7 @@ describe('Schema Migrations', () => {
       const dbPath = tempDbPath()
       const service = new DatabaseService(dbPath)
 
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
 
       service.database
         .prepare(
@@ -655,7 +655,7 @@ describe('Schema Migrations', () => {
       const dbPath = tempDbPath()
       const service = new DatabaseService(dbPath)
 
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
 
       const metric = service.database
         .prepare('SELECT id FROM metric_definitions LIMIT 1')
@@ -686,7 +686,7 @@ describe('Schema Migrations', () => {
       const dbPath = tempDbPath()
       const service = new DatabaseService(dbPath)
 
-      const caseId = service.createCase('test-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
       const metric = service.database
         .prepare('SELECT id FROM metric_definitions LIMIT 1')
         .get() as { id: number }

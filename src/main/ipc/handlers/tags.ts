@@ -19,7 +19,7 @@ import { getDatabaseService } from '../../database'
 ipcMain.handle('tags:list', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.listTags()
+    return db.tags.listTags()
   })
 })
 
@@ -29,7 +29,7 @@ ipcMain.handle('tags:list', async () => {
 ipcMain.handle('tags:create', async (_event, name: string, color: string) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.createTag(name, color)
+    return db.tags.createTag(name, color)
   })
 })
 
@@ -41,7 +41,7 @@ ipcMain.handle(
   async (_event, id: number, updates: { name?: string; color?: string }) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.updateTag(id, updates)
+      return db.tags.updateTag(id, updates)
     })
   }
 )
@@ -52,7 +52,7 @@ ipcMain.handle(
 ipcMain.handle('tags:delete', async (_event, id: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.deleteTag(id)
+    db.tags.deleteTag(id)
     return undefined
   })
 })
@@ -63,7 +63,7 @@ ipcMain.handle('tags:delete', async (_event, id: number) => {
 ipcMain.handle('tags:getUsageCount', async (_event, tagId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getTagUsageCount(tagId)
+    return db.tags.getTagUsageCount(tagId)
   })
 })
 
@@ -77,7 +77,7 @@ ipcMain.handle('tags:getUsageCount', async (_event, tagId: number) => {
 ipcMain.handle('tags:getVariantTags', async (_event, caseId: number, variantId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getVariantTags(caseId, variantId)
+    return db.tags.getVariantTags(caseId, variantId)
   })
 })
 
@@ -89,7 +89,7 @@ ipcMain.handle(
   async (_event, caseId: number, variantId: number, tagId: number) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      db.assignVariantTag(caseId, variantId, tagId)
+      db.tags.assignVariantTag(caseId, variantId, tagId)
       return undefined
     })
   }
@@ -103,7 +103,7 @@ ipcMain.handle(
   async (_event, caseId: number, variantId: number, tagId: number) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      db.removeVariantTag(caseId, variantId, tagId)
+      db.tags.removeVariantTag(caseId, variantId, tagId)
       return undefined
     })
   }
@@ -117,7 +117,7 @@ ipcMain.handle(
   async (_event, caseId: number, variantId: number, tagIds: number[]) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      db.setVariantTags(caseId, variantId, tagIds)
+      db.tags.setVariantTags(caseId, variantId, tagIds)
       return undefined
     })
   }

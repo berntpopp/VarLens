@@ -146,7 +146,7 @@ ipcMain.handle('database:recentList', async () => {
 ipcMain.handle('database:overview', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    const overview = db.getDatabaseOverview()
+    const overview = db.overview.getDatabaseOverview()
     // Deep clone for IPC serialization (handle BigInt)
     return JSON.parse(
       JSON.stringify(overview, (_key, value) => (typeof value === 'bigint' ? Number(value) : value))

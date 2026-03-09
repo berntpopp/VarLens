@@ -15,7 +15,7 @@ describe('insertVariantsBatch with transcripts', () => {
 
   beforeEach(() => {
     db = new DatabaseService(':memory:')
-    caseId = db.createCase('test', '/test.json', 100)
+    caseId = db.cases.createCase('test', '/test.json', 100)
   })
 
   afterEach(() => {
@@ -68,7 +68,7 @@ describe('insertVariantsBatch with transcripts', () => {
       }
     ]
 
-    db.insertVariantsBatch(caseId, variants)
+    db.variants.insertVariantsBatch(caseId, variants)
 
     const txRows = db.database.prepare('SELECT * FROM variant_transcripts').all() as Record<
       string,
@@ -105,7 +105,7 @@ describe('insertVariantsBatch with transcripts', () => {
       }
     ]
 
-    db.insertVariantsBatch(caseId, variants)
+    db.variants.insertVariantsBatch(caseId, variants)
 
     const txRows = db.database.prepare('SELECT * FROM variant_transcripts').all()
     expect(txRows).toHaveLength(0)

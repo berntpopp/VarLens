@@ -4,5 +4,5 @@ export const API_CONFIG = {
   /** VEP hourly rate limit */
   VEP_HOURLY_LIMIT: 55000,
   /** Import progress throttle interval (ms) */
-  PROGRESS_THROTTLE_MS: 100,
+  PROGRESS_THROTTLE_MS: 100
 } as const

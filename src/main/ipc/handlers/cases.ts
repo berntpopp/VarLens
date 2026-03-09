@@ -10,14 +10,14 @@ import { getDatabaseService } from '../../database'
 ipcMain.handle('cases:list', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getAllCases()
+    return db.cases.getAllCases()
   })
 })
 
 ipcMain.handle('cases:delete', async (_event, id: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.deleteCase(id)
+    db.cases.deleteCase(id)
     return undefined
   })
 })
@@ -25,13 +25,13 @@ ipcMain.handle('cases:delete', async (_event, id: number) => {
 ipcMain.handle('cases:deleteAll', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.deleteAllCases()
+    return db.cases.deleteAllCases()
   })
 })
 
 ipcMain.handle('cases:deleteBatch', async (_event, ids: number[]) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.deleteCasesBatch(ids)
+    return db.cases.deleteCasesBatch(ids)
   })
 })

@@ -36,7 +36,7 @@ ipcMain.handle(
   async (_event, chr: string, pos: number, ref: string, alt: string) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.getGlobalAnnotation(chr, pos, ref, alt)
+      return db.annotations.getGlobalAnnotation(chr, pos, ref, alt)
     })
   }
 )
@@ -61,7 +61,7 @@ ipcMain.handle(
       const { user_name, ...annotationUpdates } = updates
 
       // Read current state before upsert for audit trail
-      const oldAnnotation = db.getGlobalAnnotation(chr, pos, ref, alt)
+      const oldAnnotation = db.annotations.getGlobalAnnotation(chr, pos, ref, alt)
 
       // Build dbUpdates only with keys actually provided
       const dbUpdates: Partial<
@@ -84,12 +84,12 @@ ipcMain.handle(
         dbUpdates.starred = annotationUpdates.starred ? 1 : 0
       }
 
-      const result = db.upsertGlobalAnnotation(chr, pos, ref, alt, dbUpdates)
+      const result = db.annotations.upsertGlobalAnnotation(chr, pos, ref, alt, dbUpdates)
 
       // Audit logging
       const entityKey = `${chr}:${pos}:${ref}:${alt}`
       if (annotationUpdates.acmg_classification !== undefined) {
-        db.appendAuditEntry({
+        db.auditLog.appendEntry({
           action_type: 'acmg_classify',
           entity_type: 'variant_annotation',
           entity_key: entityKey,
@@ -103,7 +103,7 @@ ipcMain.handle(
         })
       }
       if (annotationUpdates.acmg_evidence !== undefined) {
-        db.appendAuditEntry({
+        db.auditLog.appendEntry({
           action_type: 'acmg_evidence_update',
           entity_type: 'variant_annotation',
           entity_key: entityKey,
@@ -115,7 +115,7 @@ ipcMain.handle(
         })
       }
       if (annotationUpdates.starred !== undefined) {
-        db.appendAuditEntry({
+        db.auditLog.appendEntry({
           action_type: annotationUpdates.starred ? 'star' : 'unstar',
           entity_type: 'variant_annotation',
           entity_key: entityKey,
@@ -138,7 +138,7 @@ ipcMain.handle(
   async (_event, chr: string, pos: number, ref: string, alt: string) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      db.deleteGlobalAnnotation(chr, pos, ref, alt)
+      db.annotations.deleteGlobalAnnotation(chr, pos, ref, alt)
       return undefined
     })
   }
@@ -150,7 +150,7 @@ ipcMain.handle(
 ipcMain.handle('annotations:getPerCase', async (_event, caseId: number, variantId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getPerCaseAnnotation(caseId, variantId)
+    return db.annotations.getPerCaseAnnotation(caseId, variantId)
   })
 })
 
@@ -168,7 +168,7 @@ ipcMain.handle(
       const { user_name, ...annotationUpdates } = updates
 
       // Read current state before upsert for audit trail
-      const oldAnnotation = db.getPerCaseAnnotation(caseId, variantId)
+      const oldAnnotation = db.annotations.getPerCaseAnnotation(caseId, variantId)
 
       // Build dbUpdates only with keys actually provided
       const dbUpdates: Partial<
@@ -191,12 +191,12 @@ ipcMain.handle(
         dbUpdates.starred = annotationUpdates.starred ? 1 : 0
       }
 
-      const result = db.upsertPerCaseAnnotation(caseId, variantId, dbUpdates)
+      const result = db.annotations.upsertPerCaseAnnotation(caseId, variantId, dbUpdates)
 
       // Audit logging
       const entityKey = `case:${caseId}:variant:${variantId}`
       if (annotationUpdates.acmg_classification !== undefined) {
-        db.appendAuditEntry({
+        db.auditLog.appendEntry({
           action_type: 'acmg_classify',
           entity_type: 'case_variant_annotation',
           entity_key: entityKey,
@@ -210,7 +210,7 @@ ipcMain.handle(
         })
       }
       if (annotationUpdates.acmg_evidence !== undefined) {
-        db.appendAuditEntry({
+        db.auditLog.appendEntry({
           action_type: 'acmg_evidence_update',
           entity_type: 'case_variant_annotation',
           entity_key: entityKey,
@@ -222,7 +222,7 @@ ipcMain.handle(
         })
       }
       if (annotationUpdates.starred !== undefined) {
-        db.appendAuditEntry({
+        db.auditLog.appendEntry({
           action_type: annotationUpdates.starred ? 'star' : 'unstar',
           entity_type: 'case_variant_annotation',
           entity_key: entityKey,
@@ -243,7 +243,7 @@ ipcMain.handle(
 ipcMain.handle('annotations:deletePerCase', async (_event, caseId: number, variantId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.deletePerCaseAnnotation(caseId, variantId)
+    db.annotations.deletePerCaseAnnotation(caseId, variantId)
     return undefined
   })
 })
@@ -256,7 +256,7 @@ ipcMain.handle(
   async (_event, caseId: number, chr: string, pos: number, ref: string, alt: string) => {
     return wrapHandler(async () => {
       const db = getDatabaseService()
-      return db.getAnnotationsForVariant(caseId, chr, pos, ref, alt)
+      return db.annotations.getAnnotationsForVariant(caseId, chr, pos, ref, alt)
     })
   }
 )

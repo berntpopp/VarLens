@@ -86,7 +86,7 @@ ipcMain.handle(
 
       const db = getDatabaseService()
       const fullFilter: VariantFilter = { case_id: validatedCaseId.data, ...validatedFilters.data }
-      return db.getVariants(fullFilter, validatedLimit, validatedCursor, validatedSortBy)
+      return db.variants.getVariants(fullFilter, validatedLimit, validatedCursor, validatedSortBy)
     })
   }
 )
@@ -104,7 +104,7 @@ ipcMain.handle('variants:filterOptions', async (_event, caseId: unknown) => {
     }
 
     const db = getDatabaseService()
-    return db.getFilterOptions(validatedCaseId.data)
+    return db.variants.getFilterOptions(validatedCaseId.data)
   })
 })
 
@@ -152,7 +152,7 @@ ipcMain.handle(
       }
 
       const db = getDatabaseService()
-      return db.searchVariants(validatedCaseId.data, validatedQuery.data, validatedLimit)
+      return db.variants.searchVariants(validatedCaseId.data, validatedQuery.data, validatedLimit)
     })
   }
 )
@@ -193,7 +193,7 @@ ipcMain.handle(
       }
 
       const db = getDatabaseService()
-      return db.getGeneSymbols(validatedCaseId.data, validatedQuery.data, validatedLimit)
+      return db.variants.getGeneSymbols(validatedCaseId.data, validatedQuery.data, validatedLimit)
     })
   }
 )

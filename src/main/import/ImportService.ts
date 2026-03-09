@@ -52,7 +52,7 @@ export class ImportService {
       const fileSize = fileStats.size
 
       // Create case record (before strategy runs)
-      caseId = this.db.createCase(options.caseName, filePath, fileSize)
+      caseId = this.db.cases.createCase(options.caseName, filePath, fileSize)
 
       // Get strategy from registry
       const strategy = importRegistry.getStrategy(formatInfo)
@@ -72,7 +72,7 @@ export class ImportService {
       try {
         const parts = filePath.split(/[/\\]/)
         const fileName = parts[parts.length - 1] || filePath
-        this.db.upsertCaseDataInfo(caseId, {
+        this.db.metadata.upsertCaseDataInfo(caseId, {
           import_file_name: fileName,
           import_file_type: formatInfo.format
         })
@@ -85,7 +85,7 @@ export class ImportService {
       // Rollback case creation on failure
       if (caseId !== null) {
         try {
-          this.db.deleteCase(caseId)
+          this.db.cases.deleteCase(caseId)
         } catch (rollbackError) {
           mainLogger.error(`Failed to rollback case creation: ${rollbackError}`, 'import')
         }

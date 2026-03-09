@@ -14,21 +14,21 @@ import { readFile } from 'node:fs/promises'
 ipcMain.handle('gene-lists:list', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.listGeneLists()
+    return db.geneLists.listGeneLists()
   })
 })
 
 ipcMain.handle('gene-lists:create', async (_event, name: string, description?: string | null) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.createGeneList(name, description)
+    return db.geneLists.createGeneList(name, description)
   })
 })
 
 ipcMain.handle('gene-lists:delete', async (_event, id: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.deleteGeneList(id)
+    db.geneLists.deleteGeneList(id)
     return undefined
   })
 })
@@ -36,15 +36,15 @@ ipcMain.handle('gene-lists:delete', async (_event, id: number) => {
 ipcMain.handle('gene-lists:getGenes', async (_event, listId: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getGeneListGenes(listId)
+    return db.geneLists.getGeneListGenes(listId)
   })
 })
 
 ipcMain.handle('gene-lists:setGenes', async (_event, listId: number, genes: string[]) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.setGeneListGenes(listId, genes)
-    return db.getGeneListGenes(listId)
+    db.geneLists.setGeneListGenes(listId, genes)
+    return db.geneLists.getGeneListGenes(listId)
   })
 })
 
@@ -55,21 +55,21 @@ ipcMain.handle('gene-lists:setGenes', async (_event, listId: number, genes: stri
 ipcMain.handle('region-files:list', async () => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.listRegionFiles()
+    return db.geneLists.listRegionFiles()
   })
 })
 
 ipcMain.handle('region-files:create', async (_event, name: string, description: string | null) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.createRegionFile(name, description)
+    return db.geneLists.createRegionFile(name, description)
   })
 })
 
 ipcMain.handle('region-files:delete', async (_event, id: number) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    db.deleteRegionFile(id)
+    db.geneLists.deleteRegionFile(id)
     return undefined
   })
 })
@@ -105,6 +105,6 @@ ipcMain.handle('region-files:importBed', async (_event, fileId: number, filePath
     }
 
     const db = getDatabaseService()
-    return db.importBedEntries(fileId, entries)
+    return db.geneLists.importBedEntries(fileId, entries)
   })
 })

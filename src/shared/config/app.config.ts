@@ -11,5 +11,5 @@ export const APP_CONFIG = {
   /** Snackbar timeout for error messages (-1 = manual close) */
   SNACKBAR_ERROR_MS: -1,
   /** Default items-per-page options */
-  ITEMS_PER_PAGE_OPTIONS: [10, 25, 50, 100] as readonly number[],
+  ITEMS_PER_PAGE_OPTIONS: [10, 25, 50, 100] as readonly number[]
 } as const

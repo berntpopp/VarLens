@@ -19,7 +19,7 @@ interface AuditQueryParams {
 ipcMain.handle('audit:getByEntity', async (_event, entityKey: string) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.getAuditByEntityKey(entityKey)
+    return db.auditLog.getByEntityKey(entityKey)
   })
 })
 
@@ -29,6 +29,6 @@ ipcMain.handle('audit:getByEntity', async (_event, entityKey: string) => {
 ipcMain.handle('audit:query', async (_event, params: AuditQueryParams) => {
   return wrapHandler(async () => {
     const db = getDatabaseService()
-    return db.queryAuditLog(params)
+    return db.auditLog.query(params)
   })
 })

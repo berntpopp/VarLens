@@ -60,7 +60,7 @@ export class BatchImportService {
 
       let isDuplicate = false
       try {
-        this.db.getCaseByName(caseName)
+        this.db.cases.getCaseByName(caseName)
         isDuplicate = true
         duplicateCount++
       } catch (error) {
@@ -133,7 +133,7 @@ export class BatchImportService {
         let isDuplicate = false
 
         try {
-          const existingCase = this.db.getCaseByName(caseName)
+          const existingCase = this.db.cases.getCaseByName(caseName)
           isDuplicate = true
           existingCaseId = existingCase.id
         } catch (error) {
@@ -156,7 +156,7 @@ export class BatchImportService {
             result.skipped++
             continue
           } else if (options.duplicateStrategy === 'overwrite' && existingCaseId !== null) {
-            this.db.deleteCase(existingCaseId)
+            this.db.cases.deleteCase(existingCaseId)
             importedInBatch.delete(caseName)
           }
         }

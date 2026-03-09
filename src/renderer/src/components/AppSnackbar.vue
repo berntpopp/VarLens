@@ -30,7 +30,9 @@ interface ShowOptions {
 const show = (msg: string, type: 'success' | 'error' = 'success', options?: ShowOptions): void => {
   message.value = msg
   color.value = type
-  timeout.value = options?.timeout ?? (type === 'error' ? APP_CONFIG.SNACKBAR_ERROR_MS : APP_CONFIG.SNACKBAR_SUCCESS_MS)
+  timeout.value =
+    options?.timeout ??
+    (type === 'error' ? APP_CONFIG.SNACKBAR_ERROR_MS : APP_CONFIG.SNACKBAR_SUCCESS_MS)
   actionText.value = options?.action?.text ?? null
   actionCallback.value = options?.action?.callback ?? null
   snackbar.value = true

@@ -60,10 +60,10 @@ describe('SQLCipher Encryption', () => {
 
       // Create encrypted database and insert data
       let service = new DatabaseService(dbPath, encryptionKey)
-      const caseId = service.createCase('encrypted-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('encrypted-case', '/path/to/file.vcf', 1024)
 
       // Insert a test variant
-      service.insertVariantsBatch(caseId, [
+      service.variants.insertVariantsBatch(caseId, [
         {
           chr: '1',
           pos: 10000,
@@ -90,11 +90,11 @@ describe('SQLCipher Encryption', () => {
       // Reopen with the same key and verify data is accessible
       service = new DatabaseService(dbPath, encryptionKey)
 
-      const cases = service.getAllCases()
+      const cases = service.cases.getAllCases()
       expect(cases).toHaveLength(1)
       expect(cases[0].name).toBe('encrypted-case')
 
-      const variantCount = service.getVariantCount(caseId)
+      const variantCount = service.variants.getVariantCount(caseId)
       expect(variantCount).toBe(1)
 
       service.close()
@@ -107,7 +107,7 @@ describe('SQLCipher Encryption', () => {
 
       // Create encrypted database
       let service = new DatabaseService(dbPath, correctKey)
-      service.createCase('test-case', '/path/to/file.vcf', 1024)
+      service.cases.createCase('test-case', '/path/to/file.vcf', 1024)
       service.close()
 
       // Attempt to open with wrong key should fail during schema initialization
@@ -120,8 +120,8 @@ describe('SQLCipher Encryption', () => {
       // This test ensures existing behavior is preserved
       const service = new DatabaseService(':memory:')
 
-      service.createCase('unencrypted-case', '/path/to/file.vcf', 512)
-      const cases = service.getAllCases()
+      service.cases.createCase('unencrypted-case', '/path/to/file.vcf', 512)
+      const cases = service.cases.getAllCases()
 
       expect(cases).toHaveLength(1)
       expect(cases[0].name).toBe('unencrypted-case')
@@ -136,7 +136,7 @@ describe('SQLCipher Encryption', () => {
       const encryptionKey = 'fts5-test-key'
 
       const service = new DatabaseService(dbPath, encryptionKey)
-      const caseId = service.createCase('fts5-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('fts5-case', '/path/to/file.vcf', 1024)
 
       // Insert a variant with searchable gene_symbol
       service.database
@@ -166,7 +166,7 @@ describe('SQLCipher Encryption', () => {
         )
 
       // Search using FTS5
-      const results = service.searchVariants(caseId, 'BRCA1', 10)
+      const results = service.variants.searchVariants(caseId, 'BRCA1', 10)
 
       expect(results).toHaveLength(1)
       expect(results[0].gene_symbol).toBe('BRCA1')
@@ -181,7 +181,7 @@ describe('SQLCipher Encryption', () => {
 
       // Create encrypted database and insert variant
       let service = new DatabaseService(dbPath, encryptionKey)
-      const caseId = service.createCase('fts5-persist-case', '/path/to/file.vcf', 1024)
+      const caseId = service.cases.createCase('fts5-persist-case', '/path/to/file.vcf', 1024)
 
       service.database
         .prepare(
@@ -214,7 +214,7 @@ describe('SQLCipher Encryption', () => {
       // Reopen with same key and verify FTS5 works
       service = new DatabaseService(dbPath, encryptionKey)
 
-      const results = service.searchVariants(caseId, 'BRCA2', 10)
+      const results = service.variants.searchVariants(caseId, 'BRCA2', 10)
 
       expect(results).toHaveLength(1)
       expect(results[0].gene_symbol).toBe('BRCA2')

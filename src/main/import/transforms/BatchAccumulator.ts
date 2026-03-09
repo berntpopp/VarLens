@@ -64,7 +64,7 @@ export class BatchAccumulator extends Transform {
   private flushBatch(): void {
     if (this.batch.length === 0) return
 
-    this.db.insertVariantsBatch(this.caseId, this.batch)
+    this.db.variants.insertVariantsBatch(this.caseId, this.batch)
     this.totalInserted += this.batch.length
 
     if (this.onProgress) {

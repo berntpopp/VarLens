@@ -17,7 +17,7 @@ import {
  * @returns Case ID
  */
 function createTestCase(db: DatabaseService, name: string): number {
-  return db.createCase(name, `/path/to/${name}.vcf`, 1024)
+  return db.cases.createCase(name, `/path/to/${name}.vcf`, 1024)
 }
 
 /**
@@ -78,7 +78,7 @@ describe('Variant Operations', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(10)
 
-      const count = service.insertVariantsBatch(caseId, variants)
+      const count = service.variants.insertVariantsBatch(caseId, variants)
 
       expect(count).toBe(10)
     })
@@ -87,9 +87,9 @@ describe('Variant Operations', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(25)
 
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const updatedCase = service.getCase(caseId)
+      const updatedCase = service.cases.getCase(caseId)
       expect(updatedCase.variant_count).toBe(25)
     })
 
@@ -98,10 +98,10 @@ describe('Variant Operations', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(100)
 
-      const count = service.insertVariantsBatch(caseId, variants)
+      const count = service.variants.insertVariantsBatch(caseId, variants)
 
       expect(count).toBe(100)
-      expect(service.getVariantCount(caseId)).toBe(100)
+      expect(service.variants.getVariantCount(caseId)).toBe(100)
     })
 
     it('handles multiple batches', () => {
@@ -110,17 +110,17 @@ describe('Variant Operations', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(150)
 
-      const count = service.insertVariantsBatch(caseId, variants)
+      const count = service.variants.insertVariantsBatch(caseId, variants)
 
       expect(count).toBe(150)
-      expect(service.getVariantCount(caseId)).toBe(150)
+      expect(service.variants.getVariantCount(caseId)).toBe(150)
     })
 
     it('throws NotFoundError for invalid case_id', () => {
       const variants = createTestVariants(5)
 
       expect(() => {
-        service.insertVariantsBatch(99999, variants)
+        service.variants.insertVariantsBatch(99999, variants)
       }).toThrow(NotFoundError)
     })
 
@@ -140,10 +140,10 @@ describe('Variant Operations', () => {
         }
       ]
 
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
       // Search for the unique gene symbol
-      const results = service.searchVariants(caseId, 'UNIQUE_GENE')
+      const results = service.variants.searchVariants(caseId, 'UNIQUE_GENE')
       expect(results.length).toBe(1)
       expect(results[0].gene_symbol).toBe('UNIQUE_GENE_XYZ')
     })
@@ -153,7 +153,7 @@ describe('Variant Operations', () => {
     it('returns 0 for case with no variants', () => {
       const caseId = createTestCase(service, 'empty-case')
 
-      const count = service.getVariantCount(caseId)
+      const count = service.variants.getVariantCount(caseId)
 
       expect(count).toBe(0)
     })
@@ -161,9 +161,9 @@ describe('Variant Operations', () => {
     it('returns correct count', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(15)
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const count = service.getVariantCount(caseId)
+      const count = service.variants.getVariantCount(caseId)
 
       expect(count).toBe(15)
     })
@@ -173,9 +173,9 @@ describe('Variant Operations', () => {
     it('returns first page of results', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(100)
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId }, 20)
+      const result = service.variants.getVariants({ case_id: caseId }, 20)
 
       expect(result.data.length).toBe(20)
     })
@@ -183,9 +183,9 @@ describe('Variant Operations', () => {
     it('has_more is true when more results exist', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(100)
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId }, 20)
+      const result = service.variants.getVariants({ case_id: caseId }, 20)
 
       expect(result.has_more).toBe(true)
     })
@@ -193,9 +193,9 @@ describe('Variant Operations', () => {
     it('has_more is false on last page', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(15)
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId }, 20)
+      const result = service.variants.getVariants({ case_id: caseId }, 20)
 
       expect(result.has_more).toBe(false)
     })
@@ -203,12 +203,12 @@ describe('Variant Operations', () => {
     it('cursor navigates to next page', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(50)
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const page1 = service.getVariants({ case_id: caseId }, 20)
+      const page1 = service.variants.getVariants({ case_id: caseId }, 20)
       expect(page1.next_cursor).not.toBeNull()
 
-      const page2 = service.getVariants({ case_id: caseId }, 20, page1.next_cursor!)
+      const page2 = service.variants.getVariants({ case_id: caseId }, 20, page1.next_cursor!)
 
       // Different results on page 2
       expect(page2.data[0].id).not.toBe(page1.data[0].id)
@@ -222,9 +222,9 @@ describe('Variant Operations', () => {
     it('total_count reflects all matching variants', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(100)
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId }, 20)
+      const result = service.variants.getVariants({ case_id: caseId }, 20)
 
       expect(result.total_count).toBe(100)
     })
@@ -232,7 +232,7 @@ describe('Variant Operations', () => {
     it('returns empty result for case with no variants', () => {
       const caseId = createTestCase(service, 'empty-case')
 
-      const result = service.getVariants({ case_id: caseId }, 20)
+      const result = service.variants.getVariants({ case_id: caseId }, 20)
 
       expect(result.data).toEqual([])
       expect(result.has_more).toBe(false)
@@ -279,9 +279,9 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId, gene_symbol: 'BRCA' }, 20)
+      const result = service.variants.getVariants({ case_id: caseId, gene_symbol: 'BRCA' }, 20)
 
       expect(result.data.length).toBe(2)
       expect(result.data.every((v) => v.gene_symbol?.includes('BRCA'))).toBe(true)
@@ -324,9 +324,12 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId, consequence: 'missense_variant' }, 20)
+      const result = service.variants.getVariants(
+        { case_id: caseId, consequence: 'missense_variant' },
+        20
+      )
 
       expect(result.data.length).toBe(2)
       expect(result.data.every((v) => v.consequence === 'missense_variant')).toBe(true)
@@ -369,9 +372,9 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId, gnomad_af_max: 0.05 }, 20)
+      const result = service.variants.getVariants({ case_id: caseId, gnomad_af_max: 0.05 }, 20)
 
       expect(result.data.length).toBe(2)
       expect(result.data.every((v) => v.gnomad_af !== null && v.gnomad_af <= 0.05)).toBe(true)
@@ -414,9 +417,9 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId, gnomad_af_max: 0.05 }, 20)
+      const result = service.variants.getVariants({ case_id: caseId, gnomad_af_max: 0.05 }, 20)
 
       expect(result.data.length).toBe(2)
       // Should include the null AF variant
@@ -460,9 +463,9 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId, cadd_min: 20 }, 20)
+      const result = service.variants.getVariants({ case_id: caseId, cadd_min: 20 }, 20)
 
       expect(result.data.length).toBe(2)
       expect(result.data.every((v) => v.cadd !== null && v.cadd >= 20)).toBe(true)
@@ -505,9 +508,9 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId, cadd_min: 20 }, 20)
+      const result = service.variants.getVariants({ case_id: caseId, cadd_min: 20 }, 20)
 
       // NULL values should pass the filter (NULL = unknown = include by default)
       expect(result.data.length).toBe(3)
@@ -564,7 +567,7 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
       // Filter: BRCA genes + AF <= 0.01 + CADD >= 20
       const filter: VariantFilter = {
@@ -573,7 +576,7 @@ describe('Variant Operations', () => {
         gnomad_af_max: 0.01,
         cadd_min: 20
       }
-      const result = service.getVariants(filter, 20)
+      const result = service.variants.getVariants(filter, 20)
 
       // Only first variant matches all criteria
       expect(result.data.length).toBe(1)
@@ -620,9 +623,9 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const results = service.searchVariants(caseId, 'BRC')
+      const results = service.variants.searchVariants(caseId, 'BRC')
 
       expect(results.length).toBe(2)
       expect(results.every((v) => v.gene_symbol?.startsWith('BRC'))).toBe(true)
@@ -665,9 +668,9 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const results = service.searchVariants(caseId, 'stop')
+      const results = service.variants.searchVariants(caseId, 'stop')
 
       expect(results.length).toBe(1)
       expect(results[0].consequence).toBe('stop_gained')
@@ -699,10 +702,10 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
       // BM25 scoring should return results (order depends on relevance)
-      const results = service.searchVariants(caseId, 'ABC')
+      const results = service.variants.searchVariants(caseId, 'ABC')
 
       expect(results.length).toBe(2)
       // Both should be found - exact order depends on BM25 scoring
@@ -712,9 +715,9 @@ describe('Variant Operations', () => {
     it('returns empty array for no matches', () => {
       const caseId = createTestCase(service, 'test-case')
       const variants = createTestVariants(10)
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const results = service.searchVariants(caseId, 'NONEXISTENT_GENE_ZZZZ')
+      const results = service.variants.searchVariants(caseId, 'NONEXISTENT_GENE_ZZZZ')
 
       expect(results).toEqual([])
     })
@@ -736,9 +739,9 @@ describe('Variant Operations', () => {
           clinvar: null
         })
       }
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const results = service.searchVariants(caseId, 'SEARCHABLE', 10)
+      const results = service.variants.searchVariants(caseId, 'SEARCHABLE', 10)
 
       expect(results.length).toBe(10)
     })
@@ -758,9 +761,9 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const results = service.searchVariants(caseId, 'brca1')
+      const results = service.variants.searchVariants(caseId, 'brca1')
 
       expect(results.length).toBe(1)
       expect(results[0].gene_symbol).toBe('BRCA1')
@@ -784,11 +787,11 @@ describe('Variant Operations', () => {
         }
       ]
 
-      const count = service.insertVariantsBatch(caseId, variants)
+      const count = service.variants.insertVariantsBatch(caseId, variants)
 
       expect(count).toBe(1)
 
-      const result = service.getVariants({ case_id: caseId }, 20)
+      const result = service.variants.getVariants({ case_id: caseId }, 20)
       expect(result.data.length).toBe(1)
       expect(result.data[0].gene_symbol).toBeNull()
       expect(result.data[0].consequence).toBeNull()
@@ -811,13 +814,15 @@ describe('Variant Operations', () => {
           clinvar: null
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
       // These should not cause SQL injection or errors
-      expect(() => service.searchVariants(caseId, "'; DROP TABLE variants; --")).not.toThrow()
-      expect(() => service.searchVariants(caseId, '"quoted"')).not.toThrow()
-      expect(() => service.searchVariants(caseId, 'test*')).not.toThrow()
-      expect(() => service.searchVariants(caseId, 'test AND other')).not.toThrow()
+      expect(() =>
+        service.variants.searchVariants(caseId, "'; DROP TABLE variants; --")
+      ).not.toThrow()
+      expect(() => service.variants.searchVariants(caseId, '"quoted"')).not.toThrow()
+      expect(() => service.variants.searchVariants(caseId, 'test*')).not.toThrow()
+      expect(() => service.variants.searchVariants(caseId, 'test AND other')).not.toThrow()
     })
   })
 
@@ -869,7 +874,7 @@ describe('Variant Operations', () => {
           omim_mim_number: '113705'
         }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
       // All columns that should be in DatabaseService SORTABLE_COLUMNS
       const sortableColumns = [
@@ -893,7 +898,7 @@ describe('Variant Operations', () => {
 
       for (const column of sortableColumns) {
         // Test ascending sort - should not throw
-        const resultAsc = service.getVariants({ case_id: caseId }, 20, undefined, [
+        const resultAsc = service.variants.getVariants({ case_id: caseId }, 20, undefined, [
           { key: column, order: 'asc' }
         ])
         expect(
@@ -902,7 +907,7 @@ describe('Variant Operations', () => {
         ).toBeGreaterThan(0)
 
         // Test descending sort - should not throw
-        const resultDesc = service.getVariants({ case_id: caseId }, 20, undefined, [
+        const resultDesc = service.variants.getVariants({ case_id: caseId }, 20, undefined, [
           { key: column, order: 'desc' }
         ])
         expect(
@@ -923,9 +928,9 @@ describe('Variant Operations', () => {
         { chr: '1', pos: 100, ref: 'C', alt: 'T' },
         { chr: '1', pos: 200, ref: 'G', alt: 'A' }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId }, 20, undefined, [
+      const result = service.variants.getVariants({ case_id: caseId }, 20, undefined, [
         { key: 'pos', order: 'asc' }
       ])
 
@@ -941,9 +946,9 @@ describe('Variant Operations', () => {
         { chr: '1', pos: 100, ref: 'C', alt: 'T' },
         { chr: '1', pos: 200, ref: 'G', alt: 'A' }
       ]
-      service.insertVariantsBatch(caseId, variants)
+      service.variants.insertVariantsBatch(caseId, variants)
 
-      const result = service.getVariants({ case_id: caseId }, 20, undefined, [
+      const result = service.variants.getVariants({ case_id: caseId }, 20, undefined, [
         { key: 'pos', order: 'desc' }
       ])
 
@@ -956,13 +961,13 @@ describe('Variant Operations', () => {
   describe('column_filters', () => {
     it('should filter by text column with partial match', () => {
       const caseId = createTestCase(service, 'col-filter-text')
-      service.insertVariantsBatch(caseId, [
+      service.variants.insertVariantsBatch(caseId, [
         { chr: '1', pos: 100, ref: 'A', alt: 'G', gene_symbol: 'BRCA1' },
         { chr: '1', pos: 200, ref: 'C', alt: 'T', gene_symbol: 'BRCA2' },
         { chr: '1', pos: 300, ref: 'G', alt: 'A', gene_symbol: 'TP53' }
       ])
 
-      const result = service.getVariants(
+      const result = service.variants.getVariants(
         { case_id: caseId, column_filters: { gene_symbol: 'BRCA' } },
         20
       )
@@ -972,25 +977,28 @@ describe('Variant Operations', () => {
 
     it('should filter by numeric column using text LIKE', () => {
       const caseId = createTestCase(service, 'col-filter-numeric')
-      service.insertVariantsBatch(caseId, [
+      service.variants.insertVariantsBatch(caseId, [
         { chr: '1', pos: 100, ref: 'A', alt: 'G', cadd: 25.3 },
         { chr: '1', pos: 200, ref: 'C', alt: 'T', cadd: 15.1 },
         { chr: '1', pos: 300, ref: 'G', alt: 'A', cadd: 25.7 }
       ])
 
-      const result = service.getVariants({ case_id: caseId, column_filters: { cadd: '25' } }, 20)
+      const result = service.variants.getVariants(
+        { case_id: caseId, column_filters: { cadd: '25' } },
+        20
+      )
       expect(result.total_count).toBe(2)
     })
 
     it('should combine multiple column filters with AND logic', () => {
       const caseId = createTestCase(service, 'col-filter-combo')
-      service.insertVariantsBatch(caseId, [
+      service.variants.insertVariantsBatch(caseId, [
         { chr: '1', pos: 100, ref: 'A', alt: 'G', gene_symbol: 'BRCA1', clinvar: 'Pathogenic' },
         { chr: '1', pos: 200, ref: 'C', alt: 'T', gene_symbol: 'BRCA2', clinvar: 'Benign' },
         { chr: '1', pos: 300, ref: 'G', alt: 'A', gene_symbol: 'TP53', clinvar: 'Pathogenic' }
       ])
 
-      const result = service.getVariants(
+      const result = service.variants.getVariants(
         { case_id: caseId, column_filters: { gene_symbol: 'BRCA', clinvar: 'Pathogenic' } },
         20
       )
@@ -1000,9 +1008,9 @@ describe('Variant Operations', () => {
 
     it('should safely ignore unknown column keys', () => {
       const caseId = createTestCase(service, 'col-filter-unknown')
-      service.insertVariantsBatch(caseId, [{ chr: '1', pos: 100, ref: 'A', alt: 'G' }])
+      service.variants.insertVariantsBatch(caseId, [{ chr: '1', pos: 100, ref: 'A', alt: 'G' }])
 
-      const result = service.getVariants(
+      const result = service.variants.getVariants(
         { case_id: caseId, column_filters: { nonexistent_column: 'test' } },
         20
       )
@@ -1011,12 +1019,12 @@ describe('Variant Operations', () => {
 
     it('should skip empty string filter values', () => {
       const caseId = createTestCase(service, 'col-filter-empty')
-      service.insertVariantsBatch(caseId, [
+      service.variants.insertVariantsBatch(caseId, [
         { chr: '1', pos: 100, ref: 'A', alt: 'G', gene_symbol: 'BRCA1' },
         { chr: '1', pos: 200, ref: 'C', alt: 'T', gene_symbol: 'TP53' }
       ])
 
-      const result = service.getVariants(
+      const result = service.variants.getVariants(
         { case_id: caseId, column_filters: { gene_symbol: '' } },
         20
       )
