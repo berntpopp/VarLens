@@ -22,7 +22,7 @@
         :items="variants"
         :items-length="totalCount"
         :loading="loading"
-        :items-per-page-options="[10, 25, 50, 100]"
+        :items-per-page-options="itemsPerPageOptions"
         density="compact"
         multi-sort
         class="elevation-1"
@@ -349,6 +349,7 @@ import { useColumnFilters } from '../composables/useColumnFilters'
 import { useDebounce } from '../composables/useDebounce'
 import { formatConsequence } from '../utils/formatters'
 import { useTableScroll } from '../composables/useTableScroll'
+import { APP_CONFIG } from '../../../shared/config'
 import CommentDialog from './CommentDialog.vue'
 import AcmgEvidenceDialog from './AcmgEvidenceDialog.vue'
 import {
@@ -369,6 +370,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
 
 const emit = defineEmits<{
   'update:counts': [counts: { filtered: number; total: number }]

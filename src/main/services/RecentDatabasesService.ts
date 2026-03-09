@@ -7,6 +7,7 @@
 
 import { readFileSync, writeFileSync } from 'fs'
 import { basename } from 'path'
+import { DATABASE_CONFIG } from '../../shared/config'
 
 /**
  * Recent database entry
@@ -28,7 +29,7 @@ interface SettingsData {
  * Service for managing recent databases list
  */
 export class RecentDatabasesService {
-  private readonly maxRecent = 5
+  private readonly maxRecent = DATABASE_CONFIG.MAX_RECENT_DATABASES
   private readonly settingsPath: string
 
   /**

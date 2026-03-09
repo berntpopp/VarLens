@@ -6,6 +6,7 @@ import { ImportService, BatchImportService, ZipExtractor, TempDirectoryManager }
 import type { DuplicateChoice } from '../../../shared/types/api'
 import type { ProgressUpdate } from '../../import/types'
 import { mainLogger } from '../../services/MainLogger'
+import { API_CONFIG } from '../../../shared/config'
 
 /**
  * Batch Import IPC handlers
@@ -50,7 +51,7 @@ function saveSettings(settings: Settings): void {
 }
 
 // Throttle interval for progress updates (ms)
-const PROGRESS_THROTTLE_MS = 100
+const PROGRESS_THROTTLE_MS = API_CONFIG.PROGRESS_THROTTLE_MS
 
 /**
  * Select multiple files for batch import

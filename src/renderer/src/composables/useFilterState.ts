@@ -24,6 +24,7 @@ import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { useDebounce } from './useDebounce'
 import { useTags } from './useTags'
 import type { VariantFilter, Tag, FilterOptions } from '../../../shared/types/api'
+import { APP_CONFIG } from '../../../shared/config'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -543,7 +544,7 @@ export function useFilterState(
   }
 
   // Create debounced version
-  const { debouncedFn: debouncedEmit } = useDebounce(emitFilters, 300)
+  const { debouncedFn: debouncedEmit } = useDebounce(emitFilters, APP_CONFIG.DEBOUNCE_MS)
 
   // -------------------------------------------------------------------------
   // Watchers

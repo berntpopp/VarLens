@@ -8,6 +8,7 @@
 
 import type Database from 'better-sqlite3-multiple-ciphers'
 import type { CacheSizeInfo } from '../../../shared/types/api-enrichment'
+import { DATABASE_CONFIG } from '../../../shared/config'
 
 interface CacheEntry {
   response_data: string
@@ -79,7 +80,7 @@ export class ApiCache {
    * @param data - JSON string to cache
    * @param ttlDays - Time-to-live in days (default 30)
    */
-  set(key: string, data: string, ttlDays: number = 30): void {
+  set(key: string, data: string, ttlDays: number = DATABASE_CONFIG.CACHE_TTL_DAYS): void {
     const now = Date.now()
 
     // Add TTL jitter: ±10% to spread expiration times

@@ -35,6 +35,7 @@ import type { DatabaseOverview } from '../../shared/types/database-overview'
 import type { FilterOptions } from '../../shared/types/api'
 import type { TranscriptAnnotation, TranscriptInsertRow } from '../../shared/types/transcript'
 import { DatabaseError, TransactionError } from './errors'
+import { DATABASE_CONFIG } from '../../shared/config'
 import { CaseRepository } from './CaseRepository'
 import { TranscriptRepository } from './TranscriptRepository'
 import { AnnotationRepository } from './AnnotationRepository'
@@ -100,10 +101,10 @@ export class DatabaseService {
 
       // Performance PRAGMAs
       this.db.pragma('synchronous = NORMAL')
-      this.db.pragma('busy_timeout = 5000')
-      this.db.pragma('cache_size = -32000')
+      this.db.pragma(`busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}`)
+      this.db.pragma(`cache_size = ${DATABASE_CONFIG.CACHE_SIZE_KB}`)
       this.db.pragma('temp_store = MEMORY')
-      this.db.pragma('mmap_size = 268435456')
+      this.db.pragma(`mmap_size = ${DATABASE_CONFIG.MMAP_SIZE_BYTES}`)
 
       // Initialize database schema (tables, indexes, FTS5)
       initializeSchema(this.db)

@@ -19,6 +19,7 @@ import {
 import type { VepFetchResult } from '../../../shared/types/api-enrichment'
 import { getSpliceAIMaxDelta } from './clinical-thresholds'
 import { mainLogger } from '../MainLogger'
+import { API_CONFIG } from '../../../shared/config'
 
 /**
  * Normalize chromosome identifier for consistent cache keys
@@ -66,11 +67,11 @@ export class VepApiClient {
 
     // Configure Bottleneck for VEP rate limits
     this.limiter = new Bottleneck({
-      reservoir: 55000, // 55k requests per hour (Ensembl limit)
-      reservoirRefreshAmount: 55000,
+      reservoir: API_CONFIG.VEP_HOURLY_LIMIT,
+      reservoirRefreshAmount: API_CONFIG.VEP_HOURLY_LIMIT,
       reservoirRefreshInterval: 60 * 60 * 1000, // hourly refresh
       maxConcurrent: 1, // serialize requests for predictability
-      minTime: 67 // 67ms between requests = ~15 req/sec
+      minTime: API_CONFIG.VEP_MIN_TIME_MS
     })
 
     // Retry handling for 429 responses with exponential backoff

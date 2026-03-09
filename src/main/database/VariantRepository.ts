@@ -7,7 +7,9 @@ import type { TranscriptInsertRow } from '../../shared/types/transcript'
 import { createFTSTriggers } from './schema'
 import { mainLogger } from '../services/MainLogger'
 
-const BATCH_SIZE = 5000
+import { DATABASE_CONFIG } from '../../shared/config'
+
+const BATCH_SIZE = DATABASE_CONFIG.BATCH_INSERT_SIZE
 
 const SORTABLE_COLUMNS: Record<string, string> = {
   chr: 'chr',

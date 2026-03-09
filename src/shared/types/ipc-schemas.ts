@@ -19,6 +19,7 @@
  */
 
 import { z } from 'zod'
+import { DOMAIN_CONFIG } from '../config'
 
 /**
  * Helper to create a nullish string that transforms null to undefined
@@ -89,7 +90,7 @@ export const CohortSearchParamsSchema = z.object({
   cadd_min: z
     .number()
     .min(0)
-    .max(60)
+    .max(DOMAIN_CONFIG.MAX_CADD_SCORE)
     .nullish()
     .transform((val) => val ?? undefined),
   cohort_frequency_min: z
@@ -152,7 +153,7 @@ export const VariantFilterPartialSchema = z.object({
   cadd_min: z
     .number()
     .min(0)
-    .max(60)
+    .max(DOMAIN_CONFIG.MAX_CADD_SCORE)
     .nullish()
     .transform((val) => val ?? undefined),
 
@@ -246,7 +247,7 @@ export const AssociationConfigSchema = z.object({
   covariates: z.array(z.string()),
   filters: z.object({
     gnomad_af_max: z.number().min(0).max(1).optional(),
-    cadd_min: z.number().min(0).max(60).optional(),
+    cadd_min: z.number().min(0).max(DOMAIN_CONFIG.MAX_CADD_SCORE).optional(),
     consequences: z.array(z.string()).optional(),
     gene_list: z.array(z.string()).optional()
   }),

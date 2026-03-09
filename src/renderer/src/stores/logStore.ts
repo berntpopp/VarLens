@@ -6,11 +6,12 @@
 import { ref, computed, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { LogEntry, LogConfig, LogStatistics } from '../types/log'
+import { APP_CONFIG } from '../../../shared/config'
 
 const CONFIG_KEY = 'varlens_log_config'
 
 const DEFAULT_CONFIG: LogConfig = {
-  maxEntries: 1000,
+  maxEntries: APP_CONFIG.MAX_LOG_ENTRIES,
   minLevel: 'debug'
 }
 
