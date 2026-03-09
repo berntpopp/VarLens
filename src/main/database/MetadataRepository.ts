@@ -16,9 +16,9 @@ import { DatabaseError, NotFoundError, UniqueConstraintError } from './errors'
 
 export class MetadataRepository extends BaseRepository {
   getCaseMetadata(caseId: number): CaseMetadata | null {
-    const result = this.stmt('SELECT * FROM case_metadata WHERE case_id = ?').get(caseId) as
-      | CaseMetadata
-      | undefined
+    const result = this.execFirst<CaseMetadata>(
+      this.kysely.selectFrom('case_metadata').selectAll().where('case_id', '=', caseId)
+    )
     return result ?? null
   }
 
@@ -48,9 +48,9 @@ export class MetadataRepository extends BaseRepository {
       }
 
       // Try INSERT first, then UPDATE on conflict
-      const existing = this.stmt('SELECT * FROM case_metadata WHERE case_id = ?').get(caseId) as
-        | CaseMetadata
-        | undefined
+      const existing = this.execFirst<CaseMetadata>(
+        this.kysely.selectFrom('case_metadata').selectAll().where('case_id', '=', caseId)
+      )
 
       if (existing === undefined) {
         return this.stmt(
@@ -75,7 +75,9 @@ export class MetadataRepository extends BaseRepository {
   }
 
   listCohortGroups(): CohortGroup[] {
-    return this.stmt('SELECT * FROM cohort_groups ORDER BY name').all() as CohortGroup[]
+    return this.execAll<CohortGroup>(
+      this.kysely.selectFrom('cohort_groups').selectAll().orderBy('name')
+    )
   }
 
   createCohortGroup(name: string, description?: string | null): CohortGroup {
@@ -91,9 +93,9 @@ export class MetadataRepository extends BaseRepository {
     updates: { name?: string; description?: string | null }
   ): CohortGroup {
     try {
-      const existing = this.stmt('SELECT * FROM cohort_groups WHERE id = ?').get(id) as
-        | CohortGroup
-        | undefined
+      const existing = this.execFirst<CohortGroup>(
+        this.kysely.selectFrom('cohort_groups').selectAll().where('id', '=', id)
+      )
       if (!existing) throw new NotFoundError('CohortGroup', id)
 
       const setClauses: string[] = []
@@ -127,13 +129,13 @@ export class MetadataRepository extends BaseRepository {
   }
 
   deleteCohortGroup(cohortId: number): void {
-    this.stmt('DELETE FROM cohort_groups WHERE id = ?').run(cohortId)
+    this.execRun(this.kysely.deleteFrom('cohort_groups').where('id', '=', cohortId))
   }
 
   getCohortGroupByName(name: string): CohortGroup | null {
-    const result = this.stmt('SELECT * FROM cohort_groups WHERE name = ?').get(name) as
-      | CohortGroup
-      | undefined
+    const result = this.execFirst<CohortGroup>(
+      this.kysely.selectFrom('cohort_groups').selectAll().where('name', '=', name)
+    )
     return result ?? null
   }
 
@@ -155,9 +157,11 @@ export class MetadataRepository extends BaseRepository {
   }
 
   removeCaseCohort(caseId: number, cohortId: number): void {
-    this.stmt('DELETE FROM case_cohort_links WHERE case_id = ? AND cohort_id = ?').run(
-      caseId,
-      cohortId
+    this.execRun(
+      this.kysely
+        .deleteFrom('case_cohort_links')
+        .where('case_id', '=', caseId)
+        .where('cohort_id', '=', cohortId)
     )
   }
 
@@ -172,9 +176,13 @@ export class MetadataRepository extends BaseRepository {
   }
 
   getCaseHpoTerms(caseId: number): CaseHpoTerm[] {
-    return this.stmt('SELECT * FROM case_hpo_terms WHERE case_id = ? ORDER BY hpo_id').all(
-      caseId
-    ) as CaseHpoTerm[]
+    return this.execAll<CaseHpoTerm>(
+      this.kysely
+        .selectFrom('case_hpo_terms')
+        .selectAll()
+        .where('case_id', '=', caseId)
+        .orderBy('hpo_id')
+    )
   }
 
   assignCaseHpoTerm(caseId: number, hpoId: string, hpoLabel: string): CaseHpoTerm {
@@ -191,7 +199,12 @@ export class MetadataRepository extends BaseRepository {
   }
 
   removeCaseHpoTerm(caseId: number, hpoId: string): void {
-    this.stmt('DELETE FROM case_hpo_terms WHERE case_id = ? AND hpo_id = ?').run(caseId, hpoId)
+    this.execRun(
+      this.kysely
+        .deleteFrom('case_hpo_terms')
+        .where('case_id', '=', caseId)
+        .where('hpo_id', '=', hpoId)
+    )
   }
 
   // ============================================================
@@ -199,9 +212,14 @@ export class MetadataRepository extends BaseRepository {
   // ============================================================
 
   listCaseComments(caseId: number): CaseComment[] {
-    return this.stmt(
-      'SELECT * FROM case_comments WHERE case_id = ? ORDER BY created_at DESC, id DESC'
-    ).all(caseId) as CaseComment[]
+    return this.execAll<CaseComment>(
+      this.kysely
+        .selectFrom('case_comments')
+        .selectAll()
+        .where('case_id', '=', caseId)
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+    )
   }
 
   createCaseComment(caseId: number, category: CommentCategory, content: string): CaseComment {
@@ -224,7 +242,9 @@ export class MetadataRepository extends BaseRepository {
   }
 
   deleteCaseComment(commentId: number): void {
-    const result = this.stmt('DELETE FROM case_comments WHERE id = ?').run(commentId)
+    const result = this.execRun(
+      this.kysely.deleteFrom('case_comments').where('id', '=', commentId)
+    )
     if (result.changes === 0) {
       throw new NotFoundError('CaseComment', commentId)
     }
@@ -235,9 +255,13 @@ export class MetadataRepository extends BaseRepository {
   // ============================================================
 
   listMetricDefinitions(): MetricDefinition[] {
-    return this.stmt(
-      'SELECT * FROM metric_definitions ORDER BY category, name'
-    ).all() as MetricDefinition[]
+    return this.execAll<MetricDefinition>(
+      this.kysely
+        .selectFrom('metric_definitions')
+        .selectAll()
+        .orderBy('category')
+        .orderBy('name')
+    )
   }
 
   createMetricDefinition(
@@ -297,7 +321,12 @@ export class MetadataRepository extends BaseRepository {
   }
 
   deleteCaseMetric(caseId: number, metricId: number): void {
-    this.stmt('DELETE FROM case_metrics WHERE case_id = ? AND metric_id = ?').run(caseId, metricId)
+    this.execRun(
+      this.kysely
+        .deleteFrom('case_metrics')
+        .where('case_id', '=', caseId)
+        .where('metric_id', '=', metricId)
+    )
   }
 
   // ============================================================
@@ -305,9 +334,9 @@ export class MetadataRepository extends BaseRepository {
   // ============================================================
 
   getCaseDataInfo(caseId: number): CaseDataInfo | null {
-    const result = this.stmt('SELECT * FROM case_data_info WHERE case_id = ?').get(caseId) as
-      | CaseDataInfo
-      | undefined
+    const result = this.execFirst<CaseDataInfo>(
+      this.kysely.selectFrom('case_data_info').selectAll().where('case_id', '=', caseId)
+    )
     return result ?? null
   }
 
@@ -321,9 +350,9 @@ export class MetadataRepository extends BaseRepository {
     return this.runTransaction(() => {
       const now = Date.now()
 
-      const existing = this.stmt('SELECT * FROM case_data_info WHERE case_id = ?').get(caseId) as
-        | CaseDataInfo
-        | undefined
+      const existing = this.execFirst<CaseDataInfo>(
+        this.kysely.selectFrom('case_data_info').selectAll().where('case_id', '=', caseId)
+      )
 
       if (existing === undefined) {
         return this.stmt(
@@ -382,9 +411,13 @@ export class MetadataRepository extends BaseRepository {
   // ============================================================
 
   listCaseExternalIds(caseId: number): CaseExternalId[] {
-    return this.stmt('SELECT * FROM case_external_ids WHERE case_id = ? ORDER BY id_type').all(
-      caseId
-    ) as CaseExternalId[]
+    return this.execAll<CaseExternalId>(
+      this.kysely
+        .selectFrom('case_external_ids')
+        .selectAll()
+        .where('case_id', '=', caseId)
+        .orderBy('id_type')
+    )
   }
 
   upsertCaseExternalId(caseId: number, idType: string, idValue: string): CaseExternalId {
@@ -398,22 +431,36 @@ export class MetadataRepository extends BaseRepository {
   }
 
   deleteCaseExternalId(caseId: number, idType: string): void {
-    this.stmt('DELETE FROM case_external_ids WHERE case_id = ? AND id_type = ?').run(caseId, idType)
+    this.execRun(
+      this.kysely
+        .deleteFrom('case_external_ids')
+        .where('case_id', '=', caseId)
+        .where('id_type', '=', idType)
+    )
   }
 
   /** Get all distinct platform values across all cases */
   getDistinctPlatforms(): string[] {
-    const rows = this.stmt(
-      'SELECT DISTINCT platform FROM case_data_info WHERE platform IS NOT NULL ORDER BY platform'
-    ).all() as Array<{ platform: string }>
+    const rows = this.execAll<{ platform: string }>(
+      this.kysely
+        .selectFrom('case_data_info')
+        .select('platform')
+        .distinct()
+        .where('platform', 'is not', null)
+        .orderBy('platform')
+    )
     return rows.map((r) => r.platform)
   }
 
   /** Get all distinct external ID types across all cases */
   getDistinctExternalIdTypes(): string[] {
-    const rows = this.stmt(
-      'SELECT DISTINCT id_type FROM case_external_ids ORDER BY id_type'
-    ).all() as Array<{ id_type: string }>
+    const rows = this.execAll<{ id_type: string }>(
+      this.kysely
+        .selectFrom('case_external_ids')
+        .select('id_type')
+        .distinct()
+        .orderBy('id_type')
+    )
     return rows.map((r) => r.id_type)
   }
 }

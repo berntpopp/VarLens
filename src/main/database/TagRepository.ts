@@ -4,7 +4,7 @@ import { DatabaseError, NotFoundError, UniqueConstraintError } from './errors'
 
 export class TagRepository extends BaseRepository {
   listTags(): Tag[] {
-    return this.stmt('SELECT * FROM tags ORDER BY name').all() as Tag[]
+    return this.execAll<Tag>(this.kysely.selectFrom('tags').selectAll().orderBy('name'))
   }
 
   createTag(name: string, color: string): Tag {
@@ -27,7 +27,9 @@ export class TagRepository extends BaseRepository {
 
   updateTag(id: number, updates: { name?: string; color?: string }): Tag {
     try {
-      const existing = this.stmt('SELECT * FROM tags WHERE id = ?').get(id) as Tag | undefined
+      const existing = this.execFirst<Tag>(
+        this.kysely.selectFrom('tags').selectAll().where('id', '=', id)
+      )
       if (!existing) throw new NotFoundError('Tag', id)
 
       const setClauses: string[] = []
@@ -61,20 +63,25 @@ export class TagRepository extends BaseRepository {
   }
 
   deleteTag(id: number): void {
-    const result = this.stmt('DELETE FROM tags WHERE id = ?').run(id)
+    const result = this.execRun(this.kysely.deleteFrom('tags').where('id', '=', id))
     if (result.changes === 0) throw new NotFoundError('Tag', id)
   }
 
   getTag(id: number): Tag | null {
-    const result = this.stmt('SELECT * FROM tags WHERE id = ?').get(id) as Tag | undefined
+    const result = this.execFirst<Tag>(
+      this.kysely.selectFrom('tags').selectAll().where('id', '=', id)
+    )
     return result ?? null
   }
 
   getTagUsageCount(tagId: number): number {
-    const result = this.stmt('SELECT COUNT(*) as count FROM variant_tags WHERE tag_id = ?').get(
-      tagId
-    ) as { count: number }
-    return result.count
+    const result = this.execFirst<{ count: number }>(
+      this.kysely
+        .selectFrom('variant_tags')
+        .select(({ fn }) => fn.countAll<number>().as('count'))
+        .where('tag_id', '=', tagId)
+    )
+    return result?.count ?? 0
   }
 
   getVariantTags(caseId: number, variantId: number): Tag[] {
@@ -96,10 +103,12 @@ export class TagRepository extends BaseRepository {
   }
 
   removeVariantTag(caseId: number, variantId: number, tagId: number): void {
-    this.stmt('DELETE FROM variant_tags WHERE case_id = ? AND variant_id = ? AND tag_id = ?').run(
-      caseId,
-      variantId,
-      tagId
+    this.execRun(
+      this.kysely
+        .deleteFrom('variant_tags')
+        .where('case_id', '=', caseId)
+        .where('variant_id', '=', variantId)
+        .where('tag_id', '=', tagId)
     )
   }
 

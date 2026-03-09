@@ -18,7 +18,9 @@ export class GeneListRepository extends BaseRepository {
 
   getGeneList(id: number): GeneList | null {
     return (
-      (this.stmt('SELECT * FROM gene_lists WHERE id = ?').get(id) as GeneList | undefined) ?? null
+      this.execFirst<GeneList>(
+        this.kysely.selectFrom('gene_lists').selectAll().where('id', '=', id)
+      ) ?? null
     )
   }
 
@@ -50,13 +52,17 @@ export class GeneListRepository extends BaseRepository {
   }
 
   deleteGeneList(id: number): void {
-    this.stmt('DELETE FROM gene_lists WHERE id = ?').run(id)
+    this.execRun(this.kysely.deleteFrom('gene_lists').where('id', '=', id))
   }
 
   getGeneListGenes(listId: number): string[] {
-    const rows = this.stmt(
-      'SELECT gene_symbol FROM gene_list_items WHERE gene_list_id = ? ORDER BY gene_symbol'
-    ).all(listId) as Array<{ gene_symbol: string }>
+    const rows = this.execAll<{ gene_symbol: string }>(
+      this.kysely
+        .selectFrom('gene_list_items')
+        .select('gene_symbol')
+        .where('gene_list_id', '=', listId)
+        .orderBy('gene_symbol')
+    )
     return rows.map((r) => r.gene_symbol)
   }
 
@@ -81,7 +87,9 @@ export class GeneListRepository extends BaseRepository {
   // ============================================================
 
   listRegionFiles(): RegionFile[] {
-    return this.stmt('SELECT * FROM region_files ORDER BY name').all() as RegionFile[]
+    return this.execAll<RegionFile>(
+      this.kysely.selectFrom('region_files').selectAll().orderBy('name')
+    )
   }
 
   createRegionFile(name: string, description: string | null): RegionFile {
@@ -92,7 +100,7 @@ export class GeneListRepository extends BaseRepository {
   }
 
   deleteRegionFile(id: number): void {
-    this.stmt('DELETE FROM region_files WHERE id = ?').run(id)
+    this.execRun(this.kysely.deleteFrom('region_files').where('id', '=', id))
   }
 
   importBedEntries(
@@ -113,7 +121,9 @@ export class GeneListRepository extends BaseRepository {
         'UPDATE region_files SET region_count = ?, total_bases = ?, updated_at = ? WHERE id = ?'
       ).run(entries.length, totalBases, Date.now(), fileId)
 
-      return this.stmt('SELECT * FROM region_files WHERE id = ?').get(fileId) as RegionFile
+      return this.execFirst<RegionFile>(
+        this.kysely.selectFrom('region_files').selectAll().where('id', '=', fileId)
+      ) as RegionFile
     })
   }
 }

@@ -3,16 +3,7 @@ import type { TranscriptAnnotation, TranscriptInsertRow } from '../../shared/typ
 
 export class TranscriptRepository extends BaseRepository {
   getVariantTranscripts(variantId: number): TranscriptAnnotation[] {
-    const rows = this.stmt(
-      `
-      SELECT id, variant_id, transcript_id, gene_symbol, consequence,
-             cdna, aa_change, hpo_sim_score, moi, is_selected,
-             is_mane_select, is_canonical
-      FROM variant_transcripts
-      WHERE variant_id = ?
-      ORDER BY is_selected DESC, transcript_id ASC
-    `
-    ).all(variantId) as {
+    const rows = this.execAll<{
       id: number
       variant_id: number
       transcript_id: string
@@ -25,7 +16,27 @@ export class TranscriptRepository extends BaseRepository {
       is_selected: number
       is_mane_select: number | null
       is_canonical: number | null
-    }[]
+    }>(
+      this.kysely
+        .selectFrom('variant_transcripts')
+        .select([
+          'id',
+          'variant_id',
+          'transcript_id',
+          'gene_symbol',
+          'consequence',
+          'cdna',
+          'aa_change',
+          'hpo_sim_score',
+          'moi',
+          'is_selected',
+          'is_mane_select',
+          'is_canonical'
+        ])
+        .where('variant_id', '=', variantId)
+        .orderBy('is_selected', 'desc')
+        .orderBy('transcript_id', 'asc')
+    )
 
     return rows.map((r) => ({
       ...r,

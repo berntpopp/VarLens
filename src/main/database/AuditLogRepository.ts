@@ -44,9 +44,13 @@ export class AuditLogRepository extends BaseRepository {
   }
 
   getByEntityKey(entityKey: string): AuditLogEntry[] {
-    return this.stmt('SELECT * FROM audit_log WHERE entity_key = ? ORDER BY timestamp ASC').all(
-      entityKey
-    ) as AuditLogEntry[]
+    return this.execAll<AuditLogEntry>(
+      this.kysely
+        .selectFrom('audit_log')
+        .selectAll()
+        .where('entity_key', '=', entityKey)
+        .orderBy('timestamp', 'asc')
+    )
   }
 
   query(filter: AuditQueryFilter): AuditQueryResult {

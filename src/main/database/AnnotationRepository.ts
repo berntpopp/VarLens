@@ -8,9 +8,15 @@ export class AnnotationRepository extends BaseRepository {
     ref: string,
     alt: string
   ): VariantAnnotation | null {
-    const result = this.stmt(
-      'SELECT * FROM variant_annotations WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
-    ).get(chr, pos, ref, alt) as VariantAnnotation | undefined
+    const result = this.execFirst<VariantAnnotation>(
+      this.kysely
+        .selectFrom('variant_annotations')
+        .selectAll()
+        .where('chr', '=', chr)
+        .where('pos', '=', pos)
+        .where('ref', '=', ref)
+        .where('alt', '=', alt)
+    )
     return result ?? null
   }
 
@@ -68,15 +74,24 @@ export class AnnotationRepository extends BaseRepository {
   }
 
   deleteGlobalAnnotation(chr: string, pos: number, ref: string, alt: string): void {
-    this.stmt(
-      'DELETE FROM variant_annotations WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
-    ).run(chr, pos, ref, alt)
+    this.execRun(
+      this.kysely
+        .deleteFrom('variant_annotations')
+        .where('chr', '=', chr)
+        .where('pos', '=', pos)
+        .where('ref', '=', ref)
+        .where('alt', '=', alt)
+    )
   }
 
   getPerCaseAnnotation(caseId: number, variantId: number): CaseVariantAnnotation | null {
-    const result = this.stmt(
-      'SELECT * FROM case_variant_annotations WHERE case_id = ? AND variant_id = ?'
-    ).get(caseId, variantId) as CaseVariantAnnotation | undefined
+    const result = this.execFirst<CaseVariantAnnotation>(
+      this.kysely
+        .selectFrom('case_variant_annotations')
+        .selectAll()
+        .where('case_id', '=', caseId)
+        .where('variant_id', '=', variantId)
+    )
     return result ?? null
   }
 
@@ -128,9 +143,11 @@ export class AnnotationRepository extends BaseRepository {
   }
 
   deletePerCaseAnnotation(caseId: number, variantId: number): void {
-    this.stmt('DELETE FROM case_variant_annotations WHERE case_id = ? AND variant_id = ?').run(
-      caseId,
-      variantId
+    this.execRun(
+      this.kysely
+        .deleteFrom('case_variant_annotations')
+        .where('case_id', '=', caseId)
+        .where('variant_id', '=', variantId)
     )
   }
 
@@ -141,9 +158,16 @@ export class AnnotationRepository extends BaseRepository {
     ref: string,
     alt: string
   ): { global: VariantAnnotation | null; perCase: CaseVariantAnnotation | null } {
-    const variant = this.stmt(
-      'SELECT id FROM variants WHERE case_id = ? AND chr = ? AND pos = ? AND ref = ? AND alt = ?'
-    ).get(caseId, chr, pos, ref, alt) as { id: number } | undefined
+    const variant = this.execFirst<{ id: number }>(
+      this.kysely
+        .selectFrom('variants')
+        .select('id')
+        .where('case_id', '=', caseId)
+        .where('chr', '=', chr)
+        .where('pos', '=', pos)
+        .where('ref', '=', ref)
+        .where('alt', '=', alt)
+    )
 
     const variantId = variant?.id
     const global = this.getGlobalAnnotation(chr, pos, ref, alt)
