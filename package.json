@@ -120,6 +120,7 @@
     }
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
     "@vueuse/core": "^14.2.0",
     "adm-zip": "^0.5.16",
     "better-sqlite3-multiple-ciphers": "^12.6.2",
@@ -130,6 +131,7 @@
     "jstat": "^1.9.6",
     "kysely": "^0.28.11",
     "markdown-it": "^14.1.0",
+    "nanoid": "^5.1.6",
     "pinia": "^3.0.4",
     "plotly.js-dist-min": "^3.4.0",
     "stream-json": "^1.9.1",
