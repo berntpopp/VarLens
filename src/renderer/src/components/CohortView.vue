@@ -21,10 +21,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, provide } from 'vue'
 import CohortTable from './CohortTable.vue'
 import GeneBurdenView from './association/GeneBurdenView.vue'
+import { FiltersKey, createFilters } from '../composables/useFilters'
 import type { CohortVariant } from '../../../shared/types/cohort'
+
+// Create and provide filter state for child components (CohortTable, CohortFilterBar)
+const filtersInstance = createFilters()
+provide(FiltersKey, filtersInstance)
 
 defineEmits<{
   'navigate-to-case': [

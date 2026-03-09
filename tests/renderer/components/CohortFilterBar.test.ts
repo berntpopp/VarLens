@@ -5,6 +5,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import CohortFilterBar from '../../../src/renderer/src/components/cohort/CohortFilterBar.vue'
 import { createMockApi } from '../../utils/mock-api'
+import { FiltersKey, createFilters } from '../../../src/renderer/src/composables/useFilters'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -30,11 +31,18 @@ describe('CohortFilterBar', () => {
     exporting: false
   }
 
+  // Provide FiltersKey for useFilters() inject in CohortFilterBar
+  const globalConfig = {
+    plugins: [vuetify],
+    stubs: drawerStubs,
+    provide: { [FiltersKey as symbol]: createFilters() }
+  }
+
   describe('Filter Inputs Rendering', () => {
     it('renders search input field', () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       const searchInput = wrapper.find('.filter-search-input')
@@ -44,7 +52,7 @@ describe('CohortFilterBar', () => {
     it('renders ACMG classification chips in toolbar', () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       // Find chips within the ACMG chip-group
@@ -60,7 +68,7 @@ describe('CohortFilterBar', () => {
     it('displays total count in results chip', () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       const resultsChip = wrapper.find('.results-chip')
@@ -74,7 +82,7 @@ describe('CohortFilterBar', () => {
           ...defaultProps,
           totalCount: 50
         },
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       const resultsChip = wrapper.find('.results-chip')
@@ -87,7 +95,7 @@ describe('CohortFilterBar', () => {
           ...defaultProps,
           totalCount: null
         },
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       const resultsChip = wrapper.find('.results-chip')
@@ -97,7 +105,7 @@ describe('CohortFilterBar', () => {
     it('shows clear button', () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       // Find the clear button by its mdi-filter-off icon
@@ -110,7 +118,7 @@ describe('CohortFilterBar', () => {
     it('shows export button', () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       const exportButton = wrapper.findAll('button').find((btn) => btn.text().includes('Export'))
@@ -123,7 +131,7 @@ describe('CohortFilterBar', () => {
           ...defaultProps,
           totalCount: 0
         },
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       const exportButton = wrapper.findAll('button').find((btn) => btn.text().includes('Export'))
@@ -136,7 +144,7 @@ describe('CohortFilterBar', () => {
           ...defaultProps,
           exporting: true
         },
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       // When exporting, the v-btn has loading=true which renders a loader overlay
@@ -151,7 +159,7 @@ describe('CohortFilterBar', () => {
     it('has handleClearAll method that emits clear-all event', () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       // Find the clear button by its prepend icon
@@ -167,7 +175,7 @@ describe('CohortFilterBar', () => {
     it('emits export when export button clicked', async () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       const exportButton = wrapper.findAll('button').find((btn) => btn.text().includes('Export'))
@@ -179,7 +187,7 @@ describe('CohortFilterBar', () => {
     it('emits toggle-column when column visibility toggled', async () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       await wrapper.vm.$emit('toggle-column', 'gene_symbol')
@@ -191,7 +199,7 @@ describe('CohortFilterBar', () => {
     it('emits reorder-columns when columns reordered', async () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       await wrapper.vm.$emit('reorder-columns', ['chr', 'gene_symbol'])
@@ -203,7 +211,7 @@ describe('CohortFilterBar', () => {
     it('emits reset-columns when columns reset', async () => {
       const wrapper = mount(CohortFilterBar, {
         props: defaultProps,
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       await wrapper.vm.$emit('reset-columns')
@@ -219,7 +227,7 @@ describe('CohortFilterBar', () => {
           ...defaultProps,
           totalCount: 42
         },
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       const resultsChip = wrapper.find('.results-chip')
@@ -232,7 +240,7 @@ describe('CohortFilterBar', () => {
           ...defaultProps,
           cohortSummary: { total_cases: 10, unique_variants: 250 }
         },
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       expect(wrapper.props('cohortSummary')).toEqual({ total_cases: 10, unique_variants: 250 })
@@ -250,7 +258,7 @@ describe('CohortFilterBar', () => {
           ...defaultProps,
           columns: customColumns
         },
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       expect(wrapper.props('columns')).toEqual(customColumns)
@@ -264,7 +272,7 @@ describe('CohortFilterBar', () => {
           ...defaultProps,
           visibleColumns: visibleCols
         },
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       expect(wrapper.props('visibleColumns')).toEqual(visibleCols)
@@ -276,7 +284,7 @@ describe('CohortFilterBar', () => {
           ...defaultProps,
           exporting: true
         },
-        global: { plugins: [vuetify], stubs: drawerStubs }
+        global: globalConfig
       })
 
       expect(wrapper.props('exporting')).toBe(true)

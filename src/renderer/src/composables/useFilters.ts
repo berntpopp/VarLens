@@ -1,12 +1,8 @@
 /**
  * Composable for filter state management with preset sync
  *
- * Extracts filter state handling from CohortTable.vue (lines 726-1105)
- * into a reusable composable with explicit return types.
- *
- * IMPORTANT: This is a SINGLETON composable - state is shared across all
- * components that call useFilters(). This enables CohortFilterBar and
- * CohortTable to share the same filter state without prop drilling.
+ * Uses provide/inject pattern: a parent component creates filters with
+ * createFilters() and provides them, child components consume via useFilters().
  *
  * Provides:
  * - Core filter state (gene, consequences, funcs, clinvars, numeric filters)
@@ -16,12 +12,11 @@
  * - activeFiltersList for chip-based filter summary
  * - clearAllFilters and clearFilter methods
  * - reset() for database context changes
- *
- * SOL-03: Centralized filter state management for CohortTable.vue.
+ * - getIpcParams() for IPC-safe parameter generation
  */
 
-import { ref, computed, watch } from 'vue'
-import type { Ref, ComputedRef } from 'vue'
+import { ref, computed, watch, inject } from 'vue'
+import type { Ref, ComputedRef, InjectionKey } from 'vue'
 import {
   clearFilter as clearFilterUtil,
   buildActiveFiltersList,
@@ -87,22 +82,6 @@ export interface FilterState {
 
 /**
  * Return type for useFilters composable
- *
- * @property filters - Core filter state ref
- * @property searchTerm - Search term ref
- * @property selectedImpactPresets - Selected impact level presets
- * @property selectedCohortFreqPreset - Selected cohort frequency preset
- * @property selectedAfPreset - Selected gnomAD AF preset
- * @property selectedCaddPreset - Selected CADD preset
- * @property customCohortFreq - Custom cohort frequency input (percentage)
- * @property customGnomadAf - Custom gnomAD AF input (percentage)
- * @property customCadd - Custom CADD score input
- * @property hasActiveFilters - Computed boolean for any active filter
- * @property activeFiltersList - Computed list of active filters for display
- * @property clearAllFilters - Method to clear all filters
- * @property clearFilter - Method to clear a specific filter by ID
- * @property reset - Method to reset all state (for database switches)
- * @property getIpcParams - Method to build IPC-safe filter parameters
  */
 export interface UseFiltersReturn {
   // Core filter state
@@ -132,6 +111,11 @@ export interface UseFiltersReturn {
 }
 
 /**
+ * Injection key for filter state
+ */
+export const FiltersKey: InjectionKey<UseFiltersReturn> = Symbol('filters')
+
+/**
  * Create initial filter state
  */
 function createInitialFilterState(): FilterState {
@@ -150,40 +134,41 @@ function createInitialFilterState(): FilterState {
   }
 }
 
-// ============================================================================
-// SINGLETON STATE - Shared across all components calling useFilters()
-// This is intentional architecture to enable filter state sharing between
-// CohortFilterBar and CohortTable without prop drilling or event payloads.
-// ============================================================================
-
-// Core filter state (singleton)
-const filters = ref<FilterState>(createInitialFilterState())
-const searchTerm = ref('')
-
-// Preset selections (singleton)
-const selectedImpactPresets = ref<string[]>([])
-const selectedCohortFreqPreset = ref<number | null>(null)
-const selectedAfPreset = ref<number | null>(null)
-const selectedCaddPreset = ref<number | null>(null)
-
-// Custom inputs (percentage/raw values) (singleton)
-const customCohortFreq = ref<number | null>(null) // Percentage (0-100)
-const customGnomadAf = ref<number | null>(null) // Percentage (0-100)
-const customCadd = ref<number | null>(null) // Raw CADD score
-
-// Track if watchers have been initialized (only once)
-let watchersInitialized = false
-
 /**
- * Initialize watchers for bidirectional preset/custom sync
- * Only runs once per application lifetime
+ * Factory function that creates a new filter state instance.
+ *
+ * Call this in a parent component and provide it via FiltersKey.
+ * Child components then consume via useFilters().
+ *
+ * @returns Object with filter state refs and management methods
+ *
+ * @example
+ * ```typescript
+ * // In parent component
+ * import { provide } from 'vue'
+ * import { FiltersKey, createFilters } from '../composables/useFilters'
+ *
+ * const filters = createFilters()
+ * provide(FiltersKey, filters)
+ * ```
  */
-function initializeWatchers(): void {
-  if (watchersInitialized) return
-  watchersInitialized = true
+export function createFilters(): UseFiltersReturn {
+  // Core filter state
+  const filters = ref<FilterState>(createInitialFilterState())
+  const searchTerm = ref('')
+
+  // Preset selections
+  const selectedImpactPresets = ref<string[]>([])
+  const selectedCohortFreqPreset = ref<number | null>(null)
+  const selectedAfPreset = ref<number | null>(null)
+  const selectedCaddPreset = ref<number | null>(null)
+
+  // Custom inputs (percentage/raw values)
+  const customCohortFreq = ref<number | null>(null) // Percentage (0-100)
+  const customGnomadAf = ref<number | null>(null) // Percentage (0-100)
+  const customCadd = ref<number | null>(null) // Raw CADD score
 
   // BIDIRECTIONAL SYNC: Preset -> Filter + clear custom
-  // When a preset is selected, update the filter state and clear custom input
   watch(selectedCohortFreqPreset, (value) => {
     filters.value.minCohortFrequency = value
     if (value !== null) {
@@ -206,7 +191,6 @@ function initializeWatchers(): void {
   })
 
   // Custom -> Filter + clear preset
-  // When custom input is used, update filter state and clear preset
   watch(customCohortFreq, (value) => {
     if (value === null || Number.isNaN(value)) return
 
@@ -215,15 +199,12 @@ function initializeWatchers(): void {
       value < FILTER_RANGES.cohortFreqPercent.min ||
       value > FILTER_RANGES.cohortFreqPercent.max
     ) {
-      // Invalid range - reset to null (consumer shows error via snackbar)
       customCohortFreq.value = null
       return
     }
 
     if (value > 0) {
       // Convert percentage (0-100) to decimal (0-1)
-      // NOTE (ANTI-10): NULL values in database pass cohort frequency filter by design
-      // (variants without cohort data should not be excluded by frequency filters)
       filters.value.minCohortFrequency = value / 100
       selectedCohortFreqPreset.value = null
     }
@@ -240,8 +221,6 @@ function initializeWatchers(): void {
 
     if (value > 0) {
       // Convert percentage (0-100) to decimal (0-1)
-      // NOTE (ANTI-10): NULL gnomAD AF values pass filter by design
-      // (novel variants without population data should not be excluded)
       filters.value.maxGnomadAf = value / 100
       selectedAfPreset.value = null
     }
@@ -257,188 +236,127 @@ function initializeWatchers(): void {
     }
 
     if (value >= 0) {
-      // NOTE (ANTI-10): NULL CADD scores pass filter by design
-      // (variants without CADD annotation should not be excluded by score filters)
       filters.value.minCadd = value
       selectedCaddPreset.value = null
     }
   })
-}
 
-/**
- * Clear all filters and reset to initial state
- */
-function clearAllFilters(): void {
-  searchTerm.value = ''
-  filters.value = createInitialFilterState()
-  selectedImpactPresets.value = []
-  selectedCohortFreqPreset.value = null
-  selectedAfPreset.value = null
-  selectedCaddPreset.value = null
-  customCohortFreq.value = null
-  customGnomadAf.value = null
-  customCadd.value = null
-}
-
-/**
- * Clear a specific filter by ID
- *
- * @param filterId - The ID of the filter to clear
- */
-function clearFilter(filterId: string): void {
-  // Use shared utility for filter state updates
-  const partialUpdate = clearFilterUtil(filterId as FilterId)
-
-  // Handle searchQuery -> searchTerm mapping
-  if ('searchQuery' in partialUpdate) {
-    searchTerm.value = partialUpdate.searchQuery as string
-    delete partialUpdate.searchQuery
+  /**
+   * Clear all filters and reset to initial state
+   */
+  function clearAllFilters(): void {
+    searchTerm.value = ''
+    filters.value = createInitialFilterState()
+    selectedImpactPresets.value = []
+    selectedCohortFreqPreset.value = null
+    selectedAfPreset.value = null
+    selectedCaddPreset.value = null
+    customCohortFreq.value = null
+    customGnomadAf.value = null
+    customCadd.value = null
   }
 
-  // Apply remaining filter updates
-  Object.assign(filters.value, partialUpdate)
+  /**
+   * Clear a specific filter by ID
+   */
+  function clearFilter(filterId: string): void {
+    const partialUpdate = clearFilterUtil(filterId as FilterId)
 
-  // Clear associated presets and custom inputs
-  switch (filterId) {
-    case 'frequency':
-      selectedAfPreset.value = null
-      customGnomadAf.value = null
-      break
-    case 'cadd':
-      selectedCaddPreset.value = null
-      customCadd.value = null
-      break
-    case 'cohortFreq':
-      selectedCohortFreqPreset.value = null
-      customCohortFreq.value = null
-      break
-    case 'impact':
-      selectedImpactPresets.value = []
-      break
-    case 'starred':
-    case 'comments':
-    case 'acmg':
-      // Already handled by clearFilterUtil above
-      break
+    // Handle searchQuery -> searchTerm mapping
+    if ('searchQuery' in partialUpdate) {
+      searchTerm.value = partialUpdate.searchQuery as string
+      delete partialUpdate.searchQuery
+    }
+
+    // Apply remaining filter updates
+    Object.assign(filters.value, partialUpdate)
+
+    // Clear associated presets and custom inputs
+    switch (filterId) {
+      case 'frequency':
+        selectedAfPreset.value = null
+        customGnomadAf.value = null
+        break
+      case 'cadd':
+        selectedCaddPreset.value = null
+        customCadd.value = null
+        break
+      case 'cohortFreq':
+        selectedCohortFreqPreset.value = null
+        customCohortFreq.value = null
+        break
+      case 'impact':
+        selectedImpactPresets.value = []
+        break
+      case 'starred':
+      case 'comments':
+      case 'acmg':
+        // Already handled by clearFilterUtil above
+        break
+    }
   }
-}
 
-// Computed: has active filters (matches CohortTable logic)
-const hasActiveFilters = computed(() => {
-  const afActive =
-    filters.value.maxGnomadAf !== null &&
-    !Number.isNaN(filters.value.maxGnomadAf) &&
-    filters.value.maxGnomadAf > 0
-  const caddActive =
-    filters.value.minCadd !== null &&
-    !Number.isNaN(filters.value.minCadd) &&
-    filters.value.minCadd >= 0
-  const cohortFreqActive =
-    filters.value.minCohortFrequency !== null &&
-    !Number.isNaN(filters.value.minCohortFrequency) &&
-    filters.value.minCohortFrequency > 0
+  // Computed: has active filters
+  const hasActiveFilters = computed(() => {
+    const afActive =
+      filters.value.maxGnomadAf !== null &&
+      !Number.isNaN(filters.value.maxGnomadAf) &&
+      filters.value.maxGnomadAf > 0
+    const caddActive =
+      filters.value.minCadd !== null &&
+      !Number.isNaN(filters.value.minCadd) &&
+      filters.value.minCadd >= 0
+    const cohortFreqActive =
+      filters.value.minCohortFrequency !== null &&
+      !Number.isNaN(filters.value.minCohortFrequency) &&
+      filters.value.minCohortFrequency > 0
 
-  return (
-    searchTerm.value !== '' ||
-    filters.value.geneSymbol !== '' ||
-    filters.value.consequences.length > 0 ||
-    filters.value.funcs.length > 0 ||
-    filters.value.clinvars.length > 0 ||
-    afActive ||
-    caddActive ||
-    cohortFreqActive ||
-    (filters.value.minCarriers !== null && filters.value.minCarriers > 0) ||
-    filters.value.starredOnly ||
-    filters.value.hasCommentOnly ||
-    filters.value.acmgClassifications.length > 0 ||
-    // Preset selections
-    selectedImpactPresets.value.length > 0 ||
-    selectedCohortFreqPreset.value !== null ||
-    selectedAfPreset.value !== null ||
-    selectedCaddPreset.value !== null
-  )
-})
+    return (
+      searchTerm.value !== '' ||
+      filters.value.geneSymbol !== '' ||
+      filters.value.consequences.length > 0 ||
+      filters.value.funcs.length > 0 ||
+      filters.value.clinvars.length > 0 ||
+      afActive ||
+      caddActive ||
+      cohortFreqActive ||
+      (filters.value.minCarriers !== null && filters.value.minCarriers > 0) ||
+      filters.value.starredOnly ||
+      filters.value.hasCommentOnly ||
+      filters.value.acmgClassifications.length > 0 ||
+      selectedImpactPresets.value.length > 0 ||
+      selectedCohortFreqPreset.value !== null ||
+      selectedAfPreset.value !== null ||
+      selectedCaddPreset.value !== null
+    )
+  })
 
-// Computed: active filters list for chip display
-const activeFiltersList = computed<ActiveFilter[]>(() => {
-  // Merge searchTerm into FilterState shape for utility
-  const stateWithSearch = {
-    ...filters.value,
-    searchQuery: searchTerm.value
+  // Computed: active filters list for chip display
+  const activeFiltersList = computed<ActiveFilter[]>(() => {
+    const stateWithSearch = {
+      ...filters.value,
+      searchQuery: searchTerm.value
+    }
+    return buildActiveFiltersList(stateWithSearch, selectedImpactPresets.value)
+  })
+
+  /**
+   * Build IPC-safe filter parameters
+   */
+  function getIpcParams(): FilterIpcParams {
+    const stateWithSearch = {
+      ...filters.value,
+      searchQuery: searchTerm.value
+    }
+    return buildIpcParams(stateWithSearch)
   }
-  return buildActiveFiltersList(stateWithSearch, selectedImpactPresets.value)
-})
 
-/**
- * Build IPC-safe filter parameters for data fetching and export
- *
- * Uses shared buildIpcParams utility to convert filter state to
- * IPC-compatible format (snake_case keys, no undefined values).
- * Handles searchTerm -> searchQuery mapping.
- *
- * @returns FilterIpcParams object ready for IPC calls
- */
-function getIpcParams(): FilterIpcParams {
-  // Merge searchTerm into FilterState shape for utility
-  const stateWithSearch = {
-    ...filters.value,
-    searchQuery: searchTerm.value
+  /**
+   * Reset all state (alias for clearAllFilters, for database context changes)
+   */
+  function reset(): void {
+    clearAllFilters()
   }
-  return buildIpcParams(stateWithSearch)
-}
-
-/**
- * Reset all state (alias for clearAllFilters, for database context changes)
- */
-function reset(): void {
-  clearAllFilters()
-}
-
-/**
- * Reset singleton state for testing purposes
- * This should ONLY be called in test setup (beforeEach)
- */
-export function _resetFiltersForTesting(): void {
-  clearAllFilters()
-  watchersInitialized = false
-}
-
-/**
- * Composable for filter state management with bidirectional preset sync
- *
- * NOTE: This is a SINGLETON composable. All components calling useFilters()
- * share the same filter state. This is intentional to enable CohortFilterBar
- * and CohortTable to stay in sync without prop drilling.
- *
- * @returns Object with filter state refs and management methods
- *
- * @example
- * ```typescript
- * const {
- *   filters,
- *   searchTerm,
- *   selectedImpactPresets,
- *   selectedAfPreset,
- *   hasActiveFilters,
- *   clearAllFilters
- * } = useFilters()
- *
- * // Bind to UI
- * <v-text-field v-model="filters.geneSymbol" />
- * <v-chip-group v-model="selectedImpactPresets" />
- *
- * // Check if filters are active
- * if (hasActiveFilters.value) {
- *   // Show clear button
- * }
- *
- * // Clear all filters
- * clearAllFilters()
- * ```
- */
-export function useFilters(): UseFiltersReturn {
-  // Initialize watchers on first call (singleton behavior)
-  initializeWatchers()
 
   return {
     filters,
@@ -457,4 +375,20 @@ export function useFilters(): UseFiltersReturn {
     reset,
     getIpcParams
   }
+}
+
+/**
+ * Consume filter state from a parent provider.
+ *
+ * Must be called inside a component that has a parent providing FiltersKey.
+ *
+ * @returns Object with filter state refs and management methods
+ * @throws Error if called without a provider
+ */
+export function useFilters(): UseFiltersReturn {
+  const filters = inject(FiltersKey)
+  if (!filters) {
+    throw new Error('useFilters() called without provider. Wrap in a component that provides FiltersKey.')
+  }
+  return filters
 }
