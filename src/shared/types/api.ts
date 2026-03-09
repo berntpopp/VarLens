@@ -518,4 +518,27 @@ export interface WindowAPI {
   regionFiles: RegionFilesAPI
   updater: UpdaterAPI
   audit: AuditLogAPI
+  auth: AuthAPI
+}
+
+export interface AuthAPI {
+  login: (
+    username: string,
+    password: string
+  ) => Promise<{
+    success: boolean
+    user?: { id: number; username: string; role: string }
+    mustChangePassword?: boolean
+    locked?: boolean
+  }>
+  logout: () => Promise<void>
+  currentUser: () => Promise<{ id: number; username: string; role: string } | null>
+  isAccountsEnabled: () => Promise<boolean>
+  createUser: (username: string, displayName: string, tempPassword: string) => Promise<void>
+  listUsers: () => Promise<
+    Array<{ id: number; username: string; display_name: string; role: string; active: number }>
+  >
+  deactivateUser: (username: string) => Promise<void>
+  resetPassword: (username: string, newPassword: string) => Promise<void>
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>
 }

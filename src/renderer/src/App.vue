@@ -338,7 +338,7 @@ const caseMetadataModalRef = ref<InstanceType<typeof CaseMetadataModal> | null>(
 
 // Register snackbar handler for cross-component communication
 setSnackbarHandler((message: string, type: string, options?: Record<string, unknown>) => {
-  snackbarRef.value?.show(message, type, options)
+  snackbarRef.value?.show(message, type as 'success' | 'error', options)
 })
 
 // Sidebar resize
