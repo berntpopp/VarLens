@@ -5,6 +5,7 @@ import FilterToolbar from '../components/FilterToolbar.vue'
 import VariantTable from '../components/VariantTable.vue'
 import { useAppState } from '../composables/useAppState'
 import type { VariantFilter, Variant } from '../../../shared/types/api'
+import { APP_CONFIG } from '../../../shared/config/app.config'
 
 const {
   selectedCaseId,
@@ -61,13 +62,13 @@ function handleExportSuccess(data: {
   action: { text: string; callback: () => void }
 }): void {
   showSnack(`Exported to ${data.filePath}`, 'success', {
-    timeout: 3000,
+    timeout: APP_CONFIG.SNACKBAR_SUCCESS_MS,
     action: data.action
   })
 }
 
 function handleExportError(error: string): void {
-  showSnack(`Export failed: ${error}`, 'error', { timeout: -1 })
+  showSnack(`Export failed: ${error}`, 'error', { timeout: APP_CONFIG.SNACKBAR_ERROR_MS })
 }
 
 // filterToolbarRef is used as template ref (not detected by vue-tsc from destructured composable)

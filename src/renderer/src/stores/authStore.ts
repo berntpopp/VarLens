@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { useApiService } from '../composables/useApiService'
 
 export const useAuthStore = defineStore('auth', () => {
+  const { api } = useApiService()
   const currentUser = ref<{ id: number; username: string; role: string } | null>(null)
   const accountsEnabled = ref(false)
 
@@ -10,11 +12,11 @@ export const useAuthStore = defineStore('auth', () => {
   const displayName = computed(() => currentUser.value?.username ?? 'anonymous')
 
   async function checkAccountsEnabled(): Promise<void> {
-    if (typeof window === 'undefined' || typeof window.api === 'undefined') return
+    if (!api) return
     try {
-      accountsEnabled.value = await window.api.auth.isAccountsEnabled()
+      accountsEnabled.value = await api.auth.isAccountsEnabled()
       if (accountsEnabled.value) {
-        const user = await window.api.auth.currentUser()
+        const user = await api.auth.currentUser()
         if (user !== null && user !== undefined) {
           currentUser.value = user
         }
@@ -28,10 +30,10 @@ export const useAuthStore = defineStore('auth', () => {
     username: string,
     password: string
   ): Promise<{ success: boolean; mustChangePassword?: boolean; locked?: boolean }> {
-    if (typeof window === 'undefined' || typeof window.api === 'undefined') {
+    if (!api) {
       return { success: false }
     }
-    const result = await window.api.auth.login(username, password)
+    const result = await api.auth.login(username, password)
     if (result.success === true && result.user !== null && result.user !== undefined) {
       currentUser.value = result.user
     }
@@ -40,8 +42,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   function logout(): void {
     currentUser.value = null
-    if (typeof window === 'undefined' || typeof window.api === 'undefined') return
-    window.api.auth.logout()
+    if (!api) return
+    api.auth.logout()
   }
 
   return {

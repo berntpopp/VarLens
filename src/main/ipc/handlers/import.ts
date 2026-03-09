@@ -6,6 +6,7 @@ import type { HandlerDependencies } from '../types'
 import { ImportService } from '../../import'
 import type { ProgressUpdate } from '../../import/types'
 import { mainLogger } from '../../services/MainLogger'
+import { API_CONFIG } from '../../../shared/config/api.config'
 
 /**
  * Import IPC handlers
@@ -41,8 +42,7 @@ function saveSettings(settings: Settings): void {
   }
 }
 
-// Throttle interval for progress updates (ms)
-const PROGRESS_THROTTLE_MS = 100
+const PROGRESS_THROTTLE_MS = API_CONFIG.PROGRESS_THROTTLE_MS
 
 export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies): void {
   ipcMain.handle('import:selectFile', async () => {

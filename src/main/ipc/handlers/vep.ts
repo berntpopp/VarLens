@@ -3,6 +3,8 @@ import type { HandlerDependencies } from '../types'
 import { VepApiClient, normalizeChromosome } from '../../services/api/VepApiClient'
 import { ApiCache } from '../../services/api/ApiCache'
 import { networkStatus } from '../../services/network/NetworkStatus'
+import { VariantCoordsSchema } from '../../../shared/types/ipc-schemas'
+import { mainLogger } from '../../services/MainLogger'
 
 /**
  * VEP IPC handlers
@@ -29,15 +31,22 @@ export function registerVepHandlers({ ipcMain, getDb }: HandlerDependencies): vo
    */
   ipcMain.handle(
     'vep:fetch',
-    async (_event, chr: string, pos: number, ref: string, alt: string) => {
+    async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown) => {
       return wrapHandler(async () => {
+        // ANTI-07: Runtime validation at IPC boundary
+        const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        if (!validated.success) {
+          mainLogger.error(`Invalid vep:fetch params: ${validated.error.message}`, 'vep')
+          throw new Error('Invalid parameters')
+        }
+
         const client = getVepClient()
         const isOnline = networkStatus.getStatus()
 
         // If offline, try to get cached data
         if (!isOnline) {
-          const normalizedChr = normalizeChromosome(chr)
-          const cacheKey = `vep:${normalizedChr}:${pos}:${ref}:${alt}`
+          const normalizedChr = normalizeChromosome(validated.data.chr)
+          const cacheKey = `vep:${normalizedChr}:${validated.data.pos}:${validated.data.ref}:${validated.data.alt}`
           const cached = client.getCached(cacheKey)
 
           if (cached) {
@@ -60,7 +69,12 @@ export function registerVepHandlers({ ipcMain, getDb }: HandlerDependencies): vo
         }
 
         // Online - fetch normally (will use cache if available)
-        return await client.fetchVariantAnnotation(chr, pos, ref, alt)
+        return await client.fetchVariantAnnotation(
+          validated.data.chr,
+          validated.data.pos,
+          validated.data.ref,
+          validated.data.alt
+        )
       })
     }
   )

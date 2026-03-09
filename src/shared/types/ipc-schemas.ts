@@ -358,9 +358,9 @@ export const CaseVariantIdSchema = z.object({
 export const UsernameSchema = z.string().min(1).max(100)
 
 /**
- * Schema for password validation (min 4 characters)
+ * Schema for password validation (min 8 characters)
  */
-export const PasswordSchema = z.string().min(4).max(256)
+export const PasswordSchema = z.string().min(8).max(256)
 
 /**
  * Schema for login parameters

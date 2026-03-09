@@ -158,7 +158,7 @@ onMounted(loadUsers)
             </td>
             <td>
               <v-btn
-                v-if="user.username !== authStore.displayName && user.is_active"
+                v-if="user.username !== authStore.currentUser?.username && user.is_active"
                 icon="mdi-lock-reset"
                 size="small"
                 variant="text"
@@ -166,7 +166,7 @@ onMounted(loadUsers)
                 @click="openResetDialog(user.username)"
               />
               <v-btn
-                v-if="user.username !== authStore.displayName && user.is_active"
+                v-if="user.username !== authStore.currentUser?.username && user.is_active"
                 icon="mdi-account-off"
                 size="small"
                 variant="text"

@@ -1,5 +1,7 @@
+import { z } from 'zod'
 import { shell } from 'electron'
 import type { HandlerDependencies } from '../types'
+import { mainLogger } from '../../services/MainLogger'
 
 /**
  * Shell IPC handlers
@@ -9,6 +11,15 @@ import type { HandlerDependencies } from '../types'
  * Only HTTPS URLs on whitelisted domains are allowed.
  * Shows files in system file manager for export feedback.
  */
+
+/** Schema for URL string */
+const UrlSchema = z.string().min(1).max(2048)
+
+/** Schema for file path string */
+const FilePathSchema = z.string().min(1).max(1024)
+
+/** Schema for user domains array */
+const UserDomainsSchema = z.array(z.string().min(1).max(253))
 
 /** Built-in domains allowed for external link opening */
 const ALLOWED_DOMAINS = [
@@ -39,15 +50,31 @@ function isDomainAllowed(hostname: string): boolean {
 }
 
 export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
-  ipcMain.handle('shell:updateUserDomains', async (_event, domains: string[]): Promise<void> => {
-    userDomains = domains
+  ipcMain.handle('shell:updateUserDomains', async (_event, domains: unknown): Promise<void> => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = UserDomainsSchema.safeParse(domains)
+    if (!validated.success) {
+      mainLogger.error(
+        `Invalid shell:updateUserDomains params: ${validated.error.message}`,
+        'shell'
+      )
+      throw new Error('Invalid parameters')
+    }
+    userDomains = validated.data
   })
 
   ipcMain.handle(
     'shell:openExternal',
-    async (_event, url: string): Promise<{ success: boolean; error?: string }> => {
+    async (_event, url: unknown): Promise<{ success: boolean; error?: string }> => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = UrlSchema.safeParse(url)
+      if (!validated.success) {
+        mainLogger.error(`Invalid shell:openExternal params: ${validated.error.message}`, 'shell')
+        throw new Error('Invalid parameters')
+      }
+
       try {
-        const parsedUrl = new URL(url)
+        const parsedUrl = new URL(validated.data)
 
         // Only allow HTTPS protocol
         if (parsedUrl.protocol !== 'https:') {
@@ -59,7 +86,7 @@ export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
           return { success: false, error: 'Domain not allowed' }
         }
 
-        await shell.openExternal(url)
+        await shell.openExternal(validated.data)
         return { success: true }
       } catch {
         return { success: false, error: 'Invalid URL' }
@@ -71,8 +98,15 @@ export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
    * Show file in system file manager
    * Used for export feedback ("Open folder" action)
    */
-  ipcMain.handle('shell:showItemInFolder', async (_event, filePath: string) => {
-    shell.showItemInFolder(filePath)
+  ipcMain.handle('shell:showItemInFolder', async (_event, filePath: unknown) => {
+    // ANTI-07: Runtime validation at IPC boundary
+    const validated = FilePathSchema.safeParse(filePath)
+    if (!validated.success) {
+      mainLogger.error(`Invalid shell:showItemInFolder params: ${validated.error.message}`, 'shell')
+      throw new Error('Invalid parameters')
+    }
+
+    shell.showItemInFolder(validated.data)
     return { success: true }
   })
 }

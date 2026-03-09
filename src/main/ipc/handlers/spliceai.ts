@@ -3,6 +3,8 @@ import type { HandlerDependencies } from '../types'
 import { SpliceAIApiClient } from '../../services/api/SpliceAIApiClient'
 import { ApiCache } from '../../services/api/ApiCache'
 import { networkStatus } from '../../services/network/NetworkStatus'
+import { VariantCoordsSchema } from '../../../shared/types/ipc-schemas'
+import { mainLogger } from '../../services/MainLogger'
 
 /**
  * SpliceAI Lookup (Broad Institute) IPC handlers
@@ -29,15 +31,22 @@ export function registerSpliceAIHandlers({ ipcMain, getDb }: HandlerDependencies
    */
   ipcMain.handle(
     'spliceai:fetch',
-    async (_event, chr: string, pos: number, ref: string, alt: string) => {
+    async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown) => {
       return wrapHandler(async () => {
+        // ANTI-07: Runtime validation at IPC boundary
+        const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        if (!validated.success) {
+          mainLogger.error(`Invalid spliceai:fetch params: ${validated.error.message}`, 'spliceai')
+          throw new Error('Invalid parameters')
+        }
+
         const client = getSpliceAIClient()
         const isOnline = networkStatus.getStatus()
 
         // If offline, try to get cached data
         if (!isOnline) {
-          const normalizedChr = chr.replace(/^chr/i, '')
-          const variantId = `${normalizedChr}-${pos}-${ref}-${alt}`
+          const normalizedChr = validated.data.chr.replace(/^chr/i, '')
+          const variantId = `${normalizedChr}-${validated.data.pos}-${validated.data.ref}-${validated.data.alt}`
           const cacheKey = `spliceai:38:${variantId}`
           const cached = client.getCached(cacheKey)
 
@@ -78,7 +87,13 @@ export function registerSpliceAIHandlers({ ipcMain, getDb }: HandlerDependencies
         }
 
         // Online - fetch normally
-        return await client.fetchSpliceAIScores(chr, pos, ref, alt, '38')
+        return await client.fetchSpliceAIScores(
+          validated.data.chr,
+          validated.data.pos,
+          validated.data.ref,
+          validated.data.alt,
+          '38'
+        )
       })
     }
   )

@@ -3,6 +3,8 @@ import type { HandlerDependencies } from '../types'
 import { MyVariantApiClient } from '../../services/api/MyVariantApiClient'
 import { ApiCache } from '../../services/api/ApiCache'
 import { networkStatus } from '../../services/network/NetworkStatus'
+import { VariantCoordsSchema } from '../../../shared/types/ipc-schemas'
+import { mainLogger } from '../../services/MainLogger'
 
 /**
  * MyVariant.info IPC handlers
@@ -29,15 +31,25 @@ export function registerMyVariantHandlers({ ipcMain, getDb }: HandlerDependencie
    */
   ipcMain.handle(
     'myvariant:fetch',
-    async (_event, chr: string, pos: number, ref: string, alt: string) => {
+    async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown) => {
       return wrapHandler(async () => {
+        // ANTI-07: Runtime validation at IPC boundary
+        const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        if (!validated.success) {
+          mainLogger.error(
+            `Invalid myvariant:fetch params: ${validated.error.message}`,
+            'myvariant'
+          )
+          throw new Error('Invalid parameters')
+        }
+
         const client = getMyVariantClient()
         const isOnline = networkStatus.getStatus()
 
         // If offline, try to get cached data
         if (!isOnline) {
-          const normalizedChr = chr.replace(/^chr/i, '')
-          const hgvs = `chr${normalizedChr}:g.${pos}${ref}>${alt}`
+          const normalizedChr = validated.data.chr.replace(/^chr/i, '')
+          const hgvs = `chr${normalizedChr}:g.${validated.data.pos}${validated.data.ref}>${validated.data.alt}`
           const cacheKey = `myvariant:hg38:${hgvs}`
           const cached = client.getCached(cacheKey)
 
@@ -69,7 +81,13 @@ export function registerMyVariantHandlers({ ipcMain, getDb }: HandlerDependencie
         }
 
         // Online - fetch normally
-        return await client.fetchVariantScores(chr, pos, ref, alt, 'hg38')
+        return await client.fetchVariantScores(
+          validated.data.chr,
+          validated.data.pos,
+          validated.data.ref,
+          validated.data.alt,
+          'hg38'
+        )
       })
     }
   )

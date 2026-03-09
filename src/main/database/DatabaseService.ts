@@ -3,11 +3,8 @@
  *
  * Manages SQLite connection, schema initialization, and exposes typed repositories.
  * Uses better-sqlite3-multiple-ciphers for synchronous database access.
- *
- * A shared statement cache (`Map<string, Statement>`) is passed to all repositories
- * that still use `BaseRepository.stmt()` for raw SQL queries. New code should use
- * the Kysely compile+execute helpers instead. The cache will be removed once all
- * repositories are migrated.
+ * Repositories use Kysely compile+execute helpers (`execAll`, `execFirst`, `execRun`)
+ * for type-safe query building.
  */
 
 import Database from 'better-sqlite3-multiple-ciphers'

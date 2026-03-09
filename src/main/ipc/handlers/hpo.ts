@@ -1,8 +1,16 @@
+import { z } from 'zod'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { HpoApiClient } from '../../services/api/HpoApiClient'
 import { ApiCache } from '../../services/api/ApiCache'
 import { networkStatus } from '../../services/network/NetworkStatus'
+import { mainLogger } from '../../services/MainLogger'
+
+/** Schema for HPO search parameters */
+const HpoSearchParamsSchema = z.object({
+  query: z.string().min(1).max(500),
+  maxResults: z.number().int().positive().max(100).optional()
+})
 
 /**
  * HPO IPC handlers
@@ -27,14 +35,21 @@ export function registerHpoHandlers({ ipcMain, getDb }: HandlerDependencies): vo
    * Search HPO terms
    * Checks network status and returns cached data if offline
    */
-  ipcMain.handle('hpo:search', async (_event, query: string, maxResults?: number) => {
+  ipcMain.handle('hpo:search', async (_event, query: unknown, maxResults?: unknown) => {
     return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = HpoSearchParamsSchema.safeParse({ query, maxResults })
+      if (!validated.success) {
+        mainLogger.error(`Invalid hpo:search params: ${validated.error.message}`, 'hpo')
+        throw new Error('Invalid parameters')
+      }
+
       const client = getHpoClient()
       const isOnline = networkStatus.getStatus()
 
       // If offline, try to get cached data
       if (!isOnline) {
-        const cached = client.getCached(query, maxResults ?? 20)
+        const cached = client.getCached(validated.data.query, validated.data.maxResults ?? 20)
 
         if (cached) {
           return {
@@ -52,7 +67,7 @@ export function registerHpoHandlers({ ipcMain, getDb }: HandlerDependencies): vo
       }
 
       // Online - search normally (will use cache if available)
-      return await client.search(query, maxResults)
+      return await client.search(validated.data.query, validated.data.maxResults)
     })
   })
 

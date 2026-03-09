@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { dialog, BrowserWindow } from 'electron'
 import * as XLSX from 'xlsx'
 import { writeFile } from 'fs/promises'
@@ -7,6 +8,18 @@ import { CohortService } from '../../database/cohort'
 import type { Variant, VariantFilter } from '../../database/types'
 import type { CohortSearchParams, CohortVariant } from '../../../shared/types/cohort'
 import { mainLogger } from '../../services/MainLogger'
+import {
+  CaseIdSchema,
+  VariantFilterPartialSchema,
+  CohortSearchParamsSchema
+} from '../../../shared/types/ipc-schemas'
+
+/** Schema for variant export parameters */
+const VariantExportParamsSchema = z.object({
+  caseId: CaseIdSchema,
+  filters: VariantFilterPartialSchema,
+  caseName: z.string().min(1).max(500)
+})
 
 /**
  * Export IPC handlers
@@ -61,15 +74,22 @@ export function registerExportHandlers({ ipcMain, getDb }: HandlerDependencies):
     'export:variants',
     async (
       _event,
-      caseId: number,
-      filters: Omit<VariantFilter, 'case_id'>,
-      caseName: string
+      caseId: unknown,
+      filters: unknown,
+      caseName: unknown
     ): Promise<{ success: boolean; filePath?: string; error?: string }> => {
-      mainLogger.debug(
-        `Export handler called with caseId=${caseId}, caseName=${caseName}, filters=${JSON.stringify(filters)}`,
-        'export'
-      )
       return wrapHandler(async () => {
+        // ANTI-07: Runtime validation at IPC boundary
+        const validated = VariantExportParamsSchema.safeParse({ caseId, filters, caseName })
+        if (!validated.success) {
+          mainLogger.error(`Invalid export:variants params: ${validated.error.message}`, 'export')
+          throw new Error('Invalid parameters')
+        }
+
+        mainLogger.debug(
+          `Export handler called with caseId=${validated.data.caseId}, caseName=${validated.data.caseName}, filters=${JSON.stringify(validated.data.filters)}`,
+          'export'
+        )
         const db = getDb()
         const mainWindow = BrowserWindow.getAllWindows()[0]
         mainLogger.debug(`Main window found: ${mainWindow !== undefined}`, 'export')
@@ -81,7 +101,7 @@ export function registerExportHandlers({ ipcMain, getDb }: HandlerDependencies):
         }
 
         // Show save dialog
-        const defaultFileName = `${caseName.replace(/[^a-z0-9]/gi, '_')}_variants.xlsx`
+        const defaultFileName = `${validated.data.caseName.replace(/[^a-z0-9]/gi, '_')}_variants.xlsx`
         mainLogger.debug(`Showing save dialog with default filename: ${defaultFileName}`, 'export')
         const result = await dialog.showSaveDialog(mainWindow, {
           title: 'Export Variants to Excel',
@@ -101,7 +121,10 @@ export function registerExportHandlers({ ipcMain, getDb }: HandlerDependencies):
         }
 
         // Get all variants matching the current filters (no pagination)
-        const fullFilter: VariantFilter = { ...filters, case_id: caseId }
+        const fullFilter: VariantFilter = {
+          ...validated.data.filters,
+          case_id: validated.data.caseId
+        }
         const variants = db.variants.getAllVariantsForExport(fullFilter)
 
         // Convert variants to worksheet data
@@ -135,29 +158,30 @@ export function registerExportHandlers({ ipcMain, getDb }: HandlerDependencies):
         XLSX.utils.book_append_sheet(wb, ws, 'Variants')
 
         // Add metadata sheet
+        const vFilters = validated.data.filters
         const metaData = [
           ['Export Information'],
-          ['Case Name', caseName],
+          ['Case Name', validated.data.caseName],
           ['Total Variants', variants.length],
           ['Export Date', new Date().toISOString()],
           [''],
           ['Active Filters'],
-          ...(filters.gene_symbol !== undefined && filters.gene_symbol !== ''
-            ? [['Gene', filters.gene_symbol]]
+          ...(vFilters.gene_symbol !== undefined && vFilters.gene_symbol !== ''
+            ? [['Gene', vFilters.gene_symbol]]
             : []),
-          ...(filters.consequences !== undefined && filters.consequences.length > 0
-            ? [['Consequences', filters.consequences.join(', ')]]
+          ...(vFilters.consequences !== undefined && vFilters.consequences.length > 0
+            ? [['Consequences', vFilters.consequences.join(', ')]]
             : []),
-          ...(filters.funcs !== undefined && filters.funcs.length > 0
-            ? [['Functions', filters.funcs.join(', ')]]
+          ...(vFilters.funcs !== undefined && vFilters.funcs.length > 0
+            ? [['Functions', vFilters.funcs.join(', ')]]
             : []),
-          ...(filters.clinvars !== undefined && filters.clinvars.length > 0
-            ? [['ClinVar', filters.clinvars.join(', ')]]
+          ...(vFilters.clinvars !== undefined && vFilters.clinvars.length > 0
+            ? [['ClinVar', vFilters.clinvars.join(', ')]]
             : []),
-          ...(filters.gnomad_af_max !== undefined
-            ? [['Max gnomAD AF', filters.gnomad_af_max]]
+          ...(vFilters.gnomad_af_max !== undefined
+            ? [['Max gnomAD AF', vFilters.gnomad_af_max]]
             : []),
-          ...(filters.cadd_min !== undefined ? [['Min CADD', filters.cadd_min]] : [])
+          ...(vFilters.cadd_min !== undefined ? [['Min CADD', vFilters.cadd_min]] : [])
         ]
         const metaWs = XLSX.utils.aoa_to_sheet(metaData)
         XLSX.utils.book_append_sheet(wb, metaWs, 'Export Info')
@@ -175,13 +199,20 @@ export function registerExportHandlers({ ipcMain, getDb }: HandlerDependencies):
     'export:cohort',
     async (
       _event,
-      params: CohortSearchParams
+      params: unknown
     ): Promise<{ success: boolean; filePath?: string; error?: string }> => {
-      mainLogger.debug(
-        `Cohort export handler called with params: ${JSON.stringify(params)}`,
-        'export'
-      )
       return wrapHandler(async () => {
+        // ANTI-07: Runtime validation at IPC boundary
+        const validated = CohortSearchParamsSchema.safeParse(params)
+        if (!validated.success) {
+          mainLogger.error(`Invalid export:cohort params: ${validated.error.message}`, 'export')
+          throw new Error('Invalid parameters')
+        }
+
+        mainLogger.debug(
+          `Cohort export handler called with params: ${JSON.stringify(validated.data)}`,
+          'export'
+        )
         const db = getDb()
         const cohortService = new CohortService(db.database)
         const mainWindow = BrowserWindow.getAllWindows()[0]
@@ -212,7 +243,7 @@ export function registerExportHandlers({ ipcMain, getDb }: HandlerDependencies):
 
         // Get cohort variants matching filters (hard limit of 100k rows — sufficient for typical cohorts)
         const exportParams: CohortSearchParams = {
-          ...params,
+          ...validated.data,
           limit: 100000
         }
         const cohortResult = cohortService.getCohortVariants(exportParams)
@@ -257,28 +288,35 @@ export function registerExportHandlers({ ipcMain, getDb }: HandlerDependencies):
           ['Export Date', new Date().toISOString()],
           [''],
           ['Active Filters'],
-          ...(params.search_term !== undefined && params.search_term !== ''
-            ? [['Search Term', params.search_term]]
+          ...(validated.data.search_term !== undefined && validated.data.search_term !== ''
+            ? [['Search Term', validated.data.search_term]]
             : []),
-          ...(params.gene_symbol !== undefined && params.gene_symbol !== ''
-            ? [['Gene', params.gene_symbol]]
+          ...(validated.data.gene_symbol !== undefined && validated.data.gene_symbol !== ''
+            ? [['Gene', validated.data.gene_symbol]]
             : []),
-          ...(params.consequences !== undefined && params.consequences.length > 0
-            ? [['Impact Levels', params.consequences.join(', ')]]
+          ...(validated.data.consequences !== undefined && validated.data.consequences.length > 0
+            ? [['Impact Levels', validated.data.consequences.join(', ')]]
             : []),
-          ...(params.funcs !== undefined && params.funcs.length > 0
-            ? [['Functions', params.funcs.join(', ')]]
+          ...(validated.data.funcs !== undefined && validated.data.funcs.length > 0
+            ? [['Functions', validated.data.funcs.join(', ')]]
             : []),
-          ...(params.clinvars !== undefined && params.clinvars.length > 0
-            ? [['ClinVar', params.clinvars.join(', ')]]
+          ...(validated.data.clinvars !== undefined && validated.data.clinvars.length > 0
+            ? [['ClinVar', validated.data.clinvars.join(', ')]]
             : []),
-          ...(params.gnomad_af_max !== undefined ? [['Max gnomAD AF', params.gnomad_af_max]] : []),
-          ...(params.cadd_min !== undefined ? [['Min CADD', params.cadd_min]] : []),
-          ...(params.cohort_frequency_min !== undefined
-            ? [['Min Cohort Frequency', `${(params.cohort_frequency_min * 100).toFixed(1)}%`]]
+          ...(validated.data.gnomad_af_max !== undefined
+            ? [['Max gnomAD AF', validated.data.gnomad_af_max]]
             : []),
-          ...(params.carrier_count_min !== undefined
-            ? [['Min Carrier Count', params.carrier_count_min]]
+          ...(validated.data.cadd_min !== undefined ? [['Min CADD', validated.data.cadd_min]] : []),
+          ...(validated.data.cohort_frequency_min !== undefined
+            ? [
+                [
+                  'Min Cohort Frequency',
+                  `${(validated.data.cohort_frequency_min * 100).toFixed(1)}%`
+                ]
+              ]
+            : []),
+          ...(validated.data.carrier_count_min !== undefined
+            ? [['Min Carrier Count', validated.data.carrier_count_min]]
             : [])
         ]
         const metaWs = XLSX.utils.aoa_to_sheet(metaData)

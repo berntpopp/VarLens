@@ -48,9 +48,8 @@ async function handleNavigateToCase(payload: {
 
   // Look up case name
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cases = await (api as any).cases.list()
-    const selectedCase = cases.find((c: { id: number }) => c.id === payload.caseId)
+    const cases = await api.cases.list()
+    const selectedCase = cases.find((c) => c.id === payload.caseId)
     if (selectedCase !== undefined) {
       selectedCaseName.value = selectedCase.name
     }

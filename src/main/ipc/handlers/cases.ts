@@ -1,5 +1,11 @@
+import { z } from 'zod'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
+import { CaseIdSchema } from '../../../shared/types/ipc-schemas'
+import { mainLogger } from '../../services/MainLogger'
+
+// Schema for batch delete IDs array
+const CaseIdArraySchema = z.array(z.number().int().positive()).min(1)
 
 /**
  * Cases IPC handlers
@@ -13,10 +19,17 @@ export function registerCaseHandlers({ ipcMain, getDb }: HandlerDependencies): v
     })
   })
 
-  ipcMain.handle('cases:delete', async (_event, id: number) => {
+  ipcMain.handle('cases:delete', async (_event, id: unknown) => {
     return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = CaseIdSchema.safeParse(id)
+      if (!validated.success) {
+        mainLogger.error(`Invalid cases:delete params: ${validated.error.message}`, 'cases')
+        throw new Error('Invalid parameters')
+      }
+
       const db = getDb()
-      db.cases.deleteCase(id)
+      db.cases.deleteCase(validated.data)
       return undefined
     })
   })
@@ -28,10 +41,17 @@ export function registerCaseHandlers({ ipcMain, getDb }: HandlerDependencies): v
     })
   })
 
-  ipcMain.handle('cases:deleteBatch', async (_event, ids: number[]) => {
+  ipcMain.handle('cases:deleteBatch', async (_event, ids: unknown) => {
     return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = CaseIdArraySchema.safeParse(ids)
+      if (!validated.success) {
+        mainLogger.error(`Invalid cases:deleteBatch params: ${validated.error.message}`, 'cases')
+        throw new Error('Invalid parameters')
+      }
+
       const db = getDb()
-      return db.cases.deleteCasesBatch(ids)
+      return db.cases.deleteCasesBatch(validated.data)
     })
   })
 }
