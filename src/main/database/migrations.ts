@@ -536,4 +536,35 @@ export function runMigrations(db: Database.Database): void {
 
     db.exec('PRAGMA user_version = 11')
   }
+
+  // ── Migration v12: Users and database_settings tables ──
+  if (currentVersion < 12) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        display_name TEXT,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin', 'user')),
+        is_active INTEGER NOT NULL DEFAULT 1,
+        must_change_password INTEGER NOT NULL DEFAULT 0,
+        failed_login_count INTEGER NOT NULL DEFAULT 0,
+        locked_until TEXT,
+        password_changed_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_by INTEGER REFERENCES users(id),
+        updated_at TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_users_username
+        ON users(username);
+
+      CREATE TABLE IF NOT EXISTS database_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `)
+
+    db.exec('PRAGMA user_version = 12')
+  }
 }

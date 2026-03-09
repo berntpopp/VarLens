@@ -258,6 +258,29 @@ export interface RegionFileEntriesTable {
   label: string | null
 }
 
+// ── Users ────────────────────────────────────────────────
+export interface UsersTable {
+  id: Generated<number>
+  username: string
+  display_name: string | null
+  password_hash: string
+  role: string
+  is_active: number
+  must_change_password: number
+  failed_login_count: number
+  locked_until: string | null
+  password_changed_at: string | null
+  created_at: string
+  created_by: number | null
+  updated_at: string | null
+}
+
+// ── Database Settings ────────────────────────────────────
+export interface DatabaseSettingsTable {
+  key: string
+  value: string
+}
+
 // ── Full Database Schema ──────────────────────────────────
 export interface VarlensDatabase {
   cases: CasesTable
@@ -282,4 +305,6 @@ export interface VarlensDatabase {
   gene_list_items: GeneListItemsTable
   region_files: RegionFilesTable
   region_file_entries: RegionFileEntriesTable
+  users: UsersTable
+  database_settings: DatabaseSettingsTable
 }
