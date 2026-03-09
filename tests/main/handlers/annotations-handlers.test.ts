@@ -70,7 +70,7 @@ describe('annotation IPC handlers', () => {
       db.annotations.upsertPerCaseAnnotation(caseId, variantId, {
         per_case_comment: 'Per-case note',
         starred: 0,
-        acmg_classification: 'Likely_pathogenic'
+        acmg_classification: 'Likely Pathogenic'
       })
 
       const result = db.annotations.getAnnotationsForVariant(caseId, '1', 12345, 'A', 'G')
@@ -83,7 +83,7 @@ describe('annotation IPC handlers', () => {
       expect(result.perCase).not.toBeNull()
       expect(result.perCase!.per_case_comment).toBe('Per-case note')
       expect(result.perCase!.starred).toBe(0)
-      expect(result.perCase!.acmg_classification).toBe('Likely_pathogenic')
+      expect(result.perCase!.acmg_classification).toBe('Likely Pathogenic')
     })
   })
 

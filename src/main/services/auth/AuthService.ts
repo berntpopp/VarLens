@@ -174,9 +174,12 @@ export class AuthService {
   }
 
   async deactivateUser(username: string): Promise<void> {
-    this.db
+    const result = this.db
       .prepare("UPDATE users SET is_active = 0, updated_at = datetime('now') WHERE username = ?")
       .run(username)
+    if (result.changes === 0) {
+      throw new Error(`User not found: ${username}`)
+    }
   }
 
   async resetPassword(username: string, newPassword: string): Promise<void> {
