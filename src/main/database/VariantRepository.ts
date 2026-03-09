@@ -1,6 +1,8 @@
 import { BaseRepository } from './BaseRepository'
 import type { CaseRepository } from './CaseRepository'
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
+import type { Kysely } from 'kysely'
+import type { VarlensDatabase } from '../../shared/types/database-schema'
 import type { Variant, VariantFilter, PaginationCursor, PaginatedResult, SortItem } from './types'
 import type { FilterOptions } from '../../shared/types/api'
 import type { TranscriptInsertRow } from '../../shared/types/transcript'
@@ -35,8 +37,13 @@ const NUMERIC_COLUMNS = new Set(['pos', 'gnomad_af', 'cadd', 'qual', 'hpo_sim_sc
 export class VariantRepository extends BaseRepository {
   private cases: CaseRepository
 
-  constructor(db: DatabaseType, statementCache: Map<string, Statement>, cases: CaseRepository) {
-    super(db, statementCache)
+  constructor(
+    db: DatabaseType,
+    kysely: Kysely<VarlensDatabase>,
+    statementCache: Map<string, Statement>,
+    cases: CaseRepository
+  ) {
+    super(db, kysely, statementCache)
     this.cases = cases
   }
 

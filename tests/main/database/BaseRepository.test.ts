@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Statement } from 'better-sqlite3-multiple-ciphers'
 import { BaseRepository } from '../../../src/main/database/BaseRepository'
+import { createKysely } from '../../../src/main/database/kysely'
 
 class TestRepository extends BaseRepository {
   createTable(): void {
@@ -35,7 +36,7 @@ describe('BaseRepository', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     cache = new Map()
-    repo = new TestRepository(db, cache)
+    repo = new TestRepository(db, createKysely(db), cache)
     repo.createTable()
   })
 

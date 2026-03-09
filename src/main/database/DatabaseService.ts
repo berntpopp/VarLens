@@ -120,15 +120,20 @@ export class DatabaseService {
       this._kysely = createKysely(this.db)
 
       // Initialize repositories
-      this.cases = new CaseRepository(this.db, this.statementCache)
-      this.transcripts = new TranscriptRepository(this.db, this.statementCache)
-      this.annotations = new AnnotationRepository(this.db, this.statementCache)
-      this.metadata = new MetadataRepository(this.db, this.statementCache)
-      this.tags = new TagRepository(this.db, this.statementCache)
-      this.variantsRepo = new VariantRepository(this.db, this.statementCache, this.cases)
-      this.overview = new DatabaseOverviewService(this.db, this.statementCache)
-      this.auditLog = new AuditLogRepository(this.db, this.statementCache)
-      this.geneLists = new GeneListRepository(this.db, this.statementCache)
+      this.cases = new CaseRepository(this.db, this._kysely, this.statementCache)
+      this.transcripts = new TranscriptRepository(this.db, this._kysely, this.statementCache)
+      this.annotations = new AnnotationRepository(this.db, this._kysely, this.statementCache)
+      this.metadata = new MetadataRepository(this.db, this._kysely, this.statementCache)
+      this.tags = new TagRepository(this.db, this._kysely, this.statementCache)
+      this.variantsRepo = new VariantRepository(
+        this.db,
+        this._kysely,
+        this.statementCache,
+        this.cases
+      )
+      this.overview = new DatabaseOverviewService(this.db, this._kysely, this.statementCache)
+      this.auditLog = new AuditLogRepository(this.db, this._kysely, this.statementCache)
+      this.geneLists = new GeneListRepository(this.db, this._kysely, this.statementCache)
 
       // Clean up expired API cache entries on startup
       this.db.prepare('DELETE FROM api_cache WHERE expires_at < ?').run(Date.now())
