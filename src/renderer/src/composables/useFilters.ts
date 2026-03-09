@@ -388,7 +388,9 @@ export function createFilters(): UseFiltersReturn {
 export function useFilters(): UseFiltersReturn {
   const filters = inject(FiltersKey)
   if (!filters) {
-    throw new Error('useFilters() called without provider. Wrap in a component that provides FiltersKey.')
+    throw new Error(
+      'useFilters() called without provider. Wrap in a component that provides FiltersKey.'
+    )
   }
   return filters
 }
