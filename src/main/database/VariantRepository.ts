@@ -1,4 +1,3 @@
-import { sql } from 'kysely'
 import { BaseRepository } from './BaseRepository'
 import type { CaseRepository } from './CaseRepository'
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
@@ -521,10 +520,7 @@ export class VariantRepository extends BaseRepository {
     const caddRange = this.execFirst<{ min_cadd: number | null; max_cadd: number | null }>(
       this.kysely
         .selectFrom('variants')
-        .select(({ fn }) => [
-          fn.min('cadd').as('min_cadd'),
-          fn.max('cadd').as('max_cadd')
-        ])
+        .select(({ fn }) => [fn.min('cadd').as('min_cadd'), fn.max('cadd').as('max_cadd')])
         .where('case_id', '=', caseId)
         .where('cadd', 'is not', null)
     )
@@ -532,10 +528,7 @@ export class VariantRepository extends BaseRepository {
     const afRange = this.execFirst<{ min_af: number | null; max_af: number | null }>(
       this.kysely
         .selectFrom('variants')
-        .select(({ fn }) => [
-          fn.min('gnomad_af').as('min_af'),
-          fn.max('gnomad_af').as('max_af')
-        ])
+        .select(({ fn }) => [fn.min('gnomad_af').as('min_af'), fn.max('gnomad_af').as('max_af')])
         .where('case_id', '=', caseId)
         .where('gnomad_af', 'is not', null)
     )

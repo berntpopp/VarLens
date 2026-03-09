@@ -22,10 +22,10 @@ async function handleLogin(): Promise<void> {
   try {
     const result = await authStore.login(username.value, password.value)
     if (result.success) {
-      if (result.mustChangePassword) {
+      if (result.mustChangePassword === true) {
         mustChangePassword.value = true
       }
-    } else if (result.locked) {
+    } else if (result.locked === true) {
       error.value = 'Account is temporarily locked. Please try again later.'
     } else {
       error.value = 'Invalid username or password.'
@@ -67,9 +67,7 @@ async function handleChangePassword(): Promise<void> {
     <v-row align="center" justify="center">
       <v-col cols="12" sm="8" md="4">
         <v-card class="elevation-4">
-          <v-card-title class="text-h5 text-center pt-6">
-            VarLens
-          </v-card-title>
+          <v-card-title class="text-h5 text-center pt-6"> VarLens </v-card-title>
           <v-card-subtitle class="text-center">
             {{ mustChangePassword ? 'Change your password' : 'Sign in to continue' }}
           </v-card-subtitle>
