@@ -2,6 +2,7 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
+import { AuthService } from '../../../src/main/services/auth'
 
 describe('Users table migration', () => {
   let db: Database.Database
@@ -65,10 +66,152 @@ describe('Users table migration', () => {
   })
 
   it('should allow key-value storage in database_settings', () => {
-    db.prepare("INSERT INTO database_settings (key, value) VALUES ('accounts_enabled', 'true')").run()
+    db.prepare(
+      "INSERT INTO database_settings (key, value) VALUES ('accounts_enabled', 'true')"
+    ).run()
     const result = db
       .prepare("SELECT value FROM database_settings WHERE key = 'accounts_enabled'")
       .get() as { value: string }
     expect(result.value).toBe('true')
+  })
+})
+
+describe('AuthService', () => {
+  let db: Database.Database
+  let authService: AuthService
+
+  beforeEach(() => {
+    db = new Database(':memory:')
+    initializeSchema(db)
+    runMigrations(db)
+    authService = new AuthService(db)
+  })
+
+  afterEach(() => {
+    db.close()
+  })
+
+  describe('account setup', () => {
+    it('should create first user as admin', async () => {
+      const result = await authService.createFirstUser('admin1', 'Admin User', 'password123')
+      expect(result.role).toBe('admin')
+      expect(result.username).toBe('admin1')
+    })
+
+    it('should reject second call to createFirstUser', async () => {
+      await authService.createFirstUser('admin1', 'Admin', 'pass')
+      await expect(authService.createFirstUser('admin2', 'Admin2', 'pass')).rejects.toThrow(
+        'Admin user already exists'
+      )
+    })
+
+    it('should generate a recovery key', async () => {
+      const { recoveryKey } = await authService.createFirstUser('admin1', 'Admin', 'pass')
+      expect(recoveryKey).toBeDefined()
+      expect(recoveryKey.length).toBeGreaterThan(10)
+    })
+
+    it('should enable accounts setting', async () => {
+      await authService.createFirstUser('admin1', 'Admin', 'pass')
+      expect(authService.isAccountsEnabled()).toBe(true)
+    })
+  })
+
+  describe('authentication', () => {
+    beforeEach(async () => {
+      await authService.createFirstUser('admin1', 'Admin', 'correct-password')
+    })
+
+    it('should authenticate with correct password', async () => {
+      const result = await authService.authenticate('admin1', 'correct-password')
+      expect(result.success).toBe(true)
+      expect(result.user?.username).toBe('admin1')
+    })
+
+    it('should reject wrong password', async () => {
+      const result = await authService.authenticate('admin1', 'wrong-password')
+      expect(result.success).toBe(false)
+    })
+
+    it('should reject non-existent user', async () => {
+      const result = await authService.authenticate('nonexistent', 'password')
+      expect(result.success).toBe(false)
+    })
+
+    it('should increment failed login count', async () => {
+      await authService.authenticate('admin1', 'wrong')
+      await authService.authenticate('admin1', 'wrong')
+      const user = authService.getUser('admin1')
+      expect(user?.failed_login_count).toBe(2)
+    })
+
+    it('should reset failed count on successful login', async () => {
+      await authService.authenticate('admin1', 'wrong')
+      await authService.authenticate('admin1', 'correct-password')
+      const user = authService.getUser('admin1')
+      expect(user?.failed_login_count).toBe(0)
+    })
+
+    it('should not expose password_hash in auth result', async () => {
+      const result = await authService.authenticate('admin1', 'correct-password')
+      expect(result.user).toBeDefined()
+      expect((result.user as Record<string, unknown>).password_hash).toBeUndefined()
+    })
+  })
+
+  describe('user management', () => {
+    beforeEach(async () => {
+      await authService.createFirstUser('admin1', 'Admin', 'pass')
+    })
+
+    it('should create regular user', async () => {
+      const user = await authService.createUser('user1', 'User One', 'temppass', 'admin1')
+      expect(user.role).toBe('user')
+      expect(user.must_change_password).toBe(1)
+    })
+
+    it('should list users without password hashes', async () => {
+      await authService.createUser('user1', 'User One', 'pass', 'admin1')
+      const users = authService.listUsers()
+      expect(users.length).toBe(2)
+      for (const u of users) {
+        expect((u as Record<string, unknown>).password_hash).toBeUndefined()
+      }
+    })
+
+    it('should deactivate user', async () => {
+      await authService.createUser('user1', 'User One', 'pass', 'admin1')
+      await authService.deactivateUser('user1')
+      const user = authService.getUser('user1')
+      expect(user?.is_active).toBe(0)
+    })
+
+    it('should reject login for deactivated user', async () => {
+      await authService.createUser('user1', 'User One', 'pass', 'admin1')
+      await authService.deactivateUser('user1')
+      const result = await authService.authenticate('user1', 'pass')
+      expect(result.success).toBe(false)
+    })
+
+    it('should reset password', async () => {
+      await authService.createUser('user1', 'User', 'oldpass', 'admin1')
+      await authService.resetPassword('user1', 'newpass')
+      const result = await authService.authenticate('user1', 'newpass')
+      expect(result.success).toBe(true)
+    })
+
+    it('should change password with valid old password', async () => {
+      await authService.createUser('user1', 'User', 'oldpass', 'admin1')
+      const changed = await authService.changePassword('user1', 'oldpass', 'newpass')
+      expect(changed).toBe(true)
+      const result = await authService.authenticate('user1', 'newpass')
+      expect(result.success).toBe(true)
+    })
+
+    it('should reject password change with wrong old password', async () => {
+      await authService.createUser('user1', 'User', 'oldpass', 'admin1')
+      const changed = await authService.changePassword('user1', 'wrongold', 'newpass')
+      expect(changed).toBe(false)
+    })
   })
 })
