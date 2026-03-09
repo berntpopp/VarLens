@@ -36,6 +36,9 @@ import type { FilterOptions } from '../../shared/types/api'
 import type { TranscriptAnnotation, TranscriptInsertRow } from '../../shared/types/transcript'
 import { DatabaseError, TransactionError } from './errors'
 import { DATABASE_CONFIG } from '../../shared/config'
+import { createKysely } from './kysely'
+import type { Kysely } from 'kysely'
+import type { VarlensDatabase } from '../../shared/types/database-schema'
 import { CaseRepository } from './CaseRepository'
 import { TranscriptRepository } from './TranscriptRepository'
 import { AnnotationRepository } from './AnnotationRepository'
@@ -55,6 +58,7 @@ import type { AuditQueryFilter, AuditQueryResult } from './AuditLogRepository'
  */
 export class DatabaseService {
   private db: DatabaseType
+  private _kysely: Kysely<VarlensDatabase>
   private statementCache: Map<string, Statement>
   private dbPath: string
   private encrypted: boolean
@@ -111,6 +115,9 @@ export class DatabaseService {
 
       // Run version-tracked migrations for v0.4.0+ features
       runMigrations(this.db)
+
+      // Initialize Kysely query builder (shares same connection)
+      this._kysely = createKysely(this.db)
 
       // Initialize repositories
       this.cases = new CaseRepository(this.db, this.statementCache)
@@ -601,6 +608,8 @@ export class DatabaseService {
    */
   close(): void {
     this.clearStatementCache()
+    // Destroy Kysely instance (sync with better-sqlite3 dialect)
+    this._kysely.destroy().catch(() => {})
     try {
       this.db.pragma('optimize')
     } catch {
@@ -617,5 +626,15 @@ export class DatabaseService {
    */
   get database(): DatabaseType {
     return this.db
+  }
+
+  /**
+   * Get the Kysely query builder instance
+   *
+   * Returns a typed Kysely instance sharing the same underlying connection.
+   * Note: All Kysely operations return Promises (even with sync better-sqlite3).
+   */
+  get kysely(): Kysely<VarlensDatabase> {
+    return this._kysely
   }
 }

@@ -478,4 +478,20 @@ describe('DatabaseService', () => {
       expect(dodMetric.date_value).toBe('1990-05-15')
     })
   })
+
+  describe('Kysely integration', () => {
+    it('should expose a Kysely instance', () => {
+      expect(service.kysely).toBeDefined()
+      expect(typeof service.kysely.selectFrom).toBe('function')
+    })
+
+    it('should use the same underlying connection', async () => {
+      // Insert via raw SQL
+      service.createCase('kysely-test', '/path', 100)
+      // Read via Kysely — verifies shared connection
+      const result = await service.kysely.selectFrom('cases').selectAll().execute()
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe('kysely-test')
+    })
+  })
 })
