@@ -209,7 +209,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, onMounted, computed, provide } from 'vue'
 import { useRouter } from 'vue-router'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
@@ -237,12 +237,17 @@ import { useColumnPreferences } from './composables/useColumnPreferences'
 import { useFilterPreferences } from './composables/useFilterPreferences'
 import { useResponsiveLayout } from './composables/useResponsiveLayout'
 import { logService } from './services/LogService'
-import { useAppState } from './composables/useAppState'
+import { AppStateKey, createAppState } from './composables/useAppState'
+import { useApiService } from './composables/useApiService'
 import type { AffectedStatus, CaseSex } from '../../shared/types/api'
 
 const router = useRouter()
+const { api } = useApiService()
 
-// Shared state from composable
+// Create and provide shared app state for child components
+const appState = createAppState()
+provide(AppStateKey, appState)
+
 const {
   selectedCaseId,
   selectedCaseName,
@@ -262,7 +267,7 @@ const {
   filterToolbarRef,
   cohortViewRef,
   setSnackbarHandler
-} = useAppState()
+} = appState
 
 // Initialize responsive layout
 const { tier, showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
@@ -300,16 +305,14 @@ const handleResetFilters = () => {
 }
 
 const handleDeleteAllCases = async () => {
-  // eslint-disable-next-line no-undef
-  if (typeof window.api === 'undefined') {
+  if (!api) {
     return
   }
 
   const confirmed = await deleteAllCasesDialogRef.value?.show(caseCount.value)
 
   if (confirmed === true) {
-    // eslint-disable-next-line no-undef
-    const deleted = await window.api.cases.deleteAll()
+    const deleted = await api.cases.deleteAll()
 
     selectedCaseId.value = null
     selectedCaseName.value = ''

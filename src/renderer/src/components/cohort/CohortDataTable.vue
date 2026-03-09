@@ -232,6 +232,7 @@
 import { ref, watch, computed, onMounted, nextTick } from 'vue'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { AcmgClassification } from '../../../../main/database/types'
+import { useApiService } from '../../composables/useApiService'
 import { useTableScroll } from '../../composables/useTableScroll'
 import { useTableRowProps } from '../../composables/useTableRowProps'
 import { useCarriers } from '../../composables/useCarriers'
@@ -304,6 +305,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 // Composables
+const { api } = useApiService()
 // Template refs (used in template via ref="...")
 // @ts-expect-error - These refs ARE used in template bindings
 const { topScrollbarRef, topScrollbarInnerRef, initScrollSync } = useTableScroll()
@@ -403,11 +405,9 @@ const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> 
     setTimeout(() => target.classList.remove('external-link--clicked'), 200)
   }
 
-  // eslint-disable-next-line no-undef
-  if (typeof window.api !== 'undefined') {
+  if (api) {
     try {
-      // eslint-disable-next-line no-undef
-      await window.api.shell.openExternal(url)
+      await api.shell.openExternal(url)
     } catch {
       // Error logged silently - external link opening is best-effort
     }

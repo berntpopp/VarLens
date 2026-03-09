@@ -34,18 +34,7 @@ export class MetadataRepository extends BaseRepository {
   ): CaseMetadata {
     return this.runTransaction(() => {
       const now = Date.now()
-
-      // Build dynamic SET clause: only update fields explicitly provided (even if null)
-      const setClauses: string[] = ['updated_at = ?']
-      const setParams: (string | number | null)[] = [now]
-
       const fields = ['affected_status', 'sex', 'notes', 'age', 'date_of_birth'] as const
-      for (const field of fields) {
-        if (field in updates) {
-          setClauses.push(`${field} = ?`)
-          setParams.push(updates[field] ?? null)
-        }
-      }
 
       // Try INSERT first, then UPDATE on conflict
       const existing = this.execFirst<CaseMetadata>(
@@ -53,24 +42,37 @@ export class MetadataRepository extends BaseRepository {
       )
 
       if (existing === undefined) {
-        return this.stmt(
-          `INSERT INTO case_metadata (case_id, affected_status, sex, notes, age, date_of_birth, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
-        ).get(
-          caseId,
-          updates.affected_status ?? null,
-          updates.sex ?? null,
-          updates.notes ?? null,
-          updates.age ?? null,
-          updates.date_of_birth ?? null,
-          now,
-          now
+        return this.execFirst<CaseMetadata>(
+          this.kysely
+            .insertInto('case_metadata')
+            .values({
+              case_id: caseId,
+              affected_status: updates.affected_status ?? null,
+              sex: updates.sex ?? null,
+              notes: updates.notes ?? null,
+              age: updates.age ?? null,
+              date_of_birth: updates.date_of_birth ?? null,
+              created_at: now,
+              updated_at: now
+            })
+            .returningAll()
         ) as CaseMetadata
       }
 
-      setParams.push(caseId)
-      const sql = `UPDATE case_metadata SET ${setClauses.join(', ')} WHERE case_id = ? RETURNING *`
-      return this.db.prepare(sql).get(...setParams) as CaseMetadata
+      // Build dynamic update object from explicitly provided fields
+      const updateObj: Record<string, string | number | null> = { updated_at: now }
+      for (const field of fields) {
+        if (field in updates) {
+          updateObj[field] = updates[field] ?? null
+        }
+      }
+      return this.execFirst<CaseMetadata>(
+        this.kysely
+          .updateTable('case_metadata')
+          .set(updateObj)
+          .where('case_id', '=', caseId)
+          .returningAll()
+      ) as CaseMetadata
     })
   }
 
@@ -82,10 +84,12 @@ export class MetadataRepository extends BaseRepository {
 
   createCohortGroup(name: string, description?: string | null): CohortGroup {
     const now = Date.now()
-    const result = this.stmt(
-      'INSERT INTO cohort_groups (name, description, created_at) VALUES (?, ?, ?) RETURNING *'
-    ).get(name, description ?? null, now) as CohortGroup
-    return result
+    return this.execFirst<CohortGroup>(
+      this.kysely
+        .insertInto('cohort_groups')
+        .values({ name, description: description ?? null, created_at: now })
+        .returningAll()
+    ) as CohortGroup
   }
 
   updateCohortGroup(
@@ -98,24 +102,15 @@ export class MetadataRepository extends BaseRepository {
       )
       if (!existing) throw new NotFoundError('CohortGroup', id)
 
-      const setClauses: string[] = []
-      const params: (string | number | null)[] = []
+      const updateObj: Record<string, string | number | null> = {}
+      if (updates.name !== undefined) updateObj.name = updates.name
+      if (updates.description !== undefined) updateObj.description = updates.description
 
-      if (updates.name !== undefined) {
-        setClauses.push('name = ?')
-        params.push(updates.name)
-      }
-      if (updates.description !== undefined) {
-        setClauses.push('description = ?')
-        params.push(updates.description)
-      }
+      if (Object.keys(updateObj).length === 0) return existing
 
-      if (setClauses.length === 0) return existing
-
-      params.push(id)
-      const sql = `UPDATE cohort_groups SET ${setClauses.join(', ')} WHERE id = ? RETURNING *`
-      const result = this.db.prepare(sql).get(...params) as CohortGroup
-      return result
+      return this.execFirst<CohortGroup>(
+        this.kysely.updateTable('cohort_groups').set(updateObj).where('id', '=', id).returningAll()
+      ) as CohortGroup
     } catch (error) {
       if (error instanceof NotFoundError) throw error
       if (error instanceof Error && error.message.includes('UNIQUE constraint failed') === true) {
@@ -140,20 +135,23 @@ export class MetadataRepository extends BaseRepository {
   }
 
   getCaseCohorts(caseId: number): CohortGroup[] {
-    return this.stmt(
-      `
-      SELECT cg.* FROM cohort_groups cg
-      JOIN case_cohort_links ccl ON cg.id = ccl.cohort_id
-      WHERE ccl.case_id = ?
-      ORDER BY cg.name
-    `
-    ).all(caseId) as CohortGroup[]
+    return this.execAll<CohortGroup>(
+      this.kysely
+        .selectFrom('cohort_groups as cg')
+        .innerJoin('case_cohort_links as ccl', 'cg.id', 'ccl.cohort_id')
+        .selectAll('cg')
+        .where('ccl.case_id', '=', caseId)
+        .orderBy('cg.name')
+    )
   }
 
   assignCaseCohort(caseId: number, cohortId: number): void {
-    this.stmt(
-      'INSERT INTO case_cohort_links (case_id, cohort_id) VALUES (?, ?) ON CONFLICT DO NOTHING'
-    ).run(caseId, cohortId)
+    this.execRun(
+      this.kysely
+        .insertInto('case_cohort_links')
+        .values({ case_id: caseId, cohort_id: cohortId })
+        .onConflict((oc) => oc.doNothing())
+    )
   }
 
   removeCaseCohort(caseId: number, cohortId: number): void {
@@ -167,10 +165,13 @@ export class MetadataRepository extends BaseRepository {
 
   setCaseCohorts(caseId: number, cohortIds: number[]): void {
     this.runTransaction(() => {
-      this.stmt('DELETE FROM case_cohort_links WHERE case_id = ?').run(caseId)
-      const insert = this.stmt('INSERT INTO case_cohort_links (case_id, cohort_id) VALUES (?, ?)')
+      this.execRun(this.kysely.deleteFrom('case_cohort_links').where('case_id', '=', caseId))
       for (const cohortId of cohortIds) {
-        insert.run(caseId, cohortId)
+        this.execRun(
+          this.kysely
+            .insertInto('case_cohort_links')
+            .values({ case_id: caseId, cohort_id: cohortId })
+        )
       }
     })
   }
@@ -187,15 +188,13 @@ export class MetadataRepository extends BaseRepository {
 
   assignCaseHpoTerm(caseId: number, hpoId: string, hpoLabel: string): CaseHpoTerm {
     const now = Date.now()
-    const result = this.stmt(
-      `
-      INSERT INTO case_hpo_terms (case_id, hpo_id, hpo_label, created_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(case_id, hpo_id) DO UPDATE SET hpo_label = excluded.hpo_label
-      RETURNING *
-    `
-    ).get(caseId, hpoId, hpoLabel, now) as CaseHpoTerm
-    return result
+    return this.execFirst<CaseHpoTerm>(
+      this.kysely
+        .insertInto('case_hpo_terms')
+        .values({ case_id: caseId, hpo_id: hpoId, hpo_label: hpoLabel, created_at: now })
+        .onConflict((oc) => oc.columns(['case_id', 'hpo_id']).doUpdateSet({ hpo_label: hpoLabel }))
+        .returningAll()
+    ) as CaseHpoTerm
   }
 
   removeCaseHpoTerm(caseId: number, hpoId: string): void {
@@ -224,16 +223,23 @@ export class MetadataRepository extends BaseRepository {
 
   createCaseComment(caseId: number, category: CommentCategory, content: string): CaseComment {
     const now = Date.now()
-    return this.stmt(
-      'INSERT INTO case_comments (case_id, category, content, created_at) VALUES (?, ?, ?, ?) RETURNING *'
-    ).get(caseId, category, content, now) as CaseComment
+    return this.execFirst<CaseComment>(
+      this.kysely
+        .insertInto('case_comments')
+        .values({ case_id: caseId, category, content, created_at: now })
+        .returningAll()
+    ) as CaseComment
   }
 
   updateCaseComment(commentId: number, content: string): CaseComment {
     const now = Date.now()
-    const result = this.stmt(
-      'UPDATE case_comments SET content = ?, updated_at = ? WHERE id = ? RETURNING *'
-    ).get(content, now, commentId) as CaseComment | undefined
+    const result = this.execFirst<CaseComment>(
+      this.kysely
+        .updateTable('case_comments')
+        .set({ content, updated_at: now })
+        .where('id', '=', commentId)
+        .returningAll()
+    )
 
     if (!result) {
       throw new NotFoundError('CaseComment', commentId)
@@ -265,9 +271,19 @@ export class MetadataRepository extends BaseRepository {
     category: string
   ): MetricDefinition {
     const now = Date.now()
-    return this.stmt(
-      'INSERT INTO metric_definitions (name, value_type, unit, category, is_predefined, created_at) VALUES (?, ?, ?, ?, 0, ?) RETURNING *'
-    ).get(name, valueType, unit, category, now) as MetricDefinition
+    return this.execFirst<MetricDefinition>(
+      this.kysely
+        .insertInto('metric_definitions')
+        .values({
+          name,
+          value_type: valueType,
+          unit,
+          category,
+          is_predefined: 0,
+          created_at: now
+        })
+        .returningAll()
+    ) as MetricDefinition
   }
 
   // ============================================================
@@ -275,15 +291,17 @@ export class MetadataRepository extends BaseRepository {
   // ============================================================
 
   listCaseMetrics(caseId: number): CaseMetricWithDefinition[] {
-    return this.stmt(
-      `
-      SELECT cm.*, md.name, md.value_type, md.unit, md.category AS metric_category
-      FROM case_metrics cm
-      JOIN metric_definitions md ON cm.metric_id = md.id
-      WHERE cm.case_id = ?
-      ORDER BY md.category, md.name
-    `
-    ).all(caseId) as CaseMetricWithDefinition[]
+    return this.execAll<CaseMetricWithDefinition>(
+      this.kysely
+        .selectFrom('case_metrics as cm')
+        .innerJoin('metric_definitions as md', 'cm.metric_id', 'md.id')
+        .selectAll('cm')
+        .select(['md.name', 'md.value_type', 'md.unit'])
+        .select('md.category as metric_category')
+        .where('cm.case_id', '=', caseId)
+        .orderBy('md.category')
+        .orderBy('md.name')
+    )
   }
 
   upsertCaseMetric(
@@ -292,25 +310,27 @@ export class MetadataRepository extends BaseRepository {
     value: { numeric_value?: number | null; text_value?: string | null; date_value?: string | null }
   ): CaseMetric {
     const now = Date.now()
-    return this.stmt(
-      `
-      INSERT INTO case_metrics (case_id, metric_id, numeric_value, text_value, date_value, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(case_id, metric_id) DO UPDATE SET
-        numeric_value = excluded.numeric_value,
-        text_value = excluded.text_value,
-        date_value = excluded.date_value,
-        updated_at = excluded.updated_at
-      RETURNING *
-    `
-    ).get(
-      caseId,
-      metricId,
-      value.numeric_value ?? null,
-      value.text_value ?? null,
-      value.date_value ?? null,
-      now,
-      now
+    return this.execFirst<CaseMetric>(
+      this.kysely
+        .insertInto('case_metrics')
+        .values({
+          case_id: caseId,
+          metric_id: metricId,
+          numeric_value: value.numeric_value ?? null,
+          text_value: value.text_value ?? null,
+          date_value: value.date_value ?? null,
+          created_at: now,
+          updated_at: now
+        })
+        .onConflict((oc) =>
+          oc.columns(['case_id', 'metric_id']).doUpdateSet({
+            numeric_value: value.numeric_value ?? null,
+            text_value: value.text_value ?? null,
+            date_value: value.date_value ?? null,
+            updated_at: now
+          })
+        )
+        .returningAll()
     ) as CaseMetric
   }
 
@@ -349,31 +369,30 @@ export class MetadataRepository extends BaseRepository {
       )
 
       if (existing === undefined) {
-        return this.stmt(
-          `INSERT INTO case_data_info (case_id, import_file_name, import_file_type, platform, platform_details, af_filter, gene_list_filter, region_filter, quality_filter, data_notes, gene_list_id, region_file_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
-        ).get(
-          caseId,
-          updates.import_file_name ?? null,
-          updates.import_file_type ?? null,
-          updates.platform ?? null,
-          updates.platform_details ?? null,
-          updates.af_filter ?? null,
-          updates.gene_list_filter ?? null,
-          updates.region_filter ?? null,
-          updates.quality_filter ?? null,
-          updates.data_notes ?? null,
-          updates.gene_list_id ?? null,
-          updates.region_file_id ?? null,
-          now,
-          now
+        return this.execFirst<CaseDataInfo>(
+          this.kysely
+            .insertInto('case_data_info')
+            .values({
+              case_id: caseId,
+              import_file_name: updates.import_file_name ?? null,
+              import_file_type: updates.import_file_type ?? null,
+              platform: updates.platform ?? null,
+              platform_details: updates.platform_details ?? null,
+              af_filter: updates.af_filter ?? null,
+              gene_list_filter: updates.gene_list_filter ?? null,
+              region_filter: updates.region_filter ?? null,
+              quality_filter: updates.quality_filter ?? null,
+              data_notes: updates.data_notes ?? null,
+              gene_list_id: updates.gene_list_id ?? null,
+              region_file_id: updates.region_file_id ?? null,
+              created_at: now,
+              updated_at: now
+            })
+            .returningAll()
         ) as CaseDataInfo
       }
 
-      // Build dynamic SET clause: only update fields explicitly provided (even if null)
-      const setClauses: string[] = ['updated_at = ?']
-      const setParams: (string | number | null)[] = [now]
-
+      // Build dynamic update object from explicitly provided fields
       const allFields = [
         'import_file_name',
         'import_file_type',
@@ -387,16 +406,19 @@ export class MetadataRepository extends BaseRepository {
         'gene_list_id',
         'region_file_id'
       ] as const
+      const updateObj: Record<string, string | number | null> = { updated_at: now }
       for (const field of allFields) {
         if (field in updates) {
-          setClauses.push(`${field} = ?`)
-          setParams.push(updates[field] ?? null)
+          updateObj[field] = updates[field] ?? null
         }
       }
-
-      setParams.push(caseId)
-      const sql = `UPDATE case_data_info SET ${setClauses.join(', ')} WHERE case_id = ? RETURNING *`
-      return this.db.prepare(sql).get(...setParams) as CaseDataInfo
+      return this.execFirst<CaseDataInfo>(
+        this.kysely
+          .updateTable('case_data_info')
+          .set(updateObj)
+          .where('case_id', '=', caseId)
+          .returningAll()
+      ) as CaseDataInfo
     })
   }
 
@@ -416,12 +438,13 @@ export class MetadataRepository extends BaseRepository {
 
   upsertCaseExternalId(caseId: number, idType: string, idValue: string): CaseExternalId {
     const now = Date.now()
-    return this.stmt(
-      `INSERT INTO case_external_ids (case_id, id_type, id_value, created_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(case_id, id_type) DO UPDATE SET id_value = excluded.id_value
-       RETURNING *`
-    ).get(caseId, idType, idValue, now) as CaseExternalId
+    return this.execFirst<CaseExternalId>(
+      this.kysely
+        .insertInto('case_external_ids')
+        .values({ case_id: caseId, id_type: idType, id_value: idValue, created_at: now })
+        .onConflict((oc) => oc.columns(['case_id', 'id_type']).doUpdateSet({ id_value: idValue }))
+        .returningAll()
+    ) as CaseExternalId
   }
 
   deleteCaseExternalId(caseId: number, idType: string): void {

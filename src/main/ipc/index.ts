@@ -1,38 +1,69 @@
+import { ipcMain } from 'electron'
+import { getDatabaseService, getDatabaseManager } from '../database'
 import { mainLogger } from '../services/MainLogger'
+import type { HandlerDependencies } from './types'
+
+import { registerCaseHandlers } from './handlers/cases'
+import { registerVariantHandlers } from './handlers/variants'
+import { registerImportHandlers } from './handlers/import'
+import { registerSystemHandlers } from './handlers/system'
+import { registerExportHandlers } from './handlers/export'
+import { registerShellHandlers } from './handlers/shell'
+import { registerDatabaseHandlers } from './handlers/database'
+import { registerBatchImportHandlers } from './handlers/batch-import'
+import { registerCohortHandlers } from './handlers/cohort'
+import { registerAnnotationHandlers } from './handlers/annotations'
+import { registerVepHandlers } from './handlers/vep'
+import { registerHpoHandlers } from './handlers/hpo'
+import { registerMyVariantHandlers } from './handlers/myvariant'
+import { registerSpliceAIHandlers } from './handlers/spliceai'
+import { registerCaseMetadataHandlers } from './handlers/case-metadata'
+import { registerCaseCommentHandlers } from './handlers/case-comments'
+import { registerCaseMetricHandlers } from './handlers/case-metrics'
+import { registerTagHandlers } from './handlers/tags'
+import { registerTranscriptHandlers } from './handlers/transcripts'
+import { registerUpdaterHandlers } from './handlers/updater'
+import { registerAuditLogHandlers } from './handlers/audit-log'
+import { registerGeneListHandlers } from './handlers/gene-lists'
+import { registerAuthHandlers } from './handlers/auth'
 
 /**
  * Register all IPC handlers.
  * Called once during app initialization.
  *
- * Handler modules self-register via ipcMain.handle() on import.
+ * Creates shared dependencies and passes them to each handler module's
+ * register function, replacing the previous side-effect import pattern.
  */
-export async function registerIpcHandlers(): Promise<void> {
-  // Import handler modules - they register themselves as side effect
-  await Promise.all([
-    import('./handlers/cases'),
-    import('./handlers/variants'),
-    import('./handlers/import'),
-    import('./handlers/system'),
-    import('./handlers/export'),
-    import('./handlers/shell'),
-    import('./handlers/database'),
-    import('./handlers/batch-import'),
-    import('./handlers/cohort'),
-    import('./handlers/annotations'),
-    import('./handlers/vep'),
-    import('./handlers/hpo'),
-    import('./handlers/myvariant'),
-    import('./handlers/spliceai'),
-    import('./handlers/case-metadata'),
-    import('./handlers/case-comments'),
-    import('./handlers/case-metrics'),
-    import('./handlers/tags'),
-    import('./handlers/transcripts'),
-    import('./handlers/updater'),
-    import('./handlers/audit-log'),
-    import('./handlers/gene-lists'),
-    import('./handlers/auth')
-  ])
+export function registerIpcHandlers(): void {
+  const deps: HandlerDependencies = {
+    ipcMain,
+    getDb: getDatabaseService,
+    getDbManager: getDatabaseManager
+  }
+
+  registerCaseHandlers(deps)
+  registerVariantHandlers(deps)
+  registerImportHandlers(deps)
+  registerSystemHandlers(deps)
+  registerExportHandlers(deps)
+  registerShellHandlers(deps)
+  registerDatabaseHandlers(deps)
+  registerBatchImportHandlers(deps)
+  registerCohortHandlers(deps)
+  registerAnnotationHandlers(deps)
+  registerVepHandlers(deps)
+  registerHpoHandlers(deps)
+  registerMyVariantHandlers(deps)
+  registerSpliceAIHandlers(deps)
+  registerCaseMetadataHandlers(deps)
+  registerCaseCommentHandlers(deps)
+  registerCaseMetricHandlers(deps)
+  registerTagHandlers(deps)
+  registerTranscriptHandlers(deps)
+  registerUpdaterHandlers(deps)
+  registerAuditLogHandlers(deps)
+  registerGeneListHandlers(deps)
+  registerAuthHandlers(deps)
 
   mainLogger.info('IPC handlers registered', 'ipc')
 }

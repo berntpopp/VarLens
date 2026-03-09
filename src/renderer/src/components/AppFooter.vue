@@ -211,6 +211,7 @@ import { storeToRefs } from 'pinia'
 import { useLogStore } from '../stores/logStore'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useAutoUpdate } from '../composables/useAutoUpdate'
+import { useApiService } from '../composables/useApiService'
 
 defineProps<{
   disclaimerAcknowledged: boolean
@@ -227,6 +228,9 @@ const { showFooterLinks } = useResponsiveLayout()
 
 // Auto-update
 const { updateStatus, checkForUpdate, downloadUpdate, installUpdate } = useAutoUpdate()
+
+// API service
+const { api } = useApiService()
 
 // Version state
 const appVersion = ref('...')
@@ -254,9 +258,9 @@ onMounted(async () => {
   window.addEventListener('online', handleOnline)
   window.addEventListener('offline', handleOffline)
 
-  if (typeof window.api !== 'undefined') {
+  if (api) {
     try {
-      const versionInfo = await window.api.system.getVersion()
+      const versionInfo = await api.system.getVersion()
       appVersion.value = versionInfo.app
       electronVersion.value = versionInfo.electron
     } catch (error) {
@@ -284,9 +288,9 @@ const openFAQ = (): void => {
 }
 
 const openGitHub = async (): Promise<void> => {
-  if (typeof window.api !== 'undefined') {
+  if (api) {
     try {
-      const result = await window.api.shell.openExternal('https://github.com/berntpopp/varlens')
+      const result = await api.shell.openExternal('https://github.com/berntpopp/varlens')
       if (!result.success) {
         console.error('Failed to open GitHub URL:', result.error)
       }
@@ -297,9 +301,9 @@ const openGitHub = async (): Promise<void> => {
 }
 
 const openLicense = async (): Promise<void> => {
-  if (typeof window.api !== 'undefined') {
+  if (api) {
     try {
-      const result = await window.api.shell.openExternal('https://opensource.org/licenses/MIT')
+      const result = await api.shell.openExternal('https://opensource.org/licenses/MIT')
       if (!result.success) {
         console.error('Failed to open license URL:', result.error)
       }

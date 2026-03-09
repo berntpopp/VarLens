@@ -1,6 +1,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { UpdateStatus } from '../../../shared/types/api'
+import { useApiService } from './useApiService'
 
 export interface UseAutoUpdateReturn {
   updateStatus: Ref<UpdateStatus>
@@ -13,17 +14,18 @@ export interface UseAutoUpdateReturn {
 }
 
 export function useAutoUpdate(): UseAutoUpdateReturn {
+  const { api } = useApiService()
   const updateStatus = ref<UpdateStatus>({ state: 'idle' })
   let cleanup: (() => void) | null = null
 
-  if (typeof window !== 'undefined' && typeof window.api !== 'undefined') {
+  if (api) {
     // Fetch initial status
-    window.api.updater.getStatus().then((status) => {
+    api.updater.getStatus().then((status) => {
       updateStatus.value = status
     })
 
     // Listen for status changes
-    cleanup = window.api.updater.onStatusChange((status: UpdateStatus) => {
+    cleanup = api.updater.onStatusChange((status: UpdateStatus) => {
       updateStatus.value = status
     })
   }
@@ -40,20 +42,20 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
   const isDownloading = computed(() => updateStatus.value.state === 'downloading')
 
   async function checkForUpdate(): Promise<void> {
-    if (typeof window !== 'undefined' && typeof window.api !== 'undefined') {
-      await window.api.updater.checkForUpdate()
+    if (api) {
+      await api.updater.checkForUpdate()
     }
   }
 
   async function downloadUpdate(): Promise<void> {
-    if (typeof window !== 'undefined' && typeof window.api !== 'undefined') {
-      await window.api.updater.downloadUpdate()
+    if (api) {
+      await api.updater.downloadUpdate()
     }
   }
 
   async function installUpdate(): Promise<void> {
-    if (typeof window !== 'undefined' && typeof window.api !== 'undefined') {
-      await window.api.updater.installUpdate()
+    if (api) {
+      await api.updater.installUpdate()
     }
   }
 

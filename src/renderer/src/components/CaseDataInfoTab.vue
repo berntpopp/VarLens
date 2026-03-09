@@ -64,148 +64,25 @@
     </v-row>
 
     <!-- External IDs -->
-    <div class="text-subtitle-2 text-medium-emphasis mb-2">
-      <v-icon size="small" class="mr-1">mdi-identifier</v-icon>
-      External IDs
-    </div>
-    <v-table v-if="externalIds.length > 0" density="compact" class="mb-2">
-      <tbody>
-        <tr v-for="extId in externalIds" :key="extId.id_type">
-          <td style="width: 40%">
-            <span class="text-body-2 font-weight-medium">{{ extId.id_type }}</span>
-          </td>
-          <td>
-            <span class="text-body-2">{{ extId.id_value }}</span>
-          </td>
-          <td style="width: 40px">
-            <v-btn
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              color="error"
-              @click="deleteExternalId(extId.id_type)"
-            />
-          </td>
-        </tr>
-      </tbody>
-    </v-table>
-    <div v-else class="text-body-2 text-medium-emphasis mb-2">No external IDs added yet</div>
-    <v-row dense class="mb-4">
-      <v-col cols="5">
-        <v-combobox
-          v-model="newIdType"
-          label="ID type"
-          :items="idTypeSuggestions"
-          density="compact"
-          variant="outlined"
-          hide-details
-          placeholder="Type or select..."
-        />
-      </v-col>
-      <v-col cols="5">
-        <v-text-field
-          v-model="newIdValue"
-          label="Value"
-          density="compact"
-          variant="outlined"
-          hide-details
-          placeholder="e.g. S-12345"
-          @keydown.enter="addExternalId"
-        />
-      </v-col>
-      <v-col cols="2" class="d-flex align-center">
-        <v-btn
-          color="primary"
-          size="small"
-          :disabled="!newIdType || !newIdValue"
-          @click="addExternalId"
-        >
-          Add
-        </v-btn>
-      </v-col>
-    </v-row>
+    <ExternalIdsEditor
+      :external-ids="externalIds"
+      :id-type-suggestions="idTypeSuggestions"
+      @add="addExternalId"
+      @delete="deleteExternalId"
+    />
 
-    <!-- Pre-filtering Information -->
-    <div class="text-subtitle-2 text-medium-emphasis mb-2">
-      <v-icon size="small" class="mr-1">mdi-filter-outline</v-icon>
-      Pre-filtering Applied
-    </div>
-    <v-row dense class="mb-4">
-      <v-col cols="6">
-        <v-text-field
-          v-model="afFilter"
-          label="Allele frequency filter"
-          placeholder="e.g. gnomAD AF < 0.01"
-          variant="outlined"
-          density="compact"
-          hide-details
-          @blur="save"
-        />
-      </v-col>
-      <v-col cols="6">
-        <v-text-field
-          v-model="qualityFilter"
-          label="Quality filter"
-          placeholder="e.g. PASS only, QUAL > 30"
-          variant="outlined"
-          density="compact"
-          hide-details
-          @blur="save"
-        />
-      </v-col>
-
-      <!-- Gene List (interactive) -->
-      <v-col cols="6">
-        <div class="d-flex align-center ga-1">
-          <v-select
-            v-model="selectedGeneListId"
-            label="Gene list / panel"
-            :items="geneListItems"
-            item-title="text"
-            item-value="value"
-            variant="outlined"
-            density="compact"
-            hide-details
-            clearable
-            class="flex-grow-1"
-            @update:model-value="onGeneListSelected"
-          />
-          <v-btn
-            icon="mdi-playlist-edit"
-            size="x-small"
-            variant="text"
-            color="primary"
-            @click="openGeneListEditor"
-          />
-        </div>
-      </v-col>
-
-      <!-- Region File (interactive) -->
-      <v-col cols="6">
-        <div class="d-flex align-center ga-1">
-          <v-select
-            v-model="selectedRegionFileId"
-            label="Region filter (BED)"
-            :items="regionFileItems"
-            item-title="text"
-            item-value="value"
-            variant="outlined"
-            density="compact"
-            hide-details
-            clearable
-            class="flex-grow-1"
-            @update:model-value="onRegionFileSelected"
-          />
-          <v-btn
-            icon="mdi-file-upload-outline"
-            size="x-small"
-            variant="text"
-            color="primary"
-            @click="openRegionFileImport"
-          />
-        </div>
-      </v-col>
-    </v-row>
+    <!-- Pre-filtering -->
+    <PrefilteringSection
+      v-model:af-filter="afFilter"
+      v-model:quality-filter="qualityFilter"
+      v-model:selected-gene-list-id="selectedGeneListId"
+      v-model:selected-region-file-id="selectedRegionFileId"
+      :gene-list-items="geneListItems"
+      :region-file-items="regionFileItems"
+      @save="save"
+      @open-gene-list-editor="openGeneListEditor"
+      @open-region-file-import="openRegionFileImport"
+    />
 
     <!-- Notes -->
     <div class="text-subtitle-2 text-medium-emphasis mb-2">
@@ -339,6 +216,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import ExternalIdsEditor from './case-data-info/ExternalIdsEditor.vue'
+import PrefilteringSection from './case-data-info/PrefilteringSection.vue'
 
 const props = defineProps<{
   caseId: number
@@ -389,10 +268,6 @@ const dataNotes = ref('')
 // Suggestions from database
 const platformSuggestions = ref<string[]>(['Exome', 'Genome', 'Targeted Panel'])
 const idTypeSuggestions = ref<string[]>([])
-
-// External ID add form
-const newIdType = ref('')
-const newIdValue = ref('')
 
 // Gene lists
 const geneLists = ref<GeneListItem[]>([])
@@ -512,22 +387,16 @@ async function save(): Promise<void> {
   }
 }
 
-async function addExternalId(): Promise<void> {
-  const type = typeof newIdType.value === 'string' ? newIdType.value.trim() : ''
-  const value = newIdValue.value.trim()
-  if (type === '' || value === '') return
-
+async function addExternalId(idType: string, idValue: string): Promise<void> {
   try {
     const api = getApi().caseMetadata
-    await api.upsertExternalId(props.caseId, type, value)
+    await api.upsertExternalId(props.caseId, idType, idValue)
     const [ids, idTypes] = await Promise.all([
       api.listExternalIds(props.caseId),
       api.distinctExternalIdTypes()
     ])
     externalIds.value = ids
     idTypeSuggestions.value = idTypes ?? []
-    newIdType.value = ''
-    newIdValue.value = ''
   } catch {
     // Silently fail
   }
@@ -556,11 +425,6 @@ function onPlatformChange(): void {
     save()
     platformDebounce = null
   }, 500)
-}
-
-// Gene list selection
-function onGeneListSelected(): void {
-  save()
 }
 
 function openGeneListEditor(): void {
@@ -627,11 +491,6 @@ async function deleteCurrentGeneList(): Promise<void> {
   } catch {
     // Silently fail
   }
-}
-
-// Region file
-function onRegionFileSelected(): void {
-  save()
 }
 
 function openRegionFileImport(): void {

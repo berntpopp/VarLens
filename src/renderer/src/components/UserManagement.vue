@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/authStore'
+import { useApiService } from '../composables/useApiService'
 
 const authStore = useAuthStore()
+const { api } = useApiService()
 
 interface UserRow {
   id: number
@@ -33,8 +35,7 @@ const resetPassword = ref('')
 
 async function loadUsers(): Promise<void> {
   try {
-    // eslint-disable-next-line no-undef
-    users.value = await window.api.auth.listUsers()
+    users.value = await api!.auth.listUsers()
   } catch {
     error.value = 'Failed to load users'
   }
@@ -47,8 +48,7 @@ async function handleCreateUser(): Promise<void> {
   error.value = ''
 
   try {
-    // eslint-disable-next-line no-undef
-    await window.api.auth.createUser(newUsername.value, newDisplayName.value, newTempPassword.value)
+    await api!.auth.createUser(newUsername.value, newDisplayName.value, newTempPassword.value)
     showCreateDialog.value = false
     newUsername.value = ''
     newDisplayName.value = ''
@@ -64,8 +64,7 @@ async function handleCreateUser(): Promise<void> {
 
 async function handleDeactivateUser(username: string): Promise<void> {
   try {
-    // eslint-disable-next-line no-undef
-    await window.api.auth.deactivateUser(username)
+    await api!.auth.deactivateUser(username)
     success.value = `User ${username} deactivated`
     await loadUsers()
   } catch (e) {
@@ -80,8 +79,7 @@ async function handleResetPassword(): Promise<void> {
   error.value = ''
 
   try {
-    // eslint-disable-next-line no-undef
-    await window.api.auth.resetPassword(selectedUser.value, resetPassword.value)
+    await api!.auth.resetPassword(selectedUser.value, resetPassword.value)
     showResetDialog.value = false
     resetPassword.value = ''
     selectedUser.value = ''

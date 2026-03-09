@@ -1,6 +1,7 @@
-import { ipcMain, app } from 'electron'
+import { app } from 'electron'
 import { readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
+import type { HandlerDependencies } from '../types'
 
 /**
  * System IPC handlers
@@ -35,10 +36,12 @@ function getAppVersion(): string {
   return reportedVersion
 }
 
-ipcMain.handle('system:version', async () => {
-  return { app: getAppVersion(), electron: process.versions.electron }
-})
+export function registerSystemHandlers({ ipcMain }: HandlerDependencies): void {
+  ipcMain.handle('system:version', async () => {
+    return { app: getAppVersion(), electron: process.versions.electron }
+  })
 
-ipcMain.handle('system:userDataPath', async () => {
-  return app.getPath('userData')
-})
+  ipcMain.handle('system:userDataPath', async () => {
+    return app.getPath('userData')
+  })
+}

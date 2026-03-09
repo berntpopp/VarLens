@@ -126,8 +126,8 @@ if (gotTheLock !== true) {
     // Initialize database manager with default database
     initDatabaseManager()
 
-    // Register IPC handlers (await to catch load errors)
-    await registerIpcHandlers()
+    // Register IPC handlers
+    registerIpcHandlers()
 
     // Initialize auto-updater and schedule periodic checks
     initAutoUpdater()

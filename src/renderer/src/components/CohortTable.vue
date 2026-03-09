@@ -103,6 +103,7 @@ import { useFilters } from '../composables/useFilters'
 import { useCarriers } from '../composables/useCarriers'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
+import { useApiService } from '../composables/useApiService'
 // Sub-components
 import CohortFilterBar from './cohort/CohortFilterBar.vue'
 import CohortDataTable from './cohort/CohortDataTable.vue'
@@ -129,6 +130,7 @@ const emit = defineEmits<{
 }>()
 
 // Composables
+const { api } = useApiService()
 const { variants, totalCount, isLoading, error, summary, nextCursor, fetchVariants, fetchSummary } =
   useCohortData()
 
@@ -468,10 +470,9 @@ const handleLoadCarriers = async (variant: CohortVariant) => {
 // Export to Excel
 const exportToExcel = async () => {
   // Guard for browser dev mode (no preload)
-  // eslint-disable-next-line no-undef
-  if (typeof window.api === 'undefined') {
+  if (!api) {
     // eslint-disable-next-line no-undef
-    console.warn('window.api not available - running outside Electron')
+    console.warn('API not available - running outside Electron')
     return
   }
 
@@ -492,8 +493,8 @@ const exportToExcel = async () => {
 
     // Deep clone to strip Vue proxies
     const plainParams = globalThis.structuredClone(exportParams)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
-    const result = await (window as any).api.export.cohort(plainParams)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (api as any).export.cohort(plainParams)
 
     if (result !== null && result !== undefined && 'code' in result) {
       snackbar.value = {
@@ -512,8 +513,8 @@ const exportToExcel = async () => {
         timeout: 3000,
         actionText: 'Open folder',
         actionCallback: () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
-          ;(window as any).api.shell.showItemInFolder(result.filePath)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(api as any).shell.showItemInFolder(result.filePath)
         }
       }
     }

@@ -5,7 +5,13 @@
  *
  * Run with: npx playwright test tests/e2e/full-workflow.e2e.ts
  */
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import {
+  test,
+  expect,
+  _electron as electron,
+  type ElectronApplication,
+  type Page
+} from '@playwright/test'
 
 let app: ElectronApplication
 let window: Page
@@ -121,13 +127,19 @@ test.describe('Case View', () => {
     }
 
     // Click first case in list
-    const caseItem = window.locator('.v-list-item').filter({ hasText: /variants/ }).first()
+    const caseItem = window
+      .locator('.v-list-item')
+      .filter({ hasText: /variants/ })
+      .first()
     if ((await caseItem.count()) > 0) {
       await caseItem.click()
       await window.waitForTimeout(1000)
 
       // Variant table or filter toolbar should appear
-      const hasTable = await window.locator('.v-data-table-server, .filter-bar-container').first().isVisible()
+      const hasTable = await window
+        .locator('.v-data-table-server, .filter-bar-container')
+        .first()
+        .isVisible()
         .catch(() => false)
 
       await window.screenshot({ path: testInfo.outputPath('case-selected.png') })

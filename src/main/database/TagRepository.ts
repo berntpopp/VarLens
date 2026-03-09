@@ -10,10 +10,9 @@ export class TagRepository extends BaseRepository {
   createTag(name: string, color: string): Tag {
     try {
       const now = Date.now()
-      const result = this.stmt(
-        'INSERT INTO tags (name, color, created_at) VALUES (?, ?, ?) RETURNING *'
-      ).get(name, color, now) as Tag
-      return result
+      return this.execFirst<Tag>(
+        this.kysely.insertInto('tags').values({ name, color, created_at: now }).returningAll()
+      ) as Tag
     } catch (error) {
       if (error instanceof Error && error.message.includes('UNIQUE constraint failed') === true) {
         throw new UniqueConstraintError('name', name)
@@ -32,24 +31,15 @@ export class TagRepository extends BaseRepository {
       )
       if (!existing) throw new NotFoundError('Tag', id)
 
-      const setClauses: string[] = []
-      const params: (string | number)[] = []
+      const updateObj: Record<string, string | number> = {}
+      if (updates.name !== undefined) updateObj.name = updates.name
+      if (updates.color !== undefined) updateObj.color = updates.color
 
-      if (updates.name !== undefined) {
-        setClauses.push('name = ?')
-        params.push(updates.name)
-      }
-      if (updates.color !== undefined) {
-        setClauses.push('color = ?')
-        params.push(updates.color)
-      }
+      if (Object.keys(updateObj).length === 0) return existing
 
-      if (setClauses.length === 0) return existing
-
-      params.push(id)
-      const sql = `UPDATE tags SET ${setClauses.join(', ')} WHERE id = ? RETURNING *`
-      const result = this.db.prepare(sql).get(...params) as Tag
-      return result
+      return this.execFirst<Tag>(
+        this.kysely.updateTable('tags').set(updateObj).where('id', '=', id).returningAll()
+      ) as Tag
     } catch (error) {
       if (error instanceof NotFoundError) throw error
       if (error instanceof Error && error.message.includes('UNIQUE constraint failed') === true) {
@@ -85,21 +75,25 @@ export class TagRepository extends BaseRepository {
   }
 
   getVariantTags(caseId: number, variantId: number): Tag[] {
-    return this.stmt(
-      `
-      SELECT t.* FROM tags t
-      JOIN variant_tags vt ON t.id = vt.tag_id
-      WHERE vt.case_id = ? AND vt.variant_id = ?
-      ORDER BY t.name
-    `
-    ).all(caseId, variantId) as Tag[]
+    return this.execAll<Tag>(
+      this.kysely
+        .selectFrom('tags as t')
+        .innerJoin('variant_tags as vt', 't.id', 'vt.tag_id')
+        .selectAll('t')
+        .where('vt.case_id', '=', caseId)
+        .where('vt.variant_id', '=', variantId)
+        .orderBy('t.name')
+    )
   }
 
   assignVariantTag(caseId: number, variantId: number, tagId: number): void {
     const now = Date.now()
-    this.stmt(
-      'INSERT INTO variant_tags (case_id, variant_id, tag_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING'
-    ).run(caseId, variantId, tagId, now)
+    this.execRun(
+      this.kysely
+        .insertInto('variant_tags')
+        .values({ case_id: caseId, variant_id: variantId, tag_id: tagId, created_at: now })
+        .onConflict((oc) => oc.doNothing())
+    )
   }
 
   removeVariantTag(caseId: number, variantId: number, tagId: number): void {
@@ -114,16 +108,19 @@ export class TagRepository extends BaseRepository {
 
   setVariantTags(caseId: number, variantId: number, tagIds: number[]): void {
     this.runTransaction(() => {
-      this.stmt('DELETE FROM variant_tags WHERE case_id = ? AND variant_id = ?').run(
-        caseId,
-        variantId
+      this.execRun(
+        this.kysely
+          .deleteFrom('variant_tags')
+          .where('case_id', '=', caseId)
+          .where('variant_id', '=', variantId)
       )
       const now = Date.now()
-      const insert = this.stmt(
-        'INSERT INTO variant_tags (case_id, variant_id, tag_id, created_at) VALUES (?, ?, ?, ?)'
-      )
       for (const tagId of tagIds) {
-        insert.run(caseId, variantId, tagId, now)
+        this.execRun(
+          this.kysely
+            .insertInto('variant_tags')
+            .values({ case_id: caseId, variant_id: variantId, tag_id: tagId, created_at: now })
+        )
       }
     })
   }

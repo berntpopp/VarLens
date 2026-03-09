@@ -171,6 +171,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import type { Case, CohortGroup, AffectedStatus, CaseSex } from '../../../shared/types/api'
 import { useContextMenu } from '../composables/useContextMenu'
 import { useCaseMetadata, getCohortColor } from '../composables/useCaseMetadata'
+import { useApiService } from '../composables/useApiService'
 import CaseStatusIcons from './CaseStatusIcons.vue'
 import DeleteCaseDialog from './DeleteCaseDialog.vue'
 import AppSnackbar from './AppSnackbar.vue'
@@ -191,6 +192,7 @@ const selectedHpoFilters = ref<string[]>([])
 const selected = ref<number[]>([])
 const contextMenuCase = ref<Case | null>(null)
 const contextMenu = useContextMenu()
+const { api } = useApiService()
 
 // Multi-select state
 const multiSelected = ref<Set<number>>(new Set())
@@ -208,17 +210,15 @@ const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 // Load cases from IPC
 const loadCases = async (): Promise<void> => {
   // Guard for browser dev mode (no preload)
-  // eslint-disable-next-line no-undef
-  if (typeof window.api === 'undefined') {
+  if (!api) {
     // eslint-disable-next-line no-undef
-    console.warn('window.api not available - running outside Electron')
+    console.warn('API not available - running outside Electron')
     return
   }
 
   loading.value = true
   try {
-    // eslint-disable-next-line no-undef
-    cases.value = await window.api.cases.list()
+    cases.value = await api.cases.list()
     emit('cases-loaded', cases.value.length)
 
     // Load metadata for all cases
@@ -381,8 +381,7 @@ const handleDelete = async (): Promise<void> => {
   const confirmed = await dialogRef.value?.show(caseToDelete.name, caseToDelete.variant_count)
 
   if (confirmed === true) {
-    // eslint-disable-next-line no-undef
-    await window.api.cases.delete(caseToDelete.id)
+    await api!.cases.delete(caseToDelete.id)
     emit('case-deleted', caseToDelete.id)
 
     // If deleted case was selected, clear selection
@@ -417,8 +416,7 @@ const handleDeleteSelected = async (): Promise<void> => {
   const confirmed = await dialogRef.value?.showBatch(ids.length, totalVariants)
 
   if (confirmed === true) {
-    // eslint-disable-next-line no-undef
-    const deleted = await window.api.cases.deleteBatch(ids)
+    const deleted = await api!.cases.deleteBatch(ids)
 
     // Emit deleted event for each case
     for (const id of ids) {

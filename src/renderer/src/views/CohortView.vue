@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import CohortViewComponent from '../components/CohortView.vue'
 import { useAppState } from '../composables/useAppState'
+import { useApiService } from '../composables/useApiService'
 import { useRouter } from 'vue-router'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 
 const router = useRouter()
+const { api } = useApiService()
 const {
   selectedCaseId,
   selectedCaseName,
@@ -16,6 +18,9 @@ const {
   cohortViewRef
 } = useAppState()
 
+// cohortViewRef is used as template ref (not detected by vue-tsc from destructured composable)
+void cohortViewRef
+
 async function handleNavigateToCase(payload: {
   caseId: number
   chr: string
@@ -25,8 +30,7 @@ async function handleNavigateToCase(payload: {
   geneSymbol: string | null
   cdna: string | null
 }): Promise<void> {
-  // eslint-disable-next-line no-undef
-  if (typeof window.api === 'undefined') return
+  if (!api) return
 
   // Build search query from gene symbol and/or cDNA
   const parts: string[] = []
@@ -44,8 +48,8 @@ async function handleNavigateToCase(payload: {
 
   // Look up case name
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
-    const cases = await (window as any).api.cases.list()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cases = await (api as any).cases.list()
     const selectedCase = cases.find((c: { id: number }) => c.id === payload.caseId)
     if (selectedCase !== undefined) {
       selectedCaseName.value = selectedCase.name

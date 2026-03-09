@@ -21,6 +21,7 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
 import type { CohortVariant, CohortCarrier } from '../../../shared/types/cohort'
+import { useApiService } from './useApiService'
 
 // ============================================================================
 // SINGLETON STATE - Module-scoped refs shared across all components
@@ -92,6 +93,7 @@ export interface UseCarriersReturn {
 export function useCarriers(): UseCarriersReturn {
   // Uses module-scoped singleton refs (defined above)
   // This ensures CohortTable and CohortDataTable share the same state
+  const { api } = useApiService()
 
   /**
    * Load carriers for a specific variant
@@ -103,7 +105,7 @@ export function useCarriers(): UseCarriersReturn {
    */
   const loadCarriers = async (variant: CohortVariant): Promise<void> => {
     // Guard for browser dev mode (no preload)
-    if (typeof window.api === 'undefined') {
+    if (!api) {
       return
     }
 
@@ -114,7 +116,7 @@ export function useCarriers(): UseCarriersReturn {
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const carriers = await (window as any).api.cohort.getCarriers(
+      const carriers = await (api as any).cohort.getCarriers(
         variant.chr,
         variant.pos,
         variant.ref,

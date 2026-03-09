@@ -2,11 +2,16 @@
  * DatabaseService - Core database service for Varlens
  *
  * Manages SQLite connection, schema initialization, and exposes typed repositories.
- * Uses better-sqlite3-multiple-ciphers for synchronous database access with prepared statement caching.
+ * Uses better-sqlite3-multiple-ciphers for synchronous database access.
+ *
+ * A shared statement cache (`Map<string, Statement>`) is passed to all repositories
+ * that still use `BaseRepository.stmt()` for raw SQL queries. New code should use
+ * the Kysely compile+execute helpers instead. The cache will be removed once all
+ * repositories are migrated.
  */
 
 import Database from 'better-sqlite3-multiple-ciphers'
-import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
+import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from './schema'
 import { runMigrations } from './migrations'
 import { DatabaseError, TransactionError } from './errors'
@@ -34,7 +39,6 @@ import { AuthService } from '../services/auth'
 export class DatabaseService {
   private db: DatabaseType
   private _kysely: Kysely<VarlensDatabase>
-  private statementCache: Map<string, Statement>
   private dbPath: string
   private encrypted: boolean
 
@@ -64,7 +68,6 @@ export class DatabaseService {
 
     try {
       this.db = new Database(dbPath)
-      this.statementCache = new Map()
 
       // CRITICAL: Encryption key must be the FIRST pragma issued
       if (this.encrypted) {
@@ -95,20 +98,15 @@ export class DatabaseService {
       this._kysely = createKysely(this.db)
 
       // Initialize repositories
-      this._cases = new CaseRepository(this.db, this._kysely, this.statementCache)
-      this._transcripts = new TranscriptRepository(this.db, this._kysely, this.statementCache)
-      this._annotations = new AnnotationRepository(this.db, this._kysely, this.statementCache)
-      this._metadata = new MetadataRepository(this.db, this._kysely, this.statementCache)
-      this._tags = new TagRepository(this.db, this._kysely, this.statementCache)
-      this._variants = new VariantRepository(
-        this.db,
-        this._kysely,
-        this.statementCache,
-        this._cases
-      )
-      this._overview = new DatabaseOverviewService(this.db, this._kysely, this.statementCache)
-      this._auditLog = new AuditLogRepository(this.db, this._kysely, this.statementCache)
-      this._geneLists = new GeneListRepository(this.db, this._kysely, this.statementCache)
+      this._cases = new CaseRepository(this.db, this._kysely)
+      this._transcripts = new TranscriptRepository(this.db, this._kysely)
+      this._annotations = new AnnotationRepository(this.db, this._kysely)
+      this._metadata = new MetadataRepository(this.db, this._kysely)
+      this._tags = new TagRepository(this.db, this._kysely)
+      this._variants = new VariantRepository(this.db, this._kysely, this._cases)
+      this._overview = new DatabaseOverviewService(this.db, this._kysely)
+      this._auditLog = new AuditLogRepository(this.db, this._kysely)
+      this._geneLists = new GeneListRepository(this.db, this._kysely)
       this._auth = new AuthService(this.db)
 
       // Clean up expired API cache entries on startup
@@ -190,13 +188,6 @@ export class DatabaseService {
   }
 
   /**
-   * Clear the prepared statement cache
-   */
-  clearStatementCache(): void {
-    this.statementCache.clear()
-  }
-
-  /**
    * Check if this database is encrypted
    */
   isEncrypted(): boolean {
@@ -229,7 +220,6 @@ export class DatabaseService {
    * Close the database connection
    */
   close(): void {
-    this.clearStatementCache()
     this._kysely.destroy().catch(() => {})
     try {
       this.db.pragma('optimize')

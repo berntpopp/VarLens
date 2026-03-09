@@ -75,6 +75,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { ProgressUpdate, ImportResult } from '../../../shared/types/api'
 import { isIpcError, ErrorCode } from '../../../shared/types/errors'
+import { useApiService } from '../composables/useApiService'
+
+const { api } = useApiService()
 
 const dialog = ref(false)
 const filePath = ref('')
@@ -124,8 +127,7 @@ const extractCaseName = (path: string): string => {
 
 // Open file browser and populate file path
 const handleBrowse = async (): Promise<void> => {
-  // eslint-disable-next-line no-undef
-  const selectedPath = await window.api.import.selectFile()
+  const selectedPath = await api!.import.selectFile()
   if (selectedPath !== null) {
     filePath.value = selectedPath
     // Auto-populate case name if empty
@@ -141,8 +143,7 @@ const handleImport = async (): Promise<void> => {
   errorMessage.value = ''
   progress.value = { phase: 'reading', count: 0, elapsed: 0 }
 
-  // eslint-disable-next-line no-undef
-  const result = await window.api.import.start(filePath.value, caseName.value)
+  const result = await api!.import.start(filePath.value, caseName.value)
 
   isImporting.value = false
 
@@ -163,8 +164,7 @@ const handleImport = async (): Promise<void> => {
 const handleCancel = async (): Promise<void> => {
   if (isImporting.value === true) {
     // Cancel active import
-    // eslint-disable-next-line no-undef
-    await window.api.import.cancel()
+    await api!.import.cancel()
     isImporting.value = false
   }
   dialog.value = false
@@ -205,8 +205,7 @@ const show = async (): Promise<void> => {
 
 // Setup IPC progress listener
 onMounted(() => {
-  // eslint-disable-next-line no-undef
-  cleanupProgress = window.api.import.onProgress((update: ProgressUpdate) => {
+  cleanupProgress = api!.import.onProgress((update: ProgressUpdate) => {
     progress.value = update
   })
 })

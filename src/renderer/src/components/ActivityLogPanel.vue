@@ -35,10 +35,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { AuditLogEntry, AuditActionType } from '../../../main/database/types'
+import { useApiService } from '../composables/useApiService'
 
 const props = defineProps<{
   entityKey: string | null
 }>()
+
+const { api } = useApiService()
 
 const entries = ref<AuditLogEntry[]>([])
 const loading = ref(false)
@@ -51,8 +54,7 @@ async function loadEntries(): Promise<void> {
 
   loading.value = true
   try {
-    // eslint-disable-next-line no-undef
-    entries.value = await window.api.audit.getByEntity(props.entityKey)
+    entries.value = await api!.audit.getByEntity(props.entityKey)
   } catch (error) {
     // eslint-disable-next-line no-undef
     console.error('Failed to load audit entries:', error)

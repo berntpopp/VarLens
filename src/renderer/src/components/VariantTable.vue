@@ -36,68 +36,16 @@
           :key="`header-${col.key}`"
           #[`header.${col.key}`]="{ column: headerColumn, getSortIcon, toggleSort, isSorted }"
         >
-          <div class="d-flex align-center justify-space-between header-wrapper">
-            <div
-              class="d-flex align-center flex-grow-1 sortable-header"
-              @click="toggleSort(headerColumn)"
-            >
-              <span class="header-title">{{ headerColumn.title }}</span>
-              <v-icon v-if="isSorted(headerColumn)" size="x-small" class="ml-1">
-                {{ getSortIcon(headerColumn) }}
-              </v-icon>
-              <v-icon v-else size="x-small" class="ml-1 sort-icon-inactive">mdi-sort</v-icon>
-            </div>
-            <v-menu :close-on-content-click="false" location="bottom">
-              <template #activator="{ props: menuProps }">
-                <v-btn
-                  v-bind="menuProps"
-                  icon
-                  size="x-small"
-                  variant="text"
-                  :color="hasColumnFilter(col.key) ? 'primary' : undefined"
-                  @click.stop
-                >
-                  <v-icon size="small">
-                    {{ hasColumnFilter(col.key) ? 'mdi-filter' : 'mdi-filter-outline' }}
-                  </v-icon>
-                  <v-tooltip activator="parent" location="bottom">Filter this column</v-tooltip>
-                </v-btn>
-              </template>
-              <v-card min-width="250" max-width="350">
-                <v-card-title class="text-subtitle-2 py-2">
-                  Filter: {{ headerColumn.title }}
-                </v-card-title>
-                <v-divider />
-                <v-card-text class="pa-3">
-                  <v-text-field
-                    :model-value="columnFilters[col.key] || ''"
-                    label="Filter value"
-                    placeholder="Type to filter..."
-                    density="compact"
-                    variant="outlined"
-                    clearable
-                    hide-details
-                    autofocus
-                    @update:model-value="(v: string | null) => setColumnFilter(col.key, v)"
-                  >
-                    <template #prepend-inner>
-                      <v-icon size="small">mdi-magnify</v-icon>
-                    </template>
-                  </v-text-field>
-                  <div class="text-caption text-medium-emphasis mt-2">
-                    Case-insensitive partial match
-                  </div>
-                </v-card-text>
-                <v-divider />
-                <v-card-actions class="pa-2">
-                  <v-spacer />
-                  <v-btn size="small" variant="text" @click="clearColumnFilter(col.key)">
-                    Clear
-                  </v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-menu>
-          </div>
+          <VariantColumnHeader
+            :header-column="headerColumn"
+            :get-sort-icon="getSortIcon"
+            :toggle-sort="toggleSort"
+            :is-sorted="isSorted"
+            :has-filter="hasColumnFilter(col.key)"
+            :filter-value="columnFilters[col.key] || ''"
+            @update:filter="(v) => setColumnFilter(col.key, v)"
+            @clear-filter="clearColumnFilter(col.key)"
+          />
         </template>
 
         <!-- Annotations column (star, ACMG, comment) -->
@@ -331,7 +279,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, nextTick } from 'vue'
+import { ref, watch, computed, toRef, onMounted, nextTick } from 'vue'
 import type {
   Variant,
   VariantFilter,
@@ -339,19 +287,20 @@ import type {
   PaginatedResult,
   SortItem
 } from '../../../shared/types/api'
-import { useExternalLinksStore, type ExternalLinkConfig } from '../stores/externalLinksStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { resolveUrlTemplate, buildOmimUrl, type VariantLinkData } from '../utils/externalLinks'
 import { useAnnotations } from '../composables/useAnnotations'
-import type { AcmgClassification } from '../../../main/database/types'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useColumnFilters } from '../composables/useColumnFilters'
 import { useDebounce } from '../composables/useDebounce'
+import { useVariantLinks } from '../composables/useVariantLinks'
+import { useAnnotationDialogs } from '../composables/useAnnotationDialogs'
 import { formatConsequence } from '../utils/formatters'
 import { useTableScroll } from '../composables/useTableScroll'
 import { APP_CONFIG } from '../../../shared/config'
+import { useApiService } from '../composables/useApiService'
 import CommentDialog from './CommentDialog.vue'
 import AcmgEvidenceDialog from './AcmgEvidenceDialog.vue'
+import VariantColumnHeader from './variant-table/VariantColumnHeader.vue'
 import {
   PositionCell,
   AlleleCell,
@@ -370,6 +319,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { api } = useApiService()
 
 const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
 
@@ -380,7 +330,6 @@ const emit = defineEmits<{
 }>()
 
 // Initialize stores
-const linksStore = useExternalLinksStore()
 const settingsStore = useSettingsStore()
 
 // Initialize annotations composable
@@ -401,6 +350,39 @@ const {
   upsertPerCaseComment,
   getAnnotations
 } = useAnnotations()
+
+// Initialize variant links composable
+const { linksStore, snackbar, buildOmimEntryUrl, resolveLink, getLinkForColumn, openExternalLink } =
+  useVariantLinks()
+
+// Initialize annotation dialogs composable
+const {
+  commentDialogOpen,
+  selectedVariantForComment,
+  selectedVariantForAcmg,
+  acmgEvidenceDialogRef,
+  acmgEvidenceJson,
+  acmgVariantData,
+  acmgVariantLabel,
+  openCommentDialog,
+  openAcmgEvidenceDialog,
+  handleStarToggle,
+  handleQuickAcmgSelect,
+  handleAcmgEvidenceChange,
+  handleCommentSave,
+  getGlobalTimestamps,
+  getPerCaseTimestamps
+} = useAnnotationDialogs(toRef(props, 'caseId'), {
+  getAcmgEvidence,
+  toggleStar,
+  setAcmgClassification,
+  setAcmgClassificationWithEvidence,
+  upsertGlobalComment,
+  upsertPerCaseComment,
+  getAnnotations
+})
+// acmgEvidenceDialogRef is used as template ref (not detected by vue-tsc from destructured composable)
+void acmgEvidenceDialogRef
 
 // Initialize column preferences (only prefs needed here, management is in FilterToolbar)
 const { prefs } = useColumnPreferences('variant-table')
@@ -444,43 +426,6 @@ const cursorCache = ref<Map<string, PaginationCursor>>(new Map())
 
 // Track unfiltered count for "X of Y" display
 const unfilteredCount = ref(0)
-
-// Snackbar state for error feedback
-const snackbar = ref({
-  visible: false,
-  message: '',
-  color: 'error'
-})
-
-// Comment dialog state
-const commentDialogOpen = ref(false)
-const selectedVariantForComment = ref<Variant | null>(null)
-
-// ACMG evidence dialog state
-const acmgEvidenceDialogRef = ref<InstanceType<typeof AcmgEvidenceDialog> | null>(null)
-const selectedVariantForAcmg = ref<Variant | null>(null)
-
-const acmgEvidenceJson = computed(() => {
-  const v = selectedVariantForAcmg.value
-  if (v === null) return null
-  return getAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
-})
-
-const acmgVariantData = computed(() => {
-  const v = selectedVariantForAcmg.value
-  if (v === null) return null
-  return {
-    gnomad_af: v.gnomad_af ?? null,
-    cadd: v.cadd ?? null,
-    clinvar: v.clinvar ?? null
-  }
-})
-
-const acmgVariantLabel = computed(() => {
-  const v = selectedVariantForAcmg.value
-  if (v === null) return ''
-  return `${v.chr}:${v.pos} ${v.ref}>${v.alt}${v.gene_symbol !== null ? ` (${v.gene_symbol})` : ''}`
-})
 
 // Selected row tracking for highlighting
 const selectedVariantId = ref<number | null>(null)
@@ -549,63 +494,6 @@ const filterableColumns = computed(() =>
   )
 )
 
-// Helper functions for link resolution
-const getVariantLinkData = (item: Variant): VariantLinkData => ({
-  chr: item.chr,
-  pos: item.pos,
-  ref: item.ref,
-  alt: item.alt,
-  gene_symbol: item.gene_symbol ?? null,
-  mim_number: item.omim_mim_number ?? null
-})
-
-const buildOmimEntryUrl = (mimNumber: string | null): string | null => {
-  return buildOmimUrl(mimNumber)
-}
-
-const resolveLink = (linkId: string, item: Variant): string | null => {
-  const link = linksStore.enabledLinks.find((l) => l.id === linkId)
-  if (link === undefined) return null
-  return resolveUrlTemplate(
-    link.urlTemplate,
-    getVariantLinkData(item),
-    linksStore.genomeBuild,
-    link.requiredFields
-  )
-}
-
-const getLinkForColumn = (column: string): ExternalLinkConfig | null => {
-  return linksStore.enabledLinks.find((l) => l.column === column) ?? null
-}
-
-// Open external link with visual feedback and error handling
-const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> => {
-  if (!url) return
-
-  // Brief highlight on clicked element
-  const target = event?.currentTarget as HTMLElement
-  if (target !== null && target !== undefined) {
-    target.classList.add('external-link--clicked')
-    // eslint-disable-next-line no-undef
-    setTimeout(() => target.classList.remove('external-link--clicked'), 200)
-  }
-
-  // eslint-disable-next-line no-undef
-  if (typeof window.api !== 'undefined') {
-    try {
-      // eslint-disable-next-line no-undef
-      const result = await window.api.shell.openExternal(url)
-      if (!result.success) {
-        snackbar.value = { visible: true, message: 'Could not open link', color: 'error' }
-      }
-    } catch (error) {
-      // eslint-disable-next-line no-undef
-      console.error('Failed to open external link:', error)
-      snackbar.value = { visible: true, message: 'Could not open link', color: 'error' }
-    }
-  }
-}
-
 // Row click handler - track selection and emit event
 const handleRowClick = (_event: unknown, { item }: { item: Variant }): void => {
   selectedVariantId.value = item.id
@@ -629,107 +517,13 @@ const getRowProps = ({ item, index }: { item: Variant; index: number }) => {
   return { class: classes.join(' ') }
 }
 
-// Handle star toggle (per-case)
-const handleStarToggle = async (item: Variant): Promise<void> => {
-  await toggleStar(props.caseId, item.id, item.chr, item.pos, item.ref, item.alt)
-}
-
-// Open comment dialog for variant
-const openCommentDialog = (item: Variant) => {
-  selectedVariantForComment.value = item
-  commentDialogOpen.value = true
-}
-
-// Quick ACMG classification (no evidence, just set the classification)
-const handleQuickAcmgSelect = async (
-  item: Variant,
-  classification: AcmgClassification | null
-): Promise<void> => {
-  await setAcmgClassification(
-    props.caseId,
-    item.id,
-    item.chr,
-    item.pos,
-    item.ref,
-    item.alt,
-    classification
-  )
-}
-
-// Open ACMG evidence dialog for a variant
-const openAcmgEvidenceDialog = (item: Variant): void => {
-  selectedVariantForAcmg.value = item
-  nextTick(() => {
-    acmgEvidenceDialogRef.value?.open()
-  })
-}
-
-// Handle ACMG evidence change from dialog
-const handleAcmgEvidenceChange = async (payload: {
-  classification: AcmgClassification | null
-  evidenceJson: string
-}): Promise<void> => {
-  const v = selectedVariantForAcmg.value
-  if (v === null) return
-  await setAcmgClassificationWithEvidence(
-    props.caseId,
-    v.id,
-    v.chr,
-    v.pos,
-    v.ref,
-    v.alt,
-    payload.classification,
-    payload.evidenceJson
-  )
-}
-
-// Handle comment save
-const handleCommentSave = async (data: {
-  globalComment: string | null
-  perCaseComment: string | null
-  globalChanged: boolean
-  perCaseChanged: boolean
-}): Promise<void> => {
-  if (!selectedVariantForComment.value) return
-  const v = selectedVariantForComment.value
-
-  if (data.globalChanged) {
-    await upsertGlobalComment(v.chr, v.pos, v.ref, v.alt, data.globalComment)
-  }
-  if (data.perCaseChanged) {
-    await upsertPerCaseComment(props.caseId, v.id, v.chr, v.pos, v.ref, v.alt, data.perCaseComment)
-  }
-
-  commentDialogOpen.value = false
-}
-
-// Get timestamps from cache
-const getGlobalTimestamps = (
-  item: Variant | null
-): { created_at: number; updated_at: number } | null => {
-  if (!item) return null
-  const annotations = getAnnotations(item.chr, item.pos, item.ref, item.alt)
-  if (!annotations?.global) return null
-  return { created_at: annotations.global.created_at, updated_at: annotations.global.updated_at }
-}
-
-const getPerCaseTimestamps = (
-  item: Variant | null
-): { created_at: number; updated_at: number } | null => {
-  if (!item) return null
-  const annotations = getAnnotations(item.chr, item.pos, item.ref, item.alt)
-  if (!annotations?.perCase) return null
-  return { created_at: annotations.perCase.created_at, updated_at: annotations.perCase.updated_at }
-}
-
 // Load variants from backend
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const loadVariants = async (_options?: any): Promise<void> => {
   // Guard for browser dev mode (no preload)
-  // eslint-disable-next-line no-undef
-  if (typeof window.api === 'undefined') {
+  if (!api) {
     // eslint-disable-next-line no-undef
-    console.warn('window.api not available - running outside Electron')
+    console.warn('API not available - running outside Electron')
     return
   }
 
@@ -805,8 +599,8 @@ watch(
       clearCache()
 
       // Fetch unfiltered count (query with empty filters)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
-      const result = await (window as any).api.variants.query(newCaseId, {}, undefined, 1, [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (api as any).variants.query(newCaseId, {}, undefined, 1, [])
       unfilteredCount.value = result.total_count
     }
   },
@@ -886,38 +680,6 @@ defineExpose({
 </script>
 
 <style scoped>
-/* Per-column filter header layout */
-.header-wrapper {
-  width: 100%;
-  gap: 4px;
-}
-
-.sortable-header {
-  cursor: pointer;
-  user-select: none;
-  min-width: 0;
-}
-
-.sortable-header:hover {
-  opacity: 0.7;
-}
-
-.header-title {
-  font-weight: 600;
-  font-size: 0.8125rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sort-icon-inactive {
-  opacity: 0.3;
-}
-
-.sortable-header:hover .sort-icon-inactive {
-  opacity: 0.6;
-}
-
 /* Table container fills remaining height in flex parent */
 .table-container {
   position: relative;

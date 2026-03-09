@@ -7,13 +7,15 @@ export class GeneListRepository extends BaseRepository {
   // ============================================================
 
   listGeneLists(): GeneListWithCount[] {
-    return this.stmt(
-      `SELECT gl.*, COUNT(gli.id) AS gene_count
-       FROM gene_lists gl
-       LEFT JOIN gene_list_items gli ON gl.id = gli.gene_list_id
-       GROUP BY gl.id
-       ORDER BY gl.name`
-    ).all() as GeneListWithCount[]
+    return this.execAll<GeneListWithCount>(
+      this.kysely
+        .selectFrom('gene_lists as gl')
+        .leftJoin('gene_list_items as gli', 'gl.id', 'gli.gene_list_id')
+        .selectAll('gl')
+        .select(({ fn }) => fn.count<number>('gli.id').as('gene_count'))
+        .groupBy('gl.id')
+        .orderBy('gl.name')
+    )
   }
 
   getGeneList(id: number): GeneList | null {
@@ -26,28 +28,22 @@ export class GeneListRepository extends BaseRepository {
 
   createGeneList(name: string, description?: string | null): GeneList {
     const now = Date.now()
-    return this.stmt(
-      'INSERT INTO gene_lists (name, description, created_at, updated_at) VALUES (?, ?, ?, ?) RETURNING *'
-    ).get(name, description ?? null, now, now) as GeneList
+    return this.execFirst<GeneList>(
+      this.kysely
+        .insertInto('gene_lists')
+        .values({ name, description: description ?? null, created_at: now, updated_at: now })
+        .returningAll()
+    ) as GeneList
   }
 
   updateGeneList(id: number, updates: { name?: string; description?: string | null }): GeneList {
     const now = Date.now()
-    const setClauses: string[] = ['updated_at = ?']
-    const params: (string | number | null)[] = [now]
+    const updateObj: Record<string, string | number | null> = { updated_at: now }
+    if (updates.name !== undefined) updateObj.name = updates.name
+    if (updates.description !== undefined) updateObj.description = updates.description
 
-    if (updates.name !== undefined) {
-      setClauses.push('name = ?')
-      params.push(updates.name)
-    }
-    if (updates.description !== undefined) {
-      setClauses.push('description = ?')
-      params.push(updates.description)
-    }
-    params.push(id)
-
-    return this.stmt(`UPDATE gene_lists SET ${setClauses.join(', ')} WHERE id = ? RETURNING *`).get(
-      ...params
+    return this.execFirst<GeneList>(
+      this.kysely.updateTable('gene_lists').set(updateObj).where('id', '=', id).returningAll()
     ) as GeneList
   }
 
@@ -68,17 +64,24 @@ export class GeneListRepository extends BaseRepository {
 
   setGeneListGenes(listId: number, genes: string[]): void {
     this.runTransaction(() => {
-      this.stmt('DELETE FROM gene_list_items WHERE gene_list_id = ?').run(listId)
-      const insert = this.stmt(
-        'INSERT OR IGNORE INTO gene_list_items (gene_list_id, gene_symbol) VALUES (?, ?)'
-      )
+      this.execRun(this.kysely.deleteFrom('gene_list_items').where('gene_list_id', '=', listId))
       for (const gene of genes) {
         const trimmed = gene.trim().toUpperCase()
         if (trimmed !== '') {
-          insert.run(listId, trimmed)
+          this.execRun(
+            this.kysely
+              .insertInto('gene_list_items')
+              .values({ gene_list_id: listId, gene_symbol: trimmed })
+              .onConflict((oc) => oc.doNothing())
+          )
         }
       }
-      this.stmt('UPDATE gene_lists SET updated_at = ? WHERE id = ?').run(Date.now(), listId)
+      this.execRun(
+        this.kysely
+          .updateTable('gene_lists')
+          .set({ updated_at: Date.now() })
+          .where('id', '=', listId)
+      )
     })
   }
 
@@ -94,9 +97,19 @@ export class GeneListRepository extends BaseRepository {
 
   createRegionFile(name: string, description: string | null): RegionFile {
     const now = Date.now()
-    return this.stmt(
-      'INSERT INTO region_files (name, description, region_count, total_bases, created_at, updated_at) VALUES (?, ?, 0, 0, ?, ?) RETURNING *'
-    ).get(name, description, now, now) as RegionFile
+    return this.execFirst<RegionFile>(
+      this.kysely
+        .insertInto('region_files')
+        .values({
+          name,
+          description,
+          region_count: 0,
+          total_bases: 0,
+          created_at: now,
+          updated_at: now
+        })
+        .returningAll()
+    ) as RegionFile
   }
 
   deleteRegionFile(id: number): void {
@@ -108,18 +121,28 @@ export class GeneListRepository extends BaseRepository {
     entries: Array<{ chr: string; start: number; end: number; label?: string }>
   ): RegionFile {
     return this.runTransaction(() => {
-      this.stmt('DELETE FROM region_file_entries WHERE region_file_id = ?').run(fileId)
-      const insert = this.stmt(
-        'INSERT INTO region_file_entries (region_file_id, chr, start_pos, end_pos, label) VALUES (?, ?, ?, ?, ?)'
+      this.execRun(
+        this.kysely.deleteFrom('region_file_entries').where('region_file_id', '=', fileId)
       )
       let totalBases = 0
       for (const e of entries) {
-        insert.run(fileId, e.chr, e.start, e.end, e.label ?? null)
+        this.execRun(
+          this.kysely.insertInto('region_file_entries').values({
+            region_file_id: fileId,
+            chr: e.chr,
+            start_pos: e.start,
+            end_pos: e.end,
+            label: e.label ?? null
+          })
+        )
         totalBases += e.end - e.start
       }
-      this.stmt(
-        'UPDATE region_files SET region_count = ?, total_bases = ?, updated_at = ? WHERE id = ?'
-      ).run(entries.length, totalBases, Date.now(), fileId)
+      this.execRun(
+        this.kysely
+          .updateTable('region_files')
+          .set({ region_count: entries.length, total_bases: totalBases, updated_at: Date.now() })
+          .where('id', '=', fileId)
+      )
 
       return this.execFirst<RegionFile>(
         this.kysely.selectFrom('region_files').selectAll().where('id', '=', fileId)

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/authStore'
+import { useApiService } from '../composables/useApiService'
 
 const authStore = useAuthStore()
+const { api } = useApiService()
 
 const username = ref('')
 const password = ref('')
@@ -51,8 +53,7 @@ async function handleChangePassword(): Promise<void> {
   error.value = ''
 
   try {
-    // eslint-disable-next-line no-undef
-    await window.api.auth.changePassword(password.value, newPassword.value)
+    await api!.auth.changePassword(password.value, newPassword.value)
     mustChangePassword.value = false
   } catch {
     error.value = 'Failed to change password.'

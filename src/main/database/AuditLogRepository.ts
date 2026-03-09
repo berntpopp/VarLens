@@ -1,4 +1,5 @@
 import { BaseRepository } from './BaseRepository'
+import { sql } from 'kysely'
 import type { AuditLogEntry, AuditActionType, AuditEntityType } from './types'
 
 interface AppendEntryInput {
@@ -28,19 +29,12 @@ export interface AuditQueryResult {
 export class AuditLogRepository extends BaseRepository {
   appendEntry(input: AppendEntryInput): AuditLogEntry {
     const now = Date.now()
-    return this.stmt(
-      `INSERT INTO audit_log (timestamp, action_type, entity_type, entity_key, old_value, new_value, user_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       RETURNING *`
-    ).get(
-      now,
-      input.action_type,
-      input.entity_type,
-      input.entity_key,
-      input.old_value,
-      input.new_value,
-      input.user_name
-    ) as AuditLogEntry
+    const compiled = sql<AuditLogEntry>`
+        INSERT INTO audit_log (timestamp, action_type, entity_type, entity_key, old_value, new_value, user_name)
+        VALUES (${now}, ${input.action_type}, ${input.entity_type}, ${input.entity_key}, ${input.old_value}, ${input.new_value}, ${input.user_name})
+        RETURNING *
+      `.compile(this.kysely)
+    return this.db.prepare(compiled.sql).get(...compiled.parameters) as AuditLogEntry
   }
 
   getByEntityKey(entityKey: string): AuditLogEntry[] {
@@ -54,44 +48,38 @@ export class AuditLogRepository extends BaseRepository {
   }
 
   query(filter: AuditQueryFilter): AuditQueryResult {
-    const conditions: string[] = []
-    const params: unknown[] = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let baseQuery = this.kysely.selectFrom('audit_log') as any
 
     if (filter.action_type) {
-      conditions.push('action_type = ?')
-      params.push(filter.action_type)
+      baseQuery = baseQuery.where('action_type', '=', filter.action_type)
     }
     if (filter.entity_type) {
-      conditions.push('entity_type = ?')
-      params.push(filter.entity_type)
+      baseQuery = baseQuery.where('entity_type', '=', filter.entity_type)
     }
     if (filter.entity_key !== undefined && filter.entity_key !== null) {
-      conditions.push('entity_key = ?')
-      params.push(filter.entity_key)
+      baseQuery = baseQuery.where('entity_key', '=', filter.entity_key)
     }
     if (filter.from_timestamp !== undefined && filter.from_timestamp !== null) {
-      conditions.push('timestamp >= ?')
-      params.push(filter.from_timestamp)
+      baseQuery = baseQuery.where('timestamp', '>=', filter.from_timestamp)
     }
     if (filter.to_timestamp !== undefined && filter.to_timestamp !== null) {
-      conditions.push('timestamp <= ?')
-      params.push(filter.to_timestamp)
+      baseQuery = baseQuery.where('timestamp', '<=', filter.to_timestamp)
     }
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
-
-    const total_count = (
-      this.stmt(`SELECT COUNT(*) as count FROM audit_log ${where}`).get(...params) as {
-        count: number
-      }
-    ).count
+    const countResult = this.execFirst<{ count: number }>(
+      baseQuery.select(({ fn }: { fn: { countAll: <T>() => { as: (alias: string) => T } } }) =>
+        fn.countAll<number>().as('count')
+      )
+    )
+    const total_count = countResult?.count ?? 0
 
     const limit = filter.limit ?? 100
     const offset = filter.offset ?? 0
 
-    const data = this.stmt(
-      `SELECT * FROM audit_log ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`
-    ).all(...params, limit, offset) as AuditLogEntry[]
+    const data = this.execAll<AuditLogEntry>(
+      baseQuery.selectAll().orderBy('timestamp', 'desc').limit(limit).offset(offset)
+    )
 
     return { data, total_count }
   }

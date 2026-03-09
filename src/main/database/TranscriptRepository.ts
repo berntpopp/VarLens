@@ -47,71 +47,78 @@ export class TranscriptRepository extends BaseRepository {
   }
 
   switchSelectedTranscript(variantId: number, transcriptId: string): void {
-    const switchTx = this.db.transaction(() => {
-      this.stmt('UPDATE variant_transcripts SET is_selected = 0 WHERE variant_id = ?').run(
-        variantId
+    this.runTransaction(() => {
+      this.execRun(
+        this.kysely
+          .updateTable('variant_transcripts')
+          .set({ is_selected: 0 })
+          .where('variant_id', '=', variantId)
       )
 
-      const result = this.stmt(
-        'UPDATE variant_transcripts SET is_selected = 1 WHERE variant_id = ? AND transcript_id = ?'
-      ).run(variantId, transcriptId)
+      const result = this.execRun(
+        this.kysely
+          .updateTable('variant_transcripts')
+          .set({ is_selected: 1 })
+          .where('variant_id', '=', variantId)
+          .where('transcript_id', '=', transcriptId)
+      )
 
       if (result.changes === 0) {
         throw new Error(`Transcript ${transcriptId} not found for variant ${variantId}`)
       }
 
-      const transcript = this.stmt(
-        'SELECT gene_symbol, consequence, cdna, aa_change, hpo_sim_score, moi FROM variant_transcripts WHERE variant_id = ? AND transcript_id = ?'
-      ).get(variantId, transcriptId) as {
+      const transcript = this.execFirst<{
         gene_symbol: string | null
         consequence: string | null
         cdna: string | null
         aa_change: string | null
         hpo_sim_score: number | null
         moi: string | null
-      }
+      }>(
+        this.kysely
+          .selectFrom('variant_transcripts')
+          .select(['gene_symbol', 'consequence', 'cdna', 'aa_change', 'hpo_sim_score', 'moi'])
+          .where('variant_id', '=', variantId)
+          .where('transcript_id', '=', transcriptId)
+      )!
 
-      this.stmt(
-        `
-        UPDATE variants
-        SET transcript = ?, gene_symbol = ?, consequence = ?, cdna = ?, aa_change = ?, hpo_sim_score = ?, moi = ?
-        WHERE id = ?
-      `
-      ).run(
-        transcriptId,
-        transcript.gene_symbol,
-        transcript.consequence,
-        transcript.cdna,
-        transcript.aa_change,
-        transcript.hpo_sim_score,
-        transcript.moi,
-        variantId
+      this.execRun(
+        this.kysely
+          .updateTable('variants')
+          .set({
+            transcript: transcriptId,
+            gene_symbol: transcript.gene_symbol,
+            consequence: transcript.consequence,
+            cdna: transcript.cdna,
+            aa_change: transcript.aa_change,
+            hpo_sim_score: transcript.hpo_sim_score,
+            moi: transcript.moi
+          })
+          .where('id', '=', variantId)
       )
     })
-
-    switchTx()
   }
 
   insertTranscriptAndSwitch(variantId: number, transcript: TranscriptInsertRow): void {
-    const tx = this.db.transaction(() => {
-      this.stmt(
-        `INSERT OR IGNORE INTO variant_transcripts
-           (variant_id, transcript_id, gene_symbol, consequence, cdna, aa_change, hpo_sim_score, moi, is_selected)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`
-      ).run(
-        variantId,
-        transcript.transcript_id,
-        transcript.gene_symbol,
-        transcript.consequence,
-        transcript.cdna,
-        transcript.aa_change,
-        transcript.hpo_sim_score,
-        transcript.moi
+    this.runTransaction(() => {
+      this.execRun(
+        this.kysely
+          .insertInto('variant_transcripts')
+          .values({
+            variant_id: variantId,
+            transcript_id: transcript.transcript_id,
+            gene_symbol: transcript.gene_symbol,
+            consequence: transcript.consequence,
+            cdna: transcript.cdna,
+            aa_change: transcript.aa_change,
+            hpo_sim_score: transcript.hpo_sim_score,
+            moi: transcript.moi,
+            is_selected: 0
+          })
+          .onConflict((oc) => oc.doNothing())
       )
 
       this.switchSelectedTranscript(variantId, transcript.transcript_id)
     })
-
-    tx()
   }
 }

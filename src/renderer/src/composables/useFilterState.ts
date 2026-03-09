@@ -23,6 +23,7 @@
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { useDebounce } from './useDebounce'
 import { useTags } from './useTags'
+import { useApiService } from './useApiService'
 import type { VariantFilter, Tag, FilterOptions } from '../../../shared/types/api'
 import { APP_CONFIG } from '../../../shared/config'
 
@@ -158,6 +159,9 @@ export function useFilterState(
   options: UseFilterStateOptions
 ): UseFilterStateReturn {
   const { onFiltersUpdate, onResetSort, hasSortRef } = options
+
+  // API service
+  const { api } = useApiService()
 
   // Tags composable
   const { loadTags, getTags } = useTags()
@@ -465,11 +469,7 @@ export function useFilterState(
     try {
       // Use optimized geneSymbols API - direct LIKE query instead of FTS5
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const results: string[] = await (window as any).api.variants.geneSymbols(
-        caseIdRef.value,
-        query,
-        50
-      )
+      const results: string[] = await (api as any).variants.geneSymbols(caseIdRef.value, query, 50)
       geneSymbolSuggestions.value = results
     } catch {
       geneSymbolSuggestions.value = []
@@ -633,13 +633,13 @@ export function useFilterState(
    */
   const loadFilterOptions = async (caseId: number): Promise<void> => {
     // Guard for browser dev mode
-    if (typeof window.api === 'undefined') {
+    if (!api) {
       return
     }
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const options = await (window as any).api.variants.getFilterOptions(caseId)
+      const options = await (api as any).variants.getFilterOptions(caseId)
       filterOptions.value = options
     } catch (error) {
       console.error('Failed to load filter options:', error)
@@ -686,8 +686,8 @@ export function useFilterState(
    */
   const exportToExcel = async (caseId: number, caseName: string): Promise<ExportResult | null> => {
     // Guard for browser dev mode
-    if (typeof window.api === 'undefined') {
-      console.warn('window.api not available - running outside Electron')
+    if (!api) {
+      console.warn('API not available - running outside Electron')
       return null
     }
 
@@ -742,7 +742,7 @@ export function useFilterState(
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (window as any).api.export.variants(
+      const result = await (api as any).export.variants(
         caseId,
         exportFilters,
         caseName !== '' ? caseName : `case_${caseId}`
@@ -793,8 +793,8 @@ export function useFilterState(
    */
   const loadFilterOptionsAndTags = async (caseId: number): Promise<void> => {
     // Guard for browser dev mode
-    if (typeof window.api === 'undefined') {
-      console.warn('window.api not available - running outside Electron')
+    if (!api) {
+      console.warn('API not available - running outside Electron')
       return
     }
 
@@ -802,7 +802,7 @@ export function useFilterState(
       // Load filter options and tags in parallel
       const [options] = await Promise.all([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).api.variants.getFilterOptions(caseId),
+        (api as any).variants.getFilterOptions(caseId),
         loadTags()
       ])
       filterOptions.value = options

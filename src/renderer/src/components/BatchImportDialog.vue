@@ -1,7 +1,21 @@
 <template>
-  <v-dialog v-model="dialog" max-width="700" :persistent="phase === 'importing'">
+  <v-dialog
+    v-model="dialog"
+    max-width="700"
+    :persistent="phase === 'importing' || phase === 'summary'"
+  >
     <v-card>
-      <v-card-title>Batch Import</v-card-title>
+      <v-card-title class="d-flex align-center">
+        Batch Import
+        <v-spacer />
+        <v-btn
+          v-if="phase !== 'importing'"
+          icon="mdi-close"
+          size="small"
+          variant="text"
+          @click="phase === 'summary' ? handleCancel() : closeDialog()"
+        />
+      </v-card-title>
 
       <v-card-text>
         <!-- Review phase (always shown before import) -->
@@ -169,7 +183,6 @@
 
       <v-card-actions>
         <v-spacer />
-        <v-btn v-if="phase === 'review'" variant="text" @click="closeDialog"> Cancel </v-btn>
         <v-btn
           v-if="phase === 'review'"
           color="primary"
@@ -192,7 +205,6 @@
           Unlock
         </v-btn>
         <v-btn v-if="phase === 'importing'" @click="handleCancel"> Cancel </v-btn>
-        <v-btn v-if="phase === 'summary'" @click="handleCancel"> Close </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -206,8 +218,11 @@ import type {
   DuplicateChoice,
   DuplicateCheckItem
 } from '../../../shared/types/api'
+import { useApiService } from '../composables/useApiService'
 
 type Phase = 'idle' | 'review' | 'importing' | 'summary' | 'zip-password'
+
+const { api } = useApiService()
 
 const dialog = ref(false)
 const phase = ref<Phase>('idle')
@@ -280,14 +295,25 @@ const hasEmptyCaseNames = computed(() => reviewFiles.value.some((f) => f.caseNam
 // eslint-disable-next-line no-undef
 let recheckTimeout: ReturnType<typeof setTimeout> | null = null
 
+// Emit refresh event when dialog closes from summary phase (handles Escape, overlay click, etc.)
+watch(dialog, (newVal, oldVal) => {
+  if (oldVal === true && newVal === false && phase.value === 'summary') {
+    if (isZipImport.value === true) {
+      api!.batchImport.cleanupZipTemp()
+    }
+    if (summary.value.succeeded > 0) {
+      emit('batch-import-complete', { totalImported: summary.value.succeeded })
+    }
+  }
+})
+
 watch(stripText, () => {
   // eslint-disable-next-line no-undef
   if (recheckTimeout !== null) clearTimeout(recheckTimeout)
   // eslint-disable-next-line no-undef
   recheckTimeout = setTimeout(async () => {
     if (selectedFilePaths.value.length === 0) return
-    // eslint-disable-next-line no-undef
-    const checkResult = await window.api.batchImport.checkDuplicates(
+    const checkResult = await api!.batchImport.checkDuplicates(
       [...selectedFilePaths.value],
       stripText.value || undefined
     )
@@ -303,8 +329,7 @@ const show = async (mode: 'files' | 'folder' | 'zip'): Promise<void> => {
   resetState()
 
   if (mode === 'zip') {
-    // eslint-disable-next-line no-undef
-    const result = await window.api.batchImport.selectZip()
+    const result = await api!.batchImport.selectZip()
     if (result === null) return
 
     zipPath.value = result.filePath
@@ -322,11 +347,9 @@ const show = async (mode: 'files' | 'folder' | 'zip'): Promise<void> => {
   let filePaths: string[]
 
   if (mode === 'files') {
-    // eslint-disable-next-line no-undef
-    filePaths = await window.api.batchImport.selectFiles()
+    filePaths = await api!.batchImport.selectFiles()
   } else {
-    // eslint-disable-next-line no-undef
-    filePaths = await window.api.batchImport.selectFolder()
+    filePaths = await api!.batchImport.selectFolder()
   }
 
   if (filePaths.length === 0) return
@@ -335,8 +358,7 @@ const show = async (mode: 'files' | 'folder' | 'zip'): Promise<void> => {
   fileCount.value = filePaths.length
   dialog.value = true
 
-  // eslint-disable-next-line no-undef
-  const checkResult = await window.api.batchImport.checkDuplicates(filePaths)
+  const checkResult = await api!.batchImport.checkDuplicates(filePaths)
   duplicateCheckFiles.value = checkResult.files
   duplicateCount.value = checkResult.duplicateCount
   phase.value = 'review'
@@ -347,31 +369,27 @@ const show = async (mode: 'files' | 'folder' | 'zip'): Promise<void> => {
  */
 const extractAndShowReview = async (zipFilePath: string, password?: string): Promise<void> => {
   try {
-    // eslint-disable-next-line no-undef
-    const result = await window.api.batchImport.extractZip(zipFilePath, password)
+    const result = await api!.batchImport.extractZip(zipFilePath, password)
 
     if (result.files.length === 0) {
       zipErrorMessage.value = 'No importable files found in archive.'
       if (result.errors.length > 0) {
         zipErrorMessage.value += ' Errors: ' + result.errors.join('; ')
       }
-      // eslint-disable-next-line no-undef
-      await window.api.batchImport.cleanupZipTemp()
+      await api!.batchImport.cleanupZipTemp()
       return
     }
 
     selectedFilePaths.value = result.files
     fileCount.value = result.files.length
 
-    // eslint-disable-next-line no-undef
-    const checkResult = await window.api.batchImport.checkDuplicates(result.files)
+    const checkResult = await api!.batchImport.checkDuplicates(result.files)
     duplicateCheckFiles.value = checkResult.files
     duplicateCount.value = checkResult.duplicateCount
     phase.value = 'review'
   } catch (error) {
     zipErrorMessage.value = error instanceof Error ? error.message : 'Failed to extract archive'
-    // eslint-disable-next-line no-undef
-    await window.api.batchImport.cleanupZipTemp()
+    await api!.batchImport.cleanupZipTemp()
   }
 }
 
@@ -397,8 +415,7 @@ const startImport = async (
   totalFiles.value = filePaths.length
 
   try {
-    // eslint-disable-next-line no-undef
-    const result = await window.api.batchImport.start(filePaths, strategy, strip)
+    const result = await api!.batchImport.start(filePaths, strategy, strip)
 
     summary.value = result
     phase.value = 'summary'
@@ -429,8 +446,7 @@ const handleZipUnlock = async (): Promise<void> => {
   zipErrorMessage.value = ''
 
   try {
-    // eslint-disable-next-line no-undef
-    const result = await window.api.batchImport.testZipPassword(zipPath.value, zipPassword.value)
+    const result = await api!.batchImport.testZipPassword(zipPath.value, zipPassword.value)
     if (result.success === true) {
       await extractAndShowReview(zipPath.value, zipPassword.value)
     } else {
@@ -447,8 +463,7 @@ const handleZipUnlock = async (): Promise<void> => {
  * Cancel ZIP flow and clean up temp directory
  */
 const handleZipCancel = async (): Promise<void> => {
-  // eslint-disable-next-line no-undef
-  await window.api.batchImport.cleanupZipTemp()
+  await api!.batchImport.cleanupZipTemp()
   dialog.value = false
 }
 
@@ -457,18 +472,10 @@ const handleZipCancel = async (): Promise<void> => {
  */
 const handleCancel = async (): Promise<void> => {
   if (phase.value === 'importing') {
-    // eslint-disable-next-line no-undef
-    await window.api.batchImport.cancel()
+    await api!.batchImport.cancel()
   } else if (phase.value === 'summary') {
+    // Close dialog — the watch on `dialog` handles cleanup and event emission
     dialog.value = false
-    if (isZipImport.value === true) {
-      // eslint-disable-next-line no-undef
-      await window.api.batchImport.cleanupZipTemp()
-    }
-
-    if (summary.value.succeeded > 0) {
-      emit('batch-import-complete', { totalImported: summary.value.succeeded })
-    }
   }
 }
 
@@ -477,8 +484,7 @@ const handleCancel = async (): Promise<void> => {
  */
 const closeDialog = async (): Promise<void> => {
   if (isZipImport.value === true) {
-    // eslint-disable-next-line no-undef
-    await window.api.batchImport.cleanupZipTemp()
+    await api!.batchImport.cleanupZipTemp()
   }
   dialog.value = false
 }
@@ -510,8 +516,7 @@ const resetState = (): void => {
 
 // Setup IPC listeners
 onMounted(() => {
-  // eslint-disable-next-line no-undef
-  cleanupProgress = window.api.batchImport.onProgress((progress: BatchProgress) => {
+  cleanupProgress = api!.batchImport.onProgress((progress: BatchProgress) => {
     currentIndex.value = progress.currentIndex
     totalFiles.value = progress.totalFiles
     currentFileName.value = progress.currentFileName

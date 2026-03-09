@@ -70,6 +70,9 @@ function handleExportError(error: string): void {
   showSnack(`Export failed: ${error}`, 'error', { timeout: -1 })
 }
 
+// filterToolbarRef is used as template ref (not detected by vue-tsc from destructured composable)
+void filterToolbarRef
+
 defineExpose({
   handleImportClick
 })

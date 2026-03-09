@@ -12,6 +12,7 @@ import type {
   CaseMetricWithDefinition,
   MetricValue
 } from '../../../shared/types/api'
+import { useApiService } from './useApiService'
 
 // Global metric definitions cache
 const definitionsCache = ref<MetricDefinition[]>([])
@@ -22,6 +23,8 @@ const metricsCache = ref<Map<number, CaseMetricWithDefinition[]>>(new Map())
 const loadingStates = ref<Map<number, boolean>>(new Map())
 
 export function useCaseMetrics() {
+  const { api } = useApiService()
+
   // Computed: definitions grouped by category
   const definitionsByCategory = computed(() => {
     const grouped = new Map<string, MetricDefinition[]>()
@@ -36,7 +39,7 @@ export function useCaseMetrics() {
   async function loadDefinitions(): Promise<void> {
     if (definitionsLoaded.value) return
     try {
-      definitionsCache.value = await window.api.caseMetrics.listDefinitions()
+      definitionsCache.value = await api!.caseMetrics.listDefinitions()
       definitionsLoaded.value = true
     } catch (error) {
       console.error('Failed to load metric definitions:', error)
@@ -48,7 +51,7 @@ export function useCaseMetrics() {
 
     loadingStates.value.set(caseId, true)
     try {
-      const metrics = await window.api.caseMetrics.listForCase(caseId)
+      const metrics = await api!.caseMetrics.listForCase(caseId)
       metricsCache.value.set(caseId, metrics)
     } catch (error) {
       console.error('Failed to load case metrics:', error)
@@ -66,7 +69,7 @@ export function useCaseMetrics() {
   }
 
   async function upsertMetric(caseId: number, metricId: number, value: MetricValue): Promise<void> {
-    await window.api.caseMetrics.upsert(caseId, metricId, value)
+    await api!.caseMetrics.upsert(caseId, metricId, value)
     // Reload to get joined data
     loadingStates.value.delete(caseId) // Allow reload
     metricsCache.value.delete(caseId)
@@ -74,7 +77,7 @@ export function useCaseMetrics() {
   }
 
   async function deleteMetric(caseId: number, metricId: number): Promise<void> {
-    await window.api.caseMetrics.delete(caseId, metricId)
+    await api!.caseMetrics.delete(caseId, metricId)
 
     // Remove from cache
     const cached = metricsCache.value.get(caseId)
@@ -92,7 +95,7 @@ export function useCaseMetrics() {
     unit: string,
     category: string
   ): Promise<MetricDefinition> {
-    const def = await window.api.caseMetrics.createDefinition(name, valueType, unit, category)
+    const def = await api!.caseMetrics.createDefinition(name, valueType, unit, category)
     definitionsCache.value.push(def)
     // Re-sort
     definitionsCache.value.sort(

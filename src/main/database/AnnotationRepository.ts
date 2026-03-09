@@ -1,4 +1,5 @@
 import { BaseRepository } from './BaseRepository'
+import { sql } from 'kysely'
 import type { VariantAnnotation, CaseVariantAnnotation } from './types'
 
 export class AnnotationRepository extends BaseRepository {
@@ -41,34 +42,33 @@ export class AnnotationRepository extends BaseRepository {
       const acmgEvidenceProvided = 'acmg_evidence' in updates
       const commentProvided = 'global_comment' in updates
 
-      const result = this.stmt(
-        `
-        INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, IFNULL(?, 0), ?, ?, ?, ?)
-        ON CONFLICT(chr, pos, ref, alt) DO UPDATE SET
-          global_comment = ${commentProvided ? '?' : 'IFNULL(?, global_comment)'},
-          starred = IFNULL(?, starred),
-          acmg_classification = ${acmgClassProvided ? '?' : 'IFNULL(?, acmg_classification)'},
-          acmg_evidence = ${acmgEvidenceProvided ? '?' : 'IFNULL(?, acmg_evidence)'},
-          updated_at = excluded.updated_at
-        RETURNING *
-      `
-      ).get(
-        chr,
-        pos,
-        ref,
-        alt,
-        updates.global_comment ?? null,
-        updates.starred !== undefined ? (updates.starred ? 1 : 0) : null,
-        updates.acmg_classification ?? null,
-        updates.acmg_evidence ?? null,
-        now,
-        now,
-        updates.global_comment ?? null,
-        updates.starred !== undefined ? (updates.starred ? 1 : 0) : null,
-        updates.acmg_classification ?? null,
-        updates.acmg_evidence ?? null
-      ) as VariantAnnotation
+      const commentVal = updates.global_comment ?? null
+      const starredVal = updates.starred !== undefined ? (updates.starred ? 1 : 0) : null
+      const acmgClassVal = updates.acmg_classification ?? null
+      const acmgEvidenceVal = updates.acmg_evidence ?? null
+
+      const commentUpdate = commentProvided
+        ? sql`${commentVal}`
+        : sql`IFNULL(${commentVal}, global_comment)`
+      const acmgClassUpdate = acmgClassProvided
+        ? sql`${acmgClassVal}`
+        : sql`IFNULL(${acmgClassVal}, acmg_classification)`
+      const acmgEvidenceUpdate = acmgEvidenceProvided
+        ? sql`${acmgEvidenceVal}`
+        : sql`IFNULL(${acmgEvidenceVal}, acmg_evidence)`
+
+      const compiled = sql<VariantAnnotation>`
+          INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
+          VALUES (${chr}, ${pos}, ${ref}, ${alt}, ${commentVal}, IFNULL(${starredVal}, 0), ${acmgClassVal}, ${acmgEvidenceVal}, ${now}, ${now})
+          ON CONFLICT(chr, pos, ref, alt) DO UPDATE SET
+            global_comment = ${commentUpdate},
+            starred = IFNULL(${starredVal}, starred),
+            acmg_classification = ${acmgClassUpdate},
+            acmg_evidence = ${acmgEvidenceUpdate},
+            updated_at = excluded.updated_at
+          RETURNING *
+        `.compile(this.kysely)
+      const result = this.db.prepare(compiled.sql).get(...compiled.parameters) as VariantAnnotation
       return result
     })
   }
@@ -112,32 +112,35 @@ export class AnnotationRepository extends BaseRepository {
       const acmgEvidenceProvided = 'acmg_evidence' in updates
       const commentProvided = 'per_case_comment' in updates
 
-      const result = this.stmt(
-        `
-        INSERT INTO case_variant_annotations (case_id, variant_id, per_case_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
-        VALUES (?, ?, ?, IFNULL(?, 0), ?, ?, ?, ?)
-        ON CONFLICT(case_id, variant_id) DO UPDATE SET
-          per_case_comment = ${commentProvided ? '?' : 'IFNULL(?, per_case_comment)'},
-          starred = IFNULL(?, starred),
-          acmg_classification = ${acmgClassProvided ? '?' : 'IFNULL(?, acmg_classification)'},
-          acmg_evidence = ${acmgEvidenceProvided ? '?' : 'IFNULL(?, acmg_evidence)'},
-          updated_at = excluded.updated_at
-        RETURNING *
-      `
-      ).get(
-        caseId,
-        variantId,
-        updates.per_case_comment ?? null,
-        updates.starred !== undefined ? (updates.starred ? 1 : 0) : null,
-        updates.acmg_classification ?? null,
-        updates.acmg_evidence ?? null,
-        now,
-        now,
-        updates.per_case_comment ?? null,
-        updates.starred !== undefined ? (updates.starred ? 1 : 0) : null,
-        updates.acmg_classification ?? null,
-        updates.acmg_evidence ?? null
-      ) as CaseVariantAnnotation
+      const commentVal = updates.per_case_comment ?? null
+      const starredVal = updates.starred !== undefined ? (updates.starred ? 1 : 0) : null
+      const acmgClassVal = updates.acmg_classification ?? null
+      const acmgEvidenceVal = updates.acmg_evidence ?? null
+
+      const commentUpdate = commentProvided
+        ? sql`${commentVal}`
+        : sql`IFNULL(${commentVal}, per_case_comment)`
+      const acmgClassUpdate = acmgClassProvided
+        ? sql`${acmgClassVal}`
+        : sql`IFNULL(${acmgClassVal}, acmg_classification)`
+      const acmgEvidenceUpdate = acmgEvidenceProvided
+        ? sql`${acmgEvidenceVal}`
+        : sql`IFNULL(${acmgEvidenceVal}, acmg_evidence)`
+
+      const compiled = sql<CaseVariantAnnotation>`
+          INSERT INTO case_variant_annotations (case_id, variant_id, per_case_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
+          VALUES (${caseId}, ${variantId}, ${commentVal}, IFNULL(${starredVal}, 0), ${acmgClassVal}, ${acmgEvidenceVal}, ${now}, ${now})
+          ON CONFLICT(case_id, variant_id) DO UPDATE SET
+            per_case_comment = ${commentUpdate},
+            starred = IFNULL(${starredVal}, starred),
+            acmg_classification = ${acmgClassUpdate},
+            acmg_evidence = ${acmgEvidenceUpdate},
+            updated_at = excluded.updated_at
+          RETURNING *
+        `.compile(this.kysely)
+      const result = this.db
+        .prepare(compiled.sql)
+        .get(...compiled.parameters) as CaseVariantAnnotation
       return result
     })
   }

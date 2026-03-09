@@ -12,6 +12,7 @@ import type {
   AcmgClassification
 } from '../../../main/database/types'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useApiService } from './useApiService'
 
 interface AnnotationCache {
   global: VariantAnnotation | null
@@ -25,6 +26,8 @@ const annotationCache = ref<Map<string, AnnotationCache>>(new Map())
 const loadingStates = ref<Map<string, boolean>>(new Map())
 
 export function useAnnotations() {
+  const { api } = useApiService()
+
   // Get current user name for audit trail
   function getUserName(): string | undefined {
     try {
@@ -108,7 +111,7 @@ export function useAnnotations() {
 
     loadingStates.value.set(key, true)
     try {
-      const result = await window.api.annotations.getForVariant(caseId, chr, pos, ref, alt)
+      const result = await api!.annotations.getForVariant(caseId, chr, pos, ref, alt)
       annotationCache.value.set(key, result)
     } catch (error) {
       console.error('Failed to load annotations:', error)
@@ -142,7 +145,7 @@ export function useAnnotations() {
     }
 
     try {
-      const updated = await window.api.annotations.upsertPerCase(caseId, variantId, {
+      const updated = await api!.annotations.upsertPerCase(caseId, variantId, {
         starred: newStarred
       })
       // Update cache with server response
@@ -191,7 +194,7 @@ export function useAnnotations() {
 
     loadingStates.value.set(key, true)
     try {
-      const global = await window.api.annotations.getGlobal(chr, pos, ref, alt)
+      const global = await api!.annotations.getGlobal(chr, pos, ref, alt)
       annotationCache.value.set(key, { global, perCase: null })
     } catch (error) {
       console.error('Failed to load global annotations:', error)
@@ -232,7 +235,7 @@ export function useAnnotations() {
     }
 
     try {
-      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+      const updated = await api!.annotations.upsertGlobal(chr, pos, ref, alt, {
         starred: newStarred
       })
       // Update cache with server response
@@ -273,7 +276,7 @@ export function useAnnotations() {
     }
 
     try {
-      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+      const updated = await api!.annotations.upsertGlobal(chr, pos, ref, alt, {
         acmg_classification: classification
       })
       // Update cache with server response
@@ -326,7 +329,7 @@ export function useAnnotations() {
     }
 
     try {
-      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+      const updated = await api!.annotations.upsertGlobal(chr, pos, ref, alt, {
         global_comment: comment
       })
       // Update cache with server response
@@ -371,7 +374,7 @@ export function useAnnotations() {
     }
 
     try {
-      const updated = await window.api.annotations.upsertPerCase(caseId, variantId, {
+      const updated = await api!.annotations.upsertPerCase(caseId, variantId, {
         per_case_comment: comment
       })
       // Update cache with server response
@@ -438,7 +441,7 @@ export function useAnnotations() {
     }
 
     try {
-      const updated = await window.api.annotations.upsertPerCase(caseId, variantId, {
+      const updated = await api!.annotations.upsertPerCase(caseId, variantId, {
         acmg_classification: classification
       })
       // Update cache with server response
@@ -504,7 +507,7 @@ export function useAnnotations() {
     }
 
     try {
-      const updated = await window.api.annotations.upsertPerCase(caseId, variantId, {
+      const updated = await api!.annotations.upsertPerCase(caseId, variantId, {
         acmg_classification: classification,
         acmg_evidence: evidenceJson,
         user_name: getUserName()
@@ -547,7 +550,7 @@ export function useAnnotations() {
     }
 
     try {
-      const updated = await window.api.annotations.upsertGlobal(chr, pos, ref, alt, {
+      const updated = await api!.annotations.upsertGlobal(chr, pos, ref, alt, {
         acmg_classification: classification,
         acmg_evidence: evidenceJson,
         user_name: getUserName()

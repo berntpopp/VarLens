@@ -21,6 +21,7 @@ import type {
   CohortSummary,
   CohortPaginationCursor
 } from '../../../shared/types/cohort'
+import { useApiService } from './useApiService'
 
 /**
  * Query parameters for cohort variant fetching
@@ -127,6 +128,8 @@ export interface UseCohortDataReturn {
  * ```
  */
 export function useCohortData(): UseCohortDataReturn {
+  const { api } = useApiService()
+
   // State refs
   const variants = ref<CohortVariant[]>([])
   const totalCount = ref(0)
@@ -143,8 +146,8 @@ export function useCohortData(): UseCohortDataReturn {
    */
   const fetchVariants = async (params: CohortQueryParams): Promise<void> => {
     // Guard for browser dev mode (no preload)
-    if (typeof window.api === 'undefined') {
-      console.warn('window.api not available - running outside Electron')
+    if (!api) {
+      console.warn('API not available - running outside Electron')
       return
     }
 
@@ -213,7 +216,7 @@ export function useCohortData(): UseCohortDataReturn {
       // Deep clone for IPC (structured clone rejects Vue proxies)
       const plainParams = globalThis.structuredClone(ipcParams)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (window as any).api.cohort.getVariants(plainParams)
+      const result = await (api as any).cohort.getVariants(plainParams)
 
       variants.value = result.data ?? []
       totalCount.value = result.total_count ?? 0
@@ -235,13 +238,13 @@ export function useCohortData(): UseCohortDataReturn {
    */
   const fetchSummary = async (): Promise<void> => {
     // Guard for browser dev mode
-    if (typeof window.api === 'undefined') {
+    if (!api) {
       return
     }
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (window as any).api.cohort.getSummary()
+      const result = await (api as any).cohort.getSummary()
       summary.value = result
     } catch (err) {
       console.error('Failed to load cohort summary:', err)

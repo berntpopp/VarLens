@@ -65,6 +65,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useDebounce } from '../composables/useDebounce'
+import { useApiService } from '../composables/useApiService'
 import type { CaseHpoTerm } from '../../../shared/types/api'
 
 interface HpoSearchResult {
@@ -82,6 +83,8 @@ const emit = defineEmits<{
   'remove:term': [hpoId: string]
 }>()
 
+const { api } = useApiService()
+
 const searchQuery = ref('')
 const searchResults = ref<HpoSearchResult[]>([])
 const loading = ref(false)
@@ -91,12 +94,7 @@ const hpoApiAvailable = ref(false)
 // Check if HPO API is available (Phase 21 complete)
 onMounted(() => {
   hpoApiAvailable.value =
-    // eslint-disable-next-line no-undef
-    typeof window.api !== 'undefined' &&
-    // eslint-disable-next-line no-undef
-    typeof window.api.hpo !== 'undefined' &&
-    // eslint-disable-next-line no-undef
-    typeof window.api.hpo.search === 'function'
+    api != null && typeof api.hpo !== 'undefined' && typeof api.hpo.search === 'function'
 })
 
 // Search function for debouncing
@@ -108,8 +106,7 @@ async function performSearch(query: string) {
 
   loading.value = true
   try {
-    // eslint-disable-next-line no-undef
-    const result = await window.api.hpo.search(query, 20)
+    const result = await api!.hpo.search(query, 20)
     if (result.success) {
       // Filter out already assigned terms
       const assignedIds = new Set(props.modelValue.map((t) => t.hpo_id))

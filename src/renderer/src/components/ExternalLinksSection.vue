@@ -32,6 +32,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useExternalLinksStore } from '../stores/externalLinksStore'
+import { useApiService } from '../composables/useApiService'
 import { resolveUrlTemplate } from '../utils/externalLinks'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
@@ -42,6 +43,7 @@ interface Props {
 
 const props = defineProps<Props>()
 
+const { api } = useApiService()
 const externalLinksStore = useExternalLinksStore()
 
 /**
@@ -124,8 +126,7 @@ async function openLink(linkId: string): Promise<void> {
   if (link === undefined || link.resolvedUrl === null) return
 
   try {
-    // eslint-disable-next-line no-undef
-    await window.api.shell.openExternal(link.resolvedUrl)
+    await api!.shell.openExternal(link.resolvedUrl)
   } catch {
     // Silently fail - link opening is best-effort
   }

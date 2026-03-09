@@ -1,6 +1,6 @@
 import { BaseRepository } from './BaseRepository'
 import type { CaseRepository } from './CaseRepository'
-import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
+import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import type { Kysely } from 'kysely'
 import type { VarlensDatabase } from '../../shared/types/database-schema'
 import type { Variant, VariantFilter, PaginationCursor, PaginatedResult, SortItem } from './types'
@@ -37,13 +37,8 @@ const NUMERIC_COLUMNS = new Set(['pos', 'gnomad_af', 'cadd', 'qual', 'hpo_sim_sc
 export class VariantRepository extends BaseRepository {
   private cases: CaseRepository
 
-  constructor(
-    db: DatabaseType,
-    kysely: Kysely<VarlensDatabase>,
-    statementCache: Map<string, Statement>,
-    cases: CaseRepository
-  ) {
-    super(db, kysely, statementCache)
+  constructor(db: DatabaseType, kysely: Kysely<VarlensDatabase>, cases: CaseRepository) {
+    super(db, kysely)
     this.cases = cases
   }
 
@@ -61,54 +56,48 @@ export class VariantRepository extends BaseRepository {
     `)
 
     try {
-      const insert = this.stmt(`
-        INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, omim_mim_number, consequence, gnomad_af, cadd, clinvar, gt_num, func, qual, hpo_sim_score, transcript, cdna, aa_change, moi)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-
-      const insertTranscript = this.stmt(`
-        INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, cdna, aa_change, hpo_sim_score, moi, is_selected)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-
       const insertBatch = this.db.transaction(
         (batch: (Omit<Variant, 'id' | 'case_id'> & { _transcripts?: TranscriptInsertRow[] })[]) => {
           for (const v of batch) {
-            const result = insert.run(
-              caseId,
-              v.chr,
-              v.pos,
-              v.ref,
-              v.alt,
-              v.gene_symbol,
-              v.omim_mim_number,
-              v.consequence,
-              v.gnomad_af,
-              v.cadd,
-              v.clinvar,
-              v.gt_num,
-              v.func,
-              v.qual,
-              v.hpo_sim_score,
-              v.transcript,
-              v.cdna,
-              v.aa_change,
-              v.moi
+            const result = this.execRun(
+              this.kysely.insertInto('variants').values({
+                case_id: caseId,
+                chr: v.chr,
+                pos: v.pos,
+                ref: v.ref,
+                alt: v.alt,
+                gene_symbol: v.gene_symbol,
+                omim_mim_number: v.omim_mim_number,
+                consequence: v.consequence,
+                gnomad_af: v.gnomad_af,
+                cadd: v.cadd,
+                clinvar: v.clinvar,
+                gt_num: v.gt_num,
+                func: v.func,
+                qual: v.qual,
+                hpo_sim_score: v.hpo_sim_score,
+                transcript: v.transcript,
+                cdna: v.cdna,
+                aa_change: v.aa_change,
+                moi: v.moi
+              })
             )
 
             if (v._transcripts !== undefined && v._transcripts.length > 0) {
               const variantId = result.lastInsertRowid as number
               for (const t of v._transcripts) {
-                insertTranscript.run(
-                  variantId,
-                  t.transcript_id,
-                  t.gene_symbol,
-                  t.consequence,
-                  t.cdna,
-                  t.aa_change,
-                  t.hpo_sim_score,
-                  t.moi,
-                  t.is_selected
+                this.execRun(
+                  this.kysely.insertInto('variant_transcripts').values({
+                    variant_id: variantId,
+                    transcript_id: t.transcript_id,
+                    gene_symbol: t.gene_symbol,
+                    consequence: t.consequence,
+                    cdna: t.cdna,
+                    aa_change: t.aa_change,
+                    hpo_sim_score: t.hpo_sim_score,
+                    moi: t.moi,
+                    is_selected: t.is_selected
+                  })
                 )
               }
             }

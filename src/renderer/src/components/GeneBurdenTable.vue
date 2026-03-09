@@ -48,6 +48,10 @@
 import { ref, watch, onMounted } from 'vue'
 import type { GeneBurden } from '../../../shared/types/cohort'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useApiService } from '../composables/useApiService'
+
+// API service
+const { api } = useApiService()
 
 // Settings store for persisted items-per-page
 const settingsStore = useSettingsStore()
@@ -79,17 +83,12 @@ const headers = [
 // Load gene burden data
 const loadGeneBurden = async (): Promise<void> => {
   // Guard for browser dev mode (no preload)
-  // eslint-disable-next-line no-undef
-  if (typeof window.api === 'undefined') {
-    // eslint-disable-next-line no-undef
-    console.warn('window.api not available - running outside Electron')
-    return
-  }
+  if (!api) return
 
   loading.value = true
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-undef
-    const result = await (window as any).api.cohort.getGeneBurden()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (api as any).cohort.getGeneBurden()
     geneBurden.value = result
   } catch (error) {
     // eslint-disable-next-line no-undef

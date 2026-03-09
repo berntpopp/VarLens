@@ -21,8 +21,11 @@ import type {
   VepTranscriptConsequence,
   VepColocatedVariant
 } from '../../../main/services/api/schemas/vep-response'
+import { useApiService } from './useApiService'
 
 export function useVepEnrichment() {
+  const { api } = useApiService()
+
   // VEP data
   const vepData = ref<VepFetchResult | null>(null)
   const vepLoading = ref(false)
@@ -110,6 +113,8 @@ export function useVepEnrichment() {
    * Fetch all enrichment data for a variant in parallel
    */
   async function fetchVep(chr: string, pos: number, ref: string, alt: string): Promise<void> {
+    if (!api) return
+
     // Reset state
     vepLoading.value = true
     myvariantLoading.value = true
@@ -121,9 +126,9 @@ export function useVepEnrichment() {
 
     // Fetch all APIs in parallel
     const [vepResult, myvariantResult, spliceaiResult] = await Promise.allSettled([
-      window.api.vep.fetch(chr, pos, ref, alt),
-      window.api.myvariant.fetch(chr, pos, ref, alt),
-      window.api.spliceai.fetch(chr, pos, ref, alt)
+      api.vep.fetch(chr, pos, ref, alt),
+      api.myvariant.fetch(chr, pos, ref, alt),
+      api.spliceai.fetch(chr, pos, ref, alt)
     ])
 
     // Process VEP result
