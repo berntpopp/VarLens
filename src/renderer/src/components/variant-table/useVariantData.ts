@@ -86,7 +86,7 @@ export function useVariantData(options: UseVariantDataOptions) {
       const plainSortBy = JSON.parse(JSON.stringify(sortBy.value))
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result: PaginatedResult<Variant> = await (window as any).api.variants.query(
+      const result: PaginatedResult<Variant> = await (api as any).variants.query(
         caseId.value,
         plainFilters,
         cursor,

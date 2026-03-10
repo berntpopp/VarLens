@@ -52,8 +52,10 @@ async function handleChangePassword(): Promise<void> {
   loading.value = true
   error.value = ''
 
+  if (!api) return
+
   try {
-    await api!.auth.changePassword(password.value, newPassword.value)
+    await api.auth.changePassword(password.value, newPassword.value)
     mustChangePassword.value = false
   } catch {
     error.value = 'Failed to change password.'

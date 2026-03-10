@@ -65,6 +65,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useApiService } from '../../composables/useApiService'
 
 interface RegionFileItem {
   id: number
@@ -93,11 +94,7 @@ const selectedBedBasename = computed(() => {
   return parts[parts.length - 1]
 })
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getApi(): any {
-  // eslint-disable-next-line no-undef
-  return (window as unknown as Record<string, unknown>).api
-}
+const { api } = useApiService()
 
 // Reset state when dialog opens
 watch(
@@ -111,8 +108,10 @@ watch(
 )
 
 async function selectBedFile(): Promise<void> {
+  if (!api) return
   try {
-    const result = await getApi().import.selectFile()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (api as any).import.selectFile()
     if (typeof result === 'string') {
       selectedBedPath.value = result
       if (regionFileName.value.trim() === '') {
@@ -128,14 +127,15 @@ async function selectBedFile(): Promise<void> {
 
 async function importRegionFile(): Promise<void> {
   const name = regionFileName.value.trim()
-  if (name === '' || !selectedBedPath.value) return
+  if (name === '' || !selectedBedPath.value || !api) return
   importingRegion.value = true
   try {
-    const api = getApi().regionFiles
-    const created = await api.create(name, regionFileDescription.value.trim() || null)
-    await api.importBed(created.id, selectedBedPath.value)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const regionFilesApi = (api as any).regionFiles
+    const created = await regionFilesApi.create(name, regionFileDescription.value.trim() || null)
+    await regionFilesApi.importBed(created.id, selectedBedPath.value)
 
-    const updatedFiles = await api.list()
+    const updatedFiles = await regionFilesApi.list()
     emit('imported', { regionFileId: created.id, regionFiles: updatedFiles })
     emit('update:modelValue', false)
   } catch {
