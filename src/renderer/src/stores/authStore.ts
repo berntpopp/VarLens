@@ -43,7 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
   function logout(): void {
     currentUser.value = null
     if (!api) return
-    api.auth.logout()
+    api.auth.logout().catch(() => {})
   }
 
   return {

@@ -44,11 +44,12 @@ export function useCaseComments() {
   const { api } = useApiService()
 
   async function loadComments(caseId: number): Promise<void> {
+    if (!api) return
     if (loadingStates.value.get(caseId) === true) return
 
     loadingStates.value.set(caseId, true)
     try {
-      const comments = await api!.caseComments.list(caseId)
+      const comments = await api.caseComments.list(caseId)
       commentsCache.value.set(caseId, comments)
     } catch (error) {
       console.error('Failed to load comments:', error)
@@ -69,8 +70,9 @@ export function useCaseComments() {
     caseId: number,
     category: CommentCategory,
     content: string
-  ): Promise<CaseComment> {
-    const comment = await api!.caseComments.create(caseId, category, content)
+  ): Promise<CaseComment | null> {
+    if (!api) return null
+    const comment = await api.caseComments.create(caseId, category, content)
 
     // Add to cache (newest first)
     const cached = commentsCache.value.get(caseId) ?? []
@@ -81,7 +83,8 @@ export function useCaseComments() {
   }
 
   async function updateComment(caseId: number, commentId: number, content: string): Promise<void> {
-    const updated = await api!.caseComments.update(commentId, content)
+    if (!api) return
+    const updated = await api.caseComments.update(commentId, content)
 
     // Update in cache
     const cached = commentsCache.value.get(caseId)
@@ -96,7 +99,8 @@ export function useCaseComments() {
   }
 
   async function deleteComment(caseId: number, commentId: number): Promise<void> {
-    await api!.caseComments.delete(commentId)
+    if (!api) return
+    await api.caseComments.delete(commentId)
 
     // Remove from cache
     const cached = commentsCache.value.get(caseId)

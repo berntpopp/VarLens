@@ -37,9 +37,10 @@ export function useCaseMetrics() {
   })
 
   async function loadDefinitions(): Promise<void> {
+    if (!api) return
     if (definitionsLoaded.value) return
     try {
-      definitionsCache.value = await api!.caseMetrics.listDefinitions()
+      definitionsCache.value = await api.caseMetrics.listDefinitions()
       definitionsLoaded.value = true
     } catch (error) {
       console.error('Failed to load metric definitions:', error)
@@ -47,11 +48,12 @@ export function useCaseMetrics() {
   }
 
   async function loadMetrics(caseId: number): Promise<void> {
+    if (!api) return
     if (loadingStates.value.get(caseId) === true) return
 
     loadingStates.value.set(caseId, true)
     try {
-      const metrics = await api!.caseMetrics.listForCase(caseId)
+      const metrics = await api.caseMetrics.listForCase(caseId)
       metricsCache.value.set(caseId, metrics)
     } catch (error) {
       console.error('Failed to load case metrics:', error)
@@ -69,7 +71,8 @@ export function useCaseMetrics() {
   }
 
   async function upsertMetric(caseId: number, metricId: number, value: MetricValue): Promise<void> {
-    await api!.caseMetrics.upsert(caseId, metricId, value)
+    if (!api) return
+    await api.caseMetrics.upsert(caseId, metricId, value)
     // Reload to get joined data
     loadingStates.value.delete(caseId) // Allow reload
     metricsCache.value.delete(caseId)
@@ -77,7 +80,8 @@ export function useCaseMetrics() {
   }
 
   async function deleteMetric(caseId: number, metricId: number): Promise<void> {
-    await api!.caseMetrics.delete(caseId, metricId)
+    if (!api) return
+    await api.caseMetrics.delete(caseId, metricId)
 
     // Remove from cache
     const cached = metricsCache.value.get(caseId)
@@ -94,8 +98,9 @@ export function useCaseMetrics() {
     valueType: 'numeric' | 'text' | 'date',
     unit: string,
     category: string
-  ): Promise<MetricDefinition> {
-    const def = await api!.caseMetrics.createDefinition(name, valueType, unit, category)
+  ): Promise<MetricDefinition | null> {
+    if (!api) return null
+    const def = await api.caseMetrics.createDefinition(name, valueType, unit, category)
     definitionsCache.value.push(def)
     // Re-sort
     definitionsCache.value.sort(
