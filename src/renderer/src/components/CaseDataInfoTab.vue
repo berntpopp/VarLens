@@ -102,122 +102,25 @@
     />
 
     <!-- Gene List Editor Dialog -->
-    <v-dialog v-model="geneListDialog" max-width="640" persistent>
-      <v-card>
-        <v-card-title class="d-flex align-center">
-          <span>{{ editingGeneList ? 'Edit Gene List' : 'Create Gene List' }}</span>
-          <v-spacer />
-          <v-btn icon="mdi-close" variant="text" size="small" @click="geneListDialog = false" />
-        </v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="geneListName"
-            label="List name"
-            variant="outlined"
-            density="compact"
-            class="mb-3"
-            hide-details
-          />
-          <v-text-field
-            v-model="geneListDescription"
-            label="Description (optional)"
-            variant="outlined"
-            density="compact"
-            class="mb-3"
-            hide-details
-          />
-          <v-textarea
-            v-model="geneListGenesText"
-            label="Genes (one per line, or comma/semicolon separated)"
-            placeholder="BRCA1&#10;BRCA2&#10;TP53&#10;ATM"
-            variant="outlined"
-            density="compact"
-            rows="8"
-            hide-details
-          />
-          <div class="text-caption text-medium-emphasis mt-1">
-            {{ parsedGeneCount }} gene(s) recognized
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-btn v-if="editingGeneList" color="error" variant="text" @click="deleteCurrentGeneList">
-            Delete list
-          </v-btn>
-          <v-spacer />
-          <v-btn variant="text" @click="geneListDialog = false">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            :disabled="!geneListName.trim()"
-            :loading="savingGeneList"
-            @click="saveGeneList"
-          >
-            Save
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <GeneListEditorDialog
+      v-model="geneListDialog"
+      :gene-lists="geneLists"
+      :edit-gene-list-id="editGeneListId"
+      @saved="onGeneListSaved"
+      @deleted="onGeneListDeleted"
+    />
 
     <!-- Region File Import Dialog -->
-    <v-dialog v-model="regionFileDialog" max-width="500" persistent>
-      <v-card>
-        <v-card-title class="d-flex align-center">
-          <span>Import BED Region File</span>
-          <v-spacer />
-          <v-btn icon="mdi-close" variant="text" size="small" @click="regionFileDialog = false" />
-        </v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="regionFileName"
-            label="Region file name"
-            variant="outlined"
-            density="compact"
-            class="mb-3"
-            hide-details
-          />
-          <v-text-field
-            v-model="regionFileDescription"
-            label="Description (optional)"
-            variant="outlined"
-            density="compact"
-            class="mb-3"
-            hide-details
-          />
-          <v-btn
-            variant="outlined"
-            color="primary"
-            prepend-icon="mdi-file-upload-outline"
-            :loading="importingRegion"
-            @click="selectBedFile"
-          >
-            {{ selectedBedPath ? 'Change file...' : 'Select BED file...' }}
-          </v-btn>
-          <div v-if="selectedBedPath" class="text-body-2 mt-2">
-            {{ selectedBedBasename }}
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="regionFileDialog = false">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            :disabled="!regionFileName.trim() || !selectedBedPath"
-            :loading="importingRegion"
-            @click="importRegionFile"
-          >
-            Import
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <RegionFileImportDialog v-model="regionFileDialog" @imported="onRegionFileImported" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import ExternalIdsEditor from './case-data-info/ExternalIdsEditor.vue'
+import GeneListEditorDialog from './case-data-info/GeneListEditorDialog.vue'
 import PrefilteringSection from './case-data-info/PrefilteringSection.vue'
+import RegionFileImportDialog from './case-data-info/RegionFileImportDialog.vue'
 
 const props = defineProps<{
   caseId: number
@@ -273,20 +176,12 @@ const idTypeSuggestions = ref<string[]>([])
 const geneLists = ref<GeneListItem[]>([])
 const selectedGeneListId = ref<number | null>(null)
 const geneListDialog = ref(false)
-const editingGeneList = ref<number | null>(null)
-const geneListName = ref('')
-const geneListDescription = ref('')
-const geneListGenesText = ref('')
-const savingGeneList = ref(false)
+const editGeneListId = ref<number | null>(null)
 
 // Region files
 const regionFiles = ref<RegionFileItem[]>([])
 const selectedRegionFileId = ref<number | null>(null)
 const regionFileDialog = ref(false)
-const regionFileName = ref('')
-const regionFileDescription = ref('')
-const selectedBedPath = ref('')
-const importingRegion = ref(false)
 
 const geneListItems = computed(() =>
   geneLists.value.map((gl) => ({
@@ -301,24 +196,6 @@ const regionFileItems = computed(() =>
     value: rf.id
   }))
 )
-
-const parsedGeneCount = computed(() => {
-  const genes = parseGeneText(geneListGenesText.value)
-  return genes.length
-})
-
-const selectedBedBasename = computed(() => {
-  if (!selectedBedPath.value) return ''
-  const parts = selectedBedPath.value.split(/[/\\]/)
-  return parts[parts.length - 1]
-})
-
-function parseGeneText(text: string): string[] {
-  return text
-    .split(/[\n,;]+/)
-    .map((g) => g.trim().toUpperCase())
-    .filter((g) => g !== '')
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getApi(): any {
@@ -428,114 +305,36 @@ function onPlatformChange(): void {
 }
 
 function openGeneListEditor(): void {
-  if (selectedGeneListId.value != null) {
-    // Edit existing
-    const gl = geneLists.value.find((g) => g.id === selectedGeneListId.value)
-    if (gl != null) {
-      editingGeneList.value = gl.id
-      geneListName.value = gl.name
-      geneListDescription.value = ''
-      // Load genes
-      getApi()
-        .geneLists.getGenes(gl.id)
-        .then((genes: string[]) => {
-          geneListGenesText.value = genes.join('\n')
-        })
-    }
-  } else {
-    // Create new
-    editingGeneList.value = null
-    geneListName.value = ''
-    geneListDescription.value = ''
-    geneListGenesText.value = ''
-  }
+  editGeneListId.value = selectedGeneListId.value
   geneListDialog.value = true
 }
 
-async function saveGeneList(): Promise<void> {
-  const name = geneListName.value.trim()
-  if (name === '') return
-  savingGeneList.value = true
-  try {
-    const api = getApi().geneLists
-    let listId: number
-    if (editingGeneList.value != null) {
-      listId = editingGeneList.value
-    } else {
-      const created = await api.create(name, geneListDescription.value.trim() || null)
-      listId = created.id
-    }
-    const genes = parseGeneText(geneListGenesText.value)
-    await api.setGenes(listId, genes)
-
-    // Refresh lists
-    geneLists.value = await api.list()
-    selectedGeneListId.value = listId
-    await save()
-    geneListDialog.value = false
-  } catch {
-    // Silently fail
-  } finally {
-    savingGeneList.value = false
-  }
+async function onGeneListSaved(payload: {
+  listId: number
+  geneLists: GeneListItem[]
+}): Promise<void> {
+  geneLists.value = payload.geneLists
+  selectedGeneListId.value = payload.listId
+  await save()
 }
 
-async function deleteCurrentGeneList(): Promise<void> {
-  if (editingGeneList.value == null) return
-  try {
-    await getApi().geneLists.delete(editingGeneList.value)
-    geneLists.value = await getApi().geneLists.list()
-    selectedGeneListId.value = null
-    await save()
-    geneListDialog.value = false
-  } catch {
-    // Silently fail
-  }
+async function onGeneListDeleted(payload: { geneLists: GeneListItem[] }): Promise<void> {
+  geneLists.value = payload.geneLists
+  selectedGeneListId.value = null
+  await save()
 }
 
 function openRegionFileImport(): void {
-  regionFileName.value = ''
-  regionFileDescription.value = ''
-  selectedBedPath.value = ''
   regionFileDialog.value = true
 }
 
-async function selectBedFile(): Promise<void> {
-  try {
-    const result = await getApi().import.selectFile()
-    if (typeof result === 'string') {
-      selectedBedPath.value = result
-      // Auto-fill name from filename if empty
-      if (regionFileName.value.trim() === '') {
-        const parts = result.split(/[/\\]/)
-        const basename = parts[parts.length - 1]
-        regionFileName.value = basename.replace(/\.bed$/i, '')
-      }
-    }
-  } catch {
-    // Silently fail
-  }
-}
-
-async function importRegionFile(): Promise<void> {
-  const name = regionFileName.value.trim()
-  if (name === '' || !selectedBedPath.value) return
-  importingRegion.value = true
-  try {
-    const api = getApi().regionFiles
-    const created = await api.create(name, regionFileDescription.value.trim() || null)
-    await api.importBed(created.id, selectedBedPath.value)
-
-    // Refresh lists
-    regionFiles.value = await api.list()
-    selectedRegionFileId.value = created.id
-    await save()
-    regionFileDialog.value = false
-  } catch {
-    // Silently fail
-  } finally {
-    importingRegion.value = false
-  }
+async function onRegionFileImported(payload: {
+  regionFileId: number
+  regionFiles: RegionFileItem[]
+}): Promise<void> {
+  regionFiles.value = payload.regionFiles
+  selectedRegionFileId.value = payload.regionFileId
+  await save()
 }
 
 watch(() => props.caseId, loadDataInfo, { immediate: true })
