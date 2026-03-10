@@ -23,11 +23,11 @@
       :cohort-summary="summary"
       :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
       :visible-columns="visibleHeaders.map((h) => h.key)"
-      :exporting="exporting"
+      :exporting="annotationDialogsRef?.exporting ?? false"
       @filter-change="handleFilterChange"
       @clear-all="handleClearAll"
       @clear-filter="handleClearFilter"
-      @export="exportToExcel"
+      @export="handleExport"
       @toggle-column="toggleColumnVisibility"
       @reorder-columns="setColumnOrder"
       @reset-columns="resetToDefaults"
@@ -47,71 +47,40 @@
       :get-global-comment="getGlobalComment"
       @update:options="handleTableOptions"
       @row-click="handleRowClick"
-      @star-toggle="handleGlobalStarToggle"
-      @acmg-select="handleGlobalAcmgSelect"
-      @acmg-evidence-click="openAcmgEvidenceDialog"
-      @comment-click="openCommentDialog"
+      @star-toggle="handleStarToggle"
+      @acmg-select="handleAcmgSelect"
+      @acmg-evidence-click="handleAcmgEvidenceClick"
+      @comment-click="handleCommentClick"
       @navigate-to-case="handleNavigateToCase"
       @load-carriers="handleLoadCarriers"
       @column-filters-change="handleColumnFiltersChange"
     />
 
-    <!-- Comment Dialog -->
-    <CommentDialog
-      v-model="commentDialogOpen"
-      :global-comment="selectedVariantComment"
-      :per-case-comment="null"
-      :global-timestamps="selectedVariantTimestamps"
-      :per-case-timestamps="null"
-      @save="handleCommentSave"
+    <!-- Annotation Dialogs (Comment, ACMG Evidence, Snackbar) -->
+    <CohortAnnotationDialogs
+      ref="annotationDialogsRef"
+      :annotation-actions="annotationActions"
+      :filter-state="filterState"
     />
-
-    <!-- ACMG Evidence Dialog -->
-    <AcmgEvidenceDialog
-      ref="acmgEvidenceDialogRef"
-      :evidence-json="acmgEvidenceJson"
-      :variant-data="acmgVariantData"
-      :variant-label="acmgVariantLabel"
-      :variant-cdna="selectedVariantForAcmg?.cdna ?? null"
-      :variant-aa-change="selectedVariantForAcmg?.aa_change ?? null"
-      @change="handleAcmgEvidenceChange"
-    />
-
-    <!-- Success Snackbar -->
-    <v-snackbar
-      v-model="snackbar.visible"
-      :color="snackbar.color"
-      :timeout="snackbar.timeout"
-      location="bottom right"
-    >
-      {{ snackbar.message }}
-      <template #actions>
-        <v-btn v-if="snackbar.actionText" variant="text" @click="snackbar.actionCallback?.()">
-          {{ snackbar.actionText }}
-        </v-btn>
-        <v-btn variant="text" @click="snackbar.visible = false">Close</v-btn>
-      </template>
-    </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, nextTick } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 // Composables
 import { useCohortData } from '../composables/useCohortData'
 import { useFilters } from '../composables/useFilters'
 import { useCarriers } from '../composables/useCarriers'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
-import { useApiService } from '../composables/useApiService'
 // Sub-components
 import CohortFilterBar from './cohort/CohortFilterBar.vue'
 import CohortDataTable from './cohort/CohortDataTable.vue'
-import CommentDialog from './CommentDialog.vue'
-import AcmgEvidenceDialog from './AcmgEvidenceDialog.vue'
+import CohortAnnotationDialogs from './cohort/CohortAnnotationDialogs.vue'
+// Column composable
+import { useCohortColumns } from './cohort/useCohortColumns'
 // Types
 import type { CohortVariant, CohortPaginationCursor } from '../../../shared/types/cohort'
-import type { AcmgClassification } from '../../../main/database/types'
 
 // Emit for navigation and row click
 const emit = defineEmits<{
@@ -130,7 +99,6 @@ const emit = defineEmits<{
 }>()
 
 // Composables
-const { api } = useApiService()
 const { variants, totalCount, isLoading, error, summary, nextCursor, fetchVariants, fetchSummary } =
   useCohortData()
 
@@ -159,6 +127,9 @@ const {
 const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
   useColumnPreferences('cohort-table')
 
+// Column management
+const { orderedColumns, visibleHeaders } = useCohortColumns(prefs)
+
 // Per-column text filters from CohortDataTable
 const cohortColumnFilters = ref<Record<string, string> | undefined>(undefined)
 
@@ -167,110 +138,25 @@ const cohortColumnFilters = ref<Record<string, string> | undefined>(undefined)
 // @ts-expect-error - ref is used in template
 const dataTableRef = ref()
 const selectedVariantKey = ref<string | null>(null)
-const commentDialogOpen = ref(false)
-const selectedVariantForComment = ref<CohortVariant | null>(null)
+const annotationDialogsRef = ref<InstanceType<typeof CohortAnnotationDialogs> | null>(null)
 
-// ACMG evidence dialog state
-const acmgEvidenceDialogRef = ref<InstanceType<typeof AcmgEvidenceDialog> | null>(null)
-const selectedVariantForAcmg = ref<CohortVariant | null>(null)
+// Annotation actions passed to CohortAnnotationDialogs
+const annotationActions = {
+  toggleGlobalStar,
+  setGlobalAcmgClassification,
+  setGlobalAcmgClassificationWithEvidence,
+  upsertGlobalComment,
+  getGlobalAcmgEvidence,
+  getGlobalComment,
+  getAnnotations
+}
 
-const acmgEvidenceJson = computed(() => {
-  const v = selectedVariantForAcmg.value
-  if (v === null) return null
-  return getGlobalAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
-})
-
-const acmgVariantData = computed(() => {
-  const v = selectedVariantForAcmg.value
-  if (v === null) return null
-  return {
-    gnomad_af: v.gnomad_af ?? null,
-    cadd: v.cadd_phred ?? null,
-    clinvar: v.clinvar ?? null
-  }
-})
-
-const acmgVariantLabel = computed(() => {
-  const v = selectedVariantForAcmg.value
-  if (v === null) return ''
-  return `${v.chr}:${v.pos} ${v.ref}>${v.alt}${v.gene_symbol !== null ? ` (${v.gene_symbol})` : ''}`
-})
-
-const exporting = ref(false)
-const snackbar = ref({
-  visible: false,
-  message: '',
-  color: 'success' as 'success' | 'error',
-  timeout: 3000,
-  actionText: null as string | null,
-  actionCallback: null as (() => void) | null
-})
-
-// Base headers definition - matching Case Analysis columns where applicable
-// Note: 'data-table-expand' header puts expand button on left side
-const baseHeaders = [
-  { title: '', key: 'data-table-expand', sortable: false, width: '40px' },
-  { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' as const },
-  { title: 'Chr', key: 'chr', sortable: true },
-  { title: 'Position', key: 'pos', sortable: true, align: 'end' as const },
-  { title: 'Ref', key: 'ref', sortable: false, width: '80px' },
-  { title: 'Alt', key: 'alt', sortable: false, width: '80px' },
-  { title: 'Gene', key: 'gene_symbol', sortable: true },
-  { title: 'Transcript', key: 'transcript', sortable: true },
-  { title: 'cDNA', key: 'cdna', sortable: true },
-  { title: 'AA Change', key: 'aa_change', sortable: true },
-  { title: 'Consequence', key: 'consequence', sortable: true },
-  { title: 'Func', key: 'func', sortable: true },
-  { title: 'ClinVar', key: 'clinvar', sortable: true },
-  { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' as const },
-  { title: 'CADD', key: 'cadd_phred', sortable: true, align: 'end' as const },
-  { title: 'Carriers', key: 'carrier_count', sortable: true, align: 'end' as const },
-  { title: 'Cohort Freq', key: 'cohort_frequency', sortable: true, align: 'end' as const },
-  { title: 'Het / Hom', key: 'het_count', sortable: true }
-]
-
-// Ordered columns based on user preferences
-const orderedColumns = computed(() => {
-  if (prefs.value.order.length > 0) {
-    return [...baseHeaders].sort((a, b) => {
-      const aIdx = prefs.value.order.indexOf(a.key)
-      const bIdx = prefs.value.order.indexOf(b.key)
-      if (aIdx === -1 && bIdx === -1) return 0
-      if (aIdx === -1) return 1
-      if (bIdx === -1) return -1
-      return aIdx - bIdx
-    })
-  }
-  return baseHeaders
-})
-
-// Visible headers based on user preferences
-const visibleHeaders = computed(() => {
-  return orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false)
-})
-
-// Computed properties for comment dialog
-const selectedVariantComment = computed(() => {
-  if (!selectedVariantForComment.value) return null
-  return getGlobalComment(
-    selectedVariantForComment.value.chr,
-    selectedVariantForComment.value.pos,
-    selectedVariantForComment.value.ref,
-    selectedVariantForComment.value.alt
-  )
-})
-
-const selectedVariantTimestamps = computed(() => {
-  if (!selectedVariantForComment.value) return null
-  const annotations = getAnnotations(
-    selectedVariantForComment.value.chr,
-    selectedVariantForComment.value.pos,
-    selectedVariantForComment.value.ref,
-    selectedVariantForComment.value.alt
-  )
-  if (!annotations?.global) return null
-  return { created_at: annotations.global.created_at, updated_at: annotations.global.updated_at }
-})
+// Filter state passed to CohortAnnotationDialogs for export
+const filterState = {
+  searchTerm,
+  filters,
+  selectedImpactPresets
+}
 
 // Build query params from filter state
 // NOTE: buildQueryParams is temporary scaffolding. Phase 28 (DRY-07, DRY-09) will
@@ -389,66 +275,28 @@ const handleRetry = async () => {
   await fetchVariants(buildQueryParams())
 }
 
-const handleGlobalStarToggle = async (item: CohortVariant) => {
-  await toggleGlobalStar(item.chr, item.pos, item.ref, item.alt)
+// Delegate annotation events to CohortAnnotationDialogs
+const handleStarToggle = (item: CohortVariant) => {
+  annotationDialogsRef.value?.handleStarToggle(item)
 }
 
-const handleGlobalAcmgSelect = async (payload: {
+const handleAcmgSelect = (payload: {
   item: CohortVariant
-  classification: AcmgClassification | null
+  classification: import('../../../main/database/types').AcmgClassification | null
 }) => {
-  await setGlobalAcmgClassification(
-    payload.item.chr,
-    payload.item.pos,
-    payload.item.ref,
-    payload.item.alt,
-    payload.classification
-  )
+  annotationDialogsRef.value?.handleAcmgSelect(payload)
 }
 
-const openAcmgEvidenceDialog = (item: CohortVariant): void => {
-  selectedVariantForAcmg.value = item
-  nextTick(() => {
-    acmgEvidenceDialogRef.value?.open()
-  })
+const handleAcmgEvidenceClick = (item: CohortVariant) => {
+  annotationDialogsRef.value?.openAcmgEvidenceDialog(item)
 }
 
-const handleAcmgEvidenceChange = async (payload: {
-  classification: AcmgClassification | null
-  evidenceJson: string
-}): Promise<void> => {
-  const v = selectedVariantForAcmg.value
-  if (v === null) return
-  await setGlobalAcmgClassificationWithEvidence(
-    v.chr,
-    v.pos,
-    v.ref,
-    v.alt,
-    payload.classification,
-    payload.evidenceJson
-  )
+const handleCommentClick = (item: CohortVariant) => {
+  annotationDialogsRef.value?.openCommentDialog(item)
 }
 
-const openCommentDialog = (item: CohortVariant) => {
-  selectedVariantForComment.value = item
-  commentDialogOpen.value = true
-}
-
-const handleCommentSave = async (data: {
-  globalComment: string | null
-  perCaseComment: string | null
-  globalChanged: boolean
-  perCaseChanged: boolean
-}) => {
-  if (!selectedVariantForComment.value) return
-  const item = selectedVariantForComment.value
-
-  // In cohort mode, only save global comments
-  if (data.globalChanged) {
-    await upsertGlobalComment(item.chr, item.pos, item.ref, item.alt, data.globalComment)
-  }
-
-  commentDialogOpen.value = false
+const handleExport = () => {
+  annotationDialogsRef.value?.exportToExcel()
 }
 
 const handleNavigateToCase = (payload: { caseId: number; item: CohortVariant }) => {
@@ -465,62 +313,6 @@ const handleNavigateToCase = (payload: { caseId: number; item: CohortVariant }) 
 
 const handleLoadCarriers = async (variant: CohortVariant) => {
   await loadCarriers(variant)
-}
-
-// Export to Excel
-const exportToExcel = async () => {
-  // Guard for browser dev mode (no preload)
-  if (!api) {
-    // eslint-disable-next-line no-undef
-    console.warn('API not available - running outside Electron')
-    return
-  }
-
-  exporting.value = true
-  try {
-    // Build export params without pagination
-    const exportParams = {
-      search_term: searchTerm.value || undefined,
-      gene_symbol: filters.value.geneSymbol || undefined,
-      consequences:
-        selectedImpactPresets.value.length > 0 ? selectedImpactPresets.value : undefined,
-      funcs: filters.value.funcs.length > 0 ? filters.value.funcs : undefined,
-      clinvars: filters.value.clinvars.length > 0 ? filters.value.clinvars : undefined,
-      gnomad_af_max: filters.value.maxGnomadAf ?? undefined,
-      cadd_min: filters.value.minCadd ?? undefined,
-      cohort_frequency_min: filters.value.minCohortFrequency ?? undefined
-    }
-
-    // Deep clone to strip Vue proxies
-    const plainParams = globalThis.structuredClone(exportParams)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (api as any).export.cohort(plainParams)
-
-    if (result !== null && result !== undefined && 'code' in result) {
-      snackbar.value = {
-        visible: true,
-        message: `Export failed: ${result.message ?? result.userMessage ?? 'Unknown error'}`,
-        color: 'error',
-        timeout: -1,
-        actionText: null,
-        actionCallback: null
-      }
-    } else if (result !== null && result !== undefined && result.success === true) {
-      snackbar.value = {
-        visible: true,
-        message: `Exported to ${result.filePath}`,
-        color: 'success',
-        timeout: 3000,
-        actionText: 'Open folder',
-        actionCallback: () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(api as any).shell.showItemInFolder(result.filePath)
-        }
-      }
-    }
-  } finally {
-    exporting.value = false
-  }
 }
 
 // Watch variants and load annotations
