@@ -1,6 +1,6 @@
 # Supported Formats
 
-VarLens supports several data formats for variant import.
+VarLens supports several JSON-based data formats for variant import.
 
 ## JSON Columnar Format
 
@@ -53,7 +53,7 @@ The most common format. Data is organized with a header array describing columns
 | `ClinVSig` / `ClinVar` | ClinVar significance | |
 | `GTNum-Index` / `Genotype` | Genotype | |
 | `HpoSimScore` | HPO similarity | Dictionary type |
-| `MoI` | Mode of inheritance | Dictionary: AD, AR, XL |
+| `MoI` | Mode of inheritance | Dictionary: AD, AR, XLD, etc. |
 | `Omim` | OMIM number | |
 
 ## JSON Object Format
@@ -95,10 +95,6 @@ A flat array of variant objects:
   ]
 }
 ```
-
-## VCF Format
-
-Standard VCF v4.x files are supported with VEP/CSQ annotations in the INFO field. Annotations are parsed from the `CSQ` key following VEP output conventions.
 
 ## Compression
 

@@ -2,10 +2,11 @@
 
 VarLens supports keyboard shortcuts for common actions.
 
-| Shortcut | Action |
-|----------|--------|
-| `Escape` | Close open panel or dialog |
-
-::: tip
-Additional keyboard shortcuts may be added in future releases. Check the application's Help menu for the most current list.
-:::
+| Shortcut (Windows/Linux) | Shortcut (macOS) | Action |
+|--------------------------|------------------|--------|
+| `Escape` | `Escape` | Close open panel or dialog |
+| `Ctrl+Shift+F` | `Cmd+Shift+F` | Toggle filter drawer |
+| `Ctrl+Shift+C` | `Cmd+Shift+C` | Toggle columns drawer |
+| `Ctrl+L` | `Cmd+L` | Open log viewer |
+| `Ctrl+Shift+D` | `Cmd+Shift+D` | Show disclaimer |
+| `Ctrl+Shift+Q` | `Cmd+Shift+Q` | Show FAQ |

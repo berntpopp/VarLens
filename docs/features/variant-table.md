@@ -27,7 +27,7 @@ The table includes the following columns by default:
 | Qual | Variant call quality score |
 | ClinVar | ClinVar clinical significance |
 | HPO Sim | HPO similarity score |
-| MOI | Mode of inheritance (AD, AR, XL) |
+| MOI | Mode of inheritance (AD, AR, XLD, etc.) |
 
 ## Column Customization
 

@@ -10,13 +10,13 @@ VarLens is a desktop application for offline genetic variant analysis. It is des
 
 ## Key Capabilities
 
-- **Import** variant data from JSON or VCF files (single or batch)
+- **Import** variant data from JSON files (single or batch)
 - **Browse** variants in a sortable, filterable data table
 - **Filter** by gene, consequence, allele frequency, pathogenicity scores, and more
 - **Annotate** variants with stars, comments, tags, and ACMG classifications
 - **Enrich** variants on-demand with VEP, SpliceAI, and MyVariant.info
 - **Analyze cohorts** with carrier aggregation and gene burden testing (Fisher's exact test)
-- **Export** filtered results to CSV or TSV
+- **Export** filtered results to Excel (XLSX)
 
 ## Architecture
 

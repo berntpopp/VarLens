@@ -32,15 +32,11 @@ The case and all its variants are permanently removed from the database. Global 
 
 ### My import is slow. What can I do?
 
-Large files (>100,000 variants) take longer to import. The import streams data to avoid memory issues, but SQLite writes are the bottleneck. Ensure your disk is not heavily loaded during import.
+Large files (>100,000 variants) take longer to import. SQLite writes are the main bottleneck. Ensure your disk is not heavily loaded during import.
 
 ### Can I import multiple files at once?
 
 Yes, use the batch import feature to process multiple files sequentially.
-
-### My VCF file fails to import. Why?
-
-VarLens expects VEP-annotated VCF files with a `CSQ` field in the INFO column. Plain VCF files without VEP annotations may import with limited data.
 
 ## Analysis
 
@@ -50,4 +46,4 @@ VarLens implements the ACMG/AMP evidence framework with Bayesian point-based sco
 
 ### Can I export my results?
 
-Yes, use the export feature to download filtered variants as CSV or TSV. Export respects your current filters and column selection.
+Yes, use the export feature to download filtered variants as an Excel file (XLSX). Export respects your current filters and column selection.

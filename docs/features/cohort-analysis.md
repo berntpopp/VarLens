@@ -19,7 +19,12 @@ The cohort table shows:
 
 ## Gene Burden Analysis
 
-VarLens includes gene burden testing using Fisher's exact test to identify genes with statistically significant variant enrichment in affected versus unaffected cases.
+VarLens includes gene burden testing to identify genes with statistically significant variant enrichment:
+
+- **Fisher's exact test** — p-value, odds ratio, and 95% confidence interval
+- **Logistic burden test** — p-value and beta coefficient
+- **FDR-adjusted q-values** for multiple testing correction
+- **Volcano plot and Manhattan plot** visualizations of results
 
 ## Filtering
 
