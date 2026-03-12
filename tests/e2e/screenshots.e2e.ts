@@ -539,8 +539,9 @@ test.describe('Documentation Screenshots', () => {
         const modeToggle = appBar.querySelector('.mode-toggle')
         if (modeToggle) items.push({ el: modeToggle, num: 3, label: 'Case / Cohort', clr: purple })
 
-        const dbLabel = appBar.querySelector('.text-body-medium')
-        if (dbLabel) items.push({ el: dbLabel, num: 4, label: 'Database', clr: orange })
+        // DatabasePicker is a .text-none button containing the db name
+        const dbBtn = appBar.querySelector('.v-btn.text-none')
+        if (dbBtn) items.push({ el: dbBtn, num: 4, label: 'Database', clr: orange })
 
         const gearIcon = appBar.querySelector('.mdi-cog')
         const gearBtn = gearIcon?.closest('.v-btn')
