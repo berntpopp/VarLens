@@ -1,4 +1,4 @@
-.PHONY: help rebuild dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build
+.PHONY: help rebuild dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build docs docs-dev docs-preview docs-screenshots
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -124,6 +124,22 @@ ci-build: ci-full ## Run full CI + build (like GitHub Actions with dist)
 	@echo "=== CI + Build PASSED ==="
 
 all: ci build ## Run CI checks and build
+
+#---------------------------------------------------------------------------
+# Documentation
+#---------------------------------------------------------------------------
+
+docs: ## Build documentation site
+	npm run docs:build
+
+docs-dev: ## Start documentation dev server
+	npm run docs:dev
+
+docs-preview: ## Preview built documentation site
+	npm run docs:preview
+
+docs-screenshots: rebuild build ## Generate documentation screenshots from Electron app
+	npm run docs:screenshots
 
 #---------------------------------------------------------------------------
 # Setup & Cleanup
