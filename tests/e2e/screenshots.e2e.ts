@@ -27,18 +27,19 @@ async function saveScreenshot(page: Page, name: string): Promise<void> {
 }
 
 /**
- * Add a highlight overlay around an element for documentation screenshots.
- * Draws a colored border with optional label. Returns a cleanup function.
+ * Add a bold highlight box around an element for documentation screenshots.
+ * Uses a bright red/coral border with a labeled badge for maximum visibility.
  */
 async function addHighlight(
   page: Page,
   selector: string,
-  options?: { label?: string; color?: string }
+  options?: { label?: string; color?: string; padding?: number }
 ): Promise<void> {
-  const color = options?.color ?? 'rgba(160, 149, 136, 0.9)'
+  const color = options?.color ?? '#e74c3c'
   const label = options?.label ?? ''
+  const padding = options?.padding ?? 4
   await page.evaluate(
-    ({ sel, clr, lbl }) => {
+    ({ sel, clr, lbl, pad }) => {
       const el = document.querySelector(sel)
       if (!el) return
       const rect = el.getBoundingClientRect()
@@ -46,36 +47,94 @@ async function addHighlight(
       overlay.className = 'screenshot-highlight'
       overlay.style.cssText = `
         position: fixed;
-        top: ${rect.top - 3}px;
-        left: ${rect.left - 3}px;
-        width: ${rect.width + 6}px;
-        height: ${rect.height + 6}px;
+        top: ${rect.top - pad}px;
+        left: ${rect.left - pad}px;
+        width: ${rect.width + pad * 2}px;
+        height: ${rect.height + pad * 2}px;
         border: 3px solid ${clr};
-        border-radius: 6px;
+        border-radius: 8px;
         pointer-events: none;
         z-index: 99999;
-        box-shadow: 0 0 0 2000px rgba(0,0,0,0.05);
       `
       if (lbl) {
         const labelEl = document.createElement('div')
         labelEl.style.cssText = `
           position: absolute;
-          top: -24px;
-          left: 4px;
+          top: -28px;
+          left: 8px;
           background: ${clr};
           color: white;
-          padding: 2px 8px;
+          padding: 3px 10px;
           border-radius: 4px;
-          font-size: 12px;
-          font-weight: 600;
+          font-size: 13px;
+          font-weight: 700;
           white-space: nowrap;
+          letter-spacing: 0.3px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         `
         labelEl.textContent = lbl
         overlay.appendChild(labelEl)
       }
       document.body.appendChild(overlay)
     },
-    { sel: selector, clr: color, lbl: label }
+    { sel: selector, clr: color, lbl: label, pad: padding }
+  )
+}
+
+/**
+ * Add a numbered callout circle at a specific element for annotation.
+ */
+async function addCallout(
+  page: Page,
+  selector: string,
+  number: number,
+  options?: { color?: string; position?: 'top-right' | 'top-left' | 'center' }
+): Promise<void> {
+  const color = options?.color ?? '#e74c3c'
+  const position = options?.position ?? 'top-right'
+  await page.evaluate(
+    ({ sel, num, clr, pos }) => {
+      const el = document.querySelector(sel)
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const callout = document.createElement('div')
+      callout.className = 'screenshot-highlight'
+
+      let top: number, left: number
+      if (pos === 'top-left') {
+        top = rect.top - 12
+        left = rect.left - 12
+      } else if (pos === 'center') {
+        top = rect.top + rect.height / 2 - 14
+        left = rect.left + rect.width / 2 - 14
+      } else {
+        top = rect.top - 12
+        left = rect.right - 12
+      }
+
+      callout.style.cssText = `
+        position: fixed;
+        top: ${top}px;
+        left: ${left}px;
+        width: 28px;
+        height: 28px;
+        background: ${clr};
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 800;
+        pointer-events: none;
+        z-index: 99999;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        border: 2px solid white;
+      `
+      callout.textContent = String(num)
+      document.body.appendChild(callout)
+    },
+    { sel: selector, num: number, clr: color, pos: position }
   )
 }
 
@@ -168,7 +227,7 @@ test.describe('Documentation Screenshots', () => {
       await plusBtn.click()
       await window.waitForTimeout(800)
       // Highlight the import menu dropdown
-      await addHighlight(window, '.v-menu .v-list', { label: 'Import options' })
+      await addHighlight(window, '.v-overlay--active .v-list', { label: 'Import options' })
       await window.waitForTimeout(300)
       await saveScreenshot(window, 'import-menu')
       await clearHighlights(window)
@@ -202,13 +261,8 @@ test.describe('Documentation Screenshots', () => {
     const caseItem = window.locator('.v-list-item').filter({ hasText: /DemoCase/ })
     await caseItem.waitFor({ timeout: 15000 })
 
-    // Highlight the sidebar case list
-    await addHighlight(window, '.v-navigation-drawer', { label: 'Case sidebar' })
-    await window.waitForTimeout(300)
-
-    // Screenshot: case list with sidebar highlighted
+    // Screenshot: case list (clean, no highlights — sidebar speaks for itself)
     await saveScreenshot(window, 'case-list')
-    await clearHighlights(window)
 
     // Click the case to load variants
     await caseItem.click()
@@ -227,54 +281,96 @@ test.describe('Documentation Screenshots', () => {
   })
 
   test('05 - filters active', async () => {
-    // Open the filter drawer using keyboard shortcut Ctrl+Shift+F
-    await window.keyboard.press('Control+Shift+f')
-    await window.waitForTimeout(1500)
-
-    // Highlight the filter drawer
-    const filterDrawer = window.locator(
-      '.v-navigation-drawer--active, .v-navigation-drawer:not(.v-navigation-drawer--close)'
-    )
-    if ((await filterDrawer.count()) > 0) {
-      await addHighlight(
-        window,
-        '.v-navigation-drawer--active, .v-navigation-drawer:not(.v-navigation-drawer--close)',
-        { label: 'Filter drawer' }
-      )
-      await window.waitForTimeout(300)
+    // Click the "Filters" button in the toolbar to open the filter drawer
+    const filtersBtn = window.locator('button:has-text("Filters")')
+    if ((await filtersBtn.count()) > 0) {
+      await filtersBtn.first().click()
+      await window.waitForTimeout(1500)
     }
 
+    // Verify filter drawer is open by looking for the "All Filters" title
+    const allFiltersTitle = window.locator('text=All Filters')
+    const drawerOpen = await allFiltersTitle.isVisible().catch(() => false)
+
+    if (drawerOpen) {
+      // Highlight the filter drawer (right-side navigation drawer)
+      await addHighlight(window, '.v-navigation-drawer[location="right"]', {
+        label: 'Filter drawer',
+        color: '#e74c3c'
+      })
+    }
+
+    await window.waitForTimeout(300)
     await saveScreenshot(window, 'filters-active')
     await clearHighlights(window)
 
-    // Close the filter drawer
-    await window.keyboard.press('Control+Shift+f')
+    // Close the filter drawer — click the scrim overlay or press Escape
+    const scrim = window.locator('.v-navigation-drawer__scrim')
+    if ((await scrim.count()) > 0 && (await scrim.isVisible().catch(() => false))) {
+      await scrim.click({ force: true })
+    } else {
+      await window.keyboard.press('Escape')
+    }
     await window.waitForTimeout(500)
   })
 
   test('06 - column filters', async () => {
-    // Per-column text filters are shown above table columns
-    // Highlight the filter row in the table header
-    await addHighlight(window, '.v-data-table-header', { label: 'Column filters' })
+    // Column filter inputs are in the table header area
+    // The header contains sortable columns with filter icons
+    await window.waitForTimeout(300)
+
+    // Try multiple selectors for the table header
+    const headerSelectors = [
+      'thead',
+      '.v-data-table thead',
+      '.v-data-table-header',
+      'th:first-child'
+    ]
+    let matched = false
+    for (const sel of headerSelectors) {
+      const count = await window.locator(sel).count()
+      if (count > 0) {
+        await addHighlight(window, sel, {
+          label: 'Per-column filters & sorting',
+          color: '#e74c3c'
+        })
+        matched = true
+        break
+      }
+    }
     await window.waitForTimeout(300)
     await saveScreenshot(window, 'column-filters')
     await clearHighlights(window)
   })
 
   test('07 - variant details panel', async () => {
+    // Ensure no overlays are blocking
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
     // Click a row to open the variant details panel
     const firstRow = window.locator('.v-data-table__tr').first()
-    await firstRow.click()
+    await firstRow.click({ timeout: 10000 })
     await window.waitForTimeout(1500)
 
-    // Wait for the panel to appear
-    const panel = window.locator('.v-navigation-drawer--right, .v-navigation-drawer--temporary')
-    if (await panel.isVisible().catch(() => false)) {
-      await addHighlight(window, '.v-navigation-drawer--right, .v-navigation-drawer--temporary', {
-        label: 'Variant details'
-      })
-      await window.waitForTimeout(500)
+    // Wait for the details panel to appear (right-side temporary drawer)
+    // Try multiple selectors to find the visible panel
+    const panelSelectors = [
+      '.v-navigation-drawer--temporary.v-navigation-drawer--active',
+      '.v-navigation-drawer--temporary',
+      '.v-navigation-drawer--right'
+    ]
+    for (const sel of panelSelectors) {
+      const panel = window.locator(sel)
+      if ((await panel.count()) > 0 && (await panel.isVisible().catch(() => false))) {
+        await addHighlight(window, sel, {
+          label: 'Variant details panel',
+          color: '#e74c3c'
+        })
+        break
+      }
     }
+    await window.waitForTimeout(500)
 
     await saveScreenshot(window, 'variant-details')
     await clearHighlights(window)
@@ -285,26 +381,18 @@ test.describe('Documentation Screenshots', () => {
     await window.keyboard.press('Escape')
     await window.waitForTimeout(500)
 
-    // Open case metadata via the info button next to the case name in the header
-    // The case info button is typically in the app bar showing the case name
-    const infoBtn = window.locator('.v-app-bar .v-btn:has(.mdi-information), button:has(.mdi-information-outline)').first()
+    // Open case metadata by clicking the info icon next to case name in the header
+    const infoBtn = window
+      .locator(
+        '.v-app-bar .v-btn:has(.mdi-information), button:has(.mdi-information-outline)'
+      )
+      .first()
     if ((await infoBtn.count()) > 0) {
       await infoBtn.click()
       await window.waitForTimeout(1000)
     } else {
-      // Try the sidebar info icon next to the case name
+      // Fallback: click the case name area in the app bar
       await window.evaluate(() => {
-        // Trigger showCaseMetadata via the AppDialogHost
-        const appEl = document.querySelector('.v-application') as HTMLElement & {
-          __vue_app__: {
-            config: {
-              globalProperties: {
-                $root: { $refs: Record<string, { showCaseMetadata?: () => void }> }
-              }
-            }
-          }
-        }
-        // Try emitting the event by clicking the case name area
         const caseNameHeader = document.querySelector(
           '.v-app-bar .text-body-large, .v-app-bar .v-toolbar-title'
         )
@@ -315,10 +403,13 @@ test.describe('Documentation Screenshots', () => {
       await window.waitForTimeout(1000)
     }
 
-    // Check if dialog is open
-    const dialog = window.locator('.v-dialog--active, .v-dialog:visible')
-    if ((await dialog.count()) > 0) {
-      await addHighlight(window, '.v-dialog .v-card', { label: 'Case metadata' })
+    // Highlight the dialog card if visible
+    const dialogCard = window.locator('.v-overlay--active .v-card')
+    if ((await dialogCard.count()) > 0) {
+      await addHighlight(window, '.v-overlay--active .v-card', {
+        label: 'Case metadata',
+        color: '#e74c3c'
+      })
       await window.waitForTimeout(300)
     }
 
@@ -331,32 +422,72 @@ test.describe('Documentation Screenshots', () => {
   })
 
   test('09 - ACMG classification', async () => {
-    // ACMG classification chips are in the filter toolbar
-    await addHighlight(window, '.filter-bar-container, .v-toolbar:has(.v-chip)', {
-      label: 'ACMG filter chips'
-    })
-    await window.waitForTimeout(300)
+    // The ACMG quick-classify chips (P, LP, VUS, LB, B) are in the variant details panel
+    // Re-open the detail panel by clicking a row
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+    const firstRow = window.locator('.v-data-table__tr').first()
+    await firstRow.click({ timeout: 10000 })
+    await window.waitForTimeout(1500)
+
     await saveScreenshot(window, 'acmg-classification')
-    await clearHighlights(window)
   })
 
   test('10 - annotations', async () => {
-    // Highlight the annotation columns (star, bookmark, comment icons)
-    await addHighlight(window, '.v-data-table-server', { label: 'Annotations (star, bookmark, comments)' })
+    // Close the detail panel
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
+
+    // Annotations: star, ACMG, comment icons in the first column of each row
+    // Use evaluate to find and annotate the first row's annotation icons
+    await window.evaluate(() => {
+      const firstRow = document.querySelector('.v-data-table__tr')
+      if (!firstRow) return
+
+      // Find the annotation wrapper elements (star, ACMG, comment)
+      const wrappers = firstRow.querySelectorAll('.annotation-icon-wrapper')
+      const colors = ['#e74c3c', '#3498db', '#2ecc71']
+      const labels = ['Star', 'ACMG', 'Comment']
+
+      wrappers.forEach((wrapper, i) => {
+        if (i >= 3) return
+        const rect = wrapper.getBoundingClientRect()
+        const callout = document.createElement('div')
+        callout.className = 'screenshot-highlight'
+        callout.style.cssText = `
+          position: fixed;
+          top: ${rect.top - 14}px;
+          left: ${rect.left + rect.width / 2 - 14}px;
+          width: 28px;
+          height: 28px;
+          background: ${colors[i]};
+          color: white;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          font-weight: 800;
+          pointer-events: none;
+          z-index: 99999;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+          border: 2px solid white;
+        `
+        callout.textContent = String(i + 1)
+        document.body.appendChild(callout)
+      })
+    })
     await window.waitForTimeout(300)
     await saveScreenshot(window, 'annotations')
     await clearHighlights(window)
   })
 
   test('11 - cohort view', async () => {
-    // Switch to cohort mode
+    // Switch to cohort mode by clicking the Cohort button in the mode toggle
     const cohortBtn = window.locator('.mode-toggle .v-btn').nth(1)
     if (await cohortBtn.isVisible().catch(() => false)) {
-      await addHighlight(window, '.mode-toggle', { label: 'Mode toggle' })
-      await window.waitForTimeout(300)
       await cohortBtn.click()
       await window.waitForTimeout(1500)
-      await clearHighlights(window)
     }
 
     await saveScreenshot(window, 'cohort-view')
@@ -368,7 +499,4 @@ test.describe('Documentation Screenshots', () => {
       await window.waitForTimeout(1000)
     }
   })
-
-  // Note: dark mode screenshot removed — Vuetify theme changes via evaluate
-  // don't propagate visually in the Playwright Electron context
 })

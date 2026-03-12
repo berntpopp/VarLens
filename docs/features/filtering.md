@@ -15,7 +15,7 @@ The filter toolbar above the variant table provides quick-access filters:
 
 ## Filter Drawer
 
-Open the filter drawer (`Ctrl+Shift+F` / `Cmd+Shift+F`) for advanced filters:
+Open the filter drawer by clicking the **Filters** button in the toolbar, or use the keyboard shortcut `Ctrl+Shift+F` / `Cmd+Shift+F`. The drawer slides in from the right with advanced filters:
 
 - **Gene symbol** — Autocomplete search by gene name
 - **Consequence** — Multi-select consequence types (HIGH, MODERATE, LOW, MODIFIER)
