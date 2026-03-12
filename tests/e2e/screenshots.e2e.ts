@@ -461,76 +461,143 @@ test.describe('Documentation Screenshots', () => {
   })
 
   test('09 - ACMG classification', async () => {
-    // Open the variant details panel
+    // Ensure no drawers are open first
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
+
+    // Open the variant details panel by clicking a row
     await ensureCaseSelected(window)
     await window.waitForTimeout(500)
     const firstRow = window.locator('.v-data-table__tr').first()
     await firstRow.click({ timeout: 10000 })
-    await window.waitForTimeout(1500)
+    await window.waitForTimeout(2000)
 
-    // Step 1: Quick-classify as LP (Likely Pathogenic) by clicking the LP chip
-    const lpChip = window.locator('.v-navigation-drawer--temporary .v-chip:has-text("LP")').first()
-    if ((await lpChip.count()) > 0) {
-      await lpChip.click()
-      await window.waitForTimeout(800)
-    }
-
-    // Step 2: Expand the "Evidence editor" accordion panel
-    const evidenceTitle = window.locator('text=Evidence editor')
-    if ((await evidenceTitle.count()) > 0) {
-      await evidenceTitle.click()
-      await window.waitForTimeout(1000)
-    }
-
-    // Step 3: Click "Auto-suggest" to populate evidence codes
-    const autoSuggestBtn = window.locator('button:has-text("Auto-suggest"), .v-btn:has-text("Auto-suggest")')
-    if ((await autoSuggestBtn.count()) > 0) {
-      await autoSuggestBtn.first().click()
-      await window.waitForTimeout(1000)
-    }
-
-    // Scroll the panel to show the ACMG section well
+    // Step 1: Scroll to ACMG section in the variant details drawer (not the filter drawer)
     await window.evaluate(() => {
-      const panel = document.querySelector('.v-navigation-drawer--temporary .v-navigation-drawer__content')
-      if (panel) {
-        // Scroll to show ACMG Classification section
-        const acmgSection = panel.querySelector('.acmg-classification-panel, .v-expansion-panels')
-        if (acmgSection) {
-          acmgSection.scrollIntoView({ block: 'start', behavior: 'instant' })
+      const drawers = document.querySelectorAll('.v-navigation-drawer')
+      for (const drawer of drawers) {
+        if (drawer.textContent?.includes('Variant Details')) {
+          const scrollContainer = drawer.querySelector('.v-navigation-drawer__content')
+          const acmgSection = drawer.querySelector('.acmg-section')
+          if (acmgSection && scrollContainer) {
+            acmgSection.scrollIntoView({ block: 'start', behavior: 'instant' })
+          }
+          break
         }
       }
     })
     await window.waitForTimeout(500)
 
-    // Highlight the ACMG section
+    // Step 2: Expand evidence editor — click the expansion panel title in acmg-section
+    // Use Playwright locator targeting text "Evidence editor"
+    const evidenceEditorTitle = window.locator(
+      '.v-expansion-panel-title:has-text("Evidence editor")'
+    )
+    if ((await evidenceEditorTitle.count()) > 0) {
+      // Scroll it into view first
+      await window.evaluate(() => {
+        const drawers = document.querySelectorAll('.v-navigation-drawer')
+        for (const drawer of drawers) {
+          if (drawer.textContent?.includes('Variant Details')) {
+            const title = drawer.querySelector('.acmg-section .v-expansion-panel-title')
+            if (title) title.scrollIntoView({ block: 'center', behavior: 'instant' })
+            break
+          }
+        }
+      })
+      await window.waitForTimeout(300)
+      await evidenceEditorTitle.first().click({ force: true })
+      await window.waitForTimeout(1500)
+    }
+
+    // Step 3: Click Auto-suggest
+    const autoSuggestBtn = window.locator('.v-btn:has-text("Auto-suggest")')
+    if ((await autoSuggestBtn.count()) > 0) {
+      await window.evaluate(() => {
+        const drawers = document.querySelectorAll('.v-navigation-drawer')
+        for (const drawer of drawers) {
+          if (drawer.textContent?.includes('Variant Details')) {
+            const btns = drawer.querySelectorAll('.v-btn')
+            for (const btn of btns) {
+              if (btn.textContent?.includes('Auto-suggest')) {
+                btn.scrollIntoView({ block: 'center', behavior: 'instant' })
+                break
+              }
+            }
+            break
+          }
+        }
+      })
+      await window.waitForTimeout(300)
+      await autoSuggestBtn.first().click({ force: true })
+      await window.waitForTimeout(1500)
+    }
+
+    // Step 4: Quick-classify as LP
+    await window.evaluate(() => {
+      const drawers = document.querySelectorAll('.v-navigation-drawer')
+      for (const drawer of drawers) {
+        if (drawer.textContent?.includes('Variant Details')) {
+          const acmg = drawer.querySelector('.acmg-section')
+          if (acmg) acmg.scrollIntoView({ block: 'start', behavior: 'instant' })
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(300)
+
+    const lpChip = window
+      .locator('.acmg-section .v-chip')
+      .filter({ hasText: /^LP$/ })
+    if ((await lpChip.count()) > 0) {
+      await lpChip.first().click({ force: true })
+      await window.waitForTimeout(1000)
+    }
+
+    // Step 5: Scroll to show the evidence grid content
+    await window.evaluate(() => {
+      const drawers = document.querySelectorAll('.v-navigation-drawer')
+      for (const drawer of drawers) {
+        if (drawer.textContent?.includes('Variant Details')) {
+          const scrollContainer = drawer.querySelector('.v-navigation-drawer__content')
+          const acmg = drawer.querySelector('.acmg-section')
+          if (acmg && scrollContainer) {
+            const acmgTop = acmg.getBoundingClientRect().top
+            const containerTop = scrollContainer.getBoundingClientRect().top
+            // Scroll ACMG heading to the very top of the drawer
+            scrollContainer.scrollTop += acmgTop - containerTop
+          }
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(500)
+
+    // Step 6: Add a visible highlight on the ACMG section
     await window.evaluate(({ clr }: { clr: string }) => {
-      // Find the ACMG Classification heading and highlight from there down
-      const panels = document.querySelectorAll('.v-navigation-drawer--temporary .v-expansion-panels')
-      if (panels.length > 0) {
-        const panel = panels[0]
-        const rect = panel.getBoundingClientRect()
-        // Also get the quick-classify chips above
-        const acmgHeading = document.querySelector('.v-navigation-drawer--temporary div:has(> .v-chip)')
-        const startY = acmgHeading ? acmgHeading.getBoundingClientRect().top : rect.top
-        const endY = rect.bottom
-        const overlay = document.createElement('div')
-        overlay.className = 'screenshot-highlight'
-        overlay.style.cssText = `
-          position: fixed;
-          top: ${startY - 8}px;
-          left: ${rect.left - 8}px;
-          width: ${rect.width + 16}px;
-          height: ${endY - startY + 16}px;
-          border: 3px solid ${clr};
-          border-radius: 8px;
-          pointer-events: none;
-          z-index: 99999;
-        `
+      const drawers = document.querySelectorAll('.v-navigation-drawer')
+      for (const drawer of drawers) {
+        if (!drawer.textContent?.includes('Variant Details')) continue
+        const acmgSection = drawer.querySelector('.acmg-section') as HTMLElement
+        if (!acmgSection) continue
+
+        // Apply a bold outline directly on the ACMG section element
+        acmgSection.style.outline = `3px solid ${clr}`
+        acmgSection.style.outlineOffset = '4px'
+        acmgSection.style.borderRadius = '8px'
+
+        // Add a floating label badge
+        const scrollContainer = drawer.querySelector('.v-navigation-drawer__content')
+        if (!scrollContainer) break
+        ;(scrollContainer as HTMLElement).style.position = 'relative'
+        const rect = acmgSection.getBoundingClientRect()
+        const containerRect = scrollContainer.getBoundingClientRect()
         const labelEl = document.createElement('div')
+        labelEl.className = 'screenshot-highlight'
         labelEl.style.cssText = `
           position: absolute;
-          top: -28px;
-          left: 8px;
+          top: ${rect.top - containerRect.top + scrollContainer.scrollTop - 24}px;
+          left: ${rect.left - containerRect.left + 8}px;
           background: ${clr};
           color: white;
           padding: 3px 10px;
@@ -538,10 +605,12 @@ test.describe('Documentation Screenshots', () => {
           font-size: 13px;
           font-weight: 700;
           box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          z-index: 100000;
+          pointer-events: none;
         `
-        labelEl.textContent = 'ACMG evidence editor + auto-suggest'
-        overlay.appendChild(labelEl)
-        document.body.appendChild(overlay)
+        labelEl.textContent = 'ACMG classification + evidence editor'
+        scrollContainer.appendChild(labelEl)
+        break
       }
     }, { clr: '#e74c3c' })
 
