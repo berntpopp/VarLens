@@ -277,7 +277,134 @@ test.describe('Documentation Screenshots', () => {
     await expect(rows.first()).toBeVisible({ timeout: 15000 })
     await window.waitForTimeout(500)
 
+    // Add labeled highlights for key UI sections referenced in the docs
+    await window.evaluate(() => {
+      function highlight(
+        el: Element,
+        label: string,
+        clr: string,
+        opts?: { labelPos?: 'top' | 'bottom' | 'top-right'; pad?: number }
+      ): void {
+        const pad = opts?.pad ?? 3
+        const rect = el.getBoundingClientRect()
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${rect.top - pad}px;
+          left: ${rect.left - pad}px;
+          width: ${rect.width + pad * 2}px;
+          height: ${rect.height + pad * 2}px;
+          border: 2.5px solid ${clr};
+          border-radius: 6px;
+          pointer-events: none;
+          z-index: 99999;
+        `
+        const lbl = document.createElement('div')
+        let posCSS = 'top: -20px; left: 8px;'
+        if (opts?.labelPos === 'bottom') posCSS = 'bottom: -20px; left: 8px;'
+        if (opts?.labelPos === 'top-right') posCSS = 'top: -20px; right: 8px;'
+        lbl.style.cssText = `
+          position: absolute; ${posCSS}
+          background: ${clr}; color: white;
+          padding: 2px 8px; border-radius: 3px;
+          font-size: 11px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = label
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+
+      function highlightGroup(
+        els: Element[],
+        label: string,
+        clr: string,
+        opts?: { labelPos?: 'top' | 'bottom' | 'top-right'; pad?: number }
+      ): void {
+        const pad = opts?.pad ?? 3
+        const rects = els.map((e) => e.getBoundingClientRect())
+        const top = Math.min(...rects.map((r) => r.top)) - pad
+        const left = Math.min(...rects.map((r) => r.left)) - pad
+        const right = Math.max(...rects.map((r) => r.right)) + pad
+        const bottom = Math.max(...rects.map((r) => r.bottom)) + pad
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${top}px; left: ${left}px;
+          width: ${right - left}px; height: ${bottom - top}px;
+          border: 2.5px solid ${clr};
+          border-radius: 6px;
+          pointer-events: none;
+          z-index: 99999;
+        `
+        const lbl = document.createElement('div')
+        let posCSS = 'top: -20px; left: 8px;'
+        if (opts?.labelPos === 'bottom') posCSS = 'bottom: -20px; left: 8px;'
+        if (opts?.labelPos === 'top-right') posCSS = 'top: -20px; right: 8px;'
+        lbl.style.cssText = `
+          position: absolute; ${posCSS}
+          background: ${clr}; color: white;
+          padding: 2px 8px; border-radius: 3px;
+          font-size: 11px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = label
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+
+      const red = '#e74c3c'
+      const blue = '#3498db'
+      const green = '#27ae60'
+      const purple = '#8e44ad'
+      const orange = '#e67e22'
+
+      // 1. Search bar
+      const searchField = document.querySelector('.filter-toolbar .filter-search-input')
+      if (searchField) highlight(searchField, 'Search (gene, position, HGVS)', red, { pad: 2 })
+
+      // 2. Quick filters: star btn + comment btn + ACMG chip-group
+      const toolbar = document.querySelector('.filter-toolbar')
+      if (toolbar) {
+        const starBtn = toolbar.querySelector('.v-btn .mdi-star-outline, .v-btn .mdi-star')
+          ?.closest('.v-btn')
+        const chipGroup = toolbar.querySelector('.v-chip-group')
+        if (starBtn && chipGroup) {
+          highlightGroup([starBtn, chipGroup], 'Quick filters (star, comments, ACMG)', blue)
+        }
+      }
+
+      // 3. Toolbar actions: Filters, Columns, Export buttons
+      const toolbarBtns = Array.from(document.querySelectorAll('.filter-toolbar .v-btn'))
+      const filtersBtn = toolbarBtns.find((b) => b.textContent?.includes('Filters'))
+      const exportBtn = toolbarBtns.find((b) => b.textContent?.includes('Export'))
+      if (filtersBtn && exportBtn) {
+        const colsBtn = toolbarBtns.find((b) => b.textContent?.includes('Columns'))
+        const btns = [filtersBtn, colsBtn, exportBtn].filter(Boolean) as Element[]
+        highlightGroup(btns, 'Filters / Columns / Export', green, { labelPos: 'top-right' })
+      }
+
+      // 4. Column headers with sort indicators
+      const headerRow = document.querySelector('.v-data-table thead tr')
+      if (headerRow) {
+        highlight(headerRow, 'Sortable columns with per-column filters', purple, {
+          labelPos: 'bottom',
+          pad: 1
+        })
+      }
+
+      // 5. Pagination
+      const footer = document.querySelector('.v-data-table-footer')
+      if (footer) highlight(footer, 'Pagination controls', orange, { pad: 2 })
+    })
+    await window.waitForTimeout(300)
+
     await saveScreenshot(window, 'variant-table')
+    await clearHighlights(window)
   })
 
   test('05 - filters active', async () => {
