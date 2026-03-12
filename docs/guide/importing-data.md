@@ -10,7 +10,7 @@ VarLens accepts several JSON formats for variant data:
 - **Object format:** `{ "metadata": {...}, "samples": { "sampleId": { "variants": [...] } } }` — structured variant objects
 - **Simple format:** `{ "variants": [...] }` — flat array of variant objects
 
-Files can be gzip-compressed (`.json.gz`).
+Files must be gzip-compressed (`.json.gz`); uncompressed `.json` files are not currently supported.
 
 For detailed format specifications, see [Supported Formats](../reference/supported-formats.md).
 

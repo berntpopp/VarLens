@@ -4,7 +4,7 @@ VarLens supports several JSON-based data formats for variant import.
 
 ## JSON Columnar Format
 
-The most common format. Data is organized with a header array describing columns and a data array of row values. Files may be gzip-compressed (`.json.gz`).
+The most common format. Data is organized with a header array describing columns and a data array of row values. Files must be gzip-compressed (`.json.gz`).
 
 ```json
 {
@@ -98,4 +98,4 @@ A flat array of variant objects:
 
 ## Compression
 
-All JSON formats can be gzip-compressed (`.json.gz`). VarLens detects compression automatically during import.
+All JSON formats must be gzip-compressed (`.json.gz`). Uncompressed `.json` files are not currently supported.
