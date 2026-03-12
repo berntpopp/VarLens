@@ -70,4 +70,4 @@ See the [contributing guide](https://berntpopp.github.io/VarLens/about/contribut
 
 ## License
 
-[MIT](LICENSE) -- Labor Berlin
+[MIT](LICENSE)
