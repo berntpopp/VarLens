@@ -407,6 +407,327 @@ test.describe('Documentation Screenshots', () => {
     await clearHighlights(window)
   })
 
+  test('04b - app layout overview', async () => {
+    // Ensure case is selected and table is visible with sidebar open
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Open sidebar if not already open
+    await window.evaluate(() => {
+      const sidebar = document.querySelector('.v-navigation-drawer:not(.v-navigation-drawer--temporary)')
+      if (sidebar && !sidebar.classList.contains('v-navigation-drawer--active')) {
+        const toggle = document.querySelector('.sidebar-toggle-btn') as HTMLElement
+        if (toggle) toggle.click()
+      }
+    })
+    await window.waitForTimeout(500)
+
+    // Add numbered callouts and region borders for the app layout overview
+    await window.evaluate(() => {
+      const red = '#e74c3c'
+      const blue = '#3498db'
+      const green = '#27ae60'
+      const orange = '#e67e22'
+
+      /** Draw a border around a region with a label badge */
+      function regionBorder(
+        el: Element,
+        label: string,
+        clr: string,
+        labelPos: 'top-left' | 'bottom-left' | 'center'
+      ): void {
+        const rect = el.getBoundingClientRect()
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${rect.top}px; left: ${rect.left}px;
+          width: ${rect.width}px; height: ${rect.height}px;
+          border: 2.5px solid ${clr}; border-radius: 2px;
+          pointer-events: none; z-index: 99998;
+        `
+        const lbl = document.createElement('div')
+        let posCSS: string
+        if (labelPos === 'center') {
+          posCSS = `top: 50%; left: 50%; transform: translate(-50%, -50%);`
+        } else if (labelPos === 'bottom-left') {
+          posCSS = `bottom: 6px; left: 8px;`
+        } else {
+          posCSS = `top: 6px; left: 8px;`
+        }
+        lbl.style.cssText = `
+          position: absolute; ${posCSS}
+          background: ${clr}; color: white;
+          padding: 3px 12px; border-radius: 4px;
+          font-size: 13px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+          letter-spacing: 0.3px;
+        `
+        lbl.textContent = label
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+
+      /** Place a numbered circle at a specific position on an element */
+      function numberedCallout(
+        el: Element,
+        num: number,
+        clr: string,
+        pos: 'top-right' | 'top-left' | 'bottom-center' = 'top-right'
+      ): void {
+        const rect = el.getBoundingClientRect()
+        let cx: number, cy: number
+        if (pos === 'top-right') {
+          cx = rect.right - 6
+          cy = rect.top - 6
+        } else if (pos === 'top-left') {
+          cx = rect.left - 6
+          cy = rect.top - 6
+        } else {
+          cx = rect.left + rect.width / 2 - 11
+          cy = rect.bottom - 10
+        }
+        const circle = document.createElement('div')
+        circle.className = 'screenshot-highlight'
+        circle.style.cssText = `
+          position: fixed;
+          top: ${cy}px; left: ${cx}px;
+          width: 22px; height: 22px;
+          background: ${clr}; color: white;
+          border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 12px; font-weight: 800;
+          pointer-events: none; z-index: 100000;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+          border: 2px solid white;
+        `
+        circle.textContent = String(num)
+        document.body.appendChild(circle)
+      }
+
+      // === Region borders ===
+      const appBar = document.querySelector('.v-app-bar')
+      if (appBar) regionBorder(appBar, 'Title bar', red, 'top-left')
+
+      const sidebar = document.querySelector(
+        '.v-navigation-drawer:not(.v-navigation-drawer--temporary)'
+      )
+      if (sidebar) regionBorder(sidebar, 'Sidebar', blue, 'center')
+
+      const mainContent = document.querySelector('.v-main')
+      if (mainContent) regionBorder(mainContent, 'Content area', green, 'center')
+
+      const footer = document.querySelector('.v-footer')
+      if (footer) regionBorder(footer, 'Status bar', orange, 'top-left')
+
+      // === Title bar numbered callouts ===
+      // Use a single legend strip below the title bar for clean labeling
+      if (appBar) {
+        const purple = '#8e44ad'
+        const barRect = appBar.getBoundingClientRect()
+
+        // Collect all title bar elements with their positions
+        const items: { el: Element; num: number; label: string; clr: string }[] = []
+
+        const sidebarToggle = appBar.querySelector('.sidebar-toggle-btn')
+        if (sidebarToggle) items.push({ el: sidebarToggle, num: 1, label: 'Sidebar toggle', clr: '#555' })
+
+        const contextIndicator = appBar.querySelector('.context-indicator')
+        if (contextIndicator) items.push({ el: contextIndicator, num: 2, label: 'Case indicator', clr: red })
+
+        const modeToggle = appBar.querySelector('.mode-toggle')
+        if (modeToggle) items.push({ el: modeToggle, num: 3, label: 'Case / Cohort', clr: purple })
+
+        const dbLabel = appBar.querySelector('.text-body-medium')
+        if (dbLabel) items.push({ el: dbLabel, num: 4, label: 'Database', clr: orange })
+
+        const gearIcon = appBar.querySelector('.mdi-cog')
+        const gearBtn = gearIcon?.closest('.v-btn')
+        if (gearBtn) items.push({ el: gearBtn, num: 5, label: 'Settings', clr: green })
+
+        // Place circles at the top-center of each element (inside the dark title bar)
+        for (const item of items) {
+          const r = item.el.getBoundingClientRect()
+          const circle = document.createElement('div')
+          circle.className = 'screenshot-highlight'
+          circle.style.cssText = `
+            position: fixed;
+            top: ${barRect.top + 1}px;
+            left: ${r.left + r.width / 2 - 10}px;
+            width: 20px; height: 20px;
+            background: white; color: ${item.clr};
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 900;
+            pointer-events: none; z-index: 100000;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+          `
+          circle.textContent = String(item.num)
+          document.body.appendChild(circle)
+        }
+
+        // Add a compact legend strip below the title bar
+        const legendY = barRect.bottom + 4
+        let legendX = barRect.left + 8
+        for (const item of items) {
+          const lbl = document.createElement('div')
+          lbl.className = 'screenshot-highlight'
+          lbl.style.cssText = `
+            position: fixed;
+            top: ${legendY}px; left: ${legendX}px;
+            display: flex; align-items: center; gap: 4px;
+            pointer-events: none; z-index: 100000;
+            font-size: 10px; font-weight: 700;
+            white-space: nowrap;
+          `
+          // Small circle
+          const dot = document.createElement('span')
+          dot.style.cssText = `
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 16px; height: 16px; border-radius: 50%;
+            background: ${item.clr}; color: white;
+            font-size: 9px; font-weight: 800;
+          `
+          dot.textContent = String(item.num)
+          const text = document.createElement('span')
+          text.style.cssText = `color: ${item.clr}; text-shadow: 0 0 2px white, 0 0 4px white;`
+          text.textContent = item.label
+          lbl.appendChild(dot)
+          lbl.appendChild(text)
+          document.body.appendChild(lbl)
+
+          // Measure approximate width for next position
+          legendX += item.label.length * 7 + 30
+        }
+      }
+    })
+    await window.waitForTimeout(300)
+
+    await saveScreenshot(window, 'app-layout')
+    await clearHighlights(window)
+  })
+
+  test('04c - status bar', async () => {
+    // Take a close-up of the status bar with labeled icons
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(300)
+
+    await window.evaluate(() => {
+      const colors = {
+        red: '#e74c3c',
+        blue: '#3498db',
+        green: '#27ae60',
+        purple: '#8e44ad',
+        orange: '#e67e22',
+        teal: '#16a085'
+      }
+
+      function iconLabel(
+        iconSelector: string,
+        label: string,
+        clr: string
+      ): void {
+        const icon = document.querySelector(`.v-footer ${iconSelector}`)
+        const btn = icon?.closest('.v-btn') || icon
+        if (!btn) return
+        const rect = btn.getBoundingClientRect()
+        // Box around the icon
+        const box = document.createElement('div')
+        box.className = 'screenshot-highlight'
+        box.style.cssText = `
+          position: fixed;
+          top: ${rect.top - 3}px; left: ${rect.left - 3}px;
+          width: ${rect.width + 6}px; height: ${rect.height + 6}px;
+          border: 2px solid ${clr}; border-radius: 4px;
+          pointer-events: none; z-index: 99999;
+        `
+        // Label above
+        const lbl = document.createElement('div')
+        lbl.style.cssText = `
+          position: absolute;
+          top: -20px; left: 50%; transform: translateX(-50%);
+          background: ${clr}; color: white;
+          padding: 1px 6px; border-radius: 3px;
+          font-size: 10px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = label
+        box.appendChild(lbl)
+        document.body.appendChild(box)
+      }
+
+      // Version button (first button in footer)
+      const versionBtn = document.querySelector('.v-footer .v-btn')
+      if (versionBtn) {
+        const rect = versionBtn.getBoundingClientRect()
+        const box = document.createElement('div')
+        box.className = 'screenshot-highlight'
+        box.style.cssText = `
+          position: fixed;
+          top: ${rect.top - 3}px; left: ${rect.left - 3}px;
+          width: ${rect.width + 6}px; height: ${rect.height + 6}px;
+          border: 2px solid ${colors.red}; border-radius: 4px;
+          pointer-events: none; z-index: 99999;
+        `
+        const lbl = document.createElement('div')
+        lbl.style.cssText = `
+          position: absolute;
+          top: -20px; left: 4px;
+          background: ${colors.red}; color: white;
+          padding: 1px 6px; border-radius: 3px;
+          font-size: 10px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = 'Version'
+        box.appendChild(lbl)
+        document.body.appendChild(box)
+      }
+
+      // Network status icon
+      iconLabel('.mdi-wifi, .mdi-wifi-off', 'Network status', colors.blue)
+
+      // GitHub
+      iconLabel('.mdi-github', 'GitHub', colors.green)
+
+      // License
+      iconLabel('.mdi-license', 'License', colors.purple)
+
+      // Disclaimer shield
+      iconLabel('.mdi-shield-check, .mdi-shield-alert', 'Disclaimer', colors.orange)
+
+      // FAQ help
+      iconLabel('.mdi-help-circle', 'FAQ', colors.teal)
+
+      // Console / log viewer
+      iconLabel('.mdi-console', 'Log viewer', colors.red)
+    })
+    await window.waitForTimeout(300)
+
+    // Crop to just the footer area for a close-up screenshot
+    const footerRect = await window.evaluate(() => {
+      const footer = document.querySelector('.v-footer')
+      if (!footer) return null
+      const rect = footer.getBoundingClientRect()
+      // Extra space above for labels, below for padding
+      return { x: rect.x, y: rect.y - 30, width: rect.width, height: rect.height + 38 }
+    })
+
+    if (footerRect) {
+      const filePath = path.join(SCREENSHOT_DIR, 'status-bar.png')
+      await window.screenshot({
+        path: filePath,
+        type: 'png',
+        clip: { x: footerRect.x, y: footerRect.y, width: footerRect.width, height: footerRect.height }
+      })
+    } else {
+      await saveScreenshot(window, 'status-bar')
+    }
+    await clearHighlights(window)
+  })
+
   test('05 - filters active', async () => {
     // Click the "Filters" button in the toolbar to open the filter drawer
     const filtersBtn = window.locator('button:has-text("Filters")')

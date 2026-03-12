@@ -42,6 +42,7 @@ export default defineConfig({
           text: 'Guide',
           items: [
             { text: 'Introduction', link: '/guide/introduction' },
+            { text: 'App Layout', link: '/guide/app-layout' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Importing Data', link: '/guide/importing-data' }
           ]

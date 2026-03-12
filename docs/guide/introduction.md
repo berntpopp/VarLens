@@ -30,5 +30,6 @@ All processing happens locally. External API calls (VEP, gnomAD, ClinVar) are op
 
 ## Next Steps
 
+- [Explore the app layout](./app-layout.md) to learn the interface
 - [Install VarLens](./installation.md) on your platform
 - [Import your first dataset](./importing-data.md)
