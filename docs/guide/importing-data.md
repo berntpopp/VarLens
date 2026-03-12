@@ -21,13 +21,19 @@ For detailed format specifications, see [Supported Formats](../reference/support
 3. Enter a case name (or accept the auto-generated name from the filename)
 4. VarLens imports the data, showing progress in real-time (reading, parsing, inserting phases)
 
-![Import progress showing variants being loaded](/screenshots/importing-data.png)
+![Import menu showing import options](/screenshots/import-menu.png)
 
 ## After Import
 
 Once import completes, the case appears in the sidebar. Click it to open the variant table.
 
 ![Imported case visible in the sidebar](/screenshots/case-list.png)
+
+## Case Metadata
+
+Click the case name in the header bar to open the case metadata modal. Here you can view and edit case details including status, cohort assignment, HPO terms, comments, and quality metrics.
+
+![Case metadata modal](/screenshots/case-metadata.png)
 
 ## Batch Import
 
