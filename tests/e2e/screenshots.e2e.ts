@@ -293,11 +293,50 @@ test.describe('Documentation Screenshots', () => {
     const drawerOpen = await allFiltersTitle.isVisible().catch(() => false)
 
     if (drawerOpen) {
-      // Highlight the filter drawer (right-side navigation drawer)
-      await addHighlight(window, '.v-navigation-drawer[location="right"]', {
-        label: 'Filter drawer',
-        color: '#e74c3c'
-      })
+      // Add highlight inside the drawer itself (appending to body doesn't work
+      // because the drawer's z-index/stacking context covers it)
+      await window.evaluate(({ clr }) => {
+        const drawers = document.querySelectorAll('.v-navigation-drawer')
+        for (const drawer of drawers) {
+          if (drawer.textContent?.includes('All Filters')) {
+            // Add an inner border highlight
+            const highlight = document.createElement('div')
+            highlight.className = 'screenshot-highlight'
+            highlight.style.cssText = `
+              position: absolute;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              border: 3px solid ${clr};
+              border-radius: 0;
+              pointer-events: none;
+              z-index: 99999;
+            `
+            // Add label inside the drawer at the top-left
+            const labelEl = document.createElement('div')
+            labelEl.style.cssText = `
+              position: absolute;
+              top: 4px;
+              left: 4px;
+              background: ${clr};
+              color: white;
+              padding: 3px 10px;
+              border-radius: 4px;
+              font-size: 13px;
+              font-weight: 700;
+              white-space: nowrap;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+              z-index: 100000;
+            `
+            labelEl.textContent = 'Filter drawer (click Filters button)'
+            highlight.appendChild(labelEl)
+            ;(drawer as HTMLElement).style.position = 'relative'
+            drawer.appendChild(highlight)
+            break
+          }
+        }
+      }, { clr: '#e74c3c' })
     }
 
     await window.waitForTimeout(300)
@@ -422,20 +461,137 @@ test.describe('Documentation Screenshots', () => {
   })
 
   test('09 - ACMG classification', async () => {
-    // The ACMG quick-classify chips (P, LP, VUS, LB, B) are in the variant details panel
-    // Re-open the detail panel by clicking a row
+    // Open the variant details panel
     await ensureCaseSelected(window)
     await window.waitForTimeout(500)
     const firstRow = window.locator('.v-data-table__tr').first()
     await firstRow.click({ timeout: 10000 })
     await window.waitForTimeout(1500)
 
+    // Step 1: Quick-classify as LP (Likely Pathogenic) by clicking the LP chip
+    const lpChip = window.locator('.v-navigation-drawer--temporary .v-chip:has-text("LP")').first()
+    if ((await lpChip.count()) > 0) {
+      await lpChip.click()
+      await window.waitForTimeout(800)
+    }
+
+    // Step 2: Expand the "Evidence editor" accordion panel
+    const evidenceTitle = window.locator('text=Evidence editor')
+    if ((await evidenceTitle.count()) > 0) {
+      await evidenceTitle.click()
+      await window.waitForTimeout(1000)
+    }
+
+    // Step 3: Click "Auto-suggest" to populate evidence codes
+    const autoSuggestBtn = window.locator('button:has-text("Auto-suggest"), .v-btn:has-text("Auto-suggest")')
+    if ((await autoSuggestBtn.count()) > 0) {
+      await autoSuggestBtn.first().click()
+      await window.waitForTimeout(1000)
+    }
+
+    // Scroll the panel to show the ACMG section well
+    await window.evaluate(() => {
+      const panel = document.querySelector('.v-navigation-drawer--temporary .v-navigation-drawer__content')
+      if (panel) {
+        // Scroll to show ACMG Classification section
+        const acmgSection = panel.querySelector('.acmg-classification-panel, .v-expansion-panels')
+        if (acmgSection) {
+          acmgSection.scrollIntoView({ block: 'start', behavior: 'instant' })
+        }
+      }
+    })
+    await window.waitForTimeout(500)
+
+    // Highlight the ACMG section
+    await window.evaluate(({ clr }: { clr: string }) => {
+      // Find the ACMG Classification heading and highlight from there down
+      const panels = document.querySelectorAll('.v-navigation-drawer--temporary .v-expansion-panels')
+      if (panels.length > 0) {
+        const panel = panels[0]
+        const rect = panel.getBoundingClientRect()
+        // Also get the quick-classify chips above
+        const acmgHeading = document.querySelector('.v-navigation-drawer--temporary div:has(> .v-chip)')
+        const startY = acmgHeading ? acmgHeading.getBoundingClientRect().top : rect.top
+        const endY = rect.bottom
+        const overlay = document.createElement('div')
+        overlay.className = 'screenshot-highlight'
+        overlay.style.cssText = `
+          position: fixed;
+          top: ${startY - 8}px;
+          left: ${rect.left - 8}px;
+          width: ${rect.width + 16}px;
+          height: ${endY - startY + 16}px;
+          border: 3px solid ${clr};
+          border-radius: 8px;
+          pointer-events: none;
+          z-index: 99999;
+        `
+        const labelEl = document.createElement('div')
+        labelEl.style.cssText = `
+          position: absolute;
+          top: -28px;
+          left: 8px;
+          background: ${clr};
+          color: white;
+          padding: 3px 10px;
+          border-radius: 4px;
+          font-size: 13px;
+          font-weight: 700;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        `
+        labelEl.textContent = 'ACMG evidence editor + auto-suggest'
+        overlay.appendChild(labelEl)
+        document.body.appendChild(overlay)
+      }
+    }, { clr: '#e74c3c' })
+
+    await window.waitForTimeout(300)
     await saveScreenshot(window, 'acmg-classification')
+    await clearHighlights(window)
+
+    // Close the panel
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
   })
 
-  test('10 - annotations', async () => {
-    // Close the detail panel
+  test('10 - comment dialog', async () => {
+    // Open variant details and click the comment icon to open the comment dialog
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Click the comment icon on the first row via evaluate
+    await window.evaluate(() => {
+      const firstRow = document.querySelector('.v-data-table__tr')
+      if (!firstRow) return
+      // Find comment icon (mdi-comment-text-outline)
+      const commentIcon = firstRow.querySelector('.mdi-comment-text-outline')
+      if (commentIcon) {
+        ;(commentIcon as HTMLElement).click()
+      }
+    })
+    await window.waitForTimeout(1000)
+
+    // Check if comment dialog is open
+    const commentDialog = window.locator('.v-overlay--active .v-card:has-text("Comment")')
+    if ((await commentDialog.count()) > 0) {
+      await addHighlight(window, '.v-overlay--active .v-card', {
+        label: 'Comment dialog',
+        color: '#e74c3c'
+      })
+      await window.waitForTimeout(300)
+    }
+
+    await saveScreenshot(window, 'comment-dialog')
+    await clearHighlights(window)
+
+    // Close the dialog
     await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
+  })
+
+  test('11 - annotations overview', async () => {
+    // Ensure no overlays
+    await ensureCaseSelected(window)
     await window.waitForTimeout(500)
 
     // Annotations: star, ACMG, comment icons in the first column of each row
@@ -482,15 +638,31 @@ test.describe('Documentation Screenshots', () => {
     await clearHighlights(window)
   })
 
-  test('11 - cohort view', async () => {
-    // Switch to cohort mode by clicking the Cohort button in the mode toggle
+  test('12 - cohort view', async () => {
+    // Highlight the Cohort button before clicking it
     const cohortBtn = window.locator('.mode-toggle .v-btn').nth(1)
     if (await cohortBtn.isVisible().catch(() => false)) {
+      // Add highlight on the Cohort button in the top bar
+      await addHighlight(window, '.mode-toggle', {
+        label: 'Case / Cohort toggle',
+        color: '#e74c3c'
+      })
+      await window.waitForTimeout(300)
+      await clearHighlights(window)
+
       await cohortBtn.click()
       await window.waitForTimeout(1500)
+
+      // Highlight the Cohort button (now active) after switching
+      await addHighlight(window, '.mode-toggle', {
+        label: 'Cohort mode active',
+        color: '#e74c3c'
+      })
     }
 
+    await window.waitForTimeout(300)
     await saveScreenshot(window, 'cohort-view')
+    await clearHighlights(window)
 
     // Switch back to case mode
     const caseBtn = window.locator('.mode-toggle .v-btn').nth(0)

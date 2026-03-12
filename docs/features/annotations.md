@@ -32,6 +32,8 @@ The evidence editor can auto-suggest applicable criteria based on:
 
 ## Comments
 
+![Comment dialog for adding variant notes](/screenshots/comment-dialog.png)
+
 Add free-text comments to document your reasoning:
 
 - **Global comments** — Visible across all cases containing this variant
