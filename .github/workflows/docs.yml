@@ -1,0 +1,105 @@
+name: Deploy Docs
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-screenshots:
+    name: Build & Screenshots
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure git line endings
+        run: git config --global core.autocrlf false
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev build-essential
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules for Electron
+        run: npm run rebuild:electron
+
+      - name: Build Electron app
+        run: npx electron-vite build
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps
+
+      - name: Generate screenshots
+        run: xvfb-run --auto-servernum npx playwright test tests/e2e/screenshots.e2e.ts
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/public/screenshots/*.png
+          retention-days: 1
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build-screenshots
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies (skip native rebuild — only VitePress needed)
+        run: npm ci --ignore-scripts
+
+      - name: Download screenshots
+        uses: actions/download-artifact@v4
+        with:
+          name: screenshots
+          path: docs/public/screenshots/
+
+      - name: Build docs
+        run: npm run docs:build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload to Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/.vitepress/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
