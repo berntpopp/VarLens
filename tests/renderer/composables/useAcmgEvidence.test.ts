@@ -96,6 +96,23 @@ describe('useAcmgEvidence', () => {
     expect(evidence2.notes.value).toBe('test note')
   })
 
+  it('loadState(null) clears auto-suggested codes (variant switch scenario)', () => {
+    const { applySuggestions, pathogenicCodes, benignCodes, loadState, isCodeSuggested } =
+      useAcmgEvidence()
+
+    // Simulate auto-suggest for variant A
+    applySuggestions({ gnomad_af: 0.0001, cadd: 30, clinvar: 'Pathogenic' })
+    expect(pathogenicCodes.value.length).toBeGreaterThan(0)
+
+    // Simulate switching to variant B with null evidence
+    loadState(null)
+
+    expect(pathogenicCodes.value).toHaveLength(0)
+    expect(benignCodes.value).toHaveLength(0)
+    expect(isCodeSuggested('PM2')).toBe(false)
+    expect(isCodeSuggested('PP3')).toBe(false)
+  })
+
   it('reset clears all state', () => {
     const { toggleCode, notes, reset, pathogenicCodes, effectiveClassification } = useAcmgEvidence()
     toggleCode('PVS1')

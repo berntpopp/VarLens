@@ -39,6 +39,9 @@ export function useVepEnrichment() {
   const spliceaiData = ref<SpliceAIFetchResult | null>(null)
   const spliceaiLoading = ref(false)
 
+  // Generation counter to guard against stale async results
+  let fetchGeneration = 0
+
   // Combined loading state
   const isLoading = computed(
     () => vepLoading.value || myvariantLoading.value || spliceaiLoading.value
@@ -110,9 +113,12 @@ export function useVepEnrichment() {
   const spliceaiMaxDelta = computed<number | null>(() => spliceaiScores.value?.max_delta ?? null)
 
   /**
-   * Clear all enrichment data (call on variant change)
+   * Clear all enrichment data (call on variant change).
+   * Increments the generation counter so any in-flight fetchVep()
+   * from a previous variant will discard its results.
    */
   function clearData(): void {
+    fetchGeneration++
     vepData.value = null
     vepLoading.value = false
     vepError.value = null
@@ -127,6 +133,9 @@ export function useVepEnrichment() {
    */
   async function fetchVep(chr: string, pos: number, ref: string, alt: string): Promise<void> {
     if (!api) return
+
+    // Capture current generation so we can detect if the variant changed mid-flight
+    const thisGeneration = ++fetchGeneration
 
     // Reset state
     vepLoading.value = true
@@ -143,6 +152,9 @@ export function useVepEnrichment() {
       api.myvariant.fetch(chr, pos, ref, alt),
       api.spliceai.fetch(chr, pos, ref, alt)
     ])
+
+    // Discard results if the variant changed while we were fetching
+    if (fetchGeneration !== thisGeneration) return
 
     // Process VEP result
     if (vepResult.status === 'fulfilled') {
