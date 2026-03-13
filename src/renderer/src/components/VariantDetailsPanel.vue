@@ -238,7 +238,8 @@ const {
   alphamissenseScore,
   spliceaiMaxDelta,
   isLoading,
-  fetchVep
+  fetchVep,
+  clearData: clearVepData
 } = useVepEnrichment()
 
 // Global ACMG classification (for showing in case mode)
@@ -392,7 +393,8 @@ watch(
         await loadGlobalAnnotations(newVariant.chr, newVariant.pos, newVariant.ref, newVariant.alt)
       }
 
-      // VEP enrichment is now fetched on-demand via TranscriptSection button
+      // Clear stale VEP enrichment data — re-fetched on-demand via TranscriptSection button
+      clearVepData()
     }
   },
   { immediate: true }

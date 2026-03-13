@@ -110,6 +110,19 @@ export function useVepEnrichment() {
   const spliceaiMaxDelta = computed<number | null>(() => spliceaiScores.value?.max_delta ?? null)
 
   /**
+   * Clear all enrichment data (call on variant change)
+   */
+  function clearData(): void {
+    vepData.value = null
+    vepLoading.value = false
+    vepError.value = null
+    myvariantData.value = null
+    myvariantLoading.value = false
+    spliceaiData.value = null
+    spliceaiLoading.value = false
+  }
+
+  /**
    * Fetch all enrichment data for a variant in parallel
    */
   async function fetchVep(chr: string, pos: number, ref: string, alt: string): Promise<void> {
@@ -184,6 +197,7 @@ export function useVepEnrichment() {
     // Combined
     isLoading,
     error,
-    fetchVep
+    fetchVep,
+    clearData
   }
 }

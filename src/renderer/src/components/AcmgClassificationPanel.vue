@@ -261,10 +261,12 @@ function emitChange(): void {
   })
 }
 
-// Load state when evidence JSON changes
+// Load state when evidence JSON or variant identity changes.
+// Watching variantData ensures we reset when switching between variants
+// that both have null evidence (where evidenceJson alone wouldn't trigger).
 watch(
-  () => props.evidenceJson,
-  (json) => loadState(json),
+  () => [props.evidenceJson, props.variantData] as const,
+  () => loadState(props.evidenceJson),
   { immediate: true }
 )
 </script>
