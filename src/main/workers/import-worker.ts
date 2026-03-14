@@ -2,7 +2,6 @@ import { parentPort } from 'worker_threads'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { statSync } from 'node:fs'
-import { pipeline } from 'node:stream/promises'
 import type { Readable } from 'node:stream'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/Pick'
@@ -15,7 +14,6 @@ import type { FormatInfo } from '../import/strategies/ImportStrategy'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createFieldMapper } from '../import/transforms/FieldMapper'
 import { createObjectFormatMapper } from '../import/transforms/ObjectFormatMapper'
-import { createBatchAccumulator } from '../import/transforms/BatchAccumulator'
 import { resolveColumnIndices } from '../import/config/fieldMapping'
 import { detectFormat } from '../import/format-detection'
 import { createDecompressedStream } from '../import/stream-utils'
@@ -55,6 +53,7 @@ port.on('message', async (msg: MainMessage) => {
       const totalFiles = msg.files.length
       const batchSize = msg.batchSize ?? DATABASE_CONFIG.BATCH_INSERT_SIZE
       const importedInBatch = new Set<string>()
+      let nextFileParsed: Promise<ParsedFileResult> | null = null
       const results: Array<{
         filePath: string
         fileName: string
@@ -120,16 +119,48 @@ port.on('message', async (msg: MainMessage) => {
 
           const startTime = Date.now()
           let variantCount = 0
-          let fileSkipped = 0
+          const fileSkipped = 0
 
           try {
-            const formatInfo = await detectFormat(file.filePath)
+            let parsedData: ParsedFileResult
 
-            const flushFn = (cId: number, batch: Array<Record<string, unknown>>): void => {
-              stmts.insertBatch(cId, batch)
+            // Use pre-parsed data if available (from previous iteration's lookahead)
+            if (nextFileParsed) {
+              parsedData = await nextFileParsed
+              nextFileParsed = null
+            } else {
+              // First file — parse synchronously
+              parsedData = await preParseFile(file.filePath, () => cancelled)
             }
 
-            const onProgress = (): void => {
+            const { formatInfo, variants: parsedVariants } = parsedData
+
+            // Start pre-parsing next file (pipeline parallelism)
+            if (fileIndex + 1 < totalFiles && !cancelled) {
+              const nextFile = msg.files[fileIndex + 1]
+              // Only pre-parse if not a known skip
+              const nextExisting = stmts.getCaseByName.get(nextFile.caseName) as
+                | { id: number }
+                | undefined
+              const nextIsInBatchDup = importedInBatch.has(nextFile.caseName)
+              const nextWillSkip =
+                (nextExisting || nextFile.isDuplicate || nextIsInBatchDup) &&
+                nextFile.duplicateStrategy === 'skip'
+
+              if (!nextWillSkip) {
+                nextFileParsed = preParseFile(nextFile.filePath, () => cancelled)
+              }
+            }
+
+            // Insert pre-parsed variants in batches
+            const totalVariants = parsedVariants.length
+            for (let batchStart = 0; batchStart < totalVariants; batchStart += batchSize) {
+              if (cancelled) break
+              const batchEnd = Math.min(batchStart + batchSize, totalVariants)
+              const batch = parsedVariants.slice(batchStart, batchEnd)
+              stmts.insertBatch(caseId, batch)
+              variantCount = batchEnd
+
               const now = Date.now()
               if (now - lastProgressTime >= msg.throttleMs) {
                 lastProgressTime = now
@@ -146,24 +177,6 @@ port.on('message', async (msg: MainMessage) => {
                 port.postMessage(progressMsg)
               }
             }
-
-            const accumulator = createBatchAccumulator({
-              caseId,
-              batchSize,
-              flushFn,
-              onProgress: (update) => {
-                variantCount = update.count
-                fileSkipped = update.skipped ?? 0
-                onProgress()
-              },
-              startTime,
-              isCancelled: () => cancelled
-            })
-
-            await runImportPipeline(file.filePath, formatInfo, accumulator)
-
-            variantCount = accumulator.inserted
-            fileSkipped = accumulator.skippedCount
 
             stmts.updateVariantCount.run(variantCount, caseId)
 
@@ -199,6 +212,11 @@ port.on('message', async (msg: MainMessage) => {
             }
             port.postMessage(fileCompleteMsg)
           } catch (importError) {
+            // Clean up pre-parse promise on error
+            if (nextFileParsed) {
+              nextFileParsed.catch(() => {}) // prevent unhandled rejection
+              nextFileParsed = null
+            }
             stmts.deleteCase.run(caseId)
             throw importError
           }
@@ -524,60 +542,6 @@ async function createMapperPipeline(filePath: string, formatInfo: FormatInfo): P
         .pipe(streamArray())
         .pipe(fieldMapper)
       return stream
-    }
-  }
-}
-
-/**
- * Detect format and run the appropriate streaming pipeline.
- */
-async function runImportPipeline(
-  filePath: string,
-  formatInfo: FormatInfo,
-  accumulator: ReturnType<typeof createBatchAccumulator>
-): Promise<void> {
-  switch (formatInfo.format) {
-    case 'simple':
-      await pipeline(
-        createDecompressedStream(filePath),
-        parser(),
-        pick({ filter: 'variants' }),
-        streamArray(),
-        createObjectFormatMapper(),
-        accumulator
-      )
-      break
-
-    case 'object': {
-      const samplePath = `samples.${formatInfo.caseKey}.variants`
-      await pipeline(
-        createDecompressedStream(filePath),
-        parser(),
-        pick({ filter: samplePath }),
-        streamArray(),
-        createObjectFormatMapper(),
-        accumulator
-      )
-      break
-    }
-
-    case 'columnar': {
-      const wrapped = formatInfo.wrapped !== false
-      const headerPath = wrapped ? `${formatInfo.caseKey}.header` : 'header'
-      const dataPath = wrapped ? `${formatInfo.caseKey}.data` : 'data'
-
-      const { dictionaries, columnIndices } = await parseHeader(filePath, headerPath)
-      const fieldMapper = createFieldMapper(dictionaries, columnIndices)
-
-      await pipeline(
-        createDecompressedStream(filePath),
-        parser(),
-        pick({ filter: dataPath }),
-        streamArray(),
-        fieldMapper,
-        accumulator
-      )
-      break
     }
   }
 }
