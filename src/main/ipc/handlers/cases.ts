@@ -1,11 +1,47 @@
 import { z } from 'zod'
+import { Worker } from 'worker_threads'
+import { BrowserWindow } from 'electron'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { CaseIdSchema } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
+import type { DeleteWorkerRequest, DeleteWorkerResponse } from '../../workers/delete-worker'
 
 // Schema for batch delete IDs array
 const CaseIdArraySchema = z.array(z.number().int().positive()).min(1)
+
+function safeEmit(channel: string, data: unknown): void {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win === undefined || win.isDestroyed()) return
+  win.webContents.send(channel, data)
+}
+
+/**
+ * Run a delete operation in a worker thread to avoid blocking the main process.
+ */
+function runDeleteWorker(request: DeleteWorkerRequest): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const workerPath = __dirname + '/delete-worker.js'
+    const worker = new Worker(workerPath)
+
+    worker.on('message', (msg: DeleteWorkerResponse) => {
+      if (msg.type === 'complete') {
+        resolve(msg.deleted ?? 0)
+      } else {
+        reject(new Error(msg.error ?? 'Delete worker failed'))
+      }
+      worker.terminate().catch(() => {})
+    })
+
+    worker.on('error', (err: Error) => {
+      mainLogger.error(`Delete worker error: ${err.message}`, 'cases')
+      reject(err)
+      worker.terminate().catch(() => {})
+    })
+
+    worker.postMessage(request)
+  })
+}
 
 /**
  * Cases IPC handlers
@@ -37,7 +73,13 @@ export function registerCaseHandlers({ ipcMain, getDb }: HandlerDependencies): v
   ipcMain.handle('cases:deleteAll', async () => {
     return wrapHandler(async () => {
       const db = getDb()
-      return db.cases.deleteAllCases()
+      const deleted = await runDeleteWorker({
+        type: 'deleteAll',
+        dbPath: db.getPath(),
+        encryptionKey: db.getEncryptionKey()
+      })
+      safeEmit('cases:deleted', { deleted })
+      return deleted
     })
   })
 
@@ -51,7 +93,14 @@ export function registerCaseHandlers({ ipcMain, getDb }: HandlerDependencies): v
       }
 
       const db = getDb()
-      return db.cases.deleteCasesBatch(validated.data)
+      const deleted = await runDeleteWorker({
+        type: 'deleteBatch',
+        dbPath: db.getPath(),
+        encryptionKey: db.getEncryptionKey(),
+        ids: validated.data
+      })
+      safeEmit('cases:deleted', { deleted })
+      return deleted
     })
   })
 }

@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, provide } from 'vue'
+import { ref, watch, onMounted, onUnmounted, provide } from 'vue'
 import { useRouter } from 'vue-router'
 import AppToolbar from './components/AppToolbar.vue'
 import AppSidebar from './components/AppSidebar.vue'
@@ -85,9 +85,11 @@ import { logService } from './services/LogService'
 import { AppStateKey, createAppState } from './composables/useAppState'
 import { useApiService } from './composables/useApiService'
 import ImportStatusBar from './components/ImportStatusBar.vue'
+import { useImportStatusStore } from './stores/importStatusStore'
 
 const router = useRouter()
 const { api } = useApiService()
+const importStore = useImportStatusStore()
 
 // Create and provide shared app state for child components
 const appState = createAppState()
@@ -291,10 +293,34 @@ useKeyboardShortcuts({
   onToggleColumnsDrawer: () => filterToolbarRef.value?.toggleColumnsDrawer()
 })
 
+// Global listener for background import completion
+// This fires even when BatchImportDialog is closed via "Continue in Background"
+let cleanupImportComplete: (() => void) | null = null
+
 // Lifecycle
 onMounted(async () => {
   logService.setupMainProcessListener()
   await databaseStore.fetchInfo()
+
+  if (api) {
+    cleanupImportComplete = api.batchImport.onComplete((result) => {
+      // Update the import store so the status bar reflects completion
+      importStore.importComplete({
+        ...result,
+        details: result.details.map((d) => ({
+          ...d,
+          caseName: d.caseName ?? d.fileName,
+          status: d.status === 'success' ? 'success' : d.status === 'failed' ? 'failed' : 'skipped'
+        }))
+      })
+      // Refresh the case list with newly imported cases
+      caseListRef.value?.refreshCases()
+    })
+  }
+})
+
+onUnmounted(() => {
+  cleanupImportComplete?.()
 })
 </script>
 

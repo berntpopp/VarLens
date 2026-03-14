@@ -34,7 +34,8 @@ const mockApi = {
     testZipPassword: vi.fn().mockResolvedValue({ valid: false }),
     extractZip: vi.fn().mockResolvedValue({ success: false }),
     cleanupZipTemp: vi.fn().mockResolvedValue(undefined),
-    onProgress: vi.fn(() => vi.fn()) // Returns cleanup function
+    onProgress: vi.fn(() => vi.fn()), // Returns cleanup function
+    onComplete: vi.fn(() => vi.fn()) // Returns cleanup function
   },
   system: {
     getVersion: vi.fn().mockResolvedValue({ app: '0.2.0', electron: '33.0.0' }),

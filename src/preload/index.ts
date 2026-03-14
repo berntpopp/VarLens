@@ -4,6 +4,7 @@ import type {
   VariantFilter,
   SortItem,
   BatchProgress,
+  BatchResult,
   DuplicateChoice,
   DuplicateCheckResult,
   CohortSearchParams,
@@ -130,6 +131,16 @@ const api = {
       ipcRenderer.on('batch-import:progress', handler)
       return () => {
         ipcRenderer.removeListener('batch-import:progress', handler)
+      }
+    },
+
+    onComplete: (callback: (result: BatchResult) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, result: BatchResult) => {
+        callback(result)
+      }
+      ipcRenderer.on('batch-import:complete', handler)
+      return () => {
+        ipcRenderer.removeListener('batch-import:complete', handler)
       }
     }
   },

@@ -200,6 +200,23 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
                 overallPercent: 100
               })
 
+              // Notify renderer globally that import completed
+              // (even if BatchImportDialog was closed via "Continue in Background")
+              safeEmit('batch-import:complete', {
+                succeeded: msg.results.succeeded,
+                failed: msg.results.failed,
+                skipped: msg.results.skipped,
+                cancelled: msg.results.cancelled,
+                details: msg.results.details.map((d) => ({
+                  filePath: d.filePath,
+                  fileName: d.fileName,
+                  status: d.status,
+                  caseName: d.caseName,
+                  variantCount: d.variantCount,
+                  error: d.error
+                }))
+              })
+
               resolve({
                 succeeded: msg.results.succeeded,
                 failed: msg.results.failed,
