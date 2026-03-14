@@ -13,7 +13,8 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
           'statistics-worker': resolve(__dirname, 'src/main/statistics/worker.ts'),
-          'import-worker': resolve(__dirname, 'src/main/workers/import-worker.ts')
+          'import-worker': resolve(__dirname, 'src/main/workers/import-worker.ts'),
+          'delete-worker': resolve(__dirname, 'src/main/workers/delete-worker.ts')
         }
       }
     }
