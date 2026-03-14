@@ -3,6 +3,7 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { statSync } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
+import type { Readable } from 'node:stream'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/Pick'
 import { streamArray } from 'stream-json/streamers/StreamArray'
@@ -441,6 +442,89 @@ function rebuildFts(db: DatabaseType): void {
     db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
   } catch {
     // best effort
+  }
+}
+
+interface ParsedFileResult {
+  formatInfo: FormatInfo
+  variants: Array<Record<string, unknown>>
+}
+
+/**
+ * Pre-parse a file into an in-memory variant array.
+ * Used for pipeline parallelism: parse next file while current file inserts.
+ *
+ * The mapper transforms (ObjectFormatMapper / FieldMapper) emit plain
+ * Record<string, unknown> objects with variant fields (chr, pos, ref, alt,
+ * _transcripts, etc.) — the same shape that insertBatch expects.
+ */
+async function preParseFile(
+  filePath: string,
+  isCancelled: () => boolean
+): Promise<ParsedFileResult> {
+  const formatInfo = await detectFormat(filePath)
+  const variants: Array<Record<string, unknown>> = []
+
+  const mapperStream = await createMapperPipeline(filePath, formatInfo)
+
+  for await (const chunk of mapperStream) {
+    if (isCancelled()) {
+      // Explicitly destroy the underlying stream to release file handle
+      mapperStream.destroy()
+      break
+    }
+    // Mappers emit plain variant objects (or null for skipped variants)
+    if (chunk !== null) {
+      variants.push(chunk as Record<string, unknown>)
+    }
+  }
+
+  return { formatInfo, variants }
+}
+
+/**
+ * Create a readable stream that outputs mapped variant objects.
+ * Pipes: decompress → parse → pick → streamArray → format mapper.
+ *
+ * Output: plain Record<string, unknown> objects (not { key, value } wrappers),
+ * because the mapper transforms consume the streamArray wrapper.
+ */
+async function createMapperPipeline(filePath: string, formatInfo: FormatInfo): Promise<Readable> {
+  switch (formatInfo.format) {
+    case 'simple': {
+      const stream = createDecompressedStream(filePath)
+        .pipe(parser())
+        .pipe(pick({ filter: 'variants' }))
+        .pipe(streamArray())
+        .pipe(createObjectFormatMapper())
+      return stream
+    }
+
+    case 'object': {
+      const samplePath = `samples.${formatInfo.caseKey}.variants`
+      const stream = createDecompressedStream(filePath)
+        .pipe(parser())
+        .pipe(pick({ filter: samplePath }))
+        .pipe(streamArray())
+        .pipe(createObjectFormatMapper())
+      return stream
+    }
+
+    case 'columnar': {
+      const wrapped = formatInfo.wrapped !== false
+      const headerPath = wrapped ? `${formatInfo.caseKey}.header` : 'header'
+      const dataPath = wrapped ? `${formatInfo.caseKey}.data` : 'data'
+
+      const { dictionaries, columnIndices } = await parseHeader(filePath, headerPath)
+      const fieldMapper = createFieldMapper(dictionaries, columnIndices)
+
+      const stream = createDecompressedStream(filePath)
+        .pipe(parser())
+        .pipe(pick({ filter: dataPath }))
+        .pipe(streamArray())
+        .pipe(fieldMapper)
+      return stream
+    }
   }
 }
 
