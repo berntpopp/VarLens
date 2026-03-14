@@ -1,7 +1,7 @@
 import { parentPort } from 'worker_threads'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
-import { statSync, existsSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/Pick'
@@ -47,8 +47,9 @@ port.on('message', async (msg: MainMessage) => {
 
       const stmts = prepareStatements(db)
 
-      // Drop FTS triggers once at start (batch optimization)
+      // Drop FTS triggers and non-essential indexes at start (batch optimization)
       db.exec(DROP_FTS_TRIGGERS)
+      db.exec(DROP_INDEXES)
 
       const totalFiles = msg.files.length
       const batchSize = msg.batchSize ?? DATABASE_CONFIG.BATCH_INSERT_SIZE
@@ -107,9 +108,6 @@ port.on('message', async (msg: MainMessage) => {
           }
 
           // Create case record
-          if (!existsSync(file.filePath)) {
-            throw new Error(`File not found: ${file.filePath}`)
-          }
           const fileSize = statSync(file.filePath).size
           const caseResult = stmts.insertCase.run(
             file.caseName,
@@ -239,6 +237,11 @@ port.on('message', async (msg: MainMessage) => {
     } catch (fatalError) {
       if (db) {
         try {
+          db.exec(RECREATE_INDEXES)
+        } catch {
+          // best effort
+        }
+        try {
           db.exec(createFTSTriggers)
         } catch {
           // best effort
@@ -255,6 +258,23 @@ port.on('message', async (msg: MainMessage) => {
       port.postMessage(errorMsg)
     } finally {
       if (db) {
+        try {
+          db.exec(RECREATE_INDEXES)
+        } catch {
+          // best effort — initializeSchema() recreates on next app start
+        }
+        try {
+          db.pragma('wal_checkpoint(TRUNCATE)')
+        } catch {
+          // best effort
+        }
+        try {
+          db.pragma('synchronous = NORMAL')
+          db.pragma('wal_autocheckpoint = 1000')
+          db.pragma('foreign_keys = ON')
+        } catch {
+          // best effort
+        }
         try {
           db.close()
         } catch {
@@ -296,12 +316,13 @@ function openDatabase(dbPath: string, encryptionKey?: string): DatabaseType {
   }
 
   db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
-  db.pragma('synchronous = NORMAL')
+  db.pragma('foreign_keys = OFF')
+  db.pragma('synchronous = OFF')
   db.pragma(`busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}`)
-  db.pragma(`cache_size = ${DATABASE_CONFIG.CACHE_SIZE_KB}`)
+  db.pragma('cache_size = -64000')
   db.pragma('temp_store = MEMORY')
   db.pragma(`mmap_size = ${DATABASE_CONFIG.MMAP_SIZE_BYTES}`)
+  db.pragma('wal_autocheckpoint = 0')
 
   return db
 }
