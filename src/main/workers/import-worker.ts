@@ -157,7 +157,8 @@ port.on('message', async (msg: MainMessage) => {
                 fileSkipped = update.skipped ?? 0
                 onProgress()
               },
-              startTime
+              startTime,
+              isCancelled: () => cancelled
             })
 
             await runImportPipeline(file.filePath, formatInfo, accumulator)

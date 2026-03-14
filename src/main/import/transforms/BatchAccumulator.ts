@@ -12,6 +12,7 @@ interface BatchAccumulatorOptions {
   flushFn: FlushFn
   onProgress?: ProgressCallback
   startTime: number
+  isCancelled?: () => boolean
 }
 
 export class BatchAccumulator extends Transform {
@@ -23,6 +24,7 @@ export class BatchAccumulator extends Transform {
   private readonly flushFn: FlushFn
   private readonly onProgress?: ProgressCallback
   private readonly startTime: number
+  private readonly isCancelled?: () => boolean
 
   constructor(options: BatchAccumulatorOptions) {
     super({ objectMode: true })
@@ -31,6 +33,7 @@ export class BatchAccumulator extends Transform {
     this.flushFn = options.flushFn
     this.onProgress = options.onProgress
     this.startTime = options.startTime
+    this.isCancelled = options.isCancelled
   }
 
   _transform(
@@ -38,6 +41,12 @@ export class BatchAccumulator extends Transform {
     _encoding: BufferEncoding,
     callback: TransformCallback
   ): void {
+    // Check for cancellation before processing
+    if (this.isCancelled !== undefined && this.isCancelled()) {
+      this.destroy(new Error('Import cancelled'))
+      return
+    }
+
     // Null chunks indicate skipped variants from FieldMapper
     if (chunk === null) {
       this.skipped++
