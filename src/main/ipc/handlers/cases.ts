@@ -73,13 +73,26 @@ export function registerCaseHandlers({ ipcMain, getDb }: HandlerDependencies): v
   ipcMain.handle('cases:deleteAll', async () => {
     return wrapHandler(async () => {
       const db = getDb()
-      const deleted = await runDeleteWorker({
-        type: 'deleteAll',
-        dbPath: db.getPath(),
-        encryptionKey: db.getEncryptionKey()
-      })
-      safeEmit('cases:deleted', { deleted })
-      return deleted
+      mainLogger.info(
+        `Starting deleteAll worker (db: ${db.getPath()})`,
+        'cases'
+      )
+      try {
+        const deleted = await runDeleteWorker({
+          type: 'deleteAll',
+          dbPath: db.getPath(),
+          encryptionKey: db.getEncryptionKey()
+        })
+        mainLogger.info(`deleteAll completed: ${deleted} cases deleted`, 'cases')
+        safeEmit('cases:deleted', { deleted })
+        return deleted
+      } catch (error) {
+        mainLogger.error(
+          `deleteAll worker failed: ${error instanceof Error ? error.message : error}`,
+          'cases'
+        )
+        throw error
+      }
     })
   })
 
