@@ -10,6 +10,7 @@
  * const { formatPosition, formatScientific } = useTableFormatters()
  * ```
  */
+import { EMPTY_VALUE_PLACEHOLDER } from '../utils/formatters'
 
 export interface UseTableFormattersReturn {
   formatPosition: (pos: number) => string
@@ -27,7 +28,7 @@ export function useTableFormatters(): UseTableFormattersReturn {
 
   /** Format allele frequency in scientific notation when small */
   const formatScientific = (value: number | null): string => {
-    if (value === null || value === undefined) return '--'
+    if (value === null || value === undefined) return EMPTY_VALUE_PLACEHOLDER
     if (value === 0) return '0'
     if (value >= 0.01) return value.toFixed(4)
     return value.toExponential(1)
@@ -40,12 +41,12 @@ export function useTableFormatters(): UseTableFormattersReturn {
 
   /** Format CADD score with one decimal */
   const formatCaddScore = (value: number | null): string => {
-    return value !== null ? value.toFixed(1) : '--'
+    return value !== null ? value.toFixed(1) : EMPTY_VALUE_PLACEHOLDER
   }
 
   /** Format nullable score values with configurable decimals */
   const formatScore = (value: number | null, decimals = 2): string => {
-    return value !== null ? value.toFixed(decimals) : '--'
+    return value !== null ? value.toFixed(decimals) : EMPTY_VALUE_PLACEHOLDER
   }
 
   return {

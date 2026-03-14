@@ -1064,6 +1064,67 @@ describe('Variant Operations', () => {
       expect(result.data[1].pos).toBe(200)
       expect(result.data[2].pos).toBe(100)
     })
+
+    it('should sort NULL values last when sorting ascending', () => {
+      const caseId = createTestCase(service, 'null-sort-asc')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'G', cadd: null },
+        { chr: '1', pos: 200, ref: 'C', alt: 'T', cadd: 30 },
+        { chr: '1', pos: 300, ref: 'G', alt: 'A', cadd: 10 }
+      ])
+
+      const result = service.variants.getVariants({ case_id: caseId }, 20, undefined, [
+        { key: 'cadd', order: 'asc' }
+      ])
+
+      // Non-null values first in ascending order, then nulls last
+      expect(result.data[0].cadd).toBe(10)
+      expect(result.data[1].cadd).toBe(30)
+      expect(result.data[2].cadd).toBeNull()
+    })
+
+    it('should sort NULL values last when sorting descending', () => {
+      const caseId = createTestCase(service, 'null-sort-desc')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'G', cadd: null },
+        { chr: '1', pos: 200, ref: 'C', alt: 'T', cadd: 30 },
+        { chr: '1', pos: 300, ref: 'G', alt: 'A', cadd: 10 }
+      ])
+
+      const result = service.variants.getVariants({ case_id: caseId }, 20, undefined, [
+        { key: 'cadd', order: 'desc' }
+      ])
+
+      // Non-null values first in descending order, then nulls last
+      expect(result.data[0].cadd).toBe(30)
+      expect(result.data[1].cadd).toBe(10)
+      expect(result.data[2].cadd).toBeNull()
+    })
+
+    it('should sort NULL gnomad_af values last in both directions', () => {
+      const caseId = createTestCase(service, 'null-gnomad-sort')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'G', gnomad_af: null },
+        { chr: '1', pos: 200, ref: 'C', alt: 'T', gnomad_af: 0.05 },
+        { chr: '1', pos: 300, ref: 'G', alt: 'A', gnomad_af: 0.001 }
+      ])
+
+      // Ascending
+      const ascResult = service.variants.getVariants({ case_id: caseId }, 20, undefined, [
+        { key: 'gnomad_af', order: 'asc' }
+      ])
+      expect(ascResult.data[0].gnomad_af).toBe(0.001)
+      expect(ascResult.data[1].gnomad_af).toBe(0.05)
+      expect(ascResult.data[2].gnomad_af).toBeNull()
+
+      // Descending
+      const descResult = service.variants.getVariants({ case_id: caseId }, 20, undefined, [
+        { key: 'gnomad_af', order: 'desc' }
+      ])
+      expect(descResult.data[0].gnomad_af).toBe(0.05)
+      expect(descResult.data[1].gnomad_af).toBe(0.001)
+      expect(descResult.data[2].gnomad_af).toBeNull()
+    })
   })
 
   describe('column_filters', () => {

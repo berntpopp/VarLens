@@ -618,6 +618,68 @@ describe('CohortService', () => {
           expect(resultDesc.data.length).toBeGreaterThan(0)
         })
       })
+
+      it('should sort NULL values last when sorting ascending', () => {
+        const caseId = insertCase('Null Sort Case')
+        insertVariant(caseId, '1', 100, 'A', 'G', { gnomad_af: 0.05 })
+        insertVariant(caseId, '1', 200, 'C', 'T', {}) // gnomad_af is NULL
+        insertVariant(caseId, '1', 300, 'G', 'A', { gnomad_af: 0.001 })
+        rebuildSummary()
+
+        const result = cohortService.getCohortVariants({
+          sort_by: 'gnomad_af',
+          sort_order: 'asc'
+        })
+
+        // Non-null values first in ascending order, then nulls last
+        expect(result.data[0].gnomad_af).toBe(0.001)
+        expect(result.data[1].gnomad_af).toBe(0.05)
+        expect(result.data[2].gnomad_af).toBeNull()
+      })
+
+      it('should sort NULL values last when sorting descending', () => {
+        const caseId = insertCase('Null Sort Desc Case')
+        insertVariant(caseId, '1', 100, 'A', 'G', { gnomad_af: 0.05 })
+        insertVariant(caseId, '1', 200, 'C', 'T', {}) // gnomad_af is NULL
+        insertVariant(caseId, '1', 300, 'G', 'A', { gnomad_af: 0.001 })
+        rebuildSummary()
+
+        const result = cohortService.getCohortVariants({
+          sort_by: 'gnomad_af',
+          sort_order: 'desc'
+        })
+
+        // Non-null values first in descending order, then nulls last
+        expect(result.data[0].gnomad_af).toBe(0.05)
+        expect(result.data[1].gnomad_af).toBe(0.001)
+        expect(result.data[2].gnomad_af).toBeNull()
+      })
+
+      it('should sort NULL CADD values last in both directions', () => {
+        const caseId = insertCase('Null CADD Case')
+        insertVariant(caseId, '1', 100, 'A', 'G', { cadd: 25 })
+        insertVariant(caseId, '1', 200, 'C', 'T', {}) // cadd is NULL
+        insertVariant(caseId, '1', 300, 'G', 'A', { cadd: 15 })
+        rebuildSummary()
+
+        // Ascending
+        const ascResult = cohortService.getCohortVariants({
+          sort_by: 'cadd_phred',
+          sort_order: 'asc'
+        })
+        expect(ascResult.data[0].cadd_phred).toBe(15)
+        expect(ascResult.data[1].cadd_phred).toBe(25)
+        expect(ascResult.data[2].cadd_phred).toBeNull()
+
+        // Descending
+        const descResult = cohortService.getCohortVariants({
+          sort_by: 'cadd_phred',
+          sort_order: 'desc'
+        })
+        expect(descResult.data[0].cadd_phred).toBe(25)
+        expect(descResult.data[1].cadd_phred).toBe(15)
+        expect(descResult.data[2].cadd_phred).toBeNull()
+      })
     })
   })
 

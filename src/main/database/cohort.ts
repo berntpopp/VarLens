@@ -202,7 +202,7 @@ export class CohortService {
 
     // Build ORDER BY — use PK columns as tiebreaker instead of variant_key
     const direction = sortOrder.toUpperCase()
-    const orderByClause = `ORDER BY ${sortBy} ${direction}, chr ASC, pos ASC, ref ASC, alt ASC`
+    const orderByClause = `ORDER BY ${sortBy} ${direction} NULLS LAST, chr ASC, pos ASC, ref ASC, alt ASC`
 
     // Data query — no window function, LIMIT benefits from early termination
     const sql = `

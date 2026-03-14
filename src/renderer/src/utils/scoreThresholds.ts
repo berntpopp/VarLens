@@ -3,6 +3,7 @@
  *
  * Based on clinical interpretation guidelines from RESEARCH.md
  */
+import { EMPTY_VALUE_PLACEHOLDER } from './formatters'
 
 interface ScoreThreshold {
   green: number // Threshold for benign/low concern
@@ -54,7 +55,7 @@ export function getScoreColor(scoreName: string, value: number | null): string {
  * @returns Formatted string
  */
 export function formatScoreValue(scoreName: string, value: number | null): string {
-  if (value === null || value === undefined) return '-'
+  if (value === null || value === undefined) return EMPTY_VALUE_PLACEHOLDER
 
   if (scoreName.toLowerCase() === 'gnomad_af') {
     if (value === 0) return '0'

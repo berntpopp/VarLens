@@ -157,7 +157,7 @@
             :label="value"
             @click="openExternalLink"
           />
-          <span v-else class="text-grey">&mdash;</span>
+          <EmptyPlaceholder v-else />
         </template>
 
         <!-- Consequence (handle null) -->
@@ -167,7 +167,8 @@
 
         <!-- GT (handle null) -->
         <template #[`item.gt_num`]="{ value }">
-          {{ value ?? '-' }}
+          <template v-if="value !== null && value !== undefined">{{ value }}</template>
+          <EmptyPlaceholder v-else />
         </template>
 
         <!-- Func (handle null) with human-readable formatting -->
@@ -180,12 +181,13 @@
             </template>
             <span class="text-body-small">{{ value }}</span>
           </v-tooltip>
-          <span v-else>-</span>
+          <EmptyPlaceholder v-else />
         </template>
 
         <!-- Qual score (handle null) -->
         <template #[`item.qual`]="{ value }">
-          {{ value !== null ? value.toFixed(1) : '-' }}
+          <template v-if="value !== null">{{ value.toFixed(1) }}</template>
+          <EmptyPlaceholder v-else />
         </template>
 
         <!-- Transcript (handle null, truncate long IDs) -->
@@ -198,27 +200,31 @@
             </template>
             {{ value }}
           </v-tooltip>
-          <span v-else>-</span>
+          <EmptyPlaceholder v-else />
         </template>
 
         <!-- cDNA (handle null) -->
         <template #[`item.cdna`]="{ value }">
-          <span class="hgvs-notation">{{ value ?? '-' }}</span>
+          <span v-if="value" class="hgvs-notation">{{ value }}</span>
+          <EmptyPlaceholder v-else />
         </template>
 
         <!-- AA Change (handle null) -->
         <template #[`item.aa_change`]="{ value }">
-          <span class="hgvs-notation">{{ value ?? '-' }}</span>
+          <span v-if="value" class="hgvs-notation">{{ value }}</span>
+          <EmptyPlaceholder v-else />
         </template>
 
         <!-- HPO Sim Score (handle null) -->
         <template #[`item.hpo_sim_score`]="{ value }">
-          {{ value !== null ? value.toFixed(2) : '-' }}
+          <template v-if="value !== null">{{ value.toFixed(2) }}</template>
+          <EmptyPlaceholder v-else />
         </template>
 
         <!-- MoI (handle null) -->
         <template #[`item.moi`]="{ value }">
-          {{ value ?? '-' }}
+          <template v-if="value !== null && value !== undefined">{{ value }}</template>
+          <EmptyPlaceholder v-else />
         </template>
 
         <!-- Dynamic virtual link columns from store -->
@@ -269,7 +275,8 @@ import {
   GeneSymbolCell,
   ConsequenceCell,
   ExternalLinkCell,
-  AnnotationsCell
+  AnnotationsCell,
+  EmptyPlaceholder
 } from './table-cells'
 
 interface Props {

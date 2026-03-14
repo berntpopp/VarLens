@@ -2,6 +2,9 @@
  * Formatting utilities for displaying variant data in human-readable format
  */
 
+/** Placeholder displayed for null/undefined/missing values in tables and data display */
+export const EMPTY_VALUE_PLACEHOLDER = '--'
+
 /**
  * Map of consequence types to human-readable labels
  * Based on Sequence Ontology terms used in VEP/Ensembl

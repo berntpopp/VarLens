@@ -8,6 +8,7 @@ import {
   normalizeTranscriptId,
   type UnifiedTranscriptRow
 } from '../utils/mergeTranscripts'
+import { EMPTY_VALUE_PLACEHOLDER } from '../utils/formatters'
 
 const props = defineProps<{
   variantId: number | null
@@ -252,15 +253,15 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
               </v-chip>
             </template>
           </v-tooltip>
-          <span v-else class="text-medium-emphasis">-</span>
+          <span v-else class="text-medium-emphasis">{{ EMPTY_VALUE_PLACEHOLDER }}</span>
         </template>
 
         <template #[`item.cdna`]="{ value }">
-          <span class="text-body-medium">{{ value ?? '-' }}</span>
+          <span class="text-body-medium">{{ value ?? EMPTY_VALUE_PLACEHOLDER }}</span>
         </template>
 
         <template #[`item.aa_change`]="{ value }">
-          <span class="text-body-medium">{{ value ?? '-' }}</span>
+          <span class="text-body-medium">{{ value ?? EMPTY_VALUE_PLACEHOLDER }}</span>
         </template>
 
         <template #[`item.status`]="{ item }">

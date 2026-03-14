@@ -145,7 +145,7 @@ onMounted(loadUsers)
         <tbody>
           <tr v-for="user in users" :key="user.id">
             <td>{{ user.username }}</td>
-            <td>{{ user.display_name || '—' }}</td>
+            <td>{{ user.display_name || '--' }}</td>
             <td>
               <v-chip :color="user.role === 'admin' ? 'primary' : 'default'" size="small">
                 {{ user.role }}

@@ -187,6 +187,7 @@
 import { ref, computed, watch } from 'vue'
 import { useCaseMetrics } from '../composables/useCaseMetrics'
 import type { MetricDefinition, CaseMetricWithDefinition } from '../../../shared/types/api'
+import { EMPTY_VALUE_PLACEHOLDER } from '../utils/formatters'
 
 const props = defineProps<{
   caseId: number
@@ -341,6 +342,6 @@ function formatMetricValue(metric: CaseMetricWithDefinition): string {
   if (metric.date_value !== null && metric.date_value !== undefined) {
     return metric.date_value
   }
-  return '-'
+  return EMPTY_VALUE_PLACEHOLDER
 }
 </script>

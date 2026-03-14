@@ -452,7 +452,7 @@ export class VariantRepository extends BaseRepository {
         continue
       }
       const dir = sort.order === 'desc' ? 'DESC' : 'ASC'
-      const nulls = sort.order === 'desc' ? 'NULLS FIRST' : 'NULLS LAST'
+      const nulls = 'NULLS LAST'
       sorted = sorted.orderBy(sql`${sql.ref(sqlColumn)} ${sql.raw(dir)} ${sql.raw(nulls)}`)
       if (sort.key === 'id') hasIdSort = true
     }
