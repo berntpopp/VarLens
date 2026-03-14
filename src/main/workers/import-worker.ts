@@ -29,6 +29,30 @@ const DROP_FTS_TRIGGERS = `
   DROP TRIGGER IF EXISTS variants_fts_au;
 `
 
+const DROP_INDEXES = `
+  DROP INDEX IF EXISTS idx_variants_gene;
+  DROP INDEX IF EXISTS idx_variants_pos;
+  DROP INDEX IF EXISTS idx_variants_filters;
+  DROP INDEX IF EXISTS idx_variants_chr_pos_ref_alt;
+  DROP INDEX IF EXISTS idx_vt_selected;
+  DROP INDEX IF EXISTS idx_vt_transcript;
+  DROP INDEX IF EXISTS idx_variants_filter_covering;
+  DROP INDEX IF EXISTS idx_variants_case_coords;
+  DROP INDEX IF EXISTS idx_variants_gene_notnull;
+`
+
+const RECREATE_INDEXES = `
+  CREATE INDEX IF NOT EXISTS idx_variants_gene ON variants(gene_symbol);
+  CREATE INDEX IF NOT EXISTS idx_variants_pos ON variants(chr, pos);
+  CREATE INDEX IF NOT EXISTS idx_variants_filters ON variants(gnomad_af, cadd);
+  CREATE INDEX IF NOT EXISTS idx_variants_chr_pos_ref_alt ON variants(chr, pos, ref, alt);
+  CREATE INDEX IF NOT EXISTS idx_vt_selected ON variant_transcripts(variant_id, is_selected);
+  CREATE INDEX IF NOT EXISTS idx_vt_transcript ON variant_transcripts(transcript_id);
+  CREATE INDEX IF NOT EXISTS idx_variants_filter_covering ON variants(case_id, consequence, func, clinvar);
+  CREATE INDEX IF NOT EXISTS idx_variants_case_coords ON variants(case_id, chr, pos, ref, alt);
+  CREATE INDEX IF NOT EXISTS idx_variants_gene_notnull ON variants(gene_symbol) WHERE gene_symbol IS NOT NULL;
+`
+
 let cancelled = false
 
 port.on('message', async (msg: MainMessage) => {
