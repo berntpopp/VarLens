@@ -10,14 +10,16 @@ import {
   type ElectronApplication,
   type Page
 } from '@playwright/test'
-import { readdirSync } from 'fs'
+import { readdirSync, existsSync } from 'fs'
 import { resolve, basename } from 'path'
 
 const BENCH_DIR = '/tmp/varlens-bench'
-const files = readdirSync(BENCH_DIR)
-  .filter((f) => f.endsWith('.json.gz') || f.endsWith('.json'))
-  .map((f) => resolve(BENCH_DIR, f))
-  .slice(0, 50)
+const files = existsSync(BENCH_DIR)
+  ? readdirSync(BENCH_DIR)
+      .filter((f) => f.endsWith('.json.gz') || f.endsWith('.json'))
+      .map((f) => resolve(BENCH_DIR, f))
+      .slice(0, 50)
+  : []
 
 let app: ElectronApplication
 let window: Page
@@ -47,6 +49,7 @@ test.afterAll(async () => {
 
 // eslint-disable-next-line no-empty-pattern
 test('benchmark: import 50 files, verify, delete all', async ({}, testInfo) => {
+  test.skip(files.length === 0, `Benchmark directory ${BENCH_DIR} not found or empty`)
   test.setTimeout(600000)
 
   console.log(`\n=== IMPORT BENCHMARK: ${files.length} files ===\n`)

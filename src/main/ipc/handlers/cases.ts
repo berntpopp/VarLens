@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { Worker } from 'worker_threads'
 import { BrowserWindow } from 'electron'
+import { resolve } from 'node:path'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { CaseIdSchema } from '../../../shared/types/ipc-schemas'
@@ -20,23 +21,33 @@ function safeEmit(channel: string, data: unknown): void {
  * Run a delete operation in a worker thread to avoid blocking the main process.
  */
 function runDeleteWorker(request: DeleteWorkerRequest): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const workerPath = __dirname + '/delete-worker.js'
+  return new Promise((res, rej) => {
+    const workerPath = resolve(__dirname, 'delete-worker.js')
     const worker = new Worker(workerPath)
+    let settled = false
+
+    const settle = (fn: typeof res | typeof rej, value: unknown): void => {
+      if (settled) return
+      settled = true
+      fn(value as number)
+      worker.terminate().catch(() => {})
+    }
 
     worker.on('message', (msg: DeleteWorkerResponse) => {
       if (msg.type === 'complete') {
-        resolve(msg.deleted ?? 0)
+        settle(res, msg.deleted ?? 0)
       } else {
-        reject(new Error(msg.error ?? 'Delete worker failed'))
+        settle(rej, new Error(msg.error ?? 'Delete worker failed'))
       }
-      worker.terminate().catch(() => {})
     })
 
     worker.on('error', (err: Error) => {
       mainLogger.error(`Delete worker error: ${err.message}`, 'cases')
-      reject(err)
-      worker.terminate().catch(() => {})
+      settle(rej, err)
+    })
+
+    worker.on('exit', (code) => {
+      settle(rej, new Error(`Delete worker exited unexpectedly with code ${code}`))
     })
 
     worker.postMessage(request)

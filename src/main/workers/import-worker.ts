@@ -148,6 +148,17 @@ port.on('message', async (msg: MainMessage) => {
           try {
             let parsedData: ParsedFileResult
 
+            // Emit parsing phase progress
+            sendProgress(
+              fileIndex,
+              totalFiles,
+              fileName,
+              Math.round((fileIndex / totalFiles) * 100),
+              'parsing',
+              0,
+              0
+            )
+
             // Use pre-parsed data if available (from previous iteration's lookahead)
             if (nextFileParsed) {
               parsedData = await nextFileParsed
@@ -362,7 +373,7 @@ function openDatabase(dbPath: string, encryptionKey?: string): DatabaseType {
   db.pragma('foreign_keys = OFF')
   db.pragma('synchronous = OFF')
   db.pragma(`busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}`)
-  db.pragma('cache_size = -64000')
+  db.pragma(`cache_size = ${DATABASE_CONFIG.IMPORT_CACHE_SIZE_KB}`)
   db.pragma('temp_store = MEMORY')
   db.pragma(`mmap_size = ${DATABASE_CONFIG.MMAP_SIZE_BYTES}`)
   db.pragma('wal_autocheckpoint = 0')
