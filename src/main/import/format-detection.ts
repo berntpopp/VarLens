@@ -1,4 +1,7 @@
 import { parser } from 'stream-json'
+import { pick } from 'stream-json/filters/Pick'
+import { streamArray } from 'stream-json/streamers/StreamArray'
+import type { Readable } from 'node:stream'
 import type { FileFormat, FormatInfo } from './strategies/ImportStrategy'
 import { createDecompressedStream } from './stream-utils'
 
@@ -163,4 +166,57 @@ export async function extractFirstSampleId(filePath: string): Promise<string> {
       reject(err)
     })
   })
+}
+
+/**
+ * Detect file format and create a data stream positioned at the variant/data items.
+ *
+ * Returns a streamArray() stream emitting { key: number, value: T } objects.
+ * The stream does NOT include format mappers — callers pipe through their own
+ * ObjectFormatMapper or FieldMapper as needed.
+ *
+ * Note: This opens two streams (detect + data), not one. The API benefit is
+ * consolidation — callers don't need separate detectFormat + pipeline setup.
+ * For object format, this saves the third stream that extractFirstSampleId
+ * would otherwise open separately.
+ */
+export async function createDataPipeline(filePath: string): Promise<{
+  formatInfo: FormatInfo
+  stream: Readable
+}> {
+  const formatInfo = await detectFormat(filePath)
+  const decompressed = createDecompressedStream(filePath)
+  const jsonParser = parser()
+
+  let stream: Readable
+
+  switch (formatInfo.format) {
+    case 'simple':
+      stream = decompressed
+        .pipe(jsonParser)
+        .pipe(pick({ filter: 'variants' }))
+        .pipe(streamArray())
+      break
+
+    case 'object': {
+      const samplePath = `samples.${formatInfo.caseKey}.variants`
+      stream = decompressed
+        .pipe(jsonParser)
+        .pipe(pick({ filter: samplePath }))
+        .pipe(streamArray())
+      break
+    }
+
+    case 'columnar': {
+      const wrapped = formatInfo.wrapped !== false
+      const dataPath = wrapped ? `${formatInfo.caseKey}.data` : 'data'
+      stream = decompressed
+        .pipe(jsonParser)
+        .pipe(pick({ filter: dataPath }))
+        .pipe(streamArray())
+      break
+    }
+  }
+
+  return { formatInfo, stream }
 }
