@@ -73,10 +73,7 @@ export function registerCaseHandlers({ ipcMain, getDb }: HandlerDependencies): v
   ipcMain.handle('cases:deleteAll', async () => {
     return wrapHandler(async () => {
       const db = getDb()
-      mainLogger.info(
-        `Starting deleteAll worker (db: ${db.getPath()})`,
-        'cases'
-      )
+      mainLogger.info(`Starting deleteAll worker (db: ${db.getPath()})`, 'cases')
       try {
         const deleted = await runDeleteWorker({
           type: 'deleteAll',
