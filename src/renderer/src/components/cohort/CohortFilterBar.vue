@@ -336,13 +336,16 @@ const mergedActiveFilters = computed<ActiveFilter[]>(() => [
   ...(props.columnActiveFilters ?? [])
 ])
 
-// Merged has-active check (includes column filters)
+// Merged has-active check (includes column filters + DSL filters)
 const mergedHasActiveFilters = computed(
-  () => hasActiveFilters.value || (props.columnActiveFilters ?? []).length > 0
+  () =>
+    hasActiveFilters.value || (props.columnActiveFilters ?? []).length > 0 || hasDslFilters.value
 )
 
-// Filter count only reflects actual filters, not sort
-const activeFilterCount = computed(() => mergedActiveFilters.value.length)
+// Filter count reflects actual filters + DSL column filters, not sort
+const activeFilterCount = computed(
+  () => mergedActiveFilters.value.length + Object.keys(dslColumnFilters.value).length
+)
 
 // Gene autocomplete state
 const geneSymbolSuggestions = ref<string[]>([])
@@ -452,6 +455,7 @@ const {
   isDslMode,
   dslErrors,
   dslColumnFilters,
+  hasDslFilters,
   applyDslFilters,
   handleDslClear,
   applySuggestion
