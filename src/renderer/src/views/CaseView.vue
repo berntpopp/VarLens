@@ -80,6 +80,10 @@ function handleExportError(error: string): void {
   showSnack(`Export failed: ${error}`, 'error', { timeout: APP_CONFIG.SNACKBAR_ERROR_MS })
 }
 
+function handleClearColumnFilters(): void {
+  variantTableRef.value?.clearAllColumnFilters()
+}
+
 // filterToolbarRef is used as template ref (not detected by vue-tsc from destructured composable)
 void filterToolbarRef
 
@@ -105,6 +109,7 @@ defineExpose({
         @reset-sort="handleResetSort"
         @export-success="handleExportSuccess"
         @export-error="handleExportError"
+        @clear-column-filters="handleClearColumnFilters"
       />
     </div>
     <VariantTable

@@ -8,7 +8,7 @@
     :active-filters-list="activeFiltersList"
     :exporting="exporting"
     :columns="columns"
-    @clear-all="clearAllFilters"
+    @clear-all="handleClearAll"
     @clear-filter="clearFilter"
     @open-filter-drawer="filterDrawerOpen = true"
     @open-columns-drawer="columnsDrawerOpen = true"
@@ -200,6 +200,7 @@ const props = defineProps<Props>()
 interface Emits {
   (e: 'update:filters', filters: Omit<VariantFilter, 'case_id'>): void
   (e: 'reset-sort'): void
+  (e: 'clear-column-filters'): void
   (
     e: 'export-success',
     data: { filePath: string; action: { text: string; callback: () => void } }
@@ -365,6 +366,12 @@ const searchFieldRef = ref<InstanceType<typeof VTextField> | null>(null)
 function focusSearch(): void {
   const input = searchFieldRef.value?.$el?.querySelector('input') as HTMLInputElement | null
   input?.focus()
+}
+
+// Clear all: reset drawer filters + notify parent to clear column filters
+function handleClearAll() {
+  clearAllFilters()
+  emit('clear-column-filters')
 }
 
 // Expose drawer toggles and search focus for parent keyboard shortcuts

@@ -49,8 +49,10 @@
             :is-sorted="isSorted"
             :sort-by="slotSortBy"
             :has-filter="hasFilter(col.key)"
-            :filter-value="columnFilters[col.key]?.value?.toString() ?? ''"
-            @update:filter="(v: string | null) => setColumnFilter(col.key, v && v.trim() !== '' ? { operator: 'like', value: v } : null)"
+            :current-filter="getFilter(col.key)"
+            :column-meta="columnMetaMap[col.key]"
+            :filter-mode="columnFilterModes[col.key] ?? 'text-suggest'"
+            @apply-filter="(f) => setColumnFilter(col.key, f)"
             @clear-filter="clearColumnFilter(col.key)"
           />
         </template>
@@ -257,6 +259,8 @@
 import { ref, computed, toRef, watch, onMounted, nextTick } from 'vue'
 import type { Variant, VariantFilter } from '../../../shared/types/api'
 import type { AnnotationScope } from '../../../shared/types/annotations'
+import type { ColumnFilterMeta, ColumnFilterMode } from '../../../shared/types/column-filters'
+import { detectFilterMode } from '../config/columnFilterConfig'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useVariantLinks } from '../composables/useVariantLinks'
@@ -357,18 +361,37 @@ const {
   loadVariants,
   resetSort,
   getRowProps,
-  columnFilters,
+  columnMeta,
   hasActiveFilters: hasColumnFilters,
   activeFilterCount: columnFilterCount,
   setColumnFilter,
   clearColumnFilter,
   clearAllColumnFilters,
-  hasFilter
+  hasFilter,
+  getFilter
 } = useVariantData({
   caseId: toRef(props, 'caseId'),
   filters: toRef(props, 'filters'),
   onCountsUpdate: (counts) => emit('update:counts', counts),
   onSortUpdate: (hasSort) => emit('update:hasSort', hasSort)
+})
+
+// Column metadata map for filter UI auto-detection
+const columnMetaMap = computed<Record<string, ColumnFilterMeta>>(() => {
+  const map: Record<string, ColumnFilterMeta> = {}
+  for (const meta of columnMeta.value) {
+    map[meta.key] = meta
+  }
+  return map
+})
+
+// Column filter modes derived from metadata + config overrides
+const columnFilterModes = computed<Record<string, ColumnFilterMode>>(() => {
+  const modes: Record<string, ColumnFilterMode> = {}
+  for (const meta of columnMeta.value) {
+    modes[meta.key] = detectFilterMode(meta)
+  }
+  return modes
 })
 
 // Template refs

@@ -43,8 +43,10 @@
           :is-sorted="isSorted"
           :sort-by="slotSortBy"
           :has-filter="hasColumnFilter(col.key)"
-          :filter-value="columnFilters[col.key]?.value?.toString() ?? ''"
-          @update:filter="(v: string | null) => setColumnFilter(col.key, v && v.trim() !== '' ? { operator: 'like', value: v } : null)"
+          :current-filter="getColumnFilter(col.key)"
+          :column-meta="columnMetaMap[col.key]"
+          :filter-mode="columnFilterModes[col.key] ?? 'text-suggest'"
+          @apply-filter="(f: ColumnFilter) => setColumnFilter(col.key, f)"
           @clear-filter="clearColumnFilter(col.key)"
         />
       </template>
@@ -209,7 +211,13 @@ import {
 import CarrierExpandedRow from './CarrierExpandedRow.vue'
 import VariantColumnHeader from '../variant-table/VariantColumnHeader.vue'
 import { useColumnFilters } from '../../composables/useColumnFilters'
-import type { ColumnFiltersParam } from '../../../../shared/types/column-filters'
+import type {
+  ColumnFilter,
+  ColumnFilterMeta,
+  ColumnFilterMode,
+  ColumnFiltersParam
+} from '../../../../shared/types/column-filters'
+import { detectFilterMode } from '../../config/columnFilterConfig'
 import { useDebounce } from '../../composables/useDebounce'
 import { useExternalLinksStore, type ExternalLinkConfig } from '../../stores/externalLinksStore'
 import { APP_CONFIG } from '../../../../shared/config'
@@ -227,6 +235,8 @@ interface Props {
     align?: 'start' | 'center' | 'end'
   }>
   selectedVariantKey: string | null
+  /** Per-column metadata for filter UI auto-detection (optional, defaults to text-suggest) */
+  columnMeta?: ColumnFilterMeta[]
   // Annotation lookup functions passed from parent
   isGlobalStarred: (chr: string, pos: number, ref: string, alt: string) => boolean
   getGlobalAcmgClassification: (
@@ -291,10 +301,10 @@ const {
 
 // Per-column text filters
 const {
-  columnFilters,
   setColumnFilter,
   clearColumnFilter,
   hasFilter: hasColumnFilter,
+  getFilter: getColumnFilter,
   getColumnFiltersParam
 } = useColumnFilters()
 
@@ -308,6 +318,24 @@ const filterableColumns = computed(() =>
       h.key !== 'data-table-expand'
   )
 )
+
+// Column metadata map for filter UI auto-detection
+const columnMetaMap = computed<Record<string, ColumnFilterMeta>>(() => {
+  const map: Record<string, ColumnFilterMeta> = {}
+  for (const meta of props.columnMeta ?? []) {
+    map[meta.key] = meta
+  }
+  return map
+})
+
+// Column filter modes derived from metadata + config overrides
+const columnFilterModes = computed<Record<string, ColumnFilterMode>>(() => {
+  const modes: Record<string, ColumnFilterMode> = {}
+  for (const meta of props.columnMeta ?? []) {
+    modes[meta.key] = detectFilterMode(meta)
+  }
+  return modes
+})
 
 // Debounced emit when column filters change
 const { debouncedFn: debouncedEmitColumnFilters } = useDebounce(

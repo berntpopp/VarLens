@@ -74,7 +74,7 @@ const selectedOperator = ref<ColumnFilterOperator>(props.initialOperator)
 const filterValue = ref<number | undefined>(props.initialValue)
 
 function onApply() {
-  if (filterValue.value == null || filterValue.value === '') return
+  if (filterValue.value == null) return
   emit('apply', { operator: selectedOperator.value, value: Number(filterValue.value) })
 }
 

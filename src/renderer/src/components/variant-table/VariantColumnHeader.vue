@@ -113,7 +113,7 @@ interface Props {
   /** Column metadata from backend for filter UI (min/max, distinct values) */
   columnMeta?: ColumnFilterMeta
   /** Auto-detected or overridden filter mode */
-  filterMode: ColumnFilterMode
+  filterMode?: ColumnFilterMode
 }
 
 const props = withDefaults(defineProps<Props>(), {
