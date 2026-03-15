@@ -404,6 +404,7 @@ onMounted(async () => {
 .filter-tag-input {
   max-width: 200px;
   flex-shrink: 1;
+  align-self: center;
 }
 
 .filter-tag-input :deep(.v-field) {
