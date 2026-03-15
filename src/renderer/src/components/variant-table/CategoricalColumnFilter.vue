@@ -75,8 +75,8 @@ const filteredValues = computed(() => {
   return props.values.filter((v) => v.toLowerCase().includes(q))
 })
 
-function toggleValue(val: string, checked: unknown) {
-  if (checked) {
+function toggleValue(val: string, checked: boolean | null | undefined) {
+  if (checked === true) {
     if (!selected.value.includes(val)) {
       selected.value.push(val)
     }

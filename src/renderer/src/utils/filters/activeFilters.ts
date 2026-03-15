@@ -38,10 +38,7 @@ const COLUMN_LABELS: Record<string, string> = {
  * - categorical (in): "Consequence: 3 selected"
  * - text (like): "Gene ~ BRCA"
  */
-function formatColumnFilterValue(
-  operator: string,
-  value: string | number | string[]
-): string {
+function formatColumnFilterValue(operator: string, value: string | number | string[]): string {
   if (operator === 'in' && Array.isArray(value)) {
     return `${value.length} selected`
   }
