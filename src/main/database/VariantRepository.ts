@@ -5,6 +5,7 @@ import { sql, type Kysely, type SelectQueryBuilder } from 'kysely'
 import type { VarlensDatabase } from '../../shared/types/database-schema'
 import type { Variant, VariantFilter, PaginatedResult, SortItem } from './types'
 import type { FilterOptions } from '../../shared/types/api'
+import type { ColumnFilterMeta } from '../../shared/types/column-filters'
 import type { TranscriptInsertRow } from '../../shared/types/transcript'
 import { createFTSTriggers } from './schema'
 import { mainLogger } from '../services/MainLogger'
@@ -549,6 +550,70 @@ export class VariantRepository extends BaseRepository {
     return query.compile()
   }
 
+  /**
+   * Gather per-column metadata for filter UI auto-detection.
+   * For each filterable column: distinct count, min/max (numeric), distinct values (if <= 50).
+   */
+  private getColumnMeta(caseId: number): ColumnFilterMeta[] {
+    const DISTINCT_THRESHOLD = 50
+    const meta: ColumnFilterMeta[] = []
+
+    for (const [key, sqlCol] of Object.entries(SORTABLE_COLUMNS)) {
+      const isNumeric = NUMERIC_COLUMNS.has(key)
+
+      // Get distinct count
+      const countResult = this.execFirst<{ cnt: number }>(
+        this.kysely
+          .selectFrom('variants')
+          .select(
+            sql<number>`COUNT(DISTINCT ${sql.ref(sqlCol)})`.as('cnt')
+          )
+          .where('case_id', '=', caseId)
+          .where(sql.ref(sqlCol), 'is not', null)
+      )
+      const distinctCount = countResult?.cnt ?? 0
+
+      const entry: ColumnFilterMeta = {
+        key,
+        dataType: isNumeric ? 'numeric' : 'text',
+        distinctCount
+      }
+
+      // For numeric columns: fetch min/max
+      if (isNumeric) {
+        const rangeResult = this.execFirst<{ min_val: number | null; max_val: number | null }>(
+          this.kysely
+            .selectFrom('variants')
+            .select(({ fn }) => [
+              fn.min(sql.ref(sqlCol)).as('min_val'),
+              fn.max(sql.ref(sqlCol)).as('max_val')
+            ])
+            .where('case_id', '=', caseId)
+            .where(sql.ref(sqlCol), 'is not', null)
+        )
+        entry.min = rangeResult?.min_val ?? undefined
+        entry.max = rangeResult?.max_val ?? undefined
+      }
+
+      // Populate distinct values if count is within threshold
+      if (distinctCount > 0 && distinctCount <= DISTINCT_THRESHOLD) {
+        const rows = this.execAll<Record<string, unknown>>(
+          this.kysely
+            .selectFrom('variants')
+            .select(sql`DISTINCT ${sql.ref(sqlCol)}`.as('val'))
+            .where('case_id', '=', caseId)
+            .where(sql.ref(sqlCol), 'is not', null)
+            .orderBy(sql.ref(sqlCol))
+        )
+        entry.distinctValues = rows.map((r) => String(r.val))
+      }
+
+      meta.push(entry)
+    }
+
+    return meta
+  }
+
   getFilterOptions(caseId: number): FilterOptions {
     const consequences = this.execAll<{ consequence: string }>(
       this.kysely
@@ -603,7 +668,8 @@ export class VariantRepository extends BaseRepository {
       minCadd: caddRange?.min_cadd ?? null,
       maxCadd: caddRange?.max_cadd ?? null,
       minGnomadAf: afRange?.min_af ?? null,
-      maxGnomadAf: afRange?.max_af ?? null
+      maxGnomadAf: afRange?.max_af ?? null,
+      columnMeta: this.getColumnMeta(caseId)
     }
   }
 }
