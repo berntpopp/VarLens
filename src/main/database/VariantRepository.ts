@@ -352,19 +352,26 @@ export class VariantRepository extends BaseRepository {
         } else if (operator === 'like' && typeof value === 'string') {
           query = query.where(sql`${sql.ref(sqlColumn)} COLLATE NOCASE`, 'like', `%${value}%`)
         } else if (
-          (operator === '=' ||
-            operator === '!=' ||
-            operator === '<' ||
-            operator === '>' ||
-            operator === '<=' ||
-            operator === '>=') &&
+          (operator === '=' || operator === '!=') &&
           (typeof value === 'string' || typeof value === 'number')
         ) {
+          // Exact match — NULLs excluded (user is looking for specific values)
           const compValue = typeof value === 'string' ? Number(value) || value : value
           query = query.where(
             sqlColumn as keyof Variant,
-            operator as '=' | '!=' | '<' | '>' | '<=' | '>=',
+            operator as '=' | '!=',
             compValue
+          )
+        } else if (
+          (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
+          (typeof value === 'string' || typeof value === 'number')
+        ) {
+          // Range comparison — include NULLs by default (don't lose unannotated variants)
+          const compValue = typeof value === 'string' ? Number(value) || value : value
+          const col = sqlColumn as keyof Variant
+          const op = operator as '<' | '>' | '<=' | '>='
+          query = query.where(({ or, eb }) =>
+            or([eb(col, 'is', null), eb(col, op, compValue)])
           )
         }
       }

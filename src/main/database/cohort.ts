@@ -198,10 +198,18 @@ export class CohortService {
           whereConditions.push(`cvs.${sqlColumn} LIKE ? COLLATE NOCASE`)
           paramsArray.push(`%${value}%`)
         } else if (
-          ['=', '!=', '<', '>', '<=', '>='].includes(operator) &&
+          ['=', '!='].includes(operator) &&
           (typeof value === 'string' || typeof value === 'number')
         ) {
+          // Exact match — NULLs excluded
           whereConditions.push(`cvs.${sqlColumn} ${operator} ?`)
+          paramsArray.push(value)
+        } else if (
+          ['<', '>', '<=', '>='].includes(operator) &&
+          (typeof value === 'string' || typeof value === 'number')
+        ) {
+          // Range comparison — include NULLs by default
+          whereConditions.push(`(cvs.${sqlColumn} IS NULL OR cvs.${sqlColumn} ${operator} ?)`)
           paramsArray.push(value)
         }
       }
