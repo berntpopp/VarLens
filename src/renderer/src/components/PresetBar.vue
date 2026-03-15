@@ -9,6 +9,9 @@
         :variant="isPresetActive(preset.id) ? 'flat' : 'outlined'"
         size="small"
         label
+        role="button"
+        :aria-pressed="isPresetActive(preset.id)"
+        :aria-label="`Filter preset: ${preset.name}`"
         @click="emit('toggle', preset.id)"
       >
         <v-icon v-if="!preset.isBuiltIn" start size="x-small">mdi-account</v-icon>
