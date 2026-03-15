@@ -37,7 +37,12 @@
 
       <!-- Gene -->
       <v-expansion-panel value="gene">
-        <FilterPanelTitle icon="mdi-dna" label="Gene" :active="isFilterGroupActive('gene')" :value-summary="geneSummary" />
+        <FilterPanelTitle
+          icon="mdi-dna"
+          label="Gene"
+          :active="isFilterGroupActive('gene')"
+          :value-summary="geneSummary"
+        />
         <v-expansion-panel-text>
           <v-autocomplete
             v-model="filters.geneSymbol"
@@ -56,7 +61,12 @@
 
       <!-- Impact -->
       <v-expansion-panel value="impact">
-        <FilterPanelTitle icon="mdi-flash" label="Impact" :active="isFilterGroupActive('impact')" :value-summary="impactSummary" />
+        <FilterPanelTitle
+          icon="mdi-flash"
+          label="Impact"
+          :active="isFilterGroupActive('impact')"
+          :value-summary="impactSummary"
+        />
         <v-expansion-panel-text>
           <div class="d-flex ga-1 flex-wrap">
             <v-chip

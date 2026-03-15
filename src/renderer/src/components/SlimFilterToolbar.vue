@@ -107,7 +107,13 @@
           <strong>{{ filter.label }}</strong>
           <span class="ml-1">{{ filter.value }}</span>
         </v-chip>
-        <v-btn variant="text" size="x-small" color="error" class="ml-auto" @click="emit('clear-all')">
+        <v-btn
+          variant="text"
+          size="x-small"
+          color="error"
+          class="ml-auto"
+          @click="emit('clear-all')"
+        >
           Clear all
         </v-btn>
       </div>
