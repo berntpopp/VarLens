@@ -8,55 +8,13 @@
     @update:expanded-panels="expandedPanels = $event"
     @clear-all="clearAllFilters"
   >
-    <!-- Preset chips (always visible, above expansion panels) -->
-    <div
-      v-if="visiblePresets && visiblePresets.length > 0"
-      class="preset-drawer-section px-3 pt-2 pb-1"
-    >
-      <div class="d-flex align-center mb-1">
-        <v-icon size="x-small" class="mr-1 text-medium-emphasis">mdi-bookmark-multiple</v-icon>
-        <span class="text-overline text-medium-emphasis">Presets</span>
-        <v-spacer />
-        <v-btn
-          v-if="hasActiveFiltersForSave"
-          size="x-small"
-          variant="text"
-          color="primary"
-          density="compact"
-          @click="onPresetSave?.()"
-        >
-          Save
-        </v-btn>
-        <v-btn size="x-small" variant="text" density="compact" @click="onPresetManage?.()">
-          <v-icon size="x-small">mdi-cog-outline</v-icon>
-        </v-btn>
-      </div>
-      <div class="d-flex ga-1 flex-wrap pb-1">
-        <v-chip
-          v-for="preset in visiblePresets"
-          :key="preset.id"
-          :color="isPresetActive?.(preset.id) ? 'primary' : undefined"
-          :variant="isPresetActive?.(preset.id) ? 'flat' : 'outlined'"
-          size="small"
-          label
-          @click="onPresetToggle?.(preset.id)"
-        >
-          {{ preset.name }}
-          <v-tooltip activator="parent" location="bottom">
-            {{ preset.description || 'No description' }}
-          </v-tooltip>
-        </v-chip>
-      </div>
-      <v-divider class="mt-1" />
-    </div>
-
     <v-expansion-panels v-model="expandedPanels" multiple variant="accordion">
       <!-- === VARIANT PROPERTIES === -->
       <div class="filter-section-header text-overline text-medium-emphasis px-3 pt-3 pb-1">
         Variant Properties
       </div>
 
-      <!-- Search -->
+      <!-- Search (ALWAYS first) -->
       <v-expansion-panel value="search">
         <FilterPanelTitle
           icon="mdi-magnify"
@@ -76,6 +34,48 @@
           />
         </v-expansion-panel-text>
       </v-expansion-panel>
+
+      <!-- Preset chips (below Search, above remaining filters) -->
+      <div
+        v-if="visiblePresets && visiblePresets.length > 0"
+        class="preset-drawer-section px-3 pt-2 pb-1"
+      >
+        <div class="d-flex align-center mb-1">
+          <v-icon size="x-small" class="mr-1 text-medium-emphasis">mdi-bookmark-multiple</v-icon>
+          <span class="text-overline text-medium-emphasis">Presets</span>
+          <v-spacer />
+          <v-btn
+            v-if="hasActiveFiltersForSave"
+            size="x-small"
+            variant="text"
+            color="primary"
+            density="compact"
+            @click="onPresetSave?.()"
+          >
+            Save
+          </v-btn>
+          <v-btn size="x-small" variant="text" density="compact" @click="onPresetManage?.()">
+            <v-icon size="x-small">mdi-cog-outline</v-icon>
+          </v-btn>
+        </div>
+        <div class="d-flex ga-1 flex-wrap pb-1">
+          <v-chip
+            v-for="preset in visiblePresets"
+            :key="preset.id"
+            :color="isPresetActive?.(preset.id) ? 'primary' : undefined"
+            :variant="isPresetActive?.(preset.id) ? 'flat' : 'outlined'"
+            size="small"
+            label
+            @click="onPresetToggle?.(preset.id)"
+          >
+            {{ preset.name }}
+            <v-tooltip activator="parent" location="bottom">
+              {{ preset.description || 'No description' }}
+            </v-tooltip>
+          </v-chip>
+        </div>
+        <v-divider class="mt-1" />
+      </div>
 
       <!-- Gene -->
       <v-expansion-panel value="gene">
