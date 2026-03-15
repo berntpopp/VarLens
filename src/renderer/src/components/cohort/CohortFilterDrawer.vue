@@ -15,6 +15,7 @@
           icon="mdi-magnify"
           label="Search"
           :active="isFilterGroupActive('search')"
+          :value-summary="searchSummary"
         />
         <v-expansion-panel-text>
           <v-text-field
@@ -31,7 +32,7 @@
 
       <!-- Gene -->
       <v-expansion-panel value="gene">
-        <FilterPanelTitle icon="mdi-dna" label="Gene" :active="isFilterGroupActive('gene')" />
+        <FilterPanelTitle icon="mdi-dna" label="Gene" :active="isFilterGroupActive('gene')" :value-summary="geneSummary" />
         <v-expansion-panel-text>
           <v-autocomplete
             v-model="filters.geneSymbol"
@@ -50,7 +51,7 @@
 
       <!-- Impact -->
       <v-expansion-panel value="impact">
-        <FilterPanelTitle icon="mdi-flash" label="Impact" :active="isFilterGroupActive('impact')" />
+        <FilterPanelTitle icon="mdi-flash" label="Impact" :active="isFilterGroupActive('impact')" :value-summary="impactSummary" />
         <v-expansion-panel-text>
           <div class="d-flex ga-1 flex-wrap">
             <v-chip
@@ -74,6 +75,7 @@
           icon="mdi-function"
           label="Consequence"
           :active="isFilterGroupActive('function')"
+          :value-summary="funcSummary"
         />
         <v-expansion-panel-text>
           <GroupedMultiSelect
@@ -92,6 +94,7 @@
           icon="mdi-hospital-box"
           label="ClinVar"
           :active="isFilterGroupActive('clinvar')"
+          :value-summary="clinvarSummary"
         />
         <v-expansion-panel-text>
           <GroupedMultiSelect
@@ -110,6 +113,7 @@
           icon="mdi-star-circle"
           label="Annotations"
           :active="isFilterGroupActive('annotations')"
+          :value-summary="annotationsSummary"
         />
         <v-expansion-panel-text>
           <div class="d-flex ga-2 mb-3">
@@ -157,6 +161,7 @@
           icon="mdi-account-group"
           label="Cohort Freq"
           :active="isFilterGroupActive('cohortFreq')"
+          :value-summary="cohortFreqSummary"
         />
         <v-expansion-panel-text>
           <div class="d-flex ga-1 flex-wrap mb-2">
@@ -196,6 +201,7 @@
           icon="mdi-earth"
           label="gnomAD AF"
           :active="isFilterGroupActive('frequency')"
+          :value-summary="frequencySummary"
         />
         <v-expansion-panel-text>
           <div class="d-flex ga-1 flex-wrap mb-2">
@@ -232,6 +238,7 @@
           icon="mdi-alert-circle"
           label="CADD"
           :active="isFilterGroupActive('cadd')"
+          :value-summary="caddSummary"
         />
         <v-expansion-panel-text>
           <div class="d-flex ga-1 flex-wrap mb-2">
@@ -268,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref } from 'vue'
+import { inject, ref, computed } from 'vue'
 import FilterDrawerShell from '../filters/FilterDrawerShell.vue'
 import FilterPanelTitle from '../filters/FilterPanelTitle.vue'
 import GroupedMultiSelect from '../GroupedMultiSelect.vue'
@@ -329,6 +336,58 @@ const {
   clearAllFilters,
   searchGeneSymbols
 } = state
+
+// Value summaries for collapsed panel previews
+const searchSummary = computed(() => searchTerm.value || '')
+const geneSummary = computed(() => filters.value.geneSymbol || '')
+
+const impactSummary = computed(() => {
+  if (selectedImpactPresets.value.length > 0) {
+    return selectedImpactPresets.value.join(', ')
+  }
+  return ''
+})
+
+const funcSummary = computed(() =>
+  filters.value.funcs.length > 0 ? `${filters.value.funcs.length} selected` : ''
+)
+
+const clinvarSummary = computed(() =>
+  filters.value.clinvars.length > 0 ? `${filters.value.clinvars.length} selected` : ''
+)
+
+const annotationsSummary = computed(() => {
+  const parts: string[] = []
+  if (filters.value.starredOnly) parts.push('Starred')
+  if (filters.value.hasCommentOnly) parts.push('Comments')
+  if (filters.value.acmgClassifications.length > 0) {
+    parts.push(`ACMG: ${filters.value.acmgClassifications.length}`)
+  }
+  return parts.join(', ')
+})
+
+const cohortFreqSummary = computed(() => {
+  if (filters.value.minCohortFrequency !== null && filters.value.minCohortFrequency > 0) {
+    const pct = (filters.value.minCohortFrequency * 100).toFixed(1)
+    return `>= ${pct}%`
+  }
+  return ''
+})
+
+const frequencySummary = computed(() => {
+  if (filters.value.maxGnomadAf !== null && filters.value.maxGnomadAf > 0) {
+    const pct = (filters.value.maxGnomadAf * 100).toFixed(2)
+    return `<= ${pct}%`
+  }
+  return ''
+})
+
+const caddSummary = computed(() => {
+  if (filters.value.minCadd !== null && filters.value.minCadd >= 0) {
+    return `>= ${filters.value.minCadd}`
+  }
+  return ''
+})
 
 const acmgFilterOptions = ACMG_FILTER_OPTIONS
 
