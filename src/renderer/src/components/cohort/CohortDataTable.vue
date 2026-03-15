@@ -217,6 +217,8 @@ import type {
   ColumnFilterMeta,
   ColumnFiltersParam
 } from '../../../../shared/types/column-filters'
+import type { ActiveFilter } from '../../../../shared/types/filters'
+import { buildActiveFiltersList } from '../../utils/filters/activeFilters'
 import { useDebounce } from '../../composables/useDebounce'
 import { useExternalLinksStore, type ExternalLinkConfig } from '../../stores/externalLinksStore'
 import { APP_CONFIG } from '../../../../shared/config'
@@ -302,6 +304,9 @@ const {
 const {
   setColumnFilter,
   clearColumnFilter,
+  clearAllColumnFilters,
+  hasActiveFilters: hasColumnFilters,
+  activeFilterCount: columnFilterCount,
   hasFilter: hasColumnFilter,
   getFilter: getColumnFilter,
   getColumnFiltersParam
@@ -559,14 +564,45 @@ onMounted(async () => {
   }
 })
 
+// Column active filter chips for the toolbar
+const columnActiveFilters = computed<ActiveFilter[]>(() => {
+  const colFilters = getColumnFiltersParam()
+  if (!colFilters) return []
+  return buildActiveFiltersList(
+    {
+      searchQuery: '',
+      geneSymbol: '',
+      consequences: [],
+      funcs: [],
+      clinvars: [],
+      maxGnomadAf: null,
+      minCadd: null,
+      minCohortFrequency: null,
+      minCarriers: null,
+      starredOnly: false,
+      hasCommentOnly: false,
+      acmgClassifications: []
+    },
+    [],
+    colFilters
+  ).filter((f) => f.id.startsWith('col:'))
+})
+
 /**
- * Expose refresh method for parent to call
+ * Expose refresh method and column filter state for parent to call
  */
 const refresh = (): void => {
   clearCarrierCache()
 }
 
-defineExpose({ refresh })
+defineExpose({
+  refresh,
+  columnActiveFilters,
+  clearColumnFilter,
+  clearAllColumnFilters,
+  hasColumnFilters,
+  columnFilterCount
+})
 </script>
 
 <style scoped>

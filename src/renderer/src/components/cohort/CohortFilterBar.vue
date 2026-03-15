@@ -2,10 +2,10 @@
   <SlimFilterToolbar
     :filtered-count="totalCount ?? 0"
     :total-count="cohortSummary?.unique_variants ?? null"
-    :has-active-filters="hasActiveFilters"
+    :has-active-filters="mergedHasActiveFilters"
     :has-clearable-state="props.hasSort"
     :active-filter-count="activeFilterCount"
-    :active-filters-list="activeFiltersList"
+    :active-filters-list="mergedActiveFilters"
     :exporting="exporting"
     :columns="columns"
     @clear-all="handleClearAll"
@@ -115,7 +115,7 @@ import { useDebounce } from '../../composables/useDebounce'
 import SlimFilterToolbar from '../SlimFilterToolbar.vue'
 import ColumnsDrawer from '../ColumnsDrawer.vue'
 import CohortFilterDrawer from './CohortFilterDrawer.vue'
-import type { CohortVariant } from '../../../../shared/types/cohort'
+import type { ActiveFilter } from '../../../../shared/types/filters'
 import type { CohortFilterDrawerState } from './cohortFilterDrawerTypes'
 import { ACMG_FILTER_OPTIONS } from '../../utils/filters'
 
@@ -126,6 +126,8 @@ interface Props {
   visibleColumns: string[]
   exporting: boolean
   hasSort?: boolean
+  /** Per-column active filter chips from CohortDataTable */
+  columnActiveFilters?: ActiveFilter[]
 }
 
 const props = defineProps<Props>()
@@ -134,6 +136,8 @@ const emit = defineEmits<{
   'filter-change': []
   'clear-all': []
   'clear-filter': [filterId: string]
+  'clear-column-filter': [columnKey: string]
+  'clear-column-filters': []
   export: []
   'toggle-column': [key: string]
   'reorder-columns': [keys: string[]]
@@ -192,8 +196,19 @@ const caddPresets = [
   { label: '25', value: 25 }
 ]
 
+// Merged active filters: regular filters + column filters
+const mergedActiveFilters = computed<ActiveFilter[]>(() => [
+  ...activeFiltersList.value,
+  ...(props.columnActiveFilters ?? [])
+])
+
+// Merged has-active check (includes column filters)
+const mergedHasActiveFilters = computed(
+  () => hasActiveFilters.value || (props.columnActiveFilters ?? []).length > 0
+)
+
 // Filter count only reflects actual filters, not sort
-const activeFilterCount = computed(() => activeFiltersList.value.length)
+const activeFilterCount = computed(() => mergedActiveFilters.value.length)
 
 // Gene autocomplete state
 const geneSymbolSuggestions = ref<string[]>([])
@@ -330,12 +345,18 @@ const handleSearchChange = (value: string | null) => {
 
 const handleClearAll = () => {
   clearAllFilters()
+  emit('clear-column-filters')
   emit('clear-all')
 }
 
 const handleClearFilter = (filterId: string) => {
-  clearFilter(filterId)
-  emit('clear-filter', filterId)
+  if (filterId.startsWith('col:')) {
+    const columnKey = filterId.slice(4)
+    emit('clear-column-filter', columnKey)
+  } else {
+    clearFilter(filterId)
+    emit('clear-filter', filterId)
+  }
 }
 
 const handleToggleColumn = (key: string) => {

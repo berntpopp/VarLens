@@ -31,9 +31,12 @@
       :visible-columns="visibleHeaders.map((h) => h.key)"
       :exporting="exporting"
       :has-sort="hasSort"
+      :column-active-filters="cohortDataTableRef?.columnActiveFilters ?? []"
       @filter-change="handleFilterChange"
       @clear-all="handleClearAll"
       @clear-filter="handleClearFilter"
+      @clear-column-filter="handleClearColumnFilter"
+      @clear-column-filters="handleClearColumnFilters"
       @export="handleExport"
       @toggle-column="toggleColumnVisibility"
       @reorder-columns="setColumnOrder"
@@ -42,6 +45,7 @@
 
     <!-- Data Table -->
     <CohortDataTable
+      ref="cohortDataTableRef"
       v-model:page="page"
       v-model:items-per-page="itemsPerPage"
       v-model:sort-by="sortBy"
@@ -226,6 +230,7 @@ const {
 // Local state
 const selectedVariantKey = ref<string | null>(null)
 const annotationDialogsRef = ref<InstanceType<typeof AnnotationDialogs> | null>(null)
+const cohortDataTableRef = ref<InstanceType<typeof CohortDataTable> | null>(null)
 
 // Export state
 const exporting = ref(false)
@@ -315,6 +320,7 @@ const handleFilterChange = () => invalidateAndReload()
 
 const handleClearAll = async () => {
   clearAllFilters()
+  cohortDataTableRef.value?.clearAllColumnFilters()
   resetSort()
   await invalidateAndReload()
 }
@@ -335,6 +341,14 @@ const { debouncedFn: debouncedColumnFilterReload } = useDebounce(invalidateAndRe
 const handleColumnFiltersChange = (newFilters: ColumnFiltersParam | undefined): void => {
   cohortColumnFilters.value = newFilters
   debouncedColumnFilterReload()
+}
+
+const handleClearColumnFilter = (columnKey: string): void => {
+  cohortDataTableRef.value?.clearColumnFilter(columnKey)
+}
+
+const handleClearColumnFilters = (): void => {
+  cohortDataTableRef.value?.clearAllColumnFilters()
 }
 
 const handleRetry = async () => {
