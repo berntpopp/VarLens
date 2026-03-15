@@ -196,7 +196,8 @@ export function useCohortData(): UseCohortDataReturn {
       ipcParams.acmg_classifications = [...params.acmg_classifications]
     }
     if (params.column_filters !== undefined) {
-      ipcParams.column_filters = { ...params.column_filters }
+      // Deep-clone to strip reactive proxies for IPC structured clone
+      ipcParams.column_filters = JSON.parse(JSON.stringify(params.column_filters))
     }
 
     return ipcParams
