@@ -93,7 +93,7 @@
     <!-- Applied Filters Summary Bar -->
     <v-expand-transition>
       <div v-if="activeFiltersList.length > 0" class="applied-filters-bar">
-        <span class="text-body-small text-medium-emphasis mr-2">Active:</span>
+        <v-icon size="small" class="text-medium-emphasis mr-1">mdi-filter-check</v-icon>
         <v-chip
           v-for="filter in activeFiltersList"
           :key="filter.id"
@@ -107,7 +107,7 @@
           <strong>{{ filter.label }}</strong>
           <span class="ml-1">{{ filter.value }}</span>
         </v-chip>
-        <v-btn variant="text" size="x-small" color="error" class="ml-1" @click="emit('clear-all')">
+        <v-btn variant="text" size="x-small" color="error" class="ml-auto" @click="emit('clear-all')">
           Clear all
         </v-btn>
       </div>
@@ -184,7 +184,8 @@ const emit = defineEmits<{
   flex-wrap: wrap;
   gap: 4px;
   padding: 6px 16px;
-  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 4%, transparent);
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, transparent);
+  border-left: 3px solid rgb(var(--v-theme-primary));
   border-top: 1px solid rgba(var(--v-border-color), 0.08);
 }
 
