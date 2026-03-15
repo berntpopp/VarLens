@@ -767,7 +767,7 @@ describe('CohortService', () => {
       insertVariant(case1, '2', 300, 'G', 'A', { gene_symbol: 'TP53' })
 
       rebuildSummary()
-      const result = cohortService.getCohortVariants({ column_filters: { gene_symbol: 'BRCA' } })
+      const result = cohortService.getCohortVariants({ column_filters: { gene_symbol: { operator: 'like', value: 'BRCA' } } })
       expect(result.total_count).toBe(2)
       expect(result.data.every((v) => v.gene_symbol?.includes('BRCA'))).toBe(true)
     })
@@ -790,7 +790,7 @@ describe('CohortService', () => {
 
       rebuildSummary()
       const result = cohortService.getCohortVariants({
-        column_filters: { gene_symbol: 'BRCA', clinvar: 'Pathogenic' }
+        column_filters: { gene_symbol: { operator: 'like', value: 'BRCA' }, clinvar: { operator: 'like', value: 'Pathogenic' } }
       })
       expect(result.total_count).toBe(1)
       expect(result.data[0].gene_symbol).toBe('BRCA1')
@@ -802,7 +802,7 @@ describe('CohortService', () => {
 
       rebuildSummary()
       const result = cohortService.getCohortVariants({
-        column_filters: { nonexistent_column: 'test' }
+        column_filters: { nonexistent_column: { operator: 'like', value: 'test' } }
       })
       expect(result.total_count).toBe(1)
     })
@@ -814,7 +814,7 @@ describe('CohortService', () => {
 
       rebuildSummary()
       const result = cohortService.getCohortVariants({
-        column_filters: { gene_symbol: '' }
+        column_filters: { gene_symbol: { operator: 'like', value: '' } }
       })
       expect(result.total_count).toBe(2)
     })
@@ -827,7 +827,7 @@ describe('CohortService', () => {
 
       rebuildSummary()
       const result = cohortService.getCohortVariants({
-        column_filters: { cadd_phred: '30' }
+        column_filters: { cadd_phred: { operator: '=', value: 30 } }
       })
 
       expect(result.data.length).toBe(1)
