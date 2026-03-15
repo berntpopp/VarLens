@@ -53,9 +53,9 @@ export function useVariantData(options: UseVariantDataOptions) {
       const plainFilters = JSON.parse(JSON.stringify(filters.value))
       const colFilters = getColumnFiltersParam()
       if (colFilters !== undefined) {
-        plainFilters.column_filters = colFilters
+        // Deep-clone to strip reactive proxies for IPC structured clone
+        plainFilters.column_filters = JSON.parse(JSON.stringify(colFilters))
       }
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (api as any).variants.query(
         caseId.value,
@@ -124,7 +124,7 @@ export function useVariantData(options: UseVariantDataOptions) {
 
   // Debounced reload when per-column filters change
   const { debouncedFn: debouncedColumnFilterReload } = useDebounce(invalidateAndReload, 300)
-  watch(getColumnFiltersParam, debouncedColumnFilterReload, { deep: true })
+  watch(columnFilterState.columnFilters, debouncedColumnFilterReload, { deep: true })
 
   // Load annotations when variants change
   watch(

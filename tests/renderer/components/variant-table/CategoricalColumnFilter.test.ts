@@ -67,9 +67,7 @@ describe('CategoricalColumnFilter', () => {
   describe('events', () => {
     it('emits apply with in operator and selected values when OK is clicked', async () => {
       const wrapper = mountFilter({ initialSelected: ['missense', 'nonsense'] })
-      const okBtn = wrapper
-        .findAllComponents({ name: 'VBtn' })
-        .find((b) => b.text() === 'OK')
+      const okBtn = wrapper.findAllComponents({ name: 'VBtn' }).find((b) => b.text() === 'OK')
       expect(okBtn).toBeDefined()
       await okBtn!.trigger('click')
       expect(wrapper.emitted('apply')).toBeTruthy()
@@ -80,9 +78,7 @@ describe('CategoricalColumnFilter', () => {
 
     it('emits clear when Clear is clicked', async () => {
       const wrapper = mountFilter({ initialSelected: ['missense'] })
-      const clearBtn = wrapper
-        .findAllComponents({ name: 'VBtn' })
-        .find((b) => b.text() === 'Clear')
+      const clearBtn = wrapper.findAllComponents({ name: 'VBtn' }).find((b) => b.text() === 'Clear')
       expect(clearBtn).toBeDefined()
       await clearBtn!.trigger('click')
       expect(wrapper.emitted('clear')).toBeTruthy()
@@ -90,9 +86,7 @@ describe('CategoricalColumnFilter', () => {
 
     it('does not emit apply when nothing is selected', async () => {
       const wrapper = mountFilter()
-      const okBtn = wrapper
-        .findAllComponents({ name: 'VBtn' })
-        .find((b) => b.text() === 'OK')
+      const okBtn = wrapper.findAllComponents({ name: 'VBtn' }).find((b) => b.text() === 'OK')
       await okBtn!.trigger('click')
       expect(wrapper.emitted('apply')).toBeFalsy()
     })

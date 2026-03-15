@@ -17,7 +17,12 @@ export const COLUMN_FILTER_OVERRIDES: Record<
 > = {
   gene_symbol: { forceMode: 'text-suggest' },
   chr: { forceMode: 'categorical' },
-  gt_num: { threshold: 50 }
+  gt_num: { forceMode: 'categorical' },
+  pos: { forceMode: 'numeric' },
+  gnomad_af: { forceMode: 'numeric' },
+  cadd: { forceMode: 'numeric' },
+  qual: { forceMode: 'numeric' },
+  hpo_sim_score: { forceMode: 'numeric' }
 }
 
 /**
@@ -25,8 +30,8 @@ export const COLUMN_FILTER_OVERRIDES: Record<
  *
  * Priority:
  * 1. Config override (forceMode) — always wins
- * 2. Distinct count <= threshold — categorical
- * 3. Numeric data type — numeric
+ * 2. Numeric data type — always numeric (never downgrade to categorical)
+ * 3. Distinct count <= threshold — categorical
  * 4. Fallback — text-suggest
  */
 export function detectFilterMode(meta: ColumnFilterMeta): ColumnFilterMode {
@@ -37,15 +42,15 @@ export function detectFilterMode(meta: ColumnFilterMeta): ColumnFilterMode {
     return override.forceMode
   }
 
-  // 2. Few distinct values -> categorical (regardless of data type)
+  // 2. Numeric type — always numeric, even with few distinct values
+  if (meta.dataType === 'numeric') {
+    return 'numeric'
+  }
+
+  // 3. Few distinct values -> categorical
   const threshold = override?.threshold ?? DEFAULT_CATEGORICAL_THRESHOLD
   if (meta.distinctCount <= threshold) {
     return 'categorical'
-  }
-
-  // 3. Numeric type with many values -> numeric
-  if (meta.dataType === 'numeric') {
-    return 'numeric'
   }
 
   // 4. Text type with many values -> text-suggest

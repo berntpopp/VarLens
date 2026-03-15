@@ -92,16 +92,16 @@ describe('columnFilterConfig', () => {
       expect(detectFilterMode(meta)).toBe('text-suggest')
     })
 
-    it('returns categorical for numeric with few distinct values', () => {
+    it('returns numeric for numeric type even with few distinct values', () => {
       const meta: ColumnFilterMeta = {
-        key: 'qual',
+        key: 'some_numeric',
         dataType: 'numeric',
         distinctCount: 5,
         distinctValues: ['10', '20', '30', '40', '50'],
         min: 10,
         max: 50
       }
-      expect(detectFilterMode(meta)).toBe('categorical')
+      expect(detectFilterMode(meta)).toBe('numeric')
     })
 
     it('respects per-column threshold override', () => {

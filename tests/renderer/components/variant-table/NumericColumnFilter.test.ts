@@ -81,10 +81,11 @@ describe('NumericColumnFilter', () => {
 
   describe('events', () => {
     it('emits apply with operator and value when Apply is clicked', async () => {
-      const wrapper = mountFilter({ initialOperator: '>' as ColumnFilterOperator, initialValue: 20 })
-      const applyBtn = wrapper
-        .findAllComponents({ name: 'VBtn' })
-        .find((b) => b.text() === 'Apply')
+      const wrapper = mountFilter({
+        initialOperator: '>' as ColumnFilterOperator,
+        initialValue: 20
+      })
+      const applyBtn = wrapper.findAllComponents({ name: 'VBtn' }).find((b) => b.text() === 'Apply')
       expect(applyBtn).toBeDefined()
       await applyBtn!.trigger('click')
       expect(wrapper.emitted('apply')).toBeTruthy()
@@ -93,9 +94,7 @@ describe('NumericColumnFilter', () => {
 
     it('emits clear when Clear is clicked', async () => {
       const wrapper = mountFilter()
-      const clearBtn = wrapper
-        .findAllComponents({ name: 'VBtn' })
-        .find((b) => b.text() === 'Clear')
+      const clearBtn = wrapper.findAllComponents({ name: 'VBtn' }).find((b) => b.text() === 'Clear')
       expect(clearBtn).toBeDefined()
       await clearBtn!.trigger('click')
       expect(wrapper.emitted('clear')).toBeTruthy()
@@ -103,9 +102,7 @@ describe('NumericColumnFilter', () => {
 
     it('does not emit apply when value is empty', async () => {
       const wrapper = mountFilter()
-      const applyBtn = wrapper
-        .findAllComponents({ name: 'VBtn' })
-        .find((b) => b.text() === 'Apply')
+      const applyBtn = wrapper.findAllComponents({ name: 'VBtn' }).find((b) => b.text() === 'Apply')
       await applyBtn!.trigger('click')
       expect(wrapper.emitted('apply')).toBeFalsy()
     })

@@ -7,11 +7,7 @@
     @update:model-value="emit('update:open', $event)"
   >
     <!-- Left-edge resize handle -->
-    <div
-      class="filter-drawer-resize-handle"
-      @mousedown="startResize"
-      @dblclick="resetWidth"
-    />
+    <div class="filter-drawer-resize-handle" @mousedown="startResize" @dblclick="resetWidth" />
     <v-card flat class="h-100 d-flex flex-column">
       <!-- Header -->
       <v-toolbar color="transparent" density="compact" flat>

@@ -346,13 +346,11 @@ export class VariantRepository extends BaseRepository {
 
         if (operator === 'in' && Array.isArray(value)) {
           if (value.length === 0) continue
-          query = query.where(sql.ref(sqlColumn), 'in', value)
+          // Use raw SQL for IN clause to avoid Kysely type issues
+          const placeholders = value.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(', ')
+          query = query.where(sql<boolean>`${sql.ref(sqlColumn)} IN (${sql.raw(placeholders)})`)
         } else if (operator === 'like' && typeof value === 'string') {
-          query = query.where(
-            sql`${sql.ref(sqlColumn)} COLLATE NOCASE`,
-            'like',
-            `%${value}%`
-          )
+          query = query.where(sql`${sql.ref(sqlColumn)} COLLATE NOCASE`, 'like', `%${value}%`)
         } else if (
           (operator === '=' ||
             operator === '!=' ||
@@ -362,7 +360,12 @@ export class VariantRepository extends BaseRepository {
             operator === '>=') &&
           (typeof value === 'string' || typeof value === 'number')
         ) {
-          query = query.where(sql.ref(sqlColumn), operator, value)
+          const compValue = typeof value === 'string' ? Number(value) || value : value
+          query = query.where(
+            sqlColumn as keyof Variant,
+            operator as '=' | '!=' | '<' | '>' | '<=' | '>=',
+            compValue
+          )
         }
       }
     }
@@ -582,9 +585,7 @@ export class VariantRepository extends BaseRepository {
       const countResult = this.execFirst<{ cnt: number }>(
         this.kysely
           .selectFrom('variants')
-          .select(
-            sql<number>`COUNT(DISTINCT ${sql.ref(sqlCol)})`.as('cnt')
-          )
+          .select(sql<number>`COUNT(DISTINCT ${sql.ref(sqlCol)})`.as('cnt'))
           .where('case_id', '=', caseId)
           .where(sql.ref(sqlCol), 'is not', null)
       )
