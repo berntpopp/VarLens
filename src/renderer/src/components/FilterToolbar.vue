@@ -410,10 +410,14 @@ onMounted(async () => {
 .filter-tag-input :deep(.v-field) {
   border-radius: 6px;
   border-color: rgba(0, 0, 0, 0.15);
+  min-height: 32px;
 }
 
 .filter-tag-input :deep(.v-field__input) {
   font-size: 0.85rem;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  min-height: 32px;
 }
 
 .filter-tag-input.filter-active :deep(.v-field) {

@@ -3,9 +3,15 @@
     :model-value="open"
     location="right"
     temporary
-    :width="300"
+    :width="panelWidth"
     @update:model-value="emit('update:open', $event)"
   >
+    <!-- Left-edge resize handle -->
+    <div
+      class="filter-drawer-resize-handle"
+      @mousedown="startResize"
+      @dblclick="resetWidth"
+    />
     <v-card flat class="h-100 d-flex flex-column">
       <!-- Header -->
       <v-toolbar color="transparent" density="compact" flat>
@@ -67,6 +73,15 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { usePanelResize } from '../../composables/usePanelResize'
+
+const { panelWidth, startResize, resetWidth } = usePanelResize({
+  side: 'right',
+  storageKey: 'varlens_filter_drawer_width',
+  defaultWidth: 300,
+  minWidth: 250,
+  maxWidth: 500
+})
 
 const props = defineProps<{
   open: boolean
@@ -94,3 +109,20 @@ const collapseAll = (): void => {
   emit('update:expandedPanels', [])
 }
 </script>
+
+<style scoped>
+.filter-drawer-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background-color 0.15s ease;
+}
+
+.filter-drawer-resize-handle:hover {
+  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 20%, transparent);
+}
+</style>
