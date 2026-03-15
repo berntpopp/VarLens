@@ -1,5 +1,8 @@
 <template>
-  <div class="d-flex align-center justify-space-between header-wrapper">
+  <div
+    class="d-flex align-center justify-space-between header-wrapper"
+    :class="{ 'filtered-column': hasFilter }"
+  >
     <div
       class="d-flex align-center flex-grow-1 sortable-header"
       :class="{ 'sorted-header': isSorted(headerColumn) }"
@@ -12,7 +15,7 @@
       </span>
       <v-icon v-else size="x-small" class="ml-1 sort-icon-inactive">mdi-sort</v-icon>
     </div>
-    <v-menu :close-on-content-click="false" location="bottom">
+    <v-menu v-model="menuOpen" :close-on-content-click="false" location="bottom">
       <template #activator="{ props: menuProps }">
         <v-btn
           v-bind="menuProps"
@@ -28,33 +31,38 @@
           <v-tooltip activator="parent" location="bottom">Filter this column</v-tooltip>
         </v-btn>
       </template>
-      <v-card min-width="250" max-width="350">
-        <v-card-title class="text-subtitle-2 py-2"> Filter: {{ headerColumn.title }} </v-card-title>
-        <v-divider />
-        <v-card-text class="pa-3">
-          <v-text-field
-            :model-value="filterValue"
-            label="Filter value"
-            placeholder="Type to filter..."
-            density="compact"
-            variant="outlined"
-            clearable
-            hide-details
-            autofocus
-            @update:model-value="(v: string | null) => emit('update:filter', v)"
-          >
-            <template #prepend-inner>
-              <v-icon size="small">mdi-magnify</v-icon>
-            </template>
-          </v-text-field>
-          <div class="text-caption text-medium-emphasis mt-2">Case-insensitive partial match</div>
-        </v-card-text>
-        <v-divider />
-        <v-card-actions class="pa-2">
-          <v-spacer />
-          <v-btn size="small" variant="text" @click="emit('clear-filter')"> Clear </v-btn>
-        </v-card-actions>
-      </v-card>
+
+      <!-- Numeric filter -->
+      <NumericColumnFilter
+        v-if="filterMode === 'numeric'"
+        :column-title="headerColumn.title"
+        :min="columnMeta?.min"
+        :max="columnMeta?.max"
+        :initial-operator="numericInitialOperator"
+        :initial-value="numericInitialValue"
+        @apply="handleNumericApply"
+        @clear="handleClear"
+      />
+
+      <!-- Categorical filter -->
+      <CategoricalColumnFilter
+        v-else-if="filterMode === 'categorical'"
+        :column-title="headerColumn.title"
+        :values="columnMeta?.distinctValues ?? []"
+        :initial-selected="categoricalInitialSelected"
+        @apply="handleCategoricalApply"
+        @clear="handleClear"
+      />
+
+      <!-- Text-suggest filter (default) -->
+      <TextSuggestColumnFilter
+        v-else
+        :column-title="headerColumn.title"
+        :suggestions="columnMeta?.distinctValues ?? []"
+        :initial-value="textInitialValue"
+        @apply="handleTextApply"
+        @clear="handleClear"
+      />
     </v-menu>
   </div>
 </template>
@@ -64,9 +72,19 @@
  * VariantColumnHeader - Shared header template for variant/cohort table columns
  *
  * Renders a sortable header with sort priority indicator and per-column filter menu.
- * Used by both VariantTable and CohortDataTable for consistent behavior.
+ * Auto-selects the correct filter component (numeric, categorical, text-suggest)
+ * based on the filterMode prop. Used by both VariantTable and CohortDataTable.
  */
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
+import type {
+  ColumnFilter,
+  ColumnFilterMeta,
+  ColumnFilterMode,
+  ColumnFilterOperator
+} from '../../../../shared/types/column-filters'
+import NumericColumnFilter from './NumericColumnFilter.vue'
+import CategoricalColumnFilter from './CategoricalColumnFilter.vue'
+import TextSuggestColumnFilter from './TextSuggestColumnFilter.vue'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type VuetifyInternalColumn = any
@@ -90,11 +108,20 @@ interface Props {
   sortBy?: readonly SortItem[]
   /** Whether this column currently has an active filter */
   hasFilter: boolean
-  /** Current filter value for this column */
-  filterValue: string
+  /** Current typed filter for this column */
+  currentFilter?: ColumnFilter
+  /** Column metadata from backend for filter UI (min/max, distinct values) */
+  columnMeta?: ColumnFilterMeta
+  /** Auto-detected or overridden filter mode */
+  filterMode: ColumnFilterMode
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  sortBy: undefined,
+  currentFilter: undefined,
+  columnMeta: undefined,
+  filterMode: 'text-suggest'
+})
 
 /** 1-based sort priority index. Only shown when multiple columns are sorted. */
 const sortIndex = computed(() => {
@@ -104,9 +131,60 @@ const sortIndex = computed(() => {
 })
 
 const emit = defineEmits<{
-  'update:filter': [value: string | null]
+  'apply-filter': [filter: ColumnFilter]
   'clear-filter': []
 }>()
+
+const menuOpen = ref(false)
+
+// Derive initial values from currentFilter for each filter type
+const numericInitialOperator = computed<ColumnFilterOperator>(() => {
+  if (props.currentFilter && props.filterMode === 'numeric') {
+    return props.currentFilter.operator
+  }
+  return '='
+})
+
+const numericInitialValue = computed<number | undefined>(() => {
+  if (props.currentFilter && props.filterMode === 'numeric') {
+    return Number(props.currentFilter.value)
+  }
+  return undefined
+})
+
+const categoricalInitialSelected = computed<string[]>(() => {
+  if (props.currentFilter && props.filterMode === 'categorical') {
+    return Array.isArray(props.currentFilter.value) ? props.currentFilter.value : []
+  }
+  return []
+})
+
+const textInitialValue = computed<string>(() => {
+  if (props.currentFilter && props.filterMode === 'text-suggest') {
+    return String(props.currentFilter.value)
+  }
+  return ''
+})
+
+function handleNumericApply(payload: { operator: ColumnFilterOperator; value: number }) {
+  emit('apply-filter', { operator: payload.operator, value: payload.value })
+  menuOpen.value = false
+}
+
+function handleCategoricalApply(payload: { operator: 'in'; value: string[] }) {
+  emit('apply-filter', { operator: payload.operator, value: payload.value })
+  menuOpen.value = false
+}
+
+function handleTextApply(payload: { operator: ColumnFilterOperator; value: string }) {
+  emit('apply-filter', { operator: payload.operator, value: payload.value })
+  menuOpen.value = false
+}
+
+function handleClear() {
+  emit('clear-filter')
+  menuOpen.value = false
+}
 </script>
 
 <style scoped>
@@ -156,5 +234,12 @@ const emit = defineEmits<{
 
 .sortable-header:hover .sort-icon-inactive {
   opacity: 0.6;
+}
+
+.filtered-column {
+  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 6%, transparent);
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
 }
 </style>
