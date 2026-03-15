@@ -40,6 +40,7 @@
         :max="columnMeta?.max"
         :initial-operator="numericInitialOperator"
         :initial-value="numericInitialValue"
+        :initial-include-empty="numericInitialIncludeEmpty"
         @apply="handleNumericApply"
         @clear="handleClear"
       />
@@ -153,6 +154,13 @@ const numericInitialValue = computed<number | undefined>(() => {
   return undefined
 })
 
+const numericInitialIncludeEmpty = computed<boolean>(() => {
+  if (props.currentFilter && props.filterMode === 'numeric') {
+    return props.currentFilter.includeEmpty !== false
+  }
+  return true
+})
+
 const categoricalInitialSelected = computed<string[]>(() => {
   if (props.currentFilter && props.filterMode === 'categorical') {
     return Array.isArray(props.currentFilter.value) ? props.currentFilter.value : []
@@ -167,8 +175,16 @@ const textInitialValue = computed<string>(() => {
   return ''
 })
 
-function handleNumericApply(payload: { operator: ColumnFilterOperator; value: number }) {
-  emit('apply-filter', { operator: payload.operator, value: payload.value })
+function handleNumericApply(payload: {
+  operator: ColumnFilterOperator
+  value: number
+  includeEmpty?: boolean
+}) {
+  emit('apply-filter', {
+    operator: payload.operator,
+    value: payload.value,
+    includeEmpty: payload.includeEmpty
+  })
   menuOpen.value = false
 }
 

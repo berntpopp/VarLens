@@ -10,6 +10,8 @@ export type ColumnFilterOperator = '=' | '!=' | '<' | '>' | '<=' | '>=' | 'like'
 export interface ColumnFilter {
   operator: ColumnFilterOperator
   value: string | number | string[]
+  /** Whether to include NULL/empty values (default: true for range operators) */
+  includeEmpty?: boolean
 }
 
 /** Column filters map: column key -> typed filter */

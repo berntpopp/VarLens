@@ -26,6 +26,14 @@
       <div v-if="min != null && max != null" class="text-caption text-medium-emphasis">
         Range: {{ min }} - {{ max }}
       </div>
+      <v-checkbox
+        v-if="isRangeOperator"
+        v-model="includeEmpty"
+        label="Include empty"
+        density="compact"
+        hide-details
+        class="include-empty-toggle mt-1"
+      />
     </v-card-text>
     <v-divider />
     <v-card-actions class="pa-1 px-2">
@@ -42,8 +50,10 @@
  *
  * Renders a dropdown for comparison operator (=, !=, <, >, <=, >=)
  * and a number input field. Shows range hint when min/max are provided.
+ * For range operators (<, >, <=, >=), shows an "Include empty" toggle
+ * that defaults to ON (preserving unannotated variants).
  */
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { ColumnFilterOperator } from '../../../../shared/types/column-filters'
 
 interface Props {
@@ -57,31 +67,52 @@ interface Props {
   initialOperator?: ColumnFilterOperator
   /** Pre-filled numeric value */
   initialValue?: number
+  /** Pre-set include empty state */
+  initialIncludeEmpty?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   min: undefined,
   max: undefined,
   initialOperator: '=',
-  initialValue: undefined
+  initialValue: undefined,
+  initialIncludeEmpty: true
 })
 
 const emit = defineEmits<{
-  apply: [payload: { operator: ColumnFilterOperator; value: number }]
+  apply: [payload: { operator: ColumnFilterOperator; value: number; includeEmpty?: boolean }]
   clear: []
 }>()
 
 const operators: ColumnFilterOperator[] = ['=', '!=', '<', '>', '<=', '>=']
+const RANGE_OPERATORS = new Set(['<', '>', '<=', '>='])
 
 const selectedOperator = ref<ColumnFilterOperator>(props.initialOperator)
 const filterValue = ref<number | undefined>(props.initialValue)
+const includeEmpty = ref(props.initialIncludeEmpty)
+
+const isRangeOperator = computed(() => RANGE_OPERATORS.has(selectedOperator.value))
 
 function onApply() {
   if (filterValue.value == null) return
-  emit('apply', { operator: selectedOperator.value, value: Number(filterValue.value) })
+  emit('apply', {
+    operator: selectedOperator.value,
+    value: Number(filterValue.value),
+    includeEmpty: isRangeOperator.value ? includeEmpty.value : undefined
+  })
 }
 
 function onClear() {
   emit('clear')
 }
 </script>
+
+<style scoped>
+.include-empty-toggle :deep(.v-label) {
+  font-size: 0.75rem;
+}
+
+.include-empty-toggle :deep(.v-selection-control) {
+  min-height: 28px;
+}
+</style>

@@ -357,22 +357,21 @@ export class VariantRepository extends BaseRepository {
         ) {
           // Exact match — NULLs excluded (user is looking for specific values)
           const compValue = typeof value === 'string' ? Number(value) || value : value
-          query = query.where(
-            sqlColumn as keyof Variant,
-            operator as '=' | '!=',
-            compValue
-          )
+          query = query.where(sqlColumn as keyof Variant, operator as '=' | '!=', compValue)
         } else if (
           (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
           (typeof value === 'string' || typeof value === 'number')
         ) {
-          // Range comparison — include NULLs by default (don't lose unannotated variants)
+          // Range comparison — includeEmpty defaults to true (don't lose unannotated variants)
           const compValue = typeof value === 'string' ? Number(value) || value : value
           const col = sqlColumn as keyof Variant
           const op = operator as '<' | '>' | '<=' | '>='
-          query = query.where(({ or, eb }) =>
-            or([eb(col, 'is', null), eb(col, op, compValue)])
-          )
+          const includeNulls = filterDef.includeEmpty !== false
+          if (includeNulls) {
+            query = query.where(({ or, eb }) => or([eb(col, 'is', null), eb(col, op, compValue)]))
+          } else {
+            query = query.where(col, op, compValue)
+          }
         }
       }
     }

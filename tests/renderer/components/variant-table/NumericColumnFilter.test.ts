@@ -89,7 +89,9 @@ describe('NumericColumnFilter', () => {
       expect(applyBtn).toBeDefined()
       await applyBtn!.trigger('click')
       expect(wrapper.emitted('apply')).toBeTruthy()
-      expect(wrapper.emitted('apply')![0]).toEqual([{ operator: '>', value: 20 }])
+      expect(wrapper.emitted('apply')![0]).toEqual([
+        { operator: '>', value: 20, includeEmpty: true }
+      ])
     })
 
     it('emits clear when Clear is clicked', async () => {

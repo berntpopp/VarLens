@@ -208,8 +208,13 @@ export class CohortService {
           ['<', '>', '<=', '>='].includes(operator) &&
           (typeof value === 'string' || typeof value === 'number')
         ) {
-          // Range comparison — include NULLs by default
-          whereConditions.push(`(cvs.${sqlColumn} IS NULL OR cvs.${sqlColumn} ${operator} ?)`)
+          // Range comparison — includeEmpty defaults to true
+          const includeNulls = filterDef.includeEmpty !== false
+          if (includeNulls) {
+            whereConditions.push(`(cvs.${sqlColumn} IS NULL OR cvs.${sqlColumn} ${operator} ?)`)
+          } else {
+            whereConditions.push(`cvs.${sqlColumn} ${operator} ?`)
+          }
           paramsArray.push(value)
         }
       }

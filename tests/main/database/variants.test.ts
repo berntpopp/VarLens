@@ -1168,7 +1168,13 @@ describe('Variant Operations', () => {
       ])
 
       const result = service.variants.getVariants(
-        { case_id: caseId, column_filters: { gene_symbol: { operator: 'like', value: 'BRCA' }, clinvar: { operator: 'like', value: 'Pathogenic' } } },
+        {
+          case_id: caseId,
+          column_filters: {
+            gene_symbol: { operator: 'like', value: 'BRCA' },
+            clinvar: { operator: 'like', value: 'Pathogenic' }
+          }
+        },
         20
       )
       expect(result.total_count).toBe(1)
@@ -1180,7 +1186,10 @@ describe('Variant Operations', () => {
       service.variants.insertVariantsBatch(caseId, [{ chr: '1', pos: 100, ref: 'A', alt: 'G' }])
 
       const result = service.variants.getVariants(
-        { case_id: caseId, column_filters: { nonexistent_column: { operator: 'like', value: 'test' } } },
+        {
+          case_id: caseId,
+          column_filters: { nonexistent_column: { operator: 'like', value: 'test' } }
+        },
         20
       )
       expect(result.total_count).toBe(1)
