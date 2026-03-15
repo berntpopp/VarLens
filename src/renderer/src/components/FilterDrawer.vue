@@ -9,6 +9,11 @@
     @clear-all="clearAllFilters"
   >
     <v-expansion-panels v-model="expandedPanels" multiple variant="accordion">
+      <!-- === VARIANT PROPERTIES === -->
+      <div class="filter-section-header text-overline text-medium-emphasis px-3 pt-3 pb-1">
+        Variant Properties
+      </div>
+
       <!-- Search -->
       <v-expansion-panel value="search">
         <FilterPanelTitle
@@ -122,6 +127,12 @@
         </v-expansion-panel-text>
       </v-expansion-panel>
 
+      <!-- === POPULATION & SCORES === -->
+      <div class="filter-section-header text-overline text-medium-emphasis px-3 pt-3 pb-1">
+        <v-divider class="mb-2" />
+        Population &amp; Scores
+      </div>
+
       <!-- Frequency -->
       <v-expansion-panel value="frequency">
         <FilterPanelTitle
@@ -196,6 +207,12 @@
           />
         </v-expansion-panel-text>
       </v-expansion-panel>
+
+      <!-- === ANNOTATIONS === -->
+      <div class="filter-section-header text-overline text-medium-emphasis px-3 pt-3 pb-1">
+        <v-divider class="mb-2" />
+        Annotations
+      </div>
 
       <!-- Tags -->
       <v-expansion-panel value="tags">
@@ -433,5 +450,11 @@ const toggleAcmgFilter = (value: string): void => {
 
 :deep(.v-expansion-panel-text__wrapper) {
   padding: 8px 12px 12px;
+}
+
+.filter-section-header {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 </style>
