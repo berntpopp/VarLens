@@ -62,7 +62,9 @@ const shortcutGroups = [
     shortcuts: [
       { key: '/', description: 'Focus search field' },
       { key: `${mod}+Shift+F`, description: 'Toggle filter panel' },
-      { key: `${mod}+Shift+C`, description: 'Toggle columns panel' }
+      { key: `${mod}+Shift+C`, description: 'Toggle columns panel' },
+      { key: `${mod}+Shift+X`, description: 'Clear all filters' },
+      { key: 'Escape', description: 'Close drawer / blur search' }
     ]
   },
   {
