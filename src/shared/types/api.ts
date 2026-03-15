@@ -75,6 +75,7 @@ import type {
   MyVariantFetchResult,
   SpliceAIFetchResult
 } from './api-enrichment'
+import type { ColumnFilterMeta } from './column-filters'
 import type { LogMessage } from './log'
 import type { TranscriptAnnotation, TranscriptInsertRow } from './transcript'
 import type { DatabaseOverview } from './database-overview'
@@ -141,6 +142,8 @@ export interface FilterOptions {
   maxCadd: number | null
   minGnomadAf: number | null
   maxGnomadAf: number | null
+  /** Per-column metadata for filter UI auto-detection */
+  columnMeta: ColumnFilterMeta[]
 }
 
 export interface ImportAPI {

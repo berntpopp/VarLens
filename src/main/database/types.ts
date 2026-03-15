@@ -107,8 +107,8 @@ export interface VariantFilter {
   has_comment?: boolean
   /** Filter by ACMG classification (OR logic) */
   acmg_classifications?: string[]
-  /** Per-column text filters (key = column name, value = search text) */
-  column_filters?: Record<string, string>
+  /** Per-column typed filters (key = column name, value = operator + value) */
+  column_filters?: Record<string, { operator: string; value: string | number | string[] }>
   /** Annotation scope for star/ACMG filters: 'case' = per-case only, 'all' = per-case OR global */
   annotation_scope?: 'case' | 'all'
 }

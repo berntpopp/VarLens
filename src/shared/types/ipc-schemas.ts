@@ -47,6 +47,12 @@ const nullishNumberArray = () =>
     .nullish()
     .transform((val) => val ?? undefined)
 
+/** Schema for a single typed column filter */
+const ColumnFilterSchema = z.object({
+  operator: z.enum(['=', '!=', '<', '>', '<=', '>=', 'like', 'in']),
+  value: z.union([z.string(), z.number(), z.array(z.string())])
+})
+
 /**
  * Schema for cohort search parameters
  * Matches CohortSearchParams in src/shared/types/cohort.ts
@@ -109,9 +115,9 @@ export const CohortSearchParamsSchema = z.object({
   has_comment: z.boolean().optional(),
   acmg_classifications: nullishStringArray(),
 
-  // Per-column text filters
+  // Per-column typed filters (operator + value)
   column_filters: z
-    .record(z.string(), z.string())
+    .record(z.string(), ColumnFilterSchema)
     .nullish()
     .transform((val) => val ?? undefined),
 
@@ -177,9 +183,9 @@ export const VariantFilterPartialSchema = z.object({
   has_comment: z.boolean().optional(),
   acmg_classifications: nullishStringArray(),
 
-  // Per-column text filters
+  // Per-column typed filters (operator + value)
   column_filters: z
-    .record(z.string(), z.string())
+    .record(z.string(), ColumnFilterSchema)
     .nullish()
     .transform((val) => val ?? undefined),
 

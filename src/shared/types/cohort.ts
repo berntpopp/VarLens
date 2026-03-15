@@ -154,8 +154,8 @@ export interface CohortSearchParams {
   has_comment?: boolean
   /** Filter by ACMG classifications (global annotations) */
   acmg_classifications?: string[]
-  /** Per-column text filters (key = column name, value = search text) */
-  column_filters?: Record<string, string>
+  /** Per-column typed filters (key = column name, value = operator + value) */
+  column_filters?: Record<string, { operator: string; value: string | number | string[] }>
   /** Whether the total count needs to be recomputed (false = use cached count) */
   _count_needed?: boolean
 }

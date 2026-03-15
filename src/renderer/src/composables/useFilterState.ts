@@ -89,7 +89,8 @@ export function useFilterState(
     minCadd: null as number | null,
     maxCadd: null as number | null,
     minGnomadAf: null as number | null,
-    maxGnomadAf: null as number | null
+    maxGnomadAf: null as number | null,
+    columnMeta: []
   })
 
   // Gene autocomplete state

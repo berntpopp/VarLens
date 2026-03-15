@@ -945,5 +945,6 @@ export const mockFilterOptions: FilterOptions = {
   minCadd: 0,
   maxCadd: 50,
   minGnomadAf: 0,
-  maxGnomadAf: 1
+  maxGnomadAf: 1,
+  columnMeta: []
 }
