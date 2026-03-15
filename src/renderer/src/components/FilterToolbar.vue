@@ -5,11 +5,11 @@
     :has-active-filters="hasActiveFilters"
     :has-clearable-state="props.hasSort"
     :active-filter-count="activeFilterCount"
-    :active-filters-list="activeFiltersList"
+    :active-filters-list="mergedActiveFiltersList"
     :exporting="exporting"
     :columns="columns"
     @clear-all="handleClearAll"
-    @clear-filter="clearFilter"
+    @clear-filter="handleClearFilter"
     @open-filter-drawer="filterDrawerOpen = true"
     @open-columns-drawer="columnsDrawerOpen = true"
     @export="exportToExcel"
@@ -177,6 +177,7 @@ import AnnotationScopeToggle from './AnnotationScopeToggle.vue'
 import ColumnsDrawer from './ColumnsDrawer.vue'
 import FilterDrawer from './FilterDrawer.vue'
 import type { VariantFilter, Tag } from '../../../shared/types/api'
+import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS } from '../utils/filters'
 
@@ -193,6 +194,8 @@ interface Props {
   hasSort?: boolean
   initialSearch?: string
   columns?: ColumnDef[]
+  /** Additional active filter chips from column filters (appended to drawer filter chips) */
+  columnActiveFilters?: ActiveFilter[]
 }
 
 const props = defineProps<Props>()
@@ -201,6 +204,7 @@ interface Emits {
   (e: 'update:filters', filters: Omit<VariantFilter, 'case_id'>): void
   (e: 'reset-sort'): void
   (e: 'clear-column-filters'): void
+  (e: 'clear-column-filter', columnKey: string): void
   (
     e: 'export-success',
     data: { filePath: string; action: { text: string; callback: () => void } }
@@ -368,10 +372,25 @@ function focusSearch(): void {
   input?.focus()
 }
 
+// Merge drawer active filters with column active filters
+const mergedActiveFiltersList = computed(() => [
+  ...activeFiltersList.value,
+  ...(props.columnActiveFilters ?? [])
+])
+
 // Clear all: reset drawer filters + notify parent to clear column filters
 function handleClearAll() {
   clearAllFilters()
   emit('clear-column-filters')
+}
+
+// Handle clear-filter — route column filter clears to parent
+function handleClearFilter(filterId: string) {
+  if (filterId.startsWith('col:')) {
+    emit('clear-column-filter', filterId.slice(4))
+  } else {
+    clearFilter(filterId)
+  }
 }
 
 // Expose drawer toggles and search focus for parent keyboard shortcuts

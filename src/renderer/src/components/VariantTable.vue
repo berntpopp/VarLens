@@ -260,6 +260,8 @@ import { ref, computed, toRef, watch, onMounted, nextTick } from 'vue'
 import type { Variant, VariantFilter } from '../../../shared/types/api'
 import type { AnnotationScope } from '../../../shared/types/annotations'
 import type { ColumnFilterMeta, ColumnFilterMode } from '../../../shared/types/column-filters'
+import type { ActiveFilter } from '../../../shared/types/filters'
+import { buildActiveFiltersList } from '../utils/filters/activeFilters'
 import { detectFilterMode } from '../config/columnFilterConfig'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
@@ -368,7 +370,8 @@ const {
   clearColumnFilter,
   clearAllColumnFilters,
   hasFilter,
-  getFilter
+  getFilter,
+  getColumnFiltersParam
 } = useVariantData({
   caseId: toRef(props, 'caseId'),
   filters: toRef(props, 'filters'),
@@ -392,6 +395,14 @@ const columnFilterModes = computed<Record<string, ColumnFilterMode>>(() => {
     modes[meta.key] = detectFilterMode(meta)
   }
   return modes
+})
+
+// Column active filter chips for the toolbar
+const columnActiveFilters = computed<ActiveFilter[]>(() => {
+  const colFilters = getColumnFiltersParam()
+  if (!colFilters) return []
+  return buildActiveFiltersList({ searchQuery: '', geneSymbol: '', consequences: [], funcs: [], clinvars: [], maxGnomadAf: null, minCadd: null, minCohortFrequency: null, minCarriers: null, starredOnly: false, hasCommentOnly: false, acmgClassifications: [] }, [], colFilters)
+    .filter((f) => f.id.startsWith('col:'))
 })
 
 // Template refs
@@ -536,7 +547,9 @@ defineExpose({
   columns: computed(() => headers.value.map((h) => ({ key: h.key, title: h.title }))),
   hasColumnFilters,
   columnFilterCount,
-  clearAllColumnFilters
+  clearAllColumnFilters,
+  clearColumnFilter,
+  columnActiveFilters
 })
 </script>
 
