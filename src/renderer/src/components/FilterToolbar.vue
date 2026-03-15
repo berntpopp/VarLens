@@ -190,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, provide } from 'vue'
+import { ref, computed, watch, onMounted, provide, nextTick } from 'vue'
 import type { VTextField } from 'vuetify/components'
 import { useFilterState } from '../composables/useFilterState'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
@@ -205,7 +205,7 @@ import PresetManageDialog from './PresetManageDialog.vue'
 import type { VariantFilter, Tag } from '../../../shared/types/api'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
-import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters } from '../utils/filters'
+import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
 
 interface ColumnDef {
   key: string
@@ -278,6 +278,7 @@ const {
 const {
   presets: allPresets,
   visiblePresets,
+  activePresetIds,
   loadPresets,
   togglePreset,
   isPresetActive,
@@ -292,6 +293,7 @@ const {
 const showSavePresetDialog = ref(false)
 const showManagePresetsDialog = ref(false)
 const savingPreset = ref(false)
+let applyingPresets = false // guard to skip divergence check during applyActivePresets
 
 // Preset toggle handler — applies merged preset filters
 function handlePresetToggle(presetId: number): void {
@@ -305,11 +307,38 @@ function handlePresetToggle(presetId: number): void {
  * properly clears its contributed values.
  */
 function applyActivePresets(): void {
+  applyingPresets = true
   applyPresetStateToFilters({
     filters,
     presetState: getActiveFilterState()
   })
+  // Reset guard after Vue reactivity settles
+  void nextTick(() => {
+    applyingPresets = false
+  })
 }
+
+// Auto-deactivate presets when user manually changes filter values
+watch(
+  filters,
+  () => {
+    if (applyingPresets || activePresetIds.value.size === 0) return
+    const idsToDeactivate: number[] = []
+    for (const id of activePresetIds.value) {
+      const preset = allPresets.value.find((p) => p.id === id)
+      if (
+        preset !== undefined &&
+        isPresetDiverged({ filters: filters.value, presetFilterJson: preset.filterJson })
+      ) {
+        idsToDeactivate.push(id)
+      }
+    }
+    for (const id of idsToDeactivate) {
+      togglePreset(id)
+    }
+  },
+  { deep: true }
+)
 
 async function handleSavePreset(data: { name: string; description: string | null }): Promise<void> {
   savingPreset.value = true
@@ -385,7 +414,21 @@ provide<FilterDrawerState>('filterDrawerState', {
   removeTagFilter,
   clearAllFilters,
   handleGeneClear,
-  searchGeneSymbols
+  searchGeneSymbols,
+
+  // Preset store integration for FilterDrawer
+  visiblePresets,
+  isPresetActive,
+  onPresetToggle: handlePresetToggle,
+  onPresetSave: () => {
+    showSavePresetDialog.value = true
+  },
+  onPresetManage: () => {
+    showManagePresetsDialog.value = true
+  },
+  hasActiveFiltersForSave: computed(
+    () => hasActiveFilters.value || (props.columnActiveFilters?.length ?? 0) > 0
+  )
 })
 
 // Watch initialSearch prop to pre-populate search from cohort navigation

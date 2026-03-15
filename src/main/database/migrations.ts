@@ -29,6 +29,7 @@ import { BUILT_IN_PRESETS } from './built-in-presets'
  * - 10: v0.21.0 gene_lists and gene_list_items tables (curated reusable gene lists)
  * - 11: v0.21.0 remove non-clinical predefined metrics (genetics, QC, variant stats)
  * - 15: Filter presets table with built-in preset seeding
+ * - 16: Rework built-in presets to clinical combo presets
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1070,5 +1071,30 @@ export function runMigrations(db: Database.Database): void {
     }
 
     db.exec('PRAGMA user_version = 15')
+  }
+
+  // ── Migration v16: Rework built-in presets to clinical combos ──
+  if (currentVersion < 16) {
+    // Delete old built-in presets and re-seed with clinically meaningful combos
+    db.exec('DELETE FROM filter_presets WHERE is_built_in = 1')
+
+    const now = Date.now()
+    const insertStmt = db.prepare(
+      `INSERT OR IGNORE INTO filter_presets
+        (name, description, filter_json, is_built_in, is_visible, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, 1, 1, ?, ?, ?)`
+    )
+    for (const preset of BUILT_IN_PRESETS) {
+      insertStmt.run(
+        preset.name,
+        preset.description,
+        JSON.stringify(preset.filterJson),
+        preset.sortOrder,
+        now,
+        now
+      )
+    }
+
+    db.exec('PRAGMA user_version = 16')
   }
 }

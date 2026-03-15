@@ -98,3 +98,46 @@ export function applyPresetStateToFilters({
     if (presetState.minCarriers !== undefined) filters.value.minCarriers = presetState.minCarriers
   }
 }
+
+/**
+ * Check if a single preset's filter values still match the current filter state.
+ * Returns false if any field the preset sets has diverged from the preset's value.
+ */
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const sortedA = [...a].sort()
+  const sortedB = [...b].sort()
+  return sortedA.every((v, i) => v === sortedB[i])
+}
+
+interface DivergenceCheckOptions {
+  filters: FilterFields
+  presetFilterJson: Partial<FilterState>
+  /** For cohort view: the separate consequences ref value */
+  consequencesValue?: string[]
+}
+
+export function isPresetDiverged({
+  filters,
+  presetFilterJson,
+  consequencesValue
+}: DivergenceCheckOptions): boolean {
+  const fj = presetFilterJson
+
+  if (fj.maxGnomadAf !== undefined && filters.maxGnomadAf !== fj.maxGnomadAf) return true
+  if (fj.minCadd !== undefined && filters.minCadd !== fj.minCadd) return true
+  if (fj.starredOnly !== undefined && filters.starredOnly !== fj.starredOnly) return true
+  if (fj.hasCommentOnly !== undefined && filters.hasCommentOnly !== fj.hasCommentOnly) return true
+
+  if (fj.consequences !== undefined) {
+    const current = consequencesValue ?? filters.consequences
+    if (!arraysEqual(current, fj.consequences)) return true
+  }
+  if (fj.funcs !== undefined && !arraysEqual(filters.funcs, fj.funcs)) return true
+  if (fj.clinvars !== undefined && !arraysEqual(filters.clinvars, fj.clinvars)) return true
+  if (fj.acmgClassifications !== undefined) {
+    if (!arraysEqual(filters.acmgClassifications, fj.acmgClassifications)) return true
+  }
+
+  return false
+}

@@ -38,4 +38,4 @@ export {
 } from './presetSync'
 
 // Database-backed preset application
-export { applyPresetStateToFilters } from './presetApplication'
+export { applyPresetStateToFilters, isPresetDiverged } from './presetApplication'

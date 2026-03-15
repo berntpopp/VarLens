@@ -8,7 +8,8 @@
       :class="{ 'sorted-header': isSorted(headerColumn) }"
       @click.stop="toggleSort(headerColumn)"
     >
-      <span class="header-title">{{ headerColumn.title }}
+      <span class="header-title"
+        >{{ headerColumn.title }}
         <v-tooltip activator="parent" location="bottom">{{ headerColumn.title }}</v-tooltip>
       </span>
       <span v-if="isSorted(headerColumn)" class="sort-indicator ml-1">

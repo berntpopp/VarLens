@@ -30,13 +30,13 @@ describe('migration v15 - filter_presets', () => {
 
   it('sets user_version to 15', () => {
     const version = db.pragma('user_version', { simple: true })
-    expect(version).toBe(15)
+    expect(version).toBe(16)
   })
 
   it('creates unique index on name', () => {
     expect(() => {
       db.prepare(
-        "INSERT INTO filter_presets (name, filter_json, is_built_in, is_visible, sort_order, created_at, updated_at) VALUES ('Rare (1%)', '{}', 0, 1, 99, 0, 0)"
+        "INSERT INTO filter_presets (name, filter_json, is_built_in, is_visible, sort_order, created_at, updated_at) VALUES ('Rare Pathogenic', '{}', 0, 1, 99, 0, 0)"
       ).run()
     }).toThrow(/UNIQUE constraint/)
   })
@@ -60,7 +60,7 @@ describe('FilterPresetRepository', () => {
     it('returns built-in presets sorted by sort_order', () => {
       const presets = repo.listPresets()
       expect(presets.length).toBeGreaterThanOrEqual(8)
-      expect(presets[0].name).toBe('Rare (1%)')
+      expect(presets[0].name).toBe('Rare Pathogenic')
       expect(presets[0].isBuiltIn).toBe(true)
     })
   })

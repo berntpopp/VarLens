@@ -8,6 +8,48 @@
     @update:expanded-panels="expandedPanels = $event"
     @clear-all="clearAllFilters"
   >
+    <!-- Preset chips (always visible, above expansion panels) -->
+    <div
+      v-if="visiblePresets && visiblePresets.length > 0"
+      class="preset-drawer-section px-3 pt-2 pb-1"
+    >
+      <div class="d-flex align-center mb-1">
+        <v-icon size="x-small" class="mr-1 text-medium-emphasis">mdi-bookmark-multiple</v-icon>
+        <span class="text-overline text-medium-emphasis">Presets</span>
+        <v-spacer />
+        <v-btn
+          v-if="hasActiveFiltersForSave"
+          size="x-small"
+          variant="text"
+          color="primary"
+          density="compact"
+          @click="onPresetSave?.()"
+        >
+          Save
+        </v-btn>
+        <v-btn size="x-small" variant="text" density="compact" @click="onPresetManage?.()">
+          <v-icon size="x-small">mdi-cog-outline</v-icon>
+        </v-btn>
+      </div>
+      <div class="d-flex ga-1 flex-wrap pb-1">
+        <v-chip
+          v-for="preset in visiblePresets"
+          :key="preset.id"
+          :color="isPresetActive?.(preset.id) ? 'primary' : undefined"
+          :variant="isPresetActive?.(preset.id) ? 'flat' : 'outlined'"
+          size="small"
+          label
+          @click="onPresetToggle?.(preset.id)"
+        >
+          {{ preset.name }}
+          <v-tooltip activator="parent" location="bottom">
+            {{ preset.description || 'No description' }}
+          </v-tooltip>
+        </v-chip>
+      </div>
+      <v-divider class="mt-1" />
+    </div>
+
     <v-expansion-panels v-model="expandedPanels" multiple variant="accordion">
       <!-- === VARIANT PROPERTIES === -->
       <div class="filter-section-header text-overline text-medium-emphasis px-3 pt-3 pb-1">
@@ -377,7 +419,13 @@ const {
   clearAllFilters,
   handleGeneClear,
   searchGeneSymbols,
-  removeTagFilter
+  removeTagFilter,
+  visiblePresets,
+  isPresetActive,
+  onPresetToggle,
+  onPresetSave,
+  onPresetManage,
+  hasActiveFiltersForSave
 } = state
 
 // Value summaries for collapsed panel previews
@@ -466,5 +514,9 @@ const toggleAcmgFilter = (value: string): void => {
   font-size: 10px;
   letter-spacing: 0.1em;
   color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.preset-drawer-section {
+  background: color-mix(in srgb, rgb(var(--v-theme-surface)) 95%, rgb(var(--v-theme-primary)));
 }
 </style>

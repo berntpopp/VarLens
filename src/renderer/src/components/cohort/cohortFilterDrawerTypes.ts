@@ -5,6 +5,7 @@
  */
 
 import type { Ref, ComputedRef } from 'vue'
+import type { FilterPreset } from '../../../../shared/types/filter-presets'
 
 /**
  * Active filter representation for chip display
@@ -66,4 +67,12 @@ export interface CohortFilterDrawerState {
   clearAllFilters: () => void
   clearFilter: (id: string) => void
   searchGeneSymbols: (query: string) => void
+
+  // Preset store (optional)
+  visiblePresets?: ComputedRef<FilterPreset[]>
+  isPresetActive?: (id: number) => boolean
+  onPresetToggle?: (id: number) => void
+  onPresetSave?: () => void
+  onPresetManage?: () => void
+  hasActiveFiltersForSave?: ComputedRef<boolean>
 }

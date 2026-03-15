@@ -131,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, provide, onMounted } from 'vue'
+import { ref, computed, watch, provide, onMounted, nextTick } from 'vue'
 import { useFilters } from '../../composables/useFilters'
 import { useDebounce } from '../../composables/useDebounce'
 import { useFilterPresetStore } from '../../composables/useFilterPresetStore'
@@ -144,7 +144,11 @@ import PresetManageDialog from '../PresetManageDialog.vue'
 import type { ActiveFilter } from '../../../../shared/types/filters'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { CohortFilterDrawerState } from './cohortFilterDrawerTypes'
-import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters } from '../../utils/filters'
+import {
+  ACMG_FILTER_OPTIONS,
+  applyPresetStateToFilters,
+  isPresetDiverged
+} from '../../utils/filters'
 
 interface Props {
   totalCount: number | null
@@ -192,6 +196,7 @@ const {
 const {
   presets: allPresets,
   visiblePresets,
+  activePresetIds,
   loadPresets,
   togglePreset,
   isPresetActive,
@@ -206,6 +211,7 @@ const {
 const showSavePresetDialog = ref(false)
 const showManagePresetsDialog = ref(false)
 const savingPreset = ref(false)
+let applyingPresets = false
 
 // Preset toggle handler — applies merged preset filters
 function handlePresetToggle(presetId: number): void {
@@ -219,13 +225,43 @@ function handlePresetToggle(presetId: number): void {
  * because the cohort query reads from that ref, not filters.consequences.
  */
 function applyActivePresets(): void {
+  applyingPresets = true
   applyPresetStateToFilters({
     filters,
     presetState: getActiveFilterState(),
     consequencesTarget: selectedImpactPresets,
     includeCohortFields: true
   })
+  void nextTick(() => {
+    applyingPresets = false
+  })
 }
+
+// Auto-deactivate presets when user manually changes filter values
+watch(
+  [filters, selectedImpactPresets],
+  () => {
+    if (applyingPresets || activePresetIds.value.size === 0) return
+    const idsToDeactivate: number[] = []
+    for (const id of activePresetIds.value) {
+      const preset = allPresets.value.find((p) => p.id === id)
+      if (
+        preset !== undefined &&
+        isPresetDiverged({
+          filters: filters.value,
+          presetFilterJson: preset.filterJson,
+          consequencesValue: selectedImpactPresets.value
+        })
+      ) {
+        idsToDeactivate.push(id)
+      }
+    }
+    for (const id of idsToDeactivate) {
+      togglePreset(id)
+    }
+  },
+  { deep: true }
+)
 
 async function handleSavePreset(data: { name: string; description: string | null }): Promise<void> {
   savingPreset.value = true
@@ -423,7 +459,19 @@ provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
   isFilterGroupActive,
   clearAllFilters,
   clearFilter,
-  searchGeneSymbols
+  searchGeneSymbols,
+
+  // Preset store integration for CohortFilterDrawer
+  visiblePresets,
+  isPresetActive,
+  onPresetToggle: handlePresetToggle,
+  onPresetSave: () => {
+    showSavePresetDialog.value = true
+  },
+  onPresetManage: () => {
+    showManagePresetsDialog.value = true
+  },
+  hasActiveFiltersForSave: mergedHasActiveFilters
 })
 
 // Debounced filter change emission
