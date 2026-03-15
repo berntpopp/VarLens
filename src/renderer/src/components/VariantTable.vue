@@ -259,10 +259,9 @@
 import { ref, computed, toRef, watch, onMounted, nextTick } from 'vue'
 import type { Variant, VariantFilter } from '../../../shared/types/api'
 import type { AnnotationScope } from '../../../shared/types/annotations'
-import type { ColumnFilterMeta, ColumnFilterMode } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import { buildActiveFiltersList } from '../utils/filters/activeFilters'
-import { detectFilterMode } from '../config/columnFilterConfig'
+import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useVariantLinks } from '../composables/useVariantLinks'
@@ -379,23 +378,8 @@ const {
   onSortUpdate: (hasSort) => emit('update:hasSort', hasSort)
 })
 
-// Column metadata map for filter UI auto-detection
-const columnMetaMap = computed<Record<string, ColumnFilterMeta>>(() => {
-  const map: Record<string, ColumnFilterMeta> = {}
-  for (const meta of columnMeta.value) {
-    map[meta.key] = meta
-  }
-  return map
-})
-
-// Column filter modes derived from metadata + config overrides
-const columnFilterModes = computed<Record<string, ColumnFilterMode>>(() => {
-  const modes: Record<string, ColumnFilterMode> = {}
-  for (const meta of columnMeta.value) {
-    modes[meta.key] = detectFilterMode(meta)
-  }
-  return modes
-})
+// Column metadata map + filter modes (shared composable)
+const { columnMetaMap, columnFilterModes } = useColumnFilterMeta(columnMeta)
 
 // Column active filter chips for the toolbar
 const columnActiveFilters = computed<ActiveFilter[]>(() => {

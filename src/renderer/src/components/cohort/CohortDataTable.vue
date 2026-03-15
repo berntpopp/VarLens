@@ -211,13 +211,12 @@ import {
 import CarrierExpandedRow from './CarrierExpandedRow.vue'
 import VariantColumnHeader from '../variant-table/VariantColumnHeader.vue'
 import { useColumnFilters } from '../../composables/useColumnFilters'
+import { useColumnFilterMeta } from '../../composables/useColumnFilterMeta'
 import type {
   ColumnFilter,
   ColumnFilterMeta,
-  ColumnFilterMode,
   ColumnFiltersParam
 } from '../../../../shared/types/column-filters'
-import { detectFilterMode } from '../../config/columnFilterConfig'
 import { useDebounce } from '../../composables/useDebounce'
 import { useExternalLinksStore, type ExternalLinkConfig } from '../../stores/externalLinksStore'
 import { APP_CONFIG } from '../../../../shared/config'
@@ -319,23 +318,9 @@ const filterableColumns = computed(() =>
   )
 )
 
-// Column metadata map for filter UI auto-detection
-const columnMetaMap = computed<Record<string, ColumnFilterMeta>>(() => {
-  const map: Record<string, ColumnFilterMeta> = {}
-  for (const meta of props.columnMeta ?? []) {
-    map[meta.key] = meta
-  }
-  return map
-})
-
-// Column filter modes derived from metadata + config overrides
-const columnFilterModes = computed<Record<string, ColumnFilterMode>>(() => {
-  const modes: Record<string, ColumnFilterMode> = {}
-  for (const meta of props.columnMeta ?? []) {
-    modes[meta.key] = detectFilterMode(meta)
-  }
-  return modes
-})
+// Column metadata map + filter modes (shared composable)
+const columnMetaRef = computed<ColumnFilterMeta[]>(() => props.columnMeta ?? [])
+const { columnMetaMap, columnFilterModes } = useColumnFilterMeta(columnMetaRef)
 
 // Debounced emit when column filters change
 const { debouncedFn: debouncedEmitColumnFilters } = useDebounce(
