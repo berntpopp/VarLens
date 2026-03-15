@@ -543,7 +543,7 @@ test.describe('Documentation Screenshots', () => {
         const dbBtn = appBar.querySelector('.v-btn.text-none')
         if (dbBtn) items.push({ el: dbBtn, num: 4, label: 'Database', clr: orange })
 
-        const gearIcon = appBar.querySelector('.mdi-cog')
+        const gearIcon = appBar.querySelector('.mdi-cog-outline')
         const gearBtn = gearIcon?.closest('.v-btn')
         if (gearBtn) items.push({ el: gearBtn, num: 5, label: 'Settings', clr: green })
 
@@ -1188,5 +1188,940 @@ test.describe('Documentation Screenshots', () => {
       await caseBtn.click()
       await window.waitForTimeout(1000)
     }
+  })
+
+  // ===================================================================
+  // Filter system screenshots (Phase 6 documentation)
+  // ===================================================================
+
+  test('13 - filter toolbar', async () => {
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Add labeled highlights for the key toolbar sections
+    await window.evaluate(() => {
+      function highlight(
+        el: Element,
+        label: string,
+        clr: string,
+        opts?: { labelPos?: 'top' | 'bottom' | 'top-right'; pad?: number }
+      ): void {
+        const pad = opts?.pad ?? 3
+        const rect = el.getBoundingClientRect()
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${rect.top - pad}px;
+          left: ${rect.left - pad}px;
+          width: ${rect.width + pad * 2}px;
+          height: ${rect.height + pad * 2}px;
+          border: 2.5px solid ${clr};
+          border-radius: 6px;
+          pointer-events: none;
+          z-index: 99999;
+        `
+        const lbl = document.createElement('div')
+        let posCSS = 'top: -20px; left: 8px;'
+        if (opts?.labelPos === 'bottom') posCSS = 'bottom: -20px; left: 8px;'
+        if (opts?.labelPos === 'top-right') posCSS = 'top: -20px; right: 8px;'
+        lbl.style.cssText = `
+          position: absolute; ${posCSS}
+          background: ${clr}; color: white;
+          padding: 2px 8px; border-radius: 3px;
+          font-size: 11px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = label
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+
+      function highlightGroup(
+        els: Element[],
+        label: string,
+        clr: string,
+        opts?: { labelPos?: 'top' | 'bottom' | 'top-right'; pad?: number }
+      ): void {
+        const pad = opts?.pad ?? 3
+        const rects = els.map((e) => e.getBoundingClientRect())
+        const top = Math.min(...rects.map((r) => r.top)) - pad
+        const left = Math.min(...rects.map((r) => r.left)) - pad
+        const right = Math.max(...rects.map((r) => r.right)) + pad
+        const bottom = Math.max(...rects.map((r) => r.bottom)) + pad
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${top}px; left: ${left}px;
+          width: ${right - left}px; height: ${bottom - top}px;
+          border: 2.5px solid ${clr};
+          border-radius: 6px;
+          pointer-events: none;
+          z-index: 99999;
+        `
+        const lbl = document.createElement('div')
+        let posCSS = 'top: -20px; left: 8px;'
+        if (opts?.labelPos === 'bottom') posCSS = 'bottom: -20px; left: 8px;'
+        if (opts?.labelPos === 'top-right') posCSS = 'top: -20px; right: 8px;'
+        lbl.style.cssText = `
+          position: absolute; ${posCSS}
+          background: ${clr}; color: white;
+          padding: 2px 8px; border-radius: 3px;
+          font-size: 11px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = label
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+
+      const red = '#e74c3c'
+      const blue = '#3498db'
+      const green = '#27ae60'
+      const purple = '#8e44ad'
+      const orange = '#e67e22'
+
+      // 1. DSL search bar
+      const searchField = document.querySelector('.filter-toolbar .filter-search-input')
+      if (searchField) highlight(searchField, 'DSL search bar', red, { pad: 2 })
+
+      // 2. Quick filters: star, comment, ACMG chips
+      const toolbar = document.querySelector('.filter-toolbar')
+      if (toolbar) {
+        const starBtn = toolbar.querySelector('.v-btn .mdi-star-outline, .v-btn .mdi-star')
+          ?.closest('.v-btn')
+        const chipGroup = toolbar.querySelector('.v-chip-group')
+        if (starBtn && chipGroup) {
+          highlightGroup([starBtn, chipGroup], 'Quick filters (star, comments, ACMG)', blue)
+        }
+      }
+
+      // 3. Results count chip
+      const resultsChip = document.querySelector('.results-chip')
+      if (resultsChip) highlight(resultsChip, 'Filtered count', green, { labelPos: 'top-right' })
+
+      // 4. Filters / Columns / Export buttons
+      const toolbarBtns = Array.from(document.querySelectorAll('.filter-toolbar .v-btn'))
+      const filtersBtn = toolbarBtns.find((b) => b.textContent?.includes('Filters'))
+      const exportBtn = toolbarBtns.find((b) => b.textContent?.includes('Export'))
+      if (filtersBtn && exportBtn) {
+        const colsBtn = toolbarBtns.find((b) => b.textContent?.includes('Columns'))
+        const btns = [filtersBtn, colsBtn, exportBtn].filter(Boolean) as Element[]
+        highlightGroup(btns, 'Filters / Columns / Export', purple, { labelPos: 'top-right' })
+      }
+
+      // 5. Preset bar (if visible)
+      const presetBar = document.querySelector('.preset-bar')
+      if (presetBar) highlight(presetBar, 'Preset bar', orange, { labelPos: 'bottom', pad: 2 })
+    })
+    await window.waitForTimeout(300)
+
+    await saveScreenshot(window, 'filter-toolbar')
+    await clearHighlights(window)
+  })
+
+  test('14 - filter preset bar', async () => {
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Add labeled highlights to the preset bar elements
+    await window.evaluate(() => {
+      const red = '#e74c3c'
+      const blue = '#3498db'
+      const green = '#27ae60'
+      const orange = '#e67e22'
+
+      const presetBar = document.querySelector('.preset-bar')
+      if (!presetBar) return
+
+      // Highlight individual preset chips
+      const chips = presetBar.querySelectorAll('.v-chip')
+      if (chips.length > 0) {
+        // Group all preset chips
+        const chipRects = Array.from(chips).map((c) => c.getBoundingClientRect())
+        const top = Math.min(...chipRects.map((r) => r.top)) - 4
+        const left = Math.min(...chipRects.map((r) => r.left)) - 4
+        const right = Math.max(...chipRects.map((r) => r.right)) + 4
+        const bottom = Math.max(...chipRects.map((r) => r.bottom)) + 4
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${top}px; left: ${left}px;
+          width: ${right - left}px; height: ${bottom - top}px;
+          border: 2.5px solid ${red};
+          border-radius: 6px;
+          pointer-events: none;
+          z-index: 99999;
+        `
+        const lbl = document.createElement('div')
+        lbl.style.cssText = `
+          position: absolute; top: -20px; left: 8px;
+          background: ${red}; color: white;
+          padding: 2px 8px; border-radius: 3px;
+          font-size: 11px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = 'Filter presets (click to toggle)'
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+
+      // Highlight Save button
+      const btns = presetBar.querySelectorAll('.v-btn')
+      for (const btn of btns) {
+        if (btn.textContent?.includes('Save') || btn.querySelector('.mdi-content-save-outline')) {
+          const rect = btn.getBoundingClientRect()
+          const div = document.createElement('div')
+          div.className = 'screenshot-highlight'
+          div.style.cssText = `
+            position: fixed;
+            top: ${rect.top - 3}px; left: ${rect.left - 3}px;
+            width: ${rect.width + 6}px; height: ${rect.height + 6}px;
+            border: 2.5px solid ${green};
+            border-radius: 6px;
+            pointer-events: none;
+            z-index: 99999;
+          `
+          const lbl = document.createElement('div')
+          lbl.style.cssText = `
+            position: absolute; top: -20px; left: 4px;
+            background: ${green}; color: white;
+            padding: 2px 8px; border-radius: 3px;
+            font-size: 11px; font-weight: 700;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          `
+          lbl.textContent = 'Save preset'
+          div.appendChild(lbl)
+          document.body.appendChild(div)
+          break
+        }
+      }
+
+      // Highlight Manage (gear) button
+      const gearIcon = presetBar.querySelector('.mdi-cog-outline')
+      const gearBtn = gearIcon?.closest('.v-btn')
+      if (gearBtn) {
+        const rect = gearBtn.getBoundingClientRect()
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${rect.top - 3}px; left: ${rect.left - 3}px;
+          width: ${rect.width + 6}px; height: ${rect.height + 6}px;
+          border: 2.5px solid ${orange};
+          border-radius: 6px;
+          pointer-events: none;
+          z-index: 99999;
+        `
+        const lbl = document.createElement('div')
+        lbl.style.cssText = `
+          position: absolute; top: -20px; right: 4px;
+          background: ${orange}; color: white;
+          padding: 2px 8px; border-radius: 3px;
+          font-size: 11px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = 'Manage presets'
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+    })
+    await window.waitForTimeout(300)
+
+    // Crop to just the toolbar + preset bar area
+    const toolbarRect = await window.evaluate(() => {
+      const container = document.querySelector('.filter-toolbar-container')
+      const presetBar = document.querySelector('.preset-bar')
+      if (!container) return null
+      const containerRect = container.getBoundingClientRect()
+      const bottom = presetBar
+        ? presetBar.getBoundingClientRect().bottom + 30
+        : containerRect.bottom + 30
+      return { x: containerRect.x, y: containerRect.y - 25, width: containerRect.width, height: bottom - containerRect.y + 25 }
+    })
+
+    if (toolbarRect) {
+      const filePath = path.join(SCREENSHOT_DIR, 'filter-preset-bar.png')
+      await window.screenshot({
+        path: filePath,
+        type: 'png',
+        clip: { x: toolbarRect.x, y: toolbarRect.y, width: toolbarRect.width, height: toolbarRect.height }
+      })
+    } else {
+      await saveScreenshot(window, 'filter-preset-bar')
+    }
+    await clearHighlights(window)
+  })
+
+  test('15 - filter drawer sections', async () => {
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Open filter drawer
+    const filtersBtn = window.locator('button:has-text("Filters")')
+    if ((await filtersBtn.count()) > 0) {
+      await filtersBtn.first().click()
+      await window.waitForTimeout(1500)
+    }
+
+    // Set a frequency filter so we see a value preview when collapsed
+    await window.evaluate(() => {
+      // Find the Frequency expansion panel and expand it
+      const panels = document.querySelectorAll('.v-expansion-panel')
+      for (const panel of panels) {
+        if (panel.textContent?.includes('Frequency')) {
+          const title = panel.querySelector('.v-expansion-panel-title') as HTMLElement
+          if (title) title.click()
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(800)
+
+    // Click the 1% preset button for frequency
+    await window.evaluate(() => {
+      const panels = document.querySelectorAll('.v-expansion-panel')
+      for (const panel of panels) {
+        if (panel.textContent?.includes('Frequency')) {
+          const btns = panel.querySelectorAll('.v-btn')
+          for (const btn of btns) {
+            if (btn.textContent?.includes('1%')) {
+              ;(btn as HTMLElement).click()
+              break
+            }
+          }
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(800)
+
+    // Collapse frequency panel to show preview
+    await window.evaluate(() => {
+      const panels = document.querySelectorAll('.v-expansion-panel')
+      for (const panel of panels) {
+        if (panel.textContent?.includes('Frequency')) {
+          const title = panel.querySelector('.v-expansion-panel-title') as HTMLElement
+          if (title) title.click()
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(500)
+
+    // Add highlights inside the filter drawer
+    await window.evaluate(({ colors }: { colors: Record<string, string> }) => {
+      const drawers = document.querySelectorAll('.v-navigation-drawer')
+      for (const drawer of drawers) {
+        if (!drawer.textContent?.includes('All Filters')) continue
+
+        // Highlight section headers
+        const headers = drawer.querySelectorAll('.filter-section-header')
+        headers.forEach((header) => {
+          const rect = header.getBoundingClientRect()
+          const div = document.createElement('div')
+          div.className = 'screenshot-highlight'
+          div.style.cssText = `
+            position: fixed;
+            top: ${rect.top - 2}px; left: ${rect.left - 2}px;
+            width: ${rect.width + 4}px; height: ${rect.height + 4}px;
+            border: 2px solid ${colors.blue};
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 99999;
+          `
+          document.body.appendChild(div)
+        })
+
+        // Add a label for the first section header
+        if (headers.length > 0) {
+          const firstRect = headers[0].getBoundingClientRect()
+          const lbl = document.createElement('div')
+          lbl.className = 'screenshot-highlight'
+          lbl.style.cssText = `
+            position: fixed;
+            top: ${firstRect.top - 20}px; left: ${firstRect.left + 4}px;
+            background: ${colors.blue}; color: white;
+            padding: 2px 8px; border-radius: 3px;
+            font-size: 11px; font-weight: 700;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            z-index: 99999;
+          `
+          lbl.textContent = 'Section headers'
+          document.body.appendChild(lbl)
+        }
+
+        // Highlight value preview on the Frequency panel (should show "≤ 1.00%")
+        const summaries = drawer.querySelectorAll('.filter-value-summary')
+        for (const summary of summaries) {
+          if (summary.textContent?.includes('%') || summary.textContent?.includes('≤')) {
+            const rect = summary.getBoundingClientRect()
+            const div = document.createElement('div')
+            div.className = 'screenshot-highlight'
+            div.style.cssText = `
+              position: fixed;
+              top: ${rect.top - 3}px; left: ${rect.left - 3}px;
+              width: ${rect.width + 6}px; height: ${rect.height + 6}px;
+              border: 2.5px solid ${colors.green};
+              border-radius: 4px;
+              pointer-events: none;
+              z-index: 99999;
+            `
+            const lbl = document.createElement('div')
+            lbl.style.cssText = `
+              position: absolute; top: -18px; right: 4px;
+              background: ${colors.green}; color: white;
+              padding: 2px 8px; border-radius: 3px;
+              font-size: 10px; font-weight: 700;
+              white-space: nowrap;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            `
+            lbl.textContent = 'Collapsed value preview'
+            div.appendChild(lbl)
+            document.body.appendChild(div)
+            break
+          }
+        }
+
+        // Highlight the "Active" chip on the frequency panel
+        const activeChips = drawer.querySelectorAll('.v-chip')
+        for (const chip of activeChips) {
+          if (chip.textContent?.trim() === 'Active') {
+            const rect = chip.getBoundingClientRect()
+            const div = document.createElement('div')
+            div.className = 'screenshot-highlight'
+            div.style.cssText = `
+              position: fixed;
+              top: ${rect.top - 3}px; left: ${rect.left - 3}px;
+              width: ${rect.width + 6}px; height: ${rect.height + 6}px;
+              border: 2.5px solid ${colors.red};
+              border-radius: 4px;
+              pointer-events: none;
+              z-index: 99999;
+            `
+            const lbl = document.createElement('div')
+            lbl.style.cssText = `
+              position: absolute; top: -18px; left: 4px;
+              background: ${colors.red}; color: white;
+              padding: 2px 8px; border-radius: 3px;
+              font-size: 10px; font-weight: 700;
+              white-space: nowrap;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            `
+            lbl.textContent = 'Active indicator'
+            div.appendChild(lbl)
+            document.body.appendChild(div)
+            break
+          }
+        }
+
+        break
+      }
+    }, { colors: { red: '#e74c3c', blue: '#3498db', green: '#27ae60' } })
+    await window.waitForTimeout(300)
+
+    await saveScreenshot(window, 'filter-drawer-sections')
+    await clearHighlights(window)
+
+    // Close drawer
+    const scrim = window.locator('.v-navigation-drawer__scrim')
+    if ((await scrim.count()) > 0 && (await scrim.isVisible().catch(() => false))) {
+      await scrim.click({ force: true })
+    } else {
+      await window.keyboard.press('Escape')
+    }
+    await window.waitForTimeout(500)
+  })
+
+  test('16 - filter preset save dialog', async () => {
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // First ensure we have an active filter so the Save button appears
+    // Activate a preset chip (e.g. "Rare (1%)")
+    await window.evaluate(() => {
+      const presetBar = document.querySelector('.preset-bar')
+      if (!presetBar) return
+      const chips = presetBar.querySelectorAll('.v-chip')
+      for (const chip of chips) {
+        if (chip.textContent?.includes('Rare (1%)')) {
+          ;(chip as HTMLElement).click()
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(1000)
+
+    // Click the Save button in the preset bar
+    await window.evaluate(() => {
+      const presetBar = document.querySelector('.preset-bar')
+      if (!presetBar) return
+      const btns = presetBar.querySelectorAll('.v-btn')
+      for (const btn of btns) {
+        if (btn.textContent?.includes('Save') || btn.querySelector('.mdi-content-save-outline')) {
+          ;(btn as HTMLElement).click()
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(1000)
+
+    // Highlight the save dialog
+    const dialogCard = window.locator('.v-overlay--active .v-card')
+    if ((await dialogCard.count()) > 0) {
+      await addHighlight(window, '.v-overlay--active .v-card', {
+        label: 'Save filter preset',
+        color: '#e74c3c'
+      })
+      await window.waitForTimeout(300)
+    }
+
+    await saveScreenshot(window, 'filter-preset-save')
+    await clearHighlights(window)
+
+    // Close dialog
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
+
+    // Deactivate the preset to clean up
+    await window.evaluate(() => {
+      const presetBar = document.querySelector('.preset-bar')
+      if (!presetBar) return
+      const chips = presetBar.querySelectorAll('.v-chip')
+      for (const chip of chips) {
+        if (chip.textContent?.includes('Rare (1%)')) {
+          ;(chip as HTMLElement).click()
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(500)
+  })
+
+  test('17 - filter preset manage dialog', async () => {
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Click the gear/manage icon in the preset bar
+    await window.evaluate(() => {
+      const presetBar = document.querySelector('.preset-bar')
+      if (!presetBar) return
+      const gearIcon = presetBar.querySelector('.mdi-cog-outline')
+      const gearBtn = gearIcon?.closest('.v-btn')
+      if (gearBtn) (gearBtn as HTMLElement).click()
+    })
+    await window.waitForTimeout(1000)
+
+    // Highlight the manage dialog
+    const dialogCard = window.locator('.v-overlay--active .v-card')
+    if ((await dialogCard.count()) > 0) {
+      // Add highlights for built-in vs user preset indicators
+      await window.evaluate(({ colors }: { colors: Record<string, string> }) => {
+        const card = document.querySelector('.v-overlay--active .v-card')
+        if (!card) return
+
+        // Highlight lock icon (built-in preset)
+        const lockIcon = card.querySelector('.mdi-lock')
+        if (lockIcon) {
+          const listItem = lockIcon.closest('.v-list-item')
+          if (listItem) {
+            const rect = listItem.getBoundingClientRect()
+            const div = document.createElement('div')
+            div.className = 'screenshot-highlight'
+            div.style.cssText = `
+              position: fixed;
+              top: ${rect.top - 2}px; left: ${rect.left - 2}px;
+              width: ${rect.width + 4}px; height: ${rect.height + 4}px;
+              border: 2px solid ${colors.blue};
+              border-radius: 4px;
+              pointer-events: none;
+              z-index: 100001;
+            `
+            const lbl = document.createElement('div')
+            lbl.style.cssText = `
+              position: absolute; top: -18px; left: 8px;
+              background: ${colors.blue}; color: white;
+              padding: 2px 8px; border-radius: 3px;
+              font-size: 10px; font-weight: 700;
+              white-space: nowrap;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            `
+            lbl.textContent = 'Built-in preset (locked)'
+            div.appendChild(lbl)
+            document.body.appendChild(div)
+          }
+        }
+
+        // Highlight the dialog overall
+        const cardRect = card.getBoundingClientRect()
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${cardRect.top - 4}px; left: ${cardRect.left - 4}px;
+          width: ${cardRect.width + 8}px; height: ${cardRect.height + 8}px;
+          border: 3px solid ${colors.red};
+          border-radius: 8px;
+          pointer-events: none;
+          z-index: 100000;
+        `
+        const lbl = document.createElement('div')
+        lbl.style.cssText = `
+          position: absolute; top: -24px; left: 8px;
+          background: ${colors.red}; color: white;
+          padding: 3px 10px; border-radius: 4px;
+          font-size: 13px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = 'Manage filter presets'
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }, { colors: { red: '#e74c3c', blue: '#3498db' } })
+      await window.waitForTimeout(300)
+    }
+
+    await saveScreenshot(window, 'filter-preset-manage')
+    await clearHighlights(window)
+
+    // Close dialog
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
+  })
+
+  test('18 - filter DSL autocomplete', async () => {
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Focus the search bar and type a DSL expression to trigger autocomplete
+    const searchInput = window.locator('.filter-search-input input, .dsl-search-bar input')
+    if ((await searchInput.count()) > 0) {
+      await searchInput.first().click()
+      await window.waitForTimeout(500)
+
+      // Type slowly to trigger autocomplete
+      await searchInput.first().fill('')
+      await window.waitForTimeout(300)
+      await searchInput.first().pressSequentially('gnomad_af:', { delay: 100 })
+      await window.waitForTimeout(1500)
+    }
+
+    // Highlight the autocomplete dropdown
+    await window.evaluate(({ colors }: { colors: Record<string, string> }) => {
+      // Search bar highlight
+      const searchBar = document.querySelector('.dsl-search-bar')
+      if (searchBar) {
+        const rect = searchBar.getBoundingClientRect()
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${rect.top - 3}px; left: ${rect.left - 3}px;
+          width: ${rect.width + 6}px; height: ${rect.height + 6}px;
+          border: 2.5px solid ${colors.red};
+          border-radius: 6px;
+          pointer-events: none;
+          z-index: 99999;
+        `
+        const lbl = document.createElement('div')
+        lbl.style.cssText = `
+          position: absolute; top: -20px; left: 8px;
+          background: ${colors.red}; color: white;
+          padding: 2px 8px; border-radius: 3px;
+          font-size: 11px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = 'DSL mode (primary border)'
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+
+      // Autocomplete dropdown highlight
+      const suggestionList = document.querySelector('.dsl-suggestion-list')
+      if (suggestionList) {
+        const rect = suggestionList.getBoundingClientRect()
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${rect.top - 3}px; left: ${rect.left - 3}px;
+          width: ${rect.width + 6}px; height: ${rect.height + 6}px;
+          border: 2.5px solid ${colors.blue};
+          border-radius: 6px;
+          pointer-events: none;
+          z-index: 100001;
+        `
+        const lbl = document.createElement('div')
+        lbl.style.cssText = `
+          position: absolute; bottom: -20px; left: 8px;
+          background: ${colors.blue}; color: white;
+          padding: 2px 8px; border-radius: 3px;
+          font-size: 11px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = 'Context-aware operator suggestions'
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+    }, { colors: { red: '#e74c3c', blue: '#3498db' } })
+    await window.waitForTimeout(300)
+
+    await saveScreenshot(window, 'filter-dsl-autocomplete')
+    await clearHighlights(window)
+
+    // Clear the search bar and close autocomplete
+    const searchInputAgain = window.locator('.filter-search-input input, .dsl-search-bar input')
+    if ((await searchInputAgain.count()) > 0) {
+      await searchInputAgain.first().fill('')
+    }
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
+  })
+
+  test('19 - per-column numeric filter', async () => {
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Click a numeric column header filter icon (CADD)
+    await window.evaluate(() => {
+      const headers = document.querySelectorAll('th')
+      for (const header of headers) {
+        if (header.textContent?.includes('CADD')) {
+          const filterIcon = header.querySelector('.mdi-filter, .mdi-filter-outline, .v-btn')
+          if (filterIcon) {
+            const btn = filterIcon.closest('.v-btn') || filterIcon
+            ;(btn as HTMLElement).click()
+          }
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(1000)
+
+    // Highlight the filter popup
+    await window.evaluate(({ clr }: { clr: string }) => {
+      const popup = document.querySelector('.filter-popup')
+      if (!popup) return
+      const rect = popup.getBoundingClientRect()
+      const div = document.createElement('div')
+      div.className = 'screenshot-highlight'
+      div.style.cssText = `
+        position: fixed;
+        top: ${rect.top - 4}px; left: ${rect.left - 4}px;
+        width: ${rect.width + 8}px; height: ${rect.height + 8}px;
+        border: 3px solid ${clr};
+        border-radius: 8px;
+        pointer-events: none;
+        z-index: 100001;
+      `
+      const lbl = document.createElement('div')
+      lbl.style.cssText = `
+        position: absolute; top: -24px; left: 8px;
+        background: ${clr}; color: white;
+        padding: 3px 10px; border-radius: 4px;
+        font-size: 13px; font-weight: 700;
+        white-space: nowrap;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      `
+      lbl.textContent = 'Numeric column filter (CADD)'
+      div.appendChild(lbl)
+      document.body.appendChild(div)
+    }, { clr: '#e74c3c' })
+    await window.waitForTimeout(300)
+
+    await saveScreenshot(window, 'filter-column-numeric')
+    await clearHighlights(window)
+
+    // Close popup
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
+  })
+
+  test('20 - per-column categorical filter', async () => {
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Click a categorical column header filter icon (Consequence)
+    await window.evaluate(() => {
+      const headers = document.querySelectorAll('th')
+      for (const header of headers) {
+        if (header.textContent?.includes('Consequence') || header.textContent?.includes('Conseq')) {
+          const filterIcon = header.querySelector('.mdi-filter, .mdi-filter-outline, .v-btn')
+          if (filterIcon) {
+            const btn = filterIcon.closest('.v-btn') || filterIcon
+            ;(btn as HTMLElement).click()
+          }
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(1000)
+
+    // Highlight the categorical filter popup
+    await window.evaluate(({ clr }: { clr: string }) => {
+      const popup = document.querySelector('.filter-popup')
+      if (!popup) return
+      const rect = popup.getBoundingClientRect()
+      const div = document.createElement('div')
+      div.className = 'screenshot-highlight'
+      div.style.cssText = `
+        position: fixed;
+        top: ${rect.top - 4}px; left: ${rect.left - 4}px;
+        width: ${rect.width + 8}px; height: ${rect.height + 8}px;
+        border: 3px solid ${clr};
+        border-radius: 8px;
+        pointer-events: none;
+        z-index: 100001;
+      `
+      const lbl = document.createElement('div')
+      lbl.style.cssText = `
+        position: absolute; top: -24px; left: 8px;
+        background: ${clr}; color: white;
+        padding: 3px 10px; border-radius: 4px;
+        font-size: 13px; font-weight: 700;
+        white-space: nowrap;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      `
+      lbl.textContent = 'Categorical column filter (Consequence)'
+      div.appendChild(lbl)
+      document.body.appendChild(div)
+    }, { clr: '#3498db' })
+    await window.waitForTimeout(300)
+
+    await saveScreenshot(window, 'filter-column-categorical')
+    await clearHighlights(window)
+
+    // Close popup
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
+  })
+
+  test('21 - filter empty state', async () => {
+    await ensureCaseSelected(window)
+    await window.waitForTimeout(500)
+
+    // Apply extreme filters that will produce zero results
+    // Open filter drawer and set an impossible frequency
+    const filtersBtn = window.locator('button:has-text("Filters")')
+    if ((await filtersBtn.count()) > 0) {
+      await filtersBtn.first().click()
+      await window.waitForTimeout(1500)
+    }
+
+    // Set CADD >= 99 which should give zero results
+    await window.evaluate(() => {
+      const panels = document.querySelectorAll('.v-expansion-panel')
+      for (const panel of panels) {
+        if (panel.textContent?.includes('CADD')) {
+          const title = panel.querySelector('.v-expansion-panel-title') as HTMLElement
+          if (title) title.click()
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(800)
+
+    // Type a high CADD value
+    await window.evaluate(() => {
+      const panels = document.querySelectorAll('.v-expansion-panel')
+      for (const panel of panels) {
+        if (panel.textContent?.includes('CADD')) {
+          const input = panel.querySelector('input[type="number"], input')
+          if (input) {
+            ;(input as HTMLInputElement).value = '999'
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            input.dispatchEvent(new Event('change', { bubbles: true }))
+          }
+          break
+        }
+      }
+    })
+    await window.waitForTimeout(1000)
+
+    // Close drawer to see results
+    const scrim = window.locator('.v-navigation-drawer__scrim')
+    if ((await scrim.count()) > 0 && (await scrim.isVisible().catch(() => false))) {
+      await scrim.click({ force: true })
+    } else {
+      await window.keyboard.press('Escape')
+    }
+    await window.waitForTimeout(1000)
+
+    // Check if there's a no-results / empty state visible
+    // Highlight whatever empty state is shown
+    await window.evaluate(({ clr }: { clr: string }) => {
+      // Look for empty state indicators
+      const noData = document.querySelector('.v-data-table__empty-wrapper, .v-data-table__td--no-data')
+      const emptyState = document.querySelector('.text-center:has(.mdi-filter-off), .v-container:has(.mdi-filter-off)')
+      const target = emptyState || noData
+      if (target) {
+        const rect = target.getBoundingClientRect()
+        const div = document.createElement('div')
+        div.className = 'screenshot-highlight'
+        div.style.cssText = `
+          position: fixed;
+          top: ${rect.top - 4}px; left: ${rect.left - 4}px;
+          width: ${rect.width + 8}px; height: ${rect.height + 8}px;
+          border: 3px solid ${clr};
+          border-radius: 8px;
+          pointer-events: none;
+          z-index: 99999;
+        `
+        const lbl = document.createElement('div')
+        lbl.style.cssText = `
+          position: absolute; top: -24px; left: 8px;
+          background: ${clr}; color: white;
+          padding: 3px 10px; border-radius: 4px;
+          font-size: 13px; font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        `
+        lbl.textContent = 'Empty state — no matching variants'
+        div.appendChild(lbl)
+        document.body.appendChild(div)
+      }
+    }, { clr: '#e74c3c' })
+    await window.waitForTimeout(300)
+
+    await saveScreenshot(window, 'filter-empty-state')
+    await clearHighlights(window)
+
+    // Clear all filters to restore state for any subsequent tests
+    await window.evaluate(() => {
+      // Try the applied filters bar clear button
+      const appliedBar = document.querySelector('.applied-filters-bar')
+      if (appliedBar) {
+        const btns = appliedBar.querySelectorAll('.v-btn')
+        for (const btn of btns) {
+          if (btn.textContent?.includes('Clear')) {
+            ;(btn as HTMLElement).click()
+            return
+          }
+        }
+      }
+      // Fallback: find any "Clear" button in the toolbar area
+      const allBtns = document.querySelectorAll('.filter-toolbar-container .v-btn')
+      for (const btn of allBtns) {
+        if (btn.textContent?.includes('Clear')) {
+          ;(btn as HTMLElement).click()
+          return
+        }
+      }
+    })
+    await window.waitForTimeout(500)
+
+    // Also clear via keyboard shortcut
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(500)
   })
 })
