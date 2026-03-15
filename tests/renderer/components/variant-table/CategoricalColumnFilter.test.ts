@@ -42,7 +42,7 @@ describe('CategoricalColumnFilter', () => {
       const buttons = wrapper.findAllComponents({ name: 'VBtn' })
       const buttonTexts = buttons.map((b) => b.text())
       expect(buttonTexts).toContain('Clear')
-      expect(buttonTexts).toContain('Select All')
+      expect(buttonTexts).toContain('All')
       expect(buttonTexts).toContain('OK')
     })
 

@@ -1,29 +1,27 @@
 <template>
-  <v-card min-width="280" max-width="350">
-    <v-card-title class="text-subtitle-2 py-2">Filter: {{ columnTitle }}</v-card-title>
+  <v-card min-width="200" max-width="300" class="filter-popup">
+    <v-card-title class="text-caption font-weight-medium py-1 px-3">
+      Filter: {{ columnTitle }}
+    </v-card-title>
     <v-divider />
-    <v-card-text class="pa-3">
+    <v-card-text class="pa-2">
       <v-autocomplete
         v-model="filterValue"
         :items="suggestions"
-        label="Type to filter..."
+        placeholder="Type to filter..."
         density="compact"
         variant="outlined"
         clearable
         hide-details
         auto-select-first
-      >
-        <template #prepend-inner>
-          <v-icon size="small">mdi-magnify</v-icon>
-        </template>
-      </v-autocomplete>
-      <div class="text-caption text-medium-emphasis mt-2">Case-insensitive partial match</div>
+        prepend-inner-icon="mdi-magnify"
+      />
     </v-card-text>
     <v-divider />
-    <v-card-actions class="pa-2">
-      <v-btn size="small" variant="text" @click="onClear">Clear</v-btn>
+    <v-card-actions class="pa-1 px-2">
+      <v-btn size="x-small" variant="text" @click="onClear">Clear</v-btn>
       <v-spacer />
-      <v-btn size="small" variant="text" color="primary" @click="onApply">Apply</v-btn>
+      <v-btn size="x-small" variant="text" color="primary" @click="onApply">Apply</v-btn>
     </v-card-actions>
   </v-card>
 </template>

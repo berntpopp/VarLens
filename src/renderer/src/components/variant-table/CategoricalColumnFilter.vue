@@ -1,23 +1,22 @@
 <template>
-  <v-card min-width="280" max-width="350">
-    <v-card-title class="text-subtitle-2 py-2">Filter: {{ columnTitle }}</v-card-title>
+  <v-card min-width="200" max-width="300" class="filter-popup">
+    <v-card-title class="text-caption font-weight-medium py-1 px-3">
+      Filter: {{ columnTitle }}
+    </v-card-title>
     <v-divider />
-    <v-card-text class="pa-3">
+    <v-card-text class="pa-2">
       <v-text-field
         v-model="searchText"
-        label="Search..."
+        placeholder="Search..."
         density="compact"
         variant="outlined"
         clearable
         hide-details
-        class="mb-2"
-      >
-        <template #prepend-inner>
-          <v-icon size="small">mdi-magnify</v-icon>
-        </template>
-      </v-text-field>
-      <div class="text-caption text-medium-emphasis mb-1">{{ selected.length }} selected</div>
-      <div class="checkbox-list" style="max-height: 250px; overflow-y: auto">
+        class="mb-1"
+        prepend-inner-icon="mdi-magnify"
+      />
+      <div class="text-caption text-medium-emphasis">{{ selected.length }} selected</div>
+      <div class="checkbox-list">
         <v-checkbox
           v-for="val in filteredValues"
           :key="val"
@@ -25,16 +24,17 @@
           :model-value="selected.includes(val)"
           density="compact"
           hide-details
+          class="checkbox-dense"
           @update:model-value="toggleValue(val, $event)"
         />
       </div>
     </v-card-text>
     <v-divider />
-    <v-card-actions class="pa-2">
-      <v-btn size="small" variant="text" @click="onClear">Clear</v-btn>
-      <v-btn size="small" variant="text" @click="selectAll">Select All</v-btn>
+    <v-card-actions class="pa-1 px-2">
+      <v-btn size="x-small" variant="text" @click="onClear">Clear</v-btn>
+      <v-btn size="x-small" variant="text" @click="selectAll">All</v-btn>
       <v-spacer />
-      <v-btn size="small" variant="text" color="primary" @click="onApply">OK</v-btn>
+      <v-btn size="x-small" variant="text" color="primary" @click="onApply">OK</v-btn>
     </v-card-actions>
   </v-card>
 </template>
@@ -98,3 +98,18 @@ function onClear() {
   emit('clear')
 }
 </script>
+
+<style scoped>
+.checkbox-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.checkbox-dense :deep(.v-label) {
+  font-size: 0.75rem;
+}
+
+.checkbox-dense :deep(.v-selection-control) {
+  min-height: 28px;
+}
+</style>
