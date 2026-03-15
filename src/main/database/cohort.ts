@@ -195,6 +195,7 @@ export class CohortService {
           whereConditions.push(`cvs.${sqlColumn} IN (${placeholders})`)
           paramsArray.push(...value)
         } else if (operator === 'like' && typeof value === 'string') {
+          if (value.trim() === '') continue // Skip empty — LIKE '%%' excludes NULLs unnecessarily
           whereConditions.push(`cvs.${sqlColumn} LIKE ? COLLATE NOCASE`)
           paramsArray.push(`%${value}%`)
         } else if (

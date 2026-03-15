@@ -350,20 +350,23 @@ export class VariantRepository extends BaseRepository {
           const params = sql.join(value.map((v) => sql`${String(v)}`))
           query = query.where(sql<boolean>`${sql.ref(sqlColumn)} IN (${params})`)
         } else if (operator === 'like' && typeof value === 'string') {
+          if (value.trim() === '') continue // Skip empty — LIKE '%%' excludes NULLs unnecessarily
           query = query.where(sql`${sql.ref(sqlColumn)} COLLATE NOCASE`, 'like', `%${value}%`)
         } else if (
           (operator === '=' || operator === '!=') &&
           (typeof value === 'string' || typeof value === 'number')
         ) {
           // Exact match — NULLs excluded (user is looking for specific values)
-          const compValue = typeof value === 'string' ? Number(value) || value : value
+          const num = Number(value)
+          const compValue = typeof value === 'number' ? value : Number.isFinite(num) ? num : value
           query = query.where(sqlColumn as keyof Variant, operator as '=' | '!=', compValue)
         } else if (
           (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
           (typeof value === 'string' || typeof value === 'number')
         ) {
           // Range comparison — includeEmpty defaults to true (don't lose unannotated variants)
-          const compValue = typeof value === 'string' ? Number(value) || value : value
+          const num = Number(value)
+          const compValue = typeof value === 'number' ? value : Number.isFinite(num) ? num : value
           const col = sqlColumn as keyof Variant
           const op = operator as '<' | '>' | '<=' | '>='
           const includeNulls = filterDef.includeEmpty !== false

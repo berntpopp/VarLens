@@ -508,6 +508,7 @@ export const mockApi: WindowAPI = {
         }))
         .sort((a, b) => b.affected_case_count - a.affected_case_count)
     },
+    getColumnMeta: async () => [],
     getSummaryStatus: async () => ({
       is_stale: false,
       last_rebuilt_at: Math.floor(Date.now() / 1000)

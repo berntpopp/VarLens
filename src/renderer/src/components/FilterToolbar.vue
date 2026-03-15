@@ -2,9 +2,9 @@
   <SlimFilterToolbar
     :filtered-count="filteredCount"
     :total-count="totalCount"
-    :has-active-filters="hasActiveFilters"
+    :has-active-filters="mergedHasActiveFilters"
     :has-clearable-state="props.hasSort"
-    :active-filter-count="activeFilterCount"
+    :active-filter-count="mergedActiveFilterCount"
     :active-filters-list="mergedActiveFiltersList"
     :exporting="exporting"
     :columns="columns"
@@ -371,6 +371,15 @@ function focusSearch(): void {
   const input = searchFieldRef.value?.$el?.querySelector('input') as HTMLInputElement | null
   input?.focus()
 }
+
+// Merge badge counts to include column filters
+const mergedHasActiveFilters = computed(
+  () => hasActiveFilters.value || (props.columnActiveFilters?.length ?? 0) > 0
+)
+
+const mergedActiveFilterCount = computed(
+  () => activeFilterCount.value + (props.columnActiveFilters?.length ?? 0)
+)
 
 // Merge drawer active filters with column active filters
 const mergedActiveFiltersList = computed(() => [

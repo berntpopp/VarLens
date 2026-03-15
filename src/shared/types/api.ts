@@ -276,6 +276,7 @@ export interface CohortAPI {
   getSummary: () => Promise<CohortSummary>
   getCarriers: (chr: string, pos: number, ref: string, alt: string) => Promise<CohortCarrier[]>
   getGeneBurden: () => Promise<GeneBurden[]>
+  getColumnMeta: () => Promise<ColumnFilterMeta[]>
   getSummaryStatus: () => Promise<{ is_stale: boolean; last_rebuilt_at: number }>
   rebuildSummary: () => Promise<void>
   onSummaryRebuilt: (callback: (status: { is_stale: boolean }) => void) => () => void

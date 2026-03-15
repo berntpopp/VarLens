@@ -291,8 +291,7 @@ export function useCohortData(): UseCohortDataReturn {
     if (!api) return
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (api as any).cohort.getColumnMeta()
+      const result = await api.cohort.getColumnMeta()
       columnMeta.value = result ?? []
     } catch {
       columnMeta.value = []
