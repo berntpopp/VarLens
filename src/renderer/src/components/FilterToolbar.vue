@@ -75,8 +75,13 @@
         }}
       </v-tooltip>
 
-      <!-- ACMG classification chips -->
-      <v-chip-group v-model="filters.acmgClassifications" multiple class="ml-2 flex-nowrap">
+      <!-- ACMG classification chips (hidden at narrow widths, available in drawer) -->
+      <v-chip-group
+        v-if="showToolbarAcmg"
+        v-model="filters.acmgClassifications"
+        multiple
+        class="ml-2 flex-nowrap"
+      >
         <v-chip
           v-for="cls in acmgFilterOptions"
           :key="cls.value"
@@ -165,6 +170,7 @@ import type { ColumnFilter } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 
 interface ColumnDef {
   key: string
@@ -390,6 +396,10 @@ const toggleCommented = () => {
 
 // ACMG classification options (shared constant)
 const acmgFilterOptions = ACMG_FILTER_OPTIONS
+
+// Responsive layout — hide ACMG chips at compact/narrow widths (available in drawer)
+const { tier } = useResponsiveLayout()
+const showToolbarAcmg = computed(() => tier.value === 'full')
 
 // Drawer states with mutual exclusion
 const filterDrawerOpen = ref(false)

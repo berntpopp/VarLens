@@ -63,33 +63,58 @@
           </v-tooltip>
         </v-btn>
 
-        <!-- Columns drawer -->
-        <v-btn
-          v-if="columns && columns.length > 0"
-          variant="tonal"
-          @click="emit('open-columns-drawer')"
-        >
-          <v-icon start size="small">mdi-table-column</v-icon>
-          Columns
-          <v-tooltip activator="parent" location="bottom"
-            >Toggle columns ({{ mod }}+Shift+C)</v-tooltip
+        <!-- At wide widths: show Columns and Export buttons directly -->
+        <template v-if="!showOverflowMenu">
+          <v-btn
+            v-if="columns && columns.length > 0"
+            variant="tonal"
+            @click="emit('open-columns-drawer')"
           >
-        </v-btn>
+            <v-icon start size="small">mdi-table-column</v-icon>
+            Columns
+            <v-tooltip activator="parent" location="bottom"
+              >Toggle columns ({{ mod }}+Shift+C)</v-tooltip
+            >
+          </v-btn>
 
-        <!-- Export -->
-        <v-btn
-          :loading="exporting"
-          :disabled="filteredCount === 0"
-          color="success"
-          variant="tonal"
-          @click="emit('export')"
-        >
-          <v-icon start size="small">mdi-microsoft-excel</v-icon>
-          Export
-          <v-tooltip activator="parent" location="bottom">
-            Export {{ filteredCount.toLocaleString() }} variants to Excel
-          </v-tooltip>
-        </v-btn>
+          <v-btn
+            :loading="exporting"
+            :disabled="filteredCount === 0"
+            color="success"
+            variant="tonal"
+            @click="emit('export')"
+          >
+            <v-icon start size="small">mdi-microsoft-excel</v-icon>
+            Export
+            <v-tooltip activator="parent" location="bottom">
+              Export {{ filteredCount.toLocaleString() }} variants to Excel
+            </v-tooltip>
+          </v-btn>
+        </template>
+
+        <!-- At narrow widths: overflow menu -->
+        <v-menu v-else>
+          <template #activator="{ props: menuProps }">
+            <v-btn v-bind="menuProps" icon size="small" variant="text">
+              <v-icon>mdi-dots-vertical</v-icon>
+              <v-tooltip activator="parent" location="bottom">More actions</v-tooltip>
+            </v-btn>
+          </template>
+          <v-list density="compact">
+            <v-list-item
+              v-if="columns && columns.length > 0"
+              prepend-icon="mdi-table-column"
+              title="Columns"
+              @click="emit('open-columns-drawer')"
+            />
+            <v-list-item
+              prepend-icon="mdi-microsoft-excel"
+              title="Export"
+              :disabled="filteredCount === 0"
+              @click="emit('export')"
+            />
+          </v-list>
+        </v-menu>
       </v-toolbar>
     </v-defaults-provider>
 
@@ -135,7 +160,8 @@
 
 <script setup lang="ts">
 /* global navigator */
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 
 interface ActiveFilter {
   id: string
@@ -174,6 +200,10 @@ watch(
     }, 300)
   }
 )
+
+// Responsive: collapse Columns/Export into overflow menu at non-full widths
+const { tier } = useResponsiveLayout()
+const showOverflowMenu = computed(() => tier.value !== 'full')
 
 const isMac =
   typeof navigator !== 'undefined' &&
