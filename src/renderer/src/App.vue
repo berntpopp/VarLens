@@ -301,7 +301,8 @@ useKeyboardShortcuts({
   onSearchFocus: () => filterToolbarRef.value?.focusSearch(),
   onHelp: () => {
     showKeyboardHelp.value = true
-  }
+  },
+  onClearAllFilters: () => filterToolbarRef.value?.handleClearAll()
 })
 
 // Global listener for background import completion

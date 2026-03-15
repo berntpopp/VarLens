@@ -562,8 +562,8 @@ function handleClearFilter(filterId: string) {
   }
 }
 
-// Expose drawer toggles and search focus for parent keyboard shortcuts
-defineExpose({ toggleFilterDrawer, toggleColumnsDrawer, focusSearch })
+// Expose drawer toggles, search focus, and clear-all for parent keyboard shortcuts
+defineExpose({ toggleFilterDrawer, toggleColumnsDrawer, focusSearch, handleClearAll })
 
 // Load filter options and presets on mount
 onMounted(async () => {
