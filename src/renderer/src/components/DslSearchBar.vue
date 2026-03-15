@@ -172,7 +172,7 @@ function onClear(): void {
 
 function onBlur(): void {
   // Delay to allow click on suggestion to fire first
-  // eslint-disable-next-line no-undef
+
   globalThis.setTimeout(() => {
     showMenu.value = false
   }, 200)
@@ -226,5 +226,12 @@ defineExpose({ focus })
 .dsl-suggestion-list {
   max-height: 400px;
   overflow-y: auto;
+}
+
+/* Hide mode badge at narrow widths to save space */
+@media (max-width: 900px) {
+  .dsl-search-bar :deep(.v-field__append-inner .v-chip) {
+    display: none;
+  }
 }
 </style>

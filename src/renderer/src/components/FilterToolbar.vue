@@ -92,46 +92,6 @@
           {{ cls.label }}
         </v-chip>
       </v-chip-group>
-
-      <!-- Tag filter -->
-      <v-select
-        v-if="availableTags.length > 0"
-        v-model="filters.tagIds"
-        :items="availableTags"
-        item-title="name"
-        item-value="id"
-        multiple
-        chips
-        closable-chips
-        density="compact"
-        variant="outlined"
-        hide-details
-        clearable
-        placeholder="Tags..."
-        prepend-inner-icon="mdi-tag-multiple"
-        class="filter-tag-input ml-1"
-        :class="{ 'filter-active': filters.tagIds.length > 0 }"
-      >
-        <template #chip="{ item }">
-          <v-chip
-            closable
-            size="x-small"
-            :color="(item as unknown as Tag).color"
-            variant="flat"
-            @click:close="removeTagFilter((item as unknown as Tag).id)"
-          >
-            {{ (item as unknown as Tag).name }}
-          </v-chip>
-        </template>
-        <template #item="{ item, props: itemProps }">
-          <v-list-item v-bind="itemProps" :title="undefined">
-            <template #prepend>
-              <v-icon :color="(item as unknown as Tag).color" size="small">mdi-circle</v-icon>
-            </template>
-            <v-list-item-title>{{ (item as unknown as Tag).name }}</v-list-item-title>
-          </v-list-item>
-        </template>
-      </v-select>
     </template>
 
     <template #preset-bar>
@@ -204,7 +164,7 @@ import FilterDrawer from './FilterDrawer.vue'
 import PresetBar from './PresetBar.vue'
 import PresetSaveDialog from './PresetSaveDialog.vue'
 import PresetManageDialog from './PresetManageDialog.vue'
-import type { VariantFilter, Tag } from '../../../shared/types/api'
+import type { VariantFilter } from '../../../shared/types/api'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
@@ -608,34 +568,10 @@ onMounted(async () => {
 
 <style scoped>
 .filter-search-input {
-  min-width: 300px;
+  min-width: 180px;
+  max-width: 320px;
   flex-shrink: 1;
   flex-grow: 1;
-}
-
-.filter-tag-input {
-  max-width: 200px;
-  flex-shrink: 1;
-  align-self: center;
-}
-
-.filter-tag-input :deep(.v-field) {
-  border-radius: 6px;
-  border-color: rgba(0, 0, 0, 0.15);
-  min-height: 32px;
-}
-
-.filter-tag-input :deep(.v-field__input) {
-  font-size: 0.85rem;
-  padding-top: 2px;
-  padding-bottom: 2px;
-  min-height: 32px;
-}
-
-.filter-tag-input.filter-active :deep(.v-field) {
-  border-color: rgb(var(--v-theme-primary));
-  border-width: 2px;
-  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 4%, transparent);
 }
 
 /* Annotation hint bar */
