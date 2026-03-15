@@ -23,7 +23,7 @@
         :errors="dslErrors"
         class="filter-search-input mr-2"
         @update:raw-input="dslInput = $event"
-        @apply="handleDslApply"
+        @apply="applyDslFilters"
         @clear="handleDslClear"
         @select-suggestion="applySuggestion"
       />
@@ -137,7 +137,7 @@ import { useDebounce } from '../../composables/useDebounce'
 import { useFilterPresetStore } from '../../composables/useFilterPresetStore'
 import SlimFilterToolbar from '../SlimFilterToolbar.vue'
 import DslSearchBar from '../DslSearchBar.vue'
-import { useDslSearch } from '../../composables/useDslSearch'
+import { useDslFilterIntegration } from '../../composables/useDslFilterIntegration'
 import ColumnsDrawer from '../ColumnsDrawer.vue'
 import CohortFilterDrawer from './CohortFilterDrawer.vue'
 import PresetBar from '../PresetBar.vue'
@@ -437,43 +437,6 @@ const searchGeneSymbols = async (query: string) => {
   }
 }
 
-// DSL search for cohort (same component as variant table)
-const {
-  rawInput: dslInput,
-  suggestions: dslSuggestions,
-  isDslMode,
-  ftsQuery,
-  errors: dslErrors,
-  applySuggestion,
-  clear: clearDsl,
-  parseNow
-} = useDslSearch(() => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')))
-
-// FTS mode: auto-apply search on keystroke
-watch(ftsQuery, (query) => {
-  if (!isDslMode.value) {
-    searchTerm.value = query
-    emitFilterChange()
-  }
-})
-
-function handleDslApply(): void {
-  parseNow()
-  if (!isDslMode.value) {
-    // FTS mode — searchTerm already synced via ftsQuery watcher
-    return
-  }
-  // DSL mode — apply searchTerm update + emit
-  searchTerm.value = ''
-  emitFilterChange()
-}
-
-function handleDslClear(): void {
-  clearDsl()
-  searchTerm.value = ''
-  emitFilterChange()
-}
-
 // Debounced filter change emission
 const { debouncedFn: emitFilterChange } = useDebounce(() => emit('filter-change'), 300)
 
@@ -481,6 +444,26 @@ const { debouncedFn: emitFilterChange } = useDebounce(() => emit('filter-change'
 watch(filters, () => emitFilterChange(), { deep: true })
 watch(selectedImpactPresets, () => emitFilterChange())
 watch([selectedCohortFreqPreset, selectedAfPreset, selectedCaddPreset], () => emitFilterChange())
+
+// DSL search integration — same composable as variant table (DRY)
+const {
+  dslInput,
+  dslSuggestions,
+  isDslMode,
+  dslErrors,
+  dslColumnFilters,
+  applyDslFilters,
+  handleDslClear,
+  applySuggestion
+} = useDslFilterIntegration({
+  presetNames: () => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')),
+  searchQueryRef: searchTerm,
+  emitFilters: emitFilterChange,
+  clearConflictingDrawerFields: (columnFilters) => {
+    if ('gnomad_af' in columnFilters) filters.value.maxGnomadAf = null
+    if ('cadd' in columnFilters) filters.value.minCadd = null
+  }
+})
 
 // Provide shared filter state for CohortFilterDrawer (via provide/inject)
 provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
@@ -525,9 +508,10 @@ provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
   dslSuggestions,
   isDslMode,
   dslErrors,
-  onDslApply: handleDslApply,
+  onDslApply: applyDslFilters,
   onDslClear: handleDslClear,
-  onDslSuggestionSelect: applySuggestion
+  onDslSuggestionSelect: applySuggestion,
+  dslColumnFilters
 })
 
 const handleClearAll = () => {
@@ -568,6 +552,9 @@ const handleExport = () => {
 onMounted(async () => {
   await loadPresets()
 })
+
+// Expose DSL column filters for CohortTable to merge into query
+defineExpose({ dslColumnFilters })
 </script>
 
 <style scoped>

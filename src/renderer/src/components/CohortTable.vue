@@ -25,6 +25,7 @@
 
     <!-- Filter Bar -->
     <CohortFilterBar
+      ref="cohortFilterBarRef"
       :total-count="totalCount"
       :cohort-summary="summary"
       :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
@@ -164,6 +165,9 @@ const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
   useColumnPreferences('cohort-table')
 const { orderedColumns, visibleHeaders } = useCohortColumns(prefs)
 
+// Ref to CohortFilterBar for accessing DSL column filters
+const cohortFilterBarRef = ref<InstanceType<typeof CohortFilterBar> | null>(null)
+
 // Per-column text filters from CohortDataTable
 const cohortColumnFilters = ref<ColumnFiltersParam | undefined>(undefined)
 
@@ -189,7 +193,14 @@ const buildCohortQueryParams = (): Omit<
     filters.value.acmgClassifications.length > 0
       ? [...filters.value.acmgClassifications]
       : undefined,
-  column_filters: cohortColumnFilters.value
+  column_filters:
+    cohortColumnFilters.value != null ||
+    Object.keys(cohortFilterBarRef.value?.dslColumnFilters ?? {}).length > 0
+      ? {
+          ...(cohortColumnFilters.value ?? {}),
+          ...(cohortFilterBarRef.value?.dslColumnFilters ?? {})
+        }
+      : undefined
 })
 
 // Shared offset pagination (same composable as case view)

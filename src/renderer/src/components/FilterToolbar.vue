@@ -152,7 +152,7 @@ import { ref, computed, watch, onMounted, provide, nextTick } from 'vue'
 import { useFilterState } from '../composables/useFilterState'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useFilterPresetStore } from '../composables/useFilterPresetStore'
-import { useDslSearch } from '../composables/useDslSearch'
+import { useDslFilterIntegration } from '../composables/useDslFilterIntegration'
 import SlimFilterToolbar from './SlimFilterToolbar.vue'
 import DslSearchBar from './DslSearchBar.vue'
 import ColumnsDrawer from './ColumnsDrawer.vue'
@@ -199,8 +199,9 @@ interface Emits {
 
 const emit = defineEmits<Emits>()
 
-// Track DSL-produced column filters (defined early so onFiltersUpdate can reference it)
-const dslColumnFilters = ref<Record<string, ColumnFilter>>({})
+// Forward ref for DSL column filters — populated by useDslFilterIntegration below.
+// Used in onFiltersUpdate closure to merge DSL column filters into the emitted payload.
+const dslColumnFiltersRef = ref<Record<string, ColumnFilter>>({})
 
 // Filter state composable - single source of truth for all filter logic
 const {
@@ -233,11 +234,12 @@ const {
   computed(() => props.caseId),
   {
     onFiltersUpdate: (f) => {
-      // Merge DSL column filters into the emitted filter payload
-      if (Object.keys(dslColumnFilters.value).length > 0) {
+      // Merge DSL column filters — dslIntegration is initialized after this
+      // but the closure captures the ref which is populated later
+      if (Object.keys(dslColumnFiltersRef.value).length > 0) {
         emit('update:filters', {
           ...f,
-          column_filters: { ...(f.column_filters ?? {}), ...dslColumnFilters.value }
+          column_filters: { ...(f.column_filters ?? {}), ...dslColumnFiltersRef.value }
         })
       } else {
         emit('update:filters', f)
@@ -262,53 +264,32 @@ const {
   deletePreset: deletePresetStore
 } = useFilterPresetStore()
 
-// DSL search — uses preset names for @preset autocomplete
+// DSL search integration — shared composable for all filter toolbars
 const {
-  rawInput: dslInput,
-  translationResult: dslTranslation,
-  suggestions: dslSuggestions,
+  dslInput,
+  dslSuggestions,
   isDslMode,
-  ftsQuery,
-  errors: dslErrors,
-  applySuggestion,
-  clear: clearDsl,
-  parseNow
-} = useDslSearch(() => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')))
-
-// FTS mode: auto-apply search on keystroke (existing behavior)
-watch(ftsQuery, (query) => {
-  if (!isDslMode.value) {
-    filters.value.searchQuery = query
-  }
-})
-
-/**
- * Apply DSL filters — called ONLY on Enter key (not on every keystroke).
- * This prevents partial expressions like "consequence:=:L" from filtering.
- */
-function applyDslFilters(): void {
-  parseNow() // force immediate parse (bypass debounce)
-  const translation = dslTranslation.value
-
-  if (isDslMode.value && Object.keys(translation.columnFilters).length > 0) {
-    dslColumnFilters.value = { ...translation.columnFilters }
-
-    // Clear drawer equivalents for DSL-filtered columns to prevent conflicts
-    if ('gnomad_af' in translation.columnFilters) filters.value.maxGnomadAf = null
-    if ('cadd' in translation.columnFilters) filters.value.minCadd = null
-
-    // Clear FTS search when in DSL mode
-    filters.value.searchQuery = ''
-
-    emitFilters()
-  } else if (!isDslMode.value && Object.keys(dslColumnFilters.value).length > 0) {
-    // Was in DSL mode, now in FTS — clear DSL column filters
-    dslColumnFilters.value = {}
-    emitFilters()
-  }
-
-  // Resolve @preset references
-  for (const presetName of translation.presetNames) {
+  dslErrors,
+  dslColumnFilters,
+  hasDslFilters,
+  applyDslFilters,
+  handleDslClear,
+  applySuggestion
+} = useDslFilterIntegration({
+  columnFiltersRef: dslColumnFiltersRef,
+  presetNames: () => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')),
+  searchQueryRef: computed({
+    get: () => filters.value.searchQuery,
+    set: (v) => {
+      filters.value.searchQuery = v
+    }
+  }),
+  emitFilters,
+  clearConflictingDrawerFields: (columnFilters) => {
+    if ('gnomad_af' in columnFilters) filters.value.maxGnomadAf = null
+    if ('cadd' in columnFilters) filters.value.minCadd = null
+  },
+  resolvePreset: (presetName) => {
     const preset = allPresets.value.find(
       (p) => p.name.toLowerCase().replace(/\s+/g, '_') === presetName
     )
@@ -316,7 +297,7 @@ function applyDslFilters(): void {
       handlePresetToggle(preset.id)
     }
   }
-}
+})
 
 // Dialog state
 const showSavePresetDialog = ref(false)
@@ -546,8 +527,6 @@ function focusSearch(): void {
 }
 
 // Merge badge counts to include column filters + DSL filters
-const hasDslFilters = computed(() => Object.keys(dslColumnFilters.value).length > 0)
-
 const mergedHasActiveFilters = computed(
   () =>
     hasActiveFilters.value || (props.columnActiveFilters?.length ?? 0) > 0 || hasDslFilters.value
@@ -565,14 +544,6 @@ const mergedActiveFiltersList = computed(() => [
   ...activeFiltersList.value,
   ...(props.columnActiveFilters ?? [])
 ])
-
-// Clear DSL search bar state and re-emit filters without DSL column filters
-function handleDslClear(): void {
-  clearDsl()
-  filters.value.searchQuery = ''
-  dslColumnFilters.value = {}
-  emitFilters()
-}
 
 // Clear all: reset drawer filters + presets + DSL + notify parent to clear column filters
 function handleClearAll() {
