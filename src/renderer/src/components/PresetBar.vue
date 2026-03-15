@@ -66,4 +66,8 @@ const emit = defineEmits<{
   border-top: 1px solid rgba(var(--v-border-color), 0.08);
   flex-wrap: wrap;
 }
+
+.preset-bar :deep(.v-chip) {
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
 </style>
