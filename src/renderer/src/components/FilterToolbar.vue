@@ -25,11 +25,7 @@
         class="filter-search-input mr-2"
         @update:raw-input="dslInput = $event"
         @apply="parseNow"
-        @clear="
-          clearDsl()
-          filters.searchQuery = ''
-          dslColumnFilters = {}
-        "
+        @clear="handleDslClear"
         @select-suggestion="applySuggestion"
       />
 
@@ -576,12 +572,18 @@ const mergedActiveFiltersList = computed(() => [
   ...(props.columnActiveFilters ?? [])
 ])
 
+// Clear DSL search bar state
+function handleDslClear(): void {
+  clearDsl()
+  filters.value.searchQuery = ''
+  dslColumnFilters.value = {}
+}
+
 // Clear all: reset drawer filters + presets + DSL + notify parent to clear column filters
 function handleClearAll() {
   clearAllFilters()
   clearActivePresets()
-  clearDsl()
-  dslColumnFilters.value = {}
+  handleDslClear()
   emit('clear-column-filters')
 }
 

@@ -79,3 +79,5 @@ docs/public/screenshots/*.png
 *.fastq.gz
 *.fq.gz
 *.ped
+e2e-dsl-test.mjs
+e2e-screenshots/

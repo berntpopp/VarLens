@@ -1,113 +1,96 @@
 <template>
-  <!--
-    IMPORTANT: v-combobox selection race condition prevention:
-    - :return-object="false" prevents Vuetify from setting model to the item object
-    - :auto-select-first="false" prevents auto-highlighting
-    - :no-filter="true" disables Vuetify's internal filtering (our autocomplete handles it)
-    - We intercept selection via @update:model-value and prevent the default by
-      immediately resetting the model to the rawInput value after applySuggestion runs
-  -->
-  <v-combobox
-    ref="comboboxRef"
-    v-model="inputModel"
-    :items="formattedSuggestions"
-    :menu-props="{ maxHeight: 400, width: 500 }"
-    variant="outlined"
-    density="compact"
-    :placeholder="placeholder"
-    prepend-inner-icon="mdi-magnify"
-    hide-details
-    clearable
-    :return-object="false"
-    :auto-select-first="false"
-    :no-filter="true"
-    :error="hasErrors"
-    class="dsl-search-bar"
-    :class="{ 'dsl-mode': isDslMode, 'fts-mode': !isDslMode && rawInput !== '' }"
-    @update:search="onSearchInput"
-    @click:clear="onClear"
-    @keydown.enter="onEnter"
-  >
-    <!-- Custom dropdown item rendering -->
-    <template #item="{ item, props: itemProps }">
-      <!-- Category header -->
-      <v-list-subheader v-if="(item.raw as SuggestionItem).isHeader === true" class="text-overline">
-        {{ (item.raw as SuggestionItem).title }}
-      </v-list-subheader>
+  <div class="dsl-search-bar-wrapper">
+    <v-text-field
+      ref="textFieldRef"
+      v-model="localInput"
+      variant="outlined"
+      density="compact"
+      :placeholder="placeholder"
+      prepend-inner-icon="mdi-magnify"
+      hide-details
+      clearable
+      :error="hasErrors"
+      class="dsl-search-bar"
+      :class="{ 'dsl-mode': isDslMode, 'fts-mode': !isDslMode && localInput !== '' }"
+      @update:model-value="onInput"
+      @click:clear="onClear"
+      @keydown.enter="onEnter"
+      @focus="showMenu = true"
+      @blur="onBlur"
+    >
+      <!-- Append inner: mode indicator -->
+      <template #append-inner>
+        <v-chip v-if="isDslMode" size="x-small" color="primary" variant="tonal" label class="mr-1">
+          DSL
+        </v-chip>
+        <v-chip v-else-if="localInput !== ''" size="x-small" variant="tonal" label class="mr-1">
+          Search
+        </v-chip>
+      </template>
+    </v-text-field>
 
-      <!-- Suggestion item -->
-      <v-list-item v-else v-bind="itemProps" @click="handleSelect(item.raw as SuggestionItem)">
-        <template #prepend>
-          <v-icon v-if="(item.raw as SuggestionItem).icon" size="small" class="mr-2">{{
-            (item.raw as SuggestionItem).icon
-          }}</v-icon>
+    <!-- Autocomplete dropdown -->
+    <v-menu
+      v-model="showMenu"
+      :activator="textFieldRef?.$el"
+      :close-on-content-click="false"
+      :open-on-click="false"
+      max-height="400"
+      width="500"
+      offset="4"
+      location="bottom start"
+    >
+      <v-list v-if="suggestions.length > 0" density="compact" class="dsl-suggestion-list">
+        <template v-for="(item, idx) in groupedSuggestions" :key="idx">
+          <!-- Category header -->
+          <v-list-subheader v-if="item.isHeader" class="text-overline">
+            {{ item.headerLabel }}
+          </v-list-subheader>
+
+          <!-- Suggestion item -->
+          <v-list-item v-else @mousedown.prevent="handleSelect(item.suggestion!)">
+            <template #prepend>
+              <v-icon v-if="item.suggestion!.icon" size="small" class="mr-2">
+                {{ item.suggestion!.icon }}
+              </v-icon>
+            </template>
+            <v-list-item-title>
+              {{ item.suggestion!.label }}
+              <span
+                v-if="item.suggestion!.description"
+                class="text-caption text-medium-emphasis ml-2"
+              >
+                {{ item.suggestion!.description }}
+              </span>
+            </v-list-item-title>
+            <template #append>
+              <v-chip v-if="item.suggestion!.typeBadge" size="x-small" variant="tonal" label>
+                {{ item.suggestion!.typeBadge }}
+              </v-chip>
+            </template>
+          </v-list-item>
         </template>
-        <v-list-item-title>
-          {{ (item.raw as SuggestionItem).label }}
-          <span
-            v-if="(item.raw as SuggestionItem).description"
-            class="text-caption text-medium-emphasis ml-2"
-          >
-            {{ (item.raw as SuggestionItem).description }}
-          </span>
-        </v-list-item-title>
-        <template #append>
-          <v-chip
-            v-if="(item.raw as SuggestionItem).typeBadge"
-            size="x-small"
-            variant="tonal"
-            label
-          >
-            {{ (item.raw as SuggestionItem).typeBadge }}
-          </v-chip>
-        </template>
-      </v-list-item>
-    </template>
+      </v-list>
+    </v-menu>
 
-    <!-- Append inner: mode indicator -->
-    <template #append-inner>
-      <v-chip v-if="isDslMode" size="x-small" color="primary" variant="tonal" label class="mr-1">
-        DSL
-      </v-chip>
-      <v-chip v-else-if="rawInput !== ''" size="x-small" variant="tonal" label class="mr-1">
-        Search
-      </v-chip>
-    </template>
-  </v-combobox>
-
-  <!-- Error display -->
-  <div v-if="hasErrors" class="dsl-error-bar px-3 py-1">
-    <v-icon size="x-small" color="error" class="mr-1">mdi-alert-circle</v-icon>
-    <span class="text-caption text-error">{{ errors[0]?.message }}</span>
+    <!-- Error display -->
+    <div v-if="hasErrors" class="dsl-error-bar px-3 py-1">
+      <v-icon size="x-small" color="error" class="mr-1">mdi-alert-circle</v-icon>
+      <span class="text-caption text-error">{{ errors[0]?.message }}</span>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import type { VTextField } from 'vuetify/components'
 import type { Suggestion } from '../dsl/autocomplete'
 
-/** Item shape in the formatted suggestions list */
-interface SuggestionItem extends Record<string, unknown> {
-  isHeader?: boolean
-  title?: string
-  label?: string
-  description?: string
-  icon?: string
-  typeBadge?: string
-  value?: string
-  category?: string
-}
-
 interface Props {
-  /** Reactive raw input from useDslSearch */
   rawInput: string
-  /** Suggestions from useDslSearch */
   suggestions: Suggestion[]
-  /** Whether the input is in DSL mode */
   isDslMode: boolean
-  /** Parse errors */
   errors: { message: string; position: number; length: number }[]
-  /** Placeholder text */
   placeholder?: string
 }
 
@@ -122,67 +105,87 @@ const emit = defineEmits<{
   'select-suggestion': [suggestion: Suggestion]
 }>()
 
-const comboboxRef = ref<HTMLElement | null>(null)
+const textFieldRef = ref<InstanceType<typeof VTextField> | null>(null)
+const showMenu = ref(false)
 
-const inputModel = computed({
-  get: () => props.rawInput,
-  set: (val) => emit('update:rawInput', val ?? '')
-})
+/** Local input model synced with parent rawInput */
+const localInput = ref(props.rawInput)
+
+watch(
+  () => props.rawInput,
+  (val) => {
+    localInput.value = val
+  }
+)
 
 const hasErrors = computed(() => props.errors.length > 0)
 
+interface GroupedItem {
+  isHeader: boolean
+  headerLabel?: string
+  suggestion?: Suggestion
+}
+
 /** Format suggestions with category headers for the dropdown */
-const formattedSuggestions = computed(() => {
-  const items: Array<Record<string, unknown>> = []
+const groupedSuggestions = computed((): GroupedItem[] => {
+  const items: GroupedItem[] = []
   let lastCategory = ''
+
+  const headerLabels: Record<string, string> = {
+    column: 'COLUMNS',
+    operator: 'OPERATORS',
+    value: 'VALUES',
+    combinator: 'COMBINE WITH',
+    preset: 'PRESETS'
+  }
 
   for (const s of props.suggestions) {
     if (s.category !== lastCategory && s.category !== 'hint') {
-      const headerLabels: Record<string, string> = {
-        column: 'COLUMNS',
-        operator: 'OPERATORS',
-        value: 'VALUES',
-        combinator: 'COMBINE WITH',
-        preset: 'PRESETS'
-      }
       items.push({
         isHeader: true,
-        title: headerLabels[s.category] ?? s.category.toUpperCase(),
-        value: `__header_${s.category}`
+        headerLabel: headerLabels[s.category] ?? s.category.toUpperCase()
       })
       lastCategory = s.category
     }
-    items.push({
-      ...s,
-      title: s.label,
-      value: s.value
-    })
+    items.push({ isHeader: false, suggestion: s })
   }
   return items
 })
 
-function onSearchInput(value: string | null): void {
-  emit('update:rawInput', value ?? '')
+function onInput(value: string | null): void {
+  const v = value ?? ''
+  emit('update:rawInput', v)
+  showMenu.value = v.length > 0 || props.suggestions.length > 0
 }
 
 function onEnter(): void {
+  showMenu.value = false
   emit('apply')
 }
 
 function onClear(): void {
+  localInput.value = ''
+  emit('update:rawInput', '')
   emit('clear')
+  showMenu.value = false
 }
 
-function handleSelect(item: SuggestionItem): void {
-  if (item.isHeader === true) return
-  emit('select-suggestion', item as unknown as Suggestion)
+function onBlur(): void {
+  // Delay to allow click on suggestion to fire first
+  // eslint-disable-next-line no-undef
+  globalThis.setTimeout(() => {
+    showMenu.value = false
+  }, 200)
+}
+
+function handleSelect(suggestion: Suggestion): void {
+  emit('select-suggestion', suggestion)
+  showMenu.value = true
 }
 
 /** Expose focus method for keyboard shortcut */
 function focus(): void {
-  const input = (comboboxRef.value as HTMLElement | null)?.querySelector(
-    'input'
-  ) as HTMLInputElement | null
+  const input = textFieldRef.value?.$el?.querySelector('input') as HTMLInputElement | null
   input?.focus()
 }
 
@@ -190,9 +193,10 @@ defineExpose({ focus })
 </script>
 
 <style scoped>
-.dsl-search-bar {
+.dsl-search-bar-wrapper {
   flex-grow: 1;
   max-width: 100%;
+  position: relative;
 }
 
 .dsl-search-bar :deep(.v-field) {
@@ -217,5 +221,10 @@ defineExpose({ focus })
 .dsl-error-bar {
   background: color-mix(in srgb, rgb(var(--v-theme-error)) 8%, transparent);
   border-top: 1px solid rgba(var(--v-border-color), 0.08);
+}
+
+.dsl-suggestion-list {
+  max-height: 400px;
+  overflow-y: auto;
 }
 </style>

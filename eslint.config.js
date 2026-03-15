@@ -12,6 +12,7 @@ export default [
       '**/*.d.ts',
       'docs/**',
       'tests/e2e/**',
+      'e2e-*.mjs',
       '.planning/**'
     ]
   },
