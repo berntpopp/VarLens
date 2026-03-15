@@ -515,9 +515,9 @@ provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
 })
 
 const handleClearAll = () => {
+  handleDslClear() // Must be first — clears dslColumnFilters before filter watchers fire
   clearAllFilters()
   clearActivePresets()
-  handleDslClear()
   emit('clear-column-filters')
   emit('clear-all')
 }
