@@ -346,9 +346,9 @@ export class VariantRepository extends BaseRepository {
 
         if (operator === 'in' && Array.isArray(value)) {
           if (value.length === 0) continue
-          // Use raw SQL for IN clause to avoid Kysely type issues
-          const placeholders = value.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(', ')
-          query = query.where(sql<boolean>`${sql.ref(sqlColumn)} IN (${sql.raw(placeholders)})`)
+          // Parameterized IN clause using sql.join
+          const params = sql.join(value.map((v) => sql`${String(v)}`))
+          query = query.where(sql<boolean>`${sql.ref(sqlColumn)} IN (${params})`)
         } else if (operator === 'like' && typeof value === 'string') {
           query = query.where(sql`${sql.ref(sqlColumn)} COLLATE NOCASE`, 'like', `%${value}%`)
         } else if (

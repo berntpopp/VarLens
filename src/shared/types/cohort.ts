@@ -1,3 +1,5 @@
+import type { ColumnFiltersParam } from './column-filters'
+
 /**
  * Cohort analysis types for Varlens
  *
@@ -155,7 +157,7 @@ export interface CohortSearchParams {
   /** Filter by ACMG classifications (global annotations) */
   acmg_classifications?: string[]
   /** Per-column typed filters (key = column name, value = operator + value) */
-  column_filters?: Record<string, { operator: string; value: string | number | string[] }>
+  column_filters?: ColumnFiltersParam
   /** Whether the total count needs to be recomputed (false = use cached count) */
   _count_needed?: boolean
 }

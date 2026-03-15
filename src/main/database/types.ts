@@ -1,3 +1,5 @@
+import type { ColumnFiltersParam } from '../../shared/types/column-filters'
+
 /**
  * Database entity types for Varlens
  *
@@ -108,7 +110,7 @@ export interface VariantFilter {
   /** Filter by ACMG classification (OR logic) */
   acmg_classifications?: string[]
   /** Per-column typed filters (key = column name, value = operator + value) */
-  column_filters?: Record<string, { operator: string; value: string | number | string[] }>
+  column_filters?: ColumnFiltersParam
   /** Annotation scope for star/ACMG filters: 'case' = per-case only, 'all' = per-case OR global */
   annotation_scope?: 'case' | 'all'
 }

@@ -147,7 +147,8 @@ const numericInitialOperator = computed<ColumnFilterOperator>(() => {
 
 const numericInitialValue = computed<number | undefined>(() => {
   if (props.currentFilter && props.filterMode === 'numeric') {
-    return Number(props.currentFilter.value)
+    const num = Number(props.currentFilter.value)
+    return Number.isFinite(num) ? num : undefined
   }
   return undefined
 })
