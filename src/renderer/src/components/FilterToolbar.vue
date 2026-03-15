@@ -551,11 +551,12 @@ const mergedActiveFiltersList = computed(() => [
   ...(props.columnActiveFilters ?? [])
 ])
 
-// Clear DSL search bar state
+// Clear DSL search bar state and re-emit filters without DSL column filters
 function handleDslClear(): void {
   clearDsl()
   filters.value.searchQuery = ''
   dslColumnFilters.value = {}
+  emitFilters()
 }
 
 // Clear all: reset drawer filters + presets + DSL + notify parent to clear column filters
