@@ -6,6 +6,8 @@
 
 import type { Ref, ComputedRef } from 'vue'
 import type { FilterPreset } from '../../../../shared/types/filter-presets'
+import type { Suggestion } from '../../dsl/autocomplete'
+import type { DslParseError } from '../../dsl/types'
 
 /**
  * Active filter representation for chip display
@@ -75,4 +77,13 @@ export interface CohortFilterDrawerState {
   onPresetSave?: () => void
   onPresetManage?: () => void
   hasActiveFiltersForSave?: ComputedRef<boolean>
+
+  // DSL search state
+  dslInput?: Ref<string>
+  dslSuggestions?: Ref<Suggestion[]>
+  isDslMode?: ComputedRef<boolean>
+  dslErrors?: ComputedRef<DslParseError[]>
+  onDslApply?: () => void
+  onDslClear?: () => void
+  onDslSuggestionSelect?: (suggestion: Suggestion) => void
 }

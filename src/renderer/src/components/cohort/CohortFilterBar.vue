@@ -15,17 +15,17 @@
     @export="handleExport"
   >
     <template #filters>
-      <!-- Search field -->
-      <v-text-field
-        :model-value="searchTerm"
-        variant="outlined"
-        hide-details
-        clearable
-        placeholder="Gene, position, HGVS..."
-        prepend-inner-icon="mdi-magnify"
+      <!-- DSL search bar (same component as variant table) -->
+      <DslSearchBar
+        :raw-input="dslInput"
+        :suggestions="dslSuggestions"
+        :is-dsl-mode="isDslMode"
+        :errors="dslErrors"
         class="filter-search-input mr-2"
-        :class="{ 'filter-active': searchTerm !== '' }"
-        @update:model-value="handleSearchChange"
+        @update:raw-input="dslInput = $event"
+        @apply="handleDslApply"
+        @clear="handleDslClear"
+        @select-suggestion="applySuggestion"
       />
 
       <!-- Star toggle -->
@@ -136,6 +136,8 @@ import { useFilters } from '../../composables/useFilters'
 import { useDebounce } from '../../composables/useDebounce'
 import { useFilterPresetStore } from '../../composables/useFilterPresetStore'
 import SlimFilterToolbar from '../SlimFilterToolbar.vue'
+import DslSearchBar from '../DslSearchBar.vue'
+import { useDslSearch } from '../../composables/useDslSearch'
 import ColumnsDrawer from '../ColumnsDrawer.vue'
 import CohortFilterDrawer from './CohortFilterDrawer.vue'
 import PresetBar from '../PresetBar.vue'
@@ -435,6 +437,51 @@ const searchGeneSymbols = async (query: string) => {
   }
 }
 
+// DSL search for cohort (same component as variant table)
+const {
+  rawInput: dslInput,
+  suggestions: dslSuggestions,
+  isDslMode,
+  ftsQuery,
+  errors: dslErrors,
+  applySuggestion,
+  clear: clearDsl,
+  parseNow
+} = useDslSearch(() => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')))
+
+// FTS mode: auto-apply search on keystroke
+watch(ftsQuery, (query) => {
+  if (!isDslMode.value) {
+    searchTerm.value = query
+    emitFilterChange()
+  }
+})
+
+function handleDslApply(): void {
+  parseNow()
+  if (!isDslMode.value) {
+    // FTS mode — searchTerm already synced via ftsQuery watcher
+    return
+  }
+  // DSL mode — apply searchTerm update + emit
+  searchTerm.value = ''
+  emitFilterChange()
+}
+
+function handleDslClear(): void {
+  clearDsl()
+  searchTerm.value = ''
+  emitFilterChange()
+}
+
+// Debounced filter change emission
+const { debouncedFn: emitFilterChange } = useDebounce(() => emit('filter-change'), 300)
+
+// Watch filter state changes
+watch(filters, () => emitFilterChange(), { deep: true })
+watch(selectedImpactPresets, () => emitFilterChange())
+watch([selectedCohortFreqPreset, selectedAfPreset, selectedCaddPreset], () => emitFilterChange())
+
 // Provide shared filter state for CohortFilterDrawer (via provide/inject)
 provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
   filters,
@@ -461,7 +508,7 @@ provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
   clearFilter,
   searchGeneSymbols,
 
-  // Preset store integration for CohortFilterDrawer
+  // Preset store integration
   visiblePresets,
   isPresetActive,
   onPresetToggle: handlePresetToggle,
@@ -471,25 +518,22 @@ provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
   onPresetManage: () => {
     showManagePresetsDialog.value = true
   },
-  hasActiveFiltersForSave: mergedHasActiveFilters
+  hasActiveFiltersForSave: mergedHasActiveFilters,
+
+  // DSL search state
+  dslInput,
+  dslSuggestions,
+  isDslMode,
+  dslErrors,
+  onDslApply: handleDslApply,
+  onDslClear: handleDslClear,
+  onDslSuggestionSelect: applySuggestion
 })
-
-// Debounced filter change emission
-const { debouncedFn: emitFilterChange } = useDebounce(() => emit('filter-change'), 300)
-
-// Watch filter state changes
-watch(filters, () => emitFilterChange(), { deep: true })
-watch(selectedImpactPresets, () => emitFilterChange())
-watch([selectedCohortFreqPreset, selectedAfPreset, selectedCaddPreset], () => emitFilterChange())
-
-const handleSearchChange = (value: string | null) => {
-  searchTerm.value = value ?? ''
-  emitFilterChange()
-}
 
 const handleClearAll = () => {
   clearAllFilters()
   clearActivePresets()
+  handleDslClear()
   emit('clear-column-filters')
   emit('clear-all')
 }
@@ -528,26 +572,9 @@ onMounted(async () => {
 
 <style scoped>
 .filter-search-input {
-  max-width: 240px;
+  min-width: 180px;
+  max-width: 320px;
   flex-shrink: 1;
-}
-
-.filter-search-input :deep(.v-field) {
-  border-radius: 6px;
-  border-color: rgba(0, 0, 0, 0.15);
-}
-
-.filter-search-input :deep(.v-field--focused) {
-  box-shadow: 0 0 0 2px color-mix(in srgb, rgb(var(--v-theme-primary)) 15%, transparent);
-}
-
-.filter-search-input :deep(.v-field__input) {
-  font-size: 0.85rem;
-}
-
-.filter-search-input.filter-active :deep(.v-field) {
-  border-color: rgb(var(--v-theme-primary));
-  border-width: 2px;
-  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 4%, transparent);
+  flex-grow: 1;
 }
 </style>

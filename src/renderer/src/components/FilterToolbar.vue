@@ -457,7 +457,16 @@ provide<FilterDrawerState>('filterDrawerState', {
   },
   hasActiveFiltersForSave: computed(
     () => hasActiveFilters.value || (props.columnActiveFilters?.length ?? 0) > 0
-  )
+  ),
+
+  // DSL search state for DslSearchBar in drawer
+  dslInput,
+  dslSuggestions,
+  isDslMode,
+  dslErrors,
+  onDslApply: applyDslFilters,
+  onDslClear: handleDslClear,
+  onDslSuggestionSelect: applySuggestion
 })
 
 // Watch initialSearch prop to pre-populate search from cohort navigation

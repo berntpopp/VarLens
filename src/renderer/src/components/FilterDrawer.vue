@@ -23,7 +23,19 @@
           :value-summary="searchSummary"
         />
         <v-expansion-panel-text>
+          <DslSearchBar
+            v-if="dslInput"
+            :raw-input="dslInput"
+            :suggestions="dslSuggestions ?? []"
+            :is-dsl-mode="isDslMode ?? false"
+            :errors="dslErrors ?? []"
+            @update:raw-input="dslInput = $event"
+            @apply="onDslApply?.()"
+            @clear="onDslClear?.()"
+            @select-suggestion="onDslSuggestionSelect?.($event)"
+          />
           <v-text-field
+            v-else
             v-model="filters.searchQuery"
             density="compact"
             variant="outlined"
@@ -369,6 +381,7 @@ import { inject, ref, computed } from 'vue'
 import FilterDrawerShell from './filters/FilterDrawerShell.vue'
 import FilterPanelTitle from './filters/FilterPanelTitle.vue'
 import AnnotationScopeToggle from './AnnotationScopeToggle.vue'
+import DslSearchBar from './DslSearchBar.vue'
 import GroupedMultiSelect from './GroupedMultiSelect.vue'
 import { consequenceGroups, clinvarGroups } from '../config/filterGroups'
 import { ACMG_FILTER_OPTIONS_LONG } from '../utils/filters'
@@ -428,7 +441,14 @@ const {
   onPresetToggle,
   onPresetSave,
   onPresetManage,
-  hasActiveFiltersForSave
+  hasActiveFiltersForSave,
+  dslInput,
+  dslSuggestions,
+  isDslMode,
+  dslErrors,
+  onDslApply,
+  onDslClear,
+  onDslSuggestionSelect
 } = state
 
 // Value summaries for collapsed panel previews
