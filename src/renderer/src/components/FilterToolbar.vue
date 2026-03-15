@@ -536,13 +536,19 @@ function focusSearch(): void {
   searchFieldRef.value?.focus()
 }
 
-// Merge badge counts to include column filters
+// Merge badge counts to include column filters + DSL filters
+const hasDslFilters = computed(() => Object.keys(dslColumnFilters.value).length > 0)
+
 const mergedHasActiveFilters = computed(
-  () => hasActiveFilters.value || (props.columnActiveFilters?.length ?? 0) > 0
+  () =>
+    hasActiveFilters.value || (props.columnActiveFilters?.length ?? 0) > 0 || hasDslFilters.value
 )
 
 const mergedActiveFilterCount = computed(
-  () => activeFilterCount.value + (props.columnActiveFilters?.length ?? 0)
+  () =>
+    activeFilterCount.value +
+    (props.columnActiveFilters?.length ?? 0) +
+    Object.keys(dslColumnFilters.value).length
 )
 
 // Merge drawer active filters with column active filters
