@@ -69,8 +69,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { usePanelResize } from '../../composables/usePanelResize'
+
+const { width: viewportWidth } = useDisplay()
+const maxDrawerWidth = computed(() => Math.min(500, Math.floor(viewportWidth.value * 0.4)))
 
 const { panelWidth, startResize, resetWidth } = usePanelResize({
   side: 'right',
@@ -78,6 +82,13 @@ const { panelWidth, startResize, resetWidth } = usePanelResize({
   defaultWidth: 300,
   minWidth: 250,
   maxWidth: 500
+})
+
+// Clamp panel width when viewport shrinks
+watch(maxDrawerWidth, (max) => {
+  if (panelWidth.value > max) {
+    panelWidth.value = max
+  }
 })
 
 const props = defineProps<{
