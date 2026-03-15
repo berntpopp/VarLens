@@ -49,6 +49,7 @@
       :total-count="totalCount"
       :loading="loading"
       :headers="visibleHeaders"
+      :column-meta="columnMeta"
       :selected-variant-key="selectedVariantKey"
       :is-global-starred="isGlobalStarred"
       :get-global-acmg-classification="getGlobalAcmgClassification"
@@ -132,7 +133,7 @@ const emit = defineEmits<{
 
 // API + domain composables
 const { api } = useApiService()
-const { summary, summaryStale, fetchSummary, buildIpcParams, cleanupListeners } = useCohortData()
+const { summary, summaryStale, columnMeta, fetchSummary, fetchColumnMeta, buildIpcParams, cleanupListeners } = useCohortData()
 const { filters, searchTerm, selectedImpactPresets, clearAllFilters, clearFilter } = useFilters()
 const { loadCarriers } = useCarriers()
 const {
@@ -393,15 +394,17 @@ watch(variants, async (newVariants) => {
 // Auto-refresh when summary rebuild completes
 watch(summaryStale, (newVal, oldVal) => {
   if (oldVal === true && newVal === false) {
-    // Summary rebuilt — refresh current page
+    // Summary rebuilt — refresh current page and metadata
     void invalidateAndReload()
     void fetchSummary()
+    void fetchColumnMeta()
   }
 })
 
 // Lifecycle
 onMounted(() => {
   void fetchSummary()
+  void fetchColumnMeta()
 })
 
 onUnmounted(() => {

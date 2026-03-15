@@ -77,6 +77,14 @@ export function registerCohortHandlers({ ipcMain, getDb }: HandlerDependencies):
     })
   })
 
+  ipcMain.handle('cohort:columnMeta', async (_event) => {
+    return wrapHandler(async () => {
+      const db = getDb()
+      const cohortService = new CohortService(db.database)
+      return cohortService.getColumnMeta()
+    })
+  })
+
   ipcMain.handle('cohort:summary', async (_event) => {
     return wrapHandler(async () => {
       const db = getDb()

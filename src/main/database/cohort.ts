@@ -15,6 +15,7 @@ import type {
   GeneBurden,
   CohortPaginatedResult
 } from '../../shared/types/cohort'
+import type { ColumnFilterMeta } from '../../shared/types/column-filters'
 
 /**
  * Sortable columns for cohort queries
@@ -38,7 +39,16 @@ const SORTABLE_COLUMNS: Record<string, string> = {
   transcript: 'transcript'
 }
 
-// Note: NUMERIC_COLUMNS removed — type-aware filtering uses operator from filter definition
+/** Numeric columns for column metadata auto-detection (data type inference) */
+const NUMERIC_COLUMNS = new Set([
+  'pos',
+  'carrier_count',
+  'cohort_frequency',
+  'het_count',
+  'hom_count',
+  'gnomad_af',
+  'cadd_phred'
+])
 
 /**
  * CohortService class
@@ -441,6 +451,59 @@ export class CohortService {
     `
     const stmt = this.getStatement(sql)
     return stmt.all() as GeneBurden[]
+  }
+
+  /**
+   * Get per-column metadata from cohort_variant_summary for filter UI auto-detection.
+   *
+   * Returns distinct count, data type, distinct values (if few), and min/max for numerics.
+   */
+  getColumnMeta(): ColumnFilterMeta[] {
+    const DISTINCT_THRESHOLD = 50
+    const meta: ColumnFilterMeta[] = []
+
+    for (const [key, sqlCol] of Object.entries(SORTABLE_COLUMNS)) {
+      const isNumeric = NUMERIC_COLUMNS.has(key)
+
+      // Get distinct count
+      const countResult = this.db
+        .prepare(
+          `SELECT COUNT(DISTINCT ${sqlCol}) as cnt FROM cohort_variant_summary WHERE ${sqlCol} IS NOT NULL`
+        )
+        .get() as { cnt: number }
+      const distinctCount = countResult?.cnt ?? 0
+
+      const entry: ColumnFilterMeta = {
+        key,
+        dataType: isNumeric ? 'numeric' : 'text',
+        distinctCount
+      }
+
+      // For numeric columns: fetch min/max
+      if (isNumeric) {
+        const rangeResult = this.db
+          .prepare(
+            `SELECT MIN(${sqlCol}) as min_val, MAX(${sqlCol}) as max_val FROM cohort_variant_summary WHERE ${sqlCol} IS NOT NULL`
+          )
+          .get() as { min_val: number | null; max_val: number | null }
+        entry.min = rangeResult?.min_val ?? undefined
+        entry.max = rangeResult?.max_val ?? undefined
+      }
+
+      // Populate distinct values if count is within threshold
+      if (distinctCount > 0 && distinctCount <= DISTINCT_THRESHOLD) {
+        const rows = this.db
+          .prepare(
+            `SELECT DISTINCT ${sqlCol} as val FROM cohort_variant_summary WHERE ${sqlCol} IS NOT NULL ORDER BY ${sqlCol}`
+          )
+          .all() as Array<{ val: unknown }>
+        entry.distinctValues = rows.map((r) => String(r.val))
+      }
+
+      meta.push(entry)
+    }
+
+    return meta
   }
 
   /**

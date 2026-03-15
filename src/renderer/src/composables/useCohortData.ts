@@ -18,6 +18,7 @@
 import { ref, shallowRef } from 'vue'
 import type { Ref, ShallowRef } from 'vue'
 import type { CohortVariant, CohortSummary } from '../../../shared/types/cohort'
+import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { ColumnFiltersParam } from '../../../shared/types/column-filters'
 import { useApiService } from './useApiService'
 
@@ -80,12 +81,16 @@ export interface UseCohortDataReturn {
   summary: Ref<CohortSummary | null>
   /** Whether the cohort summary is stale (being rebuilt) */
   summaryStale: Ref<boolean>
+  /** Per-column metadata for filter UI auto-detection */
+  columnMeta: Ref<ColumnFilterMeta[]>
   /** Build IPC-safe params from query parameters */
   buildIpcParams: (params: CohortQueryParams) => Record<string, unknown>
   /** Fetch variants and update reactive state */
   fetchVariants: (params: CohortQueryParams) => Promise<void>
   /** Fetch cohort summary */
   fetchSummary: () => Promise<void>
+  /** Fetch column metadata for filter auto-detection */
+  fetchColumnMeta: () => Promise<void>
   /** Reset all state (for database context changes) */
   reset: () => void
   /** Clean up IPC listeners (call on component unmount) */
@@ -102,6 +107,7 @@ export function useCohortData(): UseCohortDataReturn {
   const error = ref<Error | null>(null)
   const summary = ref<CohortSummary | null>(null)
   const summaryStale = ref(false)
+  const columnMeta = ref<ColumnFilterMeta[]>([])
 
   // Generation counter and filter cache for count optimization
   let requestGeneration = 0
@@ -278,6 +284,21 @@ export function useCohortData(): UseCohortDataReturn {
   }
 
   /**
+   * Fetch per-column metadata for filter UI auto-detection
+   */
+  const fetchColumnMeta = async (): Promise<void> => {
+    if (!api) return
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (api as any).cohort.getColumnMeta()
+      columnMeta.value = result ?? []
+    } catch {
+      columnMeta.value = []
+    }
+  }
+
+  /**
    * Reset all state (for database context changes)
    */
   const reset = (): void => {
@@ -286,6 +307,7 @@ export function useCohortData(): UseCohortDataReturn {
     error.value = null
     summary.value = null
     summaryStale.value = false
+    columnMeta.value = []
     cachedFilterHash = ''
     requestGeneration = 0
   }
@@ -297,9 +319,11 @@ export function useCohortData(): UseCohortDataReturn {
     error,
     summary,
     summaryStale,
+    columnMeta,
     buildIpcParams,
     fetchVariants,
     fetchSummary,
+    fetchColumnMeta,
     reset,
     cleanupListeners
   }

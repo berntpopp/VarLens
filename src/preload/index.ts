@@ -147,6 +147,7 @@ const api = {
 
   cohort: {
     getVariants: (params: CohortSearchParams) => ipcRenderer.invoke('cohort:variants', params),
+    getColumnMeta: () => ipcRenderer.invoke('cohort:columnMeta'),
     getSummary: () => ipcRenderer.invoke('cohort:summary'),
     getCarriers: (chr: string, pos: number, ref: string, alt: string) =>
       ipcRenderer.invoke('cohort:carriers', chr, pos, ref, alt),
