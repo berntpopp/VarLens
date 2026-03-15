@@ -15,6 +15,7 @@
       @update:model-value="onInput"
       @click:clear="onClear"
       @keydown.enter="onEnter"
+      @keydown.escape="($event.target as HTMLElement)?.blur()"
       @focus="showMenu = true"
       @blur="onBlur"
     >
