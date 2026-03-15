@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildActiveFiltersList } from '../../../../src/renderer/src/utils/filters/activeFilters'
 import type { FilterState } from '../../../../src/shared/types/filters'
+import type { ColumnFiltersParam } from '../../../../src/shared/types/column-filters'
 
 function makeDefaultFilters(overrides: Partial<FilterState> = {}): FilterState {
   return {
@@ -68,5 +69,93 @@ describe('buildActiveFiltersList', () => {
     const acmg = result.find((f) => f.id === 'acmg')
     expect(acmg).toBeDefined()
     expect(acmg!.value).toBe('Pathogenic, Likely pathogenic')
+  })
+
+  // Column filter chip tests
+  describe('column filter chips', () => {
+    it('adds chip for numeric column filter with >= operator', () => {
+      const columnFilters: ColumnFiltersParam = {
+        cadd_phred: { operator: '>=', value: 20 }
+      }
+      const result = buildActiveFiltersList(makeDefaultFilters(), [], columnFilters)
+      const chip = result.find((f) => f.id === 'col:cadd_phred')
+      expect(chip).toBeDefined()
+      expect(chip!.label).toBe('CADD')
+      expect(chip!.value).toBe('>= 20')
+    })
+
+    it('adds chip for numeric column filter with <= operator', () => {
+      const columnFilters: ColumnFiltersParam = {
+        gnomad_af: { operator: '<=', value: 0.01 }
+      }
+      const result = buildActiveFiltersList(makeDefaultFilters(), [], columnFilters)
+      const chip = result.find((f) => f.id === 'col:gnomad_af')
+      expect(chip).toBeDefined()
+      expect(chip!.label).toBe('gnomAD AF')
+      expect(chip!.value).toBe('<= 0.01')
+    })
+
+    it('adds chip for categorical column filter with in operator', () => {
+      const columnFilters: ColumnFiltersParam = {
+        consequence: { operator: 'in', value: ['missense', 'nonsense', 'frameshift'] }
+      }
+      const result = buildActiveFiltersList(makeDefaultFilters(), [], columnFilters)
+      const chip = result.find((f) => f.id === 'col:consequence')
+      expect(chip).toBeDefined()
+      expect(chip!.label).toBe('Consequence')
+      expect(chip!.value).toBe('3 selected')
+    })
+
+    it('adds chip for text column filter with like operator', () => {
+      const columnFilters: ColumnFiltersParam = {
+        gene_symbol: { operator: 'like', value: 'BRCA' }
+      }
+      const result = buildActiveFiltersList(makeDefaultFilters(), [], columnFilters)
+      const chip = result.find((f) => f.id === 'col:gene_symbol')
+      expect(chip).toBeDefined()
+      expect(chip!.label).toBe('Gene')
+      expect(chip!.value).toBe('~ BRCA')
+    })
+
+    it('adds chips for multiple column filters', () => {
+      const columnFilters: ColumnFiltersParam = {
+        cadd_phred: { operator: '>=', value: 15 },
+        chr: { operator: '=', value: '1' },
+        consequence: { operator: 'in', value: ['missense'] }
+      }
+      const result = buildActiveFiltersList(makeDefaultFilters(), [], columnFilters)
+      const colChips = result.filter((f) => f.id.startsWith('col:'))
+      expect(colChips).toHaveLength(3)
+    })
+
+    it('uses column key as label for unknown columns', () => {
+      const columnFilters: ColumnFiltersParam = {
+        custom_field: { operator: '=', value: 'test' }
+      }
+      const result = buildActiveFiltersList(makeDefaultFilters(), [], columnFilters)
+      const chip = result.find((f) => f.id === 'col:custom_field')
+      expect(chip).toBeDefined()
+      expect(chip!.label).toBe('custom_field')
+      expect(chip!.value).toBe('= test')
+    })
+
+    it('column filter chips appear after standard filter chips', () => {
+      const columnFilters: ColumnFiltersParam = {
+        gene_symbol: { operator: 'like', value: 'BRCA' }
+      }
+      const result = buildActiveFiltersList(
+        makeDefaultFilters({ searchQuery: 'test' }),
+        [],
+        columnFilters
+      )
+      expect(result.length).toBe(2)
+      expect(result[0].id).toBe('search')
+      expect(result[1].id).toBe('col:gene_symbol')
+    })
+
+    it('returns empty when columnFilters is empty object', () => {
+      const result = buildActiveFiltersList(makeDefaultFilters(), [], {})
+      expect(result).toEqual([])
+    })
   })
 })
