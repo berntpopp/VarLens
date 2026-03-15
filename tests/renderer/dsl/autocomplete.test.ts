@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  getAutocompleteSuggestions,
-  type Suggestion
-} from '../../../src/renderer/src/dsl/autocomplete'
+import { getAutocompleteSuggestions } from '../../../src/renderer/src/dsl/autocomplete'
 
 describe('getAutocompleteSuggestions', () => {
   it('suggests columns when input is empty', () => {

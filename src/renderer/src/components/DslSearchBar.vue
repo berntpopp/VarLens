@@ -31,24 +31,34 @@
     <!-- Custom dropdown item rendering -->
     <template #item="{ item, props: itemProps }">
       <!-- Category header -->
-      <v-list-subheader v-if="item.raw.isHeader" class="text-overline">
-        {{ item.raw.title }}
+      <v-list-subheader v-if="(item.raw as SuggestionItem).isHeader === true" class="text-overline">
+        {{ (item.raw as SuggestionItem).title }}
       </v-list-subheader>
 
       <!-- Suggestion item -->
-      <v-list-item v-else v-bind="itemProps" @click="handleSelect(item.raw)">
+      <v-list-item v-else v-bind="itemProps" @click="handleSelect(item.raw as SuggestionItem)">
         <template #prepend>
-          <v-icon v-if="item.raw.icon" size="small" class="mr-2">{{ item.raw.icon }}</v-icon>
+          <v-icon v-if="(item.raw as SuggestionItem).icon" size="small" class="mr-2">{{
+            (item.raw as SuggestionItem).icon
+          }}</v-icon>
         </template>
         <v-list-item-title>
-          {{ item.raw.label }}
-          <span v-if="item.raw.description" class="text-caption text-medium-emphasis ml-2">
-            {{ item.raw.description }}
+          {{ (item.raw as SuggestionItem).label }}
+          <span
+            v-if="(item.raw as SuggestionItem).description"
+            class="text-caption text-medium-emphasis ml-2"
+          >
+            {{ (item.raw as SuggestionItem).description }}
           </span>
         </v-list-item-title>
         <template #append>
-          <v-chip v-if="item.raw.typeBadge" size="x-small" variant="tonal" label>
-            {{ item.raw.typeBadge }}
+          <v-chip
+            v-if="(item.raw as SuggestionItem).typeBadge"
+            size="x-small"
+            variant="tonal"
+            label
+          >
+            {{ (item.raw as SuggestionItem).typeBadge }}
           </v-chip>
         </template>
       </v-list-item>
@@ -75,6 +85,18 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Suggestion } from '../dsl/autocomplete'
+
+/** Item shape in the formatted suggestions list */
+interface SuggestionItem extends Record<string, unknown> {
+  isHeader?: boolean
+  title?: string
+  label?: string
+  description?: string
+  icon?: string
+  typeBadge?: string
+  value?: string
+  category?: string
+}
 
 interface Props {
   /** Reactive raw input from useDslSearch */
@@ -151,8 +173,8 @@ function onClear(): void {
   emit('clear')
 }
 
-function handleSelect(item: Record<string, unknown>): void {
-  if (item.isHeader) return
+function handleSelect(item: SuggestionItem): void {
+  if (item.isHeader === true) return
   emit('select-suggestion', item as unknown as Suggestion)
 }
 

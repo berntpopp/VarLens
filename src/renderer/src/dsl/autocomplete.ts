@@ -6,8 +6,12 @@
  * suggestions. Limits to 10 suggestions max.
  */
 
-import { FILTER_COLUMNS, findColumn, getColumnSuggestions, getCommonValues } from './column-registry'
-import type { DslOperator } from './types'
+import {
+  FILTER_COLUMNS,
+  findColumn,
+  getColumnSuggestions,
+  getCommonValues
+} from './column-registry'
 
 const MAX_SUGGESTIONS = 10
 
@@ -39,7 +43,7 @@ const OPERATOR_LABELS: Record<string, string> = {
   '~': 'Contains',
   '!~': 'Does not contain',
   '^': 'Starts with',
-  '$': 'Ends with',
+  $: 'Ends with',
   'is:null': 'Is empty/missing',
   'is:notnull': 'Has value'
 }
@@ -72,14 +76,9 @@ function detectState(input: string): ParsedContext {
   }
 
   // Look at the last "term" in the input (after the last combinator)
-  const lastCombinatorIdx = Math.max(
-    input.lastIndexOf(' AND '),
-    input.lastIndexOf(' OR ')
-  )
+  const lastCombinatorIdx = Math.max(input.lastIndexOf(' AND '), input.lastIndexOf(' OR '))
   const lastTerm =
-    lastCombinatorIdx >= 0
-      ? input.slice(lastCombinatorIdx).replace(/^\s*(AND|OR)\s*/, '')
-      : trimmed
+    lastCombinatorIdx >= 0 ? input.slice(lastCombinatorIdx).replace(/^\s*(AND|OR)\s*/, '') : trimmed
 
   // Count colons to determine state
   const parts = lastTerm.split(':')
@@ -137,22 +136,22 @@ export function getAutocompleteSuggestions(
   const ctx = detectState(input)
 
   switch (ctx.state) {
-    case 'empty':
-      return [
-        {
-          value: '',
-          label: 'Type column name to filter, or plain text to search',
-          category: 'hint',
-          description: 'e.g. gnomad_af:<:0.01 or BRCA1'
-        },
-        ...FILTER_COLUMNS.slice(0, MAX_SUGGESTIONS - 1).map((col) => ({
-          value: col.key,
-          label: col.key,
-          description: col.label,
-          category: 'column' as SuggestionCategory,
-          typeBadge: col.type
-        }))
-      ].slice(0, MAX_SUGGESTIONS)
+    case 'empty': {
+      const hint: Suggestion = {
+        value: '',
+        label: 'Type column name to filter, or plain text to search',
+        category: 'hint',
+        description: 'e.g. gnomad_af:<:0.01 or BRCA1'
+      }
+      const cols: Suggestion[] = FILTER_COLUMNS.slice(0, MAX_SUGGESTIONS - 1).map((col) => ({
+        value: col.key,
+        label: col.key,
+        description: col.label,
+        category: 'column' as SuggestionCategory,
+        typeBadge: col.type
+      }))
+      return [hint, ...cols].slice(0, MAX_SUGGESTIONS)
+    }
 
     case 'column': {
       const matching = getColumnSuggestions(ctx.partial)

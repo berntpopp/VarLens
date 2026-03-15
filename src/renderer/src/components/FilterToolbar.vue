@@ -25,7 +25,11 @@
         class="filter-search-input mr-2"
         @update:raw-input="dslInput = $event"
         @apply="parseNow"
-        @clear="clearDsl(); filters.searchQuery = ''; dslColumnFilters = {}"
+        @clear="
+          clearDsl()
+          filters.searchQuery = ''
+          dslColumnFilters = {}
+        "
         @select-suggestion="applySuggestion"
       />
 
@@ -302,9 +306,7 @@ const {
   applySuggestion,
   clear: clearDsl,
   parseNow
-} = useDslSearch(() =>
-  allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_'))
-)
+} = useDslSearch(() => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')))
 
 // Track DSL-produced column filters separately so we can clear them
 const dslColumnFilters = ref<Record<string, unknown>>({})
@@ -318,8 +320,8 @@ watch(
       dslColumnFilters.value = { ...translation.columnFilters }
 
       // Clear drawer equivalents for DSL-filtered columns to prevent conflicts
-      if (translation.columnFilters.gnomad_af) filters.value.maxGnomadAf = null
-      if (translation.columnFilters.cadd) filters.value.minCadd = null
+      if ('gnomad_af' in translation.columnFilters) filters.value.maxGnomadAf = null
+      if ('cadd' in translation.columnFilters) filters.value.minCadd = null
     }
 
     // Resolve @preset references

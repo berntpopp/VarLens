@@ -21,9 +21,7 @@ describe('tokenizer', () => {
 
   it('tokenizes is:null operator', () => {
     const tokens = tokenize('gnomad_af:is:null')
-    expect(tokens).toContainEqual(
-      expect.objectContaining({ type: 'operator', value: 'is:null' })
-    )
+    expect(tokens).toContainEqual(expect.objectContaining({ type: 'operator', value: 'is:null' }))
   })
 
   it('tokenizes is:notnull operator', () => {
@@ -35,16 +33,12 @@ describe('tokenizer', () => {
 
   it('tokenizes AND combinator', () => {
     const tokens = tokenize('gnomad_af:<:0.01 AND cadd:>=:20')
-    expect(tokens).toContainEqual(
-      expect.objectContaining({ type: 'combinator', value: 'AND' })
-    )
+    expect(tokens).toContainEqual(expect.objectContaining({ type: 'combinator', value: 'AND' }))
   })
 
   it('tokenizes OR combinator', () => {
     const tokens = tokenize('gnomad_af:<:0.01 OR gnomad_af:is:null')
-    expect(tokens).toContainEqual(
-      expect.objectContaining({ type: 'combinator', value: 'OR' })
-    )
+    expect(tokens).toContainEqual(expect.objectContaining({ type: 'combinator', value: 'OR' }))
   })
 
   it('tokenizes parentheses', () => {
@@ -57,9 +51,7 @@ describe('tokenizer', () => {
 
   it('tokenizes preset reference', () => {
     const tokens = tokenize('@rare_pathogenic')
-    expect(tokens).toEqual([
-      { type: 'preset', value: 'rare_pathogenic', position: 0 }
-    ])
+    expect(tokens).toEqual([{ type: 'preset', value: 'rare_pathogenic', position: 0 }])
   })
 
   it('tokenizes quoted values', () => {

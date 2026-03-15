@@ -115,9 +115,7 @@ describe('parseDsl', () => {
   })
 
   it('handles deeply nested parentheses', () => {
-    const result = parseDsl(
-      '((gene:=:BRCA1 OR gene:=:TP53) AND cadd:>=:20) OR gnomad_af:<:0.01'
-    )
+    const result = parseDsl('((gene:=:BRCA1 OR gene:=:TP53) AND cadd:>=:20) OR gnomad_af:<:0.01')
     expect(result.errors).toEqual([])
     expect(result.ast?.type).toBe('group')
   })

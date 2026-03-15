@@ -3,8 +3,7 @@ import {
   FILTER_COLUMNS,
   findColumn,
   getOperatorsForColumn,
-  getCommonValues,
-  type FilterColumnDef
+  getCommonValues
 } from '../../../src/renderer/src/dsl/column-registry'
 
 describe('column-registry', () => {

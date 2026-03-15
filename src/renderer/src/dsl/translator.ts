@@ -80,8 +80,7 @@ function translateRule(rule: DslFilterRule, result: TranslationResult): void {
     filterValue = `${value}`
   }
 
-  const includeEmpty =
-    isNumericColumn(column) && ['<', '>', '<=', '>='].includes(operator)
+  const includeEmpty = isNumericColumn(column) && ['<', '>', '<=', '>='].includes(operator)
 
   result.columnFilters[column] = {
     operator: backendOp,

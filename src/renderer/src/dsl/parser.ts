@@ -13,7 +13,6 @@ import type {
   DslNode,
   DslFilterRule,
   DslPresetRef,
-  DslGroup,
   DslParseResult,
   DslParseError,
   DslOperator,
