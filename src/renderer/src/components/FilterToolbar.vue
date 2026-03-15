@@ -15,17 +15,18 @@
     @export="exportToExcel"
   >
     <template #filters>
-      <!-- Search field -->
-      <v-text-field
+      <!-- DSL search bar (replaces plain text search) -->
+      <DslSearchBar
         ref="searchFieldRef"
-        v-model="filters.searchQuery"
-        variant="outlined"
-        hide-details
-        clearable
-        placeholder="Gene, chr:pos, c./p. HGVS..."
-        prepend-inner-icon="mdi-magnify"
+        :raw-input="dslInput"
+        :suggestions="dslSuggestions"
+        :is-dsl-mode="isDslMode"
+        :errors="dslErrors"
         class="filter-search-input mr-2"
-        :class="{ 'filter-active': filters.searchQuery !== '' }"
+        @update:raw-input="dslInput = $event"
+        @apply="parseNow"
+        @clear="clearDsl(); filters.searchQuery = ''; dslColumnFilters = {}"
+        @select-suggestion="applySuggestion"
       />
 
       <!-- Annotation scope toggle -->
@@ -191,12 +192,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, provide, nextTick } from 'vue'
-import type { VTextField } from 'vuetify/components'
 import { useFilterState } from '../composables/useFilterState'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useFilterPresetStore } from '../composables/useFilterPresetStore'
+import { useDslSearch } from '../composables/useDslSearch'
 import SlimFilterToolbar from './SlimFilterToolbar.vue'
 import AnnotationScopeToggle from './AnnotationScopeToggle.vue'
+import DslSearchBar from './DslSearchBar.vue'
 import ColumnsDrawer from './ColumnsDrawer.vue'
 import FilterDrawer from './FilterDrawer.vue'
 import PresetBar from './PresetBar.vue'
@@ -288,6 +290,56 @@ const {
   updatePreset: updatePresetStore,
   deletePreset: deletePresetStore
 } = useFilterPresetStore()
+
+// DSL search — uses preset names for @preset autocomplete
+const {
+  rawInput: dslInput,
+  translationResult: dslTranslation,
+  suggestions: dslSuggestions,
+  isDslMode,
+  ftsQuery,
+  errors: dslErrors,
+  applySuggestion,
+  clear: clearDsl,
+  parseNow
+} = useDslSearch(() =>
+  allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_'))
+)
+
+// Track DSL-produced column filters separately so we can clear them
+const dslColumnFilters = ref<Record<string, unknown>>({})
+
+// When DSL translation changes, apply results to filter state
+watch(
+  () => dslTranslation.value,
+  (translation) => {
+    if (isDslMode.value && Object.keys(translation.columnFilters).length > 0) {
+      // Store DSL column filters so we can clear them later
+      dslColumnFilters.value = { ...translation.columnFilters }
+
+      // Clear drawer equivalents for DSL-filtered columns to prevent conflicts
+      if (translation.columnFilters.gnomad_af) filters.value.maxGnomadAf = null
+      if (translation.columnFilters.cadd) filters.value.minCadd = null
+    }
+
+    // Resolve @preset references
+    for (const presetName of translation.presetNames) {
+      const preset = allPresets.value.find(
+        (p) => p.name.toLowerCase().replace(/\s+/g, '_') === presetName
+      )
+      if (preset && !isPresetActive(preset.id)) {
+        handlePresetToggle(preset.id)
+      }
+    }
+  }
+)
+
+// FTS mode: update searchQuery from DSL composable
+watch(ftsQuery, (query) => {
+  if (!isDslMode.value) {
+    filters.value.searchQuery = query
+  }
+})
 
 // Dialog state
 const showSavePresetDialog = ref(false)
@@ -501,11 +553,10 @@ const toggleColumnsDrawer = () => {
 }
 
 // Search field ref and focus method
-const searchFieldRef = ref<InstanceType<typeof VTextField> | null>(null)
+const searchFieldRef = ref<InstanceType<typeof DslSearchBar> | null>(null)
 
 function focusSearch(): void {
-  const input = searchFieldRef.value?.$el?.querySelector('input') as HTMLInputElement | null
-  input?.focus()
+  searchFieldRef.value?.focus()
 }
 
 // Merge badge counts to include column filters
@@ -523,10 +574,12 @@ const mergedActiveFiltersList = computed(() => [
   ...(props.columnActiveFilters ?? [])
 ])
 
-// Clear all: reset drawer filters + presets + notify parent to clear column filters
+// Clear all: reset drawer filters + presets + DSL + notify parent to clear column filters
 function handleClearAll() {
   clearAllFilters()
   clearActivePresets()
+  clearDsl()
+  dslColumnFilters.value = {}
   emit('clear-column-filters')
 }
 
@@ -551,27 +604,9 @@ onMounted(async () => {
 
 <style scoped>
 .filter-search-input {
-  max-width: 240px;
+  min-width: 300px;
   flex-shrink: 1;
-}
-
-.filter-search-input :deep(.v-field) {
-  border-radius: 6px;
-  border-color: rgba(0, 0, 0, 0.15);
-}
-
-.filter-search-input :deep(.v-field--focused) {
-  box-shadow: 0 0 0 2px color-mix(in srgb, rgb(var(--v-theme-primary)) 15%, transparent);
-}
-
-.filter-search-input :deep(.v-field__input) {
-  font-size: 0.85rem;
-}
-
-.filter-search-input.filter-active :deep(.v-field) {
-  border-color: rgb(var(--v-theme-primary));
-  border-width: 2px;
-  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 4%, transparent);
+  flex-grow: 1;
 }
 
 .filter-tag-input {
