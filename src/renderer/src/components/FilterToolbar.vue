@@ -24,7 +24,7 @@
         :errors="dslErrors"
         class="filter-search-input mr-2"
         @update:raw-input="dslInput = $event"
-        @apply="parseNow"
+        @apply="applyDslFilters"
         @clear="handleDslClear"
         @select-suggestion="applySuggestion"
       />
@@ -275,44 +275,48 @@ const {
   parseNow
 } = useDslSearch(() => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')))
 
-// When DSL translation changes, apply results to filter state
-watch(
-  () => dslTranslation.value,
-  (translation) => {
-    if (isDslMode.value && Object.keys(translation.columnFilters).length > 0) {
-      // Store DSL column filters — merged into emitted payload via onFiltersUpdate
-      dslColumnFilters.value = { ...translation.columnFilters }
-
-      // Clear drawer equivalents for DSL-filtered columns to prevent conflicts
-      if ('gnomad_af' in translation.columnFilters) filters.value.maxGnomadAf = null
-      if ('cadd' in translation.columnFilters) filters.value.minCadd = null
-
-      // Force a filter re-emit so the DSL column filters reach the backend
-      emitFilters()
-    } else if (Object.keys(dslColumnFilters.value).length > 0) {
-      // Exited DSL mode — clear DSL column filters and re-emit
-      dslColumnFilters.value = {}
-      emitFilters()
-    }
-
-    // Resolve @preset references
-    for (const presetName of translation.presetNames) {
-      const preset = allPresets.value.find(
-        (p) => p.name.toLowerCase().replace(/\s+/g, '_') === presetName
-      )
-      if (preset && !isPresetActive(preset.id)) {
-        handlePresetToggle(preset.id)
-      }
-    }
-  }
-)
-
-// FTS mode: update searchQuery from DSL composable
+// FTS mode: auto-apply search on keystroke (existing behavior)
 watch(ftsQuery, (query) => {
   if (!isDslMode.value) {
     filters.value.searchQuery = query
   }
 })
+
+/**
+ * Apply DSL filters — called ONLY on Enter key (not on every keystroke).
+ * This prevents partial expressions like "consequence:=:L" from filtering.
+ */
+function applyDslFilters(): void {
+  parseNow() // force immediate parse (bypass debounce)
+  const translation = dslTranslation.value
+
+  if (isDslMode.value && Object.keys(translation.columnFilters).length > 0) {
+    dslColumnFilters.value = { ...translation.columnFilters }
+
+    // Clear drawer equivalents for DSL-filtered columns to prevent conflicts
+    if ('gnomad_af' in translation.columnFilters) filters.value.maxGnomadAf = null
+    if ('cadd' in translation.columnFilters) filters.value.minCadd = null
+
+    // Clear FTS search when in DSL mode
+    filters.value.searchQuery = ''
+
+    emitFilters()
+  } else if (!isDslMode.value && Object.keys(dslColumnFilters.value).length > 0) {
+    // Was in DSL mode, now in FTS — clear DSL column filters
+    dslColumnFilters.value = {}
+    emitFilters()
+  }
+
+  // Resolve @preset references
+  for (const presetName of translation.presetNames) {
+    const preset = allPresets.value.find(
+      (p) => p.name.toLowerCase().replace(/\s+/g, '_') === presetName
+    )
+    if (preset && !isPresetActive(preset.id)) {
+      handlePresetToggle(preset.id)
+    }
+  }
+}
 
 // Dialog state
 const showSavePresetDialog = ref(false)
