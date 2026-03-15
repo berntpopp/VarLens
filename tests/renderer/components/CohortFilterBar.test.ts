@@ -7,11 +7,23 @@ import CohortFilterBar from '../../../src/renderer/src/components/cohort/CohortF
 import { createMockApi } from '../../utils/mock-api'
 import { FiltersKey, createFilters } from '../../../src/renderer/src/composables/useFilters'
 
-const vuetify = createVuetify({ components, directives })
+const vuetify = createVuetify({
+  components,
+  directives,
+  display: {
+    // Simulate a wide viewport so responsive overflow doesn't hide buttons
+    mobileBreakpoint: 'sm',
+    thresholds: { xs: 0, sm: 600, md: 960, lg: 1280, xl: 1920, xxl: 2560 }
+  }
+})
 
 describe('CohortFilterBar', () => {
   beforeEach(() => {
     window.api = createMockApi()
+    // Simulate a wide viewport so responsive overflow doesn't hide Export/Columns buttons
+    Object.defineProperty(window, 'innerWidth', { value: 1400, writable: true })
+    Object.defineProperty(window, 'innerHeight', { value: 900, writable: true })
+    window.dispatchEvent(new Event('resize'))
   })
 
   // Stub out drawer and toolbar components that require Vuetify layout provider

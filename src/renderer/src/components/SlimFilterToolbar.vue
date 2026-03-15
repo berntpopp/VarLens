@@ -195,7 +195,7 @@ watch(
   () => props.filteredCount,
   () => {
     countPulsing.value = true
-    setTimeout(() => {
+    globalThis.setTimeout(() => {
       countPulsing.value = false
     }, 300)
   }
@@ -232,7 +232,9 @@ const emit = defineEmits<{
 
 .results-chip {
   font-size: 0.85rem;
-  transition: transform 150ms ease, box-shadow 150ms ease;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .results-chip.count-updated {

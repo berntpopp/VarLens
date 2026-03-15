@@ -28,9 +28,8 @@ describe('useKeyboardShortcuts', () => {
 
   it('registers Ctrl+Shift+X for clear all filters', async () => {
     const clearAll = vi.fn()
-    const { useKeyboardShortcuts } = await import(
-      '../../../src/renderer/src/composables/useKeyboardShortcuts'
-    )
+    const { useKeyboardShortcuts } =
+      await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
     useKeyboardShortcuts({ onClearAllFilters: clearAll })
 
     const handler = keyHandlers.get('X')
@@ -38,9 +37,8 @@ describe('useKeyboardShortcuts', () => {
   })
 
   it('does not register X handler when onClearAllFilters is not provided', async () => {
-    const { useKeyboardShortcuts } = await import(
-      '../../../src/renderer/src/composables/useKeyboardShortcuts'
-    )
+    const { useKeyboardShortcuts } =
+      await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
     useKeyboardShortcuts({})
 
     const handler = keyHandlers.get('X')
