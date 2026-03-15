@@ -21,6 +21,8 @@
           :variant="hasActiveFilters ? 'flat' : 'tonal'"
           size="small"
           class="results-chip mr-1"
+          aria-live="polite"
+          :aria-label="`${filteredCount} of ${totalCount ?? 'unknown'} variants shown`"
         >
           <v-icon start size="small">mdi-filter-variant</v-icon>
           <strong>{{ filteredCount.toLocaleString() }}</strong>
