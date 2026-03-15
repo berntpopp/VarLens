@@ -12,7 +12,7 @@
           density="compact"
           variant="outlined"
           hide-details
-          style="max-width: 90px"
+          style="min-width: 80px; max-width: 100px"
         />
         <v-text-field
           v-model.number="filterValue"

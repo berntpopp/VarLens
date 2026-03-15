@@ -47,12 +47,16 @@ export function useFilterPresets(filters: Ref<FilterState>, onPresetsChange: () 
   watch(selectedAfPreset, (value) => {
     if (value !== null) {
       filters.value.maxGnomadAf = value
+    } else {
+      filters.value.maxGnomadAf = null
     }
   })
 
   watch(selectedCaddPreset, (value) => {
     if (value !== null) {
       filters.value.minCadd = value
+    } else {
+      filters.value.minCadd = null
     }
   })
 
