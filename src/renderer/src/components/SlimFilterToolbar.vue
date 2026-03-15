@@ -21,6 +21,7 @@
           :variant="hasActiveFilters ? 'flat' : 'tonal'"
           size="small"
           class="results-chip mr-1"
+          :class="{ 'count-updated': countPulsing }"
           aria-live="polite"
           :aria-label="`${filteredCount} of ${totalCount ?? 'unknown'} variants shown`"
         >
@@ -134,6 +135,8 @@
 
 <script setup lang="ts">
 /* global navigator */
+import { ref, watch } from 'vue'
+
 interface ActiveFilter {
   id: string
   label: string
@@ -157,7 +160,20 @@ interface Props {
   hasClearableState?: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
+
+// Pulse animation on count change
+const countPulsing = ref(false)
+
+watch(
+  () => props.filteredCount,
+  () => {
+    countPulsing.value = true
+    setTimeout(() => {
+      countPulsing.value = false
+    }, 300)
+  }
+)
 
 const isMac =
   typeof navigator !== 'undefined' &&
@@ -186,6 +202,24 @@ const emit = defineEmits<{
 
 .results-chip {
   font-size: 0.85rem;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.results-chip.count-updated {
+  animation: count-pulse 300ms ease;
+}
+
+@keyframes count-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 4px color-mix(in srgb, rgb(var(--v-theme-primary)) 20%, transparent);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* Applied filters summary bar */
