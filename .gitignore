@@ -81,3 +81,4 @@ docs/public/screenshots/*.png
 *.ped
 e2e-dsl-test.mjs
 e2e-screenshots/
+*.png
