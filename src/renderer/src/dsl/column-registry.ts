@@ -30,9 +30,11 @@ export interface FilterColumnDef {
   commonValues?: CommonValue[]
 }
 
-const NUMERIC_OPERATORS: DslOperator[] = ['=', '!=', '<', '>', '<=', '>=', 'is:null', 'is:notnull']
-const TEXT_OPERATORS: DslOperator[] = ['=', '!=', '~', '!~', '^', '$', 'is:null', 'is:notnull']
-const CATEGORICAL_OPERATORS: DslOperator[] = ['=', '!=', '~', '!~', 'is:null', 'is:notnull']
+const NUMERIC_OPERATORS: DslOperator[] = ['=', '!=', '<', '>', '<=', '>=']
+// Note: '^' (starts with), '$' (ends with), '!~' (not contains), 'is:null', 'is:notnull'
+// are excluded until the backend column filter API supports them.
+const TEXT_OPERATORS: DslOperator[] = ['=', '!=', '~']
+const CATEGORICAL_OPERATORS: DslOperator[] = ['=', '!=', '~']
 
 export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
   {
@@ -127,14 +129,14 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     label: 'Chromosome',
     aliases: ['chrom', 'chromosome'],
     type: 'text',
-    operators: ['=', '!=', 'is:null', 'is:notnull']
+    operators: ['=', '!=']
   },
   {
     key: 'gt_num',
     label: 'Genotype',
     aliases: ['genotype', 'gt'],
     type: 'text',
-    operators: ['=', '!=', '~', 'is:null', 'is:notnull']
+    operators: ['=', '!=', '~']
   },
   {
     key: 'moi',
@@ -169,7 +171,7 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     label: 'OMIM',
     aliases: ['omim', 'mim'],
     type: 'text',
-    operators: ['=', '!=', '~', 'is:null', 'is:notnull']
+    operators: ['=', '!=', '~']
   }
 ] as const
 

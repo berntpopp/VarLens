@@ -44,6 +44,12 @@ interface ApplyPresetOptions {
 /**
  * Reset preset-managed filter fields to defaults, then apply the merged
  * preset state. Handles both case and cohort filter architectures.
+ *
+ * Note: searchQuery and geneSymbol are intentionally NOT managed by presets.
+ * These are ad-hoc user inputs that should persist independently of preset
+ * toggles. The getActiveFilterState() merger includes them so saved presets
+ * can capture them, but they are not applied/reset on toggle to avoid
+ * surprising the user by clearing their current search.
  */
 export function applyPresetStateToFilters({
   filters,

@@ -1075,6 +1075,14 @@ export function runMigrations(db: Database.Database): void {
 
   // ── Migration v16: Rework built-in presets to clinical combos ──
   if (currentVersion < 16) {
+    // Preserve user visibility preferences for built-in presets before reseeding
+    const existingVisibility = new Map<string, number>()
+    const existingRows = db
+      .prepare('SELECT name, is_visible FROM filter_presets WHERE is_built_in = 1')
+      .all() as { name: string; is_visible: number }[]
+    for (const row of existingRows) {
+      existingVisibility.set(row.name, row.is_visible)
+    }
     // Delete old built-in presets and re-seed with clinically meaningful combos
     db.exec('DELETE FROM filter_presets WHERE is_built_in = 1')
 
@@ -1093,6 +1101,14 @@ export function runMigrations(db: Database.Database): void {
         now,
         now
       )
+    }
+
+    // Restore user visibility preferences for presets that existed before
+    const restoreStmt = db.prepare(
+      'UPDATE filter_presets SET is_visible = ? WHERE name = ? AND is_built_in = 1'
+    )
+    for (const [name, isVisible] of existingVisibility) {
+      restoreStmt.run(isVisible, name)
     }
 
     db.exec('PRAGMA user_version = 16')

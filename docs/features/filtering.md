@@ -102,8 +102,6 @@ column:operator:value
 | `cadd:>=:20` | CADD at least 20 |
 | `gene:=:BRCA1` | Exact gene match |
 | `consequence:~:missense` | Consequence contains "missense" |
-| `clinvar:!~:benign` | ClinVar does not contain "benign" |
-| `gnomad_af:is:null` | No gnomAD data (novel variant) |
 
 ### Operators
 
@@ -113,11 +111,6 @@ column:operator:value
 | `!=` | Not equals | All |
 | `<` `>` `<=` `>=` | Comparisons | Numeric |
 | `~` | Contains | Text, Categorical |
-| `!~` | Not contains | Text, Categorical |
-| `^` | Starts with | Text |
-| `$` | Ends with | Text |
-| `is:null` | Is empty/missing | All |
-| `is:notnull` | Has a value | All |
 
 ### Combining Filters
 
@@ -151,7 +144,7 @@ The search bar offers context-aware suggestions as you type:
 Type `@` followed by a preset name to apply a saved preset directly from the search bar:
 
 ```
-@rare_pathogenic
+@rare-pathogenic
 ```
 
 ### Plain Text Search

@@ -12,8 +12,10 @@ import type {
   FilterPresetUpdate
 } from '../../../shared/types/filter-presets'
 import type { FilterState } from '../../../shared/types/filters'
+import { useApiService } from './useApiService'
 
 export function useFilterPresetStore() {
+  const { api } = useApiService()
   const presets = ref<FilterPreset[]>([])
   const activePresetIds = ref<Set<number>>(new Set())
   const loading = ref(false)
@@ -21,10 +23,10 @@ export function useFilterPresetStore() {
   const visiblePresets = computed(() => presets.value.filter((p) => p.isVisible))
 
   async function loadPresets(): Promise<void> {
+    if (!api) return
     loading.value = true
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (window as any).api.presets.list()
+      const result = await api.presets.list()
       presets.value = Array.isArray(result) ? result : []
     } finally {
       loading.value = false
@@ -90,30 +92,36 @@ export function useFilterPresetStore() {
     return merged
   }
 
-  async function savePreset(params: FilterPresetCreate): Promise<FilterPreset> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const created = await (window as any).api.presets.create(params)
+  async function savePreset(params: FilterPresetCreate): Promise<FilterPreset | null> {
+    if (!api) return null
+    const created = await api.presets.create(params)
     await loadPresets()
     return created
   }
 
-  async function updatePreset(id: number, updates: FilterPresetUpdate): Promise<FilterPreset> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updated = await (window as any).api.presets.update(id, updates)
+  async function updatePreset(
+    id: number,
+    updates: FilterPresetUpdate
+  ): Promise<FilterPreset | null> {
+    if (!api) return null
+    const updated = await api.presets.update(id, updates)
     await loadPresets()
     return updated
   }
 
   async function deletePreset(id: number): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (window as any).api.presets.delete(id)
-    activePresetIds.value.delete(id)
+    if (!api) return
+    await api.presets.delete(id)
+    // Reassign Set to trigger Vue reactivity (in-place Set.delete doesn't)
+    const newSet = new Set(activePresetIds.value)
+    newSet.delete(id)
+    activePresetIds.value = newSet
     await loadPresets()
   }
 
   async function reorderPresets(items: { id: number; sortOrder: number }[]): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (window as any).api.presets.reorder(items)
+    if (!api) return
+    await api.presets.reorder(items)
     await loadPresets()
   }
 

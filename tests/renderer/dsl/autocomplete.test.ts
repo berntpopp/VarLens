@@ -53,7 +53,7 @@ describe('getAutocompleteSuggestions', () => {
   it('suggests text operators for gene_symbol', () => {
     const suggestions = getAutocompleteSuggestions('gene_symbol:')
     expect(suggestions.some((s) => s.value === '~')).toBe(true)
-    expect(suggestions.some((s) => s.value === '^')).toBe(true)
+    expect(suggestions.some((s) => s.value === '=')).toBe(true)
   })
 
   it('limits suggestions to 10', () => {

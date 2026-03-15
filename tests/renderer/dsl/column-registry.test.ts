@@ -53,10 +53,10 @@ describe('column-registry', () => {
       }
     })
 
-    it('all columns have is:null and is:notnull', () => {
+    it('all columns have at least = and != operators', () => {
       for (const col of FILTER_COLUMNS) {
-        expect(col.operators).toContain('is:null')
-        expect(col.operators).toContain('is:notnull')
+        expect(col.operators).toContain('=')
+        expect(col.operators).toContain('!=')
       }
     })
   })
@@ -92,7 +92,7 @@ describe('column-registry', () => {
     it('returns text operators for gene_symbol', () => {
       const ops = getOperatorsForColumn('gene_symbol')
       expect(ops).toContain('~')
-      expect(ops).toContain('^')
+      expect(ops).toContain('=')
     })
 
     it('returns empty array for unknown column', () => {

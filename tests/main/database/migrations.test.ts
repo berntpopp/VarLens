@@ -480,7 +480,7 @@ describe('Schema Migrations', () => {
       expect(tableNamesAfterReopen).toContain('variant_annotations')
       expect(tableNamesAfterReopen).toContain('case_variant_annotations')
 
-      // Verify user_version still 15
+      // Verify user_version is 16 (v15 creates filter_presets, v16 reseeds)
       versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
@@ -795,7 +795,7 @@ describe('Schema Migrations', () => {
       const indexNames = indexes.map((i) => i.name)
       expect(indexNames).toContain('idx_cvs_cohort_freq')
 
-      // Verify user_version = 15
+      // Verify user_version = 16 (v15 + v16 both run)
       const version = db.pragma('user_version', { simple: true }) as number
       expect(version).toBe(16)
 

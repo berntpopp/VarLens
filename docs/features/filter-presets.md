@@ -59,7 +59,7 @@ From here you can:
 You can also activate presets from the [DSL search bar](./filtering.md#preset-references) by typing `@` followed by the preset name:
 
 ```
-@rare_1%
+@rare-pathogenic
 ```
 
-The autocomplete dropdown shows available presets when you type `@`.
+The autocomplete dropdown shows available presets when you type `@`. Preset names are converted to URL-safe slugs (lowercase, spaces to hyphens, special characters removed).

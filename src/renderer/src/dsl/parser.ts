@@ -145,9 +145,12 @@ class Parser {
     const next = this.peek()
     if (next?.type === 'operator' && (next.value === 'is:null' || next.value === 'is:notnull')) {
       this.advance()
+      // Resolve column alias to canonical key (same as the normal path below)
+      const colDef = findColumn(colToken.value)
+      const canonicalKey = colDef?.key ?? colToken.value
       return {
         type: 'rule',
-        column: colToken.value,
+        column: canonicalKey,
         operator: next.value as DslOperator,
         value: null
       }
