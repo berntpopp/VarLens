@@ -43,8 +43,8 @@
           :is-sorted="isSorted"
           :sort-by="slotSortBy"
           :has-filter="hasColumnFilter(col.key)"
-          :filter-value="columnFilters[col.key] || ''"
-          @update:filter="(v) => setColumnFilter(col.key, v)"
+          :filter-value="columnFilters[col.key]?.value?.toString() ?? ''"
+          @update:filter="(v: string | null) => setColumnFilter(col.key, v && v.trim() !== '' ? { operator: 'like', value: v } : null)"
           @clear-filter="clearColumnFilter(col.key)"
         />
       </template>
@@ -209,6 +209,7 @@ import {
 import CarrierExpandedRow from './CarrierExpandedRow.vue'
 import VariantColumnHeader from '../variant-table/VariantColumnHeader.vue'
 import { useColumnFilters } from '../../composables/useColumnFilters'
+import type { ColumnFiltersParam } from '../../../../shared/types/column-filters'
 import { useDebounce } from '../../composables/useDebounce'
 import { useExternalLinksStore, type ExternalLinkConfig } from '../../stores/externalLinksStore'
 import { APP_CONFIG } from '../../../../shared/config'
@@ -246,7 +247,7 @@ const emit = defineEmits<{
   'comment-click': [item: CohortVariant]
   'navigate-to-case': [payload: { caseId: number; item: CohortVariant }]
   'load-carriers': [variant: CohortVariant]
-  'column-filters-change': [filters: Record<string, string> | undefined]
+  'column-filters-change': [filters: ColumnFiltersParam | undefined]
   deselect: []
 }>()
 
@@ -310,7 +311,7 @@ const filterableColumns = computed(() =>
 
 // Debounced emit when column filters change
 const { debouncedFn: debouncedEmitColumnFilters } = useDebounce(
-  (newFilters: Record<string, string> | undefined) => {
+  (newFilters: ColumnFiltersParam | undefined) => {
     emit('column-filters-change', newFilters)
   },
   300

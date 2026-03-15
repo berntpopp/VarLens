@@ -111,6 +111,7 @@ import { useCohortColumns } from './cohort/useCohortColumns'
 // Types
 import type { CohortVariant } from '../../../shared/types/cohort'
 import type { CohortQueryParams } from '../composables/useCohortData'
+import type { ColumnFiltersParam } from '../../../shared/types/column-filters'
 
 // Emit for navigation and row click
 const emit = defineEmits<{
@@ -151,7 +152,7 @@ const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
 const { orderedColumns, visibleHeaders } = useCohortColumns(prefs)
 
 // Per-column text filters from CohortDataTable
-const cohortColumnFilters = ref<Record<string, string> | undefined>(undefined)
+const cohortColumnFilters = ref<ColumnFiltersParam | undefined>(undefined)
 
 // Sort state for filter bar
 const hasSort = ref(false)
@@ -330,7 +331,7 @@ const handleRowClick = (variant: CohortVariant) => {
 // Debounced reload when per-column filters change
 const { debouncedFn: debouncedColumnFilterReload } = useDebounce(invalidateAndReload, 300)
 
-const handleColumnFiltersChange = (newFilters: Record<string, string> | undefined): void => {
+const handleColumnFiltersChange = (newFilters: ColumnFiltersParam | undefined): void => {
   cohortColumnFilters.value = newFilters
   debouncedColumnFilterReload()
 }

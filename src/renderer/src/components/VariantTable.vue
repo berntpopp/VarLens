@@ -49,8 +49,8 @@
             :is-sorted="isSorted"
             :sort-by="slotSortBy"
             :has-filter="hasFilter(col.key)"
-            :filter-value="columnFilters[col.key] || ''"
-            @update:filter="(v) => setColumnFilter(col.key, v)"
+            :filter-value="columnFilters[col.key]?.value?.toString() ?? ''"
+            @update:filter="(v: string | null) => setColumnFilter(col.key, v && v.trim() !== '' ? { operator: 'like', value: v } : null)"
             @clear-filter="clearColumnFilter(col.key)"
           />
         </template>

@@ -18,6 +18,7 @@
 import { ref, shallowRef } from 'vue'
 import type { Ref, ShallowRef } from 'vue'
 import type { CohortVariant, CohortSummary } from '../../../shared/types/cohort'
+import type { ColumnFiltersParam } from '../../../shared/types/column-filters'
 import { useApiService } from './useApiService'
 
 /**
@@ -56,8 +57,8 @@ export interface CohortQueryParams {
   has_comment?: boolean
   /** Filter by ACMG classifications (global annotations) */
   acmg_classifications?: string[]
-  /** Per-column text filters from table header inputs */
-  column_filters?: Record<string, string>
+  /** Per-column typed filters from table header inputs */
+  column_filters?: ColumnFiltersParam
 }
 
 /** Raw result from cohort variant query (before state update) */
