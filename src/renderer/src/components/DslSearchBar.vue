@@ -73,11 +73,13 @@
       </v-list>
     </v-menu>
 
-    <!-- Error display -->
-    <div v-if="hasErrors" class="dsl-error-bar px-3 py-1">
-      <v-icon size="x-small" color="error" class="mr-1">mdi-alert-circle</v-icon>
-      <span class="text-caption text-error">{{ errors[0]?.message }}</span>
-    </div>
+    <!-- Error tooltip (shown on hover when there are parse errors) -->
+    <v-tooltip
+      v-if="hasErrors"
+      :text="errors[0]?.message"
+      location="bottom"
+      :activator="textFieldRef?.$el"
+    />
   </div>
 </template>
 
@@ -218,18 +220,13 @@ defineExpose({ focus })
   font-size: 0.85rem;
 }
 
-.dsl-error-bar {
-  background: color-mix(in srgb, rgb(var(--v-theme-error)) 8%, transparent);
-  border-top: 1px solid rgba(var(--v-border-color), 0.08);
-}
-
 .dsl-suggestion-list {
   max-height: 400px;
   overflow-y: auto;
 }
 
 /* Hide mode badge at narrow widths to save space */
-@media (max-width: 900px) {
+@media (max-width: 600px) {
   .dsl-search-bar :deep(.v-field__append-inner .v-chip) {
     display: none;
   }

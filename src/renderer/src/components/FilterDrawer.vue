@@ -342,6 +342,8 @@
               Commented
             </v-btn>
           </div>
+          <div class="text-body-small text-medium-emphasis mb-1 mt-1">Annotation Scope</div>
+          <AnnotationScopeToggle v-model="filters.annotationScope" class="mb-3" />
           <div class="text-body-small text-medium-emphasis mb-1">ACMG Classification</div>
           <div class="d-flex flex-wrap ga-1">
             <v-chip
@@ -366,6 +368,7 @@
 import { inject, ref, computed } from 'vue'
 import FilterDrawerShell from './filters/FilterDrawerShell.vue'
 import FilterPanelTitle from './filters/FilterPanelTitle.vue'
+import AnnotationScopeToggle from './AnnotationScopeToggle.vue'
 import GroupedMultiSelect from './GroupedMultiSelect.vue'
 import { consequenceGroups, clinvarGroups } from '../config/filterGroups'
 import { ACMG_FILTER_OPTIONS_LONG } from '../utils/filters'

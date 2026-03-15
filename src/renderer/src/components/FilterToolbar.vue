@@ -29,9 +29,6 @@
         @select-suggestion="applySuggestion"
       />
 
-      <!-- Annotation scope toggle -->
-      <AnnotationScopeToggle v-model="filters.annotationScope" class="mr-2" />
-
       <!-- Star toggle -->
       <v-tooltip location="bottom">
         <template #activator="{ props: tooltipProps }">
@@ -157,7 +154,6 @@ import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useFilterPresetStore } from '../composables/useFilterPresetStore'
 import { useDslSearch } from '../composables/useDslSearch'
 import SlimFilterToolbar from './SlimFilterToolbar.vue'
-import AnnotationScopeToggle from './AnnotationScopeToggle.vue'
 import DslSearchBar from './DslSearchBar.vue'
 import ColumnsDrawer from './ColumnsDrawer.vue'
 import FilterDrawer from './FilterDrawer.vue'
@@ -165,6 +161,7 @@ import PresetBar from './PresetBar.vue'
 import PresetSaveDialog from './PresetSaveDialog.vue'
 import PresetManageDialog from './PresetManageDialog.vue'
 import type { VariantFilter } from '../../../shared/types/api'
+import type { ColumnFilter } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
@@ -202,6 +199,9 @@ interface Emits {
 
 const emit = defineEmits<Emits>()
 
+// Track DSL-produced column filters (defined early so onFiltersUpdate can reference it)
+const dslColumnFilters = ref<Record<string, ColumnFilter>>({})
+
 // Filter state composable - single source of truth for all filter logic
 const {
   filters,
@@ -227,11 +227,22 @@ const {
   searchGeneSymbols,
   loadFilterOptions,
   setInitialSearch,
+  emitFilters,
   exportToExcel: composableExportToExcel
 } = useFilterState(
   computed(() => props.caseId),
   {
-    onFiltersUpdate: (f) => emit('update:filters', f),
+    onFiltersUpdate: (f) => {
+      // Merge DSL column filters into the emitted filter payload
+      if (Object.keys(dslColumnFilters.value).length > 0) {
+        emit('update:filters', {
+          ...f,
+          column_filters: { ...(f.column_filters ?? {}), ...dslColumnFilters.value }
+        })
+      } else {
+        emit('update:filters', f)
+      }
+    },
     onResetSort: () => emit('reset-sort')
   }
 )
@@ -264,20 +275,24 @@ const {
   parseNow
 } = useDslSearch(() => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')))
 
-// Track DSL-produced column filters separately so we can clear them
-const dslColumnFilters = ref<Record<string, unknown>>({})
-
 // When DSL translation changes, apply results to filter state
 watch(
   () => dslTranslation.value,
   (translation) => {
     if (isDslMode.value && Object.keys(translation.columnFilters).length > 0) {
-      // Store DSL column filters so we can clear them later
+      // Store DSL column filters — merged into emitted payload via onFiltersUpdate
       dslColumnFilters.value = { ...translation.columnFilters }
 
       // Clear drawer equivalents for DSL-filtered columns to prevent conflicts
       if ('gnomad_af' in translation.columnFilters) filters.value.maxGnomadAf = null
       if ('cadd' in translation.columnFilters) filters.value.minCadd = null
+
+      // Force a filter re-emit so the DSL column filters reach the backend
+      emitFilters()
+    } else if (Object.keys(dslColumnFilters.value).length > 0) {
+      // Exited DSL mode — clear DSL column filters and re-emit
+      dslColumnFilters.value = {}
+      emitFilters()
     }
 
     // Resolve @preset references
