@@ -158,6 +158,10 @@ function onInput(value: string | null): void {
   const v = value ?? ''
   emit('update:rawInput', v)
   showMenu.value = v.length > 0 || props.suggestions.length > 0
+  // When user deletes all text, clear any active DSL filters
+  if (v === '') {
+    emit('clear')
+  }
 }
 
 function onEnter(): void {
