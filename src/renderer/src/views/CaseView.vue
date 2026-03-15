@@ -127,6 +127,7 @@ defineExpose({
       @update:has-sort="handleSortUpdate"
       @row-click="handleRowClick"
       @deselect="handleDeselect"
+      @clear-filters="filterToolbarRef?.handleClearAll()"
     />
   </div>
 </template>

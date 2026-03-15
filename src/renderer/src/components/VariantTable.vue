@@ -243,6 +243,26 @@
           />
           <span v-else class="text-grey">--</span>
         </template>
+
+        <!-- Empty state when filters produce no results -->
+        <template #no-data>
+          <div class="text-center pa-8" role="status" aria-label="No variants match the current filters">
+            <v-icon size="48" color="grey-lighten-1" class="mb-4">mdi-filter-off-outline</v-icon>
+            <div class="text-h6 text-medium-emphasis mb-2">No variants match your filters</div>
+            <div class="text-body-2 text-medium-emphasis mb-4">
+              Try adjusting your filter criteria or clearing all filters.
+            </div>
+            <v-btn
+              variant="tonal"
+              color="primary"
+              size="small"
+              @click="emit('clear-filters')"
+            >
+              <v-icon start size="small">mdi-filter-off</v-icon>
+              Clear filters
+            </v-btn>
+          </div>
+        </template>
       </v-data-table-server>
     </template>
 
@@ -301,6 +321,7 @@ const emit = defineEmits<{
   'update:hasSort': [hasSort: boolean]
   'row-click': [variant: Variant]
   deselect: []
+  'clear-filters': []
 }>()
 
 // Annotations
