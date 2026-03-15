@@ -205,7 +205,7 @@ import PresetManageDialog from './PresetManageDialog.vue'
 import type { VariantFilter, Tag } from '../../../shared/types/api'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
-import { ACMG_FILTER_OPTIONS } from '../utils/filters'
+import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters } from '../utils/filters'
 
 interface ColumnDef {
   key: string
@@ -305,42 +305,10 @@ function handlePresetToggle(presetId: number): void {
  * properly clears its contributed values.
  */
 function applyActivePresets(): void {
-  // Step 1: Reset all fields that presets can set to their defaults
-  filters.value.maxGnomadAf = null
-  filters.value.minCadd = null
-  filters.value.consequences = []
-  filters.value.funcs = []
-  filters.value.clinvars = []
-  filters.value.starredOnly = false
-  filters.value.hasCommentOnly = false
-  filters.value.acmgClassifications = []
-
-  // Step 2: Merge all active presets on top of defaults
-  const presetState = getActiveFilterState()
-  if (presetState.maxGnomadAf !== undefined) {
-    filters.value.maxGnomadAf = presetState.maxGnomadAf
-  }
-  if (presetState.minCadd !== undefined) {
-    filters.value.minCadd = presetState.minCadd
-  }
-  if (presetState.consequences !== undefined) {
-    filters.value.consequences = presetState.consequences
-  }
-  if (presetState.funcs !== undefined) {
-    filters.value.funcs = presetState.funcs
-  }
-  if (presetState.clinvars !== undefined) {
-    filters.value.clinvars = presetState.clinvars
-  }
-  if (presetState.starredOnly !== undefined) {
-    filters.value.starredOnly = presetState.starredOnly
-  }
-  if (presetState.hasCommentOnly !== undefined) {
-    filters.value.hasCommentOnly = presetState.hasCommentOnly
-  }
-  if (presetState.acmgClassifications !== undefined) {
-    filters.value.acmgClassifications = presetState.acmgClassifications
-  }
+  applyPresetStateToFilters({
+    filters,
+    presetState: getActiveFilterState()
+  })
 }
 
 async function handleSavePreset(data: { name: string; description: string | null }): Promise<void> {

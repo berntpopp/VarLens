@@ -144,7 +144,7 @@ import PresetManageDialog from '../PresetManageDialog.vue'
 import type { ActiveFilter } from '../../../../shared/types/filters'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { CohortFilterDrawerState } from './cohortFilterDrawerTypes'
-import { ACMG_FILTER_OPTIONS } from '../../utils/filters'
+import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters } from '../../utils/filters'
 
 interface Props {
   totalCount: number | null
@@ -215,34 +215,16 @@ function handlePresetToggle(presetId: number): void {
 
 /**
  * Reset preset-managed filter fields to defaults, then re-apply
- * all currently active presets.
+ * all currently active presets. Routes consequences to selectedImpactPresets
+ * because the cohort query reads from that ref, not filters.consequences.
  */
 function applyActivePresets(): void {
-  filters.value.maxGnomadAf = null
-  filters.value.minCadd = null
-  filters.value.minCohortFrequency = null
-  filters.value.minCarriers = null
-  filters.value.consequences = []
-  filters.value.funcs = []
-  filters.value.clinvars = []
-  filters.value.starredOnly = false
-  filters.value.hasCommentOnly = false
-  filters.value.acmgClassifications = []
-
-  const presetState = getActiveFilterState()
-  if (presetState.maxGnomadAf !== undefined) filters.value.maxGnomadAf = presetState.maxGnomadAf
-  if (presetState.minCadd !== undefined) filters.value.minCadd = presetState.minCadd
-  if (presetState.minCohortFrequency !== undefined)
-    filters.value.minCohortFrequency = presetState.minCohortFrequency
-  if (presetState.minCarriers !== undefined) filters.value.minCarriers = presetState.minCarriers
-  if (presetState.consequences !== undefined) filters.value.consequences = presetState.consequences
-  if (presetState.funcs !== undefined) filters.value.funcs = presetState.funcs
-  if (presetState.clinvars !== undefined) filters.value.clinvars = presetState.clinvars
-  if (presetState.starredOnly !== undefined) filters.value.starredOnly = presetState.starredOnly
-  if (presetState.hasCommentOnly !== undefined)
-    filters.value.hasCommentOnly = presetState.hasCommentOnly
-  if (presetState.acmgClassifications !== undefined)
-    filters.value.acmgClassifications = presetState.acmgClassifications
+  applyPresetStateToFilters({
+    filters,
+    presetState: getActiveFilterState(),
+    consequencesTarget: selectedImpactPresets,
+    includeCohortFields: true
+  })
 }
 
 async function handleSavePreset(data: { name: string; description: string | null }): Promise<void> {

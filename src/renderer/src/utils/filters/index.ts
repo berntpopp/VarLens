@@ -36,3 +36,6 @@ export {
   type PresetOption,
   type CreatePresetWatcherParams
 } from './presetSync'
+
+// Database-backed preset application
+export { applyPresetStateToFilters } from './presetApplication'
