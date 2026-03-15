@@ -4,6 +4,7 @@
     location="right"
     temporary
     :width="panelWidth"
+    aria-label="Filter options"
     @update:model-value="emit('update:open', $event)"
   >
     <!-- Left-edge resize handle -->
