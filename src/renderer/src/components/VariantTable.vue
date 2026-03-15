@@ -401,8 +401,24 @@ const columnFilterModes = computed<Record<string, ColumnFilterMode>>(() => {
 const columnActiveFilters = computed<ActiveFilter[]>(() => {
   const colFilters = getColumnFiltersParam()
   if (!colFilters) return []
-  return buildActiveFiltersList({ searchQuery: '', geneSymbol: '', consequences: [], funcs: [], clinvars: [], maxGnomadAf: null, minCadd: null, minCohortFrequency: null, minCarriers: null, starredOnly: false, hasCommentOnly: false, acmgClassifications: [] }, [], colFilters)
-    .filter((f) => f.id.startsWith('col:'))
+  return buildActiveFiltersList(
+    {
+      searchQuery: '',
+      geneSymbol: '',
+      consequences: [],
+      funcs: [],
+      clinvars: [],
+      maxGnomadAf: null,
+      minCadd: null,
+      minCohortFrequency: null,
+      minCarriers: null,
+      starredOnly: false,
+      hasCommentOnly: false,
+      acmgClassifications: []
+    },
+    [],
+    colFilters
+  ).filter((f) => f.id.startsWith('col:'))
 })
 
 // Template refs
