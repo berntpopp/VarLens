@@ -6,16 +6,16 @@ import type { FilterState } from './filter-types'
 // ---------------------------------------------------------------------------
 
 export const afPresets = [
-  { label: '1%', value: 0.01 },
-  { label: '0.1%', value: 0.001 },
-  { label: '0.01%', value: 0.0001 }
+  { label: '<= 1%', value: 0.01 },
+  { label: '<= 0.1%', value: 0.001 },
+  { label: '<= 0.01%', value: 0.0001 }
 ] as const
 
 export const caddPresets = [
-  { label: '10', value: 10 },
-  { label: '15', value: 15 },
-  { label: '20', value: 20 },
-  { label: '25', value: 25 }
+  { label: '>= 10', value: 10 },
+  { label: '>= 15', value: 15 },
+  { label: '>= 20', value: 20 },
+  { label: '>= 25', value: 25 }
 ] as const
 
 export const impactPresets = [
