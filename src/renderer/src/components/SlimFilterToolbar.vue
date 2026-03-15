@@ -104,7 +104,7 @@
           class="mr-1"
           @click:close="emit('clear-filter', filter.id)"
         >
-          <span class="font-weight-medium">{{ filter.label }}:</span>
+          <strong>{{ filter.label }}</strong>
           <span class="ml-1">{{ filter.value }}</span>
         </v-chip>
         <v-btn variant="text" size="x-small" color="error" class="ml-1" @click="emit('clear-all')">

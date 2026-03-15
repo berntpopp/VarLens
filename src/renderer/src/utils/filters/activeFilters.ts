@@ -54,20 +54,20 @@ export function buildActiveFiltersList(
     list.push({ id: 'clinvars', label: 'ClinVar', value: `${filters.clinvars.length} selected` })
   }
 
-  // Numeric filters - format for display
+  // Numeric filters - operator goes in value for cleaner chip display
   if (filters.maxGnomadAf !== null && filters.maxGnomadAf > 0) {
     const pct = (filters.maxGnomadAf * 100).toFixed(2)
-    list.push({ id: 'frequency', label: 'AF <=', value: `${pct}%` })
+    list.push({ id: 'frequency', label: 'AF', value: `<= ${pct}%` })
   }
   if (filters.minCadd !== null && filters.minCadd >= 0) {
-    list.push({ id: 'cadd', label: 'CADD >=', value: String(filters.minCadd) })
+    list.push({ id: 'cadd', label: 'CADD', value: `>= ${filters.minCadd}` })
   }
   if (filters.minCohortFrequency !== null && filters.minCohortFrequency > 0) {
     const pct = (filters.minCohortFrequency * 100).toFixed(1)
-    list.push({ id: 'cohortFreq', label: 'Cohort >=', value: `${pct}%` })
+    list.push({ id: 'cohortFreq', label: 'Cohort', value: `>= ${pct}%` })
   }
   if (filters.minCarriers !== null && filters.minCarriers > 0) {
-    list.push({ id: 'carriers', label: 'Carriers >=', value: String(filters.minCarriers) })
+    list.push({ id: 'carriers', label: 'Carriers', value: `>= ${filters.minCarriers}` })
   }
 
   // Annotation filters
