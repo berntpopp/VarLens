@@ -281,6 +281,19 @@ export interface DatabaseSettingsTable {
   value: string
 }
 
+// ── Filter Presets ───────────────────────────────────────
+export interface FilterPresetsTable {
+  id: Generated<number>
+  name: string
+  description: string | null
+  filter_json: string
+  is_built_in: number
+  is_visible: number
+  sort_order: number
+  created_at: number
+  updated_at: number
+}
+
 // ── Full Database Schema ──────────────────────────────────
 export interface VarlensDatabase {
   cases: CasesTable
@@ -307,4 +320,5 @@ export interface VarlensDatabase {
   region_file_entries: RegionFileEntriesTable
   users: UsersTable
   database_settings: DatabaseSettingsTable
+  filter_presets: FilterPresetsTable
 }

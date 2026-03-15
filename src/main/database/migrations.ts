@@ -7,6 +7,7 @@
 
 import type Database from 'better-sqlite3-multiple-ciphers'
 import { CLINICAL_METRICS } from './clinical-metrics'
+import { BUILT_IN_PRESETS } from './built-in-presets'
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -27,6 +28,7 @@ import { CLINICAL_METRICS } from './clinical-metrics'
  * - 9: v0.21.0 case_data_info table (import provenance, platform, pre-filtering)
  * - 10: v0.21.0 gene_lists and gene_list_items tables (curated reusable gene lists)
  * - 11: v0.21.0 remove non-clinical predefined metrics (genetics, QC, variant stats)
+ * - 15: Filter presets table with built-in preset seeding
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1029,5 +1031,44 @@ export function runMigrations(db: Database.Database): void {
     `)
 
     db.exec('PRAGMA user_version = 14')
+  }
+
+  // ── Migration v15: Filter presets table ──────────────────
+  if (currentVersion < 15) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS filter_presets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        filter_json TEXT NOT NULL DEFAULT '{}',
+        is_built_in INTEGER NOT NULL DEFAULT 0,
+        is_visible INTEGER NOT NULL DEFAULT 1,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_filter_presets_name
+        ON filter_presets(name);
+    `)
+
+    // Seed built-in presets
+    const now = Date.now()
+    const insertStmt = db.prepare(
+      `INSERT OR IGNORE INTO filter_presets
+        (name, description, filter_json, is_built_in, is_visible, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, 1, 1, ?, ?, ?)`
+    )
+    for (const preset of BUILT_IN_PRESETS) {
+      insertStmt.run(
+        preset.name,
+        preset.description,
+        JSON.stringify(preset.filterJson),
+        preset.sortOrder,
+        now,
+        now
+      )
+    }
+
+    db.exec('PRAGMA user_version = 15')
   }
 }

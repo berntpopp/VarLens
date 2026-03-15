@@ -27,6 +27,7 @@ import { AuditLogRepository } from './AuditLogRepository'
 import { GeneListRepository } from './GeneListRepository'
 import { AuthService } from '../services/auth'
 import { CohortSummaryService } from './CohortSummaryService'
+import { FilterPresetRepository } from './FilterPresetRepository'
 
 /**
  * DatabaseService class
@@ -53,6 +54,7 @@ export class DatabaseService {
   private _geneLists: GeneListRepository
   private _auth: AuthService
   private _cohortSummary: CohortSummaryService
+  private _filterPresets: FilterPresetRepository
   private _currentUser: { id: number; username: string; role: string } | null = null
 
   /**
@@ -113,6 +115,7 @@ export class DatabaseService {
       this._geneLists = new GeneListRepository(this.db, this._kysely)
       this._auth = new AuthService(this.db)
       this._cohortSummary = new CohortSummaryService(this.db)
+      this._filterPresets = new FilterPresetRepository(this.db, this._kysely)
 
       // Initial cohort summary rebuild if tables are empty but variants exist
       try {
@@ -183,6 +186,10 @@ export class DatabaseService {
 
   get cohortSummary(): CohortSummaryService {
     return this._cohortSummary
+  }
+
+  get filterPresets(): FilterPresetRepository {
+    return this._filterPresets
   }
 
   get user(): { id: number; username: string; role: string } | null {

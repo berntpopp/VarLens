@@ -90,6 +90,9 @@
       </v-toolbar>
     </v-defaults-provider>
 
+    <!-- Preset bar (optional, provided by consumer) -->
+    <slot name="preset-bar" />
+
     <!-- Applied Filters Summary Bar -->
     <v-expand-transition>
       <div v-if="activeFiltersList.length > 0" class="applied-filters-bar">

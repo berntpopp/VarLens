@@ -26,6 +26,7 @@ import { registerUpdaterHandlers } from './handlers/updater'
 import { registerAuditLogHandlers } from './handlers/audit-log'
 import { registerGeneListHandlers } from './handlers/gene-lists'
 import { registerAuthHandlers } from './handlers/auth'
+import { registerFilterPresetHandlers } from './handlers/filter-presets'
 
 /**
  * Register all IPC handlers.
@@ -64,6 +65,7 @@ export function registerIpcHandlers(): void {
   registerAuditLogHandlers(deps)
   registerGeneListHandlers(deps)
   registerAuthHandlers(deps)
+  registerFilterPresetHandlers(deps)
 
   mainLogger.info('IPC handlers registered', 'ipc')
 }

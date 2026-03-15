@@ -460,6 +460,34 @@ const api = {
       ipcRenderer.invoke('auth:resetPassword', username, newPassword),
     changePassword: (oldPassword: string, newPassword: string) =>
       ipcRenderer.invoke('auth:changePassword', oldPassword, newPassword)
+  },
+
+  presets: {
+    list: () => ipcRenderer.invoke('presets:list'),
+
+    create: (params: {
+      name: string
+      description?: string | null
+      filterJson: Record<string, unknown>
+      isVisible?: boolean
+      sortOrder?: number
+    }) => ipcRenderer.invoke('presets:create', params),
+
+    update: (
+      id: number,
+      updates: {
+        name?: string
+        description?: string | null
+        filterJson?: Record<string, unknown>
+        isVisible?: boolean
+        sortOrder?: number
+      }
+    ) => ipcRenderer.invoke('presets:update', id, updates),
+
+    delete: (id: number) => ipcRenderer.invoke('presets:delete', id),
+
+    reorder: (items: { id: number; sortOrder: number }[]) =>
+      ipcRenderer.invoke('presets:reorder', items)
   }
 }
 

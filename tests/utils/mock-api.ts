@@ -123,6 +123,13 @@ export type MockApi = {
     removeVariantTag: ReturnType<typeof vi.fn>
     setVariantTags: ReturnType<typeof vi.fn>
   }
+  presets: {
+    list: ReturnType<typeof vi.fn>
+    create: ReturnType<typeof vi.fn>
+    update: ReturnType<typeof vi.fn>
+    delete: ReturnType<typeof vi.fn>
+    reorder: ReturnType<typeof vi.fn>
+  }
   logs: {
     onMessage: ReturnType<typeof vi.fn>
   }
@@ -266,6 +273,14 @@ export function createMockApi(): MockApi {
       assignVariantTag: vi.fn().mockResolvedValue(undefined),
       removeVariantTag: vi.fn().mockResolvedValue(undefined),
       setVariantTags: vi.fn().mockResolvedValue(undefined)
+    },
+
+    presets: {
+      list: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue(undefined),
+      reorder: vi.fn().mockResolvedValue(undefined)
     },
 
     logs: {

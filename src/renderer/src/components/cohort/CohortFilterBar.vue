@@ -92,6 +92,17 @@
       <!-- Impact preset chips moved to filter drawer only -->
     </template>
 
+    <template #preset-bar>
+      <PresetBar
+        :visible-presets="visiblePresets"
+        :is-preset-active="isPresetActive"
+        :has-active-filters="mergedHasActiveFilters"
+        @toggle="handlePresetToggle"
+        @save="showSavePresetDialog = true"
+        @manage="showManagePresetsDialog = true"
+      />
+    </template>
+
     <template #drawers>
       <ColumnsDrawer
         v-if="columns && columns.length > 0"
@@ -104,17 +115,32 @@
         @reset="handleResetColumns"
       />
       <CohortFilterDrawer v-model:open="filterDrawerOpen" />
+      <PresetSaveDialog
+        v-model="showSavePresetDialog"
+        :saving="savingPreset"
+        @save="handleSavePreset"
+      />
+      <PresetManageDialog
+        v-model="showManagePresetsDialog"
+        :presets="allPresets"
+        @toggle-visibility="handleToggleVisibility"
+        @delete="handleDeletePreset"
+      />
     </template>
   </SlimFilterToolbar>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, provide } from 'vue'
+import { ref, computed, watch, provide, onMounted } from 'vue'
 import { useFilters } from '../../composables/useFilters'
 import { useDebounce } from '../../composables/useDebounce'
+import { useFilterPresetStore } from '../../composables/useFilterPresetStore'
 import SlimFilterToolbar from '../SlimFilterToolbar.vue'
 import ColumnsDrawer from '../ColumnsDrawer.vue'
 import CohortFilterDrawer from './CohortFilterDrawer.vue'
+import PresetBar from '../PresetBar.vue'
+import PresetSaveDialog from '../PresetSaveDialog.vue'
+import PresetManageDialog from '../PresetManageDialog.vue'
 import type { ActiveFilter } from '../../../../shared/types/filters'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { CohortFilterDrawerState } from './cohortFilterDrawerTypes'
@@ -161,6 +187,93 @@ const {
   clearAllFilters,
   clearFilter
 } = useFilters()
+
+// Preset store
+const {
+  presets: allPresets,
+  visiblePresets,
+  loadPresets,
+  togglePreset,
+  isPresetActive,
+  clearActivePresets,
+  getActiveFilterState,
+  savePreset,
+  updatePreset: updatePresetStore,
+  deletePreset: deletePresetStore
+} = useFilterPresetStore()
+
+// Dialog state
+const showSavePresetDialog = ref(false)
+const showManagePresetsDialog = ref(false)
+const savingPreset = ref(false)
+
+// Preset toggle handler — applies merged preset filters
+function handlePresetToggle(presetId: number): void {
+  togglePreset(presetId)
+  applyActivePresets()
+}
+
+/**
+ * Reset preset-managed filter fields to defaults, then re-apply
+ * all currently active presets.
+ */
+function applyActivePresets(): void {
+  filters.value.maxGnomadAf = null
+  filters.value.minCadd = null
+  filters.value.minCohortFrequency = null
+  filters.value.minCarriers = null
+  filters.value.consequences = []
+  filters.value.funcs = []
+  filters.value.clinvars = []
+  filters.value.starredOnly = false
+  filters.value.hasCommentOnly = false
+  filters.value.acmgClassifications = []
+
+  const presetState = getActiveFilterState()
+  if (presetState.maxGnomadAf !== undefined) filters.value.maxGnomadAf = presetState.maxGnomadAf
+  if (presetState.minCadd !== undefined) filters.value.minCadd = presetState.minCadd
+  if (presetState.minCohortFrequency !== undefined)
+    filters.value.minCohortFrequency = presetState.minCohortFrequency
+  if (presetState.minCarriers !== undefined) filters.value.minCarriers = presetState.minCarriers
+  if (presetState.consequences !== undefined) filters.value.consequences = presetState.consequences
+  if (presetState.funcs !== undefined) filters.value.funcs = presetState.funcs
+  if (presetState.clinvars !== undefined) filters.value.clinvars = presetState.clinvars
+  if (presetState.starredOnly !== undefined) filters.value.starredOnly = presetState.starredOnly
+  if (presetState.hasCommentOnly !== undefined)
+    filters.value.hasCommentOnly = presetState.hasCommentOnly
+  if (presetState.acmgClassifications !== undefined)
+    filters.value.acmgClassifications = presetState.acmgClassifications
+}
+
+async function handleSavePreset(data: { name: string; description: string | null }): Promise<void> {
+  savingPreset.value = true
+  try {
+    // Deep-clone via JSON to strip Vue reactive proxies for IPC serialization
+    const plainFilters = JSON.parse(JSON.stringify(filters.value))
+    const result = await savePreset({
+      name: data.name,
+      description: data.description,
+      filterJson: plainFilters
+    })
+    // Check if IPC returned a serializable error
+    if (result !== null && typeof result === 'object' && 'code' in result) {
+      return
+    }
+    showSavePresetDialog.value = false
+  } catch {
+    // Save failed — dialog stays open so user can retry
+  } finally {
+    savingPreset.value = false
+  }
+}
+
+async function handleToggleVisibility(id: number, visible: boolean): Promise<void> {
+  await updatePresetStore(id, { isVisible: visible })
+}
+
+async function handleDeletePreset(id: number): Promise<void> {
+  await deletePresetStore(id)
+}
 
 // Drawer state
 const columnsDrawerOpen = ref(false)
@@ -346,6 +459,7 @@ const handleSearchChange = (value: string | null) => {
 
 const handleClearAll = () => {
   clearAllFilters()
+  clearActivePresets()
   emit('clear-column-filters')
   emit('clear-all')
 }
@@ -375,6 +489,11 @@ const handleResetColumns = () => {
 const handleExport = () => {
   emit('export')
 }
+
+// Load presets on mount
+onMounted(async () => {
+  await loadPresets()
+})
 </script>
 
 <style scoped>

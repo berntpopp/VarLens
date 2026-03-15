@@ -133,6 +133,17 @@
       </v-select>
     </template>
 
+    <template #preset-bar>
+      <PresetBar
+        :visible-presets="visiblePresets"
+        :is-preset-active="isPresetActive"
+        :has-active-filters="mergedHasActiveFilters"
+        @toggle="handlePresetToggle"
+        @save="showSavePresetDialog = true"
+        @manage="showManagePresetsDialog = true"
+      />
+    </template>
+
     <template #hints>
       <v-expand-transition>
         <div
@@ -163,6 +174,17 @@
         @reorder="setColumnOrder"
         @reset="resetColumnDefaults"
       />
+      <PresetSaveDialog
+        v-model="showSavePresetDialog"
+        :saving="savingPreset"
+        @save="handleSavePreset"
+      />
+      <PresetManageDialog
+        v-model="showManagePresetsDialog"
+        :presets="allPresets"
+        @toggle-visibility="handleToggleVisibility"
+        @delete="handleDeletePreset"
+      />
     </template>
   </SlimFilterToolbar>
 </template>
@@ -172,10 +194,14 @@ import { ref, computed, watch, onMounted, provide } from 'vue'
 import type { VTextField } from 'vuetify/components'
 import { useFilterState } from '../composables/useFilterState'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
+import { useFilterPresetStore } from '../composables/useFilterPresetStore'
 import SlimFilterToolbar from './SlimFilterToolbar.vue'
 import AnnotationScopeToggle from './AnnotationScopeToggle.vue'
 import ColumnsDrawer from './ColumnsDrawer.vue'
 import FilterDrawer from './FilterDrawer.vue'
+import PresetBar from './PresetBar.vue'
+import PresetSaveDialog from './PresetSaveDialog.vue'
+import PresetManageDialog from './PresetManageDialog.vue'
 import type { VariantFilter, Tag } from '../../../shared/types/api'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
@@ -247,6 +273,105 @@ const {
     onResetSort: () => emit('reset-sort')
   }
 )
+
+// Preset store
+const {
+  presets: allPresets,
+  visiblePresets,
+  loadPresets,
+  togglePreset,
+  isPresetActive,
+  clearActivePresets,
+  getActiveFilterState,
+  savePreset,
+  updatePreset: updatePresetStore,
+  deletePreset: deletePresetStore
+} = useFilterPresetStore()
+
+// Dialog state
+const showSavePresetDialog = ref(false)
+const showManagePresetsDialog = ref(false)
+const savingPreset = ref(false)
+
+// Preset toggle handler — applies merged preset filters
+function handlePresetToggle(presetId: number): void {
+  togglePreset(presetId)
+  applyActivePresets()
+}
+
+/**
+ * Reset preset-managed filter fields to defaults, then re-apply
+ * all currently active presets. This ensures toggling OFF a preset
+ * properly clears its contributed values.
+ */
+function applyActivePresets(): void {
+  // Step 1: Reset all fields that presets can set to their defaults
+  filters.value.maxGnomadAf = null
+  filters.value.minCadd = null
+  filters.value.consequences = []
+  filters.value.funcs = []
+  filters.value.clinvars = []
+  filters.value.starredOnly = false
+  filters.value.hasCommentOnly = false
+  filters.value.acmgClassifications = []
+
+  // Step 2: Merge all active presets on top of defaults
+  const presetState = getActiveFilterState()
+  if (presetState.maxGnomadAf !== undefined) {
+    filters.value.maxGnomadAf = presetState.maxGnomadAf
+  }
+  if (presetState.minCadd !== undefined) {
+    filters.value.minCadd = presetState.minCadd
+  }
+  if (presetState.consequences !== undefined) {
+    filters.value.consequences = presetState.consequences
+  }
+  if (presetState.funcs !== undefined) {
+    filters.value.funcs = presetState.funcs
+  }
+  if (presetState.clinvars !== undefined) {
+    filters.value.clinvars = presetState.clinvars
+  }
+  if (presetState.starredOnly !== undefined) {
+    filters.value.starredOnly = presetState.starredOnly
+  }
+  if (presetState.hasCommentOnly !== undefined) {
+    filters.value.hasCommentOnly = presetState.hasCommentOnly
+  }
+  if (presetState.acmgClassifications !== undefined) {
+    filters.value.acmgClassifications = presetState.acmgClassifications
+  }
+}
+
+async function handleSavePreset(data: { name: string; description: string | null }): Promise<void> {
+  savingPreset.value = true
+  try {
+    // Deep-clone via JSON to strip Vue reactive proxies for IPC serialization
+    const plainFilters = JSON.parse(JSON.stringify(filters.value))
+    const result = await savePreset({
+      name: data.name,
+      description: data.description,
+      filterJson: plainFilters
+    })
+    // Check if IPC returned a serializable error
+    if (result !== null && typeof result === 'object' && 'code' in result) {
+      return
+    }
+    showSavePresetDialog.value = false
+  } catch {
+    // Save failed — dialog stays open so user can retry
+  } finally {
+    savingPreset.value = false
+  }
+}
+
+async function handleToggleVisibility(id: number, visible: boolean): Promise<void> {
+  await updatePresetStore(id, { isVisible: visible })
+}
+
+async function handleDeletePreset(id: number): Promise<void> {
+  await deletePresetStore(id)
+}
 
 // Toggle methods for star/comment
 const toggleStarred = () => {
@@ -387,9 +512,10 @@ const mergedActiveFiltersList = computed(() => [
   ...(props.columnActiveFilters ?? [])
 ])
 
-// Clear all: reset drawer filters + notify parent to clear column filters
+// Clear all: reset drawer filters + presets + notify parent to clear column filters
 function handleClearAll() {
   clearAllFilters()
+  clearActivePresets()
   emit('clear-column-filters')
 }
 
@@ -405,9 +531,10 @@ function handleClearFilter(filterId: string) {
 // Expose drawer toggles and search focus for parent keyboard shortcuts
 defineExpose({ toggleFilterDrawer, toggleColumnsDrawer, focusSearch })
 
-// Load filter options on mount
+// Load filter options and presets on mount
 onMounted(async () => {
   await loadFilterOptions(props.caseId)
+  await loadPresets()
 })
 </script>
 

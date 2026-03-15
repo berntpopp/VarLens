@@ -76,6 +76,7 @@ import type {
   SpliceAIFetchResult
 } from './api-enrichment'
 import type { ColumnFilterMeta } from './column-filters'
+import type { FilterPreset, FilterPresetCreate, FilterPresetUpdate } from './filter-presets'
 import type { LogMessage } from './log'
 import type { TranscriptAnnotation, TranscriptInsertRow } from './transcript'
 import type { DatabaseOverview } from './database-overview'
@@ -525,6 +526,15 @@ export interface WindowAPI {
   updater: UpdaterAPI
   audit: AuditLogAPI
   auth: AuthAPI
+  presets: PresetsAPI
+}
+
+export interface PresetsAPI {
+  list: () => Promise<FilterPreset[]>
+  create: (params: FilterPresetCreate) => Promise<FilterPreset>
+  update: (id: number, updates: FilterPresetUpdate) => Promise<FilterPreset>
+  delete: (id: number) => Promise<void>
+  reorder: (items: { id: number; sortOrder: number }[]) => Promise<void>
 }
 
 export interface AuthAPI {

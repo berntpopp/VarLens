@@ -814,5 +814,33 @@ export const mockApi: WindowAPI = {
     deactivateUser: async () => {},
     resetPassword: async () => {},
     changePassword: async () => {}
+  },
+
+  presets: {
+    list: async () => [],
+    create: async (params) => ({
+      id: 1,
+      name: params.name,
+      description: params.description ?? null,
+      filterJson: params.filterJson,
+      isBuiltIn: false,
+      isVisible: true,
+      sortOrder: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }),
+    update: async (_id, updates) => ({
+      id: _id,
+      name: updates.name ?? 'Preset',
+      description: updates.description ?? null,
+      filterJson: updates.filterJson ?? {},
+      isBuiltIn: false,
+      isVisible: updates.isVisible ?? true,
+      sortOrder: updates.sortOrder ?? 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }),
+    delete: async () => {},
+    reorder: async () => {}
   }
 }

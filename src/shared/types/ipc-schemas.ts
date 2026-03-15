@@ -489,3 +489,36 @@ export const AssociationConfigSchema = z.object({
   }),
   max_threads: z.number().int().min(1).max(64).default(4)
 })
+
+// ============================================================
+// Filter Preset Schemas
+// ============================================================
+
+export const FilterPresetIdSchema = z.number().int().positive()
+
+export const FilterPresetCreateSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z
+    .string()
+    .max(500)
+    .nullish()
+    .transform((val) => val ?? null),
+  filterJson: z.record(z.string(), z.unknown()),
+  isVisible: z.boolean().optional().default(true),
+  sortOrder: z.number().int().optional().default(0)
+})
+
+export const FilterPresetUpdateSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).nullable().optional(),
+  filterJson: z.record(z.string(), z.unknown()).optional(),
+  isVisible: z.boolean().optional(),
+  sortOrder: z.number().int().optional()
+})
+
+export const FilterPresetReorderSchema = z.array(
+  z.object({
+    id: z.number().int().positive(),
+    sortOrder: z.number().int()
+  })
+)
