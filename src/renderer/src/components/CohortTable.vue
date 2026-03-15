@@ -137,7 +137,15 @@ const emit = defineEmits<{
 
 // API + domain composables
 const { api } = useApiService()
-const { summary, summaryStale, columnMeta, fetchSummary, fetchColumnMeta, buildIpcParams, cleanupListeners } = useCohortData()
+const {
+  summary,
+  summaryStale,
+  columnMeta,
+  fetchSummary,
+  fetchColumnMeta,
+  buildIpcParams,
+  cleanupListeners
+} = useCohortData()
 const { filters, searchTerm, selectedImpactPresets, clearAllFilters, clearFilter } = useFilters()
 const { loadCarriers } = useCarriers()
 const {

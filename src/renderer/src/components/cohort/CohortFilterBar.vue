@@ -116,6 +116,7 @@ import SlimFilterToolbar from '../SlimFilterToolbar.vue'
 import ColumnsDrawer from '../ColumnsDrawer.vue'
 import CohortFilterDrawer from './CohortFilterDrawer.vue'
 import type { ActiveFilter } from '../../../../shared/types/filters'
+import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { CohortFilterDrawerState } from './cohortFilterDrawerTypes'
 import { ACMG_FILTER_OPTIONS } from '../../utils/filters'
 
