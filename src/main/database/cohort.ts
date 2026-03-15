@@ -38,7 +38,7 @@ const SORTABLE_COLUMNS: Record<string, string> = {
   transcript: 'transcript'
 }
 
-const NUMERIC_COLUMNS = new Set(['pos', 'gnomad_af', 'cadd_phred'])
+// Note: NUMERIC_COLUMNS removed — type-aware filtering uses operator from filter definition
 
 /**
  * CohortService class
@@ -172,17 +172,28 @@ export class CohortService {
       paramsArray.push(...params.acmg_classifications)
     }
 
-    // Per-column text filters
+    // Per-column typed filters
     if (params.column_filters !== undefined) {
-      for (const [column, value] of Object.entries(params.column_filters)) {
-        if (value === '' || SORTABLE_COLUMNS[column] === undefined) continue
+      for (const [column, filterDef] of Object.entries(params.column_filters)) {
+        if (SORTABLE_COLUMNS[column] === undefined) continue
         const sqlColumn = SORTABLE_COLUMNS[column]
-        whereConditions.push(
-          NUMERIC_COLUMNS.has(column)
-            ? `CAST(cvs.${sqlColumn} AS TEXT) LIKE ? COLLATE NOCASE`
-            : `cvs.${sqlColumn} LIKE ? COLLATE NOCASE`
-        )
-        paramsArray.push(`%${value}%`)
+        const { operator, value } = filterDef
+
+        if (operator === 'in' && Array.isArray(value)) {
+          if (value.length === 0) continue
+          const placeholders = value.map(() => '?').join(', ')
+          whereConditions.push(`cvs.${sqlColumn} IN (${placeholders})`)
+          paramsArray.push(...value)
+        } else if (operator === 'like' && typeof value === 'string') {
+          whereConditions.push(`cvs.${sqlColumn} LIKE ? COLLATE NOCASE`)
+          paramsArray.push(`%${value}%`)
+        } else if (
+          ['=', '!=', '<', '>', '<=', '>='].includes(operator) &&
+          (typeof value === 'string' || typeof value === 'number')
+        ) {
+          whereConditions.push(`cvs.${sqlColumn} ${operator} ?`)
+          paramsArray.push(value)
+        }
       }
     }
 

@@ -337,15 +337,32 @@ export class VariantRepository extends BaseRepository {
       )
     })
 
-    // Column filters (dynamic)
+    // Column filters (dynamic, type-aware)
     if (filter.column_filters !== undefined) {
-      for (const [column, value] of Object.entries(filter.column_filters)) {
-        if (value === '' || SORTABLE_COLUMNS[column] === undefined) continue
+      for (const [column, filterDef] of Object.entries(filter.column_filters)) {
+        if (SORTABLE_COLUMNS[column] === undefined) continue
         const sqlColumn = SORTABLE_COLUMNS[column]
-        if (NUMERIC_COLUMNS.has(column)) {
-          query = query.where(sql`CAST(${sql.ref(sqlColumn)} AS TEXT)`, 'like', `%${value}%`)
-        } else {
-          query = query.where(sql`${sql.ref(sqlColumn)} COLLATE NOCASE`, 'like', `%${value}%`)
+        const { operator, value } = filterDef
+
+        if (operator === 'in' && Array.isArray(value)) {
+          if (value.length === 0) continue
+          query = query.where(sql.ref(sqlColumn), 'in', value)
+        } else if (operator === 'like' && typeof value === 'string') {
+          query = query.where(
+            sql`${sql.ref(sqlColumn)} COLLATE NOCASE`,
+            'like',
+            `%${value}%`
+          )
+        } else if (
+          (operator === '=' ||
+            operator === '!=' ||
+            operator === '<' ||
+            operator === '>' ||
+            operator === '<=' ||
+            operator === '>=') &&
+          (typeof value === 'string' || typeof value === 'number')
+        ) {
+          query = query.where(sql.ref(sqlColumn), operator, value)
         }
       }
     }
