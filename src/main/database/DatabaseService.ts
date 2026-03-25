@@ -13,21 +13,21 @@ import { initializeSchema } from './schema'
 import { runMigrations } from './migrations'
 import { DatabaseError, TransactionError } from './errors'
 import { DATABASE_CONFIG } from '../../shared/config'
-import { createKysely } from './kysely'
 import type { Kysely } from 'kysely'
 import type { VarlensDatabase } from '../../shared/types/database-schema'
-import { CaseRepository } from './CaseRepository'
-import { TranscriptRepository } from './TranscriptRepository'
-import { AnnotationRepository } from './AnnotationRepository'
-import { MetadataRepository } from './MetadataRepository'
-import { TagRepository } from './TagRepository'
-import { VariantRepository } from './VariantRepository'
-import { DatabaseOverviewService } from './DatabaseOverviewService'
-import { AuditLogRepository } from './AuditLogRepository'
-import { GeneListRepository } from './GeneListRepository'
-import { AuthService } from '../services/auth'
-import { CohortSummaryService } from './CohortSummaryService'
-import { FilterPresetRepository } from './FilterPresetRepository'
+import { createRepositories, type Repositories } from './createRepositories'
+import type { CaseRepository } from './CaseRepository'
+import type { TranscriptRepository } from './TranscriptRepository'
+import type { AnnotationRepository } from './AnnotationRepository'
+import type { MetadataRepository } from './MetadataRepository'
+import type { TagRepository } from './TagRepository'
+import type { VariantRepository } from './VariantRepository'
+import type { DatabaseOverviewService } from './DatabaseOverviewService'
+import type { AuditLogRepository } from './AuditLogRepository'
+import type { GeneListRepository } from './GeneListRepository'
+import type { AuthService } from '../services/auth'
+import type { CohortSummaryService } from './CohortSummaryService'
+import type { FilterPresetRepository } from './FilterPresetRepository'
 
 /**
  * DatabaseService class
@@ -42,19 +42,8 @@ export class DatabaseService {
   private encrypted: boolean
   private _encryptionKey?: string
 
-  // Repositories — accessed via public getters
-  private _cases: CaseRepository
-  private _transcripts: TranscriptRepository
-  private _annotations: AnnotationRepository
-  private _metadata: MetadataRepository
-  private _tags: TagRepository
-  private _variants: VariantRepository
-  private _overview: DatabaseOverviewService
-  private _auditLog: AuditLogRepository
-  private _geneLists: GeneListRepository
-  private _auth: AuthService
-  private _cohortSummary: CohortSummaryService
-  private _filterPresets: FilterPresetRepository
+  // Repositories — created via shared factory, accessed via public getters
+  private _repos: Repositories
   private _currentUser: { id: number; username: string; role: string } | null = null
 
   /**
@@ -98,22 +87,9 @@ export class DatabaseService {
       // Run version-tracked migrations for v0.4.0+ features
       runMigrations(this.db)
 
-      // Initialize Kysely query builder (shares same connection)
-      this._kysely = createKysely(this.db)
-
-      // Initialize repositories
-      this._cases = new CaseRepository(this.db, this._kysely)
-      this._transcripts = new TranscriptRepository(this.db, this._kysely)
-      this._annotations = new AnnotationRepository(this.db, this._kysely)
-      this._metadata = new MetadataRepository(this.db, this._kysely)
-      this._tags = new TagRepository(this.db, this._kysely)
-      this._variants = new VariantRepository(this.db, this._kysely, this._cases)
-      this._overview = new DatabaseOverviewService(this.db, this._kysely)
-      this._auditLog = new AuditLogRepository(this.db, this._kysely)
-      this._geneLists = new GeneListRepository(this.db, this._kysely)
-      this._auth = new AuthService(this.db)
-      this._cohortSummary = new CohortSummaryService(this.db)
-      this._filterPresets = new FilterPresetRepository(this.db, this._kysely)
+      // Initialize repositories via shared factory (also creates Kysely instance)
+      this._repos = createRepositories(this.db)
+      this._kysely = this._repos.kysely
 
       // Defer heavy housekeeping to after the constructor returns so the
       // window can render while these run on the next event-loop tick.
@@ -129,51 +105,51 @@ export class DatabaseService {
   // ── Repository getters ──────────────────────────────────────
 
   get cases(): CaseRepository {
-    return this._cases
+    return this._repos.cases
   }
 
   get variants(): VariantRepository {
-    return this._variants
+    return this._repos.variants
   }
 
   get transcripts(): TranscriptRepository {
-    return this._transcripts
+    return this._repos.transcripts
   }
 
   get annotations(): AnnotationRepository {
-    return this._annotations
+    return this._repos.annotations
   }
 
   get metadata(): MetadataRepository {
-    return this._metadata
+    return this._repos.metadata
   }
 
   get tags(): TagRepository {
-    return this._tags
+    return this._repos.tags
   }
 
   get overview(): DatabaseOverviewService {
-    return this._overview
+    return this._repos.overview
   }
 
   get auditLog(): AuditLogRepository {
-    return this._auditLog
+    return this._repos.auditLog
   }
 
   get geneLists(): GeneListRepository {
-    return this._geneLists
+    return this._repos.geneLists
   }
 
   get auth(): AuthService {
-    return this._auth
+    return this._repos.auth
   }
 
   get cohortSummary(): CohortSummaryService {
-    return this._cohortSummary
+    return this._repos.cohortSummary
   }
 
   get filterPresets(): FilterPresetRepository {
-    return this._filterPresets
+    return this._repos.filterPresets
   }
 
   get user(): { id: number; username: string; role: string } | null {
@@ -185,7 +161,7 @@ export class DatabaseService {
   }
 
   isAccountsEnabled(): boolean {
-    return this._auth.isAccountsEnabled()
+    return this._repos.auth.isAccountsEnabled()
   }
 
   // ── Deferred initialisation ────────────────────────────────

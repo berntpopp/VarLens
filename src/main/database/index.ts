@@ -76,6 +76,8 @@ export function closeDatabaseManager(): void {
 export { DatabaseService } from './DatabaseService'
 export { DatabaseManager }
 export { RecentDatabasesService }
+export { DbPool } from './DbPool'
+export { createRepositories, type Repositories } from './createRepositories'
 
 // Repositories
 export { BaseRepository } from './BaseRepository'
