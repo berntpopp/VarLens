@@ -281,6 +281,7 @@ export interface CohortAPI {
   getSummaryStatus: () => Promise<{ is_stale: boolean; last_rebuilt_at: number }>
   rebuildSummary: () => Promise<void>
   onSummaryRebuilt: (callback: (status: { is_stale: boolean }) => void) => () => void
+  onSummaryRebuilding: (callback: (rebuilding: boolean) => void) => () => void
 }
 
 // Annotation update types

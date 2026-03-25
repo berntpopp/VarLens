@@ -17,11 +17,16 @@
       </div>
     </v-alert>
 
-    <!-- Staleness Indicator -->
-    <v-chip v-if="summaryStale" size="small" color="warning" variant="tonal" class="mb-2">
-      <v-progress-circular indeterminate size="12" width="2" class="mr-1" />
-      Updating cohort...
-    </v-chip>
+    <!-- Rebuild Indicator -->
+    <v-banner
+      v-if="summaryStale"
+      density="compact"
+      color="info"
+      icon="mdi-database-sync"
+      class="mb-2"
+    >
+      Rebuilding cohort index...
+    </v-banner>
 
     <!-- Filter Bar -->
     <CohortFilterBar
