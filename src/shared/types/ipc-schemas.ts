@@ -133,6 +133,28 @@ export const CohortSearchParamsSchema = z.object({
 export type ValidatedCohortSearchParams = z.infer<typeof CohortSearchParamsSchema>
 
 /**
+ * Schema for case search/pagination parameters
+ * Matches CaseSearchParams in src/main/database/types.ts
+ */
+export const CaseSearchParamsSchema = z.object({
+  limit: z.number().int().positive().max(1000).default(50),
+  offset: z.number().int().nonnegative().optional().default(0),
+  sort_by: z.enum(['name', 'created_at', 'variant_count']).optional(),
+  sort_order: z.enum(['asc', 'desc']).optional().default('desc'),
+  search_term: nullishString(),
+  cohort_ids: z
+    .array(z.number().int().positive())
+    .nullish()
+    .transform((val) => val ?? undefined),
+  _count_needed: z.boolean().optional()
+})
+
+/**
+ * Inferred type from CaseSearchParamsSchema
+ */
+export type ValidatedCaseSearchParams = z.infer<typeof CaseSearchParamsSchema>
+
+/**
  * Schema for variant filter parameters (partial, without case_id)
  * Matches Omit<VariantFilter, 'case_id'> in src/main/database/types.ts
  *

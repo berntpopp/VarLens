@@ -1,6 +1,32 @@
 import type { ColumnFiltersParam } from '../../shared/types/column-filters'
 
 /**
+ * CaseWithCohorts - Case entity enriched with cohort membership and metadata
+ *
+ * Returned by CaseRepository.queryCases() which uses a single JOIN query
+ * instead of per-case metadata lookups.
+ */
+export interface CaseWithCohorts extends Case {
+  cohort_names: string[]
+  cohort_ids: number[]
+  affected_status?: string | null
+  sex?: string | null
+}
+
+/**
+ * CaseSearchParams - Pagination, sorting, and filtering for case queries
+ */
+export interface CaseSearchParams {
+  limit: number
+  offset?: number
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+  search_term?: string
+  cohort_ids?: number[]
+  _count_needed?: boolean
+}
+
+/**
  * Database entity types for Varlens
  *
  * These interfaces match the SQLite database schema exactly.

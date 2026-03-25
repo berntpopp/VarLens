@@ -1,8 +1,29 @@
 import { BaseRepository } from './BaseRepository'
-import type { Case } from './types'
+import type { Case, CaseWithCohorts, CaseSearchParams, PaginatedResult } from './types'
 import { DatabaseError, NotFoundError, UniqueConstraintError } from './errors'
 import { createFTSTriggers } from './schema'
 import { mainLogger } from '../services/MainLogger'
+
+/** Whitelist of sortable columns to prevent SQL injection */
+const CASE_SORTABLE_COLUMNS: Record<string, string> = {
+  name: 'c.name',
+  created_at: 'c.created_at',
+  variant_count: 'c.variant_count'
+}
+
+/** Raw row shape returned by the JOIN query before post-processing */
+interface CaseQueryRawRow {
+  id: number
+  name: string
+  file_path: string
+  file_size: number
+  variant_count: number
+  created_at: number
+  affected_status: string | null
+  sex: string | null
+  cohort_names_raw: string | null
+  cohort_ids_raw: string | null
+}
 
 export class CaseRepository extends BaseRepository {
   createCase(name: string, filePath: string, fileSize: number): number {
@@ -82,6 +103,100 @@ export class CaseRepository extends BaseRepository {
       this.restoreFtsTriggersSafe()
       throw error
     }
+  }
+
+  /**
+   * Paginated case query with cohort names, metadata, sorting, and filtering.
+   *
+   * Returns cases enriched with cohort_names[], cohort_ids[], affected_status, and sex
+   * in a single JOIN query — replacing the previous N+1 pattern of per-case metadata lookups.
+   */
+  queryCases(params: CaseSearchParams): PaginatedResult<CaseWithCohorts> {
+    const { limit, offset = 0, sort_by, sort_order = 'desc', search_term, cohort_ids } = params
+    const countNeeded = params._count_needed !== false
+
+    // Build WHERE clauses and parameters
+    const whereClauses: string[] = []
+    const whereParams: (string | number)[] = []
+
+    // Search filter (LIKE on case name)
+    if (search_term !== undefined && search_term !== '') {
+      whereClauses.push('c.name LIKE ?')
+      whereParams.push(`%${search_term}%`)
+    }
+
+    // Cohort filter
+    if (cohort_ids !== undefined && cohort_ids.length > 0) {
+      const placeholders = cohort_ids.map(() => '?').join(', ')
+      whereClauses.push(
+        `c.id IN (SELECT case_id FROM case_cohort_links WHERE cohort_id IN (${placeholders}))`
+      )
+      whereParams.push(...cohort_ids)
+    }
+
+    const whereSQL = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : ''
+
+    // Sort column (whitelist-validated)
+    const sortColumn =
+      sort_by !== undefined && sort_by !== ''
+        ? (CASE_SORTABLE_COLUMNS[sort_by] ?? 'c.created_at')
+        : 'c.created_at'
+    const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC'
+
+    // Main data query with LEFT JOINs
+    const dataSQL = `
+      SELECT c.id, c.name, c.file_path, c.file_size, c.variant_count, c.created_at,
+             cm.affected_status, cm.sex,
+             GROUP_CONCAT(cg.name, '|') AS cohort_names_raw,
+             GROUP_CONCAT(cg.id, '|') AS cohort_ids_raw
+      FROM cases c
+      LEFT JOIN case_metadata cm ON cm.case_id = c.id
+      LEFT JOIN case_cohort_links ccl ON ccl.case_id = c.id
+      LEFT JOIN cohort_groups cg ON cg.id = ccl.cohort_id
+      ${whereSQL}
+      GROUP BY c.id
+      ORDER BY ${sortColumn} ${sortDir}
+      LIMIT ? OFFSET ?
+    `
+
+    const dataParams = [...whereParams, limit, offset]
+    const rawRows = this.db.prepare(dataSQL).all(...dataParams) as CaseQueryRawRow[]
+
+    // Post-process GROUP_CONCAT results
+    const data: CaseWithCohorts[] = rawRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      file_path: row.file_path,
+      file_size: row.file_size,
+      variant_count: row.variant_count,
+      created_at: row.created_at,
+      affected_status: row.affected_status,
+      sex: row.sex,
+      cohort_names:
+        row.cohort_names_raw !== null && row.cohort_names_raw !== ''
+          ? row.cohort_names_raw.split('|')
+          : [],
+      cohort_ids:
+        row.cohort_ids_raw !== null && row.cohort_ids_raw !== ''
+          ? row.cohort_ids_raw.split('|').map((id) => Number(id))
+          : []
+    }))
+
+    // Count query (optional)
+    let totalCount = 0
+    if (countNeeded) {
+      const countSQL = `
+        SELECT COUNT(DISTINCT c.id) AS cnt
+        FROM cases c
+        ${cohort_ids !== undefined && cohort_ids.length > 0 ? 'LEFT JOIN case_cohort_links ccl ON ccl.case_id = c.id' : ''}
+        ${whereSQL}
+      `
+      // Count query uses same where params but without LIMIT/OFFSET
+      const countRow = this.db.prepare(countSQL).get(...whereParams) as { cnt: number } | undefined
+      totalCount = countRow?.cnt ?? 0
+    }
+
+    return { data, total_count: totalCount }
   }
 
   deleteCasesBatch(ids: number[]): number {
