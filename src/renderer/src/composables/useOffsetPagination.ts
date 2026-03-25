@@ -7,7 +7,7 @@
  * DRY: Both case (VariantTable) and cohort (CohortTable) views use this composable.
  */
 
-import { ref, watch, type Ref } from 'vue'
+import { ref, shallowRef, watch, type Ref } from 'vue'
 import { useSettingsStore } from '../stores/settingsStore'
 import { APP_CONFIG } from '../../../shared/config'
 
@@ -57,7 +57,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
 
   // Result state
-  const items = ref<T[]>([]) as Ref<T[]>
+  const items = shallowRef<T[]>([]) as Ref<T[]>
   const totalCount = ref(0)
   const loading = ref(false)
   const error = ref<Error | null>(null)
