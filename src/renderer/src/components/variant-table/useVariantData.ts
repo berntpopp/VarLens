@@ -1,4 +1,4 @@
-import { ref, shallowRef, computed, watch, toRaw, type Ref } from 'vue'
+import { ref, shallowRef, computed, watch, markRaw, toRaw, type Ref } from 'vue'
 import type { Variant, VariantFilter } from '../../../../shared/types/api'
 import type { ColumnFilterMeta } from '../../../../shared/types/column-filters'
 import { useOffsetPagination } from '../../composables/useOffsetPagination'
@@ -10,12 +10,14 @@ import { useApiService } from '../../composables/useApiService'
 interface UseVariantDataOptions {
   caseId: Ref<number>
   filters: Ref<Omit<VariantFilter, 'case_id'>>
+  /** Optional external column metadata (e.g. from useFilterState). Avoids duplicate IPC call. */
+  columnMeta?: Ref<ColumnFilterMeta[]>
   onCountsUpdate: (counts: { filtered: number; total: number }) => void
   onSortUpdate: (hasSort: boolean) => void
 }
 
 export function useVariantData(options: UseVariantDataOptions) {
-  const { caseId, filters, onCountsUpdate, onSortUpdate } = options
+  const { caseId, filters, columnMeta: externalColumnMeta, onCountsUpdate, onSortUpdate } = options
   const { api } = useApiService()
 
   // Annotations
@@ -77,7 +79,7 @@ export function useVariantData(options: UseVariantDataOptions) {
       )
 
       return {
-        data: result.data,
+        data: markRaw(result.data),
         total_count: result.total_count
       }
     },
@@ -87,7 +89,8 @@ export function useVariantData(options: UseVariantDataOptions) {
   // Domain-specific state
   const unfilteredCount = ref(0)
   const selectedVariantId = ref<number | null>(null)
-  const columnMeta = shallowRef<ColumnFilterMeta[]>([])
+  // Use external columnMeta if provided (from useFilterState), otherwise internal ref
+  const columnMeta = externalColumnMeta ?? shallowRef<ColumnFilterMeta[]>([])
 
   // Row props for zebra striping and selection highlighting
   const getRowProps = ({ item, index }: { item: Variant; index: number }) => {
@@ -116,15 +119,6 @@ export function useVariantData(options: UseVariantDataOptions) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = await (api as any).variants.query(newCaseId, {}, undefined, 1, [])
         unfilteredCount.value = result.total_count
-
-        // Fetch column metadata for filter UI auto-detection
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const options = await (api as any).variants.getFilterOptions(newCaseId)
-          columnMeta.value = options.columnMeta ?? []
-        } catch {
-          columnMeta.value = []
-        }
       }
     },
     { immediate: true }

@@ -278,6 +278,7 @@
 import { ref, computed, toRef, watch, onMounted, nextTick } from 'vue'
 import type { Variant, VariantFilter } from '../../../shared/types/api'
 import type { AnnotationScope } from '../../../shared/types/annotations'
+import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import { buildActiveFiltersList } from '../utils/filters/activeFilters'
 import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
@@ -309,10 +310,13 @@ interface Props {
   caseId: number
   filters: Omit<VariantFilter, 'case_id'>
   annotationScope?: AnnotationScope
+  /** Per-column metadata from useFilterState (avoids duplicate IPC call) */
+  columnMeta?: ColumnFilterMeta[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  annotationScope: 'case'
+  annotationScope: 'case',
+  columnMeta: () => []
 })
 
 const emit = defineEmits<{
@@ -394,6 +398,7 @@ const {
 } = useVariantData({
   caseId: toRef(props, 'caseId'),
   filters: toRef(props, 'filters'),
+  columnMeta: computed(() => props.columnMeta ?? []),
   onCountsUpdate: (counts) => emit('update:counts', counts),
   onSortUpdate: (hasSort) => emit('update:hasSort', hasSort)
 })

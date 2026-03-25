@@ -449,8 +449,25 @@ export function useFilterState(
     resetPresets()
   }
 
+  // LRU cache for filter options per case
+  const FILTER_OPTIONS_CACHE_MAX = 20
+  const filterOptionsCache = new Map<number, FilterOptions>()
+
   /**
-   * Load filter options for a given case from the database
+   * Store options in the LRU cache (delete+re-insert moves to end; evict from front)
+   */
+  const cacheFilterOptions = (caseId: number, options: FilterOptions): void => {
+    if (filterOptionsCache.has(caseId)) filterOptionsCache.delete(caseId)
+    filterOptionsCache.set(caseId, options)
+    while (filterOptionsCache.size > FILTER_OPTIONS_CACHE_MAX) {
+      const oldestKey = filterOptionsCache.keys().next().value
+      if (oldestKey === undefined) break
+      filterOptionsCache.delete(oldestKey)
+    }
+  }
+
+  /**
+   * Load filter options for a given case from the database (with LRU cache)
    */
   const loadFilterOptions = async (caseId: number): Promise<void> => {
     // Guard for browser dev mode
@@ -458,13 +475,28 @@ export function useFilterState(
       return
     }
 
+    // Check cache first
+    const cached = filterOptionsCache.get(caseId)
+    if (cached) {
+      filterOptions.value = cached
+      return
+    }
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const options = await (api as any).variants.getFilterOptions(caseId)
       filterOptions.value = options
+      cacheFilterOptions(caseId, options)
     } catch (error) {
       console.error('Failed to load filter options:', error)
     }
+  }
+
+  /**
+   * Invalidate the filter options cache (call after import/delete)
+   */
+  const invalidateFilterOptionsCache = (): void => {
+    filterOptionsCache.clear()
   }
 
   // Watch caseId prop and reset filters when case changes
@@ -509,6 +541,15 @@ export function useFilterState(
       return
     }
 
+    // Check cache first for filter options
+    const cached = filterOptionsCache.get(caseId)
+    if (cached) {
+      // Options are cached — only need to load tags
+      filterOptions.value = cached
+      await loadTags()
+      return
+    }
+
     try {
       // Load filter options and tags in parallel
       const [options] = await Promise.all([
@@ -517,6 +558,7 @@ export function useFilterState(
         loadTags()
       ])
       filterOptions.value = options
+      cacheFilterOptions(caseId, options)
     } catch (error) {
       console.error('Failed to load filter options:', error)
     }
@@ -565,6 +607,7 @@ export function useFilterState(
     searchGeneSymbols,
     emitFilters,
     loadFilterOptions: loadFilterOptionsPublic,
+    invalidateFilterOptionsCache,
     resetForCaseSwitch,
     setInitialSearch,
     exportToExcel

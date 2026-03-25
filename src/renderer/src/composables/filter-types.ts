@@ -84,6 +84,7 @@ export interface UseFilterStateReturn {
   searchGeneSymbols: (query: string) => Promise<void>
   emitFilters: () => void
   loadFilterOptions: (caseId: number) => Promise<void>
+  invalidateFilterOptionsCache: () => void
   resetForCaseSwitch: () => void
   setInitialSearch: (search: string) => void
   exportToExcel: (caseId: number, caseName: string) => Promise<ExportResult | null>

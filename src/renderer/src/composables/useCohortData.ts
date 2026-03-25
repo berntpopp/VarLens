@@ -15,7 +15,7 @@
  * SOL-02: Centralized cohort data management for CohortTable.vue.
  */
 
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, markRaw } from 'vue'
 import type { Ref, ShallowRef } from 'vue'
 import type { CohortVariant, CohortSummary } from '../../../shared/types/cohort'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
@@ -249,7 +249,7 @@ export function useCohortData(): UseCohortDataReturn {
       // Discard stale responses from superseded requests
       if (thisGeneration !== requestGeneration) return
 
-      variants.value = result.data ?? []
+      variants.value = markRaw(result.data ?? [])
       if (filtersChanged) {
         totalCount.value = result.total_count ?? 0
         cachedFilterHash = filterHash

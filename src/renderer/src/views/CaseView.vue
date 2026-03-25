@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { AnnotationScope } from '../../../shared/types/annotations'
 import EmptyState from '../components/EmptyState.vue'
 import FilterToolbar from '../components/FilterToolbar.vue'
@@ -27,6 +28,11 @@ const {
 
 const hasCases = computed(() => caseCount.value > 0)
 const annotationScope = ref<AnnotationScope>('case')
+
+// Pipe columnMeta from FilterToolbar (single owner of filter options) to VariantTable
+const columnMeta = computed<ColumnFilterMeta[]>(
+  () => filterToolbarRef.value?.filterOptions?.columnMeta ?? []
+)
 
 function handleImportClick(): void {
   // Delegate to parent App.vue via event bus or direct ref
@@ -123,6 +129,7 @@ defineExpose({
       :case-id="selectedCaseId"
       :filters="currentFilters"
       :annotation-scope="annotationScope"
+      :column-meta="columnMeta"
       @update:counts="handleCountsUpdate"
       @update:has-sort="handleSortUpdate"
       @row-click="handleRowClick"
