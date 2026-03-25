@@ -5,24 +5,19 @@ import type {
   GeneAssociationResultWithFDR
 } from './types'
 import { AssociationDataBuilder } from '../database/AssociationDataBuilder'
-import { fisherExactTest } from './fisher'
-import { logisticBurdenTest } from './burden'
 import { benjaminiHochberg } from './fdr'
+import { WorkerPool } from './WorkerPool'
 import type Database from 'better-sqlite3-multiple-ciphers'
-
-/** Yield control back to the event loop so IPC messages (e.g. cancel) can be processed */
-function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve))
-}
 
 /**
  * Main orchestrator for association analysis.
- * Runs asynchronously, yielding between genes so the event loop
- * can process cancel requests and progress IPC.
+ * Distributes gene-level statistical tests across worker threads
+ * using WorkerPool for parallel computation.
  */
 export class AssociationEngine {
   private db: Database.Database
   private onProgress?: (completed: number, total: number) => void
+  private pool: WorkerPool | null = null
   private aborted = false
 
   constructor(db: Database.Database, onProgress?: (completed: number, total: number) => void) {
@@ -54,41 +49,13 @@ export class AssociationEngine {
       }
     }
 
-    // 2. Run tests for each gene, yielding periodically
-    const rawResults: GeneAssociationResult[] = []
-    for (let i = 0; i < genes.length; i++) {
-      if (this.aborted) break
-
-      const gene = genes[i]
-      const fisher = fisherExactTest(
-        gene.groupA_carrier_count,
-        gene.groupB_carrier_count,
-        gene.groupA_non_carrier_count,
-        gene.groupB_non_carrier_count
-      )
-      const logistic = logisticBurdenTest(gene.samples, config.weight_scheme)
-
-      if (logistic.warning !== undefined && logistic.warning !== '') {
-        warnings.push(`${gene.gene_symbol}: ${logistic.warning}`)
-      }
-
-      rawResults.push({
-        gene_symbol: gene.gene_symbol,
-        n_variants: gene.samples.length > 0 ? gene.samples[0].dosages.length : 0,
-        groupA_carriers: gene.groupA_carrier_count,
-        groupB_carriers: gene.groupB_carrier_count,
-        groupA_total: gene.groupA_carrier_count + gene.groupA_non_carrier_count,
-        groupB_total: gene.groupB_carrier_count + gene.groupB_non_carrier_count,
-        fisher,
-        logistic_burden: logistic
-      })
-
-      this.onProgress?.(i + 1, genes.length)
-
-      // Yield every 10 genes to let event loop process cancel/progress IPC
-      if (i % 10 === 9) {
-        await yieldToEventLoop()
-      }
+    // 2. Run tests in parallel across worker threads
+    this.pool = new WorkerPool(config.max_threads > 0 ? config.max_threads : undefined)
+    let rawResults: GeneAssociationResult[]
+    try {
+      rawResults = await this.pool.run(genes, config.weight_scheme, this.onProgress)
+    } finally {
+      this.pool = null
     }
 
     if (this.aborted) {
@@ -98,6 +65,13 @@ export class AssociationEngine {
         config,
         warnings: ['Analysis cancelled'],
         elapsed_ms: Date.now() - start
+      }
+    }
+
+    // Collect warnings from logistic burden results
+    for (const result of rawResults) {
+      if (result.logistic_burden.warning !== undefined && result.logistic_burden.warning !== '') {
+        warnings.push(`${result.gene_symbol}: ${result.logistic_burden.warning}`)
       }
     }
 
@@ -133,5 +107,6 @@ export class AssociationEngine {
 
   abort(): void {
     this.aborted = true
+    this.pool?.abort()
   }
 }

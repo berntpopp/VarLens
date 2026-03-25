@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
@@ -6,6 +6,7 @@ import { AssociationDataBuilder } from '../../../src/main/database/AssociationDa
 import { fisherExactTest } from '../../../src/main/statistics/fisher'
 import { logisticBurdenTest } from '../../../src/main/statistics/burden'
 import { benjaminiHochberg } from '../../../src/main/statistics/fdr'
+import type { GeneAssociationResult } from '../../../src/main/statistics/types'
 
 describe('Association analysis integration', () => {
   let db: Database.Database
@@ -138,5 +139,134 @@ describe('Association analysis integration', () => {
       // Sex encoded as: male=1, female=0
       expect([0, 0.5, 1]).toContain(sample.covariate_values[0])
     }
+  })
+})
+
+describe('AssociationEngine parallel execution', () => {
+  let db: Database.Database
+
+  beforeEach(() => {
+    db = new Database(':memory:')
+    initializeSchema(db)
+    runMigrations(db)
+
+    const now = Date.now()
+    for (let i = 1; i <= 10; i++) {
+      db.prepare(
+        "INSERT INTO cases (id, name, file_path, file_size, variant_count, created_at) VALUES (?, ?, '/test', 100, 0, ?)"
+      ).run(i, `case${i}`, now)
+      db.prepare(
+        'INSERT INTO case_metadata (case_id, affected_status, sex, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(i, i <= 5 ? 'affected' : 'unaffected', 'male', '', now, now)
+    }
+    for (const caseId of [1, 2, 3]) {
+      db.prepare(
+        "INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, gnomad_af, cadd, gt_num) VALUES (?, 'chr17', 41244000, 'A', 'G', 'BRCA1', 'missense_variant', 0.001, 25.0, '1')"
+      ).run(caseId)
+    }
+    for (const caseId of [4, 5, 8]) {
+      db.prepare(
+        "INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, gnomad_af, cadd, gt_num) VALUES (?, 'chr17', 7579472, 'C', 'T', 'TP53', 'missense_variant', 0.01, 30.0, '1')"
+      ).run(caseId)
+    }
+  })
+
+  it('delegates gene computation to WorkerPool', async () => {
+    // Mock WorkerPool so tests don't need a compiled statistics-worker.js
+    const mockResults: GeneAssociationResult[] = [
+      {
+        gene_symbol: 'BRCA1',
+        n_variants: 1,
+        groupA_carriers: 3,
+        groupB_carriers: 0,
+        groupA_total: 5,
+        groupB_total: 5,
+        fisher: { p_value: 0.05, odds_ratio: null, ci_lower: null, ci_upper: null },
+        logistic_burden: {
+          p_value: 0.1,
+          beta: null,
+          se: null,
+          ci_lower: null,
+          ci_upper: null,
+          used_firth: false
+        }
+      }
+    ]
+
+    const mockRun = vi.fn().mockResolvedValue(mockResults)
+    vi.resetModules()
+    vi.doMock('../../../src/main/statistics/WorkerPool', () => {
+      function WorkerPool() {
+        return { run: mockRun, abort: vi.fn() }
+      }
+      return { WorkerPool }
+    })
+
+    // Re-import after mock is set up
+    const { AssociationEngine } = await import('../../../src/main/statistics/AssociationEngine')
+
+    const engine = new AssociationEngine(db)
+
+    const config = {
+      groupA_ids: [1, 2, 3, 4, 5],
+      groupB_ids: [6, 7, 8, 9, 10],
+      primary_test: 'fisher' as const,
+      weight_scheme: 'uniform' as const,
+      covariates: [],
+      filters: {},
+      max_threads: 2
+    }
+
+    const results = await engine.run(config)
+
+    // WorkerPool.run should have been called with the gene data
+    expect(mockRun).toHaveBeenCalledOnce()
+    const [genesArg, weightSchemeArg] = mockRun.mock.calls[0]
+    expect(genesArg.length).toBeGreaterThan(0)
+    expect(weightSchemeArg).toBe('uniform')
+
+    // Results should include FDR-corrected output from the mocked worker results
+    expect(results.results.length).toBe(1)
+    expect(results.results[0].gene_symbol).toBe('BRCA1')
+    expect(results.results[0].q_value).not.toBeNull()
+    expect(results.primary_test).toBe('fisher')
+  })
+
+  it('propagates abort to WorkerPool', async () => {
+    const mockAbort = vi.fn()
+    let engineRef: { abort: () => void } | null = null
+    const mockRun = vi.fn().mockImplementation(async () => {
+      // Simulate mid-run abort: engine.abort() is called while pool.run() is awaited
+      engineRef?.abort()
+      return []
+    })
+
+    vi.resetModules()
+    vi.doMock('../../../src/main/statistics/WorkerPool', () => {
+      function WorkerPool() {
+        return { run: mockRun, abort: mockAbort }
+      }
+      return { WorkerPool }
+    })
+
+    const { AssociationEngine } = await import('../../../src/main/statistics/AssociationEngine')
+    const engine = new AssociationEngine(db)
+    engineRef = engine
+
+    const config = {
+      groupA_ids: [1, 2, 3, 4, 5],
+      groupB_ids: [6, 7, 8, 9, 10],
+      primary_test: 'fisher' as const,
+      weight_scheme: 'uniform' as const,
+      covariates: [],
+      filters: {},
+      max_threads: 1
+    }
+
+    const results = await engine.run(config)
+
+    // abort() should have been forwarded to the pool
+    expect(mockAbort).toHaveBeenCalled()
+    expect(results.warnings).toContain('Analysis cancelled')
   })
 })
