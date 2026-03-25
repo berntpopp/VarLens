@@ -30,6 +30,8 @@ const hasCases = computed(() => caseCount.value > 0)
 const annotationScope = ref<AnnotationScope>('case')
 
 // Pipe columnMeta from FilterToolbar (single owner of filter options) to VariantTable
+// filterOptions is exposed as Ref<FilterOptions> from FilterToolbar; Vue template refs
+// auto-unwrap refs from defineExpose, so .columnMeta is directly accessible.
 const columnMeta = computed<ColumnFilterMeta[]>(
   () => filterToolbarRef.value?.filterOptions?.columnMeta ?? []
 )

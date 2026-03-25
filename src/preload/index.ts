@@ -11,6 +11,7 @@ import type {
   GlobalAnnotationUpdates,
   PerCaseAnnotationUpdates,
   CaseMetadataUpdates,
+  CaseSearchParams,
   LogMessage
 } from '../shared/types'
 import type { CommentCategory } from '../shared/types/api'
@@ -29,7 +30,7 @@ import type { CommentCategory } from '../shared/types/api'
 const api = {
   cases: {
     list: () => ipcRenderer.invoke('cases:list'),
-    query: (params: Record<string, unknown>) => ipcRenderer.invoke('cases:query', params),
+    query: (params: CaseSearchParams) => ipcRenderer.invoke('cases:query', params),
     delete: (id: number) => ipcRenderer.invoke('cases:delete', id),
     deleteAll: (): Promise<number> => ipcRenderer.invoke('cases:deleteAll'),
     deleteBatch: (ids: number[]): Promise<number> => ipcRenderer.invoke('cases:deleteBatch', ids)
@@ -82,7 +83,10 @@ const api = {
   system: {
     getVersion: () => ipcRenderer.invoke('system:version'),
     getUserDataPath: () => ipcRenderer.invoke('system:userDataPath'),
-    getCpuCount: (): Promise<number> => ipcRenderer.invoke('system:getCpuCount')
+    getCpuCount: (): Promise<number> => ipcRenderer.invoke('system:getCpuCount'),
+    setWorkerThreads: (count: number): Promise<void> =>
+      ipcRenderer.invoke('system:setWorkerThreads', count),
+    getWorkerThreads: (): Promise<number> => ipcRenderer.invoke('system:getWorkerThreads')
   },
 
   export: {

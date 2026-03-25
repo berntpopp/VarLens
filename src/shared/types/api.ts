@@ -36,6 +36,8 @@ import type {
   Case,
   CaseWithCohorts,
   CaseSearchParams,
+  AffectedStatus,
+  CaseSex,
   Variant,
   VariantFilter,
   PaginatedResult,
@@ -88,6 +90,8 @@ export type {
   Case,
   CaseWithCohorts,
   CaseSearchParams,
+  AffectedStatus,
+  CaseSex,
   Variant,
   VariantFilter,
   PaginatedResult,
@@ -163,6 +167,8 @@ export interface SystemAPI {
   getVersion: () => Promise<{ app: string; electron: string }>
   getUserDataPath: () => Promise<string>
   getCpuCount: () => Promise<number>
+  setWorkerThreads: (count: number) => Promise<void>
+  getWorkerThreads: () => Promise<number>
 }
 
 export interface ShellOpenExternalResult {
@@ -365,9 +371,6 @@ export interface SpliceAIAPI {
 }
 
 // Case metadata types
-export type AffectedStatus = 'affected' | 'unaffected' | 'unknown'
-export type CaseSex = 'unknown' | 'male' | 'female' | 'other'
-
 export interface CaseMetadataUpdates {
   affected_status?: AffectedStatus | null
   sex?: CaseSex | null

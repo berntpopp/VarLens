@@ -64,8 +64,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useApiService } from '../composables/useApiService'
 
 const settings = useSettingsStore()
+const { api } = useApiService()
 
 const isOpen = ref(false)
 const cpuCount = ref(
@@ -73,13 +75,9 @@ const cpuCount = ref(
   navigator.hardwareConcurrency || 4
 )
 
-// Try to get CPU count from main process (Task 6 adds system:getCpuCount IPC)
+// Get CPU count from main process via typed API
 onMounted(async () => {
   try {
-    // eslint-disable-next-line no-undef
-    const api = (window as unknown as Record<string, unknown>).api as
-      | { system?: { getCpuCount?: () => Promise<number> } }
-      | undefined
     if (api?.system?.getCpuCount) {
       cpuCount.value = await api.system.getCpuCount()
     }
@@ -92,6 +90,8 @@ const workerThreadsValue = computed({
   get: () => settings.workerThreads,
   set: (val: number) => {
     settings.workerThreads = val
+    // Sync to main process DbPool — takes effect on next database open
+    api?.system?.setWorkerThreads(val)
   }
 })
 

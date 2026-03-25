@@ -78,7 +78,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
 
   function buildPrefetchKey(offset: number): string {
     const sortKey = JSON.stringify(normalizeSortBy(sortBy.value))
-    return `${offset}:${sortKey}`
+    return `${offset}:${itemsPerPage.value}:${sortKey}`
   }
 
   /** Fire-and-forget: pre-fetch the next page and store in cache. */
@@ -104,18 +104,19 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
         sortBy: normalizeSortBy(sortBy.value),
         skipCount: true
       })
-      .catch(() => {
-        // Silently discard failed pre-fetches — the normal fetch path handles errors
+      .catch((err) => {
+        // Delete failed entry so the normal fetch path runs when this page is requested
         prefetchCache.delete(key)
-        return { data: [], total_count: 0 } as OffsetPageResult<T>
+        throw err
       })
 
     prefetchCache.set(key, promise)
   }
 
-  // Sync items-per-page to settings store
+  // Sync items-per-page to settings store and invalidate prefetch cache
   watch(itemsPerPage, (v) => {
     settingsStore.itemsPerPage = v
+    prefetchCache.clear()
   })
 
   /**
@@ -133,14 +134,18 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
       const cached = prefetchCache.get(key)
       if (cached) {
         prefetchCache.delete(key)
-        const result = await cached
+        try {
+          const result = await cached
 
-        // A pre-fetched result always used skipCount=true, so keep cached count
-        items.value = result.data
-        totalCount.value = cachedTotalCount ?? result.total_count
+          // A pre-fetched result always used skipCount=true, so keep cached count
+          items.value = result.data
+          totalCount.value = cachedTotalCount ?? result.total_count
 
-        prefetchNextPage()
-        return
+          prefetchNextPage()
+          return
+        } catch {
+          // Prefetch failed — fall through to normal fetch path below
+        }
       }
 
       // Skip the COUNT(*) query when we already have a cached total for the

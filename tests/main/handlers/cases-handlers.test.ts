@@ -28,10 +28,8 @@ describe('cases IPC handlers', () => {
     db.close()
   })
 
-  // NOTE: cases:query tests depend on CaseRepository.queryCases() from Task 1.
-  // Remove .skip once Task 1 is merged.
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  describe.skip('cases:query (pending Task 1 merge)', () => {
+  describe('cases:query', () => {
     it('returns paginated results with valid params', () => {
       insertCase('Case Alpha')
       insertCase('Case Beta')

@@ -135,7 +135,9 @@ export const mockApi: WindowAPI = {
   system: {
     getVersion: async () => ({ app: '0.6.0-mock', electron: 'browser-mode' }),
     getUserDataPath: async () => '/mock/user/data',
-    getCpuCount: async () => 4
+    getCpuCount: async () => 4,
+    setWorkerThreads: async () => {},
+    getWorkerThreads: async () => 0
   },
 
   export: {

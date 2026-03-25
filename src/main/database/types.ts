@@ -1,5 +1,10 @@
 import type { ColumnFiltersParam } from '../../shared/types/column-filters'
 
+/** Affected status for case metadata */
+export type AffectedStatus = 'affected' | 'unaffected' | 'unknown'
+/** Biological sex for case metadata */
+export type CaseSex = 'unknown' | 'male' | 'female' | 'other'
+
 /**
  * CaseWithCohorts - Case entity enriched with cohort membership and metadata
  *
@@ -9,8 +14,8 @@ import type { ColumnFiltersParam } from '../../shared/types/column-filters'
 export interface CaseWithCohorts extends Case {
   cohort_names: string[]
   cohort_ids: number[]
-  affected_status?: string | null
-  sex?: string | null
+  affected_status?: AffectedStatus | null
+  sex?: CaseSex | null
 }
 
 /**
@@ -19,7 +24,7 @@ export interface CaseWithCohorts extends Case {
 export interface CaseSearchParams {
   limit: number
   offset?: number
-  sort_by?: string
+  sort_by?: 'name' | 'created_at' | 'variant_count'
   sort_order?: 'asc' | 'desc'
   search_term?: string
   cohort_ids?: number[]
@@ -49,26 +54,6 @@ export interface Case {
   variant_count: number
   /** Unix timestamp in milliseconds */
   created_at: number
-}
-
-/**
- * CaseQueryParams - Parameters for paginated case query (used by Task 3 agent)
- */
-export interface CaseQueryParams {
-  /** Max rows to return */
-  limit: number
-  /** Offset for pagination */
-  offset: number
-  /** Search by case name (LIKE %term%) */
-  search_term?: string
-  /** Filter by cohort IDs (OR logic) */
-  cohort_ids?: number[]
-  /** Sort column */
-  sort_by?: 'created_at' | 'name' | 'variant_count'
-  /** Sort direction */
-  sort_order?: 'asc' | 'desc'
-  /** Whether to compute total_count (skip for subsequent pages) */
-  _count_needed?: boolean
 }
 
 /**

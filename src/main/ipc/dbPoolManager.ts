@@ -10,10 +10,32 @@ import { mainLogger } from '../services/MainLogger'
 let dbPool: DbPool | null = null
 
 /**
+ * User-configured worker thread count.
+ * 0 = auto (cpus - 1). Set via system:setWorkerThreads IPC.
+ * Applied on the next initDbPool() call.
+ */
+let configuredWorkerThreads = 0
+
+/**
  * Get the current DbPool instance (or null if not yet initialised).
  */
 export function getDbPool(): DbPool | null {
   return dbPool
+}
+
+/**
+ * Set the desired worker thread count (0 = auto).
+ * Takes effect on the next initDbPool() call.
+ */
+export function setWorkerThreads(count: number): void {
+  configuredWorkerThreads = Math.max(0, Math.floor(count))
+}
+
+/**
+ * Get the current configured worker thread count.
+ */
+export function getWorkerThreads(): number {
+  return configuredWorkerThreads
 }
 
 /**
@@ -25,8 +47,12 @@ export function getDbPool(): DbPool | null {
 export async function initDbPool(dbPath: string, encryptionKey?: string): Promise<void> {
   await destroyDbPool()
   dbPool = new DbPool()
-  dbPool.init(dbPath, encryptionKey)
-  mainLogger.info('DbPool initialized for worker-thread reads', 'ipc')
+  const maxThreads = configuredWorkerThreads > 0 ? configuredWorkerThreads : undefined
+  dbPool.init(dbPath, encryptionKey, maxThreads ? { maxThreads } : undefined)
+  mainLogger.info(
+    `DbPool initialized for worker-thread reads (threads: ${maxThreads ?? 'auto'})`,
+    'ipc'
+  )
 }
 
 /**

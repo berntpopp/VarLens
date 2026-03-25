@@ -70,8 +70,8 @@
           <!-- Status + sex icons when not in multi-select mode -->
           <CaseStatusIcons
             v-else
-            :status="(caseItem.affected_status as AffectedStatus) ?? 'unknown'"
-            :sex="(caseItem.sex as CaseSex) ?? 'unknown'"
+            :status="toAffectedStatus(caseItem.affected_status)"
+            :sex="toCaseSex(caseItem.sex)"
             class="mr-2"
           />
         </template>
@@ -159,6 +159,17 @@
 import { ref, computed, watch, shallowRef, markRaw } from 'vue'
 import type { CaseWithCohorts, CaseSex, AffectedStatus } from '../../../shared/types/api'
 import { useContextMenu } from '../composables/useContextMenu'
+
+const VALID_AFFECTED: Set<string> = new Set(['affected', 'unaffected', 'unknown'])
+const VALID_SEX: Set<string> = new Set(['unknown', 'male', 'female', 'other'])
+
+function toAffectedStatus(value: string | null | undefined): AffectedStatus {
+  return value != null && VALID_AFFECTED.has(value) ? (value as AffectedStatus) : 'unknown'
+}
+
+function toCaseSex(value: string | null | undefined): CaseSex {
+  return value != null && VALID_SEX.has(value) ? (value as CaseSex) : 'unknown'
+}
 import { useCaseMetadata, getCohortColor } from '../composables/useCaseMetadata'
 import { useDebounce } from '../composables/useDebounce'
 import { useApiService } from '../composables/useApiService'

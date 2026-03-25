@@ -1,5 +1,12 @@
 import { BaseRepository } from './BaseRepository'
-import type { Case, CaseWithCohorts, CaseSearchParams, PaginatedResult } from './types'
+import type {
+  Case,
+  CaseWithCohorts,
+  CaseSearchParams,
+  PaginatedResult,
+  AffectedStatus,
+  CaseSex
+} from './types'
 import { DatabaseError, NotFoundError, UniqueConstraintError } from './errors'
 import { createFTSTriggers } from './schema'
 import { mainLogger } from '../services/MainLogger'
@@ -138,9 +145,7 @@ export class CaseRepository extends BaseRepository {
 
     // Sort column (whitelist-validated)
     const sortColumn =
-      sort_by !== undefined && sort_by !== ''
-        ? (CASE_SORTABLE_COLUMNS[sort_by] ?? 'c.created_at')
-        : 'c.created_at'
+      sort_by !== undefined ? (CASE_SORTABLE_COLUMNS[sort_by] ?? 'c.created_at') : 'c.created_at'
     const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC'
 
     // Main data query with LEFT JOINs
@@ -170,8 +175,8 @@ export class CaseRepository extends BaseRepository {
       file_size: row.file_size,
       variant_count: row.variant_count,
       created_at: row.created_at,
-      affected_status: row.affected_status,
-      sex: row.sex,
+      affected_status: (row.affected_status as AffectedStatus | null) ?? null,
+      sex: (row.sex as CaseSex | null) ?? null,
       cohort_names:
         row.cohort_names_raw !== null && row.cohort_names_raw !== ''
           ? row.cohort_names_raw.split('|')
@@ -185,10 +190,10 @@ export class CaseRepository extends BaseRepository {
     // Count query (optional)
     let totalCount = 0
     if (countNeeded) {
+      // Cohort filter uses a subquery in WHERE, so no JOIN needed for counting
       const countSQL = `
-        SELECT COUNT(DISTINCT c.id) AS cnt
+        SELECT COUNT(*) AS cnt
         FROM cases c
-        ${cohort_ids !== undefined && cohort_ids.length > 0 ? 'LEFT JOIN case_cohort_links ccl ON ccl.case_id = c.id' : ''}
         ${whereSQL}
       `
       // Count query uses same where params but without LIMIT/OFFSET
