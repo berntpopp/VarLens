@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { getDatabaseService, getDatabaseManager } from '../database'
 import { mainLogger } from '../services/MainLogger'
 import type { HandlerDependencies } from './types'
+import { getDbPool } from './dbPoolManager'
 
 import { registerCaseHandlers } from './handlers/cases'
 import { registerVariantHandlers } from './handlers/variants'
@@ -28,6 +29,9 @@ import { registerGeneListHandlers } from './handlers/gene-lists'
 import { registerAuthHandlers } from './handlers/auth'
 import { registerFilterPresetHandlers } from './handlers/filter-presets'
 
+// Re-export pool lifecycle for external callers (e.g. app shutdown)
+export { initDbPool, destroyDbPool } from './dbPoolManager'
+
 /**
  * Register all IPC handlers.
  * Called once during app initialization.
@@ -39,7 +43,8 @@ export function registerIpcHandlers(): void {
   const deps: HandlerDependencies = {
     ipcMain,
     getDb: getDatabaseService,
-    getDbManager: getDatabaseManager
+    getDbManager: getDatabaseManager,
+    getDbPool
   }
 
   registerCaseHandlers(deps)

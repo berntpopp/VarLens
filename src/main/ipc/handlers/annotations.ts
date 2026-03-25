@@ -16,7 +16,11 @@ import { mainLogger } from '../../services/MainLogger'
  *           annotations:upsertPerCase, annotations:deleteGlobal, annotations:deletePerCase,
  *           annotations:getForVariant
  */
-export function registerAnnotationHandlers({ ipcMain, getDb }: HandlerDependencies): void {
+export function registerAnnotationHandlers({
+  ipcMain,
+  getDb,
+  getDbPool
+}: HandlerDependencies): void {
   /**
    * Get global annotation for a variant
    */
@@ -32,6 +36,14 @@ export function registerAnnotationHandlers({ ipcMain, getDb }: HandlerDependenci
             'annotations'
           )
           throw new Error('Invalid variant coordinates')
+        }
+
+        const pool = getDbPool?.()
+        if (pool) {
+          return await pool.run({
+            type: 'annotations:getGlobal',
+            params: [validated.data.chr, validated.data.pos, validated.data.ref, validated.data.alt]
+          })
         }
 
         const db = getDb()
@@ -191,6 +203,14 @@ export function registerAnnotationHandlers({ ipcMain, getDb }: HandlerDependenci
         throw new Error('Invalid case/variant ID')
       }
 
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({
+          type: 'annotations:getPerCase',
+          params: [validated.data.caseId, validated.data.variantId]
+        })
+      }
+
       const db = getDb()
       return db.annotations.getPerCaseAnnotation(validated.data.caseId, validated.data.variantId)
     })
@@ -348,6 +368,20 @@ export function registerAnnotationHandlers({ ipcMain, getDb }: HandlerDependenci
             'annotations'
           )
           throw new Error('Invalid variant coordinates')
+        }
+
+        const pool = getDbPool?.()
+        if (pool) {
+          return await pool.run({
+            type: 'annotations:getForVariant',
+            params: [
+              validatedCaseId.data,
+              validatedCoords.data.chr,
+              validatedCoords.data.pos,
+              validatedCoords.data.ref,
+              validatedCoords.data.alt
+            ]
+          })
         }
 
         const db = getDb()

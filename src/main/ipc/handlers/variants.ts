@@ -19,7 +19,7 @@ import { mainLogger } from '../../services/MainLogger'
 // Schema for search query params
 const SearchQuerySchema = z.string().min(1).max(100)
 
-export function registerVariantHandlers({ ipcMain, getDb }: HandlerDependencies): void {
+export function registerVariantHandlers({ ipcMain, getDb, getDbPool }: HandlerDependencies): void {
   ipcMain.handle(
     'variants:query',
     async (
@@ -90,11 +90,20 @@ export function registerVariantHandlers({ ipcMain, getDb }: HandlerDependencies)
           validatedSortBy = sortByResult.data
         }
 
-        const db = getDb()
         const fullFilter: VariantFilter = {
           case_id: validatedCaseId.data,
           ...validatedFilters.data
         }
+
+        const pool = getDbPool?.()
+        if (pool) {
+          return await pool.run({
+            type: 'variants:query',
+            params: [fullFilter, validatedLimit, validatedOffset, validatedSortBy]
+          })
+        }
+
+        const db = getDb()
         return db.variants.getVariants(fullFilter, validatedLimit, validatedOffset, validatedSortBy)
       })
     }
@@ -110,6 +119,11 @@ export function registerVariantHandlers({ ipcMain, getDb }: HandlerDependencies)
           'variants'
         )
         throw new Error('Invalid case ID')
+      }
+
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'variants:filterOptions', params: [validatedCaseId.data] })
       }
 
       const db = getDb()
@@ -157,6 +171,14 @@ export function registerVariantHandlers({ ipcMain, getDb }: HandlerDependencies)
           validatedLimit = limitResult.data
         }
 
+        const pool = getDbPool?.()
+        if (pool) {
+          return await pool.run({
+            type: 'variants:search',
+            params: [validatedCaseId.data, validatedQuery.data, validatedLimit]
+          })
+        }
+
         const db = getDb()
         return db.variants.searchVariants(validatedCaseId.data, validatedQuery.data, validatedLimit)
       })
@@ -196,6 +218,14 @@ export function registerVariantHandlers({ ipcMain, getDb }: HandlerDependencies)
           if (limitResult.success) {
             validatedLimit = limitResult.data
           }
+        }
+
+        const pool = getDbPool?.()
+        if (pool) {
+          return await pool.run({
+            type: 'variants:geneSymbols',
+            params: [validatedCaseId.data, validatedQuery.data, validatedLimit]
+          })
         }
 
         const db = getDb()

@@ -2,7 +2,7 @@ import { app, dialog, shell, session, nativeImage, BrowserWindow } from 'electro
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3-multiple-ciphers'
-import { registerIpcHandlers } from './ipc'
+import { registerIpcHandlers, destroyDbPool } from './ipc'
 import { initDatabaseManager, closeDatabaseManager } from './database'
 import { mainLogger } from './services/MainLogger'
 import { initAutoUpdater, scheduleUpdateChecks } from './services/AutoUpdater'
@@ -164,8 +164,9 @@ if (gotTheLock !== true) {
     })
   })
 
-  // Clean up database on quit
+  // Clean up database and worker pool on quit
   app.on('before-quit', () => {
+    destroyDbPool().catch(() => {})
     closeDatabaseManager()
   })
 

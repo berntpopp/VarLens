@@ -58,9 +58,14 @@ function runDeleteWorker(request: DeleteWorkerRequest): Promise<number> {
  * Cases IPC handlers
  * Channels: cases:list, cases:delete, cases:deleteAll, cases:deleteBatch
  */
-export function registerCaseHandlers({ ipcMain, getDb }: HandlerDependencies): void {
+export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDependencies): void {
   ipcMain.handle('cases:list', async () => {
     return wrapHandler(async () => {
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'cases:list', params: [] })
+      }
+
       const db = getDb()
       return db.cases.getAllCases()
     })

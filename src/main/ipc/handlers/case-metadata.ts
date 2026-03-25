@@ -81,7 +81,11 @@ const ExternalIdDeleteSchema = z.object({
  *           case-metadata:setCohorts, case-metadata:getHpoTerms, case-metadata:assignHpoTerm,
  *           case-metadata:removeHpoTerm, case-metadata:getFullMetadata
  */
-export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependencies): void {
+export function registerCaseMetadataHandlers({
+  ipcMain,
+  getDb,
+  getDbPool
+}: HandlerDependencies): void {
   // ============================================================
   // Case Metadata Handlers
   // ============================================================
@@ -99,6 +103,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
           'case-metadata'
         )
         throw new Error('Invalid parameters')
+      }
+
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:get', params: [validated.data] })
       }
 
       const db = getDb()
@@ -144,6 +153,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
    */
   ipcMain.handle('case-metadata:listCohorts', async () => {
     return wrapHandler(async () => {
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:listCohorts', params: [] })
+      }
+
       const db = getDb()
       return db.metadata.listCohortGroups()
     })
@@ -240,6 +254,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
         throw new Error('Invalid parameters')
       }
 
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:getCohortByName', params: [validated.data] })
+      }
+
       const db = getDb()
       return db.metadata.getCohortGroupByName(validated.data)
     })
@@ -262,6 +281,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
           'case-metadata'
         )
         throw new Error('Invalid parameters')
+      }
+
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:getCaseCohorts', params: [validated.data] })
       }
 
       const db = getDb()
@@ -360,6 +384,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
         throw new Error('Invalid parameters')
       }
 
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:getHpoTerms', params: [validated.data] })
+      }
+
       const db = getDb()
       return db.metadata.getCaseHpoTerms(validated.data)
     })
@@ -432,6 +461,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
         throw new Error('Invalid parameters')
       }
 
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:getDataInfo', params: [validated.data] })
+      }
+
       const db = getDb()
       return db.metadata.getCaseDataInfo(validated.data)
     })
@@ -485,6 +519,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
         throw new Error('Invalid parameters')
       }
 
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:listExternalIds', params: [validated.data] })
+      }
+
       const db = getDb()
       return db.metadata.listCaseExternalIds(validated.data)
     })
@@ -516,6 +555,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
 
   ipcMain.handle('case-metadata:distinctPlatforms', async () => {
     return wrapHandler(async () => {
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:distinctPlatforms', params: [] })
+      }
+
       const db = getDb()
       return db.metadata.getDistinctPlatforms()
     })
@@ -523,6 +567,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
 
   ipcMain.handle('case-metadata:distinctExternalIdTypes', async () => {
     return wrapHandler(async () => {
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:distinctExternalIdTypes', params: [] })
+      }
+
       const db = getDb()
       return db.metadata.getDistinctExternalIdTypes()
     })
@@ -566,6 +615,11 @@ export function registerCaseMetadataHandlers({ ipcMain, getDb }: HandlerDependen
           'case-metadata'
         )
         throw new Error('Invalid parameters')
+      }
+
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'case-metadata:getFullMetadata', params: [validated.data] })
       }
 
       const db = getDb()
