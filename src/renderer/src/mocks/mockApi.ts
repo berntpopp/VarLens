@@ -514,8 +514,7 @@ export const mockApi: WindowAPI = {
       last_rebuilt_at: Math.floor(Date.now() / 1000)
     }),
     rebuildSummary: async () => {},
-    onSummaryRebuilt: () => () => {},
-    onSummaryRebuilding: () => () => {}
+    onSummaryRebuilt: () => () => {}
   },
 
   annotations: {

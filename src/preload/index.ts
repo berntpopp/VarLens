@@ -178,15 +178,6 @@ const api = {
       return () => {
         ipcRenderer.removeListener('cohort:summaryRebuilt', handler)
       }
-    },
-    onSummaryRebuilding: (callback: (rebuilding: boolean) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, rebuilding: boolean): void => {
-        callback(rebuilding)
-      }
-      ipcRenderer.on('cohort:summaryRebuilding', handler)
-      return () => {
-        ipcRenderer.removeListener('cohort:summaryRebuilding', handler)
-      }
     }
   },
 

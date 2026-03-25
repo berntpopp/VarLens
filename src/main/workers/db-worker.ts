@@ -38,6 +38,8 @@ db.pragma(`busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}`)
 db.pragma('foreign_keys = ON')
 // Allow dirty reads from WAL — workers are read-only and tolerate stale data
 db.pragma('read_uncommitted = ON')
+// Enforce read-only: accidental writes from a new/incorrect task type fail fast
+db.pragma('query_only = ON')
 
 const repos: Repositories = createRepositories(db)
 

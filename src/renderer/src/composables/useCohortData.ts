@@ -115,18 +115,12 @@ export function useCohortData(): UseCohortDataReturn {
 
   // Listen for summary rebuild events and initialize staleness state
   let cleanupSummaryListener: (() => void) | null = null
-  let cleanupSummaryRebuildingListener: (() => void) | null = null
   if (api) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cohortApi = (api as any).cohort
     if (typeof cohortApi.onSummaryRebuilt === 'function') {
       cleanupSummaryListener = cohortApi.onSummaryRebuilt((status: { is_stale: boolean }) => {
         summaryStale.value = status.is_stale
-      })
-    }
-    if (typeof cohortApi.onSummaryRebuilding === 'function') {
-      cleanupSummaryRebuildingListener = cohortApi.onSummaryRebuilding((rebuilding: boolean) => {
-        summaryStale.value = rebuilding
       })
     }
     // Initialize staleness from current status (catches in-progress rebuilds)
@@ -146,10 +140,6 @@ export function useCohortData(): UseCohortDataReturn {
     if (cleanupSummaryListener) {
       cleanupSummaryListener()
       cleanupSummaryListener = null
-    }
-    if (cleanupSummaryRebuildingListener) {
-      cleanupSummaryRebuildingListener()
-      cleanupSummaryRebuildingListener = null
     }
   }
 

@@ -39,11 +39,11 @@ function cacheSet(key: string, value: AnnotationCache): void {
     cache.delete(key)
   }
   cache.set(key, value)
-  if (cache.size > MAX_CACHE_SIZE) {
-    const keysToDelete = [...cache.keys()].slice(0, cache.size - MAX_CACHE_SIZE)
-    for (const k of keysToDelete) {
-      cache.delete(k)
-    }
+  // Evict oldest entries without allocating an intermediate keys array
+  while (cache.size > MAX_CACHE_SIZE) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey === undefined) break
+    cache.delete(oldestKey)
   }
 }
 

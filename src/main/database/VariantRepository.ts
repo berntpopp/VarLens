@@ -664,12 +664,12 @@ export class VariantRepository extends BaseRepository {
 
     // Query 2: UNION ALL for distinct values of all low-cardinality columns
     if (lowCardinalityColumns.length > 0) {
+      // SAFETY: sqlCol values come from hardcoded SORTABLE_COLUMNS constant
       const unionParts = lowCardinalityColumns.map(
         ([key, sqlCol]) =>
-          `SELECT '${key}' AS col_key, CAST("${sqlCol}" AS TEXT) AS val FROM variants WHERE case_id = ? AND "${sqlCol}" IS NOT NULL GROUP BY "${sqlCol}" ORDER BY "${sqlCol}"`
+          `SELECT '${key}' AS col_key, CAST("${sqlCol}" AS TEXT) AS val FROM variants WHERE case_id = ? AND "${sqlCol}" IS NOT NULL GROUP BY "${sqlCol}"`
       )
-      // Wrap each part to preserve per-column ordering
-      const unionSql = unionParts.map((part) => `SELECT * FROM (${part})`).join(' UNION ALL ')
+      const unionSql = unionParts.join(' UNION ALL ')
       const params = lowCardinalityColumns.map(() => caseId)
       const rows = this.db.prepare(unionSql).all(...params) as {
         col_key: string
@@ -687,11 +687,11 @@ export class VariantRepository extends BaseRepository {
         arr.push(row.val)
       }
 
-      // Attach distinct values to corresponding meta entries
+      // Attach sorted distinct values to corresponding meta entries
       for (const entry of meta) {
         const values = valuesByKey.get(entry.key)
         if (values !== undefined) {
-          entry.distinctValues = values
+          entry.distinctValues = values.sort((a, b) => a.localeCompare(b))
         }
       }
     }
