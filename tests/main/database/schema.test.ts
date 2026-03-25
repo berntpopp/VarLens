@@ -263,7 +263,7 @@ describe('Database Schema', () => {
         )
         .all() as Array<{ name: string }>
 
-      expect(indexes.length).toBe(8)
+      expect(indexes.length).toBe(9)
     })
 
     it('creates all triggers', () => {

@@ -74,6 +74,7 @@ CREATE INDEX IF NOT EXISTS idx_variants_chr_pos_ref_alt ON variants(chr, pos, re
 CREATE INDEX IF NOT EXISTS idx_vt_variant_id ON variant_transcripts(variant_id);
 CREATE INDEX IF NOT EXISTS idx_vt_selected ON variant_transcripts(variant_id, is_selected);
 CREATE INDEX IF NOT EXISTS idx_vt_transcript ON variant_transcripts(transcript_id);
+CREATE INDEX IF NOT EXISTS idx_variants_case_numeric ON variants(case_id, cadd, gnomad_af);
 `
 
 /**

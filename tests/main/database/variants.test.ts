@@ -1369,6 +1369,156 @@ describe('Variant Operations', () => {
     })
   })
 
+  describe('getFilterOptions', () => {
+    it('returns correct structure with consequences, funcs, clinvars, ranges, and columnMeta', () => {
+      const caseId = createTestCase(service, 'filter-opts')
+      const variants = [
+        {
+          chr: '1',
+          pos: 1000,
+          ref: 'A',
+          alt: 'G',
+          gene_symbol: 'BRCA1',
+          consequence: 'missense_variant',
+          gnomad_af: 0.001,
+          cadd: 25.5,
+          clinvar: 'pathogenic',
+          func: 'exonic',
+          qual: 100,
+          hpo_sim_score: 0.8,
+          gt_num: '0/1',
+          transcript: 'NM_001',
+          cdna: 'c.100A>G',
+          aa_change: 'p.Thr34Ala',
+          moi: 'AD'
+        },
+        {
+          chr: '2',
+          pos: 2000,
+          ref: 'C',
+          alt: 'T',
+          gene_symbol: 'TP53',
+          consequence: 'stop_gained',
+          gnomad_af: 0.05,
+          cadd: 35.0,
+          clinvar: 'likely_pathogenic',
+          func: 'splicing',
+          qual: 200,
+          hpo_sim_score: 0.6,
+          gt_num: '1/1',
+          transcript: 'NM_002',
+          cdna: 'c.200C>T',
+          aa_change: 'p.Arg67Ter',
+          moi: 'AR'
+        },
+        {
+          chr: '1',
+          pos: 3000,
+          ref: 'G',
+          alt: 'A',
+          gene_symbol: 'BRCA1',
+          consequence: 'missense_variant',
+          gnomad_af: null,
+          cadd: null,
+          clinvar: null,
+          func: 'exonic',
+          qual: null,
+          hpo_sim_score: null,
+          gt_num: '0/1',
+          transcript: 'NM_001',
+          cdna: 'c.300G>A',
+          aa_change: 'p.Gly100Asp',
+          moi: 'AD'
+        }
+      ]
+      service.variants.insertVariantsBatch(caseId, variants)
+
+      const opts = service.variants.getFilterOptions(caseId)
+
+      // Top-level arrays
+      expect(opts.consequences.sort()).toEqual(['missense_variant', 'stop_gained'])
+      expect(opts.funcs.sort()).toEqual(['exonic', 'splicing'])
+      expect(opts.clinvars.sort()).toEqual(['likely_pathogenic', 'pathogenic'])
+
+      // Numeric ranges
+      expect(opts.minCadd).toBe(25.5)
+      expect(opts.maxCadd).toBe(35.0)
+      expect(opts.minGnomadAf).toBe(0.001)
+      expect(opts.maxGnomadAf).toBe(0.05)
+
+      // columnMeta array should have entries for all SORTABLE_COLUMNS (16 columns)
+      expect(opts.columnMeta).toHaveLength(16)
+
+      // Check a specific numeric column
+      const caddMeta = opts.columnMeta.find((m) => m.key === 'cadd')
+      expect(caddMeta).toBeDefined()
+      expect(caddMeta!.dataType).toBe('numeric')
+      expect(caddMeta!.distinctCount).toBe(2)
+      expect(caddMeta!.min).toBe(25.5)
+      expect(caddMeta!.max).toBe(35.0)
+      expect(caddMeta!.distinctValues).toBeDefined()
+      expect(caddMeta!.distinctValues!.sort()).toEqual(['25.5', '35.0'].sort())
+
+      // Check a text column
+      const geneMeta = opts.columnMeta.find((m) => m.key === 'gene_symbol')
+      expect(geneMeta).toBeDefined()
+      expect(geneMeta!.dataType).toBe('text')
+      expect(geneMeta!.distinctCount).toBe(2)
+      expect(geneMeta!.distinctValues).toBeDefined()
+      expect(geneMeta!.distinctValues!.sort()).toEqual(['BRCA1', 'TP53'])
+
+      // Column with all-null values should have distinctCount 0 and no distinctValues
+      // (hpo_sim_score has 2 non-null values, so check a different pattern)
+      const hpoMeta = opts.columnMeta.find((m) => m.key === 'hpo_sim_score')
+      expect(hpoMeta).toBeDefined()
+      expect(hpoMeta!.dataType).toBe('numeric')
+      expect(hpoMeta!.distinctCount).toBe(2)
+    })
+
+    it('returns empty arrays for case with no variants', () => {
+      const caseId = createTestCase(service, 'empty-filter-opts')
+
+      const opts = service.variants.getFilterOptions(caseId)
+
+      expect(opts.consequences).toEqual([])
+      expect(opts.funcs).toEqual([])
+      expect(opts.clinvars).toEqual([])
+      expect(opts.minCadd).toBeNull()
+      expect(opts.maxCadd).toBeNull()
+      expect(opts.minGnomadAf).toBeNull()
+      expect(opts.maxGnomadAf).toBeNull()
+      expect(opts.columnMeta).toHaveLength(16)
+      expect(opts.columnMeta.every((m) => m.distinctCount === 0)).toBe(true)
+    })
+
+    it('does not populate distinctValues when cardinality exceeds threshold', () => {
+      const caseId = createTestCase(service, 'high-card')
+      // Create 60 variants with unique gene symbols (exceeds DISTINCT_THRESHOLD of 50)
+      const variants: Omit<Variant, 'id' | 'case_id'>[] = []
+      for (let i = 0; i < 60; i++) {
+        variants.push({
+          chr: '1',
+          pos: 1000 + i * 100,
+          ref: 'A',
+          alt: 'G',
+          gene_symbol: `GENE_${String(i).padStart(3, '0')}`,
+          consequence: 'missense_variant',
+          gnomad_af: 0.01,
+          cadd: 20,
+          clinvar: null
+        })
+      }
+      service.variants.insertVariantsBatch(caseId, variants)
+
+      const opts = service.variants.getFilterOptions(caseId)
+
+      const geneMeta = opts.columnMeta.find((m) => m.key === 'gene_symbol')
+      expect(geneMeta).toBeDefined()
+      expect(geneMeta!.distinctCount).toBe(60)
+      expect(geneMeta!.distinctValues).toBeUndefined()
+    })
+  })
+
   describe('getExportCount', () => {
     it('returns count matching filter without loading data', () => {
       const caseId = createTestCase(service, 'count-test')

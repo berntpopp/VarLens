@@ -581,24 +581,32 @@ export class VariantRepository extends BaseRepository {
 
   /**
    * Gather per-column metadata for filter UI auto-detection.
-   * For each filterable column: distinct count, min/max (numeric), distinct values (if <= 50).
+   * Consolidated: one aggregate query for all COUNT DISTINCT + MIN/MAX,
+   * then one UNION ALL query for distinct values of low-cardinality columns.
    */
   private getColumnMeta(caseId: number): ColumnFilterMeta[] {
     const DISTINCT_THRESHOLD = 50
+    const columns = Object.entries(SORTABLE_COLUMNS)
+
+    // Query 1: Single scan — COUNT(DISTINCT col) for all columns + MIN/MAX for numeric columns
+    const selectParts: string[] = []
+    for (const [key, sqlCol] of columns) {
+      selectParts.push(`COUNT(DISTINCT "${sqlCol}") AS "cnt_${key}"`)
+      if (NUMERIC_COLUMNS.has(key)) {
+        selectParts.push(`MIN("${sqlCol}") AS "min_${key}"`)
+        selectParts.push(`MAX("${sqlCol}") AS "max_${key}"`)
+      }
+    }
+    const aggSql = `SELECT ${selectParts.join(', ')} FROM variants WHERE case_id = ?`
+    const aggRow = this.db.prepare(aggSql).get(caseId) as Record<string, number | null>
+
+    // Build initial meta entries from aggregate results
     const meta: ColumnFilterMeta[] = []
+    const lowCardinalityColumns: [string, string][] = []
 
-    for (const [key, sqlCol] of Object.entries(SORTABLE_COLUMNS)) {
+    for (const [key, sqlCol] of columns) {
       const isNumeric = NUMERIC_COLUMNS.has(key)
-
-      // Get distinct count
-      const countResult = this.execFirst<{ cnt: number }>(
-        this.kysely
-          .selectFrom('variants')
-          .select(sql<number>`COUNT(DISTINCT ${sql.ref(sqlCol)})`.as('cnt'))
-          .where('case_id', '=', caseId)
-          .where(sql.ref(sqlCol), 'is not', null)
-      )
-      const distinctCount = countResult?.cnt ?? 0
+      const distinctCount = (aggRow[`cnt_${key}`] as number) ?? 0
 
       const entry: ColumnFilterMeta = {
         key,
@@ -606,97 +614,86 @@ export class VariantRepository extends BaseRepository {
         distinctCount
       }
 
-      // For numeric columns: fetch min/max
       if (isNumeric) {
-        const rangeResult = this.execFirst<{ min_val: number | null; max_val: number | null }>(
-          this.kysely
-            .selectFrom('variants')
-            .select(({ fn }) => [
-              fn.min(sql.ref(sqlCol)).as('min_val'),
-              fn.max(sql.ref(sqlCol)).as('max_val')
-            ])
-            .where('case_id', '=', caseId)
-            .where(sql.ref(sqlCol), 'is not', null)
-        )
-        entry.min = rangeResult?.min_val ?? undefined
-        entry.max = rangeResult?.max_val ?? undefined
+        const minVal = aggRow[`min_${key}`]
+        const maxVal = aggRow[`max_${key}`]
+        entry.min = minVal ?? undefined
+        entry.max = maxVal ?? undefined
       }
 
-      // Populate distinct values if count is within threshold
       if (distinctCount > 0 && distinctCount <= DISTINCT_THRESHOLD) {
-        const rows = this.execAll<Record<string, unknown>>(
-          this.kysely
-            .selectFrom('variants')
-            .select(sql`DISTINCT ${sql.ref(sqlCol)}`.as('val'))
-            .where('case_id', '=', caseId)
-            .where(sql.ref(sqlCol), 'is not', null)
-            .orderBy(sql.ref(sqlCol))
-        )
-        entry.distinctValues = rows.map((r) => String(r.val))
+        lowCardinalityColumns.push([key, sqlCol])
       }
 
       meta.push(entry)
+    }
+
+    // Query 2: UNION ALL for distinct values of all low-cardinality columns
+    if (lowCardinalityColumns.length > 0) {
+      const unionParts = lowCardinalityColumns.map(
+        ([key, sqlCol]) =>
+          `SELECT '${key}' AS col_key, CAST("${sqlCol}" AS TEXT) AS val FROM variants WHERE case_id = ? AND "${sqlCol}" IS NOT NULL GROUP BY "${sqlCol}" ORDER BY "${sqlCol}"`
+      )
+      // Wrap each part to preserve per-column ordering
+      const unionSql = unionParts
+        .map((part) => `SELECT * FROM (${part})`)
+        .join(' UNION ALL ')
+      const params = lowCardinalityColumns.map(() => caseId)
+      const rows = this.db.prepare(unionSql).all(...params) as {
+        col_key: string
+        val: string
+      }[]
+
+      // Group results by column key
+      const valuesByKey = new Map<string, string[]>()
+      for (const row of rows) {
+        let arr = valuesByKey.get(row.col_key)
+        if (arr === undefined) {
+          arr = []
+          valuesByKey.set(row.col_key, arr)
+        }
+        arr.push(row.val)
+      }
+
+      // Attach distinct values to corresponding meta entries
+      for (const entry of meta) {
+        const values = valuesByKey.get(entry.key)
+        if (values !== undefined) {
+          entry.distinctValues = values
+        }
+      }
     }
 
     return meta
   }
 
   getFilterOptions(caseId: number): FilterOptions {
-    const consequences = this.execAll<{ consequence: string }>(
-      this.kysely
-        .selectFrom('variants')
-        .select('consequence')
-        .distinct()
-        .where('case_id', '=', caseId)
-        .where('consequence', 'is not', null)
-        .orderBy('consequence')
-    ).map((r) => r.consequence)
+    const columnMeta = this.getColumnMeta(caseId)
 
-    const funcs = this.execAll<{ func: string }>(
-      this.kysely
-        .selectFrom('variants')
-        .select('func')
-        .distinct()
-        .where('case_id', '=', caseId)
-        .where('func', 'is not', null)
-        .orderBy('func')
-    ).map((r) => r.func)
+    // Extract legacy FilterOptions fields from column metadata
+    const metaByKey = new Map(columnMeta.map((m) => [m.key, m]))
 
-    const clinvars = this.execAll<{ clinvar: string }>(
-      this.kysely
-        .selectFrom('variants')
-        .select('clinvar')
-        .distinct()
-        .where('case_id', '=', caseId)
-        .where('clinvar', 'is not', null)
-        .orderBy('clinvar')
-    ).map((r) => r.clinvar)
+    const consequenceMeta = metaByKey.get('consequence')
+    const consequences = consequenceMeta?.distinctValues ?? []
 
-    const caddRange = this.execFirst<{ min_cadd: number | null; max_cadd: number | null }>(
-      this.kysely
-        .selectFrom('variants')
-        .select(({ fn }) => [fn.min('cadd').as('min_cadd'), fn.max('cadd').as('max_cadd')])
-        .where('case_id', '=', caseId)
-        .where('cadd', 'is not', null)
-    )
+    const funcMeta = metaByKey.get('func')
+    const funcs = funcMeta?.distinctValues ?? []
 
-    const afRange = this.execFirst<{ min_af: number | null; max_af: number | null }>(
-      this.kysely
-        .selectFrom('variants')
-        .select(({ fn }) => [fn.min('gnomad_af').as('min_af'), fn.max('gnomad_af').as('max_af')])
-        .where('case_id', '=', caseId)
-        .where('gnomad_af', 'is not', null)
-    )
+    const clinvarMeta = metaByKey.get('clinvar')
+    const clinvars = clinvarMeta?.distinctValues ?? []
+
+    const caddMeta = metaByKey.get('cadd')
+    const gnomadAfMeta = metaByKey.get('gnomad_af')
 
     return {
       consequences,
       funcs,
       clinvars,
-      minCadd: caddRange?.min_cadd ?? null,
-      maxCadd: caddRange?.max_cadd ?? null,
-      minGnomadAf: afRange?.min_af ?? null,
-      maxGnomadAf: afRange?.max_af ?? null,
-      columnMeta: this.getColumnMeta(caseId)
+      minCadd: caddMeta?.min ?? null,
+      maxCadd: caddMeta?.max ?? null,
+      minGnomadAf: gnomadAfMeta?.min ?? null,
+      maxGnomadAf: gnomadAfMeta?.max ?? null,
+      columnMeta
     }
   }
 }
