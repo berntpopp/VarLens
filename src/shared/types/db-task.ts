@@ -1,12 +1,47 @@
 /**
- * DbTask — message type dispatched to Piscina db-worker threads.
+ * DbTask — typed task dispatched to Piscina db-worker threads.
  *
- * Each task maps to a read-only repository method. Writes stay on the main thread.
+ * The `type` field is a string literal union of all valid task types,
+ * providing compile-time safety against typos and invalid task names.
+ * Params are untyped since they cross a structured-clone boundary
+ * where TypeScript types aren't enforced at runtime.
  */
 
+/** All valid read-only task types handled by the db-worker */
+export type DbTaskType =
+  // Variants
+  | 'variants:query'
+  | 'variants:filterOptions'
+  | 'variants:search'
+  | 'variants:geneSymbols'
+  // Cohort
+  | 'cohort:variants'
+  | 'cohort:columnMeta'
+  | 'cohort:summary'
+  | 'cohort:carriers'
+  | 'cohort:geneBurden'
+  | 'cohort:summaryStatus'
+  // Cases
+  | 'cases:list'
+  // Annotations
+  | 'annotations:getGlobal'
+  | 'annotations:getPerCase'
+  | 'annotations:getForVariant'
+  // Case metadata
+  | 'case-metadata:get'
+  | 'case-metadata:listCohorts'
+  | 'case-metadata:getCohortByName'
+  | 'case-metadata:getCaseCohorts'
+  | 'case-metadata:getHpoTerms'
+  | 'case-metadata:getDataInfo'
+  | 'case-metadata:listExternalIds'
+  | 'case-metadata:distinctPlatforms'
+  | 'case-metadata:distinctExternalIdTypes'
+  | 'case-metadata:getFullMetadata'
+
 export interface DbTask {
-  /** IPC-style channel name, e.g. 'variants:query' */
-  type: string
+  /** IPC-style channel name — must be a valid DbTaskType */
+  type: DbTaskType
   /** Arguments forwarded to the repository method (order-dependent) */
   params: unknown[]
 }

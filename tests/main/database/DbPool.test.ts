@@ -2,7 +2,7 @@
  * Integration tests for DbPool (Piscina worker pool)
  *
  * Uses a file-based database so worker threads can open their own connections.
- * Workers need tsx to load TypeScript source files during tests.
+ * Requires `npx electron-vite build` before running so that out/main/db-worker.js exists.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
@@ -14,16 +14,22 @@ import { DbPool } from '../../../src/main/database/DbPool'
 import type { DbTask } from '../../../src/shared/types/db-task'
 
 const TEST_DB_PATH = join(tmpdir(), `varlens-dbpool-test-${Date.now()}.db`)
-const WORKER_PATH = resolve(__dirname, '../../../src/main/workers/db-worker.ts')
-// tsx loader so Piscina worker threads can load .ts source files
-const WORKER_EXEC_ARGV = ['--import', 'tsx']
-const WORKER_OPTS = { workerPath: WORKER_PATH, execArgv: WORKER_EXEC_ARGV }
+// Use the built JS worker (same as production) — no tsx dependency needed
+const WORKER_PATH = resolve(__dirname, '../../../out/main/db-worker.js')
+const WORKER_OPTS = { workerPath: WORKER_PATH }
 
 describe('DbPool', () => {
   let mainService: DatabaseService
   let pool: DbPool
 
   beforeAll(() => {
+    // Verify built worker exists (requires `npx electron-vite build` first)
+    if (!existsSync(WORKER_PATH)) {
+      throw new Error(
+        `db-worker.js not found at ${WORKER_PATH}. Run "npx electron-vite build" before tests.`
+      )
+    }
+
     // Create a file-based DB and insert test data on the main thread
     mainService = new DatabaseService(TEST_DB_PATH)
 
@@ -63,7 +69,7 @@ describe('DbPool', () => {
 
   it('rejects unknown task types with descriptive error', async () => {
     // Pool already initialised from previous test
-    const task: DbTask = { type: 'unknown:task', params: [] }
+    const task = { type: 'unknown:task' as DbTask['type'], params: [] }
 
     await expect(pool.run(task)).rejects.toThrow('Unknown db-worker task type: unknown:task')
   })
