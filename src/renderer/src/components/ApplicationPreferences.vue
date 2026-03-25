@@ -77,7 +77,7 @@ const cpuCount = ref(
 onMounted(async () => {
   try {
     // eslint-disable-next-line no-undef
-    const api = (window as Record<string, unknown>).api as
+    const api = (window as unknown as Record<string, unknown>).api as
       | { system?: { getCpuCount?: () => Promise<number> } }
       | undefined
     if (api?.system?.getCpuCount) {

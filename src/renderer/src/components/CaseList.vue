@@ -70,8 +70,8 @@
           <!-- Status + sex icons when not in multi-select mode -->
           <CaseStatusIcons
             v-else
-            :status="caseItem.affected_status ?? 'unknown'"
-            :sex="caseItem.sex ?? 'unknown'"
+            :status="(caseItem.affected_status as AffectedStatus) ?? 'unknown'"
+            :sex="(caseItem.sex as CaseSex) ?? 'unknown'"
             class="mr-2"
           />
         </template>
@@ -91,7 +91,7 @@
         <template #append>
           <div class="d-flex ga-1">
             <v-chip
-              v-for="name in parseCohortNames(caseItem.cohort_names).slice(0, 3)"
+              v-for="name in caseItem.cohort_names.slice(0, 3)"
               :key="name"
               :color="getCohortColor(name)"
               size="x-small"
@@ -100,12 +100,12 @@
               {{ name }}
             </v-chip>
             <v-chip
-              v-if="parseCohortNames(caseItem.cohort_names).length > 3"
+              v-if="caseItem.cohort_names.length > 3"
               size="x-small"
               color="grey"
               label
             >
-              +{{ parseCohortNames(caseItem.cohort_names).length - 3 }}
+              +{{ caseItem.cohort_names.length - 3 }}
             </v-chip>
           </div>
         </template>
@@ -162,7 +162,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, shallowRef, markRaw } from 'vue'
-import type { CaseWithCohorts } from '../../../shared/types/api'
+import type { CaseWithCohorts, CaseSex, AffectedStatus } from '../../../shared/types/api'
 import { useContextMenu } from '../composables/useContextMenu'
 import { useCaseMetadata, getCohortColor } from '../composables/useCaseMetadata'
 import { useDebounce } from '../composables/useDebounce'
@@ -217,11 +217,6 @@ const emptyText = computed(() => {
   return 'All cases loaded'
 })
 
-// Parse comma-separated cohort names string into array
-function parseCohortNames(names: string): string[] {
-  if (!names) return []
-  return names.split(',')
-}
 
 // Infinite scroll load handler
 const onLoad = async ({

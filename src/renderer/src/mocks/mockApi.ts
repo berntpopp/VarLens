@@ -24,12 +24,13 @@ export const mockApi: WindowAPI = {
         result = result.filter((c) => c.name.toLowerCase().includes(q))
       }
       const total_count = result.length
-      result = result.slice(params.offset, params.offset + params.limit)
+      const offset = params.offset ?? 0
+      result = result.slice(offset, offset + params.limit)
       return {
         data: result.map((c) => ({
           ...c,
-          cohort_names: '',
-          cohort_ids: '',
+          cohort_names: [] as string[],
+          cohort_ids: [] as number[],
           affected_status: null,
           sex: null
         })),
