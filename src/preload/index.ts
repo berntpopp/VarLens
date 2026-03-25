@@ -81,7 +81,8 @@ const api = {
 
   system: {
     getVersion: () => ipcRenderer.invoke('system:version'),
-    getUserDataPath: () => ipcRenderer.invoke('system:userDataPath')
+    getUserDataPath: () => ipcRenderer.invoke('system:userDataPath'),
+    getCpuCount: (): Promise<number> => ipcRenderer.invoke('system:getCpuCount')
   },
 
   export: {

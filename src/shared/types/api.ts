@@ -162,6 +162,7 @@ export interface ImportAPI {
 export interface SystemAPI {
   getVersion: () => Promise<{ app: string; electron: string }>
   getUserDataPath: () => Promise<string>
+  getCpuCount: () => Promise<number>
 }
 
 export interface ShellOpenExternalResult {

@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
+import os from 'os'
 import type { HandlerDependencies } from '../types'
 
 /**
@@ -43,5 +44,9 @@ export function registerSystemHandlers({ ipcMain }: HandlerDependencies): void {
 
   ipcMain.handle('system:userDataPath', async () => {
     return app.getPath('userData')
+  })
+
+  ipcMain.handle('system:getCpuCount', () => {
+    return os.cpus().length
   })
 }

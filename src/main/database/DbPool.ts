@@ -3,7 +3,7 @@
  *
  * Each worker opens its own SQLite connection (with encryption support)
  * and uses the shared createRepositories factory. The pool is configured
- * with 1-4 threads and a 30-second idle timeout.
+ * with 1 to (cpuCount - 1) threads (minimum 1) and a 30-second idle timeout.
  *
  * Usage:
  *   pool.init(dbPath, encryptionKey)
@@ -12,6 +12,7 @@
  */
 
 import { resolve } from 'path'
+import os from 'os'
 import type { DbTask } from '../../shared/types/db-task'
 
 // Use require() to load piscina — avoids Vite's static import analysis
@@ -40,22 +41,23 @@ export class DbPool {
    *
    * @param dbPath     Absolute path to the SQLite database file.
    * @param encryptionKey  Optional encryption key (passed via workerData).
-   * @param options    Optional overrides (workerPath, execArgv) for tests.
+   * @param options    Optional overrides (workerPath, execArgv, maxThreads) for tests or config.
    */
   init(
     dbPath: string,
     encryptionKey?: string,
-    options?: { workerPath?: string; execArgv?: string[] }
+    options?: { workerPath?: string; execArgv?: string[]; maxThreads?: number }
   ): void {
     if (this.pool !== null) return // already initialised
 
     const filename = options?.workerPath ?? resolve(__dirname, 'db-worker.js')
     const Piscina = getPiscina()
+    const maxThreads = options?.maxThreads ?? Math.max(1, os.cpus().length - 1)
 
     this.pool = new Piscina({
       filename,
       minThreads: 1,
-      maxThreads: 4,
+      maxThreads,
       idleTimeout: 30_000,
       workerData: { dbPath, encryptionKey },
       ...(options?.execArgv !== undefined ? { execArgv: options.execArgv } : {})
