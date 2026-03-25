@@ -11,12 +11,24 @@
  *   await pool.destroy()
  */
 
-import Piscina from 'piscina'
 import { resolve } from 'path'
 import type { DbTask } from '../../shared/types/db-task'
 
+// Use require() to load piscina — avoids Vite's static import analysis
+// which cannot resolve Node.js-only modules during test transforms
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let PiscinaClass: any = null
+function getPiscina(): any {
+  if (!PiscinaClass) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    PiscinaClass = require('piscina')
+  }
+  return PiscinaClass
+}
+
 export class DbPool {
-  private pool: Piscina | null = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pool: any = null
 
   /**
    * Initialise the worker pool.
@@ -33,6 +45,7 @@ export class DbPool {
     if (this.pool) return // already initialised
 
     const filename = options?.workerPath ?? resolve(__dirname, 'db-worker.js')
+    const Piscina = getPiscina()
 
     this.pool = new Piscina({
       filename,

@@ -76,7 +76,8 @@ export function closeDatabaseManager(): void {
 export { DatabaseService } from './DatabaseService'
 export { DatabaseManager }
 export { RecentDatabasesService }
-export { DbPool } from './DbPool'
+// DbPool intentionally NOT exported from barrel — import directly from './DbPool'
+// to avoid pulling piscina into test contexts that don't need it
 export { createRepositories, type Repositories } from './createRepositories'
 
 // Repositories
