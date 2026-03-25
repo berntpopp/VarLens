@@ -19,11 +19,33 @@ interface AnnotationCache {
   perCase: CaseVariantAnnotation | null
 }
 
+// Maximum number of annotation cache entries before LRU eviction
+export const MAX_CACHE_SIZE = 5000
+
 // Cache annotations by variant key (chr:pos:ref:alt)
 const annotationCache = ref<Map<string, AnnotationCache>>(new Map())
 
 // Loading states per variant key
 const loadingStates = ref<Map<string, boolean>>(new Map())
+
+/**
+ * LRU-aware cache setter. Moves existing keys to the end (most-recently-used)
+ * and evicts oldest entries when the cache exceeds MAX_CACHE_SIZE.
+ * JavaScript Map maintains insertion order, so the first entry is the oldest.
+ */
+function cacheSet(key: string, value: AnnotationCache): void {
+  const cache = annotationCache.value
+  if (cache.has(key)) {
+    cache.delete(key)
+  }
+  cache.set(key, value)
+  if (cache.size > MAX_CACHE_SIZE) {
+    const keysToDelete = [...cache.keys()].slice(0, cache.size - MAX_CACHE_SIZE)
+    for (const k of keysToDelete) {
+      cache.delete(k)
+    }
+  }
+}
 
 export function useAnnotations() {
   const { api } = useApiService()
@@ -113,7 +135,7 @@ export function useAnnotations() {
     loadingStates.value.set(key, true)
     try {
       const result = await api.annotations.getForVariant(caseId, chr, pos, ref, alt)
-      annotationCache.value.set(key, result)
+      cacheSet(key, result)
     } catch (error) {
       console.error('Failed to load annotations:', error)
     } finally {
@@ -151,7 +173,7 @@ export function useAnnotations() {
         starred: newStarred
       })
       // Update cache with server response
-      annotationCache.value.set(key, {
+      cacheSet(key, {
         global: current?.global ?? null,
         perCase: updated
       })
@@ -198,7 +220,7 @@ export function useAnnotations() {
     loadingStates.value.set(key, true)
     try {
       const global = await api.annotations.getGlobal(chr, pos, ref, alt)
-      annotationCache.value.set(key, { global, perCase: null })
+      cacheSet(key, { global, perCase: null })
     } catch (error) {
       console.error('Failed to load global annotations:', error)
     } finally {
@@ -243,7 +265,7 @@ export function useAnnotations() {
         starred: newStarred
       })
       // Update cache with server response
-      annotationCache.value.set(key, {
+      cacheSet(key, {
         global: updated,
         perCase: current?.perCase ?? null
       })
@@ -285,7 +307,7 @@ export function useAnnotations() {
         acmg_classification: classification
       })
       // Update cache with server response
-      annotationCache.value.set(key, {
+      cacheSet(key, {
         global: updated,
         perCase: current?.perCase ?? null
       })
@@ -339,7 +361,7 @@ export function useAnnotations() {
         global_comment: comment
       })
       // Update cache with server response
-      annotationCache.value.set(key, {
+      cacheSet(key, {
         global: updated,
         perCase: current?.perCase ?? null
       })
@@ -385,7 +407,7 @@ export function useAnnotations() {
         per_case_comment: comment
       })
       // Update cache with server response
-      annotationCache.value.set(key, {
+      cacheSet(key, {
         global: current?.global ?? null,
         perCase: updated
       })
@@ -453,7 +475,7 @@ export function useAnnotations() {
         acmg_classification: classification
       })
       // Update cache with server response
-      annotationCache.value.set(key, {
+      cacheSet(key, {
         global: current?.global ?? null,
         perCase: updated
       })
@@ -521,7 +543,7 @@ export function useAnnotations() {
         acmg_evidence: evidenceJson,
         user_name: getUserName()
       })
-      annotationCache.value.set(key, {
+      cacheSet(key, {
         global: current?.global ?? null,
         perCase: updated
       })
@@ -565,7 +587,7 @@ export function useAnnotations() {
         acmg_evidence: evidenceJson,
         user_name: getUserName()
       })
-      annotationCache.value.set(key, {
+      cacheSet(key, {
         global: updated,
         perCase: current?.perCase ?? null
       })
@@ -611,6 +633,17 @@ export function useAnnotations() {
     setAcmgClassificationWithEvidence,
     setGlobalAcmgClassificationWithEvidence
   }
+}
+
+/**
+ * Reset annotation cache and loading states for testing.
+ *
+ * Call this in beforeEach() to ensure test isolation.
+ * Only exported for testing - not part of the public API.
+ */
+export function _resetAnnotationsForTesting(): void {
+  annotationCache.value.clear()
+  loadingStates.value.clear()
 }
 
 // ACMG classification values in display order
