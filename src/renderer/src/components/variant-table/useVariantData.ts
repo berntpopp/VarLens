@@ -1,4 +1,4 @@
-import { ref, watch, type Ref } from 'vue'
+import { ref, shallowRef, computed, watch, toRaw, type Ref } from 'vue'
 import type { Variant, VariantFilter } from '../../../../shared/types/api'
 import type { ColumnFilterMeta } from '../../../../shared/types/column-filters'
 import { useOffsetPagination } from '../../composables/useOffsetPagination'
@@ -49,16 +49,23 @@ export function useVariantData(options: UseVariantDataOptions) {
         return { data: [], total_count: 0 }
       }
 
-      // Deep-clone filters to strip reactive proxies for IPC
-      const plainFilters = JSON.parse(JSON.stringify(filters.value))
+      // Single deep-clone pass to strip reactive proxies for IPC
       const colFilters = getColumnFiltersParam()
-      if (colFilters !== undefined || plainFilters.column_filters !== undefined) {
-        // Merge: header filters first, DSL filters override for same column
-        plainFilters.column_filters = {
-          ...JSON.parse(JSON.stringify(colFilters ?? {})),
-          ...(plainFilters.column_filters ?? {})
-        }
-      }
+      const rawFilters = filters.value
+      const plainFilters = JSON.parse(
+        JSON.stringify({
+          ...rawFilters,
+          ...(colFilters !== undefined || rawFilters.column_filters !== undefined
+            ? {
+                // Merge: header filters first, DSL filters override for same column
+                column_filters: {
+                  ...(colFilters ?? {}),
+                  ...(rawFilters.column_filters ?? {})
+                }
+              }
+            : {})
+        })
+      )
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (api as any).variants.query(
         caseId.value,
@@ -79,7 +86,7 @@ export function useVariantData(options: UseVariantDataOptions) {
   // Domain-specific state
   const unfilteredCount = ref(0)
   const selectedVariantId = ref<number | null>(null)
-  const columnMeta = ref<ColumnFilterMeta[]>([])
+  const columnMeta = shallowRef<ColumnFilterMeta[]>([])
 
   // Row props for zebra striping and selection highlighting
   const getRowProps = ({ item, index }: { item: Variant; index: number }) => {
@@ -122,8 +129,9 @@ export function useVariantData(options: UseVariantDataOptions) {
     { immediate: true }
   )
 
-  // Reload when filters change
-  watch(filters, invalidateAndReload, { deep: true })
+  // Reload when filters change (serialized key avoids deep reactive traversal)
+  const filterKey = computed(() => JSON.stringify(toRaw(filters.value)))
+  watch(filterKey, invalidateAndReload)
 
   // Debounced reload when per-column filters change
   const { debouncedFn: debouncedColumnFilterReload } = useDebounce(invalidateAndReload, 300)
