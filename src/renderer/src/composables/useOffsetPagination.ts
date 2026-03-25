@@ -42,6 +42,8 @@ export interface UseOffsetPaginationOptions<T> {
     offset: number
     limit: number
     sortBy: NormalizedSortItem[]
+    /** When true, the caller should skip the COUNT(*) query and reuse the cached value. */
+    skipCount: boolean
   }) => Promise<OffsetPageResult<T>>
   /** Called when sort state changes (e.g. to update "has sort" indicator) */
   onSortChange?: (hasSort: boolean) => void
@@ -65,6 +67,10 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   // Sort change detection (prevents spurious reloads on reference changes)
   let prevSortSerialized = ''
 
+  // Count cache — avoids redundant COUNT(*) queries on page navigation.
+  // Invalidated via resetCount() when filters change.
+  let cachedTotalCount: number | null = null
+
   // Sync items-per-page to settings store
   watch(itemsPerPage, (v) => {
     settingsStore.itemsPerPage = v
@@ -81,14 +87,27 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
       const offset = (page.value - 1) * itemsPerPage.value
       const plainSortBy = normalizeSortBy(sortBy.value)
 
+      // Skip the COUNT(*) query when we already have a cached total for the
+      // current filter set. The cache is invalidated by resetCount().
+      const skipCount = cachedTotalCount !== null
+
       const result = await options.fetchPage({
         offset,
         limit: itemsPerPage.value,
-        sortBy: plainSortBy
+        sortBy: plainSortBy,
+        skipCount
       })
 
       items.value = result.data
-      totalCount.value = result.total_count
+
+      if (skipCount) {
+        // Keep the cached count; the backend may return 0 or a stale value
+        // when skipCount is true — we use the cached value instead.
+        totalCount.value = cachedTotalCount!
+      } else {
+        totalCount.value = result.total_count
+        cachedTotalCount = result.total_count
+      }
     } catch (err) {
       error.value = err instanceof Error ? err : new Error(String(err))
       items.value = []
@@ -99,10 +118,19 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   }
 
   /**
+   * Invalidate the cached total count.
+   * Call this whenever filters change so the next loadPage re-queries COUNT(*).
+   */
+  const resetCount = (): void => {
+    cachedTotalCount = null
+  }
+
+  /**
    * Reset to page 1 and reload.
    * Use when filters change or data needs a full refresh.
    */
   const invalidateAndReload = async (): Promise<void> => {
+    resetCount()
     page.value = 1
     await loadPage()
   }
@@ -134,6 +162,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     page.value = 1
     sortBy.value = []
     prevSortSerialized = ''
+    cachedTotalCount = null
   }
 
   return {
@@ -152,6 +181,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     // Methods
     loadPage,
     invalidateAndReload,
+    resetCount,
     resetSort,
     resetState
   }

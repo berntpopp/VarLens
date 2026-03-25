@@ -43,7 +43,7 @@ export function useVariantData(options: UseVariantDataOptions) {
     resetSort,
     resetState
   } = useOffsetPagination<Variant>({
-    fetchPage: async ({ offset, limit, sortBy: sortItems }) => {
+    fetchPage: async ({ offset, limit, sortBy: sortItems, skipCount }) => {
       if (!api) {
         console.warn('API not available - running outside Electron')
         return { data: [], total_count: 0 }
@@ -72,7 +72,8 @@ export function useVariantData(options: UseVariantDataOptions) {
         plainFilters,
         offset,
         limit,
-        sortItems
+        sortItems,
+        skipCount
       )
 
       return {
