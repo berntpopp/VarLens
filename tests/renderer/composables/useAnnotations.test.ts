@@ -48,8 +48,7 @@ describe('useAnnotations', () => {
     })
 
     it('clearCache clears all entries', async () => {
-      window.api.annotations.getForVariant = () =>
-        Promise.resolve({ global: null, perCase: null })
+      window.api.annotations.getForVariant = () => Promise.resolve({ global: null, perCase: null })
 
       const [result, appInstance] = withSetup(() => useAnnotations())
       app = appInstance
@@ -69,8 +68,7 @@ describe('useAnnotations', () => {
 
     it('does not evict when under the limit', async () => {
       // Fill to exactly MAX_CACHE_SIZE entries
-      window.api.annotations.getForVariant = () =>
-        Promise.resolve({ global: null, perCase: null })
+      window.api.annotations.getForVariant = () => Promise.resolve({ global: null, perCase: null })
 
       const [result, appInstance] = withSetup(() => useAnnotations())
       app = appInstance
@@ -102,8 +100,7 @@ describe('useAnnotations', () => {
       // verifying the cacheSet helper evicts correctly by adding exactly
       // MAX_CACHE_SIZE + 1 entries.
 
-      window.api.annotations.getForVariant = () =>
-        Promise.resolve({ global: null, perCase: null })
+      window.api.annotations.getForVariant = () => Promise.resolve({ global: null, perCase: null })
 
       const [result, appInstance] = withSetup(() => useAnnotations())
       app = appInstance
@@ -143,8 +140,7 @@ describe('useAnnotations', () => {
       //
       // Simpler: verify that re-inserting an existing key updates it in place
       // without growing the cache beyond MAX_CACHE_SIZE.
-      window.api.annotations.getForVariant = () =>
-        Promise.resolve({ global: null, perCase: null })
+      window.api.annotations.getForVariant = () => Promise.resolve({ global: null, perCase: null })
 
       const [result, appInstance] = withSetup(() => useAnnotations())
       app = appInstance

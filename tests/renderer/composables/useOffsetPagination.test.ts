@@ -15,7 +15,9 @@ import type { OffsetPageResult } from '@renderer/composables/useOffsetPagination
 type MockItem = { id: number; name: string; nested: { value: number } }
 
 function makeFetchPage(items: MockItem[], total: number) {
-  return vi.fn().mockResolvedValue({ data: items, total_count: total } as OffsetPageResult<MockItem>)
+  return vi
+    .fn()
+    .mockResolvedValue({ data: items, total_count: total } as OffsetPageResult<MockItem>)
 }
 
 describe('useOffsetPagination', () => {

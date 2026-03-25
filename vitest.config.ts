@@ -61,5 +61,5 @@ export default defineConfig({
     alias: {
       '@renderer': resolve(__dirname, 'src/renderer/src')
     }
-  },
+  }
 })

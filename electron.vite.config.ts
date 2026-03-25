@@ -16,7 +16,10 @@ export default defineConfig({
           'import-worker': resolve(__dirname, 'src/main/workers/import-worker.ts'),
           'delete-worker': resolve(__dirname, 'src/main/workers/delete-worker.ts'),
           'export-worker': resolve(__dirname, 'src/main/workers/export-worker.ts'),
-          'rebuild-summary-worker': resolve(__dirname, 'src/main/workers/rebuild-summary-worker.ts'),
+          'rebuild-summary-worker': resolve(
+            __dirname,
+            'src/main/workers/rebuild-summary-worker.ts'
+          ),
           'db-worker': resolve(__dirname, 'src/main/workers/db-worker.ts')
         }
       }
