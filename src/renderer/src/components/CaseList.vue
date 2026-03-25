@@ -1,6 +1,6 @@
 <template>
   <v-text-field
-    v-model="search"
+    v-model="searchTerm"
     prepend-inner-icon="mdi-magnify"
     placeholder="Search cases..."
     density="compact"
@@ -11,7 +11,7 @@
 
   <div class="case-filters-stack mx-2 mt-1">
     <v-select
-      v-model="selectedCohortFilters"
+      v-model="selectedCohortIds"
       :items="cohortGroupsCache"
       item-title="name"
       item-value="id"
@@ -25,99 +25,93 @@
       closable-chips
       class="mb-1"
     />
-    <v-autocomplete
-      v-model="selectedHpoFilters"
-      :items="availableHpoTerms"
-      item-title="label"
-      item-value="hpo_id"
-      prepend-inner-icon="mdi-human"
-      label="HPO"
-      density="compact"
-      hide-details
-      clearable
-      multiple
-      chips
-      closable-chips
-      auto-select-first
-    />
   </div>
 
-  <v-list v-model:selected="selected" density="compact" select-strategy="single-leaf">
-    <!-- Empty state -->
-    <v-list-item v-if="filteredCases.length === 0 && !loading">
-      <v-list-item-title class="text-grey text-center py-4">
-        <template v-if="hasActiveFilters">
-          <v-icon class="mb-1">mdi-filter-off</v-icon>
-          <div>No matching cases</div>
-        </template>
-        <template v-else>
-          <v-icon class="mb-1">mdi-folder-open-outline</v-icon>
-          <div>No cases yet</div>
-          <div class="text-body-small mt-1">Click + to import</div>
-        </template>
-      </v-list-item-title>
-    </v-list-item>
-
-    <!-- Case items -->
-    <v-list-item
-      v-for="caseItem in filteredCases"
-      :key="caseItem.id"
-      :value="caseItem.id"
-      :class="{ 'multi-selected': isMultiSelected(caseItem.id) }"
-      color="primary"
-      @click="handleCaseClick($event, caseItem)"
-      @contextmenu.prevent="handleContextMenu($event, caseItem)"
-    >
-      <template #prepend>
-        <!-- Multi-select checkbox when in multi-select mode -->
-        <v-icon
-          v-if="isMultiSelectMode"
-          :icon="
-            isMultiSelected(caseItem.id) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'
-          "
-          :color="isMultiSelected(caseItem.id) ? 'primary' : 'grey'"
-          size="small"
-          class="mr-2"
-        />
-        <!-- Status + sex icons when not in multi-select mode -->
-        <CaseStatusIcons
-          v-else
-          :status="getCaseStatusValue(caseItem.id)"
-          :sex="getCaseSexValue(caseItem.id)"
-          class="mr-2"
-        />
-      </template>
-
-      <v-list-item-title>{{ caseItem.name }}</v-list-item-title>
-      <v-list-item-subtitle>
-        {{ caseItem.variant_count.toLocaleString() }} variants •
-        <v-tooltip location="top">
-          <template #activator="{ props: dateProps }">
-            <span v-bind="dateProps">{{ formatDate(caseItem.created_at) }}</span>
+  <v-infinite-scroll :key="scrollKey" :empty-text="emptyText" @load="onLoad">
+    <!-- Empty state (shown when no cases after first load completes) -->
+    <template v-if="cases.length === 0 && !loading" #empty>
+      <v-list-item>
+        <v-list-item-title class="text-grey text-center py-4">
+          <template v-if="hasActiveFilters">
+            <v-icon class="mb-1">mdi-filter-off</v-icon>
+            <div>No matching cases</div>
           </template>
-          {{ formatFullDate(caseItem.created_at) }}
-        </v-tooltip>
-      </v-list-item-subtitle>
+          <template v-else>
+            <v-icon class="mb-1">mdi-folder-open-outline</v-icon>
+            <div>No cases yet</div>
+            <div class="text-body-small mt-1">Click + to import</div>
+          </template>
+        </v-list-item-title>
+      </v-list-item>
+    </template>
 
-      <!-- Cohort chips (show max 3, then +N more) -->
-      <template #append>
-        <div class="d-flex ga-1">
-          <v-chip
-            v-for="cohort in getCaseCohorts(caseItem.id).slice(0, 3)"
-            :key="cohort.id"
-            :color="getCohortColor(cohort.name)"
-            size="x-small"
-            label
-          >
-            {{ cohort.name }}
-          </v-chip>
-          <v-chip v-if="getCaseCohorts(caseItem.id).length > 3" size="x-small" color="grey" label>
-            +{{ getCaseCohorts(caseItem.id).length - 3 }}
-          </v-chip>
-        </div>
-      </template>
-    </v-list-item>
-  </v-list>
+    <v-list v-model:selected="selected" density="compact" select-strategy="single-leaf">
+      <!-- Case items -->
+      <v-list-item
+        v-for="caseItem in cases"
+        :key="caseItem.id"
+        :value="caseItem.id"
+        :class="{ 'multi-selected': isMultiSelected(caseItem.id) }"
+        color="primary"
+        @click="handleCaseClick($event, caseItem)"
+        @contextmenu.prevent="handleContextMenu($event, caseItem)"
+      >
+        <template #prepend>
+          <!-- Multi-select checkbox when in multi-select mode -->
+          <v-icon
+            v-if="isMultiSelectMode"
+            :icon="
+              isMultiSelected(caseItem.id) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'
+            "
+            :color="isMultiSelected(caseItem.id) ? 'primary' : 'grey'"
+            size="small"
+            class="mr-2"
+          />
+          <!-- Status + sex icons when not in multi-select mode -->
+          <CaseStatusIcons
+            v-else
+            :status="caseItem.affected_status ?? 'unknown'"
+            :sex="caseItem.sex ?? 'unknown'"
+            class="mr-2"
+          />
+        </template>
+
+        <v-list-item-title>{{ caseItem.name }}</v-list-item-title>
+        <v-list-item-subtitle>
+          {{ caseItem.variant_count.toLocaleString() }} variants •
+          <v-tooltip location="top">
+            <template #activator="{ props: dateProps }">
+              <span v-bind="dateProps">{{ formatDate(caseItem.created_at) }}</span>
+            </template>
+            {{ formatFullDate(caseItem.created_at) }}
+          </v-tooltip>
+        </v-list-item-subtitle>
+
+        <!-- Cohort chips (show max 3, then +N more) -->
+        <template #append>
+          <div class="d-flex ga-1">
+            <v-chip
+              v-for="name in parseCohortNames(caseItem.cohort_names).slice(0, 3)"
+              :key="name"
+              :color="getCohortColor(name)"
+              size="x-small"
+              label
+            >
+              {{ name }}
+            </v-chip>
+            <v-chip
+              v-if="parseCohortNames(caseItem.cohort_names).length > 3"
+              size="x-small"
+              color="grey"
+              label
+            >
+              +{{ parseCohortNames(caseItem.cohort_names).length - 3 }}
+            </v-chip>
+          </div>
+        </template>
+      </v-list-item>
+    </v-list>
+  </v-infinite-scroll>
 
   <!-- Context menu -->
   <v-menu
@@ -167,14 +161,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import type { Case, CohortGroup, AffectedStatus, CaseSex } from '../../../shared/types/api'
+import { ref, computed, watch, shallowRef, markRaw } from 'vue'
+import type { CaseWithCohorts } from '../../../shared/types/api'
 import { useContextMenu } from '../composables/useContextMenu'
 import { useCaseMetadata, getCohortColor } from '../composables/useCaseMetadata'
+import { useDebounce } from '../composables/useDebounce'
 import { useApiService } from '../composables/useApiService'
 import CaseStatusIcons from './CaseStatusIcons.vue'
 import DeleteCaseDialog from './DeleteCaseDialog.vue'
 import AppSnackbar from './AppSnackbar.vue'
+
+const PAGE_SIZE = 50
 
 const emit = defineEmits<{
   'case-selected': [caseId: number, caseName: string, variantCount: number, createdAt: number]
@@ -184,15 +181,19 @@ const emit = defineEmits<{
 }>()
 
 // State
-const cases = ref<Case[]>([])
+const cases = shallowRef<CaseWithCohorts[]>([])
 const loading = ref(false)
-const search = ref('')
-const selectedCohortFilters = ref<number[]>([])
-const selectedHpoFilters = ref<string[]>([])
+const searchTerm = ref('')
+const selectedCohortIds = ref<number[]>([])
 const selected = ref<number[]>([])
-const contextMenuCase = ref<Case | null>(null)
+const contextMenuCase = ref<CaseWithCohorts | null>(null)
 const contextMenu = useContextMenu()
 const { api } = useApiService()
+
+// Infinite scroll state
+const currentOffset = ref(0)
+const totalCaseCount = ref(0)
+const scrollKey = ref(0)
 
 // Multi-select state
 const multiSelected = ref<Set<number>>(new Set())
@@ -200,88 +201,79 @@ const isMultiSelectMode = computed(() => multiSelected.value.size > 0)
 const multiSelectedCount = computed(() => multiSelected.value.size)
 const isMultiSelected = (id: number): boolean => multiSelected.value.has(id)
 
-// Initialize case metadata composable
-const { loadMetadata, getMetadata, loadCohortGroups, cohortGroupsCache } = useCaseMetadata()
+// Load cohort groups for filter dropdown
+const { loadCohortGroups, cohortGroupsCache } = useCaseMetadata()
 
 // Component refs
 const dialogRef = ref<InstanceType<typeof DeleteCaseDialog> | null>(null)
 const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 
-// Load cases from IPC
-const loadCases = async (): Promise<void> => {
-  // Guard for browser dev mode (no preload)
+// Whether any filter is active (for empty-state messaging)
+const hasActiveFilters = computed(() => !!searchTerm.value || selectedCohortIds.value.length > 0)
+
+// Empty text for infinite scroll
+const emptyText = computed(() => {
+  if (cases.value.length === 0) return ''
+  return 'All cases loaded'
+})
+
+// Parse comma-separated cohort names string into array
+function parseCohortNames(names: string): string[] {
+  if (!names) return []
+  return names.split(',')
+}
+
+// Infinite scroll load handler
+const onLoad = async ({
+  done
+}: {
+  side: string
+  done: (status: 'ok' | 'empty' | 'error') => void
+}): Promise<void> => {
   if (!api) {
-    // eslint-disable-next-line no-undef
-    console.warn('API not available - running outside Electron')
+    done('empty')
     return
   }
 
   loading.value = true
   try {
-    cases.value = await api.cases.list()
-    emit('cases-loaded', cases.value.length)
+    const result = await api.cases.query({
+      limit: PAGE_SIZE,
+      offset: currentOffset.value,
+      search_term: searchTerm.value || undefined,
+      cohort_ids: selectedCohortIds.value.length > 0 ? [...selectedCohortIds.value] : undefined,
+      sort_by: 'created_at',
+      sort_order: 'desc',
+      _count_needed: currentOffset.value === 0
+    })
 
-    // Load metadata for all cases
-    await loadCohortGroups()
-    await Promise.all(cases.value.map((c) => loadMetadata(c.id)))
+    cases.value = markRaw([...cases.value, ...result.data])
+
+    if (currentOffset.value === 0) {
+      totalCaseCount.value = result.total_count
+      emit('cases-loaded', result.total_count)
+    }
+
+    currentOffset.value += result.data.length
+    done(result.data.length < PAGE_SIZE ? 'empty' : 'ok')
+  } catch {
+    done('error')
   } finally {
     loading.value = false
   }
 }
 
-// Unique HPO terms across all loaded cases (for autocomplete suggestions)
-const availableHpoTerms = computed(() => {
-  const seen = new Map<string, string>()
-  for (const c of cases.value) {
-    const metadata = getMetadata(c.id)
-    for (const t of metadata?.hpoTerms ?? []) {
-      if (!seen.has(t.hpo_id)) {
-        seen.set(t.hpo_id, t.hpo_label)
-      }
-    }
-  }
-  return Array.from(seen, ([hpo_id, hpo_label]) => ({
-    hpo_id,
-    label: `${hpo_label} (${hpo_id})`
-  })).sort((a, b) => a.label.localeCompare(b.label))
-})
+// Reset list (for search/filter changes)
+const resetList = (): void => {
+  cases.value = markRaw([])
+  currentOffset.value = 0
+  scrollKey.value++
+}
 
-// Whether any filter is active (for empty-state messaging)
-const hasActiveFilters = computed(
-  () =>
-    !!search.value || selectedCohortFilters.value.length > 0 || selectedHpoFilters.value.length > 0
-)
+const { debouncedFn: debouncedReset } = useDebounce(resetList, 300)
 
-// Filter cases by search term, cohort(s), HPO(s) — sorted by created_at DESC
-const filteredCases = computed(() => {
-  let result = [...cases.value]
-
-  if (search.value) {
-    const query = search.value.toLowerCase()
-    result = result.filter((c) => c.name.toLowerCase().includes(query))
-  }
-
-  if (selectedCohortFilters.value.length > 0) {
-    const cohortIds = selectedCohortFilters.value
-    result = result.filter((c) =>
-      cohortIds.some((cohortId) => getCaseCohorts(c.id).some((cohort) => cohort.id === cohortId))
-    )
-  }
-
-  if (selectedHpoFilters.value.length > 0) {
-    const hpoIds = selectedHpoFilters.value
-    result = result.filter((c) => {
-      const metadata = getMetadata(c.id)
-      const caseHpoIds = (metadata?.hpoTerms ?? []).map((t) => t.hpo_id)
-      return hpoIds.some((hpoId) => caseHpoIds.includes(hpoId))
-    })
-  }
-
-  // Sort by created_at descending (newest first)
-  result.sort((a, b) => b.created_at - a.created_at)
-
-  return result
-})
+watch(searchTerm, debouncedReset)
+watch(selectedCohortIds, resetList, { deep: true })
 
 // Format date as relative time ("2 days ago") with full date on hover
 const formatDate = (timestamp: number): string => {
@@ -332,7 +324,7 @@ watch(selected, (newSelection) => {
 })
 
 // Click handler for Ctrl+click multi-select
-const handleCaseClick = (event: MouseEvent | KeyboardEvent, caseItem: Case): void => {
+const handleCaseClick = (event: MouseEvent | KeyboardEvent, caseItem: CaseWithCohorts): void => {
   if (event.ctrlKey || event.metaKey) {
     // Toggle multi-select
     event.preventDefault()
@@ -360,7 +352,7 @@ const clearMultiSelect = (): void => {
 }
 
 // Context menu handlers
-const handleContextMenu = (event: MouseEvent, caseItem: Case): void => {
+const handleContextMenu = (event: MouseEvent, caseItem: CaseWithCohorts): void => {
   contextMenuCase.value = caseItem
   contextMenu.open(event)
 }
@@ -397,7 +389,7 @@ const handleDelete = async (): Promise<void> => {
     }
 
     snackbarRef.value?.show(`Deleted "${caseToDelete.name}"`)
-    await loadCases()
+    resetList()
   }
 }
 
@@ -432,29 +424,14 @@ const handleDeleteSelected = async (): Promise<void> => {
     multiSelected.value = new Set()
 
     snackbarRef.value?.show(`Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`)
-    await loadCases()
+    resetList()
   }
 }
 
-// Helper functions for metadata display
-function getCaseStatusValue(caseId: number): AffectedStatus {
-  const metadata = getMetadata(caseId)
-  return metadata?.metadata?.affected_status ?? 'unknown'
-}
-
-function getCaseSexValue(caseId: number): CaseSex {
-  const metadata = getMetadata(caseId)
-  return metadata?.metadata?.sex ?? 'unknown'
-}
-
-function getCaseCohorts(caseId: number): CohortGroup[] {
-  const metadata = getMetadata(caseId)
-  return metadata?.cohorts ?? []
-}
-
-// Expose methods for parent to call after import
+// Expose methods for parent to call after import/delete/db-switch
 const refreshCases = async (): Promise<void> => {
-  await loadCases()
+  await loadCohortGroups()
+  resetList()
 }
 
 const selectCase = (caseId: number): void => {
@@ -463,7 +440,8 @@ const selectCase = (caseId: number): void => {
 
 defineExpose({ refreshCases, selectCase })
 
-onMounted(loadCases)
+// Load cohort groups on mount (single query, needed for filter dropdown)
+loadCohortGroups()
 </script>
 
 <style scoped>

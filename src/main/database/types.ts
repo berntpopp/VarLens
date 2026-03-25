@@ -52,6 +52,41 @@ export interface Case {
 }
 
 /**
+ * CaseWithCohorts - Case with inline metadata for list display
+ * Avoids N+1 queries by joining cohorts/metadata in a single query.
+ */
+export interface CaseWithCohorts extends Case {
+  /** Comma-separated cohort names (empty string if none) */
+  cohort_names: string
+  /** Comma-separated cohort IDs (empty string if none) */
+  cohort_ids: string
+  /** Affected status from case_metadata */
+  affected_status: 'affected' | 'unaffected' | 'unknown' | null
+  /** Biological sex from case_metadata */
+  sex: 'unknown' | 'male' | 'female' | 'other' | null
+}
+
+/**
+ * CaseQueryParams - Parameters for paginated case query
+ */
+export interface CaseQueryParams {
+  /** Max rows to return */
+  limit: number
+  /** Offset for pagination */
+  offset: number
+  /** Search by case name (LIKE %term%) */
+  search_term?: string
+  /** Filter by cohort IDs (OR logic) */
+  cohort_ids?: number[]
+  /** Sort column */
+  sort_by?: 'created_at' | 'name' | 'variant_count'
+  /** Sort direction */
+  sort_order?: 'asc' | 'desc'
+  /** Whether to compute total_count (skip for subsequent pages) */
+  _count_needed?: boolean
+}
+
+/**
  * Variant entity - represents a single genomic variant
  */
 export interface Variant {

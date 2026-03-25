@@ -17,22 +17,23 @@ const variants = [...mockVariants]
 export const mockApi: WindowAPI = {
   cases: {
     list: async () => cases,
-    query: async (params: Record<string, unknown>) => {
-      const searchTerm = (params.search_term as string) ?? ''
-      const filtered = cases.filter(
-        (c) => !searchTerm || c.name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      const start = (params.offset as number) ?? 0
-      const limit = (params.limit as number) ?? 50
+    query: async (params) => {
+      let result = [...cases]
+      if (params.search_term !== undefined && params.search_term !== '') {
+        const q = params.search_term.toLowerCase()
+        result = result.filter((c) => c.name.toLowerCase().includes(q))
+      }
+      const total_count = result.length
+      result = result.slice(params.offset, params.offset + params.limit)
       return {
-        data: filtered.slice(start, start + limit).map((c) => ({
+        data: result.map((c) => ({
           ...c,
-          cohort_names: [] as string[],
-          cohort_ids: [] as number[],
+          cohort_names: '',
+          cohort_ids: '',
           affected_status: null,
           sex: null
         })),
-        total_count: filtered.length
+        total_count
       }
     },
     delete: async (id: number) => {
