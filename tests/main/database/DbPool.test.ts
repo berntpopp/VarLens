@@ -26,7 +26,6 @@ describe.skipIf(!workerAvailable)('DbPool', () => {
   let pool: DbPool
 
   beforeAll(() => {
-
     // Create a file-based DB and insert test data on the main thread
     mainService = new DatabaseService(TEST_DB_PATH)
 
