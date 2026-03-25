@@ -48,7 +48,7 @@ export async function initDbPool(dbPath: string, encryptionKey?: string): Promis
   await destroyDbPool()
   dbPool = new DbPool()
   const maxThreads = configuredWorkerThreads > 0 ? configuredWorkerThreads : undefined
-  dbPool.init(dbPath, encryptionKey, maxThreads ? { maxThreads } : undefined)
+  dbPool.init(dbPath, encryptionKey, maxThreads !== undefined ? { maxThreads } : undefined)
   mainLogger.info(
     `DbPool initialized for worker-thread reads (threads: ${maxThreads ?? 'auto'})`,
     'ipc'
