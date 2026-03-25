@@ -270,6 +270,83 @@ describe('Variant Operations', () => {
     })
   })
 
+  describe('bulk insert lifecycle', () => {
+    it('beginBulkInsert/insertBatch/finishBulkInsert rebuilds FTS once', () => {
+      const caseId = createTestCase(service, 'lifecycle-case')
+
+      service.variants.beginBulkInsert()
+
+      // Verify FTS triggers are dropped by checking sqlite_master
+      const triggerCount = (
+        service.database
+          .prepare(
+            `SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='trigger' AND name LIKE 'variants_fts%'`
+          )
+          .get() as { cnt: number }
+      ).cnt
+      expect(triggerCount).toBe(0)
+
+      // Insert two batches with different gene symbols
+      const batch1 = createTestVariants(5, { genePrefix: 'BATCH1_GENE', startPos: 1000 })
+      const batch2 = createTestVariants(5, { genePrefix: 'BATCH2_GENE', startPos: 2000 })
+
+      service.variants.insertBatch(batch1, caseId)
+      service.variants.insertBatch(batch2, caseId)
+
+      service.variants.finishBulkInsert(caseId, 10)
+
+      // Verify FTS triggers are recreated
+      const triggersAfter = (
+        service.database
+          .prepare(
+            `SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='trigger' AND name LIKE 'variants_fts%'`
+          )
+          .get() as { cnt: number }
+      ).cnt
+      expect(triggersAfter).toBeGreaterThan(0)
+
+      // Verify FTS search works across both batches
+      const results1 = service.variants.searchVariants(caseId, 'BATCH1_GENE')
+      expect(results1.length).toBe(5)
+
+      const results2 = service.variants.searchVariants(caseId, 'BATCH2_GENE')
+      expect(results2.length).toBe(5)
+
+      // Verify variant count is correct
+      expect(service.variants.getVariantCount(caseId)).toBe(10)
+    })
+
+    it('insertVariantsBatch still works for single-batch calls (backward compat)', () => {
+      const caseId = createTestCase(service, 'compat-case')
+      const variants = [
+        {
+          chr: '1',
+          pos: 10000,
+          ref: 'A',
+          alt: 'G',
+          gene_symbol: 'COMPAT_GENE_ABC',
+          consequence: 'missense_variant',
+          gnomad_af: 0.01,
+          cadd: 25,
+          clinvar: null
+        }
+      ]
+
+      const count = service.variants.insertVariantsBatch(caseId, variants)
+
+      expect(count).toBe(1)
+
+      // FTS should work immediately after the single call
+      const results = service.variants.searchVariants(caseId, 'COMPAT_GENE')
+      expect(results.length).toBe(1)
+      expect(results[0].gene_symbol).toBe('COMPAT_GENE_ABC')
+
+      // Case variant count should be updated
+      const updatedCase = service.cases.getCase(caseId)
+      expect(updatedCase.variant_count).toBe(1)
+    })
+  })
+
   describe('getVariantCount', () => {
     it('returns 0 for case with no variants', () => {
       const caseId = createTestCase(service, 'empty-case')

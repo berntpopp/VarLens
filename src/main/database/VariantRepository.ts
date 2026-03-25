@@ -46,102 +46,136 @@ export class VariantRepository extends BaseRepository {
     this.cases = cases
   }
 
+  /**
+   * Drop FTS triggers to avoid per-row overhead before a bulk insert session.
+   * Must be paired with a subsequent call to `finishBulkInsert()`.
+   */
+  beginBulkInsert(): void {
+    this.db.exec(`
+      DROP TRIGGER IF EXISTS variants_fts_ai;
+      DROP TRIGGER IF EXISTS variants_fts_ad;
+      DROP TRIGGER IF EXISTS variants_fts_au;
+    `)
+  }
+
+  /**
+   * Insert a single batch of variants inside a transaction.
+   * Call `beginBulkInsert()` before and `finishBulkInsert()` after all batches.
+   * Does not update case variant_count — that is done in `finishBulkInsert()`.
+   */
+  insertBatch(
+    variants: (Omit<Variant, 'id' | 'case_id'> & { _transcripts?: TranscriptInsertRow[] })[],
+    caseId: number
+  ): void {
+    const runTransaction = this.db.transaction(
+      (batch: (Omit<Variant, 'id' | 'case_id'> & { _transcripts?: TranscriptInsertRow[] })[]) => {
+        for (const v of batch) {
+          const result = this.execRun(
+            this.kysely.insertInto('variants').values({
+              case_id: caseId,
+              chr: v.chr,
+              pos: v.pos,
+              ref: v.ref,
+              alt: v.alt,
+              gene_symbol: v.gene_symbol,
+              omim_mim_number: v.omim_mim_number,
+              consequence: v.consequence,
+              gnomad_af: v.gnomad_af,
+              cadd: v.cadd,
+              clinvar: v.clinvar,
+              gt_num: v.gt_num,
+              func: v.func,
+              qual: v.qual,
+              hpo_sim_score: v.hpo_sim_score,
+              transcript: v.transcript,
+              cdna: v.cdna,
+              aa_change: v.aa_change,
+              moi: v.moi
+            })
+          )
+
+          if (v._transcripts !== undefined && v._transcripts.length > 0) {
+            const variantId = result.lastInsertRowid as number
+            for (const t of v._transcripts) {
+              this.execRun(
+                this.kysely.insertInto('variant_transcripts').values({
+                  variant_id: variantId,
+                  transcript_id: t.transcript_id,
+                  gene_symbol: t.gene_symbol,
+                  consequence: t.consequence,
+                  cdna: t.cdna,
+                  aa_change: t.aa_change,
+                  hpo_sim_score: t.hpo_sim_score,
+                  moi: t.moi,
+                  is_selected: t.is_selected
+                })
+              )
+            }
+          }
+        }
+      }
+    )
+
+    for (let i = 0; i < variants.length; i += BATCH_SIZE) {
+      runTransaction(variants.slice(i, i + BATCH_SIZE))
+    }
+  }
+
+  /**
+   * Rebuild FTS, recreate triggers, update case variant_count, run ANALYZE and optimize.
+   * Call this once after all `insertBatch()` calls to complete a bulk insert session.
+   */
+  finishBulkInsert(caseId: number, totalInserted: number): void {
+    this.cases.updateCaseVariantCount(caseId, totalInserted)
+
+    // Always rebuild FTS and restore triggers, even if a step fails
+    try {
+      this.db.exec("INSERT INTO variants_fts(variants_fts) VALUES('rebuild')")
+    } catch (error) {
+      mainLogger.error(`Failed to rebuild FTS index: ${error}`, 'VariantRepository')
+    }
+
+    try {
+      this.db.exec(createFTSTriggers)
+    } catch (error) {
+      mainLogger.error(`Failed to recreate FTS triggers: ${error}`, 'VariantRepository')
+    }
+
+    // Update query planner statistics after bulk import
+    try {
+      this.db.exec('ANALYZE')
+    } catch (error) {
+      mainLogger.error(`Failed to run ANALYZE: ${error}`, 'VariantRepository')
+    }
+
+    // Optimize FTS5 index after bulk import
+    try {
+      this.db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
+    } catch (error) {
+      mainLogger.error(`Failed to optimize FTS index: ${error}`, 'VariantRepository')
+    }
+  }
+
+  /**
+   * Convenience method: drop FTS triggers, insert all variants in batches,
+   * then rebuild FTS and restore triggers in a single call.
+   *
+   * For large imports with multiple logical batches, prefer calling
+   * `beginBulkInsert()`, then `insertBatch()` per batch, then `finishBulkInsert()`
+   * so that FTS is rebuilt only once.
+   */
   insertVariantsBatch(
     caseId: number,
     variants: (Omit<Variant, 'id' | 'case_id'> & { _transcripts?: TranscriptInsertRow[] })[]
   ): number {
     this.cases.getCase(caseId)
 
-    // Drop FTS triggers to avoid per-row overhead during bulk insert
-    this.db.exec(`
-      DROP TRIGGER IF EXISTS variants_fts_ai;
-      DROP TRIGGER IF EXISTS variants_fts_ad;
-      DROP TRIGGER IF EXISTS variants_fts_au;
-    `)
+    this.beginBulkInsert()
 
     try {
-      const insertBatch = this.db.transaction(
-        (batch: (Omit<Variant, 'id' | 'case_id'> & { _transcripts?: TranscriptInsertRow[] })[]) => {
-          for (const v of batch) {
-            const result = this.execRun(
-              this.kysely.insertInto('variants').values({
-                case_id: caseId,
-                chr: v.chr,
-                pos: v.pos,
-                ref: v.ref,
-                alt: v.alt,
-                gene_symbol: v.gene_symbol,
-                omim_mim_number: v.omim_mim_number,
-                consequence: v.consequence,
-                gnomad_af: v.gnomad_af,
-                cadd: v.cadd,
-                clinvar: v.clinvar,
-                gt_num: v.gt_num,
-                func: v.func,
-                qual: v.qual,
-                hpo_sim_score: v.hpo_sim_score,
-                transcript: v.transcript,
-                cdna: v.cdna,
-                aa_change: v.aa_change,
-                moi: v.moi
-              })
-            )
-
-            if (v._transcripts !== undefined && v._transcripts.length > 0) {
-              const variantId = result.lastInsertRowid as number
-              for (const t of v._transcripts) {
-                this.execRun(
-                  this.kysely.insertInto('variant_transcripts').values({
-                    variant_id: variantId,
-                    transcript_id: t.transcript_id,
-                    gene_symbol: t.gene_symbol,
-                    consequence: t.consequence,
-                    cdna: t.cdna,
-                    aa_change: t.aa_change,
-                    hpo_sim_score: t.hpo_sim_score,
-                    moi: t.moi,
-                    is_selected: t.is_selected
-                  })
-                )
-              }
-            }
-          }
-        }
-      )
-
-      for (let i = 0; i < variants.length; i += BATCH_SIZE) {
-        const batch = variants.slice(i, i + BATCH_SIZE)
-        insertBatch(batch)
-      }
-
-      this.cases.updateCaseVariantCount(caseId, variants.length)
+      this.insertBatch(variants, caseId)
     } finally {
-      // Always rebuild FTS and restore triggers, even if insert fails
-      try {
-        this.db.exec("INSERT INTO variants_fts(variants_fts) VALUES('rebuild')")
-      } catch (error) {
-        mainLogger.error(`Failed to rebuild FTS index: ${error}`, 'VariantRepository')
-      }
-
-      try {
-        this.db.exec(createFTSTriggers)
-      } catch (error) {
-        mainLogger.error(`Failed to recreate FTS triggers: ${error}`, 'VariantRepository')
-      }
-
-      // Update query planner statistics after bulk import
-      try {
-        this.db.exec('ANALYZE')
-      } catch (error) {
-        mainLogger.error(`Failed to run ANALYZE: ${error}`, 'VariantRepository')
-      }
-
-      // Optimize FTS5 index after bulk import
-      try {
-        this.db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
-      } catch (error) {
-        mainLogger.error(`Failed to optimize FTS index: ${error}`, 'VariantRepository')
-      }
+      this.finishBulkInsert(caseId, variants.length)
     }
 
     return variants.length
