@@ -71,6 +71,48 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   // Invalidated via resetCount() when filters change.
   let cachedTotalCount: number | null = null
 
+  // Pre-fetch cache: Map<cacheKey, Promise<result>>
+  // Keyed by `offset:sortKey` so stale entries are naturally ignored after
+  // sort/filter changes (which also call prefetchCache.clear()).
+  const prefetchCache = new Map<string, Promise<OffsetPageResult<T>>>()
+
+  function buildPrefetchKey(offset: number): string {
+    const sortKey = JSON.stringify(normalizeSortBy(sortBy.value))
+    return `${offset}:${sortKey}`
+  }
+
+  /** Fire-and-forget: pre-fetch the next page and store in cache. */
+  function prefetchNextPage(): void {
+    if (!settingsStore.prefetchEnabled) return
+
+    const nextOffset = page.value * itemsPerPage.value
+    if (nextOffset >= totalCount.value) return // no more pages
+
+    const key = buildPrefetchKey(nextOffset)
+    if (prefetchCache.has(key)) return // already pre-fetched
+
+    // Limit cache to 3 entries — evict oldest
+    if (prefetchCache.size >= 3) {
+      const oldestKey = prefetchCache.keys().next().value
+      if (oldestKey !== undefined) prefetchCache.delete(oldestKey)
+    }
+
+    const promise = options
+      .fetchPage({
+        offset: nextOffset,
+        limit: itemsPerPage.value,
+        sortBy: normalizeSortBy(sortBy.value),
+        skipCount: true
+      })
+      .catch(() => {
+        // Silently discard failed pre-fetches — the normal fetch path handles errors
+        prefetchCache.delete(key)
+        return { data: [], total_count: 0 } as OffsetPageResult<T>
+      })
+
+    prefetchCache.set(key, promise)
+  }
+
   // Sync items-per-page to settings store
   watch(itemsPerPage, (v) => {
     settingsStore.itemsPerPage = v
@@ -85,7 +127,21 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     error.value = null
     try {
       const offset = (page.value - 1) * itemsPerPage.value
-      const plainSortBy = normalizeSortBy(sortBy.value)
+      const key = buildPrefetchKey(offset)
+
+      // Check pre-fetch cache first
+      const cached = prefetchCache.get(key)
+      if (cached) {
+        prefetchCache.delete(key)
+        const result = await cached
+
+        // A pre-fetched result always used skipCount=true, so keep cached count
+        items.value = result.data
+        totalCount.value = cachedTotalCount ?? result.total_count
+
+        prefetchNextPage()
+        return
+      }
 
       // Skip the COUNT(*) query when we already have a cached total for the
       // current filter set. The cache is invalidated by resetCount().
@@ -94,7 +150,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
       const result = await options.fetchPage({
         offset,
         limit: itemsPerPage.value,
-        sortBy: plainSortBy,
+        sortBy: normalizeSortBy(sortBy.value),
         skipCount
       })
 
@@ -108,6 +164,8 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
         totalCount.value = result.total_count
         cachedTotalCount = result.total_count
       }
+
+      prefetchNextPage()
     } catch (err) {
       error.value = err instanceof Error ? err : new Error(String(err))
       items.value = []
@@ -130,12 +188,13 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
    * Use when filters change or data needs a full refresh.
    */
   const invalidateAndReload = async (): Promise<void> => {
+    prefetchCache.clear()
     resetCount()
     page.value = 1
     await loadPage()
   }
 
-  // Watch sort changes — reset page.
+  // Watch sort changes — reset page and clear pre-fetch cache.
   // The page reset triggers Vuetify to re-emit @update:options → loadPage.
   watch(
     sortBy,
@@ -145,6 +204,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
         .join(',')
       if (serialized === prevSortSerialized) return
       prevSortSerialized = serialized
+      prefetchCache.clear()
       page.value = 1
       options.onSortChange?.(sortBy.value.length > 0)
     },
@@ -163,6 +223,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     sortBy.value = []
     prevSortSerialized = ''
     cachedTotalCount = null
+    prefetchCache.clear()
   }
 
   return {
