@@ -18,17 +18,14 @@ const TEST_DB_PATH = join(tmpdir(), `varlens-dbpool-test-${Date.now()}.db`)
 const WORKER_PATH = resolve(__dirname, '../../../out/main/db-worker.js')
 const WORKER_OPTS = { workerPath: WORKER_PATH }
 
-describe('DbPool', () => {
+// Skip entire suite if the built worker doesn't exist (CI runs tests before build)
+const workerAvailable = existsSync(WORKER_PATH)
+
+describe.skipIf(!workerAvailable)('DbPool', () => {
   let mainService: DatabaseService
   let pool: DbPool
 
   beforeAll(() => {
-    // Verify built worker exists (requires `npx electron-vite build` first)
-    if (!existsSync(WORKER_PATH)) {
-      throw new Error(
-        `db-worker.js not found at ${WORKER_PATH}. Run "npx electron-vite build" before tests.`
-      )
-    }
 
     // Create a file-based DB and insert test data on the main thread
     mainService = new DatabaseService(TEST_DB_PATH)
