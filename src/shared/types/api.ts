@@ -34,6 +34,8 @@ export interface UpdaterAPI {
 // Import database and import types for reuse
 import type {
   Case,
+  CaseWithCohorts,
+  CaseSearchParams,
   Variant,
   VariantFilter,
   PaginatedResult,
@@ -84,6 +86,8 @@ import type { DatabaseOverview } from './database-overview'
 // Re-export for convenience
 export type {
   Case,
+  CaseWithCohorts,
+  CaseSearchParams,
   Variant,
   VariantFilter,
   PaginatedResult,
@@ -118,6 +122,7 @@ export type {
 
 export interface CasesAPI {
   list: () => Promise<Case[]>
+  query: (params: CaseSearchParams) => Promise<{ data: CaseWithCohorts[]; total_count: number }>
   delete: (id: number) => Promise<void>
   deleteAll: () => Promise<number>
   deleteBatch: (ids: number[]) => Promise<number>

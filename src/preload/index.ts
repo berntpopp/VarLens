@@ -29,6 +29,7 @@ import type { CommentCategory } from '../shared/types/api'
 const api = {
   cases: {
     list: () => ipcRenderer.invoke('cases:list'),
+    query: (params: Record<string, unknown>) => ipcRenderer.invoke('cases:query', params),
     delete: (id: number) => ipcRenderer.invoke('cases:delete', id),
     deleteAll: (): Promise<number> => ipcRenderer.invoke('cases:deleteAll'),
     deleteBatch: (ids: number[]): Promise<number> => ipcRenderer.invoke('cases:deleteBatch', ids)

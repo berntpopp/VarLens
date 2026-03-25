@@ -4,7 +4,7 @@ import { BrowserWindow } from 'electron'
 import { resolve } from 'node:path'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
-import { CaseIdSchema } from '../../../shared/types/ipc-schemas'
+import { CaseIdSchema, CaseSearchParamsSchema } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
 import type { DeleteWorkerRequest, DeleteWorkerResponse } from '../../workers/delete-worker'
 
@@ -68,6 +68,24 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDepen
 
       const db = getDb()
       return db.cases.getAllCases()
+    })
+  })
+
+  ipcMain.handle('cases:query', async (_event, params: unknown) => {
+    return wrapHandler(async () => {
+      const validated = CaseSearchParamsSchema.safeParse(params)
+      if (validated.success !== true) {
+        mainLogger.error(`Invalid cases:query params: ${validated.error.message}`, 'cases')
+        throw new Error('Invalid parameters')
+      }
+
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'cases:query', params: [validated.data] })
+      }
+
+      const db = getDb()
+      return db.cases.queryCases(validated.data)
     })
   })
 

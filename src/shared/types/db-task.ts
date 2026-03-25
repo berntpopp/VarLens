@@ -23,6 +23,7 @@ export type DbTaskType =
   | 'cohort:summaryStatus'
   // Cases
   | 'cases:list'
+  | 'cases:query'
   // Annotations
   | 'annotations:getGlobal'
   | 'annotations:getPerCase'
@@ -38,6 +39,8 @@ export type DbTaskType =
   | 'case-metadata:distinctPlatforms'
   | 'case-metadata:distinctExternalIdTypes'
   | 'case-metadata:getFullMetadata'
+  // Database
+  | 'database:overview'
 
 export interface DbTask {
   /** IPC-style channel name — must be a valid DbTaskType */

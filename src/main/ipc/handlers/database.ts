@@ -22,7 +22,8 @@ import { initDbPool } from '../dbPoolManager'
 export function registerDatabaseHandlers({
   ipcMain,
   getDb,
-  getDbManager
+  getDbManager,
+  getDbPool
 }: HandlerDependencies): void {
   /**
    * Show file picker for selecting database file
@@ -209,6 +210,11 @@ export function registerDatabaseHandlers({
    */
   ipcMain.handle('database:overview', async () => {
     return wrapHandler(async () => {
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'database:overview', params: [] })
+      }
+
       const db = getDb()
       const overview = db.overview.getDatabaseOverview()
       // Deep clone for IPC serialization (handle BigInt)

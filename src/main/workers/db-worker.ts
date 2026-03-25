@@ -106,6 +106,9 @@ export default function run(task: DbTask): unknown {
       case 'cases:list':
         return repos.cases.getAllCases()
 
+      case 'cases:query':
+        return repos.cases.queryCases(params[0] as Parameters<typeof repos.cases.queryCases>[0])
+
       // ── Annotations ───────────────────────────────────────
       case 'annotations:getGlobal':
         return repos.annotations.getGlobalAnnotation(
@@ -165,6 +168,16 @@ export default function run(task: DbTask): unknown {
           dataInfo: repos.metadata.getCaseDataInfo(params[0] as number),
           externalIds: repos.metadata.listCaseExternalIds(params[0] as number)
         }
+
+      // ── Database ──────────────────────────────────────────
+      case 'database:overview': {
+        const overview = repos.overview.getDatabaseOverview()
+        return JSON.parse(
+          JSON.stringify(overview, (_key, value) =>
+            typeof value === 'bigint' ? Number(value) : value
+          )
+        )
+      }
 
       default:
         throw new Error(`Unknown db-worker task type: ${type}`)
