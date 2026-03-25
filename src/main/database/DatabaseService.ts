@@ -197,23 +197,13 @@ export class DatabaseService {
    * Uses process.nextTick so the work executes on the very next event-loop
    * turn — still on the main thread (better-sqlite3 is synchronous) but
    * after the BrowserWindow has had a chance to show.
+   *
+   * NOTE: Cohort summary rebuild is no longer performed here. It is
+   * handled asynchronously via a worker thread after IPC handlers are
+   * registered (see cohort.ts `triggerStartupRebuildIfNeeded`).
    */
   private _deferredInit(): void {
     process.nextTick(() => {
-      try {
-        // Rebuild cohort summary if stale (lightweight EXISTS instead of COUNT(*))
-        const summaryRow = this.db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get()
-        const variantRow = this.db.prepare('SELECT 1 FROM variants LIMIT 1').get()
-        const summaryEmpty = summaryRow === undefined
-        const hasVariants = variantRow !== undefined
-
-        if (summaryEmpty && hasVariants) {
-          this._cohortSummary.rebuild()
-        }
-      } catch {
-        // Best effort — summary will be rebuilt on next import
-      }
-
       try {
         // Clean up expired API cache entries
         this.db.prepare('DELETE FROM api_cache WHERE expires_at < ?').run(Date.now())
@@ -221,6 +211,23 @@ export class DatabaseService {
         // Best effort
       }
     })
+  }
+
+  /**
+   * Check whether the cohort summary tables need a startup rebuild.
+   *
+   * Returns true when the summary is empty but variants exist —
+   * i.e., the summary was never built or was cleared.
+   * Uses lightweight EXISTS queries instead of COUNT(*).
+   */
+  needsStartupRebuild(): boolean {
+    try {
+      const summaryRow = this.db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get()
+      const variantRow = this.db.prepare('SELECT 1 FROM variants LIMIT 1').get()
+      return summaryRow === undefined && variantRow !== undefined
+    } catch {
+      return false
+    }
   }
 
   // ── Utility methods ─────────────────────────────────────────

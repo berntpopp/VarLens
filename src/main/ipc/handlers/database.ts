@@ -16,6 +16,7 @@ import {
   DatabaseRekeySchema,
   FilePathSchema
 } from '../../../shared/types/ipc-schemas'
+import { triggerStartupRebuildIfNeeded } from './cohort'
 
 export function registerDatabaseHandlers({
   ipcMain,
@@ -104,6 +105,12 @@ export function registerDatabaseHandlers({
       // Try to open with password (or without if plaintext)
       try {
         manager.open(vPath, vPassword)
+        // Trigger async cohort summary rebuild if needed (non-blocking)
+        try {
+          triggerStartupRebuildIfNeeded(getDb())
+        } catch {
+          // Best effort — don't block database open
+        }
         const info = manager.getCurrentInfo()
         return {
           success: true,

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { BrowserWindow } from 'electron'
+import { Worker } from 'worker_threads'
+import { resolve } from 'node:path'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { CohortService } from '../../database/cohort'
@@ -9,6 +11,8 @@ import {
   AssociationConfigSchema
 } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
+import type { RebuildWorkerResponse } from '../../workers/rebuild-summary-worker'
+import type { DatabaseService } from '../../database/DatabaseService'
 
 function safeEmit(channel: string, data: unknown): void {
   const win = BrowserWindow.getAllWindows()[0]
@@ -197,5 +201,61 @@ export function registerCohortHandlers({ ipcMain, getDb }: HandlerDependencies):
       db.cohortSummary.rebuild()
       safeEmit('cohort:summaryRebuilt', { is_stale: false })
     })
+  })
+}
+
+/**
+ * Spawn a worker thread to rebuild the cohort summary if the database
+ * has variants but an empty summary table. Called once after handlers
+ * are registered so the UI stays responsive during the rebuild.
+ *
+ * Notifies the renderer via `cohort:summaryRebuilt` before and after
+ * the rebuild so the UI can show a progress indicator.
+ */
+export function triggerStartupRebuildIfNeeded(db: DatabaseService): void {
+  if (!db.needsStartupRebuild()) return
+
+  mainLogger.info(
+    'Startup: cohort summary empty with existing variants — spawning rebuild worker',
+    'cohort'
+  )
+  safeEmit('cohort:summaryRebuilt', { is_stale: true })
+
+  const workerPath = resolve(__dirname, 'rebuild-summary-worker.js')
+  const worker = new Worker(workerPath)
+  let settled = false
+
+  const settle = (): void => {
+    if (settled) return
+    settled = true
+    worker.terminate().catch(() => {})
+  }
+
+  worker.on('message', (msg: RebuildWorkerResponse) => {
+    if (msg.type === 'complete') {
+      mainLogger.info('Startup: cohort summary rebuild completed', 'cohort')
+      safeEmit('cohort:summaryRebuilt', { is_stale: false })
+    } else {
+      mainLogger.error(`Startup: cohort summary rebuild failed: ${msg.error}`, 'cohort')
+      // Leave is_stale: true so the user can trigger a manual rebuild
+    }
+    settle()
+  })
+
+  worker.on('error', (err: Error) => {
+    mainLogger.error(`Startup: rebuild worker error: ${err.message}`, 'cohort')
+    settle()
+  })
+
+  worker.on('exit', (code) => {
+    if (!settled) {
+      mainLogger.error(`Startup: rebuild worker exited unexpectedly with code ${code}`, 'cohort')
+    }
+    settled = true
+  })
+
+  worker.postMessage({
+    dbPath: db.getPath(),
+    encryptionKey: db.getEncryptionKey()
   })
 }

@@ -489,6 +489,42 @@ describe('DatabaseService', () => {
     })
   })
 
+  describe('needsStartupRebuild', () => {
+    it('returns false when no variants exist', () => {
+      expect(service.needsStartupRebuild()).toBe(false)
+    })
+
+    it('returns true when variants exist but summary is empty', () => {
+      const caseId = service.cases.createCase('rebuild-test', '/path/test.vcf', 1024)
+      service.database
+        .prepare(
+          'INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )
+        .run(caseId, '1', 12345, 'A', 'G', 'BRCA1', 'missense_variant')
+
+      expect(service.needsStartupRebuild()).toBe(true)
+    })
+
+    it('returns false when both variants and summary exist', () => {
+      const caseId = service.cases.createCase('rebuild-test-2', '/path/test.vcf', 1024)
+      service.database
+        .prepare(
+          'INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )
+        .run(caseId, '1', 12345, 'A', 'G', 'BRCA1', 'missense_variant')
+
+      // Rebuild to populate the summary
+      service.cohortSummary.rebuild()
+
+      expect(service.needsStartupRebuild()).toBe(false)
+    })
+
+    it('returns false when summary and variants are both empty', () => {
+      // Fresh database — no variants, no summary
+      expect(service.needsStartupRebuild()).toBe(false)
+    })
+  })
+
   describe('Kysely integration', () => {
     it('should expose a Kysely instance', () => {
       expect(service.kysely).toBeDefined()
