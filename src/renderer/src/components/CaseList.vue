@@ -99,12 +99,7 @@
             >
               {{ name }}
             </v-chip>
-            <v-chip
-              v-if="caseItem.cohort_names.length > 3"
-              size="x-small"
-              color="grey"
-              label
-            >
+            <v-chip v-if="caseItem.cohort_names.length > 3" size="x-small" color="grey" label>
               +{{ caseItem.cohort_names.length - 3 }}
             </v-chip>
           </div>
@@ -216,7 +211,6 @@ const emptyText = computed(() => {
   if (cases.value.length === 0) return ''
   return 'All cases loaded'
 })
-
 
 // Infinite scroll load handler
 const onLoad = async ({
