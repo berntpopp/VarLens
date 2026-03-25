@@ -114,10 +114,7 @@ export default function run(task: DbTask): unknown {
         )
 
       case 'annotations:getPerCase':
-        return repos.annotations.getPerCaseAnnotation(
-          params[0] as number,
-          params[1] as number
-        )
+        return repos.annotations.getPerCaseAnnotation(params[0] as number, params[1] as number)
 
       case 'annotations:getForVariant':
         return repos.annotations.getAnnotationsForVariant(

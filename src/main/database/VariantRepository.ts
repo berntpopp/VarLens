@@ -669,9 +669,7 @@ export class VariantRepository extends BaseRepository {
           `SELECT '${key}' AS col_key, CAST("${sqlCol}" AS TEXT) AS val FROM variants WHERE case_id = ? AND "${sqlCol}" IS NOT NULL GROUP BY "${sqlCol}" ORDER BY "${sqlCol}"`
       )
       // Wrap each part to preserve per-column ordering
-      const unionSql = unionParts
-        .map((part) => `SELECT * FROM (${part})`)
-        .join(' UNION ALL ')
+      const unionSql = unionParts.map((part) => `SELECT * FROM (${part})`).join(' UNION ALL ')
       const params = lowCardinalityColumns.map(() => caseId)
       const rows = this.db.prepare(unionSql).all(...params) as {
         col_key: string

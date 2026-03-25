@@ -16,19 +16,24 @@ import type { DbTask } from '../../shared/types/db-task'
 
 // Use require() to load piscina — avoids Vite's static import analysis
 // which cannot resolve Node.js-only modules during test transforms
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let PiscinaClass: any = null
-function getPiscina(): any {
-  if (!PiscinaClass) {
+
+let PiscinaClass: (new (opts: Record<string, unknown>) => PiscinaInstance) | null = null
+
+interface PiscinaInstance {
+  run: (task: DbTask) => Promise<unknown>
+  destroy: () => Promise<void>
+}
+
+function getPiscina(): new (opts: Record<string, unknown>) => PiscinaInstance {
+  if (PiscinaClass === null) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    PiscinaClass = require('piscina')
+    PiscinaClass = require('piscina') as typeof PiscinaClass
   }
-  return PiscinaClass
+  return PiscinaClass!
 }
 
 export class DbPool {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private pool: any = null
+  private pool: PiscinaInstance | null = null
 
   /**
    * Initialise the worker pool.
@@ -42,7 +47,7 @@ export class DbPool {
     encryptionKey?: string,
     options?: { workerPath?: string; execArgv?: string[] }
   ): void {
-    if (this.pool) return // already initialised
+    if (this.pool !== null) return // already initialised
 
     const filename = options?.workerPath ?? resolve(__dirname, 'db-worker.js')
     const Piscina = getPiscina()
@@ -53,15 +58,22 @@ export class DbPool {
       maxThreads: 4,
       idleTimeout: 30_000,
       workerData: { dbPath, encryptionKey },
-      ...(options?.execArgv ? { execArgv: options.execArgv } : {})
+      ...(options?.execArgv !== undefined ? { execArgv: options.execArgv } : {})
     })
+  }
+
+  /**
+   * Check whether the pool has been initialised.
+   */
+  isInitialised(): boolean {
+    return this.pool !== null
   }
 
   /**
    * Dispatch a read-only task to the pool.
    */
   async run<T>(task: DbTask): Promise<T> {
-    if (!this.pool) throw new Error('DbPool not initialized — call init() first')
+    if (this.pool === null) throw new Error('DbPool not initialized — call init() first')
     return this.pool.run(task) as Promise<T>
   }
 
@@ -69,7 +81,7 @@ export class DbPool {
    * Destroy the pool and close all worker connections.
    */
   async destroy(): Promise<void> {
-    if (this.pool) {
+    if (this.pool !== null) {
       await this.pool.destroy()
       this.pool = null
     }
