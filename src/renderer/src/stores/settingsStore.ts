@@ -11,11 +11,15 @@ const STORAGE_KEY = 'varlens_user_settings_v1'
 interface PersistedSettings {
   itemsPerPage: number
   userName: string
+  workerThreads: number // 0 = auto (cpus - 1)
+  prefetchEnabled: boolean
 }
 
 const DEFAULTS: PersistedSettings = {
   itemsPerPage: 25,
-  userName: ''
+  userName: '',
+  workerThreads: 0,
+  prefetchEnabled: true
 }
 
 function load(): PersistedSettings {
@@ -40,14 +44,23 @@ export const useSettingsStore = defineStore('settings', () => {
 
   const itemsPerPage = ref(persisted.itemsPerPage)
   const userName = ref(persisted.userName)
+  const workerThreads = ref(persisted.workerThreads)
+  const prefetchEnabled = ref(persisted.prefetchEnabled)
 
   // Auto-persist on change
-  watch([itemsPerPage, userName], () => {
-    save({ itemsPerPage: itemsPerPage.value, userName: userName.value })
+  watch([itemsPerPage, userName, workerThreads, prefetchEnabled], () => {
+    save({
+      itemsPerPage: itemsPerPage.value,
+      userName: userName.value,
+      workerThreads: workerThreads.value,
+      prefetchEnabled: prefetchEnabled.value
+    })
   })
 
   return {
     itemsPerPage,
-    userName
+    userName,
+    workerThreads,
+    prefetchEnabled
   }
 })

@@ -5,6 +5,7 @@
       @show-database-overview="dialogHostRef?.showDatabaseOverview()"
       @show-external-links="dialogHostRef?.showExternalLinks()"
       @show-tag-management="dialogHostRef?.showTagManagement()"
+      @show-preferences="dialogHostRef?.showPreferences()"
       @reset-columns="handleResetColumns"
       @reset-filters="handleResetFilters"
       @delete-all-cases="handleDeleteAllCases"

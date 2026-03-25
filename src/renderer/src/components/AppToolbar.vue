@@ -113,6 +113,11 @@
           title="Custom Tags"
           @click="$emit('show-tag-management')"
         />
+        <v-list-item
+          prepend-icon="mdi-tune"
+          title="Application Preferences"
+          @click="$emit('show-preferences')"
+        />
         <v-divider class="my-1" />
         <v-list-subheader>Reset Preferences</v-list-subheader>
         <v-list-item
@@ -164,6 +169,7 @@ defineEmits<{
   'show-database-overview': []
   'show-external-links': []
   'show-tag-management': []
+  'show-preferences': []
   'show-import-progress': []
   'reset-columns': []
   'reset-filters': []
