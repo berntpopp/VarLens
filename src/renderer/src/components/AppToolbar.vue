@@ -148,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import DatabasePicker from './DatabasePicker.vue'
 import CaseStatusIcons from './CaseStatusIcons.vue'
@@ -178,7 +178,18 @@ const router = useRouter()
 const { selectedCaseId, selectedCaseName, caseCount, activeTab, sidebarOpen } = useAppState()
 
 const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
-const { getMetadata } = useCaseMetadata()
+const { getMetadata, loadMetadata } = useCaseMetadata()
+
+// Preload metadata when a case is selected so status/sex icons display immediately
+watch(
+  selectedCaseId,
+  (caseId) => {
+    if (caseId != null) {
+      loadMetadata(caseId)
+    }
+  },
+  { immediate: true }
+)
 
 defineEmits<{
   'show-case-metadata': []
