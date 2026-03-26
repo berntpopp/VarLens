@@ -219,7 +219,11 @@ export function useAnnotations() {
       .filter((v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)))
       .map((v) => loadAnnotations(caseId, v.chr, v.pos, v.ref, v.alt))
 
-    await Promise.all(promises)
+    const results = await Promise.allSettled(promises)
+    const failed = results.filter((r) => r.status === 'rejected')
+    if (failed.length > 0) {
+      console.warn(`Failed to load ${failed.length}/${promises.length} annotations`)
+    }
   }
 
   // Load global annotations only (for cohort mode - no caseId needed)
@@ -256,7 +260,11 @@ export function useAnnotations() {
       .filter((v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)))
       .map((v) => loadGlobalAnnotations(v.chr, v.pos, v.ref, v.alt))
 
-    await Promise.all(promises)
+    const results = await Promise.allSettled(promises)
+    const failed = results.filter((r) => r.status === 'rejected')
+    if (failed.length > 0) {
+      console.warn(`Failed to load ${failed.length}/${promises.length} global annotations`)
+    }
   }
 
   // Toggle global star (for cohort mode)

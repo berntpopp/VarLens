@@ -339,7 +339,6 @@ watch(
   (newFilters) => {
     debouncedEmitColumnFilters(newFilters)
   },
-  { deep: true }
 )
 
 // Stores

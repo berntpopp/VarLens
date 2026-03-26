@@ -267,8 +267,8 @@ watch(presetDivergenceKey, () => {
 async function handleSavePreset(data: { name: string; description: string | null }): Promise<void> {
   savingPreset.value = true
   try {
-    // Deep-clone to strip Vue reactive proxies for IPC serialization
-    const plainFilters = JSON.parse(JSON.stringify(filters.value))
+    // Strip reactive proxies for IPC via structuredClone
+    const plainFilters = structuredClone(filters.value)
     const result = await savePreset({
       name: data.name,
       description: data.description,
