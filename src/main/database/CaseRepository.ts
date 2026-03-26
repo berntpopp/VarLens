@@ -8,6 +8,7 @@ import type {
   CaseSex
 } from './types'
 import { DatabaseError, NotFoundError, UniqueConstraintError } from './errors'
+import { sqlPlaceholders } from './sql-utils'
 import { createFTSTriggers } from './schema'
 import { mainLogger } from '../services/MainLogger'
 
@@ -83,7 +84,7 @@ export class CaseRepository extends BaseRepository {
 
     for (let i = 0; i < names.length; i += MAX_SQLITE_VARIABLES) {
       const batch = names.slice(i, i + MAX_SQLITE_VARIABLES)
-      const placeholders = batch.map(() => '?').join(',')
+      const placeholders = sqlPlaceholders(batch.length)
       const rows = this.db
         .prepare(`SELECT name FROM cases WHERE name IN (${placeholders})`)
         .all(...batch) as Array<{ name: string }>
@@ -165,7 +166,7 @@ export class CaseRepository extends BaseRepository {
 
     // Cohort filter
     if (cohort_ids !== undefined && cohort_ids.length > 0) {
-      const placeholders = cohort_ids.map(() => '?').join(', ')
+      const placeholders = sqlPlaceholders(cohort_ids.length)
       whereClauses.push(
         `c.id IN (SELECT case_id FROM case_cohort_links WHERE cohort_id IN (${placeholders}))`
       )
@@ -174,7 +175,7 @@ export class CaseRepository extends BaseRepository {
 
     // HPO term filter
     if (hpo_ids !== undefined && hpo_ids.length > 0) {
-      const placeholders = hpo_ids.map(() => '?').join(', ')
+      const placeholders = sqlPlaceholders(hpo_ids.length)
       whereClauses.push(
         `c.id IN (SELECT case_id FROM case_hpo_terms WHERE hpo_id IN (${placeholders}))`
       )

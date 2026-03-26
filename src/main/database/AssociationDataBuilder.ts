@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3-multiple-ciphers'
 import type { GeneContingencyData, SampleBurdenData, VariantFilters } from '../statistics/types'
+import { sqlPlaceholders } from './sql-utils'
 
 export class AssociationDataBuilder {
   private db: Database.Database
@@ -24,7 +25,7 @@ export class AssociationDataBuilder {
     const params: (string | number)[] = []
 
     // Case ID filter - use parameterized IN clause
-    const placeholders = allIds.map(() => '?').join(', ')
+    const placeholders = sqlPlaceholders(allIds.length)
     conditions.push(`case_id IN (${placeholders})`)
     params.push(...allIds)
 
@@ -37,12 +38,12 @@ export class AssociationDataBuilder {
       params.push(filters.cadd_min)
     }
     if (filters.consequences && filters.consequences.length > 0) {
-      const cPlaceholders = filters.consequences.map(() => '?').join(', ')
+      const cPlaceholders = sqlPlaceholders(filters.consequences.length)
       conditions.push(`consequence IN (${cPlaceholders})`)
       params.push(...filters.consequences)
     }
     if (filters.gene_list && filters.gene_list.length > 0) {
-      const gPlaceholders = filters.gene_list.map(() => '?').join(', ')
+      const gPlaceholders = sqlPlaceholders(filters.gene_list.length)
       conditions.push(`gene_symbol IN (${gPlaceholders})`)
       params.push(...filters.gene_list)
     }
@@ -195,7 +196,7 @@ export class AssociationDataBuilder {
     covariateMap: Map<number, number[]>
   ): void {
     // Load sex and age from case_metadata
-    const placeholders = caseIds.map(() => '?').join(', ')
+    const placeholders = sqlPlaceholders(caseIds.length)
     const metaRows = this.db
       .prepare(`SELECT case_id, sex, age FROM case_metadata WHERE case_id IN (${placeholders})`)
       .all(...caseIds) as Array<{ case_id: number; sex: string | null; age: number | null }>
@@ -213,7 +214,7 @@ export class AssociationDataBuilder {
       FROM case_metrics cm
       JOIN metric_definitions md ON cm.metric_id = md.id
       WHERE cm.case_id IN (${placeholders})
-        AND md.name IN (${covariateNames.map(() => '?').join(', ')})
+        AND md.name IN (${sqlPlaceholders(covariateNames.length)})
     `
       )
       .all(...caseIds, ...covariateNames) as Array<{

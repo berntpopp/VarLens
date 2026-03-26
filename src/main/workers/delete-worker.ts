@@ -10,6 +10,7 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createFTSTriggers } from '../database/schema'
+import { sqlPlaceholders } from '../database/sql-utils'
 import {
   REBUILD_VARIANT_SUMMARY_SQL,
   REBUILD_GENE_BURDEN_SQL,
@@ -68,7 +69,7 @@ port.on('message', (msg: DeleteWorkerRequest) => {
         port.postMessage(response)
         return
       }
-      const placeholders = ids.map(() => '?').join(',')
+      const placeholders = sqlPlaceholders(ids.length)
       const deleteBatch = db.transaction(() => {
         return db!.prepare(`DELETE FROM cases WHERE id IN (${placeholders})`).run(...ids).changes
       })

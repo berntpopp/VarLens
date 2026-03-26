@@ -16,6 +16,7 @@ import type {
   CohortPaginatedResult
 } from '../../shared/types/cohort'
 import type { ColumnFilterMeta } from '../../shared/types/column-filters'
+import { sqlPlaceholders } from './sql-utils'
 
 /**
  * Sortable columns for cohort queries
@@ -125,21 +126,21 @@ export class CohortService {
 
     // Consequence/Impact filter (IN clause)
     if (params.consequences !== undefined && params.consequences.length > 0) {
-      const placeholders = params.consequences.map(() => '?').join(', ')
+      const placeholders = sqlPlaceholders(params.consequences.length)
       whereConditions.push(`cvs.consequence IN (${placeholders})`)
       paramsArray.push(...params.consequences)
     }
 
     // Func filter (IN clause)
     if (params.funcs !== undefined && params.funcs.length > 0) {
-      const placeholders = params.funcs.map(() => '?').join(', ')
+      const placeholders = sqlPlaceholders(params.funcs.length)
       whereConditions.push(`cvs.func IN (${placeholders})`)
       paramsArray.push(...params.funcs)
     }
 
     // ClinVar filter (exact match via IN clause)
     if (params.clinvars !== undefined && params.clinvars.length > 0) {
-      const placeholders = params.clinvars.map(() => '?').join(', ')
+      const placeholders = sqlPlaceholders(params.clinvars.length)
       whereConditions.push(`cvs.clinvar IN (${placeholders})`)
       paramsArray.push(...params.clinvars)
     }
@@ -177,7 +178,7 @@ export class CohortService {
     }
 
     if (params.acmg_classifications !== undefined && params.acmg_classifications.length > 0) {
-      const placeholders = params.acmg_classifications.map(() => '?').join(', ')
+      const placeholders = sqlPlaceholders(params.acmg_classifications.length)
       whereConditions.push(`cvs.acmg_best IN (${placeholders})`)
       paramsArray.push(...params.acmg_classifications)
     }
@@ -191,7 +192,7 @@ export class CohortService {
 
         if (operator === 'in' && Array.isArray(value)) {
           if (value.length === 0) continue
-          const placeholders = value.map(() => '?').join(', ')
+          const placeholders = sqlPlaceholders(value.length)
           whereConditions.push(`cvs.${sqlColumn} IN (${placeholders})`)
           paramsArray.push(...value)
         } else if (operator === 'like' && typeof value === 'string') {
