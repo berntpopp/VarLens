@@ -585,30 +585,9 @@ defineExpose({
 </script>
 
 <style scoped>
-/* Table container fills remaining height in flex parent */
-.table-container {
-  position: relative;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
+@import './data-table-shared.css';
 
-/* Make data table fill available space */
-:deep(.v-data-table) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-:deep(.v-table__wrapper) {
-  flex: 1;
-  overflow-y: auto;
-}
-
-/* Loading skeleton */
+/* Loading skeleton (VariantTable-specific) */
 .variant-table-skeleton {
   padding: 16px;
 }
@@ -617,51 +596,13 @@ defineExpose({
   margin-bottom: 8px;
 }
 
-.top-scrollbar-container {
-  overflow-x: auto;
-  overflow-y: hidden;
-  height: 12px;
-  background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 3%, transparent);
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
-}
-
-.top-scrollbar-inner {
-  height: 1px;
-}
-
-/* Custom scrollbar styling for top scrollbar */
-.top-scrollbar-container::-webkit-scrollbar {
-  height: 10px;
-}
-
-.top-scrollbar-container::-webkit-scrollbar-track {
-  background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 5%, transparent);
-}
-
-.top-scrollbar-container::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 20%, transparent);
-  border-radius: 5px;
-}
-
-.top-scrollbar-container::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 35%, transparent);
-}
-
-.external-link--clicked {
-  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 10%, transparent);
-  border-radius: 2px;
-}
-
-.hgvs-notation {
-  font-family: 'Courier New', monospace;
-  font-size: 0.85em;
-}
-
+/* Monospace data display */
 .variant-data-mono {
   font-family: 'Courier New', monospace;
   font-size: 0.85em;
 }
 
+/* Transcript column truncation */
 .transcript-truncated {
   max-width: 120px;
   display: inline-block;
@@ -669,72 +610,5 @@ defineExpose({
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: bottom;
-}
-
-/* Clickable table rows */
-:deep(.v-data-table tbody tr) {
-  cursor: pointer;
-}
-
-/* Zebra striping for better scanability */
-:deep(.v-data-table tbody tr.variant-row--striped) {
-  background-color: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 3.5%, transparent);
-}
-
-/* Selected row highlighting - prominent with left accent border */
-:deep(.v-data-table tbody tr.variant-row--selected) {
-  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 10%, transparent) !important;
-  border-left: 4px solid rgb(var(--v-theme-primary)) !important;
-}
-
-:deep(.v-data-table tbody tr.variant-row--selected td:first-child) {
-  padding-left: calc(16px - 4px);
-}
-
-/* Hover state - visible but subtle */
-:deep(.v-data-table tbody tr:hover) {
-  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, transparent) !important;
-}
-
-/* Selected + hover - slightly darker */
-:deep(.v-data-table tbody tr.variant-row--selected:hover) {
-  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 18%, transparent) !important;
-}
-
-/* CSS containment: each cell is layout-independent */
-:deep(.v-data-table tbody td) {
-  contain: layout style;
-}
-
-/* Column max-width with ellipsis and horizontal scroll */
-:deep(.v-data-table th),
-:deep(.v-data-table td) {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Ensure table can scroll horizontally when columns overflow */
-:deep(.v-table__wrapper) {
-  overflow-x: auto;
-}
-
-/* Style bottom scrollbar to match top scrollbar */
-:deep(.v-table__wrapper)::-webkit-scrollbar {
-  height: 10px;
-}
-
-:deep(.v-table__wrapper)::-webkit-scrollbar-track {
-  background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 5%, transparent);
-}
-
-:deep(.v-table__wrapper)::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 20%, transparent);
-  border-radius: 5px;
-}
-
-:deep(.v-table__wrapper)::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 35%, transparent);
 }
 </style>
