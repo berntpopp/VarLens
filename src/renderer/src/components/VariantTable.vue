@@ -584,9 +584,8 @@ defineExpose({
 })
 </script>
 
+<style scoped src="./data-table-shared.css"></style>
 <style scoped>
-@import './data-table-shared.css';
-
 /* Loading skeleton (VariantTable-specific) */
 .variant-table-skeleton {
   padding: 16px;

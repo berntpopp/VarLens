@@ -609,9 +609,8 @@ defineExpose({
 })
 </script>
 
+<style scoped src="../data-table-shared.css"></style>
 <style scoped>
-@import '../data-table-shared.css';
-
 /* Consequence cell (CohortDataTable-specific) */
 .consequence-cell {
   font-size: 0.9em;
