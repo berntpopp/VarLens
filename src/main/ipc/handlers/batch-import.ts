@@ -1,6 +1,6 @@
-import { dialog, BrowserWindow, app } from 'electron'
-import { join, dirname, basename } from 'path'
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs'
+import { dialog, BrowserWindow } from 'electron'
+import { dirname, basename, join } from 'path'
+import { readdir } from 'fs/promises'
 import type { HandlerDependencies } from '../types'
 import { ZipExtractor, TempDirectoryManager } from '../../import'
 import { checkDuplicates } from '../../import/batch-utils'
@@ -8,6 +8,8 @@ import { ImportWorkerClient } from '../../workers/import-worker-client'
 import type { DuplicateChoice } from '../../../shared/types/api'
 import { mainLogger } from '../../services/MainLogger'
 import { API_CONFIG } from '../../../shared/config'
+import { wrapHandler } from '../errorHandler'
+import { loadSettings, saveSettings } from '../utils/settings-io'
 
 // Track current batch import for cancellation
 let workerClient: ImportWorkerClient | null = null
@@ -15,31 +17,6 @@ let workerClient: ImportWorkerClient | null = null
 // ZIP extraction utilities
 const zipExtractor = new ZipExtractor()
 let zipTempManager: TempDirectoryManager | null = null
-
-const settingsPath = () => join(app.getPath('userData'), 'settings.json')
-
-interface Settings {
-  lastImportDirectory?: string
-}
-
-function loadSettings(): Settings {
-  try {
-    if (existsSync(settingsPath()) === true) {
-      return JSON.parse(readFileSync(settingsPath(), 'utf8'))
-    }
-  } catch {
-    // Ignore parse errors, return empty
-  }
-  return {}
-}
-
-function saveSettings(settings: Settings): void {
-  try {
-    writeFileSync(settingsPath(), JSON.stringify(settings, null, 2))
-  } catch (error) {
-    mainLogger.error(`Failed to save settings: ${error}`, 'import')
-  }
-}
 
 function safeEmit(channel: string, data: unknown): void {
   const win = BrowserWindow.getAllWindows()[0]
@@ -52,65 +29,69 @@ function safeEmit(channel: string, data: unknown): void {
 
 export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependencies): void {
   ipcMain.handle('batch-import:selectFiles', async () => {
-    const settings = loadSettings()
+    return wrapHandler(async () => {
+      const settings = await loadSettings()
 
-    const result = await dialog.showOpenDialog({
-      title: 'Select Files to Import',
-      defaultPath: settings.lastImportDirectory,
-      properties: ['openFile', 'multiSelections'],
-      filters: [
-        { name: 'Variant Files', extensions: ['gz', 'json.gz', 'json'] },
-        { name: 'ZIP Archives', extensions: ['zip'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
+      const result = await dialog.showOpenDialog({
+        title: 'Select Files to Import',
+        defaultPath: settings.lastImportDirectory,
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          { name: 'Variant Files', extensions: ['gz', 'json.gz', 'json'] },
+          { name: 'ZIP Archives', extensions: ['zip'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      })
+
+      if (result.canceled === true || result.filePaths.length === 0) {
+        return []
+      }
+
+      const firstFile = result.filePaths[0]
+      await saveSettings({ ...settings, lastImportDirectory: dirname(firstFile) })
+
+      return result.filePaths
     })
-
-    if (result.canceled === true || result.filePaths.length === 0) {
-      return []
-    }
-
-    const firstFile = result.filePaths[0]
-    saveSettings({ ...settings, lastImportDirectory: dirname(firstFile) })
-
-    return result.filePaths
   })
 
   ipcMain.handle('batch-import:selectFolder', async () => {
-    const settings = loadSettings()
+    return wrapHandler(async () => {
+      const settings = await loadSettings()
 
-    const result = await dialog.showOpenDialog({
-      title: 'Select Folder to Import',
-      defaultPath: settings.lastImportDirectory,
-      properties: ['openDirectory']
+      const result = await dialog.showOpenDialog({
+        title: 'Select Folder to Import',
+        defaultPath: settings.lastImportDirectory,
+        properties: ['openDirectory']
+      })
+
+      if (result.canceled === true || result.filePaths.length === 0) {
+        return []
+      }
+
+      const folderPath = result.filePaths[0]
+      await saveSettings({ ...settings, lastImportDirectory: folderPath })
+
+      try {
+        const entries = await readdir(folderPath, { withFileTypes: true })
+
+        const files = entries
+          .filter((entry) => {
+            if (entry.isFile() === false) return false
+            const name = entry.name.toLowerCase()
+            return (
+              name.endsWith('.json') === true ||
+              name.endsWith('.json.gz') === true ||
+              name.endsWith('.gz') === true
+            )
+          })
+          .map((entry) => join(folderPath, entry.name))
+
+        return files
+      } catch (error) {
+        mainLogger.error(`Failed to read directory: ${error}`, 'import')
+        return []
+      }
     })
-
-    if (result.canceled === true || result.filePaths.length === 0) {
-      return []
-    }
-
-    const folderPath = result.filePaths[0]
-    saveSettings({ ...settings, lastImportDirectory: folderPath })
-
-    try {
-      const entries = readdirSync(folderPath, { withFileTypes: true })
-
-      const files = entries
-        .filter((entry) => {
-          if (entry.isFile() === false) return false
-          const name = entry.name.toLowerCase()
-          return (
-            name.endsWith('.json') === true ||
-            name.endsWith('.json.gz') === true ||
-            name.endsWith('.gz') === true
-          )
-        })
-        .map((entry) => join(folderPath, entry.name))
-
-      return files
-    } catch (error) {
-      mainLogger.error(`Failed to read directory: ${error}`, 'import')
-      return []
-    }
   })
 
   /**
@@ -120,23 +101,25 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
   ipcMain.handle(
     'batch-import:checkDuplicates',
     async (_event, filePaths: string[], stripText?: string) => {
-      try {
-        const db = getDb()
-        const result = checkDuplicates(db, filePaths, stripText)
+      return wrapHandler(async () => {
+        try {
+          const db = getDb()
+          const result = checkDuplicates(db, filePaths, stripText)
 
-        return {
-          files: result.files.map((f) => ({
-            filePath: f.filePath,
-            fileName: f.fileName,
-            caseName: f.caseName,
-            isDuplicate: f.isDuplicate
-          })),
-          duplicateCount: result.duplicateCount
+          return {
+            files: result.files.map((f) => ({
+              filePath: f.filePath,
+              fileName: f.fileName,
+              caseName: f.caseName,
+              isDuplicate: f.isDuplicate
+            })),
+            duplicateCount: result.duplicateCount
+          }
+        } catch (error) {
+          mainLogger.error(`checkDuplicates error: ${error}`, 'import')
+          return { files: [], duplicateCount: 0 }
         }
-      } catch (error) {
-        mainLogger.error(`checkDuplicates error: ${error}`, 'import')
-        return { files: [], duplicateCount: 0 }
-      }
+      })
     }
   )
 
@@ -147,7 +130,8 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
   ipcMain.handle(
     'batch-import:start',
     async (_event, filePaths: string[], duplicateStrategy: DuplicateChoice, stripText?: string) => {
-      try {
+      return wrapHandler(async () => {
+        try {
         const db = getDb()
 
         if (workerClient?.isRunning === true) {
@@ -261,91 +245,102 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
           }))
         }
       }
+      })
     }
   )
 
   ipcMain.handle('batch-import:cancel', async () => {
-    if (workerClient !== null) {
-      workerClient.cancel()
-    }
+    return wrapHandler(async () => {
+      if (workerClient !== null) {
+        workerClient.cancel()
+      }
+    })
   })
 
   ipcMain.handle('batch-import:selectZip', async () => {
-    try {
-      const settings = loadSettings()
+    return wrapHandler(async () => {
+      try {
+        const settings = await loadSettings()
 
-      const result = await dialog.showOpenDialog({
-        title: 'Select ZIP Archive to Import',
-        defaultPath: settings.lastImportDirectory,
-        properties: ['openFile'],
-        filters: [
-          { name: 'ZIP Archives', extensions: ['zip'] },
-          { name: 'All Files', extensions: ['*'] }
-        ]
-      })
+        const result = await dialog.showOpenDialog({
+          title: 'Select ZIP Archive to Import',
+          defaultPath: settings.lastImportDirectory,
+          properties: ['openFile'],
+          filters: [
+            { name: 'ZIP Archives', extensions: ['zip'] },
+            { name: 'All Files', extensions: ['*'] }
+          ]
+        })
 
-      if (result.canceled === true || result.filePaths.length === 0) {
+        if (result.canceled === true || result.filePaths.length === 0) {
+          return null
+        }
+
+        const filePath = result.filePaths[0]
+        await saveSettings({ ...settings, lastImportDirectory: dirname(filePath) })
+
+        const isEncrypted = zipExtractor.isEncrypted(filePath)
+        return { filePath, isEncrypted }
+      } catch (error) {
+        mainLogger.error(`batch-import:selectZip error: ${error}`, 'import')
         return null
       }
-
-      const filePath = result.filePaths[0]
-      saveSettings({ ...settings, lastImportDirectory: dirname(filePath) })
-
-      const isEncrypted = zipExtractor.isEncrypted(filePath)
-      return { filePath, isEncrypted }
-    } catch (error) {
-      mainLogger.error(`batch-import:selectZip error: ${error}`, 'import')
-      return null
-    }
+    })
   })
 
   ipcMain.handle(
     'batch-import:testZipPassword',
     async (_event, zipPath: string, password: string) => {
-      try {
-        const success = zipExtractor.testPassword(zipPath, password)
-        return { success }
-      } catch (error) {
-        mainLogger.error(`batch-import:testZipPassword error: ${error}`, 'import')
-        return { success: false }
-      }
+      return wrapHandler(async () => {
+        try {
+          const success = zipExtractor.testPassword(zipPath, password)
+          return { success }
+        } catch (error) {
+          mainLogger.error(`batch-import:testZipPassword error: ${error}`, 'import')
+          return { success: false }
+        }
+      })
     }
   )
 
   ipcMain.handle('batch-import:extractZip', async (_event, zipPath: string, password?: string) => {
-    try {
-      if (zipTempManager !== null) {
-        zipTempManager.cleanup()
+    return wrapHandler(async () => {
+      try {
+        if (zipTempManager !== null) {
+          zipTempManager.cleanup()
+        }
+
+        zipTempManager = new TempDirectoryManager()
+        const targetDir = zipTempManager.create()
+
+        const result = zipExtractor.extract(zipPath, targetDir, password)
+
+        return JSON.parse(
+          JSON.stringify({
+            files: result.extractedFiles,
+            errors: result.errors
+          })
+        )
+      } catch (error) {
+        mainLogger.error(`batch-import:extractZip error: ${error}`, 'import')
+        if (zipTempManager !== null) {
+          zipTempManager.cleanup()
+          zipTempManager = null
+        }
+        return {
+          files: [],
+          errors: [error instanceof Error ? error.message : 'Extraction failed']
+        }
       }
+    })
+  })
 
-      zipTempManager = new TempDirectoryManager()
-      const targetDir = zipTempManager.create()
-
-      const result = zipExtractor.extract(zipPath, targetDir, password)
-
-      return JSON.parse(
-        JSON.stringify({
-          files: result.extractedFiles,
-          errors: result.errors
-        })
-      )
-    } catch (error) {
-      mainLogger.error(`batch-import:extractZip error: ${error}`, 'import')
+  ipcMain.handle('batch-import:cleanupZipTemp', async () => {
+    return wrapHandler(async () => {
       if (zipTempManager !== null) {
         zipTempManager.cleanup()
         zipTempManager = null
       }
-      return {
-        files: [],
-        errors: [error instanceof Error ? error.message : 'Extraction failed']
-      }
-    }
-  })
-
-  ipcMain.handle('batch-import:cleanupZipTemp', async () => {
-    if (zipTempManager !== null) {
-      zipTempManager.cleanup()
-      zipTempManager = null
-    }
+    })
   })
 }

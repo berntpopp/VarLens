@@ -1,13 +1,16 @@
 import { app } from 'electron'
-import { readFileSync, existsSync } from 'fs'
+import { readFile } from 'fs/promises'
+import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import os from 'os'
 import type { HandlerDependencies } from '../types'
 import { setWorkerThreads, getWorkerThreads } from '../dbPoolManager'
+import { wrapHandler } from '../errorHandler'
 
 /**
  * System IPC handlers
- * Channels: system:version, system:userDataPath
+ * Channels: system:version, system:userDataPath, system:getCpuCount,
+ *           system:setWorkerThreads, system:getWorkerThreads
  */
 
 /**
@@ -15,7 +18,7 @@ import { setWorkerThreads, getWorkerThreads } from '../dbPoolManager'
  * In non-packaged (dev) mode, app.getVersion() returns the Electron version
  * instead of the app version, so we read package.json directly as fallback.
  */
-function getAppVersion(): string {
+async function getAppVersion(): Promise<string> {
   const electronVersion = process.versions.electron
   const reportedVersion = app.getVersion()
   if (reportedVersion === electronVersion) {
@@ -25,7 +28,8 @@ function getAppVersion(): string {
       for (let i = 0; i < 5; i++) {
         const pkgPath = join(dir, 'package.json')
         if (existsSync(pkgPath)) {
-          const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+          const data = await readFile(pkgPath, 'utf-8')
+          const pkg = JSON.parse(data)
           if (typeof pkg.version === 'string') return pkg.version
         }
         dir = dirname(dir)
@@ -40,22 +44,32 @@ function getAppVersion(): string {
 
 export function registerSystemHandlers({ ipcMain }: HandlerDependencies): void {
   ipcMain.handle('system:version', async () => {
-    return { app: getAppVersion(), electron: process.versions.electron }
+    return wrapHandler(async () => {
+      return { app: await getAppVersion(), electron: process.versions.electron }
+    })
   })
 
   ipcMain.handle('system:userDataPath', async () => {
-    return app.getPath('userData')
+    return wrapHandler(async () => {
+      return app.getPath('userData')
+    })
   })
 
-  ipcMain.handle('system:getCpuCount', () => {
-    return os.cpus().length
+  ipcMain.handle('system:getCpuCount', async () => {
+    return wrapHandler(async () => {
+      return os.cpus().length
+    })
   })
 
-  ipcMain.handle('system:setWorkerThreads', (_event, count: number) => {
-    setWorkerThreads(count)
+  ipcMain.handle('system:setWorkerThreads', async (_event, count: number) => {
+    return wrapHandler(async () => {
+      setWorkerThreads(count)
+    })
   })
 
-  ipcMain.handle('system:getWorkerThreads', () => {
-    return getWorkerThreads()
+  ipcMain.handle('system:getWorkerThreads', async () => {
+    return wrapHandler(async () => {
+      return getWorkerThreads()
+    })
   })
 }

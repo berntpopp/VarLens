@@ -1,39 +1,13 @@
-import { dialog, BrowserWindow, app } from 'electron'
+import { dialog, BrowserWindow } from 'electron'
 import { dirname } from 'path'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { join } from 'path'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { mainLogger } from '../../services/MainLogger'
 import { API_CONFIG } from '../../../shared/config/api.config'
+import { loadSettings, saveSettings } from '../utils/settings-io'
 
 let workerClient: ImportWorkerClient | null = null
-
-const settingsPath = () => join(app.getPath('userData'), 'settings.json')
-
-interface Settings {
-  lastImportDirectory?: string
-}
-
-function loadSettings(): Settings {
-  try {
-    if (existsSync(settingsPath()) === true) {
-      return JSON.parse(readFileSync(settingsPath(), 'utf8'))
-    }
-  } catch {
-    // Ignore parse errors, return empty
-  }
-  return {}
-}
-
-function saveSettings(settings: Settings): void {
-  try {
-    writeFileSync(settingsPath(), JSON.stringify(settings, null, 2))
-  } catch (error) {
-    mainLogger.error(`Failed to save settings: ${error}`, 'import')
-  }
-}
 
 function safeEmit(channel: string, data: unknown): void {
   const win = BrowserWindow.getAllWindows()[0]
@@ -46,26 +20,28 @@ function safeEmit(channel: string, data: unknown): void {
 
 export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies): void {
   ipcMain.handle('import:selectFile', async () => {
-    const settings = loadSettings()
+    return wrapHandler(async () => {
+      const settings = await loadSettings()
 
-    const result = await dialog.showOpenDialog({
-      title: 'Select Variant File',
-      defaultPath: settings.lastImportDirectory,
-      properties: ['openFile'],
-      filters: [
-        { name: 'JSON Files', extensions: ['json', 'json.gz', 'gz'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
+      const result = await dialog.showOpenDialog({
+        title: 'Select Variant File',
+        defaultPath: settings.lastImportDirectory,
+        properties: ['openFile'],
+        filters: [
+          { name: 'JSON Files', extensions: ['json', 'json.gz', 'gz'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      })
+
+      if (result.canceled === true || result.filePaths.length === 0) {
+        return null
+      }
+
+      const filePath = result.filePaths[0]
+      await saveSettings({ ...settings, lastImportDirectory: dirname(filePath) })
+
+      return filePath
     })
-
-    if (result.canceled === true || result.filePaths.length === 0) {
-      return null
-    }
-
-    const filePath = result.filePaths[0]
-    saveSettings({ ...settings, lastImportDirectory: dirname(filePath) })
-
-    return filePath
   })
 
   ipcMain.handle('import:start', async (_event, filePath: string, caseName: string) => {
@@ -147,10 +123,12 @@ export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies):
   })
 
   ipcMain.handle('import:cancel', async () => {
-    // Only send cancel — do NOT null out workerClient here.
-    // The onComplete callback handles cleanup after the worker responds.
-    if (workerClient !== null) {
-      workerClient.cancel()
-    }
+    return wrapHandler(async () => {
+      // Only send cancel — do NOT null out workerClient here.
+      // The onComplete callback handles cleanup after the worker responds.
+      if (workerClient !== null) {
+        workerClient.cancel()
+      }
+    })
   })
 }

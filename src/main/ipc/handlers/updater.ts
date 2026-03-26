@@ -5,6 +5,7 @@ import {
   installUpdate,
   getUpdateStatus
 } from '../../services/AutoUpdater'
+import { wrapHandler } from '../errorHandler'
 
 /**
  * Updater IPC handlers
@@ -12,18 +13,26 @@ import {
  */
 export function registerUpdaterHandlers({ ipcMain }: HandlerDependencies): void {
   ipcMain.handle('updater:check', async () => {
-    await checkForUpdates()
+    return wrapHandler(async () => {
+      await checkForUpdates()
+    })
   })
 
   ipcMain.handle('updater:download', async () => {
-    await downloadUpdate()
+    return wrapHandler(async () => {
+      await downloadUpdate()
+    })
   })
 
   ipcMain.handle('updater:install', async () => {
-    installUpdate()
+    return wrapHandler(async () => {
+      installUpdate()
+    })
   })
 
   ipcMain.handle('updater:status', async () => {
-    return getUpdateStatus()
+    return wrapHandler(async () => {
+      return getUpdateStatus()
+    })
   })
 }

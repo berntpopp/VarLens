@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { shell } from 'electron'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
+import { wrapHandler } from '../errorHandler'
 
 /**
  * Shell IPC handlers
@@ -51,47 +52,54 @@ function isDomainAllowed(hostname: string): boolean {
 }
 
 export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
-  ipcMain.handle('shell:updateUserDomains', async (_event, domains: unknown): Promise<void> => {
-    // ANTI-07: Runtime validation at IPC boundary
-    const validated = UserDomainsSchema.safeParse(domains)
-    if (!validated.success) {
-      mainLogger.error(
-        `Invalid shell:updateUserDomains params: ${validated.error.message}`,
-        'shell'
-      )
-      throw new Error('Invalid parameters')
-    }
-    userDomains = validated.data
+  ipcMain.handle('shell:updateUserDomains', async (_event, domains: unknown) => {
+    return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = UserDomainsSchema.safeParse(domains)
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid shell:updateUserDomains params: ${validated.error.message}`,
+          'shell'
+        )
+        throw new Error('Invalid parameters')
+      }
+      userDomains = validated.data
+    })
   })
 
   ipcMain.handle(
     'shell:openExternal',
-    async (_event, url: unknown): Promise<{ success: boolean; error?: string }> => {
-      // ANTI-07: Runtime validation at IPC boundary
-      const validated = UrlSchema.safeParse(url)
-      if (!validated.success) {
-        mainLogger.error(`Invalid shell:openExternal params: ${validated.error.message}`, 'shell')
-        throw new Error('Invalid parameters')
-      }
-
-      try {
-        const parsedUrl = new URL(validated.data)
-
-        // Only allow HTTPS protocol
-        if (parsedUrl.protocol !== 'https:') {
-          return { success: false, error: 'Only HTTPS URLs allowed' }
+    async (_event, url: unknown) => {
+      return wrapHandler(async () => {
+        // ANTI-07: Runtime validation at IPC boundary
+        const validated = UrlSchema.safeParse(url)
+        if (!validated.success) {
+          mainLogger.error(
+            `Invalid shell:openExternal params: ${validated.error.message}`,
+            'shell'
+          )
+          throw new Error('Invalid parameters')
         }
 
-        // Check domain whitelist
-        if (!isDomainAllowed(parsedUrl.hostname)) {
-          return { success: false, error: 'Domain not allowed' }
-        }
+        try {
+          const parsedUrl = new URL(validated.data)
 
-        await shell.openExternal(validated.data)
-        return { success: true }
-      } catch {
-        return { success: false, error: 'Invalid URL' }
-      }
+          // Only allow HTTPS protocol
+          if (parsedUrl.protocol !== 'https:') {
+            return { success: false, error: 'Only HTTPS URLs allowed' }
+          }
+
+          // Check domain whitelist
+          if (!isDomainAllowed(parsedUrl.hostname)) {
+            return { success: false, error: 'Domain not allowed' }
+          }
+
+          await shell.openExternal(validated.data)
+          return { success: true }
+        } catch {
+          return { success: false, error: 'Invalid URL' }
+        }
+      })
     }
   )
 
@@ -100,14 +108,19 @@ export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
    * Used for export feedback ("Open folder" action)
    */
   ipcMain.handle('shell:showItemInFolder', async (_event, filePath: unknown) => {
-    // ANTI-07: Runtime validation at IPC boundary
-    const validated = FilePathSchema.safeParse(filePath)
-    if (!validated.success) {
-      mainLogger.error(`Invalid shell:showItemInFolder params: ${validated.error.message}`, 'shell')
-      throw new Error('Invalid parameters')
-    }
+    return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = FilePathSchema.safeParse(filePath)
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid shell:showItemInFolder params: ${validated.error.message}`,
+          'shell'
+        )
+        throw new Error('Invalid parameters')
+      }
 
-    shell.showItemInFolder(validated.data)
-    return { success: true }
+      shell.showItemInFolder(validated.data)
+      return { success: true }
+    })
   })
 }
