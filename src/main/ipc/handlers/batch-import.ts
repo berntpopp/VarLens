@@ -132,119 +132,119 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
     async (_event, filePaths: string[], duplicateStrategy: DuplicateChoice, stripText?: string) => {
       return wrapHandler(async () => {
         try {
-        const db = getDb()
+          const db = getDb()
 
-        if (workerClient?.isRunning === true) {
-          throw new Error('A batch import is already in progress')
-        }
+          if (workerClient?.isRunning === true) {
+            throw new Error('A batch import is already in progress')
+          }
 
-        safeEmit('cohort:summaryRebuilt', { is_stale: true })
+          safeEmit('cohort:summaryRebuilt', { is_stale: true })
 
-        // Build FileImportRequest array with duplicate info
-        const checkResult = checkDuplicates(db, filePaths, stripText)
+          // Build FileImportRequest array with duplicate info
+          const checkResult = checkDuplicates(db, filePaths, stripText)
 
-        const files = checkResult.files.map((f) => ({
-          filePath: f.filePath,
-          caseName: f.caseName,
-          isDuplicate: f.isDuplicate,
-          duplicateStrategy
-        }))
-
-        workerClient = new ImportWorkerClient()
-
-        return await new Promise((resolve, reject) => {
-          workerClient!.start({
-            files,
-            dbPath: db.getPath(),
-            encryptionKey: db.getEncryptionKey(),
-            throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
-            onProgress: (msg) => {
-              safeEmit('batch-import:progress', {
-                currentIndex: msg.fileIndex,
-                totalFiles: msg.totalFiles,
-                currentFileName: msg.fileName,
-                overallPercent: msg.overallPercent,
-                fileProgress: {
-                  phase: msg.phase,
-                  count: msg.variantCount,
-                  elapsed: 0,
-                  skipped: msg.skipped
-                }
-              })
-            },
-            onFileComplete: () => {
-              // File complete — progress already sent via onProgress
-            },
-            onComplete: (msg) => {
-              workerClient = null
-
-              // Send final progress
-              safeEmit('batch-import:progress', {
-                currentIndex: msg.results.details.length,
-                totalFiles: msg.results.details.length,
-                currentFileName: '',
-                overallPercent: 100
-              })
-
-              safeEmit('cohort:summaryRebuilt', { is_stale: false })
-
-              // Notify renderer globally that import completed
-              // (even if BatchImportDialog was closed via "Continue in Background")
-              safeEmit('batch-import:complete', {
-                succeeded: msg.results.succeeded,
-                failed: msg.results.failed,
-                skipped: msg.results.skipped,
-                cancelled: msg.results.cancelled,
-                details: msg.results.details.map((d) => ({
-                  filePath: d.filePath,
-                  fileName: d.fileName,
-                  status: d.status,
-                  caseName: d.caseName,
-                  variantCount: d.variantCount,
-                  error: d.error
-                }))
-              })
-
-              resolve({
-                succeeded: msg.results.succeeded,
-                failed: msg.results.failed,
-                skipped: msg.results.skipped,
-                cancelled: msg.results.cancelled,
-                details: msg.results.details.map((d) => ({
-                  filePath: d.filePath,
-                  fileName: d.fileName,
-                  status: d.status,
-                  caseName: d.caseName,
-                  variantCount: d.variantCount,
-                  error: d.error
-                }))
-              })
-            },
-            onError: (msg) => {
-              if (msg.fileIndex === -1) {
-                // Fatal error
-                workerClient = null
-                reject(new Error(msg.error))
-              }
-            }
-          })
-        })
-      } catch (error) {
-        workerClient = null
-        mainLogger.error(`batch-import:start error: ${error}`, 'import')
-        return {
-          succeeded: 0,
-          failed: filePaths.length,
-          skipped: 0,
-          cancelled: false,
-          details: filePaths.map((fp) => ({
-            filePath: fp,
-            fileName: basename(fp) || 'unknown',
-            status: 'failed' as const,
-            error: error instanceof Error ? error.message : 'Unknown error'
+          const files = checkResult.files.map((f) => ({
+            filePath: f.filePath,
+            caseName: f.caseName,
+            isDuplicate: f.isDuplicate,
+            duplicateStrategy
           }))
+
+          workerClient = new ImportWorkerClient()
+
+          return await new Promise((resolve, reject) => {
+            workerClient!.start({
+              files,
+              dbPath: db.getPath(),
+              encryptionKey: db.getEncryptionKey(),
+              throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
+              onProgress: (msg) => {
+                safeEmit('batch-import:progress', {
+                  currentIndex: msg.fileIndex,
+                  totalFiles: msg.totalFiles,
+                  currentFileName: msg.fileName,
+                  overallPercent: msg.overallPercent,
+                  fileProgress: {
+                    phase: msg.phase,
+                    count: msg.variantCount,
+                    elapsed: 0,
+                    skipped: msg.skipped
+                  }
+                })
+              },
+              onFileComplete: () => {
+                // File complete — progress already sent via onProgress
+              },
+              onComplete: (msg) => {
+                workerClient = null
+
+                // Send final progress
+                safeEmit('batch-import:progress', {
+                  currentIndex: msg.results.details.length,
+                  totalFiles: msg.results.details.length,
+                  currentFileName: '',
+                  overallPercent: 100
+                })
+
+                safeEmit('cohort:summaryRebuilt', { is_stale: false })
+
+                // Notify renderer globally that import completed
+                // (even if BatchImportDialog was closed via "Continue in Background")
+                safeEmit('batch-import:complete', {
+                  succeeded: msg.results.succeeded,
+                  failed: msg.results.failed,
+                  skipped: msg.results.skipped,
+                  cancelled: msg.results.cancelled,
+                  details: msg.results.details.map((d) => ({
+                    filePath: d.filePath,
+                    fileName: d.fileName,
+                    status: d.status,
+                    caseName: d.caseName,
+                    variantCount: d.variantCount,
+                    error: d.error
+                  }))
+                })
+
+                resolve({
+                  succeeded: msg.results.succeeded,
+                  failed: msg.results.failed,
+                  skipped: msg.results.skipped,
+                  cancelled: msg.results.cancelled,
+                  details: msg.results.details.map((d) => ({
+                    filePath: d.filePath,
+                    fileName: d.fileName,
+                    status: d.status,
+                    caseName: d.caseName,
+                    variantCount: d.variantCount,
+                    error: d.error
+                  }))
+                })
+              },
+              onError: (msg) => {
+                if (msg.fileIndex === -1) {
+                  // Fatal error
+                  workerClient = null
+                  reject(new Error(msg.error))
+                }
+              }
+            })
+          })
+        } catch (error) {
+          workerClient = null
+          mainLogger.error(`batch-import:start error: ${error}`, 'import')
+          return {
+            succeeded: 0,
+            failed: filePaths.length,
+            skipped: 0,
+            cancelled: false,
+            details: filePaths.map((fp) => ({
+              filePath: fp,
+              fileName: basename(fp) || 'unknown',
+              status: 'failed' as const,
+              error: error instanceof Error ? error.message : 'Unknown error'
+            }))
+          }
         }
-      }
       })
     }
   )

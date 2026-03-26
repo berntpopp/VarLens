@@ -67,6 +67,6 @@ describe('Migration v13-v14: cohort summary tables', () => {
     runMigrations(db)
     expect(() => runMigrations(db)).not.toThrow()
     const version = db.prepare('PRAGMA user_version').get() as { user_version: number }
-    expect(version.user_version).toBe(17)
+    expect(version.user_version).toBe(18)
   })
 })

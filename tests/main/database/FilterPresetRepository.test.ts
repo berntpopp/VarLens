@@ -28,9 +28,9 @@ describe('migration v15 - filter_presets', () => {
     expect(presets.length).toBeGreaterThanOrEqual(8)
   })
 
-  it('sets user_version to 17', () => {
+  it('sets user_version to 18', () => {
     const version = db.pragma('user_version', { simple: true })
-    expect(version).toBe(17)
+    expect(version).toBe(18)
   })
 
   it('creates unique index on name', () => {

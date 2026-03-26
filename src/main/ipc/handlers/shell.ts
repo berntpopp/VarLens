@@ -67,41 +67,35 @@ export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
     })
   })
 
-  ipcMain.handle(
-    'shell:openExternal',
-    async (_event, url: unknown) => {
-      return wrapHandler(async () => {
-        // ANTI-07: Runtime validation at IPC boundary
-        const validated = UrlSchema.safeParse(url)
-        if (!validated.success) {
-          mainLogger.error(
-            `Invalid shell:openExternal params: ${validated.error.message}`,
-            'shell'
-          )
-          throw new Error('Invalid parameters')
+  ipcMain.handle('shell:openExternal', async (_event, url: unknown) => {
+    return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = UrlSchema.safeParse(url)
+      if (!validated.success) {
+        mainLogger.error(`Invalid shell:openExternal params: ${validated.error.message}`, 'shell')
+        throw new Error('Invalid parameters')
+      }
+
+      try {
+        const parsedUrl = new URL(validated.data)
+
+        // Only allow HTTPS protocol
+        if (parsedUrl.protocol !== 'https:') {
+          return { success: false, error: 'Only HTTPS URLs allowed' }
         }
 
-        try {
-          const parsedUrl = new URL(validated.data)
-
-          // Only allow HTTPS protocol
-          if (parsedUrl.protocol !== 'https:') {
-            return { success: false, error: 'Only HTTPS URLs allowed' }
-          }
-
-          // Check domain whitelist
-          if (!isDomainAllowed(parsedUrl.hostname)) {
-            return { success: false, error: 'Domain not allowed' }
-          }
-
-          await shell.openExternal(validated.data)
-          return { success: true }
-        } catch {
-          return { success: false, error: 'Invalid URL' }
+        // Check domain whitelist
+        if (!isDomainAllowed(parsedUrl.hostname)) {
+          return { success: false, error: 'Domain not allowed' }
         }
-      })
-    }
-  )
+
+        await shell.openExternal(validated.data)
+        return { success: true }
+      } catch {
+        return { success: false, error: 'Invalid URL' }
+      }
+    })
+  })
 
   /**
    * Show file in system file manager

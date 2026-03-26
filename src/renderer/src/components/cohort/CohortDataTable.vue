@@ -334,12 +334,9 @@ const { debouncedFn: debouncedEmitColumnFilters } = useDebounce(
   },
   300
 )
-watch(
-  getColumnFiltersParam,
-  (newFilters) => {
-    debouncedEmitColumnFilters(newFilters)
-  },
-)
+watch(getColumnFiltersParam, (newFilters) => {
+  debouncedEmitColumnFilters(newFilters)
+})
 
 // Stores
 const linksStore = useExternalLinksStore()
