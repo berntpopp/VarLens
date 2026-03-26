@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { join } from 'path'
 
 vi.mock('electron', () => ({
   app: {
@@ -24,7 +25,7 @@ describe('settings-io', () => {
 
   describe('settingsPath', () => {
     it('returns path under userData', () => {
-      expect(settingsPath()).toBe('/mock/userData/settings.json')
+      expect(settingsPath()).toBe(join('/mock/userData', 'settings.json'))
     })
   })
 
