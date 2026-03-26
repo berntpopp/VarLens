@@ -584,7 +584,7 @@ defineExpose({
 })
 </script>
 
-<style scoped src="./data-table-shared.css"></style>
+<style src="./data-table-shared.css"></style>
 <style scoped>
 /* Loading skeleton (VariantTable-specific) */
 .variant-table-skeleton {

@@ -609,7 +609,7 @@ defineExpose({
 })
 </script>
 
-<style scoped src="../data-table-shared.css"></style>
+<style src="../data-table-shared.css"></style>
 <style scoped>
 /* Consequence cell (CohortDataTable-specific) */
 .consequence-cell {

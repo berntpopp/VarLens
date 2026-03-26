@@ -3,14 +3,14 @@
  * DRY: Both tables use identical flex layout, scrollbar styling, row
  * highlighting, and column overflow behavior.
  *
- * Usage in a Vue SFC:
- *   <style scoped src="./data-table-shared.css"></style>
- *   <style scoped>
- *     /* Component-specific overrides here */
- *   </style>
+ * All selectors are scoped to .table-container to avoid leaking
+ * into unrelated components when imported as a non-scoped style block.
  *
- * Note: Vue SFC scoped styles with src= apply the scoped attribute
- * to all selectors, so :deep() works correctly.
+ * Usage in a Vue SFC (two style blocks):
+ *   <style src="./data-table-shared.css"></style>
+ *   <style scoped>
+ *     .component-specific { ... }
+ *   </style>
  */
 
 /* Table container fills remaining height in flex parent */
@@ -24,20 +24,20 @@
 }
 
 /* Make data table fill available space */
-:deep(.v-data-table) {
+.table-container .v-data-table {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-:deep(.v-table__wrapper) {
+.table-container .v-table__wrapper {
   flex: 1;
   overflow-y: auto;
 }
 
 /* Top scrollbar (synced with table via useTableScroll composable) */
-.top-scrollbar-container {
+.table-container .top-scrollbar-container {
   overflow-x: auto;
   overflow-y: hidden;
   height: 12px;
@@ -45,72 +45,72 @@
   border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
 }
 
-.top-scrollbar-inner {
+.table-container .top-scrollbar-inner {
   height: 1px;
 }
 
-.top-scrollbar-container::-webkit-scrollbar {
+.table-container .top-scrollbar-container::-webkit-scrollbar {
   height: 10px;
 }
 
-.top-scrollbar-container::-webkit-scrollbar-track {
+.table-container .top-scrollbar-container::-webkit-scrollbar-track {
   background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 5%, transparent);
 }
 
-.top-scrollbar-container::-webkit-scrollbar-thumb {
+.table-container .top-scrollbar-container::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 20%, transparent);
   border-radius: 5px;
 }
 
-.top-scrollbar-container::-webkit-scrollbar-thumb:hover {
+.table-container .top-scrollbar-container::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 35%, transparent);
 }
 
 /* HGVS notation monospace */
-.hgvs-notation {
+.table-container .hgvs-notation {
   font-family: 'Courier New', monospace;
   font-size: 0.85em;
 }
 
 /* Clickable table rows with hover transition */
-:deep(.v-data-table tbody tr) {
+.table-container .v-data-table tbody tr {
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
 /* Zebra striping for better scanability */
-:deep(.v-data-table tbody tr.variant-row--striped) {
+.table-container .v-data-table tbody tr.variant-row--striped {
   background-color: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 3.5%, transparent);
 }
 
 /* Selected row highlighting - prominent with left accent border */
-:deep(.v-data-table tbody tr.variant-row--selected) {
+.table-container .v-data-table tbody tr.variant-row--selected {
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 12%, transparent) !important;
   border-left: 4px solid rgb(var(--v-theme-primary)) !important;
 }
 
-:deep(.v-data-table tbody tr.variant-row--selected td:first-child) {
+.table-container .v-data-table tbody tr.variant-row--selected td:first-child {
   padding-left: calc(16px - 4px);
 }
 
 /* Hover state - visible but subtle */
-:deep(.v-data-table tbody tr:hover) {
+.table-container .v-data-table tbody tr:hover {
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, transparent) !important;
 }
 
 /* Selected + hover - slightly darker */
-:deep(.v-data-table tbody tr.variant-row--selected:hover) {
+.table-container .v-data-table tbody tr.variant-row--selected:hover {
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 18%, transparent) !important;
 }
 
 /* CSS containment: each cell is layout-independent */
-:deep(.v-data-table tbody td) {
+.table-container .v-data-table tbody td {
   contain: layout style;
 }
 
 /* Column max-width with ellipsis and horizontal scroll */
-:deep(.v-data-table th),
-:deep(.v-data-table td) {
+.table-container .v-data-table th,
+.table-container .v-data-table td {
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -118,30 +118,30 @@
 }
 
 /* Ensure table can scroll horizontally when columns overflow */
-:deep(.v-table__wrapper) {
+.table-container .v-table__wrapper {
   overflow-x: auto;
 }
 
 /* Style bottom scrollbar to match top scrollbar */
-:deep(.v-table__wrapper)::-webkit-scrollbar {
+.table-container .v-table__wrapper::-webkit-scrollbar {
   height: 10px;
 }
 
-:deep(.v-table__wrapper)::-webkit-scrollbar-track {
+.table-container .v-table__wrapper::-webkit-scrollbar-track {
   background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 5%, transparent);
 }
 
-:deep(.v-table__wrapper)::-webkit-scrollbar-thumb {
+.table-container .v-table__wrapper::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 20%, transparent);
   border-radius: 5px;
 }
 
-:deep(.v-table__wrapper)::-webkit-scrollbar-thumb:hover {
+.table-container .v-table__wrapper::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 35%, transparent);
 }
 
 /* External link click highlight */
-.external-link--clicked {
+.table-container .external-link--clicked {
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 10%, transparent);
   border-radius: 2px;
 }
