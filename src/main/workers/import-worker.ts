@@ -263,7 +263,9 @@ port.on('message', async (msg: MainMessage) => {
           } catch (importError) {
             // Clean up pre-parse promise on error
             if (nextFileParsed) {
-              nextFileParsed.catch(() => {}) // prevent unhandled rejection
+              nextFileParsed.catch((e) => {
+                console.warn('Pre-parse cleanup failed:', e)
+              }) // prevent unhandled rejection
               nextFileParsed = null
             }
             stmts.deleteCase.run(caseId)

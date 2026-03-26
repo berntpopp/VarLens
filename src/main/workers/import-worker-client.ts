@@ -98,7 +98,9 @@ export class ImportWorkerClient {
 
   private cleanup(): void {
     if (this.worker !== null) {
-      this.worker.terminate().catch(() => {})
+      this.worker.terminate().catch((e) => {
+        console.warn('Worker termination failed:', e)
+      })
       this.worker = null
     }
   }

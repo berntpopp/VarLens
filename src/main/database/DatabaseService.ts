@@ -261,7 +261,9 @@ export class DatabaseService {
    * Close the database connection
    */
   close(): void {
-    this._kysely.destroy().catch(() => {})
+    this._kysely.destroy().catch((e) => {
+      console.warn('Kysely destroy failed during close:', e)
+    })
     try {
       // Cap ANALYZE sampling so optimize finishes quickly even on large tables
       this.db.pragma(`analysis_limit = ${DATABASE_CONFIG.ANALYSIS_LIMIT}`)

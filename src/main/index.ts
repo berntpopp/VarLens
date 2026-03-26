@@ -170,7 +170,9 @@ if (gotTheLock !== true) {
 
   // Clean up database and worker pool on quit
   app.on('before-quit', () => {
-    destroyDbPool().catch(() => {})
+    destroyDbPool().catch((e) => {
+      console.warn('DbPool destruction failed during quit:', e)
+    })
     closeDatabaseManager()
   })
 

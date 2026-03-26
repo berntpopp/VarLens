@@ -30,7 +30,9 @@ function runDeleteWorker(request: DeleteWorkerRequest): Promise<number> {
       if (settled) return
       settled = true
       fn(value as number)
-      worker.terminate().catch(() => {})
+      worker.terminate().catch((e) => {
+        mainLogger.warn(`Delete worker termination failed: ${e}`, 'cases')
+      })
     }
 
     worker.on('message', (msg: DeleteWorkerResponse) => {

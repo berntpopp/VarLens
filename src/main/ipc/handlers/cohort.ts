@@ -280,7 +280,9 @@ export function triggerStartupRebuildIfNeeded(db: DatabaseService): void {
   const settle = (): void => {
     if (settled) return
     settled = true
-    worker.terminate().catch(() => {})
+    worker.terminate().catch((e) => {
+      mainLogger.warn(`Summary rebuild worker termination failed: ${e}`, 'cohort')
+    })
   }
 
   worker.on('message', (msg: RebuildWorkerResponse) => {
