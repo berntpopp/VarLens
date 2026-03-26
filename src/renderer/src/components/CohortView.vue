@@ -115,11 +115,17 @@ defineExpose({ refresh })
   opacity: 0.6;
 }
 
-/* Prevent dual-display glitch during tab switch (Vuetify bug #19682) */
+/* Prevent dual-display glitch during tab switch (Vuetify bug #19682).
+   Use height: 100% instead of auto to maintain flex height chain for pagination. */
 .cohort-tabs-window :deep(.v-window__container) {
   display: block !important;
-  height: auto !important;
+  height: 100% !important;
   transition: none !important;
+}
+
+/* Ensure tab window items fill their container height */
+.cohort-tabs-window :deep(.v-window-item) {
+  height: 100%;
 }
 
 .cohort-tabs-window :deep(.v-window-item:not(.v-window-item--active)) {

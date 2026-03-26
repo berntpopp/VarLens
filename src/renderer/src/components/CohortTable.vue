@@ -476,4 +476,10 @@ defineExpose({ refresh })
   min-height: 0;
   overflow: hidden;
 }
+
+/* Prevent banners/alerts from growing — only the data table gets remaining space */
+.cohort-table-container > .v-alert,
+.cohort-table-container > .v-banner {
+  flex-shrink: 0;
+}
 </style>
