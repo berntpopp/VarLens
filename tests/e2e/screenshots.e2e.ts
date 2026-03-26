@@ -836,9 +836,11 @@ test.describe('Documentation Screenshots', () => {
     await ensureCaseSelected(window)
     await window.waitForTimeout(500)
 
-    // Click a row to open the variant details panel
-    const firstRow = window.locator('.v-data-table__tr').first()
-    await firstRow.click({ timeout: 10000 })
+    // Click a body row to open the variant details panel
+    // Use tbody selector to avoid matching header rows
+    const firstRow = window.locator('.v-data-table tbody .v-data-table__tr').first()
+    await firstRow.scrollIntoViewIfNeeded()
+    await firstRow.click({ timeout: 15000 })
     await window.waitForTimeout(1500)
 
     // Wait for the details panel to appear (right-side temporary drawer)
@@ -916,9 +918,13 @@ test.describe('Documentation Screenshots', () => {
 
     // Open the variant details panel by clicking a row
     await ensureCaseSelected(window)
-    await window.waitForTimeout(500)
-    const firstRow = window.locator('.v-data-table__tr').first()
-    await firstRow.click({ timeout: 10000 })
+    await window.waitForTimeout(1000)
+
+    // Wait for table rows to be fully loaded and visible, then click
+    // Use tbody tr to avoid matching header rows, and scroll into view first
+    const firstBodyRow = window.locator('.v-data-table tbody .v-data-table__tr').first()
+    await firstBodyRow.scrollIntoViewIfNeeded()
+    await firstBodyRow.click({ timeout: 15000 })
     await window.waitForTimeout(2000)
 
     // Step 1: Scroll to ACMG section in the variant details drawer (not the filter drawer)
