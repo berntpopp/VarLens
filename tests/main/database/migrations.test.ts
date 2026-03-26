@@ -127,7 +127,7 @@ describe('Schema Migrations', () => {
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(17)
+      expect(versionResult.user_version).toBe(18)
 
       service.close()
 
@@ -137,7 +137,7 @@ describe('Schema Migrations', () => {
       const versionAfterReopen = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionAfterReopen.user_version).toBe(17)
+      expect(versionAfterReopen.user_version).toBe(18)
 
       service.close()
     })
@@ -464,7 +464,7 @@ describe('Schema Migrations', () => {
       let versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(17)
+      expect(versionResult.user_version).toBe(18)
 
       service.close()
 
@@ -480,11 +480,11 @@ describe('Schema Migrations', () => {
       expect(tableNamesAfterReopen).toContain('variant_annotations')
       expect(tableNamesAfterReopen).toContain('case_variant_annotations')
 
-      // Verify user_version is 17 (v15 creates filter_presets, v16 reseeds, v17 adds perf indexes)
+      // Verify user_version is 18 (v15 creates filter_presets, v16 reseeds, v17 adds perf indexes, v18 adds covering index)
       versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(17)
+      expect(versionResult.user_version).toBe(18)
 
       service.close()
     })
@@ -514,11 +514,11 @@ describe('Schema Migrations', () => {
       expect(tableNames).toContain('variant_tags')
       expect(tableNames).toContain('case_hpo_terms')
 
-      // Verify user_version is 17
+      // Verify user_version is 18
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(17)
+      expect(versionResult.user_version).toBe(18)
 
       service.close()
     })
@@ -756,7 +756,7 @@ describe('Schema Migrations', () => {
       const version = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(version.user_version).toBe(17)
+      expect(version.user_version).toBe(18)
 
       service.close()
     })
@@ -795,9 +795,9 @@ describe('Schema Migrations', () => {
       const indexNames = indexes.map((i) => i.name)
       expect(indexNames).toContain('idx_cvs_cohort_freq')
 
-      // Verify user_version = 17 (v15 + v16 + v17 all run)
+      // Verify user_version = 18 (v15 + v16 + v17 + v18 all run)
       const version = db.pragma('user_version', { simple: true }) as number
-      expect(version).toBe(17)
+      expect(version).toBe(18)
 
       service.close()
     })

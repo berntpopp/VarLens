@@ -1160,4 +1160,18 @@ export function runMigrations(db: Database.Database): void {
       PRAGMA user_version = 17;
     `)
   }
+
+  // ── v18: Add composite index on variant_annotations for coordinate lookups ──
+  if (currentVersion < 18) {
+    db.exec(`
+      -- Explicit composite index for coordinate-based annotation lookups.
+      -- The UNIQUE constraint on (chr, pos, ref, alt) creates an implicit index,
+      -- but this explicit index includes acmg_classification for covering queries
+      -- in the starred/comment/ACMG scope='all' UNION filters.
+      CREATE INDEX IF NOT EXISTS idx_variant_annotations_coords_acmg
+        ON variant_annotations(chr, pos, ref, alt, acmg_classification);
+
+      PRAGMA user_version = 18;
+    `)
+  }
 }
