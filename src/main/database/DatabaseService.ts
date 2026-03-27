@@ -69,6 +69,10 @@ export class DatabaseService {
         this.db.pragma(`key='${safeKey}'`)
       }
 
+      // Set page size for new databases (no-op on existing ones with data).
+      // Must be issued BEFORE journal_mode = WAL and any table creation.
+      this.db.pragma(`page_size = ${DATABASE_CONFIG.PAGE_SIZE}`)
+
       // Enable WAL mode for better concurrent read performance
       this.db.pragma('journal_mode = WAL')
 

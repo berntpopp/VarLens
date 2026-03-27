@@ -1,4 +1,11 @@
 export const DATABASE_CONFIG = {
+  /**
+   * SQLite page size in bytes. 8192 is optimal for variant-heavy databases:
+   * - Larger rows (variants have 20+ columns) fit better in fewer pages
+   * - Fewer page reads for table scans and index lookups
+   * - Must be set BEFORE any tables are created (only applies to new databases)
+   */
+  PAGE_SIZE: 8192,
   /** SQLite cache size in KB (negative = KB, positive = pages) */
   CACHE_SIZE_KB: -32000,
   /** SQLite cache size for import worker (64 MB, larger for bulk writes) */

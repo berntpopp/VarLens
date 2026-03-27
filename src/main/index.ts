@@ -131,6 +131,11 @@ if (gotTheLock !== true) {
     // Register IPC handlers
     registerIpcHandlers()
 
+    // Create window immediately after IPC handlers are ready — don't wait for
+    // non-critical setup. The renderer can start loading in parallel with the
+    // remaining initialization below.
+    createWindow()
+
     // Initialize auto-updater and schedule periodic checks (deferred to avoid competing with startup)
     setImmediate(() => {
       initAutoUpdater()
@@ -158,8 +163,6 @@ if (gotTheLock !== true) {
         }
       })
     })
-
-    createWindow()
 
     app.on('activate', function () {
       // On macOS it's common to re-create a window in the app when the

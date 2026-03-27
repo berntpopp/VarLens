@@ -80,12 +80,11 @@ export function useFilterPreferences(options?: UseFilterPreferencesOptions) {
   })
 
   /**
-   * Merge stored groups with defaults
-   * If stored groups are missing any default IDs (e.g., new filter added),
-   * append them at the end with visible=true, expanded=true
-   * Also migrate old 'active' field to new 'visible'+'expanded' fields
+   * Merged filter groups — computed once per storedPrefs change.
+   * Merges stored groups with defaults, migrating old 'active' field to
+   * new 'visible'+'expanded' fields, and appending any newly-added defaults.
    */
-  const mergeWithDefaults = (): FilterGroupPreference[] => {
+  const mergedGroups: ComputedRef<FilterGroupPreference[]> = computed(() => {
     const stored = storedPrefs.value.groups ?? []
     const storedIds = new Set(stored.map((g) => g.id))
 
@@ -126,14 +125,13 @@ export function useFilterPreferences(options?: UseFilterPreferencesOptions) {
     }))
 
     return [...migrated, ...mergedMissing]
-  }
+  })
 
   /**
    * All filter groups sorted by order (for menu)
    */
   const filterGroups: ComputedRef<FilterGroupPreference[]> = computed(() => {
-    const merged = mergeWithDefaults()
-    return merged.slice().sort((a, b) => a.order - b.order)
+    return mergedGroups.value.slice().sort((a, b) => a.order - b.order)
   })
 
   /**
@@ -148,7 +146,7 @@ export function useFilterPreferences(options?: UseFilterPreferencesOptions) {
    * @param ids Array of filter group IDs in desired order
    */
   const setFilterGroupOrder = (ids: string[]): void => {
-    const currentGroups = mergeWithDefaults()
+    const currentGroups = mergedGroups.value
     const groupMap = new Map(currentGroups.map((g) => [g.id, g]))
 
     // Update order based on new ids array
@@ -168,7 +166,7 @@ export function useFilterPreferences(options?: UseFilterPreferencesOptions) {
    * @param id Filter group ID to toggle
    */
   const toggleFilterGroupExpanded = (id: string): void => {
-    const currentGroups = mergeWithDefaults()
+    const currentGroups = mergedGroups.value
     const updated = currentGroups.map((g) => (g.id === id ? { ...g, expanded: !g.expanded } : g))
     storedPrefs.value.groups = updated
   }
@@ -178,7 +176,7 @@ export function useFilterPreferences(options?: UseFilterPreferencesOptions) {
    * @param id Filter group ID to toggle
    */
   const toggleFilterGroupVisible = (id: string): void => {
-    const currentGroups = mergeWithDefaults()
+    const currentGroups = mergedGroups.value
     const updated = currentGroups.map((g) => (g.id === id ? { ...g, visible: !g.visible } : g))
     storedPrefs.value.groups = updated
   }
@@ -188,7 +186,7 @@ export function useFilterPreferences(options?: UseFilterPreferencesOptions) {
    * @param id Filter group ID to hide
    */
   const hideFilterGroup = (id: string): void => {
-    const currentGroups = mergeWithDefaults()
+    const currentGroups = mergedGroups.value
     const updated = currentGroups.map((g) => (g.id === id ? { ...g, visible: false } : g))
     storedPrefs.value.groups = updated
   }
@@ -204,7 +202,7 @@ export function useFilterPreferences(options?: UseFilterPreferencesOptions) {
    * Show all filter groups (set all to visible and expanded)
    */
   const showAll = (): void => {
-    const currentGroups = mergeWithDefaults()
+    const currentGroups = mergedGroups.value
     const updated = currentGroups.map((g) => ({ ...g, visible: true, expanded: true }))
     storedPrefs.value.groups = updated
   }

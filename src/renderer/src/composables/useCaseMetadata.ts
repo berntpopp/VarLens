@@ -5,7 +5,7 @@
  * Used by CaseList, CaseMetadataCard for status, cohort, and HPO display/editing.
  */
 
-import { ref } from 'vue'
+import { ref, shallowRef, triggerRef } from 'vue'
 import { logService } from '../services/LogService'
 import { useCaseComments } from './useCaseComments'
 import { useCaseMetrics } from './useCaseMetrics'
@@ -27,11 +27,41 @@ import type {
   FullCaseMetadata
 } from '../../../shared/types/api'
 
-// Cache full metadata by caseId
-const metadataCache = ref<Map<number, FullCaseMetadata>>(new Map())
+/** Maximum cached case metadata entries — evicts oldest on overflow */
+const MAX_METADATA_CACHE_SIZE = 200
 
-// Loading states per case
-const loadingStates = ref<Map<number, boolean>>(new Map())
+// Cache full metadata by caseId — shallowRef avoids deep reactivity overhead
+// on the Map's values (FullCaseMetadata objects are never observed individually)
+const metadataCache = shallowRef<Map<number, FullCaseMetadata>>(new Map())
+
+// Loading states per case — shallowRef since we trigger manually
+const loadingStates = shallowRef<Map<number, boolean>>(new Map())
+
+/** Notify Vue that metadataCache changed (batched via microtask) */
+let _pendingTrigger = false
+function triggerCacheUpdate(): void {
+  if (!_pendingTrigger) {
+    _pendingTrigger = true
+    Promise.resolve().then(() => {
+      triggerRef(metadataCache)
+      _pendingTrigger = false
+    })
+  }
+}
+
+/** Evict oldest entries when cache exceeds limit (Map preserves insertion order) */
+function evictIfNeeded(): void {
+  const cache = metadataCache.value
+  if (cache.size > MAX_METADATA_CACHE_SIZE) {
+    const keysToDelete = Array.from(cache.keys()).slice(
+      0,
+      cache.size - MAX_METADATA_CACHE_SIZE
+    )
+    for (const key of keysToDelete) {
+      cache.delete(key)
+    }
+  }
+}
 
 // Global cohort groups list
 const cohortGroupsCache = ref<CohortGroup[]>([])
@@ -48,9 +78,12 @@ export function useCaseMetadata() {
     }
 
     loadingStates.value.set(caseId, true)
+    triggerRef(loadingStates)
     try {
       const result = await api.caseMetadata.getFullMetadata(caseId)
       metadataCache.value.set(caseId, result)
+      evictIfNeeded()
+      triggerCacheUpdate()
     } catch (error) {
       logService.error(
         'Failed to load case metadata: ' + (error instanceof Error ? error.message : String(error)),
@@ -58,6 +91,7 @@ export function useCaseMetadata() {
       )
     } finally {
       loadingStates.value.set(caseId, false)
+      triggerRef(loadingStates)
     }
   }
 
@@ -355,7 +389,9 @@ export function useCaseMetadata() {
   // Clear all caches (call on database switch)
   function clearCache(): void {
     metadataCache.value.clear()
+    triggerRef(metadataCache)
     loadingStates.value.clear()
+    triggerRef(loadingStates)
     cohortGroupsCache.value = []
     useCaseComments().clearCache()
     useCaseMetrics().clearCache()
@@ -364,7 +400,9 @@ export function useCaseMetadata() {
   // Invalidate single case (force reload)
   function invalidateCase(caseId: number): void {
     metadataCache.value.delete(caseId)
+    triggerCacheUpdate()
     loadingStates.value.delete(caseId)
+    triggerRef(loadingStates)
   }
 
   return {

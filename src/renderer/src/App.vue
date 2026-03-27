@@ -324,9 +324,12 @@ useKeyboardShortcuts({
 let cleanupImportComplete: (() => void) | null = null
 
 // Lifecycle
-onMounted(async () => {
+onMounted(() => {
   logService.setupMainProcessListener()
-  await databaseStore.fetchInfo()
+
+  // Fire-and-forget: fetch database info without blocking the initial render.
+  // The UI will show immediately and the data will arrive on the next tick.
+  databaseStore.fetchInfo()
 
   if (api) {
     cleanupImportComplete = api.batchImport.onComplete((result) => {

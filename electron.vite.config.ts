@@ -41,6 +41,22 @@ export default defineConfig({
     plugins: [vue(), vuetify({ autoImport: true })],
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version)
+    },
+    build: {
+      // Inline small assets to avoid extra file-protocol round-trips in Electron
+      assetsInlineLimit: 8192,
+      rollupOptions: {
+        output: {
+          // Separate large vendor chunks so the main bundle stays small and
+          // the renderer can start executing sooner (parallel chunk loading).
+          manualChunks: {
+            vuetify: ['vuetify'],
+            'vuetify-components': ['vuetify/components'],
+            'vuetify-labs': ['vuetify/labs'],
+            zod: ['zod']
+          }
+        }
+      }
     }
   }
 })

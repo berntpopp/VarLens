@@ -3,7 +3,7 @@
  * Manages configurable external database links with localStorage persistence
  */
 
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { GenomeBuild } from '../utils/externalLinks'
 import { logService } from '../services/LogService'
@@ -224,39 +224,53 @@ export const useExternalLinksStore = defineStore('externalLinks', () => {
     return Array.from(domains)
   })
 
+  // Persist and sync after any mutation — replaces the expensive deep watcher
+  function _persistAndSync(): void {
+    saveLinks(links.value)
+    syncDomains()
+  }
+
   // Actions
   function updateLink(id: string, updates: Partial<ExternalLinkConfig>): void {
     const index = links.value.findIndex((link) => link.id === id)
     if (index !== -1) {
       links.value[index] = { ...links.value[index], ...updates }
+      _persistAndSync()
     }
   }
 
   function toggleLink(id: string): void {
-    const link = links.value.find((l) => l.id === id)
-    if (link !== undefined) {
-      link.enabled = !link.enabled
+    const index = links.value.findIndex((l) => l.id === id)
+    if (index !== -1) {
+      links.value[index] = { ...links.value[index], enabled: !links.value[index].enabled }
+      _persistAndSync()
     }
   }
 
   function addCustomLink(config: Omit<ExternalLinkConfig, 'id' | 'isBuiltIn'>): void {
     const id = crypto.randomUUID()
-    links.value.push({
-      ...config,
-      id,
-      isBuiltIn: false
-    })
+    links.value = [
+      ...links.value,
+      {
+        ...config,
+        id,
+        isBuiltIn: false
+      }
+    ]
+    _persistAndSync()
   }
 
   function removeLink(id: string): void {
     const link = links.value.find((l) => l.id === id)
     if (link !== undefined && !link.isBuiltIn) {
       links.value = links.value.filter((l) => l.id !== id)
+      _persistAndSync()
     }
   }
 
   function resetToDefaults(): void {
     links.value = getDefaultLinks()
+    _persistAndSync()
   }
 
   function setGenomeBuild(build: GenomeBuild): void {
@@ -268,16 +282,6 @@ export const useExternalLinksStore = defineStore('externalLinks', () => {
     const domains = configuredDomains.value
     window.api.shell.updateDomains(domains)
   }
-
-  // Watch links changes and persist to localStorage
-  watch(
-    links,
-    (newLinks) => {
-      saveLinks(newLinks)
-      syncDomains()
-    },
-    { deep: true }
-  )
 
   // Initial sync
   syncDomains()
