@@ -435,6 +435,58 @@
           </div>
         </v-expansion-panel-text>
       </v-expansion-panel>
+      <!-- === INHERITANCE === -->
+      <div class="filter-section-header text-overline text-medium-emphasis px-3 pt-3 pb-1">
+        <v-divider class="mb-2" />
+        Inheritance
+      </div>
+
+      <!-- Inheritance Modes -->
+      <v-expansion-panel value="inheritance">
+        <FilterPanelTitle
+          :icon="mdiDna"
+          label="Inheritance"
+          :active="isFilterGroupActive('inheritance')"
+          :value-summary="inheritanceSummary"
+        />
+        <v-expansion-panel-text>
+          <div class="text-caption text-medium-emphasis mb-1">Genotype (always available)</div>
+          <div class="d-flex ga-1 flex-wrap mb-3">
+            <v-chip
+              v-for="meta in soloModes"
+              :key="meta.mode"
+              :color="filters.inheritanceModes.includes(meta.mode) ? meta.color : undefined"
+              :variant="filters.inheritanceModes.includes(meta.mode) ? 'flat' : 'outlined'"
+              size="small"
+              @click="toggleInheritanceMode(meta.mode)"
+            >
+              {{ meta.abbr }}
+              <v-tooltip activator="parent" location="top">{{ meta.label }}</v-tooltip>
+            </v-chip>
+          </div>
+          <div class="text-caption text-medium-emphasis mb-1">Segregation (requires family)</div>
+          <div class="d-flex ga-1 flex-wrap mb-3">
+            <v-chip
+              v-for="meta in trioModes"
+              :key="meta.mode"
+              :disabled="filters.analysisGroupId === null"
+              :color="filters.inheritanceModes.includes(meta.mode) ? meta.color : undefined"
+              :variant="filters.inheritanceModes.includes(meta.mode) ? 'flat' : 'outlined'"
+              size="small"
+              @click="toggleInheritanceMode(meta.mode)"
+            >
+              {{ meta.abbr }}
+              <v-tooltip activator="parent" location="top">
+                {{
+                  filters.analysisGroupId !== null
+                    ? meta.label
+                    : meta.label + ' — assign a family to enable'
+                }}
+              </v-tooltip>
+            </v-chip>
+          </div>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
     </v-expansion-panels>
 
     <PanelManagerDialog v-model="panelManagerOpen" @panels-changed="onPanelsChanged" />
@@ -452,6 +504,7 @@ import PanelManagerDialog from './panels/PanelManagerDialog.vue'
 import PanelFilterSection from './panels/PanelFilterSection.vue'
 import { consequenceGroups, clinvarGroups } from '../config/filterGroups'
 import { ACMG_FILTER_OPTIONS_LONG } from '../utils/filters'
+import { INHERITANCE_MODE_META, SOLO_MODES, TRIO_MODES } from '../../../shared/types/inheritance'
 import type { Tag } from '../../../shared/types/api'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import {
@@ -493,7 +546,8 @@ const allPanelValues = [
   'internal-frequency',
   'cadd',
   'tags',
-  'annotations'
+  'annotations',
+  'inheritance'
 ]
 const expandedPanels = ref<string[]>(['search', 'impact', 'frequency'])
 
@@ -673,6 +727,29 @@ const toggleAcmgFilter = (value: string): void => {
     filters.value.acmgClassifications = [...current, value]
   }
 }
+
+// Inheritance modes
+const soloModes = SOLO_MODES.map((m) => INHERITANCE_MODE_META[m])
+const trioModes = TRIO_MODES.map((m) => INHERITANCE_MODE_META[m])
+
+function toggleInheritanceMode(mode: string): void {
+  const idx = filters.value.inheritanceModes.indexOf(mode)
+  if (idx >= 0) {
+    filters.value.inheritanceModes.splice(idx, 1)
+  } else {
+    filters.value.inheritanceModes.push(mode)
+  }
+}
+
+const inheritanceSummary = computed(() => {
+  if (filters.value.inheritanceModes.length === 0) return ''
+  return filters.value.inheritanceModes
+    .map((m) => {
+      const meta = INHERITANCE_MODE_META[m as keyof typeof INHERITANCE_MODE_META]
+      return meta?.abbr ?? m
+    })
+    .join(', ')
+})
 </script>
 
 <style scoped>

@@ -88,6 +88,17 @@ export function buildIpcParams(filters: FilterState): FilterIpcParams {
     params.carrier_count_min = filters.minCarriers
   }
 
+  // Inheritance filters
+  if (filters.inheritanceModes.length > 0) {
+    params.inheritance_modes = [...filters.inheritanceModes]
+  }
+  if (filters.analysisGroupId !== null) {
+    params.analysis_group_id = filters.analysisGroupId
+  }
+  if (filters.considerPhasing) {
+    params.consider_phasing = true
+  }
+
   // Annotation filters
   if (filters.starredOnly) {
     params.starred_only = true

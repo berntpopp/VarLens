@@ -9,6 +9,7 @@
 
 import type { FilterState, ActiveFilter } from '../../../../shared/types/filters'
 import type { ColumnFiltersParam } from '../../../../shared/types/column-filters'
+import { INHERITANCE_MODE_META } from '../../../../shared/types/inheritance'
 
 /** Human-readable labels for column filter keys */
 const COLUMN_LABELS: Record<string, string> = {
@@ -126,6 +127,15 @@ export function buildActiveFiltersList(
   }
   if (filters.acmgClassifications.length > 0) {
     list.push({ id: 'acmg', label: 'ACMG', value: filters.acmgClassifications.join(', ') })
+  }
+
+  // Inheritance modes
+  if (filters.inheritanceModes.length > 0) {
+    const labels = filters.inheritanceModes.map((m) => {
+      const meta = INHERITANCE_MODE_META[m as keyof typeof INHERITANCE_MODE_META]
+      return meta?.abbr ?? m
+    })
+    list.push({ id: 'inheritance', label: 'Inheritance', value: labels.join(', ') })
   }
 
   // Gene panels

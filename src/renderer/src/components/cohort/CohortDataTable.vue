@@ -588,7 +588,10 @@ const columnActiveFilters = computed<ActiveFilter[]>(() => {
       hasCommentOnly: false,
       acmgClassifications: [],
       activePanelIds: [],
-      panelPaddingBp: 5000
+      panelPaddingBp: 5000,
+      inheritanceModes: [],
+      analysisGroupId: null,
+      considerPhasing: false
     },
     [],
     colFilters

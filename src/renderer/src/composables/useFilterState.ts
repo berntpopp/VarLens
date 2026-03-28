@@ -82,7 +82,10 @@ export function useFilterState(
     acmgClassifications: [] as string[],
     annotationScope: 'case' as const,
     activePanelIds: [] as number[],
-    panelPaddingBp: 5000
+    panelPaddingBp: 5000,
+    inheritanceModes: [] as string[],
+    analysisGroupId: null as number | null,
+    considerPhasing: false
   })
 
   // Filter options loaded from database
@@ -177,7 +180,8 @@ export function useFilterState(
       filters.value.starredOnly ||
       filters.value.hasCommentOnly ||
       filters.value.acmgClassifications.length > 0 ||
-      filters.value.activePanelIds.length > 0
+      filters.value.activePanelIds.length > 0 ||
+      filters.value.inheritanceModes.length > 0
     )
   })
 
@@ -212,6 +216,7 @@ export function useFilterState(
     if (filters.value.hasCommentOnly) count++
     if (filters.value.acmgClassifications.length > 0) count++
     if (filters.value.activePanelIds.length > 0) count++
+    if (filters.value.inheritanceModes.length > 0) count++
     return count
   })
 
@@ -300,6 +305,13 @@ export function useFilterState(
         value: `${filters.value.activePanelIds.length} panel(s)`
       })
     }
+    if (filters.value.inheritanceModes.length > 0) {
+      list.push({
+        id: 'inheritance',
+        label: 'Inheritance',
+        value: filters.value.inheritanceModes.join(', ')
+      })
+    }
 
     return list
   })
@@ -348,6 +360,8 @@ export function useFilterState(
         )
       case 'panels':
         return filters.value.activePanelIds.length > 0
+      case 'inheritance':
+        return filters.value.inheritanceModes.length > 0
       default:
         return false
     }
@@ -407,6 +421,11 @@ export function useFilterState(
         filters.value.activePanelIds = []
         filters.value.panelPaddingBp = 5000
         break
+      case 'inheritance':
+        filters.value.inheritanceModes = []
+        filters.value.analysisGroupId = null
+        filters.value.considerPhasing = false
+        break
     }
   }
 
@@ -430,6 +449,9 @@ export function useFilterState(
     filters.value.annotationScope = 'case'
     filters.value.activePanelIds = []
     filters.value.panelPaddingBp = 5000
+    filters.value.inheritanceModes = []
+    filters.value.analysisGroupId = null
+    filters.value.considerPhasing = false
     resetPresets()
     // Also reset sort order in parent
     onResetSort()
@@ -496,6 +518,9 @@ export function useFilterState(
     filters.value.annotationScope = 'case'
     filters.value.activePanelIds = []
     filters.value.panelPaddingBp = 5000
+    filters.value.inheritanceModes = []
+    filters.value.analysisGroupId = null
+    filters.value.considerPhasing = false
     resetPresets()
   }
 

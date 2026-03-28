@@ -20,6 +20,9 @@ export interface FilterState {
   activePanelIds: number[]
   panelPaddingBp: number
   maxInternalAf: number | null
+  inheritanceModes: string[]
+  analysisGroupId: number | null
+  considerPhasing: boolean
 }
 
 /**
@@ -156,6 +159,16 @@ export function buildFilterFromState(
   const internalAfValue = filters.maxInternalAf
   if (internalAfValue !== null && Number.isNaN(internalAfValue) === false && internalAfValue > 0) {
     variantFilter.max_internal_af = internalAfValue
+  }
+
+  if (filters.inheritanceModes.length > 0) {
+    variantFilter.inheritance_modes = [...filters.inheritanceModes]
+  }
+  if (filters.analysisGroupId !== null) {
+    variantFilter.analysis_group_id = filters.analysisGroupId
+  }
+  if (filters.considerPhasing) {
+    variantFilter.consider_phasing = true
   }
 
   return variantFilter

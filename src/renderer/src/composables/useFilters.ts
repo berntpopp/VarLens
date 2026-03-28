@@ -84,6 +84,12 @@ export interface FilterState {
   panelPaddingBp: number
   /** Maximum internal database allele frequency (0-1) */
   maxInternalAf: number | null
+  /** Selected inheritance mode filters (multi-select) */
+  inheritanceModes: string[]
+  /** Active analysis group ID for trio filtering */
+  analysisGroupId: number | null
+  /** Consider phasing information for compound het */
+  considerPhasing: boolean
 }
 
 /**
@@ -139,7 +145,10 @@ function createInitialFilterState(): FilterState {
     hasCommentOnly: false,
     acmgClassifications: [],
     activePanelIds: [],
-    panelPaddingBp: 5000
+    panelPaddingBp: 5000,
+    inheritanceModes: [],
+    analysisGroupId: null,
+    considerPhasing: false
   }
 }
 
