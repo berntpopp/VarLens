@@ -100,13 +100,56 @@ export function useMolstarViewer(
   /** The warm-light background color used across the panel */
   const BG_COLOR = { r: 250, g: 248, b: 246 }
 
+  /** Timer for background color polling restore */
+  let bgRestoreTimer: ReturnType<typeof setInterval> | null = null
+
   /**
    * Restore the background color on the canvas.
    * Called after any operation that may reset the canvas (load, representation change).
+   * Uses both the Mol* API and direct canvas element styling as a fallback,
+   * because the Mol* renderer can override the API-set color during certain
+   * representation computations (e.g., molecular surface).
    */
   function restoreBgColor(): void {
     if (viewerInstance?.canvas) {
       viewerInstance.canvas.setBgColor(BG_COLOR)
+    }
+    // Also set bg-color attributes on the element so Mol* picks them up on re-init
+    const el = molstarRef.value as PdbeMolstarElement | null
+    if (el) {
+      el.setAttribute('bg-color-r', String(BG_COLOR.r))
+      el.setAttribute('bg-color-g', String(BG_COLOR.g))
+      el.setAttribute('bg-color-b', String(BG_COLOR.b))
+      // Also style the canvas element directly as a CSS fallback
+      const canvas = el.querySelector('canvas') as HTMLCanvasElement | null
+      if (canvas) {
+        canvas.style.backgroundColor = `rgb(${BG_COLOR.r}, ${BG_COLOR.g}, ${BG_COLOR.b})`
+      }
+    }
+  }
+
+  /**
+   * Start a polling loop that continuously restores the background color.
+   * Molecular surface computation can take many seconds and resets the canvas
+   * after our initial setBgColor calls. This polls every 500ms for up to 15s.
+   */
+  function startBgColorRestore(): void {
+    stopBgColorRestore()
+    let attempts = 0
+    const maxAttempts = 30 // 15 seconds
+    bgRestoreTimer = setInterval(() => {
+      attempts++
+      restoreBgColor()
+      if (attempts >= maxAttempts) {
+        stopBgColorRestore()
+      }
+    }, 500)
+  }
+
+  function stopBgColorRestore(): void {
+    if (bgRestoreTimer !== null) {
+      clearInterval(bgRestoreTimer)
+      bgRestoreTimer = null
     }
   }
 
@@ -328,9 +371,8 @@ export function useMolstarViewer(
       // Set the visual-style attribute for the web component
       el.setAttribute('visual-style', type)
 
-      // Trigger a full reload with the new visual style.
-      // We must re-specify the data source since fullLoad=true clears it.
-      // Include bgColor so the component re-initializes with the correct background.
+      // First try without fullLoad — this avoids the background reset issue.
+      // pdbe-molstar can switch visual style without a full data reload.
       const updateOptions: Record<string, unknown> = {
         visualStyle: type,
         bgColor: BG_COLOR,
@@ -340,23 +382,19 @@ export function useMolstarViewer(
         }
       }
 
-      const updatePromise = viewerInstance.visual.update(updateOptions, true)
+      // Use fullLoad=false to avoid resetting the canvas (which turns bg black).
+      // The visual style change is applied as a representation update on the
+      // existing structure data.
+      const updatePromise = viewerInstance.visual.update(updateOptions, false)
 
-      // After visual.update with fullLoad=true, the background color gets reset.
-      // The loadComplete handler will also restore bg color, but we add
-      // explicit fallbacks here in case loadComplete fires before canvas is ready.
       if (updatePromise instanceof Promise) {
         void updatePromise.then(() => {
           restoreBgColor()
           highlightVariants()
         })
       }
-      // Staggered fallback restores: the canvas may not be ready when the promise
-      // resolves or when loadComplete fires, so we retry at increasing intervals.
-      setTimeout(() => restoreBgColor(), 500)
-      setTimeout(() => restoreBgColor(), 1500)
-      setTimeout(() => restoreBgColor(), 3000)
-      setTimeout(() => restoreBgColor(), 5000)
+      // Start polling bg color restore as a safety net
+      startBgColorRestore()
 
       logService.info(`Representation changed to ${type}`, 'MolstarViewer')
 
@@ -453,6 +491,7 @@ export function useMolstarViewer(
 
   onBeforeUnmount(() => {
     stopPolling()
+    stopBgColorRestore()
     loadSubscription?.unsubscribe()
     loadSubscription = null
     viewerInstance = null

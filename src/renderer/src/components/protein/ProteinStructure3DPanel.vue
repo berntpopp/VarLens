@@ -5,10 +5,11 @@
  */
 
 import { computed, ref } from 'vue'
-import { mdiTargetVariant, mdiMedicalBag, mdiFilter } from '@mdi/js'
+import { mdiTargetVariant, mdiMedicalBag } from '@mdi/js'
 import type {
   LollipopVariant,
   ClinVarVariant,
+  ClinVarSignificance,
   ProteinStructureInfo
 } from '../../../../shared/types/protein'
 import {
@@ -20,11 +21,33 @@ import MolstarViewer from './MolstarViewer.vue'
 import StructureControls from './StructureControls.vue'
 import type { RepresentationType, VariantStyle } from '../../composables/useMolstarViewer'
 
-/** Filter state for sidebar variant visibility */
+/** Filter state */
 const showUserVariants = ref(true)
-const showClinvarVariants = ref(true)
-const clinvarFilter = ref<'all' | 'pathogenic' | 'likely_pathogenic'>('all')
+const activeClinvar = ref<Set<ClinVarSignificance>>(new Set(['pathogenic', 'likely_pathogenic']))
 const variantStyle = ref<VariantStyle>('colored')
+
+const clinvarChips: Array<{ key: ClinVarSignificance; label: string; color: string }> = [
+  { key: 'pathogenic', label: 'Pathogenic', color: CLINVAR_COLORS.pathogenic },
+  { key: 'likely_pathogenic', label: 'Likely P.', color: CLINVAR_COLORS.likely_pathogenic },
+  { key: 'uncertain', label: 'VUS', color: CLINVAR_COLORS.uncertain },
+  { key: 'likely_benign', label: 'Likely B.', color: CLINVAR_COLORS.likely_benign },
+  { key: 'benign', label: 'Benign', color: CLINVAR_COLORS.benign }
+]
+
+function toggleClinvar(key: ClinVarSignificance): void {
+  const next = new Set(activeClinvar.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  activeClinvar.value = next
+}
+
+function clinvarOnly(key: ClinVarSignificance): void {
+  activeClinvar.value = new Set([key])
+}
+
+function clinvarAll(): void {
+  activeClinvar.value = new Set(clinvarChips.map((c) => c.key))
+}
 
 const props = defineProps<{
   structureInfo: ProteinStructureInfo | null
@@ -54,24 +77,29 @@ const missenseVariants = computed(() =>
   props.variants.filter((v) => v.consequenceCategory === 'missense' && v.proteinPosition > 0)
 )
 
-/** Filter ClinVar to P/LP variants with protein positions for the sidebar */
-const pathogenicClinvarVariants = computed(() => {
+/** Filter ClinVar variants by active significance chips + must have protein position */
+const filteredClinvarVariants = computed(() => {
   const cvVariants = props.clinvarVariants ?? []
   return cvVariants.filter((v) => {
     if (v.proteinPosition === null || v.proteinPosition <= 0) return false
     const cat = getClinVarCategory(v.clinicalSignificance)
-    if (clinvarFilter.value === 'pathogenic') return cat === 'pathogenic'
-    if (clinvarFilter.value === 'likely_pathogenic')
-      return cat === 'pathogenic' || cat === 'likely_pathogenic'
-    return cat === 'pathogenic' || cat === 'likely_pathogenic'
+    return activeClinvar.value.has(cat)
   })
+})
+
+/** Counts per ClinVar category (for chip labels) */
+const clinvarCounts = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const v of props.clinvarVariants ?? []) {
+    if (v.proteinPosition === null || v.proteinPosition <= 0) continue
+    const cat = getClinVarCategory(v.clinicalSignificance)
+    counts[cat] = (counts[cat] ?? 0) + 1
+  }
+  return counts
 })
 
 /** Filtered variants passed to the 3D viewer based on toggle state */
 const filteredUserVariants = computed(() => (showUserVariants.value ? props.variants : []))
-const filteredClinvarVariants = computed(() =>
-  showClinvarVariants.value ? pathogenicClinvarVariants.value : []
-)
 
 const activeRepresentation = computed<RepresentationType>(
   () => molstarViewerRef.value?.activeRepresentation ?? 'cartoon'
@@ -133,51 +161,61 @@ function onClinvarClick(cv: ClinVarVariant): void {
       <!-- Variant sidebar (when variants or ClinVar exist) -->
       <div
         v-if="
-          (missenseVariants.length > 0 || pathogenicClinvarVariants.length > 0) && structureLoaded
+          (missenseVariants.length > 0 || filteredClinvarVariants.length > 0) && structureLoaded
         "
         class="variant-sidebar"
       >
-        <!-- Filter controls -->
-        <div class="sidebar-header pa-2 pb-1">
-          <div class="d-flex align-center mb-1">
-            <v-icon size="14" :icon="mdiFilter" class="mr-1 text-medium-emphasis" />
-            <span class="text-body-2 text-medium-emphasis font-weight-medium">Filters</span>
+        <!-- Filter chips -->
+        <div class="sidebar-header pa-2">
+          <!-- User variant toggle -->
+          <v-chip
+            size="small"
+            label
+            :variant="showUserVariants ? 'flat' : 'outlined'"
+            :color="showUserVariants ? 'primary' : 'grey'"
+            class="mb-1 mr-1"
+            @click="showUserVariants = !showUserVariants"
+          >
+            Your Variant
+          </v-chip>
+
+          <!-- ClinVar significance chips -->
+          <div class="d-flex flex-wrap align-center ga-1 mt-1">
+            <span class="text-caption text-medium-emphasis mr-1">ClinVar:</span>
+            <v-chip
+              v-for="chip in clinvarChips"
+              :key="chip.key"
+              size="x-small"
+              label
+              :variant="activeClinvar.has(chip.key) ? 'flat' : 'outlined'"
+              :color="activeClinvar.has(chip.key) ? chip.color : 'grey-lighten-1'"
+              :style="{ opacity: activeClinvar.has(chip.key) ? 1 : 0.5 }"
+              @click="toggleClinvar(chip.key)"
+            >
+              {{ chip.label }} ({{ clinvarCounts[chip.key] ?? 0 }})
+            </v-chip>
           </div>
-          <v-switch
-            v-model="showUserVariants"
-            density="compact"
-            hide-details
-            color="primary"
-            class="filter-switch"
-          >
-            <template #label>
-              <span class="text-caption">User variants</span>
-            </template>
-          </v-switch>
-          <v-switch
-            v-model="showClinvarVariants"
-            density="compact"
-            hide-details
-            color="primary"
-            class="filter-switch"
-          >
-            <template #label>
-              <span class="text-caption">ClinVar P/LP</span>
-            </template>
-          </v-switch>
-          <v-select
-            v-if="showClinvarVariants"
-            v-model="clinvarFilter"
-            :items="[
-              { title: 'P + LP', value: 'all' },
-              { title: 'Pathogenic only', value: 'pathogenic' },
-              { title: 'Likely P+', value: 'likely_pathogenic' }
-            ]"
-            density="compact"
-            variant="outlined"
-            hide-details
-            class="mt-1 text-caption"
-          />
+          <div class="d-flex ga-1 mt-1">
+            <v-btn
+              v-for="chip in clinvarChips"
+              :key="`only-${chip.key}`"
+              size="x-small"
+              variant="text"
+              class="only-btn text-lowercase"
+              @click="clinvarOnly(chip.key)"
+            >
+              only
+            </v-btn>
+            <v-chip
+              size="x-small"
+              label
+              variant="outlined"
+              color="grey-darken-1"
+              @click="clinvarAll()"
+            >
+              All
+            </v-chip>
+          </div>
         </div>
 
         <!-- Your Variants section -->
@@ -213,14 +251,14 @@ function onClinvarClick(cv: ClinVarVariant): void {
         </template>
 
         <!-- ClinVar P/LP section -->
-        <template v-if="pathogenicClinvarVariants.length > 0 && showClinvarVariants">
+        <template v-if="filteredClinvarVariants.length > 0">
           <div class="sidebar-header text-body-2 text-medium-emphasis pa-2 pb-1 font-weight-medium">
             <v-icon size="14" :icon="mdiMedicalBag" class="mr-1" />
-            ClinVar P/LP ({{ pathogenicClinvarVariants.length }})
+            ClinVar P/LP ({{ filteredClinvarVariants.length }})
           </div>
           <v-list density="compact" class="pa-0" bg-color="transparent">
             <v-list-item
-              v-for="cv in pathogenicClinvarVariants"
+              v-for="cv in filteredClinvarVariants"
               :key="cv.variantId"
               class="variant-list-item"
               @click="onClinvarClick(cv)"
@@ -285,22 +323,15 @@ function onClinvarClick(cv: ClinVarVariant): void {
   border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.filter-switch {
-  margin-top: 0;
-  padding-top: 0;
+.only-btn {
+  font-size: 10px;
+  min-width: 28px;
+  height: 18px;
+  padding: 0 3px;
+  opacity: 0.5;
 }
 
-.filter-switch :deep(.v-input__control) {
-  min-height: 28px;
-}
-
-.filter-switch :deep(.v-switch__track) {
-  height: 16px;
-  width: 28px;
-}
-
-.filter-switch :deep(.v-switch__thumb) {
-  height: 12px;
-  width: 12px;
+.only-btn:hover {
+  opacity: 1;
 }
 </style>
