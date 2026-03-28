@@ -993,5 +993,15 @@ export const mockApi: WindowAPI = {
     }),
     removeMember: async () => {},
     getForCase: async () => null
+  },
+
+  protein: {
+    getMapping: async () => ({ success: false as const, error: 'Mock mode - Protein API not available' }),
+    getDomains: async () => ({ success: false as const, error: 'Mock mode - Protein API not available' }),
+    getStructure: async () => ({ success: false as const, error: 'Mock mode - Protein API not available' })
+  },
+
+  gnomad: {
+    getVariants: async () => ({ success: false as const, error: 'Mock mode - gnomAD API not available' })
   }
 }

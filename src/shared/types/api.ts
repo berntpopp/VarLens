@@ -97,6 +97,13 @@ import type {
   ActivePanelRow
 } from '../../main/database/PanelRepository'
 import type { PanelAppSearchResult } from '../../main/services/api/PanelAppClient'
+import type {
+  ProteinMappingResult,
+  ProteinDomainResult,
+  ProteinStructureResult,
+  GnomadFetchResult,
+  ProteinApiError
+} from './protein'
 
 // Re-export for convenience
 export type {
@@ -641,6 +648,16 @@ export interface AnalysisGroupsAPI {
   getForCase: (caseId: number) => Promise<AnalysisGroup | null>
 }
 
+export interface ProteinAPI {
+  getMapping: (geneSymbol: string) => Promise<ProteinMappingResult | ProteinApiError>
+  getDomains: (uniprotAccession: string) => Promise<ProteinDomainResult | ProteinApiError>
+  getStructure: (uniprotAccession: string) => Promise<ProteinStructureResult | ProteinApiError>
+}
+
+export interface GnomadAPI {
+  getVariants: (geneSymbol: string, dataset?: string) => Promise<GnomadFetchResult | ProteinApiError>
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -671,6 +688,8 @@ export interface WindowAPI {
   panels: PanelsAPI
   geneRef: GeneRefAPI
   analysisGroups: AnalysisGroupsAPI
+  protein: ProteinAPI
+  gnomad: GnomadAPI
 }
 
 export interface PresetsAPI {

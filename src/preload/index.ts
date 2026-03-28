@@ -547,6 +547,19 @@ const api = {
     getForCase: (caseId: number) => ipcRenderer.invoke('analysisGroups:getForCase', caseId)
   },
 
+  protein: {
+    getMapping: (geneSymbol: string) => ipcRenderer.invoke('protein:mapping', geneSymbol),
+    getDomains: (uniprotAccession: string) =>
+      ipcRenderer.invoke('protein:domains', uniprotAccession),
+    getStructure: (uniprotAccession: string) =>
+      ipcRenderer.invoke('protein:structure', uniprotAccession)
+  },
+
+  gnomad: {
+    getVariants: (geneSymbol: string, dataset?: string) =>
+      ipcRenderer.invoke('gnomad:variants', geneSymbol, dataset)
+  },
+
   presets: {
     list: () => ipcRenderer.invoke('presets:list'),
 
