@@ -28,6 +28,7 @@ interface Props {
   showGnomad: boolean
   activeCategories: Set<ConsequenceCategory>
   activeClinvarCategories: Set<ClinVarSignificance>
+  activeClinvarConsequences: Set<ConsequenceCategory>
   /** Maximum allele frequency filter for gnomAD variants (default 1 = all) */
   gnomadMaxAf?: number
 }
@@ -52,6 +53,7 @@ const { tooltip, resetZoom, zoomIn, zoomOut, exportSvg, exportPng } = useLollipo
   showGnomad: toRef(props, 'showGnomad'),
   activeCategories: toRef(props, 'activeCategories'),
   activeClinvarCategories: toRef(props, 'activeClinvarCategories'),
+  activeClinvarConsequences: toRef(props, 'activeClinvarConsequences'),
   gnomadMaxAf: toRef(props, 'gnomadMaxAf')
 })
 

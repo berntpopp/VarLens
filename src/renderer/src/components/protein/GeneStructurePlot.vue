@@ -8,10 +8,7 @@
 <script setup lang="ts">
 import { ref, toRef } from 'vue'
 import { useResizeObserver } from '../../composables/useResizeObserver'
-import {
-  useGeneStructurePlot,
-  type GenomicVariant
-} from '../../composables/useGeneStructurePlot'
+import { useGeneStructurePlot, type GenomicVariant } from '../../composables/useGeneStructurePlot'
 import GeneStructureTooltip from './GeneStructureTooltip.vue'
 import type { GeneStructure } from '../../../../shared/types/protein'
 

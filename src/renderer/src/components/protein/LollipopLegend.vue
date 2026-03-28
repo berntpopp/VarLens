@@ -43,10 +43,10 @@
       </v-chip>
     </div>
 
-    <!-- ClinVar filter row -->
+    <!-- ClinVar Significance filter row -->
     <div v-if="hasClinvar" class="d-flex flex-wrap ga-1 align-center mb-2">
       <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium section-label"
-        >ClinVar:</span
+        >ClinVar Significance:</span
       >
       <div
         v-for="[category, color] in clinvarEntries"
@@ -81,6 +81,49 @@
         color="grey-darken-1"
         class="ml-2"
         @click="emit('select-all-clinvar')"
+      >
+        All
+      </v-chip>
+    </div>
+
+    <!-- ClinVar Consequence filter row -->
+    <div v-if="hasClinvar" class="d-flex flex-wrap ga-1 align-center mb-2">
+      <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium section-label"
+        >ClinVar Consequence:</span
+      >
+      <div
+        v-for="[category, color] in consequenceEntries"
+        :key="'cv-cons-' + category"
+        class="filter-pill"
+        :class="{ inactive: !isClinVarConsequenceActive(category) }"
+      >
+        <v-chip
+          size="small"
+          label
+          :variant="isClinVarConsequenceActive(category) ? 'flat' : 'outlined'"
+          :style="clinvarConsequenceChipStyle(category, color)"
+          class="cursor-pointer"
+          @click="toggleClinVarConsequence(category)"
+        >
+          {{ formatCategory(category) }}
+          ({{ clinvarConsequenceCounts[category] ?? 0 }})
+        </v-chip>
+        <v-btn
+          size="x-small"
+          variant="text"
+          class="only-btn text-none"
+          @click.stop="emit('select-only-clinvar-consequence', category)"
+        >
+          only
+        </v-btn>
+      </div>
+      <v-chip
+        size="small"
+        label
+        variant="outlined"
+        color="grey-darken-1"
+        class="ml-2"
+        @click="emit('select-all-clinvar-consequences')"
       >
         All
       </v-chip>
@@ -165,13 +208,16 @@ import {
 interface Props {
   activeCategories: Set<ConsequenceCategory>
   activeClinvarCategories: Set<ClinVarSignificance>
+  activeClinvarConsequences: Set<ConsequenceCategory>
   domains: ProteinDomain[]
   /** Whether ClinVar data is available */
   hasClinvar: boolean
-  /** Variant counts per consequence category */
+  /** Variant counts per consequence category (gnomAD) */
   consequenceCounts: Record<ConsequenceCategory, number>
   /** Variant counts per ClinVar significance category */
   clinvarCounts: Record<ClinVarSignificance, number>
+  /** Variant counts per consequence category (ClinVar) */
+  clinvarConsequenceCounts: Record<ConsequenceCategory, number>
 }
 
 const props = defineProps<Props>()
@@ -183,6 +229,9 @@ const emit = defineEmits<{
   'toggle-clinvar-category': [category: ClinVarSignificance]
   'select-only-clinvar': [category: ClinVarSignificance]
   'select-all-clinvar': []
+  'toggle-clinvar-consequence': [category: ConsequenceCategory]
+  'select-only-clinvar-consequence': [category: ConsequenceCategory]
+  'select-all-clinvar-consequences': []
 }>()
 
 const consequenceEntries = computed(
@@ -247,6 +296,24 @@ function formatClinVarCategory(category: ClinVarSignificance): string {
   return CLINVAR_LABELS[category]
 }
 
+function isClinVarConsequenceActive(category: ConsequenceCategory): boolean {
+  return props.activeClinvarConsequences.has(category)
+}
+
+function toggleClinVarConsequence(category: ConsequenceCategory): void {
+  emit('toggle-clinvar-consequence', category)
+}
+
+function clinvarConsequenceChipStyle(
+  category: ConsequenceCategory,
+  color: string
+): Record<string, string> {
+  if (isClinVarConsequenceActive(category)) {
+    return { backgroundColor: color, color: '#fff', borderColor: color }
+  }
+  return { borderColor: color, color, opacity: '0.6' }
+}
+
 function clinvarChipStyle(category: ClinVarSignificance, color: string): Record<string, string> {
   if (isClinVarActive(category)) {
     // For light colors (uncertain/yellow), use dark text
@@ -294,6 +361,6 @@ function clinvarChipStyle(category: ClinVarSignificance, color: string): Record<
 }
 
 .section-label {
-  min-width: 110px;
+  min-width: 140px;
 }
 </style>

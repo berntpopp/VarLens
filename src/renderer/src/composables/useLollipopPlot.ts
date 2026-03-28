@@ -90,6 +90,8 @@ export interface LollipopPlotOptions {
   showGnomad: Ref<boolean>
   activeCategories: Ref<Set<ConsequenceCategory>>
   activeClinvarCategories: Ref<Set<ClinVarSignificance>>
+  /** Consequence category filter for ClinVar variants */
+  activeClinvarConsequences: Ref<Set<ConsequenceCategory>>
   /** Maximum allele frequency filter for gnomAD variants */
   gnomadMaxAf: Ref<number>
 }
@@ -134,6 +136,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     showGnomad,
     activeCategories,
     activeClinvarCategories,
+    activeClinvarConsequences,
     gnomadMaxAf
   } = options
 
@@ -255,10 +258,8 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     const { width, height } = dimensions.value
     if (width <= 0 || height <= 0 || proteinLength.value <= 0) return
 
-    const filteredVariants = variants.value.filter((v) =>
-      activeCategories.value.has(v.consequenceCategory)
-    )
-    const groups = groupByPosition(filteredVariants)
+    // Case/user variants are always shown (highlighted variant must always be visible)
+    const groups = groupByPosition(variants.value)
 
     // Separate highlighted and non-highlighted groups
     const highlightedGroups = groups.filter((g) => g.hasHighlighted)
@@ -282,9 +283,12 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       .range([LOLLIPOP_MIN_STEM, LOLLIPOP_MAX_STEM])
       .clamp(true)
 
-    // Filter gnomAD variants by AF threshold
+    // Filter gnomAD variants by AF threshold AND consequence category
     const filteredGnomad = gnomadVariants.value.filter(
-      (gv) => gv.proteinPosition !== null && gv.alleleFrequency <= gnomadMaxAf.value
+      (gv) =>
+        gv.proteinPosition !== null &&
+        gv.alleleFrequency <= gnomadMaxAf.value &&
+        activeCategories.value.has(getConsequenceCategory(gv.consequence))
     )
     const gnomadGroups = groupGnomadByPosition(filteredGnomad)
 
@@ -375,10 +379,14 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       }
     })
 
-    // ── Filter ClinVar variants by active significance categories ──────
+    // ── Filter ClinVar variants by significance AND consequence categories ──
     const filteredClinVar = clinvarVariants.value.filter((cv) => {
-      const cat = getClinVarCategory(cv.clinicalSignificance)
-      return activeClinvarCategories.value.has(cat) && cv.proteinPosition !== null
+      if (cv.proteinPosition === null) return false
+      const sigCat = getClinVarCategory(cv.clinicalSignificance)
+      const consCat = getConsequenceCategory(cv.consequence)
+      return (
+        activeClinvarCategories.value.has(sigCat) && activeClinvarConsequences.value.has(consCat)
+      )
     })
     const clinvarGroups = groupClinVarByPosition(filteredClinVar)
 
@@ -729,10 +737,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     })
 
     // Update non-highlighted lollipops
-    const filteredVariants = variants.value.filter((v) =>
-      activeCategories.value.has(v.consequenceCategory)
-    )
-    const groups = groupByPosition(filteredVariants)
+    const groups = groupByPosition(variants.value)
     const normalGroups = groups.filter((g) => !g.hasHighlighted)
     const highlightedGroups = groups.filter((g) => g.hasHighlighted)
 
@@ -782,8 +787,12 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     // Update ClinVar diamonds
     {
       const filteredCV = clinvarVariants.value.filter((cv) => {
-        const cat = getClinVarCategory(cv.clinicalSignificance)
-        return activeClinvarCategories.value.has(cat) && cv.proteinPosition !== null
+        if (cv.proteinPosition === null) return false
+        const sigCat = getClinVarCategory(cv.clinicalSignificance)
+        const consCat = getConsequenceCategory(cv.consequence)
+        return (
+          activeClinvarCategories.value.has(sigCat) && activeClinvarConsequences.value.has(consCat)
+        )
       })
       const cvGroups = groupClinVarByPosition(filteredCV)
 
@@ -810,7 +819,10 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     // Update gnomAD
     if (showGnomad.value) {
       const filteredGnomad = gnomadVariants.value.filter(
-        (gv) => gv.proteinPosition !== null && gv.alleleFrequency <= gnomadMaxAf.value
+        (gv) =>
+          gv.proteinPosition !== null &&
+          gv.alleleFrequency <= gnomadMaxAf.value &&
+          activeCategories.value.has(getConsequenceCategory(gv.consequence))
       )
       const gnomadGroups = groupGnomadByPosition(filteredGnomad)
 
@@ -831,8 +843,12 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     const backboneY =
       MARGIN.top + (dimensions.value.height - MARGIN.top - MARGIN.bottom) * BACKBONE_Y_OFFSET
     const filteredCV = clinvarVariants.value.filter((cv) => {
-      const cat = getClinVarCategory(cv.clinicalSignificance)
-      return activeClinvarCategories.value.has(cat) && cv.proteinPosition !== null
+      if (cv.proteinPosition === null) return false
+      const sigCat = getClinVarCategory(cv.clinicalSignificance)
+      const consCat = getConsequenceCategory(cv.consequence)
+      return (
+        activeClinvarCategories.value.has(sigCat) && activeClinvarConsequences.value.has(consCat)
+      )
     })
     const cvGroupsForAxis = groupClinVarByPosition(filteredCV)
     let axisY = backboneY + BACKBONE_HEIGHT / 2 + 16
@@ -840,10 +856,13 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       axisY += CLINVAR_TRACK_HEIGHT + 4
     }
     if (showGnomad.value) {
-      const filteredGnomad = gnomadVariants.value.filter(
-        (gv) => gv.proteinPosition !== null && gv.alleleFrequency <= gnomadMaxAf.value
+      const filteredGnomadForAxis = gnomadVariants.value.filter(
+        (gv) =>
+          gv.proteinPosition !== null &&
+          gv.alleleFrequency <= gnomadMaxAf.value &&
+          activeCategories.value.has(getConsequenceCategory(gv.consequence))
       )
-      if (groupGnomadByPosition(filteredGnomad).length > 0) {
+      if (groupGnomadByPosition(filteredGnomadForAxis).length > 0) {
         axisY += GNOMAD_TRACK_HEIGHT
       }
     }
@@ -869,6 +888,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       showGnomad.value,
       activeCategories.value,
       activeClinvarCategories.value,
+      activeClinvarConsequences.value,
       gnomadMaxAf.value
     ]
     void _deps

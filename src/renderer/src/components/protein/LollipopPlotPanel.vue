@@ -39,6 +39,7 @@
         :show-gnomad="showGnomad"
         :active-categories="activeCategories"
         :active-clinvar-categories="activeClinVarCategories"
+        :active-clinvar-consequences="activeClinVarConsequences"
         :gnomad-max-af="gnomadMaxAf"
       />
     </div>
@@ -47,16 +48,21 @@
     <LollipopLegend
       :active-categories="activeCategories"
       :active-clinvar-categories="activeClinVarCategories"
+      :active-clinvar-consequences="activeClinVarConsequences"
       :domains="domains"
       :has-clinvar="clinvarVariants.length > 0"
       :consequence-counts="consequenceCounts"
       :clinvar-counts="clinvarCounts"
+      :clinvar-consequence-counts="clinvarConsequenceCounts"
       @toggle-category="handleToggleCategory"
       @select-only-category="handleSelectOnlyCategory"
       @select-all-categories="handleSelectAllCategories"
       @toggle-clinvar-category="handleToggleClinVarCategory"
       @select-only-clinvar="handleSelectOnlyClinVar"
       @select-all-clinvar="handleSelectAllClinVar"
+      @toggle-clinvar-consequence="handleToggleClinVarConsequence"
+      @select-only-clinvar-consequence="handleSelectOnlyClinVarConsequence"
+      @select-all-clinvar-consequences="handleSelectAllClinVarConsequences"
     />
   </div>
 </template>
@@ -125,11 +131,14 @@ const clinvarVariants = ref<ClinVarVariant[]>([])
 // gnomAD frequency filter (default: show all)
 const gnomadMaxAf = ref(1)
 
-/** Count of gnomAD variants after AF filter */
+/** Count of gnomAD variants after AF + consequence filters */
 const filteredGnomadCount = computed(
   () =>
     gnomadVariants.value.filter(
-      (gv) => gv.proteinPosition !== null && gv.alleleFrequency <= gnomadMaxAf.value
+      (gv) =>
+        gv.proteinPosition !== null &&
+        gv.alleleFrequency <= gnomadMaxAf.value &&
+        activeCategories.value.has(getConsequenceCategory(gv.consequence))
     ).length
 )
 
@@ -138,9 +147,14 @@ const activeCategories = ref<Set<ConsequenceCategory>>(
   new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
 )
 
-// ClinVar filter categories - all active by default
+// ClinVar significance filter categories - all active by default
 const activeClinVarCategories = ref<Set<ClinVarSignificance>>(
   new Set(Object.keys(CLINVAR_COLORS) as ClinVarSignificance[])
+)
+
+// ClinVar consequence filter categories - all active by default
+const activeClinVarConsequences = ref<Set<ConsequenceCategory>>(
+  new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
 )
 
 // Auto-fetch gnomAD and ClinVar data when gene symbol is available
@@ -255,7 +269,27 @@ function handleSelectAllClinVar(): void {
   activeClinVarCategories.value = new Set(Object.keys(CLINVAR_COLORS) as ClinVarSignificance[])
 }
 
-/** Compute variant counts per consequence category from gnomAD variants */
+function handleToggleClinVarConsequence(category: ConsequenceCategory): void {
+  const next = new Set(activeClinVarConsequences.value)
+  if (next.has(category)) {
+    next.delete(category)
+  } else {
+    next.add(category)
+  }
+  activeClinVarConsequences.value = next
+}
+
+function handleSelectOnlyClinVarConsequence(category: ConsequenceCategory): void {
+  activeClinVarConsequences.value = new Set([category])
+}
+
+function handleSelectAllClinVarConsequences(): void {
+  activeClinVarConsequences.value = new Set(
+    Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[]
+  )
+}
+
+/** Compute variant counts per consequence category from gnomAD variants only */
 const consequenceCounts = computed(() => {
   const counts: Record<ConsequenceCategory, number> = {
     missense: 0,
@@ -271,9 +305,24 @@ const consequenceCounts = computed(() => {
       counts[cat]++
     }
   }
-  // Also count case variants
-  for (const v of props.variants) {
-    counts[v.consequenceCategory]++
+  return counts
+})
+
+/** Compute variant counts per consequence category from ClinVar variants */
+const clinvarConsequenceCounts = computed(() => {
+  const counts: Record<ConsequenceCategory, number> = {
+    missense: 0,
+    truncating: 0,
+    inframe: 0,
+    splice: 0,
+    synonymous: 0,
+    other: 0
+  }
+  for (const v of clinvarVariants.value) {
+    if (v.proteinPosition !== null) {
+      const cat = getConsequenceCategory(v.consequence)
+      counts[cat]++
+    }
   }
   return counts
 })

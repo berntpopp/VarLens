@@ -8,11 +8,7 @@
     <v-card class="d-flex flex-column fill-height">
       <!-- Header -->
       <v-toolbar color="secondary" density="comfortable" flat>
-        <v-btn icon variant="text" @click="emit('update:modelValue', false)">
-          <v-icon :icon="mdiClose" />
-        </v-btn>
-
-        <v-toolbar-title class="d-flex align-center ga-3">
+        <v-toolbar-title class="d-flex align-center ga-3 ml-4">
           <!-- Gene name -->
           <span v-if="geneSymbol" class="text-h6 font-weight-bold">
             {{ geneSymbol }}
@@ -48,11 +44,15 @@
 
         <template #append>
           <!-- Tabs -->
-          <v-tabs v-model="activeTab" color="white" density="compact">
+          <v-tabs v-model="activeTab" color="white" density="compact" class="mr-2">
             <v-tab value="lollipop">Lollipop Plot</v-tab>
             <v-tab value="gene-structure">Gene Structure</v-tab>
             <v-tab value="3d">3D Structure</v-tab>
           </v-tabs>
+
+          <v-btn icon variant="text" aria-label="Close" @click="emit('update:modelValue', false)">
+            <v-icon :icon="mdiClose" />
+          </v-btn>
         </template>
       </v-toolbar>
 
