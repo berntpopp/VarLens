@@ -5,7 +5,7 @@
  */
 
 import { computed, ref } from 'vue'
-import { mdiTargetVariant, mdiMedicalBag } from '@mdi/js'
+import { mdiTargetVariant, mdiMedicalBag, mdiFilter } from '@mdi/js'
 import type {
   LollipopVariant,
   ClinVarVariant,
@@ -18,7 +18,13 @@ import {
 } from '../../../../shared/utils/protein-utils'
 import MolstarViewer from './MolstarViewer.vue'
 import StructureControls from './StructureControls.vue'
-import type { RepresentationType } from '../../composables/useMolstarViewer'
+import type { RepresentationType, VariantStyle } from '../../composables/useMolstarViewer'
+
+/** Filter state for sidebar variant visibility */
+const showUserVariants = ref(true)
+const showClinvarVariants = ref(true)
+const clinvarFilter = ref<'all' | 'pathogenic' | 'likely_pathogenic'>('all')
+const variantStyle = ref<VariantStyle>('colored')
 
 const props = defineProps<{
   structureInfo: ProteinStructureInfo | null
@@ -54,9 +60,18 @@ const pathogenicClinvarVariants = computed(() => {
   return cvVariants.filter((v) => {
     if (v.proteinPosition === null || v.proteinPosition <= 0) return false
     const cat = getClinVarCategory(v.clinicalSignificance)
+    if (clinvarFilter.value === 'pathogenic') return cat === 'pathogenic'
+    if (clinvarFilter.value === 'likely_pathogenic')
+      return cat === 'pathogenic' || cat === 'likely_pathogenic'
     return cat === 'pathogenic' || cat === 'likely_pathogenic'
   })
 })
+
+/** Filtered variants passed to the 3D viewer based on toggle state */
+const filteredUserVariants = computed(() => (showUserVariants.value ? props.variants : []))
+const filteredClinvarVariants = computed(() =>
+  showClinvarVariants.value ? pathogenicClinvarVariants.value : []
+)
 
 const activeRepresentation = computed<RepresentationType>(
   () => molstarViewerRef.value?.activeRepresentation ?? 'cartoon'
@@ -66,6 +81,11 @@ const structureLoaded = computed(() => molstarViewerRef.value?.structureLoaded ?
 
 function onRepresentationChange(type: RepresentationType): void {
   molstarViewerRef.value?.setRepresentation(type)
+}
+
+function onVariantStyleChange(style: VariantStyle): void {
+  variantStyle.value = style
+  molstarViewerRef.value?.setVariantStyle(style)
 }
 
 function onResetView(): void {
@@ -89,9 +109,11 @@ function onClinvarClick(cv: ClinVarVariant): void {
     <StructureControls
       v-if="structureLoaded"
       :active-representation="activeRepresentation"
+      :variant-style="variantStyle"
       :is-alpha-fold="isAlphaFold"
       :source-label="sourceLabel"
       @update:representation="onRepresentationChange"
+      @update:variant-style="onVariantStyleChange"
       @reset-view="onResetView"
     />
 
@@ -102,8 +124,9 @@ function onClinvarClick(cv: ClinVarVariant): void {
         <MolstarViewer
           ref="molstarViewerRef"
           :structure-info="props.structureInfo"
-          :variants="props.variants"
-          :clinvar-variants="pathogenicClinvarVariants"
+          :variants="filteredUserVariants"
+          :clinvar-variants="filteredClinvarVariants"
+          :variant-style="variantStyle"
         />
       </div>
 
@@ -114,8 +137,51 @@ function onClinvarClick(cv: ClinVarVariant): void {
         "
         class="variant-sidebar"
       >
+        <!-- Filter controls -->
+        <div class="sidebar-header pa-2 pb-1">
+          <div class="d-flex align-center mb-1">
+            <v-icon size="14" :icon="mdiFilter" class="mr-1 text-medium-emphasis" />
+            <span class="text-body-2 text-medium-emphasis font-weight-medium">Filters</span>
+          </div>
+          <v-switch
+            v-model="showUserVariants"
+            density="compact"
+            hide-details
+            color="primary"
+            class="filter-switch"
+          >
+            <template #label>
+              <span class="text-caption">User variants</span>
+            </template>
+          </v-switch>
+          <v-switch
+            v-model="showClinvarVariants"
+            density="compact"
+            hide-details
+            color="primary"
+            class="filter-switch"
+          >
+            <template #label>
+              <span class="text-caption">ClinVar P/LP</span>
+            </template>
+          </v-switch>
+          <v-select
+            v-if="showClinvarVariants"
+            v-model="clinvarFilter"
+            :items="[
+              { title: 'P + LP', value: 'all' },
+              { title: 'Pathogenic only', value: 'pathogenic' },
+              { title: 'Likely P+', value: 'likely_pathogenic' }
+            ]"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="mt-1 text-caption"
+          />
+        </div>
+
         <!-- Your Variants section -->
-        <template v-if="missenseVariants.length > 0">
+        <template v-if="missenseVariants.length > 0 && showUserVariants">
           <div class="sidebar-header text-body-2 text-medium-emphasis pa-2 pb-1 font-weight-medium">
             <v-icon size="14" :icon="mdiTargetVariant" class="mr-1" />
             Your Variants ({{ missenseVariants.length }})
@@ -147,7 +213,7 @@ function onClinvarClick(cv: ClinVarVariant): void {
         </template>
 
         <!-- ClinVar P/LP section -->
-        <template v-if="pathogenicClinvarVariants.length > 0">
+        <template v-if="pathogenicClinvarVariants.length > 0 && showClinvarVariants">
           <div class="sidebar-header text-body-2 text-medium-emphasis pa-2 pb-1 font-weight-medium">
             <v-icon size="14" :icon="mdiMedicalBag" class="mr-1" />
             ClinVar P/LP ({{ pathogenicClinvarVariants.length }})
@@ -217,5 +283,24 @@ function onClinvarClick(cv: ClinVarVariant): void {
   border-radius: 50%;
   flex-shrink: 0;
   border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.filter-switch {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.filter-switch :deep(.v-input__control) {
+  min-height: 28px;
+}
+
+.filter-switch :deep(.v-switch__track) {
+  height: 16px;
+  width: 28px;
+}
+
+.filter-switch :deep(.v-switch__thumb) {
+  height: 12px;
+  width: 12px;
 }
 </style>

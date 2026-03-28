@@ -24,6 +24,9 @@ import { logService } from '../services/LogService'
 /** Representation types supported by pdbe-molstar */
 export type RepresentationType = 'cartoon' | 'molecular-surface' | 'ball-and-stick'
 
+/** How variant residues are rendered on the structure */
+export type VariantStyle = 'colored' | 'ball-and-stick'
+
 /** pdbe-molstar viewer instance (partial typing for the API we use) */
 interface MolstarViewerInstance {
   events: {
@@ -40,6 +43,7 @@ interface MolstarViewerInstance {
         color: { r: number; g: number; b: number }
         focus?: boolean
         sideChain?: boolean
+        representation?: string
       }>
       nonSelectedColor?: { r: number; g: number; b: number }
     }) => void
@@ -86,11 +90,25 @@ export function useMolstarViewer(
   const error = ref<string | null>(null)
   const structureLoaded = ref(false)
   const activeRepresentation = ref<RepresentationType>('cartoon')
+  const variantStyle = ref<VariantStyle>('colored')
 
   // Store viewer instance outside Vue reactivity (WebGL objects break with proxies)
   let viewerInstance: MolstarViewerInstance | null = null
   let loadSubscription: { unsubscribe: () => void } | null = null
   let pollingTimer: ReturnType<typeof setInterval> | null = null
+
+  /** The warm-light background color used across the panel */
+  const BG_COLOR = { r: 250, g: 248, b: 246 }
+
+  /**
+   * Restore the background color on the canvas.
+   * Called after any operation that may reset the canvas (load, representation change).
+   */
+  function restoreBgColor(): void {
+    if (viewerInstance?.canvas) {
+      viewerInstance.canvas.setBgColor(BG_COLOR)
+    }
+  }
 
   /**
    * Attempt to grab the viewer instance from the custom element and
@@ -112,6 +130,10 @@ export function useMolstarViewer(
         loading.value = false
         structureLoaded.value = true
         error.value = null
+        // Restore background color after every load (including representation changes
+        // that use fullLoad=true, which resets the canvas bg to black)
+        restoreBgColor()
+        setTimeout(() => restoreBgColor(), 300)
         // Delay highlighting slightly to ensure the visual API is fully initialized
         // after the loadComplete event fires
         setTimeout(() => highlightVariants(), 500)
@@ -197,6 +219,8 @@ export function useMolstarViewer(
 
     const variantsToHighlight = variants.value.filter((v) => v.proteinPosition > 0)
 
+    const useBallAndStick = variantStyle.value === 'ball-and-stick'
+
     // Build selection data for user variants
     const selections = variantsToHighlight.map((v) => ({
       struct_asym_id: 'A',
@@ -204,7 +228,8 @@ export function useMolstarViewer(
       end_residue_number: v.proteinPosition,
       color: hexToRgb(v.color),
       focus: false,
-      sideChain: true
+      sideChain: true,
+      ...(useBallAndStick ? { representation: 'ball-and-stick' as const } : {})
     }))
 
     // Add ClinVar P/LP variants (in red tones)
@@ -221,7 +246,8 @@ export function useMolstarViewer(
         end_residue_number: cv.proteinPosition,
         color: hexToRgb(CLINVAR_COLORS[cat]),
         focus: false,
-        sideChain: true
+        sideChain: true,
+        ...(useBallAndStick ? { representation: 'ball-and-stick' as const } : {})
       })
     }
 
@@ -304,15 +330,34 @@ export function useMolstarViewer(
 
       // Trigger a full reload with the new visual style.
       // We must re-specify the data source since fullLoad=true clears it.
+      // Include bgColor so the component re-initializes with the correct background.
       const updateOptions: Record<string, unknown> = {
         visualStyle: type,
+        bgColor: BG_COLOR,
         customData: {
           url: customDataUrl,
           format: customDataFormat
         }
       }
 
-      void viewerInstance.visual.update(updateOptions, true)
+      const updatePromise = viewerInstance.visual.update(updateOptions, true)
+
+      // After visual.update with fullLoad=true, the background color gets reset.
+      // The loadComplete handler will also restore bg color, but we add
+      // explicit fallbacks here in case loadComplete fires before canvas is ready.
+      if (updatePromise instanceof Promise) {
+        void updatePromise.then(() => {
+          restoreBgColor()
+          highlightVariants()
+        })
+      }
+      // Staggered fallback restores: the canvas may not be ready when the promise
+      // resolves or when loadComplete fires, so we retry at increasing intervals.
+      setTimeout(() => restoreBgColor(), 500)
+      setTimeout(() => restoreBgColor(), 1500)
+      setTimeout(() => restoreBgColor(), 3000)
+      setTimeout(() => restoreBgColor(), 5000)
+
       logService.info(`Representation changed to ${type}`, 'MolstarViewer')
 
       // Re-apply variant highlighting after the representation change completes
@@ -322,6 +367,17 @@ export function useMolstarViewer(
         `Failed to change representation to ${type}: ${err instanceof Error ? err.message : String(err)}`,
         'MolstarViewer'
       )
+    }
+  }
+
+  /**
+   * Switch between colored-only and ball-and-stick rendering for variant residues
+   */
+  function setVariantStyle(style: VariantStyle): void {
+    variantStyle.value = style
+    logService.info(`Variant style changed to ${style}`, 'MolstarViewer')
+    if (structureLoaded.value) {
+      highlightVariants()
     }
   }
 
@@ -407,8 +463,10 @@ export function useMolstarViewer(
     error,
     structureLoaded,
     activeRepresentation,
+    variantStyle,
     focusResidue,
     setRepresentation,
+    setVariantStyle,
     resetView
   }
 }

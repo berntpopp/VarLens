@@ -10,20 +10,29 @@ import {
   mdiCircleOutline,
   mdiAtom,
   mdiAlphaACircle,
-  mdiDatabase
+  mdiDatabase,
+  mdiPalette,
+  mdiAtom as mdiAtomAlt
 } from '@mdi/js'
-import type { RepresentationType } from '../../composables/useMolstarViewer'
+import type { RepresentationType, VariantStyle } from '../../composables/useMolstarViewer'
 
 defineProps<{
   activeRepresentation: RepresentationType
+  variantStyle: VariantStyle
   isAlphaFold: boolean
   sourceLabel: string
 }>()
 
 const emit = defineEmits<{
   (e: 'update:representation', type: RepresentationType): void
+  (e: 'update:variant-style', style: VariantStyle): void
   (e: 'reset-view'): void
 }>()
+
+const variantStyles: Array<{ value: VariantStyle; label: string; icon: string }> = [
+  { value: 'colored', label: 'Colored', icon: mdiPalette },
+  { value: 'ball-and-stick', label: 'Ball+Stick', icon: mdiAtomAlt }
+]
 
 /** pLDDT confidence color legend for AlphaFold structures */
 const plddtLegend = [
@@ -54,6 +63,22 @@ const representations: Array<{ value: RepresentationType; label: string; icon: s
       >
         <v-icon start size="16" :icon="rep.icon" />
         {{ rep.label }}
+      </v-btn>
+    </v-btn-group>
+
+    <!-- Variant residue style toggle -->
+    <span class="text-caption text-medium-emphasis mx-2">Variants:</span>
+    <v-btn-group density="compact" variant="outlined" divided class="mr-3">
+      <v-btn
+        v-for="vs in variantStyles"
+        :key="vs.value"
+        :color="variantStyle === vs.value ? 'primary' : undefined"
+        :variant="variantStyle === vs.value ? 'flat' : 'outlined'"
+        size="small"
+        @click="emit('update:variant-style', vs.value)"
+      >
+        <v-icon start size="16" :icon="vs.icon" />
+        {{ vs.label }}
       </v-btn>
     </v-btn-group>
 

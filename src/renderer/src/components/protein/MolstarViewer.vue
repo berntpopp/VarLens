@@ -9,9 +9,10 @@
  * through Vite.
  */
 
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed, watch, type Ref } from 'vue'
 import { mdiMolecule } from '@mdi/js'
 import { useMolstarViewer } from '../../composables/useMolstarViewer'
+import type { VariantStyle } from '../../composables/useMolstarViewer'
 import type {
   LollipopVariant,
   ClinVarVariant,
@@ -22,6 +23,7 @@ const props = defineProps<{
   structureInfo: ProteinStructureInfo | null
   variants: LollipopVariant[]
   clinvarVariants?: ClinVarVariant[]
+  variantStyle?: VariantStyle
 }>()
 
 const molstarRef = ref<HTMLElement | null>(null) as Ref<HTMLElement | null>
@@ -47,12 +49,24 @@ const {
   activeRepresentation,
   focusResidue,
   setRepresentation,
+  setVariantStyle,
   resetView
 } = useMolstarViewer(molstarRef, structureInfoRef, variantsRef, clinvarRef)
+
+// Sync variant style prop to composable
+watch(
+  () => props.variantStyle,
+  (style) => {
+    if (style !== undefined) {
+      setVariantStyle(style)
+    }
+  }
+)
 
 defineExpose({
   focusResidue,
   setRepresentation,
+  setVariantStyle,
   resetView,
   activeRepresentation,
   structureLoaded
