@@ -686,13 +686,23 @@ watch(customInternalAf, (val) => {
   }
 })
 
-// Sync filter state back to UI when cleared externally (e.g. "Clear all")
+// Sync filter state back to UI when changed externally (e.g. "Clear all", loading presets)
 watch(
   () => filters.value.maxInternalAf,
   (val) => {
     if (val === null || val === 0) {
       selectedInternalAfPreset.value = null
       customInternalAf.value = ''
+    } else if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+      // Check if it matches a preset
+      const matchingPreset = internalAfPresets.find((p) => p.value === val)
+      if (matchingPreset) {
+        selectedInternalAfPreset.value = matchingPreset.value
+        customInternalAf.value = ''
+      } else {
+        selectedInternalAfPreset.value = null
+        customInternalAf.value = String(val * 100)
+      }
     }
   }
 )

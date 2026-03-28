@@ -44,11 +44,24 @@ describe('FILTER_DEFAULTS', () => {
 
   it('includes all expected keys', () => {
     const expectedKeys = [
-      'geneSymbol', 'searchQuery', 'consequences', 'funcs', 'clinvars',
-      'maxGnomadAf', 'minCadd', 'minCohortFrequency', 'minCarriers',
-      'starredOnly', 'hasCommentOnly', 'acmgClassifications',
-      'activePanelIds', 'panelPaddingBp',
-      'maxInternalAf', 'inheritanceModes', 'analysisGroupId', 'considerPhasing'
+      'geneSymbol',
+      'searchQuery',
+      'consequences',
+      'funcs',
+      'clinvars',
+      'maxGnomadAf',
+      'minCadd',
+      'minCohortFrequency',
+      'minCarriers',
+      'starredOnly',
+      'hasCommentOnly',
+      'acmgClassifications',
+      'activePanelIds',
+      'panelPaddingBp',
+      'maxInternalAf',
+      'inheritanceModes',
+      'analysisGroupId',
+      'considerPhasing'
     ].sort()
     expect(Object.keys(FILTER_DEFAULTS).sort()).toEqual(expectedKeys)
   })

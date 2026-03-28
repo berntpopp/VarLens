@@ -960,15 +960,16 @@ export const mockApi: WindowAPI = {
     get: async (id) => ({
       id,
       name: '',
-      group_type: 'trio',
+      group_type: 'family',
       description: null,
       created_at: Date.now(),
-      updated_at: Date.now()
+      updated_at: Date.now(),
+      members: []
     }),
     create: async (params) => ({
       id: 1,
       name: params.name,
-      group_type: params.groupType ?? 'trio',
+      group_type: params.groupType ?? 'family',
       description: params.description ?? null,
       created_at: Date.now(),
       updated_at: Date.now()
@@ -976,7 +977,7 @@ export const mockApi: WindowAPI = {
     update: async (id, params) => ({
       id,
       name: params.name ?? '',
-      group_type: 'trio',
+      group_type: 'family',
       description: params.description ?? null,
       created_at: Date.now(),
       updated_at: Date.now()
@@ -991,6 +992,6 @@ export const mockApi: WindowAPI = {
       individual_id: params.individualId ?? null
     }),
     removeMember: async () => {},
-    getForCase: async () => []
+    getForCase: async () => null
   }
 }

@@ -622,7 +622,7 @@ export interface AnalysisGroupMember {
 
 export interface AnalysisGroupsAPI {
   list: () => Promise<AnalysisGroup[]>
-  get: (id: number) => Promise<AnalysisGroup>
+  get: (id: number) => Promise<AnalysisGroup & { members: AnalysisGroupMember[] }>
   create: (params: {
     name: string
     groupType?: string
@@ -638,7 +638,7 @@ export interface AnalysisGroupsAPI {
     individualId?: string
   }) => Promise<AnalysisGroupMember>
   removeMember: (groupId: number, caseId: number) => Promise<void>
-  getForCase: (caseId: number) => Promise<AnalysisGroup[]>
+  getForCase: (caseId: number) => Promise<AnalysisGroup | null>
 }
 
 export interface WindowAPI {

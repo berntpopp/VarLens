@@ -1257,8 +1257,8 @@ export function runMigrations(db: Database.Database): void {
         group_type TEXT NOT NULL DEFAULT 'family'
           CHECK(group_type IN ('family', 'tumor_normal')),
         description TEXT,
-        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-        updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+        updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
       );
 
       CREATE TABLE IF NOT EXISTS analysis_group_members (

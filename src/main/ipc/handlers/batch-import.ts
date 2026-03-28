@@ -179,6 +179,10 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
                 workerClient = null
 
                 // Update internal variant frequency counts for successful imports
+                // NOTE: Overwritten cases are deleted inside the import worker thread
+                // which doesn't have access to decrementFrequencies(). A full frequency
+                // recompute may be needed if overwrites occurred. This is a known limitation
+                // that will be addressed when the import worker is refactored.
                 try {
                   for (const detail of msg.results.details) {
                     if (detail.status === 'success' && detail.caseName) {

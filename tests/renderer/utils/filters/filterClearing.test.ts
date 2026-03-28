@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { clearFilter, clearAllFilters } from '../../../../src/renderer/src/utils/filters/filterClearing'
+import {
+  clearFilter,
+  clearAllFilters
+} from '../../../../src/renderer/src/utils/filters/filterClearing'
 import { FILTER_DEFAULTS } from '../../../../src/renderer/src/utils/filters/filterDefaults'
 
 describe('clearFilter', () => {

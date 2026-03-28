@@ -155,6 +155,7 @@ jobs:
     name: Release (Windows)
     needs: create-release
     runs-on: windows-latest
+    environment: ${{ vars.ESIGNER_ENABLED == 'true' && 'release' || '' }}
     permissions:
       contents: write
 
@@ -193,9 +194,18 @@ jobs:
       # batch_sign signs all files with a single OTP, avoiding TOTP replay.
       # Gated on ESIGNER_ENABLED variable to conserve signing quota (20/month).
 
+      - name: Log signing quota usage
+        if: vars.ESIGNER_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $version = "${{ needs.create-release.outputs.version }}"
+          $filesToSign = @("Varlens-Setup-${version}.exe", "Varlens-Portable-${version}.exe")
+          $found = ($filesToSign | Where-Object { Test-Path (Join-Path "release" $_) }).Count
+          Write-Host "::notice::Code signing: will sign $found of $($filesToSign.Count) files (monthly quota: 20 operations)"
+
       - name: Setup Java for CodeSignTool
         if: vars.ESIGNER_ENABLED == 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: corretto
           java-version: '11'

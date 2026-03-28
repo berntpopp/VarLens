@@ -503,6 +503,16 @@ export class VariantRepository extends BaseRepository {
 
     // ── Inheritance mode filters ─────────────────────────────
     if (filter.inheritance_modes && filter.inheritance_modes.length > 0) {
+      // Validate IDs are safe integers before SQL interpolation
+      const caseIdNum = Number(filter.case_id)
+      const groupIdNum = filter.analysis_group_id != null ? Number(filter.analysis_group_id) : null
+      if (!Number.isInteger(caseIdNum) || caseIdNum <= 0) {
+        return query // Skip inheritance filter on invalid case_id
+      }
+      if (groupIdNum !== null && (!Number.isInteger(groupIdNum) || groupIdNum <= 0)) {
+        return query // Skip inheritance filter on invalid group_id
+      }
+
       const modes = filter.inheritance_modes
       const conditions: string[] = []
 
@@ -522,7 +532,7 @@ export class VariantRepository extends BaseRepository {
         conditions.push(
           `(variants.gene_symbol IN (
             SELECT v2.gene_symbol FROM variants v2
-            WHERE v2.case_id = ${filter.case_id}
+            WHERE v2.case_id = ${caseIdNum}
               AND v2.gt_num IN ('0/1', '0|1', '1|0')
               AND v2.gene_symbol IS NOT NULL
             GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
@@ -531,9 +541,9 @@ export class VariantRepository extends BaseRepository {
       }
 
       // Trio modes — require analysis_group_id
-      if (filter.analysis_group_id != null) {
-        const gid = filter.analysis_group_id
-        const cid = filter.case_id
+      if (groupIdNum !== null) {
+        const gid = groupIdNum
+        const cid = caseIdNum
 
         if (modes.includes('de_novo')) {
           // Het in proband, absent or ref in both parents
@@ -984,7 +994,7 @@ export class VariantRepository extends BaseRepository {
   updateFrequencies(caseId: number): void {
     this.db.exec(`
       INSERT INTO variant_frequency (chr, pos, ref, alt, case_count)
-      SELECT chr, pos, ref, alt, 1
+      SELECT DISTINCT chr, pos, ref, alt, 1
       FROM variants WHERE case_id = ${caseId}
       ON CONFLICT(chr, pos, ref, alt)
       DO UPDATE SET case_count = case_count + 1;
@@ -1000,7 +1010,7 @@ export class VariantRepository extends BaseRepository {
       UPDATE variant_frequency
       SET case_count = case_count - 1
       WHERE (chr, pos, ref, alt) IN (
-        SELECT chr, pos, ref, alt FROM variants WHERE case_id = ${caseId}
+        SELECT DISTINCT chr, pos, ref, alt FROM variants WHERE case_id = ${caseId}
       );
     `)
     this.db.exec('DELETE FROM variant_frequency WHERE case_count <= 0;')
