@@ -266,6 +266,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       const stemHeight = stemScale(group.variants.length)
       const headY = backboneY - BACKBONE_HEIGHT / 2 - stemHeight
       const color = group.variants[0].color
+      const isHighlighted = group.variants.some((v) => v.highlighted === true)
 
       // Stem
       lollipopGroup
@@ -275,18 +276,21 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
         .attr('x2', cx)
         .attr('y2', headY)
         .attr('stroke', color)
-        .attr('stroke-width', 1.5)
-        .attr('opacity', 0.6)
+        .attr('stroke-width', isHighlighted ? 2.5 : 1.5)
+        .attr('opacity', isHighlighted ? 1 : 0.6)
 
       // Head
+      const headRadius = isHighlighted
+        ? Math.min(LOLLIPOP_HEAD_RADIUS + group.variants.length + 1, 12)
+        : Math.min(LOLLIPOP_HEAD_RADIUS + group.variants.length - 1, 10)
       lollipopGroup
         .append('circle')
         .attr('cx', cx)
         .attr('cy', headY)
-        .attr('r', Math.min(LOLLIPOP_HEAD_RADIUS + group.variants.length - 1, 10))
+        .attr('r', headRadius)
         .attr('fill', color)
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 1.5)
+        .attr('stroke', isHighlighted ? '#FFD700' : '#fff')
+        .attr('stroke-width', isHighlighted ? 3 : 1.5)
         .attr('cursor', 'pointer')
         .on('mouseenter', (event: MouseEvent) => {
           tooltip.value = {

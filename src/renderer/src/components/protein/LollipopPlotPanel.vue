@@ -3,10 +3,14 @@
     <!-- Toolbar -->
     <LollipopToolbar
       :show-gnomad="showGnomad"
+      :show-case-variants="showCaseVariants"
+      :case-variants-loading="caseVariantsLoading"
+      :has-case-id="hasCaseId"
       @zoom-in="plotRef?.zoomIn()"
       @zoom-out="plotRef?.zoomOut()"
       @zoom-reset="plotRef?.resetZoom()"
       @toggle-gnomad="handleToggleGnomad"
+      @toggle-case-variants="emit('toggle-case-variants')"
       @export-svg="handleExportSvg"
       @export-png="handleExportPng"
     />
@@ -37,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, type ComponentPublicInstance } from 'vue'
+import { ref, watch, type ComponentPublicInstance } from 'vue'
 import LollipopToolbar from './LollipopToolbar.vue'
 import LollipopPlot from './LollipopPlot.vue'
 import LollipopLegend from './LollipopLegend.vue'
@@ -56,9 +60,19 @@ interface Props {
   domains: ProteinDomain[]
   variants: LollipopVariant[]
   geneSymbol: string | null
+  /** Whether the "Show case variants" toggle is active (controlled by parent) */
+  showCaseVariants: boolean
+  /** Whether case variants are currently loading (controlled by parent) */
+  caseVariantsLoading: boolean
+  /** Whether a case ID is available for fetching case variants */
+  hasCaseId: boolean
 }
 
 const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  'toggle-case-variants': []
+}>()
 
 const { api } = useApiService()
 
@@ -71,8 +85,8 @@ const plotRef = ref<ComponentPublicInstance<{
   exportPng: () => Promise<Blob | null>
 }> | null>(null)
 
-// gnomAD state
-const showGnomad = ref(false)
+// gnomAD state - ON by default
+const showGnomad = ref(true)
 const gnomadLoading = ref(false)
 const gnomadVariants = ref<GnomadVariant[]>([])
 
@@ -81,10 +95,44 @@ const activeCategories = ref<Set<ConsequenceCategory>>(
   new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
 )
 
+// Auto-fetch gnomAD data when gene symbol is available (since gnomAD is ON by default)
+watch(
+  () => props.geneSymbol,
+  async (gene) => {
+    // Reset gnomAD data when gene changes
+    gnomadVariants.value = []
+
+    if (showGnomad.value && gene !== null && gene !== '' && api !== undefined) {
+      await fetchGnomad(gene)
+    }
+  },
+  { immediate: true }
+)
+
+async function fetchGnomad(gene: string): Promise<void> {
+  if (api === undefined) return
+  gnomadLoading.value = true
+  try {
+    const result = await api.gnomad.getVariants(gene)
+    if (result.success) {
+      gnomadVariants.value = result.variants
+    } else {
+      logService.warn(`gnomAD fetch failed: ${result.error}`, 'LollipopPlotPanel')
+    }
+  } catch (err) {
+    logService.error(
+      `gnomAD fetch error: ${err instanceof Error ? err.message : 'Unknown'}`,
+      'LollipopPlotPanel'
+    )
+  } finally {
+    gnomadLoading.value = false
+  }
+}
+
 async function handleToggleGnomad(): Promise<void> {
   showGnomad.value = !showGnomad.value
 
-  // Fetch gnomAD variants on first toggle
+  // Fetch gnomAD variants when toggling on if not already loaded
   if (
     showGnomad.value &&
     gnomadVariants.value.length === 0 &&
@@ -92,22 +140,7 @@ async function handleToggleGnomad(): Promise<void> {
     props.geneSymbol !== '' &&
     api !== undefined
   ) {
-    gnomadLoading.value = true
-    try {
-      const result = await api.gnomad.getVariants(props.geneSymbol)
-      if (result.success) {
-        gnomadVariants.value = result.variants
-      } else {
-        logService.warn(`gnomAD fetch failed: ${result.error}`, 'LollipopPlotPanel')
-      }
-    } catch (err) {
-      logService.error(
-        `gnomAD fetch error: ${err instanceof Error ? err.message : 'Unknown'}`,
-        'LollipopPlotPanel'
-      )
-    } finally {
-      gnomadLoading.value = false
-    }
+    await fetchGnomad(props.geneSymbol)
   }
 }
 

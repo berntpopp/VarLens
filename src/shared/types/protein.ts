@@ -111,4 +111,6 @@ export interface LollipopVariant {
   gnomadAf: number | null
   cadd: number | null
   clinvar: string | null
+  /** Whether this variant should be visually highlighted (e.g. the selected variant) */
+  highlighted?: boolean
 }

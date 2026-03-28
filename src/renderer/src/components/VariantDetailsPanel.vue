@@ -175,8 +175,9 @@
       <!-- Protein Visualization Modal -->
       <ProteinVisualizationModal
         v-model="proteinModalOpen"
-        :initial-gene="proteinModalGene"
-        :all-variants="allVariants"
+        :variant="variant"
+        :case-id="caseId"
+        :mode="mode"
       />
     </v-card>
   </v-navigation-drawer>
@@ -232,12 +233,9 @@ interface Props {
   variant: Variant | CohortVariant | null
   caseId: number | null
   mode: 'case' | 'cohort'
-  allVariants?: (Variant | CohortVariant)[]
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  allVariants: () => []
-})
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
@@ -246,10 +244,8 @@ const emit = defineEmits<{
 
 // Protein visualization modal state
 const proteinModalOpen = ref(false)
-const proteinModalGene = ref<string | null>(null)
 
 function openProteinView(): void {
-  proteinModalGene.value = props.variant?.gene_symbol ?? null
   proteinModalOpen.value = true
 }
 

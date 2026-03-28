@@ -48,6 +48,24 @@
         {{ showGnomad ? 'Hide' : 'Show' }} gnomAD variants
       </v-tooltip>
 
+      <!-- Case variants toggle (only when a case is available) -->
+      <v-tooltip v-if="hasCaseId" location="bottom">
+        <template #activator="{ props: tip }">
+          <v-btn
+            v-bind="tip"
+            icon
+            size="small"
+            :variant="showCaseVariants ? 'flat' : 'text'"
+            :color="showCaseVariants ? 'success' : undefined"
+            :loading="caseVariantsLoading"
+            @click="emit('toggle-case-variants')"
+          >
+            <v-icon size="small" :icon="mdiAccountGroupOutline" />
+          </v-btn>
+        </template>
+        {{ showCaseVariants ? 'Hide' : 'Show' }} case variants
+      </v-tooltip>
+
       <v-divider vertical class="mx-1" />
 
       <!-- Export buttons -->
@@ -79,11 +97,15 @@ import {
   mdiFitToScreenOutline,
   mdiEarth,
   mdiFileImageOutline,
-  mdiImageOutline
+  mdiImageOutline,
+  mdiAccountGroupOutline
 } from '@mdi/js'
 
 interface Props {
   showGnomad: boolean
+  showCaseVariants: boolean
+  caseVariantsLoading: boolean
+  hasCaseId: boolean
 }
 
 defineProps<Props>()
@@ -93,6 +115,7 @@ const emit = defineEmits<{
   'zoom-out': []
   'zoom-reset': []
   'toggle-gnomad': []
+  'toggle-case-variants': []
   'export-svg': []
   'export-png': []
 }>()

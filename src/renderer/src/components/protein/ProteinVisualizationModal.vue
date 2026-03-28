@@ -13,16 +13,10 @@
         </v-btn>
 
         <v-toolbar-title class="d-flex align-center ga-3">
-          <!-- Gene selector -->
-          <v-select
-            v-model="selectedGene"
-            :items="geneOptions"
-            density="compact"
-            variant="outlined"
-            hide-details
-            style="max-width: 200px"
-            label="Gene"
-          />
+          <!-- Gene name -->
+          <span v-if="geneSymbol" class="text-body-1 font-weight-medium">
+            {{ geneSymbol }}
+          </span>
 
           <!-- Protein name -->
           <span v-if="proteinData.mapping.value" class="text-body-1">
@@ -76,7 +70,7 @@
           <v-icon size="64" color="grey" :icon="mdiDna" class="mb-4" />
           <div class="text-h6 mb-2">No Protein Data</div>
           <div class="text-body-2 text-medium-emphasis">
-            Could not find UniProt mapping for {{ selectedGene ?? 'this gene' }}.
+            Could not find UniProt mapping for {{ geneSymbol ?? 'this gene' }}.
           </div>
         </div>
 
@@ -86,8 +80,12 @@
           :protein-length="proteinData.proteinLength.value"
           :domains="proteinData.domains.value"
           :variants="lollipopVariants"
-          :gene-symbol="selectedGene"
+          :gene-symbol="geneSymbol"
+          :show-case-variants="showCaseVariants"
+          :case-variants-loading="caseVariantsLoading"
+          :has-case-id="caseId !== null && mode === 'case'"
           class="fill-height"
+          @toggle-case-variants="handleToggleCaseVariants"
         />
 
         <!-- 3D Structure tab -->
@@ -106,6 +104,7 @@
 import { ref, computed, watch } from 'vue'
 import { mdiClose, mdiAlertCircleOutline, mdiDna } from '@mdi/js'
 import { useProteinData } from '../../composables/useProteinData'
+import { useApiService } from '../../composables/useApiService'
 import LollipopPlotPanel from './LollipopPlotPanel.vue'
 import ProteinStructure3DPanel from './ProteinStructure3DPanel.vue'
 import type { Variant } from '../../../../shared/types/api'
@@ -116,11 +115,13 @@ import {
   getConsequenceCategory,
   getConsequenceColor
 } from '../../../../shared/utils/protein-utils'
+import { logService } from '../../services/LogService'
 
 interface Props {
   modelValue: boolean
-  initialGene: string | null
-  allVariants: (Variant | CohortVariant)[]
+  variant: Variant | CohortVariant | null
+  caseId: number | null
+  mode: 'case' | 'cohort'
 }
 
 const props = defineProps<Props>()
@@ -129,64 +130,124 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const activeTab = ref('lollipop')
-const selectedGene = ref<string | null>(props.initialGene)
+const { api } = useApiService()
 
-// Update selected gene when initialGene changes
+const activeTab = ref('lollipop')
+
+// Derive gene symbol from the variant
+const geneSymbol = computed<string | null>(() => props.variant?.gene_symbol ?? null)
+
+// Protein data composable - watches geneSymbol reactively
+const proteinData = useProteinData(geneSymbol)
+
+// Case variants state
+const showCaseVariants = ref(false)
+const caseVariantsLoading = ref(false)
+const caseVariants = ref<(Variant | CohortVariant)[]>([])
+
+// Reset case variants when variant/modal changes
 watch(
-  () => props.initialGene,
-  (newGene) => {
-    if (newGene !== null && newGene !== '') {
-      selectedGene.value = newGene
-    }
+  () => [props.modelValue, props.variant],
+  () => {
+    showCaseVariants.value = false
+    caseVariants.value = []
   }
 )
 
-// Compute unique gene options from all variants
-const geneOptions = computed<string[]>(() => {
-  const genes = new Set<string>()
-  for (const v of props.allVariants) {
-    if (v.gene_symbol !== null && v.gene_symbol !== '') {
-      genes.add(v.gene_symbol)
-    }
+// Convert a single variant to LollipopVariant format
+function toLolli(v: Variant | CohortVariant, highlighted: boolean): LollipopVariant | null {
+  const proteinPosition = parseProteinPosition(v.aa_change)
+  if (proteinPosition === null) return null
+
+  const consequence = v.consequence ?? 'unknown'
+  const consequenceCategory = getConsequenceCategory(consequence)
+  const color = getConsequenceColor(consequence)
+
+  const cadd = 'cadd' in v ? (v.cadd ?? null) : 'cadd_phred' in v ? (v.cadd_phred ?? null) : null
+
+  return {
+    proteinPosition,
+    aaChange: v.aa_change,
+    consequence,
+    consequenceCategory,
+    color,
+    geneSymbol: v.gene_symbol ?? '',
+    chr: v.chr,
+    pos: v.pos,
+    ref: v.ref,
+    alt: v.alt,
+    gnomadAf: v.gnomad_af ?? null,
+    cadd,
+    clinvar: v.clinvar ?? null,
+    highlighted
   }
-  return Array.from(genes).sort()
-})
+}
 
-// Protein data composable
-const proteinData = useProteinData(selectedGene)
-
-// Convert variants to LollipopVariant format
+// Build lollipop variants: selected variant (highlighted) + optional case variants
 const lollipopVariants = computed<LollipopVariant[]>(() => {
   const result: LollipopVariant[] = []
-  for (const v of props.allVariants) {
-    if (v.gene_symbol !== selectedGene.value) continue
 
-    const proteinPosition = parseProteinPosition(v.aa_change)
-    if (proteinPosition === null) continue
-
-    const consequence = v.consequence ?? 'unknown'
-    const consequenceCategory = getConsequenceCategory(consequence)
-    const color = getConsequenceColor(consequence)
-
-    const cadd = 'cadd' in v ? (v.cadd ?? null) : 'cadd_phred' in v ? (v.cadd_phred ?? null) : null
-
-    result.push({
-      proteinPosition,
-      aaChange: v.aa_change,
-      consequence,
-      consequenceCategory,
-      color,
-      geneSymbol: v.gene_symbol ?? '',
-      chr: v.chr,
-      pos: v.pos,
-      ref: v.ref,
-      alt: v.alt,
-      gnomadAf: v.gnomad_af ?? null,
-      cadd,
-      clinvar: v.clinvar ?? null
-    })
+  // Add the selected variant (highlighted)
+  if (props.variant !== null && props.variant.gene_symbol === geneSymbol.value) {
+    const lolli = toLolli(props.variant, true)
+    if (lolli !== null) {
+      result.push(lolli)
+    }
   }
+
+  // Add case variants if toggled on (excluding the selected variant to avoid duplicates)
+  if (showCaseVariants.value) {
+    for (const v of caseVariants.value) {
+      // Skip the selected variant (already added above)
+      if (
+        props.variant !== null &&
+        v.chr === props.variant.chr &&
+        v.pos === props.variant.pos &&
+        v.ref === props.variant.ref &&
+        v.alt === props.variant.alt
+      ) {
+        continue
+      }
+
+      if (v.gene_symbol !== geneSymbol.value) continue
+      const lolli = toLolli(v, false)
+      if (lolli !== null) {
+        result.push(lolli)
+      }
+    }
+  }
+
   return result
 })
+
+// Fetch case variants for the current gene
+async function handleToggleCaseVariants(): Promise<void> {
+  showCaseVariants.value = !showCaseVariants.value
+
+  if (
+    showCaseVariants.value &&
+    caseVariants.value.length === 0 &&
+    props.caseId !== null &&
+    geneSymbol.value !== null &&
+    api !== undefined
+  ) {
+    caseVariantsLoading.value = true
+    try {
+      const result = await api.variants.query(
+        props.caseId,
+        { gene_symbol: geneSymbol.value },
+        0,
+        1000
+      )
+      caseVariants.value = result.data
+    } catch (err) {
+      logService.error(
+        `Failed to fetch case variants: ${err instanceof Error ? err.message : 'Unknown'}`,
+        'ProteinVisualizationModal'
+      )
+    } finally {
+      caseVariantsLoading.value = false
+    }
+  }
+}
 </script>
