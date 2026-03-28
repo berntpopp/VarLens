@@ -9,8 +9,16 @@
  */
 
 import { ref, watch, onBeforeUnmount, markRaw, type Ref } from 'vue'
-import type { LollipopVariant, ProteinStructureInfo } from '../../../shared/types/protein'
-import { getConsequenceColor } from '../../../shared/utils/protein-utils'
+import type {
+  LollipopVariant,
+  ClinVarVariant,
+  ProteinStructureInfo
+} from '../../../shared/types/protein'
+import {
+  getConsequenceColor,
+  getClinVarCategory,
+  CLINVAR_COLORS
+} from '../../../shared/utils/protein-utils'
 import { logService } from '../services/LogService'
 
 /** Representation types supported by pdbe-molstar */
@@ -71,7 +79,8 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
 export function useMolstarViewer(
   molstarRef: Ref<HTMLElement | null>,
   structureInfo: Ref<ProteinStructureInfo | null>,
-  variants: Ref<LollipopVariant[]>
+  variants: Ref<LollipopVariant[]>,
+  clinvarVariants?: Ref<ClinVarVariant[]>
 ) {
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -187,9 +196,8 @@ export function useMolstarViewer(
     if (!viewerInstance) return
 
     const variantsToHighlight = variants.value.filter((v) => v.proteinPosition > 0)
-    if (variantsToHighlight.length === 0) return
 
-    // Build selection data with struct_asym_id for reliable chain matching
+    // Build selection data for user variants
     const selections = variantsToHighlight.map((v) => ({
       struct_asym_id: 'A',
       start_residue_number: v.proteinPosition,
@@ -199,8 +207,28 @@ export function useMolstarViewer(
       sideChain: true
     }))
 
+    // Add ClinVar P/LP variants (in red tones)
+    const cvVariants = clinvarVariants?.value ?? []
+    const userPositions = new Set(variantsToHighlight.map((v) => v.proteinPosition))
+    for (const cv of cvVariants) {
+      if (cv.proteinPosition === null || cv.proteinPosition <= 0) continue
+      // Skip if already highlighted by user variant
+      if (userPositions.has(cv.proteinPosition)) continue
+      const cat = getClinVarCategory(cv.clinicalSignificance)
+      selections.push({
+        struct_asym_id: 'A',
+        start_residue_number: cv.proteinPosition,
+        end_residue_number: cv.proteinPosition,
+        color: hexToRgb(CLINVAR_COLORS[cat]),
+        focus: false,
+        sideChain: true
+      })
+    }
+
+    if (selections.length === 0) return
+
     logService.info(
-      `Highlighting ${selections.length} variant residue(s) on 3D structure`,
+      `Highlighting ${selections.length} residue(s) on 3D structure (${variantsToHighlight.length} user + ${selections.length - variantsToHighlight.length} ClinVar)`,
       'MolstarViewer'
     )
 
@@ -320,6 +348,15 @@ export function useMolstarViewer(
       highlightVariants()
     }
   })
+
+  // Re-highlight when ClinVar variants change
+  if (clinvarVariants) {
+    watch(clinvarVariants, () => {
+      if (structureLoaded.value) {
+        highlightVariants()
+      }
+    })
+  }
 
   onBeforeUnmount(() => {
     stopPolling()

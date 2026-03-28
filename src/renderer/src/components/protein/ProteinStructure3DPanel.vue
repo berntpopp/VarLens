@@ -5,9 +5,17 @@
  */
 
 import { computed, ref } from 'vue'
-import { mdiTargetVariant } from '@mdi/js'
-import type { LollipopVariant, ProteinStructureInfo } from '../../../../shared/types/protein'
-import { getConsequenceColor } from '../../../../shared/utils/protein-utils'
+import { mdiTargetVariant, mdiMedicalBag } from '@mdi/js'
+import type {
+  LollipopVariant,
+  ClinVarVariant,
+  ProteinStructureInfo
+} from '../../../../shared/types/protein'
+import {
+  getConsequenceColor,
+  getClinVarCategory,
+  CLINVAR_COLORS
+} from '../../../../shared/utils/protein-utils'
 import MolstarViewer from './MolstarViewer.vue'
 import StructureControls from './StructureControls.vue'
 import type { RepresentationType } from '../../composables/useMolstarViewer'
@@ -15,6 +23,7 @@ import type { RepresentationType } from '../../composables/useMolstarViewer'
 const props = defineProps<{
   structureInfo: ProteinStructureInfo | null
   variants: LollipopVariant[]
+  clinvarVariants?: ClinVarVariant[]
 }>()
 
 const molstarViewerRef = ref<InstanceType<typeof MolstarViewer> | null>(null)
@@ -39,6 +48,16 @@ const missenseVariants = computed(() =>
   props.variants.filter((v) => v.consequenceCategory === 'missense' && v.proteinPosition > 0)
 )
 
+/** Filter ClinVar to P/LP variants with protein positions for the sidebar */
+const pathogenicClinvarVariants = computed(() => {
+  const cvVariants = props.clinvarVariants ?? []
+  return cvVariants.filter((v) => {
+    if (v.proteinPosition === null || v.proteinPosition <= 0) return false
+    const cat = getClinVarCategory(v.clinicalSignificance)
+    return cat === 'pathogenic' || cat === 'likely_pathogenic'
+  })
+})
+
 const activeRepresentation = computed<RepresentationType>(
   () => molstarViewerRef.value?.activeRepresentation ?? 'cartoon'
 )
@@ -55,6 +74,12 @@ function onResetView(): void {
 
 function onVariantClick(variant: LollipopVariant): void {
   molstarViewerRef.value?.focusResidue(variant.proteinPosition)
+}
+
+function onClinvarClick(cv: ClinVarVariant): void {
+  if (cv.proteinPosition !== null) {
+    molstarViewerRef.value?.focusResidue(cv.proteinPosition)
+  }
 }
 </script>
 
@@ -78,39 +103,79 @@ function onVariantClick(variant: LollipopVariant): void {
           ref="molstarViewerRef"
           :structure-info="props.structureInfo"
           :variants="props.variants"
+          :clinvar-variants="pathogenicClinvarVariants"
         />
       </div>
 
-      <!-- Variant sidebar (only when missense variants exist) -->
-      <div v-if="missenseVariants.length > 0 && structureLoaded" class="variant-sidebar">
-        <div class="sidebar-header text-body-2 text-medium-emphasis pa-2 pb-1 font-weight-medium">
-          <v-icon size="14" :icon="mdiTargetVariant" class="mr-1" />
-          Missense Variants ({{ missenseVariants.length }})
-        </div>
-        <v-list density="compact" class="pa-0" bg-color="transparent">
-          <v-list-item
-            v-for="variant in missenseVariants"
-            :key="`${variant.chr}-${variant.pos}-${variant.ref}-${variant.alt}`"
-            class="variant-list-item"
-            @click="onVariantClick(variant)"
-          >
-            <template #prepend>
-              <div
-                class="variant-color-dot mr-2"
-                :style="{ backgroundColor: getConsequenceColor(variant.consequence) }"
-              />
-            </template>
-            <v-list-item-title class="text-body-2 font-weight-medium">
-              {{ variant.aaChange ?? `p.${variant.proteinPosition}` }}
-            </v-list-item-title>
-            <v-list-item-subtitle class="text-caption">
-              Pos {{ variant.proteinPosition }}
-              <span v-if="variant.highlighted" class="ml-1 text-primary font-weight-bold">
-                &#9733;
-              </span>
-            </v-list-item-subtitle>
-          </v-list-item>
-        </v-list>
+      <!-- Variant sidebar (when variants or ClinVar exist) -->
+      <div
+        v-if="
+          (missenseVariants.length > 0 || pathogenicClinvarVariants.length > 0) && structureLoaded
+        "
+        class="variant-sidebar"
+      >
+        <!-- Your Variants section -->
+        <template v-if="missenseVariants.length > 0">
+          <div class="sidebar-header text-body-2 text-medium-emphasis pa-2 pb-1 font-weight-medium">
+            <v-icon size="14" :icon="mdiTargetVariant" class="mr-1" />
+            Your Variants ({{ missenseVariants.length }})
+          </div>
+          <v-list density="compact" class="pa-0" bg-color="transparent">
+            <v-list-item
+              v-for="variant in missenseVariants"
+              :key="`${variant.chr}-${variant.pos}-${variant.ref}-${variant.alt}`"
+              class="variant-list-item"
+              @click="onVariantClick(variant)"
+            >
+              <template #prepend>
+                <div
+                  class="variant-color-dot mr-2"
+                  :style="{ backgroundColor: getConsequenceColor(variant.consequence) }"
+                />
+              </template>
+              <v-list-item-title class="text-body-2 font-weight-medium">
+                {{ variant.aaChange ?? `p.${variant.proteinPosition}` }}
+              </v-list-item-title>
+              <v-list-item-subtitle class="text-caption">
+                Pos {{ variant.proteinPosition }}
+                <span v-if="variant.highlighted" class="ml-1 text-primary font-weight-bold">
+                  &#9733;
+                </span>
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </template>
+
+        <!-- ClinVar P/LP section -->
+        <template v-if="pathogenicClinvarVariants.length > 0">
+          <div class="sidebar-header text-body-2 text-medium-emphasis pa-2 pb-1 font-weight-medium">
+            <v-icon size="14" :icon="mdiMedicalBag" class="mr-1" />
+            ClinVar P/LP ({{ pathogenicClinvarVariants.length }})
+          </div>
+          <v-list density="compact" class="pa-0" bg-color="transparent">
+            <v-list-item
+              v-for="cv in pathogenicClinvarVariants"
+              :key="cv.variantId"
+              class="variant-list-item"
+              @click="onClinvarClick(cv)"
+            >
+              <template #prepend>
+                <div
+                  class="variant-color-dot mr-2"
+                  :style="{
+                    backgroundColor: CLINVAR_COLORS[getClinVarCategory(cv.clinicalSignificance)]
+                  }"
+                />
+              </template>
+              <v-list-item-title class="text-body-2 font-weight-medium">
+                {{ cv.hgvsp ?? `p.${cv.proteinPosition}` }}
+              </v-list-item-title>
+              <v-list-item-subtitle class="text-caption">
+                Pos {{ cv.proteinPosition }} &middot; {{ cv.clinicalSignificance }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </template>
       </div>
     </div>
   </div>

@@ -6,15 +6,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, toRef } from 'vue'
+import { ref, toRef, computed } from 'vue'
 import { useResizeObserver } from '../../composables/useResizeObserver'
 import { useGeneStructurePlot, type GenomicVariant } from '../../composables/useGeneStructurePlot'
 import GeneStructureTooltip from './GeneStructureTooltip.vue'
-import type { GeneStructure } from '../../../../shared/types/protein'
+import type {
+  GeneStructure,
+  ClinVarVariant,
+  ClinVarSignificance
+} from '../../../../shared/types/protein'
 
 interface Props {
   geneStructure: GeneStructure
   variant: GenomicVariant | null
+  clinvarVariants?: ClinVarVariant[]
+  activeClinvarCategories?: Set<ClinVarSignificance>
 }
 
 const props = defineProps<Props>()
@@ -24,11 +30,18 @@ const svgRef = ref<SVGSVGElement | null>(null)
 
 const { dimensions } = useResizeObserver(containerRef)
 
+const clinvarRef = computed(() => props.clinvarVariants ?? [])
+const activeClinvarRef = computed<Set<ClinVarSignificance>>(
+  () => props.activeClinvarCategories ?? new Set<ClinVarSignificance>()
+)
+
 const { tooltip, resetZoom, zoomIn, zoomOut, exportSvg, exportPng } = useGeneStructurePlot({
   svgRef,
   dimensions,
   geneStructure: toRef(props, 'geneStructure'),
-  variant: toRef(props, 'variant')
+  variant: toRef(props, 'variant'),
+  clinvarVariants: clinvarRef,
+  activeClinvarCategories: activeClinvarRef
 })
 
 defineExpose({

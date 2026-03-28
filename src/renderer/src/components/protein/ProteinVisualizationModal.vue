@@ -104,6 +104,8 @@
           :show-case-variants="showCaseVariants"
           :case-variants-loading="caseVariantsLoading"
           :has-case-id="caseId !== null && mode === 'case'"
+          :clinvar-variants="clinvarVariants"
+          :clinvar-loading="clinvarLoading"
           class="fill-height"
           @toggle-case-variants="handleToggleCaseVariants"
         />
@@ -116,6 +118,8 @@
           :error="proteinData.geneStructureError.value"
           :variant="genomicVariant"
           :gene-symbol="geneSymbol"
+          :clinvar-variants="clinvarVariants"
+          :clinvar-loading="clinvarLoading"
           class="fill-height"
         />
 
@@ -124,6 +128,7 @@
           v-else-if="activeTab === '3d'"
           :structure-info="proteinData.structureInfo.value"
           :variants="lollipopVariants"
+          :clinvar-variants="clinvarVariants"
           class="fill-height"
         />
       </div>
@@ -141,7 +146,7 @@ import GeneStructurePanel from './GeneStructurePanel.vue'
 import ProteinStructure3DPanel from './ProteinStructure3DPanel.vue'
 import type { Variant } from '../../../../shared/types/api'
 import type { CohortVariant } from '../../../../shared/types/cohort'
-import type { LollipopVariant } from '../../../../shared/types/protein'
+import type { LollipopVariant, ClinVarVariant } from '../../../../shared/types/protein'
 import type { GenomicVariant } from '../../composables/useGeneStructurePlot'
 import {
   parseProteinPosition,
@@ -193,13 +198,45 @@ const showCaseVariants = ref(false)
 const caseVariantsLoading = ref(false)
 const caseVariants = ref<(Variant | CohortVariant)[]>([])
 
-// Reset case variants when variant/modal changes
+// ClinVar state (shared across Lollipop, Gene Structure, and 3D tabs)
+const clinvarLoading = ref(false)
+const clinvarVariants = ref<ClinVarVariant[]>([])
+
+// Reset case variants and ClinVar when variant/modal changes
 watch(
   () => [props.modelValue, props.variant],
   () => {
     showCaseVariants.value = false
     caseVariants.value = []
+    clinvarVariants.value = []
   }
+)
+
+// Fetch ClinVar data when gene symbol changes (shared across all tabs)
+watch(
+  geneSymbol,
+  async (gene) => {
+    clinvarVariants.value = []
+    if (gene !== null && gene !== '' && api !== undefined) {
+      clinvarLoading.value = true
+      try {
+        const result = await api.gnomad.getClinVarVariants(gene)
+        if (result.success) {
+          clinvarVariants.value = result.variants
+        } else {
+          logService.warn(`ClinVar fetch failed: ${result.error}`, 'ProteinVisualizationModal')
+        }
+      } catch (err) {
+        logService.error(
+          `ClinVar fetch error: ${err instanceof Error ? err.message : 'Unknown'}`,
+          'ProteinVisualizationModal'
+        )
+      } finally {
+        clinvarLoading.value = false
+      }
+    }
+  },
+  { immediate: true }
 )
 
 // Convert a single variant to LollipopVariant format.

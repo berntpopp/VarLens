@@ -100,6 +100,10 @@ interface Props {
   caseVariantsLoading: boolean
   /** Whether a case ID is available for fetching case variants */
   hasCaseId: boolean
+  /** ClinVar variants (fetched by parent modal, shared across tabs) */
+  clinvarVariants: ClinVarVariant[]
+  /** Whether ClinVar data is loading */
+  clinvarLoading: boolean
 }
 
 const props = defineProps<Props>()
@@ -124,9 +128,7 @@ const showGnomad = ref(true)
 const gnomadLoading = ref(false)
 const gnomadVariants = ref<GnomadVariant[]>([])
 
-// ClinVar state
-const clinvarLoading = ref(false)
-const clinvarVariants = ref<ClinVarVariant[]>([])
+// ClinVar variants and loading come from props (clinvarVariants, clinvarLoading)
 
 // gnomAD frequency filter (default: show all)
 const gnomadMaxAf = ref(1)
@@ -157,22 +159,17 @@ const activeClinVarConsequences = ref<Set<ConsequenceCategory>>(
   new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
 )
 
-// Auto-fetch gnomAD and ClinVar data when gene symbol is available
+// Auto-fetch gnomAD data when gene symbol is available
 watch(
   () => props.geneSymbol,
   async (gene) => {
     // Reset data when gene changes
     gnomadVariants.value = []
-    clinvarVariants.value = []
 
     if (gene !== null && gene !== '' && api !== undefined) {
-      // Fetch gnomAD and ClinVar in parallel
-      const promises: Promise<void>[] = []
       if (showGnomad.value) {
-        promises.push(fetchGnomad(gene))
+        await fetchGnomad(gene)
       }
-      promises.push(fetchClinVar(gene))
-      await Promise.all(promises)
     }
   },
   { immediate: true }
@@ -195,26 +192,6 @@ async function fetchGnomad(gene: string): Promise<void> {
     )
   } finally {
     gnomadLoading.value = false
-  }
-}
-
-async function fetchClinVar(gene: string): Promise<void> {
-  if (api === undefined) return
-  clinvarLoading.value = true
-  try {
-    const result = await api.gnomad.getClinVarVariants(gene)
-    if (result.success) {
-      clinvarVariants.value = result.variants
-    } else {
-      logService.warn(`ClinVar fetch failed: ${result.error}`, 'LollipopPlotPanel')
-    }
-  } catch (err) {
-    logService.error(
-      `ClinVar fetch error: ${err instanceof Error ? err.message : 'Unknown'}`,
-      'LollipopPlotPanel'
-    )
-  } finally {
-    clinvarLoading.value = false
   }
 }
 
@@ -318,7 +295,7 @@ const clinvarConsequenceCounts = computed(() => {
     synonymous: 0,
     other: 0
   }
-  for (const v of clinvarVariants.value) {
+  for (const v of props.clinvarVariants) {
     if (v.proteinPosition !== null) {
       const cat = getConsequenceCategory(v.consequence)
       counts[cat]++
@@ -337,7 +314,7 @@ const clinvarCounts = computed(() => {
     benign: 0,
     other: 0
   }
-  for (const v of clinvarVariants.value) {
+  for (const v of props.clinvarVariants) {
     if (v.proteinPosition !== null) {
       const cat = getClinVarCategory(v.clinicalSignificance)
       counts[cat]++

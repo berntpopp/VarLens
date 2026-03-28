@@ -12,11 +12,16 @@
 import { ref, computed, type Ref } from 'vue'
 import { mdiMolecule } from '@mdi/js'
 import { useMolstarViewer } from '../../composables/useMolstarViewer'
-import type { LollipopVariant, ProteinStructureInfo } from '../../../../shared/types/protein'
+import type {
+  LollipopVariant,
+  ClinVarVariant,
+  ProteinStructureInfo
+} from '../../../../shared/types/protein'
 
 const props = defineProps<{
   structureInfo: ProteinStructureInfo | null
   variants: LollipopVariant[]
+  clinvarVariants?: ClinVarVariant[]
 }>()
 
 const molstarRef = ref<HTMLElement | null>(null) as Ref<HTMLElement | null>
@@ -33,6 +38,7 @@ const structureFormat = computed(() => activeSource.value?.format ?? 'cif')
 // Reactive refs for the composable
 const structureInfoRef = computed(() => props.structureInfo)
 const variantsRef = computed(() => props.variants)
+const clinvarRef = computed(() => props.clinvarVariants ?? [])
 
 const {
   loading,
@@ -42,7 +48,7 @@ const {
   focusResidue,
   setRepresentation,
   resetView
-} = useMolstarViewer(molstarRef, structureInfoRef, variantsRef)
+} = useMolstarViewer(molstarRef, structureInfoRef, variantsRef, clinvarRef)
 
 defineExpose({
   focusResidue,

@@ -391,7 +391,8 @@ export class GnomadApiClient {
         proteinPosition,
         hgvsp: v.hgvsp ?? null,
         consequence: v.major_consequence ?? 'unknown',
-        alleleFrequency
+        alleleFrequency,
+        genomicPosition: v.pos ?? null
       }
     })
   }

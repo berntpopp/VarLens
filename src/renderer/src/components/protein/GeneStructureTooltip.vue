@@ -27,6 +27,23 @@
           <span class="tooltip-value tooltip-mono">{{ data.variantLabel }}</span>
         </div>
       </template>
+
+      <!-- ClinVar variant tooltip -->
+      <template v-else-if="data.type === 'clinvar'">
+        <div class="tooltip-title">ClinVar Variant</div>
+        <div v-if="data.clinvarSignificance" class="tooltip-row">
+          <span class="tooltip-label">Significance:</span>
+          <span class="tooltip-value">{{ data.clinvarSignificance }}</span>
+        </div>
+        <div v-if="data.clinvarVariantId" class="tooltip-row">
+          <span class="tooltip-label">ID:</span>
+          <span class="tooltip-value tooltip-mono">{{ data.clinvarVariantId }}</span>
+        </div>
+        <div v-if="data.clinvarHgvsp" class="tooltip-row">
+          <span class="tooltip-label">Protein:</span>
+          <span class="tooltip-value tooltip-mono">{{ data.clinvarHgvsp }}</span>
+        </div>
+      </template>
     </div>
   </Teleport>
 </template>

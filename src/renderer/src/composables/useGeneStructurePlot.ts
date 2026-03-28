@@ -15,7 +15,13 @@
 
 import { ref, watchEffect, type Ref } from 'vue'
 import * as d3 from 'd3'
-import type { GeneStructure, GeneExon } from '../../../shared/types/protein'
+import type {
+  GeneStructure,
+  GeneExon,
+  ClinVarVariant,
+  ClinVarSignificance
+} from '../../../shared/types/protein'
+import { CLINVAR_COLORS, getClinVarCategory } from '../../../shared/utils/protein-utils'
 import type { Dimensions } from './useResizeObserver'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,9 +31,12 @@ export interface GeneStructureTooltipData {
   visible: boolean
   x: number
   y: number
-  type: 'exon' | 'variant'
+  type: 'exon' | 'variant' | 'clinvar'
   exon?: GeneExon
   variantLabel?: string
+  clinvarSignificance?: string
+  clinvarVariantId?: string
+  clinvarHgvsp?: string | null
 }
 
 /** Variant position on the gene structure */
@@ -45,6 +54,8 @@ export interface GeneStructurePlotOptions {
   dimensions: Ref<Dimensions>
   geneStructure: Ref<GeneStructure | null>
   variant: Ref<GenomicVariant | null>
+  clinvarVariants?: Ref<ClinVarVariant[]>
+  activeClinvarCategories?: Ref<Set<ClinVarSignificance>>
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -55,6 +66,8 @@ const EXON_HEIGHT = 28
 const INTRON_LINE_WIDTH = 2
 const LOLLIPOP_STEM_HEIGHT = 60
 const LOLLIPOP_HEAD_RADIUS = 8
+const CLINVAR_DIAMOND_SIZE = 7
+const CLINVAR_TRACK_OFFSET = 24 // Below the exon track
 const EXON_COLOR = '#1867C0' // Vuetify primary blue
 const EXON_COLOR_HOVER = '#1565C0'
 const INTRON_COLOR = '#9E9E9E'
@@ -63,7 +76,8 @@ const VARIANT_COLOR = '#D32F2F' // Red for variant marker
 // ─── Composable ───────────────────────────────────────────────────────────────
 
 export function useGeneStructurePlot(options: GeneStructurePlotOptions) {
-  const { svgRef, dimensions, geneStructure, variant } = options
+  const { svgRef, dimensions, geneStructure, variant, clinvarVariants, activeClinvarCategories } =
+    options
 
   const tooltip = ref<GeneStructureTooltipData>({
     visible: false,
@@ -275,6 +289,56 @@ export function useGeneStructurePlot(options: GeneStructurePlotOptions) {
         .text(v.label)
     }
 
+    // ── ClinVar variant diamonds (below exon track) ────────────────────
+    const cvVariants = clinvarVariants?.value ?? []
+    const activeCategories = activeClinvarCategories?.value ?? new Set()
+    if (cvVariants.length > 0) {
+      const clinvarGroup = clipGroup.append('g').attr('class', 'clinvar-markers')
+      const clinvarY = backboneY + EXON_HEIGHT / 2 + CLINVAR_TRACK_OFFSET
+
+      for (const cv of cvVariants) {
+        if (cv.genomicPosition === null) continue
+        const cat = getClinVarCategory(cv.clinicalSignificance)
+        if (!activeCategories.has(cat)) continue
+
+        const cx = xScale(cv.genomicPosition)
+        const color = CLINVAR_COLORS[cat]
+
+        // Diamond shape (rotated square)
+        clinvarGroup
+          .append('rect')
+          .attr('x', cx - CLINVAR_DIAMOND_SIZE / 2)
+          .attr('y', clinvarY - CLINVAR_DIAMOND_SIZE / 2)
+          .attr('width', CLINVAR_DIAMOND_SIZE)
+          .attr('height', CLINVAR_DIAMOND_SIZE)
+          .attr('transform', `rotate(45, ${cx}, ${clinvarY})`)
+          .attr('fill', color)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 0.5)
+          .attr('cursor', 'pointer')
+          .attr('opacity', 0.85)
+          .on('mouseenter', (event: MouseEvent) => {
+            d3.select(event.currentTarget as SVGRectElement).attr('opacity', 1)
+            tooltip.value = {
+              visible: true,
+              x: event.clientX,
+              y: event.clientY,
+              type: 'clinvar',
+              clinvarSignificance: cv.clinicalSignificance,
+              clinvarVariantId: cv.variantId,
+              clinvarHgvsp: cv.hgvsp
+            }
+          })
+          .on('mousemove', (event: MouseEvent) => {
+            tooltip.value = { ...tooltip.value, x: event.clientX, y: event.clientY }
+          })
+          .on('mouseleave', (event: MouseEvent) => {
+            d3.select(event.currentTarget as SVGRectElement).attr('opacity', 0.85)
+            tooltip.value = { ...tooltip.value, visible: false }
+          })
+      }
+    }
+
     // ── X-Axis with genomic coordinates ─────────────────────────────────
     const axisY = backboneY + EXON_HEIGHT / 2 + 30
 
@@ -358,8 +422,7 @@ export function useGeneStructurePlot(options: GeneStructurePlotOptions) {
         .attr('stroke', '#999')
         .attr('stroke-width', 2)
 
-      const scaleLabel =
-        scaleBarBp >= 1_000 ? `${scaleBarBp / 1_000} kb` : `${scaleBarBp} bp`
+      const scaleLabel = scaleBarBp >= 1_000 ? `${scaleBarBp / 1_000} kb` : `${scaleBarBp} bp`
       scaleBarGroup
         .append('text')
         .attr('x', scaleBarWidth / 2)
@@ -450,6 +513,32 @@ export function useGeneStructurePlot(options: GeneStructurePlotOptions) {
       clipGroup.selectAll('.variant-marker text').attr('x', vx)
     }
 
+    // Update ClinVar markers
+    const cvVars = clinvarVariants?.value ?? []
+    const activeCV = activeClinvarCategories?.value ?? new Set()
+    const plotHeight = dimensions.value.height - MARGIN.top - MARGIN.bottom
+    const backboneYz = plotHeight * INTRON_Y_OFFSET
+    const clinvarYz = backboneYz + EXON_HEIGHT / 2 + CLINVAR_TRACK_OFFSET
+
+    clipGroup.selectAll('.clinvar-markers rect').each(function (_d, i) {
+      // Find the i-th visible ClinVar variant
+      let visibleIdx = 0
+      for (const cv of cvVars) {
+        if (cv.genomicPosition === null) continue
+        const cat = getClinVarCategory(cv.clinicalSignificance)
+        if (!activeCV.has(cat)) continue
+        if (visibleIdx === i) {
+          const cx = newXScale(cv.genomicPosition)
+          d3.select(this)
+            .attr('x', cx - CLINVAR_DIAMOND_SIZE / 2)
+            .attr('y', clinvarYz - CLINVAR_DIAMOND_SIZE / 2)
+            .attr('transform', `rotate(45, ${cx}, ${clinvarYz})`)
+          break
+        }
+        visibleIdx++
+      }
+    })
+
     // Update x-axis
     const xAxis = d3
       .axisBottom(newXScale)
@@ -467,7 +556,14 @@ export function useGeneStructurePlot(options: GeneStructurePlotOptions) {
   // ─── Reactive re-rendering ──────────────────────────────────────────
 
   watchEffect(() => {
-    const _deps = [svgRef.value, dimensions.value, geneStructure.value, variant.value]
+    const _deps = [
+      svgRef.value,
+      dimensions.value,
+      geneStructure.value,
+      variant.value,
+      clinvarVariants?.value,
+      activeClinvarCategories?.value
+    ]
     void _deps
     render()
   })

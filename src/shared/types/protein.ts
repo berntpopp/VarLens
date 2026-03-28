@@ -97,6 +97,8 @@ export interface ClinVarVariant {
   hgvsp: string | null
   consequence: string
   alleleFrequency: number | null
+  /** Genomic position (from gnomAD API pos field) for gene structure rendering */
+  genomicPosition: number | null
 }
 
 /** ClinVar significance categories for filtering */
