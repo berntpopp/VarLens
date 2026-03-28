@@ -49,10 +49,14 @@
       :active-clinvar-categories="activeClinVarCategories"
       :domains="domains"
       :has-clinvar="clinvarVariants.length > 0"
+      :consequence-counts="consequenceCounts"
+      :clinvar-counts="clinvarCounts"
       @toggle-category="handleToggleCategory"
-      @reset-categories="handleResetCategories"
+      @select-only-category="handleSelectOnlyCategory"
+      @select-all-categories="handleSelectAllCategories"
       @toggle-clinvar-category="handleToggleClinVarCategory"
-      @reset-clinvar-categories="handleResetClinVarCategories"
+      @select-only-clinvar="handleSelectOnlyClinVar"
+      @select-all-clinvar="handleSelectAllClinVar"
     />
   </div>
 </template>
@@ -70,7 +74,12 @@ import type {
   ConsequenceCategory,
   ClinVarSignificance
 } from '../../../../shared/types/protein'
-import { CONSEQUENCE_COLORS, CLINVAR_COLORS } from '../../../../shared/utils/protein-utils'
+import {
+  CONSEQUENCE_COLORS,
+  CLINVAR_COLORS,
+  getConsequenceCategory,
+  getClinVarCategory
+} from '../../../../shared/utils/protein-utils'
 import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
 
@@ -220,7 +229,11 @@ function handleToggleCategory(category: ConsequenceCategory): void {
   activeCategories.value = next
 }
 
-function handleResetCategories(): void {
+function handleSelectOnlyCategory(category: ConsequenceCategory): void {
+  activeCategories.value = new Set([category])
+}
+
+function handleSelectAllCategories(): void {
   activeCategories.value = new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
 }
 
@@ -234,9 +247,55 @@ function handleToggleClinVarCategory(category: ClinVarSignificance): void {
   activeClinVarCategories.value = next
 }
 
-function handleResetClinVarCategories(): void {
+function handleSelectOnlyClinVar(category: ClinVarSignificance): void {
+  activeClinVarCategories.value = new Set([category])
+}
+
+function handleSelectAllClinVar(): void {
   activeClinVarCategories.value = new Set(Object.keys(CLINVAR_COLORS) as ClinVarSignificance[])
 }
+
+/** Compute variant counts per consequence category from gnomAD variants */
+const consequenceCounts = computed(() => {
+  const counts: Record<ConsequenceCategory, number> = {
+    missense: 0,
+    truncating: 0,
+    inframe: 0,
+    splice: 0,
+    synonymous: 0,
+    other: 0
+  }
+  for (const v of gnomadVariants.value) {
+    if (v.proteinPosition !== null) {
+      const cat = getConsequenceCategory(v.consequence)
+      counts[cat]++
+    }
+  }
+  // Also count case variants
+  for (const v of props.variants) {
+    counts[v.consequenceCategory]++
+  }
+  return counts
+})
+
+/** Compute variant counts per ClinVar significance category */
+const clinvarCounts = computed(() => {
+  const counts: Record<ClinVarSignificance, number> = {
+    pathogenic: 0,
+    likely_pathogenic: 0,
+    uncertain: 0,
+    likely_benign: 0,
+    benign: 0,
+    other: 0
+  }
+  for (const v of clinvarVariants.value) {
+    if (v.proteinPosition !== null) {
+      const cat = getClinVarCategory(v.clinicalSignificance)
+      counts[cat]++
+    }
+  }
+  return counts
+})
 
 function handleExportSvg(): void {
   const svgString = plotRef.value?.exportSvg()

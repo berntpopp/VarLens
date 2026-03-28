@@ -1,29 +1,41 @@
 <template>
   <div class="lollipop-legend d-flex flex-wrap align-center ga-2 pa-2 bg-grey-lighten-4">
-    <!-- Consequence category chips (clickable toggle) -->
+    <!-- Consequence category chips (clickable toggle with "only" buttons) -->
     <div class="d-flex flex-wrap ga-1 align-center">
       <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">Consequence:</span>
-      <v-chip
+      <div
         v-for="[category, color] in consequenceEntries"
         :key="category"
-        size="small"
-        label
-        :variant="isActive(category) ? 'flat' : 'outlined'"
-        :style="chipStyle(category, color)"
-        class="cursor-pointer"
-        @click="toggle(category)"
+        class="filter-pill"
+        :class="{ inactive: !isActive(category) }"
       >
-        {{ formatCategory(category) }}
-      </v-chip>
+        <v-chip
+          size="small"
+          label
+          :variant="isActive(category) ? 'flat' : 'outlined'"
+          :style="chipStyle(category, color)"
+          class="cursor-pointer"
+          @click="toggle(category)"
+        >
+          {{ formatCategory(category) }}
+          ({{ consequenceCounts[category] ?? 0 }})
+        </v-chip>
+        <v-btn
+          size="x-small"
+          variant="text"
+          class="only-btn text-none"
+          @click.stop="emit('select-only-category', category)"
+        >
+          only
+        </v-btn>
+      </div>
       <v-btn
-        v-if="!allActive"
         size="x-small"
-        variant="text"
-        color="primary"
+        variant="outlined"
         class="ml-1 text-none"
-        @click="emit('reset-categories')"
+        @click="emit('select-all-categories')"
       >
-        Reset
+        all
       </v-btn>
     </div>
 
@@ -32,27 +44,39 @@
       <v-divider vertical class="mx-1" />
       <div class="d-flex flex-wrap ga-1 align-center">
         <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">ClinVar:</span>
-        <v-chip
+        <div
           v-for="[category, color] in clinvarEntries"
           :key="category"
-          size="small"
-          label
-          :variant="isClinVarActive(category) ? 'flat' : 'outlined'"
-          :style="clinvarChipStyle(category, color)"
-          class="cursor-pointer"
-          @click="toggleClinVar(category)"
+          class="filter-pill"
+          :class="{ inactive: !isClinVarActive(category) }"
         >
-          {{ formatClinVarCategory(category) }}
-        </v-chip>
+          <v-chip
+            size="small"
+            label
+            :variant="isClinVarActive(category) ? 'flat' : 'outlined'"
+            :style="clinvarChipStyle(category, color)"
+            class="cursor-pointer"
+            @click="toggleClinVar(category)"
+          >
+            {{ formatClinVarCategory(category) }}
+            ({{ clinvarCounts[category] ?? 0 }})
+          </v-chip>
+          <v-btn
+            size="x-small"
+            variant="text"
+            class="only-btn text-none"
+            @click.stop="emit('select-only-clinvar', category)"
+          >
+            only
+          </v-btn>
+        </div>
         <v-btn
-          v-if="!allClinVarActive"
           size="x-small"
-          variant="text"
-          color="primary"
+          variant="outlined"
           class="ml-1 text-none"
-          @click="emit('reset-clinvar-categories')"
+          @click="emit('select-all-clinvar')"
         >
-          Reset
+          all
         </v-btn>
       </div>
     </template>
@@ -92,31 +116,29 @@ interface Props {
   domains: ProteinDomain[]
   /** Whether ClinVar data is available */
   hasClinvar: boolean
+  /** Variant counts per consequence category */
+  consequenceCounts: Record<ConsequenceCategory, number>
+  /** Variant counts per ClinVar significance category */
+  clinvarCounts: Record<ClinVarSignificance, number>
 }
 
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'toggle-category': [category: ConsequenceCategory]
-  'reset-categories': []
+  'select-only-category': [category: ConsequenceCategory]
+  'select-all-categories': []
   'toggle-clinvar-category': [category: ClinVarSignificance]
-  'reset-clinvar-categories': []
+  'select-only-clinvar': [category: ClinVarSignificance]
+  'select-all-clinvar': []
 }>()
 
 const consequenceEntries = computed(
   () => Object.entries(CONSEQUENCE_COLORS) as [ConsequenceCategory, string][]
 )
 
-/** Whether all categories are active */
-const allActive = computed(() => props.activeCategories.size === consequenceEntries.value.length)
-
 const clinvarEntries = computed(
   () => Object.entries(CLINVAR_COLORS) as [ClinVarSignificance, string][]
-)
-
-/** Whether all ClinVar categories are active */
-const allClinVarActive = computed(
-  () => props.activeClinvarCategories.size === clinvarEntries.value.length
 )
 
 /** Unique domain types present in the current protein */
@@ -194,5 +216,28 @@ function clinvarChipStyle(category: ClinVarSignificance, color: string): Record<
   height: 12px;
   border-radius: 2px;
   flex-shrink: 0;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.filter-pill.inactive {
+  opacity: 0.5;
+}
+
+.only-btn {
+  font-size: 10px;
+  min-width: 32px;
+  height: 20px;
+  padding: 0 4px;
+  text-transform: lowercase;
+  opacity: 0.6;
+}
+
+.only-btn:hover {
+  opacity: 1;
 }
 </style>
