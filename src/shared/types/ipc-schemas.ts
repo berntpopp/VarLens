@@ -253,7 +253,17 @@ export const VariantFilterPartialSchema = z.object({
 
   // Inheritance mode filters
   inheritance_modes: z
-    .array(z.string())
+    .array(
+      z.enum([
+        'homozygous',
+        'heterozygous',
+        'x_hemizygous',
+        'candidate_compound_het',
+        'de_novo',
+        'autosomal_recessive',
+        'compound_het'
+      ])
+    )
     .nullish()
     .transform((val) => val ?? undefined),
   analysis_group_id: z

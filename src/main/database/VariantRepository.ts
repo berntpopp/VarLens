@@ -536,6 +536,9 @@ export class VariantRepository extends BaseRepository {
       }
 
       // Trio modes — require analysis_group_id
+      // NOTE: If only trio modes are selected without an analysis group,
+      // conditions will be empty and no inheritance filter is applied.
+      // The UI prevents this by disabling trio chips when no group is set.
       if (groupIdNum !== null) {
         const gid = groupIdNum
         const cid = caseIdNum
@@ -1025,6 +1028,19 @@ export class VariantRepository extends BaseRepository {
       )
       .run(caseId)
     this.db.exec('DELETE FROM variant_frequency WHERE case_count <= 0')
+  }
+
+  /**
+   * Recompute all variant_frequency counts from scratch.
+   * Used after bulk deletion operations where incremental updates aren't possible.
+   */
+  recomputeAllFrequencies(): void {
+    this.db.exec('DELETE FROM variant_frequency')
+    this.db.exec(`
+      INSERT INTO variant_frequency (chr, pos, ref, alt, case_count)
+      SELECT chr, pos, ref, alt, COUNT(DISTINCT case_id)
+      FROM variants GROUP BY chr, pos, ref, alt
+    `)
   }
 
   getFilterOptions(caseId: number): FilterOptions {

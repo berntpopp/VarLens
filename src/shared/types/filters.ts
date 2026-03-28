@@ -10,6 +10,9 @@
  * - CohortTable.vue, FilterToolbar.vue
  */
 
+// TODO: The renderer has local copies of FilterState in composables/filter-types.ts
+// and composables/useFilters.ts that must be kept in sync. Consider consolidating.
+
 /**
  * Active filter representation for chip display
  */

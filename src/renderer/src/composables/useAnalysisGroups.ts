@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { logService } from '../services/LogService'
 
 interface AnalysisGroupOption {
   id: number
@@ -14,7 +15,8 @@ export function useAnalysisGroups() {
     loading.value = true
     try {
       groups.value = (await window.api.analysisGroups.list()) as AnalysisGroupOption[]
-    } catch {
+    } catch (error) {
+      logService.error(`Failed to load analysis groups: ${error}`, 'useAnalysisGroups')
       groups.value = []
     } finally {
       loading.value = false

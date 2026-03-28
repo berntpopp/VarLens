@@ -148,12 +148,7 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDepen
 
         // Recompute variant frequencies after bulk deletion
         try {
-          db.database.exec('DELETE FROM variant_frequency')
-          db.database.exec(`
-            INSERT INTO variant_frequency (chr, pos, ref, alt, case_count)
-            SELECT chr, pos, ref, alt, COUNT(DISTINCT case_id)
-            FROM variants GROUP BY chr, pos, ref, alt
-          `)
+          db.variants.recomputeAllFrequencies()
         } catch (freqError) {
           mainLogger.warn(`Failed to recompute variant frequencies: ${freqError}`, 'cases')
         }
@@ -192,12 +187,7 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDepen
 
       // Recompute variant frequencies after batch deletion
       try {
-        db.database.exec('DELETE FROM variant_frequency')
-        db.database.exec(`
-          INSERT INTO variant_frequency (chr, pos, ref, alt, case_count)
-          SELECT chr, pos, ref, alt, COUNT(DISTINCT case_id)
-          FROM variants GROUP BY chr, pos, ref, alt
-        `)
+        db.variants.recomputeAllFrequencies()
       } catch (freqError) {
         mainLogger.warn(`Failed to recompute variant frequencies: ${freqError}`, 'cases')
       }
