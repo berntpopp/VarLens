@@ -116,6 +116,29 @@ export function useMolstarViewer(
       stopPolling()
     })
 
+    // Check if the structure is already loaded (event may have fired before
+    // we subscribed). Inspect the plugin's structure hierarchy as a fallback.
+    if (!structureLoaded.value) {
+      try {
+        const plugin = (viewerInstance as unknown as Record<string, unknown>).plugin as
+          | { managers?: { structure?: { hierarchy?: { current?: { structures?: unknown[] } } } } }
+          | undefined
+        const structures = plugin?.managers?.structure?.hierarchy?.current?.structures
+        if (structures !== undefined && structures.length > 0) {
+          loading.value = false
+          structureLoaded.value = true
+          error.value = null
+          highlightVariants()
+          logService.info(
+            '3D structure already loaded (detected via plugin state)',
+            'MolstarViewer'
+          )
+        }
+      } catch {
+        // Ignore — structure state check is a best-effort fallback
+      }
+    }
+
     return true
   }
 

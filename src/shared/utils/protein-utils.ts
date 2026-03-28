@@ -31,7 +31,12 @@ const CONSEQUENCE_CATEGORY_MAP: Record<string, ConsequenceCategory> = {
   splice_donor_variant: 'splice',
   splice_acceptor_variant: 'splice',
   splice_region_variant: 'splice',
-  synonymous_variant: 'synonymous'
+  synonymous_variant: 'synonymous',
+  // VEP impact levels (used by some import formats instead of specific terms)
+  HIGH: 'truncating',
+  MODERATE: 'missense',
+  LOW: 'synonymous',
+  MODIFIER: 'other'
 }
 
 /**

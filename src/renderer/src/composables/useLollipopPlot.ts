@@ -81,7 +81,7 @@ export interface LollipopPlotOptions {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MARGIN = { top: 40, right: 30, bottom: 80, left: 50 }
-const BACKBONE_Y_OFFSET = 0.5 // fraction of plot height for backbone
+const BACKBONE_Y_OFFSET = 0.55 // fraction of plot height for backbone (slightly below center for lollipop room)
 const BACKBONE_HEIGHT = 14
 const DOMAIN_HEIGHT = 22
 /** Radius for the highlighted (selected) variant head */
@@ -464,12 +464,15 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
 
     // ── Highlighted (selected) variant lollipops ─── render LAST for z-order
     const highlightGroup = clipGroup.append('g').attr('class', 'highlighted')
+    // Use ~70% of available space above backbone for the highlighted stem
+    const availableAbove = backboneY - BACKBONE_HEIGHT / 2 - MARGIN.top
+    const highlightStemHeight = Math.min(
+      HIGHLIGHTED_MAX_STEM,
+      Math.max(HIGHLIGHTED_MIN_STEM, availableAbove * 0.7)
+    )
     for (const group of highlightedGroups) {
       const cx = xScale(group.position)
-      const stemHeight = Math.min(
-        HIGHLIGHTED_MAX_STEM,
-        Math.max(HIGHLIGHTED_MIN_STEM, LOLLIPOP_MIN_STEM + group.variants.length * 12)
-      )
+      const stemHeight = highlightStemHeight
       const headY = backboneY - BACKBONE_HEIGHT / 2 - stemHeight
       const highlightedVariant = group.variants.find((v) => v.highlighted === true)
       const color = highlightedVariant?.color ?? group.variants[0].color

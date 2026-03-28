@@ -154,9 +154,21 @@ watch(
   }
 )
 
-// Convert a single variant to LollipopVariant format
+// Convert a single variant to LollipopVariant format.
+// Tries aa_change first, then cdna as fallback (some import formats place protein
+// notation in the cDNA column when columns are shifted).
 function toLolli(v: Variant | CohortVariant, highlighted: boolean): LollipopVariant | null {
-  const proteinPosition = parseProteinPosition(v.aa_change)
+  let proteinPosition = parseProteinPosition(v.aa_change)
+  let aaChange = v.aa_change
+
+  // Fallback: try parsing the cdna field if aa_change didn't yield a valid position
+  if (proteinPosition === null && 'cdna' in v && typeof v.cdna === 'string') {
+    proteinPosition = parseProteinPosition(v.cdna)
+    if (proteinPosition !== null) {
+      aaChange = v.cdna
+    }
+  }
+
   if (proteinPosition === null) return null
 
   const consequence = v.consequence ?? 'unknown'
@@ -167,7 +179,7 @@ function toLolli(v: Variant | CohortVariant, highlighted: boolean): LollipopVari
 
   return {
     proteinPosition,
-    aaChange: v.aa_change,
+    aaChange,
     consequence,
     consequenceCategory,
     color,

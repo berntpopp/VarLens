@@ -109,6 +109,43 @@ if (variantRows.length > 0) {
       await window.screenshot({ path: '/tmp/varlens-04-protein-modal.png', fullPage: true });
       console.log('=== Screenshot 4: protein modal (lollipop tab)');
 
+      // Debug: check SVG data attributes and text elements for the highlighted variant
+      const variantDebug = await window.evaluate(() => {
+        const svg = document.querySelector('.lollipop-svg');
+        if (!svg) return 'no svg';
+        // Check all groups
+        const groups = svg.querySelectorAll('g[class]');
+        const info = [];
+        for (const g of groups) {
+          info.push({ class: g.getAttribute('class'), childCount: g.children.length });
+        }
+        // Also look for any text elements (the label)
+        const texts = svg.querySelectorAll('text');
+        const textContents = [];
+        for (const t of texts) {
+          textContents.push(t.textContent);
+        }
+        return { groups: info, texts: textContents };
+      });
+      console.log('=== SVG groups:', JSON.stringify(variantDebug, null, 2));
+
+      // Debug: check SVG content for highlighted group
+      const svgDebug = await window.evaluate(() => {
+        const svg = document.querySelector('.lollipop-svg');
+        if (!svg) return 'No SVG found';
+        const highlighted = svg.querySelector('.highlighted');
+        const lollipops = svg.querySelector('.lollipops');
+        const gnomad = svg.querySelector('.gnomad');
+        return {
+          svgDims: `${svg.getAttribute('width')}x${svg.getAttribute('height')}`,
+          highlightedElements: highlighted ? highlighted.children.length : 'no .highlighted group',
+          highlightedHTML: highlighted ? highlighted.innerHTML.substring(0, 500) : 'N/A',
+          lollipopElements: lollipops ? lollipops.children.length : 'no .lollipops group',
+          gnomadElements: gnomad ? gnomad.children.length : 'no .gnomad group'
+        };
+      });
+      console.log('=== SVG Debug:', JSON.stringify(svgDebug, null, 2));
+
       // Check modal content
       const dialog = await window.$('.v-dialog--fullscreen');
       if (dialog) {
@@ -128,7 +165,7 @@ if (variantRows.length > 0) {
           if (tabText.includes('3D')) {
             console.log('=== Clicking 3D tab');
             await tab.click();
-            await window.waitForTimeout(5000); // Wait for 3D structure to load
+            await window.waitForTimeout(15000); // Wait for 3D structure to load
 
             await window.screenshot({ path: '/tmp/varlens-05-protein-3d.png', fullPage: true });
             console.log('=== Screenshot 5: protein modal (3D tab)');
@@ -139,6 +176,55 @@ if (variantRows.length > 0) {
 
             const molstar = await dialog.$$('pdbe-molstar');
             console.log(`=== pdbe-molstar elements: ${molstar.length}`);
+
+            // Debug: check pdbe-molstar attributes and state
+            const molstarDebug = await window.evaluate(() => {
+              const el = document.querySelector('pdbe-molstar');
+              if (!el) return 'no pdbe-molstar element';
+              const vi = el.viewerInstance;
+              let pluginInfo = {};
+              try {
+                if (vi && vi.plugin) {
+                  const plugin = vi.plugin;
+                  pluginInfo = {
+                    hasDataState: !!plugin.state?.data,
+                    structures: plugin.managers?.structure?.hierarchy?.current?.structures?.length ?? 'N/A',
+                    canvasHasContent: !!plugin.canvas3d
+                  };
+                }
+              } catch (e) { pluginInfo = { error: e.message }; }
+              // Check if canvas has content
+              const canvas = el.querySelector('canvas');
+              let canvasInfo = 'no canvas';
+              if (canvas) {
+                canvasInfo = `${canvas.width}x${canvas.height}, visible=${canvas.style.display !== 'none'}`;
+              }
+              return {
+                customDataUrl: el.getAttribute('custom-data-url'),
+                visibility: el.style.visibility,
+                hasViewerInstance: !!vi,
+                pluginInfo,
+                canvasInfo,
+                // Check events
+                hasEvents: !!(vi?.events),
+                eventKeys: vi?.events ? Object.keys(vi.events).join(',') : 'N/A'
+              };
+            });
+            console.log('=== Molstar debug:', JSON.stringify(molstarDebug, null, 2));
+
+            // Check for error alerts in dialog
+            const alerts = await dialog.$$('.v-alert');
+            for (const alert of alerts) {
+              const alertText = await alert.innerText();
+              console.log(`=== Alert: "${alertText}"`);
+            }
+
+            // Check loading overlay
+            const overlay = await dialog.$('.molstar-overlay');
+            if (overlay) {
+              const overlayText = await overlay.innerText();
+              console.log(`=== Molstar overlay: "${overlayText}"`);
+            }
             break;
           }
         }
@@ -169,6 +255,21 @@ for (const msg of consoleMessages.filter(m => m.startsWith('[error]')).slice(0, 
 
 console.log('\n=== Console WARNINGS:');
 for (const msg of consoleMessages.filter(m => m.startsWith('[warning]')).slice(0, 10)) {
+  console.log(msg);
+}
+
+// Print all console messages related to molstar/structure/3d
+console.log('\n=== Console messages (molstar/structure related):');
+for (const msg of consoleMessages.filter(m =>
+  m.toLowerCase().includes('molstar') ||
+  m.toLowerCase().includes('structure') ||
+  m.toLowerCase().includes('alphafold') ||
+  m.toLowerCase().includes('cif') ||
+  m.toLowerCase().includes('load') ||
+  m.toLowerCase().includes('fetch') ||
+  m.toLowerCase().includes('csp') ||
+  m.toLowerCase().includes('refused')
+).slice(0, 30)) {
   console.log(msg);
 }
 
