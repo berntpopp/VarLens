@@ -527,6 +527,26 @@ const api = {
       ipcRenderer.invoke('auth:changePassword', oldPassword, newPassword)
   },
 
+  analysisGroups: {
+    list: () => ipcRenderer.invoke('analysisGroups:list'),
+    get: (id: number) => ipcRenderer.invoke('analysisGroups:get', id),
+    create: (params: { name: string; groupType?: string; description?: string }) =>
+      ipcRenderer.invoke('analysisGroups:create', params),
+    update: (id: number, params: { name?: string; description?: string }) =>
+      ipcRenderer.invoke('analysisGroups:update', id, params),
+    delete: (id: number) => ipcRenderer.invoke('analysisGroups:delete', id),
+    addMember: (params: {
+      groupId: number
+      caseId: number
+      role: string
+      affectedStatus?: string
+      individualId?: string
+    }) => ipcRenderer.invoke('analysisGroups:addMember', params),
+    removeMember: (groupId: number, caseId: number) =>
+      ipcRenderer.invoke('analysisGroups:removeMember', groupId, caseId),
+    getForCase: (caseId: number) => ipcRenderer.invoke('analysisGroups:getForCase', caseId)
+  },
+
   presets: {
     list: () => ipcRenderer.invoke('presets:list'),
 
