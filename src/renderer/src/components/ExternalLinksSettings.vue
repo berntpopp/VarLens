@@ -13,18 +13,19 @@
       <v-card-text>
         <!-- Genome Build Selector -->
         <div class="mb-4">
-          <div class="text-title-small mb-2">Genome Build</div>
+          <div class="text-subtitle-2 text-medium-emphasis mb-2">Genome Build</div>
           <v-btn-toggle
             v-model="buildSelection"
             color="primary"
             mandatory
             variant="outlined"
             density="compact"
+            divided
           >
-            <v-btn value="GRCh37">GRCh37</v-btn>
-            <v-btn value="GRCh38">GRCh38</v-btn>
+            <v-btn value="GRCh37" size="small">GRCh37</v-btn>
+            <v-btn value="GRCh38" size="small">GRCh38</v-btn>
           </v-btn-toggle>
-          <div class="text-body-small text-medium-emphasis mt-1">
+          <div class="text-caption text-medium-emphasis mt-1">
             Affects build-dependent URLs (gnomAD dataset, UCSC db)
           </div>
         </div>
@@ -33,47 +34,57 @@
 
         <!-- Link List -->
         <div class="mb-4">
-          <div class="text-title-small mb-2">Configured Links</div>
+          <div class="text-subtitle-2 text-medium-emphasis mb-2">Configured Links</div>
 
-          <v-list density="compact">
-            <v-list-item
+          <div class="links-list">
+            <div
               v-for="link in linksStore.links"
               :key="link.id"
+              class="link-row d-flex align-center py-2 px-3"
               :class="{ 'text-medium-emphasis': !link.enabled }"
             >
-              <template #prepend>
-                <v-switch
-                  :model-value="link.enabled"
-                  color="primary"
-                  density="compact"
-                  hide-details
-                  @update:model-value="linksStore.toggleLink(link.id)"
-                />
-              </template>
-
-              <v-list-item-title class="d-flex align-center ga-2">
-                <span :class="{ 'font-weight-bold': link.isBuiltIn }">{{ link.name }}</span>
-                <v-chip v-if="link.isBuiltIn" size="x-small" variant="outlined">Default</v-chip>
-                <v-chip size="x-small" variant="tonal">{{ getColumnLabel(link.column) }}</v-chip>
-              </v-list-item-title>
-
-              <template #append>
-                <v-btn
-                  :icon="mdiPencil"
-                  size="x-small"
-                  variant="text"
-                  @click="startEditLink(link)"
-                />
-                <v-btn
-                  v-if="!link.isBuiltIn"
-                  :icon="mdiDelete"
-                  size="x-small"
-                  variant="text"
-                  @click="confirmDeleteLink(link.id)"
-                />
-              </template>
-            </v-list-item>
-          </v-list>
+              <v-checkbox-btn
+                :model-value="link.enabled"
+                color="primary"
+                density="compact"
+                :aria-label="`Toggle ${link.name}`"
+                @update:model-value="linksStore.toggleLink(link.id)"
+              />
+              <div class="flex-grow-1 ml-2" style="min-width: 0">
+                <div class="d-flex align-center ga-2">
+                  <span class="text-body-2" :class="{ 'font-weight-medium': link.isBuiltIn }">{{
+                    link.name
+                  }}</span>
+                  <v-chip
+                    v-if="link.isBuiltIn"
+                    size="x-small"
+                    variant="outlined"
+                    color="primary"
+                    label
+                    >Built-in</v-chip
+                  >
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ getColumnLabel(link.column) }} column
+                </div>
+              </div>
+              <v-btn
+                :icon="mdiPencil"
+                size="x-small"
+                variant="text"
+                class="ml-1"
+                @click="startEditLink(link)"
+              />
+              <v-btn
+                v-if="!link.isBuiltIn"
+                :icon="mdiDelete"
+                size="x-small"
+                variant="text"
+                color="error"
+                @click="confirmDeleteLink(link.id)"
+              />
+            </div>
+          </div>
 
           <v-btn
             color="primary"
@@ -389,3 +400,23 @@ const show = (): void => {
 
 defineExpose({ show })
 </script>
+
+<style scoped>
+.links-list {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.link-row {
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.08);
+}
+
+.link-row:last-child {
+  border-bottom: none;
+}
+
+.link-row:hover {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+</style>
