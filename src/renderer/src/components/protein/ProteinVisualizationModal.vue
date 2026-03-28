@@ -14,17 +14,36 @@
 
         <v-toolbar-title class="d-flex align-center ga-3">
           <!-- Gene name -->
-          <span v-if="geneSymbol" class="text-body-1 font-weight-medium">
+          <span v-if="geneSymbol" class="text-h6 font-weight-bold">
             {{ geneSymbol }}
           </span>
+
+          <v-divider v-if="proteinData.mapping.value" vertical class="mx-1" />
 
           <!-- Protein name -->
           <span v-if="proteinData.mapping.value" class="text-body-1">
             {{ proteinData.mapping.value.proteinName }}
           </span>
-          <span v-if="proteinData.proteinLength.value > 0" class="text-body-2 text-medium-emphasis">
+          <v-chip
+            v-if="proteinData.proteinLength.value > 0"
+            size="small"
+            variant="outlined"
+            color="white"
+            class="ml-1"
+          >
             {{ proteinData.proteinLength.value }} aa
-          </span>
+          </v-chip>
+
+          <!-- UniProt accession -->
+          <v-chip
+            v-if="proteinData.mapping.value"
+            size="small"
+            variant="tonal"
+            color="white"
+            class="ml-1"
+          >
+            {{ proteinData.mapping.value.uniprotAccession }}
+          </v-chip>
         </v-toolbar-title>
 
         <template #append>

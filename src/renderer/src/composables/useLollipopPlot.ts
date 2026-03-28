@@ -368,7 +368,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
         .attr('text-anchor', 'end')
         .attr('dominant-baseline', 'middle')
         .attr('fill', '#999')
-        .attr('font-size', '9px')
+        .attr('font-size', '11px')
         .text('gnomAD')
     }
 
@@ -535,8 +535,8 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
           .attr('y', headY - HIGHLIGHTED_HEAD_RADIUS - 8)
           .attr('text-anchor', 'middle')
           .attr('fill', '#333')
-          .attr('font-size', '11px')
-          .attr('font-weight', '600')
+          .attr('font-size', '13px')
+          .attr('font-weight', '700')
           .text(highlightedVariant.aaChange)
       }
     }
@@ -547,22 +547,23 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       ? backboneY + BACKBONE_HEIGHT / 2 + GNOMAD_TRACK_HEIGHT + 16
       : backboneY + BACKBONE_HEIGHT / 2 + 16
     const xAxis = d3.axisBottom(xScale).ticks(Math.min(10, proteinLength.value))
-    mainGroup
+    const xAxisGroup = mainGroup
       .append('g')
       .attr('class', 'x-axis')
       .attr('transform', `translate(0,${axisY})`)
       .call(xAxis)
-      .selectAll('text')
-      .attr('fill', '#666')
+    xAxisGroup.selectAll('text').attr('fill', '#666').attr('font-size', '12px')
+    xAxisGroup.selectAll('line').attr('stroke', '#bbb')
+    xAxisGroup.selectAll('path').attr('stroke', '#bbb')
 
     // Axis label
     mainGroup
       .append('text')
       .attr('x', plotWidth / 2)
-      .attr('y', axisY + 35)
+      .attr('y', axisY + 38)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#999')
-      .attr('font-size', '11px')
+      .attr('fill', '#666')
+      .attr('font-size', '13px')
       .text('Amino Acid Position')
 
     // ── Minimap ─────────────────────────────────────────────────────────

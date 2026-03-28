@@ -41,7 +41,7 @@ const representations: Array<{ value: RepresentationType; label: string; icon: s
 </script>
 
 <template>
-  <v-toolbar density="compact" flat color="transparent" class="structure-controls">
+  <v-toolbar density="compact" flat color="secondary" class="structure-controls">
     <!-- Representation toggle -->
     <v-btn-group density="compact" variant="outlined" divided class="mr-3">
       <v-btn

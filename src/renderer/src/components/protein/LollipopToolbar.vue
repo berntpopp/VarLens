@@ -36,13 +36,14 @@
         <template #activator="{ props: tip }">
           <v-btn
             v-bind="tip"
-            icon
             size="small"
             :variant="showGnomad ? 'flat' : 'text'"
-            :color="showGnomad ? 'info' : undefined"
+            :color="showGnomad ? 'primary' : undefined"
+            :prepend-icon="mdiEarth"
+            class="text-none"
             @click="emit('toggle-gnomad')"
           >
-            <v-icon size="small" :icon="mdiEarth" />
+            gnomAD
           </v-btn>
         </template>
         {{ showGnomad ? 'Hide' : 'Show' }} gnomAD variants
@@ -54,7 +55,7 @@
           <template #activator="{ props: menuProps }">
             <v-chip
               v-bind="menuProps"
-              size="x-small"
+              size="small"
               label
               variant="outlined"
               class="ml-1 cursor-pointer"
@@ -66,8 +67,8 @@
               </span>
             </v-chip>
           </template>
-          <v-card min-width="220" class="pa-3">
-            <div class="text-caption font-weight-medium mb-2">gnomAD AF Filter</div>
+          <v-card min-width="240" class="pa-3">
+            <div class="text-body-2 font-weight-medium mb-2">gnomAD Allele Frequency Filter</div>
             <v-chip-group
               :model-value="gnomadMaxAf"
               mandatory
@@ -95,14 +96,15 @@
         <template #activator="{ props: tip }">
           <v-btn
             v-bind="tip"
-            icon
             size="small"
             :variant="showCaseVariants ? 'flat' : 'text'"
             :color="showCaseVariants ? 'success' : undefined"
             :loading="caseVariantsLoading"
+            :prepend-icon="mdiAccountGroupOutline"
+            class="text-none"
             @click="emit('toggle-case-variants')"
           >
-            <v-icon size="small" :icon="mdiAccountGroupOutline" />
+            Case
           </v-btn>
         </template>
         {{ showCaseVariants ? 'Hide' : 'Show' }} case variants

@@ -41,6 +41,7 @@
       :active-categories="activeCategories"
       :domains="domains"
       @toggle-category="handleToggleCategory"
+      @reset-categories="handleResetCategories"
     />
   </div>
 </template>
@@ -168,6 +169,10 @@ function handleToggleCategory(category: ConsequenceCategory): void {
     next.add(category)
   }
   activeCategories.value = next
+}
+
+function handleResetCategories(): void {
+  activeCategories.value = new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
 }
 
 function handleExportSvg(): void {

@@ -103,7 +103,9 @@ export function useMolstarViewer(
         loading.value = false
         structureLoaded.value = true
         error.value = null
-        highlightVariants()
+        // Delay highlighting slightly to ensure the visual API is fully initialized
+        // after the loadComplete event fires
+        setTimeout(() => highlightVariants(), 500)
         logService.info('3D structure loaded successfully', 'MolstarViewer')
       } else {
         loading.value = false
@@ -128,7 +130,7 @@ export function useMolstarViewer(
           loading.value = false
           structureLoaded.value = true
           error.value = null
-          highlightVariants()
+          setTimeout(() => highlightVariants(), 500)
           logService.info(
             '3D structure already loaded (detected via plugin state)',
             'MolstarViewer'
@@ -175,25 +177,38 @@ export function useMolstarViewer(
   }
 
   /**
-   * Highlight missense variant residues on the 3D structure
+   * Highlight variant residues on the 3D structure.
+   * Uses the pdbe-molstar visual.select() API with struct_asym_id='A'
+   * (chain A is the default for both AlphaFold and most PDB structures).
+   * Colors each residue by its consequence category and dims unselected
+   * residues with a light gray nonSelectedColor.
    */
   function highlightVariants(): void {
     if (!viewerInstance) return
 
-    const missenseVariants = variants.value.filter(
-      (v) => v.consequenceCategory === 'missense' && v.proteinPosition > 0
-    )
-    if (missenseVariants.length === 0) return
+    const variantsToHighlight = variants.value.filter((v) => v.proteinPosition > 0)
+    if (variantsToHighlight.length === 0) return
 
-    const selections = missenseVariants.map((v) => ({
+    // Build selection data with struct_asym_id for reliable chain matching
+    const selections = variantsToHighlight.map((v) => ({
+      struct_asym_id: 'A',
       start_residue_number: v.proteinPosition,
       end_residue_number: v.proteinPosition,
-      color: hexToRgb(getConsequenceColor(v.consequence)),
+      color: hexToRgb(v.color),
+      focus: false,
       sideChain: true
     }))
 
+    logService.info(
+      `Highlighting ${selections.length} variant residue(s) on 3D structure`,
+      'MolstarViewer'
+    )
+
     try {
-      viewerInstance.visual.select({ data: selections })
+      viewerInstance.visual.select({
+        data: selections,
+        nonSelectedColor: { r: 220, g: 220, b: 220 }
+      })
     } catch (err) {
       logService.error(
         `Failed to highlight variants: ${err instanceof Error ? err.message : String(err)}`,
@@ -208,17 +223,25 @@ export function useMolstarViewer(
   function focusResidue(position: number): void {
     if (!viewerInstance) return
 
+    // Find the variant at this position to use its actual color
+    const variant = variants.value.find((v) => v.proteinPosition === position)
+    const color = variant
+      ? hexToRgb(variant.color)
+      : hexToRgb(getConsequenceColor('missense_variant'))
+
     try {
       viewerInstance.visual.select({
         data: [
           {
+            struct_asym_id: 'A',
             start_residue_number: position,
             end_residue_number: position,
-            color: hexToRgb(getConsequenceColor('missense_variant')),
+            color,
             focus: true,
             sideChain: true
           }
-        ]
+        ],
+        nonSelectedColor: { r: 220, g: 220, b: 220 }
       })
     } catch (err) {
       logService.error(

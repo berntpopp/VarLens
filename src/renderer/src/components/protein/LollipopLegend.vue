@@ -1,12 +1,12 @@
 <template>
-  <div class="lollipop-legend d-flex flex-wrap align-center ga-2 pa-2">
+  <div class="lollipop-legend d-flex flex-wrap align-center ga-2 pa-2 bg-grey-lighten-4">
     <!-- Consequence category chips (clickable toggle) -->
     <div class="d-flex flex-wrap ga-1 align-center">
-      <span class="text-caption text-medium-emphasis mr-1">Consequence:</span>
+      <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">Consequence:</span>
       <v-chip
         v-for="[category, color] in consequenceEntries"
         :key="category"
-        size="x-small"
+        size="small"
         label
         :variant="isActive(category) ? 'flat' : 'outlined'"
         :style="chipStyle(category, color)"
@@ -15,16 +15,26 @@
       >
         {{ formatCategory(category) }}
       </v-chip>
+      <v-btn
+        v-if="!allActive"
+        size="x-small"
+        variant="text"
+        color="primary"
+        class="ml-1 text-none"
+        @click="emit('reset-categories')"
+      >
+        Reset
+      </v-btn>
     </div>
 
     <!-- Domain color indicators -->
     <v-divider v-if="domainTypes.length > 0" vertical class="mx-1" />
     <div v-if="domainTypes.length > 0" class="d-flex flex-wrap ga-1 align-center">
-      <span class="text-caption text-medium-emphasis mr-1">Domains:</span>
+      <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">Domains:</span>
       <span
         v-for="[type, color] in domainTypes"
         :key="type"
-        class="d-inline-flex align-center ga-1 text-caption"
+        class="d-inline-flex align-center ga-1 text-body-2"
       >
         <span class="domain-swatch" :style="{ backgroundColor: color }" />
         {{ type }}
@@ -47,11 +57,15 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'toggle-category': [category: ConsequenceCategory]
+  'reset-categories': []
 }>()
 
 const consequenceEntries = computed(
   () => Object.entries(CONSEQUENCE_COLORS) as [ConsequenceCategory, string][]
 )
+
+/** Whether all categories are active */
+const allActive = computed(() => props.activeCategories.size === consequenceEntries.value.length)
 
 /** Unique domain types present in the current protein */
 const domainTypes = computed(() => {
@@ -83,7 +97,7 @@ function chipStyle(category: ConsequenceCategory, color: string): Record<string,
   if (isActive(category)) {
     return { backgroundColor: color, color: '#fff', borderColor: color }
   }
-  return { borderColor: color, color }
+  return { borderColor: color, color, opacity: '0.6' }
 }
 </script>
 
@@ -94,8 +108,8 @@ function chipStyle(category: ConsequenceCategory, color: string): Record<string,
 
 .domain-swatch {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 2px;
   flex-shrink: 0;
 }

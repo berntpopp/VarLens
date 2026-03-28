@@ -5,6 +5,7 @@
  */
 
 import { computed, ref } from 'vue'
+import { mdiTargetVariant } from '@mdi/js'
 import type { LollipopVariant, ProteinStructureInfo } from '../../../../shared/types/protein'
 import { getConsequenceColor } from '../../../../shared/utils/protein-utils'
 import MolstarViewer from './MolstarViewer.vue'
@@ -82,7 +83,8 @@ function onVariantClick(variant: LollipopVariant): void {
 
       <!-- Variant sidebar (only when missense variants exist) -->
       <div v-if="missenseVariants.length > 0 && structureLoaded" class="variant-sidebar">
-        <div class="text-caption text-medium-emphasis pa-2 pb-1 font-weight-medium">
+        <div class="sidebar-header text-body-2 text-medium-emphasis pa-2 pb-1 font-weight-medium">
+          <v-icon size="14" :icon="mdiTargetVariant" class="mr-1" />
           Missense Variants ({{ missenseVariants.length }})
         </div>
         <v-list density="compact" class="pa-0" bg-color="transparent">
@@ -98,11 +100,14 @@ function onVariantClick(variant: LollipopVariant): void {
                 :style="{ backgroundColor: getConsequenceColor(variant.consequence) }"
               />
             </template>
-            <v-list-item-title class="text-caption">
+            <v-list-item-title class="text-body-2 font-weight-medium">
               {{ variant.aaChange ?? `p.${variant.proteinPosition}` }}
             </v-list-item-title>
             <v-list-item-subtitle class="text-caption">
               Pos {{ variant.proteinPosition }}
+              <span v-if="variant.highlighted" class="ml-1 text-primary font-weight-bold">
+                &#9733;
+              </span>
             </v-list-item-subtitle>
           </v-list-item>
         </v-list>
@@ -126,14 +131,19 @@ function onVariantClick(variant: LollipopVariant): void {
   background-color: #faf8f6;
 }
 
+.sidebar-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 .variant-list-item {
   cursor: pointer;
   transition: background-color 0.15s ease;
-  min-height: 36px;
+  min-height: 40px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 .variant-list-item:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+  background-color: rgba(0, 0, 0, 0.06);
 }
 
 .variant-color-dot {
@@ -141,5 +151,6 @@ function onVariantClick(variant: LollipopVariant): void {
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 </style>
