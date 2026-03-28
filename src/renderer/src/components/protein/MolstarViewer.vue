@@ -86,6 +86,7 @@ defineExpose({
       ref="molstarRef"
       :custom-data-url="structureUrl"
       :custom-data-format="structureFormat"
+      :visual-style="activeRepresentation"
       hide-controls="true"
       landscape="true"
       bg-color-r="250"

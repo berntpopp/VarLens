@@ -280,12 +280,49 @@ export function useMolstarViewer(
   }
 
   /**
-   * Switch the molecular representation type
+   * Switch the molecular representation type.
+   *
+   * Sets the `visual-style` attribute on the pdbe-molstar web component element,
+   * then calls visual.update() to trigger a reload with the new style.
+   * The custom-data-url and custom-data-format must be re-specified so
+   * the component knows what structure to load with the new visual style.
    */
   function setRepresentation(type: RepresentationType): void {
     if (!viewerInstance) return
     activeRepresentation.value = type
-    logService.info(`Representation changed to ${type}`, 'MolstarViewer')
+
+    const el = molstarRef.value as PdbeMolstarElement | null
+    if (!el) return
+
+    try {
+      // Read current structure data source from element attributes
+      const customDataUrl = el.getAttribute('custom-data-url') ?? ''
+      const customDataFormat = el.getAttribute('custom-data-format') ?? 'cif'
+
+      // Set the visual-style attribute for the web component
+      el.setAttribute('visual-style', type)
+
+      // Trigger a full reload with the new visual style.
+      // We must re-specify the data source since fullLoad=true clears it.
+      const updateOptions: Record<string, unknown> = {
+        visualStyle: type,
+        customData: {
+          url: customDataUrl,
+          format: customDataFormat
+        }
+      }
+
+      void viewerInstance.visual.update(updateOptions, true)
+      logService.info(`Representation changed to ${type}`, 'MolstarViewer')
+
+      // Re-apply variant highlighting after the representation change completes
+      setTimeout(() => highlightVariants(), 2000)
+    } catch (err) {
+      logService.error(
+        `Failed to change representation to ${type}: ${err instanceof Error ? err.message : String(err)}`,
+        'MolstarViewer'
+      )
+    }
   }
 
   /**
