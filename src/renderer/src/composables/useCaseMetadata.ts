@@ -53,10 +53,7 @@ function triggerCacheUpdate(): void {
 function evictIfNeeded(): void {
   const cache = metadataCache.value
   if (cache.size > MAX_METADATA_CACHE_SIZE) {
-    const keysToDelete = Array.from(cache.keys()).slice(
-      0,
-      cache.size - MAX_METADATA_CACHE_SIZE
-    )
+    const keysToDelete = Array.from(cache.keys()).slice(0, cache.size - MAX_METADATA_CACHE_SIZE)
     for (const key of keysToDelete) {
       cache.delete(key)
     }
