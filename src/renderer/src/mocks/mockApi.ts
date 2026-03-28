@@ -959,7 +959,7 @@ export const mockApi: WindowAPI = {
     list: async () => [],
     get: async (id) => ({
       id,
-      name: '',
+      name: 'Mock Family',
       group_type: 'family',
       description: null,
       created_at: Date.now(),
@@ -976,7 +976,7 @@ export const mockApi: WindowAPI = {
     }),
     update: async (id, params) => ({
       id,
-      name: params.name ?? '',
+      name: params.name ?? 'Mock Family',
       group_type: 'family',
       description: params.description ?? null,
       created_at: Date.now(),

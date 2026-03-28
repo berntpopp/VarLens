@@ -50,11 +50,16 @@ export class AnalysisGroupRepository extends BaseRepository {
     return this.getGroup(member.group_id)
   }
 
-  updateGroup(id: number, updates: { name?: string; description?: string }): AnalysisGroup {
+  updateGroup(
+    id: number,
+    updates: { name?: string; description?: string | null }
+  ): AnalysisGroup {
     const group = this.getGroup(id)
+    const newDescription =
+      updates.description === undefined ? group.description : updates.description
     this.db
       .prepare('UPDATE analysis_groups SET name = ?, description = ?, updated_at = ? WHERE id = ?')
-      .run(updates.name ?? group.name, updates.description ?? group.description, Date.now(), id)
+      .run(updates.name ?? group.name, newDescription, Date.now(), id)
     return this.getGroup(id)
   }
 

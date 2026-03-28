@@ -744,11 +744,7 @@ export const AnalysisGroupCreateSchema = z.object({
  */
 export const AnalysisGroupUpdateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  description: z
-    .string()
-    .max(1000)
-    .nullish()
-    .transform((val) => val ?? undefined)
+  description: z.string().max(1000).nullable().optional()
 })
 
 /**

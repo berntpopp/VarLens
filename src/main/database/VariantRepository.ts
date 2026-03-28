@@ -38,18 +38,10 @@ const SORTABLE_COLUMNS: Record<string, string> = {
   qual: 'qual',
   hpo_sim_score: 'hpo_sim_score',
   clinvar: 'clinvar',
-  moi: 'moi',
-  internal_af: 'internal_af'
+  moi: 'moi'
 }
 
-const NUMERIC_COLUMNS = new Set([
-  'pos',
-  'gnomad_af',
-  'cadd',
-  'qual',
-  'hpo_sim_score',
-  'internal_af'
-])
+const NUMERIC_COLUMNS = new Set(['pos', 'gnomad_af', 'cadd', 'qual', 'hpo_sim_score'])
 
 /** Columns that are computed at query time (not physical table columns) -- excluded from getColumnMeta */
 const COMPUTED_COLUMNS = new Set(['internal_af'])
@@ -502,6 +494,9 @@ export class VariantRepository extends BaseRepository {
     }
 
     // ── Inheritance mode filters ─────────────────────────────
+    // NOTE: filter.consider_phasing is accepted but not yet implemented.
+    // Phasing-aware compound het detection (distinguishing 0|1 from 1|0)
+    // will be added when long-read phased VCF import is supported.
     if (filter.inheritance_modes && filter.inheritance_modes.length > 0) {
       // Validate IDs are safe integers before SQL interpolation
       const caseIdNum = Number(filter.case_id)
@@ -592,34 +587,42 @@ export class VariantRepository extends BaseRepository {
         }
 
         if (modes.includes('compound_het')) {
-          // Het variants in genes where BOTH parents contribute at least one variant each
-          // Gene must have het variants inherited from father AND het variants inherited from mother
+          // Het variants in genes where:
+          // 1. Gene has >= 2 distinct het variants in proband
+          // 2. At least one variant is shared with father
+          // 3. At least one DIFFERENT variant is shared with mother
           conditions.push(`(
             variants.gt_num IN ('0/1', '0|1', '1|0')
             AND variants.gene_symbol IS NOT NULL
             AND variants.gene_symbol IN (
-              SELECT v1.gene_symbol
-              FROM variants v1
+              SELECT v_inner.gene_symbol
+              FROM variants v_inner
+              WHERE v_inner.case_id = ${cid}
+                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
+                AND v_inner.gene_symbol IS NOT NULL
+              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
+            )
+            AND variants.gene_symbol IN (
+              SELECT pf.gene_symbol
+              FROM variants pf
               INNER JOIN analysis_group_members agm_f
                 ON agm_f.group_id = ${gid} AND agm_f.role = 'father'
               INNER JOIN variants f ON f.case_id = agm_f.case_id
-                AND f.chr = v1.chr AND f.pos = v1.pos AND f.ref = v1.ref AND f.alt = v1.alt
+                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
                 AND f.gt_num IN ('0/1', '0|1', '1|0')
-              WHERE v1.case_id = ${cid}
-                AND v1.gt_num IN ('0/1', '0|1', '1|0')
-                AND v1.gene_symbol IS NOT NULL
-            )
-            AND variants.gene_symbol IN (
-              SELECT v2.gene_symbol
-              FROM variants v2
+              INNER JOIN variants pm
+                ON pm.case_id = ${cid}
+                AND pm.gene_symbol = pf.gene_symbol
+                AND pm.gt_num IN ('0/1', '0|1', '1|0')
+                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
               INNER JOIN analysis_group_members agm_m
                 ON agm_m.group_id = ${gid} AND agm_m.role = 'mother'
               INNER JOIN variants m ON m.case_id = agm_m.case_id
-                AND m.chr = v2.chr AND m.pos = v2.pos AND m.ref = v2.ref AND m.alt = v2.alt
+                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
                 AND m.gt_num IN ('0/1', '0|1', '1|0')
-              WHERE v2.case_id = ${cid}
-                AND v2.gt_num IN ('0/1', '0|1', '1|0')
-                AND v2.gene_symbol IS NOT NULL
+              WHERE pf.case_id = ${cid}
+                AND pf.gt_num IN ('0/1', '0|1', '1|0')
+                AND pf.gene_symbol IS NOT NULL
             )
           )`)
         }
@@ -992,13 +995,17 @@ export class VariantRepository extends BaseRepository {
    * Called after import to increment shared variant counts.
    */
   updateFrequencies(caseId: number): void {
-    this.db.exec(`
+    this.db
+      .prepare(
+        `
       INSERT INTO variant_frequency (chr, pos, ref, alt, case_count)
       SELECT DISTINCT chr, pos, ref, alt, 1
-      FROM variants WHERE case_id = ${caseId}
+      FROM variants WHERE case_id = ?
       ON CONFLICT(chr, pos, ref, alt)
-      DO UPDATE SET case_count = case_count + 1;
-    `)
+      DO UPDATE SET case_count = case_count + 1
+    `
+      )
+      .run(caseId)
   }
 
   /**
@@ -1006,14 +1013,18 @@ export class VariantRepository extends BaseRepository {
    * Called before case deletion. Removes rows where count reaches 0.
    */
   decrementFrequencies(caseId: number): void {
-    this.db.exec(`
+    this.db
+      .prepare(
+        `
       UPDATE variant_frequency
       SET case_count = case_count - 1
       WHERE (chr, pos, ref, alt) IN (
-        SELECT DISTINCT chr, pos, ref, alt FROM variants WHERE case_id = ${caseId}
-      );
-    `)
-    this.db.exec('DELETE FROM variant_frequency WHERE case_count <= 0;')
+        SELECT DISTINCT chr, pos, ref, alt FROM variants WHERE case_id = ?
+      )
+    `
+      )
+      .run(caseId)
+    this.db.exec('DELETE FROM variant_frequency WHERE case_count <= 0')
   }
 
   getFilterOptions(caseId: number): FilterOptions {

@@ -676,7 +676,8 @@ watch(selectedInternalAfPreset, (val) => {
 watch(customInternalAf, (val) => {
   const num = parseFloat(val)
   if (val !== '' && !Number.isNaN(num) && num > 0) {
-    filters.value.maxInternalAf = num / 100
+    const clamped = Math.min(Math.max(num, 0), 100)
+    filters.value.maxInternalAf = clamped / 100
     selectedInternalAfPreset.value = null
   } else if (val === '') {
     // Only clear if no preset is active

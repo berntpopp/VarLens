@@ -155,7 +155,7 @@ jobs:
     name: Release (Windows)
     needs: create-release
     runs-on: windows-latest
-    environment: ${{ vars.ESIGNER_ENABLED == 'true' && 'release' || '' }}
+    environment: release
     permissions:
       contents: write
 
