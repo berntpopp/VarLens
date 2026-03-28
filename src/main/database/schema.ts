@@ -228,15 +228,17 @@ function schemaAlreadyExists(db: Database.Database): boolean {
  * @throws Error if schema creation fails
  */
 export function initializeSchema(db: Database.Database): void {
-  // Fast path: if schema already fully exists, skip all creation work.
-  // Migrations (runMigrations) will still handle any incremental changes.
-  if (schemaAlreadyExists(db)) {
-    return
+  const existingSchema = schemaAlreadyExists(db)
+
+  if (!existingSchema) {
+    // Full schema creation for new databases
+    db.exec(createTables)
+    db.exec(createIndexes)
   }
 
-  db.exec(createTables)
+  // Always run column migrations — they use IF NOT EXISTS internally
+  // and must run even on existing databases to add newer columns
   migrateVariantsTable(db)
-  db.exec(createIndexes)
 
   // Check if variants table has omim_mim_number column
   const columns = db.prepare('PRAGMA table_info(variants)').all() as { name: string }[]

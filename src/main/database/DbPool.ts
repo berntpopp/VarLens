@@ -3,7 +3,7 @@
  *
  * Each worker opens its own SQLite connection (with encryption support)
  * and uses the shared createRepositories factory. The pool is configured
- * with 1 to (cpuCount - 1) threads (minimum 1) and a 30-second idle timeout.
+ * with 1 to (cpuCount - 1) threads (minimum 1) and a configurable idle timeout.
  *
  * Usage:
  *   pool.init(dbPath, encryptionKey)
@@ -14,6 +14,7 @@
 import { resolve } from 'path'
 import os from 'os'
 import type { DbTask } from '../../shared/types/db-task'
+import { DATABASE_CONFIG } from '../../shared/config'
 
 // Use require() to load piscina — avoids Vite's static import analysis
 // which cannot resolve Node.js-only modules during test transforms
@@ -58,7 +59,7 @@ export class DbPool {
       filename,
       minThreads: 1,
       maxThreads,
-      idleTimeout: 30_000,
+      idleTimeout: DATABASE_CONFIG.WORKER_IDLE_TIMEOUT_MS,
       workerData: { dbPath, encryptionKey },
       ...(options?.execArgv !== undefined ? { execArgv: options.execArgv } : {})
     })

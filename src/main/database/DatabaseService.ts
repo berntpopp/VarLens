@@ -47,6 +47,7 @@ export class DatabaseService {
   // Repositories — created via shared factory, accessed via public getters
   private _repos: Repositories
   private _currentUser: { id: number; username: string; role: string } | null = null
+  private _cacheCleanupTimer: ReturnType<typeof setInterval> | null = null
 
   /**
    * Create a new DatabaseService instance
@@ -198,6 +199,17 @@ export class DatabaseService {
         // Best effort
       }
     })
+
+    // Schedule periodic cache cleanup to prevent unbounded growth during long sessions
+    this._cacheCleanupTimer = setInterval(() => {
+      try {
+        this.db.prepare('DELETE FROM api_cache WHERE expires_at < ?').run(Date.now())
+      } catch {
+        // Best effort — DB may be closed during shutdown
+      }
+    }, DATABASE_CONFIG.CACHE_CLEANUP_INTERVAL_MS)
+    // Prevent the timer from keeping the Node.js event loop alive during quit
+    this._cacheCleanupTimer.unref()
   }
 
   /**
@@ -271,6 +283,10 @@ export class DatabaseService {
    * Close the database connection
    */
   close(): void {
+    if (this._cacheCleanupTimer !== null) {
+      clearInterval(this._cacheCleanupTimer)
+      this._cacheCleanupTimer = null
+    }
     this._kysely.destroy().catch((e) => {
       mainLogger.warn(
         `Kysely destroy failed during close: ${e instanceof Error ? e.message : String(e)}`,

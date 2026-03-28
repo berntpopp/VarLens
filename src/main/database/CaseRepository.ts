@@ -191,19 +191,25 @@ export class CaseRepository extends BaseRepository {
       sort_by !== undefined ? (CASE_SORTABLE_COLUMNS[sort_by] ?? 'c.created_at') : 'c.created_at'
     const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC'
 
-    // Main data query with LEFT JOINs
+    // Main data query — uses scalar subqueries instead of LEFT JOIN + GROUP BY
+    // to avoid row multiplication when cases belong to multiple cohorts.
+    // SQLite's query planner handles correlated subqueries efficiently for small
+    // result sets (the LIMIT/OFFSET applies to the outer query first).
     const dataSQL = `
       SELECT c.id, c.name, c.file_path, c.file_size, c.variant_count, c.created_at,
              c.genome_build,
-             cm.affected_status, cm.sex,
-             GROUP_CONCAT(cg.name, '|') AS cohort_names_raw,
-             GROUP_CONCAT(cg.id, '|') AS cohort_ids_raw
+             (SELECT cm.affected_status FROM case_metadata cm WHERE cm.case_id = c.id) AS affected_status,
+             (SELECT cm.sex FROM case_metadata cm WHERE cm.case_id = c.id) AS sex,
+             (SELECT GROUP_CONCAT(cg.name, '|')
+              FROM case_cohort_links ccl
+              JOIN cohort_groups cg ON cg.id = ccl.cohort_id
+              WHERE ccl.case_id = c.id) AS cohort_names_raw,
+             (SELECT GROUP_CONCAT(cg.id, '|')
+              FROM case_cohort_links ccl
+              JOIN cohort_groups cg ON cg.id = ccl.cohort_id
+              WHERE ccl.case_id = c.id) AS cohort_ids_raw
       FROM cases c
-      LEFT JOIN case_metadata cm ON cm.case_id = c.id
-      LEFT JOIN case_cohort_links ccl ON ccl.case_id = c.id
-      LEFT JOIN cohort_groups cg ON cg.id = ccl.cohort_id
       ${whereSQL}
-      GROUP BY c.id
       ORDER BY ${sortColumn} ${sortDir}
       LIMIT ? OFFSET ?
     `

@@ -51,8 +51,6 @@ export default defineConfig({
           // the renderer can start executing sooner (parallel chunk loading).
           manualChunks: {
             vuetify: ['vuetify'],
-            'vuetify-components': ['vuetify/components'],
-            'vuetify-labs': ['vuetify/labs'],
             zod: ['zod']
           }
         }

@@ -131,17 +131,6 @@ if (gotTheLock !== true) {
     // Register IPC handlers
     registerIpcHandlers()
 
-    // Create window immediately after IPC handlers are ready — don't wait for
-    // non-critical setup. The renderer can start loading in parallel with the
-    // remaining initialization below.
-    createWindow()
-
-    // Initialize auto-updater and schedule periodic checks (deferred to avoid competing with startup)
-    setImmediate(() => {
-      initAutoUpdater()
-      scheduleUpdateChecks()
-    })
-
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
@@ -153,6 +142,7 @@ if (gotTheLock !== true) {
     // checker sees the policy (it inspects HTTP headers, not <meta> tags).
     // In production (file:// protocol) this handler never fires — the meta
     // tag in index.html provides the CSP instead.
+    // Must be registered BEFORE createWindow() so the first navigation has CSP.
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
         responseHeaders: {
@@ -162,6 +152,15 @@ if (gotTheLock !== true) {
           ]
         }
       })
+    })
+
+    // Create window after security handlers are registered
+    createWindow()
+
+    // Initialize auto-updater and schedule periodic checks (deferred to avoid competing with startup)
+    setImmediate(() => {
+      initAutoUpdater()
+      scheduleUpdateChecks()
     })
 
     app.on('activate', function () {

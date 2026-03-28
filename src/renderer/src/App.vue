@@ -329,7 +329,12 @@ onMounted(() => {
 
   // Fire-and-forget: fetch database info without blocking the initial render.
   // The UI will show immediately and the data will arrive on the next tick.
-  databaseStore.fetchInfo()
+  databaseStore.fetchInfo().catch((error) => {
+    logService.error(
+      'Failed to fetch database info: ' + (error instanceof Error ? error.message : String(error)),
+      'app'
+    )
+  })
 
   if (api) {
     cleanupImportComplete = api.batchImport.onComplete((result) => {
