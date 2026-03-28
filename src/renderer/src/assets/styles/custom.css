@@ -19,42 +19,46 @@ html::-webkit-scrollbar-thumb {
   background-clip: padding-box;
 }
 
-/* VS Code-style dense dialogs and menus */
-.v-dialog .v-card-title {
+/*
+ * VarLens dense UI overrides — scoped to .v-application to avoid
+ * affecting third-party components while still applying globally
+ * within the app. Uses the Vuetify application root as scope.
+ */
+.v-application .v-dialog .v-card-title {
   padding: 12px 16px !important;
   font-size: 0.875rem !important;
   line-height: 1.4 !important;
 }
 
-.v-dialog .v-card-text {
+.v-application .v-dialog .v-card-text {
   padding: 12px 16px !important;
   font-size: 0.8125rem !important;
 }
 
-.v-dialog .v-card-actions {
+.v-application .v-dialog .v-card-actions {
   padding: 8px 16px !important;
 }
 
-.v-dialog .v-divider {
+.v-application .v-dialog .v-divider {
   opacity: 0.12;
 }
 
 /* Tighter menu items */
-.v-menu .v-list-item {
+.v-application .v-menu .v-list-item {
   min-height: 32px !important;
   padding-top: 2px !important;
   padding-bottom: 2px !important;
 }
 
-.v-menu .v-list-item-title {
+.v-application .v-menu .v-list-item-title {
   font-size: 0.8125rem !important;
 }
 
-.v-menu .v-list-item-subtitle {
+.v-application .v-menu .v-list-item-subtitle {
   font-size: 0.6875rem !important;
 }
 
-.v-menu .v-list-subheader {
+.v-application .v-menu .v-list-subheader {
   min-height: 28px !important;
   font-size: 0.625rem !important;
   padding-top: 4px !important;
