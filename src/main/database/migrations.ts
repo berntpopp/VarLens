@@ -34,6 +34,7 @@ import { BUILT_IN_PRESETS } from './built-in-presets'
  * - 18: Composite index on variant_annotations for coordinate lookups
  * - 19: panels, panel_genes, case_active_panels + cases.genome_build
  * - 20: variant_frequency table for internal AF tracking (#106)
+ * - 21: analysis_groups + analysis_group_members for family/trio support (#107)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1245,5 +1246,39 @@ export function runMigrations(db: Database.Database): void {
     `)
 
     db.exec('PRAGMA user_version = 20')
+  }
+
+  // v21: analysis_groups + analysis_group_members for family/trio support (#107)
+  if (currentVersion < 21) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS analysis_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        group_type TEXT NOT NULL DEFAULT 'family'
+          CHECK(group_type IN ('family', 'tumor_normal')),
+        description TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+
+      CREATE TABLE IF NOT EXISTS analysis_group_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER NOT NULL REFERENCES analysis_groups(id) ON DELETE CASCADE,
+        case_id INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK(role IN (
+          'proband', 'father', 'mother', 'sibling', 'partner', 'other',
+          'tumor', 'normal'
+        )),
+        affected_status TEXT NOT NULL DEFAULT 'unknown'
+          CHECK(affected_status IN ('affected', 'unaffected', 'unknown')),
+        individual_id TEXT,
+        UNIQUE(group_id, case_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agm_group ON analysis_group_members(group_id);
+      CREATE INDEX IF NOT EXISTS idx_agm_case ON analysis_group_members(case_id);
+    `)
+
+    db.exec('PRAGMA user_version = 21')
   }
 }
