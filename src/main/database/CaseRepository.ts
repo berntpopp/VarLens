@@ -19,7 +19,7 @@ const CASE_SORTABLE_COLUMNS: Record<string, string> = {
   variant_count: 'c.variant_count'
 }
 
-/** Raw row shape returned by the JOIN query before post-processing */
+/** Raw row shape returned by the query before post-processing */
 interface CaseQueryRawRow {
   id: number
   name: string
@@ -30,8 +30,7 @@ interface CaseQueryRawRow {
   genome_build: string
   affected_status: string | null
   sex: string | null
-  cohort_names_raw: string | null
-  cohort_ids_raw: string | null
+  cohorts_raw: string | null
 }
 
 export class CaseRepository extends BaseRepository {
@@ -191,23 +190,18 @@ export class CaseRepository extends BaseRepository {
       sort_by !== undefined ? (CASE_SORTABLE_COLUMNS[sort_by] ?? 'c.created_at') : 'c.created_at'
     const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC'
 
-    // Main data query — uses scalar subqueries instead of LEFT JOIN + GROUP BY
-    // to avoid row multiplication when cases belong to multiple cohorts.
-    // SQLite's query planner handles correlated subqueries efficiently for small
-    // result sets (the LIMIT/OFFSET applies to the outer query first).
+    // Scalar subqueries avoid row multiplication from LEFT JOIN + GROUP BY.
+    // Cohort id+name are fetched in a single subquery (one join pass) and
+    // split in post-processing to avoid duplicating the ccl→cg join.
     const dataSQL = `
       SELECT c.id, c.name, c.file_path, c.file_size, c.variant_count, c.created_at,
              c.genome_build,
              (SELECT cm.affected_status FROM case_metadata cm WHERE cm.case_id = c.id) AS affected_status,
              (SELECT cm.sex FROM case_metadata cm WHERE cm.case_id = c.id) AS sex,
-             (SELECT GROUP_CONCAT(cg.name, '|')
+             (SELECT GROUP_CONCAT(cg.id || ':' || cg.name, '|')
               FROM case_cohort_links ccl
               JOIN cohort_groups cg ON cg.id = ccl.cohort_id
-              WHERE ccl.case_id = c.id) AS cohort_names_raw,
-             (SELECT GROUP_CONCAT(cg.id, '|')
-              FROM case_cohort_links ccl
-              JOIN cohort_groups cg ON cg.id = ccl.cohort_id
-              WHERE ccl.case_id = c.id) AS cohort_ids_raw
+              WHERE ccl.case_id = c.id) AS cohorts_raw
       FROM cases c
       ${whereSQL}
       ORDER BY ${sortColumn} ${sortDir}
@@ -217,26 +211,29 @@ export class CaseRepository extends BaseRepository {
     const dataParams = [...whereParams, limit, offset]
     const rawRows = this.db.prepare(dataSQL).all(...dataParams) as CaseQueryRawRow[]
 
-    // Post-process GROUP_CONCAT results
-    const data: CaseWithCohorts[] = rawRows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      file_path: row.file_path,
-      file_size: row.file_size,
-      variant_count: row.variant_count,
-      created_at: row.created_at,
-      genome_build: row.genome_build ?? 'GRCh38',
-      affected_status: (row.affected_status as AffectedStatus | null) ?? null,
-      sex: (row.sex as CaseSex | null) ?? null,
-      cohort_names:
-        row.cohort_names_raw !== null && row.cohort_names_raw !== ''
-          ? row.cohort_names_raw.split('|')
-          : [],
-      cohort_ids:
-        row.cohort_ids_raw !== null && row.cohort_ids_raw !== ''
-          ? row.cohort_ids_raw.split('|').map((id) => Number(id))
+    // Post-process: split "id:name|id:name" into separate arrays
+    const data: CaseWithCohorts[] = rawRows.map((row) => {
+      const pairs =
+        row.cohorts_raw !== null && row.cohorts_raw !== ''
+          ? row.cohorts_raw.split('|').map((pair) => {
+              const sep = pair.indexOf(':')
+              return { id: Number(pair.slice(0, sep)), name: pair.slice(sep + 1) }
+            })
           : []
-    }))
+      return {
+        id: row.id,
+        name: row.name,
+        file_path: row.file_path,
+        file_size: row.file_size,
+        variant_count: row.variant_count,
+        created_at: row.created_at,
+        genome_build: row.genome_build ?? 'GRCh38',
+        affected_status: (row.affected_status as AffectedStatus | null) ?? null,
+        sex: (row.sex as CaseSex | null) ?? null,
+        cohort_names: pairs.map((p) => p.name),
+        cohort_ids: pairs.map((p) => p.id)
+      }
+    })
 
     // Count query (optional)
     let totalCount = 0

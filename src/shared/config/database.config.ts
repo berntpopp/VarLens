@@ -20,8 +20,8 @@ export const DATABASE_CONFIG = {
   BATCH_INSERT_SIZE: 10_000,
   /** API cache TTL in days */
   CACHE_TTL_DAYS: 30,
-  /** Interval between periodic API cache cleanup runs (ms) — 1 hour */
-  CACHE_CLEANUP_INTERVAL_MS: 3_600_000,
+  /** Interval between periodic API cache cleanup runs (ms) — 6 hours */
+  CACHE_CLEANUP_INTERVAL_MS: 21_600_000,
   /** Max recent databases in history */
   MAX_RECENT_DATABASES: 5,
   /** Worker pool idle timeout in ms — balances thread churn vs memory on desktop */

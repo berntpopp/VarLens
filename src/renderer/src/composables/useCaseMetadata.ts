@@ -37,7 +37,12 @@ const metadataCache = shallowRef<Map<number, FullCaseMetadata>>(new Map())
 // Loading states per case — shallowRef since we trigger manually
 const loadingStates = shallowRef<Map<number, boolean>>(new Map())
 
-/** Notify Vue that metadataCache changed (batched via microtask) */
+/**
+ * Notify Vue that metadataCache changed (batched via microtask).
+ * Multiple synchronous mutations within one tick coalesce into a single
+ * triggerRef — this is intentional for optimistic updates where a mutation
+ * and its revert may both run before the next render cycle.
+ */
 let _pendingTrigger = false
 function triggerCacheUpdate(): void {
   if (!_pendingTrigger) {
