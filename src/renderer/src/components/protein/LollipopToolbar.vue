@@ -1,6 +1,6 @@
 <template>
   <v-toolbar density="compact" color="secondary" flat class="lollipop-toolbar">
-    <div class="d-flex align-center ga-1 px-2">
+    <div class="d-flex align-center ga-1 px-2 flex-wrap">
       <!-- Zoom controls -->
       <v-tooltip location="bottom">
         <template #activator="{ props: tip }">
@@ -47,6 +47,48 @@
         </template>
         {{ showGnomad ? 'Hide' : 'Show' }} gnomAD variants
       </v-tooltip>
+
+      <!-- gnomAD frequency filter (only shown when gnomAD is visible) -->
+      <template v-if="showGnomad">
+        <v-menu :close-on-content-click="false" location="bottom" offset="4">
+          <template #activator="{ props: menuProps }">
+            <v-chip
+              v-bind="menuProps"
+              size="x-small"
+              label
+              variant="outlined"
+              class="ml-1 cursor-pointer"
+              :prepend-icon="mdiFilterVariant"
+            >
+              AF &le; {{ formatAf(gnomadMaxAf) }}
+              <span v-if="gnomadTotal > 0" class="ml-1 text-medium-emphasis">
+                ({{ gnomadCount }}/{{ gnomadTotal }})
+              </span>
+            </v-chip>
+          </template>
+          <v-card min-width="220" class="pa-3">
+            <div class="text-caption font-weight-medium mb-2">gnomAD AF Filter</div>
+            <v-chip-group
+              :model-value="gnomadMaxAf"
+              mandatory
+              column
+              @update:model-value="emit('update:gnomad-max-af', $event)"
+            >
+              <v-chip
+                v-for="preset in afPresets"
+                :key="preset.value"
+                :value="preset.value"
+                size="small"
+                label
+                variant="outlined"
+                class="mr-1 mb-1"
+              >
+                {{ preset.label }}
+              </v-chip>
+            </v-chip-group>
+          </v-card>
+        </v-menu>
+      </template>
 
       <!-- Case variants toggle (only when a case is available) -->
       <v-tooltip v-if="hasCaseId" location="bottom">
@@ -98,7 +140,8 @@ import {
   mdiEarth,
   mdiFileImageOutline,
   mdiImageOutline,
-  mdiAccountGroupOutline
+  mdiAccountGroupOutline,
+  mdiFilterVariant
 } from '@mdi/js'
 
 interface Props {
@@ -106,6 +149,12 @@ interface Props {
   showCaseVariants: boolean
   caseVariantsLoading: boolean
   hasCaseId: boolean
+  /** Current gnomAD max AF filter value */
+  gnomadMaxAf: number
+  /** Number of gnomAD variants passing the current filter */
+  gnomadCount: number
+  /** Total number of gnomAD variants */
+  gnomadTotal: number
 }
 
 defineProps<Props>()
@@ -116,7 +165,29 @@ const emit = defineEmits<{
   'zoom-reset': []
   'toggle-gnomad': []
   'toggle-case-variants': []
+  'update:gnomad-max-af': [value: number]
   'export-svg': []
   'export-png': []
 }>()
+
+/** AF filter presets */
+const afPresets = [
+  { label: 'All', value: 1 },
+  { label: 'AF < 1%', value: 0.01 },
+  { label: 'AF < 0.1%', value: 0.001 },
+  { label: 'AF < 0.01%', value: 0.0001 },
+  { label: 'AF < 0.001%', value: 0.00001 }
+]
+
+function formatAf(af: number): string {
+  if (af >= 1) return 'All'
+  if (af >= 0.01) return `${(af * 100).toFixed(0)}%`
+  return af.toExponential(0)
+}
 </script>
+
+<style scoped>
+.cursor-pointer {
+  cursor: pointer;
+}
+</style>

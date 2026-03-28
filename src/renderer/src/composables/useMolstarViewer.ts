@@ -1,6 +1,11 @@
 /**
  * Composable for managing pdbe-molstar Web Component lifecycle
  * Handles structure loading, variant highlighting, and viewer controls
+ *
+ * pdbe-molstar exposes a `.viewerInstance` property whose
+ * `events.loadComplete` is an RxJS observable that fires when the
+ * structure finishes loading. We use a MutationObserver + polling
+ * approach to reliably detect when the viewer is ready.
  */
 
 import { ref, watch, onBeforeUnmount, markRaw, type Ref } from 'vue'
@@ -13,6 +18,11 @@ export type RepresentationType = 'cartoon' | 'molecular-surface' | 'ball-and-sti
 
 /** pdbe-molstar viewer instance (partial typing for the API we use) */
 interface MolstarViewerInstance {
+  events: {
+    loadComplete: {
+      subscribe: (callback: (success: boolean) => void) => { unsubscribe: () => void }
+    }
+  }
   visual: {
     select: (params: {
       data: Array<{
@@ -31,6 +41,11 @@ interface MolstarViewerInstance {
   canvas: {
     setBgColor: (color: { r: number; g: number; b: number }) => void
   }
+}
+
+/** pdbe-molstar custom element with viewer instance */
+interface PdbeMolstarElement extends HTMLElement {
+  viewerInstance?: MolstarViewerInstance
 }
 
 /**
@@ -65,34 +80,75 @@ export function useMolstarViewer(
 
   // Store viewer instance outside Vue reactivity (WebGL objects break with proxies)
   let viewerInstance: MolstarViewerInstance | null = null
+  let loadSubscription: { unsubscribe: () => void } | null = null
+  let pollingTimer: ReturnType<typeof setInterval> | null = null
 
   /**
-   * Handle the PDB.molstar.loaded event: highlight variant residues
+   * Attempt to grab the viewer instance from the custom element and
+   * subscribe to load events.
    */
-  function onMolstarLoaded(): void {
-    loading.value = false
-    structureLoaded.value = true
-    error.value = null
+  function tryAttachViewer(): boolean {
+    const el = molstarRef.value as PdbeMolstarElement | null
+    if (!el?.viewerInstance) return false
 
-    // Grab the viewer instance from the custom element
-    const el = molstarRef.value as HTMLElement & { viewerInstance?: MolstarViewerInstance }
-    if (el?.viewerInstance) {
-      viewerInstance = markRaw(el.viewerInstance) as MolstarViewerInstance
-      highlightVariants()
-    }
+    // Already attached
+    if (viewerInstance === el.viewerInstance) return true
 
-    logService.info('3D structure loaded successfully', 'MolstarViewer')
+    viewerInstance = markRaw(el.viewerInstance) as MolstarViewerInstance
+
+    // Subscribe to load complete
+    loadSubscription?.unsubscribe()
+    loadSubscription = viewerInstance.events.loadComplete.subscribe((success: boolean) => {
+      if (success) {
+        loading.value = false
+        structureLoaded.value = true
+        error.value = null
+        highlightVariants()
+        logService.info('3D structure loaded successfully', 'MolstarViewer')
+      } else {
+        loading.value = false
+        structureLoaded.value = false
+        error.value = 'Failed to load 3D structure'
+        logService.error('3D structure load returned failure', 'MolstarViewer')
+      }
+
+      // Stop polling once we get a result
+      stopPolling()
+    })
+
+    return true
   }
 
   /**
-   * Handle load errors
+   * Poll for the viewer instance to become available.
+   * The pdbe-molstar web component initializes asynchronously, so
+   * viewerInstance may not be available immediately after DOM insertion.
    */
-  function onMolstarError(event: Event): void {
-    loading.value = false
-    structureLoaded.value = false
-    const detail = (event as CustomEvent)?.detail
-    error.value = detail?.message ?? 'Failed to load 3D structure'
-    logService.error(`3D structure load error: ${error.value}`, 'MolstarViewer')
+  function startPolling(): void {
+    stopPolling()
+    let attempts = 0
+    const maxAttempts = 60 // 30 seconds max
+
+    pollingTimer = setInterval(() => {
+      attempts++
+      if (tryAttachViewer()) {
+        stopPolling()
+        return
+      }
+      if (attempts >= maxAttempts) {
+        stopPolling()
+        loading.value = false
+        error.value = 'Timed out waiting for 3D viewer to initialize'
+        logService.error('pdbe-molstar viewer instance not found after timeout', 'MolstarViewer')
+      }
+    }, 500)
+  }
+
+  function stopPolling(): void {
+    if (pollingTimer !== null) {
+      clearInterval(pollingTimer)
+      pollingTimer = null
+    }
   }
 
   /**
@@ -155,9 +211,6 @@ export function useMolstarViewer(
   function setRepresentation(type: RepresentationType): void {
     if (!viewerInstance) return
     activeRepresentation.value = type
-    // pdbe-molstar does not expose a direct representation toggle via the JS API,
-    // so we re-initialize the viewer with updated options through the element attribute approach.
-    // For now, we store the preference; the component re-renders the element with the attribute.
     logService.info(`Representation changed to ${type}`, 'MolstarViewer')
   }
 
@@ -178,28 +231,20 @@ export function useMolstarViewer(
     }
   }
 
-  /**
-   * Attach event listeners to the pdbe-molstar element
-   */
-  function attachListeners(el: HTMLElement): void {
-    el.addEventListener('PDB.molstar.loaded', onMolstarLoaded)
-    el.addEventListener('PDB.molstar.error', onMolstarError)
-  }
-
-  /**
-   * Detach event listeners from the pdbe-molstar element
-   */
-  function detachListeners(el: HTMLElement): void {
-    el.removeEventListener('PDB.molstar.loaded', onMolstarLoaded)
-    el.removeEventListener('PDB.molstar.error', onMolstarError)
-  }
-
-  // Watch for the DOM element reference to attach listeners
+  // Watch for the DOM element reference changes
   watch(
     molstarRef,
-    (newEl, oldEl) => {
-      if (oldEl) detachListeners(oldEl)
-      if (newEl) attachListeners(newEl)
+    (newEl) => {
+      if (newEl) {
+        // Start polling for viewer instance
+        loading.value = true
+        startPolling()
+      } else {
+        stopPolling()
+        loadSubscription?.unsubscribe()
+        loadSubscription = null
+        viewerInstance = null
+      }
     },
     { immediate: true }
   )
@@ -213,6 +258,11 @@ export function useMolstarViewer(
         structureLoaded.value = false
         error.value = null
         viewerInstance = null
+        loadSubscription?.unsubscribe()
+        loadSubscription = null
+
+        // Wait for DOM update then start polling
+        setTimeout(() => startPolling(), 100)
       }
     },
     { deep: true }
@@ -226,9 +276,9 @@ export function useMolstarViewer(
   })
 
   onBeforeUnmount(() => {
-    if (molstarRef.value) {
-      detachListeners(molstarRef.value)
-    }
+    stopPolling()
+    loadSubscription?.unsubscribe()
+    loadSubscription = null
     viewerInstance = null
   })
 

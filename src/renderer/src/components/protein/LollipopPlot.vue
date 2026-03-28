@@ -24,9 +24,13 @@ interface Props {
   gnomadVariants: GnomadVariant[]
   showGnomad: boolean
   activeCategories: Set<ConsequenceCategory>
+  /** Maximum allele frequency filter for gnomAD variants (default 1 = all) */
+  gnomadMaxAf?: number
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  gnomadMaxAf: 1
+})
 
 const containerRef = ref<HTMLElement | null>(null)
 const svgRef = ref<SVGSVGElement | null>(null)
@@ -41,7 +45,8 @@ const { tooltip, resetZoom, zoomIn, zoomOut, exportSvg, exportPng } = useLollipo
   variants: toRef(props, 'variants'),
   gnomadVariants: toRef(props, 'gnomadVariants'),
   showGnomad: toRef(props, 'showGnomad'),
-  activeCategories: toRef(props, 'activeCategories')
+  activeCategories: toRef(props, 'activeCategories'),
+  gnomadMaxAf: toRef(props, 'gnomadMaxAf')
 })
 
 defineExpose({

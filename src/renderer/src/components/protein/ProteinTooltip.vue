@@ -48,26 +48,49 @@
       </template>
 
       <!-- gnomAD tooltip -->
-      <template v-else-if="data.type === 'gnomad' && data.gnomadVariant">
-        <div class="tooltip-title">gnomAD Variant</div>
-        <div v-if="data.gnomadVariant.hgvsp" class="tooltip-row">
-          <span class="tooltip-value tooltip-mono">{{ data.gnomadVariant.hgvsp }}</span>
-        </div>
-        <div class="tooltip-row">
-          <span class="tooltip-label">Consequence:</span>
-          <span class="tooltip-value">{{ formatConsequence(data.gnomadVariant.consequence) }}</span>
-        </div>
-        <div class="tooltip-row">
-          <span class="tooltip-label">AF:</span>
-          <span class="tooltip-value tooltip-mono">{{
-            data.gnomadVariant.alleleFrequency.toExponential(2)
-          }}</span>
-        </div>
-        <div class="tooltip-row">
-          <span class="tooltip-label">AC / AN:</span>
-          <span class="tooltip-value tooltip-mono">
-            {{ data.gnomadVariant.alleleCount }} / {{ data.gnomadVariant.alleleNumber }}
+      <template v-else-if="data.type === 'gnomad' && (data.gnomadVariant || data.gnomadGroup)">
+        <div class="tooltip-title">
+          gnomAD
+          <span
+            v-if="data.gnomadGroup && data.gnomadGroup.variants.length > 1"
+            class="tooltip-count"
+          >
+            ({{ data.gnomadGroup.variants.length }} variants at pos {{ data.gnomadGroup.position }})
           </span>
+        </div>
+        <!-- Show first variant details -->
+        <template v-if="data.gnomadVariant">
+          <div v-if="data.gnomadVariant.hgvsp" class="tooltip-row">
+            <span class="tooltip-value tooltip-mono">{{ data.gnomadVariant.hgvsp }}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Consequence:</span>
+            <span class="tooltip-value">{{
+              formatConsequence(data.gnomadVariant.consequence)
+            }}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">AF:</span>
+            <span class="tooltip-value tooltip-mono">{{
+              data.gnomadVariant.alleleFrequency.toExponential(2)
+            }}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">AC / AN:</span>
+            <span class="tooltip-value tooltip-mono">
+              {{ data.gnomadVariant.alleleCount }} / {{ data.gnomadVariant.alleleNumber }}
+            </span>
+          </div>
+        </template>
+        <!-- Show max AF for groups with multiple variants -->
+        <div
+          v-if="data.gnomadGroup && data.gnomadGroup.variants.length > 1"
+          class="tooltip-row tooltip-sub"
+        >
+          <span class="tooltip-label">Max AF in group:</span>
+          <span class="tooltip-value tooltip-mono">{{
+            data.gnomadGroup.maxAf.toExponential(2)
+          }}</span>
         </div>
       </template>
     </div>

@@ -6,11 +6,15 @@
       :show-case-variants="showCaseVariants"
       :case-variants-loading="caseVariantsLoading"
       :has-case-id="hasCaseId"
+      :gnomad-max-af="gnomadMaxAf"
+      :gnomad-count="filteredGnomadCount"
+      :gnomad-total="gnomadVariants.length"
       @zoom-in="plotRef?.zoomIn()"
       @zoom-out="plotRef?.zoomOut()"
       @zoom-reset="plotRef?.resetZoom()"
       @toggle-gnomad="handleToggleGnomad"
       @toggle-case-variants="emit('toggle-case-variants')"
+      @update:gnomad-max-af="gnomadMaxAf = $event"
       @export-svg="handleExportSvg"
       @export-png="handleExportPng"
     />
@@ -28,6 +32,7 @@
         :gnomad-variants="gnomadVariants"
         :show-gnomad="showGnomad"
         :active-categories="activeCategories"
+        :gnomad-max-af="gnomadMaxAf"
       />
     </div>
 
@@ -41,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, type ComponentPublicInstance } from 'vue'
+import { ref, computed, watch, type ComponentPublicInstance } from 'vue'
 import LollipopToolbar from './LollipopToolbar.vue'
 import LollipopPlot from './LollipopPlot.vue'
 import LollipopLegend from './LollipopLegend.vue'
@@ -89,6 +94,17 @@ const plotRef = ref<ComponentPublicInstance<{
 const showGnomad = ref(true)
 const gnomadLoading = ref(false)
 const gnomadVariants = ref<GnomadVariant[]>([])
+
+// gnomAD frequency filter (default: show all)
+const gnomadMaxAf = ref(1)
+
+/** Count of gnomAD variants after AF filter */
+const filteredGnomadCount = computed(
+  () =>
+    gnomadVariants.value.filter(
+      (gv) => gv.proteinPosition !== null && gv.alleleFrequency <= gnomadMaxAf.value
+    ).length
+)
 
 // Filter categories - all active by default
 const activeCategories = ref<Set<ConsequenceCategory>>(

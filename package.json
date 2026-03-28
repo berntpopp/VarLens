@@ -6,7 +6,10 @@
   "author": "Bernt Popp <bernt.popp@gmail.com>",
   "license": "MIT",
   "scripts": {
+    "predev": "npm run copy:molstar",
     "dev": "electron-vite dev",
+    "copy:molstar": "cp node_modules/pdbe-molstar/build/pdbe-molstar-component.js src/renderer/public/ && cp node_modules/pdbe-molstar/build/pdbe-molstar-light.css src/renderer/public/",
+    "prebuild": "npm run copy:molstar",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "dist": "electron-vite build && electron-builder --publish onTag",

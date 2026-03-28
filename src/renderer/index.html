@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <title>VarLens</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- pdbe-molstar light theme CSS for 3D protein structure viewer -->
+    <link rel="stylesheet" type="text/css" href="/pdbe-molstar-light.css" />
     <!-- Load Roboto Mono font for genomic data -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12,14 +14,21 @@
       rel="stylesheet"
     />
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <!-- Note: 'unsafe-eval' is required by Mol*/pdbe-molstar for WebGL shader compilation.
+         blob: is needed for Mol* internal worker/data handling.
+         External connect-src entries enable AlphaFold, PDB, gnomAD, UniProt, InterPro APIs. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' data: https://alphafold.ebi.ac.uk https://www.ebi.ac.uk https://files.rcsb.org https://models.rcsb.org https://data.rcsb.org https://rest.ensembl.org https://gnomad.broadinstitute.org https://www.proteins.uniprot.org https://rest.uniprot.org https://www.interpro.ebi.ac.uk blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
   </head>
 
   <body>
     <div id="app"></div>
+    <!-- pdbe-molstar: 3D protein structure viewer (web component).
+         Loaded as a classic script because it is a 6 MB webpack IIFE that
+         self-registers the <pdbe-molstar> custom element on window. -->
+    <script src="/pdbe-molstar-component.js"></script>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>
