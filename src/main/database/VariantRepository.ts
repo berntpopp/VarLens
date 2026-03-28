@@ -530,6 +530,91 @@ export class VariantRepository extends BaseRepository {
         )
       }
 
+      // Trio modes — require analysis_group_id
+      if (filter.analysis_group_id) {
+        const gid = filter.analysis_group_id
+        const cid = filter.case_id
+
+        if (modes.includes('de_novo')) {
+          // Het in proband, absent or ref in both parents
+          // "Absent" means the variant doesn't exist in the parent's case at all (LEFT JOIN -> NULL)
+          // "Ref" means the parent has the variant but with ref genotype
+          conditions.push(`(
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ${gid} AND agm_f.role = 'father'
+              INNER JOIN variants f
+                ON f.case_id = agm_f.case_id
+                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
+                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+              WHERE p.case_id = ${cid}
+            )
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ${gid} AND agm_m.role = 'mother'
+              INNER JOIN variants f
+                ON f.case_id = agm_m.case_id
+                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
+                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+              WHERE p.case_id = ${cid}
+            )
+          )`)
+        }
+
+        if (modes.includes('autosomal_recessive')) {
+          // Proband hom, parents NOT hom (must be het carriers or absent)
+          conditions.push(`(
+            variants.gt_num IN ('1/1', '1|1')
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_par
+                ON agm_par.group_id = ${gid} AND agm_par.role IN ('father', 'mother')
+              INNER JOIN variants par
+                ON par.case_id = agm_par.case_id
+                AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+                AND par.gt_num IN ('1/1', '1|1')
+              WHERE p.case_id = ${cid}
+            )
+          )`)
+        }
+
+        if (modes.includes('compound_het')) {
+          // Het variants in genes where BOTH parents contribute at least one variant each
+          // Gene must have het variants inherited from father AND het variants inherited from mother
+          conditions.push(`(
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.gene_symbol IS NOT NULL
+            AND variants.gene_symbol IN (
+              SELECT v1.gene_symbol
+              FROM variants v1
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ${gid} AND agm_f.role = 'father'
+              INNER JOIN variants f ON f.case_id = agm_f.case_id
+                AND f.chr = v1.chr AND f.pos = v1.pos AND f.ref = v1.ref AND f.alt = v1.alt
+                AND f.gt_num IN ('0/1', '0|1', '1|0')
+              WHERE v1.case_id = ${cid}
+                AND v1.gt_num IN ('0/1', '0|1', '1|0')
+                AND v1.gene_symbol IS NOT NULL
+            )
+            AND variants.gene_symbol IN (
+              SELECT v2.gene_symbol
+              FROM variants v2
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ${gid} AND agm_m.role = 'mother'
+              INNER JOIN variants m ON m.case_id = agm_m.case_id
+                AND m.chr = v2.chr AND m.pos = v2.pos AND m.ref = v2.ref AND m.alt = v2.alt
+                AND m.gt_num IN ('0/1', '0|1', '1|0')
+              WHERE v2.case_id = ${cid}
+                AND v2.gt_num IN ('0/1', '0|1', '1|0')
+                AND v2.gene_symbol IS NOT NULL
+            )
+          )`)
+        }
+      }
+
       if (conditions.length > 0) {
         query = query.where(sql<boolean>`(${sql.raw(conditions.join(' OR '))})`)
       }
