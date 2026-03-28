@@ -1,5 +1,5 @@
 <template>
-  <v-footer app color="#E5AA94" class="px-4 py-1" height="auto">
+  <v-footer app class="app-footer px-4 py-1" height="auto">
     <div class="d-flex align-center justify-space-between" style="width: 100%">
       <!-- Left section: Version menu + network status -->
       <div class="d-flex align-center">
@@ -384,6 +384,11 @@ const openLicense = async (): Promise<void> => {
 </script>
 
 <style scoped>
+.app-footer {
+  background-color: #dfe4ea !important;
+  border-top: 1px solid #c8cfd8 !important;
+}
+
 .footer-actions {
   gap: 4px;
 }

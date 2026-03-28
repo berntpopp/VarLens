@@ -39,7 +39,7 @@ function createWindow(): void {
     width: APP_CONFIG.WINDOW_WIDTH,
     height: APP_CONFIG.WINDOW_HEIGHT,
     show: false,
-    backgroundColor: '#faf8f6',
+    backgroundColor: '#F0F4F8',
     title: 'Varlens',
     autoHideMenuBar: true,
     icon: getAppIcon(),

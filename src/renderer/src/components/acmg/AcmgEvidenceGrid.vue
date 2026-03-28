@@ -110,15 +110,15 @@ const STRENGTH_COLORS: Record<EvidenceStrength, string> = {
   stand_alone: 'red-darken-2'
 }
 
-/** Muted color hints for inactive (unselected) buttons by default strength.
- *  Uses lighten-3 (not lighten-5) to maintain readable contrast on the
- *  warm surface background (#faf8f6). lighten-5 values are nearly invisible. */
+/** Muted color for inactive (unselected) buttons by default strength.
+ *  Uses lighten-1 for clearly visible outlined buttons on #FAFBFD surface.
+ *  The outline + color text provides sufficient affordance without dominating. */
 const INACTIVE_COLORS: Record<EvidenceStrength, string> = {
-  very_strong: 'deep-purple-lighten-3',
-  strong: 'orange-lighten-3',
-  moderate: 'amber-lighten-3',
-  supporting: 'blue-grey-lighten-3',
-  stand_alone: 'red-lighten-3'
+  very_strong: 'deep-purple-lighten-1',
+  strong: 'orange-darken-1',
+  moderate: 'amber-darken-2',
+  supporting: 'blue-grey',
+  stand_alone: 'red-lighten-1'
 }
 
 function getCodeStrength(code: AcmgCode): EvidenceStrength {
@@ -137,7 +137,7 @@ function isDeprecated(code: AcmgCode): boolean {
 function getButtonColor(code: AcmgCode): string {
   if (props.isCodeActive(code)) return STRENGTH_COLORS[getCodeStrength(code)]
   if (props.isCodeSuggested(code)) return 'amber-darken-2'
-  if (isDeprecated(code)) return 'grey-lighten-2'
+  if (isDeprecated(code)) return 'grey'
   return INACTIVE_COLORS[getDefaultStrength(code)]
 }
 
