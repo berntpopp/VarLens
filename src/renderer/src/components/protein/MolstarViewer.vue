@@ -2,9 +2,15 @@
 /**
  * MolstarViewer - pdbe-molstar Web Component wrapper
  * Renders a 3D protein structure with variant highlighting
+ *
+ * The <pdbe-molstar> custom element is registered by the global script
+ * tag in index.html (pdbe-molstar-component.js). The CSS is also loaded
+ * globally (pdbe-molstar-light.css). This avoids bundling the 6 MB IIFE
+ * through Vite.
  */
 
 import { ref, computed, type Ref } from 'vue'
+import { mdiMolecule } from '@mdi/js'
 import { useMolstarViewer } from '../../composables/useMolstarViewer'
 import type { LollipopVariant, ProteinStructureInfo } from '../../../../shared/types/protein'
 
@@ -62,7 +68,7 @@ defineExpose({
 
     <!-- Empty state -->
     <div v-else-if="!structureUrl" class="molstar-overlay">
-      <v-icon size="64" color="grey-lighten-1"> mdi-molecule </v-icon>
+      <v-icon size="64" color="grey-lighten-1" :icon="mdiMolecule" />
       <span class="text-body-2 mt-3 text-medium-emphasis">
         No 3D structure available for this protein
       </span>

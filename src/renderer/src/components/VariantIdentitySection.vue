@@ -10,6 +10,7 @@
             size="x-small"
             variant="text"
             class="ml-1"
+            aria-label="Open protein view"
             @click="emit('open-protein-view')"
           >
             <v-icon size="small" :icon="mdiDna" />

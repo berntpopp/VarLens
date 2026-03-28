@@ -62,8 +62,11 @@ export class GnomadApiClient {
    * @param geneSymbol - HGNC gene symbol (e.g., "TP53")
    * @returns GnomadFetchResult with parsed variants or ProteinApiError
    */
-  async fetchGeneVariants(geneSymbol: string): Promise<GnomadFetchResult | ProteinApiError> {
-    const cacheKey = `gnomad:${geneSymbol}:${REFERENCE_GENOME}:${DATASET}`
+  async fetchGeneVariants(
+    geneSymbol: string,
+    dataset: string = DATASET
+  ): Promise<GnomadFetchResult | ProteinApiError> {
+    const cacheKey = `gnomad:${geneSymbol}:${REFERENCE_GENOME}:${dataset}`
 
     // Check cache first
     const cached = this.cache.get(cacheKey)
@@ -78,7 +81,7 @@ export class GnomadApiClient {
           success: true,
           variants: this.transformVariants(gene.variants),
           geneId: gene.gene_id,
-          dataset: DATASET,
+          dataset,
           cacheInfo: {
             cached: true,
             cachedAt: cached.createdAt
@@ -91,7 +94,9 @@ export class GnomadApiClient {
     }
 
     try {
-      const rawResponse = await this.limiter.schedule(() => this.makeGnomadRequest(geneSymbol))
+      const rawResponse = await this.limiter.schedule(() =>
+        this.makeGnomadRequest(geneSymbol, dataset)
+      )
 
       const data = GnomadResponseSchema.parse(rawResponse)
       const gene = data.data.gene
@@ -107,7 +112,7 @@ export class GnomadApiClient {
         success: true,
         variants: this.transformVariants(gene.variants),
         geneId: gene.gene_id,
-        dataset: DATASET,
+        dataset,
         cacheInfo: {
           cached: false,
           cachedAt: undefined
@@ -143,7 +148,10 @@ export class GnomadApiClient {
    * @private
    * @throws Error on non-OK response
    */
-  private async makeGnomadRequest(geneSymbol: string): Promise<unknown> {
+  private async makeGnomadRequest(
+    geneSymbol: string,
+    dataset: string = DATASET
+  ): Promise<unknown> {
     const response = await fetch(GNOMAD_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -154,7 +162,7 @@ export class GnomadApiClient {
         variables: {
           geneSymbol,
           referenceGenome: REFERENCE_GENOME,
-          dataset: DATASET
+          dataset
         }
       })
     })

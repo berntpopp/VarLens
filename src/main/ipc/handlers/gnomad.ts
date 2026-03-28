@@ -68,7 +68,7 @@ export function registerGnomadHandlers({ ipcMain, getDb }: HandlerDependencies):
 
       const client = getGnomadClient()
 
-      return await client.fetchGeneVariants(geneValidated.data)
+      return await client.fetchGeneVariants(geneValidated.data, datasetValidated.data)
     })
   })
 }

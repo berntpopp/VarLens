@@ -70,21 +70,16 @@ export function registerProteinHandlers({ ipcMain, getDb }: HandlerDependencies)
       const client = getUniProtClient()
       const isOnline = networkStatus.getStatus()
 
-      // If offline, try to get cached data
+      // If offline, delegate to the client which checks cache first.
+      // If cached data is available it will return a proper ProteinMappingResult.
+      // If no cache, the network request will fail and the client returns a ProteinApiError.
       if (!isOnline) {
-        const cacheKey = `uniprot:${validated.data}`
-        const cache = getSharedCache()
-        const cached = cache.get(cacheKey)
-
-        if (cached) {
-          return {
-            success: true,
-            cached: true,
-            cachedAt: cached.createdAt
-          }
+        const result = await client.fetchProteinMapping(validated.data)
+        // If the client returned a successful cached result, return it as-is
+        if ('success' in result && result.success) {
+          return result
         }
-
-        // No cache available while offline
+        // No cache available while offline - provide a clear offline error
         return {
           success: false,
           error: 'No network connection and no cached data available',

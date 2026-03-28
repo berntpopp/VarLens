@@ -4,8 +4,9 @@
  * Renders a protein-level lollipop plot with:
  * - Protein backbone track
  * - Domain rectangles (colored by InterPro type)
- * - Lollipop stems + heads (colored by consequence category)
- * - Optional gnomAD population variant track (below backbone)
+ * - Highlighted (user) variants as prominent lollipops ABOVE backbone
+ * - Non-highlighted (case) variants as standard lollipops ABOVE backbone
+ * - gnomAD population variants as small dots BELOW backbone (density-aware)
  * - X-axis with amino acid positions
  * - Minimap with viewport highlight
  * - D3 zoom behavior
@@ -21,7 +22,11 @@ import type {
   GnomadVariant,
   ConsequenceCategory
 } from '../../../shared/types/protein'
-import { DOMAIN_TYPE_COLORS } from '../../../shared/utils/protein-utils'
+import {
+  DOMAIN_TYPE_COLORS,
+  getConsequenceCategory,
+  getConsequenceColor
+} from '../../../shared/utils/protein-utils'
 import type { Dimensions } from './useResizeObserver'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,6 +36,17 @@ interface PositionGroup {
   position: number
   variants: LollipopVariant[]
   maxHeight: number
+  /** Whether this group contains the highlighted (selected) variant */
+  hasHighlighted: boolean
+}
+
+/** gnomAD variants grouped at the same protein position for density rendering */
+interface GnomadPositionGroup {
+  position: number
+  variants: GnomadVariant[]
+  maxAf: number
+  /** Dominant consequence category in this group */
+  dominantCategory: ConsequenceCategory
 }
 
 /** Tooltip data exposed to Vue for overlay rendering */
@@ -45,6 +61,8 @@ export interface TooltipData {
   variants?: LollipopVariant[]
   /** gnomAD variant tooltip fields */
   gnomadVariant?: GnomadVariant
+  /** gnomAD group tooltip */
+  gnomadGroup?: GnomadPositionGroup
 }
 
 export interface LollipopPlotOptions {
@@ -56,19 +74,32 @@ export interface LollipopPlotOptions {
   gnomadVariants: Ref<GnomadVariant[]>
   showGnomad: Ref<boolean>
   activeCategories: Ref<Set<ConsequenceCategory>>
+  /** Maximum allele frequency filter for gnomAD variants */
+  gnomadMaxAf: Ref<number>
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MARGIN = { top: 40, right: 30, bottom: 80, left: 50 }
-const BACKBONE_Y_OFFSET = 0.55 // fraction of plot height for backbone
+const BACKBONE_Y_OFFSET = 0.5 // fraction of plot height for backbone
 const BACKBONE_HEIGHT = 14
 const DOMAIN_HEIGHT = 22
-const LOLLIPOP_HEAD_RADIUS = 5
+/** Radius for the highlighted (selected) variant head */
+const HIGHLIGHTED_HEAD_RADIUS = 10
+/** Stroke width for the highlighted variant stem */
+const HIGHLIGHTED_STEM_WIDTH = 3
+/** Minimum stem height for highlighted variant */
+const HIGHLIGHTED_MIN_STEM = 60
+/** Maximum stem height for highlighted variant */
+const HIGHLIGHTED_MAX_STEM = 140
+/** Radius for non-highlighted user/case variant heads */
+const NORMAL_HEAD_RADIUS = 5
 const LOLLIPOP_MIN_STEM = 20
-const LOLLIPOP_MAX_STEM = 120
-const GNOMAD_TRACK_HEIGHT = 40
-const GNOMAD_HEAD_RADIUS = 3
+const LOLLIPOP_MAX_STEM = 100
+const GNOMAD_TRACK_HEIGHT = 30
+/** Radius for gnomAD dots (small) */
+const GNOMAD_DOT_RADIUS_MIN = 1.5
+const GNOMAD_DOT_RADIUS_MAX = 4
 const MINIMAP_HEIGHT = 24
 
 // ─── Composable ───────────────────────────────────────────────────────────────
@@ -82,7 +113,8 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     variants,
     gnomadVariants,
     showGnomad,
-    activeCategories
+    activeCategories,
+    gnomadMaxAf
   } = options
 
   const tooltip = ref<TooltipData>({
@@ -92,11 +124,14 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     type: 'variant'
   })
 
+  /** Unique ID for clipPath to avoid collisions when multiple plots render */
+  const clipId = `lollipop-clip-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
   /** Current D3 zoom transform (for external zoom controls) */
   let currentTransform = d3.zoomIdentity
   let zoomBehavior: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null
 
-  // ─── Helper: group variants by position ─────────────────────────────────
+  // ─── Helper: group user variants by position ─────────────────────────
 
   function groupByPosition(vars: LollipopVariant[]): PositionGroup[] {
     const map = new Map<number, LollipopVariant[]>()
@@ -111,8 +146,47 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     return Array.from(map.entries()).map(([position, group]) => ({
       position,
       variants: group,
-      maxHeight: Math.min(LOLLIPOP_MAX_STEM, LOLLIPOP_MIN_STEM + group.length * 8)
+      maxHeight: Math.min(LOLLIPOP_MAX_STEM, LOLLIPOP_MIN_STEM + group.length * 8),
+      hasHighlighted: group.some((v) => v.highlighted === true)
     }))
+  }
+
+  // ─── Helper: group gnomAD variants by position for density ───────────
+
+  function groupGnomadByPosition(vars: GnomadVariant[]): GnomadPositionGroup[] {
+    const map = new Map<number, GnomadVariant[]>()
+    for (const gv of vars) {
+      if (gv.proteinPosition === null) continue
+      const existing = map.get(gv.proteinPosition)
+      if (existing) {
+        existing.push(gv)
+      } else {
+        map.set(gv.proteinPosition, [gv])
+      }
+    }
+    return Array.from(map.entries()).map(([position, group]) => {
+      // Find the most common consequence category
+      const catCounts = new Map<ConsequenceCategory, number>()
+      for (const gv of group) {
+        const cat = getConsequenceCategory(gv.consequence)
+        catCounts.set(cat, (catCounts.get(cat) ?? 0) + 1)
+      }
+      let dominantCategory: ConsequenceCategory = 'other'
+      let maxCount = 0
+      for (const [cat, count] of catCounts) {
+        if (count > maxCount) {
+          maxCount = count
+          dominantCategory = cat
+        }
+      }
+
+      return {
+        position,
+        variants: group,
+        maxAf: Math.max(...group.map((gv) => gv.alleleFrequency)),
+        dominantCategory
+      }
+    })
   }
 
   // ─── Main render function ───────────────────────────────────────────────
@@ -129,6 +203,10 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     )
     const groups = groupByPosition(filteredVariants)
 
+    // Separate highlighted and non-highlighted groups
+    const highlightedGroups = groups.filter((g) => g.hasHighlighted)
+    const normalGroups = groups.filter((g) => !g.hasHighlighted)
+
     const plotWidth = width - MARGIN.left - MARGIN.right
     const plotHeight = height - MARGIN.top - MARGIN.bottom
     if (plotWidth <= 0 || plotHeight <= 0) return
@@ -139,23 +217,37 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
 
     const xScale = d3.scaleLinear().domain([0, proteinLength.value]).range([0, plotWidth])
 
-    // Stem height scale based on variant count at position
-    const maxCount = Math.max(1, ...groups.map((g) => g.variants.length))
+    // Stem height scale based on variant count at position (for non-highlighted)
+    const maxCount = Math.max(1, ...normalGroups.map((g) => g.variants.length))
     const stemScale = d3
       .scaleLinear()
       .domain([1, maxCount])
       .range([LOLLIPOP_MIN_STEM, LOLLIPOP_MAX_STEM])
       .clamp(true)
 
-    // gnomAD frequency scale (log)
-    const gnomadFreqs = gnomadVariants.value
-      .filter((v) => v.proteinPosition !== null && v.alleleFrequency > 0)
+    // Filter gnomAD variants by AF threshold
+    const filteredGnomad = gnomadVariants.value.filter(
+      (gv) => gv.proteinPosition !== null && gv.alleleFrequency <= gnomadMaxAf.value
+    )
+    const gnomadGroups = groupGnomadByPosition(filteredGnomad)
+
+    // gnomAD dot radius scale based on group size (density)
+    const gnomadMaxGroupSize = Math.max(1, ...gnomadGroups.map((g) => g.variants.length))
+    const gnomadRadiusScale = d3
+      .scaleSqrt()
+      .domain([1, gnomadMaxGroupSize])
+      .range([GNOMAD_DOT_RADIUS_MIN, GNOMAD_DOT_RADIUS_MAX])
+      .clamp(true)
+
+    // gnomAD Y position scale based on allele frequency
+    const gnomadAfs = filteredGnomad
+      .filter((v) => v.alleleFrequency > 0)
       .map((v) => v.alleleFrequency)
-    const gnomadMaxAf = gnomadFreqs.length > 0 ? Math.max(...gnomadFreqs) : 0.01
-    const gnomadStemScale = d3
+    const gnomadMaxAfValue = gnomadAfs.length > 0 ? Math.max(...gnomadAfs) : 0.01
+    const gnomadYScale = d3
       .scaleLog()
-      .domain([1e-6, gnomadMaxAf])
-      .range([4, GNOMAD_TRACK_HEIGHT])
+      .domain([1e-6, gnomadMaxAfValue])
+      .range([2, GNOMAD_TRACK_HEIGHT - 4])
       .clamp(true)
 
     // ── Clear and set up SVG ────────────────────────────────────────────
@@ -168,16 +260,27 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     root
       .append('defs')
       .append('clipPath')
-      .attr('id', 'plot-clip')
+      .attr('id', clipId)
       .append('rect')
       .attr('x', 0)
       .attr('y', 0)
       .attr('width', plotWidth)
       .attr('height', plotHeight + MARGIN.top)
 
+    // Drop shadow filter for highlighted variant
+    const defs = root.select('defs')
+    const filter = defs.append('filter').attr('id', 'highlight-shadow')
+    filter
+      .append('feDropShadow')
+      .attr('dx', 0)
+      .attr('dy', 1)
+      .attr('stdDeviation', 3)
+      .attr('flood-color', '#FFD700')
+      .attr('flood-opacity', 0.6)
+
     const mainGroup = root.append('g').attr('transform', `translate(${MARGIN.left},0)`)
 
-    const clipGroup = mainGroup.append('g').attr('clip-path', 'url(#plot-clip)')
+    const clipGroup = mainGroup.append('g').attr('clip-path', `url(#${clipId})`)
 
     // ── Zoom behavior ───────────────────────────────────────────────────
 
@@ -216,6 +319,58 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     })
 
     // ── Render layers ───────────────────────────────────────────────────
+
+    // gnomAD track (BELOW backbone) - render first so it's behind everything
+    if (showGnomad.value && gnomadGroups.length > 0) {
+      const gnomadGroup = clipGroup.append('g').attr('class', 'gnomad')
+      const gnomadBaseY = backboneY + BACKBONE_HEIGHT / 2 + 6
+
+      for (const group of gnomadGroups) {
+        const cx = xScale(group.position)
+        const yOffset = group.maxAf > 0 ? gnomadYScale(group.maxAf) : 2
+        const cy = gnomadBaseY + yOffset
+        const r = gnomadRadiusScale(group.variants.length)
+        const color = getConsequenceColor(group.variants[0].consequence)
+
+        // Dot (no stem for cleaner look)
+        gnomadGroup
+          .append('circle')
+          .attr('cx', cx)
+          .attr('cy', cy)
+          .attr('r', r)
+          .attr('fill', color)
+          .attr('opacity', 0.45)
+          .attr('stroke', 'none')
+          .attr('cursor', 'pointer')
+          .on('mouseenter', (event: MouseEvent) => {
+            tooltip.value = {
+              visible: true,
+              x: event.clientX,
+              y: event.clientY,
+              type: 'gnomad',
+              gnomadVariant: group.variants[0],
+              gnomadGroup: group
+            }
+          })
+          .on('mousemove', (event: MouseEvent) => {
+            tooltip.value = { ...tooltip.value, x: event.clientX, y: event.clientY }
+          })
+          .on('mouseleave', () => {
+            tooltip.value = { ...tooltip.value, visible: false }
+          })
+      }
+
+      // gnomAD track label
+      gnomadGroup
+        .append('text')
+        .attr('x', -4)
+        .attr('y', gnomadBaseY + GNOMAD_TRACK_HEIGHT / 2)
+        .attr('text-anchor', 'end')
+        .attr('dominant-baseline', 'middle')
+        .attr('fill', '#999')
+        .attr('font-size', '9px')
+        .text('gnomAD')
+    }
 
     // Backbone
     const backboneGroup = clipGroup.append('g').attr('class', 'backbone')
@@ -259,14 +414,13 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
         })
     }
 
-    // Lollipop stems + heads
+    // ── Non-highlighted (case) variant lollipops ──────────────────────
     const lollipopGroup = clipGroup.append('g').attr('class', 'lollipops')
-    for (const group of groups) {
+    for (const group of normalGroups) {
       const cx = xScale(group.position)
       const stemHeight = stemScale(group.variants.length)
       const headY = backboneY - BACKBONE_HEIGHT / 2 - stemHeight
       const color = group.variants[0].color
-      const isHighlighted = group.variants.some((v) => v.highlighted === true)
 
       // Stem
       lollipopGroup
@@ -276,21 +430,20 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
         .attr('x2', cx)
         .attr('y2', headY)
         .attr('stroke', color)
-        .attr('stroke-width', isHighlighted ? 2.5 : 1.5)
-        .attr('opacity', isHighlighted ? 1 : 0.6)
+        .attr('stroke-width', 1.5)
+        .attr('opacity', 0.5)
 
       // Head
-      const headRadius = isHighlighted
-        ? Math.min(LOLLIPOP_HEAD_RADIUS + group.variants.length + 1, 12)
-        : Math.min(LOLLIPOP_HEAD_RADIUS + group.variants.length - 1, 10)
+      const headRadius = Math.min(NORMAL_HEAD_RADIUS + group.variants.length - 1, 8)
       lollipopGroup
         .append('circle')
         .attr('cx', cx)
         .attr('cy', headY)
         .attr('r', headRadius)
         .attr('fill', color)
-        .attr('stroke', isHighlighted ? '#FFD700' : '#fff')
-        .attr('stroke-width', isHighlighted ? 3 : 1.5)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 1)
+        .attr('opacity', 0.7)
         .attr('cursor', 'pointer')
         .on('mouseenter', (event: MouseEvent) => {
           tooltip.value = {
@@ -309,54 +462,79 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
         })
     }
 
-    // gnomAD track (below backbone)
-    if (showGnomad.value && gnomadVariants.value.length > 0) {
-      const gnomadGroup = clipGroup.append('g').attr('class', 'gnomad')
-      const gnomadBaseY = backboneY + BACKBONE_HEIGHT / 2 + 4
+    // ── Highlighted (selected) variant lollipops ─── render LAST for z-order
+    const highlightGroup = clipGroup.append('g').attr('class', 'highlighted')
+    for (const group of highlightedGroups) {
+      const cx = xScale(group.position)
+      const stemHeight = Math.min(
+        HIGHLIGHTED_MAX_STEM,
+        Math.max(HIGHLIGHTED_MIN_STEM, LOLLIPOP_MIN_STEM + group.variants.length * 12)
+      )
+      const headY = backboneY - BACKBONE_HEIGHT / 2 - stemHeight
+      const highlightedVariant = group.variants.find((v) => v.highlighted === true)
+      const color = highlightedVariant?.color ?? group.variants[0].color
 
-      for (const gv of gnomadVariants.value) {
-        if (gv.proteinPosition === null) continue
-        const cx = xScale(gv.proteinPosition)
-        const stemH = gv.alleleFrequency > 0 ? gnomadStemScale(gv.alleleFrequency) : 4
-        const headY = gnomadBaseY + stemH
+      // Stem - thick and prominent
+      highlightGroup
+        .append('line')
+        .attr('x1', cx)
+        .attr('y1', backboneY - BACKBONE_HEIGHT / 2)
+        .attr('x2', cx)
+        .attr('y2', headY)
+        .attr('stroke', color)
+        .attr('stroke-width', HIGHLIGHTED_STEM_WIDTH)
+        .attr('opacity', 1)
 
-        // Stem
-        gnomadGroup
-          .append('line')
-          .attr('x1', cx)
-          .attr('y1', gnomadBaseY)
-          .attr('x2', cx)
-          .attr('y2', headY)
-          .attr('stroke', '#6A89CC')
-          .attr('stroke-width', 1)
-          .attr('opacity', 0.4)
+      // Outer glow ring
+      highlightGroup
+        .append('circle')
+        .attr('cx', cx)
+        .attr('cy', headY)
+        .attr('r', HIGHLIGHTED_HEAD_RADIUS + 4)
+        .attr('fill', 'none')
+        .attr('stroke', '#FFD700')
+        .attr('stroke-width', 2)
+        .attr('opacity', 0.4)
+        .attr('filter', 'url(#highlight-shadow)')
 
-        // Head
-        gnomadGroup
-          .append('circle')
-          .attr('cx', cx)
-          .attr('cy', headY)
-          .attr('r', GNOMAD_HEAD_RADIUS)
-          .attr('fill', '#6A89CC')
-          .attr('stroke', '#fff')
-          .attr('stroke-width', 1)
-          .attr('opacity', 0.7)
-          .attr('cursor', 'pointer')
-          .on('mouseenter', (event: MouseEvent) => {
-            tooltip.value = {
-              visible: true,
-              x: event.clientX,
-              y: event.clientY,
-              type: 'gnomad',
-              gnomadVariant: gv
-            }
-          })
-          .on('mousemove', (event: MouseEvent) => {
-            tooltip.value = { ...tooltip.value, x: event.clientX, y: event.clientY }
-          })
-          .on('mouseleave', () => {
-            tooltip.value = { ...tooltip.value, visible: false }
-          })
+      // Head - large and prominent
+      highlightGroup
+        .append('circle')
+        .attr('cx', cx)
+        .attr('cy', headY)
+        .attr('r', HIGHLIGHTED_HEAD_RADIUS)
+        .attr('fill', color)
+        .attr('stroke', '#FFD700')
+        .attr('stroke-width', 3)
+        .attr('cursor', 'pointer')
+        .attr('filter', 'url(#highlight-shadow)')
+        .on('mouseenter', (event: MouseEvent) => {
+          tooltip.value = {
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            type: 'variant',
+            variants: group.variants
+          }
+        })
+        .on('mousemove', (event: MouseEvent) => {
+          tooltip.value = { ...tooltip.value, x: event.clientX, y: event.clientY }
+        })
+        .on('mouseleave', () => {
+          tooltip.value = { ...tooltip.value, visible: false }
+        })
+
+      // Label above highlighted variant
+      if (highlightedVariant !== undefined && highlightedVariant.aaChange !== null) {
+        highlightGroup
+          .append('text')
+          .attr('x', cx)
+          .attr('y', headY - HIGHLIGHTED_HEAD_RADIUS - 8)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#333')
+          .attr('font-size', '11px')
+          .attr('font-weight', '600')
+          .text(highlightedVariant.aaChange)
       }
     }
 
@@ -419,15 +597,16 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
 
     // Minimap variant ticks
     for (const group of groups) {
+      const isHighlight = group.hasHighlighted
       miniGroup
         .append('line')
         .attr('x1', miniXScale(group.position))
-        .attr('y1', 2)
+        .attr('y1', isHighlight ? 0 : 2)
         .attr('x2', miniXScale(group.position))
-        .attr('y2', MINIMAP_HEIGHT - 2)
-        .attr('stroke', group.variants[0].color)
-        .attr('stroke-width', 1)
-        .attr('opacity', 0.5)
+        .attr('y2', isHighlight ? MINIMAP_HEIGHT : MINIMAP_HEIGHT - 2)
+        .attr('stroke', isHighlight ? '#FFD700' : group.variants[0].color)
+        .attr('stroke-width', isHighlight ? 2 : 1)
+        .attr('opacity', isHighlight ? 1 : 0.5)
     }
 
     // Viewport highlight rectangle
@@ -483,52 +662,80 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       }
     })
 
-    // Update lollipops
+    // Update non-highlighted lollipops
     const filteredVariants = variants.value.filter((v) =>
       activeCategories.value.has(v.consequenceCategory)
     )
     const groups = groupByPosition(filteredVariants)
-    const backboneY =
-      MARGIN.top + (dimensions.value.height - MARGIN.top - MARGIN.bottom) * BACKBONE_Y_OFFSET
+    const normalGroups = groups.filter((g) => !g.hasHighlighted)
+    const highlightedGroups = groups.filter((g) => g.hasHighlighted)
 
     clipGroup.selectAll('.lollipops line').each(function (_d, i) {
-      const group = groups[i]
+      const group = normalGroups[i]
       if (group !== undefined) {
         d3.select(this).attr('x1', newXScale(group.position)).attr('x2', newXScale(group.position))
       }
     })
 
     clipGroup.selectAll('.lollipops circle').each(function (_d, i) {
-      const group = groups[i]
+      const group = normalGroups[i]
       if (group !== undefined) {
         d3.select(this).attr('cx', newXScale(group.position))
       }
     })
 
+    // Update highlighted lollipops (each has: line, glow circle, head circle, optional text)
+    let highlightIdx = 0
+    clipGroup.selectAll('.highlighted line').each(function () {
+      const group = highlightedGroups[highlightIdx]
+      if (group !== undefined) {
+        d3.select(this).attr('x1', newXScale(group.position)).attr('x2', newXScale(group.position))
+      }
+      highlightIdx++
+    })
+
+    highlightIdx = 0
+    clipGroup.selectAll('.highlighted circle').each(function () {
+      // Circles come in pairs: glow + head per group
+      const group = highlightedGroups[Math.floor(highlightIdx / 2)]
+      if (group !== undefined) {
+        d3.select(this).attr('cx', newXScale(group.position))
+      }
+      highlightIdx++
+    })
+
+    highlightIdx = 0
+    clipGroup.selectAll('.highlighted text').each(function () {
+      const group = highlightedGroups[highlightIdx]
+      if (group !== undefined) {
+        d3.select(this).attr('x', newXScale(group.position))
+      }
+      highlightIdx++
+    })
+
     // Update gnomAD
     if (showGnomad.value) {
+      const filteredGnomad = gnomadVariants.value.filter(
+        (gv) => gv.proteinPosition !== null && gv.alleleFrequency <= gnomadMaxAf.value
+      )
+      const gnomadGroups = groupGnomadByPosition(filteredGnomad)
+
       let gnomadIdx = 0
-      clipGroup.selectAll('.gnomad line').each(function () {
-        const gv = getGnomadAtIndex(gnomadIdx)
-        if (gv?.proteinPosition !== null && gv?.proteinPosition !== undefined) {
-          d3.select(this)
-            .attr('x1', newXScale(gv.proteinPosition))
-            .attr('x2', newXScale(gv.proteinPosition))
+      clipGroup.selectAll('.gnomad circle').each(function () {
+        const group = gnomadGroups[gnomadIdx]
+        if (group !== undefined) {
+          d3.select(this).attr('cx', newXScale(group.position))
         }
         gnomadIdx++
       })
 
-      gnomadIdx = 0
-      clipGroup.selectAll('.gnomad circle').each(function () {
-        const gv = getGnomadAtIndex(gnomadIdx)
-        if (gv?.proteinPosition !== null && gv?.proteinPosition !== undefined) {
-          d3.select(this).attr('cx', newXScale(gv.proteinPosition))
-        }
-        gnomadIdx++
-      })
+      // Update gnomAD label position (text element)
+      clipGroup.selectAll('.gnomad text').attr('x', -4)
     }
 
     // Update x-axis
+    const backboneY =
+      MARGIN.top + (dimensions.value.height - MARGIN.top - MARGIN.bottom) * BACKBONE_Y_OFFSET
     const axisY = showGnomad.value
       ? backboneY + BACKBONE_HEIGHT / 2 + GNOMAD_TRACK_HEIGHT + 16
       : backboneY + BACKBONE_HEIGHT / 2 + 16
@@ -547,17 +754,6 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       .attr('width', Math.min(plotWidth, (viewWidth / plotWidth) * plotWidth))
   }
 
-  /** Helper to get gnomAD variant at render index (skipping null positions) */
-  function getGnomadAtIndex(index: number): GnomadVariant | undefined {
-    let count = 0
-    for (const gv of gnomadVariants.value) {
-      if (gv.proteinPosition === null) continue
-      if (count === index) return gv
-      count++
-    }
-    return undefined
-  }
-
   // ─── Reactive re-rendering ──────────────────────────────────────────
 
   watchEffect(() => {
@@ -570,7 +766,8 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       variants.value,
       gnomadVariants.value,
       showGnomad.value,
-      activeCategories.value
+      activeCategories.value,
+      gnomadMaxAf.value
     ]
     void _deps
 

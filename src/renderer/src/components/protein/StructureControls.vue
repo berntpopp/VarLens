@@ -4,6 +4,14 @@
  * Provides representation toggle, reset view, and pLDDT confidence legend
  */
 
+import {
+  mdiRefresh,
+  mdiRibbon,
+  mdiCircleOutline,
+  mdiAtom,
+  mdiAlphaACircle,
+  mdiDatabase
+} from '@mdi/js'
 import type { RepresentationType } from '../../composables/useMolstarViewer'
 
 defineProps<{
@@ -26,9 +34,9 @@ const plddtLegend = [
 ]
 
 const representations: Array<{ value: RepresentationType; label: string; icon: string }> = [
-  { value: 'cartoon', label: 'Cartoon', icon: 'mdi-ribbon' },
-  { value: 'molecular-surface', label: 'Surface', icon: 'mdi-circle-outline' },
-  { value: 'ball-and-stick', label: 'Ball+Stick', icon: 'mdi-atom' }
+  { value: 'cartoon', label: 'Cartoon', icon: mdiRibbon },
+  { value: 'molecular-surface', label: 'Surface', icon: mdiCircleOutline },
+  { value: 'ball-and-stick', label: 'Ball+Stick', icon: mdiAtom }
 ]
 </script>
 
@@ -44,15 +52,13 @@ const representations: Array<{ value: RepresentationType; label: string; icon: s
         size="small"
         @click="emit('update:representation', rep.value)"
       >
-        <v-icon start size="16">
-          {{ rep.icon }}
-        </v-icon>
+        <v-icon start size="16" :icon="rep.icon" />
         {{ rep.label }}
       </v-btn>
     </v-btn-group>
 
     <!-- Reset view button -->
-    <v-btn variant="text" size="small" prepend-icon="mdi-refresh" @click="emit('reset-view')">
+    <v-btn variant="text" size="small" :prepend-icon="mdiRefresh" @click="emit('reset-view')">
       Reset
     </v-btn>
 
@@ -60,9 +66,7 @@ const representations: Array<{ value: RepresentationType; label: string; icon: s
 
     <!-- Source indicator chip -->
     <v-chip size="small" variant="tonal" :color="isAlphaFold ? 'blue' : 'green'" class="mr-2">
-      <v-icon start size="14">
-        {{ isAlphaFold ? 'mdi-alpha-a-circle' : 'mdi-database' }}
-      </v-icon>
+      <v-icon start size="14" :icon="isAlphaFold ? mdiAlphaACircle : mdiDatabase" />
       {{ sourceLabel }}
     </v-chip>
 
