@@ -809,6 +809,35 @@ export class VariantRepository extends BaseRepository {
     return meta
   }
 
+  /**
+   * Update variant_frequency counts for all variants in a case.
+   * Called after import to increment shared variant counts.
+   */
+  updateFrequencies(caseId: number): void {
+    this.db.exec(`
+      INSERT INTO variant_frequency (chr, pos, ref, alt, case_count)
+      SELECT chr, pos, ref, alt, 1
+      FROM variants WHERE case_id = ${caseId}
+      ON CONFLICT(chr, pos, ref, alt)
+      DO UPDATE SET case_count = case_count + 1;
+    `)
+  }
+
+  /**
+   * Decrement variant_frequency counts for all variants in a case.
+   * Called before case deletion. Removes rows where count reaches 0.
+   */
+  decrementFrequencies(caseId: number): void {
+    this.db.exec(`
+      UPDATE variant_frequency
+      SET case_count = case_count - 1
+      WHERE (chr, pos, ref, alt) IN (
+        SELECT chr, pos, ref, alt FROM variants WHERE case_id = ${caseId}
+      );
+    `)
+    this.db.exec('DELETE FROM variant_frequency WHERE case_count <= 0;')
+  }
+
   getFilterOptions(caseId: number): FilterOptions {
     const columnMeta = this.getColumnMeta(caseId)
 
