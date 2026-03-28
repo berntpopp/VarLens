@@ -106,9 +106,24 @@
         />
         <v-list-item
           :prepend-icon="mdiFileImport"
-          title="Import Variant Data"
+          title="Import File"
           subtitle="Ctrl+I"
           @click="$emit('import-click')"
+        />
+        <v-list-item
+          :prepend-icon="mdiFileMultiple"
+          title="Import Multiple Files"
+          @click="$emit('batch-import-files')"
+        />
+        <v-list-item
+          :prepend-icon="mdiFolderOpen"
+          title="Import Folder"
+          @click="$emit('batch-import-folder')"
+        />
+        <v-list-item
+          :prepend-icon="mdiZipBox"
+          title="Import ZIP Archive"
+          @click="$emit('batch-import-zip')"
         />
         <v-divider class="my-1" />
         <v-list-subheader>Settings</v-list-subheader>
@@ -179,13 +194,16 @@ import {
   mdiCog,
   mdiDeleteSweep,
   mdiFileImport,
+  mdiFileMultiple,
   mdiFilterOff,
+  mdiFolderOpen,
   mdiInformationOutline,
   mdiLink,
   mdiTableColumn,
   mdiPlaylistEdit,
   mdiTagMultiple,
-  mdiTune
+  mdiTune,
+  mdiZipBox
 } from '@mdi/js'
 
 const router = useRouter()
@@ -215,6 +233,9 @@ defineEmits<{
   'show-preferences': []
   'show-import-progress': []
   'import-click': []
+  'batch-import-files': []
+  'batch-import-folder': []
+  'batch-import-zip': []
   'reset-columns': []
   'reset-filters': []
   'delete-all-cases': []

@@ -125,15 +125,30 @@ export default createVuetify({
       density: 'compact'
     },
     VCard: {
-      elevation: 2
+      elevation: 1
+    },
+    VCardTitle: {
+      class: 'text-subtitle-1 font-weight-medium'
     },
     VDialog: {
       eager: false
+    },
+    VList: {
+      density: 'compact'
+    },
+    VListItem: {
+      density: 'compact'
+    },
+    VListSubheader: {
+      class: 'text-overline font-weight-bold'
     },
     VMenu: {
       transition: 'fade-transition',
       openDelay: 0,
       closeDelay: 0
+    },
+    VExpansionPanel: {
+      elevation: 0
     },
     VTooltip: {
       openDelay: 400,
