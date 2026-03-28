@@ -602,6 +602,41 @@ export interface GeneRefAPI {
   update: () => Promise<GeneRefUpdateResult>
 }
 
+export interface AnalysisGroup {
+  id: number
+  name: string
+  group_type: string
+  description: string | null
+  created_at: number
+  updated_at: number
+}
+
+export interface AnalysisGroupMember {
+  id: number
+  group_id: number
+  case_id: number
+  role: string
+  affected_status: string
+  individual_id: string | null
+}
+
+export interface AnalysisGroupsAPI {
+  list: () => Promise<AnalysisGroup[]>
+  get: (id: number) => Promise<AnalysisGroup>
+  create: (params: { name: string; groupType?: string; description?: string }) => Promise<AnalysisGroup>
+  update: (id: number, params: { name?: string; description?: string }) => Promise<AnalysisGroup>
+  delete: (id: number) => Promise<void>
+  addMember: (params: {
+    groupId: number
+    caseId: number
+    role: string
+    affectedStatus?: string
+    individualId?: string
+  }) => Promise<AnalysisGroupMember>
+  removeMember: (groupId: number, caseId: number) => Promise<void>
+  getForCase: (caseId: number) => Promise<AnalysisGroup[]>
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -631,6 +666,7 @@ export interface WindowAPI {
   presets: PresetsAPI
   panels: PanelsAPI
   geneRef: GeneRefAPI
+  analysisGroups: AnalysisGroupsAPI
 }
 
 export interface PresetsAPI {

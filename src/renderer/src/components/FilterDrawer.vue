@@ -450,6 +450,19 @@
           :value-summary="inheritanceSummary"
         />
         <v-expansion-panel-text>
+          <v-select
+            v-model="filters.analysisGroupId"
+            :items="groupOptions"
+            :loading="groupsLoading"
+            label="Family / Analysis Group"
+            density="compact"
+            variant="outlined"
+            clearable
+            hide-details
+            class="mb-3"
+            no-data-text="No families defined yet"
+            @click:clear="filters.analysisGroupId = null"
+          />
           <div class="text-caption text-medium-emphasis mb-1">Genotype (always available)</div>
           <div class="d-flex ga-1 flex-wrap mb-3">
             <v-chip
@@ -485,6 +498,14 @@
               </v-tooltip>
             </v-chip>
           </div>
+          <v-switch
+            v-if="filters.inheritanceModes.some((m: string) => m.includes('compound'))"
+            v-model="filters.considerPhasing"
+            label="Consider phased variants"
+            density="compact"
+            hide-details
+            class="mt-1 mb-2"
+          />
         </v-expansion-panel-text>
       </v-expansion-panel>
     </v-expansion-panels>
@@ -494,7 +515,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref, computed, watch } from 'vue'
+import { inject, ref, computed, watch, onMounted } from 'vue'
 import FilterDrawerShell from './filters/FilterDrawerShell.vue'
 import FilterPanelTitle from './filters/FilterPanelTitle.vue'
 import AnnotationScopeToggle from './AnnotationScopeToggle.vue'
@@ -505,6 +526,7 @@ import PanelFilterSection from './panels/PanelFilterSection.vue'
 import { consequenceGroups, clinvarGroups } from '../config/filterGroups'
 import { ACMG_FILTER_OPTIONS_LONG } from '../utils/filters'
 import { INHERITANCE_MODE_META, SOLO_MODES, TRIO_MODES } from '../../../shared/types/inheritance'
+import { useAnalysisGroups } from '../composables/useAnalysisGroups'
 import type { Tag } from '../../../shared/types/api'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import {
@@ -727,6 +749,13 @@ const toggleAcmgFilter = (value: string): void => {
     filters.value.acmgClassifications = [...current, value]
   }
 }
+
+// Analysis groups composable for family selector
+const { loadGroups, groupOptions, loading: groupsLoading } = useAnalysisGroups()
+
+onMounted(() => {
+  loadGroups()
+})
 
 // Inheritance modes
 const soloModes = SOLO_MODES.map((m) => INHERITANCE_MODE_META[m])

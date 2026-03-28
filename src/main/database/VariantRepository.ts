@@ -531,7 +531,7 @@ export class VariantRepository extends BaseRepository {
       }
 
       // Trio modes — require analysis_group_id
-      if (filter.analysis_group_id) {
+      if (filter.analysis_group_id != null) {
         const gid = filter.analysis_group_id
         const cid = filter.case_id
 

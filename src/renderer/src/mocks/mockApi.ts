@@ -953,5 +953,44 @@ export const mockApi: WindowAPI = {
     }),
     delete: async () => {},
     reorder: async () => {}
+  },
+
+  analysisGroups: {
+    list: async () => [],
+    get: async (id) => ({
+      id,
+      name: '',
+      group_type: 'trio',
+      description: null,
+      created_at: Date.now(),
+      updated_at: Date.now()
+    }),
+    create: async (params) => ({
+      id: 1,
+      name: params.name,
+      group_type: params.groupType ?? 'trio',
+      description: params.description ?? null,
+      created_at: Date.now(),
+      updated_at: Date.now()
+    }),
+    update: async (id, params) => ({
+      id,
+      name: params.name ?? '',
+      group_type: 'trio',
+      description: params.description ?? null,
+      created_at: Date.now(),
+      updated_at: Date.now()
+    }),
+    delete: async () => {},
+    addMember: async (params) => ({
+      id: 1,
+      group_id: params.groupId,
+      case_id: params.caseId,
+      role: params.role,
+      affected_status: params.affectedStatus ?? 'unknown',
+      individual_id: params.individualId ?? null
+    }),
+    removeMember: async () => {},
+    getForCase: async () => []
   }
 }
