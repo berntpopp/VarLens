@@ -1,11 +1,7 @@
 <template>
-  <UnifiedImportDialog
-    ref="unifiedImportRef"
+  <ImportWizard
+    ref="importWizardRef"
     @import-complete="handleImportComplete"
-    @start-batch="handleStartBatch"
-  />
-  <BatchImportDialog
-    ref="batchImportDialogRef"
     @batch-import-complete="handleBatchImportComplete"
   />
   <AppSnackbar ref="snackbarRef" />
@@ -30,8 +26,7 @@
 
 <script setup lang="ts">
 import { ref, defineAsyncComponent, onMounted, nextTick, watch } from 'vue'
-import UnifiedImportDialog from './UnifiedImportDialog.vue'
-import BatchImportDialog from './BatchImportDialog.vue'
+import ImportWizard from './import/ImportWizard.vue'
 import AppSnackbar from './AppSnackbar.vue'
 import LogViewer from './LogViewer.vue'
 import DisclaimerDialog from './DisclaimerDialog.vue'
@@ -63,8 +58,7 @@ const emit = defineEmits<{
 }>()
 
 // Dialog refs
-const unifiedImportRef = ref<InstanceType<typeof UnifiedImportDialog> | null>(null)
-const batchImportDialogRef = ref<InstanceType<typeof BatchImportDialog> | null>(null)
+const importWizardRef = ref<InstanceType<typeof ImportWizard> | null>(null)
 const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 const disclaimerRef = ref<InstanceType<typeof DisclaimerDialog> | null>(null)
 const faqDialogRef = ref<InstanceType<typeof FaqDialog> | null>(null)
@@ -136,10 +130,6 @@ const handleImportComplete = (result: {
   )
 }
 
-const handleStartBatch = (mode: 'files' | 'folder' | 'zip'): void => {
-  batchImportDialogRef.value?.show(mode)
-}
-
 const handleBatchImportComplete = (result: { totalImported: number }): void => {
   emit('batch-import-complete', result)
   const message =
@@ -159,9 +149,7 @@ onMounted(() => {
 
 // Expose dialog triggers for parent coordination
 defineExpose({
-  showImportDialog: () => unifiedImportRef.value?.show(),
-  showBatchImportDialog: (mode: 'files' | 'folder' | 'zip') =>
-    batchImportDialogRef.value?.show(mode),
+  showImportDialog: () => importWizardRef.value?.show(),
   showDisclaimer: () => disclaimerRef.value?.show(),
   showFaq: async () => {
     faqMounted.value = true
@@ -202,8 +190,8 @@ defineExpose({
   showCaseMetadata: () => caseMetadataModalRef.value?.show(),
   showSnackbar: (message: string, type: 'success' | 'error') =>
     snackbarRef.value?.show(message, type),
-  reopenImportDialog: () => unifiedImportRef.value?.reopen(),
-  reopenBatchImportDialog: () => batchImportDialogRef.value?.reopen(),
+  reopenImportDialog: () => importWizardRef.value?.reopen(),
+  reopenBatchImportDialog: () => importWizardRef.value?.reopen(),
   toggleLogViewer: () => {
     logViewerOpen.value = !logViewerOpen.value
   },
