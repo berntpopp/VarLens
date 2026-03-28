@@ -623,7 +623,11 @@ export interface AnalysisGroupMember {
 export interface AnalysisGroupsAPI {
   list: () => Promise<AnalysisGroup[]>
   get: (id: number) => Promise<AnalysisGroup>
-  create: (params: { name: string; groupType?: string; description?: string }) => Promise<AnalysisGroup>
+  create: (params: {
+    name: string
+    groupType?: string
+    description?: string
+  }) => Promise<AnalysisGroup>
   update: (id: number, params: { name?: string; description?: string }) => Promise<AnalysisGroup>
   delete: (id: number) => Promise<void>
   addMember: (params: {

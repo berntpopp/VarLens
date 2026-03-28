@@ -30,7 +30,7 @@ describe('migration v15 - filter_presets', () => {
 
   it('sets user_version to 21', () => {
     const version = db.pragma('user_version', { simple: true })
-    expect(version).toBe(21)
+    expect(version).toBe(22)
   })
 
   it('creates unique index on name', () => {

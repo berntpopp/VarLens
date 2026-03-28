@@ -1281,4 +1281,13 @@ export function runMigrations(db: Database.Database): void {
 
     db.exec('PRAGMA user_version = 21')
   }
+
+  // v22: Cross-case variant coordinate index for trio inheritance queries (#107)
+  if (currentVersion < 22) {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_variants_coord_case
+        ON variants(chr, pos, ref, alt, case_id);
+    `)
+    db.exec('PRAGMA user_version = 22')
+  }
 }
