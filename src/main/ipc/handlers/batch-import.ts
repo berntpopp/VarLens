@@ -178,6 +178,21 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
               onComplete: (msg) => {
                 workerClient = null
 
+                // Update internal variant frequency counts for successful imports
+                try {
+                  for (const detail of msg.results.details) {
+                    if (detail.status === 'success' && detail.caseName) {
+                      const c = db.cases.getCaseByName(detail.caseName)
+                      db.variants.updateFrequencies(c.id)
+                    }
+                  }
+                } catch (freqError) {
+                  mainLogger.warn(
+                    `Failed to update variant frequencies: ${freqError}`,
+                    'batch-import'
+                  )
+                }
+
                 // Send final progress
                 safeEmit('batch-import:progress', {
                   currentIndex: msg.results.details.length,

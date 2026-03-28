@@ -100,6 +100,12 @@ export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies):
                 elapsed: 0,
                 skipped: 0
               })
+              // Update internal variant frequency counts
+              try {
+                db.variants.updateFrequencies(capturedCaseId)
+              } catch (freqError) {
+                mainLogger.warn(`Failed to update variant frequencies: ${freqError}`, 'import')
+              }
               resolve({
                 caseId: capturedCaseId,
                 variantCount: detail.variantCount ?? 0,

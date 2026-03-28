@@ -113,6 +113,13 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDepen
         safeEmit('cohort:summaryRebuilt', { is_stale: true })
       }
 
+      // Decrement variant frequency counts before case deletion
+      try {
+        db.variants.decrementFrequencies(validated.data)
+      } catch (freqError) {
+        mainLogger.warn(`Failed to decrement variant frequencies: ${freqError}`, 'cases')
+      }
+
       db.cases.deleteCase(validated.data)
 
       if (incrementalSucceeded) {
@@ -129,6 +136,17 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDepen
       const db = getDb()
       mainLogger.info(`Starting deleteAll worker (db: ${db.getPath()})`, 'cases')
       safeEmit('cohort:summaryRebuilt', { is_stale: true })
+
+      // Decrement variant frequency counts for all cases before deletion
+      try {
+        const allCases = db.cases.getAllCases()
+        for (const c of allCases) {
+          db.variants.decrementFrequencies(c.id)
+        }
+      } catch (freqError) {
+        mainLogger.warn(`Failed to decrement variant frequencies: ${freqError}`, 'cases')
+      }
+
       try {
         const deleted = await runDeleteWorker({
           type: 'deleteAll',
@@ -160,6 +178,16 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDepen
 
       const db = getDb()
       safeEmit('cohort:summaryRebuilt', { is_stale: true })
+
+      // Decrement variant frequency counts before batch deletion
+      try {
+        for (const caseId of validated.data) {
+          db.variants.decrementFrequencies(caseId)
+        }
+      } catch (freqError) {
+        mainLogger.warn(`Failed to decrement variant frequencies: ${freqError}`, 'cases')
+      }
+
       const deleted = await runDeleteWorker({
         type: 'deleteBatch',
         dbPath: db.getPath(),
