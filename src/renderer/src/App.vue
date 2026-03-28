@@ -4,9 +4,6 @@
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
       @show-database-overview="dialogHostRef?.showDatabaseOverview()"
       @import-click="dialogHostRef?.showImportDialog()"
-      @batch-import-files="dialogHostRef?.showBatchImportDialog('files')"
-      @batch-import-folder="dialogHostRef?.showBatchImportDialog('folder')"
-      @batch-import-zip="dialogHostRef?.showBatchImportDialog('zip')"
       @show-external-links="dialogHostRef?.showExternalLinks()"
       @show-tag-management="dialogHostRef?.showTagManagement()"
       @show-panel-manager="dialogHostRef?.showPanelManager()"
@@ -20,13 +17,7 @@
     />
 
     <v-navigation-drawer v-model="sidebarOpen" :width="sidebarWidth" :scrim="tier === 'narrow'">
-      <AppSidebar
-        :case-count="caseCount"
-        @import-click="dialogHostRef?.showImportDialog()"
-        @batch-import-files="dialogHostRef?.showBatchImportDialog('files')"
-        @batch-import-folder="dialogHostRef?.showBatchImportDialog('folder')"
-        @batch-import-zip="dialogHostRef?.showBatchImportDialog('zip')"
-      >
+      <AppSidebar :case-count="caseCount" @import-click="dialogHostRef?.showImportDialog()">
         <CaseList
           ref="caseListRef"
           @case-selected="handleCaseSelected"

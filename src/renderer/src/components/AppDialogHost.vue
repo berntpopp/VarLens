@@ -1,5 +1,9 @@
 <template>
-  <ImportDialog ref="importDialogRef" @import-complete="handleImportComplete" />
+  <UnifiedImportDialog
+    ref="unifiedImportRef"
+    @import-complete="handleImportComplete"
+    @start-batch="handleStartBatch"
+  />
   <BatchImportDialog
     ref="batchImportDialogRef"
     @batch-import-complete="handleBatchImportComplete"
@@ -26,7 +30,7 @@
 
 <script setup lang="ts">
 import { ref, defineAsyncComponent, onMounted, nextTick, watch } from 'vue'
-import ImportDialog from './ImportDialog.vue'
+import UnifiedImportDialog from './UnifiedImportDialog.vue'
 import BatchImportDialog from './BatchImportDialog.vue'
 import AppSnackbar from './AppSnackbar.vue'
 import LogViewer from './LogViewer.vue'
@@ -59,7 +63,7 @@ const emit = defineEmits<{
 }>()
 
 // Dialog refs
-const importDialogRef = ref<InstanceType<typeof ImportDialog> | null>(null)
+const unifiedImportRef = ref<InstanceType<typeof UnifiedImportDialog> | null>(null)
 const batchImportDialogRef = ref<InstanceType<typeof BatchImportDialog> | null>(null)
 const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 const disclaimerRef = ref<InstanceType<typeof DisclaimerDialog> | null>(null)
@@ -132,6 +136,10 @@ const handleImportComplete = (result: {
   )
 }
 
+const handleStartBatch = (mode: 'files' | 'folder' | 'zip'): void => {
+  batchImportDialogRef.value?.show(mode)
+}
+
 const handleBatchImportComplete = (result: { totalImported: number }): void => {
   emit('batch-import-complete', result)
   const message =
@@ -151,7 +159,7 @@ onMounted(() => {
 
 // Expose dialog triggers for parent coordination
 defineExpose({
-  showImportDialog: () => importDialogRef.value?.show(),
+  showImportDialog: () => unifiedImportRef.value?.show(),
   showBatchImportDialog: (mode: 'files' | 'folder' | 'zip') =>
     batchImportDialogRef.value?.show(mode),
   showDisclaimer: () => disclaimerRef.value?.show(),
@@ -194,7 +202,7 @@ defineExpose({
   showCaseMetadata: () => caseMetadataModalRef.value?.show(),
   showSnackbar: (message: string, type: 'success' | 'error') =>
     snackbarRef.value?.show(message, type),
-  reopenImportDialog: () => importDialogRef.value?.reopen(),
+  reopenImportDialog: () => unifiedImportRef.value?.reopen(),
   reopenBatchImportDialog: () => batchImportDialogRef.value?.reopen(),
   toggleLogViewer: () => {
     logViewerOpen.value = !logViewerOpen.value
