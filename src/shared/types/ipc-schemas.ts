@@ -203,6 +203,12 @@ export const VariantFilterPartialSchema = z.object({
     .max(DOMAIN_CONFIG.MAX_CADD_SCORE)
     .nullish()
     .transform((val) => val ?? undefined),
+  max_internal_af: z
+    .number()
+    .min(0)
+    .max(1)
+    .nullish()
+    .transform((val) => val ?? undefined),
 
   // Exact match filters (for variant navigation)
   chr: nullishString(),

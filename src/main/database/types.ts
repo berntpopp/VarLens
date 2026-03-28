@@ -103,6 +103,8 @@ export interface Variant {
   aa_change: string | null
   /** Mode of inheritance, nullable */
   moi: string | null
+  /** Internal allele frequency across all cases (computed, not stored on variants table) */
+  internal_af?: number | null
 }
 
 /**
@@ -153,6 +155,8 @@ export interface VariantFilter {
   active_panel_ids?: number[]
   /** Panel padding in base pairs (IPC-only, used during interval computation) */
   panel_padding_bp?: number
+  /** Maximum internal allele frequency (0-1) */
+  max_internal_af?: number
 }
 
 /**

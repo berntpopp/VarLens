@@ -12,8 +12,13 @@ import { mainLogger } from '../services/MainLogger'
 
 import { DATABASE_CONFIG } from '../../shared/config'
 
-/** Kysely query builder type for variant queries */
-type VariantQueryBuilder = SelectQueryBuilder<VarlensDatabase, 'variants', Record<string, unknown>>
+/**
+ * Kysely query builder type for variant queries.
+ * Uses `any` for the table union to accommodate the LEFT JOIN alias ('vf')
+ * and the computed `internal_af` column which isn't in any physical table schema.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type VariantQueryBuilder = SelectQueryBuilder<VarlensDatabase, any, Record<string, unknown>>
 
 const BATCH_SIZE = DATABASE_CONFIG.BATCH_INSERT_SIZE
 
@@ -33,10 +38,21 @@ const SORTABLE_COLUMNS: Record<string, string> = {
   qual: 'qual',
   hpo_sim_score: 'hpo_sim_score',
   clinvar: 'clinvar',
-  moi: 'moi'
+  moi: 'moi',
+  internal_af: 'internal_af'
 }
 
-const NUMERIC_COLUMNS = new Set(['pos', 'gnomad_af', 'cadd', 'qual', 'hpo_sim_score'])
+const NUMERIC_COLUMNS = new Set([
+  'pos',
+  'gnomad_af',
+  'cadd',
+  'qual',
+  'hpo_sim_score',
+  'internal_af'
+])
+
+/** Columns that are computed at query time (not physical table columns) -- excluded from getColumnMeta */
+const COMPUTED_COLUMNS = new Set(['internal_af'])
 
 export class VariantRepository extends BaseRepository {
   private cases: CaseRepository
@@ -214,8 +230,20 @@ export class VariantRepository extends BaseRepository {
   ): VariantQueryBuilder {
     let query: VariantQueryBuilder = this.kysely
       .selectFrom('variants')
-      .selectAll()
-      .where('case_id', '=', filter.case_id)
+      .selectAll('variants')
+      .leftJoin('variant_frequency as vf', (join) =>
+        join
+          .onRef('vf.chr', '=', 'variants.chr')
+          .onRef('vf.pos', '=', 'variants.pos')
+          .onRef('vf.ref', '=', 'variants.ref')
+          .onRef('vf.alt', '=', 'variants.alt')
+      )
+      .select(
+        sql<
+          number | null
+        >`CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0)`.as('internal_af')
+      )
+      .where('variants.case_id', '=', filter.case_id)
 
     // Simple filters via $if
     query = query.$if(filter.gene_symbol !== undefined && filter.gene_symbol !== '', (qb) =>
@@ -249,17 +277,37 @@ export class VariantRepository extends BaseRepository {
         qb.where(({ or, eb }) => or([eb('cadd', 'is', null), eb('cadd', '>=', filter.cadd_min!)]))
       )
 
+    // Internal AF filter (NULL-inclusive: variants without frequency data pass)
+    query = query.$if(filter.max_internal_af !== undefined && filter.max_internal_af > 0, (qb) =>
+      qb.where(({ or, eb }) =>
+        or([
+          eb(sql.ref('vf.case_count'), 'is', null),
+          eb(
+            sql<number>`CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0)`,
+            '<=',
+            filter.max_internal_af!
+          )
+        ])
+      )
+    )
+
     // FTS5 search
     if (filter.search_query != null && filter.search_query !== '') {
       query = this.applySearchFilter(query, filter.search_query)
     }
 
-    // Exact variant match
+    // Exact variant match (table-qualified to avoid ambiguity with LEFT JOIN)
     query = query
-      .$if(filter.chr != null && filter.chr !== '', (qb) => qb.where('chr', '=', filter.chr!))
-      .$if(filter.pos != null, (qb) => qb.where('pos', '=', filter.pos!))
-      .$if(filter.ref != null && filter.ref !== '', (qb) => qb.where('ref', '=', filter.ref!))
-      .$if(filter.alt != null && filter.alt !== '', (qb) => qb.where('alt', '=', filter.alt!))
+      .$if(filter.chr != null && filter.chr !== '', (qb) =>
+        qb.where('variants.chr', '=', filter.chr!)
+      )
+      .$if(filter.pos != null, (qb) => qb.where('variants.pos', '=', filter.pos!))
+      .$if(filter.ref != null && filter.ref !== '', (qb) =>
+        qb.where('variants.ref', '=', filter.ref!)
+      )
+      .$if(filter.alt != null && filter.alt !== '', (qb) =>
+        qb.where('variants.alt', '=', filter.alt!)
+      )
 
     // Tag filter
     query = query.$if((filter.tag_ids?.length ?? 0) > 0, (qb) =>
@@ -698,7 +746,7 @@ export class VariantRepository extends BaseRepository {
     const useTempTable = this.preparePanelIntervals(filter)
     try {
       const compiled = this.buildVariantQuery(filter).compile()
-      const countSql = compiled.sql.replace(/^select \* from/i, 'select count(*) as count from')
+      const countSql = `SELECT count(*) as count FROM (${compiled.sql})`
       const result = this.db.prepare(countSql).get(...compiled.parameters) as { count: number }
       return result.count
     } finally {
@@ -730,7 +778,8 @@ export class VariantRepository extends BaseRepository {
    */
   private getColumnMeta(caseId: number): ColumnFilterMeta[] {
     const DISTINCT_THRESHOLD = 50
-    const columns = Object.entries(SORTABLE_COLUMNS)
+    // Exclude computed columns (e.g. internal_af) which don't exist as physical table columns
+    const columns = Object.entries(SORTABLE_COLUMNS).filter(([key]) => !COMPUTED_COLUMNS.has(key))
 
     // Query 1: Single scan — COUNT(DISTINCT col) for all columns + MIN/MAX for numeric columns
     const selectParts: string[] = []

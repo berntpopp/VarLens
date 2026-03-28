@@ -3,11 +3,24 @@ import { DatabaseService } from '../../../src/main/database'
 
 function makeVariant(overrides: Record<string, unknown> = {}) {
   return {
-    chr: '1', pos: 100, ref: 'A', alt: 'G',
-    gene_symbol: null, consequence: null, gnomad_af: null, cadd: null,
-    clinvar: null, gt_num: '0/1', func: null, qual: null,
-    hpo_sim_score: null, transcript: null, cdna: null,
-    aa_change: null, moi: null, omim_mim_number: null,
+    chr: '1',
+    pos: 100,
+    ref: 'A',
+    alt: 'G',
+    gene_symbol: null,
+    consequence: null,
+    gnomad_af: null,
+    cadd: null,
+    clinvar: null,
+    gt_num: '0/1',
+    func: null,
+    qual: null,
+    hpo_sim_score: null,
+    transcript: null,
+    cdna: null,
+    aa_change: null,
+    moi: null,
+    omim_mim_number: null,
     ...overrides
   }
 }
@@ -31,9 +44,11 @@ describe('VariantRepository — variant frequency', () => {
     ])
     service.variants.updateFrequencies(caseId)
 
-    const freq = service.db.prepare(
-      'SELECT case_count FROM variant_frequency WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
-    ).get('1', 100, 'A', 'G') as { case_count: number }
+    const freq = service.db
+      .prepare(
+        'SELECT case_count FROM variant_frequency WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
+      )
+      .get('1', 100, 'A', 'G') as { case_count: number }
     expect(freq.case_count).toBe(1)
   })
 
@@ -46,9 +61,11 @@ describe('VariantRepository — variant frequency', () => {
     service.variants.insertVariantsBatch(c2, [makeVariant()])
     service.variants.updateFrequencies(c2)
 
-    const freq = service.db.prepare(
-      'SELECT case_count FROM variant_frequency WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
-    ).get('1', 100, 'A', 'G') as { case_count: number }
+    const freq = service.db
+      .prepare(
+        'SELECT case_count FROM variant_frequency WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
+      )
+      .get('1', 100, 'A', 'G') as { case_count: number }
     expect(freq.case_count).toBe(2)
   })
 
@@ -59,10 +76,54 @@ describe('VariantRepository — variant frequency', () => {
 
     service.variants.decrementFrequencies(c1)
 
-    const freq = service.db.prepare(
-      'SELECT case_count FROM variant_frequency WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
-    ).get('1', 100, 'A', 'G') as { case_count: number } | undefined
+    const freq = service.db
+      .prepare(
+        'SELECT case_count FROM variant_frequency WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
+      )
+      .get('1', 100, 'A', 'G') as { case_count: number } | undefined
     expect(freq).toBeUndefined()
+  })
+
+  it('getVariants returns internal_af computed from variant_frequency', () => {
+    const c1 = service.cases.createCase('case-1', '/a.json', 100)
+    const c2 = service.cases.createCase('case-2', '/b.json', 100)
+
+    service.variants.insertVariantsBatch(c1, [makeVariant({ pos: 100 })])
+    service.variants.updateFrequencies(c1)
+    service.variants.insertVariantsBatch(c2, [makeVariant({ pos: 200, ref: 'C', alt: 'T' })])
+    service.variants.updateFrequencies(c2)
+
+    const result = service.variants.getVariants({ case_id: c1 }, 50, 0)
+    const v = result.data[0]
+    expect(v.internal_af).toBeCloseTo(0.5) // 1 out of 2 total cases
+  })
+
+  it('max_internal_af filter excludes high-frequency variants', () => {
+    const c1 = service.cases.createCase('case-1', '/a.json', 100)
+    const c2 = service.cases.createCase('case-2', '/b.json', 100)
+    const shared = makeVariant({ pos: 100 })
+    const unique = makeVariant({ pos: 200, ref: 'C', alt: 'T' })
+
+    service.variants.insertVariantsBatch(c1, [shared, unique])
+    service.variants.updateFrequencies(c1)
+    service.variants.insertVariantsBatch(c2, [shared])
+    service.variants.updateFrequencies(c2)
+
+    // Shared variant: 2/2 = 100%, unique: 1/2 = 50%
+    // Filter max 60% should keep only the unique variant
+    const result = service.variants.getVariants({ case_id: c1, max_internal_af: 0.6 }, 50, 0)
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0].pos).toBe(200)
+  })
+
+  it('variants without frequency data pass max_internal_af filter', () => {
+    const c1 = service.cases.createCase('case-1', '/a.json', 100)
+    service.variants.insertVariantsBatch(c1, [makeVariant({ pos: 100 })])
+    // Don't call updateFrequencies — no frequency data
+
+    const result = service.variants.getVariants({ case_id: c1, max_internal_af: 0.01 }, 50, 0)
+    // Should still return the variant (NULL-inclusive)
+    expect(result.data).toHaveLength(1)
   })
 
   it('decrementFrequencies leaves other cases counts intact', () => {
@@ -76,9 +137,11 @@ describe('VariantRepository — variant frequency', () => {
 
     service.variants.decrementFrequencies(c1)
 
-    const freq = service.db.prepare(
-      'SELECT case_count FROM variant_frequency WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
-    ).get('1', 100, 'A', 'G') as { case_count: number }
+    const freq = service.db
+      .prepare(
+        'SELECT case_count FROM variant_frequency WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
+      )
+      .get('1', 100, 'A', 'G') as { case_count: number }
     expect(freq.case_count).toBe(1)
   })
 })
