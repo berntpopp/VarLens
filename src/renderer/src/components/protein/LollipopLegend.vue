@@ -1,8 +1,10 @@
 <template>
-  <div class="lollipop-legend d-flex flex-wrap align-center ga-2 pa-2 bg-grey-lighten-4">
-    <!-- Consequence category chips (clickable toggle with "only" buttons) -->
-    <div class="d-flex flex-wrap ga-1 align-center">
-      <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">Consequence:</span>
+  <div class="lollipop-legend pa-2 bg-grey-lighten-4">
+    <!-- gnomAD Variants filter row -->
+    <div class="d-flex flex-wrap ga-1 align-center mb-2">
+      <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium section-label"
+        >gnomAD Variants:</span
+      >
       <div
         v-for="[category, color] in consequenceEntries"
         :key="category"
@@ -29,62 +31,66 @@
           only
         </v-btn>
       </div>
-      <v-btn
-        size="x-small"
+      <v-chip
+        size="small"
+        label
         variant="outlined"
-        class="ml-1 text-none"
+        color="grey-darken-1"
+        class="ml-2"
         @click="emit('select-all-categories')"
       >
-        all
-      </v-btn>
+        All
+      </v-chip>
     </div>
 
-    <!-- ClinVar significance chips -->
-    <template v-if="hasClinvar">
-      <v-divider vertical class="mx-1" />
-      <div class="d-flex flex-wrap ga-1 align-center">
-        <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">ClinVar:</span>
-        <div
-          v-for="[category, color] in clinvarEntries"
-          :key="category"
-          class="filter-pill"
-          :class="{ inactive: !isClinVarActive(category) }"
+    <!-- ClinVar filter row -->
+    <div v-if="hasClinvar" class="d-flex flex-wrap ga-1 align-center mb-2">
+      <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium section-label"
+        >ClinVar:</span
+      >
+      <div
+        v-for="[category, color] in clinvarEntries"
+        :key="category"
+        class="filter-pill"
+        :class="{ inactive: !isClinVarActive(category) }"
+      >
+        <v-chip
+          size="small"
+          label
+          :variant="isClinVarActive(category) ? 'flat' : 'outlined'"
+          :style="clinvarChipStyle(category, color)"
+          class="cursor-pointer"
+          @click="toggleClinVar(category)"
         >
-          <v-chip
-            size="small"
-            label
-            :variant="isClinVarActive(category) ? 'flat' : 'outlined'"
-            :style="clinvarChipStyle(category, color)"
-            class="cursor-pointer"
-            @click="toggleClinVar(category)"
-          >
-            {{ formatClinVarCategory(category) }}
-            ({{ clinvarCounts[category] ?? 0 }})
-          </v-chip>
-          <v-btn
-            size="x-small"
-            variant="text"
-            class="only-btn text-none"
-            @click.stop="emit('select-only-clinvar', category)"
-          >
-            only
-          </v-btn>
-        </div>
+          {{ formatClinVarCategory(category) }}
+          ({{ clinvarCounts[category] ?? 0 }})
+        </v-chip>
         <v-btn
           size="x-small"
-          variant="outlined"
-          class="ml-1 text-none"
-          @click="emit('select-all-clinvar')"
+          variant="text"
+          class="only-btn text-none"
+          @click.stop="emit('select-only-clinvar', category)"
         >
-          all
+          only
         </v-btn>
       </div>
-    </template>
+      <v-chip
+        size="small"
+        label
+        variant="outlined"
+        color="grey-darken-1"
+        class="ml-2"
+        @click="emit('select-all-clinvar')"
+      >
+        All
+      </v-chip>
+    </div>
 
     <!-- Domain color indicators -->
-    <v-divider v-if="domainTypes.length > 0" vertical class="mx-1" />
-    <div v-if="domainTypes.length > 0" class="d-flex flex-wrap ga-1 align-center">
-      <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">Domains:</span>
+    <div v-if="domainTypes.length > 0" class="d-flex flex-wrap ga-1 align-center mb-2">
+      <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium section-label"
+        >Domains:</span
+      >
       <span
         v-for="[type, color] in domainTypes"
         :key="type"
@@ -92,6 +98,52 @@
       >
         <span class="domain-swatch" :style="{ backgroundColor: color }" />
         {{ type }}
+      </span>
+    </div>
+
+    <!-- Track legend -->
+    <div
+      class="d-flex align-center flex-wrap ga-3 pt-1"
+      style="border-top: 1px solid rgba(0, 0, 0, 0.08)"
+    >
+      <span class="text-body-2 text-medium-emphasis font-weight-medium">Tracks:</span>
+      <span class="d-inline-flex align-center ga-1">
+        <span
+          style="
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #008000;
+            border: 2px solid #ffd700;
+            display: inline-block;
+          "
+        />
+        <span class="text-body-2">Your variant</span>
+      </span>
+      <span class="d-inline-flex align-center ga-1">
+        <span
+          style="
+            width: 8px;
+            height: 8px;
+            transform: rotate(45deg);
+            background: #d73027;
+            display: inline-block;
+          "
+        />
+        <span class="text-body-2">ClinVar</span>
+      </span>
+      <span class="d-inline-flex align-center ga-1">
+        <span
+          style="
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #008000;
+            opacity: 0.5;
+            display: inline-block;
+          "
+        />
+        <span class="text-body-2">gnomAD</span>
       </span>
     </div>
   </div>
@@ -239,5 +291,9 @@ function clinvarChipStyle(category: ClinVarSignificance, color: string): Record<
 
 .only-btn:hover {
   opacity: 1;
+}
+
+.section-label {
+  min-width: 110px;
 }
 </style>
