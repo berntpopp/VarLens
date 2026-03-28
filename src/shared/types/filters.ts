@@ -55,6 +55,8 @@ export interface FilterState {
   activePanelIds: number[]
   /** Padding in base pairs around panel gene regions */
   panelPaddingBp: number
+  /** Maximum internal database allele frequency (0-1) */
+  maxInternalAf: number | null
 }
 
 /**
@@ -76,4 +78,5 @@ export interface FilterIpcParams {
   acmg_classifications?: string[]
   active_panel_ids?: number[]
   panel_padding_bp?: number
+  max_internal_af?: number
 }

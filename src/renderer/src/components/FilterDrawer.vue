@@ -255,6 +255,48 @@
         </v-expansion-panel-text>
       </v-expansion-panel>
 
+      <!-- Internal Frequency -->
+      <v-expansion-panel value="internal-frequency">
+        <FilterPanelTitle
+          :icon="mdiDatabase"
+          label="Internal Frequency"
+          :active="isFilterGroupActive('internal-frequency')"
+          :value-summary="internalFrequencySummary"
+        />
+        <v-expansion-panel-text>
+          <div class="d-flex ga-1 flex-wrap mb-2">
+            <v-chip
+              v-for="preset in internalAfPresets"
+              :key="preset.value"
+              :color="selectedInternalAfPreset === preset.value ? 'primary' : undefined"
+              :variant="selectedInternalAfPreset === preset.value ? 'flat' : 'outlined'"
+              size="small"
+              label
+              @click="
+                selectedInternalAfPreset =
+                  selectedInternalAfPreset === preset.value ? null : preset.value
+              "
+            >
+              {{ preset.label }}
+            </v-chip>
+          </div>
+          <v-text-field
+            v-model="customInternalAf"
+            density="compact"
+            variant="outlined"
+            hide-details
+            type="number"
+            step="0.1"
+            min="0"
+            max="100"
+            placeholder="Max internal AF % (e.g. 5)"
+            clearable
+            suffix="%"
+            @click:clear="customInternalAf = ''"
+          />
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+
       <!-- CADD -->
       <v-expansion-panel value="cadd">
         <FilterPanelTitle
@@ -400,7 +442,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref, computed } from 'vue'
+import { inject, ref, computed, watch } from 'vue'
 import FilterDrawerShell from './filters/FilterDrawerShell.vue'
 import FilterPanelTitle from './filters/FilterPanelTitle.vue'
 import AnnotationScopeToggle from './AnnotationScopeToggle.vue'
@@ -418,6 +460,7 @@ import {
   mdiCircle,
   mdiCogOutline,
   mdiCommentText,
+  mdiDatabase,
   mdiDna,
   mdiEarth,
   mdiFlash,
@@ -447,6 +490,7 @@ const allPanelValues = [
   'function',
   'clinvar',
   'frequency',
+  'internal-frequency',
   'cadd',
   'tags',
   'annotations'
@@ -527,6 +571,59 @@ const clinvarSummary = computed(() =>
 const frequencySummary = computed(() => {
   if (filters.value.maxGnomadAf !== null && filters.value.maxGnomadAf > 0) {
     const pct = (filters.value.maxGnomadAf * 100).toFixed(2)
+    return `<= ${pct}%`
+  }
+  return ''
+})
+
+// Internal frequency filter state
+const internalAfPresets = [
+  { label: '<= 1%', value: 0.01 },
+  { label: '<= 5%', value: 0.05 },
+  { label: '<= 10%', value: 0.1 }
+] as const
+
+const selectedInternalAfPreset = ref<number | null>(null)
+const customInternalAf = ref<string>('')
+
+// Bidirectional sync: preset selection sets filter state and clears custom input
+watch(selectedInternalAfPreset, (val) => {
+  if (val !== null) {
+    filters.value.maxInternalAf = val
+    customInternalAf.value = ''
+  } else if (customInternalAf.value === '') {
+    filters.value.maxInternalAf = null
+  }
+})
+
+// Bidirectional sync: custom input sets filter state and clears preset
+watch(customInternalAf, (val) => {
+  const num = parseFloat(val)
+  if (val !== '' && !Number.isNaN(num) && num > 0) {
+    filters.value.maxInternalAf = num / 100
+    selectedInternalAfPreset.value = null
+  } else if (val === '') {
+    // Only clear if no preset is active
+    if (selectedInternalAfPreset.value === null) {
+      filters.value.maxInternalAf = null
+    }
+  }
+})
+
+// Sync filter state back to UI when cleared externally (e.g. "Clear all")
+watch(
+  () => filters.value.maxInternalAf,
+  (val) => {
+    if (val === null || val === 0) {
+      selectedInternalAfPreset.value = null
+      customInternalAf.value = ''
+    }
+  }
+)
+
+const internalFrequencySummary = computed(() => {
+  if (filters.value.maxInternalAf !== null && filters.value.maxInternalAf > 0) {
+    const pct = (filters.value.maxInternalAf * 100).toFixed(2)
     return `<= ${pct}%`
   }
   return ''

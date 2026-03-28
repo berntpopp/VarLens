@@ -67,6 +67,13 @@ export function buildIpcParams(filters: FilterState): FilterIpcParams {
     params.cadd_min = filters.minCadd
   }
   if (
+    filters.maxInternalAf !== null &&
+    !Number.isNaN(filters.maxInternalAf) &&
+    filters.maxInternalAf > 0
+  ) {
+    params.max_internal_af = filters.maxInternalAf
+  }
+  if (
     filters.minCohortFrequency !== null &&
     !Number.isNaN(filters.minCohortFrequency) &&
     filters.minCohortFrequency > 0

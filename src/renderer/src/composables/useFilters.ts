@@ -82,6 +82,8 @@ export interface FilterState {
   activePanelIds: number[]
   /** Padding in base pairs around panel gene regions */
   panelPaddingBp: number
+  /** Maximum internal database allele frequency (0-1) */
+  maxInternalAf: number | null
 }
 
 /**
@@ -130,6 +132,7 @@ function createInitialFilterState(): FilterState {
     clinvars: [],
     maxGnomadAf: null,
     minCadd: null,
+    maxInternalAf: null,
     minCohortFrequency: null,
     minCarriers: null,
     starredOnly: false,

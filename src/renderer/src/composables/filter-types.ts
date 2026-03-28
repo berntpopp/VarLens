@@ -19,6 +19,7 @@ export interface FilterState {
   annotationScope: 'case' | 'all'
   activePanelIds: number[]
   panelPaddingBp: number
+  maxInternalAf: number | null
 }
 
 /**
@@ -150,6 +151,11 @@ export function buildFilterFromState(
   if (filters.activePanelIds.length > 0) {
     variantFilter.active_panel_ids = [...filters.activePanelIds]
     variantFilter.panel_padding_bp = filters.panelPaddingBp
+  }
+
+  const internalAfValue = filters.maxInternalAf
+  if (internalAfValue !== null && Number.isNaN(internalAfValue) === false && internalAfValue > 0) {
+    variantFilter.max_internal_af = internalAfValue
   }
 
   return variantFilter

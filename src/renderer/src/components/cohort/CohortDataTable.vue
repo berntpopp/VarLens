@@ -581,6 +581,7 @@ const columnActiveFilters = computed<ActiveFilter[]>(() => {
       clinvars: [],
       maxGnomadAf: null,
       minCadd: null,
+      maxInternalAf: null,
       minCohortFrequency: null,
       minCarriers: null,
       starredOnly: false,

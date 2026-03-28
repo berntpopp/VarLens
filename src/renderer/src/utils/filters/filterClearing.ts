@@ -27,6 +27,7 @@ export type FilterId =
   | 'comments'
   | 'acmg'
   | 'panels'
+  | 'internal-frequency'
 
 /**
  * Clear a specific filter, returning partial state update
@@ -74,6 +75,8 @@ export function clearFilter(filterId: FilterId): Partial<FilterState> {
         activePanelIds: [...FILTER_DEFAULTS.activePanelIds],
         panelPaddingBp: FILTER_DEFAULTS.panelPaddingBp
       }
+    case 'internal-frequency':
+      return { maxInternalAf: FILTER_DEFAULTS.maxInternalAf }
     default:
       return {}
   }
@@ -106,6 +109,7 @@ export function clearAllFilters(): FilterState {
     hasCommentOnly: FILTER_DEFAULTS.hasCommentOnly,
     acmgClassifications: [...FILTER_DEFAULTS.acmgClassifications],
     activePanelIds: [...FILTER_DEFAULTS.activePanelIds],
-    panelPaddingBp: FILTER_DEFAULTS.panelPaddingBp
+    panelPaddingBp: FILTER_DEFAULTS.panelPaddingBp,
+    maxInternalAf: FILTER_DEFAULTS.maxInternalAf
   }
 }

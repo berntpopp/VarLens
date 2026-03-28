@@ -29,7 +29,8 @@ const COLUMN_LABELS: Record<string, string> = {
   het_count: 'Het',
   hom_count: 'Hom',
   ref: 'Ref',
-  alt: 'Alt'
+  alt: 'Alt',
+  internal_af: 'Internal AF'
 }
 
 /**
@@ -100,6 +101,10 @@ export function buildActiveFiltersList(
   if (filters.maxGnomadAf !== null && filters.maxGnomadAf > 0) {
     const pct = (filters.maxGnomadAf * 100).toFixed(2)
     list.push({ id: 'frequency', label: 'AF', value: `<= ${pct}%` })
+  }
+  if (filters.maxInternalAf !== null && filters.maxInternalAf > 0) {
+    const pct = (filters.maxInternalAf * 100).toFixed(2)
+    list.push({ id: 'internal-frequency', label: 'Internal AF', value: `\u2264 ${pct}%` })
   }
   if (filters.minCadd !== null && filters.minCadd >= 0) {
     list.push({ id: 'cadd', label: 'CADD', value: `>= ${filters.minCadd}` })

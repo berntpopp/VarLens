@@ -51,6 +51,18 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     ]
   },
   {
+    key: 'internal_af',
+    label: 'Internal AF',
+    aliases: ['internal_frequency', 'db_af', 'internal'],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    commonValues: [
+      { value: 0.01, label: '1%' },
+      { value: 0.05, label: '5%' },
+      { value: 0.1, label: '10%' }
+    ]
+  },
+  {
     key: 'cadd',
     label: 'CADD',
     aliases: ['cadd_phred', 'cadd_score'],

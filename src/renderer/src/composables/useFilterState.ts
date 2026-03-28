@@ -75,6 +75,7 @@ export function useFilterState(
     clinvars: [] as string[],
     maxGnomadAf: null as number | null,
     minCadd: null as number | null,
+    maxInternalAf: null as number | null,
     tagIds: [] as number[],
     starredOnly: false,
     hasCommentOnly: false,
@@ -157,6 +158,10 @@ export function useFilterState(
       filters.value.minCadd !== null &&
       Number.isNaN(filters.value.minCadd) === false &&
       filters.value.minCadd >= 0
+    const internalAfActive =
+      filters.value.maxInternalAf !== null &&
+      Number.isNaN(filters.value.maxInternalAf) === false &&
+      filters.value.maxInternalAf > 0
 
     return (
       filters.value.searchQuery !== '' ||
@@ -167,6 +172,7 @@ export function useFilterState(
       filters.value.clinvars.length > 0 ||
       afActive ||
       caddActive ||
+      internalAfActive ||
       filters.value.tagIds.length > 0 ||
       filters.value.starredOnly ||
       filters.value.hasCommentOnly ||
@@ -193,6 +199,12 @@ export function useFilterState(
       filters.value.minCadd !== null &&
       !Number.isNaN(filters.value.minCadd) &&
       filters.value.minCadd >= 0
+    )
+      count++
+    if (
+      filters.value.maxInternalAf !== null &&
+      !Number.isNaN(filters.value.maxInternalAf) &&
+      filters.value.maxInternalAf > 0
     )
       count++
     if (filters.value.tagIds.length > 0) count++
@@ -251,6 +263,14 @@ export function useFilterState(
     ) {
       list.push({ id: 'cadd', label: 'CADD \u2265', value: String(filters.value.minCadd) })
     }
+    if (
+      filters.value.maxInternalAf !== null &&
+      !Number.isNaN(filters.value.maxInternalAf) &&
+      filters.value.maxInternalAf > 0
+    ) {
+      const pct = (filters.value.maxInternalAf * 100).toFixed(2)
+      list.push({ id: 'internal-frequency', label: 'Internal AF \u2264', value: `${pct}%` })
+    }
     if (filters.value.tagIds.length > 0) {
       const tagNames = availableTags.value
         .filter((t) => filters.value.tagIds.includes(t.id))
@@ -306,6 +326,12 @@ export function useFilterState(
           !Number.isNaN(filters.value.maxGnomadAf) &&
           filters.value.maxGnomadAf > 0
         )
+      case 'internal-frequency':
+        return (
+          filters.value.maxInternalAf !== null &&
+          !Number.isNaN(filters.value.maxInternalAf) &&
+          filters.value.maxInternalAf > 0
+        )
       case 'cadd':
         return (
           filters.value.minCadd !== null &&
@@ -355,6 +381,9 @@ export function useFilterState(
         filters.value.maxGnomadAf = null
         selectedAfPreset.value = null
         break
+      case 'internal-frequency':
+        filters.value.maxInternalAf = null
+        break
       case 'cadd':
         filters.value.minCadd = null
         selectedCaddPreset.value = null
@@ -393,6 +422,7 @@ export function useFilterState(
     filters.value.clinvars = []
     filters.value.maxGnomadAf = null
     filters.value.minCadd = null
+    filters.value.maxInternalAf = null
     filters.value.tagIds = []
     filters.value.starredOnly = false
     filters.value.hasCommentOnly = false
@@ -458,6 +488,7 @@ export function useFilterState(
     filters.value.clinvars = []
     filters.value.maxGnomadAf = null
     filters.value.minCadd = null
+    filters.value.maxInternalAf = null
     filters.value.tagIds = []
     filters.value.starredOnly = false
     filters.value.hasCommentOnly = false
