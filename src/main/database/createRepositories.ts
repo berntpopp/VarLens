@@ -22,6 +22,7 @@ import { CohortSummaryService } from './CohortSummaryService'
 import { FilterPresetRepository } from './FilterPresetRepository'
 import { PanelRepository } from './PanelRepository'
 import { CohortService } from './cohort'
+import { AnalysisGroupRepository } from './AnalysisGroupRepository'
 
 export function createRepositories(db: DatabaseType) {
   const kysely = createKysely(db)
@@ -40,6 +41,7 @@ export function createRepositories(db: DatabaseType) {
   const filterPresets = new FilterPresetRepository(db, kysely)
   const panels = new PanelRepository(db, kysely)
   const cohort = new CohortService(db)
+  const analysisGroups = new AnalysisGroupRepository(db, kysely)
 
   return {
     kysely,
@@ -56,7 +58,8 @@ export function createRepositories(db: DatabaseType) {
     cohortSummary,
     filterPresets,
     panels,
-    cohort
+    cohort,
+    analysisGroups
   }
 }
 

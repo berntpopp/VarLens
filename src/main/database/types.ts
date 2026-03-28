@@ -538,6 +538,49 @@ export interface CaseMetricWithDefinition extends CaseMetric {
 }
 
 /**
+ * AnalysisGroup - Family or tumor/normal group definition
+ */
+export interface AnalysisGroup {
+  id: number
+  name: string
+  group_type: 'family' | 'tumor_normal'
+  description: string | null
+  created_at: number
+  updated_at: number
+}
+
+export type AnalysisGroupRole =
+  | 'proband'
+  | 'father'
+  | 'mother'
+  | 'sibling'
+  | 'partner'
+  | 'other'
+  | 'tumor'
+  | 'normal'
+
+export type AffectedStatusValue = 'affected' | 'unaffected' | 'unknown'
+
+/**
+ * AnalysisGroupMember - Case membership within an analysis group
+ */
+export interface AnalysisGroupMember {
+  id: number
+  group_id: number
+  case_id: number
+  role: AnalysisGroupRole
+  affected_status: AffectedStatusValue
+  individual_id: string | null
+}
+
+/**
+ * AnalysisGroupWithMembers - Analysis group with its members populated
+ */
+export interface AnalysisGroupWithMembers extends AnalysisGroup {
+  members: AnalysisGroupMember[]
+}
+
+/**
  * Audit trail action types
  */
 export type AuditActionType =

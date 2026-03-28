@@ -31,6 +31,7 @@ import type { CohortSummaryService } from './CohortSummaryService'
 import type { CohortService } from './cohort'
 import type { FilterPresetRepository } from './FilterPresetRepository'
 import type { PanelRepository } from './PanelRepository'
+import type { AnalysisGroupRepository } from './AnalysisGroupRepository'
 
 /**
  * DatabaseService class
@@ -167,6 +168,10 @@ export class DatabaseService {
 
   get panels(): PanelRepository {
     return this._repos.panels
+  }
+
+  get analysisGroups(): AnalysisGroupRepository {
+    return this._repos.analysisGroups
   }
 
   get user(): { id: number; username: string; role: string } | null {

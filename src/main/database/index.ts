@@ -89,6 +89,7 @@ export { AnnotationRepository } from './AnnotationRepository'
 export { MetadataRepository } from './MetadataRepository'
 export { TagRepository } from './TagRepository'
 export { DatabaseOverviewService } from './DatabaseOverviewService'
+export { AnalysisGroupRepository } from './AnalysisGroupRepository'
 
 // Types
 export type {
@@ -111,7 +112,12 @@ export type {
   CommentCategory,
   MetricDefinition,
   CaseMetric,
-  CaseMetricWithDefinition
+  CaseMetricWithDefinition,
+  AnalysisGroup,
+  AnalysisGroupMember,
+  AnalysisGroupWithMembers,
+  AnalysisGroupRole,
+  AffectedStatusValue
 } from './types'
 
 // Errors
