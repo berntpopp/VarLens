@@ -9,6 +9,7 @@
         <v-select
           v-model="selectedOperator"
           :items="operators"
+          :aria-label="`${columnTitle} filter operator`"
           density="compact"
           variant="outlined"
           hide-details
@@ -16,7 +17,8 @@
         />
         <v-text-field
           v-model.number="filterValue"
-          placeholder="Value"
+          :placeholder="`${columnTitle} value`"
+          :aria-label="`${columnTitle} filter value`"
           type="number"
           density="compact"
           variant="outlined"

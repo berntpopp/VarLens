@@ -8,7 +8,8 @@
       <v-autocomplete
         v-model="filterValue"
         :items="suggestions"
-        placeholder="Type to filter..."
+        :placeholder="`Filter ${columnTitle}...`"
+        :aria-label="`Filter ${columnTitle}`"
         density="compact"
         variant="outlined"
         clearable

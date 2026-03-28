@@ -743,13 +743,16 @@ export const ACMG_CLASSIFICATIONS: AcmgClassification[] = [
   'Benign'
 ]
 
-// ACMG color mapping for badges
+// ACMG color mapping — colorblind-safe palette (Okabe-Ito derived).
+// Avoids red/green confusion for deuteranopia/protanopia (~8% of males).
+// Uses blue for benign instead of green, vermillion for pathogenic instead of
+// pure red, ensuring distinguishable hues across all CVD types.
 export const ACMG_COLORS: Record<AcmgClassification, string> = {
-  Pathogenic: 'error', // Red
-  'Likely Pathogenic': 'orange', // Orange
-  VUS: 'grey', // Gray
-  'Likely Benign': 'light-blue', // Light blue
-  Benign: 'success' // Green
+  Pathogenic: '#C62828', // Deep red — distinct in all CVD types
+  'Likely Pathogenic': '#D55E00', // Vermillion (Okabe-Ito) — warm, distinct from red
+  VUS: '#757575', // Neutral grey — no hue confusion
+  'Likely Benign': '#0072B2', // Blue (Okabe-Ito) — universally distinguishable
+  Benign: '#009E73' // Teal/bluish-green (Okabe-Ito) — distinct from red/orange for CVD
 }
 
 // ACMG abbreviations for compact display

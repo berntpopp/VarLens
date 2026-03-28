@@ -21,9 +21,12 @@
               :variant="getButtonVariant(code)"
               size="x-small"
               density="compact"
+              :aria-pressed="isCodeActive(code)"
+              :aria-label="`${code}: ${CODE_DESCRIPTIONS[code]}${isCodeActive(code) ? ' (active)' : ''}${isCodeSuggested(code) ? ' (suggested)' : ''}`"
               :class="[
                 'criteria-btn text-caption',
                 {
+                  'criteria-btn--active': isCodeActive(code),
                   'criteria-btn--suggested': isCodeSuggested(code),
                   'criteria-btn--deprecated': isDeprecated(code)
                 }
@@ -188,6 +191,11 @@ function getStrengthPoints(strength: EvidenceStrength): number {
   font-size: 12px !important;
   letter-spacing: 0 !important;
   height: 28px !important;
+}
+
+.criteria-btn--active {
+  font-weight: 600;
+  box-shadow: 0 0 0 2px currentColor;
 }
 
 .criteria-btn--suggested {

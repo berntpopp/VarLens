@@ -28,53 +28,57 @@ const custom: IconSet = {
     ])
 }
 
-// Warm light theme with RequiForm palette
+// "Clinical Slate" light theme — WCAG 2.1 AA+ compliant
+// Slate-navy primary inspired by NCBI/ClinVar/Broad Institute design language.
+// All semantic colors achieve >= 4.5:1 contrast on surface for normal text.
+// Cool-toned surfaces with subtle blue tint for a clinical, professional feel.
 const warmLight: ThemeDefinition = {
   dark: false,
   colors: {
-    primary: '#a09588',
-    secondary: '#424242',
-    surface: '#faf8f6',
-    'surface-variant': '#f5f2ef',
-    'surface-bright': '#ffffff',
-    background: '#fefdfb',
-    error: '#c85a54',
-    info: '#5b8a9f',
-    success: '#6b9b6e',
-    warning: '#d4a05e',
-    'on-primary': '#ffffff',
-    'on-secondary': '#ffffff',
-    'on-surface': '#1c1b1f',
-    'on-background': '#1c1b1f',
-    'on-error': '#ffffff',
-    'on-info': '#ffffff',
-    'on-success': '#ffffff',
-    'on-warning': '#000000'
+    primary: '#1E3A5F', // Slate navy → 11.1:1 on surface (AAA)
+    secondary: '#455A64', // Blue-grey → 7.0:1 on surface (AAA)
+    surface: '#FAFBFD',
+    'surface-variant': '#ECF0F4',
+    'surface-bright': '#FFFFFF',
+    background: '#F0F4F8',
+    error: '#B71C1C', // Deep red → 6.3:1 on surface (AA)
+    info: '#1565C0', // Blue → 5.5:1 on surface (AA)
+    success: '#1B5E20', // Dark green → 7.6:1 on surface (AAA)
+    warning: '#BF360C', // Deep orange → 5.4:1 on surface (AA)
+    'on-primary': '#FFFFFF', // 11.5:1 on primary (AAA)
+    'on-secondary': '#FFFFFF',
+    'on-surface': '#1A1D23', // 16.3:1 on surface (AAA)
+    'on-background': '#1A1D23',
+    'on-error': '#FFFFFF',
+    'on-info': '#FFFFFF',
+    'on-success': '#FFFFFF',
+    'on-warning': '#FFFFFF'
   }
 }
 
-// Warm dark theme with warm-shifted colors
+// "Clinical Slate" dark theme — WCAG 2.1 AA+ compliant
+// Lightened variants of the slate palette for dark surfaces.
 const warmDark: ThemeDefinition = {
   dark: true,
   colors: {
-    primary: '#a09588',
-    secondary: '#bdbdbd',
-    surface: '#2a2724',
-    'surface-variant': '#3a3632',
-    'surface-bright': '#4a4540',
-    background: '#1e1c1a',
-    error: '#d47470',
-    info: '#7ba8bb',
-    success: '#87b58a',
-    warning: '#ddb880',
-    'on-primary': '#ffffff',
-    'on-secondary': '#000000',
-    'on-surface': '#e6e1e5',
-    'on-background': '#e6e1e5',
-    'on-error': '#000000',
-    'on-info': '#000000',
-    'on-success': '#000000',
-    'on-warning': '#000000'
+    primary: '#7BAED4', // Light slate blue → 7.1:1 on surface (AAA)
+    secondary: '#90A4AE', // Light blue-grey → 6.5:1 on surface (AA)
+    surface: '#1A1D22',
+    'surface-variant': '#252A32',
+    'surface-bright': '#30353E',
+    background: '#12141A',
+    error: '#EF9A9A', // Light red → 7.9:1 on surface (AAA)
+    info: '#64B5F6', // Light blue → 7.6:1 on surface (AAA)
+    success: '#A5D6A7', // Light green → 10.3:1 on surface (AAA)
+    warning: '#FFB74D', // Light orange → 9.8:1 on surface (AAA)
+    'on-primary': '#12141A',
+    'on-secondary': '#12141A',
+    'on-surface': '#E4E7EC', // 13.6:1 on surface (AAA)
+    'on-background': '#E4E7EC',
+    'on-error': '#12141A',
+    'on-info': '#12141A',
+    'on-success': '#12141A',
+    'on-warning': '#12141A'
   }
 }
 
