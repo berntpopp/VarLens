@@ -111,9 +111,16 @@ export function useCaseMetadata() {
     }
   }
 
-  // Get metadata from cache
+  // Get metadata from cache (LRU: move to end on access to mark as recently used)
   function getMetadata(caseId: number): FullCaseMetadata | undefined {
-    return metadataCache.value.get(caseId)
+    const cache = metadataCache.value
+    const value = cache.get(caseId)
+    if (value !== undefined) {
+      // Move to end of Map (most recently used) for LRU eviction
+      cache.delete(caseId)
+      cache.set(caseId, value)
+    }
+    return value
   }
 
   // Check if loading

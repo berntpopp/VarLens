@@ -477,25 +477,48 @@ export class CohortService {
     return stmt.all() as GeneBurden[]
   }
 
+  /** Cached column metadata — invalidated on summary rebuild */
+  private _columnMetaCache: ColumnFilterMeta[] | null = null
+
+  /** Clear cached column metadata (call after cohort summary rebuild) */
+  invalidateColumnMetaCache(): void {
+    this._columnMetaCache = null
+  }
+
   /**
    * Get per-column metadata from cohort_variant_summary for filter UI auto-detection.
    *
-   * Returns distinct count, data type, distinct values (if few), and min/max for numerics.
+   * Uses a single aggregate query to compute all COUNT(DISTINCT), MIN, MAX values
+   * in one table scan, then fetches distinct values only for low-cardinality columns.
+   * Results are cached and invalidated on summary rebuild.
    */
   getColumnMeta(): ColumnFilterMeta[] {
+    if (this._columnMetaCache !== null) return this._columnMetaCache
+
     const DISTINCT_THRESHOLD = 50
+    const entries = Object.entries(SORTABLE_COLUMNS)
+
+    // Single-pass aggregate: compute COUNT(DISTINCT), MIN, MAX for all columns at once
+    const selectParts = entries.map(([key, sqlCol]) => {
+      const parts = [`COUNT(DISTINCT ${sqlCol}) AS cnt_${key}`]
+      if (NUMERIC_COLUMNS.has(key)) {
+        parts.push(`MIN(${sqlCol}) AS min_${key}`)
+        parts.push(`MAX(${sqlCol}) AS max_${key}`)
+      }
+      return parts.join(', ')
+    })
+    const aggRow = this.db
+      .prepare(`SELECT ${selectParts.join(', ')} FROM cohort_variant_summary`)
+      .get() as Record<string, number | null>
+
+    // Build metadata from aggregate results
     const meta: ColumnFilterMeta[] = []
+    // Collect low-cardinality columns for UNION ALL distinct-value fetch
+    const lowCardColumns: Array<{ key: string; sqlCol: string }> = []
 
-    for (const [key, sqlCol] of Object.entries(SORTABLE_COLUMNS)) {
+    for (const [key, sqlCol] of entries) {
       const isNumeric = NUMERIC_COLUMNS.has(key)
-
-      // Get distinct count
-      const countResult = this.db
-        .prepare(
-          `SELECT COUNT(DISTINCT ${sqlCol}) as cnt FROM cohort_variant_summary WHERE ${sqlCol} IS NOT NULL`
-        )
-        .get() as { cnt: number }
-      const distinctCount = countResult?.cnt ?? 0
+      const distinctCount = (aggRow[`cnt_${key}`] as number) ?? 0
 
       const entry: ColumnFilterMeta = {
         key,
@@ -503,30 +526,50 @@ export class CohortService {
         distinctCount
       }
 
-      // For numeric columns: fetch min/max
       if (isNumeric) {
-        const rangeResult = this.db
-          .prepare(
-            `SELECT MIN(${sqlCol}) as min_val, MAX(${sqlCol}) as max_val FROM cohort_variant_summary WHERE ${sqlCol} IS NOT NULL`
-          )
-          .get() as { min_val: number | null; max_val: number | null }
-        entry.min = rangeResult?.min_val ?? undefined
-        entry.max = rangeResult?.max_val ?? undefined
+        entry.min = (aggRow[`min_${key}`] as number | null) ?? undefined
+        entry.max = (aggRow[`max_${key}`] as number | null) ?? undefined
       }
 
-      // Populate distinct values if count is within threshold
       if (distinctCount > 0 && distinctCount <= DISTINCT_THRESHOLD) {
-        const rows = this.db
-          .prepare(
-            `SELECT DISTINCT ${sqlCol} as val FROM cohort_variant_summary WHERE ${sqlCol} IS NOT NULL ORDER BY ${sqlCol}`
-          )
-          .all() as Array<{ val: unknown }>
-        entry.distinctValues = rows.map((r) => String(r.val))
+        lowCardColumns.push({ key, sqlCol })
       }
 
       meta.push(entry)
     }
 
+    // Single UNION ALL query for all low-cardinality distinct values
+    if (lowCardColumns.length > 0) {
+      const unionParts = lowCardColumns.map(
+        ({ key, sqlCol }) =>
+          `SELECT '${key}' AS col_key, CAST(${sqlCol} AS TEXT) AS val FROM cohort_variant_summary WHERE ${sqlCol} IS NOT NULL GROUP BY ${sqlCol}`
+      )
+      const rows = this.db.prepare(unionParts.join(' UNION ALL ')).all() as Array<{
+        col_key: string
+        val: string
+      }>
+
+      // Group distinct values by column key
+      const valuesByKey = new Map<string, string[]>()
+      for (const row of rows) {
+        let arr = valuesByKey.get(row.col_key)
+        if (arr === undefined) {
+          arr = []
+          valuesByKey.set(row.col_key, arr)
+        }
+        arr.push(row.val)
+      }
+
+      // Attach to metadata entries
+      for (const entry of meta) {
+        const values = valuesByKey.get(entry.key)
+        if (values !== undefined) {
+          entry.distinctValues = values.sort()
+        }
+      }
+    }
+
+    this._columnMetaCache = meta
     return meta
   }
 

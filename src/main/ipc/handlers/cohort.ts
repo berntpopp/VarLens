@@ -4,7 +4,7 @@ import { Worker } from 'worker_threads'
 import { resolve } from 'node:path'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
-import { CohortService } from '../../database/cohort'
+import type { CohortService } from '../../database/cohort'
 import { AssociationEngine } from '../../statistics/AssociationEngine'
 import {
   CohortSearchParamsSchema,
@@ -91,8 +91,7 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
         result = await pool.run({ type: 'cohort:variants', params: [cohortParams] })
       } else {
         const db = getDb()
-        const cohortService = new CohortService(db.database)
-        result = cohortService.getCohortVariants(cohortParams)
+        result = db.cohort.getCohortVariants(cohortParams)
       }
       // Deep clone to plain object for IPC serialization
       // better-sqlite3 can return objects with non-serializable properties
@@ -133,8 +132,7 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
       }
 
       const db = getDb()
-      const cohortService = new CohortService(db.database)
-      return cohortService.getColumnMeta()
+      return db.cohort.getColumnMeta()
     })
   })
 
@@ -146,8 +144,7 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
         summary = await pool.run({ type: 'cohort:summary', params: [] })
       } else {
         const db = getDb()
-        const cohortService = new CohortService(db.database)
-        summary = cohortService.getCohortSummary()
+        summary = db.cohort.getCohortSummary()
       }
       // Convert BigInt values to Number for IPC serialization (avoids
       // double serialization via JSON.parse(JSON.stringify(...)))
@@ -175,8 +172,7 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
           })
         } else {
           const db = getDb()
-          const cohortService = new CohortService(db.database)
-          carriers = cohortService.getCarriers(
+          carriers = db.cohort.getCarriers(
             validated.data.chr,
             validated.data.pos,
             validated.data.ref,
@@ -201,8 +197,7 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
       }
 
       const db = getDb()
-      const cohortService = new CohortService(db.database)
-      return cohortService.getGeneBurden()
+      return db.cohort.getGeneBurden()
     })
   })
 
@@ -275,6 +270,7 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
       const db = getDb()
       safeEmit('cohort:summaryRebuilt', { is_stale: true })
       db.cohortSummary.rebuild()
+      db.cohort.invalidateColumnMetaCache()
       safeEmit('cohort:summaryRebuilt', { is_stale: false })
     })
   })
@@ -312,6 +308,11 @@ export function triggerStartupRebuildIfNeeded(db: DatabaseService): void {
   worker.on('message', (msg: RebuildWorkerResponse) => {
     if (msg.type === 'complete') {
       mainLogger.info('Startup: cohort summary rebuild completed', 'cohort')
+      try {
+        db.cohort.invalidateColumnMetaCache()
+      } catch {
+        /* DB may be closed */
+      }
       safeEmit('cohort:summaryRebuilt', { is_stale: false })
     } else {
       mainLogger.error(`Startup: cohort summary rebuild failed: ${msg.error}`, 'cohort')

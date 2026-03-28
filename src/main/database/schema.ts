@@ -221,8 +221,9 @@ function schemaAlreadyExists(db: Database.Database): boolean {
  * 5. Create FTS sync triggers
  *
  * For existing databases where all four core tables are already present,
- * the expensive CREATE IF NOT EXISTS / PRAGMA table_info checks are skipped
- * entirely — shaving ~50-100 ms off every cold start.
+ * the expensive CREATE TABLE IF NOT EXISTS statements are skipped — shaving
+ * ~50-100 ms off every cold start. Column migrations (via PRAGMA table_info)
+ * and index creation (via CREATE INDEX IF NOT EXISTS) still always run.
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  * @throws Error if schema creation fails
@@ -233,12 +234,15 @@ export function initializeSchema(db: Database.Database): void {
   if (!existingSchema) {
     // Full schema creation for new databases
     db.exec(createTables)
-    db.exec(createIndexes)
   }
 
-  // Always run column migrations — they use IF NOT EXISTS internally
-  // and must run even on existing databases to add newer columns
+  // Always run column migrations — they inspect existing columns via PRAGMA
+  // and are safe to run on existing databases to add newer columns
   migrateVariantsTable(db)
+
+  // Always ensure indexes exist — statements use IF NOT EXISTS internally,
+  // so this is safe and keeps existing databases up to date with new indexes.
+  db.exec(createIndexes)
 
   // Check if variants table has omim_mim_number column
   const columns = db.prepare('PRAGMA table_info(variants)').all() as { name: string }[]

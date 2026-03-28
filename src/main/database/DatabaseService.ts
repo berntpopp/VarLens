@@ -28,6 +28,7 @@ import type { AuditLogRepository } from './AuditLogRepository'
 import type { GeneListRepository } from './GeneListRepository'
 import type { AuthService } from '../services/auth'
 import type { CohortSummaryService } from './CohortSummaryService'
+import type { CohortService } from './cohort'
 import type { FilterPresetRepository } from './FilterPresetRepository'
 import type { PanelRepository } from './PanelRepository'
 
@@ -150,6 +151,10 @@ export class DatabaseService {
 
   get auth(): AuthService {
     return this._repos.auth
+  }
+
+  get cohort(): CohortService {
+    return this._repos.cohort
   }
 
   get cohortSummary(): CohortSummaryService {

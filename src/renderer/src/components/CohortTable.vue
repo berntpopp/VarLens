@@ -103,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 // Composables
 import { useOffsetPagination } from '../composables/useOffsetPagination'
 import { useCohortData } from '../composables/useCohortData'
@@ -449,19 +449,16 @@ watch(summaryStale, (newVal, oldVal) => {
   }
 })
 
-// Lifecycle
-onMounted(() => {
-  void fetchSummary()
-  void fetchColumnMeta()
-})
-
+// Lifecycle — no data fetching on mount; parent controls initialization
+// via refresh() to avoid duplicate IPC calls (onMounted + parent refresh).
 onUnmounted(() => {
   cleanupListeners()
 })
 
-// Expose refresh method
+// Expose refresh method — single entry point for all data loading
 const refresh = async () => {
   void fetchSummary()
+  void fetchColumnMeta()
   await invalidateAndReload()
 }
 defineExpose({ refresh })
