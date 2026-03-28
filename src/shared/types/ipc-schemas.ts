@@ -249,6 +249,22 @@ export const VariantFilterPartialSchema = z.object({
     .nonnegative()
     .max(1000000)
     .nullish()
+    .transform((val) => val ?? undefined),
+
+  // Inheritance mode filters
+  inheritance_modes: z
+    .array(z.string())
+    .nullish()
+    .transform((val) => val ?? undefined),
+  analysis_group_id: z
+    .number()
+    .int()
+    .positive()
+    .nullish()
+    .transform((val) => val ?? undefined),
+  consider_phasing: z
+    .boolean()
+    .nullish()
     .transform((val) => val ?? undefined)
 })
 

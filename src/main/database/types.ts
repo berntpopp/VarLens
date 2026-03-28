@@ -157,6 +157,12 @@ export interface VariantFilter {
   panel_padding_bp?: number
   /** Maximum internal allele frequency (0-1) */
   max_internal_af?: number
+  /** Inheritance mode filters */
+  inheritance_modes?: string[]
+  /** Analysis group ID for trio-based inheritance filtering */
+  analysis_group_id?: number
+  /** Whether to consider phasing for compound het */
+  consider_phasing?: boolean
 }
 
 /**

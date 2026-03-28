@@ -501,6 +501,40 @@ export class VariantRepository extends BaseRepository {
       }
     }
 
+    // ── Inheritance mode filters ─────────────────────────────
+    if (filter.inheritance_modes && filter.inheritance_modes.length > 0) {
+      const modes = filter.inheritance_modes
+      const conditions: string[] = []
+
+      // Solo modes
+      if (modes.includes('homozygous')) {
+        conditions.push("variants.gt_num IN ('1/1', '1|1')")
+      }
+      if (modes.includes('heterozygous')) {
+        conditions.push("variants.gt_num IN ('0/1', '0|1', '1|0')")
+      }
+      if (modes.includes('x_hemizygous')) {
+        conditions.push(
+          "(variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1'))"
+        )
+      }
+      if (modes.includes('candidate_compound_het')) {
+        conditions.push(
+          `(variants.gene_symbol IN (
+            SELECT v2.gene_symbol FROM variants v2
+            WHERE v2.case_id = ${filter.case_id}
+              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gene_symbol IS NOT NULL
+            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
+          ) AND variants.gt_num IN ('0/1', '0|1', '1|0'))`
+        )
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(sql<boolean>`(${sql.raw(conditions.join(' OR '))})`)
+      }
+    }
+
     return query
   }
 
