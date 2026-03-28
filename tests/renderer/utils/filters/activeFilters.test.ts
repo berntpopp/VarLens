@@ -77,6 +77,87 @@ describe('buildActiveFiltersList', () => {
     expect(acmg!.value).toBe('Pathogenic, Likely pathogenic')
   })
 
+  // Internal AF filter chip
+  describe('internal AF chip', () => {
+    it('shows internal AF chip when maxInternalAf is set', () => {
+      const result = buildActiveFiltersList(makeDefaultFilters({ maxInternalAf: 0.05 }))
+      const chip = result.find((f) => f.id === 'internal-frequency')
+      expect(chip).toBeDefined()
+      expect(chip!.label).toBe('Internal AF')
+      expect(chip!.value).toBe('\u2264 5.00%')
+    })
+
+    it('does not show internal AF chip when null', () => {
+      const result = buildActiveFiltersList(makeDefaultFilters({ maxInternalAf: null }))
+      expect(result.find((f) => f.id === 'internal-frequency')).toBeUndefined()
+    })
+
+    it('does not show internal AF chip when zero', () => {
+      const result = buildActiveFiltersList(makeDefaultFilters({ maxInternalAf: 0 }))
+      expect(result.find((f) => f.id === 'internal-frequency')).toBeUndefined()
+    })
+
+    it('formats small percentages correctly', () => {
+      const result = buildActiveFiltersList(makeDefaultFilters({ maxInternalAf: 0.001 }))
+      const chip = result.find((f) => f.id === 'internal-frequency')
+      expect(chip!.value).toBe('\u2264 0.10%')
+    })
+  })
+
+  // Inheritance mode filter chips
+  describe('inheritance mode chips', () => {
+    it('shows inheritance chip with single mode abbreviation', () => {
+      const result = buildActiveFiltersList(
+        makeDefaultFilters({ inheritanceModes: ['homozygous'] })
+      )
+      const chip = result.find((f) => f.id === 'inheritance')
+      expect(chip).toBeDefined()
+      expect(chip!.label).toBe('Inheritance')
+      expect(chip!.value).toBe('HOM')
+    })
+
+    it('shows inheritance chip with multiple mode abbreviations', () => {
+      const result = buildActiveFiltersList(
+        makeDefaultFilters({ inheritanceModes: ['homozygous', 'heterozygous', 'de_novo'] })
+      )
+      const chip = result.find((f) => f.id === 'inheritance')
+      expect(chip!.value).toBe('HOM, HET, DN')
+    })
+
+    it('does not show inheritance chip when no modes selected', () => {
+      const result = buildActiveFiltersList(makeDefaultFilters({ inheritanceModes: [] }))
+      expect(result.find((f) => f.id === 'inheritance')).toBeUndefined()
+    })
+
+    it('handles unknown mode gracefully', () => {
+      const result = buildActiveFiltersList(
+        makeDefaultFilters({ inheritanceModes: ['unknown_mode'] })
+      )
+      const chip = result.find((f) => f.id === 'inheritance')
+      expect(chip!.value).toBe('unknown_mode')
+    })
+
+    it('shows all solo mode abbreviations correctly', () => {
+      const result = buildActiveFiltersList(
+        makeDefaultFilters({
+          inheritanceModes: ['homozygous', 'heterozygous', 'x_hemizygous', 'candidate_compound_het']
+        })
+      )
+      const chip = result.find((f) => f.id === 'inheritance')
+      expect(chip!.value).toBe('HOM, HET, X_HEMI, CH?')
+    })
+
+    it('shows all trio mode abbreviations correctly', () => {
+      const result = buildActiveFiltersList(
+        makeDefaultFilters({
+          inheritanceModes: ['de_novo', 'autosomal_recessive', 'compound_het']
+        })
+      )
+      const chip = result.find((f) => f.id === 'inheritance')
+      expect(chip!.value).toBe('DN, AR, CH')
+    })
+  })
+
   // Column filter chip tests
   describe('column filter chips', () => {
     it('adds chip for numeric column filter with >= operator', () => {
