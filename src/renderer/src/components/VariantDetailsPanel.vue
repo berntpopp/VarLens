@@ -37,6 +37,7 @@
             :variant="variant"
             :colocated-variants="colocatedVariants"
             class="mb-4"
+            @open-protein-view="openProteinView"
           />
 
           <!-- Transcript Section (case + cohort mode) -->
@@ -170,12 +171,19 @@
 
         <div v-else class="text-grey text-center mt-4">Select a variant to view details</div>
       </div>
+
+      <!-- Protein Visualization Modal -->
+      <ProteinVisualizationModal
+        v-model="proteinModalOpen"
+        :initial-gene="proteinModalGene"
+        :all-variants="allVariants"
+      />
     </v-card>
   </v-navigation-drawer>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useAnnotations } from '../composables/useAnnotations'
@@ -209,6 +217,10 @@ const ActivityLogPanel = defineAsyncComponent({
   loader: () => import('./ActivityLogPanel.vue'),
   ...asyncOpts
 })
+const ProteinVisualizationModal = defineAsyncComponent({
+  loader: () => import('./protein/ProteinVisualizationModal.vue'),
+  ...asyncOpts
+})
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import type { AcmgClassification } from '../../../main/database/types'
@@ -220,14 +232,26 @@ interface Props {
   variant: Variant | CohortVariant | null
   caseId: number | null
   mode: 'case' | 'cohort'
+  allVariants?: (Variant | CohortVariant)[]
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  allVariants: () => []
+})
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'variant-updated': []
 }>()
+
+// Protein visualization modal state
+const proteinModalOpen = ref(false)
+const proteinModalGene = ref<string | null>(null)
+
+function openProteinView(): void {
+  proteinModalGene.value = props.variant?.gene_symbol ?? null
+  proteinModalOpen.value = true
+}
 
 // Use panel resize composable
 const { panelWidth, startResize } = usePanelResize()

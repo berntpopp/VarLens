@@ -1,6 +1,23 @@
 <template>
   <div class="variant-identity-section">
-    <div class="text-title-large mb-2">{{ variant.gene_symbol ?? 'Unknown Gene' }}</div>
+    <div class="d-flex align-center mb-2">
+      <div class="text-title-large">{{ variant.gene_symbol ?? 'Unknown Gene' }}</div>
+      <v-tooltip v-if="variant.gene_symbol" location="top">
+        <template #activator="{ props: tooltipProps }">
+          <v-btn
+            v-bind="tooltipProps"
+            icon
+            size="x-small"
+            variant="text"
+            class="ml-1"
+            @click="emit('open-protein-view')"
+          >
+            <v-icon size="small" :icon="mdiDna" />
+          </v-btn>
+        </template>
+        Protein View
+      </v-tooltip>
+    </div>
 
     <!-- Transcript + cDNA + protein change -->
     <div
@@ -60,7 +77,7 @@ import { useClipboard } from '../composables/useClipboard'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import type { VepColocatedVariant } from '../../../main/services/api/schemas/vep-response'
-import { mdiCheck, mdiContentCopy } from '@mdi/js'
+import { mdiCheck, mdiContentCopy, mdiDna } from '@mdi/js'
 
 interface Props {
   variant: Variant | CohortVariant
@@ -70,6 +87,10 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   colocatedVariants: () => []
 })
+
+const emit = defineEmits<{
+  'open-protein-view': []
+}>()
 
 /**
  * Check if variant is a full Variant (not CohortVariant)
