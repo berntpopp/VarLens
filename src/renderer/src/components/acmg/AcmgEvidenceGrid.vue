@@ -107,13 +107,15 @@ const STRENGTH_COLORS: Record<EvidenceStrength, string> = {
   stand_alone: 'red-darken-2'
 }
 
-/** Muted color hints for inactive (unselected) buttons by default strength */
+/** Muted color hints for inactive (unselected) buttons by default strength.
+ *  Uses lighten-3 (not lighten-5) to maintain readable contrast on the
+ *  warm surface background (#faf8f6). lighten-5 values are nearly invisible. */
 const INACTIVE_COLORS: Record<EvidenceStrength, string> = {
-  very_strong: 'deep-purple-lighten-5',
-  strong: 'orange-lighten-5',
-  moderate: 'amber-lighten-5',
-  supporting: 'blue-grey-lighten-5',
-  stand_alone: 'red-lighten-5'
+  very_strong: 'deep-purple-lighten-3',
+  strong: 'orange-lighten-3',
+  moderate: 'amber-lighten-3',
+  supporting: 'blue-grey-lighten-3',
+  stand_alone: 'red-lighten-3'
 }
 
 function getCodeStrength(code: AcmgCode): EvidenceStrength {
@@ -139,7 +141,7 @@ function getButtonColor(code: AcmgCode): string {
 function getButtonVariant(code: AcmgCode): 'flat' | 'outlined' | 'tonal' {
   if (props.isCodeActive(code)) return 'flat'
   if (props.isCodeSuggested(code)) return 'outlined'
-  return 'tonal'
+  return 'outlined'
 }
 
 function getStrengthLabel(strength: EvidenceStrength): string {
@@ -166,8 +168,8 @@ function getStrengthPoints(strength: EvidenceStrength): number {
 }
 
 .strength-label {
-  font-size: 10px !important;
-  line-height: 1.2;
+  font-size: 11px !important;
+  line-height: 1.3;
 }
 
 .mb-half {
@@ -183,9 +185,9 @@ function getStrengthPoints(strength: EvidenceStrength): number {
 .criteria-btn {
   min-width: 0 !important;
   padding: 2px 8px !important;
-  font-size: 11px !important;
+  font-size: 12px !important;
   letter-spacing: 0 !important;
-  height: 26px !important;
+  height: 28px !important;
 }
 
 .criteria-btn--suggested {
@@ -193,7 +195,7 @@ function getStrengthPoints(strength: EvidenceStrength): number {
 }
 
 .criteria-btn--deprecated {
-  opacity: 0.5;
+  opacity: 0.7;
   text-decoration: line-through;
 }
 

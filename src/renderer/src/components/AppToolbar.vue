@@ -73,7 +73,7 @@
       density="compact"
       variant="outlined"
       divided
-      color="white"
+      selected-class="mode-toggle--active"
       class="mode-toggle mr-2"
     >
       <v-btn value="case" size="small">
@@ -275,14 +275,17 @@ const handleHomeClick = (): void => {
   height: 32px;
 }
 
-.mode-toggle :deep(.v-btn--active) {
-  background-color: rgba(255, 255, 255, 0.3) !important;
+.mode-toggle :deep(.v-btn--active),
+.mode-toggle :deep(.mode-toggle--active) {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  color: rgba(var(--v-theme-primary)) !important;
   font-weight: 600;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.8);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.9);
 }
 
 .mode-toggle :deep(.v-btn:not(.v-btn--active)) {
-  opacity: 0.7;
+  color: rgba(255, 255, 255, 0.85) !important;
+  opacity: 0.85;
 }
 
 .sidebar-toggle-btn :deep(.v-icon) {
