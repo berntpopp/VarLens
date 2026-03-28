@@ -498,36 +498,30 @@ export class VariantRepository extends BaseRepository {
     // Phasing-aware compound het detection (distinguishing 0|1 from 1|0)
     // will be added when long-read phased VCF import is supported.
     if (filter.inheritance_modes && filter.inheritance_modes.length > 0) {
-      // Validate IDs are safe integers before SQL interpolation
-      const caseIdNum = Number(filter.case_id)
-      const groupIdNum = filter.analysis_group_id != null ? Number(filter.analysis_group_id) : null
-      if (!Number.isInteger(caseIdNum) || caseIdNum <= 0) {
-        return query // Skip inheritance filter on invalid case_id
-      }
-      if (groupIdNum !== null && (!Number.isInteger(groupIdNum) || groupIdNum <= 0)) {
-        return query // Skip inheritance filter on invalid group_id
-      }
-
       const modes = filter.inheritance_modes
-      const conditions: string[] = []
+      const cid = filter.case_id
+      const gid = filter.analysis_group_id ?? null
+
+      // Build parameterized SQL fragments (Kysely sql`` auto-binds interpolated values)
+      const sqlConditions: ReturnType<typeof sql>[] = []
 
       // Solo modes
       if (modes.includes('homozygous')) {
-        conditions.push("variants.gt_num IN ('1/1', '1|1')")
+        sqlConditions.push(sql`variants.gt_num IN ('1/1', '1|1')`)
       }
       if (modes.includes('heterozygous')) {
-        conditions.push("variants.gt_num IN ('0/1', '0|1', '1|0')")
+        sqlConditions.push(sql`variants.gt_num IN ('0/1', '0|1', '1|0')`)
       }
       if (modes.includes('x_hemizygous')) {
-        conditions.push(
-          "(variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1'))"
+        sqlConditions.push(
+          sql`(variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1'))`
         )
       }
       if (modes.includes('candidate_compound_het')) {
-        conditions.push(
-          `(variants.gene_symbol IN (
+        sqlConditions.push(
+          sql`(variants.gene_symbol IN (
             SELECT v2.gene_symbol FROM variants v2
-            WHERE v2.case_id = ${caseIdNum}
+            WHERE v2.case_id = ${cid}
               AND v2.gt_num IN ('0/1', '0|1', '1|0')
               AND v2.gene_symbol IS NOT NULL
             GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
@@ -539,15 +533,10 @@ export class VariantRepository extends BaseRepository {
       // NOTE: If only trio modes are selected without an analysis group,
       // conditions will be empty and no inheritance filter is applied.
       // The UI prevents this by disabling trio chips when no group is set.
-      if (groupIdNum !== null) {
-        const gid = groupIdNum
-        const cid = caseIdNum
-
+      if (gid !== null) {
         if (modes.includes('de_novo')) {
           // Het in proband, absent or ref in both parents
-          // "Absent" means the variant doesn't exist in the parent's case at all (LEFT JOIN -> NULL)
-          // "Ref" means the parent has the variant but with ref genotype
-          conditions.push(`(
+          sqlConditions.push(sql`(
             variants.gt_num IN ('0/1', '0|1', '1|0')
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
@@ -574,7 +563,7 @@ export class VariantRepository extends BaseRepository {
 
         if (modes.includes('autosomal_recessive')) {
           // Proband hom, parents NOT hom (must be het carriers or absent)
-          conditions.push(`(
+          sqlConditions.push(sql`(
             variants.gt_num IN ('1/1', '1|1')
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
@@ -594,7 +583,7 @@ export class VariantRepository extends BaseRepository {
           // 1. Gene has >= 2 distinct het variants in proband
           // 2. At least one variant is shared with father
           // 3. At least one DIFFERENT variant is shared with mother
-          conditions.push(`(
+          sqlConditions.push(sql`(
             variants.gt_num IN ('0/1', '0|1', '1|0')
             AND variants.gene_symbol IS NOT NULL
             AND variants.gene_symbol IN (
@@ -631,8 +620,16 @@ export class VariantRepository extends BaseRepository {
         }
       }
 
-      if (conditions.length > 0) {
-        query = query.where(sql<boolean>`(${sql.raw(conditions.join(' OR '))})`)
+      // Combine all conditions with OR using Kysely's sql tagged templates
+      if (sqlConditions.length === 1) {
+        query = query.where(sql<boolean>`(${sqlConditions[0]})`)
+      } else if (sqlConditions.length > 1) {
+        // Build OR chain: (cond1 OR cond2 OR ...)
+        let combined = sqlConditions[0]
+        for (let i = 1; i < sqlConditions.length; i++) {
+          combined = sql`${combined} OR ${sqlConditions[i]}`
+        }
+        query = query.where(sql<boolean>`(${combined})`)
       }
     }
 
