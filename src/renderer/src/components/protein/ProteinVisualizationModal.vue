@@ -202,13 +202,16 @@ const caseVariants = ref<(Variant | CohortVariant)[]>([])
 const clinvarLoading = ref(false)
 const clinvarVariants = ref<ClinVarVariant[]>([])
 
-// Reset case variants and ClinVar when variant/modal changes
+// Reset case variants when variant/modal changes
+// Note: ClinVar data is NOT reset here because it is keyed on geneSymbol.
+// The geneSymbol watcher handles clearing and re-fetching when the gene changes.
+// Clearing here would wipe ClinVar data when the modal is closed and reopened
+// for the same gene, since geneSymbol hasn't changed and the fetch won't re-fire.
 watch(
   () => [props.modelValue, props.variant],
   () => {
     showCaseVariants.value = false
     caseVariants.value = []
-    clinvarVariants.value = []
   }
 )
 
