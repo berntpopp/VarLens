@@ -23,6 +23,7 @@ describe('createRepositories', () => {
 
     expect(keys).toEqual(
       [
+        'analysisGroups',
         'annotations',
         'auditLog',
         'auth',

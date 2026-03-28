@@ -29,9 +29,9 @@ export class AnalysisGroupRepository extends BaseRepository {
   }
 
   getGroup(id: number): AnalysisGroup {
-    const row = this.db
-      .prepare('SELECT * FROM analysis_groups WHERE id = ?')
-      .get(id) as AnalysisGroup | undefined
+    const row = this.db.prepare('SELECT * FROM analysis_groups WHERE id = ?').get(id) as
+      | AnalysisGroup
+      | undefined
     if (!row) throw new Error(`Analysis group ${id} not found`)
     return row
   }
@@ -53,9 +53,7 @@ export class AnalysisGroupRepository extends BaseRepository {
   updateGroup(id: number, updates: { name?: string; description?: string }): AnalysisGroup {
     const group = this.getGroup(id)
     this.db
-      .prepare(
-        'UPDATE analysis_groups SET name = ?, description = ?, updated_at = ? WHERE id = ?'
-      )
+      .prepare('UPDATE analysis_groups SET name = ?, description = ?, updated_at = ? WHERE id = ?')
       .run(updates.name ?? group.name, updates.description ?? group.description, Date.now(), id)
     return this.getGroup(id)
   }

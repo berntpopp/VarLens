@@ -19,6 +19,10 @@ function makeDefaultFilters(overrides: Partial<FilterState> = {}): FilterState {
     acmgClassifications: [],
     activePanelIds: [],
     panelPaddingBp: 5000,
+    maxInternalAf: null,
+    inheritanceModes: [],
+    analysisGroupId: null,
+    considerPhasing: false,
     ...overrides
   }
 }

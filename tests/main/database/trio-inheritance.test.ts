@@ -74,12 +74,8 @@ describe('Trio inheritance filters', () => {
     })
 
     it('includes variant when parent has ref genotype at same position', () => {
-      service.variants.insertVariantsBatch(probandId, [
-        makeVariant({ gt_num: '0/1', pos: 100 })
-      ])
-      service.variants.insertVariantsBatch(fatherId, [
-        makeVariant({ gt_num: '0/0', pos: 100 })
-      ])
+      service.variants.insertVariantsBatch(probandId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/0', pos: 100 })])
 
       const result = service.variants.getVariants(
         {
@@ -94,12 +90,8 @@ describe('Trio inheritance filters', () => {
     })
 
     it('excludes variant when parent carries the alt allele', () => {
-      service.variants.insertVariantsBatch(probandId, [
-        makeVariant({ gt_num: '0/1', pos: 100 })
-      ])
-      service.variants.insertVariantsBatch(motherId, [
-        makeVariant({ gt_num: '0/1', pos: 100 })
-      ])
+      service.variants.insertVariantsBatch(probandId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
 
       const result = service.variants.getVariants(
         {
@@ -120,12 +112,8 @@ describe('Trio inheritance filters', () => {
         makeVariant({ gt_num: '1/1', pos: 100 }),
         makeVariant({ gt_num: '0/1', pos: 200 })
       ])
-      service.variants.insertVariantsBatch(fatherId, [
-        makeVariant({ gt_num: '0/1', pos: 100 })
-      ])
-      service.variants.insertVariantsBatch(motherId, [
-        makeVariant({ gt_num: '0/1', pos: 100 })
-      ])
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
 
       const result = service.variants.getVariants(
         {
@@ -141,12 +129,8 @@ describe('Trio inheritance filters', () => {
     })
 
     it('excludes hom variant when a parent is also hom', () => {
-      service.variants.insertVariantsBatch(probandId, [
-        makeVariant({ gt_num: '1/1', pos: 100 })
-      ])
-      service.variants.insertVariantsBatch(fatherId, [
-        makeVariant({ gt_num: '1/1', pos: 100 })
-      ])
+      service.variants.insertVariantsBatch(probandId, [makeVariant({ gt_num: '1/1', pos: 100 })])
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '1/1', pos: 100 })])
 
       const result = service.variants.getVariants(
         {
@@ -223,12 +207,8 @@ describe('Trio inheritance filters', () => {
         makeVariant({ gt_num: '1/1', pos: 200 }) // AR candidate
       ])
       // Parents: no variant at pos 100, carrier at pos 200
-      service.variants.insertVariantsBatch(fatherId, [
-        makeVariant({ gt_num: '0/1', pos: 200 })
-      ])
-      service.variants.insertVariantsBatch(motherId, [
-        makeVariant({ gt_num: '0/1', pos: 200 })
-      ])
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 200 })])
+      service.variants.insertVariantsBatch(motherId, [makeVariant({ gt_num: '0/1', pos: 200 })])
 
       const result = service.variants.getVariants(
         {

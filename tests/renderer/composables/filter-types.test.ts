@@ -19,7 +19,11 @@ const defaultState: FilterState = {
   acmgClassifications: [],
   annotationScope: 'case',
   activePanelIds: [],
-  panelPaddingBp: 5000
+  panelPaddingBp: 5000,
+  maxInternalAf: null,
+  inheritanceModes: [],
+  analysisGroupId: null,
+  considerPhasing: false
 }
 
 describe('buildFilterFromState', () => {
@@ -96,7 +100,11 @@ describe('buildFilterFromState', () => {
       acmgClassifications: ['Pathogenic'],
       annotationScope: 'all',
       activePanelIds: [1, 3],
-      panelPaddingBp: 10000
+      panelPaddingBp: 10000,
+      maxInternalAf: null,
+      inheritanceModes: [],
+      analysisGroupId: null,
+      considerPhasing: false
     }
     const result = buildFilterFromState(state, ['HIGH'])
 
@@ -173,7 +181,11 @@ describe('buildFilterFromState', () => {
         acmgClassifications: ['Pathogenic'],
         annotationScope: 'all',
         activePanelIds: [1],
-        panelPaddingBp: 5000
+        panelPaddingBp: 5000,
+        maxInternalAf: null,
+        inheritanceModes: [],
+        analysisGroupId: null,
+        considerPhasing: false
       })
       const result = buildFilterFromState(state.value, ['HIGH'])
       // Must not throw — proves no Proxy objects in the output

@@ -52,9 +52,9 @@ describe('PanelRepository', () => {
       expect(cols.some((c) => c.name === 'genome_build')).toBe(true)
     })
 
-    it('sets user_version to 19', () => {
+    it('sets user_version to 21', () => {
       const version = db.pragma('user_version', { simple: true })
-      expect(version).toBe(19)
+      expect(version).toBe(21)
     })
   })
 
