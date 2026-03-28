@@ -38,7 +38,16 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [vue(), vuetify({ autoImport: true })],
+    plugins: [
+      vue({
+        template: {
+          compilerOptions: {
+            isCustomElement: (tag) => tag === 'pdbe-molstar'
+          }
+        }
+      }),
+      vuetify({ autoImport: true })
+    ],
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version)
     },

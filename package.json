@@ -146,6 +146,7 @@
     "kysely": "^0.28.14",
     "markdown-it": "^14.1.0",
     "nanoid": "^5.1.7",
+    "pdbe-molstar": "^3.10.1",
     "pinia": "^3.0.4",
     "piscina": "^5.1.4",
     "plotly.js-basic-dist-min": "^3.4.0",
