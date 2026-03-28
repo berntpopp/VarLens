@@ -50,9 +50,10 @@
         </span>
       </template>
       <template v-else>
-        <v-icon size="small" class="mr-1" :icon="mdiAccount" />
+        <v-icon size="small" class="mr-1" :icon="mdiAccount" style="opacity: 0.7" />
         <span
-          class="text-body-medium text-medium-emphasis select-case-hint"
+          class="text-body-medium select-case-hint"
+          style="opacity: 0.7"
           role="button"
           tabindex="0"
           @click="sidebarOpen = true"
