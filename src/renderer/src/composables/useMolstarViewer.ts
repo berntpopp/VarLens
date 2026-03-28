@@ -106,25 +106,38 @@ export function useMolstarViewer(
   /**
    * Restore the background color on the canvas.
    * Called after any operation that may reset the canvas (load, representation change).
-   * Uses both the Mol* API and direct canvas element styling as a fallback,
-   * because the Mol* renderer can override the API-set color during certain
-   * representation computations (e.g., molecular surface).
+   * Uses the pdbe-molstar canvas API and also accesses the underlying Mol* plugin
+   * renderer state to ensure the WebGL clear color is set correctly.
    */
   function restoreBgColor(): void {
+    // Use the pdbe-molstar canvas API
     if (viewerInstance?.canvas) {
       viewerInstance.canvas.setBgColor(BG_COLOR)
     }
-    // Also set bg-color attributes on the element so Mol* picks them up on re-init
-    const el = molstarRef.value as PdbeMolstarElement | null
-    if (el) {
-      el.setAttribute('bg-color-r', String(BG_COLOR.r))
-      el.setAttribute('bg-color-g', String(BG_COLOR.g))
-      el.setAttribute('bg-color-b', String(BG_COLOR.b))
-      // Also style the canvas element directly as a CSS fallback
-      const canvas = el.querySelector('canvas') as HTMLCanvasElement | null
-      if (canvas) {
-        canvas.style.backgroundColor = `rgb(${BG_COLOR.r}, ${BG_COLOR.g}, ${BG_COLOR.b})`
+
+    // Also try to set the renderer background via the Mol* plugin state directly.
+    // This is more reliable because it sets the WebGL clear color at the source.
+    try {
+      const plugin = (viewerInstance as unknown as Record<string, unknown>)?.plugin as
+        | {
+            canvas3d?: {
+              setProps?: (props: Record<string, unknown>) => void
+            }
+          }
+        | undefined
+      if (plugin?.canvas3d?.setProps) {
+        plugin.canvas3d.setProps({
+          renderer: {
+            backgroundColor: {
+              r: BG_COLOR.r / 255,
+              g: BG_COLOR.g / 255,
+              b: BG_COLOR.b / 255
+            }
+          }
+        })
       }
+    } catch {
+      // Ignore errors from plugin internals
     }
   }
 

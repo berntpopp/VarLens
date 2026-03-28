@@ -179,33 +179,31 @@ function onClinvarClick(cv: ClinVarVariant): void {
             Your Variant
           </v-chip>
 
-          <!-- ClinVar significance chips -->
+          <!-- ClinVar significance chips with inline "only" -->
           <div class="d-flex flex-wrap align-center ga-1 mt-1">
             <span class="text-caption text-medium-emphasis mr-1">ClinVar:</span>
-            <v-chip
-              v-for="chip in clinvarChips"
-              :key="chip.key"
-              size="x-small"
-              label
-              :variant="activeClinvar.has(chip.key) ? 'flat' : 'outlined'"
-              :color="activeClinvar.has(chip.key) ? chip.color : 'grey-lighten-1'"
-              :style="{ opacity: activeClinvar.has(chip.key) ? 1 : 0.5 }"
-              @click="toggleClinvar(chip.key)"
-            >
-              {{ chip.label }} ({{ clinvarCounts[chip.key] ?? 0 }})
-            </v-chip>
-          </div>
-          <div class="d-flex ga-1 mt-1">
-            <v-btn
-              v-for="chip in clinvarChips"
-              :key="`only-${chip.key}`"
-              size="x-small"
-              variant="text"
-              class="only-btn text-lowercase"
-              @click="clinvarOnly(chip.key)"
-            >
-              only
-            </v-btn>
+            <template v-for="chip in clinvarChips" :key="chip.key">
+              <span class="d-inline-flex align-center">
+                <v-chip
+                  size="x-small"
+                  label
+                  :variant="activeClinvar.has(chip.key) ? 'flat' : 'outlined'"
+                  :color="activeClinvar.has(chip.key) ? chip.color : 'grey-lighten-1'"
+                  :style="{ opacity: activeClinvar.has(chip.key) ? 1 : 0.5 }"
+                  @click="toggleClinvar(chip.key)"
+                >
+                  {{ chip.label }} ({{ clinvarCounts[chip.key] ?? 0 }})
+                </v-chip>
+                <v-btn
+                  size="x-small"
+                  variant="text"
+                  class="only-btn text-lowercase"
+                  @click="clinvarOnly(chip.key)"
+                >
+                  only
+                </v-btn>
+              </span>
+            </template>
             <v-chip
               size="x-small"
               label
