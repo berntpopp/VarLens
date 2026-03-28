@@ -1,7 +1,15 @@
 <template>
-  <v-dialog v-model="dialog" max-width="500" :persistent="isImporting">
+  <v-dialog v-model="dialog" max-width="600" :persistent="isImporting">
     <v-card>
-      <v-card-title>Import Variant Data</v-card-title>
+      <v-card-title class="d-flex align-center">
+        <v-icon :icon="mdiFileImport" class="mr-2" />
+        Import Variant Data
+        <v-spacer />
+        <v-btn v-if="!isImporting" icon variant="text" size="small" @click="handleCancel">
+          <v-icon :icon="mdiClose" />
+        </v-btn>
+      </v-card-title>
+      <v-divider />
       <v-card-text>
         <!-- Error display -->
         <v-alert v-if="errorMessage" type="error" class="mb-4">
@@ -80,7 +88,7 @@ import type { ProgressUpdate, ImportResult } from '../../../shared/types/api'
 import { isIpcError, ErrorCode } from '../../../shared/types/errors'
 import { useApiService } from '../composables/useApiService'
 import { useImportStatusStore } from '../stores/importStatusStore'
-import { mdiCheckCircle, mdiFolderOpen } from '@mdi/js'
+import { mdiCheckCircle, mdiClose, mdiFileImport, mdiFolderOpen } from '@mdi/js'
 
 const { api } = useApiService()
 const importStore = useImportStatusStore()

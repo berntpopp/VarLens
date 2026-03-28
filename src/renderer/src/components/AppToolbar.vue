@@ -98,12 +98,20 @@
         </v-btn>
       </template>
       <v-list density="compact">
+        <v-list-subheader>Data</v-list-subheader>
         <v-list-item
           :prepend-icon="mdiChartBoxOutline"
           title="Database Overview"
           @click="$emit('show-database-overview')"
         />
+        <v-list-item
+          :prepend-icon="mdiFileImport"
+          title="Import Variant Data"
+          subtitle="Ctrl+I"
+          @click="$emit('import-click')"
+        />
         <v-divider class="my-1" />
+        <v-list-subheader>Settings</v-list-subheader>
         <v-list-item
           :prepend-icon="mdiLink"
           title="External Links"
@@ -170,6 +178,7 @@ import {
   mdiChevronDoubleRight,
   mdiCog,
   mdiDeleteSweep,
+  mdiFileImport,
   mdiFilterOff,
   mdiInformationOutline,
   mdiLink,
@@ -205,6 +214,7 @@ defineEmits<{
   'show-panel-manager': []
   'show-preferences': []
   'show-import-progress': []
+  'import-click': []
   'reset-columns': []
   'reset-filters': []
   'delete-all-cases': []

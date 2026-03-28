@@ -41,8 +41,8 @@
           New Panel
         </v-btn>
         <v-btn
-          color="success"
-          variant="tonal"
+          color="primary"
+          variant="outlined"
           density="comfortable"
           size="small"
           class="ml-2"
@@ -52,8 +52,8 @@
           Import PanelApp
         </v-btn>
         <v-btn
-          color="orange"
-          variant="tonal"
+          color="primary"
+          variant="outlined"
           density="comfortable"
           size="small"
           class="ml-2"

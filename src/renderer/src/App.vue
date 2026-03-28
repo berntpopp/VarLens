@@ -3,6 +3,7 @@
     <AppToolbar
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
       @show-database-overview="dialogHostRef?.showDatabaseOverview()"
+      @import-click="dialogHostRef?.showImportDialog()"
       @show-external-links="dialogHostRef?.showExternalLinks()"
       @show-tag-management="dialogHostRef?.showTagManagement()"
       @show-panel-manager="dialogHostRef?.showPanelManager()"
@@ -316,7 +317,8 @@ useKeyboardShortcuts({
   onHelp: () => {
     showKeyboardHelp.value = true
   },
-  onClearAllFilters: () => filterToolbarRef.value?.handleClearAll()
+  onClearAllFilters: () => filterToolbarRef.value?.handleClearAll(),
+  onImport: () => dialogHostRef.value?.showImportDialog()
 })
 
 // Global listener for background import completion
