@@ -50,10 +50,7 @@ export class AnalysisGroupRepository extends BaseRepository {
     return this.getGroup(member.group_id)
   }
 
-  updateGroup(
-    id: number,
-    updates: { name?: string; description?: string | null }
-  ): AnalysisGroup {
+  updateGroup(id: number, updates: { name?: string; description?: string | null }): AnalysisGroup {
     const group = this.getGroup(id)
     const newDescription =
       updates.description === undefined ? group.description : updates.description
