@@ -129,3 +129,42 @@ export const GnomadResponseSchema = z.object({
 })
 
 export type GnomadResponse = z.infer<typeof GnomadResponseSchema>
+
+// ── ClinVar via gnomAD GraphQL API ──────────────────────────────────
+
+const ClinVarGnomadFreqSchema = z
+  .object({
+    ac: z.number(),
+    an: z.number()
+  })
+  .nullable()
+  .optional()
+
+const ClinVarVariantSchema = z.object({
+  variant_id: z.string(),
+  clinical_significance: z.string().nullable().optional(),
+  clinvar_variation_id: z.string().nullable().optional(),
+  gold_stars: z.number().nullable().optional(),
+  hgvsp: z.string().nullable().optional(),
+  major_consequence: z.string().nullable().optional(),
+  pos: z.number(),
+  gnomad: z
+    .object({
+      exome: ClinVarGnomadFreqSchema,
+      genome: ClinVarGnomadFreqSchema
+    })
+    .nullable()
+    .optional()
+})
+
+const ClinVarGeneSchema = z.object({
+  clinvar_variants: z.array(ClinVarVariantSchema)
+})
+
+export const ClinVarResponseSchema = z.object({
+  data: z.object({
+    gene: ClinVarGeneSchema.nullable()
+  })
+})
+
+export type ClinVarResponse = z.infer<typeof ClinVarResponseSchema>

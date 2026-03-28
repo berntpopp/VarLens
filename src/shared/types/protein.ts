@@ -87,6 +87,34 @@ export interface ProteinApiError {
   offline?: boolean
 }
 
+/** ClinVar variant from gnomAD API */
+export interface ClinVarVariant {
+  variantId: string
+  clinicalSignificance: string
+  clinvarVariationId: string
+  goldStars: number
+  proteinPosition: number | null
+  hgvsp: string | null
+  consequence: string
+  alleleFrequency: number | null
+}
+
+/** ClinVar significance categories for filtering */
+export type ClinVarSignificance =
+  | 'pathogenic'
+  | 'likely_pathogenic'
+  | 'uncertain'
+  | 'likely_benign'
+  | 'benign'
+  | 'other'
+
+/** ClinVar fetch result with cache info */
+export interface ClinVarFetchResult {
+  success: true
+  variants: ClinVarVariant[]
+  cacheInfo: { cached: boolean; cachedAt?: number }
+}
+
 /** Consequence category for color mapping */
 export type ConsequenceCategory =
   | 'missense'

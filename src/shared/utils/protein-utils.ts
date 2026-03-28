@@ -3,7 +3,7 @@
  * Shared between main process and renderer
  */
 
-import type { ConsequenceCategory } from '../types/protein'
+import type { ConsequenceCategory, ClinVarSignificance } from '../types/protein'
 
 /**
  * Consequence category color scheme (cBioPortal convention)
@@ -53,6 +53,31 @@ export const DOMAIN_TYPE_COLORS: Record<string, string> = {
   repeat: '#6A1B9A',
   'zinc finger': '#0277BD',
   'coiled coil': '#EF6C00'
+}
+
+/**
+ * ClinVar clinical significance color scheme
+ */
+export const CLINVAR_COLORS: Record<ClinVarSignificance, string> = {
+  pathogenic: '#d73027',
+  likely_pathogenic: '#fc8d59',
+  uncertain: '#fee08b',
+  likely_benign: '#91cf60',
+  benign: '#1a9850',
+  other: '#999999'
+}
+
+/**
+ * Map a ClinVar clinical significance string to a display category
+ */
+export function getClinVarCategory(significance: string): ClinVarSignificance {
+  const lower = significance.toLowerCase()
+  if (lower.includes('pathogenic') && !lower.includes('likely')) return 'pathogenic'
+  if (lower.includes('likely') && lower.includes('pathogenic')) return 'likely_pathogenic'
+  if (lower.includes('uncertain') || lower.includes('vus')) return 'uncertain'
+  if (lower.includes('likely') && lower.includes('benign')) return 'likely_benign'
+  if (lower.includes('benign') && !lower.includes('likely')) return 'benign'
+  return 'other'
 }
 
 /**

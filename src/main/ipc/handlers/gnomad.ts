@@ -14,7 +14,7 @@ const DatasetSchema = z.enum(['gnomad_r4', 'gnomad_r3', 'gnomad_r2_1']).optional
 
 /**
  * gnomAD IPC handlers
- * Channels: gnomad:variants
+ * Channels: gnomad:variants, gnomad:clinvar
  */
 
 // Singleton instances - lazy initialization
@@ -69,6 +69,45 @@ export function registerGnomadHandlers({ ipcMain, getDb }: HandlerDependencies):
       const client = getGnomadClient()
 
       return await client.fetchGeneVariants(geneValidated.data, datasetValidated.data)
+    })
+  })
+
+  /**
+   * Fetch ClinVar variants for a gene via gnomAD GraphQL API
+   */
+  ipcMain.handle('gnomad:clinvar', async (_event, geneSymbol: unknown, dataset?: unknown) => {
+    return wrapHandler(async () => {
+      const geneValidated = GeneSymbolSchema.safeParse(geneSymbol)
+      if (!geneValidated.success) {
+        mainLogger.error(
+          `Invalid gnomad:clinvar params (geneSymbol): ${geneValidated.error.message}`,
+          'gnomad'
+        )
+        throw new Error('Invalid parameters')
+      }
+
+      const datasetValidated = DatasetSchema.safeParse(dataset)
+      if (!datasetValidated.success) {
+        mainLogger.error(
+          `Invalid gnomad:clinvar params (dataset): ${datasetValidated.error.message}`,
+          'gnomad'
+        )
+        throw new Error('Invalid parameters')
+      }
+
+      const isOnline = networkStatus.getStatus()
+
+      if (!isOnline) {
+        return {
+          success: false,
+          error: 'No network connection — gnomAD requires an internet connection',
+          offline: true
+        }
+      }
+
+      const client = getGnomadClient()
+
+      return await client.fetchClinVarVariants(geneValidated.data, datasetValidated.data)
     })
   })
 }

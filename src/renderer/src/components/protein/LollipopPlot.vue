@@ -14,7 +14,9 @@ import type {
   ProteinDomain,
   LollipopVariant,
   GnomadVariant,
-  ConsequenceCategory
+  ClinVarVariant,
+  ConsequenceCategory,
+  ClinVarSignificance
 } from '../../../../shared/types/protein'
 
 interface Props {
@@ -22,8 +24,10 @@ interface Props {
   domains: ProteinDomain[]
   variants: LollipopVariant[]
   gnomadVariants: GnomadVariant[]
+  clinvarVariants: ClinVarVariant[]
   showGnomad: boolean
   activeCategories: Set<ConsequenceCategory>
+  activeClinvarCategories: Set<ClinVarSignificance>
   /** Maximum allele frequency filter for gnomAD variants (default 1 = all) */
   gnomadMaxAf?: number
 }
@@ -44,8 +48,10 @@ const { tooltip, resetZoom, zoomIn, zoomOut, exportSvg, exportPng } = useLollipo
   domains: toRef(props, 'domains'),
   variants: toRef(props, 'variants'),
   gnomadVariants: toRef(props, 'gnomadVariants'),
+  clinvarVariants: toRef(props, 'clinvarVariants'),
   showGnomad: toRef(props, 'showGnomad'),
   activeCategories: toRef(props, 'activeCategories'),
+  activeClinvarCategories: toRef(props, 'activeClinvarCategories'),
   gnomadMaxAf: toRef(props, 'gnomadMaxAf')
 })
 

@@ -160,6 +160,7 @@ export type MockApi = {
   }
   gnomad: {
     getVariants: ReturnType<typeof vi.fn>
+    getClinVarVariants: ReturnType<typeof vi.fn>
   }
   logs: {
     onMessage: ReturnType<typeof vi.fn>
@@ -354,7 +355,8 @@ export function createMockApi(): MockApi {
     },
 
     gnomad: {
-      getVariants: vi.fn().mockResolvedValue({ success: false, error: 'Not mocked' })
+      getVariants: vi.fn().mockResolvedValue({ success: false, error: 'Not mocked' }),
+      getClinVarVariants: vi.fn().mockResolvedValue({ success: false, error: 'Not mocked' })
     },
 
     logs: {

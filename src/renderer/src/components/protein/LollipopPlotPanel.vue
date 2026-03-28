@@ -19,8 +19,13 @@
       @export-png="handleExportPng"
     />
 
-    <!-- Loading bar for gnomAD fetch -->
-    <v-progress-linear v-if="gnomadLoading" indeterminate color="info" height="2" />
+    <!-- Loading bar for gnomAD / ClinVar fetch -->
+    <v-progress-linear
+      v-if="gnomadLoading || clinvarLoading"
+      indeterminate
+      color="info"
+      height="2"
+    />
 
     <!-- Plot area -->
     <div class="flex-grow-1 position-relative" style="min-height: 0">
@@ -30,8 +35,10 @@
         :domains="domains"
         :variants="variants"
         :gnomad-variants="gnomadVariants"
+        :clinvar-variants="clinvarVariants"
         :show-gnomad="showGnomad"
         :active-categories="activeCategories"
+        :active-clinvar-categories="activeClinVarCategories"
         :gnomad-max-af="gnomadMaxAf"
       />
     </div>
@@ -39,9 +46,13 @@
     <!-- Legend -->
     <LollipopLegend
       :active-categories="activeCategories"
+      :active-clinvar-categories="activeClinVarCategories"
       :domains="domains"
+      :has-clinvar="clinvarVariants.length > 0"
       @toggle-category="handleToggleCategory"
       @reset-categories="handleResetCategories"
+      @toggle-clinvar-category="handleToggleClinVarCategory"
+      @reset-clinvar-categories="handleResetClinVarCategories"
     />
   </div>
 </template>
@@ -55,9 +66,11 @@ import type {
   ProteinDomain,
   LollipopVariant,
   GnomadVariant,
-  ConsequenceCategory
+  ClinVarVariant,
+  ConsequenceCategory,
+  ClinVarSignificance
 } from '../../../../shared/types/protein'
-import { CONSEQUENCE_COLORS } from '../../../../shared/utils/protein-utils'
+import { CONSEQUENCE_COLORS, CLINVAR_COLORS } from '../../../../shared/utils/protein-utils'
 import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
 
@@ -96,6 +109,10 @@ const showGnomad = ref(true)
 const gnomadLoading = ref(false)
 const gnomadVariants = ref<GnomadVariant[]>([])
 
+// ClinVar state
+const clinvarLoading = ref(false)
+const clinvarVariants = ref<ClinVarVariant[]>([])
+
 // gnomAD frequency filter (default: show all)
 const gnomadMaxAf = ref(1)
 
@@ -112,15 +129,27 @@ const activeCategories = ref<Set<ConsequenceCategory>>(
   new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
 )
 
-// Auto-fetch gnomAD data when gene symbol is available (since gnomAD is ON by default)
+// ClinVar filter categories - all active by default
+const activeClinVarCategories = ref<Set<ClinVarSignificance>>(
+  new Set(Object.keys(CLINVAR_COLORS) as ClinVarSignificance[])
+)
+
+// Auto-fetch gnomAD and ClinVar data when gene symbol is available
 watch(
   () => props.geneSymbol,
   async (gene) => {
-    // Reset gnomAD data when gene changes
+    // Reset data when gene changes
     gnomadVariants.value = []
+    clinvarVariants.value = []
 
-    if (showGnomad.value && gene !== null && gene !== '' && api !== undefined) {
-      await fetchGnomad(gene)
+    if (gene !== null && gene !== '' && api !== undefined) {
+      // Fetch gnomAD and ClinVar in parallel
+      const promises: Promise<void>[] = []
+      if (showGnomad.value) {
+        promises.push(fetchGnomad(gene))
+      }
+      promises.push(fetchClinVar(gene))
+      await Promise.all(promises)
     }
   },
   { immediate: true }
@@ -143,6 +172,26 @@ async function fetchGnomad(gene: string): Promise<void> {
     )
   } finally {
     gnomadLoading.value = false
+  }
+}
+
+async function fetchClinVar(gene: string): Promise<void> {
+  if (api === undefined) return
+  clinvarLoading.value = true
+  try {
+    const result = await api.gnomad.getClinVarVariants(gene)
+    if (result.success) {
+      clinvarVariants.value = result.variants
+    } else {
+      logService.warn(`ClinVar fetch failed: ${result.error}`, 'LollipopPlotPanel')
+    }
+  } catch (err) {
+    logService.error(
+      `ClinVar fetch error: ${err instanceof Error ? err.message : 'Unknown'}`,
+      'LollipopPlotPanel'
+    )
+  } finally {
+    clinvarLoading.value = false
   }
 }
 
@@ -173,6 +222,20 @@ function handleToggleCategory(category: ConsequenceCategory): void {
 
 function handleResetCategories(): void {
   activeCategories.value = new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
+}
+
+function handleToggleClinVarCategory(category: ClinVarSignificance): void {
+  const next = new Set(activeClinVarCategories.value)
+  if (next.has(category)) {
+    next.delete(category)
+  } else {
+    next.add(category)
+  }
+  activeClinVarCategories.value = next
+}
+
+function handleResetClinVarCategories(): void {
+  activeClinVarCategories.value = new Set(Object.keys(CLINVAR_COLORS) as ClinVarSignificance[])
 }
 
 function handleExportSvg(): void {

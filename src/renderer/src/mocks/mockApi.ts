@@ -1014,6 +1014,10 @@ export const mockApi: WindowAPI = {
     getVariants: async () => ({
       success: false as const,
       error: 'Mock mode - gnomAD API not available'
+    }),
+    getClinVarVariants: async () => ({
+      success: false as const,
+      error: 'Mock mode - ClinVar API not available'
     })
   }
 }

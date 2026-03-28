@@ -47,6 +47,50 @@
         <div v-if="overflowCount > 0" class="tooltip-overflow">+{{ overflowCount }} more</div>
       </template>
 
+      <!-- ClinVar tooltip -->
+      <template v-else-if="data.type === 'clinvar' && data.clinvarGroup">
+        <div class="tooltip-title">
+          ClinVar
+          <span class="tooltip-count">
+            ({{ data.clinvarGroup.variants.length }} variant{{
+              data.clinvarGroup.variants.length > 1 ? 's' : ''
+            }}
+            at pos {{ data.clinvarGroup.position }})
+          </span>
+        </div>
+        <div
+          v-for="(cv, i) in data.clinvarGroup.variants.slice(0, 5)"
+          :key="i"
+          class="tooltip-variant"
+        >
+          <div class="tooltip-row">
+            <span class="tooltip-label">ID:</span>
+            <span class="tooltip-value tooltip-mono">{{ cv.clinvarVariationId }}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Significance:</span>
+            <span class="tooltip-value">{{ cv.clinicalSignificance }}</span>
+          </div>
+          <div v-if="cv.goldStars > 0" class="tooltip-row">
+            <span class="tooltip-label">Stars:</span>
+            <span class="tooltip-value">{{ '\u2605'.repeat(cv.goldStars) }}</span>
+          </div>
+          <div v-if="cv.hgvsp" class="tooltip-row">
+            <span class="tooltip-label">Protein:</span>
+            <span class="tooltip-value tooltip-mono">{{ cv.hgvsp }}</span>
+          </div>
+          <div v-if="cv.alleleFrequency !== null" class="tooltip-row">
+            <span class="tooltip-label">AF:</span>
+            <span class="tooltip-value tooltip-mono">{{
+              cv.alleleFrequency.toExponential(2)
+            }}</span>
+          </div>
+        </div>
+        <div v-if="data.clinvarGroup.variants.length > 5" class="tooltip-overflow">
+          +{{ data.clinvarGroup.variants.length - 5 }} more
+        </div>
+      </template>
+
       <!-- gnomAD tooltip -->
       <template v-else-if="data.type === 'gnomad' && (data.gnomadVariant || data.gnomadGroup)">
         <div class="tooltip-title">

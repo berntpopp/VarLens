@@ -20,12 +20,16 @@ import type {
   ProteinDomain,
   LollipopVariant,
   GnomadVariant,
-  ConsequenceCategory
+  ClinVarVariant,
+  ConsequenceCategory,
+  ClinVarSignificance
 } from '../../../shared/types/protein'
 import {
   DOMAIN_TYPE_COLORS,
+  CLINVAR_COLORS,
   getConsequenceCategory,
-  getConsequenceColor
+  getConsequenceColor,
+  getClinVarCategory
 } from '../../../shared/utils/protein-utils'
 import type { Dimensions } from './useResizeObserver'
 
@@ -49,12 +53,20 @@ interface GnomadPositionGroup {
   dominantCategory: ConsequenceCategory
 }
 
+/** ClinVar variants grouped at the same protein position */
+interface ClinVarPositionGroup {
+  position: number
+  variants: ClinVarVariant[]
+  /** Dominant ClinVar significance category */
+  dominantSignificance: ClinVarSignificance
+}
+
 /** Tooltip data exposed to Vue for overlay rendering */
 export interface TooltipData {
   visible: boolean
   x: number
   y: number
-  type: 'variant' | 'domain' | 'gnomad'
+  type: 'variant' | 'domain' | 'gnomad' | 'clinvar'
   /** Domain tooltip fields */
   domain?: ProteinDomain
   /** Variant tooltip fields */
@@ -63,6 +75,8 @@ export interface TooltipData {
   gnomadVariant?: GnomadVariant
   /** gnomAD group tooltip */
   gnomadGroup?: GnomadPositionGroup
+  /** ClinVar group tooltip */
+  clinvarGroup?: ClinVarPositionGroup
 }
 
 export interface LollipopPlotOptions {
@@ -72,8 +86,10 @@ export interface LollipopPlotOptions {
   domains: Ref<ProteinDomain[]>
   variants: Ref<LollipopVariant[]>
   gnomadVariants: Ref<GnomadVariant[]>
+  clinvarVariants: Ref<ClinVarVariant[]>
   showGnomad: Ref<boolean>
   activeCategories: Ref<Set<ConsequenceCategory>>
+  activeClinvarCategories: Ref<Set<ClinVarSignificance>>
   /** Maximum allele frequency filter for gnomAD variants */
   gnomadMaxAf: Ref<number>
 }
@@ -100,7 +116,9 @@ const GNOMAD_TRACK_HEIGHT = 30
 /** Radius for gnomAD dots (small) */
 const GNOMAD_DOT_RADIUS_MIN = 1.5
 const GNOMAD_DOT_RADIUS_MAX = 4
-const MINIMAP_HEIGHT = 24
+const CLINVAR_TRACK_HEIGHT = 26
+/** Half-size of ClinVar diamond shape */
+const CLINVAR_DIAMOND_SIZE = 4
 
 // ─── Composable ───────────────────────────────────────────────────────────────
 
@@ -112,8 +130,10 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     domains,
     variants,
     gnomadVariants,
+    clinvarVariants,
     showGnomad,
     activeCategories,
+    activeClinvarCategories,
     gnomadMaxAf
   } = options
 
@@ -185,6 +205,43 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
         variants: group,
         maxAf: Math.max(...group.map((gv) => gv.alleleFrequency)),
         dominantCategory
+      }
+    })
+  }
+
+  // ─── Helper: group ClinVar variants by position ────────────────────────
+
+  function groupClinVarByPosition(vars: ClinVarVariant[]): ClinVarPositionGroup[] {
+    const map = new Map<number, ClinVarVariant[]>()
+    for (const cv of vars) {
+      if (cv.proteinPosition === null) continue
+      const existing = map.get(cv.proteinPosition)
+      if (existing) {
+        existing.push(cv)
+      } else {
+        map.set(cv.proteinPosition, [cv])
+      }
+    }
+    return Array.from(map.entries()).map(([position, group]) => {
+      // Find the most severe significance category
+      const sigCounts = new Map<ClinVarSignificance, number>()
+      for (const cv of group) {
+        const cat = getClinVarCategory(cv.clinicalSignificance)
+        sigCounts.set(cat, (sigCounts.get(cat) ?? 0) + 1)
+      }
+      let dominantSignificance: ClinVarSignificance = 'other'
+      let maxCount = 0
+      for (const [sig, count] of sigCounts) {
+        if (count > maxCount) {
+          maxCount = count
+          dominantSignificance = sig
+        }
+      }
+
+      return {
+        position,
+        variants: group,
+        dominantSignificance
       }
     })
   }
@@ -318,12 +375,73 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       }
     })
 
+    // ── Filter ClinVar variants by active significance categories ──────
+    const filteredClinVar = clinvarVariants.value.filter((cv) => {
+      const cat = getClinVarCategory(cv.clinicalSignificance)
+      return activeClinvarCategories.value.has(cat) && cv.proteinPosition !== null
+    })
+    const clinvarGroups = groupClinVarByPosition(filteredClinVar)
+
     // ── Render layers ───────────────────────────────────────────────────
 
-    // gnomAD track (BELOW backbone) - render first so it's behind everything
+    // ClinVar track (BELOW backbone, ABOVE gnomAD)
+    if (clinvarGroups.length > 0) {
+      const clinvarGroup = clipGroup.append('g').attr('class', 'clinvar')
+      const clinvarBaseY = backboneY + BACKBONE_HEIGHT / 2 + 6
+
+      for (const group of clinvarGroups) {
+        const cx = xScale(group.position)
+        const cy = clinvarBaseY + CLINVAR_TRACK_HEIGHT / 2
+        const color = CLINVAR_COLORS[group.dominantSignificance]
+        const size = Math.min(CLINVAR_DIAMOND_SIZE + group.variants.length - 1, 7)
+
+        // Diamond shape (rotated square)
+        const diamondPath = `M ${cx} ${cy - size} L ${cx + size} ${cy} L ${cx} ${cy + size} L ${cx - size} ${cy} Z`
+        clinvarGroup
+          .append('path')
+          .attr('d', diamondPath)
+          .attr('fill', color)
+          .attr('opacity', 0.7)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 0.5)
+          .attr('cursor', 'pointer')
+          .on('mouseenter', (event: MouseEvent) => {
+            tooltip.value = {
+              visible: true,
+              x: event.clientX,
+              y: event.clientY,
+              type: 'clinvar',
+              clinvarGroup: group
+            }
+          })
+          .on('mousemove', (event: MouseEvent) => {
+            tooltip.value = { ...tooltip.value, x: event.clientX, y: event.clientY }
+          })
+          .on('mouseleave', () => {
+            tooltip.value = { ...tooltip.value, visible: false }
+          })
+      }
+
+      // ClinVar track label
+      clinvarGroup
+        .append('text')
+        .attr('x', -4)
+        .attr('y', clinvarBaseY + CLINVAR_TRACK_HEIGHT / 2)
+        .attr('text-anchor', 'end')
+        .attr('dominant-baseline', 'middle')
+        .attr('fill', '#999')
+        .attr('font-size', '11px')
+        .text('ClinVar')
+    }
+
+    // gnomAD track (BELOW ClinVar) - render after ClinVar
     if (showGnomad.value && gnomadGroups.length > 0) {
       const gnomadGroup = clipGroup.append('g').attr('class', 'gnomad')
-      const gnomadBaseY = backboneY + BACKBONE_HEIGHT / 2 + 6
+      const gnomadBaseY =
+        backboneY +
+        BACKBONE_HEIGHT / 2 +
+        6 +
+        (clinvarGroups.length > 0 ? CLINVAR_TRACK_HEIGHT + 4 : 0)
 
       for (const group of gnomadGroups) {
         const cx = xScale(group.position)
@@ -543,9 +661,13 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
 
     // ── X-Axis ──────────────────────────────────────────────────────────
 
-    const axisY = showGnomad.value
-      ? backboneY + BACKBONE_HEIGHT / 2 + GNOMAD_TRACK_HEIGHT + 16
-      : backboneY + BACKBONE_HEIGHT / 2 + 16
+    let axisY = backboneY + BACKBONE_HEIGHT / 2 + 16
+    if (clinvarGroups.length > 0) {
+      axisY += CLINVAR_TRACK_HEIGHT + 4
+    }
+    if (showGnomad.value && gnomadGroups.length > 0) {
+      axisY += GNOMAD_TRACK_HEIGHT
+    }
     const xAxis = d3.axisBottom(xScale).ticks(Math.min(10, proteinLength.value))
     const xAxisGroup = mainGroup
       .append('g')
@@ -565,66 +687,6 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       .attr('fill', '#666')
       .attr('font-size', '13px')
       .text('Amino Acid Position')
-
-    // ── Minimap ─────────────────────────────────────────────────────────
-
-    const minimapY = height - MINIMAP_HEIGHT - 8
-    const miniGroup = root
-      .append('g')
-      .attr('class', 'minimap')
-      .attr('transform', `translate(${MARGIN.left},${minimapY})`)
-
-    // Minimap backbone
-    miniGroup
-      .append('rect')
-      .attr('x', 0)
-      .attr('y', MINIMAP_HEIGHT / 2 - 2)
-      .attr('width', plotWidth)
-      .attr('height', 4)
-      .attr('fill', '#E0E0E0')
-      .attr('rx', 2)
-
-    // Minimap domains
-    const miniXScale = d3.scaleLinear().domain([0, proteinLength.value]).range([0, plotWidth])
-    for (const domain of domains.value) {
-      const domainColor = DOMAIN_TYPE_COLORS[domain.type.toLowerCase()] ?? '#9E9E9E'
-      miniGroup
-        .append('rect')
-        .attr('x', miniXScale(domain.start))
-        .attr('y', MINIMAP_HEIGHT / 2 - 4)
-        .attr('width', Math.max(1, miniXScale(domain.end) - miniXScale(domain.start)))
-        .attr('height', 8)
-        .attr('fill', domainColor)
-        .attr('opacity', 0.6)
-        .attr('rx', 1)
-    }
-
-    // Minimap variant ticks
-    for (const group of groups) {
-      const isHighlight = group.hasHighlighted
-      miniGroup
-        .append('line')
-        .attr('x1', miniXScale(group.position))
-        .attr('y1', isHighlight ? 0 : 2)
-        .attr('x2', miniXScale(group.position))
-        .attr('y2', isHighlight ? MINIMAP_HEIGHT : MINIMAP_HEIGHT - 2)
-        .attr('stroke', isHighlight ? '#FFD700' : group.variants[0].color)
-        .attr('stroke-width', isHighlight ? 2 : 1)
-        .attr('opacity', isHighlight ? 1 : 0.5)
-    }
-
-    // Viewport highlight rectangle
-    miniGroup
-      .append('rect')
-      .attr('class', 'minimap-viewport')
-      .attr('x', 0)
-      .attr('y', 0)
-      .attr('width', plotWidth)
-      .attr('height', MINIMAP_HEIGHT)
-      .attr('fill', 'rgba(var(--v-theme-primary), 0.1)')
-      .attr('stroke', 'rgba(var(--v-theme-primary), 0.4)')
-      .attr('stroke-width', 1)
-      .attr('rx', 2)
 
     // Apply current transform
     if (currentTransform.k !== 1) {
@@ -717,6 +779,34 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       highlightIdx++
     })
 
+    // Update ClinVar diamonds
+    {
+      const filteredCV = clinvarVariants.value.filter((cv) => {
+        const cat = getClinVarCategory(cv.clinicalSignificance)
+        return activeClinvarCategories.value.has(cat) && cv.proteinPosition !== null
+      })
+      const cvGroups = groupClinVarByPosition(filteredCV)
+
+      let cvIdx = 0
+      clipGroup.selectAll('.clinvar path').each(function () {
+        const group = cvGroups[cvIdx]
+        if (group !== undefined) {
+          const cx = newXScale(group.position)
+          const backboneYLocal =
+            MARGIN.top + (dimensions.value.height - MARGIN.top - MARGIN.bottom) * BACKBONE_Y_OFFSET
+          const clinvarBaseY = backboneYLocal + BACKBONE_HEIGHT / 2 + 6
+          const cy = clinvarBaseY + CLINVAR_TRACK_HEIGHT / 2
+          const size = Math.min(CLINVAR_DIAMOND_SIZE + group.variants.length - 1, 7)
+          d3.select(this).attr(
+            'd',
+            `M ${cx} ${cy - size} L ${cx + size} ${cy} L ${cx} ${cy + size} L ${cx - size} ${cy} Z`
+          )
+        }
+        cvIdx++
+      })
+      clipGroup.selectAll('.clinvar text').attr('x', -4)
+    }
+
     // Update gnomAD
     if (showGnomad.value) {
       const filteredGnomad = gnomadVariants.value.filter(
@@ -737,25 +827,31 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       clipGroup.selectAll('.gnomad text').attr('x', -4)
     }
 
-    // Update x-axis
+    // Update x-axis (recompute axisY with current track visibility)
     const backboneY =
       MARGIN.top + (dimensions.value.height - MARGIN.top - MARGIN.bottom) * BACKBONE_Y_OFFSET
-    const axisY = showGnomad.value
-      ? backboneY + BACKBONE_HEIGHT / 2 + GNOMAD_TRACK_HEIGHT + 16
-      : backboneY + BACKBONE_HEIGHT / 2 + 16
+    const filteredCV = clinvarVariants.value.filter((cv) => {
+      const cat = getClinVarCategory(cv.clinicalSignificance)
+      return activeClinvarCategories.value.has(cat) && cv.proteinPosition !== null
+    })
+    const cvGroupsForAxis = groupClinVarByPosition(filteredCV)
+    let axisY = backboneY + BACKBONE_HEIGHT / 2 + 16
+    if (cvGroupsForAxis.length > 0) {
+      axisY += CLINVAR_TRACK_HEIGHT + 4
+    }
+    if (showGnomad.value) {
+      const filteredGnomad = gnomadVariants.value.filter(
+        (gv) => gv.proteinPosition !== null && gv.alleleFrequency <= gnomadMaxAf.value
+      )
+      if (groupGnomadByPosition(filteredGnomad).length > 0) {
+        axisY += GNOMAD_TRACK_HEIGHT
+      }
+    }
     const xAxis = d3.axisBottom(newXScale).ticks(Math.min(10, proteinLength.value))
     root
       .select('.x-axis')
       .attr('transform', `translate(0,${axisY})`)
       .call(xAxis as never)
-
-    // Update minimap viewport
-    const viewStart = Math.max(0, -transform.x / transform.k)
-    const viewWidth = plotWidth / transform.k
-    root
-      .select('.minimap-viewport')
-      .attr('x', (viewStart / plotWidth) * plotWidth)
-      .attr('width', Math.min(plotWidth, (viewWidth / plotWidth) * plotWidth))
   }
 
   // ─── Reactive re-rendering ──────────────────────────────────────────
@@ -769,8 +865,10 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
       domains.value,
       variants.value,
       gnomadVariants.value,
+      clinvarVariants.value,
       showGnomad.value,
       activeCategories.value,
+      activeClinvarCategories.value,
       gnomadMaxAf.value
     ]
     void _deps

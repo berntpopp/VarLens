@@ -27,6 +27,36 @@
       </v-btn>
     </div>
 
+    <!-- ClinVar significance chips -->
+    <template v-if="hasClinvar">
+      <v-divider vertical class="mx-1" />
+      <div class="d-flex flex-wrap ga-1 align-center">
+        <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">ClinVar:</span>
+        <v-chip
+          v-for="[category, color] in clinvarEntries"
+          :key="category"
+          size="small"
+          label
+          :variant="isClinVarActive(category) ? 'flat' : 'outlined'"
+          :style="clinvarChipStyle(category, color)"
+          class="cursor-pointer"
+          @click="toggleClinVar(category)"
+        >
+          {{ formatClinVarCategory(category) }}
+        </v-chip>
+        <v-btn
+          v-if="!allClinVarActive"
+          size="x-small"
+          variant="text"
+          color="primary"
+          class="ml-1 text-none"
+          @click="emit('reset-clinvar-categories')"
+        >
+          Reset
+        </v-btn>
+      </div>
+    </template>
+
     <!-- Domain color indicators -->
     <v-divider v-if="domainTypes.length > 0" vertical class="mx-1" />
     <div v-if="domainTypes.length > 0" class="d-flex flex-wrap ga-1 align-center">
@@ -45,12 +75,23 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ConsequenceCategory, ProteinDomain } from '../../../../shared/types/protein'
-import { CONSEQUENCE_COLORS, DOMAIN_TYPE_COLORS } from '../../../../shared/utils/protein-utils'
+import type {
+  ConsequenceCategory,
+  ClinVarSignificance,
+  ProteinDomain
+} from '../../../../shared/types/protein'
+import {
+  CONSEQUENCE_COLORS,
+  CLINVAR_COLORS,
+  DOMAIN_TYPE_COLORS
+} from '../../../../shared/utils/protein-utils'
 
 interface Props {
   activeCategories: Set<ConsequenceCategory>
+  activeClinvarCategories: Set<ClinVarSignificance>
   domains: ProteinDomain[]
+  /** Whether ClinVar data is available */
+  hasClinvar: boolean
 }
 
 const props = defineProps<Props>()
@@ -58,6 +99,8 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'toggle-category': [category: ConsequenceCategory]
   'reset-categories': []
+  'toggle-clinvar-category': [category: ClinVarSignificance]
+  'reset-clinvar-categories': []
 }>()
 
 const consequenceEntries = computed(
@@ -66,6 +109,15 @@ const consequenceEntries = computed(
 
 /** Whether all categories are active */
 const allActive = computed(() => props.activeCategories.size === consequenceEntries.value.length)
+
+const clinvarEntries = computed(
+  () => Object.entries(CLINVAR_COLORS) as [ClinVarSignificance, string][]
+)
+
+/** Whether all ClinVar categories are active */
+const allClinVarActive = computed(
+  () => props.activeClinvarCategories.size === clinvarEntries.value.length
+)
 
 /** Unique domain types present in the current protein */
 const domainTypes = computed(() => {
@@ -96,6 +148,36 @@ function formatCategory(category: string): string {
 function chipStyle(category: ConsequenceCategory, color: string): Record<string, string> {
   if (isActive(category)) {
     return { backgroundColor: color, color: '#fff', borderColor: color }
+  }
+  return { borderColor: color, color, opacity: '0.6' }
+}
+
+function isClinVarActive(category: ClinVarSignificance): boolean {
+  return props.activeClinvarCategories.has(category)
+}
+
+function toggleClinVar(category: ClinVarSignificance): void {
+  emit('toggle-clinvar-category', category)
+}
+
+const CLINVAR_LABELS: Record<ClinVarSignificance, string> = {
+  pathogenic: 'Pathogenic',
+  likely_pathogenic: 'Likely P.',
+  uncertain: 'VUS',
+  likely_benign: 'Likely B.',
+  benign: 'Benign',
+  other: 'Other'
+}
+
+function formatClinVarCategory(category: ClinVarSignificance): string {
+  return CLINVAR_LABELS[category]
+}
+
+function clinvarChipStyle(category: ClinVarSignificance, color: string): Record<string, string> {
+  if (isClinVarActive(category)) {
+    // For light colors (uncertain/yellow), use dark text
+    const textColor = category === 'uncertain' ? '#333' : '#fff'
+    return { backgroundColor: color, color: textColor, borderColor: color }
   }
   return { borderColor: color, color, opacity: '0.6' }
 }

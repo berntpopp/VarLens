@@ -102,6 +102,7 @@ import type {
   ProteinDomainResult,
   ProteinStructureResult,
   GnomadFetchResult,
+  ClinVarFetchResult,
   ProteinApiError
 } from './protein'
 
@@ -659,6 +660,10 @@ export interface GnomadAPI {
     geneSymbol: string,
     dataset?: string
   ) => Promise<GnomadFetchResult | ProteinApiError>
+  getClinVarVariants: (
+    geneSymbol: string,
+    dataset?: string
+  ) => Promise<ClinVarFetchResult | ProteinApiError>
 }
 
 export interface WindowAPI {

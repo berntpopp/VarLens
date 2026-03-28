@@ -557,7 +557,9 @@ const api = {
 
   gnomad: {
     getVariants: (geneSymbol: string, dataset?: string) =>
-      ipcRenderer.invoke('gnomad:variants', geneSymbol, dataset)
+      ipcRenderer.invoke('gnomad:variants', geneSymbol, dataset),
+    getClinVarVariants: (geneSymbol: string, dataset?: string) =>
+      ipcRenderer.invoke('gnomad:clinvar', geneSymbol, dataset)
   },
 
   presets: {
