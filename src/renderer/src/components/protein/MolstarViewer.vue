@@ -6,7 +6,7 @@
 
 import { ref, computed, type Ref } from 'vue'
 import { useMolstarViewer } from '../../composables/useMolstarViewer'
-import type { LollipopVariant, ProteinStructureInfo } from '../../../../../shared/types/protein'
+import type { LollipopVariant, ProteinStructureInfo } from '../../../../shared/types/protein'
 
 const props = defineProps<{
   structureInfo: ProteinStructureInfo | null

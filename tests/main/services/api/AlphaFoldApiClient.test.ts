@@ -27,8 +27,7 @@ describe('AlphaFoldApiClient', () => {
       cifUrl: 'https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v4.cif',
       bcifUrl: 'https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v4.bcif',
       pdbUrl: 'https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v4.pdb',
-      paeImageUrl:
-        'https://alphafold.ebi.ac.uk/files/AF-P04637-F1-predicted_aligned_error_v4.png',
+      paeImageUrl: 'https://alphafold.ebi.ac.uk/files/AF-P04637-F1-predicted_aligned_error_v4.png',
       modelCreatedDate: '2022-06-01',
       latestVersion: 4
     }

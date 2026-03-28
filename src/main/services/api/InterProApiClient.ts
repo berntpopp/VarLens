@@ -11,7 +11,11 @@
 import Bottleneck from 'bottleneck'
 import { ApiCache } from './ApiCache'
 import { InterProResponseSchema } from './schemas/protein-response'
-import type { ProteinDomain, ProteinDomainResult, ProteinApiError } from '../../../shared/types/protein'
+import type {
+  ProteinDomain,
+  ProteinDomainResult,
+  ProteinApiError
+} from '../../../shared/types/protein'
 import { mainLogger } from '../MainLogger'
 
 /** Domain entry types to include in results */

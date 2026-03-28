@@ -61,7 +61,7 @@ export const DOMAIN_TYPE_COLORS: Record<string, string> = {
  * parseProteinPosition(null)           // null
  */
 export function parseProteinPosition(aaChange: string | null): number | null {
-  if (!aaChange) return null
+  if (aaChange === null || aaChange === '') return null
   const match = aaChange.match(/p\.\D*?(\d+)/)
   return match ? parseInt(match[1], 10) : null
 }

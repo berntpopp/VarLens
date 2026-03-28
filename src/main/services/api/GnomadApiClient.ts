@@ -11,7 +11,11 @@
 import Bottleneck from 'bottleneck'
 import { ApiCache } from './ApiCache'
 import { GnomadResponseSchema } from './schemas/protein-response'
-import type { GnomadFetchResult, GnomadVariant, ProteinApiError } from '../../../shared/types/protein'
+import type {
+  GnomadFetchResult,
+  GnomadVariant,
+  ProteinApiError
+} from '../../../shared/types/protein'
 import { parseProteinPosition } from '../../../shared/utils/protein-utils'
 import { mainLogger } from '../MainLogger'
 
@@ -58,9 +62,7 @@ export class GnomadApiClient {
    * @param geneSymbol - HGNC gene symbol (e.g., "TP53")
    * @returns GnomadFetchResult with parsed variants or ProteinApiError
    */
-  async fetchGeneVariants(
-    geneSymbol: string
-  ): Promise<GnomadFetchResult | ProteinApiError> {
+  async fetchGeneVariants(geneSymbol: string): Promise<GnomadFetchResult | ProteinApiError> {
     const cacheKey = `gnomad:${geneSymbol}:${REFERENCE_GENOME}:${DATASET}`
 
     // Check cache first
@@ -89,9 +91,7 @@ export class GnomadApiClient {
     }
 
     try {
-      const rawResponse = await this.limiter.schedule(() =>
-        this.makeGnomadRequest(geneSymbol)
-      )
+      const rawResponse = await this.limiter.schedule(() => this.makeGnomadRequest(geneSymbol))
 
       const data = GnomadResponseSchema.parse(rawResponse)
       const gene = data.data.gene

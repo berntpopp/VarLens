@@ -86,9 +86,7 @@ describe('GnomadApiClient', () => {
 
   describe('fetchGeneVariants', () => {
     it('should fetch and parse gnomAD variants for a gene', async () => {
-      nock('https://gnomad.broadinstitute.org')
-        .post('/api')
-        .reply(200, mockGnomadResponse)
+      nock('https://gnomad.broadinstitute.org').post('/api').reply(200, mockGnomadResponse)
 
       const result = await client.fetchGeneVariants('TP53')
 
@@ -102,27 +100,21 @@ describe('GnomadApiClient', () => {
     })
 
     it('should combine exome and genome allele frequency correctly', async () => {
-      nock('https://gnomad.broadinstitute.org')
-        .post('/api')
-        .reply(200, mockGnomadResponse)
+      nock('https://gnomad.broadinstitute.org').post('/api').reply(200, mockGnomadResponse)
 
       const result = await client.fetchGeneVariants('TP53')
 
       expect(result.success).toBe(true)
       if (result.success) {
         // First variant: exome AF > 0, so use exome AF
-        const missenseVariant = result.variants.find(
-          (v) => v.variantId === '17-7674220-C-T'
-        )
+        const missenseVariant = result.variants.find((v) => v.variantId === '17-7674220-C-T')
         expect(missenseVariant).toBeDefined()
         expect(missenseVariant?.alleleFrequency).toBe(0.0000333)
         expect(missenseVariant?.alleleCount).toBe(5) // exome ac=5 + genome null (0)
         expect(missenseVariant?.alleleNumber).toBe(150000) // max(150000, 0)
 
         // Second variant: exome AF = 0, so use genome AF
-        const synonymousVariant = result.variants.find(
-          (v) => v.variantId === '17-7674230-G-A'
-        )
+        const synonymousVariant = result.variants.find((v) => v.variantId === '17-7674230-G-A')
         expect(synonymousVariant).toBeDefined()
         expect(synonymousVariant?.alleleFrequency).toBe(0.0000132)
         expect(synonymousVariant?.alleleCount).toBe(1) // exome ac=0 + genome ac=1
@@ -131,9 +123,7 @@ describe('GnomadApiClient', () => {
     })
 
     it('should return cached result on second call', async () => {
-      nock('https://gnomad.broadinstitute.org')
-        .post('/api')
-        .reply(200, mockGnomadResponse)
+      nock('https://gnomad.broadinstitute.org').post('/api').reply(200, mockGnomadResponse)
 
       // First call — fetches from API
       const first = await client.fetchGeneVariants('TP53')
@@ -158,9 +148,7 @@ describe('GnomadApiClient', () => {
     it('should handle gene not found (null gene in response)', async () => {
       const notFoundResponse = { data: { gene: null } }
 
-      nock('https://gnomad.broadinstitute.org')
-        .post('/api')
-        .reply(200, notFoundResponse)
+      nock('https://gnomad.broadinstitute.org').post('/api').reply(200, notFoundResponse)
 
       const result = await client.fetchGeneVariants('UNKNOWN_GENE')
 
@@ -171,34 +159,26 @@ describe('GnomadApiClient', () => {
     })
 
     it('should parse protein position from hgvsp', async () => {
-      nock('https://gnomad.broadinstitute.org')
-        .post('/api')
-        .reply(200, mockGnomadResponse)
+      nock('https://gnomad.broadinstitute.org').post('/api').reply(200, mockGnomadResponse)
 
       const result = await client.fetchGeneVariants('TP53')
 
       expect(result.success).toBe(true)
       if (result.success) {
         // Missense variant with hgvsp p.Arg248Trp → position 248
-        const missenseVariant = result.variants.find(
-          (v) => v.variantId === '17-7674220-C-T'
-        )
+        const missenseVariant = result.variants.find((v) => v.variantId === '17-7674220-C-T')
         expect(missenseVariant?.proteinPosition).toBe(248)
         expect(missenseVariant?.hgvsp).toBe('p.Arg248Trp')
 
         // Synonymous variant with null hgvsp → null position
-        const synonymousVariant = result.variants.find(
-          (v) => v.variantId === '17-7674230-G-A'
-        )
+        const synonymousVariant = result.variants.find((v) => v.variantId === '17-7674230-G-A')
         expect(synonymousVariant?.proteinPosition).toBe(null)
         expect(synonymousVariant?.hgvsp).toBe(null)
       }
     })
 
     it('should handle network errors', async () => {
-      nock('https://gnomad.broadinstitute.org')
-        .post('/api')
-        .replyWithError('Network error')
+      nock('https://gnomad.broadinstitute.org').post('/api').replyWithError('Network error')
 
       const result = await client.fetchGeneVariants('TP53')
 
@@ -222,9 +202,7 @@ describe('GnomadApiClient', () => {
     })
 
     it('should handle invalid response format', async () => {
-      nock('https://gnomad.broadinstitute.org')
-        .post('/api')
-        .reply(200, { unexpected: 'format' })
+      nock('https://gnomad.broadinstitute.org').post('/api').reply(200, { unexpected: 'format' })
 
       const result = await client.fetchGeneVariants('TP53')
 

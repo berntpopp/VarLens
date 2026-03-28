@@ -37,10 +37,7 @@
           <!-- Tabs -->
           <v-tabs v-model="activeTab" color="white" density="compact">
             <v-tab value="lollipop">Lollipop Plot</v-tab>
-            <v-tab value="3d" disabled>
-              3D Structure
-              <v-chip size="x-small" class="ml-1" variant="outlined">Soon</v-chip>
-            </v-tab>
+            <v-tab value="3d">3D Structure</v-tab>
           </v-tabs>
         </template>
       </v-toolbar>
@@ -92,6 +89,14 @@
           :gene-symbol="selectedGene"
           class="fill-height"
         />
+
+        <!-- 3D Structure tab -->
+        <ProteinStructure3DPanel
+          v-else-if="activeTab === '3d'"
+          :structure-info="proteinData.structureInfo.value"
+          :variants="lollipopVariants"
+          class="fill-height"
+        />
       </div>
     </v-card>
   </v-dialog>
@@ -102,6 +107,7 @@ import { ref, computed, watch } from 'vue'
 import { mdiClose, mdiAlertCircleOutline, mdiDna } from '@mdi/js'
 import { useProteinData } from '../../composables/useProteinData'
 import LollipopPlotPanel from './LollipopPlotPanel.vue'
+import ProteinStructure3DPanel from './ProteinStructure3DPanel.vue'
 import type { Variant } from '../../../../shared/types/api'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { LollipopVariant } from '../../../../shared/types/protein'

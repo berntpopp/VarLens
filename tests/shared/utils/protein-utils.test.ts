@@ -187,9 +187,7 @@ describe('DOMAIN_TYPE_COLORS', () => {
   ]
 
   it('has colors for all common domain types', () => {
-    expect(Object.keys(DOMAIN_TYPE_COLORS).length).toBeGreaterThanOrEqual(
-      commonDomainTypes.length
-    )
+    expect(Object.keys(DOMAIN_TYPE_COLORS).length).toBeGreaterThanOrEqual(commonDomainTypes.length)
   })
 
   it.each(commonDomainTypes)('has a valid hex color for domain type "%s"', (type) => {

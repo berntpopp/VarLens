@@ -76,9 +76,7 @@ describe('InterProApiClient', () => {
           {
             accession: 'P04637',
             protein_length: 393,
-            entry_protein_locations: [
-              { fragments: [{ start: 100, end: 288 }] }
-            ]
+            entry_protein_locations: [{ fragments: [{ start: 100, end: 288 }] }]
           }
         ]
       },
@@ -93,9 +91,7 @@ describe('InterProApiClient', () => {
           {
             accession: 'P04637',
             protein_length: 393,
-            entry_protein_locations: [
-              { fragments: [{ start: 1, end: 67 }] }
-            ]
+            entry_protein_locations: [{ fragments: [{ start: 1, end: 67 }] }]
           }
         ]
       },
@@ -110,9 +106,7 @@ describe('InterProApiClient', () => {
           {
             accession: 'P04637',
             protein_length: 393,
-            entry_protein_locations: [
-              { fragments: [{ start: 300, end: 393 }] }
-            ]
+            entry_protein_locations: [{ fragments: [{ start: 300, end: 393 }] }]
           }
         ]
       }
@@ -260,9 +254,7 @@ describe('InterProApiClient', () => {
               {
                 accession: 'P04637',
                 protein_length: 393,
-                entry_protein_locations: [
-                  { fragments: [{ start: 100, end: 288 }] }
-                ]
+                entry_protein_locations: [{ fragments: [{ start: 100, end: 288 }] }]
               }
             ]
           },
@@ -277,9 +269,7 @@ describe('InterProApiClient', () => {
               {
                 accession: 'P04637',
                 protein_length: 393,
-                entry_protein_locations: [
-                  { fragments: [{ start: 1, end: 393 }] }
-                ]
+                entry_protein_locations: [{ fragments: [{ start: 1, end: 393 }] }]
               }
             ]
           }

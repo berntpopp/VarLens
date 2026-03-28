@@ -5,8 +5,8 @@
  */
 
 import { computed, ref } from 'vue'
-import type { LollipopVariant, ProteinStructureInfo } from '../../../../../shared/types/protein'
-import { getConsequenceColor } from '../../../../../shared/utils/protein-utils'
+import type { LollipopVariant, ProteinStructureInfo } from '../../../../shared/types/protein'
+import { getConsequenceColor } from '../../../../shared/utils/protein-utils'
 import MolstarViewer from './MolstarViewer.vue'
 import StructureControls from './StructureControls.vue'
 import type { RepresentationType } from '../../composables/useMolstarViewer'

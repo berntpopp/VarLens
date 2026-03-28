@@ -34,9 +34,7 @@ export class UniProtApiClient {
    * @param geneSymbol - HGNC gene symbol (e.g., "BRCA1")
    * @returns ProteinMappingResult with UniProt data or ProteinApiError
    */
-  async fetchProteinMapping(
-    geneSymbol: string
-  ): Promise<ProteinMappingResult | ProteinApiError> {
+  async fetchProteinMapping(geneSymbol: string): Promise<ProteinMappingResult | ProteinApiError> {
     const cacheKey = `uniprot:${geneSymbol}`
 
     // Check cache first
@@ -45,7 +43,7 @@ export class UniProtApiClient {
       try {
         const raw = UniProtResponseSchema.parse(JSON.parse(cached.data))
         const result = raw.results[0]
-        if (!result) {
+        if (result === undefined) {
           return { success: false, error: `No UniProt entry found for gene: ${geneSymbol}` }
         }
         return {
@@ -53,8 +51,7 @@ export class UniProtApiClient {
           mapping: {
             uniprotAccession: result.primaryAccession,
             geneName: result.genes?.[0]?.geneName?.value ?? geneSymbol,
-            proteinName:
-              result.proteinDescription?.recommendedName?.fullName?.value ?? '',
+            proteinName: result.proteinDescription?.recommendedName?.fullName?.value ?? '',
             proteinLength: result.sequence.length
           },
           cacheInfo: {
@@ -69,9 +66,7 @@ export class UniProtApiClient {
     }
 
     try {
-      const rawResponse = await this.limiter.schedule(() =>
-        this.makeUniProtRequest(geneSymbol)
-      )
+      const rawResponse = await this.limiter.schedule(() => this.makeUniProtRequest(geneSymbol))
 
       const data = UniProtResponseSchema.parse(rawResponse)
 
@@ -91,8 +86,7 @@ export class UniProtApiClient {
         mapping: {
           uniprotAccession: result.primaryAccession,
           geneName: result.genes?.[0]?.geneName?.value ?? geneSymbol,
-          proteinName:
-            result.proteinDescription?.recommendedName?.fullName?.value ?? '',
+          proteinName: result.proteinDescription?.recommendedName?.fullName?.value ?? '',
           proteinLength: result.sequence.length
         },
         cacheInfo: {

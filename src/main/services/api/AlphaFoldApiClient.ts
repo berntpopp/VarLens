@@ -146,7 +146,7 @@ export class AlphaFoldApiClient {
   ) {
     const prediction = predictions[0]
 
-    if (!prediction) {
+    if (prediction === undefined) {
       return { uniprotAccession, alphafold: null, pdb: null }
     }
 
@@ -159,23 +159,25 @@ export class AlphaFoldApiClient {
 
     return {
       uniprotAccession,
-      alphafold: cifUrl
-        ? {
-            source: 'alphafold' as const,
-            url: cifUrl,
-            format: 'cif' as const,
-            id,
-            version: prediction.latestVersion
-          }
-        : null,
-      pdb: pdbUrl
-        ? {
-            source: 'pdb' as const,
-            url: pdbUrl,
-            format: 'pdb' as const,
-            id
-          }
-        : null
+      alphafold:
+        cifUrl !== undefined && cifUrl !== ''
+          ? {
+              source: 'alphafold' as const,
+              url: cifUrl,
+              format: 'cif' as const,
+              id,
+              version: prediction.latestVersion
+            }
+          : null,
+      pdb:
+        pdbUrl !== undefined && pdbUrl !== ''
+          ? {
+              source: 'pdb' as const,
+              url: pdbUrl,
+              format: 'pdb' as const,
+              id
+            }
+          : null
     }
   }
 

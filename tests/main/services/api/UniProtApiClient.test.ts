@@ -86,9 +86,7 @@ describe('UniProtApiClient', () => {
       if (result.success) {
         expect(result.mapping.uniprotAccession).toBe('P38398')
         expect(result.mapping.geneName).toBe('BRCA1')
-        expect(result.mapping.proteinName).toBe(
-          'Breast cancer type 1 susceptibility protein'
-        )
+        expect(result.mapping.proteinName).toBe('Breast cancer type 1 susceptibility protein')
         expect(result.mapping.proteinLength).toBe(1863)
         expect(result.cacheInfo.cached).toBe(false)
       }

@@ -4,8 +4,8 @@
  */
 
 import { ref, watch, onBeforeUnmount, markRaw, type Ref } from 'vue'
-import type { LollipopVariant, ProteinStructureInfo } from '../../../../shared/types/protein'
-import { getConsequenceColor } from '../../../../shared/utils/protein-utils'
+import type { LollipopVariant, ProteinStructureInfo } from '../../../shared/types/protein'
+import { getConsequenceColor } from '../../../shared/utils/protein-utils'
 import { logService } from '../services/LogService'
 
 /** Representation types supported by pdbe-molstar */

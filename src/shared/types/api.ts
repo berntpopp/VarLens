@@ -655,7 +655,10 @@ export interface ProteinAPI {
 }
 
 export interface GnomadAPI {
-  getVariants: (geneSymbol: string, dataset?: string) => Promise<GnomadFetchResult | ProteinApiError>
+  getVariants: (
+    geneSymbol: string,
+    dataset?: string
+  ) => Promise<GnomadFetchResult | ProteinApiError>
 }
 
 export interface WindowAPI {

@@ -63,10 +63,7 @@ export function registerProteinHandlers({ ipcMain, getDb }: HandlerDependencies)
       // ANTI-07: Runtime validation at IPC boundary
       const validated = GeneSymbolSchema.safeParse(geneSymbol)
       if (!validated.success) {
-        mainLogger.error(
-          `Invalid protein:mapping params: ${validated.error.message}`,
-          'protein'
-        )
+        mainLogger.error(`Invalid protein:mapping params: ${validated.error.message}`, 'protein')
         throw new Error('Invalid parameters')
       }
 
@@ -108,10 +105,7 @@ export function registerProteinHandlers({ ipcMain, getDb }: HandlerDependencies)
       // ANTI-07: Runtime validation at IPC boundary
       const validated = UniProtAccessionSchema.safeParse(uniprotAccession)
       if (!validated.success) {
-        mainLogger.error(
-          `Invalid protein:domains params: ${validated.error.message}`,
-          'protein'
-        )
+        mainLogger.error(`Invalid protein:domains params: ${validated.error.message}`, 'protein')
         throw new Error('Invalid parameters')
       }
 
@@ -129,10 +123,7 @@ export function registerProteinHandlers({ ipcMain, getDb }: HandlerDependencies)
       // ANTI-07: Runtime validation at IPC boundary
       const validated = UniProtAccessionSchema.safeParse(uniprotAccession)
       if (!validated.success) {
-        mainLogger.error(
-          `Invalid protein:structure params: ${validated.error.message}`,
-          'protein'
-        )
+        mainLogger.error(`Invalid protein:structure params: ${validated.error.message}`, 'protein')
         throw new Error('Invalid parameters')
       }
 
