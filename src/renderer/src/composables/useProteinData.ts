@@ -9,7 +9,8 @@ import { ref, watch, type Ref } from 'vue'
 import type {
   ProteinMapping,
   ProteinDomain,
-  ProteinStructureInfo
+  ProteinStructureInfo,
+  GeneStructure
 } from '../../../shared/types/protein'
 import { useApiService } from './useApiService'
 import { logService } from '../services/LogService'
@@ -23,6 +24,9 @@ export function useProteinData(geneSymbol: Ref<string | null>) {
   const domains = ref<ProteinDomain[]>([])
   const proteinLength = ref<number>(0)
   const structureInfo = ref<ProteinStructureInfo | null>(null)
+  const geneStructure = ref<GeneStructure | null>(null)
+  const geneStructureLoading = ref(false)
+  const geneStructureError = ref<string | null>(null)
 
   /** Generation counter to discard stale async results */
   let fetchGeneration = 0
@@ -38,6 +42,9 @@ export function useProteinData(geneSymbol: Ref<string | null>) {
     domains.value = []
     proteinLength.value = 0
     structureInfo.value = null
+    geneStructure.value = null
+    geneStructureLoading.value = false
+    geneStructureError.value = null
 
     try {
       // Step 1: Get UniProt mapping
@@ -53,6 +60,29 @@ export function useProteinData(geneSymbol: Ref<string | null>) {
 
       mapping.value = mappingResult.mapping
       const accession = mappingResult.mapping.uniprotAccession
+
+      // Fetch gene structure in parallel (doesn't need UniProt accession)
+      geneStructureLoading.value = true
+      api.protein
+        .getGeneStructure(gene)
+        .then((result) => {
+          if (fetchGeneration !== thisGeneration) return
+          if (result.success) {
+            geneStructure.value = result.geneStructure
+          } else {
+            geneStructureError.value = result.error
+            logService.warn(`Gene structure fetch failed: ${result.error}`, 'useProteinData')
+          }
+        })
+        .catch((err) => {
+          if (fetchGeneration !== thisGeneration) return
+          geneStructureError.value = err instanceof Error ? err.message : 'Unknown error'
+        })
+        .finally(() => {
+          if (fetchGeneration === thisGeneration) {
+            geneStructureLoading.value = false
+          }
+        })
 
       // Step 2: Fetch domains and structure in parallel
       const [domainsResult, structureResult] = await Promise.allSettled([
@@ -109,6 +139,9 @@ export function useProteinData(geneSymbol: Ref<string | null>) {
         domains.value = []
         proteinLength.value = 0
         structureInfo.value = null
+        geneStructure.value = null
+        geneStructureLoading.value = false
+        geneStructureError.value = null
       }
     },
     { immediate: true }
@@ -121,6 +154,9 @@ export function useProteinData(geneSymbol: Ref<string | null>) {
     domains,
     proteinLength,
     structureInfo,
+    geneStructure,
+    geneStructureLoading,
+    geneStructureError,
     refetch
   }
 }

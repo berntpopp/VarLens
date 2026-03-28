@@ -109,6 +109,7 @@ export class ApiCache {
       | 'interpro:'
       | 'gnomad:'
       | 'clinvar:'
+      | 'ensembl:'
   ): number {
     const result = this.deleteByPrefixStmt.run(`${prefix}%`)
     return result.changes

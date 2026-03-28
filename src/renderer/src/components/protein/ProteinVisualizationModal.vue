@@ -50,6 +50,7 @@
           <!-- Tabs -->
           <v-tabs v-model="activeTab" color="white" density="compact">
             <v-tab value="lollipop">Lollipop Plot</v-tab>
+            <v-tab value="gene-structure">Gene Structure</v-tab>
             <v-tab value="3d">3D Structure</v-tab>
           </v-tabs>
         </template>
@@ -107,6 +108,17 @@
           @toggle-case-variants="handleToggleCaseVariants"
         />
 
+        <!-- Gene Structure tab -->
+        <GeneStructurePanel
+          v-else-if="activeTab === 'gene-structure'"
+          :gene-structure="proteinData.geneStructure.value"
+          :loading="proteinData.geneStructureLoading.value"
+          :error="proteinData.geneStructureError.value"
+          :variant="genomicVariant"
+          :gene-symbol="geneSymbol"
+          class="fill-height"
+        />
+
         <!-- 3D Structure tab -->
         <ProteinStructure3DPanel
           v-else-if="activeTab === '3d'"
@@ -125,10 +137,12 @@ import { mdiClose, mdiAlertCircleOutline, mdiDna } from '@mdi/js'
 import { useProteinData } from '../../composables/useProteinData'
 import { useApiService } from '../../composables/useApiService'
 import LollipopPlotPanel from './LollipopPlotPanel.vue'
+import GeneStructurePanel from './GeneStructurePanel.vue'
 import ProteinStructure3DPanel from './ProteinStructure3DPanel.vue'
 import type { Variant } from '../../../../shared/types/api'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { LollipopVariant } from '../../../../shared/types/protein'
+import type { GenomicVariant } from '../../composables/useGeneStructurePlot'
 import {
   parseProteinPosition,
   getConsequenceCategory,
@@ -158,6 +172,21 @@ const geneSymbol = computed<string | null>(() => props.variant?.gene_symbol ?? n
 
 // Protein data composable - watches geneSymbol reactively
 const proteinData = useProteinData(geneSymbol)
+
+// Genomic variant for gene structure view
+const genomicVariant = computed<GenomicVariant | null>(() => {
+  const v = props.variant
+  if (v === null) return null
+  const label = v.aa_change ?? `${v.chr}:${v.pos} ${v.ref}>${v.alt}`
+  return {
+    chr: v.chr,
+    pos: v.pos,
+    ref: v.ref,
+    alt: v.alt,
+    label,
+    color: '#D32F2F'
+  }
+})
 
 // Case variants state
 const showCaseVariants = ref(false)

@@ -552,7 +552,9 @@ const api = {
     getDomains: (uniprotAccession: string) =>
       ipcRenderer.invoke('protein:domains', uniprotAccession),
     getStructure: (uniprotAccession: string) =>
-      ipcRenderer.invoke('protein:structure', uniprotAccession)
+      ipcRenderer.invoke('protein:structure', uniprotAccession),
+    getGeneStructure: (geneSymbol: string) =>
+      ipcRenderer.invoke('protein:gene-structure', geneSymbol)
   },
 
   gnomad: {

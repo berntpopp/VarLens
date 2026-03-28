@@ -115,6 +115,33 @@ export interface ClinVarFetchResult {
   cacheInfo: { cached: boolean; cachedAt?: number }
 }
 
+// ── Gene Structure types ─────────────────────────────────────────────
+
+/** A single exon in a gene structure */
+export interface GeneExon {
+  start: number
+  end: number
+  rank: number
+}
+
+/** Gene structure with exon coordinates for a transcript */
+export interface GeneStructure {
+  geneSymbol: string
+  chromosome: string
+  start: number
+  end: number
+  strand: 1 | -1
+  transcriptId: string
+  exons: GeneExon[]
+}
+
+/** Gene structure fetch result with cache info */
+export interface GeneStructureResult {
+  success: true
+  geneStructure: GeneStructure
+  cacheInfo: { cached: boolean; cachedAt?: number }
+}
+
 /** Consequence category for color mapping */
 export type ConsequenceCategory =
   | 'missense'

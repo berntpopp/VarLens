@@ -101,6 +101,7 @@ import type {
   ProteinMappingResult,
   ProteinDomainResult,
   ProteinStructureResult,
+  GeneStructureResult,
   GnomadFetchResult,
   ClinVarFetchResult,
   ProteinApiError
@@ -653,6 +654,7 @@ export interface ProteinAPI {
   getMapping: (geneSymbol: string) => Promise<ProteinMappingResult | ProteinApiError>
   getDomains: (uniprotAccession: string) => Promise<ProteinDomainResult | ProteinApiError>
   getStructure: (uniprotAccession: string) => Promise<ProteinStructureResult | ProteinApiError>
+  getGeneStructure: (geneSymbol: string) => Promise<GeneStructureResult | ProteinApiError>
 }
 
 export interface GnomadAPI {

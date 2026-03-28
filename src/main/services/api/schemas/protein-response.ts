@@ -90,6 +90,39 @@ export const AlphaFoldResponseSchema = z.array(AlphaFoldPredictionSchema)
 
 export type AlphaFoldResponse = z.infer<typeof AlphaFoldResponseSchema>
 
+// ── Ensembl REST API (gene lookup with transcript exons) ─────────
+
+const EnsemblExonSchema = z.object({
+  start: z.number(),
+  end: z.number(),
+  rank: z.number(),
+  id: z.string().optional(),
+  strand: z.number().optional(),
+  seq_region_name: z.string().optional()
+})
+
+const EnsemblTranscriptSchema = z.object({
+  id: z.string(),
+  display_name: z.string().optional(),
+  start: z.number(),
+  end: z.number(),
+  strand: z.number(),
+  is_canonical: z.number().optional(),
+  Exon: z.array(EnsemblExonSchema).optional()
+})
+
+export const EnsemblGeneLookupSchema = z.object({
+  id: z.string(),
+  display_name: z.string().optional(),
+  start: z.number(),
+  end: z.number(),
+  strand: z.number(),
+  seq_region_name: z.string(),
+  Transcript: z.array(EnsemblTranscriptSchema).optional()
+})
+
+export type EnsemblGeneLookup = z.infer<typeof EnsemblGeneLookupSchema>
+
 // ── gnomAD GraphQL API ────────────────────────────────────────────
 
 const GnomadTranscriptConsequenceSchema = z.object({

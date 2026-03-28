@@ -4,6 +4,7 @@ import type { HandlerDependencies } from '../types'
 import { UniProtApiClient } from '../../services/api/UniProtApiClient'
 import { InterProApiClient } from '../../services/api/InterProApiClient'
 import { AlphaFoldApiClient } from '../../services/api/AlphaFoldApiClient'
+import { EnsemblApiClient } from '../../services/api/EnsemblApiClient'
 import { ApiCache } from '../../services/api/ApiCache'
 import { networkStatus } from '../../services/network/NetworkStatus'
 import { mainLogger } from '../../services/MainLogger'
@@ -16,13 +17,14 @@ const UniProtAccessionSchema = z.string().regex(/^[A-Z0-9]{6,10}$/i)
 
 /**
  * Protein IPC handlers
- * Channels: protein:mapping, protein:domains, protein:structure
+ * Channels: protein:mapping, protein:domains, protein:structure, protein:gene-structure
  */
 
 // Singleton instances - lazy initialization
 let uniprotClient: UniProtApiClient | null = null
 let interproClient: InterProApiClient | null = null
 let alphafoldClient: AlphaFoldApiClient | null = null
+let ensemblClient: EnsemblApiClient | null = null
 let apiCache: ApiCache | null = null
 
 export function registerProteinHandlers({ ipcMain, getDb }: HandlerDependencies): void {
@@ -52,6 +54,13 @@ export function registerProteinHandlers({ ipcMain, getDb }: HandlerDependencies)
       alphafoldClient = new AlphaFoldApiClient(getSharedCache())
     }
     return alphafoldClient
+  }
+
+  function getEnsemblClient(): EnsemblApiClient {
+    if (!ensemblClient) {
+      ensemblClient = new EnsemblApiClient(getSharedCache())
+    }
+    return ensemblClient
   }
 
   /**
@@ -125,6 +134,27 @@ export function registerProteinHandlers({ ipcMain, getDb }: HandlerDependencies)
       const client = getAlphaFoldClient()
 
       return await client.fetchStructure(validated.data)
+    })
+  })
+
+  /**
+   * Fetch gene structure (exon coordinates) from Ensembl for a gene symbol
+   */
+  ipcMain.handle('protein:gene-structure', async (_event, geneSymbol: unknown) => {
+    return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = GeneSymbolSchema.safeParse(geneSymbol)
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid protein:gene-structure params: ${validated.error.message}`,
+          'protein'
+        )
+        throw new Error('Invalid parameters')
+      }
+
+      const client = getEnsemblClient()
+
+      return await client.fetchGeneStructure(validated.data)
     })
   })
 }

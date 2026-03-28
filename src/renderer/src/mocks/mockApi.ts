@@ -1007,6 +1007,10 @@ export const mockApi: WindowAPI = {
     getStructure: async () => ({
       success: false as const,
       error: 'Mock mode - Protein API not available'
+    }),
+    getGeneStructure: async () => ({
+      success: false as const,
+      error: 'Mock mode - Gene structure API not available'
     })
   },
 
