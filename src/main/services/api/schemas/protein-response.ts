@@ -95,10 +95,10 @@ export type AlphaFoldResponse = z.infer<typeof AlphaFoldResponseSchema>
 const EnsemblExonSchema = z.object({
   start: z.number(),
   end: z.number(),
-  rank: z.number(),
   id: z.string().optional(),
   strand: z.number().optional(),
-  seq_region_name: z.string().optional()
+  seq_region_name: z.string().optional(),
+  object_type: z.string().optional()
 })
 
 const EnsemblTranscriptSchema = z.object({

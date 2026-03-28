@@ -149,11 +149,14 @@ export class EnsemblApiClient {
         end: data.end,
         strand: data.strand === -1 ? -1 : 1,
         transcriptId: selected.display_name ?? selected.id,
-        exons: selected.Exon.map((e) => ({
-          start: e.start,
-          end: e.end,
-          rank: e.rank
-        })).sort((a, b) => a.rank - b.rank)
+        exons: selected.Exon
+          .map((e) => ({ start: e.start, end: e.end }))
+          .sort((a, b) => a.start - b.start)
+          .map((e, i) => ({
+            start: e.start,
+            end: e.end,
+            rank: data.strand === -1 ? selected.Exon!.length - i : i + 1
+          }))
       }
     }
   }
