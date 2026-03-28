@@ -1,26 +1,36 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="500" scrollable>
+  <v-dialog v-model="isOpen" max-width="600" scrollable>
     <v-card>
-      <v-card-title>Application Preferences</v-card-title>
+      <v-card-title class="d-flex align-center">
+        <v-icon :icon="mdiTune" class="mr-2" />
+        Application Preferences
+        <v-spacer />
+        <v-btn icon variant="text" size="small" @click="isOpen = false">
+          <v-icon :icon="mdiClose" />
+        </v-btn>
+      </v-card-title>
+      <v-divider />
       <v-card-text>
-        <!-- Display name -->
+        <!-- Display Section -->
+        <div class="text-subtitle-2 text-medium-emphasis mb-2">Display</div>
         <v-text-field
           v-model="settings.userName"
           label="Display Name"
           hint="Used for audit trail"
           persistent-hint
-          class="mb-4"
+          class="mb-3"
         />
-
-        <!-- Items per page -->
         <v-select
           v-model="settings.itemsPerPage"
           :items="[10, 25, 50, 100]"
           label="Items Per Page"
-          class="mb-4"
+          class="mb-2"
         />
 
-        <!-- Worker threads -->
+        <v-divider class="my-4" />
+
+        <!-- Performance Section -->
+        <div class="text-subtitle-2 text-medium-emphasis mb-2">Performance</div>
         <v-slider
           v-model="workerThreadsValue"
           :min="0"
@@ -33,7 +43,7 @@
             {{ modelValue === 0 ? 'Auto' : modelValue }}
           </template>
         </v-slider>
-        <div class="text-caption text-grey mb-4">
+        <div class="text-caption text-medium-emphasis mb-4">
           {{
             workerThreadsValue === 0
               ? `Auto: ${cpuCount - 1} threads`
@@ -41,14 +51,13 @@
           }}
           &middot; Takes effect on next database open
         </div>
-
-        <!-- Pre-fetch -->
         <v-switch
           v-model="settings.prefetchEnabled"
           label="Pre-fetch next page"
           color="primary"
           hide-details
         />
+        <div class="text-caption text-medium-emphasis mt-1">Settings are saved automatically</div>
       </v-card-text>
 
       <v-divider />
@@ -63,6 +72,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { mdiClose, mdiTune } from '@mdi/js'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useApiService } from '../composables/useApiService'
 

@@ -1,7 +1,15 @@
 <template>
   <v-dialog v-model="isOpen" max-width="700" scrollable>
     <v-card>
-      <v-card-title>External Links Settings</v-card-title>
+      <v-card-title class="d-flex align-center">
+        <v-icon :icon="mdiLink" class="mr-2" />
+        External Links Settings
+        <v-spacer />
+        <v-btn icon variant="text" size="small" @click="isOpen = false">
+          <v-icon :icon="mdiClose" />
+        </v-btn>
+      </v-card-title>
+      <v-divider />
       <v-card-text>
         <!-- Genome Build Selector -->
         <div class="mb-4">
@@ -204,7 +212,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { mdiDelete, mdiPencil, mdiPlus, mdiRestore } from '@mdi/js'
+import { mdiClose, mdiDelete, mdiLink, mdiPencil, mdiPlus, mdiRestore } from '@mdi/js'
 import {
   useExternalLinksStore,
   type ExternalLinkConfig,

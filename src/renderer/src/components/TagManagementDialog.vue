@@ -1,7 +1,14 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="600" scrollable>
-    <v-card>
-      <v-card-title>Custom Tags</v-card-title>
+  <v-dialog v-model="isOpen" max-width="700" scrollable>
+    <v-card min-height="400">
+      <v-card-title class="d-flex align-center">
+        <v-icon :icon="mdiTagMultiple" class="mr-2" />
+        Custom Tags
+        <v-spacer />
+        <v-btn icon variant="text" size="small" @click="isOpen = false">
+          <v-icon :icon="mdiClose" />
+        </v-btn>
+      </v-card-title>
       <v-card-text>
         <!-- Tag List -->
         <div class="mb-4">
@@ -121,7 +128,7 @@ import { ref, computed, watch } from 'vue'
 import { useTags, TAG_COLORS } from '../composables/useTags'
 import ColorSwatchPicker from './ColorSwatchPicker.vue'
 import type { Tag } from '../../../main/database/types'
-import { mdiAlert, mdiDelete, mdiPencil, mdiPlus } from '@mdi/js'
+import { mdiAlert, mdiClose, mdiDelete, mdiPencil, mdiPlus, mdiTagMultiple } from '@mdi/js'
 import { logService } from '../services/LogService'
 
 const { loadTags, getTags, createTag, updateTag, deleteTag, getTagUsageCount } = useTags()
