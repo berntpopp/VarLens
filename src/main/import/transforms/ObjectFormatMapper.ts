@@ -126,7 +126,15 @@ export class ObjectFormatMapper extends Transform {
         transcript: normalizeString(variant.transcript),
         cdna: normalizeString(variant.cdna),
         aa_change: normalizeString(variant.aa_change),
-        moi: moiString
+        moi: moiString,
+        gq: null,
+        dp: null,
+        ad_ref: null,
+        ad_alt: null,
+        ab: null,
+        filter: null,
+        info_json: null,
+        source_format: null
       }
 
       // Build single transcript row if transcript is present

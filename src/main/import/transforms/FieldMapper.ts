@@ -102,7 +102,15 @@ export class FieldMapper extends Transform {
           selectedTranscript,
           true,
           this.dictionaries.moi
-        ) as string | null
+        ) as string | null,
+        gq: null,
+        dp: null,
+        ad_ref: null,
+        ad_alt: null,
+        ab: null,
+        filter: null,
+        info_json: null,
+        source_format: null
       }
 
       // Extract all transcript annotations

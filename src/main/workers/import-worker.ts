@@ -714,6 +714,8 @@ async function createMapperPipeline(filePath: string, formatInfo: FormatInfo): P
       return stream
     }
   }
+
+  throw new Error(`Unsupported format: ${String((formatInfo as FormatInfo).format)}`)
 }
 
 /**
