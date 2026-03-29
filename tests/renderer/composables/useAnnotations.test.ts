@@ -289,8 +289,8 @@ describe('loadAnnotationsBatch uses batch endpoint', () => {
 
     await result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }])
 
-    // batchGet should be called but with empty array (all cached)
-    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(1, [])
+    // batchGet should NOT be called when all variants are cached
+    expect(window.api.annotations.batchGet).not.toHaveBeenCalled()
   })
 })
 

@@ -223,9 +223,21 @@ export function useAnnotations() {
   ): Promise<void> {
     if (!api) return
 
+    // Filter out cached AND in-flight keys to prevent duplicate IPC calls
     const uncached = variants
-      .filter((v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)))
+      .filter(
+        (v) =>
+          !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)) &&
+          loadingStates.value.get(variantKey(v.chr, v.pos, v.ref, v.alt)) !== true
+      )
       .map((v) => ({ chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }))
+
+    if (uncached.length === 0) return
+
+    // Mark all keys as in-flight before the IPC call
+    for (const vk of uncached) {
+      setLoading(variantKey(vk.chr, vk.pos, vk.ref, vk.alt), true)
+    }
 
     try {
       const results = await api.annotations.batchGet(caseId, uncached)
@@ -238,6 +250,10 @@ export function useAnnotations() {
           (error instanceof Error ? error.message : String(error)),
         'annotations'
       )
+    } finally {
+      for (const vk of uncached) {
+        setLoading(variantKey(vk.chr, vk.pos, vk.ref, vk.alt), false)
+      }
     }
   }
 
@@ -277,9 +293,21 @@ export function useAnnotations() {
   ): Promise<void> {
     if (!api) return
 
+    // Filter out cached AND in-flight keys to prevent duplicate IPC calls
     const uncached = variants
-      .filter((v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)))
+      .filter(
+        (v) =>
+          !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)) &&
+          loadingStates.value.get(variantKey(v.chr, v.pos, v.ref, v.alt)) !== true
+      )
       .map((v) => ({ chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }))
+
+    if (uncached.length === 0) return
+
+    // Mark all keys as in-flight before the IPC call
+    for (const vk of uncached) {
+      setLoading(variantKey(vk.chr, vk.pos, vk.ref, vk.alt), true)
+    }
 
     try {
       const results = await api.annotations.batchGet(null, uncached)
@@ -292,6 +320,10 @@ export function useAnnotations() {
           (error instanceof Error ? error.message : String(error)),
         'annotations'
       )
+    } finally {
+      for (const vk of uncached) {
+        setLoading(variantKey(vk.chr, vk.pos, vk.ref, vk.alt), false)
+      }
     }
   }
 

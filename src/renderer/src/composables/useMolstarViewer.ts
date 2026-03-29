@@ -232,10 +232,33 @@ export function useMolstarViewer(
     }
 
     // Phase 0: Ensure script is loaded (lazy — only on first 3D viewer open).
-    // Phase 1: Wait for custom element registration.
+    // Phase 1: Wait for custom element registration (with timeout).
     // Phase 2: Poll for viewerInstance on the DOM element.
     void ensureMolstarScript()
-      .then(() => customElements.whenDefined('pdbe-molstar'))
+      .then(() => {
+        // If already registered, skip whenDefined
+        if (customElements.get('pdbe-molstar')) return
+
+        // Wrap whenDefined in a timeout — if the script loads but fails to
+        // call customElements.define(), we don't hang forever
+        return new Promise<void>((resolve, reject) => {
+          const timeoutMs = 30_000
+          const timeoutId = setTimeout(() => {
+            reject(new Error('Timed out waiting for pdbe-molstar custom element registration'))
+          }, timeoutMs)
+
+          void customElements
+            .whenDefined('pdbe-molstar')
+            .then(() => {
+              clearTimeout(timeoutId)
+              resolve()
+            })
+            .catch((err) => {
+              clearTimeout(timeoutId)
+              reject(err)
+            })
+        })
+      })
       .then(() => {
         logService.info('pdbe-molstar custom element registered', 'MolstarViewer')
 
