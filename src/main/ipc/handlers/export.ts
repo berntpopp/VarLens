@@ -280,13 +280,8 @@ export function registerExportHandlers({ ipcMain, getDb }: HandlerDependencies):
             ? [['Max gnomAD AF', validated.data.gnomad_af_max]]
             : []),
           ...(validated.data.cadd_min !== undefined ? [['Min CADD', validated.data.cadd_min]] : []),
-          ...(validated.data.cohort_frequency_min !== undefined
-            ? [
-                [
-                  'Min Cohort Frequency',
-                  `${(validated.data.cohort_frequency_min * 100).toFixed(1)}%`
-                ]
-              ]
+          ...(validated.data.max_internal_af !== undefined
+            ? [['Max Internal Frequency', `${(validated.data.max_internal_af * 100).toFixed(1)}%`]]
             : []),
           ...(validated.data.carrier_count_min !== undefined
             ? [['Min Carrier Count', validated.data.carrier_count_min]]

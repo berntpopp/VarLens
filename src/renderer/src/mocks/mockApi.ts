@@ -220,7 +220,7 @@ export const mockApi: WindowAPI = {
       clinvars?: string[]
       gnomad_af_max?: number
       cadd_min?: number
-      cohort_frequency_min?: number
+      max_internal_af?: number
       carrier_count_min?: number
     }) => {
       // Aggregate variants by (chr, pos, ref, alt)
@@ -370,10 +370,10 @@ export const mockApi: WindowAPI = {
         )
       }
 
-      // Apply cohort frequency min filter
-      if (params?.cohort_frequency_min !== undefined && params.cohort_frequency_min > 0) {
+      // Apply max internal AF filter (NULL-inclusive)
+      if (params?.max_internal_af !== undefined && params.max_internal_af > 0) {
         cohortVariants = cohortVariants.filter(
-          (v) => v.cohort_frequency >= params.cohort_frequency_min!
+          (v) => v.cohort_frequency === null || v.cohort_frequency <= params.max_internal_af!
         )
       }
 

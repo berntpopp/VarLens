@@ -21,7 +21,6 @@ interface FilterFields {
   starredOnly: boolean
   hasCommentOnly: boolean
   acmgClassifications: string[]
-  minCohortFrequency?: number | null
   minCarriers?: number | null
 }
 
@@ -37,7 +36,7 @@ interface ApplyPresetOptions {
   presetState: Partial<FilterState>
   /** Optional: separate ref for consequences (cohort uses selectedImpactPresets) */
   consequencesTarget?: Ref<string[]>
-  /** Optional: include cohort-specific fields (minCohortFrequency, minCarriers) */
+  /** Optional: include cohort-specific fields (minCarriers) */
   includeCohortFields?: boolean
 }
 
@@ -68,7 +67,6 @@ export function applyPresetStateToFilters({
   filters.value.acmgClassifications = []
 
   if (includeCohortFields === true) {
-    filters.value.minCohortFrequency = null
     filters.value.minCarriers = null
   }
 
@@ -99,8 +97,6 @@ export function applyPresetStateToFilters({
 
   // Cohort-specific fields
   if (includeCohortFields === true) {
-    if (presetState.minCohortFrequency !== undefined)
-      filters.value.minCohortFrequency = presetState.minCohortFrequency
     if (presetState.minCarriers !== undefined) filters.value.minCarriers = presetState.minCarriers
   }
 }

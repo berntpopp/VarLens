@@ -10,7 +10,6 @@ describe('FILTER_DEFAULTS', () => {
     expect(FILTER_DEFAULTS.maxGnomadAf).toBeNull()
     expect(FILTER_DEFAULTS.minCadd).toBeNull()
     expect(FILTER_DEFAULTS.maxInternalAf).toBeNull()
-    expect(FILTER_DEFAULTS.minCohortFrequency).toBeNull()
     expect(FILTER_DEFAULTS.minCarriers).toBeNull()
   })
 
@@ -51,7 +50,6 @@ describe('FILTER_DEFAULTS', () => {
       'clinvars',
       'maxGnomadAf',
       'minCadd',
-      'minCohortFrequency',
       'minCarriers',
       'starredOnly',
       'hasCommentOnly',

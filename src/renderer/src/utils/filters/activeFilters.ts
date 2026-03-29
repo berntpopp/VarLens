@@ -110,10 +110,6 @@ export function buildActiveFiltersList(
   if (filters.minCadd !== null && filters.minCadd >= 0) {
     list.push({ id: 'cadd', label: 'CADD', value: `>= ${filters.minCadd}` })
   }
-  if (filters.minCohortFrequency !== null && filters.minCohortFrequency > 0) {
-    const pct = (filters.minCohortFrequency * 100).toFixed(1)
-    list.push({ id: 'cohortFreq', label: 'Cohort', value: `>= ${pct}%` })
-  }
   if (filters.minCarriers !== null && filters.minCarriers > 0) {
     list.push({ id: 'carriers', label: 'Carriers', value: `>= ${filters.minCarriers}` })
   }

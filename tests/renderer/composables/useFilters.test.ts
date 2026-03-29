@@ -30,7 +30,6 @@ describe('useFilters', () => {
       expect(result.filters.value.clinvars).toEqual([])
       expect(result.filters.value.maxGnomadAf).toBeNull()
       expect(result.filters.value.minCadd).toBeNull()
-      expect(result.filters.value.minCohortFrequency).toBeNull()
       expect(result.filters.value.minCarriers).toBeNull()
     })
 
@@ -46,7 +45,6 @@ describe('useFilters', () => {
       app = appInstance
 
       expect(result.selectedImpactPresets.value).toEqual([])
-      expect(result.selectedCohortFreqPreset.value).toBeNull()
       expect(result.selectedAfPreset.value).toBeNull()
       expect(result.selectedCaddPreset.value).toBeNull()
     })
@@ -55,7 +53,6 @@ describe('useFilters', () => {
       const [result, appInstance] = withSetup(() => createFilters())
       app = appInstance
 
-      expect(result.customCohortFreq.value).toBeNull()
       expect(result.customGnomadAf.value).toBeNull()
       expect(result.customCadd.value).toBeNull()
     })
@@ -141,14 +138,6 @@ describe('useFilters', () => {
       expect(result.hasActiveFilters.value).toBe(true)
     })
 
-    it('returns true when minCohortFrequency is set (> 0)', () => {
-      const [result, appInstance] = withSetup(() => createFilters())
-      app = appInstance
-
-      result.filters.value.minCohortFrequency = 0.1
-      expect(result.hasActiveFilters.value).toBe(true)
-    })
-
     it('returns true when minCarriers is set (> 0)', () => {
       const [result, appInstance] = withSetup(() => createFilters())
       app = appInstance
@@ -162,14 +151,6 @@ describe('useFilters', () => {
       app = appInstance
 
       result.selectedImpactPresets.value = ['high']
-      expect(result.hasActiveFilters.value).toBe(true)
-    })
-
-    it('returns true when cohort frequency preset is selected', () => {
-      const [result, appInstance] = withSetup(() => createFilters())
-      app = appInstance
-
-      result.selectedCohortFreqPreset.value = 0.05
       expect(result.hasActiveFilters.value).toBe(true)
     })
 
@@ -244,13 +225,10 @@ describe('useFilters', () => {
 
       result.customGnomadAf.value = 5
       result.customCadd.value = 20
-      result.customCohortFreq.value = 10
-
       result.clearAllFilters()
 
       expect(result.customGnomadAf.value).toBeNull()
       expect(result.customCadd.value).toBeNull()
-      expect(result.customCohortFreq.value).toBeNull()
     })
   })
 
@@ -301,21 +279,6 @@ describe('useFilters', () => {
       expect(result.filters.value.minCadd).toBeNull()
       expect(result.selectedCaddPreset.value).toBeNull()
       expect(result.customCadd.value).toBeNull()
-    })
-
-    it('clears cohort frequency filter and associated preset/custom', () => {
-      const [result, appInstance] = withSetup(() => createFilters())
-      app = appInstance
-
-      result.filters.value.minCohortFrequency = 0.1
-      result.selectedCohortFreqPreset.value = 0.05
-      result.customCohortFreq.value = 10
-
-      result.clearFilter('cohortFreq')
-
-      expect(result.filters.value.minCohortFrequency).toBeNull()
-      expect(result.selectedCohortFreqPreset.value).toBeNull()
-      expect(result.customCohortFreq.value).toBeNull()
     })
 
     it('clears impact presets', () => {
@@ -402,36 +365,6 @@ describe('useFilters', () => {
       expect(result.selectedCaddPreset.value).toBeNull()
     })
 
-    it('setting selectedCohortFreqPreset updates minCohortFrequency and clears customCohortFreq', async () => {
-      const [result, appInstance] = withSetup(() => createFilters())
-      app = appInstance
-
-      result.customCohortFreq.value = 10
-      await nextTick()
-
-      result.selectedCohortFreqPreset.value = 0.05
-      await nextTick()
-
-      expect(result.filters.value.minCohortFrequency).toBe(0.05)
-      expect(result.customCohortFreq.value).toBeNull()
-    })
-
-    it('setting customCohortFreq (> 0) updates minCohortFrequency and clears selectedCohortFreqPreset', async () => {
-      const [result, appInstance] = withSetup(() => createFilters())
-      app = appInstance
-
-      // First clear any preset
-      result.selectedCohortFreqPreset.value = null
-      await nextTick()
-
-      // Then set custom value
-      result.customCohortFreq.value = 10 // 10% -> 0.1 decimal
-      await nextTick()
-
-      expect(result.filters.value.minCohortFrequency).toBe(0.1)
-      expect(result.selectedCohortFreqPreset.value).toBeNull()
-    })
-
     it('validates customGnomadAf range (0-100)', async () => {
       const [result, appInstance] = withSetup(() => createFilters())
       app = appInstance
@@ -454,16 +387,6 @@ describe('useFilters', () => {
       expect(result.filters.value.minCadd).toBeNull()
     })
 
-    it('validates customCohortFreq range (0-100)', async () => {
-      const [result, appInstance] = withSetup(() => createFilters())
-      app = appInstance
-
-      result.customCohortFreq.value = -5 // Invalid - below min
-      await nextTick()
-
-      expect(result.customCohortFreq.value).toBeNull()
-      expect(result.filters.value.minCohortFrequency).toBeNull()
-    })
   })
 
   describe('getIpcParams', () => {

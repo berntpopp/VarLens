@@ -47,7 +47,6 @@ import {
  * - CADD score: 0-60 (raw phred score)
  */
 const FILTER_RANGES = {
-  cohortFreqPercent: { min: 0, max: 100 },
   gnomadAfPercent: { min: 0, max: 100 },
   cadd: { min: 0, max: 60 }
 } as const
@@ -68,8 +67,6 @@ export interface FilterState {
   maxGnomadAf: number | null
   /** Minimum CADD phred score */
   minCadd: number | null
-  /** Minimum cohort frequency (decimal, 0-1) */
-  minCohortFrequency: number | null
   /** Minimum carrier count */
   minCarriers: number | null
   /** Show only starred variants */
@@ -102,12 +99,10 @@ export interface UseFiltersReturn {
 
   // Preset selections
   selectedImpactPresets: Ref<string[]>
-  selectedCohortFreqPreset: Ref<number | null>
   selectedAfPreset: Ref<number | null>
   selectedCaddPreset: Ref<number | null>
 
   // Custom numeric inputs (percentage units for user)
-  customCohortFreq: Ref<number | null>
   customGnomadAf: Ref<number | null>
   customCadd: Ref<number | null>
 
@@ -139,7 +134,6 @@ function createInitialFilterState(): FilterState {
     maxGnomadAf: null,
     minCadd: null,
     maxInternalAf: null,
-    minCohortFrequency: null,
     minCarriers: null,
     starredOnly: false,
     hasCommentOnly: false,
@@ -177,23 +171,14 @@ export function createFilters(): UseFiltersReturn {
 
   // Preset selections
   const selectedImpactPresets = ref<string[]>([])
-  const selectedCohortFreqPreset = ref<number | null>(null)
   const selectedAfPreset = ref<number | null>(null)
   const selectedCaddPreset = ref<number | null>(null)
 
   // Custom inputs (percentage/raw values)
-  const customCohortFreq = ref<number | null>(null) // Percentage (0-100)
   const customGnomadAf = ref<number | null>(null) // Percentage (0-100)
   const customCadd = ref<number | null>(null) // Raw CADD score
 
   // BIDIRECTIONAL SYNC: Preset -> Filter + clear custom
-  watch(selectedCohortFreqPreset, (value) => {
-    filters.value.minCohortFrequency = value
-    if (value !== null) {
-      customCohortFreq.value = null
-    }
-  })
-
   watch(selectedAfPreset, (value) => {
     filters.value.maxGnomadAf = value
     if (value !== null) {
@@ -209,25 +194,6 @@ export function createFilters(): UseFiltersReturn {
   })
 
   // Custom -> Filter + clear preset
-  watch(customCohortFreq, (value) => {
-    if (value === null || Number.isNaN(value)) return
-
-    // ANTI-12: Validate range before applying
-    if (
-      value < FILTER_RANGES.cohortFreqPercent.min ||
-      value > FILTER_RANGES.cohortFreqPercent.max
-    ) {
-      customCohortFreq.value = null
-      return
-    }
-
-    if (value > 0) {
-      // Convert percentage (0-100) to decimal (0-1)
-      filters.value.minCohortFrequency = value / 100
-      selectedCohortFreqPreset.value = null
-    }
-  })
-
   watch(customGnomadAf, (value) => {
     if (value === null || Number.isNaN(value)) return
 
@@ -266,10 +232,8 @@ export function createFilters(): UseFiltersReturn {
     searchTerm.value = ''
     filters.value = createInitialFilterState()
     selectedImpactPresets.value = []
-    selectedCohortFreqPreset.value = null
     selectedAfPreset.value = null
     selectedCaddPreset.value = null
-    customCohortFreq.value = null
     customGnomadAf.value = null
     customCadd.value = null
   }
@@ -299,10 +263,6 @@ export function createFilters(): UseFiltersReturn {
         selectedCaddPreset.value = null
         customCadd.value = null
         break
-      case 'cohortFreq':
-        selectedCohortFreqPreset.value = null
-        customCohortFreq.value = null
-        break
       case 'impact':
         selectedImpactPresets.value = []
         break
@@ -324,11 +284,6 @@ export function createFilters(): UseFiltersReturn {
       filters.value.minCadd !== null &&
       !Number.isNaN(filters.value.minCadd) &&
       filters.value.minCadd >= 0
-    const cohortFreqActive =
-      filters.value.minCohortFrequency !== null &&
-      !Number.isNaN(filters.value.minCohortFrequency) &&
-      filters.value.minCohortFrequency > 0
-
     return (
       searchTerm.value !== '' ||
       filters.value.geneSymbol !== '' ||
@@ -337,13 +292,11 @@ export function createFilters(): UseFiltersReturn {
       filters.value.clinvars.length > 0 ||
       afActive ||
       caddActive ||
-      cohortFreqActive ||
       (filters.value.minCarriers !== null && filters.value.minCarriers > 0) ||
       filters.value.starredOnly ||
       filters.value.hasCommentOnly ||
       filters.value.acmgClassifications.length > 0 ||
       selectedImpactPresets.value.length > 0 ||
-      selectedCohortFreqPreset.value !== null ||
       selectedAfPreset.value !== null ||
       selectedCaddPreset.value !== null
     )
@@ -380,10 +333,8 @@ export function createFilters(): UseFiltersReturn {
     filters,
     searchTerm,
     selectedImpactPresets,
-    selectedCohortFreqPreset,
     selectedAfPreset,
     selectedCaddPreset,
-    customCohortFreq,
     customGnomadAf,
     customCadd,
     hasActiveFilters,

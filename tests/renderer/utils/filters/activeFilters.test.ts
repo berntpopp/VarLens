@@ -12,7 +12,6 @@ function makeDefaultFilters(overrides: Partial<FilterState> = {}): FilterState {
     clinvars: [],
     maxGnomadAf: null,
     minCadd: null,
-    minCohortFrequency: null,
     minCarriers: null,
     starredOnly: false,
     hasCommentOnly: false,

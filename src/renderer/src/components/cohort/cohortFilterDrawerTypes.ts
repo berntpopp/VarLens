@@ -31,7 +31,7 @@ export interface CohortFilterDrawerState {
     clinvars: string[]
     maxGnomadAf: number | null
     minCadd: number | null
-    minCohortFrequency: number | null
+    maxInternalAf: number | null
     starredOnly: boolean
     hasCommentOnly: boolean
     acmgClassifications: string[]
@@ -42,12 +42,10 @@ export interface CohortFilterDrawerState {
 
   // Preset selections
   selectedImpactPresets: Ref<string[]>
-  selectedCohortFreqPreset: Ref<number | null>
   selectedAfPreset: Ref<number | null>
   selectedCaddPreset: Ref<number | null>
 
   // Custom numeric inputs
-  customCohortFreq: Ref<number | null>
   customGnomadAf: Ref<number | null>
   customCadd: Ref<number | null>
 
@@ -57,7 +55,6 @@ export interface CohortFilterDrawerState {
 
   // Preset constants
   impactPresets: readonly { label: string; value: string; color: string }[]
-  cohortFreqPresets: readonly { label: string; value: number }[]
   afPresets: readonly { label: string; value: number }[]
   caddPresets: readonly { label: string; value: number }[]
   acmgFilterOptions: readonly { value: string; label: string; color: string }[]

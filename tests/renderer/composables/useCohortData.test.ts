@@ -233,7 +233,7 @@ describe('useCohortData', () => {
       clinvars: ['pathogenic'],
       gnomad_af_max: 0.01,
       cadd_min: 20,
-      cohort_frequency_min: 0.5,
+      max_internal_af: 0.5,
       carrier_count_min: 2
     })
 
@@ -249,7 +249,7 @@ describe('useCohortData', () => {
         clinvars: ['pathogenic'],
         gnomad_af_max: 0.01,
         cadd_min: 20,
-        cohort_frequency_min: 0.5,
+        max_internal_af: 0.5,
         carrier_count_min: 2
       })
     )

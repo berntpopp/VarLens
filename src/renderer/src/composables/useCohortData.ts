@@ -50,8 +50,8 @@ export interface CohortQueryParams {
   gnomad_af_max?: number
   /** Minimum CADD phred score */
   cadd_min?: number
-  /** Minimum cohort frequency (carrier_count / total_cases) */
-  cohort_frequency_min?: number
+  /** Maximum internal allele frequency (cohort_frequency) */
+  max_internal_af?: number
   /** Minimum carrier count */
   carrier_count_min?: number
   /** Show only starred variants (global annotations) */
@@ -186,8 +186,8 @@ export function useCohortData(): UseCohortDataReturn {
     if (params.cadd_min !== undefined) {
       ipcParams.cadd_min = params.cadd_min
     }
-    if (params.cohort_frequency_min !== undefined) {
-      ipcParams.cohort_frequency_min = params.cohort_frequency_min
+    if (params.max_internal_af !== undefined) {
+      ipcParams.max_internal_af = params.max_internal_af
     }
     if (params.carrier_count_min !== undefined) {
       ipcParams.carrier_count_min = params.carrier_count_min
@@ -240,7 +240,7 @@ export function useCohortData(): UseCohortDataReturn {
         clinvars: params.clinvars,
         gnomad_af_max: params.gnomad_af_max,
         cadd_min: params.cadd_min,
-        cohort_frequency_min: params.cohort_frequency_min,
+        max_internal_af: params.max_internal_af,
         carrier_count_min: params.carrier_count_min,
         starred_only: params.starred_only,
         has_comment: params.has_comment,

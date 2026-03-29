@@ -43,14 +43,6 @@ export interface HandleCustomChangeParams {
  *
  * @example
  * ```typescript
- * // For cohort frequency (percentage conversion):
- * handleCustomNumericChange({
- *   value: event.target.value,
- *   targetFilter: filters.value.minCohortFrequency,
- *   presetRef: selectedCohortFreqPreset,
- *   conversionMode: 'percentage'
- * })
- *
  * // For CADD score (raw value):
  * handleCustomNumericChange({
  *   value: event.target.value,

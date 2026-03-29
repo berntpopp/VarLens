@@ -256,42 +256,44 @@
         Population &amp; Scores
       </div>
 
-      <!-- Cohort Frequency (unique to cohort view) -->
-      <v-expansion-panel value="cohortFreq">
+      <!-- Internal Frequency -->
+      <v-expansion-panel value="internal-frequency">
         <FilterPanelTitle
-          :icon="mdiAccountGroup"
-          label="Cohort Freq"
-          :active="isFilterGroupActive('cohortFreq')"
-          :value-summary="cohortFreqSummary"
+          :icon="mdiDatabase"
+          label="Internal Frequency"
+          :active="isFilterGroupActive('internal-frequency')"
+          :value-summary="internalFrequencySummary"
         />
         <v-expansion-panel-text>
           <div class="d-flex ga-1 flex-wrap mb-2">
             <v-chip
-              v-for="preset in cohortFreqPresets"
+              v-for="preset in internalAfPresets"
               :key="preset.value"
-              :color="selectedCohortFreqPreset === preset.value ? 'primary' : undefined"
-              :variant="selectedCohortFreqPreset === preset.value ? 'flat' : 'outlined'"
+              :color="selectedInternalAfPreset === preset.value ? 'primary' : undefined"
+              :variant="selectedInternalAfPreset === preset.value ? 'flat' : 'outlined'"
               size="small"
               label
               @click="
-                selectedCohortFreqPreset =
-                  selectedCohortFreqPreset === preset.value ? null : preset.value
+                selectedInternalAfPreset =
+                  selectedInternalAfPreset === preset.value ? null : preset.value
               "
             >
               {{ preset.label }}
             </v-chip>
           </div>
           <v-text-field
-            v-model.number="customCohortFreq"
+            v-model="customInternalAf"
             density="compact"
             variant="outlined"
             hide-details
             type="number"
-            step="1"
+            step="0.1"
             min="0"
             max="100"
-            placeholder="Custom % (e.g. 15)"
+            placeholder="Max internal AF % (e.g. 5)"
             clearable
+            suffix="%"
+            @click:clear="customInternalAf = ''"
           />
         </v-expansion-panel-text>
       </v-expansion-panel>
@@ -378,7 +380,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref, computed } from 'vue'
+import { inject, ref, computed, watch } from 'vue'
 import FilterDrawerShell from '../filters/FilterDrawerShell.vue'
 import FilterPanelTitle from '../filters/FilterPanelTitle.vue'
 import DslSearchBar from '../DslSearchBar.vue'
@@ -389,11 +391,11 @@ import { consequenceGroups, clinvarGroups } from '../../config/filterGroups'
 import { ACMG_FILTER_OPTIONS } from '../../utils/filters'
 import type { CohortFilterDrawerState } from './cohortFilterDrawerTypes'
 import {
-  mdiAccountGroup,
   mdiAlertCircle,
   mdiBookmarkMultiple,
   mdiCogOutline,
   mdiCommentText,
+  mdiDatabase,
   mdiDna,
   mdiEarth,
   mdiFlash,
@@ -422,7 +424,7 @@ const allPanelValues = [
   'function',
   'clinvar',
   'annotations',
-  'cohortFreq',
+  'internal-frequency',
   'frequency',
   'cadd'
 ]
@@ -452,14 +454,11 @@ const {
   geneSymbolSuggestions,
   loadingGeneSuggestions,
   selectedImpactPresets,
-  selectedCohortFreqPreset,
   selectedAfPreset,
   selectedCaddPreset,
-  customCohortFreq,
   customGnomadAf,
   customCadd,
   impactPresets,
-  cohortFreqPresets,
   afPresets,
   caddPresets,
   activeFilterCount,
@@ -510,10 +509,65 @@ const annotationsSummary = computed(() => {
   return parts.join(', ')
 })
 
-const cohortFreqSummary = computed(() => {
-  if (filters.value.minCohortFrequency !== null && filters.value.minCohortFrequency > 0) {
-    const pct = (filters.value.minCohortFrequency * 100).toFixed(1)
-    return `>= ${pct}%`
+// Internal frequency filter state (local to drawer, same pattern as case-mode FilterDrawer)
+const internalAfPresets = [
+  { label: '<= 1%', value: 0.01 },
+  { label: '<= 5%', value: 0.05 },
+  { label: '<= 10%', value: 0.1 }
+] as const
+
+const selectedInternalAfPreset = ref<number | null>(null)
+const customInternalAf = ref<string>('')
+
+// Bidirectional sync: preset selection sets filter state and clears custom input
+watch(selectedInternalAfPreset, (val) => {
+  if (val !== null) {
+    filters.value.maxInternalAf = val
+    customInternalAf.value = ''
+  } else if (customInternalAf.value === '') {
+    filters.value.maxInternalAf = null
+  }
+})
+
+// Bidirectional sync: custom input sets filter state and clears preset
+watch(customInternalAf, (val) => {
+  const num = parseFloat(val)
+  if (val !== '' && !Number.isNaN(num) && num > 0) {
+    const clamped = Math.min(Math.max(num, 0), 100)
+    filters.value.maxInternalAf = clamped / 100
+    selectedInternalAfPreset.value = null
+  } else if (val === '') {
+    // Only clear if no preset is active
+    if (selectedInternalAfPreset.value === null) {
+      filters.value.maxInternalAf = null
+    }
+  }
+})
+
+// Sync filter state back to UI when changed externally (e.g. "Clear all", loading presets)
+watch(
+  () => filters.value.maxInternalAf,
+  (val) => {
+    if (val === null || val === 0) {
+      selectedInternalAfPreset.value = null
+      customInternalAf.value = ''
+    } else if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+      const matchingPreset = internalAfPresets.find((p) => p.value === val)
+      if (matchingPreset) {
+        selectedInternalAfPreset.value = matchingPreset.value
+        customInternalAf.value = ''
+      } else {
+        selectedInternalAfPreset.value = null
+        customInternalAf.value = String(val * 100)
+      }
+    }
+  }
+)
+
+const internalFrequencySummary = computed(() => {
+  if (filters.value.maxInternalAf !== null && filters.value.maxInternalAf > 0) {
+    const pct = (filters.value.maxInternalAf * 100).toFixed(2)
+    return `<= ${pct}%`
   }
   return ''
 })

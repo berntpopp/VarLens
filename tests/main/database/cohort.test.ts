@@ -297,8 +297,8 @@ describe('CohortService', () => {
       })
     })
 
-    describe('filter: cohort_frequency_min', () => {
-      it('should filter by minimum cohort frequency', () => {
+    describe('filter: max_internal_af', () => {
+      it('should filter by maximum internal allele frequency (NULL-inclusive)', () => {
         const case1 = insertCase('Case 1')
         const case2 = insertCase('Case 2')
 
@@ -310,10 +310,11 @@ describe('CohortService', () => {
         insertVariant(case1, '2', 200, 'C', 'T')
 
         rebuildSummary()
-        const result = cohortService.getCohortVariants({ cohort_frequency_min: 0.75 })
+        const result = cohortService.getCohortVariants({ max_internal_af: 0.5 })
 
+        // Should include the 50% variant but not the 100% variant
         expect(result.total_count).toBe(1)
-        expect(result.data[0].cohort_frequency).toBe(1.0)
+        expect(result.data[0].cohort_frequency).toBe(0.5)
       })
     })
 

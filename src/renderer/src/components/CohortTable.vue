@@ -193,7 +193,7 @@ const buildCohortQueryParams = (): Omit<
   clinvars: filters.value.clinvars.length > 0 ? filters.value.clinvars : undefined,
   gnomad_af_max: filters.value.maxGnomadAf ?? undefined,
   cadd_min: filters.value.minCadd ?? undefined,
-  cohort_frequency_min: filters.value.minCohortFrequency ?? undefined,
+  max_internal_af: filters.value.maxInternalAf ?? undefined,
   starred_only: filters.value.starredOnly || undefined,
   has_comment: filters.value.hasCommentOnly || undefined,
   acmg_classifications:
@@ -290,7 +290,7 @@ const exportToExcel = async (): Promise<void> => {
       clinvars: filters.value.clinvars.length > 0 ? [...filters.value.clinvars] : undefined,
       gnomad_af_max: filters.value.maxGnomadAf ?? undefined,
       cadd_min: filters.value.minCadd ?? undefined,
-      cohort_frequency_min: filters.value.minCohortFrequency ?? undefined
+      max_internal_af: filters.value.maxInternalAf ?? undefined
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await (api as any).export.cohort(plainParams)

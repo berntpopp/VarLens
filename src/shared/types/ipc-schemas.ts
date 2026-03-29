@@ -98,7 +98,7 @@ export const CohortSearchParamsSchema = z.object({
     .max(DOMAIN_CONFIG.MAX_CADD_SCORE)
     .nullish()
     .transform((val) => val ?? undefined),
-  cohort_frequency_min: z
+  max_internal_af: z
     .number()
     .min(0)
     .max(1)

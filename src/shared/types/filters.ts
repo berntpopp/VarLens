@@ -44,8 +44,6 @@ export interface FilterState {
   maxGnomadAf: number | null
   /** Minimum CADD score (0-60) */
   minCadd: number | null
-  /** Minimum cohort frequency (0-1) - cohort view only */
-  minCohortFrequency: number | null
   /** Minimum carrier count - cohort view only */
   minCarriers: number | null
   /** Show only starred variants */
@@ -80,7 +78,6 @@ export interface FilterIpcParams {
   clinvars?: string[]
   gnomad_af_max?: number
   cadd_min?: number
-  cohort_frequency_min?: number
   carrier_count_min?: number
   starred_only?: boolean
   has_comment?: boolean

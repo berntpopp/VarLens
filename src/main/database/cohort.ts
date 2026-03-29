@@ -163,9 +163,9 @@ export class CohortService {
       paramsArray.push(params.carrier_count_min)
     }
 
-    if (params.cohort_frequency_min !== undefined && params.cohort_frequency_min > 0) {
-      whereConditions.push('cvs.cohort_frequency >= ?')
-      paramsArray.push(params.cohort_frequency_min)
+    if (params.max_internal_af !== undefined && params.max_internal_af > 0) {
+      whereConditions.push('(cvs.cohort_frequency IS NULL OR cvs.cohort_frequency <= ?)')
+      paramsArray.push(params.max_internal_af)
     }
 
     // Annotation filters (use denormalized columns from v14)

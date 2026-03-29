@@ -65,7 +65,6 @@ export function useFilterPresetStore() {
       // Scalar fields: last wins
       if (fj.maxGnomadAf !== undefined) merged.maxGnomadAf = fj.maxGnomadAf
       if (fj.minCadd !== undefined) merged.minCadd = fj.minCadd
-      if (fj.minCohortFrequency !== undefined) merged.minCohortFrequency = fj.minCohortFrequency
       if (fj.minCarriers !== undefined) merged.minCarriers = fj.minCarriers
       if (fj.searchQuery !== undefined) merged.searchQuery = fj.searchQuery
       if (fj.geneSymbol !== undefined) merged.geneSymbol = fj.geneSymbol

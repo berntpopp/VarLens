@@ -183,10 +183,8 @@ const {
   filters,
   searchTerm,
   selectedImpactPresets,
-  selectedCohortFreqPreset,
   selectedAfPreset,
   selectedCaddPreset,
-  customCohortFreq,
   customGnomadAf,
   customCadd,
   hasActiveFilters,
@@ -308,13 +306,6 @@ const impactPresets = [
   { label: 'LOW', value: 'LOW', color: 'info' }
 ]
 
-// Cohort frequency presets
-const cohortFreqPresets = [
-  { label: '>=50%', value: 0.5 },
-  { label: '>=25%', value: 0.25 },
-  { label: '>=10%', value: 0.1 }
-]
-
 // gnomAD AF presets
 const afPresets = [
   { label: '1%', value: 0.01 },
@@ -365,12 +356,11 @@ const isFilterGroupActive = (groupId: string): boolean => {
       return filters.value.funcs.length > 0
     case 'clinvar':
       return filters.value.clinvars.length > 0
-    case 'cohort-freq':
-    case 'cohortFreq':
+    case 'internal-frequency':
       return (
-        filters.value.minCohortFrequency !== null &&
-        !Number.isNaN(filters.value.minCohortFrequency) &&
-        filters.value.minCohortFrequency > 0
+        filters.value.maxInternalAf !== null &&
+        !Number.isNaN(filters.value.maxInternalAf) &&
+        filters.value.maxInternalAf > 0
       )
     case 'frequency':
       return (
@@ -446,7 +436,7 @@ const { debouncedFn: emitFilterChange } = useDebounce(() => emit('filter-change'
 const cohortFilterKey = computed(() => JSON.stringify(filters.value))
 watch(cohortFilterKey, () => emitFilterChange())
 watch(selectedImpactPresets, () => emitFilterChange())
-watch([selectedCohortFreqPreset, selectedAfPreset, selectedCaddPreset], () => emitFilterChange())
+watch([selectedAfPreset, selectedCaddPreset], () => emitFilterChange())
 
 // DSL search integration — same composable as variant table (DRY)
 const {
@@ -474,16 +464,13 @@ provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
   filters,
   searchTerm,
   selectedImpactPresets,
-  selectedCohortFreqPreset,
   selectedAfPreset,
   selectedCaddPreset,
-  customCohortFreq,
   customGnomadAf,
   customCadd,
   geneSymbolSuggestions,
   loadingGeneSuggestions,
   impactPresets,
-  cohortFreqPresets,
   afPresets,
   caddPresets,
   acmgFilterOptions,

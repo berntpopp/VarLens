@@ -146,8 +146,8 @@ export interface CohortSearchParams {
   gnomad_af_max?: number
   /** Minimum CADD phred score */
   cadd_min?: number
-  /** Minimum cohort frequency (carrier_count / total_cases) */
-  cohort_frequency_min?: number
+  /** Maximum internal allele frequency (cohort_frequency) */
+  max_internal_af?: number
   /** Minimum carrier count */
   carrier_count_min?: number
   /** Show only starred variants (global annotations) */

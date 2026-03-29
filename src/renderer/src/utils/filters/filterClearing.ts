@@ -21,7 +21,6 @@ export type FilterId =
   | 'clinvars'
   | 'frequency'
   | 'cadd'
-  | 'cohortFreq'
   | 'carriers'
   | 'starred'
   | 'comments'
@@ -61,8 +60,6 @@ export function clearFilter(filterId: FilterId): Partial<FilterState> {
       return { maxGnomadAf: FILTER_DEFAULTS.maxGnomadAf }
     case 'cadd':
       return { minCadd: FILTER_DEFAULTS.minCadd }
-    case 'cohortFreq':
-      return { minCohortFrequency: FILTER_DEFAULTS.minCohortFrequency }
     case 'carriers':
       return { minCarriers: FILTER_DEFAULTS.minCarriers }
     case 'starred':
@@ -110,7 +107,6 @@ export function clearAllFilters(): FilterState {
     clinvars: [...FILTER_DEFAULTS.clinvars],
     maxGnomadAf: FILTER_DEFAULTS.maxGnomadAf,
     minCadd: FILTER_DEFAULTS.minCadd,
-    minCohortFrequency: FILTER_DEFAULTS.minCohortFrequency,
     minCarriers: FILTER_DEFAULTS.minCarriers,
     starredOnly: FILTER_DEFAULTS.starredOnly,
     hasCommentOnly: FILTER_DEFAULTS.hasCommentOnly,
