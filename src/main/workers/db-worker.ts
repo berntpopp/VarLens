@@ -183,6 +183,34 @@ export default function run(task: DbTask): unknown {
         )
       }
 
+      // ── Tags ──────────────────────────────────────────────
+      case 'tags:list':
+        return repos.tags.listTags()
+
+      case 'tags:getVariantTags':
+        return repos.tags.getVariantTags(
+          params[0] as number, // caseId
+          params[1] as number // variantId
+        )
+
+      case 'tags:getUsageCount':
+        return repos.tags.getTagUsageCount(params[0] as number) // tagId
+
+      // ── Transcripts ───────────────────────────────────────
+      case 'transcripts:list':
+        return repos.transcripts.getVariantTranscripts(params[0] as number) // variantId
+
+      // ── Gene Lists ────────────────────────────────────────
+      case 'gene-lists:list':
+        return repos.geneLists.listGeneLists()
+
+      case 'gene-lists:getGenes':
+        return repos.geneLists.getGeneListGenes(params[0] as number) // geneListId
+
+      // ── Region Files ──────────────────────────────────────
+      case 'region-files:list':
+        return repos.geneLists.listRegionFiles()
+
       // ── Database ──────────────────────────────────────────
       case 'database:overview': {
         const overview = repos.overview.getDatabaseOverview()

@@ -41,6 +41,17 @@ export type DbTaskType =
   | 'case-metadata:distinctExternalIdTypes'
   | 'case-metadata:distinctHpoTerms'
   | 'case-metadata:getFullMetadata'
+  // Tags (read-only)
+  | 'tags:list'
+  | 'tags:getVariantTags'
+  | 'tags:getUsageCount'
+  // Transcripts (read-only)
+  | 'transcripts:list'
+  // Gene lists (read-only)
+  | 'gene-lists:list'
+  | 'gene-lists:getGenes'
+  // Region files (read-only)
+  | 'region-files:list'
   // Database
   | 'database:overview'
   // Association analysis

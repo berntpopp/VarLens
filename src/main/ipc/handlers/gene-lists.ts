@@ -13,13 +13,17 @@ import { mainLogger } from '../../services/MainLogger'
 /**
  * Gene Lists and Region Files IPC handlers
  */
-export function registerGeneListHandlers({ ipcMain, getDb }: HandlerDependencies): void {
+export function registerGeneListHandlers({ ipcMain, getDb, getDbPool }: HandlerDependencies): void {
   // ============================================================
   // Gene Lists
   // ============================================================
 
   ipcMain.handle('gene-lists:list', async () => {
     return wrapHandler(async () => {
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'gene-lists:list' as const, params: [] })
+      }
       const db = getDb()
       return db.geneLists.listGeneLists()
     })
@@ -69,6 +73,10 @@ export function registerGeneListHandlers({ ipcMain, getDb }: HandlerDependencies
         throw new Error('Invalid gene list ID')
       }
 
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'gene-lists:getGenes' as const, params: [validated.data] })
+      }
       const db = getDb()
       return db.geneLists.getGeneListGenes(validated.data)
     })
@@ -98,6 +106,10 @@ export function registerGeneListHandlers({ ipcMain, getDb }: HandlerDependencies
 
   ipcMain.handle('region-files:list', async () => {
     return wrapHandler(async () => {
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'region-files:list' as const, params: [] })
+      }
       const db = getDb()
       return db.geneLists.listRegionFiles()
     })

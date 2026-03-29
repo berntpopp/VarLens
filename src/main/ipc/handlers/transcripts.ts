@@ -27,7 +27,11 @@ const TranscriptInsertRowSchema = z.object({
  *
  * Channels: transcripts:list, transcripts:switch, transcripts:insertAndSwitch
  */
-export function registerTranscriptHandlers({ ipcMain, getDb }: HandlerDependencies): void {
+export function registerTranscriptHandlers({
+  ipcMain,
+  getDb,
+  getDbPool
+}: HandlerDependencies): void {
   /**
    * List all transcripts for a variant
    */
@@ -43,6 +47,10 @@ export function registerTranscriptHandlers({ ipcMain, getDb }: HandlerDependenci
         throw new Error('Invalid parameters')
       }
 
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'transcripts:list' as const, params: [validated.data] })
+      }
       const db = getDb()
       return db.transcripts.getVariantTranscripts(validated.data)
     })

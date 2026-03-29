@@ -16,7 +16,7 @@ import { mainLogger } from '../../services/MainLogger'
  * Channels: tags:list, tags:create, tags:update, tags:delete, tags:getUsageCount,
  *           tags:getVariantTags, tags:assignVariantTag, tags:removeVariantTag, tags:setVariantTags
  */
-export function registerTagHandlers({ ipcMain, getDb }: HandlerDependencies): void {
+export function registerTagHandlers({ ipcMain, getDb, getDbPool }: HandlerDependencies): void {
   // ============================================================
   // Tag CRUD Handlers
   // ============================================================
@@ -26,6 +26,10 @@ export function registerTagHandlers({ ipcMain, getDb }: HandlerDependencies): vo
    */
   ipcMain.handle('tags:list', async () => {
     return wrapHandler(async () => {
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'tags:list' as const, params: [] })
+      }
       const db = getDb()
       return db.tags.listTags()
     })
@@ -101,6 +105,10 @@ export function registerTagHandlers({ ipcMain, getDb }: HandlerDependencies): vo
         throw new Error('Invalid tag ID')
       }
 
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({ type: 'tags:getUsageCount' as const, params: [validatedId.data] })
+      }
       const db = getDb()
       return db.tags.getTagUsageCount(validatedId.data)
     })
@@ -122,6 +130,13 @@ export function registerTagHandlers({ ipcMain, getDb }: HandlerDependencies): vo
         throw new Error('Invalid case/variant ID')
       }
 
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({
+          type: 'tags:getVariantTags' as const,
+          params: [validated.data.caseId, validated.data.variantId]
+        })
+      }
       const db = getDb()
       return db.tags.getVariantTags(validated.data.caseId, validated.data.variantId)
     })
