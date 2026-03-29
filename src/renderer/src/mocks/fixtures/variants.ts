@@ -36,7 +36,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_007294.4',
     cdna: 'c.5266G>A',
     aa_change: 'p.(Trp1756*)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 2,
@@ -58,7 +66,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000059.4',
     cdna: 'c.5972A>T',
     aa_change: 'p.(Asn1991Ile)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 3,
@@ -80,7 +96,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000546.6',
     cdna: 'c.743G>A',
     aa_change: 'p.(Arg248Gln)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 4,
@@ -102,7 +126,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000251.3',
     cdna: 'c.942+1G>T',
     aa_change: 'p.(?)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 5,
@@ -124,7 +156,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000051.4',
     cdna: 'c.8147_8148del',
     aa_change: 'p.(Leu2716Phefs*6)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 6,
@@ -146,7 +186,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000249.4',
     cdna: 'c.655A>G',
     aa_change: 'p.(Ile219=)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 7,
@@ -168,7 +216,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000548.5',
     cdna: 'c.1513C>T',
     aa_change: 'p.(Arg505*)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 8,
@@ -190,7 +246,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000038.6',
     cdna: 'c.-45A>G',
     aa_change: 'p.(=)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
 
   // ============================================
@@ -216,7 +280,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_004992.4',
     cdna: 'c.502C>T',
     aa_change: 'p.(Arg168Trp)',
-    moi: 'XLD'
+    moi: 'XLD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 10,
@@ -238,7 +310,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_002834.5',
     cdna: 'c.922A>G',
     aa_change: 'p.(Asn308Asp)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 11,
@@ -260,7 +340,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_001165963.4',
     cdna: 'c.4573C>T',
     aa_change: 'p.(Arg1525*)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 12,
@@ -282,7 +370,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_017617.5',
     cdna: 'c.4681G>A',
     aa_change: 'p.(Val1561Met)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 13,
@@ -304,7 +400,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_002693.3',
     cdna: 'c.2243_2245del',
     aa_change: 'p.(Leu748Argfs*21)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 14,
@@ -326,7 +430,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000089.4',
     cdna: 'c.1236C>T',
     aa_change: 'p.(Gly412=)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 15,
@@ -348,7 +460,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_001128425.2',
     cdna: 'c.934-1G>C',
     aa_change: 'p.(?)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 16,
@@ -370,7 +490,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000222.3',
     cdna: null,
     aa_change: null,
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 17,
@@ -392,7 +520,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000314.8',
     cdna: 'c.388C>T',
     aa_change: 'p.(Arg130*)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 18,
@@ -414,7 +550,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_019105.8',
     cdna: 'c.1234+15G>T',
     aa_change: 'p.(=)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 19,
@@ -436,7 +580,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_007194.4',
     cdna: 'c.1100del',
     aa_change: 'p.(Thr367Metfs*15)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
 
   // ============================================
@@ -462,7 +614,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000492.4',
     cdna: 'c.1521_1523del',
     aa_change: 'p.(Phe508del)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 21,
@@ -484,7 +644,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_003748.4',
     cdna: 'c.*657del',
     aa_change: 'p.(=)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 22,
@@ -506,7 +674,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_001854.4',
     cdna: 'c.138T>G',
     aa_change: 'p.(Asp46Glu)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 23,
@@ -528,7 +704,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000527.5',
     cdna: null,
     aa_change: null,
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 24,
@@ -550,7 +734,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000090.4',
     cdna: 'c.1662+1G>A',
     aa_change: 'p.(?)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 25,
@@ -572,7 +764,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000138.5',
     cdna: 'c.4096G>A',
     aa_change: 'p.(Gly1366Ser)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 26,
@@ -594,7 +794,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_004612.4',
     cdna: 'c.722A>G',
     aa_change: 'p.(Tyr241Cys)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 27,
@@ -616,7 +824,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_003242.6',
     cdna: 'c.1159T>C',
     aa_change: 'p.(Ser387Pro)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 28,
@@ -638,7 +854,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000020.3',
     cdna: 'c.925C>G',
     aa_change: 'p.(Gln309*)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 29,
@@ -660,7 +884,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000214.3',
     cdna: 'c.2230+1G>T',
     aa_change: 'p.(?)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 30,
@@ -682,7 +914,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_025128.5',
     cdna: 'c.456_458del',
     aa_change: 'p.(Gln153del)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 31,
@@ -704,7 +944,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_004260.4',
     cdna: 'c.2T>C',
     aa_change: 'p.(Met1?)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
 
   // ============================================
@@ -733,7 +981,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000059.4',
     cdna: 'c.5972A>T',
     aa_change: 'p.(Asn1991Ile)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 33,
@@ -755,7 +1011,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000059.4',
     cdna: 'c.5972A>T',
     aa_change: 'p.(Asn1991Ile)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
 
   // TP53 hotspot - present in cases 1 and 3 (cohort freq: 66%)
@@ -779,7 +1043,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000546.6',
     cdna: 'c.743G>A',
     aa_change: 'p.(Arg248Gln)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
 
   // CFTR common mutation - present in cases 2 and 3 (cohort freq: 66%)
@@ -803,7 +1075,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000492.4',
     cdna: 'c.1521_1523del',
     aa_change: 'p.(Phe508del)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
 
   // ATM truncation - present in cases 1 and 2 (cohort freq: 66%)
@@ -827,7 +1107,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000051.4',
     cdna: 'c.8147_8148del',
     aa_change: 'p.(Leu2716Phefs*6)',
-    moi: 'AR'
+    moi: 'AR',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
 
   // PTEN pathogenic - present in all 3 cases (cohort freq: 100%)
@@ -851,7 +1139,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000314.8',
     cdna: 'c.388C>T',
     aa_change: 'p.(Arg130*)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
   {
     id: 38,
@@ -873,7 +1169,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000314.8',
     cdna: 'c.388C>T',
     aa_change: 'p.(Arg130*)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   },
 
   // FBN1 Marfan variant - present in cases 1 and 3 (cohort freq: 66%)
@@ -897,7 +1201,15 @@ export const mockVariants: Variant[] = [
     transcript: 'NM_000138.5',
     cdna: 'c.4096G>A',
     aa_change: 'p.(Gly1366Ser)',
-    moi: 'AD'
+    moi: 'AD',
+    gq: null,
+    dp: null,
+    ad_ref: null,
+    ad_alt: null,
+    ab: null,
+    filter: null,
+    info_json: null,
+    source_format: null
   }
 ]
 
