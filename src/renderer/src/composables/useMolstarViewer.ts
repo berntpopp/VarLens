@@ -50,10 +50,7 @@ interface MolstarViewerInstance {
     }
   }
   visual: {
-    select: (params: {
-      data: SelectionDataItem[]
-      nonSelectedColor?: RgbColor
-    }) => Promise<void>
+    select: (params: { data: SelectionDataItem[]; nonSelectedColor?: RgbColor }) => Promise<void>
     reset: (params: { camera: boolean; theme: boolean }) => void
     update: (options: Record<string, unknown>, fullLoad?: boolean) => void | Promise<void>
   }
@@ -143,7 +140,7 @@ export function useMolstarViewer(
         setTimeout(() => restoreBgColor(), 300)
         // Delay highlighting slightly to ensure the visual API is fully initialized
         // after the loadComplete event fires
-        setTimeout(() => highlightVariants(), 500)
+        setTimeout(() => void highlightVariants(), 500)
         logService.info('3D structure loaded successfully', 'MolstarViewer')
       } else {
         loading.value = false
@@ -168,7 +165,7 @@ export function useMolstarViewer(
           loading.value = false
           structureLoaded.value = true
           error.value = null
-          setTimeout(() => highlightVariants(), 500)
+          setTimeout(() => void highlightVariants(), 500)
           logService.info(
             '3D structure already loaded (detected via plugin state)',
             'MolstarViewer'
@@ -419,7 +416,7 @@ export function useMolstarViewer(
   // Re-highlight when variants change
   watch(variants, () => {
     if (structureLoaded.value) {
-      highlightVariants()
+      void highlightVariants()
     }
   })
 
@@ -427,7 +424,7 @@ export function useMolstarViewer(
   if (clinvarVariants) {
     watch(clinvarVariants, () => {
       if (structureLoaded.value) {
-        highlightVariants()
+        void highlightVariants()
       }
     })
   }
