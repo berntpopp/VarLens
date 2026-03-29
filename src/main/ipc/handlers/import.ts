@@ -28,7 +28,9 @@ export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies):
         defaultPath: settings.lastImportDirectory,
         properties: ['openFile'],
         filters: [
-          { name: 'Variant Files', extensions: ['json', 'json.gz', 'gz', 'vcf', 'vcf.gz'] },
+          { name: 'Variant Files', extensions: ['vcf', 'vcf.gz', 'json', 'json.gz', 'gz'] },
+          { name: 'VCF Files', extensions: ['vcf', 'vcf.gz'] },
+          { name: 'JSON Files', extensions: ['json', 'json.gz', 'gz'] },
           { name: 'All Files', extensions: ['*'] }
         ]
       })
@@ -135,6 +137,13 @@ export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies):
       if (workerClient !== null) {
         workerClient.cancel()
       }
+    })
+  })
+
+  ipcMain.handle('import:vcfPreview', async (_event, filePath: string) => {
+    return wrapHandler(async () => {
+      const { getVcfPreview } = await import('../../import/vcf/vcf-preview')
+      return getVcfPreview(filePath)
     })
   })
 }

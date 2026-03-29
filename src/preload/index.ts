@@ -61,6 +61,8 @@ const api = {
     start: (filePath: string, caseName: string) =>
       ipcRenderer.invoke('import:start', filePath, caseName),
 
+    vcfPreview: (filePath: string) => ipcRenderer.invoke('import:vcfPreview', filePath),
+
     /**
      * Register progress listener. Returns cleanup function.
      * IMPORTANT: Call the returned function on component unmount to prevent memory leaks.
