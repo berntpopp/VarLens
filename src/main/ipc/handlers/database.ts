@@ -10,6 +10,7 @@ import { WrongPasswordError } from '../../database/errors'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
+import { convertBigInts } from '../../utils/convertBigInts'
 import {
   DatabaseOpenSchema,
   DatabaseCreateSchema,
@@ -218,11 +219,7 @@ export function registerDatabaseHandlers({
       const db = getDb()
       const overview = db.overview.getDatabaseOverview()
       // Deep clone for IPC serialization (handle BigInt)
-      return JSON.parse(
-        JSON.stringify(overview, (_key, value) =>
-          typeof value === 'bigint' ? Number(value) : value
-        )
-      )
+      return convertBigInts(overview)
     })
   })
 

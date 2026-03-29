@@ -14,20 +14,7 @@ import { mainLogger } from '../../services/MainLogger'
 import type { RebuildWorkerResponse } from '../../workers/rebuild-summary-worker'
 import type { DatabaseService } from '../../database/DatabaseService'
 import { computePanelIntervals } from './panelIntervalHelper'
-
-function convertBigInts<T>(obj: T): T {
-  if (obj === null || obj === undefined) return obj
-  if (typeof obj === 'bigint') return Number(obj) as unknown as T
-  if (Array.isArray(obj)) return obj.map(convertBigInts) as unknown as T
-  if (typeof obj === 'object') {
-    const result: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(obj)) {
-      result[key] = typeof value === 'bigint' ? Number(value) : value
-    }
-    return result as T
-  }
-  return obj
-}
+import { convertBigInts } from '../../utils/convertBigInts'
 
 function safeEmit(channel: string, data: unknown): void {
   const win = BrowserWindow.getAllWindows()[0]
@@ -180,11 +167,7 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
           )
         }
         // Ensure data is serializable (convert any BigInt to Number)
-        return JSON.parse(
-          JSON.stringify(carriers, (_key, value) =>
-            typeof value === 'bigint' ? Number(value) : value
-          )
-        )
+        return convertBigInts(carriers)
       })
     }
   )

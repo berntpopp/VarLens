@@ -15,6 +15,7 @@ import type { Repositories } from '../database/createRepositories'
 import { AssociationDataBuilder } from '../database/AssociationDataBuilder'
 import type { VariantFilters } from '../statistics/types'
 import type { DbTask } from '../../shared/types/db-task'
+import { convertBigInts } from '../utils/convertBigInts'
 
 // ── Initialise connection from workerData ──────────────────────
 
@@ -214,11 +215,7 @@ export default function run(task: DbTask): unknown {
       // ── Database ──────────────────────────────────────────
       case 'database:overview': {
         const overview = repos.overview.getDatabaseOverview()
-        return JSON.parse(
-          JSON.stringify(overview, (_key, value) =>
-            typeof value === 'bigint' ? Number(value) : value
-          )
-        )
+        return convertBigInts(overview)
       }
 
       default:
