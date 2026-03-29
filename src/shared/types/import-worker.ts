@@ -83,6 +83,10 @@ export interface FileImportRequest {
   caseName: string
   isDuplicate: boolean
   duplicateStrategy: 'skip' | 'overwrite'
+  /** VCF-specific: which samples to import */
+  vcfSelectedSamples?: string[]
+  /** VCF-specific: genome build override */
+  vcfGenomeBuild?: string
 }
 
 /** Worker -> Main messages */

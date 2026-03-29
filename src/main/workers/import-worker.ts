@@ -1,7 +1,9 @@
 import { parentPort } from 'worker_threads'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
-import { statSync } from 'node:fs'
+import { createReadStream, statSync } from 'node:fs'
+import { createInterface } from 'node:readline'
+import { createGunzip } from 'node:zlib'
 import type { Readable } from 'node:stream'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/Pick'
@@ -16,8 +18,13 @@ import { createFieldMapper } from '../import/transforms/FieldMapper'
 import { createObjectFormatMapper } from '../import/transforms/ObjectFormatMapper'
 import { resolveColumnIndices } from '../import/config/fieldMapping'
 import { detectFormat } from '../import/format-detection'
-import { createDecompressedStream } from '../import/stream-utils'
+import { createDecompressedStream, isGzipped } from '../import/stream-utils'
 import { createFTSTriggers } from '../database/schema'
+import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
+import { parseVcfLine } from '../import/vcf/vcf-line-parser'
+import { mapVcfRecord } from '../import/vcf/VcfMapper'
+import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
+import type { VcfHeader } from '../import/vcf/types'
 import {
   REBUILD_VARIANT_SUMMARY_SQL,
   REBUILD_GENE_BURDEN_SQL,
@@ -147,10 +154,8 @@ port.on('message', async (msg: MainMessage) => {
 
           // Create case record
           const fileSize = statSync(file.filePath).size
-          // Default to GRCh38 for JSON-based imports. Raw VCF headers are not available
-          // in the current JSON/TSV parsing pipeline. When native VCF import is added,
-          // use GenomeBuildDetector.detectGenomeBuildFromVcfHeaders() on the ## header lines.
-          const genomeBuild = 'GRCh38'
+          // Use VCF genome build override if provided, otherwise default to GRCh38
+          const genomeBuild = file.vcfGenomeBuild ?? 'GRCh38'
           const caseResult = stmts.insertCase.run(
             file.caseName,
             file.filePath,
@@ -184,7 +189,11 @@ port.on('message', async (msg: MainMessage) => {
               nextFileParsed = null
             } else {
               // First file — parse synchronously
-              parsedData = await preParseFile(file.filePath, () => cancelled)
+              parsedData = await preParseFile(
+                file.filePath,
+                () => cancelled,
+                file.vcfSelectedSamples
+              )
             }
 
             const { formatInfo, variants: parsedVariants } = parsedData
@@ -202,7 +211,11 @@ port.on('message', async (msg: MainMessage) => {
                 nextFile.duplicateStrategy === 'skip'
 
               if (!nextWillSkip) {
-                nextFileParsed = preParseFile(nextFile.filePath, () => cancelled)
+                nextFileParsed = preParseFile(
+                  nextFile.filePath,
+                  () => cancelled,
+                  nextFile.vcfSelectedSamples
+                )
               }
             }
 
@@ -408,8 +421,10 @@ function prepareStatements(db: DatabaseType) {
   const insertVariantStmt = db.prepare(`
     INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, omim_mim_number,
       consequence, gnomad_af, cadd, clinvar, gt_num, func, qual,
-      hpo_sim_score, transcript, cdna, aa_change, moi)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      hpo_sim_score, transcript, cdna, aa_change, moi,
+      gq, dp, ad_ref, ad_alt, ab, filter, info_json, source_format)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const insertTranscriptStmt = db.prepare(`
@@ -459,7 +474,15 @@ function prepareStatements(db: DatabaseType) {
         v.transcript ?? null,
         v.cdna ?? null,
         v.aa_change ?? null,
-        v.moi ?? null
+        v.moi ?? null,
+        v.gq ?? null,
+        v.dp ?? null,
+        v.ad_ref ?? null,
+        v.ad_alt ?? null,
+        v.ab ?? null,
+        v.filter ?? null,
+        v.info_json ?? null,
+        v.source_format ?? null
       )
 
       const transcripts = v._transcripts as Array<Record<string, unknown>> | undefined
@@ -554,9 +577,16 @@ interface ParsedFileResult {
  */
 async function preParseFile(
   filePath: string,
-  isCancelled: () => boolean
+  isCancelled: () => boolean,
+  vcfSelectedSamples?: string[]
 ): Promise<ParsedFileResult> {
   const formatInfo = await detectFormat(filePath)
+
+  // VCF files use a dedicated line-by-line parser instead of the JSON pipeline
+  if (formatInfo.format === 'vcf') {
+    return preParseVcfFile(filePath, formatInfo, isCancelled, vcfSelectedSamples)
+  }
+
   const variants: Array<Record<string, unknown>> = []
 
   const mapperStream = await createMapperPipeline(filePath, formatInfo)
@@ -571,6 +601,70 @@ async function preParseFile(
     if (chunk !== null) {
       variants.push(chunk as Record<string, unknown>)
     }
+  }
+
+  return { formatInfo, variants }
+}
+
+/**
+ * Pre-parse a VCF file into an in-memory variant array.
+ * Uses the VCF line-by-line parser (header parser, line parser, mapper)
+ * to produce the same Record<string, unknown> shape as JSON formats.
+ */
+async function preParseVcfFile(
+  filePath: string,
+  formatInfo: FormatInfo,
+  isCancelled: () => boolean,
+  vcfSelectedSamples?: string[]
+): Promise<ParsedFileResult> {
+  const raw = createReadStream(filePath)
+  const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
+  const rl = createInterface({ input: stream, crlfDelay: Infinity })
+
+  const headerLines: string[] = []
+  let header: VcfHeader | null = null
+  let activeSample = ''
+  const variants: Array<Record<string, unknown>> = []
+
+  try {
+    for await (const line of rl) {
+      if (isCancelled()) {
+        rl.close()
+        break
+      }
+
+      // Collect header lines
+      if (line.startsWith('#')) {
+        headerLines.push(line)
+        continue
+      }
+
+      // Parse header once, on the first data line
+      if (header === null) {
+        header = parseVcfHeaderFromLines(headerLines)
+        const selectedSample = vcfSelectedSamples?.[0]
+        activeSample = selectedSample ?? (header.samples.length > 0 ? header.samples[0] : '')
+
+        if (activeSample === '') {
+          break
+        }
+      }
+
+      // Parse the data line
+      try {
+        const record = parseVcfLine(line, header.samples)
+        const mapped = mapVcfRecord(record, header, activeSample, DEFAULT_INFO_FIELD_MAPPINGS)
+
+        for (const variant of mapped) {
+          variants.push(variant as unknown as Record<string, unknown>)
+        }
+      } catch {
+        // Skip unparseable lines — consistent with VcfStrategy behavior
+      }
+    }
+  } finally {
+    // Ensure stream resources are released
+    raw.destroy()
   }
 
   return { formatInfo, variants }
