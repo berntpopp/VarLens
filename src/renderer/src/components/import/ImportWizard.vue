@@ -506,6 +506,15 @@ const show = (): void => {
   dialog.value = true
 }
 
+// Reset import store when dialog is closed by any means (outside click, Esc, etc.)
+// handleClose() covers explicit close, but the dialog can also close via v-model
+// when persistent=false (step !== 3).
+watch(dialog, (open) => {
+  if (!open && (step.value === 4 || importStore.phase === 'error')) {
+    importStore.reset()
+  }
+})
+
 const reopen = (): void => {
   if (importStore.isActive) {
     importStore.dialogOpen = true

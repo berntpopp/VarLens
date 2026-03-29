@@ -206,15 +206,18 @@ export function useMolstarViewer(
     // Phase 1: Wait for custom element registration with timeout.
     // The 6 MB script may take seconds to parse on Windows.
     const REGISTRATION_TIMEOUT_MS = 30_000
-    const registrationTimeout = new Promise<never>((_, reject) =>
-      setTimeout(
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+    const registrationTimeout = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
         () => reject(new Error('pdbe-molstar custom element registration timed out')),
         REGISTRATION_TIMEOUT_MS
       )
-    )
+    })
 
     void Promise.race([customElements.whenDefined('pdbe-molstar'), registrationTimeout])
       .then(() => {
+        // Clear the timeout so it doesn't linger after successful registration
+        if (timeoutHandle !== null) clearTimeout(timeoutHandle)
         logService.info('pdbe-molstar custom element registered', 'MolstarViewer')
 
         // Phase 2: Poll for viewerInstance on the DOM element.

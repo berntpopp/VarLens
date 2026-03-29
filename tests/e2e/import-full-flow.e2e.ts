@@ -18,7 +18,7 @@ import { resolve } from 'path'
 import { existsSync, readdirSync } from 'fs'
 
 const FIXTURE_DIR = resolve(__dirname, '../fixtures/import')
-const REAL_DATA_DIR = '/media/bernt-popp/1819-E513/immunology_cases'
+const REAL_DATA_DIR = process.env.REAL_DATA_DIR ?? ''
 
 let app: ElectronApplication
 let window: Page
@@ -59,9 +59,7 @@ test('Import fixture files via batch API and verify cases appear', async () => {
       window as unknown as {
         api: {
           batchImport: {
-            checkDuplicates: (
-              paths: string[]
-            ) => Promise<{
+            checkDuplicates: (paths: string[]) => Promise<{
               files: Array<{ caseName: string; isDuplicate: boolean }>
               duplicateCount: number
             }>
@@ -137,9 +135,7 @@ test('Import real immunology case files', async () => {
       window as unknown as {
         api: {
           batchImport: {
-            checkDuplicates: (
-              paths: string[]
-            ) => Promise<{
+            checkDuplicates: (paths: string[]) => Promise<{
               files: Array<{ caseName: string; isDuplicate: boolean }>
               duplicateCount: number
             }>

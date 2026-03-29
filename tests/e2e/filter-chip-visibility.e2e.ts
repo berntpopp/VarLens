@@ -103,6 +103,29 @@ test('Case view: screenshot active filter chips', async ({}, testInfo) => {
     }
   }
 
+  // Assert: all flat-variant chips (active filters) must meet WCAG AA (4.5:1)
+  const flatChips = window.locator('.v-chip--variant-flat:visible')
+  const flatCount = await flatChips.count()
+  for (let i = 0; i < flatCount; i++) {
+    const info = await flatChips.nth(i).evaluate((el) => {
+      const cs = globalThis.getComputedStyle(el)
+      const bgParts = cs.backgroundColor.match(/[\d.]+/g)
+      const fgParts = cs.color.match(/[\d.]+/g)
+      return {
+        text: el.textContent?.trim().substring(0, 40) || '',
+        bg: bgParts ? bgParts.slice(0, 3).map(Number) : null,
+        fg: fgParts ? fgParts.slice(0, 3).map(Number) : null
+      }
+    })
+    if (info.bg && info.fg) {
+      const ratio = contrastRatio(info.bg, info.fg)
+      expect(
+        ratio,
+        `Flat chip "${info.text}" contrast must be >= 4.5:1, got ${ratio.toFixed(1)}:1`
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+  }
+
   // Click the chip again to deselect
   if ((await acmgChips.count()) > 0) {
     await acmgChips.first().click()
