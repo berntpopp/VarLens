@@ -130,7 +130,7 @@
           :key="filter.id"
           size="small"
           closable
-          variant="tonal"
+          variant="flat"
           color="primary"
           class="mr-1"
           @click:close="emit('clear-filter', filter.id)"

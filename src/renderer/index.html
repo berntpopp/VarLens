@@ -25,10 +25,12 @@
 
   <body>
     <!-- pdbe-molstar: 3D protein structure viewer (web component).
-         Loaded as a classic script BEFORE the app div so the custom element
-         is registered before Vue starts. The file is extracted from ASAR
-         via asarUnpack to avoid large-file read issues on Windows. -->
-    <script src="/pdbe-molstar-component.js"></script>
+         Loaded with `defer` so the 6 MB script doesn't block initial render.
+         The composable uses customElements.whenDefined() to wait for
+         registration, handling slow loads on Windows gracefully.
+         The file is extracted from ASAR via asarUnpack to avoid
+         large-file read issues on Windows. -->
+    <script defer src="/pdbe-molstar-component.js"></script>
     <div id="app"></div>
     <script type="module" src="./src/main.ts"></script>
   </body>

@@ -207,37 +207,30 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
 
                 safeEmit('cohort:summaryRebuilt', { is_stale: false })
 
+                // Build a plain-data result object. Use JSON round-trip to
+                // guarantee structured-clone compatibility (worker messages
+                // can carry prototype chains or undefined values that fail
+                // Electron's IPC serialization on some platforms).
+                const batchResult = JSON.parse(JSON.stringify({
+                  succeeded: msg.results.succeeded,
+                  failed: msg.results.failed,
+                  skipped: msg.results.skipped,
+                  cancelled: msg.results.cancelled,
+                  details: msg.results.details.map((d) => ({
+                    filePath: d.filePath,
+                    fileName: d.fileName,
+                    status: d.status,
+                    caseName: d.caseName,
+                    variantCount: d.variantCount,
+                    error: d.error
+                  }))
+                }))
+
                 // Notify renderer globally that import completed
                 // (even if BatchImportDialog was closed via "Continue in Background")
-                safeEmit('batch-import:complete', {
-                  succeeded: msg.results.succeeded,
-                  failed: msg.results.failed,
-                  skipped: msg.results.skipped,
-                  cancelled: msg.results.cancelled,
-                  details: msg.results.details.map((d) => ({
-                    filePath: d.filePath,
-                    fileName: d.fileName,
-                    status: d.status,
-                    caseName: d.caseName,
-                    variantCount: d.variantCount,
-                    error: d.error
-                  }))
-                })
+                safeEmit('batch-import:complete', batchResult)
 
-                resolve({
-                  succeeded: msg.results.succeeded,
-                  failed: msg.results.failed,
-                  skipped: msg.results.skipped,
-                  cancelled: msg.results.cancelled,
-                  details: msg.results.details.map((d) => ({
-                    filePath: d.filePath,
-                    fileName: d.fileName,
-                    status: d.status,
-                    caseName: d.caseName,
-                    variantCount: d.variantCount,
-                    error: d.error
-                  }))
-                })
+                resolve(batchResult)
               },
               onError: (msg) => {
                 if (msg.fileIndex === -1) {

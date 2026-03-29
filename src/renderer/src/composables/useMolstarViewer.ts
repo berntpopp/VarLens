@@ -180,48 +180,77 @@ export function useMolstarViewer(
   }
 
   /**
-   * Poll for the viewer instance to become available.
-   * The pdbe-molstar web component initializes asynchronously, so
-   * viewerInstance may not be available immediately after DOM insertion.
+   * Wait for the pdbe-molstar custom element to be registered, then poll
+   * for the viewerInstance to appear on the DOM element.
+   *
+   * Uses the standard `customElements.whenDefined()` API which returns a
+   * Promise that resolves when the element is registered. This is superior
+   * to polling because it reacts instantly to registration and handles
+   * slow script loading gracefully (e.g. Windows antivirus scanning the
+   * 6 MB pdbe-molstar script during ASAR extraction).
+   *
+   * After registration, a short poll waits for viewerInstance which is
+   * set synchronously in connectedCallback but may be delayed by Vue's
+   * DOM update batching.
    */
   function startPolling(): void {
     stopPolling()
 
-    // Pre-check: if the custom element is not registered, the 6 MB script
-    // failed to load/parse (common on Windows with antivirus scanning or
-    // ASAR extraction issues). Fail immediately instead of waiting 30s.
-    if (typeof customElements === 'undefined' || !customElements.get('pdbe-molstar')) {
+    if (typeof customElements === 'undefined') {
       loading.value = false
-      error.value = '3D viewer component failed to load. Try restarting the application.'
-      logService.error(
-        'pdbe-molstar custom element is not registered — script may have failed to load',
-        'MolstarViewer'
-      )
+      error.value = '3D viewer is not supported in this environment.'
+      logService.error('customElements API is unavailable', 'MolstarViewer')
       return
     }
 
-    let attempts = 0
-    const maxAttempts = 60 // 30 seconds max
+    // Phase 1: Wait for custom element registration with timeout.
+    // The 6 MB script may take seconds to parse on Windows.
+    const REGISTRATION_TIMEOUT_MS = 30_000
+    const registrationTimeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('pdbe-molstar custom element registration timed out')),
+        REGISTRATION_TIMEOUT_MS
+      )
+    )
 
-    pollingTimer = setInterval(() => {
-      attempts++
-      if (tryAttachViewer()) {
-        stopPolling()
-        return
-      }
-      if (attempts >= maxAttempts) {
-        stopPolling()
+    void Promise.race([customElements.whenDefined('pdbe-molstar'), registrationTimeout])
+      .then(() => {
+        logService.info('pdbe-molstar custom element registered', 'MolstarViewer')
+
+        // Phase 2: Poll for viewerInstance on the DOM element.
+        // connectedCallback sets it synchronously, but Vue may not have
+        // flushed the DOM update yet, so a brief poll is warranted.
+        let viewerAttempts = 0
+        const maxViewerAttempts = 60 // 30 seconds
+
+        pollingTimer = setInterval(() => {
+          viewerAttempts++
+          if (tryAttachViewer()) {
+            stopPolling()
+            return
+          }
+          if (viewerAttempts >= maxViewerAttempts) {
+            stopPolling()
+            loading.value = false
+            error.value = 'Timed out waiting for 3D viewer to initialize'
+            logService.error(
+              'pdbe-molstar viewer instance not found after timeout — ' +
+                `element exists: ${!!molstarRef.value}, ` +
+                `tagName: ${molstarRef.value?.tagName ?? 'null'}, ` +
+                `has viewerInstance: ${!!(molstarRef.value as PdbeMolstarElement | null)?.viewerInstance}`,
+              'MolstarViewer'
+            )
+          }
+        }, 500)
+      })
+      .catch((err: Error) => {
         loading.value = false
-        error.value = 'Timed out waiting for 3D viewer to initialize'
+        error.value = '3D viewer component failed to load. Try restarting the application.'
         logService.error(
-          'pdbe-molstar viewer instance not found after timeout — ' +
-            `element exists: ${!!molstarRef.value}, ` +
-            `tagName: ${molstarRef.value?.tagName ?? 'null'}, ` +
-            `has viewerInstance: ${!!(molstarRef.value as PdbeMolstarElement | null)?.viewerInstance}`,
+          `pdbe-molstar init failed: ${err.message}`,
           'MolstarViewer'
         )
-      }
-    }, 500)
+      })
   }
 
   function stopPolling(): void {

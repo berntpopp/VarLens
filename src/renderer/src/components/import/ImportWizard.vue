@@ -34,6 +34,18 @@
 
       <v-divider />
 
+      <!-- Error display -->
+      <v-alert
+        v-if="importStore.phase === 'error' && importStore.errorMessage"
+        type="error"
+        variant="tonal"
+        closable
+        class="mx-4 mt-3"
+        @click:close="importStore.reset()"
+      >
+        {{ importStore.errorMessage }}
+      </v-alert>
+
       <!-- Step 1: Source Selection -->
       <v-card-text v-if="step === 1" class="pa-4">
         <div class="text-caption text-medium-emphasis mb-3">Choose import source</div>
@@ -152,6 +164,7 @@ import type {
 } from '../../../../shared/types/api'
 import { useApiService } from '../../composables/useApiService'
 import { useImportStatusStore } from '../../stores/importStatusStore'
+import { logService } from '../../services/LogService'
 import BatchReviewPhase from '../batch-import/BatchReviewPhase.vue'
 import BatchProgressPhase from '../batch-import/BatchProgressPhase.vue'
 import BatchSummaryPhase from '../batch-import/BatchSummaryPhase.vue'
@@ -262,38 +275,46 @@ watch(stripText, () => {
 async function selectSource(mode: ImportMode): Promise<void> {
   selectedMode.value = mode
 
-  if (mode === 'zip') {
-    const result = await api!.batchImport.selectZip()
-    if (result === null) return
+  try {
+    if (mode === 'zip') {
+      const result = await api!.batchImport.selectZip()
+      if (result === null) return
 
-    zipPath.value = result.filePath
-    isZipImport.value = true
+      zipPath.value = result.filePath
+      isZipImport.value = true
 
-    if (result.isEncrypted) {
-      zipPasswordNeeded.value = true
+      if (result.isEncrypted) {
+        zipPasswordNeeded.value = true
+        return
+      }
+
+      await extractAndAdvance(result.filePath)
       return
     }
 
-    await extractAndAdvance(result.filePath)
-    return
+    let filePaths: string[]
+
+    if (mode === 'single') {
+      const path = await api!.import.selectFile()
+      if (path === null) return
+      filePaths = [path]
+    } else if (mode === 'files') {
+      filePaths = await api!.batchImport.selectFiles()
+    } else {
+      filePaths = await api!.batchImport.selectFolder()
+    }
+
+    if (filePaths.length === 0) return
+
+    selectedFilePaths.value = filePaths
+    await checkDuplicatesAndAdvance(filePaths)
+  } catch (err) {
+    logService.error(
+      `File selection failed: ${err instanceof Error ? err.message : String(err)}`,
+      'ImportWizard'
+    )
+    importStore.importError(err instanceof Error ? err.message : 'File selection failed')
   }
-
-  let filePaths: string[]
-
-  if (mode === 'single') {
-    const path = await api!.import.selectFile()
-    if (path === null) return
-    filePaths = [path]
-  } else if (mode === 'files') {
-    filePaths = await api!.batchImport.selectFiles()
-  } else {
-    filePaths = await api!.batchImport.selectFolder()
-  }
-
-  if (filePaths.length === 0) return
-
-  selectedFilePaths.value = filePaths
-  await checkDuplicatesAndAdvance(filePaths)
 }
 
 async function extractAndAdvance(path: string): Promise<void> {
@@ -307,6 +328,14 @@ async function extractAndAdvance(path: string): Promise<void> {
 
 async function checkDuplicatesAndAdvance(filePaths: string[]): Promise<void> {
   const result = await api!.batchImport.checkDuplicates(filePaths, stripText.value || undefined)
+
+  // Guard against error responses from wrapHandler
+  if (!result || !Array.isArray(result.files)) {
+    logService.error('checkDuplicates returned invalid result', 'ImportWizard')
+    importStore.importError('Failed to check files. Please try again.')
+    return
+  }
+
   reviewFiles.value = result.files
   duplicateCount.value = result.duplicateCount
   step.value = 2
@@ -342,34 +371,80 @@ async function startImport(): Promise<void> {
   importStore.startImport(fileCount.value)
   importStore.dialogOpen = true
 
-  const result = await api!.batchImport.start(
-    selectedFilePaths.value,
-    duplicateStrategy.value,
-    stripText.value || undefined
-  )
+  try {
+    // Spread reactive arrays to plain arrays — Vue Proxies cannot be
+    // structured-cloned by Electron's IPC serialization.
+    const result = await api!.batchImport.start(
+      [...selectedFilePaths.value],
+      duplicateStrategy.value,
+      stripText.value || undefined
+    )
 
-  // Result also arrives via onComplete callback; guard against double-processing
-  if (step.value === 3) {
-    summary.value = result
-    step.value = 4
-
-    importStore.importComplete({
-      ...result,
-      details: result.details.map((d) => ({ ...d, caseName: d.caseName ?? d.fileName }))
-    })
-
-    if (isZipImport.value) {
-      api!.batchImport.cleanupZipTemp()
+    // Guard against error responses from wrapHandler
+    if (!result || !Array.isArray(result.details)) {
+      const errorMsg =
+        result && 'userMessage' in result ? (result as { userMessage: string }).userMessage : 'Import failed unexpectedly'
+      logService.error(`Import returned error: ${JSON.stringify(result)}`, 'ImportWizard')
+      summary.value = { succeeded: 0, failed: fileCount.value, skipped: 0, cancelled: false, details: [] }
+      step.value = 4
+      importStore.importError(errorMsg)
+      return
     }
 
-    if (result.succeeded > 0) {
-      emit('batch-import-complete', { totalImported: result.succeeded })
+    // Result also arrives via onComplete callback; guard against double-processing
+    if (step.value === 3) {
+      summary.value = result
+      step.value = 4
+
+      importStore.importComplete({
+        ...result,
+        details: result.details.map((d) => ({ ...d, caseName: d.caseName ?? d.fileName }))
+      })
+
+      if (isZipImport.value) {
+        api!.batchImport.cleanupZipTemp()
+      }
+
+      if (result.succeeded > 0) {
+        emit('batch-import-complete', { totalImported: result.succeeded })
+      }
     }
+  } catch (err) {
+    logService.error(
+      `Import failed: ${err instanceof Error ? err.message : String(err)}`,
+      'ImportWizard'
+    )
+    // Only overwrite summary if the onComplete callback hasn't already
+    // handled it (race: safeEmit fires before resolve, so the event
+    // listener may have already set the correct summary + step 4).
+    if (step.value === 3) {
+      summary.value = { succeeded: 0, failed: fileCount.value, skipped: 0, cancelled: false, details: [] }
+      step.value = 4
+    }
+    importStore.importError(err instanceof Error ? err.message : 'Import failed')
   }
 }
 
 function cancelImport(): void {
   api!.batchImport.cancel()
+  // Transition to summary step showing cancellation, and reset import store.
+  // The onComplete callback may also fire with cancelled=true, but we handle
+  // it here immediately so the user sees feedback right away.
+  summary.value = {
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    cancelled: true,
+    details: []
+  }
+  step.value = 4
+  importStore.importComplete({
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    cancelled: true,
+    details: []
+  })
 }
 
 function continueInBackground(): void {
@@ -383,6 +458,10 @@ function handleClose(): void {
     return
   }
   dialog.value = false
+  // Reset import store when closing from summary/error step
+  if (step.value === 4 || importStore.phase === 'error') {
+    importStore.reset()
+  }
 }
 
 function resetState(): void {

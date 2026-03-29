@@ -384,7 +384,8 @@ async function save(): Promise<void> {
     }
 
     if (panelId != null) {
-      await setGenes(panelId, approvedGenes.value)
+      // Spread to plain array — Vue reactive Proxies can't be structured-cloned by Electron IPC
+      await setGenes(panelId, [...approvedGenes.value].map((g) => ({ ...g })))
     }
 
     emit('saved')
