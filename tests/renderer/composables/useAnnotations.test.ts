@@ -4,7 +4,7 @@
  * Tests LRU cache eviction behavior and basic annotation state management.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { withSetup } from '../../utils/test-helpers'
 import { createMockApi } from '../../utils/mock-api'
 import {
@@ -68,7 +68,13 @@ describe('useAnnotations', () => {
 
     it('does not evict when under the limit', async () => {
       // Fill to exactly MAX_CACHE_SIZE entries
-      window.api.annotations.getForVariant = () => Promise.resolve({ global: null, perCase: null })
+      window.api.annotations.batchGet = (_caseId: number, variants: Array<{ chr: string; pos: number; ref: string; alt: string }>) => {
+        const result: Record<string, { global: null; perCase: null }> = {}
+        for (const v of variants) {
+          result[`${v.chr}:${v.pos}:${v.ref}:${v.alt}`] = { global: null, perCase: null }
+        }
+        return Promise.resolve(result)
+      }
 
       const [result, appInstance] = withSetup(() => useAnnotations())
       app = appInstance
@@ -100,7 +106,13 @@ describe('useAnnotations', () => {
       // verifying the cacheSet helper evicts correctly by adding exactly
       // MAX_CACHE_SIZE + 1 entries.
 
-      window.api.annotations.getForVariant = () => Promise.resolve({ global: null, perCase: null })
+      window.api.annotations.batchGet = (_caseId: number, variants: Array<{ chr: string; pos: number; ref: string; alt: string }>) => {
+        const result: Record<string, { global: null; perCase: null }> = {}
+        for (const v of variants) {
+          result[`${v.chr}:${v.pos}:${v.ref}:${v.alt}`] = { global: null, perCase: null }
+        }
+        return Promise.resolve(result)
+      }
 
       const [result, appInstance] = withSetup(() => useAnnotations())
       app = appInstance
@@ -202,5 +214,102 @@ describe('useAnnotations', () => {
 
       expect(callCount).toBe(1)
     })
+  })
+})
+
+describe('loadAnnotationsBatch uses batch endpoint', () => {
+  let app: { unmount: () => void }
+
+  beforeEach(() => {
+    _resetAnnotationsForTesting()
+    window.api = createMockApi()
+  })
+
+  afterEach(() => {
+    if (app) app.unmount()
+  })
+
+  it('calls batchGet instead of individual getForVariant', async () => {
+    const batchResult = {
+      'chr1:100:A:G': { global: null, perCase: null },
+      'chr2:200:T:C': { global: null, perCase: null }
+    }
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue(batchResult)
+    window.api.annotations.getForVariant = vi.fn()
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    await result.loadAnnotationsBatch(1, [
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' },
+      { chr: 'chr2', pos: 200, ref: 'T', alt: 'C' }
+    ])
+
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(1, [
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' },
+      { chr: 'chr2', pos: 200, ref: 'T', alt: 'C' }
+    ])
+    expect(window.api.annotations.getForVariant).not.toHaveBeenCalled()
+  })
+
+  it('populates cache from batch response', async () => {
+    const batchResult = {
+      'chr1:100:A:G': { global: { starred: 1 }, perCase: null }
+    }
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue(batchResult)
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    await result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }])
+
+    const cached = result.getAnnotations('chr1', 100, 'A', 'G')
+    expect(cached).toBeDefined()
+    expect(cached!.global!.starred).toBe(1)
+  })
+
+  it('skips already-cached variants in batch call', async () => {
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({})
+    window.api.annotations.getForVariant = vi
+      .fn()
+      .mockResolvedValue({ global: null, perCase: null })
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    // Pre-populate cache via individual load
+    await result.loadAnnotations(1, 'chr1', 100, 'A', 'G')
+    vi.mocked(window.api.annotations.batchGet).mockClear()
+
+    await result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }])
+
+    // batchGet should be called but with empty array (all cached)
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(1, [])
+  })
+})
+
+describe('loadGlobalAnnotationsBatch uses batch endpoint', () => {
+  let app: { unmount: () => void }
+
+  beforeEach(() => {
+    _resetAnnotationsForTesting()
+    window.api = createMockApi()
+  })
+
+  afterEach(() => {
+    if (app) app.unmount()
+  })
+
+  it('calls batchGet with null caseId', async () => {
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({})
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    await result.loadGlobalAnnotationsBatch([{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }])
+
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(null, [
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+    ])
   })
 })

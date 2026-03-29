@@ -221,16 +221,21 @@ export function useAnnotations() {
     caseId: number,
     variants: Array<{ chr: string; pos: number; ref: string; alt: string }>
   ): Promise<void> {
-    // Load in parallel, skip already cached
-    const promises = variants
-      .filter((v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)))
-      .map((v) => loadAnnotations(caseId, v.chr, v.pos, v.ref, v.alt))
+    if (!api) return
 
-    const results = await Promise.allSettled(promises)
-    const failed = results.filter((r) => r.status === 'rejected')
-    if (failed.length > 0) {
+    const uncached = variants.filter(
+      (v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt))
+    )
+
+    try {
+      const results = await api.annotations.batchGet(caseId, uncached)
+      for (const [key, value] of Object.entries(results)) {
+        cacheSet(key, value as AnnotationCache)
+      }
+    } catch (error) {
       logService.warn(
-        `Failed to load ${failed.length}/${promises.length} annotations`,
+        'Failed to load annotation batch: ' +
+          (error instanceof Error ? error.message : String(error)),
         'annotations'
       )
     }
@@ -270,15 +275,21 @@ export function useAnnotations() {
   async function loadGlobalAnnotationsBatch(
     variants: Array<{ chr: string; pos: number; ref: string; alt: string }>
   ): Promise<void> {
-    const promises = variants
-      .filter((v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)))
-      .map((v) => loadGlobalAnnotations(v.chr, v.pos, v.ref, v.alt))
+    if (!api) return
 
-    const results = await Promise.allSettled(promises)
-    const failed = results.filter((r) => r.status === 'rejected')
-    if (failed.length > 0) {
+    const uncached = variants.filter(
+      (v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt))
+    )
+
+    try {
+      const results = await api.annotations.batchGet(null, uncached)
+      for (const [key, value] of Object.entries(results)) {
+        cacheSet(key, value as AnnotationCache)
+      }
+    } catch (error) {
       logService.warn(
-        `Failed to load ${failed.length}/${promises.length} global annotations`,
+        'Failed to load global annotation batch: ' +
+          (error instanceof Error ? error.message : String(error)),
         'annotations'
       )
     }
