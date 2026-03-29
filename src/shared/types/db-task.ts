@@ -28,6 +28,7 @@ export type DbTaskType =
   | 'annotations:getGlobal'
   | 'annotations:getPerCase'
   | 'annotations:getForVariant'
+  | 'annotations:batchGet'
   // Case metadata
   | 'case-metadata:get'
   | 'case-metadata:listCohorts'

@@ -569,7 +569,8 @@ export const mockApi: WindowAPI = {
       updated_at: Date.now()
     }),
     deletePerCase: async () => {},
-    getForVariant: async () => ({ global: null, perCase: null })
+    getForVariant: async () => ({ global: null, perCase: null }),
+    batchGet: async () => ({})
   },
 
   vep: {

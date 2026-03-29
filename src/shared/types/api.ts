@@ -343,6 +343,13 @@ export interface PerCaseAnnotationUpdates {
   user_name?: string // for audit trail only
 }
 
+export interface VariantKey {
+  chr: string
+  pos: number
+  ref: string
+  alt: string
+}
+
 export interface VariantAnnotationsResult {
   global: VariantAnnotation | null
   perCase: CaseVariantAnnotation | null
@@ -377,6 +384,10 @@ export interface AnnotationsAPI {
     ref: string,
     alt: string
   ) => Promise<VariantAnnotationsResult>
+  batchGet: (
+    caseId: number | null,
+    variantKeys: VariantKey[]
+  ) => Promise<Record<string, VariantAnnotationsResult>>
 }
 
 export interface VepAPI {
