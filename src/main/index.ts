@@ -148,11 +148,11 @@ if (gotTheLock !== true) {
     // Create window after security handlers are registered
     createWindow()
 
-    // Initialize auto-updater and schedule periodic checks (deferred to avoid competing with startup)
-    setImmediate(() => {
+    // Deferred by 5s to avoid competing with startup data loading and rendering
+    setTimeout(() => {
       initAutoUpdater()
       scheduleUpdateChecks()
-    })
+    }, 5000)
 
     app.on('activate', function () {
       // On macOS it's common to re-create a window in the app when the
