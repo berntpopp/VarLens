@@ -98,7 +98,15 @@ export class VariantRepository extends BaseRepository {
               transcript: v.transcript,
               cdna: v.cdna,
               aa_change: v.aa_change,
-              moi: v.moi
+              moi: v.moi,
+              gq: v.gq ?? null,
+              dp: v.dp ?? null,
+              ad_ref: v.ad_ref ?? null,
+              ad_alt: v.ad_alt ?? null,
+              ab: v.ab ?? null,
+              filter: v.filter ?? null,
+              info_json: v.info_json ?? null,
+              source_format: v.source_format ?? null
             })
           )
 

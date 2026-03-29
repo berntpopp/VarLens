@@ -15,6 +15,8 @@ export interface CasesTable {
   variant_count: number
   created_at: number
   genome_build: string
+  source_format: string | null
+  sample_name: string | null
 }
 
 // ── Variants ───────────────────────────────────────────────
@@ -40,6 +42,14 @@ export interface VariantsTable {
   aa_change: string | null
   hpo_match: string | null
   moi: string | null
+  gq: number | null
+  dp: number | null
+  ad_ref: number | null
+  ad_alt: number | null
+  ab: number | null
+  filter: string | null
+  info_json: string | null
+  source_format: string | null
 }
 
 // ── Variant Transcripts ────────────────────────────────────

@@ -23,6 +23,14 @@ export interface VariantInsertRow {
   cdna: string | null
   aa_change: string | null
   moi: string | null
+  gq: number | null
+  dp: number | null
+  ad_ref: number | null
+  ad_alt: number | null
+  ab: number | null
+  filter: string | null
+  info_json: string | null
+  source_format: string | null
 }
 
 /** Columns for the INSERT INTO variants (...) statement */
@@ -45,7 +53,15 @@ export const VARIANT_INSERT_COLUMNS = [
   'transcript',
   'cdna',
   'aa_change',
-  'moi'
+  'moi',
+  'gq',
+  'dp',
+  'ad_ref',
+  'ad_alt',
+  'ab',
+  'filter',
+  'info_json',
+  'source_format'
 ] as const
 
 /** Columns for the INSERT INTO variant_transcripts (...) statement */

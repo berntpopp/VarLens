@@ -103,6 +103,22 @@ export interface Variant {
   aa_change: string | null
   /** Mode of inheritance, nullable */
   moi: string | null
+  /** Genotype quality (VCF GQ), nullable */
+  gq: number | null
+  /** Read depth (VCF DP), nullable */
+  dp: number | null
+  /** Reference allele depth (VCF AD[0]), nullable */
+  ad_ref: number | null
+  /** Alternate allele depth (VCF AD[1]), nullable */
+  ad_alt: number | null
+  /** Allele balance (ad_alt / dp), nullable */
+  ab: number | null
+  /** VCF FILTER field, nullable */
+  filter: string | null
+  /** Unmapped INFO fields as JSON, nullable */
+  info_json: string | null
+  /** Import source format (e.g., 'vcf', 'tsv'), nullable */
+  source_format: string | null
   /** Internal allele frequency across all cases (computed, not stored on variants table) */
   internal_af?: number | null
 }
