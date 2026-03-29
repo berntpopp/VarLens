@@ -246,10 +246,7 @@ export function useMolstarViewer(
       .catch((err: Error) => {
         loading.value = false
         error.value = '3D viewer component failed to load. Try restarting the application.'
-        logService.error(
-          `pdbe-molstar init failed: ${err.message}`,
-          'MolstarViewer'
-        )
+        logService.error(`pdbe-molstar init failed: ${err.message}`, 'MolstarViewer')
       })
   }
 

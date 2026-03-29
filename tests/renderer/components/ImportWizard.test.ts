@@ -7,8 +7,8 @@
  *
  * Also tests cancel behavior and error handling.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref, isProxy, isReactive } from 'vue'
+import { describe, it, expect } from 'vitest'
+import { ref, isProxy } from 'vue'
 
 /**
  * Simulates Electron's structured clone validation.

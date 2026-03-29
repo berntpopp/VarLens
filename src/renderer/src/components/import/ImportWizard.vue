@@ -329,8 +329,8 @@ async function extractAndAdvance(path: string): Promise<void> {
 async function checkDuplicatesAndAdvance(filePaths: string[]): Promise<void> {
   const result = await api!.batchImport.checkDuplicates(filePaths, stripText.value || undefined)
 
-  // Guard against error responses from wrapHandler
-  if (!result || !Array.isArray(result.files)) {
+  // Guard against error responses from wrapHandler (returns SerializableError on failure)
+  if (!Array.isArray((result as unknown as Record<string, unknown>).files)) {
     logService.error('checkDuplicates returned invalid result', 'ImportWizard')
     importStore.importError('Failed to check files. Please try again.')
     return
@@ -380,12 +380,20 @@ async function startImport(): Promise<void> {
       stripText.value || undefined
     )
 
-    // Guard against error responses from wrapHandler
-    if (!result || !Array.isArray(result.details)) {
+    // Guard against error responses from wrapHandler (returns SerializableError on failure)
+    if (!Array.isArray((result as unknown as Record<string, unknown>).details)) {
       const errorMsg =
-        result && 'userMessage' in result ? (result as { userMessage: string }).userMessage : 'Import failed unexpectedly'
+        'userMessage' in (result as unknown as Record<string, unknown>)
+          ? (result as unknown as { userMessage: string }).userMessage
+          : 'Import failed unexpectedly'
       logService.error(`Import returned error: ${JSON.stringify(result)}`, 'ImportWizard')
-      summary.value = { succeeded: 0, failed: fileCount.value, skipped: 0, cancelled: false, details: [] }
+      summary.value = {
+        succeeded: 0,
+        failed: fileCount.value,
+        skipped: 0,
+        cancelled: false,
+        details: []
+      }
       step.value = 4
       importStore.importError(errorMsg)
       return
@@ -418,7 +426,13 @@ async function startImport(): Promise<void> {
     // handled it (race: safeEmit fires before resolve, so the event
     // listener may have already set the correct summary + step 4).
     if (step.value === 3) {
-      summary.value = { succeeded: 0, failed: fileCount.value, skipped: 0, cancelled: false, details: [] }
+      summary.value = {
+        succeeded: 0,
+        failed: fileCount.value,
+        skipped: 0,
+        cancelled: false,
+        details: []
+      }
       step.value = 4
     }
     importStore.importError(err instanceof Error ? err.message : 'Import failed')
