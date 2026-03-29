@@ -212,7 +212,12 @@ const api = {
       ipcRenderer.invoke('annotations:deletePerCase', caseId, variantId),
 
     getForVariant: (caseId: number, chr: string, pos: number, ref: string, alt: string) =>
-      ipcRenderer.invoke('annotations:getForVariant', caseId, chr, pos, ref, alt)
+      ipcRenderer.invoke('annotations:getForVariant', caseId, chr, pos, ref, alt),
+
+    batchGet: (
+      caseId: number | null,
+      variantKeys: Array<{ chr: string; pos: number; ref: string; alt: string }>
+    ) => ipcRenderer.invoke('annotations:batchGet', caseId, variantKeys)
   },
 
   vep: {

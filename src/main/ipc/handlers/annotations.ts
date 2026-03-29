@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import type { VariantAnnotation, CaseVariantAnnotation } from '../../database/types'
@@ -392,6 +393,47 @@ export function registerAnnotationHandlers({
           validatedCoords.data.ref,
           validatedCoords.data.alt
         )
+      })
+    }
+  )
+
+  // Batch read — single round-trip for N variants (pool-dispatched)
+  ipcMain.handle(
+    'annotations:batchGet',
+    async (_event, caseId: unknown, variantKeys: unknown) => {
+      return wrapHandler(async () => {
+        const validatedCaseId = z
+          .number()
+          .int()
+          .positive()
+          .nullable()
+          .safeParse(caseId)
+        if (!validatedCaseId.success) {
+          throw new Error('Invalid caseId parameter')
+        }
+
+        const VariantKeysSchema = z.array(
+          z.object({
+            chr: z.string().min(1),
+            pos: z.number().int().positive(),
+            ref: z.string().min(1),
+            alt: z.string().min(1)
+          })
+        )
+        const validatedKeys = VariantKeysSchema.safeParse(variantKeys)
+        if (!validatedKeys.success) {
+          throw new Error('Invalid variantKeys parameter')
+        }
+
+        const pool = getDbPool?.()
+        if (pool) {
+          return await pool.run({
+            type: 'annotations:batchGet' as const,
+            params: [validatedCaseId.data, validatedKeys.data]
+          })
+        }
+        const db = getDb()
+        return db.annotations.getBatch(validatedCaseId.data, validatedKeys.data)
       })
     }
   )

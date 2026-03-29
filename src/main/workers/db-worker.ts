@@ -132,6 +132,12 @@ export default function run(task: DbTask): unknown {
           params[4] as string
         )
 
+      case 'annotations:batchGet':
+        return repos.annotations.getBatch(
+          params[0] as number | null,
+          params[1] as Array<{ chr: string; pos: number; ref: string; alt: string }>
+        )
+
       // ── Case Metadata ────────────────────────────────────
       case 'case-metadata:get':
         return repos.metadata.getCaseMetadata(params[0] as number)

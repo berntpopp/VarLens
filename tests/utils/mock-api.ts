@@ -78,6 +78,7 @@ export type MockApi = {
     upsertPerCase: ReturnType<typeof vi.fn>
     deletePerCase: ReturnType<typeof vi.fn>
     getForVariant: ReturnType<typeof vi.fn>
+    batchGet: ReturnType<typeof vi.fn>
   }
   vep: {
     fetch: ReturnType<typeof vi.fn>
@@ -255,7 +256,8 @@ export function createMockApi(): MockApi {
       getPerCase: vi.fn().mockResolvedValue(null),
       upsertPerCase: vi.fn().mockResolvedValue(undefined),
       deletePerCase: vi.fn().mockResolvedValue(undefined),
-      getForVariant: vi.fn().mockResolvedValue({ global: null, perCase: null })
+      getForVariant: vi.fn().mockResolvedValue({ global: null, perCase: null }),
+      batchGet: vi.fn().mockResolvedValue({})
     },
 
     vep: {
