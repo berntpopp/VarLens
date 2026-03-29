@@ -21,6 +21,27 @@ import {
 } from '../../../shared/utils/protein-utils'
 import { logService } from '../services/LogService'
 
+/** Lazy-load the pdbe-molstar web component script on first use */
+let molstarScriptLoaded = false
+function ensureMolstarScript(): Promise<void> {
+  if (molstarScriptLoaded) return Promise.resolve()
+  molstarScriptLoaded = true
+
+  return new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = '/pdbe-molstar-component.js'
+    script.onload = () => {
+      logService.info('pdbe-molstar script loaded on demand', 'MolstarViewer')
+      resolve()
+    }
+    script.onerror = () => {
+      molstarScriptLoaded = false // Allow retry
+      reject(new Error('Failed to load pdbe-molstar script'))
+    }
+    document.head.appendChild(script)
+  })
+}
+
 /** Representation types supported by pdbe-molstar */
 export type RepresentationType = 'cartoon' | 'molecular-surface' | 'ball-and-stick'
 
@@ -203,21 +224,12 @@ export function useMolstarViewer(
       return
     }
 
-    // Phase 1: Wait for custom element registration with timeout.
-    // The 6 MB script may take seconds to parse on Windows.
-    const REGISTRATION_TIMEOUT_MS = 30_000
-    let timeoutHandle: ReturnType<typeof setTimeout> | null = null
-    const registrationTimeout = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(
-        () => reject(new Error('pdbe-molstar custom element registration timed out')),
-        REGISTRATION_TIMEOUT_MS
-      )
-    })
-
-    void Promise.race([customElements.whenDefined('pdbe-molstar'), registrationTimeout])
+    // Phase 0: Ensure script is loaded (lazy — only on first 3D viewer open).
+    // Phase 1: Wait for custom element registration.
+    // Phase 2: Poll for viewerInstance on the DOM element.
+    void ensureMolstarScript()
+      .then(() => customElements.whenDefined('pdbe-molstar'))
       .then(() => {
-        // Clear the timeout so it doesn't linger after successful registration
-        if (timeoutHandle !== null) clearTimeout(timeoutHandle)
         logService.info('pdbe-molstar custom element registered', 'MolstarViewer')
 
         // Phase 2: Poll for viewerInstance on the DOM element.
