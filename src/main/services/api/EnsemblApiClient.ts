@@ -134,8 +134,10 @@ export class EnsemblApiClient {
     if (!transcripts || transcripts.length === 0) return null
 
     // Prefer canonical transcript, fall back to first with exons
-    const canonical = transcripts.find((t) => t.is_canonical === 1 && t.Exon && t.Exon.length > 0)
-    const withExons = transcripts.find((t) => t.Exon && t.Exon.length > 0)
+    const canonical = transcripts.find(
+      (t) => t.is_canonical === 1 && t.Exon !== undefined && t.Exon.length > 0
+    )
+    const withExons = transcripts.find((t) => t.Exon !== undefined && t.Exon.length > 0)
     const selected = canonical ?? withExons
 
     if (!selected || !selected.Exon || selected.Exon.length === 0) return null
@@ -149,8 +151,7 @@ export class EnsemblApiClient {
         end: data.end,
         strand: data.strand === -1 ? -1 : 1,
         transcriptId: selected.display_name ?? selected.id,
-        exons: selected.Exon
-          .map((e) => ({ start: e.start, end: e.end }))
+        exons: selected.Exon.map((e) => ({ start: e.start, end: e.end }))
           .sort((a, b) => a.start - b.start)
           .map((e, i) => ({
             start: e.start,

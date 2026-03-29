@@ -8,7 +8,7 @@
   "scripts": {
     "predev": "npm run copy:molstar",
     "dev": "electron-vite dev",
-    "copy:molstar": "cp node_modules/pdbe-molstar/build/pdbe-molstar-component.js src/renderer/public/ && cp node_modules/pdbe-molstar/build/pdbe-molstar-light.css src/renderer/public/",
+    "copy:molstar": "node -e \"const fs=require('fs');const p=require('path');const s='node_modules/pdbe-molstar/build';const d='src/renderer/public';fs.copyFileSync(p.join(s,'pdbe-molstar-component.js'),p.join(d,'pdbe-molstar-component.js'));fs.copyFileSync(p.join(s,'pdbe-molstar-light.css'),p.join(d,'pdbe-molstar-light.css'))\"",
     "prebuild": "npm run copy:molstar",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

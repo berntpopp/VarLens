@@ -100,69 +100,13 @@ export function useMolstarViewer(
   /** The warm-light background color used across the panel */
   const BG_COLOR = { r: 250, g: 248, b: 246 }
 
-  /** Timer for background color polling restore */
-  let bgRestoreTimer: ReturnType<typeof setInterval> | null = null
-
   /**
-   * Restore the background color on the canvas.
-   * Called after any operation that may reset the canvas (load, representation change).
-   * Uses the pdbe-molstar canvas API and also accesses the underlying Mol* plugin
-   * renderer state to ensure the WebGL clear color is set correctly.
+   * Restore the background color on the canvas via the pdbe-molstar canvas API.
+   * Called after structure load to ensure the background matches our theme.
    */
   function restoreBgColor(): void {
-    // Use the pdbe-molstar canvas API
     if (viewerInstance?.canvas) {
       viewerInstance.canvas.setBgColor(BG_COLOR)
-    }
-
-    // Also try to set the renderer background via the Mol* plugin state directly.
-    // This is more reliable because it sets the WebGL clear color at the source.
-    try {
-      const plugin = (viewerInstance as unknown as Record<string, unknown>)?.plugin as
-        | {
-            canvas3d?: {
-              setProps?: (props: Record<string, unknown>) => void
-            }
-          }
-        | undefined
-      if (plugin?.canvas3d?.setProps) {
-        plugin.canvas3d.setProps({
-          renderer: {
-            backgroundColor: {
-              r: BG_COLOR.r / 255,
-              g: BG_COLOR.g / 255,
-              b: BG_COLOR.b / 255
-            }
-          }
-        })
-      }
-    } catch {
-      // Ignore errors from plugin internals
-    }
-  }
-
-  /**
-   * Start a polling loop that continuously restores the background color.
-   * Molecular surface computation can take many seconds and resets the canvas
-   * after our initial setBgColor calls. This polls every 500ms for up to 15s.
-   */
-  function startBgColorRestore(): void {
-    stopBgColorRestore()
-    let attempts = 0
-    const maxAttempts = 30 // 15 seconds
-    bgRestoreTimer = setInterval(() => {
-      attempts++
-      restoreBgColor()
-      if (attempts >= maxAttempts) {
-        stopBgColorRestore()
-      }
-    }, 500)
-  }
-
-  function stopBgColorRestore(): void {
-    if (bgRestoreTimer !== null) {
-      clearInterval(bgRestoreTimer)
-      bgRestoreTimer = null
     }
   }
 
@@ -364,61 +308,24 @@ export function useMolstarViewer(
   /**
    * Switch the molecular representation type.
    *
-   * Sets the `visual-style` attribute on the pdbe-molstar web component element,
-   * then calls visual.update() to trigger a reload with the new style.
-   * The custom-data-url and custom-data-format must be re-specified so
-   * the component knows what structure to load with the new visual style.
+   * Updates the activeRepresentation ref which triggers the MolstarViewer
+   * component to recreate the <pdbe-molstar> element with a new :key.
+   * This avoids the pdbe-molstar fullLoad bug where visual.update(opts, true)
+   * resets the WebGL background to black and setBgColor cannot restore it.
+   * A fresh element initialized with bg-color-r/g/b attributes always renders
+   * with the correct background.
    */
   function setRepresentation(type: RepresentationType): void {
-    if (!viewerInstance) return
     activeRepresentation.value = type
-
-    const el = molstarRef.value as PdbeMolstarElement | null
-    if (!el) return
-
-    try {
-      // Read current structure data source from element attributes
-      const customDataUrl = el.getAttribute('custom-data-url') ?? ''
-      const customDataFormat = el.getAttribute('custom-data-format') ?? 'cif'
-
-      // Set the visual-style attribute for the web component
-      el.setAttribute('visual-style', type)
-
-      // First try without fullLoad — this avoids the background reset issue.
-      // pdbe-molstar can switch visual style without a full data reload.
-      const updateOptions: Record<string, unknown> = {
-        visualStyle: type,
-        bgColor: BG_COLOR,
-        customData: {
-          url: customDataUrl,
-          format: customDataFormat
-        }
-      }
-
-      // Use fullLoad=false to avoid resetting the canvas (which turns bg black).
-      // The visual style change is applied as a representation update on the
-      // existing structure data.
-      const updatePromise = viewerInstance.visual.update(updateOptions, false)
-
-      if (updatePromise instanceof Promise) {
-        void updatePromise.then(() => {
-          restoreBgColor()
-          highlightVariants()
-        })
-      }
-      // Start polling bg color restore as a safety net
-      startBgColorRestore()
-
-      logService.info(`Representation changed to ${type}`, 'MolstarViewer')
-
-      // Re-apply variant highlighting after the representation change completes
-      setTimeout(() => highlightVariants(), 2000)
-    } catch (err) {
-      logService.error(
-        `Failed to change representation to ${type}: ${err instanceof Error ? err.message : String(err)}`,
-        'MolstarViewer'
-      )
-    }
+    // The element will be recreated by Vue's :key mechanism.
+    // The loadComplete handler will re-apply variant highlighting.
+    // Reset viewer instance since the old element will be destroyed.
+    viewerInstance = null
+    loadSubscription?.unsubscribe()
+    loadSubscription = null
+    loading.value = true
+    structureLoaded.value = false
+    logService.info(`Representation changed to ${type} (element recreated)`, 'MolstarViewer')
   }
 
   /**
@@ -504,7 +411,6 @@ export function useMolstarViewer(
 
   onBeforeUnmount(() => {
     stopPolling()
-    stopBgColorRestore()
     loadSubscription?.unsubscribe()
     loadSubscription = null
     viewerInstance = null

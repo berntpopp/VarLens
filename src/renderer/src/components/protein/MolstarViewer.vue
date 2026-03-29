@@ -94,10 +94,16 @@ defineExpose({
       </span>
     </div>
 
-    <!-- pdbe-molstar Web Component -->
+    <!-- pdbe-molstar Web Component
+         The :key includes activeRepresentation so Vue destroys and recreates the
+         element when the representation changes. This avoids the fullLoad bug in
+         pdbe-molstar where visual.update(opts, true) resets the background to black
+         and the setBgColor API cannot restore it. A fresh element always renders
+         with the correct bg-color attributes. -->
     <pdbe-molstar
       v-if="structureUrl"
       ref="molstarRef"
+      :key="`${structureUrl}-${activeRepresentation}`"
       :custom-data-url="structureUrl"
       :custom-data-format="structureFormat"
       :visual-style="activeRepresentation"
