@@ -237,6 +237,15 @@ export class VariantRepository extends BaseRepository {
       )
       .where('variants.case_id', '=', filter.case_id)
 
+    // Pre-compute case count to avoid per-row subquery in internal AF filter
+    let totalCaseCount: number | undefined
+    if (filter.max_internal_af !== undefined && filter.max_internal_af > 0) {
+      const countResult = this.execFirst<{ cnt: number }>(
+        this.kysely.selectFrom('cases').select(this.kysely.fn.countAll<number>().as('cnt'))
+      )
+      totalCaseCount = countResult?.cnt ?? 0
+    }
+
     // Simple filters via $if
     query = query.$if(filter.gene_symbol !== undefined && filter.gene_symbol !== '', (qb) =>
       qb.where('gene_symbol', 'like', `%${filter.gene_symbol}%`)
@@ -270,17 +279,22 @@ export class VariantRepository extends BaseRepository {
       )
 
     // Internal AF filter (NULL-inclusive: variants without frequency data pass)
-    query = query.$if(filter.max_internal_af !== undefined && filter.max_internal_af > 0, (qb) =>
-      qb.where(({ or, eb }) =>
-        or([
-          eb(sql.ref('vf.case_count'), 'is', null),
-          eb(
-            sql<number>`CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0)`,
-            '<=',
-            filter.max_internal_af!
-          )
-        ])
-      )
+    query = query.$if(
+      filter.max_internal_af !== undefined &&
+        filter.max_internal_af > 0 &&
+        totalCaseCount !== undefined &&
+        totalCaseCount > 0,
+      (qb) =>
+        qb.where(({ or, eb }) =>
+          or([
+            eb(sql.ref('vf.case_count'), 'is', null),
+            eb(
+              sql<number>`CAST(vf.case_count AS REAL) / ${totalCaseCount!}`,
+              '<=',
+              filter.max_internal_af!
+            )
+          ])
+        )
     )
 
     // FTS5 search
