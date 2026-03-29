@@ -101,34 +101,35 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDepen
       }
 
       const db = getDb()
+      mainLogger.info(`Starting single-case delete worker (id: ${validated.data})`, 'cases')
+      safeEmit('cohort:summaryRebuilt', { is_stale: true })
 
-      let incrementalSucceeded = false
       try {
-        // Incremental remove BEFORE cascade delete (reads from variants)
-        db.cohortSummary.incrementalRemove(validated.data)
-        incrementalSucceeded = true
-      } catch {
-        // Fallback: mark stale — next full rebuild will correct
-        db.cohortSummary.markStale()
-        safeEmit('cohort:summaryRebuilt', { is_stale: true })
+        // Decrement frequencies BEFORE worker delete — needs variant data still present.
+        // This is a fast indexed operation (stays on main thread).
+        try {
+          db.variants.decrementFrequencies(validated.data)
+        } catch (freqError) {
+          mainLogger.warn(`Failed to decrement variant frequencies: ${freqError}`, 'cases')
+        }
+
+        await runDeleteWorker({
+          type: 'deleteBatch',
+          dbPath: db.getPath(),
+          encryptionKey: db.getEncryptionKey(),
+          ids: [validated.data]
+        })
+
+        safeEmit('cases:deleted', { deleted: 1 })
+        safeEmit('cohort:summaryRebuilt', { is_stale: false })
+        return undefined
+      } catch (error) {
+        mainLogger.error(
+          `Single-case delete worker failed: ${error instanceof Error ? error.message : error}`,
+          'cases'
+        )
+        throw error
       }
-
-      // NOTE: Decrement before delete because we need variant data to identify coordinates.
-      // If deleteCase() fails (extremely rare), frequencies may be slightly off until next import.
-      try {
-        db.variants.decrementFrequencies(validated.data)
-      } catch (freqError) {
-        mainLogger.warn(`Failed to decrement variant frequencies: ${freqError}`, 'cases')
-      }
-
-      db.cases.deleteCase(validated.data)
-
-      if (incrementalSucceeded) {
-        // Variant summary updated but gene_burden still stale
-        safeEmit('cohort:summaryRebuilt', { is_stale: true })
-      }
-
-      return undefined
     })
   })
 
