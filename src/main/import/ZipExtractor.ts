@@ -40,7 +40,11 @@ export class ZipExtractor {
    * @param password - Optional password for encrypted archives
    * @returns Promise resolving to extraction result with file paths and any errors
    */
-  async extract(zipPath: string, targetDir: string, password?: string): Promise<ZipExtractionResult> {
+  async extract(
+    zipPath: string,
+    targetDir: string,
+    password?: string
+  ): Promise<ZipExtractionResult> {
     const zip = new AdmZip(zipPath)
     const entries = zip.getEntries()
     const result: ZipExtractionResult = {

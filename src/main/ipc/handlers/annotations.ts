@@ -408,35 +408,27 @@ export function registerAnnotationHandlers({
   )
 
   // Batch read — single round-trip for N variants (pool-dispatched)
-  ipcMain.handle(
-    'annotations:batchGet',
-    async (_event, caseId: unknown, variantKeys: unknown) => {
-      return wrapHandler(async () => {
-        const validatedCaseId = z
-          .number()
-          .int()
-          .positive()
-          .nullable()
-          .safeParse(caseId)
-        if (!validatedCaseId.success) {
-          throw new Error('Invalid caseId parameter')
-        }
+  ipcMain.handle('annotations:batchGet', async (_event, caseId: unknown, variantKeys: unknown) => {
+    return wrapHandler(async () => {
+      const validatedCaseId = z.number().int().positive().nullable().safeParse(caseId)
+      if (!validatedCaseId.success) {
+        throw new Error('Invalid caseId parameter')
+      }
 
-        const validatedKeys = VariantKeysSchema.safeParse(variantKeys)
-        if (!validatedKeys.success) {
-          throw new Error('Invalid variantKeys parameter')
-        }
+      const validatedKeys = VariantKeysSchema.safeParse(variantKeys)
+      if (!validatedKeys.success) {
+        throw new Error('Invalid variantKeys parameter')
+      }
 
-        const pool = getDbPool?.()
-        if (pool) {
-          return await pool.run({
-            type: 'annotations:batchGet' as const,
-            params: [validatedCaseId.data, validatedKeys.data]
-          })
-        }
-        const db = getDb()
-        return db.annotations.getBatch(validatedCaseId.data, validatedKeys.data)
-      })
-    }
-  )
+      const pool = getDbPool?.()
+      if (pool) {
+        return await pool.run({
+          type: 'annotations:batchGet' as const,
+          params: [validatedCaseId.data, validatedKeys.data]
+        })
+      }
+      const db = getDb()
+      return db.annotations.getBatch(validatedCaseId.data, validatedKeys.data)
+    })
+  })
 }

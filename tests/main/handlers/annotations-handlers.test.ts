@@ -198,9 +198,7 @@ describe('annotation IPC handlers', () => {
     it('returns annotations keyed by chr:pos:ref:alt for case mode', () => {
       db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', { starred: 1 })
 
-      const result = db.annotations.getBatch(caseId, [
-        { chr: '1', pos: 12345, ref: 'A', alt: 'G' }
-      ])
+      const result = db.annotations.getBatch(caseId, [{ chr: '1', pos: 12345, ref: 'A', alt: 'G' }])
 
       expect(result).toHaveProperty('1:12345:A:G')
       expect(result['1:12345:A:G'].global).not.toBeNull()
@@ -211,18 +209,14 @@ describe('annotation IPC handlers', () => {
     it('returns global-only annotations when caseId is null', () => {
       db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', { starred: 1 })
 
-      const result = db.annotations.getBatch(null, [
-        { chr: '1', pos: 12345, ref: 'A', alt: 'G' }
-      ])
+      const result = db.annotations.getBatch(null, [{ chr: '1', pos: 12345, ref: 'A', alt: 'G' }])
 
       expect(result['1:12345:A:G'].global).not.toBeNull()
       expect(result['1:12345:A:G'].perCase).toBeNull()
     })
 
     it('returns null entries for variants with no annotations', () => {
-      const result = db.annotations.getBatch(caseId, [
-        { chr: '1', pos: 99999, ref: 'C', alt: 'T' }
-      ])
+      const result = db.annotations.getBatch(caseId, [{ chr: '1', pos: 99999, ref: 'C', alt: 'T' }])
 
       expect(result['1:99999:C:T']).toEqual({ global: null, perCase: null })
     })

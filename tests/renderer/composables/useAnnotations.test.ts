@@ -68,7 +68,10 @@ describe('useAnnotations', () => {
 
     it('does not evict when under the limit', async () => {
       // Fill to exactly MAX_CACHE_SIZE entries
-      window.api.annotations.batchGet = (_caseId: number, variants: Array<{ chr: string; pos: number; ref: string; alt: string }>) => {
+      window.api.annotations.batchGet = (
+        _caseId: number,
+        variants: Array<{ chr: string; pos: number; ref: string; alt: string }>
+      ) => {
         const result: Record<string, { global: null; perCase: null }> = {}
         for (const v of variants) {
           result[`${v.chr}:${v.pos}:${v.ref}:${v.alt}`] = { global: null, perCase: null }
@@ -106,7 +109,10 @@ describe('useAnnotations', () => {
       // verifying the cacheSet helper evicts correctly by adding exactly
       // MAX_CACHE_SIZE + 1 entries.
 
-      window.api.annotations.batchGet = (_caseId: number, variants: Array<{ chr: string; pos: number; ref: string; alt: string }>) => {
+      window.api.annotations.batchGet = (
+        _caseId: number,
+        variants: Array<{ chr: string; pos: number; ref: string; alt: string }>
+      ) => {
         const result: Record<string, { global: null; perCase: null }> = {}
         for (const v of variants) {
           result[`${v.chr}:${v.pos}:${v.ref}:${v.alt}`] = { global: null, perCase: null }
