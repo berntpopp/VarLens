@@ -120,7 +120,6 @@ const {
   panelMode,
   variantTableRef,
   filterToolbarRef,
-  cohortViewRef,
   dataGeneration
 } = appState
 
@@ -252,14 +251,12 @@ watch(activeTab, async (newTab) => {
     if (newTab === 'cohort') {
       sidebarOpen.value = false
       await router.push('/cohort')
-      // Wait for the CohortView to mount before refreshing —
-      // the ref isn't available until after the next render cycle
-      await nextTick()
-      await cohortViewRef.value?.refresh()
     } else {
       await router.push('/case')
     }
   } finally {
+    // Allow a tick for onActivated to fire before hiding overlay
+    await nextTick()
     transitioning.value = false
   }
 })
