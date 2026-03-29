@@ -327,7 +327,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
         zipTempManager = new TempDirectoryManager()
         const targetDir = zipTempManager.create()
 
-        const result = zipExtractor.extract(zipPath, targetDir, password)
+        const result = await zipExtractor.extract(zipPath, targetDir, password)
 
         return JSON.parse(
           JSON.stringify({

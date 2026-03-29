@@ -1,5 +1,5 @@
 import AdmZip from 'adm-zip'
-import { writeFileSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { resolve, relative, basename, sep } from 'node:path'
 
 export interface ZipExtractionResult {
@@ -30,7 +30,7 @@ export class ZipExtractor {
   /**
    * Extract JSON/gz files from a ZIP archive to a target directory.
    *
-   * Uses per-entry getData(password) + writeFileSync instead of extractAllTo()
+   * Uses per-entry getData(password) + writeFile instead of extractAllTo()
    * because extractAllTo() can trigger uncaught async zlib errors that crash
    * the Electron main process. getData() handles decryption synchronously and
    * errors can be caught per-entry.
@@ -38,9 +38,9 @@ export class ZipExtractor {
    * @param zipPath - Path to the ZIP file
    * @param targetDir - Directory to extract files into (must already exist)
    * @param password - Optional password for encrypted archives
-   * @returns Extraction result with file paths and any errors
+   * @returns Promise resolving to extraction result with file paths and any errors
    */
-  extract(zipPath: string, targetDir: string, password?: string): ZipExtractionResult {
+  async extract(zipPath: string, targetDir: string, password?: string): Promise<ZipExtractionResult> {
     const zip = new AdmZip(zipPath)
     const entries = zip.getEntries()
     const result: ZipExtractionResult = {
@@ -82,7 +82,7 @@ export class ZipExtractor {
           result.errors.push(`Rejected path traversal attempt: ${entryName}`)
           continue
         }
-        writeFileSync(extractedPath, data)
+        await writeFile(extractedPath, data)
         result.extractedFiles.push(resolve(extractedPath))
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error)
