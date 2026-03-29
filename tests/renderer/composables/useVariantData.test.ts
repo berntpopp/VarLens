@@ -335,15 +335,12 @@ describe('useVariantData', () => {
   // ─── 6. Annotation loading ────────────────────────────────────────────────────
 
   describe('annotation loading', () => {
-    it('calls api.annotations.getForVariant when variants are loaded', async () => {
+    it('calls api.annotations.batchGet when variants are loaded', async () => {
       window.api.variants.query = vi.fn().mockResolvedValue({
         data: [mockVariant],
         total_count: 1
       })
-      window.api.annotations.getForVariant = vi.fn().mockResolvedValue({
-        global: null,
-        perCase: null
-      })
+      window.api.annotations.batchGet = vi.fn().mockResolvedValue({})
 
       const { result } = setup(1)
       await flushPromises()
@@ -351,21 +348,19 @@ describe('useVariantData', () => {
       await result.loadVariants()
       await flushPromises()
 
-      expect(window.api.annotations.getForVariant).toHaveBeenCalledWith(
-        1,
-        mockVariant.chr,
-        mockVariant.pos,
-        mockVariant.ref,
-        mockVariant.alt
-      )
+      expect(window.api.annotations.batchGet).toHaveBeenCalledWith(1, [
+        {
+          chr: mockVariant.chr,
+          pos: mockVariant.pos,
+          ref: mockVariant.ref,
+          alt: mockVariant.alt
+        }
+      ])
     })
 
-    it('does not call getForVariant when variants array is empty', async () => {
+    it('does not call batchGet when variants array is empty', async () => {
       window.api.variants.query = vi.fn().mockResolvedValue({ data: [], total_count: 0 })
-      window.api.annotations.getForVariant = vi.fn().mockResolvedValue({
-        global: null,
-        perCase: null
-      })
+      window.api.annotations.batchGet = vi.fn().mockResolvedValue({})
 
       const { result } = setup(1)
       await flushPromises()
@@ -373,7 +368,7 @@ describe('useVariantData', () => {
       await result.loadVariants()
       await flushPromises()
 
-      expect(window.api.annotations.getForVariant).not.toHaveBeenCalled()
+      expect(window.api.annotations.batchGet).not.toHaveBeenCalled()
     })
   })
 

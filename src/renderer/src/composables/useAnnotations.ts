@@ -223,9 +223,9 @@ export function useAnnotations() {
   ): Promise<void> {
     if (!api) return
 
-    const uncached = variants.filter(
-      (v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt))
-    )
+    const uncached = variants
+      .filter((v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)))
+      .map((v) => ({ chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }))
 
     try {
       const results = await api.annotations.batchGet(caseId, uncached)
@@ -277,9 +277,9 @@ export function useAnnotations() {
   ): Promise<void> {
     if (!api) return
 
-    const uncached = variants.filter(
-      (v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt))
-    )
+    const uncached = variants
+      .filter((v) => !annotationCache.value.has(variantKey(v.chr, v.pos, v.ref, v.alt)))
+      .map((v) => ({ chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }))
 
     try {
       const results = await api.annotations.batchGet(null, uncached)
