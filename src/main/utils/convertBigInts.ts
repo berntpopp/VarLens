@@ -11,7 +11,7 @@ export function convertBigInts<T>(obj: T): T {
   if (typeof obj === 'object') {
     const result: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(obj)) {
-      result[key] = typeof value === 'bigint' ? Number(value) : value
+      result[key] = convertBigInts(value)
     }
     return result as T
   }

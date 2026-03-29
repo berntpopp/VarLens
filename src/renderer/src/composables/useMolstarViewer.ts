@@ -23,24 +23,30 @@ import { logService } from '../services/LogService'
 
 /** Lazy-load the pdbe-molstar web component script on first use */
 let molstarScriptLoaded = false
+let molstarScriptLoadPromise: Promise<void> | null = null
 function ensureMolstarScript(): Promise<void> {
   if (molstarScriptLoaded) return Promise.resolve()
-  molstarScriptLoaded = true
+  // Return the in-flight promise if a load is already pending
+  if (molstarScriptLoadPromise) return molstarScriptLoadPromise
 
-  return new Promise<void>((resolve, reject) => {
+  molstarScriptLoadPromise = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script')
     script.src = '/pdbe-molstar-component.js'
     script.onload = () => {
       logService.info('pdbe-molstar script loaded on demand', 'MolstarViewer')
+      molstarScriptLoaded = true
+      molstarScriptLoadPromise = null
       resolve()
     }
     script.onerror = () => {
-      molstarScriptLoaded = false // Allow retry
+      molstarScriptLoadPromise = null // Allow retry on next call
       script.remove() // Remove failed element to avoid duplicates on retry
       reject(new Error('Failed to load pdbe-molstar script'))
     }
     document.head.appendChild(script)
   })
+
+  return molstarScriptLoadPromise
 }
 
 /** Representation types supported by pdbe-molstar */
