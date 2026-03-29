@@ -211,20 +211,22 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
                 // guarantee structured-clone compatibility (worker messages
                 // can carry prototype chains or undefined values that fail
                 // Electron's IPC serialization on some platforms).
-                const batchResult = JSON.parse(JSON.stringify({
-                  succeeded: msg.results.succeeded,
-                  failed: msg.results.failed,
-                  skipped: msg.results.skipped,
-                  cancelled: msg.results.cancelled,
-                  details: msg.results.details.map((d) => ({
-                    filePath: d.filePath,
-                    fileName: d.fileName,
-                    status: d.status,
-                    caseName: d.caseName,
-                    variantCount: d.variantCount,
-                    error: d.error
-                  }))
-                }))
+                const batchResult = JSON.parse(
+                  JSON.stringify({
+                    succeeded: msg.results.succeeded,
+                    failed: msg.results.failed,
+                    skipped: msg.results.skipped,
+                    cancelled: msg.results.cancelled,
+                    details: msg.results.details.map((d) => ({
+                      filePath: d.filePath,
+                      fileName: d.fileName,
+                      status: d.status,
+                      caseName: d.caseName,
+                      variantCount: d.variantCount,
+                      error: d.error
+                    }))
+                  })
+                )
 
                 // Notify renderer globally that import completed
                 // (even if BatchImportDialog was closed via "Continue in Background")
