@@ -177,4 +177,40 @@ export class AnnotationRepository extends BaseRepository {
     const perCase = variantId !== undefined ? this.getPerCaseAnnotation(caseId, variantId) : null
     return { global, perCase }
   }
+
+  getBatch(
+    caseId: number | null,
+    variantKeys: Array<{ chr: string; pos: number; ref: string; alt: string }>
+  ): Record<string, { global: VariantAnnotation | null; perCase: CaseVariantAnnotation | null }> {
+    const result: Record<
+      string,
+      { global: VariantAnnotation | null; perCase: CaseVariantAnnotation | null }
+    > = {}
+
+    for (const vk of variantKeys) {
+      const key = `${vk.chr}:${vk.pos}:${vk.ref}:${vk.alt}`
+      const global = this.getGlobalAnnotation(vk.chr, vk.pos, vk.ref, vk.alt)
+
+      let perCase: CaseVariantAnnotation | null = null
+      if (caseId !== null) {
+        const variant = this.execFirst<{ id: number }>(
+          this.kysely
+            .selectFrom('variants')
+            .select('id')
+            .where('case_id', '=', caseId)
+            .where('chr', '=', vk.chr)
+            .where('pos', '=', vk.pos)
+            .where('ref', '=', vk.ref)
+            .where('alt', '=', vk.alt)
+        )
+        if (variant) {
+          perCase = this.getPerCaseAnnotation(caseId, variant.id)
+        }
+      }
+
+      result[key] = { global, perCase }
+    }
+
+    return result
+  }
 }

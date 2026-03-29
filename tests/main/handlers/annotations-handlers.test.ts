@@ -188,4 +188,56 @@ describe('annotation IPC handlers', () => {
       expect(result).toBeNull()
     })
   })
+
+  describe('getBatch (annotations:batchGet)', () => {
+    it('returns empty record for empty variantKeys array', () => {
+      const result = db.annotations.getBatch(caseId, [])
+      expect(result).toEqual({})
+    })
+
+    it('returns annotations keyed by chr:pos:ref:alt for case mode', () => {
+      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', { starred: 1 })
+
+      const result = db.annotations.getBatch(caseId, [
+        { chr: '1', pos: 12345, ref: 'A', alt: 'G' }
+      ])
+
+      expect(result).toHaveProperty('1:12345:A:G')
+      expect(result['1:12345:A:G'].global).not.toBeNull()
+      expect(result['1:12345:A:G'].global!.starred).toBe(1)
+      expect(result['1:12345:A:G'].perCase).toBeNull()
+    })
+
+    it('returns global-only annotations when caseId is null', () => {
+      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', { starred: 1 })
+
+      const result = db.annotations.getBatch(null, [
+        { chr: '1', pos: 12345, ref: 'A', alt: 'G' }
+      ])
+
+      expect(result['1:12345:A:G'].global).not.toBeNull()
+      expect(result['1:12345:A:G'].perCase).toBeNull()
+    })
+
+    it('returns null entries for variants with no annotations', () => {
+      const result = db.annotations.getBatch(caseId, [
+        { chr: '1', pos: 99999, ref: 'C', alt: 'T' }
+      ])
+
+      expect(result['1:99999:C:T']).toEqual({ global: null, perCase: null })
+    })
+
+    it('handles multiple variants in a single batch', () => {
+      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', { starred: 1 })
+
+      const result = db.annotations.getBatch(caseId, [
+        { chr: '1', pos: 12345, ref: 'A', alt: 'G' },
+        { chr: '2', pos: 67890, ref: 'T', alt: 'C' }
+      ])
+
+      expect(Object.keys(result)).toHaveLength(2)
+      expect(result['1:12345:A:G'].global).not.toBeNull()
+      expect(result['2:67890:T:C'].global).toBeNull()
+    })
+  })
 })
