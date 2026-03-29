@@ -157,6 +157,7 @@ export type MockApi = {
     getMapping: ReturnType<typeof vi.fn>
     getDomains: ReturnType<typeof vi.fn>
     getStructure: ReturnType<typeof vi.fn>
+    getGeneStructure: ReturnType<typeof vi.fn>
   }
   gnomad: {
     getVariants: ReturnType<typeof vi.fn>
@@ -351,7 +352,8 @@ export function createMockApi(): MockApi {
     protein: {
       getMapping: vi.fn().mockResolvedValue({ success: false, error: 'Not mocked' }),
       getDomains: vi.fn().mockResolvedValue({ success: false, error: 'Not mocked' }),
-      getStructure: vi.fn().mockResolvedValue({ success: false, error: 'Not mocked' })
+      getStructure: vi.fn().mockResolvedValue({ success: false, error: 'Not mocked' }),
+      getGeneStructure: vi.fn().mockResolvedValue({ success: false, error: 'Not mocked' })
     },
 
     gnomad: {

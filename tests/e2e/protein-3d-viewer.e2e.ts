@@ -89,8 +89,8 @@ test('3D viewer: representation switching preserves background color', async ({}
     const surfaceBtn = toolbar.locator('button:has-text("Surface")')
     if ((await surfaceBtn.count()) > 0) {
       await surfaceBtn.click()
-      // Wait longer for fullLoad=true + staggered bg restore (up to 5s)
-      await window.waitForTimeout(7000)
+      // Wait for element recreation + structure reload + surface computation
+      await window.waitForTimeout(15000)
 
       const screenshotSurface = await window.screenshot({
         path: testInfo.outputPath('06-surface-representation.png')

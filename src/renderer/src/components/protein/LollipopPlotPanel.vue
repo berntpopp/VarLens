@@ -159,27 +159,32 @@ const activeClinVarConsequences = ref<Set<ConsequenceCategory>>(
   new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
 )
 
+// Generation counter to discard stale gnomAD results on rapid gene changes
+let gnomadGeneration = 0
+
 // Auto-fetch gnomAD data when gene symbol is available
 watch(
   () => props.geneSymbol,
   async (gene) => {
-    // Reset data when gene changes
+    const gen = ++gnomadGeneration
     gnomadVariants.value = []
 
     if (gene !== null && gene !== '' && api !== undefined) {
       if (showGnomad.value) {
-        await fetchGnomad(gene)
+        await fetchGnomad(gene, gen)
       }
     }
   },
   { immediate: true }
 )
 
-async function fetchGnomad(gene: string): Promise<void> {
+async function fetchGnomad(gene: string, generation?: number): Promise<void> {
   if (api === undefined) return
   gnomadLoading.value = true
   try {
     const result = await api.gnomad.getVariants(gene)
+    // Discard stale results if gene changed while fetching
+    if (generation !== undefined && generation !== gnomadGeneration) return
     if (result.success) {
       gnomadVariants.value = result.variants
     } else {

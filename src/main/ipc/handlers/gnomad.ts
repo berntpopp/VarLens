@@ -56,17 +56,20 @@ export function registerGnomadHandlers({ ipcMain, getDb }: HandlerDependencies):
         throw new Error('Invalid parameters')
       }
 
-      const isOnline = networkStatus.getStatus()
+      const client = getGnomadClient()
 
-      if (!isOnline) {
+      // Try fetching (client checks cache first, then network)
+      // If offline and cached data exists, the client will return cached results
+      if (!networkStatus.getStatus()) {
+        // Still try the client — it may have cached data
+        const cached = await client.fetchGeneVariants(geneValidated.data, datasetValidated.data)
+        if (cached.success) return cached
         return {
           success: false,
-          error: 'No network connection — gnomAD requires an internet connection',
+          error: 'No network connection and no cached gnomAD data available',
           offline: true
         }
       }
-
-      const client = getGnomadClient()
 
       return await client.fetchGeneVariants(geneValidated.data, datasetValidated.data)
     })
@@ -95,17 +98,17 @@ export function registerGnomadHandlers({ ipcMain, getDb }: HandlerDependencies):
         throw new Error('Invalid parameters')
       }
 
-      const isOnline = networkStatus.getStatus()
+      const client = getGnomadClient()
 
-      if (!isOnline) {
+      if (!networkStatus.getStatus()) {
+        const cached = await client.fetchClinVarVariants(geneValidated.data, datasetValidated.data)
+        if (cached.success) return cached
         return {
           success: false,
-          error: 'No network connection — gnomAD requires an internet connection',
+          error: 'No network connection and no cached ClinVar data available',
           offline: true
         }
       }
-
-      const client = getGnomadClient()
 
       return await client.fetchClinVarVariants(geneValidated.data, datasetValidated.data)
     })

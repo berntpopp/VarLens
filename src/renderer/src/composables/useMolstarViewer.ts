@@ -27,6 +27,21 @@ export type RepresentationType = 'cartoon' | 'molecular-surface' | 'ball-and-sti
 /** How variant residues are rendered on the structure */
 export type VariantStyle = 'colored' | 'ball-and-stick'
 
+/** RGB color value */
+type RgbColor = { r: number; g: number; b: number }
+
+/** pdbe-molstar selection data item */
+interface SelectionDataItem {
+  struct_asym_id?: string
+  start_residue_number: number
+  end_residue_number: number
+  color: RgbColor
+  focus?: boolean
+  sideChain?: boolean
+  representation?: string
+  representationColor?: RgbColor
+}
+
 /** pdbe-molstar viewer instance (partial typing for the API we use) */
 interface MolstarViewerInstance {
   events: {
@@ -36,22 +51,14 @@ interface MolstarViewerInstance {
   }
   visual: {
     select: (params: {
-      data: Array<{
-        struct_asym_id?: string
-        start_residue_number: number
-        end_residue_number: number
-        color: { r: number; g: number; b: number }
-        focus?: boolean
-        sideChain?: boolean
-        representation?: string
-      }>
-      nonSelectedColor?: { r: number; g: number; b: number }
-    }) => void
+      data: SelectionDataItem[]
+      nonSelectedColor?: RgbColor
+    }) => Promise<void>
     reset: (params: { camera: boolean; theme: boolean }) => void
     update: (options: Record<string, unknown>, fullLoad?: boolean) => void | Promise<void>
   }
   canvas: {
-    setBgColor: (color: { r: number; g: number; b: number }) => void
+    setBgColor: (color: RgbColor) => void
   }
 }
 
@@ -213,24 +220,35 @@ export function useMolstarViewer(
    * (chain A is the default for both AlphaFold and most PDB structures).
    * Colors each residue by its consequence category and dims unselected
    * residues with a light gray nonSelectedColor.
+   *
+   * In "ball-and-stick" mode, sets `sideChain: true` so pdbe-molstar creates
+   * an additional ball-and-stick StructureComponent for selected residues
+   * (on top of the existing cartoon). The `representationColor` is set to the
+   * variant color so the sticks are visually distinct from the gray background.
    */
-  function highlightVariants(): void {
+  async function highlightVariants(): Promise<void> {
     if (!viewerInstance) return
 
     const variantsToHighlight = variants.value.filter((v) => v.proteinPosition > 0)
 
     const useBallAndStick = variantStyle.value === 'ball-and-stick'
 
-    // Build selection data for user variants
-    const selections = variantsToHighlight.map((v) => ({
-      struct_asym_id: 'A',
-      start_residue_number: v.proteinPosition,
-      end_residue_number: v.proteinPosition,
-      color: hexToRgb(v.color),
-      focus: false,
-      sideChain: true,
-      ...(useBallAndStick ? { representation: 'ball-and-stick' as const } : {})
-    }))
+    // Build selection data for user variants.
+    // In ball-and-stick mode: sideChain=true triggers pdbe-molstar to add a
+    // ball-and-stick StructureComponent; representationColor colors the sticks.
+    // In colored mode: only overpaint (coloring) is applied to the main representation.
+    const selections: SelectionDataItem[] = variantsToHighlight.map((v) => {
+      const color = hexToRgb(v.color)
+      return {
+        struct_asym_id: 'A',
+        start_residue_number: v.proteinPosition,
+        end_residue_number: v.proteinPosition,
+        color,
+        focus: false,
+        sideChain: useBallAndStick,
+        ...(useBallAndStick ? { representationColor: color } : {})
+      }
+    })
 
     // Add ClinVar P/LP variants (in red tones)
     const cvVariants = clinvarVariants?.value ?? []
@@ -240,26 +258,29 @@ export function useMolstarViewer(
       // Skip if already highlighted by user variant
       if (userPositions.has(cv.proteinPosition)) continue
       const cat = getClinVarCategory(cv.clinicalSignificance)
+      const color = hexToRgb(CLINVAR_COLORS[cat])
       selections.push({
         struct_asym_id: 'A',
         start_residue_number: cv.proteinPosition,
         end_residue_number: cv.proteinPosition,
-        color: hexToRgb(CLINVAR_COLORS[cat]),
+        color,
         focus: false,
-        sideChain: true,
-        ...(useBallAndStick ? { representation: 'ball-and-stick' as const } : {})
+        sideChain: useBallAndStick,
+        ...(useBallAndStick ? { representationColor: color } : {})
       })
     }
 
     if (selections.length === 0) return
 
     logService.info(
-      `Highlighting ${selections.length} residue(s) on 3D structure (${variantsToHighlight.length} user + ${selections.length - variantsToHighlight.length} ClinVar)`,
+      `Highlighting ${selections.length} residue(s) on 3D structure` +
+        ` (${variantsToHighlight.length} user + ${selections.length - variantsToHighlight.length} ClinVar)` +
+        ` style=${variantStyle.value}`,
       'MolstarViewer'
     )
 
     try {
-      viewerInstance.visual.select({
+      await viewerInstance.visual.select({
         data: selections,
         nonSelectedColor: { r: 220, g: 220, b: 220 }
       })
@@ -272,9 +293,10 @@ export function useMolstarViewer(
   }
 
   /**
-   * Focus the camera on a specific residue position
+   * Focus the camera on a specific residue position.
+   * Always shows side chains as ball-and-stick for the focused residue.
    */
-  function focusResidue(position: number): void {
+  async function focusResidue(position: number): Promise<void> {
     if (!viewerInstance) return
 
     // Find the variant at this position to use its actual color
@@ -284,7 +306,7 @@ export function useMolstarViewer(
       : hexToRgb(getConsequenceColor('missense_variant'))
 
     try {
-      viewerInstance.visual.select({
+      await viewerInstance.visual.select({
         data: [
           {
             struct_asym_id: 'A',
@@ -292,7 +314,8 @@ export function useMolstarViewer(
             end_residue_number: position,
             color,
             focus: true,
-            sideChain: true
+            sideChain: true,
+            representationColor: color
           }
         ],
         nonSelectedColor: { r: 220, g: 220, b: 220 }
@@ -335,7 +358,7 @@ export function useMolstarViewer(
     variantStyle.value = style
     logService.info(`Variant style changed to ${style}`, 'MolstarViewer')
     if (structureLoaded.value) {
-      highlightVariants()
+      void highlightVariants()
     }
   }
 
@@ -347,7 +370,7 @@ export function useMolstarViewer(
 
     try {
       viewerInstance.visual.reset({ camera: true, theme: true })
-      highlightVariants()
+      void highlightVariants()
     } catch (err) {
       logService.error(
         `Failed to reset view: ${err instanceof Error ? err.message : String(err)}`,
