@@ -190,6 +190,7 @@ export interface FilterOptions {
 export interface ImportAPI {
   selectFile: () => Promise<string | null>
   start: (filePath: string, caseName: string) => Promise<ImportResult | SerializableError>
+  vcfPreview: (filePath: string) => Promise<unknown>
   onProgress: (callback: (progress: ProgressUpdate) => void) => () => void
   cancel: () => Promise<void>
 }

@@ -98,7 +98,16 @@
         </v-expand-transition>
       </v-card-text>
 
-      <!-- Step 2: Review -->
+      <!-- Step 2 (VCF only): VCF Preview -->
+      <v-card-text v-else-if="isVcfImport && step === 2">
+        <VcfPreviewStep
+          :file-path="vcfFilePath"
+          @preview-loaded="onVcfPreviewLoaded"
+          @selection-changed="onVcfSelectionChanged"
+        />
+      </v-card-text>
+
+      <!-- Step 2 (non-VCF): Review -->
       <v-card-text v-else-if="step === 2">
         <BatchReviewPhase
           v-model:strip-text="stripText"
@@ -136,8 +145,26 @@
           Continue in Background
         </v-btn>
         <v-btn v-if="step === 3" variant="text" size="small" @click="cancelImport">Cancel</v-btn>
+
+        <!-- VCF import button -->
         <v-btn
-          v-if="step === 2"
+          v-if="isVcfImport && step === 2"
+          color="primary"
+          variant="flat"
+          size="small"
+          :disabled="vcfSelectedSamples.length === 0 || importStore.isActive"
+          @click="startVcfImport"
+        >
+          {{
+            importStore.isActive
+              ? 'Import in progress...'
+              : `Import ${vcfSelectedSamples.length} ${vcfSelectedSamples.length === 1 ? 'sample' : 'samples'}`
+          }}
+        </v-btn>
+
+        <!-- Non-VCF import button -->
+        <v-btn
+          v-if="!isVcfImport && step === 2"
           color="primary"
           variant="flat"
           size="small"
@@ -166,12 +193,14 @@ import type {
   BatchResult,
   BatchProgress
 } from '../../../../shared/types/api'
+import type { VcfPreviewResult } from '../../../../main/import/vcf/types'
 import { useApiService } from '../../composables/useApiService'
 import { useImportStatusStore } from '../../stores/importStatusStore'
 import { logService } from '../../services/LogService'
 import BatchReviewPhase from '../batch-import/BatchReviewPhase.vue'
 import BatchProgressPhase from '../batch-import/BatchProgressPhase.vue'
 import BatchSummaryPhase from '../batch-import/BatchSummaryPhase.vue'
+import VcfPreviewStep from './VcfPreviewStep.vue'
 import {
   mdiChevronRight,
   mdiClose,
@@ -197,7 +226,19 @@ const emit = defineEmits<{
 const dialog = ref(false)
 const step = ref(1)
 
-const stepLabels = ['Source', 'Review', 'Import', 'Summary']
+// VCF import state
+const isVcfImport = ref(false)
+const vcfFilePath = ref('')
+const vcfSelectedSamples = ref<string[]>([])
+const vcfGenomeBuild = ref('GRCh38')
+const vcfCaseNames = ref(new Map<string, string>())
+
+const stepLabels = computed(() => {
+  if (isVcfImport.value) {
+    return ['Source', 'VCF Preview', 'Import', 'Summary']
+  }
+  return ['Source', 'Review', 'Import', 'Summary']
+})
 
 const sources = [
   {
@@ -311,6 +352,18 @@ async function selectSource(mode: ImportMode): Promise<void> {
     if (filePaths.length === 0) return
 
     selectedFilePaths.value = filePaths
+
+    // Detect VCF file: single file with .vcf or .vcf.gz extension
+    if (filePaths.length === 1) {
+      const fp = filePaths[0].toLowerCase()
+      if (fp.endsWith('.vcf') || fp.endsWith('.vcf.gz')) {
+        isVcfImport.value = true
+        vcfFilePath.value = filePaths[0]
+        step.value = 2 // Go to VCF Preview step
+        return
+      }
+    }
+
     await checkDuplicatesAndAdvance(filePaths)
   } catch (err) {
     logService.error(
@@ -363,6 +416,115 @@ function cancelZip(): void {
   zipPasswordNeeded.value = false
   zipPassword.value = ''
   zipError.value = ''
+}
+
+function onVcfPreviewLoaded(_preview: VcfPreviewResult): void {
+  // Preview data is stored in the child component; we just note it loaded
+  logService.info('VCF preview loaded successfully', 'ImportWizard')
+}
+
+function onVcfSelectionChanged(options: {
+  selectedSamples: string[]
+  genomeBuild: string
+  caseNames: Map<string, string>
+}): void {
+  vcfSelectedSamples.value = options.selectedSamples
+  vcfGenomeBuild.value = options.genomeBuild
+  vcfCaseNames.value = options.caseNames
+}
+
+async function startVcfImport(): Promise<void> {
+  if (importStore.isActive) {
+    logService.warn('Import already in progress — cannot start another', 'ImportWizard')
+    return
+  }
+
+  step.value = 3
+  totalFiles.value = vcfSelectedSamples.value.length
+  currentIndex.value = 0
+  overallPercent.value = 0
+  variantCount.value = 0
+
+  importStore.startImport(vcfSelectedSamples.value.length)
+  importStore.dialogOpen = true
+
+  const results: BatchResult = {
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    cancelled: false,
+    details: []
+  }
+
+  try {
+    for (let i = 0; i < vcfSelectedSamples.value.length; i++) {
+      const sample = vcfSelectedSamples.value[i]
+      const caseName = vcfCaseNames.value.get(sample) ?? sample
+
+      currentIndex.value = i + 1
+      currentFileName.value = caseName
+      overallPercent.value = Math.round(((i + 1) / vcfSelectedSamples.value.length) * 100)
+
+      try {
+        const result = await api!.import.start(vcfFilePath.value, caseName)
+        const resultObj = result as unknown as Record<string, unknown>
+
+        if ('userMessage' in resultObj) {
+          results.failed++
+          results.details.push({
+            filePath: vcfFilePath.value,
+            fileName: caseName,
+            caseName,
+            status: 'failed' as const,
+            error: String(resultObj.userMessage)
+          })
+        } else {
+          results.succeeded++
+          results.details.push({
+            filePath: vcfFilePath.value,
+            fileName: caseName,
+            caseName,
+            status: 'success' as const,
+            variantCount: (result as { variantCount: number }).variantCount
+          })
+        }
+      } catch (err) {
+        results.failed++
+        results.details.push({
+          filePath: vcfFilePath.value,
+          fileName: caseName,
+          caseName,
+          status: 'failed' as const,
+          error: err instanceof Error ? err.message : String(err)
+        })
+      }
+    }
+
+    summary.value = results
+    step.value = 4
+    importStore.importComplete({
+      ...results,
+      details: results.details.map((d) => ({ ...d, caseName: d.caseName ?? d.fileName }))
+    })
+
+    if (results.succeeded > 0) {
+      emit('batch-import-complete', { totalImported: results.succeeded })
+    }
+  } catch (err) {
+    logService.error(
+      `VCF import failed: ${err instanceof Error ? err.message : String(err)}`,
+      'ImportWizard'
+    )
+    summary.value = {
+      succeeded: 0,
+      failed: vcfSelectedSamples.value.length,
+      skipped: 0,
+      cancelled: false,
+      details: []
+    }
+    step.value = 4
+    importStore.importError(err instanceof Error ? err.message : 'VCF import failed')
+  }
 }
 
 async function startImport(): Promise<void> {
@@ -493,6 +655,11 @@ function resetState(): void {
   step.value = 1
   selectedMode.value = null
   selectedFilePaths.value = []
+  isVcfImport.value = false
+  vcfFilePath.value = ''
+  vcfSelectedSamples.value = []
+  vcfGenomeBuild.value = 'GRCh38'
+  vcfCaseNames.value = new Map()
   isZipImport.value = false
   zipPath.value = ''
   zipPasswordNeeded.value = false

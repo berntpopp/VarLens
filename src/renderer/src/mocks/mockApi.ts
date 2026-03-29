@@ -128,6 +128,14 @@ export const mockApi: WindowAPI = {
       errors: [],
       elapsed: 1500
     }),
+    vcfPreview: async () => ({
+      fileformat: 'VCFv4.2',
+      samples: ['SAMPLE1'],
+      variantCountEstimate: 100,
+      annotationType: 'none',
+      detectedGenomeBuild: 'GRCh38',
+      infoFields: []
+    }),
     onProgress: () => () => {},
     cancel: async () => {}
   },
