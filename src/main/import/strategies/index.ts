@@ -8,3 +8,4 @@ export { StrategyRegistry, UnsupportedFormatError, importRegistry } from './Stra
 import './ColumnarStrategy'
 import './ObjectStrategy'
 import './SimpleStrategy'
+import '../vcf/VcfStrategy'

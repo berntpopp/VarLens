@@ -4,7 +4,7 @@ import type { ImportOptions, ImportResult } from '../types'
 /**
  * File format types supported by import strategies
  */
-export type FileFormat = 'columnar' | 'object' | 'simple'
+export type FileFormat = 'columnar' | 'object' | 'simple' | 'vcf'
 
 /**
  * Format detection result from detectFormat()

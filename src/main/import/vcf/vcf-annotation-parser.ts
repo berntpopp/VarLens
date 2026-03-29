@@ -80,22 +80,32 @@ function parseCsq(
 
   if (filtered.length === 0) return emptyResult()
 
-  // Build TranscriptInsertRows
-  const transcripts: TranscriptInsertRow[] = filtered.map((t) => ({
-    transcript_id: t.fields.get('Feature') || '',
-    gene_symbol: t.fields.get('SYMBOL') || null,
-    consequence: t.fields.get('Consequence') || null,
-    cdna: t.fields.get('HGVSc') || null,
-    aa_change: t.fields.get('HGVSp') || null,
-    hpo_sim_score: null,
-    moi: null,
-    is_selected: 0
-  }))
+  // Build TranscriptInsertRows, deduplicating by transcript_id
+  // (same transcript can appear multiple times with different consequences)
+  const transcriptMap = new Map<string, TranscriptInsertRow>()
+  for (const t of filtered) {
+    const tid = t.fields.get('Feature') ?? ''
+    if (!transcriptMap.has(tid)) {
+      transcriptMap.set(tid, {
+        transcript_id: tid,
+        gene_symbol: t.fields.get('SYMBOL') ?? null,
+        consequence: t.fields.get('Consequence') ?? null,
+        cdna: t.fields.get('HGVSc') ?? null,
+        aa_change: t.fields.get('HGVSp') ?? null,
+        hpo_sim_score: null,
+        moi: null,
+        is_selected: 0
+      })
+    }
+  }
+  const transcripts = Array.from(transcriptMap.values())
 
   // Select best transcript
   const bestIdx = selectBestTranscript(filtered)
-  if (bestIdx >= 0 && bestIdx < transcripts.length) {
-    transcripts[bestIdx].is_selected = 1
+  const bestTid = bestIdx >= 0 ? filtered[bestIdx].fields.get('Feature') ?? '' : ''
+  const bestTranscriptRow = transcripts.find((t) => t.transcript_id === bestTid)
+  if (bestTranscriptRow) {
+    bestTranscriptRow.is_selected = 1
   }
 
   const best = bestIdx >= 0 ? filtered[bestIdx] : null
@@ -164,22 +174,32 @@ function parseAnn(info: Map<string, string>, altAllele: string): AnnotationResul
 
   if (filtered.length === 0) return emptyResult()
 
-  // Build TranscriptInsertRows
-  const transcripts: TranscriptInsertRow[] = filtered.map((t) => ({
-    transcript_id: t.parts[ANN_FEATURE_ID] || '',
-    gene_symbol: t.parts[ANN_GENE_NAME] || null,
-    consequence: t.parts[ANN_ANNOTATION] || null,
-    cdna: t.parts[ANN_HGVSC] || null,
-    aa_change: t.parts[ANN_HGVSP] || null,
-    hpo_sim_score: null,
-    moi: null,
-    is_selected: 0
-  }))
+  // Build TranscriptInsertRows, deduplicating by transcript_id
+  // (same transcript can appear multiple times with different consequences)
+  const transcriptMap = new Map<string, TranscriptInsertRow>()
+  for (const t of filtered) {
+    const tid = t.parts[ANN_FEATURE_ID] ?? ''
+    if (!transcriptMap.has(tid)) {
+      transcriptMap.set(tid, {
+        transcript_id: tid,
+        gene_symbol: t.parts[ANN_GENE_NAME] ?? null,
+        consequence: t.parts[ANN_ANNOTATION] ?? null,
+        cdna: t.parts[ANN_HGVSC] ?? null,
+        aa_change: t.parts[ANN_HGVSP] ?? null,
+        hpo_sim_score: null,
+        moi: null,
+        is_selected: 0
+      })
+    }
+  }
+  const transcripts = Array.from(transcriptMap.values())
 
   // Select best transcript
   const bestIdx = selectBestTranscriptAnn(filtered)
-  if (bestIdx >= 0 && bestIdx < transcripts.length) {
-    transcripts[bestIdx].is_selected = 1
+  const bestTid = bestIdx >= 0 ? filtered[bestIdx].parts[ANN_FEATURE_ID] ?? '' : ''
+  const bestTranscriptRow = transcripts.find((t) => t.transcript_id === bestTid)
+  if (bestTranscriptRow) {
+    bestTranscriptRow.is_selected = 1
   }
 
   const best = bestIdx >= 0 ? filtered[bestIdx] : null

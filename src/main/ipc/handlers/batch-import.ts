@@ -37,7 +37,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
         defaultPath: settings.lastImportDirectory,
         properties: ['openFile', 'multiSelections'],
         filters: [
-          { name: 'Variant Files', extensions: ['gz', 'json.gz', 'json'] },
+          { name: 'Variant Files', extensions: ['gz', 'json.gz', 'json', 'vcf', 'vcf.gz'] },
           { name: 'ZIP Archives', extensions: ['zip'] },
           { name: 'All Files', extensions: ['*'] }
         ]

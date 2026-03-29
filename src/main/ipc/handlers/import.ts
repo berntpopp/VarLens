@@ -28,7 +28,7 @@ export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies):
         defaultPath: settings.lastImportDirectory,
         properties: ['openFile'],
         filters: [
-          { name: 'JSON Files', extensions: ['json', 'json.gz', 'gz'] },
+          { name: 'Variant Files', extensions: ['json', 'json.gz', 'gz', 'vcf', 'vcf.gz'] },
           { name: 'All Files', extensions: ['*'] }
         ]
       })

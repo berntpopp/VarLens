@@ -1,19 +1,82 @@
+import { createReadStream } from 'node:fs'
+import { createGunzip } from 'node:zlib'
+import { createInterface } from 'node:readline'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/Pick'
 import { streamArray } from 'stream-json/streamers/StreamArray'
 import type { Readable } from 'node:stream'
 import type { FileFormat, FormatInfo } from './strategies/ImportStrategy'
-import { createDecompressedStream } from './stream-utils'
+import { createDecompressedStream, isGzipped } from './stream-utils'
 
 /**
- * Detect the file format by examining top-level keys in a gzipped JSON file.
+ * Check if a file is a VCF file by reading the first line.
+ * VCF files start with "##fileformat=VCFv4"
+ */
+async function isVcfFile(filePath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const raw = createReadStream(filePath, { start: 0, end: 1024 })
+    const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
+
+    const rl = createInterface({ input: stream, crlfDelay: Infinity })
+    let resolved = false
+
+    rl.on('line', (line: string) => {
+      if (!resolved) {
+        resolved = true
+        rl.close()
+        resolve(line.startsWith('##fileformat=VCFv'))
+      }
+    })
+
+    rl.on('close', () => {
+      if (!resolved) {
+        resolved = true
+        resolve(false)
+      }
+    })
+
+    rl.on('error', () => {
+      if (!resolved) {
+        resolved = true
+        resolve(false)
+      }
+    })
+
+    stream.on('error', () => {
+      if (!resolved) {
+        resolved = true
+        resolve(false)
+      }
+    })
+  })
+}
+
+/**
+ * Detect the file format by examining file content.
  *
  * Returns format type and the relevant case key:
+ * - VCF: .vcf or .vcf.gz files starting with ##fileformat=VCFv
  * - Columnar: first top-level key is the case ID
  * - Object: has 'metadata' and 'samples' keys, extracts first sample ID
  * - Simple: has 'variants' key at top level
  */
 export async function detectFormat(filePath: string): Promise<FormatInfo> {
+  // Check for VCF first (before JSON detection)
+  const ext = filePath.toLowerCase()
+  if (ext.endsWith('.vcf') || ext.endsWith('.vcf.gz')) {
+    const isVcf = await isVcfFile(filePath)
+    if (isVcf) {
+      return { format: 'vcf', caseKey: '' }
+    }
+  }
+
+  // Also check files without VCF extension but with VCF magic line
+  if (!ext.endsWith('.json') && !ext.endsWith('.json.gz')) {
+    const isVcf = await isVcfFile(filePath)
+    if (isVcf) {
+      return { format: 'vcf', caseKey: '' }
+    }
+  }
   return new Promise((resolve, reject) => {
     const stream = createDecompressedStream(filePath).pipe(parser())
 
@@ -237,6 +300,13 @@ export async function createDataPipeline(filePath: string): Promise<{
         .pipe(streamArray())
       break
     }
+
+    case 'vcf':
+      // VCF files are not JSON — createDataPipeline is not applicable.
+      // Use VcfStrategy.import() directly instead.
+      throw new Error(
+        'VCF files cannot be processed through the JSON data pipeline. Use VcfStrategy instead.'
+      )
   }
 
   return { formatInfo, stream }
