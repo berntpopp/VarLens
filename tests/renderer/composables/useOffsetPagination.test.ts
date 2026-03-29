@@ -39,7 +39,7 @@ describe('useOffsetPagination', () => {
 
     expect(result.items.value).toEqual([])
     expect(result.totalCount.value).toBe(0)
-    expect(result.loading.value).toBe(false)
+    expect(result.loading.value).toBe(true)
     expect(result.error.value).toBeNull()
   })
 

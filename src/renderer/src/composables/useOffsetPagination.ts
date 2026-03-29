@@ -67,7 +67,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   // Result state
   const items = shallowRef<T[]>([]) as Ref<T[]>
   const totalCount = ref(0)
-  const loading = ref(false)
+  const loading = ref(true)
   const error = ref<Error | null>(null)
 
   // Sort change detection (prevents spurious reloads on reference changes)
