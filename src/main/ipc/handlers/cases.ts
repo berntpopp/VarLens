@@ -128,6 +128,13 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDepen
           `Single-case delete worker failed: ${error instanceof Error ? error.message : error}`,
           'cases'
         )
+        // Recovery: frequencies were decremented before the worker ran.
+        // Recompute to correct any drift from the failed delete.
+        try {
+          db.variants.recomputeAllFrequencies()
+        } catch {
+          mainLogger.warn('Failed to recompute frequencies after delete failure', 'cases')
+        }
         throw error
       }
     })

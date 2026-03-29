@@ -36,6 +36,7 @@ function ensureMolstarScript(): Promise<void> {
     }
     script.onerror = () => {
       molstarScriptLoaded = false // Allow retry
+      script.remove() // Remove failed element to avoid duplicates on retry
       reject(new Error('Failed to load pdbe-molstar script'))
     }
     document.head.appendChild(script)

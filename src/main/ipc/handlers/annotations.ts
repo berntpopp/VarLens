@@ -397,6 +397,16 @@ export function registerAnnotationHandlers({
     }
   )
 
+  // Zod schema for batch annotation variant keys (hoisted to avoid re-creation per call)
+  const VariantKeysSchema = z.array(
+    z.object({
+      chr: z.string().min(1),
+      pos: z.number().int().positive(),
+      ref: z.string().min(1),
+      alt: z.string().min(1)
+    })
+  )
+
   // Batch read — single round-trip for N variants (pool-dispatched)
   ipcMain.handle(
     'annotations:batchGet',
@@ -412,14 +422,6 @@ export function registerAnnotationHandlers({
           throw new Error('Invalid caseId parameter')
         }
 
-        const VariantKeysSchema = z.array(
-          z.object({
-            chr: z.string().min(1),
-            pos: z.number().int().positive(),
-            ref: z.string().min(1),
-            alt: z.string().min(1)
-          })
-        )
         const validatedKeys = VariantKeysSchema.safeParse(variantKeys)
         if (!validatedKeys.success) {
           throw new Error('Invalid variantKeys parameter')
