@@ -14,8 +14,13 @@ import type { VcfRawRecord } from './types'
  * @param sampleNames - Sample names from the VCF header (#CHROM line columns 10+)
  * @returns Parsed raw record
  */
-export function parseVcfLine(line: string, sampleNames: string[]): VcfRawRecord {
+export function parseVcfLine(line: string, sampleNames: string[]): VcfRawRecord | null {
   const cols = line.split('\t')
+
+  // VCF requires at least 8 fixed columns (CHROM through INFO)
+  if (cols.length < 8) {
+    return null
+  }
 
   // VCF has 8 fixed columns, optionally FORMAT + sample columns
   const chrom = cols[0]

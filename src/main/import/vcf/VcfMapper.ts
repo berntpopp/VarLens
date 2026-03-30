@@ -53,7 +53,7 @@ export function mapVcfRecord(
 
     // Step 3: Parse annotation (CSQ or ANN)
     const altAllele = rec.alt[0]
-    const annotation = parseAnnotation(rec.info, header, altAllele)
+    const annotation = parseAnnotation(rec.info, header, altAllele, rec.ref)
 
     // Step 4: Apply INFO field registry
     const infoResult = applyInfoFieldRegistry(rec.info, registry, annotation)

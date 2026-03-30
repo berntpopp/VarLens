@@ -245,7 +245,7 @@ const sources = [
     mode: 'single' as ImportMode,
     icon: mdiFileDocument,
     title: 'Single File',
-    subtitle: 'JSON / JSON.GZ'
+    subtitle: 'JSON / VCF'
   },
   {
     mode: 'files' as ImportMode,
@@ -458,6 +458,9 @@ async function startVcfImport(): Promise<void> {
 
   try {
     for (let i = 0; i < vcfSelectedSamples.value.length; i++) {
+      // Check for cancellation between samples
+      if (importStore.phase === 'cancelled') break
+
       const sample = vcfSelectedSamples.value[i]
       const caseName = vcfCaseNames.value.get(sample) ?? sample
 
@@ -466,7 +469,10 @@ async function startVcfImport(): Promise<void> {
       overallPercent.value = Math.round(((i + 1) / vcfSelectedSamples.value.length) * 100)
 
       try {
-        const result = await api!.import.start(vcfFilePath.value, caseName)
+        const result = await api!.import.start(vcfFilePath.value, caseName, {
+          selectedSample: sample,
+          genomeBuild: vcfGenomeBuild.value ?? undefined
+        })
         const resultObj = result as unknown as Record<string, unknown>
 
         if ('userMessage' in resultObj) {

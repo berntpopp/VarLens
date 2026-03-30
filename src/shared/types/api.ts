@@ -63,6 +63,7 @@ import type {
   RegionFile
 } from '../../main/database/types'
 import type { ProgressUpdate, ImportResult } from '../../main/import/types'
+import type { VcfPreviewResult } from '../../main/import/vcf/types'
 import type { SerializableError } from './errors'
 import type {
   CohortVariant,
@@ -189,8 +190,12 @@ export interface FilterOptions {
 
 export interface ImportAPI {
   selectFile: () => Promise<string | null>
-  start: (filePath: string, caseName: string) => Promise<ImportResult | SerializableError>
-  vcfPreview: (filePath: string) => Promise<unknown>
+  start: (
+    filePath: string,
+    caseName: string,
+    vcfOptions?: { selectedSample?: string; genomeBuild?: string }
+  ) => Promise<ImportResult | SerializableError>
+  vcfPreview: (filePath: string) => Promise<VcfPreviewResult>
   onProgress: (callback: (progress: ProgressUpdate) => void) => () => void
   cancel: () => Promise<void>
 }

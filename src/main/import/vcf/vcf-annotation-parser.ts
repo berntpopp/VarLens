@@ -23,19 +23,21 @@ const IMPACT_ORDER: Record<string, number> = {
  * @param info - Raw INFO key-value pairs from VcfRawRecord
  * @param header - Parsed VCF header with annotation type info
  * @param altAllele - The ALT allele to filter annotations for
+ * @param ref - The REF allele (used to disambiguate deletion matching)
  * @returns Annotation result with selected transcript and all transcripts
  */
 export function parseAnnotation(
   info: Map<string, string>,
   header: VcfHeader,
-  altAllele: string
+  altAllele: string,
+  ref?: string
 ): AnnotationResult {
   if (header.annotationType === 'csq' && header.csqFields !== null) {
-    return parseCsq(info, header.csqFields, altAllele)
+    return parseCsq(info, header.csqFields, altAllele, ref ?? '')
   }
 
   if (header.annotationType === 'ann') {
-    return parseAnn(info, altAllele)
+    return parseAnn(info, altAllele, ref ?? '')
   }
 
   return emptyResult()
@@ -51,7 +53,8 @@ interface CsqTranscript {
 function parseCsq(
   info: Map<string, string>,
   csqFieldNames: string[],
-  altAllele: string
+  altAllele: string,
+  ref: string
 ): AnnotationResult {
   const csqRaw = info.get('CSQ')
   if (csqRaw == null || csqRaw === '') return emptyResult()
@@ -76,7 +79,7 @@ function parseCsq(
   }
 
   // Filter by allele: VEP uses the ALT base for SNVs, "-" for deletions, inserted seq for insertions
-  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele))
+  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref))
 
   if (filtered.length === 0) return emptyResult()
 
@@ -154,7 +157,7 @@ interface AnnTranscript {
   allele: string
 }
 
-function parseAnn(info: Map<string, string>, altAllele: string): AnnotationResult {
+function parseAnn(info: Map<string, string>, altAllele: string, ref: string): AnnotationResult {
   const annRaw = info.get('ANN')
   if (annRaw == null || annRaw === '') return emptyResult()
 
@@ -169,7 +172,7 @@ function parseAnn(info: Map<string, string>, altAllele: string): AnnotationResul
   }
 
   // Filter by allele
-  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele))
+  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref))
 
   if (filtered.length === 0) return emptyResult()
 
@@ -224,10 +227,10 @@ function parseAnn(info: Map<string, string>, altAllele: string): AnnotationResul
  * VEP CSQ uses the VCF ALT bases for SNVs, "-" for deletions, inserted bases for insertions.
  * SnpEff ANN uses the full ALT allele string.
  */
-function matchesAllele(annAllele: string, altAllele: string): boolean {
+function matchesAllele(annAllele: string, altAllele: string, ref: string): boolean {
   if (annAllele === altAllele) return true
-  // VEP deletion notation: "-" matches when ALT is shorter than REF
-  if (annAllele === '-') return true
+  // VEP deletion notation: "-" only matches when ALT is actually shorter than REF
+  if (annAllele === '-' && altAllele.length < ref.length) return true
   // VEP insertion: the annotation Allele is the inserted bases (ALT minus first base)
   if (altAllele.length > 1 && annAllele === altAllele.substring(1)) return true
   return false

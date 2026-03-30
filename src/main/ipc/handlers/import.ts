@@ -28,9 +28,9 @@ export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies):
         defaultPath: settings.lastImportDirectory,
         properties: ['openFile'],
         filters: [
-          { name: 'Variant Files', extensions: ['vcf', 'vcf.gz', 'json', 'json.gz', 'gz'] },
-          { name: 'VCF Files', extensions: ['vcf', 'vcf.gz'] },
-          { name: 'JSON Files', extensions: ['json', 'json.gz', 'gz'] },
+          { name: 'Variant Files', extensions: ['vcf', 'json', 'gz'] },
+          { name: 'VCF Files', extensions: ['vcf', 'gz'] },
+          { name: 'JSON Files', extensions: ['json', 'gz'] },
           { name: 'All Files', extensions: ['*'] }
         ]
       })
@@ -46,89 +46,102 @@ export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies):
     })
   })
 
-  ipcMain.handle('import:start', async (_event, filePath: string, caseName: string) => {
-    return wrapHandler(async () => {
-      const db = getDb()
+  ipcMain.handle(
+    'import:start',
+    async (
+      _event,
+      filePath: string,
+      caseName: string,
+      vcfOptions?: { selectedSample?: string; genomeBuild?: string }
+    ) => {
+      return wrapHandler(async () => {
+        const db = getDb()
 
-      if (workerClient?.isRunning === true) {
-        throw new Error('An import is already in progress')
-      }
+        if (workerClient?.isRunning === true) {
+          throw new Error('An import is already in progress')
+        }
 
-      workerClient = new ImportWorkerClient()
+        workerClient = new ImportWorkerClient()
 
-      return new Promise((resolve, reject) => {
-        let capturedCaseId = 0
+        return new Promise((resolve, reject) => {
+          let capturedCaseId = 0
 
-        workerClient!.start({
-          files: [
-            {
-              filePath,
-              caseName,
-              isDuplicate: false,
-              duplicateStrategy: 'skip'
-            }
-          ],
-          dbPath: db.getPath(),
-          encryptionKey: db.getEncryptionKey(),
-          throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
-          onProgress: (msg) => {
-            safeEmit('import:progress', {
-              phase: msg.phase === 'finalizing' ? 'inserting' : msg.phase,
-              count: msg.variantCount,
-              elapsed: 0,
-              skipped: msg.skipped
-            })
-          },
-          onFileComplete: (msg) => {
-            capturedCaseId = msg.result.caseId
-          },
-          onComplete: (msg) => {
-            workerClient = null
-            if (msg.results.cancelled === true) {
-              resolve({
-                caseId: 0,
-                variantCount: 0,
-                skipped: 0,
-                errors: ['Import cancelled by user'],
-                elapsed: 0
-              })
-              return
-            }
-            const detail = msg.results.details[0]
-            if (detail !== undefined && detail.status === 'success') {
-              safeEmit('import:progress', {
-                phase: 'inserting',
-                count: detail.variantCount ?? 0,
-                elapsed: 0,
-                skipped: 0
-              })
-              // Update internal variant frequency counts
-              try {
-                db.variants.updateFrequencies(capturedCaseId)
-              } catch (freqError) {
-                mainLogger.warn(`Failed to update variant frequencies: ${freqError}`, 'import')
+          workerClient!.start({
+            files: [
+              {
+                filePath,
+                caseName,
+                isDuplicate: false,
+                duplicateStrategy: 'skip',
+                vcfSelectedSamples:
+                  vcfOptions?.selectedSample != null && vcfOptions.selectedSample !== ''
+                    ? [vcfOptions.selectedSample]
+                    : undefined,
+                vcfGenomeBuild: vcfOptions?.genomeBuild
               }
-              resolve({
-                caseId: capturedCaseId,
-                variantCount: detail.variantCount ?? 0,
-                skipped: 0,
-                errors: [],
-                elapsed: 0
+            ],
+            dbPath: db.getPath(),
+            encryptionKey: db.getEncryptionKey(),
+            throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
+            onProgress: (msg) => {
+              safeEmit('import:progress', {
+                phase: msg.phase === 'finalizing' ? 'inserting' : msg.phase,
+                count: msg.variantCount,
+                elapsed: 0,
+                skipped: msg.skipped
               })
-            } else {
-              reject(new Error(detail?.error ?? 'Import failed'))
-            }
-          },
-          onError: (msg) => {
-            if (msg.fileIndex === -1) {
+            },
+            onFileComplete: (msg) => {
+              capturedCaseId = msg.result.caseId
+            },
+            onComplete: (msg) => {
               workerClient = null
-              reject(new Error(msg.error))
+              if (msg.results.cancelled === true) {
+                resolve({
+                  caseId: 0,
+                  variantCount: 0,
+                  skipped: 0,
+                  errors: ['Import cancelled by user'],
+                  elapsed: 0
+                })
+                return
+              }
+              const detail = msg.results.details[0]
+              if (detail !== undefined && detail.status === 'success') {
+                safeEmit('import:progress', {
+                  phase: 'inserting',
+                  count: detail.variantCount ?? 0,
+                  elapsed: 0,
+                  skipped: 0
+                })
+                // Update internal variant frequency counts
+                try {
+                  db.variants.updateFrequencies(capturedCaseId)
+                } catch (freqError) {
+                  mainLogger.warn(`Failed to update variant frequencies: ${freqError}`, 'import')
+                }
+                resolve({
+                  caseId: capturedCaseId,
+                  variantCount: detail.variantCount ?? 0,
+                  skipped: 0,
+                  errors: [],
+                  elapsed: 0
+                })
+              } else {
+                reject(new Error(detail?.error ?? 'Import failed'))
+              }
+            },
+            onError: (msg) => {
+              if (msg.fileIndex === -1) {
+                workerClient = null
+                reject(new Error(msg.error))
+              }
             }
-          }
+          })
         })
       })
-    })
-  })
+    }
+  )
 
   ipcMain.handle('import:cancel', async () => {
     return wrapHandler(async () => {

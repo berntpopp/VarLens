@@ -17,8 +17,6 @@ import { parseVcfHeaderFromLines } from './vcf-header-parser'
 import { parseVcfLine } from './vcf-line-parser'
 import { mapVcfRecord } from './VcfMapper'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from './info-field-registry'
-import { importRegistry } from '../strategies/StrategyRegistry'
-
 export class VcfStrategy implements ImportStrategy {
   readonly formatId = 'vcf' as const
 
@@ -80,6 +78,10 @@ export class VcfStrategy implements ImportStrategy {
         // Parse the data line
         try {
           const record = parseVcfLine(line, header.samples)
+          if (record === null) {
+            totalSkipped++
+            continue
+          }
           const mapped = mapVcfRecord(record, header, activeSample, DEFAULT_INFO_FIELD_MAPPINGS)
 
           if (mapped.length === 0) {
@@ -136,6 +138,3 @@ export class VcfStrategy implements ImportStrategy {
     }
   }
 }
-
-// Self-register on import
-importRegistry.register(new VcfStrategy())

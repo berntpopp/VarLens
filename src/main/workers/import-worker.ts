@@ -617,6 +617,12 @@ async function preParseVcfFile(
   isCancelled: () => boolean,
   vcfSelectedSamples?: string[]
 ): Promise<ParsedFileResult> {
+  if (vcfSelectedSamples && vcfSelectedSamples.length > 1) {
+    throw new Error(
+      `Worker expects at most one VCF sample per file entry but received ${vcfSelectedSamples.length}`
+    )
+  }
+
   const raw = createReadStream(filePath)
   const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
   const rl = createInterface({ input: stream, crlfDelay: Infinity })
@@ -653,6 +659,7 @@ async function preParseVcfFile(
       // Parse the data line
       try {
         const record = parseVcfLine(line, header.samples)
+        if (record === null) continue // Skip truncated/corrupt lines
         const mapped = mapVcfRecord(record, header, activeSample, DEFAULT_INFO_FIELD_MAPPINGS)
 
         for (const variant of mapped) {

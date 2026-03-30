@@ -3,13 +3,16 @@
  * Reads only headers + counts data lines without full parsing.
  */
 
-import { createReadStream } from 'node:fs'
+import { createReadStream, statSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { createGunzip } from 'node:zlib'
 import { isGzipped } from '../stream-utils'
 import { parseVcfHeaderFromLines } from './vcf-header-parser'
 import { getFieldColumnMapping, DEFAULT_INFO_FIELD_MAPPINGS } from './info-field-registry'
 import type { VcfPreviewResult } from './types'
+
+/** Maximum number of data lines to count before estimating via file size */
+const MAX_COUNTED_LINES = 100_000
 
 /**
  * Get VCF file preview for the import dialog.
@@ -18,6 +21,7 @@ import type { VcfPreviewResult } from './types'
 export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult> {
   // Check gzip before creating stream — isGzipped uses openSync which throws for missing files
   const gzipped = isGzipped(filePath)
+  const fileSize = statSync(filePath).size
 
   return new Promise((resolve, reject) => {
     const raw = createReadStream(filePath)
@@ -27,6 +31,8 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
 
     const headerLines: string[] = []
     let dataLineCount = 0
+    let bytesReadAtCap = 0
+    let capped = false
     let resolved = false
 
     rl.on('line', (line: string) => {
@@ -34,6 +40,12 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
         headerLines.push(line)
       } else {
         dataLineCount++
+        if (dataLineCount >= MAX_COUNTED_LINES) {
+          capped = true
+          bytesReadAtCap = raw.bytesRead
+          rl.close()
+          raw.destroy()
+        }
       }
     })
 
@@ -45,10 +57,16 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
         const header = parseVcfHeaderFromLines(headerLines)
         const infoFields = getFieldColumnMapping(header.infoDefs, DEFAULT_INFO_FIELD_MAPPINGS)
 
+        // Extrapolate total if we hit the cap
+        let estimate = dataLineCount
+        if (capped && bytesReadAtCap > 0) {
+          estimate = Math.round(dataLineCount * (fileSize / bytesReadAtCap))
+        }
+
         resolve({
           fileformat: header.fileformat,
           samples: header.samples,
-          variantCountEstimate: dataLineCount,
+          variantCountEstimate: estimate,
           annotationType: header.annotationType,
           detectedGenomeBuild: header.genomeBuild,
           infoFields
