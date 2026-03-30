@@ -10,13 +10,7 @@ import { createInterface } from 'node:readline'
 import { createGunzip } from 'node:zlib'
 import { isGzipped } from '../stream-utils'
 import { detectGenomeBuildFromVcfHeaders } from '../../services/GenomeBuildDetector'
-import type {
-  VcfHeader,
-  InfoFieldDef,
-  FormatFieldDef,
-  ContigDef,
-  AnnotationType
-} from './types'
+import type { VcfHeader, InfoFieldDef, FormatFieldDef, ContigDef, AnnotationType } from './types'
 
 /** Parse result includes the header and optionally the first data line */
 export interface VcfHeaderParseResult {

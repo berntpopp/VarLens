@@ -94,9 +94,7 @@ describe('vcf-header-parser', () => {
     })
 
     it('detects none when neither CSQ nor ANN present', () => {
-      const noAnnotLines = headerLines.filter(
-        (l) => !l.includes('ID=CSQ') && !l.includes('ID=ANN')
-      )
+      const noAnnotLines = headerLines.filter((l) => !l.includes('ID=CSQ') && !l.includes('ID=ANN'))
       const header = parseVcfHeaderFromLines(noAnnotLines)
       expect(header.annotationType).toBe('none')
     })
@@ -107,10 +105,7 @@ describe('vcf-header-parser', () => {
     })
 
     it('handles VCF without samples (sites-only)', () => {
-      const sitesOnly = [
-        '##fileformat=VCFv4.2',
-        '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO'
-      ]
+      const sitesOnly = ['##fileformat=VCFv4.2', '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO']
       const header = parseVcfHeaderFromLines(sitesOnly)
       expect(header.samples).toEqual([])
       expect(header.annotationType).toBe('none')

@@ -168,7 +168,7 @@ export function getFieldColumnMapping(
       type: def.type,
       number: def.number,
       description: def.description,
-      mapsToColumn: infoIdToColumn.get(id) || null
+      mapsToColumn: infoIdToColumn.get(id) ?? null
     })
   }
 

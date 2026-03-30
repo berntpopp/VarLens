@@ -54,7 +54,7 @@ function parseCsq(
   altAllele: string
 ): AnnotationResult {
   const csqRaw = info.get('CSQ')
-  if (!csqRaw || csqRaw === '') return emptyResult()
+  if (csqRaw == null || csqRaw === '') return emptyResult()
 
   // Split annotations by comma, then each by pipe
   const annotations = csqRaw.split(',')
@@ -71,7 +71,7 @@ function parseCsq(
       }
     }
 
-    const allele = fields.get('Allele') || ''
+    const allele = fields.get('Allele') ?? ''
     parsed.push({ fields, allele })
   }
 
@@ -102,7 +102,7 @@ function parseCsq(
 
   // Select best transcript
   const bestIdx = selectBestTranscript(filtered)
-  const bestTid = bestIdx >= 0 ? filtered[bestIdx].fields.get('Feature') ?? '' : ''
+  const bestTid = bestIdx >= 0 ? (filtered[bestIdx].fields.get('Feature') ?? '') : ''
   const bestTranscriptRow = transcripts.find((t) => t.transcript_id === bestTid)
   if (bestTranscriptRow) {
     bestTranscriptRow.is_selected = 1
@@ -111,21 +111,20 @@ function parseCsq(
   const best = bestIdx >= 0 ? filtered[bestIdx] : null
 
   // Parse numeric fields from the best transcript
-  const gnomadAfStr =
-    best?.fields.get('gnomADe_AF') || best?.fields.get('gnomADg_AF') || null
-  const caddStr = best?.fields.get('CADD_PHRED') || null
-  const clinvarStr = best?.fields.get('ClinVar_CLNSIG') || null
+  const gnomadAfStr = best?.fields.get('gnomADe_AF') ?? best?.fields.get('gnomADg_AF') ?? null
+  const caddStr = best?.fields.get('CADD_PHRED') ?? null
+  const clinvarStr = best?.fields.get('ClinVar_CLNSIG') ?? null
 
   return {
-    geneSymbol: best?.fields.get('SYMBOL') || null,
-    consequence: best?.fields.get('Consequence') || null,
-    impact: best?.fields.get('IMPACT') || null,
-    transcript: best?.fields.get('Feature') || null,
-    cdna: best?.fields.get('HGVSc') || null,
-    aaChange: best?.fields.get('HGVSp') || null,
-    gnomadAf: gnomadAfStr ? parseFloat(gnomadAfStr) : null,
-    cadd: caddStr ? parseFloat(caddStr) : null,
-    clinvar: clinvarStr || null,
+    geneSymbol: best?.fields.get('SYMBOL') ?? null,
+    consequence: best?.fields.get('Consequence') ?? null,
+    impact: best?.fields.get('IMPACT') ?? null,
+    transcript: best?.fields.get('Feature') ?? null,
+    cdna: best?.fields.get('HGVSc') ?? null,
+    aaChange: best?.fields.get('HGVSp') ?? null,
+    gnomadAf: gnomadAfStr != null && gnomadAfStr !== '' ? parseFloat(gnomadAfStr) : null,
+    cadd: caddStr != null && caddStr !== '' ? parseFloat(caddStr) : null,
+    clinvar: clinvarStr ?? null,
     transcripts
   }
 }
@@ -157,7 +156,7 @@ interface AnnTranscript {
 
 function parseAnn(info: Map<string, string>, altAllele: string): AnnotationResult {
   const annRaw = info.get('ANN')
-  if (!annRaw || annRaw === '') return emptyResult()
+  if (annRaw == null || annRaw === '') return emptyResult()
 
   const annotations = annRaw.split(',')
   const parsed: AnnTranscript[] = []
@@ -165,7 +164,7 @@ function parseAnn(info: Map<string, string>, altAllele: string): AnnotationResul
   for (const ann of annotations) {
     if (ann === '') continue
     const parts = ann.split('|')
-    const allele = parts[ANN_ALLELE] || ''
+    const allele = parts[ANN_ALLELE] ?? ''
     parsed.push({ parts, allele })
   }
 
@@ -196,7 +195,7 @@ function parseAnn(info: Map<string, string>, altAllele: string): AnnotationResul
 
   // Select best transcript
   const bestIdx = selectBestTranscriptAnn(filtered)
-  const bestTid = bestIdx >= 0 ? filtered[bestIdx].parts[ANN_FEATURE_ID] ?? '' : ''
+  const bestTid = bestIdx >= 0 ? (filtered[bestIdx].parts[ANN_FEATURE_ID] ?? '') : ''
   const bestTranscriptRow = transcripts.find((t) => t.transcript_id === bestTid)
   if (bestTranscriptRow) {
     bestTranscriptRow.is_selected = 1
@@ -205,12 +204,12 @@ function parseAnn(info: Map<string, string>, altAllele: string): AnnotationResul
   const best = bestIdx >= 0 ? filtered[bestIdx] : null
 
   return {
-    geneSymbol: best?.parts[ANN_GENE_NAME] || null,
-    consequence: best?.parts[ANN_ANNOTATION] || null,
-    impact: best?.parts[ANN_IMPACT] || null,
-    transcript: best?.parts[ANN_FEATURE_ID] || null,
-    cdna: best?.parts[ANN_HGVSC] || null,
-    aaChange: best?.parts[ANN_HGVSP] || null,
+    geneSymbol: best?.parts[ANN_GENE_NAME] ?? null,
+    consequence: best?.parts[ANN_ANNOTATION] ?? null,
+    impact: best?.parts[ANN_IMPACT] ?? null,
+    transcript: best?.parts[ANN_FEATURE_ID] ?? null,
+    cdna: best?.parts[ANN_HGVSC] ?? null,
+    aaChange: best?.parts[ANN_HGVSP] ?? null,
     gnomadAf: null, // ANN doesn't include gnomAD — handled by INFO field registry
     cadd: null, // ANN doesn't include CADD — handled by INFO field registry
     clinvar: null, // ANN doesn't include ClinVar — handled by INFO field registry
@@ -250,15 +249,15 @@ function selectBestTranscript(transcripts: CsqTranscript[]): number {
 
     // MANE_SELECT presence: highest priority
     const mane = t.fields.get('MANE_SELECT')
-    if (mane && mane !== '') score += 1000
+    if (mane != null && mane !== '') score += 1000
 
     // CANONICAL=YES
     const canonical = t.fields.get('CANONICAL')
     if (canonical === 'YES') score += 100
 
     // Impact severity
-    const impact = t.fields.get('IMPACT') || 'MODIFIER'
-    score += (IMPACT_ORDER[impact] || 0) * 10
+    const impact = t.fields.get('IMPACT') ?? 'MODIFIER'
+    score += (IMPACT_ORDER[impact] ?? 0) * 10
 
     // protein_coding biotype preference
     const biotype = t.fields.get('BIOTYPE')
@@ -287,10 +286,10 @@ function selectBestTranscriptAnn(transcripts: AnnTranscript[]): number {
     const t = transcripts[i]
     let score = 0
 
-    const impact = t.parts[ANN_IMPACT] || 'MODIFIER'
-    score += (IMPACT_ORDER[impact] || 0) * 10
+    const impact = t.parts[ANN_IMPACT] ?? 'MODIFIER'
+    score += (IMPACT_ORDER[impact] ?? 0) * 10
 
-    const biotype = t.parts[ANN_BIOTYPE] || ''
+    const biotype = t.parts[ANN_BIOTYPE] ?? ''
     if (biotype === 'protein_coding') score += 5
 
     if (score > bestScore) {

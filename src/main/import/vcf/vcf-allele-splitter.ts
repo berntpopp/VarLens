@@ -59,7 +59,7 @@ function splitInfoFields(
 
   for (const [key, value] of info) {
     const def = infoDefs.get(key)
-    const number = def?.number || '.'
+    const number = def?.number ?? '.'
 
     switch (number) {
       case '0': // Flag — copy to all
@@ -128,7 +128,7 @@ function splitSampleFields(
       }
 
       const def = formatDefs.get(field)
-      const number = def?.number || '.'
+      const number = def?.number ?? '.'
 
       if (number === 'R') {
         // Per-allele (REF + ALTs) — keep REF + current ALT
