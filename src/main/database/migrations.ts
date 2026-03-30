@@ -1303,10 +1303,8 @@ export function runMigrations(db: Database.Database): void {
     if (!varColNames.has('ad_ref')) db.exec('ALTER TABLE variants ADD COLUMN ad_ref INTEGER')
     if (!varColNames.has('ad_alt')) db.exec('ALTER TABLE variants ADD COLUMN ad_alt INTEGER')
     if (!varColNames.has('ab')) db.exec('ALTER TABLE variants ADD COLUMN ab REAL')
-    if (!varColNames.has('filter'))
-      db.exec('ALTER TABLE variants ADD COLUMN filter TEXT')
-    if (!varColNames.has('info_json'))
-      db.exec('ALTER TABLE variants ADD COLUMN info_json TEXT')
+    if (!varColNames.has('filter')) db.exec('ALTER TABLE variants ADD COLUMN filter TEXT')
+    if (!varColNames.has('info_json')) db.exec('ALTER TABLE variants ADD COLUMN info_json TEXT')
     if (!varColNames.has('source_format'))
       db.exec('ALTER TABLE variants ADD COLUMN source_format TEXT')
 
@@ -1315,8 +1313,7 @@ export function runMigrations(db: Database.Database): void {
     const caseColNames = new Set(caseCols.map((c) => c.name))
     if (!caseColNames.has('source_format'))
       db.exec('ALTER TABLE cases ADD COLUMN source_format TEXT')
-    if (!caseColNames.has('sample_name'))
-      db.exec('ALTER TABLE cases ADD COLUMN sample_name TEXT')
+    if (!caseColNames.has('sample_name')) db.exec('ALTER TABLE cases ADD COLUMN sample_name TEXT')
 
     // Partial index for variants with unmapped INFO fields
     db.exec(`

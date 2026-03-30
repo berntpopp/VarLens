@@ -66,7 +66,11 @@ describe('Migration v23: VCF import columns', () => {
     db.prepare(
       "INSERT INTO variants (case_id, chr, pos, ref, alt) VALUES (1, '1', 100, 'A', 'T')"
     ).run()
-    const row = db.prepare('SELECT gq, dp, ad_ref, ad_alt, ab, filter, info_json, source_format FROM variants WHERE id = 1').get() as Record<string, unknown>
+    const row = db
+      .prepare(
+        'SELECT gq, dp, ad_ref, ad_alt, ab, filter, info_json, source_format FROM variants WHERE id = 1'
+      )
+      .get() as Record<string, unknown>
     expect(row.gq).toBeNull()
     expect(row.dp).toBeNull()
     expect(row.ad_ref).toBeNull()
