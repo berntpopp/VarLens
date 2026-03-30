@@ -66,14 +66,14 @@ export function mapVcfRecord(
       alt: altAllele,
       gene_symbol: annotation.geneSymbol,
       omim_mim_number: null,
-      consequence: annotation.consequence,
+      consequence: annotation.impact,
       gnomad_af:
         annotation.gnomadAf ?? (infoResult.mappedValues.get('gnomad_af') as number | null) ?? null,
       cadd: annotation.cadd ?? (infoResult.mappedValues.get('cadd') as number | null) ?? null,
       clinvar:
         annotation.clinvar ?? (infoResult.mappedValues.get('clinvar') as string | null) ?? null,
       gt_num: genotype.gt,
-      func: annotation.impact,
+      func: annotation.consequence,
       qual: rec.qual,
       hpo_sim_score: null,
       transcript: annotation.transcript,
