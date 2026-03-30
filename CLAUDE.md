@@ -8,7 +8,7 @@ Varlens is an Electron desktop app for offline genetic variant analysis. Built w
 
 ## Architecture
 
-- **Main process**: `src/main/` - Electron main, SQLite database, IPC handlers, import service
+- **Main process**: `src/main/` - Electron main, SQLite database, IPC handlers, import service (JSON + VCF)
 - **Preload**: `src/preload/` - Context bridge exposing typed IPC API
 - **Renderer**: `src/renderer/` - Vue 3 SPA with Vuetify, Pinia stores, composables
 - **Shared types**: `src/shared/types/`
@@ -54,6 +54,21 @@ make ci               # lint + typecheck + test
 make ci-full          # full CI pipeline mirroring GitHub Actions
 make dist             # build + package for current platform
 ```
+
+## Import Formats
+
+VarLens supports two import paths:
+
+- **JSON formats** (`columnar`, `object`, `simple`): Pre-existing VarVis/VarLens JSON exports (`.json`, `.json.gz`)
+- **VCF** (`.vcf`, `.vcf.gz`): Standard VCF 4.x files with optional VEP CSQ or SnpEff ANN annotations
+
+VCF import is handled by `src/main/import/vcf/` — a modular parser pipeline:
+- `vcf-header-parser.ts` → `vcf-line-parser.ts` → `vcf-allele-splitter.ts` → `vcf-annotation-parser.ts` → `vcf-genotype-parser.ts` → `VcfMapper.ts` → `VcfStrategy.ts`
+- `info-field-registry.ts` — configurable mapping from INFO fields to DB columns; unmapped fields go to `info_json` (JSON column)
+- Multi-sample VCFs create one case per selected sample
+- **Field convention**: `consequence` = IMPACT (HIGH/MODERATE/LOW/MODIFIER), `func` = SO consequence term (missense_variant, etc.) — same as JSON format
+
+Test data: `tests/test-data/vcf/` — GIAB Chinese Trio (chr22:29M-30.5M), annotated with VEP and SnpEff. Regenerate via `scripts/prepare-test-data.sh`.
 
 ## CI/CD
 
