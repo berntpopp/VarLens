@@ -46,7 +46,7 @@ SAMPLE_NAMES=("HG005_NA24631_son" "HG006_NA24694_father" "HG007_NA24695_mother")
 BUILD="GRCh38"
 BENCHMARK_VERSION="v4.2.1"
 BASE_URL="https://ftp-trace.ncbi.nlm.nih.gov/giab/ftp/release/ChineseTrio"
-REGION="chr22:20000000-21000000"
+REGION="chr22:29000000-30500000"
 CONDA_ENV="varlens-tools"
 VEP_IMAGE="ensemblorg/ensembl-vep:release_115.2"
 VEP_CACHE_DIR="${HOME}/.vep"
@@ -505,17 +505,35 @@ step_annotate_vep() {
   log "Running VEP annotation via Docker (STDOUT mode) ..."
   # Mount input file directly into /opt/vep/ (VEP container has issues with /data mounts)
   # Use STDOUT to avoid container write-permission issues on host volumes
+  # Download chr22 FASTA for HGVS notation if not present
+  local fasta_dir="${WORKDIR}/downloads"
+  local fasta_file="${fasta_dir}/Homo_sapiens.GRCh38.dna.chromosome.22.fa"
+  if [[ ! -f "$fasta_file" ]]; then
+    log "Downloading GRCh38 chr22 FASTA for HGVS notation..."
+    wget -q -P "$fasta_dir" "https://ftp.ensembl.org/pub/release-115/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.chromosome.22.fa.gz"
+    gunzip -f "${fasta_file}.gz"
+    samtools faidx "$fasta_file"
+  fi
+
+  local fasta_mounts=""
+  if [[ -f "$fasta_file" ]]; then
+    fasta_mounts="-v ${fasta_file}:/opt/vep/chr22.fa:ro -v ${fasta_file}.fai:/opt/vep/chr22.fa.fai:ro"
+  fi
+
+  # shellcheck disable=SC2086
   docker run --rm \
     -v "${input_plain}:/opt/vep/input.vcf:ro" \
     -v "${VEP_CACHE_DIR}:/opt/vep/.vep:ro" \
+    ${fasta_mounts} \
     "${VEP_IMAGE}" \
     vep \
       --input_file /opt/vep/input.vcf \
       --output_file STDOUT \
       --vcf --cache --offline \
       --dir_cache /opt/vep/.vep \
+      ${fasta_file:+--fasta /opt/vep/chr22.fa} \
       --assembly GRCh38 \
-      --everything --pick \
+      --everything --pick --hgvs \
       --fork 4 \
       --no_stats \
     2>"${LOG_DIR:-/tmp}/vep_stderr.log" \
