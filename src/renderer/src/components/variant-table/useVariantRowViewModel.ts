@@ -48,9 +48,13 @@ function variantKey(chr: string, pos: number, ref: string, alt: string): string 
   return `${chr}:${pos}:${ref}:${alt}`
 }
 
+interface ReadableMap<K, V> {
+  get(key: K): V | undefined
+}
+
 export function buildRowViewModels(
   variants: Variant[],
-  annotationCache: Map<string, AnnotationEntry>,
+  annotationCache: ReadableMap<string, AnnotationEntry>,
   linkConfig: Record<string, LinkConfig>
 ): Map<string, RowViewModel> {
   const map = new Map<string, RowViewModel>()
@@ -86,7 +90,7 @@ export function buildRowViewModels(
 
 export function useVariantRowViewModel(
   variants: Ref<Variant[]>,
-  annotationCache: ShallowRef<Map<string, AnnotationEntry>>,
+  annotationCache: ShallowRef<ReadableMap<string, AnnotationEntry>>,
   linkConfig: Ref<Record<string, LinkConfig>>
 ) {
   const rowViewModels = computed(() =>

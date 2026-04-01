@@ -12,6 +12,7 @@ import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useDatabaseStore } from '../stores/databaseStore'
 import { useApiService } from './useApiService'
+import { LruMap } from '../../../shared/utils/lru-map'
 
 interface AnnotationCache {
   global: VariantAnnotation | null
@@ -24,32 +25,21 @@ export const MAX_CACHE_SIZE = 5000
 // Cache annotations by variant key (chr:pos:ref:alt)
 // shallowRef avoids deep reactive proxies on 5000+ Map entries
 // Exported so useVariantRowViewModel can read it for precomputed row state
-export const annotationCache = shallowRef<Map<string, AnnotationCache>>(new Map())
+const lruCache = new LruMap<string, AnnotationCache>(MAX_CACHE_SIZE)
+export const annotationCache = shallowRef<LruMap<string, AnnotationCache>>(lruCache)
 
 // Loading states per variant key
 const loadingStates = shallowRef<Map<string, boolean>>(new Map())
 
 /**
- * LRU-aware cache setter. Moves existing keys to the end (most-recently-used)
- * and evicts oldest entries when the cache exceeds MAX_CACHE_SIZE.
- * JavaScript Map maintains insertion order, so the first entry is the oldest.
+ * LRU-aware cache setter. Delegates promotion and eviction to LruMap.
  *
  * Uses microtask batching: multiple cacheSet calls in the same tick produce
  * only one triggerRef flush, reducing reactivity churn during batch loads.
  */
 let pendingCacheTrigger = false
 function cacheSet(key: string, value: AnnotationCache): void {
-  const cache = annotationCache.value
-  if (cache.has(key)) {
-    cache.delete(key)
-  }
-  cache.set(key, value)
-  // Evict oldest entries without allocating an intermediate keys array
-  while (cache.size > MAX_CACHE_SIZE) {
-    const oldestKey = cache.keys().next().value
-    if (oldestKey === undefined) break
-    cache.delete(oldestKey)
-  }
+  annotationCache.value.set(key, value)
   if (!pendingCacheTrigger) {
     pendingCacheTrigger = true
     Promise.resolve().then(() => {

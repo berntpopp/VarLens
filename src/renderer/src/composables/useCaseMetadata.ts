@@ -10,6 +10,7 @@ import { logService } from '../services/LogService'
 import { useCaseComments } from './useCaseComments'
 import { useCaseMetrics } from './useCaseMetrics'
 import { useApiService } from './useApiService'
+import { LruMap } from '../../../shared/utils/lru-map'
 import {
   mdiAccountAlert,
   mdiAccountCheck,
@@ -32,7 +33,9 @@ const MAX_METADATA_CACHE_SIZE = 200
 
 // Cache full metadata by caseId — shallowRef avoids deep reactivity overhead
 // on the Map's values (FullCaseMetadata objects are never observed individually)
-const metadataCache = shallowRef<Map<number, FullCaseMetadata>>(new Map())
+const metadataCache = shallowRef<LruMap<number, FullCaseMetadata>>(
+  new LruMap(MAX_METADATA_CACHE_SIZE)
+)
 
 // Loading states per case — shallowRef since we trigger manually
 const loadingStates = shallowRef<Map<number, boolean>>(new Map())
@@ -51,17 +54,6 @@ function triggerCacheUpdate(): void {
       triggerRef(metadataCache)
       _pendingTrigger = false
     })
-  }
-}
-
-/** Evict oldest entries when cache exceeds limit (Map preserves insertion order) */
-function evictIfNeeded(): void {
-  const cache = metadataCache.value
-  if (cache.size > MAX_METADATA_CACHE_SIZE) {
-    const keysToDelete = Array.from(cache.keys()).slice(0, cache.size - MAX_METADATA_CACHE_SIZE)
-    for (const key of keysToDelete) {
-      cache.delete(key)
-    }
   }
 }
 
@@ -84,7 +76,6 @@ export function useCaseMetadata() {
     try {
       const result = await api.caseMetadata.getFullMetadata(caseId)
       metadataCache.value.set(caseId, result)
-      evictIfNeeded()
       triggerCacheUpdate()
     } catch (error) {
       logService.error(
@@ -111,16 +102,9 @@ export function useCaseMetadata() {
     }
   }
 
-  // Get metadata from cache (LRU: move to end on access to mark as recently used)
+  // Get metadata from cache (LruMap.get() promotes to most-recently-used automatically)
   function getMetadata(caseId: number): FullCaseMetadata | undefined {
-    const cache = metadataCache.value
-    const value = cache.get(caseId)
-    if (value !== undefined) {
-      // Move to end of Map (most recently used) for LRU eviction
-      cache.delete(caseId)
-      cache.set(caseId, value)
-    }
-    return value
+    return metadataCache.value.get(caseId)
   }
 
   // Check if loading
