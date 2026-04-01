@@ -76,7 +76,8 @@ export class ExportWorkerClient {
       compiledParams: callbacks.compiledParams,
       outputFilePath: callbacks.outputFilePath,
       caseName: callbacks.caseName,
-      filterSummary: callbacks.filterSummary
+      filterSummary: callbacks.filterSummary,
+      format: callbacks.outputFilePath.endsWith('.csv') ? 'csv' : 'xlsx'
     }
 
     this.worker.postMessage(startMsg)
