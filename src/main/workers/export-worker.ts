@@ -85,12 +85,18 @@ async function runCsv(msg: ExportMainMessage & { type: 'start' }): Promise<void>
 
     // Write header row
     const headerRow = EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',')
-    stream.write(headerRow + '\r\n')
+    const headerOk = stream.write(headerRow + '\r\n')
+    if (!headerOk) {
+      await new Promise<void>((resolve) => stream.once('drain', resolve))
+    }
 
     let rowCount = 0
     for (const row of iterator) {
       const cells = EXPORT_COLUMNS.map((col) => csvEscape(formatCellValue(col.key, row[col.key])))
-      stream.write(cells.join(',') + '\r\n')
+      const ok = stream.write(cells.join(',') + '\r\n')
+      if (!ok) {
+        await new Promise<void>((resolve) => stream.once('drain', resolve))
+      }
       rowCount++
 
       if (rowCount % 1000 === 0) {

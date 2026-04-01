@@ -42,8 +42,20 @@ const api = {
       filters: Omit<VariantFilter, 'case_id'>,
       offset?: number,
       limit?: number,
-      sortBy?: SortItem[]
-    ) => ipcRenderer.invoke('variants:query', caseId, filters, offset, limit, sortBy),
+      sortBy?: SortItem[],
+      skipCount?: boolean,
+      includeUnfilteredCount?: boolean
+    ) =>
+      ipcRenderer.invoke(
+        'variants:query',
+        caseId,
+        filters,
+        offset,
+        limit,
+        sortBy,
+        skipCount,
+        includeUnfilteredCount
+      ),
 
     getFilterOptions: (caseId: number) => ipcRenderer.invoke('variants:filterOptions', caseId),
 

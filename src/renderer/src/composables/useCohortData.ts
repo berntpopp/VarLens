@@ -66,7 +66,7 @@ export interface CohortQueryParams {
   active_panel_ids?: number[]
   /** Padding in base pairs for panel interval computation */
   panel_padding_bp?: number
-  /** Whether to skip the COUNT(*) query (used by pagination count cache) */
+  /** Whether the COUNT(*) query is needed; set to false to skip (used by pagination count cache) */
   _count_needed?: boolean
 }
 

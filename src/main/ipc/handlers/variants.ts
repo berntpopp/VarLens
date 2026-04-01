@@ -33,6 +33,7 @@ export function registerVariantHandlers({ ipcMain, getDb, getDbPool }: HandlerDe
       offset: unknown,
       limit: unknown,
       sortBy: unknown,
+      skipCount: unknown,
       includeUnfilteredCount: unknown
     ) => {
       return wrapHandler(async () => {
@@ -138,6 +139,7 @@ export function registerVariantHandlers({ ipcMain, getDb, getDbPool }: HandlerDe
           }
         }
 
+        const validatedSkipCount = skipCount === true
         const validatedIncludeUnfilteredCount = includeUnfilteredCount === true
 
         if (pool) {
@@ -148,7 +150,7 @@ export function registerVariantHandlers({ ipcMain, getDb, getDbPool }: HandlerDe
               validatedLimit,
               validatedOffset,
               validatedSortBy,
-              undefined,
+              validatedSkipCount,
               validatedIncludeUnfilteredCount
             ]
           })
@@ -160,7 +162,7 @@ export function registerVariantHandlers({ ipcMain, getDb, getDbPool }: HandlerDe
           validatedLimit,
           validatedOffset,
           validatedSortBy,
-          undefined,
+          validatedSkipCount,
           validatedIncludeUnfilteredCount
         )
       })

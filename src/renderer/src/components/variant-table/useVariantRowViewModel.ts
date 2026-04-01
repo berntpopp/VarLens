@@ -76,8 +76,8 @@ export function buildRowViewModels(
       isGlobalStarred: (global?.starred ?? 0) === 1,
       acmgClassification: perCase?.acmg_classification ?? null,
       globalAcmgClassification: global?.acmg_classification ?? null,
-      hasComment: !!perCaseComment,
-      hasGlobalComment: !!globalComment
+      hasComment: perCaseComment !== null && perCaseComment !== '',
+      hasGlobalComment: globalComment !== null && globalComment !== ''
     })
   }
 

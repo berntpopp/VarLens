@@ -597,7 +597,6 @@ async function streamInsertJson(
     if (batch.length > 0 && !isCancelled()) {
       stmts.insertBatch(caseId, batch)
       totalInserted += batch.length
-      batch = []
       onProgress(totalInserted)
     }
   }
@@ -691,7 +690,6 @@ async function streamInsertVcf(
     if (batch.length > 0 && !isCancelled()) {
       stmts.insertBatch(caseId, batch)
       totalInserted += batch.length
-      batch = []
       onProgress(totalInserted)
     }
     // Ensure stream resources are released

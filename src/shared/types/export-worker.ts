@@ -21,7 +21,7 @@ export type ExportMainMessage = {
   caseName: string
   /** Active filter summary for metadata sheet */
   filterSummary: ExportFilterSummary
-  /** Export format — inferred from file extension by the renderer */
+  /** Export format — inferred from the output file extension in the main process */
   format: 'xlsx' | 'csv'
 }
 
