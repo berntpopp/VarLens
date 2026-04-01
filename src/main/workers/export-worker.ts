@@ -67,7 +67,7 @@ function openDb(msg: ExportMainMessage & { type: 'start' }): Database.Database {
   return db
 }
 
-function runCsv(msg: ExportMainMessage & { type: 'start' }): void {
+async function runCsv(msg: ExportMainMessage & { type: 'start' }): Promise<void> {
   let db: Database.Database | null = null
 
   try {
@@ -98,7 +98,12 @@ function runCsv(msg: ExportMainMessage & { type: 'start' }): void {
       }
     }
 
-    stream.end()
+    // Wait for the write stream to flush to disk before reporting completion
+    await new Promise<void>((resolve, reject) => {
+      stream.on('finish', resolve)
+      stream.on('error', reject)
+      stream.end()
+    })
 
     postMsg({
       type: 'complete',
@@ -126,7 +131,9 @@ function runXlsx(msg: ExportMainMessage & { type: 'start' }): void {
 
     postMsg({ type: 'progress', current: 0, total: 0 })
 
-    // Build XLSX — needs all rows in memory for the sheet
+    // XLSX requires all rows in memory for aoa_to_sheet — unlike CSV, this path
+    // cannot stream to disk. The memory win here is using .iterate() instead of
+    // .all() to avoid a second copy, not true streaming.
     const headers = EXPORT_COLUMNS.map((col) => col.header)
     const rows: (string | number | null)[][] = []
 
@@ -193,9 +200,9 @@ function runXlsx(msg: ExportMainMessage & { type: 'start' }): void {
   }
 }
 
-function run(msg: ExportMainMessage & { type: 'start' }): void {
+async function run(msg: ExportMainMessage & { type: 'start' }): Promise<void> {
   if (msg.format === 'csv') {
-    runCsv(msg)
+    await runCsv(msg)
   } else {
     runXlsx(msg)
   }

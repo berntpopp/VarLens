@@ -170,6 +170,17 @@ export function createFilters(): UseFiltersReturn {
   // acmgClassifications and provides reset/clearFilter helpers for those fields.
   const core = useFilterCore()
 
+  /** Sync core state back to the filters ref. Call after any core mutation. */
+  function syncCoreToFilters(): void {
+    filters.value.consequences = core.consequences.value
+    filters.value.funcs = core.funcs.value
+    filters.value.clinvars = core.clinvars.value
+    filters.value.maxGnomadAf = core.gnomadAfMax.value
+    filters.value.minCadd = core.caddMin.value
+    filters.value.maxInternalAf = core.maxInternalAf.value
+    filters.value.acmgClassifications = core.acmgClassifications.value
+  }
+
   // Core filter state
   const filters = ref<FilterState>(createInitialFilterState())
   const searchTerm = ref('')
@@ -236,13 +247,7 @@ export function createFilters(): UseFiltersReturn {
   function clearAllFilters(): void {
     // Reset shared fields via core, then sync back to filters object
     core.reset()
-    filters.value.consequences = core.consequences.value
-    filters.value.funcs = core.funcs.value
-    filters.value.clinvars = core.clinvars.value
-    filters.value.maxGnomadAf = core.gnomadAfMax.value
-    filters.value.minCadd = core.caddMin.value
-    filters.value.maxInternalAf = core.maxInternalAf.value
-    filters.value.acmgClassifications = core.acmgClassifications.value
+    syncCoreToFilters()
 
     // Reset adapter-specific fields
     searchTerm.value = ''
@@ -282,12 +287,7 @@ export function createFilters(): UseFiltersReturn {
     if (coreId !== undefined) {
       // Delegate to core for shared fields, then sync back
       core.clearFilter(coreId)
-      filters.value.funcs = core.funcs.value
-      filters.value.clinvars = core.clinvars.value
-      filters.value.maxGnomadAf = core.gnomadAfMax.value
-      filters.value.minCadd = core.caddMin.value
-      filters.value.maxInternalAf = core.maxInternalAf.value
-      filters.value.acmgClassifications = core.acmgClassifications.value
+      syncCoreToFilters()
     } else {
       // Use existing utility for non-core fields (search, gene, impact, panels, etc.)
       const partialUpdate = clearFilterUtil(filterId as FilterId)

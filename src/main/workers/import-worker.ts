@@ -298,18 +298,7 @@ port.on('message', async (msg: MainMessage) => {
       }
       port.postMessage(completeMsg)
     } catch (fatalError) {
-      if (db) {
-        try {
-          db.exec(RECREATE_INDEXES)
-        } catch {
-          // best effort
-        }
-        try {
-          db.exec(createFTSTriggers)
-        } catch {
-          // best effort
-        }
-      }
+      // Index/trigger recreation is handled unconditionally in the finally block below
 
       const errorMsg: WorkerMessage = {
         type: 'error',
@@ -374,7 +363,7 @@ function openDatabase(dbPath: string, encryptionKey?: string): DatabaseType {
   const db = new Database(dbPath)
 
   if (encryptionKey !== undefined && encryptionKey !== '') {
-    const safeKey = encryptionKey.split("'").join("''")
+    const safeKey = encryptionKey.replace(/'/g, "''")
     db.pragma(`key='${safeKey}'`)
   }
 

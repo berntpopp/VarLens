@@ -109,7 +109,8 @@ function resolvePanelIntervalsInPlace(filter: PanelAwareFilter, caseId?: number)
     caseId !== undefined
       ? repos.variants.getChrPrefix(caseId)
       : (() => {
-          // Cohort mode: sample any variant
+          // Cohort mode: sample any variant to detect chr prefix.
+          // Assumes uniform format — mixed chr/non-chr imports are unsupported.
           const sampleRow = db.prepare('SELECT chr FROM variants LIMIT 1').get() as
             | { chr: string }
             | undefined

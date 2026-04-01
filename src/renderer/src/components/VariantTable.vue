@@ -432,12 +432,7 @@ const linkConfig = computed<
 })
 
 // Precomputed row view models: annotation + link state per variant key
-const { getViewModel } = useVariantRowViewModel(
-  variants,
-  annotationCache,
-  linkConfig,
-  toRef(props, 'annotationScope')
-)
+const { getViewModel } = useVariantRowViewModel(variants, annotationCache, linkConfig)
 
 // Column active filter chips for the toolbar
 const columnActiveFilters = computed<ActiveFilter[]>(() => {

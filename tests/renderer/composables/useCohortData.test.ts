@@ -319,4 +319,63 @@ describe('IPC safety — buildIpcParams strips reactive proxies', () => {
     // Must serialize cleanly
     expect(() => JSON.parse(JSON.stringify(capturedParams))).not.toThrow()
   })
+
+  describe('activation gating', () => {
+    it('starts active by default', () => {
+      const [result, appInstance] = withSetup(() => useCohortData())
+      app = appInstance
+
+      expect(result.isActive.value).toBe(true)
+    })
+
+    it('deactivate sets isActive to false', () => {
+      const [result, appInstance] = withSetup(() => useCohortData())
+      app = appInstance
+
+      result.deactivate()
+      expect(result.isActive.value).toBe(false)
+    })
+
+    it('activate restores isActive to true', () => {
+      const [result, appInstance] = withSetup(() => useCohortData())
+      app = appInstance
+
+      result.deactivate()
+      expect(result.isActive.value).toBe(false)
+
+      result.activate()
+      expect(result.isActive.value).toBe(true)
+    })
+
+    it('deactivate unregisters summary listener', () => {
+      const mockOff = vi.fn()
+      window.api.cohort.onSummaryRebuilt = vi.fn().mockReturnValue(mockOff)
+
+      const [result, appInstance] = withSetup(() => useCohortData())
+      app = appInstance
+
+      // Listener was registered on init
+      expect(window.api.cohort.onSummaryRebuilt).toHaveBeenCalledTimes(1)
+
+      // Deactivate should call the cleanup function
+      result.deactivate()
+      expect(mockOff).toHaveBeenCalledTimes(1)
+    })
+
+    it('activate re-registers summary listener after deactivation', () => {
+      const mockOff = vi.fn()
+      window.api.cohort.onSummaryRebuilt = vi.fn().mockReturnValue(mockOff)
+
+      const [result, appInstance] = withSetup(() => useCohortData())
+      app = appInstance
+
+      expect(window.api.cohort.onSummaryRebuilt).toHaveBeenCalledTimes(1)
+
+      result.deactivate()
+      result.activate()
+
+      // Should have been called again on re-activation
+      expect(window.api.cohort.onSummaryRebuilt).toHaveBeenCalledTimes(2)
+    })
+  })
 })

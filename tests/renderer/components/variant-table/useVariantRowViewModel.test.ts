@@ -18,7 +18,7 @@ describe('buildRowViewModels', () => {
       ]
     ])
 
-    const result = buildRowViewModels(variants, annotationCache, {}, 'per-case')
+    const result = buildRowViewModels(variants, annotationCache, {})
 
     const vm = result.get('1:100:A:T')
     expect(vm).toBeDefined()
@@ -32,7 +32,7 @@ describe('buildRowViewModels', () => {
 
   it('should handle missing annotations gracefully', () => {
     const variants = [makeVariant('1', 200, 'G', 'C')]
-    const result = buildRowViewModels(variants, new Map(), {}, 'per-case')
+    const result = buildRowViewModels(variants, new Map(), {})
 
     const vm = result.get('1:200:G:C')
     expect(vm).toBeDefined()
@@ -52,7 +52,7 @@ describe('buildRowViewModels', () => {
       }
     }
 
-    const result = buildRowViewModels(variants, new Map(), linkConfig, 'per-case')
+    const result = buildRowViewModels(variants, new Map(), linkConfig)
 
     const vm = result.get('1:100:A:T')
     expect(vm!.links.chr).toBe('https://ucsc.edu/1:100')

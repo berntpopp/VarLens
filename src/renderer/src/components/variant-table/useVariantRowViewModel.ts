@@ -51,8 +51,7 @@ function variantKey(chr: string, pos: number, ref: string, alt: string): string 
 export function buildRowViewModels(
   variants: Variant[],
   annotationCache: Map<string, AnnotationEntry>,
-  linkConfig: Record<string, LinkConfig>,
-  _annotationScope: string
+  linkConfig: Record<string, LinkConfig>
 ): Map<string, RowViewModel> {
   const map = new Map<string, RowViewModel>()
 
@@ -88,16 +87,10 @@ export function buildRowViewModels(
 export function useVariantRowViewModel(
   variants: Ref<Variant[]>,
   annotationCache: ShallowRef<Map<string, AnnotationEntry>>,
-  linkConfig: Ref<Record<string, LinkConfig>>,
-  annotationScope: Ref<string>
+  linkConfig: Ref<Record<string, LinkConfig>>
 ) {
   const rowViewModels = computed(() =>
-    buildRowViewModels(
-      variants.value,
-      annotationCache.value,
-      linkConfig.value,
-      annotationScope.value
-    )
+    buildRowViewModels(variants.value, annotationCache.value, linkConfig.value)
   )
 
   function getViewModel(

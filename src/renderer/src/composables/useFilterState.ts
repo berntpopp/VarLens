@@ -62,6 +62,17 @@ export function useFilterState(
   // acmgClassifications and provides reset/clearFilter helpers for those fields.
   const core = useFilterCore()
 
+  /** Sync core state back to the filters ref. Call after any core mutation. */
+  function syncCoreToFilters(): void {
+    filters.value.consequences = core.consequences.value
+    filters.value.funcs = core.funcs.value
+    filters.value.clinvars = core.clinvars.value
+    filters.value.maxGnomadAf = core.gnomadAfMax.value
+    filters.value.minCadd = core.caddMin.value
+    filters.value.maxInternalAf = core.maxInternalAf.value
+    filters.value.acmgClassifications = core.acmgClassifications.value
+  }
+
   // API service
   const { api } = useApiService()
 
@@ -391,14 +402,7 @@ export function useFilterState(
     const coreId = coreIdMap[filterId]
     if (coreId !== undefined) {
       core.clearFilter(coreId)
-      // Sync core state back to filters object
-      filters.value.consequences = core.consequences.value
-      filters.value.funcs = core.funcs.value
-      filters.value.clinvars = core.clinvars.value
-      filters.value.maxGnomadAf = core.gnomadAfMax.value
-      filters.value.minCadd = core.caddMin.value
-      filters.value.maxInternalAf = core.maxInternalAf.value
-      filters.value.acmgClassifications = core.acmgClassifications.value
+      syncCoreToFilters()
     }
 
     // Handle adapter-specific and preset-related clearing
@@ -449,13 +453,7 @@ export function useFilterState(
   const clearAllFilters = () => {
     // Reset shared fields via core, then sync back to filters object
     core.reset()
-    filters.value.consequences = core.consequences.value
-    filters.value.funcs = core.funcs.value
-    filters.value.clinvars = core.clinvars.value
-    filters.value.maxGnomadAf = core.gnomadAfMax.value
-    filters.value.minCadd = core.caddMin.value
-    filters.value.maxInternalAf = core.maxInternalAf.value
-    filters.value.acmgClassifications = core.acmgClassifications.value
+    syncCoreToFilters()
 
     // Reset adapter-specific fields
     filters.value.searchQuery = ''
@@ -522,13 +520,7 @@ export function useFilterState(
   const resetForCaseSwitch = () => {
     // Reset shared fields via core, then sync back to filters object
     core.reset()
-    filters.value.consequences = core.consequences.value
-    filters.value.funcs = core.funcs.value
-    filters.value.clinvars = core.clinvars.value
-    filters.value.maxGnomadAf = core.gnomadAfMax.value
-    filters.value.minCadd = core.caddMin.value
-    filters.value.maxInternalAf = core.maxInternalAf.value
-    filters.value.acmgClassifications = core.acmgClassifications.value
+    syncCoreToFilters()
 
     // Reset adapter-specific fields
     filters.value.searchQuery = ''
