@@ -103,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 // Composables
 import { useOffsetPagination } from '../composables/useOffsetPagination'
 import { useCohortData } from '../composables/useCohortData'
@@ -152,7 +152,10 @@ const {
   fetchSummary,
   fetchColumnMeta,
   buildIpcParams,
-  cleanupListeners
+  cleanupListeners,
+  isActive,
+  activate,
+  deactivate
 } = useCohortData()
 const { filters, searchTerm, selectedImpactPresets, clearAllFilters, clearFilter } = useFilters()
 const { loadCarriers } = useCarriers()
@@ -228,7 +231,7 @@ const {
   resetSort
 } = useOffsetPagination<CohortVariant>({
   fetchPage: async ({ offset, limit, sortBy: sortItems, skipCount }) => {
-    if (!api) {
+    if (!api || !isActive.value) {
       return { data: [], total_count: 0 }
     }
 
@@ -460,6 +463,14 @@ onMounted(() => {
 
 onUnmounted(() => {
   cleanupListeners()
+})
+
+onActivated(() => {
+  activate()
+})
+
+onDeactivated(() => {
+  deactivate()
 })
 
 // Expose refresh method — single entry point for all data loading

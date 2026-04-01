@@ -101,6 +101,12 @@ export interface UseCohortDataReturn {
   reset: () => void
   /** Clean up IPC listeners (call on component unmount) */
   cleanupListeners: () => void
+  /** Whether the composable is active (inside <keep-alive>) */
+  isActive: Ref<boolean>
+  /** Activate: re-register listeners (call from onActivated) */
+  activate: () => void
+  /** Deactivate: unregister listeners (call from onDeactivated) */
+  deactivate: () => void
 }
 
 export function useCohortData(): UseCohortDataReturn {
@@ -119,9 +125,14 @@ export function useCohortData(): UseCohortDataReturn {
   let requestGeneration = 0
   let cachedFilterHash = ''
 
+  // Activation state for <keep-alive> gating
+  const isActive = ref(true)
+
   // Listen for summary rebuild events and initialize staleness state
   let cleanupSummaryListener: (() => void) | null = null
-  if (api) {
+
+  function registerSummaryListener(): void {
+    if (!api || cleanupSummaryListener) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cohortApi = (api as any).cohort
     if (typeof cohortApi.onSummaryRebuilt === 'function') {
@@ -129,7 +140,22 @@ export function useCohortData(): UseCohortDataReturn {
         summaryStale.value = status.is_stale
       })
     }
-    // Initialize staleness from current status (catches in-progress rebuilds)
+  }
+
+  function unregisterSummaryListener(): void {
+    if (cleanupSummaryListener) {
+      cleanupSummaryListener()
+      cleanupSummaryListener = null
+    }
+  }
+
+  // Register on init
+  registerSummaryListener()
+
+  // Initialize staleness from current status (catches in-progress rebuilds)
+  if (api) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cohortApi = (api as any).cohort
     if (typeof cohortApi.getSummaryStatus === 'function') {
       cohortApi
         .getSummaryStatus()
@@ -142,11 +168,18 @@ export function useCohortData(): UseCohortDataReturn {
     }
   }
 
+  function activate(): void {
+    isActive.value = true
+    registerSummaryListener()
+  }
+
+  function deactivate(): void {
+    isActive.value = false
+    unregisterSummaryListener()
+  }
+
   const cleanupListeners = (): void => {
-    if (cleanupSummaryListener) {
-      cleanupSummaryListener()
-      cleanupSummaryListener = null
-    }
+    unregisterSummaryListener()
   }
 
   /**
@@ -342,6 +375,9 @@ export function useCohortData(): UseCohortDataReturn {
     fetchSummary,
     fetchColumnMeta,
     reset,
-    cleanupListeners
+    cleanupListeners,
+    isActive,
+    activate,
+    deactivate
   }
 }
