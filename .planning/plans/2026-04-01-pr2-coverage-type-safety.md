@@ -1,6 +1,6 @@
 # PR 2: Coverage & Type Safety — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Stabilize the test coverage pipeline, enforce coverage in CI, convert IPC handler tests to DI pattern, extract testable worker logic, and eliminate cross-boundary type violations and `as any` casts.
 
@@ -68,12 +68,12 @@
 
 The ENOENT bug is confirmed: `coverage/.tmp/coverage-31.json` not found. This is a known vitest v8 provider issue where forked workers write coverage files to a temp directory that gets cleaned up before all files are read. Fix by setting an explicit temp directory outside the coverage output.
 
-- [ ] **Step 1: Verify the ENOENT reproduces**
+- [x] **Step 1: Verify the ENOENT reproduces**
 
 Run: `npm run test:coverage 2>&1 | tail -20`
 Expected: `ENOENT: no such file or directory, open '.../coverage/.tmp/coverage-*.json'`
 
-- [ ] **Step 2: Add explicit coverage temp directory**
+- [x] **Step 2: Add explicit coverage temp directory**
 
 Modify `vitest.config.ts`. In the `coverage` block, add a `processingConcurrency` limit to serialize coverage file processing:
 
@@ -104,17 +104,17 @@ If `processingConcurrency` does not exist in the vitest version used, try settin
       reportsDirectory: './coverage',
 ```
 
-- [ ] **Step 3: Test the fix**
+- [x] **Step 3: Test the fix**
 
 Run: `npm run test:coverage 2>&1 | tail -20`
 Expected: No ENOENT error. Coverage report generated successfully.
 
-- [ ] **Step 4: Run coverage 3 times to verify stability**
+- [x] **Step 4: Run coverage 3 times to verify stability**
 
 Run: `npm run test:coverage && npm run test:coverage && npm run test:coverage`
 Expected: All 3 runs exit 0 without ENOENT.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add vitest.config.ts
@@ -134,7 +134,7 @@ file processing."
 **Files:**
 - Modify: `vitest.config.ts:42-58`
 
-- [ ] **Step 1: Run coverage and record per-directory actuals**
+- [x] **Step 1: Run coverage and record per-directory actuals**
 
 Run: `npm run test:coverage -- --reporter=json-summary 2>&1 | grep -A 5 "Coverage"`
 
@@ -143,7 +143,7 @@ Run: `cat coverage/coverage-summary.json | npx -y json -a key pct 2>/dev/null ||
 
 Record the actual line/branch/function/statement percentages for key directories.
 
-- [ ] **Step 2: Replace global thresholds with per-directory floors**
+- [x] **Step 2: Replace global thresholds with per-directory floors**
 
 Modify `vitest.config.ts`. Replace the `thresholds` block based on actual coverage numbers. Use a pattern like:
 
@@ -159,12 +159,12 @@ Modify `vitest.config.ts`. Replace the `thresholds` block based on actual covera
 
 Set the global floor conservatively (at or slightly below the lowest directory), and use `autoUpdate: true` to ratchet thresholds upward automatically as coverage improves. The `autoUpdate` flag will rewrite `vitest.config.ts` with higher thresholds after each passing run.
 
-- [ ] **Step 3: Verify coverage passes with new thresholds**
+- [x] **Step 3: Verify coverage passes with new thresholds**
 
 Run: `npm run test:coverage`
 Expected: Passes with the new threshold configuration.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add vitest.config.ts
@@ -186,7 +186,7 @@ automatically ratchet thresholds upward."
 - Modify: `.github/workflows/release.yml` (add lint + typecheck)
 - Modify: `vitest.config.ts` (add json-summary reporter)
 
-- [ ] **Step 1: Add json-summary reporter to vitest config**
+- [x] **Step 1: Add json-summary reporter to vitest config**
 
 Modify `vitest.config.ts`. Add reporters to the coverage block:
 
@@ -194,7 +194,7 @@ Modify `vitest.config.ts`. Add reporters to the coverage block:
       reporter: ['text', 'json-summary', 'json'],
 ```
 
-- [ ] **Step 2: Switch CI test step to coverage (ubuntu only)**
+- [x] **Step 2: Switch CI test step to coverage (ubuntu only)**
 
 Modify `.github/workflows/build.yml`. Change the test step (line 67-68):
 
@@ -215,7 +215,7 @@ New:
         if: runner.os == 'Linux'
 ```
 
-- [ ] **Step 3: Add coverage report action for PRs**
+- [x] **Step 3: Add coverage report action for PRs**
 
 Add after the test steps in `.github/workflows/build.yml`:
 
@@ -230,7 +230,7 @@ Add after the test steps in `.github/workflows/build.yml`:
 
 Note: This action requires `permissions: pull-requests: write` on the job. Add it to the build job permissions.
 
-- [ ] **Step 4: Add lint + typecheck to release workflow**
+- [x] **Step 4: Add lint + typecheck to release workflow**
 
 Modify `.github/workflows/release.yml`. Add steps to each release job (linux, macos, windows) after `Rebuild native modules for Node.js` and before `Run tests`:
 
@@ -242,7 +242,7 @@ Modify `.github/workflows/release.yml`. Add steps to each release job (linux, ma
         run: npm run typecheck
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .github/workflows/build.yml .github/workflows/release.yml vitest.config.ts
@@ -264,7 +264,7 @@ now runs lint + typecheck for parity with build workflow."
 - Modify: `src/main/ipc/handlers/import.ts:12-19`
 - Modify: `src/main/ipc/handlers/batch-import.ts:21-28`
 
-- [ ] **Step 1: Create the shared safeEmit utility**
+- [x] **Step 1: Create the shared safeEmit utility**
 
 Create `src/main/ipc/utils/safeEmit.ts`:
 
@@ -286,7 +286,7 @@ export function safeEmit(channel: string, data: unknown): void {
 }
 ```
 
-- [ ] **Step 2: Replace local safeEmit in cases.ts**
+- [x] **Step 2: Replace local safeEmit in cases.ts**
 
 In `src/main/ipc/handlers/cases.ts`, remove lines 18-22 (the local `function safeEmit`) and add import at top:
 
@@ -294,7 +294,7 @@ In `src/main/ipc/handlers/cases.ts`, remove lines 18-22 (the local `function saf
 import { safeEmit } from '../utils/safeEmit'
 ```
 
-- [ ] **Step 3: Replace local safeEmit in cohort.ts**
+- [x] **Step 3: Replace local safeEmit in cohort.ts**
 
 In `src/main/ipc/handlers/cohort.ts`, remove lines 19-23 and add import:
 
@@ -302,7 +302,7 @@ In `src/main/ipc/handlers/cohort.ts`, remove lines 19-23 and add import:
 import { safeEmit } from '../utils/safeEmit'
 ```
 
-- [ ] **Step 4: Replace local safeEmit in import.ts**
+- [x] **Step 4: Replace local safeEmit in import.ts**
 
 In `src/main/ipc/handlers/import.ts`, remove lines 12-19 and add import:
 
@@ -310,7 +310,7 @@ In `src/main/ipc/handlers/import.ts`, remove lines 12-19 and add import:
 import { safeEmit } from '../utils/safeEmit'
 ```
 
-- [ ] **Step 5: Replace local safeEmit in batch-import.ts**
+- [x] **Step 5: Replace local safeEmit in batch-import.ts**
 
 In `src/main/ipc/handlers/batch-import.ts`, remove lines 21-28 and add import:
 
@@ -318,17 +318,17 @@ In `src/main/ipc/handlers/batch-import.ts`, remove lines 21-28 and add import:
 import { safeEmit } from '../utils/safeEmit'
 ```
 
-- [ ] **Step 6: Verify no local safeEmit definitions remain**
+- [x] **Step 6: Verify no local safeEmit definitions remain**
 
 Run: `grep -rn "function safeEmit" src/main/ipc/handlers/`
 Expected: No output (all local copies removed).
 
-- [ ] **Step 7: Run tests**
+- [x] **Step 7: Run tests**
 
 Run: `npx vitest run`
 Expected: All tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/main/ipc/utils/safeEmit.ts \
@@ -362,11 +362,11 @@ This is a large type migration. The approach:
 3. Update `src/shared/types/api.ts` to import from shared
 4. Update renderer files to import from shared
 
-- [ ] **Step 1: Read all source files to understand type ownership**
+- [x] **Step 1: Read all source files to understand type ownership**
 
 Read `src/main/database/types.ts`, `src/main/import/types.ts`, `src/main/database/GeneReferenceDb.ts`, `src/main/database/PanelRepository.ts`, and `src/shared/types/api.ts` to identify all types that need to move.
 
-- [ ] **Step 2: Create `src/shared/types/database.ts`**
+- [x] **Step 2: Create `src/shared/types/database.ts`**
 
 Copy all pure type/interface exports from `src/main/database/types.ts` to the new file. These are types with no runtime dependencies — only `import type` references. Include:
 - `Case`, `CaseWithCohorts`, `CaseSearchParams`, `AffectedStatus`, `CaseSex`
@@ -382,19 +382,19 @@ Copy all pure type/interface exports from `src/main/database/types.ts` to the ne
 
 Do NOT move types that depend on runtime imports (e.g., `Database` from better-sqlite3).
 
-- [ ] **Step 3: Create `src/shared/types/import.ts`**
+- [x] **Step 3: Create `src/shared/types/import.ts`**
 
 Copy from `src/main/import/types.ts`:
 - `ProgressUpdate`, `ProgressCallback`, `ImportOptions`, `ImportResult`
 - `FieldMapping`, `RawVariantRow`, `DataDictionaries`
 - `DuplicateChoice`, `BatchImportOptions`
 
-- [ ] **Step 4: Create `src/shared/types/gene-reference.ts`**
+- [x] **Step 4: Create `src/shared/types/gene-reference.ts`**
 
 Copy from `src/main/database/GeneReferenceDb.ts`:
 - `GeneValidationResult`, `GeneAutocompleteResult`, `GeneRefInfo`, `AssemblyInfo`
 
-- [ ] **Step 5: Create `src/shared/types/panel.ts`**
+- [x] **Step 5: Create `src/shared/types/panel.ts`**
 
 Copy from `src/main/database/PanelRepository.ts`:
 - `PanelRow`, `PanelWithCount`, `PanelGeneRow`, `ActivePanelRow`
@@ -402,7 +402,7 @@ Copy from `src/main/database/PanelRepository.ts`:
 And from `src/main/services/api/PanelAppClient.ts`:
 - `PanelAppSearchResult`
 
-- [ ] **Step 6: Update main files to re-export from shared**
+- [x] **Step 6: Update main files to re-export from shared**
 
 In `src/main/database/types.ts`, replace type definitions with re-exports:
 ```typescript
@@ -413,7 +413,7 @@ Keep any types that depend on runtime main-process code (e.g., types parameteriz
 
 Same pattern for `src/main/import/types.ts`, `GeneReferenceDb.ts`, `PanelRepository.ts`.
 
-- [ ] **Step 7: Update `src/shared/types/api.ts` imports**
+- [x] **Step 7: Update `src/shared/types/api.ts` imports**
 
 Replace all `import type { ... } from '../../main/...'` with imports from the new shared type files:
 
@@ -424,23 +424,23 @@ import type { GeneValidationResult, ... } from './gene-reference'
 import type { PanelRow, ... } from './panel'
 ```
 
-- [ ] **Step 8: Update renderer files**
+- [x] **Step 8: Update renderer files**
 
 Update all ~8 renderer files that import from `src/main/`:
 - Change `from '../../../../main/database/types'` to `from '../../../../shared/types/database'`
 - Change `from '../../../main/services/api/schemas/vep-response'` to import from an appropriate shared location (or through `api.ts`)
 
-- [ ] **Step 9: Verify no cross-boundary imports remain**
+- [x] **Step 9: Verify no cross-boundary imports remain**
 
 Run: `grep -rn "from '.*main/" src/renderer/ src/shared/ | grep -v node_modules`
 Expected: No output — all cross-boundary imports eliminated.
 
-- [ ] **Step 10: Run typecheck and tests**
+- [x] **Step 10: Run typecheck and tests**
 
 Run: `npm run typecheck && npx vitest run`
 Expected: Both pass.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add src/shared/types/database.ts src/shared/types/import.ts \
@@ -468,7 +468,7 @@ shared layers no longer import from src/main/."
 
 The shared `FilterState` already has most fields. Only 2 fields are missing: `tagIds` and `annotationScope`. The shared version also has `minCarriers` which the renderer version doesn't — keep it (cohort-only).
 
-- [ ] **Step 1: Add missing fields to shared FilterState**
+- [x] **Step 1: Add missing fields to shared FilterState**
 
 Modify `src/shared/types/filters.ts`. Add the two missing fields to the `FilterState` interface:
 
@@ -490,7 +490,7 @@ Also add corresponding IPC fields to `FilterIpcParams`:
   annotation_scope?: 'case' | 'all'
 ```
 
-- [ ] **Step 2: Move helper types from filter-types.ts to shared**
+- [x] **Step 2: Move helper types from filter-types.ts to shared**
 
 Add to `src/shared/types/filters.ts` (after the existing interfaces):
 
@@ -563,7 +563,7 @@ export interface UseFilterStateReturn {
 }
 ```
 
-- [ ] **Step 3: Move buildFilterFromState to shared**
+- [x] **Step 3: Move buildFilterFromState to shared**
 
 Add `buildFilterFromState` function from `filter-types.ts` to `src/shared/types/filters.ts` (or create `src/shared/utils/filters.ts` if it has runtime logic — since it's a pure function with no renderer dependencies, it can go in shared).
 
@@ -579,7 +579,7 @@ export function buildFilterFromState(
 }
 ```
 
-- [ ] **Step 4: Update consumers to import from shared**
+- [x] **Step 4: Update consumers to import from shared**
 
 In `src/renderer/src/composables/useFilterState.ts`:
 - Change: `from './filter-types'` → `from '../../../../shared/types/filters'`
@@ -591,25 +591,25 @@ In `src/renderer/src/composables/useFilterExport.ts`:
 In `src/renderer/src/composables/useFilterPresets.ts`:
 - Change: `from './filter-types'` → `from '../../../../shared/types/filters'`
 
-- [ ] **Step 5: Delete the old file**
+- [x] **Step 5: Delete the old file**
 
 Delete `src/renderer/src/composables/filter-types.ts`.
 
-- [ ] **Step 6: Remove the TODO comment**
+- [x] **Step 6: Remove the TODO comment**
 
 In `src/shared/types/filters.ts`, remove lines 13-14 (the TODO about consolidation — now done).
 
-- [ ] **Step 7: Verify no imports reference the deleted file**
+- [x] **Step 7: Verify no imports reference the deleted file**
 
 Run: `grep -rn "filter-types" src/`
 Expected: No output.
 
-- [ ] **Step 8: Run typecheck and tests**
+- [x] **Step 8: Run typecheck and tests**
 
 Run: `npm run typecheck && npx vitest run`
 Expected: Both pass.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/shared/types/filters.ts \
@@ -649,7 +649,7 @@ Each file follows the same conversion pattern. The implementer should:
 3. Read the corresponding handler file to identify all channels
 4. Rewrite to test channels through the DI pattern
 
-- [ ] **Step 1: Rewrite variants-handlers.test.ts**
+- [x] **Step 1: Rewrite variants-handlers.test.ts**
 
 Read `src/main/ipc/handlers/variants.ts` to identify channels: `variants:query`, `variants:filterOptions`, `variants:search`, `variants:geneSymbols`.
 
@@ -659,24 +659,24 @@ Rewrite the test file using the DI pattern. Test at minimum:
 - `variants:filterOptions` returns filter options structure
 - `variants:search` returns search results
 
-- [ ] **Step 2: Run variants handler tests**
+- [x] **Step 2: Run variants handler tests**
 
 Run: `npx vitest run tests/main/handlers/variants-handlers.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 3: Rewrite cases-handlers.test.ts**
+- [x] **Step 3: Rewrite cases-handlers.test.ts**
 
 Read `src/main/ipc/handlers/cases.ts` and `src/main/ipc/handlers/database.ts`. Test:
 - `cases:list` returns all cases
 - `cases:query` with valid search params
 - `database:overview` returns overview data
 
-- [ ] **Step 4: Run cases handler tests**
+- [x] **Step 4: Run cases handler tests**
 
 Run: `npx vitest run tests/main/handlers/cases-handlers.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 5: Rewrite annotations-handlers.test.ts**
+- [x] **Step 5: Rewrite annotations-handlers.test.ts**
 
 Read `src/main/ipc/handlers/annotations.ts`. Test:
 - `annotations:getForVariant` returns annotations for a variant
@@ -685,45 +685,45 @@ Read `src/main/ipc/handlers/annotations.ts`. Test:
 - `annotations:deleteGlobal` removes global annotation
 - `annotations:batchGet` returns batch results
 
-- [ ] **Step 6: Run annotations handler tests**
+- [x] **Step 6: Run annotations handler tests**
 
 Run: `npx vitest run tests/main/handlers/annotations-handlers.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 7: Rewrite cohort-handlers.test.ts**
+- [x] **Step 7: Rewrite cohort-handlers.test.ts**
 
 Read `src/main/ipc/handlers/cohort.ts`. Test:
 - `cohort:variants` returns cohort variant data
 - `cohort:summary` returns cohort summary
 - `cohort:carriers` returns carrier information
 
-- [ ] **Step 8: Run cohort handler tests**
+- [x] **Step 8: Run cohort handler tests**
 
 Run: `npx vitest run tests/main/handlers/cohort-handlers.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 9: Rewrite export-handlers.test.ts**
+- [x] **Step 9: Rewrite export-handlers.test.ts**
 
 Read `src/main/ipc/handlers/export.ts`. Test:
 - Export handler returns variant data in expected format
 - Filters are applied correctly to export data
 
-- [ ] **Step 10: Run export handler tests**
+- [x] **Step 10: Run export handler tests**
 
 Run: `npx vitest run tests/main/handlers/export-handlers.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 11: Run all handler tests together**
+- [x] **Step 11: Run all handler tests together**
 
 Run: `npx vitest run tests/main/handlers/`
 Expected: All handler tests pass (including existing auth-handlers).
 
-- [ ] **Step 12: Run full test suite**
+- [x] **Step 12: Run full test suite**
 
 Run: `npx vitest run`
 Expected: All tests pass, total test count has increased.
 
-- [ ] **Step 13: Commit**
+- [x] **Step 13: Commit**
 
 ```bash
 git add tests/main/handlers/
@@ -744,13 +744,13 @@ register handlers with real DB, invoke through channel names."
 - Modify: `src/shared/types/api.ts` (add missing methods)
 - Modify: ~19 renderer files (remove `as any` casts)
 
-- [ ] **Step 1: Audit missing methods**
+- [x] **Step 1: Audit missing methods**
 
 Compare `src/preload/index.ts` against `src/shared/types/api.ts`. For each `as any` cast in the renderer, check if the method exists in the WindowAPI interface. Categorize:
 - **Bucket A:** Method exists in interface → just remove the cast
 - **Bucket B:** Method missing → add to interface, then remove cast
 
-- [ ] **Step 2: Add missing methods to WindowAPI sub-interfaces**
+- [x] **Step 2: Add missing methods to WindowAPI sub-interfaces**
 
 In `src/shared/types/api.ts`, add any missing methods to the appropriate sub-interfaces. Common missing methods (from the `as any` analysis):
 - `cohort.getCarriers`, `cohort.getVariants`, `cohort.getSummary`
@@ -765,7 +765,7 @@ In `src/shared/types/api.ts`, add any missing methods to the appropriate sub-int
 
 Match signatures to what `src/preload/index.ts` actually exposes.
 
-- [ ] **Step 3: Remove as-any casts from renderer files**
+- [x] **Step 3: Remove as-any casts from renderer files**
 
 For each file with `as any` casts:
 - Replace `(api as any).method()` with `api.method()`
@@ -774,17 +774,17 @@ For each file with `as any` casts:
 
 Skip legitimate `as any` uses (JSON parsing, test mocks, backward compat migration).
 
-- [ ] **Step 4: Verify as-any count**
+- [x] **Step 4: Verify as-any count**
 
 Run: `grep -rn "as any" src/renderer/ --include='*.ts' --include='*.vue' | wc -l`
 Expected: Near zero (only legitimate uses remain).
 
-- [ ] **Step 5: Run typecheck and tests**
+- [x] **Step 5: Run typecheck and tests**
 
 Run: `npm run typecheck && npx vitest run`
 Expected: Both pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/shared/types/api.ts src/renderer/
@@ -815,7 +815,7 @@ All three workers share an `openDatabase()` pattern. Extract it once, then extra
 
 ### Part A: Shared worker DB utility
 
-- [ ] **Step 1: Create shared worker DB utility**
+- [x] **Step 1: Create shared worker DB utility**
 
 Create `src/main/workers/worker-db.ts`:
 
@@ -909,14 +909,14 @@ export const DROP_FTS_TRIGGERS = `
 `
 ```
 
-- [ ] **Step 2: Run existing tests to verify no regressions**
+- [x] **Step 2: Run existing tests to verify no regressions**
 
 Run: `npx vitest run`
 Expected: All tests pass. (No consumers yet, just verifying the module compiles.)
 
 ### Part B: Export worker extraction
 
-- [ ] **Step 3: Extract export formatting logic**
+- [x] **Step 3: Extract export formatting logic**
 
 Create `src/main/workers/export-renderer.ts` with the pure formatting functions copied from `export-worker.ts`:
 
@@ -925,7 +925,7 @@ Create `src/main/workers/export-renderer.ts` with the pure formatting functions 
 
 Copy the exact implementations. These are pure functions with no worker dependencies.
 
-- [ ] **Step 4: Write tests for export renderer**
+- [x] **Step 4: Write tests for export renderer**
 
 Create `tests/main/workers/export-renderer.test.ts`:
 
@@ -967,26 +967,26 @@ describe('csvEscape', () => {
 })
 ```
 
-- [ ] **Step 5: Run export renderer tests**
+- [x] **Step 5: Run export renderer tests**
 
 Run: `npx vitest run tests/main/workers/export-renderer.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 6: Update export-worker to import from export-renderer**
+- [x] **Step 6: Update export-worker to import from export-renderer**
 
 Modify `src/main/workers/export-worker.ts`:
 - Remove local `formatCellValue` and `csvEscape` function definitions
 - Add: `import { formatCellValue, csvEscape } from './export-renderer'`
 - Replace local `openDb()` with: `import { openWorkerDatabaseReadOnly } from './worker-db'`
 
-- [ ] **Step 7: Run tests to verify export worker still works**
+- [x] **Step 7: Run tests to verify export worker still works**
 
 Run: `npx vitest run`
 Expected: All tests pass.
 
 ### Part C: Delete worker extraction
 
-- [ ] **Step 8: Extract delete operations logic**
+- [x] **Step 8: Extract delete operations logic**
 
 Create `src/main/workers/delete-operations.ts`:
 
@@ -1019,7 +1019,7 @@ export function deleteCaseBatch(db: DatabaseType, caseIds: number[]): number {
 
 Read the actual `delete-worker.ts` implementation to ensure the extraction matches exactly.
 
-- [ ] **Step 9: Write tests for delete operations**
+- [x] **Step 9: Write tests for delete operations**
 
 Create `tests/main/workers/delete-operations.test.ts`:
 
@@ -1064,25 +1064,25 @@ describe('delete-operations', () => {
 })
 ```
 
-- [ ] **Step 10: Run delete operations tests**
+- [x] **Step 10: Run delete operations tests**
 
 Run: `npx vitest run tests/main/workers/delete-operations.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 11: Update delete-worker to import from shared modules**
+- [x] **Step 11: Update delete-worker to import from shared modules**
 
 Modify `src/main/workers/delete-worker.ts`:
 - Replace local `openDatabase()` with: `import { openWorkerDatabase, rebuildFts, rebuildCohortSummary, DROP_FTS_TRIGGERS } from './worker-db'`
 - Replace inline delete logic with: `import { deleteAllCases, deleteCaseBatch } from './delete-operations'`
 
-- [ ] **Step 12: Run tests to verify delete worker still works**
+- [x] **Step 12: Run tests to verify delete worker still works**
 
 Run: `npx vitest run`
 Expected: All tests pass.
 
 ### Part D: Import worker extraction
 
-- [ ] **Step 13: Extract import pipeline logic**
+- [x] **Step 13: Extract import pipeline logic**
 
 Create `src/main/workers/import-pipeline.ts`. Extract these functions from `import-worker.ts`:
 
@@ -1120,7 +1120,7 @@ The module should export all of these. The worker entry file keeps:
 // The isCancelled callback replaces the module-level `cancelled` flag
 ```
 
-- [ ] **Step 14: Write tests for import pipeline**
+- [x] **Step 14: Write tests for import pipeline**
 
 Create `tests/main/workers/import-pipeline.test.ts`:
 
@@ -1176,12 +1176,12 @@ describe('prepareStatements', () => {
 })
 ```
 
-- [ ] **Step 15: Run import pipeline tests**
+- [x] **Step 15: Run import pipeline tests**
 
 Run: `npx vitest run tests/main/workers/import-pipeline.test.ts`
 Expected: All tests pass.
 
-- [ ] **Step 16: Update import-worker to import from pipeline**
+- [x] **Step 16: Update import-worker to import from pipeline**
 
 Modify `src/main/workers/import-worker.ts`:
 - Replace local `openDatabase()` with: `import { openWorkerDatabase, rebuildFts, rebuildCohortSummary, DROP_FTS_TRIGGERS } from './worker-db'`
@@ -1190,12 +1190,12 @@ Modify `src/main/workers/import-worker.ts`:
 
 The worker entry file should shrink from ~840 lines to ~120 lines (message handler + lifecycle management).
 
-- [ ] **Step 17: Run full test suite**
+- [x] **Step 17: Run full test suite**
 
 Run: `npx vitest run`
 Expected: All tests pass — workers behave identically.
 
-- [ ] **Step 18: Commit**
+- [x] **Step 18: Commit**
 
 ```bash
 git add src/main/workers/worker-db.ts src/main/workers/export-renderer.ts \
@@ -1220,7 +1220,7 @@ is testable with in-memory SQLite."
 
 After all 9 tasks are committed:
 
-- [ ] **Run full CI check locally**
+- [x] **Run full CI check locally**
 
 ```bash
 npm run lint:check && npm run typecheck && npm run test:coverage
@@ -1228,7 +1228,7 @@ npm run lint:check && npm run typecheck && npm run test:coverage
 
 Expected: All pass with zero errors.
 
-- [ ] **Verify boundary enforcement**
+- [x] **Verify boundary enforcement**
 
 ```bash
 grep -rn "from '.*main/" src/renderer/ src/shared/ | grep -v node_modules
@@ -1236,7 +1236,7 @@ grep -rn "from '.*main/" src/renderer/ src/shared/ | grep -v node_modules
 
 Expected: No cross-boundary imports.
 
-- [ ] **Verify as-any reduction**
+- [x] **Verify as-any reduction**
 
 ```bash
 grep -rn "as any" src/renderer/ --include='*.ts' --include='*.vue' | wc -l
@@ -1244,7 +1244,7 @@ grep -rn "as any" src/renderer/ --include='*.ts' --include='*.vue' | wc -l
 
 Expected: Near zero.
 
-- [ ] **Verify all commits are atomic**
+- [x] **Verify all commits are atomic**
 
 ```bash
 git log --oneline refactor/coverage-type-safety --not main
@@ -1252,7 +1252,7 @@ git log --oneline refactor/coverage-type-safety --not main
 
 Expected: 9 commits, one per task.
 
-- [ ] **Create PR**
+- [x] **Create PR**
 
 ```bash
 gh pr create --title "refactor: coverage & type safety hardening (PR 2/3)" --body "$(cat <<'EOF'
@@ -1269,12 +1269,12 @@ Second of three stability hardening PRs based on cross-AI code review.
 - **FilterState**: Consolidated dual definitions into single shared module
 
 ## Test plan
-- [ ] `npm run lint:check` passes
-- [ ] `npm run typecheck` passes
-- [ ] `npm run test:coverage` passes with per-directory thresholds
-- [ ] CI posts coverage comment on PR
-- [ ] No renderer→main or shared→main imports remain
-- [ ] `as any` count near zero in renderer
+- [x] `npm run lint:check` passes
+- [x] `npm run typecheck` passes
+- [x] `npm run test:coverage` passes with per-directory thresholds
+- [x] CI posts coverage comment on PR
+- [x] No renderer→main or shared→main imports remain
+- [x] `as any` count near zero in renderer
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF

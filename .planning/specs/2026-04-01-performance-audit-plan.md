@@ -1,6 +1,6 @@
 # VarLens Performance & Maintainability Audit — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Implement all 12 findings from the performance audit across 3 phases, improving UI responsiveness, import/export throughput, and structural maintainability for datasets with 10k+ variants and 100+ cases.
 
@@ -56,11 +56,11 @@
 - Modify: `src/renderer/src/components/CohortTable.vue:229-254`
 - Test: `tests/renderer/composables/useCohortData.test.ts` (existing)
 
-- [ ] **Step 1: Read current fetchPage callback**
+- [x] **Step 1: Read current fetchPage callback**
 
 Confirm the current `fetchPage` signature in `CohortTable.vue`. The `useOffsetPagination` composable passes `{ offset, limit, sortBy, skipCount }` but the callback ignores `skipCount`.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 In `tests/renderer/composables/useCohortData.test.ts`, add a test that verifies `_count_needed` is forwarded:
 
@@ -83,11 +83,11 @@ it('should forward skipCount as _count_needed to cohort API', async () => {
 })
 ```
 
-- [ ] **Step 3: Run test to verify it passes (this is a contract test)**
+- [x] **Step 3: Run test to verify it passes (this is a contract test)**
 
 Run: `npm run test -- --run tests/renderer/composables/useCohortData.test.ts`
 
-- [ ] **Step 4: Modify CohortTable.vue fetchPage to forward skipCount**
+- [x] **Step 4: Modify CohortTable.vue fetchPage to forward skipCount**
 
 In `src/renderer/src/components/CohortTable.vue`, change the `fetchPage` callback to accept and forward `skipCount`:
 
@@ -122,11 +122,11 @@ const params: CohortQueryParams = {
 }
 ```
 
-- [ ] **Step 5: Run full test suite to verify no regressions**
+- [x] **Step 5: Run full test suite to verify no regressions**
 
 Run: `npm run test -- --run`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/renderer/src/components/CohortTable.vue
@@ -143,7 +143,7 @@ git commit -m "perf: wire cohort skipCount to skip COUNT(*) on page/sort changes
 - Modify: `src/main/import/transforms/BatchAccumulator.ts` (type only)
 - Test: `tests/main/import/BatchAccumulator.test.ts` (existing)
 
-- [ ] **Step 1: Write a test verifying bulk insert lifecycle**
+- [x] **Step 1: Write a test verifying bulk insert lifecycle**
 
 Add to `tests/main/import/BatchAccumulator.test.ts`:
 
@@ -175,12 +175,12 @@ describe('bulk insert lifecycle', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it passes**
+- [x] **Step 2: Run test to verify it passes**
 
 Run: `npm run test -- --run tests/main/import/BatchAccumulator.test.ts`
 Expected: PASS (BatchAccumulator already calls flushFn per batch — the test validates the contract)
 
-- [ ] **Step 3: Modify ColumnarStrategy to use try/finally bulk insert lifecycle**
+- [x] **Step 3: Modify ColumnarStrategy to use try/finally bulk insert lifecycle**
 
 In `src/main/import/strategies/ColumnarStrategy.ts`, replace the pipeline and finalization section:
 
@@ -251,7 +251,7 @@ Key changes:
 - `finishBulkInsert()` called once in `finally` block
 - Removed `db.cases.updateCaseVariantCount()` call (already done inside `finishBulkInsert`)
 
-- [ ] **Step 4: Modify ObjectStrategy with same pattern**
+- [x] **Step 4: Modify ObjectStrategy with same pattern**
 
 In `src/main/import/strategies/ObjectStrategy.ts`, apply the same pattern:
 
@@ -310,12 +310,12 @@ async import(
 }
 ```
 
-- [ ] **Step 5: Run tests to verify no regressions**
+- [x] **Step 5: Run tests to verify no regressions**
 
 Run: `npm run test -- --run tests/main/import/`
 Expected: All import tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/main/import/strategies/ColumnarStrategy.ts src/main/import/strategies/ObjectStrategy.ts
@@ -334,7 +334,7 @@ error/cancellation, matching the VCF strategy pattern."
 - Modify: `src/renderer/src/components/CohortTable.vue:229-258`
 - Test: `tests/renderer/composables/useCohortData.test.ts` (existing)
 
-- [ ] **Step 1: Add activation gating to useCohortData summary listener**
+- [x] **Step 1: Add activation gating to useCohortData summary listener**
 
 In `src/renderer/src/composables/useCohortData.ts`, add an `isActive` ref and gate the summary listener:
 
@@ -382,7 +382,7 @@ function deactivate(): void {
 
 Add `activate`, `deactivate`, and `isActive` to the return object.
 
-- [ ] **Step 2: Gate CohortTable fetchPage with isActive**
+- [x] **Step 2: Gate CohortTable fetchPage with isActive**
 
 In `src/renderer/src/components/CohortTable.vue`, destructure `activate`, `deactivate`, `isActive` from `useCohortData` and gate the fetchPage callback:
 
@@ -409,16 +409,16 @@ onDeactivated(() => {
 })
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `npm run test -- --run tests/renderer/composables/useCohortData.test.ts`
 Expected: PASS
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 Run: `npm run test -- --run`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/src/composables/useCohortData.ts src/renderer/src/components/CohortTable.vue
@@ -437,7 +437,7 @@ when the user is on the case view."
 - Modify: `src/renderer/src/components/VariantTable.vue:52-144`
 - Test: `tests/renderer/components/useVariantRowViewModel.test.ts`
 
-- [ ] **Step 1: Write the test for useVariantRowViewModel**
+- [x] **Step 1: Write the test for useVariantRowViewModel**
 
 Create `tests/renderer/components/useVariantRowViewModel.test.ts`:
 
@@ -501,12 +501,12 @@ describe('buildRowViewModels', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm run test -- --run tests/renderer/components/useVariantRowViewModel.test.ts`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement useVariantRowViewModel**
+- [x] **Step 3: Implement useVariantRowViewModel**
 
 Create `src/renderer/src/components/variant-table/useVariantRowViewModel.ts`:
 
@@ -600,12 +600,12 @@ export function useVariantRowViewModel(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm run test -- --run tests/renderer/components/useVariantRowViewModel.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Update VariantTable.vue to use row view models**
+- [x] **Step 5: Update VariantTable.vue to use row view models**
 
 In `src/renderer/src/components/VariantTable.vue`, import and use the composable. Replace per-cell function calls with view model lookups.
 
@@ -666,11 +666,11 @@ For link cells (chr, pos, clinvar, gene_symbol), replace `getLinkForColumn()`/`r
 
 Apply this pattern to all link columns (chr, pos, clinvar, gene_symbol).
 
-- [ ] **Step 6: Run full test suite**
+- [x] **Step 6: Run full test suite**
 
 Run: `npm run test -- --run`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/renderer/src/components/variant-table/useVariantRowViewModel.ts \
@@ -689,7 +689,7 @@ with a precomputed Map<variantKey, RowViewModel> rebuilt once per page."
 **Files:**
 - Modify: `src/main/workers/import-worker.ts:90-200, 570-680`
 
-- [ ] **Step 1: Refactor import-worker to stream JSON formats**
+- [x] **Step 1: Refactor import-worker to stream JSON formats**
 
 Replace the `preParseFile()` call pattern in the main import loop (~line 186) with inline streaming. The key change is replacing:
 
@@ -744,7 +744,7 @@ try {
 }
 ```
 
-- [ ] **Step 2: Implement streamInsertJson helper**
+- [x] **Step 2: Implement streamInsertJson helper**
 
 Add a new function in `import-worker.ts` that replaces `preParseFile`:
 
@@ -788,7 +788,7 @@ async function streamInsertJson(
 }
 ```
 
-- [ ] **Step 3: Implement streamInsertVcf helper**
+- [x] **Step 3: Implement streamInsertVcf helper**
 
 Add a similar function for VCF:
 
@@ -860,19 +860,19 @@ async function streamInsertVcf(
 }
 ```
 
-- [ ] **Step 4: Remove preParseFile and preParseVcfFile functions**
+- [x] **Step 4: Remove preParseFile and preParseVcfFile functions**
 
 Delete the `preParseFile()` (~line 578) and `preParseVcfFile()` (~line 614) functions. Also remove the `nextFileParsed` lookahead variable and its usage in the main loop.
 
-- [ ] **Step 5: Add beginBulkInsert/finishBulkInsert to WorkerStatements**
+- [x] **Step 5: Add beginBulkInsert/finishBulkInsert to WorkerStatements**
 
 Ensure `WorkerStatements` (the prepared statements object in the worker) has `beginBulkInsert` and `finishBulkInsert` methods that wrap the raw SQL for FTS trigger management. Check if they already exist or need to be added.
 
-- [ ] **Step 6: Run import tests**
+- [x] **Step 6: Run import tests**
 
 Run: `npm run test -- --run tests/main/import/`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/main/workers/import-worker.ts
@@ -890,7 +890,7 @@ Memory is now proportional to batch size, not file size."
 - Modify: `src/main/workers/export-worker.ts`
 - Modify: `src/shared/types/export-worker.ts`
 
-- [ ] **Step 1: Add format field to export worker message types**
+- [x] **Step 1: Add format field to export worker message types**
 
 In `src/shared/types/export-worker.ts`, add format to the start message:
 
@@ -909,7 +909,7 @@ export type ExportMainMessage = {
 }
 ```
 
-- [ ] **Step 2: Rewrite export-worker to use .iterate() and support CSV**
+- [x] **Step 2: Rewrite export-worker to use .iterate() and support CSV**
 
 Replace `src/main/workers/export-worker.ts`:
 
@@ -1067,7 +1067,7 @@ parentPort?.on('message', (msg: ExportMainMessage) => {
 })
 ```
 
-- [ ] **Step 3: Update the export IPC handler to pass format**
+- [x] **Step 3: Update the export IPC handler to pass format**
 
 Find the export handler that constructs the `ExportMainMessage` and add `format` derived from the output file path:
 
@@ -1086,11 +1086,11 @@ filters: [
 ]
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `npm run test -- --run tests/main/handlers/export-handlers.test.ts`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/workers/export-worker.ts src/shared/types/export-worker.ts
@@ -1111,13 +1111,13 @@ XLSX uses .iterate() instead of .all() to reduce peak allocation."
 - Modify: `src/main/ipc/handlers/cohort.ts:52-73`
 - Modify: `src/main/database/db-worker.ts`
 
-- [ ] **Step 1: Verify gene reference DB is worker-accessible**
+- [x] **Step 1: Verify gene reference DB is worker-accessible**
 
 Check `src/main/database/geneReferenceLoader.ts` — if it opens a SQLite connection per call (not relying on main-thread singletons), it can run in workers. The `getGeneReferenceDb()` function likely returns a lazily-initialized connection.
 
 Run: `grep -n 'let\|const.*geneRef\|singleton\|instance' src/main/database/geneReferenceLoader.ts`
 
-- [ ] **Step 2: Move interval computation into db-worker**
+- [x] **Step 2: Move interval computation into db-worker**
 
 In `src/main/database/db-worker.ts`, import `computePanelIntervals` and apply it inside the `variants:query` and `cohort:variants` task handlers:
 
@@ -1156,7 +1156,7 @@ case 'variants:query': {
 
 Apply similar pattern for `cohort:variants`.
 
-- [ ] **Step 3: Simplify IPC handlers — stop pre-computing intervals**
+- [x] **Step 3: Simplify IPC handlers — stop pre-computing intervals**
 
 In `src/main/ipc/handlers/variants.ts`, remove the `computePanelIntervals` call block (~lines 102-122). Pass `active_panel_ids` and `panel_padding_bp` through to the pool task unchanged.
 
@@ -1164,11 +1164,11 @@ In `src/main/ipc/handlers/cohort.ts`, remove the same block (~lines 52-73).
 
 For the fallback (no pool) path, keep inline `computePanelIntervals` call since it runs synchronously on main thread when no pool is available.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `npm run test -- --run`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/ipc/handlers/panelIntervalHelper.ts \
@@ -1190,7 +1190,7 @@ Avoids blocking the Electron main thread for panel-heavy filters."
 - Modify: `src/renderer/src/composables/useFilters.ts`
 - Test: `tests/renderer/composables/useFilterCore.test.ts`
 
-- [ ] **Step 1: Write the test for shared filter core**
+- [x] **Step 1: Write the test for shared filter core**
 
 Create `tests/renderer/composables/useFilterCore.test.ts`:
 
@@ -1237,12 +1237,12 @@ describe('useFilterCore', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm run test -- --run tests/renderer/composables/useFilterCore.test.ts`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement useFilterCore**
+- [x] **Step 3: Implement useFilterCore**
 
 Create `src/renderer/src/composables/useFilterCore.ts`:
 
@@ -1349,26 +1349,26 @@ export function useFilterCore() {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm run test -- --run tests/renderer/composables/useFilterCore.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Wire useFilterState to delegate to useFilterCore**
+- [x] **Step 5: Wire useFilterState to delegate to useFilterCore**
 
 In `src/renderer/src/composables/useFilterState.ts`, import and use `useFilterCore` for the shared state, delegating numeric/array filter state to the core. Keep tags, autocomplete, export, and view-specific logic in the adapter.
 
 This is a refactoring step — the external API of `useFilterState` must not change.
 
-- [ ] **Step 6: Wire useFilters to delegate to useFilterCore**
+- [x] **Step 6: Wire useFilters to delegate to useFilterCore**
 
 In `src/renderer/src/composables/useFilters.ts`, import and use `useFilterCore` for the shared state. Keep cohort-specific serialization and provide/inject in the adapter.
 
-- [ ] **Step 7: Run full test suite**
+- [x] **Step 7: Run full test suite**
 
 Run: `npm run test -- --run`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/renderer/src/composables/useFilterCore.ts \
@@ -1389,7 +1389,7 @@ filter state. Tags, autocomplete, export stay in view adapters."
 - Modify: `src/main/database/VariantRepository.ts:820-870`
 - Modify: `src/main/database/cohort.ts:83-300`
 
-- [ ] **Step 1: Split VariantRepository query methods**
+- [x] **Step 1: Split VariantRepository query methods**
 
 In `src/main/database/VariantRepository.ts`, the `getVariants()` method already builds count and data queries separately using `buildVariantQuery()`. Verify this and ensure count queries have no ORDER BY:
 
@@ -1420,7 +1420,7 @@ getAllVariantsForExport(filter: VariantFilter): Variant[] {
 }
 ```
 
-- [ ] **Step 2: Split CohortService query construction**
+- [x] **Step 2: Split CohortService query construction**
 
 In `src/main/database/cohort.ts`, extract the WHERE clause building into a helper method, then create dedicated count and data query methods:
 
@@ -1449,7 +1449,7 @@ getCohortVariants(params: CohortSearchParams): CohortPaginatedResult {
 }
 ```
 
-- [ ] **Step 3: Run EXPLAIN QUERY PLAN on key queries**
+- [x] **Step 3: Run EXPLAIN QUERY PLAN on key queries**
 
 After the refactoring, manually run EXPLAIN QUERY PLAN on:
 1. Cohort count query with gene filter
@@ -1460,11 +1460,11 @@ After the refactoring, manually run EXPLAIN QUERY PLAN on:
 
 Verify index usage is reasonable.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `npm run test -- --run tests/main/database/ tests/main/handlers/`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/database/VariantRepository.ts src/main/database/cohort.ts
@@ -1481,14 +1481,14 @@ Count queries skip ORDER BY. Export queries skip LIMIT."
 **Files:**
 - Modify: `src/renderer/src/App.vue`
 
-- [ ] **Step 1: Identify eagerly-imported conditional components in App.vue**
+- [x] **Step 1: Identify eagerly-imported conditional components in App.vue**
 
 Read `App.vue` imports and identify components that are conditionally rendered (behind v-if, modals, dialogs). Candidates include:
 - `ImportStatusBar`
 - `VariantDetailsPanel`
 - Any dialog host components
 
-- [ ] **Step 2: Convert to defineAsyncComponent**
+- [x] **Step 2: Convert to defineAsyncComponent**
 
 For each identified component, replace the static import with `defineAsyncComponent`:
 
@@ -1504,11 +1504,11 @@ const ImportStatusBar = defineAsyncComponent(() =>
 
 Only convert components that are not visible on initial render. Keep always-visible components (AppToolbar, AppSidebar, AppFooter) as static imports.
 
-- [ ] **Step 3: Run full test suite**
+- [x] **Step 3: Run full test suite**
 
 Run: `npm run test -- --run`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/renderer/src/App.vue
@@ -1524,7 +1524,7 @@ git commit -m "perf: lazy-load non-critical dialogs and panels in App.vue"
 - Modify: `src/main/database/VariantRepository.ts` (getVariants response)
 - Modify: `src/main/ipc/handlers/variants.ts` (pass flag through)
 
-- [ ] **Step 1: Add include_unfiltered_count to variant query**
+- [x] **Step 1: Add include_unfiltered_count to variant query**
 
 In `src/main/database/VariantRepository.ts`, modify `getVariants()` to accept and handle the flag:
 
@@ -1568,7 +1568,7 @@ getVariants(
 }
 ```
 
-- [ ] **Step 2: Update useVariantData to use the flag**
+- [x] **Step 2: Update useVariantData to use the flag**
 
 In `src/renderer/src/components/variant-table/useVariantData.ts`, replace the separate unfiltered count query:
 
@@ -1624,11 +1624,11 @@ fetchPage: async ({ offset, limit, sortBy, skipCount }) => {
 }
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `npm run test -- --run`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/main/database/VariantRepository.ts \
@@ -1647,7 +1647,7 @@ include_unfiltered_count flag for deterministic behavior."
 **Files:**
 - Modify: `src/renderer/src/composables/useAnnotations.ts:219-260`
 
-- [ ] **Step 1: Add generation counter to loadAnnotationsBatch**
+- [x] **Step 1: Add generation counter to loadAnnotationsBatch**
 
 In `src/renderer/src/composables/useAnnotations.ts`, add a generation counter and check it on response:
 
@@ -1708,7 +1708,7 @@ async function loadAnnotationsBatch(
 
 Add `invalidateAnnotationGeneration` to the return object so `useVariantData` can call it on page changes.
 
-- [ ] **Step 2: Call invalidateAnnotationGeneration on page changes**
+- [x] **Step 2: Call invalidateAnnotationGeneration on page changes**
 
 In `src/renderer/src/components/variant-table/useVariantData.ts`, call `invalidateAnnotationGeneration()` when variants change (before loading new annotations):
 
@@ -1725,11 +1725,11 @@ watch(
 )
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `npm run test -- --run`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/renderer/src/composables/useAnnotations.ts \
@@ -1747,13 +1747,13 @@ populating state after the user has navigated to a new page."
 **Files:**
 - Modify: `src/main/ipc/handlers/cohort.ts:83-105`
 
-- [ ] **Step 1: Verify better-sqlite3 returns plain objects**
+- [x] **Step 1: Verify better-sqlite3 returns plain objects**
 
 Check that the CohortService query returns plain objects. better-sqlite3 returns plain objects by default. The `Number()` wrapping is there for potential BigInt fields — check which columns could be BigInt.
 
 The `carrier_count`, `total_cases`, `het_count`, `hom_count` are `INTEGER` in SQLite and returned as `number` by better-sqlite3 (not BigInt) for values within safe integer range.
 
-- [ ] **Step 2: Replace per-row remap with convertBigInts**
+- [x] **Step 2: Replace per-row remap with convertBigInts**
 
 In `src/main/ipc/handlers/cohort.ts`, replace the manual `.map()` block with the existing `convertBigInts` utility (already used for cohort:summary and cohort:carriers):
 
@@ -1774,15 +1774,15 @@ return convertBigInts(result)
 
 The `convertBigInts` utility recursively converts BigInt values to Number and passes other types through unchanged. This handles the edge case without per-field remapping.
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `npm run test -- --run tests/main/handlers/`
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 Run: `npm run test -- --run`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/ipc/handlers/cohort.ts

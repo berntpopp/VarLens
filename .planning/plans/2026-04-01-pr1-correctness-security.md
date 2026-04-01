@@ -1,6 +1,6 @@
 # PR 1: Correctness & Security — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix 6 correctness bugs and security gaps identified by cross-AI code review — genotype dosage, ACMG label inconsistency, boolean search parser, URL validation, annotation cache scoping, and auth/transaction fixes.
 
@@ -63,7 +63,7 @@
 - Create: `tests/shared/sql/genotype-dosage.test.ts`
 - Modify: `src/main/database/AssociationDataBuilder.ts:59`
 
-- [ ] **Step 1: Write failing tests for TS utility**
+- [x] **Step 1: Write failing tests for TS utility**
 
 Create `tests/shared/utils/genotype.test.ts`:
 
@@ -146,12 +146,12 @@ describe('gtToDosage', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/shared/utils/genotype.test.ts`
 Expected: FAIL — module `src/shared/utils/genotype` does not exist
 
-- [ ] **Step 3: Implement TS utility**
+- [x] **Step 3: Implement TS utility**
 
 Create `src/shared/utils/genotype.ts`:
 
@@ -198,12 +198,12 @@ export function gtToDosage(gt: string | null | undefined): number | null {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/shared/utils/genotype.test.ts`
 Expected: All 19 tests PASS
 
-- [ ] **Step 5: Create SQL CASE constant**
+- [x] **Step 5: Create SQL CASE constant**
 
 Create `src/shared/sql/genotype-dosage.ts`:
 
@@ -230,7 +230,7 @@ export const GT_DOSAGE_SQL = `CASE gt_num
   END`
 ```
 
-- [ ] **Step 6: Write cross-check test (SQL CASE vs TS utility)**
+- [x] **Step 6: Write cross-check test (SQL CASE vs TS utility)**
 
 Create `tests/shared/sql/genotype-dosage.test.ts`:
 
@@ -287,12 +287,12 @@ describe('GT_DOSAGE_SQL cross-check with gtToDosage', () => {
 })
 ```
 
-- [ ] **Step 7: Run cross-check tests**
+- [x] **Step 7: Run cross-check tests**
 
 Run: `npx vitest run tests/shared/sql/genotype-dosage.test.ts`
 Expected: All 14 tests PASS
 
-- [ ] **Step 8: Update AssociationDataBuilder to use GT_DOSAGE_SQL**
+- [x] **Step 8: Update AssociationDataBuilder to use GT_DOSAGE_SQL**
 
 Modify `src/main/database/AssociationDataBuilder.ts`. Replace the dosage line in the SQL query:
 
@@ -311,12 +311,12 @@ Add the import at the top of the file:
 import { GT_DOSAGE_SQL } from '../../shared/sql/genotype-dosage'
 ```
 
-- [ ] **Step 9: Run existing tests to verify no regressions**
+- [x] **Step 9: Run existing tests to verify no regressions**
 
 Run: `npx vitest run tests/main/database/`
 Expected: All existing database tests PASS
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add src/shared/sql/genotype-dosage.ts src/shared/utils/genotype.ts \
@@ -351,7 +351,7 @@ Adds cross-check test verifying SQL and TS produce identical results."
 
 **Not in scope:** `filterGroups.ts` values like `Likely_pathogenic` are ClinVar database significance values (underscore format), not ACMG classification labels. The protein visualization files use `ClinVarSignificance` types. Neither should change.
 
-- [ ] **Step 1: Write failing tests for normalization function**
+- [x] **Step 1: Write failing tests for normalization function**
 
 Create `tests/shared/utils/acmg.test.ts`:
 
@@ -426,12 +426,12 @@ describe('normalizeAcmgClassification', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/shared/utils/acmg.test.ts`
 Expected: FAIL — module `src/shared/utils/acmg` does not exist
 
-- [ ] **Step 3: Add canonical ACMG constants to domain config**
+- [x] **Step 3: Add canonical ACMG constants to domain config**
 
 Modify `src/shared/config/domain.config.ts` — replace the entire file:
 
@@ -477,7 +477,7 @@ export const DOMAIN_CONFIG = {
 } as const
 ```
 
-- [ ] **Step 4: Create the normalization function**
+- [x] **Step 4: Create the normalization function**
 
 Create `src/shared/utils/acmg.ts`:
 
@@ -516,12 +516,12 @@ export function normalizeAcmgClassification(raw: string): AcmgClassification | n
 }
 ```
 
-- [ ] **Step 5: Run normalization tests**
+- [x] **Step 5: Run normalization tests**
 
 Run: `npx vitest run tests/shared/utils/acmg.test.ts`
 Expected: All 15 tests PASS
 
-- [ ] **Step 6: Update TypeScript type in types.ts**
+- [x] **Step 6: Update TypeScript type in types.ts**
 
 Modify `src/main/database/types.ts:208-213`. Replace the `AcmgClassification` type:
 
@@ -540,7 +540,7 @@ New:
 export type { AcmgClassification } from '../../shared/config/domain.config'
 ```
 
-- [ ] **Step 7: Update IPC schema enum**
+- [x] **Step 7: Update IPC schema enum**
 
 Modify `src/shared/types/ipc-schemas.ts:383-386`. Replace:
 
@@ -568,7 +568,7 @@ const AcmgClassificationSchema = z
 
 Note: The enum includes old-format values for backward compatibility with existing databases, then the `.transform()` normalizes them to canonical form. This prevents breaking imports of existing data.
 
-- [ ] **Step 8: Update ACMG switch in cohort.ts**
+- [x] **Step 8: Update ACMG switch in cohort.ts**
 
 Modify `src/main/database/cohort.ts:414-432`. Replace the switch statement:
 
@@ -614,7 +614,7 @@ New:
       }
 ```
 
-- [ ] **Step 9: Update ACMG calculator return values**
+- [x] **Step 9: Update ACMG calculator return values**
 
 Modify `src/renderer/src/utils/acmg/acmg-calculator.ts`. Add import and update all return values:
 
@@ -637,7 +637,7 @@ Replace all return value strings:
 - `'VUS'` -> `'Uncertain significance'` (1 occurrence, line 138)
 - `'Pathogenic'` and `'Benign'` stay unchanged
 
-- [ ] **Step 10: Update renderer ACMG constants in useAnnotations.ts**
+- [x] **Step 10: Update renderer ACMG constants in useAnnotations.ts**
 
 Modify `src/renderer/src/composables/useAnnotations.ts:781-807`. Replace:
 
@@ -679,7 +679,7 @@ export {
 
 Also update the `AcmgClassification` import at the top of the file to come from `domain.config` instead of `main/database/types`.
 
-- [ ] **Step 11: Update filter constants**
+- [x] **Step 11: Update filter constants**
 
 Modify `src/renderer/src/utils/filters/constants.ts`. Replace the entire file:
 
@@ -717,7 +717,7 @@ export const ACMG_FILTER_OPTIONS_LONG = [
 export { ACMG_CLASSIFICATIONS, ACMG_ABBREV }
 ```
 
-- [ ] **Step 12: Add database migration**
+- [x] **Step 12: Add database migration**
 
 Modify `src/main/database/migrations.ts`. Add a new migration at the end of the migrations array. Find the last migration number and increment it. The migration normalizes stored ACMG label values in `variant_annotations` and `case_variant_annotations` tables:
 
@@ -789,7 +789,7 @@ Modify `src/main/database/migrations.ts`. Add a new migration at the end of the 
 }
 ```
 
-- [ ] **Step 13: Run typecheck to find any remaining old-format references**
+- [x] **Step 13: Run typecheck to find any remaining old-format references**
 
 Run: `npx tsc --noEmit 2>&1 | head -50`
 
@@ -799,14 +799,14 @@ Run: `grep -rn "'Likely Pathogenic'\|'VUS'\|'Likely Benign'" src/ --include='*.t
 
 Fix any remaining occurrences found.
 
-- [ ] **Step 14: Run full test suite**
+- [x] **Step 14: Run full test suite**
 
 Run: `npx vitest run`
 Expected: All tests PASS (some test fixtures may need updating if they use old ACMG values)
 
 If tests fail due to old ACMG label values in fixtures, update those fixtures to use canonical values.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 git add src/shared/config/domain.config.ts src/shared/utils/acmg.ts \
@@ -840,7 +840,7 @@ backward compatibility and normalizes on input."
 - Modify: `src/main/database/cohort.ts:318-341`
 - Modify: `src/main/database/VariantRepository.ts:660-700`
 
-- [ ] **Step 1: Write failing tests for tokenizer + AST parser**
+- [x] **Step 1: Write failing tests for tokenizer + AST parser**
 
 Create `tests/shared/utils/boolean-search.test.ts`:
 
@@ -996,12 +996,12 @@ describe('parse', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/shared/utils/boolean-search.test.ts`
 Expected: FAIL — module does not exist
 
-- [ ] **Step 3: Implement tokenizer + recursive descent parser**
+- [x] **Step 3: Implement tokenizer + recursive descent parser**
 
 Create `src/shared/utils/boolean-search.ts`:
 
@@ -1145,12 +1145,12 @@ export function parse(tokens: Token[]): AstNode {
 }
 ```
 
-- [ ] **Step 4: Run parser tests**
+- [x] **Step 4: Run parser tests**
 
 Run: `npx vitest run tests/shared/utils/boolean-search.test.ts`
 Expected: All tests PASS
 
-- [ ] **Step 5: Write failing tests for cohort search emitter**
+- [x] **Step 5: Write failing tests for cohort search emitter**
 
 Create `tests/main/database/search/cohort-search-emitter.test.ts`:
 
@@ -1207,12 +1207,12 @@ describe('emitCohortSearch', () => {
 })
 ```
 
-- [ ] **Step 6: Run cohort emitter tests to verify they fail**
+- [x] **Step 6: Run cohort emitter tests to verify they fail**
 
 Run: `npx vitest run tests/main/database/search/cohort-search-emitter.test.ts`
 Expected: FAIL — module does not exist
 
-- [ ] **Step 7: Create the search directory and implement cohort emitter**
+- [x] **Step 7: Create the search directory and implement cohort emitter**
 
 Create `src/main/database/search/cohort-search-emitter.ts`:
 
@@ -1265,12 +1265,12 @@ function emitTerm(term: string, params: (string | number)[]): string {
   return `(gene_symbol LIKE ? OR consequence LIKE ? OR func LIKE ? OR omim_id LIKE ?)`
 }
 
-- [ ] **Step 8: Run cohort emitter tests**
+- [x] **Step 8: Run cohort emitter tests**
 
 Run: `npx vitest run tests/main/database/search/cohort-search-emitter.test.ts`
 Expected: All tests PASS. Fix any param count mismatches.
 
-- [ ] **Step 9: Write failing tests for FTS5 emitter**
+- [x] **Step 9: Write failing tests for FTS5 emitter**
 
 Create `tests/main/database/search/fts5-search-emitter.test.ts`:
 
@@ -1323,7 +1323,7 @@ describe('emitFts5Search', () => {
 })
 ```
 
-- [ ] **Step 10: Implement FTS5 emitter**
+- [x] **Step 10: Implement FTS5 emitter**
 
 Create `src/main/database/search/fts5-search-emitter.ts`:
 
@@ -1371,12 +1371,12 @@ function emitTerm(term: string, params: (string | number)[]): string {
 }
 ```
 
-- [ ] **Step 11: Run FTS5 emitter tests**
+- [x] **Step 11: Run FTS5 emitter tests**
 
 Run: `npx vitest run tests/main/database/search/fts5-search-emitter.test.ts`
 Expected: All tests PASS
 
-- [ ] **Step 12: Replace buildBooleanSearchCondition in cohort.ts**
+- [x] **Step 12: Replace buildBooleanSearchCondition in cohort.ts**
 
 Modify `src/main/database/cohort.ts`. Add imports at top:
 
@@ -1424,7 +1424,7 @@ New:
   }
 ```
 
-- [ ] **Step 13: Replace boolean parsing in VariantRepository.ts**
+- [x] **Step 13: Replace boolean parsing in VariantRepository.ts**
 
 Modify `src/main/database/VariantRepository.ts`. Add imports:
 
@@ -1445,7 +1445,7 @@ Replace the inline boolean parsing in `applySearchFilter` (the section starting 
 
 Then use `boolExpr` and `params` in the raw SQL construction that follows. Keep the existing ranking/ordering logic intact.
 
-- [ ] **Step 14: Run all search-related tests**
+- [x] **Step 14: Run all search-related tests**
 
 Run: `npx vitest run tests/shared/utils/boolean-search.test.ts tests/main/database/search/`
 Expected: All tests PASS
@@ -1454,7 +1454,7 @@ Then run the full suite to check for regressions:
 Run: `npx vitest run`
 Expected: All tests PASS
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 git add src/shared/utils/boolean-search.ts \
@@ -1482,7 +1482,7 @@ for LIKE-based cohort search and FTS5 variant search."
 - Modify: `src/main/index.ts:74-77`
 - Modify: `src/main/ipc/handlers/shell.ts:26-52`
 
-- [ ] **Step 1: Write failing tests for URL validation**
+- [x] **Step 1: Write failing tests for URL validation**
 
 Create `tests/main/utils/url-validation.test.ts`:
 
@@ -1584,12 +1584,12 @@ describe('isUrlSafeForExternal', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/main/utils/url-validation.test.ts`
 Expected: FAIL — modules do not exist
 
-- [ ] **Step 3: Create allowed-domains config**
+- [x] **Step 3: Create allowed-domains config**
 
 Create `src/shared/config/allowed-domains.ts`:
 
@@ -1615,7 +1615,7 @@ export const ALLOWED_DOMAINS = [
 ] as const
 ```
 
-- [ ] **Step 4: Create URL validation utility**
+- [x] **Step 4: Create URL validation utility**
 
 Create `src/main/utils/url-validation.ts`:
 
@@ -1666,12 +1666,12 @@ export function isUrlSafeForExternal(url: string): boolean {
 }
 ```
 
-- [ ] **Step 5: Run URL validation tests**
+- [x] **Step 5: Run URL validation tests**
 
 Run: `npx vitest run tests/main/utils/url-validation.test.ts`
 Expected: All tests PASS
 
-- [ ] **Step 6: Update index.ts setWindowOpenHandler**
+- [x] **Step 6: Update index.ts setWindowOpenHandler**
 
 Modify `src/main/index.ts`. Add import:
 
@@ -1699,7 +1699,7 @@ New:
   })
 ```
 
-- [ ] **Step 7: Update shell.ts to use shared utility**
+- [x] **Step 7: Update shell.ts to use shared utility**
 
 Modify `src/main/ipc/handlers/shell.ts`. Replace local definitions with imports:
 
@@ -1721,12 +1721,12 @@ setUserDomains(validated.data)
 
 Update the `shell:openExternal` handler to use `isUrlSafeForExternal(validated.data)` instead of inline checks.
 
-- [ ] **Step 8: Run full test suite**
+- [x] **Step 8: Run full test suite**
 
 Run: `npx vitest run`
 Expected: All tests PASS
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/shared/config/allowed-domains.ts src/main/utils/url-validation.ts \
@@ -1746,7 +1746,7 @@ shared URL validation utility used by both code paths."
 **Files:**
 - Modify: `src/renderer/src/composables/useAnnotations.ts:82-260`
 
-- [ ] **Step 1: Read the full composable to understand cache structure**
+- [x] **Step 1: Read the full composable to understand cache structure**
 
 Read `src/renderer/src/composables/useAnnotations.ts` to identify:
 - Where `annotationCache` is declared (should be a `shallowRef<Map<string, AnnotationCache>>`)
@@ -1755,7 +1755,7 @@ Read `src/renderer/src/composables/useAnnotations.ts` to identify:
 - What stores provide `dbPath` and `caseId`
 - The `loadAnnotationsBatch` function
 
-- [ ] **Step 2: Modify variantKey to include scope**
+- [x] **Step 2: Modify variantKey to include scope**
 
 In `src/renderer/src/composables/useAnnotations.ts`, add a scoped key function alongside the existing coordinate-only key:
 
@@ -1771,7 +1771,7 @@ function scopedKey(dbPath: string, caseId: number, coordKey: string): string {
 }
 ```
 
-- [ ] **Step 3: Update all cache reads to use scoped key**
+- [x] **Step 3: Update all cache reads to use scoped key**
 
 Update `getAnnotations`, `isStarred`, `isGlobalStarred`, `isLoading`, and any other cache-reading functions to construct the scoped key using the current db path and case ID from their respective stores:
 
@@ -1791,7 +1791,7 @@ function getAnnotations(
 
 Apply the same pattern to `isStarred`, `isGlobalStarred`, `isLoading`.
 
-- [ ] **Step 4: Update all cache writes to use scoped key**
+- [x] **Step 4: Update all cache writes to use scoped key**
 
 Update `cacheSet` and `setLoading` to use scoped keys:
 
@@ -1806,7 +1806,7 @@ function cacheSet(coordKey: string, value: AnnotationCache): void {
 }
 ```
 
-- [ ] **Step 5: Update batch loading to re-key results and guard async races**
+- [x] **Step 5: Update batch loading to re-key results and guard async races**
 
 Modify `loadAnnotationsBatch` (around line 230-260):
 
@@ -1857,7 +1857,7 @@ Modify `loadAnnotationsBatch` (around line 230-260):
   }
 ```
 
-- [ ] **Step 6: Add cache invalidation watchers**
+- [x] **Step 6: Add cache invalidation watchers**
 
 Add watchers that clear cache on db/case switch:
 
@@ -1879,12 +1879,12 @@ watch(() => caseStore.currentCaseId, () => {
 })
 ```
 
-- [ ] **Step 7: Run existing tests**
+- [x] **Step 7: Run existing tests**
 
 Run: `npx vitest run tests/renderer/`
 Expected: All tests PASS (or identify any tests that mock useAnnotations that need updating)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/renderer/src/composables/useAnnotations.ts
@@ -1906,7 +1906,7 @@ Add async race guard for batch loading and cache invalidation on db/case switch.
 
 ### 6A: Add admin check to auth:listUsers
 
-- [ ] **Step 1: Write failing test for unauthorized listUsers**
+- [x] **Step 1: Write failing test for unauthorized listUsers**
 
 Add to the existing `tests/main/handlers/auth-handlers.test.ts` (or create a new test if the existing file doesn't cover this):
 
@@ -1920,7 +1920,7 @@ it('auth:listUsers rejects non-admin user', async () => {
 })
 ```
 
-- [ ] **Step 2: Add admin gate to auth:listUsers**
+- [x] **Step 2: Add admin gate to auth:listUsers**
 
 Modify `src/main/ipc/handlers/auth.ts`. Replace lines 88-93:
 
@@ -1950,7 +1950,7 @@ New:
 
 ### 6B: Make createFirstUser transactional
 
-- [ ] **Step 3: Wrap createFirstUser in transaction**
+- [x] **Step 3: Wrap createFirstUser in transaction**
 
 Modify `src/main/services/auth/AuthService.ts:50-91`. Wrap the three database operations in a transaction:
 
@@ -2004,11 +2004,11 @@ New:
 
 ### 6C: Targeted dependency remediation
 
-- [ ] **Step 4: Check current vulnerable packages**
+- [x] **Step 4: Check current vulnerable packages**
 
 Run: `npm audit --json 2>/dev/null | jq '.vulnerabilities | keys'`
 
-- [ ] **Step 5: Update only targeted packages**
+- [x] **Step 5: Update only targeted packages**
 
 For `@xmldom/xmldom`:
 ```bash
@@ -2022,12 +2022,12 @@ Manually review the `package-lock.json` diff to confirm only the targeted packag
 git diff package-lock.json | head -100
 ```
 
-- [ ] **Step 6: Run tests to verify no regressions**
+- [x] **Step 6: Run tests to verify no regressions**
 
 Run: `npx vitest run`
 Expected: All tests PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/main/ipc/handlers/auth.ts src/main/services/auth/AuthService.ts \
@@ -2045,7 +2045,7 @@ git commit -m "fix: add auth:listUsers admin check, transactional createFirstUse
 
 After all 6 tasks are committed:
 
-- [ ] **Run full CI check locally**
+- [x] **Run full CI check locally**
 
 ```bash
 npm run lint && npm run typecheck && npx vitest run
@@ -2053,7 +2053,7 @@ npm run lint && npm run typecheck && npx vitest run
 
 Expected: All pass with zero errors.
 
-- [ ] **Verify all commits are atomic**
+- [x] **Verify all commits are atomic**
 
 ```bash
 git log --oneline fix/correctness-security..HEAD
@@ -2061,7 +2061,7 @@ git log --oneline fix/correctness-security..HEAD
 
 Expected: 6 commits, one per task.
 
-- [ ] **Create PR**
+- [x] **Create PR**
 
 ```bash
 gh pr create --title "fix: correctness and security hardening (PR 1/3)" --body "$(cat <<'EOF'
@@ -2078,13 +2078,13 @@ Fixes 6 correctness bugs and security gaps:
 - **Security**: `auth:listUsers` admin check, `createFirstUser` transaction, targeted dep updates
 
 ## Test plan
-- [ ] `npm run lint && npm run typecheck` passes
-- [ ] `npm run test` passes with all new tests
-- [ ] Verify genotype dosage: import VCF with het calls, run association analysis
-- [ ] Verify ACMG: existing classifications display correctly after migration
-- [ ] Verify boolean search: `BRCA1 OR NOT TP53` returns results (not SQL error)
-- [ ] Verify external links open correctly in browser
-- [ ] Verify annotations don't bleed across cases
+- [x] `npm run lint && npm run typecheck` passes
+- [x] `npm run test` passes with all new tests
+- [x] Verify genotype dosage: import VCF with het calls, run association analysis
+- [x] Verify ACMG: existing classifications display correctly after migration
+- [x] Verify boolean search: `BRCA1 OR NOT TP53` returns results (not SQL error)
+- [x] Verify external links open correctly in browser
+- [x] Verify annotations don't bleed across cases
 EOF
 )"
 ```
