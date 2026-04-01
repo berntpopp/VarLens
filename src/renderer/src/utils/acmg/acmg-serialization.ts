@@ -59,6 +59,7 @@ export function deserializeEvidence(json: string | null): AcmgEvidenceState | nu
       is_override: parsed.is_override ?? false
     }
   } catch {
+    // Return null for corrupt/invalid JSON — caller handles the null case
     return null
   }
 }

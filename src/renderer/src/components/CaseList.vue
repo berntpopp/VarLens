@@ -178,6 +178,7 @@
 import { ref, computed, watch, shallowRef, markRaw } from 'vue'
 import type { CaseWithCohorts, CaseSex, AffectedStatus } from '../../../shared/types/api'
 import { useContextMenu } from '../composables/useContextMenu'
+import { logService } from '../services/LogService'
 
 const VALID_AFFECTED: Set<string> = new Set(['affected', 'unaffected', 'unknown'])
 const VALID_SEX: Set<string> = new Set(['unknown', 'male', 'female', 'other'])
@@ -268,7 +269,11 @@ async function loadHpoTerms(): Promise<void> {
       hpo_id: t.hpo_id,
       label: `${t.hpo_label} (${t.hpo_id})`
     }))
-  } catch {
+  } catch (e) {
+    logService.warn(
+      'Failed to load HPO terms: ' + (e instanceof Error ? e.message : String(e)),
+      'case-list'
+    )
     availableHpoTerms.value = []
   }
 }
@@ -318,7 +323,11 @@ const onLoad = async ({
 
     currentOffset.value += result.data.length
     done(result.data.length < PAGE_SIZE ? 'empty' : 'ok')
-  } catch {
+  } catch (e) {
+    logService.error(
+      'Failed to load cases page: ' + (e instanceof Error ? e.message : String(e)),
+      'case-list'
+    )
     done('error')
   } finally {
     loading.value = false

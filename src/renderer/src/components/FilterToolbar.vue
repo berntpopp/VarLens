@@ -153,6 +153,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, provide, nextTick, toRaw } from 'vue'
+import { logService } from '../services/LogService'
 import { useFilterState } from '../composables/useFilterState'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useFilterPresetStore } from '../composables/useFilterPresetStore'
@@ -382,8 +383,11 @@ async function handleSavePreset(data: { name: string; description: string | null
       return
     }
     showSavePresetDialog.value = false
-  } catch {
-    // Save failed — dialog stays open so user can retry
+  } catch (e) {
+    logService.warn(
+      'Failed to save filter preset: ' + (e instanceof Error ? e.message : String(e)),
+      'filters'
+    )
   } finally {
     savingPreset.value = false
   }

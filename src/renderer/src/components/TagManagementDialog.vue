@@ -226,7 +226,11 @@ const confirmDeleteTag = async (tag: Tag): Promise<void> => {
   // Fetch usage count for the confirmation message
   try {
     deleteUsageCount.value = await getTagUsageCount(tag.id)
-  } catch {
+  } catch (e) {
+    logService.warn(
+      'Failed to get tag usage count: ' + (e instanceof Error ? e.message : String(e)),
+      'tags'
+    )
     deleteUsageCount.value = 0
   }
   deleteDialog.value = true

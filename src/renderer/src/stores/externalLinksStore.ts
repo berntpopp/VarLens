@@ -217,8 +217,14 @@ export const useExternalLinksStore = defineStore('externalLinks', () => {
         const dummyUrl = link.urlTemplate.replace(/\{[^}]+\}/g, 'x')
         const url = new URL(dummyUrl)
         domains.add(url.hostname)
-      } catch {
-        // Skip invalid templates
+      } catch (e) {
+        logService.warn(
+          'Skipping invalid URL template for link "' +
+            link.id +
+            '": ' +
+            (e instanceof Error ? e.message : String(e)),
+          'settings'
+        )
       }
     }
     return Array.from(domains)

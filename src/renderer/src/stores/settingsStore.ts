@@ -5,6 +5,7 @@
 
 import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
+import { logService } from '../services/LogService'
 
 const STORAGE_KEY = 'varlens_user_settings_v1'
 
@@ -29,8 +30,11 @@ function load(): PersistedSettings {
       const parsed = JSON.parse(raw) as Partial<PersistedSettings>
       return { ...DEFAULTS, ...parsed }
     }
-  } catch {
-    // ignore corrupt data
+  } catch (e) {
+    logService.warn(
+      'Failed to load settings from localStorage: ' + (e instanceof Error ? e.message : String(e)),
+      'settings'
+    )
   }
   return { ...DEFAULTS }
 }

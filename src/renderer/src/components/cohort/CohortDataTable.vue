@@ -188,6 +188,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
+import { logService } from '../../services/LogService'
 import { useTableKeyboardNav } from '../../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
 import type { CohortVariant } from '../../../../shared/types/cohort'
@@ -394,8 +395,11 @@ const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> 
   if (api) {
     try {
       await api.shell.openExternal(url)
-    } catch {
-      // Error logged silently - external link opening is best-effort
+    } catch (e) {
+      logService.warn(
+        'Failed to open external link: ' + (e instanceof Error ? e.message : String(e)),
+        'cohort'
+      )
     }
   }
 }

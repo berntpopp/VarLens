@@ -122,6 +122,7 @@ import GeneListEditorDialog from './case-data-info/GeneListEditorDialog.vue'
 import PrefilteringSection from './case-data-info/PrefilteringSection.vue'
 import RegionFileImportDialog from './case-data-info/RegionFileImportDialog.vue'
 import { mdiChip, mdiFileImportOutline, mdiNoteTextOutline } from '@mdi/js'
+import { logService } from '../services/LogService'
 
 const props = defineProps<{
   caseId: number
@@ -237,8 +238,11 @@ async function loadDataInfo(): Promise<void> {
       selectedGeneListId.value = info.gene_list_id
       selectedRegionFileId.value = info.region_file_id
     }
-  } catch {
-    // Data info table may not exist yet for old databases
+  } catch (e) {
+    logService.warn(
+      'Failed to load case data info: ' + (e instanceof Error ? e.message : String(e)),
+      'case-data-info'
+    )
   } finally {
     loading.value = false
   }
@@ -259,8 +263,11 @@ async function save(): Promise<void> {
       gene_list_id: selectedGeneListId.value,
       region_file_id: selectedRegionFileId.value
     })
-  } catch {
-    // Silently fail - non-critical
+  } catch (e) {
+    logService.warn(
+      'Failed to save case data info: ' + (e instanceof Error ? e.message : String(e)),
+      'case-data-info'
+    )
   }
 }
 
@@ -274,8 +281,11 @@ async function addExternalId(idType: string, idValue: string): Promise<void> {
     ])
     externalIds.value = ids
     idTypeSuggestions.value = idTypes ?? []
-  } catch {
-    // Silently fail
+  } catch (e) {
+    logService.warn(
+      'Failed to add external ID: ' + (e instanceof Error ? e.message : String(e)),
+      'case-data-info'
+    )
   }
 }
 
@@ -283,8 +293,11 @@ async function deleteExternalId(idType: string): Promise<void> {
   try {
     await getApi().caseMetadata.deleteExternalId(props.caseId, idType)
     externalIds.value = externalIds.value.filter((e) => e.id_type !== idType)
-  } catch {
-    // Silently fail
+  } catch (e) {
+    logService.warn(
+      'Failed to delete external ID: ' + (e instanceof Error ? e.message : String(e)),
+      'case-data-info'
+    )
   }
 }
 

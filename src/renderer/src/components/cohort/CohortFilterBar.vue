@@ -152,6 +152,7 @@ import {
   isPresetDiverged
 } from '../../utils/filters'
 import { cloneForIpc } from '../../utils/cloneForIpc'
+import { logService } from '../../services/LogService'
 
 interface Props {
   totalCount: number | null
@@ -277,8 +278,11 @@ async function handleSavePreset(data: { name: string; description: string | null
       return
     }
     showSavePresetDialog.value = false
-  } catch {
-    // Save failed — dialog stays open so user can retry
+  } catch (e) {
+    logService.warn(
+      'Failed to save cohort filter preset: ' + (e instanceof Error ? e.message : String(e)),
+      'filters'
+    )
   } finally {
     savingPreset.value = false
   }
@@ -422,7 +426,11 @@ const searchGeneSymbols = async (query: string) => {
     geneSymbolSuggestions.value = [
       ...new Set(variants.map((v) => v.gene_symbol).filter((s): s is string => s !== null))
     ]
-  } catch {
+  } catch (e) {
+    logService.warn(
+      'Gene symbol autocomplete failed: ' + (e instanceof Error ? e.message : String(e)),
+      'filters'
+    )
     geneSymbolSuggestions.value = []
   } finally {
     loadingGeneSuggestions.value = false

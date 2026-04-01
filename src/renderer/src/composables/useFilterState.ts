@@ -493,7 +493,11 @@ export function useFilterState(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const results: string[] = await (api as any).variants.geneSymbols(caseIdRef.value, query, 50)
       geneSymbolSuggestions.value = results
-    } catch {
+    } catch (e) {
+      logService.warn(
+        'Gene symbol autocomplete failed: ' + (e instanceof Error ? e.message : String(e)),
+        'filters'
+      )
       geneSymbolSuggestions.value = []
     } finally {
       loadingSuggestions.value = false

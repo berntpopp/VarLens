@@ -243,6 +243,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { logService } from '../../services/LogService'
 import PanelEditorDialog from './PanelEditorDialog.vue'
 import PanelAppImportDialog from './PanelAppImportDialog.vue'
 import StringDbGenerateDialog from './StringDbGenerateDialog.vue'
@@ -299,8 +300,11 @@ watch(
       await loadPanels()
       try {
         geneRefInfo.value = (await api?.geneRef.info()) ?? null
-      } catch {
-        // silently ignore - info bar won't show
+      } catch (e) {
+        logService.warn(
+          'Failed to load gene reference info: ' + (e instanceof Error ? e.message : String(e)),
+          'panels'
+        )
       }
     }
   },
@@ -332,7 +336,11 @@ function sourceColor(source: string): string {
 function formatDate(dateStr: string | number): string {
   try {
     return new Date(dateStr).toLocaleDateString()
-  } catch {
+  } catch (e) {
+    logService.warn(
+      'Failed to format date "' + String(dateStr) + '": ' + (e instanceof Error ? e.message : String(e)),
+      'panels'
+    )
     return String(dateStr)
   }
 }

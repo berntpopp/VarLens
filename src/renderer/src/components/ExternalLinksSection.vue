@@ -34,6 +34,7 @@ import { computed } from 'vue'
 import { useExternalLinksStore } from '../stores/externalLinksStore'
 import { useApiService } from '../composables/useApiService'
 import { resolveUrlTemplate } from '../utils/externalLinks'
+import { logService } from '../services/LogService'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import {
@@ -140,8 +141,11 @@ async function openLink(linkId: string): Promise<void> {
 
   try {
     await api!.shell.openExternal(link.resolvedUrl)
-  } catch {
-    // Silently fail - link opening is best-effort
+  } catch (e) {
+    logService.warn(
+      'Failed to open external link: ' + (e instanceof Error ? e.message : String(e)),
+      'links'
+    )
   }
 }
 </script>

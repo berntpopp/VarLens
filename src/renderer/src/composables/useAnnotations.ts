@@ -82,6 +82,7 @@ function getCurrentDbPath(): string | null {
     const db = useDatabaseStore()
     return db.currentPath
   } catch {
+    // Pinia not available (e.g. in unit tests without store setup)
     return null
   }
 }
@@ -119,6 +120,7 @@ export function useAnnotations() {
       const settings = useSettingsStore()
       return settings.userName || undefined
     } catch {
+      // Pinia not available (e.g. in unit tests without store setup)
       return undefined
     }
   }

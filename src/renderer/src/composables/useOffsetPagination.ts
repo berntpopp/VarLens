@@ -10,6 +10,7 @@
 import { ref, shallowRef, watch, computed, type Ref } from 'vue'
 import { useSettingsStore } from '../stores/settingsStore'
 import { APP_CONFIG } from '../../../shared/config'
+import { logService } from '../services/LogService'
 
 export interface SortItem {
   key: string
@@ -158,8 +159,12 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
 
           prefetchNextPage()
           return
-        } catch {
-          // Prefetch failed — fall through to normal fetch path below
+        } catch (e) {
+          logService.warn(
+            'Prefetch failed, falling back to normal fetch: ' +
+              (e instanceof Error ? e.message : String(e)),
+            'pagination'
+          )
         }
       }
 

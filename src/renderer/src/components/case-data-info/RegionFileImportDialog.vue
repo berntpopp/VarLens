@@ -67,6 +67,7 @@
 import { ref, computed, watch } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { mdiClose, mdiFileUploadOutline } from '@mdi/js'
+import { logService } from '../../services/LogService'
 
 interface RegionFileItem {
   id: number
@@ -121,8 +122,11 @@ async function selectBedFile(): Promise<void> {
         regionFileName.value = basename.replace(/\.bed$/i, '')
       }
     }
-  } catch {
-    // Silently fail
+  } catch (e) {
+    logService.warn(
+      'Failed to select BED file: ' + (e instanceof Error ? e.message : String(e)),
+      'region-import'
+    )
   }
 }
 
@@ -139,8 +143,11 @@ async function importRegionFile(): Promise<void> {
     const updatedFiles = await regionFilesApi.list()
     emit('imported', { regionFileId: created.id, regionFiles: updatedFiles })
     emit('update:modelValue', false)
-  } catch {
-    // Silently fail
+  } catch (e) {
+    logService.error(
+      'Failed to import region file: ' + (e instanceof Error ? e.message : String(e)),
+      'region-import'
+    )
   } finally {
     importingRegion.value = false
   }

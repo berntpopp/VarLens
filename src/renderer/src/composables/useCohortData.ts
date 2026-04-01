@@ -164,8 +164,12 @@ export function useCohortData(): UseCohortDataReturn {
         .then((status: { is_stale: boolean }) => {
           summaryStale.value = status.is_stale
         })
-        .catch(() => {
-          /* best effort */
+        .catch((e: unknown) => {
+          logService.warn(
+            'Failed to get cohort summary status: ' +
+              (e instanceof Error ? e.message : String(e)),
+            'cohort'
+          )
         })
     }
   }
@@ -345,7 +349,11 @@ export function useCohortData(): UseCohortDataReturn {
     try {
       const result = await api.cohort.getColumnMeta()
       columnMeta.value = result ?? []
-    } catch {
+    } catch (e) {
+      logService.warn(
+        'Failed to load column metadata: ' + (e instanceof Error ? e.message : String(e)),
+        'cohort'
+      )
       columnMeta.value = []
     }
   }

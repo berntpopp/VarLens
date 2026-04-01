@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useApiService } from '../composables/useApiService'
+import { logService } from '../services/LogService'
 
 export const useAuthStore = defineStore('auth', () => {
   const { api } = useApiService()
@@ -21,8 +22,11 @@ export const useAuthStore = defineStore('auth', () => {
           currentUser.value = user
         }
       }
-    } catch {
-      // Auth not available (e.g., no database open)
+    } catch (e) {
+      logService.warn(
+        'Auth check failed: ' + (e instanceof Error ? e.message : String(e)),
+        'auth'
+      )
     }
   }
 

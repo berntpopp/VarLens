@@ -70,6 +70,7 @@
 import { ref, computed, watch } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { mdiClose } from '@mdi/js'
+import { logService } from '../../services/LogService'
 
 interface GeneListItem {
   id: number
@@ -155,8 +156,11 @@ async function saveGeneList(): Promise<void> {
     const updatedLists = await geneListsApi.list()
     emit('saved', { listId, geneLists: updatedLists })
     emit('update:modelValue', false)
-  } catch {
-    // Silently fail
+  } catch (e) {
+    logService.error(
+      'Failed to save gene list: ' + (e instanceof Error ? e.message : String(e)),
+      'gene-list'
+    )
   } finally {
     savingGeneList.value = false
   }
@@ -171,8 +175,11 @@ async function deleteCurrentGeneList(): Promise<void> {
     const updatedLists = await (api as any).geneLists.list()
     emit('deleted', { geneLists: updatedLists })
     emit('update:modelValue', false)
-  } catch {
-    // Silently fail
+  } catch (e) {
+    logService.error(
+      'Failed to delete gene list: ' + (e instanceof Error ? e.message : String(e)),
+      'gene-list'
+    )
   }
 }
 </script>

@@ -75,6 +75,7 @@ import { ref, computed, onMounted } from 'vue'
 import { mdiClose, mdiTune } from '@mdi/js'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useApiService } from '../composables/useApiService'
+import { logService } from '../services/LogService'
 
 const settings = useSettingsStore()
 const { api } = useApiService()
@@ -88,8 +89,11 @@ onMounted(async () => {
     if (api?.system?.getCpuCount) {
       cpuCount.value = await api.system.getCpuCount()
     }
-  } catch {
-    // fallback to navigator.hardwareConcurrency
+  } catch (e) {
+    logService.warn(
+      'Failed to get CPU count from main process: ' + (e instanceof Error ? e.message : String(e)),
+      'settings'
+    )
   }
 })
 
