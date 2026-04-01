@@ -21,6 +21,8 @@ export type ExportMainMessage = {
   caseName: string
   /** Active filter summary for metadata sheet */
   filterSummary: ExportFilterSummary
+  /** Export format — inferred from file extension by the renderer */
+  format: 'xlsx' | 'csv'
 }
 
 /** Summary of active filters for the Excel metadata sheet */
