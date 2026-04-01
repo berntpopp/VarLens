@@ -34,7 +34,7 @@ export class LruMap<K, V> {
     this.map.set(key, value)
     while (this.map.size > this.maxSize) {
       const oldest = this.map.keys().next()
-      if (oldest.done) break
+      if (oldest.done === true) break
       this.map.delete(oldest.value)
     }
   }
