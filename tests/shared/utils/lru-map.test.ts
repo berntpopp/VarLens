@@ -86,4 +86,32 @@ describe('LruMap', () => {
     cache.set('b', 2)
     expect([...cache.values()]).toEqual([1, 2])
   })
+
+  it('keys() returns all keys in insertion order', () => {
+    const cache = new LruMap<string, number>(5)
+    cache.set('a', 1)
+    cache.set('b', 2)
+    expect([...cache.keys()]).toEqual(['a', 'b'])
+  })
+
+  it('get() promotes entries with falsy values (0, false, null, empty string)', () => {
+    const cache = new LruMap<string, number | null | boolean | string>(2)
+
+    // Test with 0
+    cache.set('zero', 0)
+    cache.set('other', 1)
+    cache.get('zero') // promote 'zero'
+    cache.set('new', 2) // should evict 'other', not 'zero'
+    expect(cache.get('zero')).toBe(0)
+    expect(cache.get('other')).toBeUndefined()
+
+    // Test with null
+    cache.clear()
+    cache.set('null-val', null)
+    cache.set('other', 1)
+    cache.get('null-val') // promote
+    cache.set('new', 2) // evicts 'other'
+    expect(cache.get('null-val')).toBeNull()
+    expect(cache.get('other')).toBeUndefined()
+  })
 })

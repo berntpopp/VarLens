@@ -1,19 +1,12 @@
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
-import type { Kysely, SelectQueryBuilder } from 'kysely'
+import type { Kysely } from 'kysely'
 import { sql } from 'kysely'
 import type { VarlensDatabase } from '../../shared/types/database-schema'
 import type { Variant } from './types'
+import type { VariantQueryBuilder } from './VariantFilterBuilder'
 import { tokenize, parse } from '../../shared/utils/boolean-search'
 import { emitFts5Search } from './search/fts5-search-emitter'
 import { mainLogger } from '../services/MainLogger'
-
-/**
- * Kysely query builder type for variant queries.
- * Uses `any` for the table union to accommodate the LEFT JOIN alias ('vf')
- * and the computed `internal_af` column which isn't in any physical table schema.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type VariantQueryBuilder = SelectQueryBuilder<VarlensDatabase, any, Record<string, unknown>>
 
 /**
  * FTS5 search and gene symbol lookup for variants.
@@ -113,7 +106,7 @@ export class VariantSearchService {
       .select('gene_symbol')
       .distinct()
       .where('case_id', '=', caseId)
-      .where('gene_symbol', 'like', `%${query}%`)
+      .where('gene_symbol', 'like', `${query}%`)
       .where('gene_symbol', 'is not', null)
       .orderBy('gene_symbol')
       .limit(limit)

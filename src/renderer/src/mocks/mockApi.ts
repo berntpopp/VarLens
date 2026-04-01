@@ -558,7 +558,12 @@ export const mockApi: WindowAPI = {
     }),
     rebuildSummary: async () => {},
     onSummaryRebuilt: () => () => {},
-    runAssociation: async () => ({ results: [], warnings: [], elapsed_ms: 0, primary_test: 'fisher' }),
+    runAssociation: async () => ({
+      results: [],
+      warnings: [],
+      elapsed_ms: 0,
+      primary_test: 'fisher'
+    }),
     cancelAssociation: async () => {},
     onAssociationProgress: () => () => {}
   },

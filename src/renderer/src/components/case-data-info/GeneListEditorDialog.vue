@@ -121,8 +121,7 @@ watch(
         geneListName.value = gl.name
         geneListDescription.value = ''
         if (api) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(api as any).geneLists.getGenes(gl.id).then((genes: string[]) => {
+          api.geneLists.getGenes(gl.id).then((genes: string[]) => {
             geneListGenesText.value = genes.join('\n')
           })
         }
@@ -141,8 +140,7 @@ async function saveGeneList(): Promise<void> {
   if (name === '' || !api) return
   savingGeneList.value = true
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const geneListsApi = (api as any).geneLists
+    const geneListsApi = api.geneLists
     let listId: number
     if (editingGeneList.value != null) {
       listId = editingGeneList.value
@@ -169,10 +167,8 @@ async function saveGeneList(): Promise<void> {
 async function deleteCurrentGeneList(): Promise<void> {
   if (editingGeneList.value == null || !api) return
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (api as any).geneLists.delete(editingGeneList.value)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updatedLists = await (api as any).geneLists.list()
+    await api.geneLists.delete(editingGeneList.value)
+    const updatedLists = await api.geneLists.list()
     emit('deleted', { geneLists: updatedLists })
     emit('update:modelValue', false)
   } catch (e) {

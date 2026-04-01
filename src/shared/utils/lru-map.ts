@@ -19,12 +19,11 @@ export class LruMap<K, V> {
   }
 
   get(key: K): V | undefined {
-    const value = this.map.get(key)
-    if (value !== undefined) {
-      // Move to end (most recently used)
-      this.map.delete(key)
-      this.map.set(key, value)
-    }
+    if (!this.map.has(key)) return undefined
+    const value = this.map.get(key) as V
+    // Move to end (most recently used)
+    this.map.delete(key)
+    this.map.set(key, value)
     return value
   }
 
@@ -34,9 +33,9 @@ export class LruMap<K, V> {
     }
     this.map.set(key, value)
     while (this.map.size > this.maxSize) {
-      const oldestKey = this.map.keys().next().value
-      if (oldestKey === undefined) break
-      this.map.delete(oldestKey)
+      const oldest = this.map.keys().next()
+      if (oldest.done) break
+      this.map.delete(oldest.value)
     }
   }
 

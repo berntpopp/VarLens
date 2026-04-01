@@ -36,7 +36,7 @@ export function isUrlSafeForExternal(url: string): boolean {
     const parsed = new URL(url)
     if (parsed.protocol !== 'https:') return false
     return isDomainAllowed(parsed.hostname)
-  } catch (_e) {
+  } catch {
     return false
   }
 }

@@ -31,7 +31,12 @@ export function useAssociation() {
 
   function cancelAssociation(): void {
     if (!api) return
-    api.cohort.cancelAssociation()
+    api.cohort.cancelAssociation().catch((e) => {
+      logService.warn(
+        'Failed to cancel association: ' + (e instanceof Error ? e.message : String(e)),
+        'association'
+      )
+    })
   }
 
   function onAssociationProgress(
@@ -61,8 +66,12 @@ export function useAssociation() {
             sex: fullMeta?.metadata?.sex ?? null,
             cohortIds: fullMeta?.cohorts?.map((co: CohortGroup) => co.id) ?? []
           }
-        } catch {
-          logService.warn(`Failed to load metadata for case ${c.id}`, 'association')
+        } catch (e) {
+          logService.warn(
+            `Failed to load metadata for case ${c.id}: ` +
+              (e instanceof Error ? e.message : String(e)),
+            'association'
+          )
           return { id: c.id, name: c.name, status: null, sex: null, cohortIds: [] }
         }
       })
