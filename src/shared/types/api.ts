@@ -174,6 +174,7 @@ export interface VariantsAPI {
   ) => Promise<PaginatedResult<Variant>>
   getFilterOptions: (caseId: number) => Promise<FilterOptions>
   search: (caseId: number, query: string, limit?: number) => Promise<Variant[]>
+  geneSymbols: (caseId: number, query: string, limit?: number) => Promise<string[]>
 }
 
 export interface FilterOptions {
@@ -334,6 +335,11 @@ export interface CohortAPI {
   getSummaryStatus: () => Promise<{ is_stale: boolean; last_rebuilt_at: number }>
   rebuildSummary: () => Promise<void>
   onSummaryRebuilt: (callback: (status: { is_stale: boolean }) => void) => () => void
+  runAssociation: (config: unknown) => Promise<unknown>
+  cancelAssociation: () => Promise<void>
+  onAssociationProgress: (
+    callback: (progress: { completed: number; total: number }) => void
+  ) => () => void
 }
 
 // Annotation update types

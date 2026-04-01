@@ -69,6 +69,9 @@ export type MockApi = {
     getSummary: ReturnType<typeof vi.fn>
     getCarriers: ReturnType<typeof vi.fn>
     getGeneBurden: ReturnType<typeof vi.fn>
+    runAssociation: ReturnType<typeof vi.fn>
+    cancelAssociation: ReturnType<typeof vi.fn>
+    onAssociationProgress: ReturnType<typeof vi.fn>
   }
   annotations: {
     getGlobal: ReturnType<typeof vi.fn>
@@ -246,7 +249,10 @@ export function createMockApi(): MockApi {
       getVariants: vi.fn().mockResolvedValue({ data: [], total_count: 0 }),
       getSummary: vi.fn().mockResolvedValue({ totalCases: 0, totalVariants: 0 }),
       getCarriers: vi.fn().mockResolvedValue([]),
-      getGeneBurden: vi.fn().mockResolvedValue([])
+      getGeneBurden: vi.fn().mockResolvedValue([]),
+      runAssociation: vi.fn().mockResolvedValue({ results: [], warnings: [] }),
+      cancelAssociation: vi.fn().mockResolvedValue(undefined),
+      onAssociationProgress: vi.fn(() => vi.fn()) // Returns cleanup function
     },
 
     annotations: {
