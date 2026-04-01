@@ -227,7 +227,7 @@ const {
   invalidateAndReload,
   resetSort
 } = useOffsetPagination<CohortVariant>({
-  fetchPage: async ({ offset, limit, sortBy: sortItems }) => {
+  fetchPage: async ({ offset, limit, sortBy: sortItems, skipCount }) => {
     if (!api) {
       return { data: [], total_count: 0 }
     }
@@ -240,7 +240,8 @@ const {
       offset,
       sort_by: sortKey,
       sort_order: sortOrder,
-      ...buildCohortQueryParams()
+      ...buildCohortQueryParams(),
+      _count_needed: skipCount !== true
     }
 
     const plainParams = buildIpcParams(params)
