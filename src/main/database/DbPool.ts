@@ -40,14 +40,20 @@ export class DbPool {
   /**
    * Initialise the worker pool.
    *
-   * @param dbPath     Absolute path to the SQLite database file.
-   * @param encryptionKey  Optional encryption key (passed via workerData).
-   * @param options    Optional overrides (workerPath, execArgv, maxThreads) for tests or config.
+   * @param dbPath        Absolute path to the SQLite database file.
+   * @param encryptionKey Optional encryption key (passed via workerData).
+   * @param options       Optional overrides (workerPath, execArgv, maxThreads, geneRefDbPath) for tests or config.
    */
   init(
     dbPath: string,
     encryptionKey?: string,
-    options?: { workerPath?: string; execArgv?: string[]; maxThreads?: number }
+    options?: {
+      workerPath?: string
+      execArgv?: string[]
+      maxThreads?: number
+      /** Path to the bundled gene_reference.db, forwarded to the worker for panel interval computation */
+      geneRefDbPath?: string
+    }
   ): void {
     if (this.pool !== null) return // already initialised
 
@@ -60,7 +66,7 @@ export class DbPool {
       minThreads: 1,
       maxThreads,
       idleTimeout: DATABASE_CONFIG.WORKER_IDLE_TIMEOUT_MS,
-      workerData: { dbPath, encryptionKey },
+      workerData: { dbPath, encryptionKey, geneRefDbPath: options?.geneRefDbPath },
       ...(options?.execArgv !== undefined ? { execArgv: options.execArgv } : {})
     })
   }

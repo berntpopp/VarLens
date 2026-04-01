@@ -9,19 +9,25 @@
 
 import Database from 'better-sqlite3-multiple-ciphers'
 import { workerData } from 'worker_threads'
+import { existsSync } from 'fs'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createRepositories } from '../database/createRepositories'
 import type { Repositories } from '../database/createRepositories'
+import { GeneReferenceDb } from '../database/GeneReferenceDb'
 import { AssociationDataBuilder } from '../database/AssociationDataBuilder'
 import type { VariantFilters } from '../statistics/types'
 import type { DbTask } from '../../shared/types/db-task'
 import { convertBigInts } from '../utils/convertBigInts'
+import type { VariantFilter } from '../database/types'
 
 // ── Initialise connection from workerData ──────────────────────
 
-const { dbPath, encryptionKey } = workerData as {
+const { dbPath, encryptionKey, geneRefDbPath } = workerData as {
   dbPath: string
   encryptionKey?: string
+  /** Path to the bundled gene_reference.db — resolved on the main thread
+   *  and forwarded here because Electron's `app` is not available in workers */
+  geneRefDbPath?: string
 }
 
 const db = new Database(dbPath)
@@ -46,6 +52,90 @@ db.pragma('query_only = ON')
 
 const repos: Repositories = createRepositories(db)
 
+// ── Gene reference DB (for panel interval computation) ────────
+// Opened from the path forwarded via workerData. The main thread resolves
+// the path using Electron's `app` module (not available in worker threads).
+
+function openGeneRefDb(): GeneReferenceDb | null {
+  if (geneRefDbPath === undefined || !existsSync(geneRefDbPath)) return null
+  try {
+    const raw = new Database(geneRefDbPath, { readonly: true, fileMustExist: true })
+    return new GeneReferenceDb(raw)
+  } catch {
+    // Gene ref DB unavailable — panel interval computation will be skipped
+    return null
+  }
+}
+
+const geneRefDb: GeneReferenceDb | null = openGeneRefDb()
+
+/** Minimal shape for a filter object that may carry panel IPC fields */
+interface PanelAwareFilter {
+  active_panel_ids?: number[]
+  panel_padding_bp?: number
+  genome_build?: string
+  panel_intervals?: Array<{ chr: string; start: number; end: number }>
+  [key: string]: unknown
+}
+
+/**
+ * Resolve panel intervals within the worker thread so the main thread
+ * is not blocked by the computation.
+ *
+ * Mutates `filter` in place: sets `panel_intervals` and removes
+ * `active_panel_ids` / `panel_padding_bp` / `genome_build` so the
+ * repository does not see IPC-only fields.
+ *
+ * No-op when the gene reference DB is unavailable.
+ *
+ * @param filter  Query filter object (variants or cohort)
+ * @param caseId  When set, chr prefix is derived from the specified case.
+ *                Omit for cohort mode — a sample variant row is queried instead.
+ */
+function resolvePanelIntervalsInPlace(filter: PanelAwareFilter, caseId?: number): void {
+  const panelIds = filter.active_panel_ids
+  if (panelIds === undefined || panelIds.length === 0 || geneRefDb === null) {
+    delete filter.active_panel_ids
+    delete filter.panel_padding_bp
+    delete filter.genome_build
+    return
+  }
+
+  const paddingBp = filter.panel_padding_bp ?? 5000
+  const genomeBuild = filter.genome_build ?? 'GRCh38'
+
+  // Detect chr prefix
+  const chrPrefix: boolean =
+    caseId !== undefined
+      ? repos.variants.getChrPrefix(caseId)
+      : (() => {
+          // Cohort mode: sample any variant
+          const sampleRow = db.prepare('SELECT chr FROM variants LIMIT 1').get() as
+            | { chr: string }
+            | undefined
+          return sampleRow?.chr?.startsWith('chr') === true
+        })()
+
+  try {
+    const intervals = repos.panels.computeIntervals(
+      panelIds,
+      genomeBuild,
+      paddingBp,
+      geneRefDb,
+      chrPrefix
+    )
+    if (intervals.length > 0) {
+      filter.panel_intervals = intervals
+    }
+  } catch {
+    // Computation failed — proceed without panel filtering
+  }
+
+  delete filter.active_panel_ids
+  delete filter.panel_padding_bp
+  delete filter.genome_build
+}
+
 // ── Task dispatcher ────────────────────────────────────────────
 
 export default function run(task: DbTask): unknown {
@@ -54,13 +144,19 @@ export default function run(task: DbTask): unknown {
   try {
     switch (type) {
       // ── Variants ──────────────────────────────────────────
-      case 'variants:query':
+      case 'variants:query': {
+        const filter = params[0] as PanelAwareFilter & VariantFilter
+        // Resolve panel intervals off the main thread (no-op when gene ref DB unavailable)
+        if ((filter.active_panel_ids?.length ?? 0) > 0) {
+          resolvePanelIntervalsInPlace(filter, filter.case_id)
+        }
         return repos.variants.getVariants(
-          params[0] as Parameters<typeof repos.variants.getVariants>[0],
+          filter,
           params[1] as number,
           params[2] as number,
           params[3] as Parameters<typeof repos.variants.getVariants>[3]
         )
+      }
 
       case 'variants:filterOptions':
         return repos.variants.getFilterOptions(params[0] as number)
@@ -80,10 +176,15 @@ export default function run(task: DbTask): unknown {
         )
 
       // ── Cohort ────────────────────────────────────────────
-      case 'cohort:variants':
-        return repos.cohort.getCohortVariants(
-          params[0] as Parameters<typeof repos.cohort.getCohortVariants>[0]
-        )
+      case 'cohort:variants': {
+        const cohortParams = params[0] as PanelAwareFilter &
+          Parameters<typeof repos.cohort.getCohortVariants>[0]
+        // Resolve panel intervals off the main thread (cohort mode: no specific case)
+        if ((cohortParams.active_panel_ids?.length ?? 0) > 0) {
+          resolvePanelIntervalsInPlace(cohortParams)
+        }
+        return repos.cohort.getCohortVariants(cohortParams)
+      }
 
       case 'cohort:columnMeta':
         return repos.cohort.getColumnMeta()

@@ -99,32 +99,44 @@ export function registerVariantHandlers({ ipcMain, getDb, getDbPool }: HandlerDe
           ...validatedFilters.data
         }
 
-        // Compute panel intervals if active panels specified
+        const pool = getDbPool?.()
+
         if (fullFilter.active_panel_ids && fullFilter.active_panel_ids.length > 0) {
-          const dbRef = getDb()
-          const caseData = dbRef.cases.getCase(fullFilter.case_id)
-          const genomeBuild = caseData?.genome_build ?? 'GRCh38'
+          if (pool) {
+            // Pool path: let the worker resolve intervals off the main thread.
+            // Attach genome_build so the worker can look up coordinates in the
+            // correct assembly without making an extra IPC-side DB call.
+            const dbRef = getDb()
+            const caseData = dbRef.cases.getCase(fullFilter.case_id)
+            ;(fullFilter as VariantFilter & { genome_build?: string }).genome_build =
+              caseData?.genome_build ?? 'GRCh38'
+            // active_panel_ids and panel_padding_bp are forwarded as-is
+          } else {
+            // Fallback (no pool): compute on the main thread synchronously
+            const dbRef = getDb()
+            const caseData = dbRef.cases.getCase(fullFilter.case_id)
+            const genomeBuild = caseData?.genome_build ?? 'GRCh38'
 
-          const intervals = computePanelIntervals(
-            dbRef,
-            {
-              active_panel_ids: fullFilter.active_panel_ids,
-              panel_padding_bp: fullFilter.panel_padding_bp,
-              genome_build: genomeBuild
-            },
-            fullFilter.case_id,
-            'variants'
-          )
-          if (intervals) {
-            fullFilter.panel_intervals = intervals
+            const intervals = computePanelIntervals(
+              dbRef,
+              {
+                active_panel_ids: fullFilter.active_panel_ids,
+                panel_padding_bp: fullFilter.panel_padding_bp,
+                genome_build: genomeBuild
+              },
+              fullFilter.case_id,
+              'variants'
+            )
+            if (intervals) {
+              fullFilter.panel_intervals = intervals
+            }
+
+            // Clean up IPC-only fields that shouldn't reach the repository
+            delete fullFilter.active_panel_ids
+            delete fullFilter.panel_padding_bp
           }
-
-          // Clean up IPC-only fields that shouldn't reach the repository
-          delete fullFilter.active_panel_ids
-          delete fullFilter.panel_padding_bp
         }
 
-        const pool = getDbPool?.()
         if (pool) {
           return await pool.run({
             type: 'variants:query',

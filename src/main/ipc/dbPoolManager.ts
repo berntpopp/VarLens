@@ -5,6 +5,7 @@
 
 import { DbPool } from '../database/DbPool'
 import { mainLogger } from '../services/MainLogger'
+import { resolveGeneRefDbPath } from '../database/geneReferenceLoader'
 
 /** Singleton DbPool instance — created lazily when a database is opened */
 let dbPool: DbPool | null = null
@@ -48,7 +49,26 @@ export async function initDbPool(dbPath: string, encryptionKey?: string): Promis
   await destroyDbPool()
   dbPool = new DbPool()
   const maxThreads = configuredWorkerThreads > 0 ? configuredWorkerThreads : undefined
-  dbPool.init(dbPath, encryptionKey, maxThreads !== undefined ? { maxThreads } : undefined)
+
+  // Resolve gene reference DB path once on the main thread and pass it to
+  // the worker via workerData — Electron's `app` module is not available
+  // in worker threads so the worker cannot call resolveGeneRefDbPath() itself.
+  let geneRefDbPath: string | undefined
+  try {
+    geneRefDbPath = resolveGeneRefDbPath()
+  } catch {
+    // Gene ref DB not available (dev without resources, fresh install before
+    // first launch). Panel interval computation in workers will be skipped.
+    mainLogger.warn(
+      'Gene reference DB not found — panel interval computation will be skipped in worker threads',
+      'ipc'
+    )
+  }
+
+  dbPool.init(dbPath, encryptionKey, {
+    ...(maxThreads !== undefined ? { maxThreads } : {}),
+    geneRefDbPath
+  })
   mainLogger.info(
     `DbPool initialized for worker-thread reads (threads: ${maxThreads ?? 'auto'})`,
     'ipc'

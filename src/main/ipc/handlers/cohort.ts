@@ -49,30 +49,40 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
         throw new Error('Invalid search parameters')
       }
 
-      // Compute panel intervals if active panels specified (DRY: shared helper)
       const cohortParams = { ...validated.data } as typeof validated.data & {
         panel_intervals?: Array<{ chr: string; start: number; end: number }>
-      }
-      if (cohortParams.active_panel_ids && cohortParams.active_panel_ids.length > 0) {
-        const dbRef = getDb()
-        const intervals = computePanelIntervals(
-          dbRef,
-          {
-            active_panel_ids: cohortParams.active_panel_ids,
-            panel_padding_bp: cohortParams.panel_padding_bp
-          },
-          undefined, // cohort mode: no specific case, sample any variant
-          'cohort'
-        )
-        if (intervals) {
-          cohortParams.panel_intervals = intervals
-        }
-        // Clean up IPC-only fields that shouldn't reach the service
-        delete cohortParams.active_panel_ids
-        delete cohortParams.panel_padding_bp
+        genome_build?: string
       }
 
       const pool = getDbPool?.()
+
+      if (cohortParams.active_panel_ids && cohortParams.active_panel_ids.length > 0) {
+        if (pool) {
+          // Pool path: let the worker resolve intervals off the main thread.
+          // Cohort mode defaults to GRCh38 (no per-case genome build).
+          cohortParams.genome_build = 'GRCh38'
+          // active_panel_ids and panel_padding_bp are forwarded as-is
+        } else {
+          // Fallback (no pool): compute panel intervals on the main thread
+          const dbRef = getDb()
+          const intervals = computePanelIntervals(
+            dbRef,
+            {
+              active_panel_ids: cohortParams.active_panel_ids,
+              panel_padding_bp: cohortParams.panel_padding_bp
+            },
+            undefined, // cohort mode: no specific case, sample any variant
+            'cohort'
+          )
+          if (intervals) {
+            cohortParams.panel_intervals = intervals
+          }
+          // Clean up IPC-only fields that shouldn't reach the service
+          delete cohortParams.active_panel_ids
+          delete cohortParams.panel_padding_bp
+        }
+      }
+
       let result: ReturnType<CohortService['getCohortVariants']>
       if (pool) {
         result = await pool.run({ type: 'cohort:variants', params: [cohortParams] })

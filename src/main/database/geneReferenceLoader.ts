@@ -25,7 +25,15 @@ let rawDb: import('better-sqlite3-multiple-ciphers').Database | null = null
  * 2. Production: process.resourcesPath/gene_reference.db
  * 3. Dev: app.getAppPath()/resources/gene_reference.db
  * 4. Fallback: __dirname/../../resources/gene_reference.db
+ *
+ * Exported so callers outside the Electron main process (e.g. dbPoolManager)
+ * can resolve the path once on the main thread and forward it to worker threads
+ * via workerData (Electron's `app` is not available in worker threads).
  */
+export function resolveGeneRefDbPath(): string {
+  return resolveDbPath()
+}
+
 function resolveDbPath(): string {
   // 1. User data path: updated DB from gene-ref:update takes precedence
   const userDataPath = join(app.getPath('userData'), 'gene_reference.db')
