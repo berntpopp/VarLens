@@ -25,6 +25,7 @@ import {
   type ActiveFilter,
   type FilterIpcParams
 } from '../utils/filters'
+import { useFilterCore } from './useFilterCore'
 
 /**
  * NULL Handling Policy (ANTI-10)
@@ -165,6 +166,10 @@ function createInitialFilterState(): FilterState {
  * ```
  */
 export function createFilters(): UseFiltersReturn {
+  // Shared filter core — owns consequences, funcs, clinvars, numeric thresholds,
+  // acmgClassifications and provides reset/clearFilter helpers for those fields.
+  const core = useFilterCore()
+
   // Core filter state
   const filters = ref<FilterState>(createInitialFilterState())
   const searchTerm = ref('')
@@ -229,8 +234,27 @@ export function createFilters(): UseFiltersReturn {
    * Clear all filters and reset to initial state
    */
   function clearAllFilters(): void {
+    // Reset shared fields via core, then sync back to filters object
+    core.reset()
+    filters.value.consequences = core.consequences.value
+    filters.value.funcs = core.funcs.value
+    filters.value.clinvars = core.clinvars.value
+    filters.value.maxGnomadAf = core.gnomadAfMax.value
+    filters.value.minCadd = core.caddMin.value
+    filters.value.maxInternalAf = core.maxInternalAf.value
+    filters.value.acmgClassifications = core.acmgClassifications.value
+
+    // Reset adapter-specific fields
     searchTerm.value = ''
-    filters.value = createInitialFilterState()
+    filters.value.geneSymbol = ''
+    filters.value.minCarriers = null
+    filters.value.starredOnly = false
+    filters.value.hasCommentOnly = false
+    filters.value.activePanelIds = []
+    filters.value.panelPaddingBp = 5000
+    filters.value.inheritanceModes = []
+    filters.value.analysisGroupId = null
+    filters.value.considerPhasing = false
     selectedImpactPresets.value = []
     selectedAfPreset.value = null
     selectedCaddPreset.value = null
@@ -239,19 +263,44 @@ export function createFilters(): UseFiltersReturn {
   }
 
   /**
+   * Map of cohort adapter filter IDs to core filter IDs for shared fields
+   */
+  const CORE_FILTER_ID_MAP: Record<string, string> = {
+    funcs: 'funcs',
+    clinvars: 'clinvars',
+    frequency: 'gnomad_af',
+    'internal-frequency': 'internal_af',
+    cadd: 'cadd',
+    acmg: 'acmg'
+  }
+
+  /**
    * Clear a specific filter by ID
    */
   function clearFilter(filterId: string): void {
-    const partialUpdate = clearFilterUtil(filterId as FilterId)
+    const coreId = CORE_FILTER_ID_MAP[filterId]
+    if (coreId !== undefined) {
+      // Delegate to core for shared fields, then sync back
+      core.clearFilter(coreId)
+      filters.value.funcs = core.funcs.value
+      filters.value.clinvars = core.clinvars.value
+      filters.value.maxGnomadAf = core.gnomadAfMax.value
+      filters.value.minCadd = core.caddMin.value
+      filters.value.maxInternalAf = core.maxInternalAf.value
+      filters.value.acmgClassifications = core.acmgClassifications.value
+    } else {
+      // Use existing utility for non-core fields (search, gene, impact, panels, etc.)
+      const partialUpdate = clearFilterUtil(filterId as FilterId)
 
-    // Handle searchQuery -> searchTerm mapping
-    if ('searchQuery' in partialUpdate) {
-      searchTerm.value = partialUpdate.searchQuery as string
-      delete partialUpdate.searchQuery
+      // Handle searchQuery -> searchTerm mapping
+      if ('searchQuery' in partialUpdate) {
+        searchTerm.value = partialUpdate.searchQuery as string
+        delete partialUpdate.searchQuery
+      }
+
+      // Apply remaining filter updates
+      Object.assign(filters.value, partialUpdate)
     }
-
-    // Apply remaining filter updates
-    Object.assign(filters.value, partialUpdate)
 
     // Clear associated presets and custom inputs
     switch (filterId) {
@@ -265,11 +314,6 @@ export function createFilters(): UseFiltersReturn {
         break
       case 'impact':
         selectedImpactPresets.value = []
-        break
-      case 'starred':
-      case 'comments':
-      case 'acmg':
-        // Already handled by clearFilterUtil above
         break
     }
   }

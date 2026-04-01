@@ -35,6 +35,7 @@ import {
 } from './filter-types'
 import { useFilterPresets } from './useFilterPresets'
 import { useFilterExport } from './useFilterExport'
+import { useFilterCore } from './useFilterCore'
 import { logService } from '../services/LogService'
 
 // Re-export types so existing consumers (e.g. filterDrawerTypes.ts) continue to work
@@ -56,6 +57,10 @@ export function useFilterState(
   options: UseFilterStateOptions
 ): UseFilterStateReturn {
   const { onFiltersUpdate, onResetSort, onCaseSwitch } = options
+
+  // Shared filter core — owns consequences, funcs, clinvars, numeric thresholds,
+  // acmgClassifications and provides reset/clearFilter helpers for those fields.
+  const core = useFilterCore()
 
   // API service
   const { api } = useApiService()
@@ -372,6 +377,31 @@ export function useFilterState(
   // -------------------------------------------------------------------------
 
   const clearFilter = (filterId: string): void => {
+    // Map adapter filter IDs to core IDs for shared fields, then sync back
+    const coreIdMap: Record<string, string> = {
+      consequences: 'consequences',
+      funcs: 'funcs',
+      clinvars: 'clinvars',
+      frequency: 'gnomad_af',
+      'internal-frequency': 'internal_af',
+      cadd: 'cadd',
+      acmg: 'acmg'
+    }
+
+    const coreId = coreIdMap[filterId]
+    if (coreId !== undefined) {
+      core.clearFilter(coreId)
+      // Sync core state back to filters object
+      filters.value.consequences = core.consequences.value
+      filters.value.funcs = core.funcs.value
+      filters.value.clinvars = core.clinvars.value
+      filters.value.maxGnomadAf = core.gnomadAfMax.value
+      filters.value.minCadd = core.caddMin.value
+      filters.value.maxInternalAf = core.maxInternalAf.value
+      filters.value.acmgClassifications = core.acmgClassifications.value
+    }
+
+    // Handle adapter-specific and preset-related clearing
     switch (filterId) {
       case 'search':
         filters.value.searchQuery = ''
@@ -382,24 +412,10 @@ export function useFilterState(
       case 'impact':
         selectedImpactPresets.value = []
         break
-      case 'consequences':
-        filters.value.consequences = []
-        break
-      case 'funcs':
-        filters.value.funcs = []
-        break
-      case 'clinvars':
-        filters.value.clinvars = []
-        break
       case 'frequency':
-        filters.value.maxGnomadAf = null
         selectedAfPreset.value = null
         break
-      case 'internal-frequency':
-        filters.value.maxInternalAf = null
-        break
       case 'cadd':
-        filters.value.minCadd = null
         selectedCaddPreset.value = null
         break
       case 'tags':
@@ -410,9 +426,6 @@ export function useFilterState(
         break
       case 'commented':
         filters.value.hasCommentOnly = false
-        break
-      case 'acmg':
-        filters.value.acmgClassifications = []
         break
       case 'annotationScope':
         filters.value.annotationScope = 'case'
@@ -434,18 +447,22 @@ export function useFilterState(
   }
 
   const clearAllFilters = () => {
+    // Reset shared fields via core, then sync back to filters object
+    core.reset()
+    filters.value.consequences = core.consequences.value
+    filters.value.funcs = core.funcs.value
+    filters.value.clinvars = core.clinvars.value
+    filters.value.maxGnomadAf = core.gnomadAfMax.value
+    filters.value.minCadd = core.caddMin.value
+    filters.value.maxInternalAf = core.maxInternalAf.value
+    filters.value.acmgClassifications = core.acmgClassifications.value
+
+    // Reset adapter-specific fields
     filters.value.searchQuery = ''
     filters.value.geneSymbol = ''
-    filters.value.consequences = []
-    filters.value.funcs = []
-    filters.value.clinvars = []
-    filters.value.maxGnomadAf = null
-    filters.value.minCadd = null
-    filters.value.maxInternalAf = null
     filters.value.tagIds = []
     filters.value.starredOnly = false
     filters.value.hasCommentOnly = false
-    filters.value.acmgClassifications = []
     filters.value.annotationScope = 'case'
     filters.value.activePanelIds = []
     filters.value.panelPaddingBp = 5000
@@ -503,18 +520,22 @@ export function useFilterState(
    * Reset all filters for a case switch (without triggering sort reset)
    */
   const resetForCaseSwitch = () => {
+    // Reset shared fields via core, then sync back to filters object
+    core.reset()
+    filters.value.consequences = core.consequences.value
+    filters.value.funcs = core.funcs.value
+    filters.value.clinvars = core.clinvars.value
+    filters.value.maxGnomadAf = core.gnomadAfMax.value
+    filters.value.minCadd = core.caddMin.value
+    filters.value.maxInternalAf = core.maxInternalAf.value
+    filters.value.acmgClassifications = core.acmgClassifications.value
+
+    // Reset adapter-specific fields
     filters.value.searchQuery = ''
     filters.value.geneSymbol = ''
-    filters.value.consequences = []
-    filters.value.funcs = []
-    filters.value.clinvars = []
-    filters.value.maxGnomadAf = null
-    filters.value.minCadd = null
-    filters.value.maxInternalAf = null
     filters.value.tagIds = []
     filters.value.starredOnly = false
     filters.value.hasCommentOnly = false
-    filters.value.acmgClassifications = []
     filters.value.annotationScope = 'case'
     filters.value.activePanelIds = []
     filters.value.panelPaddingBp = 5000
