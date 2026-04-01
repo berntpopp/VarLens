@@ -52,14 +52,12 @@
       <!-- Annotations column (star, ACMG, comment) -->
       <template #[`item.annotations`]="{ item }">
         <AnnotationsCell
-          :is-starred="isStarred(item.chr, item.pos, item.ref, item.alt)"
-          :is-global-starred="isGlobalStarred(item.chr, item.pos, item.ref, item.alt)"
-          :acmg-classification="getAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
-          :global-acmg-classification="
-            getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)
-          "
-          :has-comment="!!getPerCaseComment(item.chr, item.pos, item.ref, item.alt)"
-          :has-global-comment="!!getGlobalComment(item.chr, item.pos, item.ref, item.alt)"
+          :is-starred="getViewModel(item.chr, item.pos, item.ref, item.alt)?.isStarred ?? false"
+          :is-global-starred="getViewModel(item.chr, item.pos, item.ref, item.alt)?.isGlobalStarred ?? false"
+          :acmg-classification="getViewModel(item.chr, item.pos, item.ref, item.alt)?.acmgClassification ?? null"
+          :global-acmg-classification="getViewModel(item.chr, item.pos, item.ref, item.alt)?.globalAcmgClassification ?? null"
+          :has-comment="getViewModel(item.chr, item.pos, item.ref, item.alt)?.hasComment ?? false"
+          :has-global-comment="getViewModel(item.chr, item.pos, item.ref, item.alt)?.hasGlobalComment ?? false"
           :show-global-indicators="true"
           :annotation-scope="annotationScope"
           @star-toggle="annotationDialogsRef?.handleStarToggle(item)"
@@ -72,8 +70,8 @@
       <!-- Chromosome with dynamic link from store -->
       <template #[`item.chr`]="{ item, value }">
         <ExternalLinkCell
-          v-if="getLinkForColumn('chr') && resolveLink(getLinkForColumn('chr')!.id, item)"
-          :url="resolveLink(getLinkForColumn('chr')!.id, item)!"
+          v-if="getViewModel(item.chr, item.pos, item.ref, item.alt)?.links.chr"
+          :url="getViewModel(item.chr, item.pos, item.ref, item.alt)!.links.chr!"
           :label="value"
           @click="openExternalLink"
         />
@@ -84,11 +82,7 @@
       <template #[`item.pos`]="{ item, value }">
         <PositionCell
           :position="value"
-          :url="
-            getLinkForColumn('pos') && resolveLink(getLinkForColumn('pos')!.id, item)
-              ? resolveLink(getLinkForColumn('pos')!.id, item)!
-              : null
-          "
+          :url="getViewModel(item.chr, item.pos, item.ref, item.alt)?.links.pos ?? null"
           @click="openExternalLink"
         />
       </template>
@@ -102,13 +96,7 @@
       <template #[`item.clinvar`]="{ item, value }">
         <ClinVarCell
           :significance="value"
-          :url="
-            value &&
-            getLinkForColumn('clinvar') &&
-            resolveLink(getLinkForColumn('clinvar')!.id, item)
-              ? resolveLink(getLinkForColumn('clinvar')!.id, item)!
-              : null
-          "
+          :url="value ? (getViewModel(item.chr, item.pos, item.ref, item.alt)?.links.clinvar ?? null) : null"
           @click="openExternalLink"
         />
       </template>
@@ -132,13 +120,7 @@
       <template #[`item.gene_symbol`]="{ item, value }">
         <GeneSymbolCell
           :value="value"
-          :link-url="
-            value &&
-            getLinkForColumn('gene_symbol') &&
-            resolveLink(getLinkForColumn('gene_symbol')!.id, item)
-              ? resolveLink(getLinkForColumn('gene_symbol')!.id, item)!
-              : null
-          "
+          :link-url="value ? (getViewModel(item.chr, item.pos, item.ref, item.alt)?.links.gene_symbol ?? null) : null"
           @click="openExternalLink"
         />
       </template>
@@ -282,9 +264,11 @@ import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import { buildActiveFiltersList } from '../utils/filters/activeFilters'
 import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
-import { useAnnotations } from '../composables/useAnnotations'
+import { useAnnotations, annotationCache } from '../composables/useAnnotations'
+import { useVariantRowViewModel } from './variant-table/useVariantRowViewModel'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useVariantLinks } from '../composables/useVariantLinks'
+import { resolveUrlTemplate } from '../utils/externalLinks'
 import { formatConsequence } from '../utils/formatters'
 import { useTableScroll } from '../composables/useTableScroll'
 import { useTableKeyboardNav } from '../composables/useTableKeyboardNav'
@@ -330,10 +314,6 @@ const emit = defineEmits<{
 
 // Annotations
 const {
-  isStarred,
-  isGlobalStarred,
-  getAcmgClassification,
-  getGlobalAcmgClassification,
   getAcmgEvidence,
   toggleStar,
   setAcmgClassification,
@@ -367,7 +347,7 @@ const annotationActions = {
 }
 
 // Links
-const { linksStore, buildOmimEntryUrl, resolveLink, getLinkForColumn, openExternalLink } =
+const { linksStore, buildOmimEntryUrl, resolveLink, openExternalLink } =
   useVariantLinks()
 
 // Column preferences and column definitions
@@ -406,6 +386,41 @@ const {
 
 // Column metadata map + filter modes (shared composable)
 const { columnMetaMap, columnFilterModes } = useColumnFilterMeta(columnMeta)
+
+// Precomputed link config: one resolver per column, updated when store changes
+const linkConfig = computed<Record<string, import('./variant-table/useVariantRowViewModel').LinkConfig>>(() => {
+  const config: Record<string, import('./variant-table/useVariantRowViewModel').LinkConfig> = {}
+  for (const link of linksStore.enabledLinks) {
+    if (link.column === 'virtual') continue
+    const capturedLink = link
+    config[link.column] = {
+      id: link.id,
+      resolve: (item) =>
+        resolveUrlTemplate(
+          capturedLink.urlTemplate,
+          {
+            chr: item.chr ?? null,
+            pos: item.pos ?? null,
+            ref: item.ref ?? null,
+            alt: item.alt ?? null,
+            gene_symbol: item.gene_symbol ?? null,
+            mim_number: item.omim_mim_number ?? null
+          },
+          linksStore.genomeBuild,
+          capturedLink.requiredFields
+        )
+    }
+  }
+  return config
+})
+
+// Precomputed row view models: annotation + link state per variant key
+const { getViewModel } = useVariantRowViewModel(
+  variants,
+  annotationCache,
+  linkConfig,
+  toRef(props, 'annotationScope')
+)
 
 // Column active filter chips for the toolbar
 const columnActiveFilters = computed<ActiveFilter[]>(() => {

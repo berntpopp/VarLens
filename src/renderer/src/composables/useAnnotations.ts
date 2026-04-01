@@ -25,7 +25,8 @@ export const MAX_CACHE_SIZE = 5000
 
 // Cache annotations by variant key (chr:pos:ref:alt)
 // shallowRef avoids deep reactive proxies on 5000+ Map entries
-const annotationCache = shallowRef<Map<string, AnnotationCache>>(new Map())
+// Exported so useVariantRowViewModel can read it for precomputed row state
+export const annotationCache = shallowRef<Map<string, AnnotationCache>>(new Map())
 
 // Loading states per variant key
 const loadingStates = shallowRef<Map<string, boolean>>(new Map())
