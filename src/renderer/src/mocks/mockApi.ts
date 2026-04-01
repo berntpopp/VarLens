@@ -557,7 +557,10 @@ export const mockApi: WindowAPI = {
       last_rebuilt_at: Math.floor(Date.now() / 1000)
     }),
     rebuildSummary: async () => {},
-    onSummaryRebuilt: () => () => {}
+    onSummaryRebuilt: () => () => {},
+    runAssociation: async () => ({ results: [], warnings: [], elapsed_ms: 0, primary_test: 'fisher' }),
+    cancelAssociation: async () => {},
+    onAssociationProgress: () => () => {}
   },
 
   annotations: {

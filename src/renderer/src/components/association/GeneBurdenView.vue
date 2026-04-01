@@ -110,8 +110,33 @@ interface CohortGroup {
   name: string
 }
 
-type AssociationResultsData = {
-  results: Array<{ q_value: number | null; [key: string]: unknown }>
+interface AssociationResult {
+  gene_symbol: string
+  n_variants: number
+  groupA_carriers: number
+  groupB_carriers: number
+  groupA_total: number
+  groupB_total: number
+  fisher: {
+    p_value: number | null
+    odds_ratio: number | null
+    ci_lower: number | null
+    ci_upper: number | null
+  }
+  logistic_burden: {
+    p_value: number | null
+    beta: number | null
+    se: number | null
+    ci_lower: number | null
+    ci_upper: number | null
+    used_firth: boolean
+    warning?: string
+  }
+  q_value: number | null
+}
+
+interface AssociationResultsData {
+  results: AssociationResult[]
   warnings: string[]
   elapsed_ms: number
   primary_test: string
