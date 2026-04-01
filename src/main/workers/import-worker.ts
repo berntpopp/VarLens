@@ -46,7 +46,10 @@ port.on('message', async (msg: MainMessage) => {
       try {
         db.exec(MARK_STALE_SQL)
       } catch (e) {
-        console.warn('[import-worker] Failed to mark cohort summary as stale (table may not exist yet):', e instanceof Error ? e.message : String(e))
+        console.warn(
+          '[import-worker] Failed to mark cohort summary as stale (table may not exist yet):',
+          e instanceof Error ? e.message : String(e)
+        )
       }
 
       const totalFiles = msg.files.length
@@ -186,7 +189,10 @@ port.on('message', async (msg: MainMessage) => {
             try {
               stmts.insertDataInfo.run(caseId, fileName, formatInfo.format)
             } catch (e) {
-              console.warn('[import-worker] Failed to insert data_info provenance:', e instanceof Error ? e.message : String(e))
+              console.warn(
+                '[import-worker] Failed to insert data_info provenance:',
+                e instanceof Error ? e.message : String(e)
+              )
             }
 
             const elapsed = Date.now() - startTime
@@ -267,24 +273,36 @@ port.on('message', async (msg: MainMessage) => {
         try {
           db.exec(RECREATE_INDEXES)
         } catch (e) {
-          console.warn('[import-worker] Failed to recreate indexes (will be recreated on next app start):', e instanceof Error ? e.message : String(e))
+          console.warn(
+            '[import-worker] Failed to recreate indexes (will be recreated on next app start):',
+            e instanceof Error ? e.message : String(e)
+          )
         }
         try {
           db.pragma('wal_checkpoint(TRUNCATE)')
         } catch (e) {
-          console.warn('[import-worker] Failed to truncate WAL checkpoint:', e instanceof Error ? e.message : String(e))
+          console.warn(
+            '[import-worker] Failed to truncate WAL checkpoint:',
+            e instanceof Error ? e.message : String(e)
+          )
         }
         try {
           db.pragma('synchronous = NORMAL')
           db.pragma('wal_autocheckpoint = 1000')
           db.pragma('foreign_keys = ON')
         } catch (e) {
-          console.warn('[import-worker] Failed to restore pragmas after import:', e instanceof Error ? e.message : String(e))
+          console.warn(
+            '[import-worker] Failed to restore pragmas after import:',
+            e instanceof Error ? e.message : String(e)
+          )
         }
         try {
           db.close()
         } catch (e) {
-          console.warn('[import-worker] Failed to close database:', e instanceof Error ? e.message : String(e))
+          console.warn(
+            '[import-worker] Failed to close database:',
+            e instanceof Error ? e.message : String(e)
+          )
         }
       }
     }

@@ -207,7 +207,10 @@ function schemaAlreadyExists(db: Database.Database): boolean {
       .get() as { c: number }
     return row.c === 4
   } catch (e) {
-    mainLogger.warn('Failed to check schema existence: ' + (e instanceof Error ? e.message : String(e)), 'schema')
+    mainLogger.warn(
+      'Failed to check schema existence: ' + (e instanceof Error ? e.message : String(e)),
+      'schema'
+    )
     return false
   }
 }
@@ -274,7 +277,11 @@ export function initializeSchema(db: Database.Database): void {
         needsFtsRebuild = !ftsHasOmim
       }
     } catch (e) {
-      mainLogger.warn('Failed to inspect FTS schema (will rebuild): ' + (e instanceof Error ? e.message : String(e)), 'schema')
+      mainLogger.warn(
+        'Failed to inspect FTS schema (will rebuild): ' +
+          (e instanceof Error ? e.message : String(e)),
+        'schema'
+      )
       needsFtsRebuild = true
     }
   }

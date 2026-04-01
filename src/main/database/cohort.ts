@@ -339,7 +339,11 @@ export class CohortService {
     try {
       ast = parse(tokens)
     } catch (e) {
-      mainLogger.warn('Malformed boolean search expression, falling back to single-term: ' + (e instanceof Error ? e.message : String(e)), 'CohortService')
+      mainLogger.warn(
+        'Malformed boolean search expression, falling back to single-term: ' +
+          (e instanceof Error ? e.message : String(e)),
+        'CohortService'
+      )
       return this.buildSingleTermCondition(term, paramsArray)
     }
     const { sql, params } = emitCohortSearch(ast)

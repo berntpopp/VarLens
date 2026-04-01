@@ -120,13 +120,21 @@ export function registerDatabaseHandlers({
         try {
           await initDbPool(vPath, vPassword)
         } catch (e) {
-          mainLogger.warn('DbPool init failed — reads will use main thread: ' + (e instanceof Error ? e.message : String(e)), 'database')
+          mainLogger.warn(
+            'DbPool init failed — reads will use main thread: ' +
+              (e instanceof Error ? e.message : String(e)),
+            'database'
+          )
         }
         // Trigger async cohort summary rebuild if needed (non-blocking)
         try {
           triggerStartupRebuildIfNeeded(getDb())
         } catch (e) {
-          mainLogger.warn('triggerStartupRebuildIfNeeded failed (best effort — database open continues): ' + (e instanceof Error ? e.message : String(e)), 'database')
+          mainLogger.warn(
+            'triggerStartupRebuildIfNeeded failed (best effort — database open continues): ' +
+              (e instanceof Error ? e.message : String(e)),
+            'database'
+          )
         }
         const info = manager.getCurrentInfo()
         return {
@@ -164,7 +172,11 @@ export function registerDatabaseHandlers({
       try {
         await initDbPool(validated.data.path, validated.data.password)
       } catch (e) {
-        mainLogger.warn('DbPool init failed — reads will use main thread: ' + (e instanceof Error ? e.message : String(e)), 'database')
+        mainLogger.warn(
+          'DbPool init failed — reads will use main thread: ' +
+            (e instanceof Error ? e.message : String(e)),
+          'database'
+        )
       }
 
       const info = manager.getCurrentInfo()

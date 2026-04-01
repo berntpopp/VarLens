@@ -338,7 +338,10 @@ function formatDate(dateStr: string | number): string {
     return new Date(dateStr).toLocaleDateString()
   } catch (e) {
     logService.warn(
-      'Failed to format date "' + String(dateStr) + '": ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to format date "' +
+        String(dateStr) +
+        '": ' +
+        (e instanceof Error ? e.message : String(e)),
       'panels'
     )
     return String(dateStr)

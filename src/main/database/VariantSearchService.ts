@@ -47,7 +47,11 @@ export class VariantSearchService {
       ast = parse(tokens)
     } catch (e) {
       // Malformed boolean expression — fall back to single-term search
-      mainLogger.warn('Malformed boolean search expression, falling back to single-term: ' + (e instanceof Error ? e.message : String(e)), 'VariantSearchService')
+      mainLogger.warn(
+        'Malformed boolean search expression, falling back to single-term: ' +
+          (e instanceof Error ? e.message : String(e)),
+        'VariantSearchService'
+      )
       return this.applySingleSearchToken(query, term)
     }
     const { sql: boolExpr, params } = emitFts5Search(ast)

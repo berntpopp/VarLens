@@ -37,7 +37,10 @@ if (isMainThread) {
     log.transports.console.level = 'debug'
   } catch (e) {
     // electron-log or electron not available — fall back to console
-    console.warn('[MainLogger] electron-log/electron not available, falling back to console:', e instanceof Error ? e.message : String(e))
+    console.warn(
+      '[MainLogger] electron-log/electron not available, falling back to console:',
+      e instanceof Error ? e.message : String(e)
+    )
     log = null
     BrowserWindow = null
   }

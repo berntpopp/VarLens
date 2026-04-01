@@ -24,7 +24,10 @@ export class ZipExtractor {
         return header['encrypted'] === true || header['encripted'] === true
       })
     } catch (e) {
-      mainLogger.warn('Failed to check ZIP encryption: ' + (e instanceof Error ? e.message : String(e)), 'ZipExtractor')
+      mainLogger.warn(
+        'Failed to check ZIP encryption: ' + (e instanceof Error ? e.message : String(e)),
+        'ZipExtractor'
+      )
       return false
     }
   }
@@ -117,7 +120,10 @@ export class ZipExtractor {
       getDataWithPassword.getData(password)
       return true
     } catch (e) {
-      mainLogger.warn('ZIP password test failed: ' + (e instanceof Error ? e.message : String(e)), 'ZipExtractor')
+      mainLogger.warn(
+        'ZIP password test failed: ' + (e instanceof Error ? e.message : String(e)),
+        'ZipExtractor'
+      )
       return false
     }
   }

@@ -147,7 +147,11 @@ export class MyVariantApiClient {
         }
       } catch (e) {
         // Cache corrupted, continue to fetch
-        mainLogger.warn(`Corrupted myvariant cache entry for ${cacheKey}: ` + (e instanceof Error ? e.message : String(e)), 'api')
+        mainLogger.warn(
+          `Corrupted myvariant cache entry for ${cacheKey}: ` +
+            (e instanceof Error ? e.message : String(e)),
+          'api'
+        )
       }
     }
 
@@ -251,7 +255,13 @@ export class MyVariantApiClient {
       const data = MyVariantResponseSchema.parse(JSON.parse(cached.data))
       return { data, createdAt: cached.createdAt }
     } catch (e) {
-      mainLogger.warn('Corrupted myvariant cache entry for ' + cacheKey + ': ' + (e instanceof Error ? e.message : String(e)), 'api')
+      mainLogger.warn(
+        'Corrupted myvariant cache entry for ' +
+          cacheKey +
+          ': ' +
+          (e instanceof Error ? e.message : String(e)),
+        'api'
+      )
       return null
     }
   }

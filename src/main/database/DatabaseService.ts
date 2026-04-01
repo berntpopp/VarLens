@@ -206,7 +206,11 @@ export class DatabaseService {
         // Clean up expired API cache entries
         this.db.prepare('DELETE FROM api_cache WHERE expires_at < ?').run(Date.now())
       } catch (e) {
-        mainLogger.warn('Failed to clean up expired API cache entries: ' + (e instanceof Error ? e.message : String(e)), 'database')
+        mainLogger.warn(
+          'Failed to clean up expired API cache entries: ' +
+            (e instanceof Error ? e.message : String(e)),
+          'database'
+        )
       }
     })
 
@@ -215,7 +219,11 @@ export class DatabaseService {
       try {
         this.db.prepare('DELETE FROM api_cache WHERE expires_at < ?').run(Date.now())
       } catch (e) {
-        mainLogger.warn('Periodic API cache cleanup failed (DB may be closed): ' + (e instanceof Error ? e.message : String(e)), 'database')
+        mainLogger.warn(
+          'Periodic API cache cleanup failed (DB may be closed): ' +
+            (e instanceof Error ? e.message : String(e)),
+          'database'
+        )
       }
     }, DATABASE_CONFIG.CACHE_CLEANUP_INTERVAL_MS)
     // Prevent the timer from keeping the Node.js event loop alive during quit
@@ -235,7 +243,10 @@ export class DatabaseService {
       const variantRow = this.db.prepare('SELECT 1 FROM variants LIMIT 1').get()
       return summaryRow === undefined && variantRow !== undefined
     } catch (e) {
-      mainLogger.warn('Failed to check startup rebuild status: ' + (e instanceof Error ? e.message : String(e)), 'database')
+      mainLogger.warn(
+        'Failed to check startup rebuild status: ' + (e instanceof Error ? e.message : String(e)),
+        'database'
+      )
       return false
     }
   }
@@ -312,7 +323,10 @@ export class DatabaseService {
       // Merge the WAL back into the main DB file so the next open is fast
       this.db.pragma('wal_checkpoint(TRUNCATE)')
     } catch (e) {
-      mainLogger.warn('Failed to optimize/checkpoint on close: ' + (e instanceof Error ? e.message : String(e)), 'database')
+      mainLogger.warn(
+        'Failed to optimize/checkpoint on close: ' + (e instanceof Error ? e.message : String(e)),
+        'database'
+      )
     } finally {
       this.db.close()
     }

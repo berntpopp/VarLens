@@ -644,10 +644,7 @@ export function useFilterState(
 
     try {
       // Load filter options and tags in parallel
-      const [options] = await Promise.all([
-        api!.variants.getFilterOptions(caseId),
-        loadTags()
-      ])
+      const [options] = await Promise.all([api!.variants.getFilterOptions(caseId), loadTags()])
       filterOptions.value = options
       cacheFilterOptions(caseId, options)
     } catch (error) {

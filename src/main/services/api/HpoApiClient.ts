@@ -132,7 +132,10 @@ export class HpoApiClient {
     try {
       return JSON.parse(cached.data) as HpoTerm[]
     } catch (e) {
-      mainLogger.warn('Corrupted HPO cache entry: ' + (e instanceof Error ? e.message : String(e)), 'api')
+      mainLogger.warn(
+        'Corrupted HPO cache entry: ' + (e instanceof Error ? e.message : String(e)),
+        'api'
+      )
       return null
     }
   }

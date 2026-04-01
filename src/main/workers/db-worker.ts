@@ -62,7 +62,10 @@ function openGeneRefDb(): GeneReferenceDb | null {
     const raw = new Database(geneRefDbPath, { readonly: true, fileMustExist: true })
     return new GeneReferenceDb(raw)
   } catch (e) {
-    console.warn('[db-worker] Failed to open gene reference DB (panel interval computation will be skipped):', e instanceof Error ? e.message : String(e))
+    console.warn(
+      '[db-worker] Failed to open gene reference DB (panel interval computation will be skipped):',
+      e instanceof Error ? e.message : String(e)
+    )
     return null
   }
 }
@@ -129,7 +132,10 @@ function resolvePanelIntervalsInPlace(filter: PanelAwareFilter, caseId?: number)
       filter.panel_intervals = intervals
     }
   } catch (e) {
-    console.warn('[db-worker] Panel interval computation failed (proceeding without panel filtering):', e instanceof Error ? e.message : String(e))
+    console.warn(
+      '[db-worker] Panel interval computation failed (proceeding without panel filtering):',
+      e instanceof Error ? e.message : String(e)
+    )
   }
 
   delete filter.active_panel_ids

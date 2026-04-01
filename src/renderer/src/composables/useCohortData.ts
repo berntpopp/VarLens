@@ -166,8 +166,7 @@ export function useCohortData(): UseCohortDataReturn {
         })
         .catch((e: unknown) => {
           logService.warn(
-            'Failed to get cohort summary status: ' +
-              (e instanceof Error ? e.message : String(e)),
+            'Failed to get cohort summary status: ' + (e instanceof Error ? e.message : String(e)),
             'cohort'
           )
         })

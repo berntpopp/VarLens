@@ -24,7 +24,11 @@ export async function loadSettings(): Promise<ImportSettings> {
       return JSON.parse(data as string)
     }
   } catch (e) {
-    mainLogger.warn('Failed to load settings (file may not exist or parse error): ' + (e instanceof Error ? e.message : String(e)), 'settings-io')
+    mainLogger.warn(
+      'Failed to load settings (file may not exist or parse error): ' +
+        (e instanceof Error ? e.message : String(e)),
+      'settings-io'
+    )
   }
   return {}
 }

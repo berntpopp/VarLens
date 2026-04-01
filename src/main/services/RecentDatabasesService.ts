@@ -121,7 +121,11 @@ export class RecentDatabasesService {
       )
       return { recentDatabases }
     } catch (e) {
-      mainLogger.warn('Failed to load recent databases settings (file may not exist): ' + (e instanceof Error ? e.message : String(e)), 'RecentDatabasesService')
+      mainLogger.warn(
+        'Failed to load recent databases settings (file may not exist): ' +
+          (e instanceof Error ? e.message : String(e)),
+        'RecentDatabasesService'
+      )
       return { recentDatabases: [] }
     }
   }
@@ -144,7 +148,10 @@ export class RecentDatabasesService {
           'database'
         )
       } catch (logError) {
-        console.warn('[RecentDatabasesService] Failed to save recent databases and logging unavailable:', logError instanceof Error ? logError.message : String(logError))
+        console.warn(
+          '[RecentDatabasesService] Failed to save recent databases and logging unavailable:',
+          logError instanceof Error ? logError.message : String(logError)
+        )
       }
     }
   }

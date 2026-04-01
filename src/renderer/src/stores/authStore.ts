@@ -23,10 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
         }
       }
     } catch (e) {
-      logService.warn(
-        'Auth check failed: ' + (e instanceof Error ? e.message : String(e)),
-        'auth'
-      )
+      logService.warn('Auth check failed: ' + (e instanceof Error ? e.message : String(e)), 'auth')
     }
   }
 

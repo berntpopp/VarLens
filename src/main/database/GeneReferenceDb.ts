@@ -238,7 +238,10 @@ export class GeneReferenceDb {
         }
       }
     } catch (e) {
-      mainLogger.warn('FTS5 symbol autocomplete query failed: ' + (e instanceof Error ? e.message : String(e)), 'GeneReferenceDb')
+      mainLogger.warn(
+        'FTS5 symbol autocomplete query failed: ' + (e instanceof Error ? e.message : String(e)),
+        'GeneReferenceDb'
+      )
     }
 
     // Alias matches second
@@ -274,7 +277,10 @@ export class GeneReferenceDb {
         }
       }
     } catch (e) {
-      mainLogger.warn('FTS5 alias autocomplete query failed: ' + (e instanceof Error ? e.message : String(e)), 'GeneReferenceDb')
+      mainLogger.warn(
+        'FTS5 alias autocomplete query failed: ' + (e instanceof Error ? e.message : String(e)),
+        'GeneReferenceDb'
+      )
     }
 
     return Array.from(seen.values()).slice(0, limit)

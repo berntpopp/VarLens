@@ -110,7 +110,11 @@ export class DatabaseManager {
         try {
           testDb.close()
         } catch (e) {
-          mainLogger.warn('Failed to close test DB during encryption detection: ' + (e instanceof Error ? e.message : String(e)), 'DatabaseManager')
+          mainLogger.warn(
+            'Failed to close test DB during encryption detection: ' +
+              (e instanceof Error ? e.message : String(e)),
+            'DatabaseManager'
+          )
         }
       }
 

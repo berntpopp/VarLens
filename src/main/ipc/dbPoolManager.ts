@@ -60,7 +60,8 @@ export async function initDbPool(dbPath: string, encryptionKey?: string): Promis
     // Gene ref DB not available (dev without resources, fresh install before
     // first launch). Panel interval computation in workers will be skipped.
     mainLogger.warn(
-      'Gene reference DB not found — panel interval computation will be skipped in worker threads: ' + (e instanceof Error ? e.message : String(e)),
+      'Gene reference DB not found — panel interval computation will be skipped in worker threads: ' +
+        (e instanceof Error ? e.message : String(e)),
       'ipc'
     )
   }

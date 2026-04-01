@@ -55,12 +55,18 @@ port.on('message', (msg: RebuildWorkerRequest) => {
     try {
       db.exec('ANALYZE cohort_variant_summary')
     } catch (e) {
-      console.warn('[rebuild-summary-worker] Failed to ANALYZE cohort_variant_summary:', e instanceof Error ? e.message : String(e))
+      console.warn(
+        '[rebuild-summary-worker] Failed to ANALYZE cohort_variant_summary:',
+        e instanceof Error ? e.message : String(e)
+      )
     }
     try {
       db.exec('ANALYZE gene_burden_summary')
     } catch (e) {
-      console.warn('[rebuild-summary-worker] Failed to ANALYZE gene_burden_summary:', e instanceof Error ? e.message : String(e))
+      console.warn(
+        '[rebuild-summary-worker] Failed to ANALYZE gene_burden_summary:',
+        e instanceof Error ? e.message : String(e)
+      )
     }
 
     const response: RebuildWorkerResponse = { type: 'complete' }
@@ -76,7 +82,10 @@ port.on('message', (msg: RebuildWorkerRequest) => {
       try {
         db.close()
       } catch (e) {
-        console.warn('[rebuild-summary-worker] Failed to close database:', e instanceof Error ? e.message : String(e))
+        console.warn(
+          '[rebuild-summary-worker] Failed to close database:',
+          e instanceof Error ? e.message : String(e)
+        )
       }
     }
   }

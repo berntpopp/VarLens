@@ -44,7 +44,10 @@ port.on('message', (msg: DeleteWorkerRequest) => {
     try {
       db.exec(MARK_STALE_SQL)
     } catch (e) {
-      console.warn('[delete-worker] Failed to mark cohort summary as stale (table may not exist):', e instanceof Error ? e.message : String(e))
+      console.warn(
+        '[delete-worker] Failed to mark cohort summary as stale (table may not exist):',
+        e instanceof Error ? e.message : String(e)
+      )
     }
 
     let deleted: number
@@ -73,7 +76,10 @@ port.on('message', (msg: DeleteWorkerRequest) => {
       try {
         db.exec(createFTSTriggers)
       } catch (e) {
-        console.warn('[delete-worker] Failed to restore FTS triggers after error:', e instanceof Error ? e.message : String(e))
+        console.warn(
+          '[delete-worker] Failed to restore FTS triggers after error:',
+          e instanceof Error ? e.message : String(e)
+        )
       }
     }
 
@@ -87,7 +93,10 @@ port.on('message', (msg: DeleteWorkerRequest) => {
       try {
         db.close()
       } catch (e) {
-        console.warn('[delete-worker] Failed to close database:', e instanceof Error ? e.message : String(e))
+        console.warn(
+          '[delete-worker] Failed to close database:',
+          e instanceof Error ? e.message : String(e)
+        )
       }
     }
   }
