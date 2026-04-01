@@ -97,7 +97,9 @@ test.describe('Variant Details Panel State Isolation', () => {
     // Note: VEP data requires clicking "Fetch VEP" button and network access.
     // We verify the structural behavior: consequence chip and cached indicator
     // should not be visible before VEP is fetched.
-    const consequenceChip = detailPanel.locator('.v-chip:has-text("missense"), .v-chip:has-text("stop"), .v-chip:has-text("frameshift"), .v-chip:has-text("synonymous"), .v-chip:has-text("splice")')
+    const consequenceChip = detailPanel.locator(
+      '.v-chip:has-text("missense"), .v-chip:has-text("stop"), .v-chip:has-text("frameshift"), .v-chip:has-text("synonymous"), .v-chip:has-text("splice")'
+    )
     const cachedIndicator = detailPanel.locator('text=Cached from')
 
     // Before fetching VEP, these should not be visible

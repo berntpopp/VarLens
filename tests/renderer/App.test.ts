@@ -7,7 +7,6 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import App from '../../src/renderer/src/App.vue'
 
-
 // Mock window.api for all components that need it
 // This must match the API structure in src/preload/index.ts
 const mockApi = {

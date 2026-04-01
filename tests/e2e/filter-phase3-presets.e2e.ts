@@ -425,9 +425,7 @@ test('preset bar works in cohort view', async ({}, testInfo) => {
     }
 
     // Navigate to cohort view
-    const cohortNav = window.locator(
-      '.v-navigation-drawer .v-list-item:has-text("Cohort")'
-    )
+    const cohortNav = window.locator('.v-navigation-drawer .v-list-item:has-text("Cohort")')
     if ((await cohortNav.count()) === 0) {
       console.log('⚠ No Cohort navigation item found — skipping')
       return

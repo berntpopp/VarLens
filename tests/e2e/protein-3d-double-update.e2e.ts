@@ -32,7 +32,10 @@ test('debug: double update for bg color', async ({}, testInfo) => {
     await window.waitForTimeout(1500)
 
     const proteinBtn = window.locator('[aria-label="Open protein view"]')
-    if ((await proteinBtn.count()) === 0) { test.skip(true, 'no btn'); return }
+    if ((await proteinBtn.count()) === 0) {
+      test.skip(true, 'no btn')
+      return
+    }
     await proteinBtn.first().click()
     await window.waitForTimeout(3000)
 
@@ -56,11 +59,14 @@ test('debug: double update for bg color', async ({}, testInfo) => {
       const customDataFormat = el.getAttribute('custom-data-format') || 'cif'
 
       // First update: change visual style with fullLoad
-      vi.visual.update({
-        visualStyle: 'molecular-surface',
-        bgColor: { r: 250, g: 248, b: 246 },
-        customData: { url: customDataUrl, format: customDataFormat }
-      }, true)
+      vi.visual.update(
+        {
+          visualStyle: 'molecular-surface',
+          bgColor: { r: 250, g: 248, b: 246 },
+          customData: { url: customDataUrl, format: customDataFormat }
+        },
+        true
+      )
     })
     await window.waitForTimeout(12000)
 
@@ -71,9 +77,12 @@ test('debug: double update for bg color', async ({}, testInfo) => {
       const el = document.querySelector('pdbe-molstar') as any
       const vi = el?.viewerInstance
       if (!vi) return
-      vi.visual.update({
-        bgColor: { r: 250, g: 248, b: 246 }
-      }, false)
+      vi.visual.update(
+        {
+          bgColor: { r: 250, g: 248, b: 246 }
+        },
+        false
+      )
     })
     await window.waitForTimeout(3000)
 
@@ -132,13 +141,15 @@ test('debug: double update for bg color', async ({}, testInfo) => {
       return 'element replaced'
     })
     const fs = await import('fs')
-    fs.writeFileSync(testInfo.outputPath('re-add-result.json'), JSON.stringify({ reAddResult }, null, 2))
+    fs.writeFileSync(
+      testInfo.outputPath('re-add-result.json'),
+      JSON.stringify({ reAddResult }, null, 2)
+    )
 
     // Wait for the new element to load
     await window.waitForTimeout(15000)
 
     await window.screenshot({ path: testInfo.outputPath('05-fresh-element-surface.png') })
-
   } finally {
     if (app) await app.close()
   }

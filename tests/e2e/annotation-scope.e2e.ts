@@ -176,9 +176,7 @@ test.describe('Annotation Scope Toggle - Case View', () => {
       await expect(annotationCells.first()).toBeVisible()
 
       // Should have star icon buttons
-      const starIcons = annotationCells
-        .first()
-        .locator('.mdi-star-outline, .mdi-star')
+      const starIcons = annotationCells.first().locator('.mdi-star-outline, .mdi-star')
       if ((await starIcons.count()) > 0) {
         await expect(starIcons.first()).toBeVisible()
       }

@@ -4,15 +4,18 @@ import type { Variant } from '../../../../src/main/database/types'
 
 describe('buildRowViewModels', () => {
   const makeVariant = (chr: string, pos: number, ref: string, alt: string): Variant =>
-    ({ chr, pos, ref, alt, gene_symbol: 'BRCA1', clinvar: 'Pathogenic' } as unknown as Variant)
+    ({ chr, pos, ref, alt, gene_symbol: 'BRCA1', clinvar: 'Pathogenic' }) as unknown as Variant
 
   it('should precompute annotation flags from cache', () => {
     const variants = [makeVariant('1', 100, 'A', 'T')]
     const annotationCache = new Map([
-      ['1:100:A:T', {
-        perCase: { starred: 1, acmg_classification: 'LP' as const, comment: 'test' },
-        global: { starred: 0, acmg_classification: 'VUS' as const, comment: '' }
-      }]
+      [
+        '1:100:A:T',
+        {
+          perCase: { starred: 1, acmg_classification: 'LP' as const, comment: 'test' },
+          global: { starred: 0, acmg_classification: 'VUS' as const, comment: '' }
+        }
+      ]
     ])
 
     const result = buildRowViewModels(variants, annotationCache, {}, 'per-case')
@@ -42,7 +45,11 @@ describe('buildRowViewModels', () => {
     const variants = [makeVariant('1', 100, 'A', 'T')]
     const linkConfig = {
       chr: { id: 'ucsc', resolve: (item: Variant) => `https://ucsc.edu/${item.chr}:${item.pos}` },
-      gene_symbol: { id: 'omim', resolve: (item: Variant) => item.gene_symbol ? `https://omim.org/${item.gene_symbol}` : null }
+      gene_symbol: {
+        id: 'omim',
+        resolve: (item: Variant) =>
+          item.gene_symbol ? `https://omim.org/${item.gene_symbol}` : null
+      }
     }
 
     const result = buildRowViewModels(variants, new Map(), linkConfig, 'per-case')

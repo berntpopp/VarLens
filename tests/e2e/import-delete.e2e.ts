@@ -129,7 +129,9 @@ test('import files, verify case list, then delete all', async ({}, testInfo) => 
   // If delete blocks the main thread, this will time out.
   const appVisible = await window.locator('.v-application').isVisible()
   const uiCheckTime = Date.now() - deleteStart
-  console.log(`UI check after delete click took ${uiCheckTime}ms (should be <500ms if non-blocking)`)
+  console.log(
+    `UI check after delete click took ${uiCheckTime}ms (should be <500ms if non-blocking)`
+  )
   expect(appVisible).toBe(true)
 
   // Wait for delete to complete and snackbar to appear

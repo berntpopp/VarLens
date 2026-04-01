@@ -32,7 +32,10 @@ test('debug: hex bgColor format', async ({}, testInfo) => {
     await window.waitForTimeout(1500)
 
     const proteinBtn = window.locator('[aria-label="Open protein view"]')
-    if ((await proteinBtn.count()) === 0) { test.skip(true, 'no btn'); return }
+    if ((await proteinBtn.count()) === 0) {
+      test.skip(true, 'no btn')
+      return
+    }
     await proteinBtn.first().click()
     await window.waitForTimeout(3000)
 
@@ -63,11 +66,14 @@ test('debug: hex bgColor format', async ({}, testInfo) => {
       const customDataUrl = el.getAttribute('custom-data-url')
       const customDataFormat = el.getAttribute('custom-data-format') || 'cif'
 
-      vi.visual.update({
-        visualStyle: 'molecular-surface',
-        bgColor: '#faf8f6',
-        customData: { url: customDataUrl, format: customDataFormat }
-      }, true)
+      vi.visual.update(
+        {
+          visualStyle: 'molecular-surface',
+          bgColor: '#faf8f6',
+          customData: { url: customDataUrl, format: customDataFormat }
+        },
+        true
+      )
     })
     await window.waitForTimeout(12000)
 
@@ -110,7 +116,10 @@ test('debug: hex bgColor format', async ({}, testInfo) => {
       if (!gl) return null
       return Array.from(gl.getParameter(gl.COLOR_CLEAR_VALUE) as Float32Array)
     })
-    fs.writeFileSync(testInfo.outputPath('after-bgonly-gl.json'), JSON.stringify({ afterBgOnlyGl }, null, 2))
+    fs.writeFileSync(
+      testInfo.outputPath('after-bgonly-gl.json'),
+      JSON.stringify({ afterBgOnlyGl }, null, 2)
+    )
 
     // Try: setProps on the renderer directly
     await window.evaluate(() => {
@@ -125,7 +134,7 @@ test('debug: hex bgColor format', async ({}, testInfo) => {
       // @ts-ignore - accessing internal
       const renderer = c3d.renderer || c3d._renderer
       if (renderer?.setProps) {
-        renderer.setProps({ backgroundColor: 0xFAF8F6 })
+        renderer.setProps({ backgroundColor: 0xfaf8f6 })
       }
     })
     await window.waitForTimeout(1000)
@@ -141,10 +150,12 @@ test('debug: hex bgColor format', async ({}, testInfo) => {
       const c3dKeys = c3d ? Object.keys(c3d) : []
       return { clearColor, c3dKeys }
     })
-    fs.writeFileSync(testInfo.outputPath('after-renderer-gl.json'), JSON.stringify(afterRendererGl, null, 2))
+    fs.writeFileSync(
+      testInfo.outputPath('after-renderer-gl.json'),
+      JSON.stringify(afterRendererGl, null, 2)
+    )
 
     await window.screenshot({ path: testInfo.outputPath('03-after-renderer-setProps.png') })
-
   } finally {
     if (app) await app.close()
   }

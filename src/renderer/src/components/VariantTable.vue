@@ -53,11 +53,19 @@
       <template #[`item.annotations`]="{ item }">
         <AnnotationsCell
           :is-starred="getViewModel(item.chr, item.pos, item.ref, item.alt)?.isStarred ?? false"
-          :is-global-starred="getViewModel(item.chr, item.pos, item.ref, item.alt)?.isGlobalStarred ?? false"
-          :acmg-classification="getViewModel(item.chr, item.pos, item.ref, item.alt)?.acmgClassification ?? null"
-          :global-acmg-classification="getViewModel(item.chr, item.pos, item.ref, item.alt)?.globalAcmgClassification ?? null"
+          :is-global-starred="
+            getViewModel(item.chr, item.pos, item.ref, item.alt)?.isGlobalStarred ?? false
+          "
+          :acmg-classification="
+            getViewModel(item.chr, item.pos, item.ref, item.alt)?.acmgClassification ?? null
+          "
+          :global-acmg-classification="
+            getViewModel(item.chr, item.pos, item.ref, item.alt)?.globalAcmgClassification ?? null
+          "
           :has-comment="getViewModel(item.chr, item.pos, item.ref, item.alt)?.hasComment ?? false"
-          :has-global-comment="getViewModel(item.chr, item.pos, item.ref, item.alt)?.hasGlobalComment ?? false"
+          :has-global-comment="
+            getViewModel(item.chr, item.pos, item.ref, item.alt)?.hasGlobalComment ?? false
+          "
           :show-global-indicators="true"
           :annotation-scope="annotationScope"
           @star-toggle="annotationDialogsRef?.handleStarToggle(item)"
@@ -96,7 +104,11 @@
       <template #[`item.clinvar`]="{ item, value }">
         <ClinVarCell
           :significance="value"
-          :url="value ? (getViewModel(item.chr, item.pos, item.ref, item.alt)?.links.clinvar ?? null) : null"
+          :url="
+            value
+              ? (getViewModel(item.chr, item.pos, item.ref, item.alt)?.links.clinvar ?? null)
+              : null
+          "
           @click="openExternalLink"
         />
       </template>
@@ -120,7 +132,11 @@
       <template #[`item.gene_symbol`]="{ item, value }">
         <GeneSymbolCell
           :value="value"
-          :link-url="value ? (getViewModel(item.chr, item.pos, item.ref, item.alt)?.links.gene_symbol ?? null) : null"
+          :link-url="
+            value
+              ? (getViewModel(item.chr, item.pos, item.ref, item.alt)?.links.gene_symbol ?? null)
+              : null
+          "
           @click="openExternalLink"
         />
       </template>
@@ -347,8 +363,7 @@ const annotationActions = {
 }
 
 // Links
-const { linksStore, buildOmimEntryUrl, resolveLink, openExternalLink } =
-  useVariantLinks()
+const { linksStore, buildOmimEntryUrl, resolveLink, openExternalLink } = useVariantLinks()
 
 // Column preferences and column definitions
 const { prefs } = useColumnPreferences('variant-table')
@@ -388,7 +403,9 @@ const {
 const { columnMetaMap, columnFilterModes } = useColumnFilterMeta(columnMeta)
 
 // Precomputed link config: one resolver per column, updated when store changes
-const linkConfig = computed<Record<string, import('./variant-table/useVariantRowViewModel').LinkConfig>>(() => {
+const linkConfig = computed<
+  Record<string, import('./variant-table/useVariantRowViewModel').LinkConfig>
+>(() => {
   const config: Record<string, import('./variant-table/useVariantRowViewModel').LinkConfig> = {}
   for (const link of linksStore.enabledLinks) {
     if (link.column === 'virtual') continue

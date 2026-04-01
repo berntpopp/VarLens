@@ -49,9 +49,9 @@ function openTestDb(): { svc: DatabaseService; raw: DatabaseType } {
 }
 
 function countVariants(db: DatabaseType, caseId: number): number {
-  const row = db
-    .prepare('SELECT COUNT(*) as cnt FROM variants WHERE case_id = ?')
-    .get(caseId) as { cnt: number }
+  const row = db.prepare('SELECT COUNT(*) as cnt FROM variants WHERE case_id = ?').get(caseId) as {
+    cnt: number
+  }
   return row.cnt
 }
 
@@ -165,7 +165,12 @@ function buildStmts(db: DatabaseType) {
     }
   }
 
-  return { insertBatch, beginBulkInsert, finishBulkInsert, updateVariantCount: updateVariantCountStmt }
+  return {
+    insertBatch,
+    beginBulkInsert,
+    finishBulkInsert,
+    updateVariantCount: updateVariantCountStmt
+  }
 }
 
 async function streamInsertJson(
@@ -395,9 +400,16 @@ describe('streaming JSON import', () => {
     const progressCalls: number[] = []
 
     stmts.beginBulkInsert()
-    await streamInsertJson(SIMPLE_JSON, caseId, 1, stmts, () => false, (n) => {
-      progressCalls.push(n)
-    })
+    await streamInsertJson(
+      SIMPLE_JSON,
+      caseId,
+      1,
+      stmts,
+      () => false,
+      (n) => {
+        progressCalls.push(n)
+      }
+    )
     stmts.finishBulkInsert(caseId, progressCalls[progressCalls.length - 1] ?? 0)
 
     // With batchSize=1 and 3 variants, we expect 3 progress calls
@@ -569,15 +581,7 @@ describe('streaming VCF import', () => {
     const stmts = buildStmts(db)
 
     await expect(
-      streamInsertVcf(
-        SYNTHETIC_VCF,
-        caseId,
-        1000,
-        stmts,
-        () => false,
-        ['HG005', 'HG006'],
-        vi.fn()
-      )
+      streamInsertVcf(SYNTHETIC_VCF, caseId, 1000, stmts, () => false, ['HG005', 'HG006'], vi.fn())
     ).rejects.toThrow('Worker expects at most one VCF sample per file entry but received 2')
   })
 
@@ -652,9 +656,17 @@ describe('streaming VCF import', () => {
     const progressCalls: number[] = []
 
     stmts.beginBulkInsert()
-    await streamInsertVcf(SYNTHETIC_VCF, caseId, 1, stmts, () => false, ['HG005'], (n) => {
-      progressCalls.push(n)
-    })
+    await streamInsertVcf(
+      SYNTHETIC_VCF,
+      caseId,
+      1,
+      stmts,
+      () => false,
+      ['HG005'],
+      (n) => {
+        progressCalls.push(n)
+      }
+    )
 
     expect(progressCalls.length).toBeGreaterThan(0)
     for (let i = 1; i < progressCalls.length; i++) {

@@ -56,7 +56,14 @@ describe('getVariants — includeUnfilteredCount', () => {
   })
 
   it('does NOT include unfiltered_count when flag is undefined', () => {
-    const result = db.variants.getVariants({ case_id: caseId }, 50, 0, undefined, undefined, undefined)
+    const result = db.variants.getVariants(
+      { case_id: caseId },
+      50,
+      0,
+      undefined,
+      undefined,
+      undefined
+    )
     expect('unfiltered_count' in result).toBe(false)
   })
 

@@ -91,15 +91,11 @@ import { AppStateKey, createAppState } from './composables/useAppState'
 import { useApiService } from './composables/useApiService'
 import { useImportStatusStore } from './stores/importStatusStore'
 
-const ImportStatusBar = defineAsyncComponent(
-  () => import('./components/ImportStatusBar.vue')
-)
+const ImportStatusBar = defineAsyncComponent(() => import('./components/ImportStatusBar.vue'))
 const VariantDetailsPanel = defineAsyncComponent(
   () => import('./components/VariantDetailsPanel.vue')
 )
-const AppDialogHost = defineAsyncComponent(
-  () => import('./components/AppDialogHost.vue')
-)
+const AppDialogHost = defineAsyncComponent(() => import('./components/AppDialogHost.vue'))
 const KeyboardShortcutsDialog = defineAsyncComponent(
   () => import('./components/KeyboardShortcutsDialog.vue')
 )

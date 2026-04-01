@@ -226,7 +226,15 @@ describe('useFilterCore', () => {
       core.acmgClassifications.value = ['LP']
 
       const ids = core.activeFiltersList.value.map((f) => f.id)
-      expect(ids).toEqual(['consequences', 'funcs', 'clinvars', 'gnomad_af', 'cadd', 'internal_af', 'acmg'])
+      expect(ids).toEqual([
+        'consequences',
+        'funcs',
+        'clinvars',
+        'gnomad_af',
+        'cadd',
+        'internal_af',
+        'acmg'
+      ])
     })
   })
 

@@ -95,10 +95,7 @@ test('debug: inspect molstar viewer instance', async ({}, testInfo) => {
 
     // Write debug info as text file
     const fs = await import('fs')
-    fs.writeFileSync(
-      testInfo.outputPath('debug-info.json'),
-      JSON.stringify(debugInfo, null, 2)
-    )
+    fs.writeFileSync(testInfo.outputPath('debug-info.json'), JSON.stringify(debugInfo, null, 2))
 
     // Now switch to Surface
     const toolbar = window.locator('.structure-controls')
@@ -148,7 +145,6 @@ test('debug: inspect molstar viewer instance', async ({}, testInfo) => {
     await window.waitForTimeout(1000)
 
     await window.screenshot({ path: testInfo.outputPath('surface-after-setBgColor.png') })
-
   } finally {
     if (app) await app.close()
   }

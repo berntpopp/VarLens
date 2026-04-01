@@ -32,7 +32,10 @@ test('debug: highlight causes dark bg', async ({}, testInfo) => {
     await window.waitForTimeout(1500)
 
     const proteinBtn = window.locator('[aria-label="Open protein view"]')
-    if ((await proteinBtn.count()) === 0) { test.skip(true, 'no btn'); return }
+    if ((await proteinBtn.count()) === 0) {
+      test.skip(true, 'no btn')
+      return
+    }
     await proteinBtn.first().click()
     await window.waitForTimeout(3000)
 
@@ -100,13 +103,15 @@ test('debug: highlight causes dark bg', async ({}, testInfo) => {
     })
 
     const fs = await import('fs')
-    fs.writeFileSync(testInfo.outputPath('select-result.json'), JSON.stringify({ selectResult }, null, 2))
+    fs.writeFileSync(
+      testInfo.outputPath('select-result.json'),
+      JSON.stringify({ selectResult }, null, 2)
+    )
 
     await window.waitForTimeout(3000)
 
     // Screenshot: surface WITH visual.select()
     await window.screenshot({ path: testInfo.outputPath('03-surface-after-select.png') })
-
   } finally {
     if (app) await app.close()
   }

@@ -32,7 +32,10 @@ test('debug: requestDraw after setBgColor', async ({}, testInfo) => {
     await window.waitForTimeout(1500)
 
     const proteinBtn = window.locator('[aria-label="Open protein view"]')
-    if ((await proteinBtn.count()) === 0) { test.skip(true, 'no btn'); return }
+    if ((await proteinBtn.count()) === 0) {
+      test.skip(true, 'no btn')
+      return
+    }
     await proteinBtn.first().click()
     await window.waitForTimeout(3000)
 
@@ -83,7 +86,7 @@ test('debug: requestDraw after setBgColor', async ({}, testInfo) => {
       else if (webgl.context) glContext = webgl.context
 
       if (glContext && glContext.clearColor) {
-        glContext.clearColor(250/255, 248/255, 246/255, 1.0)
+        glContext.clearColor(250 / 255, 248 / 255, 246 / 255, 1.0)
         glContext.clear(glContext.COLOR_BUFFER_BIT)
         return { action: 'clearColor set', keys }
       }
@@ -110,7 +113,11 @@ test('debug: requestDraw after setBgColor', async ({}, testInfo) => {
 
       // Try commit
       if (c3d.commit) {
-        try { c3d.commit(); } catch(e) { /* */ }
+        try {
+          c3d.commit()
+        } catch (e) {
+          /* */
+        }
       }
 
       // Try requestDraw with force flag
@@ -124,8 +131,10 @@ test('debug: requestDraw after setBgColor', async ({}, testInfo) => {
     await window.screenshot({ path: testInfo.outputPath('04-after-setProps-commit-draw.png') })
 
     const fs = await import('fs')
-    fs.writeFileSync(testInfo.outputPath('results.json'), JSON.stringify({ result1, result2, result3 }, null, 2))
-
+    fs.writeFileSync(
+      testInfo.outputPath('results.json'),
+      JSON.stringify({ result1, result2, result3 }, null, 2)
+    )
   } finally {
     if (app) await app.close()
   }

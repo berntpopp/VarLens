@@ -68,12 +68,8 @@ export function buildRowViewModels(
     }
 
     // Support both the DB field names and the short 'comment' form used in tests
-    const perCaseComment = perCase
-      ? (perCase.per_case_comment ?? perCase.comment ?? null)
-      : null
-    const globalComment = global
-      ? (global.global_comment ?? global.comment ?? null)
-      : null
+    const perCaseComment = perCase ? (perCase.per_case_comment ?? perCase.comment ?? null) : null
+    const globalComment = global ? (global.global_comment ?? global.comment ?? null) : null
 
     map.set(key, {
       links,
@@ -81,8 +77,8 @@ export function buildRowViewModels(
       isGlobalStarred: (global?.starred ?? 0) === 1,
       acmgClassification: perCase?.acmg_classification ?? null,
       globalAcmgClassification: global?.acmg_classification ?? null,
-      hasComment: !!(perCaseComment),
-      hasGlobalComment: !!(globalComment),
+      hasComment: !!perCaseComment,
+      hasGlobalComment: !!globalComment
     })
   }
 
@@ -96,10 +92,20 @@ export function useVariantRowViewModel(
   annotationScope: Ref<string>
 ) {
   const rowViewModels = computed(() =>
-    buildRowViewModels(variants.value, annotationCache.value, linkConfig.value, annotationScope.value)
+    buildRowViewModels(
+      variants.value,
+      annotationCache.value,
+      linkConfig.value,
+      annotationScope.value
+    )
   )
 
-  function getViewModel(chr: string, pos: number, ref: string, alt: string): RowViewModel | undefined {
+  function getViewModel(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string
+  ): RowViewModel | undefined {
     return rowViewModels.value.get(variantKey(chr, pos, ref, alt))
   }
 

@@ -32,7 +32,10 @@ test('debug: canvas context attributes', async ({}, testInfo) => {
     await window.waitForTimeout(1500)
 
     const proteinBtn = window.locator('[aria-label="Open protein view"]')
-    if ((await proteinBtn.count()) === 0) { test.skip(true, 'no btn'); return }
+    if ((await proteinBtn.count()) === 0) {
+      test.skip(true, 'no btn')
+      return
+    }
     await proteinBtn.first().click()
     await window.waitForTimeout(3000)
 
@@ -77,7 +80,10 @@ test('debug: canvas context attributes', async ({}, testInfo) => {
     })
 
     const fs = await import('fs')
-    fs.writeFileSync(testInfo.outputPath('cartoon-canvas-info.json'), JSON.stringify(canvasInfo, null, 2))
+    fs.writeFileSync(
+      testInfo.outputPath('cartoon-canvas-info.json'),
+      JSON.stringify(canvasInfo, null, 2)
+    )
 
     // Screenshot cartoon - read pixel from corner
     await window.screenshot({ path: testInfo.outputPath('01-cartoon.png') })
@@ -120,13 +126,18 @@ test('debug: canvas context attributes', async ({}, testInfo) => {
             if (c3d?.props?.renderer?.backgroundColor) {
               return c3d.props.renderer.backgroundColor
             }
-          } catch { return null }
+          } catch {
+            return null
+          }
           return null
         })()
       }
     })
 
-    fs.writeFileSync(testInfo.outputPath('surface-canvas-info.json'), JSON.stringify(surfaceCanvasInfo, null, 2))
+    fs.writeFileSync(
+      testInfo.outputPath('surface-canvas-info.json'),
+      JSON.stringify(surfaceCanvasInfo, null, 2)
+    )
 
     await window.screenshot({ path: testInfo.outputPath('02-surface.png') })
 
@@ -157,11 +168,13 @@ test('debug: canvas context attributes', async ({}, testInfo) => {
       const newBg = c3d.props.renderer.backgroundColor
       return { colorInt, newBg, match: colorInt === newBg }
     })
-    fs.writeFileSync(testInfo.outputPath('setProps-result.json'), JSON.stringify(setPropsResult, null, 2))
+    fs.writeFileSync(
+      testInfo.outputPath('setProps-result.json'),
+      JSON.stringify(setPropsResult, null, 2)
+    )
 
     await window.waitForTimeout(2000)
     await window.screenshot({ path: testInfo.outputPath('03-after-full-setProps.png') })
-
   } finally {
     if (app) await app.close()
   }

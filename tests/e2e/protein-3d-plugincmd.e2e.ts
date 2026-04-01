@@ -32,7 +32,10 @@ test('debug: PluginCommands for bg color', async ({}, testInfo) => {
     await window.waitForTimeout(1500)
 
     const proteinBtn = window.locator('[aria-label="Open protein view"]')
-    if ((await proteinBtn.count()) === 0) { test.skip(true, 'no btn'); return }
+    if ((await proteinBtn.count()) === 0) {
+      test.skip(true, 'no btn')
+      return
+    }
     await proteinBtn.first().click()
     await window.waitForTimeout(3000)
 
@@ -107,7 +110,10 @@ test('debug: PluginCommands for bg color', async ({}, testInfo) => {
       return result
     })
 
-    fs.writeFileSync(testInfo.outputPath('plugin-explore.json'), JSON.stringify(pluginExplore, null, 2))
+    fs.writeFileSync(
+      testInfo.outputPath('plugin-explore.json'),
+      JSON.stringify(pluginExplore, null, 2)
+    )
 
     // Approach 3: Set bg color and force a complete repaint by resizing
     await window.evaluate(() => {
@@ -137,7 +143,6 @@ test('debug: PluginCommands for bg color', async ({}, testInfo) => {
     })
     await window.waitForTimeout(2000)
     await window.screenshot({ path: testInfo.outputPath('03-after-theme-reset.png') })
-
   } finally {
     if (app) await app.close()
   }

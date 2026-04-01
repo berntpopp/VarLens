@@ -22,8 +22,8 @@ describe('Lazy-loaded dialog/panel components', () => {
   it('defineAsyncComponent produces an object with __asyncLoader', () => {
     // Verify the shape that defineAsyncComponent() returns so we can use it as
     // a reference in subsequent checks.
-    const asyncComp = defineAsyncComponent(() =>
-      import('@renderer/components/KeyboardShortcutsDialog.vue')
+    const asyncComp = defineAsyncComponent(
+      () => import('@renderer/components/KeyboardShortcutsDialog.vue')
     )
 
     // Vue's async component wrapper exposes `__asyncLoader` on its definition object
@@ -32,24 +32,19 @@ describe('Lazy-loaded dialog/panel components', () => {
     expect(typeof (asyncComp as Record<string, unknown>).__asyncLoader).toBe('function')
   })
 
-  it.each(ASYNC_COMPONENT_PATHS)(
-    '%s resolves via dynamic import',
-    async (componentPath) => {
-      // Each path must be importable — this confirms the module actually exists
-      // and the dynamic import chain works end-to-end.
-      const mod = await import(/* @vite-ignore */ componentPath)
-      expect(mod).toBeDefined()
-      // A Vue SFC compiled module exposes a default export that is a component options object
-      expect(mod.default).toBeDefined()
-    }
-  )
+  it.each(ASYNC_COMPONENT_PATHS)('%s resolves via dynamic import', async (componentPath) => {
+    // Each path must be importable — this confirms the module actually exists
+    // and the dynamic import chain works end-to-end.
+    const mod = await import(/* @vite-ignore */ componentPath)
+    expect(mod).toBeDefined()
+    // A Vue SFC compiled module exposes a default export that is a component options object
+    expect(mod.default).toBeDefined()
+  })
 
   it.each(ASYNC_COMPONENT_PATHS)(
     '%s wrapped in defineAsyncComponent has __asyncLoader',
     (componentPath) => {
-      const asyncComp = defineAsyncComponent(
-        () => import(/* @vite-ignore */ componentPath)
-      )
+      const asyncComp = defineAsyncComponent(() => import(/* @vite-ignore */ componentPath))
       expect(asyncComp).toHaveProperty('__asyncLoader')
     }
   )

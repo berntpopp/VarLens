@@ -75,9 +75,7 @@ test('Import single-sample VCF and verify case exists', async () => {
     return await (window as any).api.cases.list()
   })
 
-  const importedCase = cases.find(
-    (c: { name: string }) => c.name === 'e2e-single-sample-vcf'
-  )
+  const importedCase = cases.find((c: { name: string }) => c.name === 'e2e-single-sample-vcf')
   expect(importedCase).toBeDefined()
   expect(importedCase.variant_count).toBeGreaterThan(0)
 })

@@ -32,7 +32,10 @@ test('debug: CSS backgrounds in molstar', async ({}, testInfo) => {
     await window.waitForTimeout(1500)
 
     const proteinBtn = window.locator('[aria-label="Open protein view"]')
-    if ((await proteinBtn.count()) === 0) { test.skip(true, 'no btn'); return }
+    if ((await proteinBtn.count()) === 0) {
+      test.skip(true, 'no btn')
+      return
+    }
     await proteinBtn.first().click()
     await window.waitForTimeout(3000)
 
@@ -50,7 +53,13 @@ test('debug: CSS backgrounds in molstar', async ({}, testInfo) => {
       const el = document.querySelector('pdbe-molstar')
       if (!el) return { error: 'no element' }
 
-      const result: Array<{tag: string, classes: string, bg: string, width: string, height: string}> = []
+      const result: Array<{
+        tag: string
+        classes: string
+        bg: string
+        width: string
+        height: string
+      }> = []
       const children = el.querySelectorAll('*')
       for (let i = 0; i < Math.min(children.length, 50); i++) {
         const child = children[i]
@@ -84,7 +93,13 @@ test('debug: CSS backgrounds in molstar', async ({}, testInfo) => {
       const el = document.querySelector('pdbe-molstar')
       if (!el) return { error: 'no element' }
 
-      const result: Array<{tag: string, classes: string, bg: string, width: string, height: string}> = []
+      const result: Array<{
+        tag: string
+        classes: string
+        bg: string
+        width: string
+        height: string
+      }> = []
       const children = el.querySelectorAll('*')
       for (let i = 0; i < Math.min(children.length, 50); i++) {
         const child = children[i]
@@ -114,7 +129,10 @@ test('debug: CSS backgrounds in molstar', async ({}, testInfo) => {
       return result
     })
 
-    fs.writeFileSync(testInfo.outputPath('02-surface-css.json'), JSON.stringify(cssInfoSurface, null, 2))
+    fs.writeFileSync(
+      testInfo.outputPath('02-surface-css.json'),
+      JSON.stringify(cssInfoSurface, null, 2)
+    )
 
     // Try forcibly setting background on all dark elements
     await window.evaluate(() => {
@@ -127,7 +145,7 @@ test('debug: CSS backgrounds in molstar', async ({}, testInfo) => {
 
       // Set on all divs inside
       const divs = el.querySelectorAll('div')
-      divs.forEach(div => {
+      divs.forEach((div) => {
         const style = window.getComputedStyle(div)
         const bg = style.backgroundColor
         // If it's dark (low RGB values), override it
@@ -145,7 +163,6 @@ test('debug: CSS backgrounds in molstar', async ({}, testInfo) => {
     await window.waitForTimeout(500)
 
     await window.screenshot({ path: testInfo.outputPath('03-surface-css-override.png') })
-
   } finally {
     if (app) await app.close()
   }

@@ -60,7 +60,9 @@ test('benchmark: import 50 files, verify, delete all', async ({}, testInfo) => {
   // Import each file individually and measure time
   for (let i = 0; i < files.length; i++) {
     const filePath = files[i]
-    const caseName = basename(filePath).replace(/\.json\.gz$/, '').replace(/\.json$/, '')
+    const caseName = basename(filePath)
+      .replace(/\.json\.gz$/, '')
+      .replace(/\.json$/, '')
     const escapedPath = filePath.replace(/\\/g, '\\\\')
 
     const start = Date.now()
@@ -77,7 +79,9 @@ test('benchmark: import 50 files, verify, delete all', async ({}, testInfo) => {
     importTimes.push({ file: caseName, ms: elapsed, variants: variantCount })
 
     if ((i + 1) % 10 === 0 || i === files.length - 1) {
-      console.log(`  [${i + 1}/${files.length}] "${caseName}": ${elapsed}ms (${variantCount} variants)`)
+      console.log(
+        `  [${i + 1}/${files.length}] "${caseName}": ${elapsed}ms (${variantCount} variants)`
+      )
     }
   }
 
@@ -158,7 +162,9 @@ test('benchmark: import 50 files, verify, delete all', async ({}, testInfo) => {
     })
     if (caseCountAfter === 0) break
     if (i % 5 === 0) {
-      console.log(`  Waiting for delete... ${caseCountAfter} cases remaining (${(Date.now() - deleteStart) / 1000}s)`)
+      console.log(
+        `  Waiting for delete... ${caseCountAfter} cases remaining (${(Date.now() - deleteStart) / 1000}s)`
+      )
     }
   }
 
