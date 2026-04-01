@@ -98,7 +98,6 @@ port.on('message', async (msg: MainMessage) => {
       const totalFiles = msg.files.length
       const batchSize = msg.batchSize ?? DATABASE_CONFIG.BATCH_INSERT_SIZE
       const importedInBatch = new Set<string>()
-      let nextFileParsed: Promise<ParsedFileResult> | null = null
       const results: Array<{
         filePath: string
         fileName: string
@@ -170,8 +169,6 @@ port.on('message', async (msg: MainMessage) => {
           const fileSkipped = 0
 
           try {
-            let parsedData: ParsedFileResult
-
             // Emit parsing phase progress
             sendProgress(
               fileIndex,
@@ -183,51 +180,9 @@ port.on('message', async (msg: MainMessage) => {
               0
             )
 
-            // Use pre-parsed data if available (from previous iteration's lookahead)
-            if (nextFileParsed) {
-              parsedData = await nextFileParsed
-              nextFileParsed = null
-            } else {
-              // First file — parse synchronously
-              parsedData = await preParseFile(
-                file.filePath,
-                () => cancelled,
-                file.vcfSelectedSamples
-              )
-            }
+            const formatInfo = await detectFormat(file.filePath)
 
-            const { formatInfo, variants: parsedVariants } = parsedData
-
-            // Start pre-parsing next file (pipeline parallelism)
-            if (fileIndex + 1 < totalFiles && !cancelled) {
-              const nextFile = msg.files[fileIndex + 1]
-              // Only pre-parse if not a known skip
-              const nextExisting = stmts.getCaseByName.get(nextFile.caseName) as
-                | { id: number }
-                | undefined
-              const nextIsInBatchDup = importedInBatch.has(nextFile.caseName)
-              const nextWillSkip =
-                (nextExisting || nextFile.isDuplicate || nextIsInBatchDup) &&
-                nextFile.duplicateStrategy === 'skip'
-
-              if (!nextWillSkip) {
-                nextFileParsed = preParseFile(
-                  nextFile.filePath,
-                  () => cancelled,
-                  nextFile.vcfSelectedSamples
-                )
-              }
-            }
-
-            // Insert pre-parsed variants in batches
-            const totalVariants = parsedVariants.length
-            for (let batchStart = 0; batchStart < totalVariants; batchStart += batchSize) {
-              if (cancelled) break
-              const batchEnd = Math.min(batchStart + batchSize, totalVariants)
-              const batch = parsedVariants.slice(batchStart, batchEnd)
-              stmts.insertBatch(caseId, batch)
-              variantCount = batchEnd
-
+            const onProgress = (count: number): void => {
               const now = Date.now()
               if (now - lastProgressTime >= msg.throttleMs) {
                 lastProgressTime = now
@@ -238,14 +193,40 @@ port.on('message', async (msg: MainMessage) => {
                   fileName,
                   overallPercent: Math.round(((fileIndex + 0.5) / totalFiles) * 100),
                   phase: 'inserting',
-                  variantCount,
+                  variantCount: count,
                   skipped: fileSkipped
                 }
                 port.postMessage(progressMsg)
               }
             }
 
-            stmts.updateVariantCount.run(variantCount, caseId)
+            stmts.beginBulkInsert()
+            try {
+              if (formatInfo.format === 'vcf') {
+                variantCount = await streamInsertVcf(
+                  file.filePath,
+                  formatInfo,
+                  caseId,
+                  batchSize,
+                  stmts,
+                  () => cancelled,
+                  file.vcfSelectedSamples,
+                  onProgress
+                )
+              } else {
+                variantCount = await streamInsertJson(
+                  file.filePath,
+                  formatInfo,
+                  caseId,
+                  batchSize,
+                  stmts,
+                  () => cancelled,
+                  onProgress
+                )
+              }
+            } finally {
+              stmts.finishBulkInsert(caseId, variantCount)
+            }
 
             // Insert data_info provenance
             try {
@@ -279,14 +260,6 @@ port.on('message', async (msg: MainMessage) => {
             }
             port.postMessage(fileCompleteMsg)
           } catch (importError) {
-            // Clean up pre-parse promise on error
-            if (nextFileParsed) {
-              nextFileParsed.catch((e) => {
-                // console.warn is the only option in worker_threads context (no access to mainLogger/Electron IPC)
-                console.warn('Pre-parse cleanup failed:', e)
-              }) // prevent unhandled rejection
-              nextFileParsed = null
-            }
             stmts.deleteCase.run(caseId)
             throw importError
           }
@@ -505,6 +478,34 @@ function prepareStatements(db: DatabaseType) {
     }
   })
 
+  /**
+   * Drop FTS triggers before a bulk insert session.
+   * The worker-level DROP_FTS_TRIGGERS already runs at session start,
+   * but this method mirrors the VariantRepository API for per-file control.
+   */
+  function beginBulkInsert(): void {
+    db.exec(DROP_FTS_TRIGGERS)
+  }
+
+  /**
+   * Rebuild FTS, recreate triggers, and update the case variant_count
+   * after all batches for one file have been inserted.
+   */
+  function finishBulkInsert(caseId: number, totalInserted: number): void {
+    updateVariantCountStmt.run(totalInserted, caseId)
+
+    try {
+      db.exec("INSERT INTO variants_fts(variants_fts) VALUES('rebuild')")
+    } catch {
+      // best effort
+    }
+    try {
+      db.exec(createFTSTriggers)
+    } catch {
+      // best effort
+    }
+  }
+
   return {
     insertCase: insertCaseStmt,
     deleteCase: deleteCaseStmt,
@@ -517,7 +518,9 @@ function prepareStatements(db: DatabaseType) {
         }
       }
     },
-    insertBatch
+    insertBatch,
+    beginBulkInsert,
+    finishBulkInsert
   }
 }
 
@@ -562,66 +565,82 @@ function rebuildCohortSummary(db: DatabaseType): void {
   }
 }
 
-interface ParsedFileResult {
-  formatInfo: FormatInfo
-  variants: Array<Record<string, unknown>>
-}
-
 /**
- * Pre-parse a file into an in-memory variant array.
- * Used for pipeline parallelism: parse next file while current file inserts.
+ * Stream a JSON/columnar/object file and insert variants in bounded batches.
+ * Memory usage is proportional to batchSize, not file size.
  *
- * The mapper transforms (ObjectFormatMapper / FieldMapper) emit plain
- * Record<string, unknown> objects with variant fields (chr, pos, ref, alt,
- * _transcripts, etc.) — the same shape that insertBatch expects.
+ * Returns the total number of variants inserted.
  */
-async function preParseFile(
-  filePath: string,
-  isCancelled: () => boolean,
-  vcfSelectedSamples?: string[]
-): Promise<ParsedFileResult> {
-  const formatInfo = await detectFormat(filePath)
-
-  // VCF files use a dedicated line-by-line parser instead of the JSON pipeline
-  if (formatInfo.format === 'vcf') {
-    return preParseVcfFile(filePath, formatInfo, isCancelled, vcfSelectedSamples)
-  }
-
-  const variants: Array<Record<string, unknown>> = []
-
-  const mapperStream = await createMapperPipeline(filePath, formatInfo)
-
-  for await (const chunk of mapperStream) {
-    if (isCancelled()) {
-      // Explicitly destroy the underlying stream to release file handle
-      mapperStream.destroy()
-      break
-    }
-    // Mappers emit plain variant objects (or null for skipped variants)
-    if (chunk !== null) {
-      variants.push(chunk as Record<string, unknown>)
-    }
-  }
-
-  return { formatInfo, variants }
-}
-
-/**
- * Pre-parse a VCF file into an in-memory variant array.
- * Uses the VCF line-by-line parser (header parser, line parser, mapper)
- * to produce the same Record<string, unknown> shape as JSON formats.
- */
-async function preParseVcfFile(
+async function streamInsertJson(
   filePath: string,
   formatInfo: FormatInfo,
+  caseId: number,
+  batchSize: number,
+  stmts: ReturnType<typeof prepareStatements>,
   isCancelled: () => boolean,
-  vcfSelectedSamples?: string[]
-): Promise<ParsedFileResult> {
+  onProgress: (count: number) => void
+): Promise<number> {
+  const mapperStream = await createMapperPipeline(filePath, formatInfo)
+
+  let batch: Array<Record<string, unknown>> = []
+  let totalInserted = 0
+
+  try {
+    for await (const chunk of mapperStream) {
+      if (isCancelled()) {
+        mapperStream.destroy()
+        break
+      }
+
+      if (chunk !== null) {
+        batch.push(chunk as Record<string, unknown>)
+
+        if (batch.length >= batchSize) {
+          stmts.insertBatch(caseId, batch)
+          totalInserted += batch.length
+          batch = []
+          onProgress(totalInserted)
+        }
+      }
+    }
+  } finally {
+    // Flush remaining items
+    if (batch.length > 0 && !isCancelled()) {
+      stmts.insertBatch(caseId, batch)
+      totalInserted += batch.length
+      batch = []
+      onProgress(totalInserted)
+    }
+  }
+
+  return totalInserted
+}
+
+/**
+ * Stream a VCF file and insert variants in bounded batches.
+ * Uses readline + header parser + line parser + mapper.
+ * Memory usage is proportional to batchSize, not file size.
+ *
+ * Returns the total number of variants inserted.
+ */
+async function streamInsertVcf(
+  filePath: string,
+  formatInfo: FormatInfo,
+  caseId: number,
+  batchSize: number,
+  stmts: ReturnType<typeof prepareStatements>,
+  isCancelled: () => boolean,
+  vcfSelectedSamples: string[] | undefined,
+  onProgress: (count: number) => void
+): Promise<number> {
   if (vcfSelectedSamples && vcfSelectedSamples.length > 1) {
     throw new Error(
       `Worker expects at most one VCF sample per file entry but received ${vcfSelectedSamples.length}`
     )
   }
+
+  // Suppress unused-variable warning — formatInfo kept for API consistency
+  void formatInfo
 
   const raw = createReadStream(filePath)
   const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
@@ -630,7 +649,9 @@ async function preParseVcfFile(
   const headerLines: string[] = []
   let header: VcfHeader | null = null
   let activeSample = ''
-  const variants: Array<Record<string, unknown>> = []
+
+  let batch: Array<Record<string, unknown>> = []
+  let totalInserted = 0
 
   try {
     for await (const line of rl) {
@@ -663,18 +684,32 @@ async function preParseVcfFile(
         const mapped = mapVcfRecord(record, header, activeSample, DEFAULT_INFO_FIELD_MAPPINGS)
 
         for (const variant of mapped) {
-          variants.push(variant as unknown as Record<string, unknown>)
+          batch.push(variant as unknown as Record<string, unknown>)
+
+          if (batch.length >= batchSize) {
+            stmts.insertBatch(caseId, batch)
+            totalInserted += batch.length
+            batch = []
+            onProgress(totalInserted)
+          }
         }
       } catch {
         // Skip unparseable lines — consistent with VcfStrategy behavior
       }
     }
   } finally {
+    // Flush remaining items
+    if (batch.length > 0 && !isCancelled()) {
+      stmts.insertBatch(caseId, batch)
+      totalInserted += batch.length
+      batch = []
+      onProgress(totalInserted)
+    }
     // Ensure stream resources are released
     raw.destroy()
   }
 
-  return { formatInfo, variants }
+  return totalInserted
 }
 
 /**
