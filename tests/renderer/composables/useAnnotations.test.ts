@@ -10,6 +10,7 @@ import { createMockApi } from '../../utils/mock-api'
 import {
   useAnnotations,
   MAX_CACHE_SIZE,
+  annotationCache,
   _resetAnnotationsForTesting
 } from '@renderer/composables/useAnnotations'
 
@@ -317,5 +318,128 @@ describe('loadGlobalAnnotationsBatch uses batch endpoint', () => {
     expect(window.api.annotations.batchGet).toHaveBeenCalledWith(null, [
       { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
     ])
+  })
+})
+
+describe('stale-request guard (annotation generation)', () => {
+  let app: { unmount: () => void }
+
+  beforeEach(() => {
+    _resetAnnotationsForTesting()
+    window.api = createMockApi()
+  })
+
+  afterEach(() => {
+    if (app) app.unmount()
+  })
+
+  it('invalidateAnnotationGeneration discards results from an in-flight batch', async () => {
+    // Simulate a slow batch that resolves after the generation has been invalidated
+    let resolveBatch!: (v: Record<string, unknown>) => void
+    window.api.annotations.batchGet = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        resolveBatch = resolve
+      })
+    )
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    // Start a batch — it is now in-flight
+    const batchPromise = result.loadAnnotationsBatch(1, [
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+    ])
+
+    // User pages — invalidate the generation before the batch resolves
+    result.invalidateAnnotationGeneration()
+
+    // Now resolve the batch with a valid result
+    resolveBatch({ 'chr1:100:A:G': { global: { starred: 1 }, perCase: null } })
+    await batchPromise
+
+    // The stale result must NOT have been written to the cache
+    expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeUndefined()
+  })
+
+  it('applies results when generation has not advanced', async () => {
+    window.api.annotations.batchGet = vi
+      .fn()
+      .mockResolvedValue({ 'chr1:200:T:C': { global: { starred: 1 }, perCase: null } })
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    // No invalidation — generation stays the same
+    await result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 200, ref: 'T', alt: 'C' }])
+
+    const cached = result.getAnnotations('chr1', 200, 'T', 'C')
+    expect(cached).toBeDefined()
+    expect(cached!.global!.starred).toBe(1)
+  })
+
+  it('results from a new batch after invalidation are applied', async () => {
+    // First batch — slow, will be stale
+    let resolveFirst!: (v: Record<string, unknown>) => void
+    window.api.annotations.batchGet = vi.fn().mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirst = resolve
+      })
+    )
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    const firstBatch = result.loadAnnotationsBatch(1, [
+      { chr: 'chr1', pos: 300, ref: 'A', alt: 'T' }
+    ])
+
+    // Invalidate and start a second batch for a different variant
+    result.invalidateAnnotationGeneration()
+    window.api.annotations.batchGet = vi
+      .fn()
+      .mockResolvedValue({ 'chr2:400:G:C': { global: null, perCase: null } })
+
+    await result.loadAnnotationsBatch(1, [{ chr: 'chr2', pos: 400, ref: 'G', alt: 'C' }])
+
+    // Resolve the stale first batch after the second has already completed
+    resolveFirst({ 'chr1:300:A:T': { global: { starred: 1 }, perCase: null } })
+    await firstBatch
+
+    // Stale result for chr1:300 must not be in cache
+    expect(result.getAnnotations('chr1', 300, 'A', 'T')).toBeUndefined()
+    // Fresh result for chr2:400 must be in cache
+    expect(result.getAnnotations('chr2', 400, 'G', 'C')).toBeDefined()
+  })
+
+  it('_resetAnnotationsForTesting resets the generation counter', async () => {
+    // Capture initial cache state
+    const before = annotationCache.value.size
+
+    window.api.annotations.batchGet = vi
+      .fn()
+      .mockResolvedValue({ 'chr1:500:A:G': { global: null, perCase: null } })
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    // Invalidate a few times
+    result.invalidateAnnotationGeneration()
+    result.invalidateAnnotationGeneration()
+
+    // Reset — generation should go back to 0
+    _resetAnnotationsForTesting()
+
+    // After reset, a new batch should not be discarded (generation is 0 again)
+    window.api.annotations.batchGet = vi
+      .fn()
+      .mockResolvedValue({ 'chr1:500:A:G': { global: { starred: 1 }, perCase: null } })
+
+    const [result2, appInstance2] = withSetup(() => useAnnotations())
+    appInstance.unmount()
+    app = appInstance2
+
+    await result2.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 500, ref: 'A', alt: 'G' }])
+    expect(result2.getAnnotations('chr1', 500, 'A', 'G')).toBeDefined()
+    expect(before).toBe(0) // confirm reset happened
   })
 })

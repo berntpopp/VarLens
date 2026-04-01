@@ -25,6 +25,7 @@ export function useVariantData(options: UseVariantDataOptions) {
   // Annotations
   const {
     loadAnnotationsBatch,
+    invalidateAnnotationGeneration,
     clearCache: clearAnnotationCache,
     ...annotationMethods
   } = useAnnotations()
@@ -146,10 +147,12 @@ export function useVariantData(options: UseVariantDataOptions) {
   const { debouncedFn: debouncedColumnFilterReload } = useDebounce(invalidateAndReload, 300)
   watch(columnFilterState.columnFilters, debouncedColumnFilterReload)
 
-  // Load annotations when variants change
+  // Load annotations when variants change; invalidate generation first so any
+  // in-flight batch from the previous page is discarded when it resolves.
   watch(
     variants,
     async (newVariants) => {
+      invalidateAnnotationGeneration()
       if (newVariants.length > 0 && caseId.value !== undefined && caseId.value !== 0) {
         await loadAnnotationsBatch(caseId.value, newVariants)
       }
