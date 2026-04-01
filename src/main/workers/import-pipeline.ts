@@ -85,8 +85,8 @@ export function prepareStatements(db: DatabaseType) {
       INSERT OR REPLACE INTO case_data_info (case_id, import_file_name, import_file_type)
       VALUES (?, ?, ?)
     `)
-  } catch {
-    // Table may not exist in older schema versions
+  } catch (e) {
+    console.warn('[import-pipeline] Failed to prepare case_data_info statement (table may not exist in older schema):', e instanceof Error ? e.message : String(e))
   }
 
   const insertBatch = db.transaction((caseId: number, variants: Array<Record<string, unknown>>) => {
@@ -159,13 +159,13 @@ export function prepareStatements(db: DatabaseType) {
 
     try {
       db.exec("INSERT INTO variants_fts(variants_fts) VALUES('rebuild')")
-    } catch {
-      // best effort
+    } catch (e) {
+      console.warn('[import-pipeline] Failed to rebuild FTS index during finishBulkInsert:', e instanceof Error ? e.message : String(e))
     }
     try {
       db.exec(createFTSTriggers)
-    } catch {
-      // best effort
+    } catch (e) {
+      console.warn('[import-pipeline] Failed to recreate FTS triggers during finishBulkInsert:', e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -314,8 +314,8 @@ export async function streamInsertVcf(
             onProgress(totalInserted)
           }
         }
-      } catch {
-        // Skip unparseable lines — consistent with VcfStrategy behavior
+      } catch (e) {
+        console.warn('[import-pipeline] Skipping unparseable VCF line:', e instanceof Error ? e.message : String(e))
       }
     }
   } finally {

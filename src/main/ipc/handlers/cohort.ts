@@ -309,8 +309,8 @@ export function triggerStartupRebuildIfNeeded(db: DatabaseService): void {
       mainLogger.info('Startup: cohort summary rebuild completed', 'cohort')
       try {
         db.cohort.invalidateColumnMetaCache()
-      } catch {
-        /* DB may be closed */
+      } catch (e) {
+        mainLogger.warn('Failed to invalidate column meta cache after startup rebuild (DB may be closed): ' + (e instanceof Error ? e.message : String(e)), 'cohort')
       }
       safeEmit('cohort:summaryRebuilt', { is_stale: false })
     })

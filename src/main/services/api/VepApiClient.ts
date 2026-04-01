@@ -268,7 +268,8 @@ export class VepApiClient {
         data,
         createdAt: cached.createdAt
       }
-    } catch {
+    } catch (e) {
+      mainLogger.warn('Corrupted VEP cache entry for ' + cacheKey + ': ' + (e instanceof Error ? e.message : String(e)), 'api')
       return null
     }
   }

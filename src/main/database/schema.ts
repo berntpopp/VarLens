@@ -5,6 +5,7 @@
  */
 
 import type Database from 'better-sqlite3-multiple-ciphers'
+import { mainLogger } from '../services/MainLogger'
 
 /**
  * SQL to create the cases and variants tables
@@ -205,7 +206,8 @@ function schemaAlreadyExists(db: Database.Database): boolean {
       )
       .get() as { c: number }
     return row.c === 4
-  } catch {
+  } catch (e) {
+    mainLogger.warn('Failed to check schema existence: ' + (e instanceof Error ? e.message : String(e)), 'schema')
     return false
   }
 }
@@ -271,8 +273,8 @@ export function initializeSchema(db: Database.Database): void {
         const ftsHasOmim = cols.some((c) => c.name === 'omim_mim_number')
         needsFtsRebuild = !ftsHasOmim
       }
-    } catch {
-      // If we can't inspect, rebuild to be safe
+    } catch (e) {
+      mainLogger.warn('Failed to inspect FTS schema (will rebuild): ' + (e instanceof Error ? e.message : String(e)), 'schema')
       needsFtsRebuild = true
     }
   }

@@ -145,8 +145,8 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDepen
         // Recompute to correct any drift from the failed delete.
         try {
           db.variants.recomputeAllFrequencies()
-        } catch {
-          mainLogger.warn('Failed to recompute frequencies after delete failure', 'cases')
+        } catch (e) {
+          mainLogger.warn('Failed to recompute frequencies after delete failure: ' + (e instanceof Error ? e.message : String(e)), 'cases')
         }
         throw error
       } finally {

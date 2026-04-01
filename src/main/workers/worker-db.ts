@@ -66,23 +66,23 @@ export function openWorkerDatabaseReadOnly(dbPath: string, encryptionKey?: strin
 export function rebuildFts(db: DatabaseType): void {
   try {
     db.exec("INSERT INTO variants_fts(variants_fts) VALUES('rebuild')")
-  } catch {
-    // best effort
+  } catch (e) {
+    console.warn('[worker-db] Failed to rebuild FTS index:', e instanceof Error ? e.message : String(e))
   }
   try {
     db.exec(createFTSTriggers)
-  } catch {
-    // best effort
+  } catch (e) {
+    console.warn('[worker-db] Failed to recreate FTS triggers:', e instanceof Error ? e.message : String(e))
   }
   try {
     db.exec('ANALYZE')
-  } catch {
-    // best effort
+  } catch (e) {
+    console.warn('[worker-db] Failed to run ANALYZE:', e instanceof Error ? e.message : String(e))
   }
   try {
     db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
-  } catch {
-    // best effort
+  } catch (e) {
+    console.warn('[worker-db] Failed to optimize FTS index:', e instanceof Error ? e.message : String(e))
   }
 }
 
@@ -103,7 +103,7 @@ export function rebuildCohortSummary(db: DatabaseType): void {
 
     db.exec('ANALYZE cohort_variant_summary')
     db.exec('ANALYZE gene_burden_summary')
-  } catch {
-    // best effort — summary can be rebuilt on next import/app start
+  } catch (e) {
+    console.warn('[worker-db] Failed to rebuild cohort summary (will be rebuilt on next import/app start):', e instanceof Error ? e.message : String(e))
   }
 }

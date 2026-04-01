@@ -5,6 +5,7 @@ import type { VarlensDatabase } from '../../shared/types/database-schema'
 import type { Variant } from './types'
 import { tokenize, parse } from '../../shared/utils/boolean-search'
 import { emitFts5Search } from './search/fts5-search-emitter'
+import { mainLogger } from '../services/MainLogger'
 
 /**
  * Kysely query builder type for variant queries.
@@ -44,8 +45,9 @@ export class VariantSearchService {
     let ast
     try {
       ast = parse(tokens)
-    } catch {
+    } catch (e) {
       // Malformed boolean expression — fall back to single-term search
+      mainLogger.warn('Malformed boolean search expression, falling back to single-term: ' + (e instanceof Error ? e.message : String(e)), 'VariantSearchService')
       return this.applySingleSearchToken(query, term)
     }
     const { sql: boolExpr, params } = emitFts5Search(ast)

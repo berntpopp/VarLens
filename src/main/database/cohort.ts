@@ -7,6 +7,7 @@
 
 import type Database from 'better-sqlite3-multiple-ciphers'
 import type { Statement } from 'better-sqlite3-multiple-ciphers'
+import { mainLogger } from '../services/MainLogger'
 import type {
   CohortVariant,
   CohortSummary,
@@ -337,8 +338,8 @@ export class CohortService {
     let ast
     try {
       ast = parse(tokens)
-    } catch {
-      // Malformed boolean expression — fall back to single-term search
+    } catch (e) {
+      mainLogger.warn('Malformed boolean search expression, falling back to single-term: ' + (e instanceof Error ? e.message : String(e)), 'CohortService')
       return this.buildSingleTermCondition(term, paramsArray)
     }
     const { sql, params } = emitCohortSearch(ast)

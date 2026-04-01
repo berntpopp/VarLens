@@ -23,8 +23,8 @@ export async function loadSettings(): Promise<ImportSettings> {
       const data = await _deps.readFile(settingsPath(), 'utf8')
       return JSON.parse(data as string)
     }
-  } catch {
-    // Ignore parse errors, return empty
+  } catch (e) {
+    mainLogger.warn('Failed to load settings (file may not exist or parse error): ' + (e instanceof Error ? e.message : String(e)), 'settings-io')
   }
   return {}
 }

@@ -8,6 +8,7 @@
  */
 
 import type { ApiCache } from './ApiCache'
+import { mainLogger } from '../MainLogger'
 import type { HpoTerm } from './schemas/hpo-response'
 import type { HpoSearchResult } from '../../../shared/types/api-enrichment'
 import { HpoAutocompleteResponseSchema } from './schemas/hpo-response'
@@ -130,7 +131,8 @@ export class HpoApiClient {
 
     try {
       return JSON.parse(cached.data) as HpoTerm[]
-    } catch {
+    } catch (e) {
+      mainLogger.warn('Corrupted HPO cache entry: ' + (e instanceof Error ? e.message : String(e)), 'api')
       return null
     }
   }

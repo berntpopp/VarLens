@@ -131,8 +131,8 @@ if (gotTheLock !== true) {
           `gpu_compositing=${gpuStatus.gpu_compositing}`,
         'app'
       )
-    } catch {
-      // Best effort — getGPUFeatureStatus may not be available in all contexts
+    } catch (e) {
+      mainLogger.warn('Failed to query GPU feature status: ' + (e instanceof Error ? e.message : String(e)), 'app')
     }
 
     // Verify better-sqlite3-multiple-ciphers works (in-memory test)

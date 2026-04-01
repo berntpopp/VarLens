@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('../../../../src/main/services/MainLogger', () => ({
-  mainLogger: { error: vi.fn() }
+  mainLogger: { error: vi.fn(), warn: vi.fn() }
 }))
 
 import {

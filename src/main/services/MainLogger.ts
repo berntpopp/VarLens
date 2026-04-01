@@ -35,8 +35,9 @@ if (isMainThread) {
     log.transports.file.maxSize = 5 * 1024 * 1024 // 5 MB before rotation
     log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}'
     log.transports.console.level = 'debug'
-  } catch {
+  } catch (e) {
     // electron-log or electron not available — fall back to console
+    console.warn('[MainLogger] electron-log/electron not available, falling back to console:', e instanceof Error ? e.message : String(e))
     log = null
     BrowserWindow = null
   }

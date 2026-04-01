@@ -36,7 +36,8 @@ async function getAppVersion(): Promise<string> {
         dir = dirname(dir)
       }
       return reportedVersion
-    } catch {
+    } catch (e) {
+      mainLogger.warn('Failed to read app version from package.json: ' + (e instanceof Error ? e.message : String(e)), 'system')
       return reportedVersion
     }
   }

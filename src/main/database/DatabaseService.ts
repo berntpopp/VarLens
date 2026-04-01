@@ -205,8 +205,8 @@ export class DatabaseService {
       try {
         // Clean up expired API cache entries
         this.db.prepare('DELETE FROM api_cache WHERE expires_at < ?').run(Date.now())
-      } catch {
-        // Best effort
+      } catch (e) {
+        mainLogger.warn('Failed to clean up expired API cache entries: ' + (e instanceof Error ? e.message : String(e)), 'database')
       }
     })
 
@@ -214,8 +214,8 @@ export class DatabaseService {
     this._cacheCleanupTimer = setInterval(() => {
       try {
         this.db.prepare('DELETE FROM api_cache WHERE expires_at < ?').run(Date.now())
-      } catch {
-        // Best effort — DB may be closed during shutdown
+      } catch (e) {
+        mainLogger.warn('Periodic API cache cleanup failed (DB may be closed): ' + (e instanceof Error ? e.message : String(e)), 'database')
       }
     }, DATABASE_CONFIG.CACHE_CLEANUP_INTERVAL_MS)
     // Prevent the timer from keeping the Node.js event loop alive during quit
@@ -234,7 +234,8 @@ export class DatabaseService {
       const summaryRow = this.db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get()
       const variantRow = this.db.prepare('SELECT 1 FROM variants LIMIT 1').get()
       return summaryRow === undefined && variantRow !== undefined
-    } catch {
+    } catch (e) {
+      mainLogger.warn('Failed to check startup rebuild status: ' + (e instanceof Error ? e.message : String(e)), 'database')
       return false
     }
   }
@@ -310,8 +311,8 @@ export class DatabaseService {
       this.db.pragma('optimize')
       // Merge the WAL back into the main DB file so the next open is fast
       this.db.pragma('wal_checkpoint(TRUNCATE)')
-    } catch {
-      // Best-effort; ignore failures to ensure the database still closes
+    } catch (e) {
+      mainLogger.warn('Failed to optimize/checkpoint on close: ' + (e instanceof Error ? e.message : String(e)), 'database')
     } finally {
       this.db.close()
     }

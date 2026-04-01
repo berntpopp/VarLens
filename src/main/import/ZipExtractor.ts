@@ -1,6 +1,7 @@
 import AdmZip from 'adm-zip'
 import { writeFile } from 'node:fs/promises'
 import { resolve, relative, basename, sep } from 'node:path'
+import { mainLogger } from '../services/MainLogger'
 
 export interface ZipExtractionResult {
   extractedFiles: string[]
@@ -22,7 +23,8 @@ export class ZipExtractor {
         const header = entry.header as unknown as Record<string, unknown>
         return header['encrypted'] === true || header['encripted'] === true
       })
-    } catch {
+    } catch (e) {
+      mainLogger.warn('Failed to check ZIP encryption: ' + (e instanceof Error ? e.message : String(e)), 'ZipExtractor')
       return false
     }
   }
@@ -114,7 +116,8 @@ export class ZipExtractor {
       }
       getDataWithPassword.getData(password)
       return true
-    } catch {
+    } catch (e) {
+      mainLogger.warn('ZIP password test failed: ' + (e instanceof Error ? e.message : String(e)), 'ZipExtractor')
       return false
     }
   }

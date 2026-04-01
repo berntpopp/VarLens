@@ -1,4 +1,5 @@
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
+import { mainLogger } from '../services/MainLogger'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -236,8 +237,8 @@ export class GeneReferenceDb {
           })
         }
       }
-    } catch {
-      // FTS5 query syntax error — return empty or partial results
+    } catch (e) {
+      mainLogger.warn('FTS5 symbol autocomplete query failed: ' + (e instanceof Error ? e.message : String(e)), 'GeneReferenceDb')
     }
 
     // Alias matches second
@@ -272,8 +273,8 @@ export class GeneReferenceDb {
           })
         }
       }
-    } catch {
-      // FTS5 query syntax error
+    } catch (e) {
+      mainLogger.warn('FTS5 alias autocomplete query failed: ' + (e instanceof Error ? e.message : String(e)), 'GeneReferenceDb')
     }
 
     return Array.from(seen.values()).slice(0, limit)

@@ -8,6 +8,7 @@
 import { DatabaseService } from '../database/DatabaseService'
 import { DatabaseError, WrongPasswordError } from '../database/errors'
 import { RecentDatabasesService, type RecentDatabase } from './RecentDatabasesService'
+import { mainLogger } from './MainLogger'
 import { basename } from 'path'
 
 /**
@@ -108,8 +109,8 @@ export class DatabaseManager {
       if (testDb) {
         try {
           testDb.close()
-        } catch {
-          // Ignore close errors
+        } catch (e) {
+          mainLogger.warn('Failed to close test DB during encryption detection: ' + (e instanceof Error ? e.message : String(e)), 'DatabaseManager')
         }
       }
 

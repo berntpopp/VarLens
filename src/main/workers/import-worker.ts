@@ -45,8 +45,8 @@ port.on('message', async (msg: MainMessage) => {
       // Mark cohort summary as stale before import
       try {
         db.exec(MARK_STALE_SQL)
-      } catch {
-        /* table may not exist yet */
+      } catch (e) {
+        console.warn('[import-worker] Failed to mark cohort summary as stale (table may not exist yet):', e instanceof Error ? e.message : String(e))
       }
 
       const totalFiles = msg.files.length
@@ -185,8 +185,8 @@ port.on('message', async (msg: MainMessage) => {
             // Insert data_info provenance
             try {
               stmts.insertDataInfo.run(caseId, fileName, formatInfo.format)
-            } catch {
-              // best effort
+            } catch (e) {
+              console.warn('[import-worker] Failed to insert data_info provenance:', e instanceof Error ? e.message : String(e))
             }
 
             const elapsed = Date.now() - startTime
@@ -266,25 +266,25 @@ port.on('message', async (msg: MainMessage) => {
       if (db) {
         try {
           db.exec(RECREATE_INDEXES)
-        } catch {
-          // best effort — initializeSchema() recreates on next app start
+        } catch (e) {
+          console.warn('[import-worker] Failed to recreate indexes (will be recreated on next app start):', e instanceof Error ? e.message : String(e))
         }
         try {
           db.pragma('wal_checkpoint(TRUNCATE)')
-        } catch {
-          // best effort
+        } catch (e) {
+          console.warn('[import-worker] Failed to truncate WAL checkpoint:', e instanceof Error ? e.message : String(e))
         }
         try {
           db.pragma('synchronous = NORMAL')
           db.pragma('wal_autocheckpoint = 1000')
           db.pragma('foreign_keys = ON')
-        } catch {
-          // best effort
+        } catch (e) {
+          console.warn('[import-worker] Failed to restore pragmas after import:', e instanceof Error ? e.message : String(e))
         }
         try {
           db.close()
-        } catch {
-          // best effort
+        } catch (e) {
+          console.warn('[import-worker] Failed to close database:', e instanceof Error ? e.message : String(e))
         }
       }
     }
