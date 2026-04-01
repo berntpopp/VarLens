@@ -53,7 +53,7 @@ export class ColumnarStrategy implements ImportStrategy {
     const batchAccumulator = createBatchAccumulator({
       caseId,
       batchSize,
-      flushFn: (cId, batch) => db.variants.insertVariantsBatch(cId, batch),
+      flushFn: (cId, batch) => db.variants.insertBatch(batch, cId),
       onProgress: options.onProgress,
       startTime
     })
@@ -65,23 +65,28 @@ export class ColumnarStrategy implements ImportStrategy {
       })
     }
 
-    // Build the pipeline
-    await pipeline(
-      createDecompressedStream(filePath),
-      parser(),
-      pick({ filter: dataPath }),
-      streamArray(),
-      fieldMapper,
-      batchAccumulator
-    )
+    // Drop FTS triggers for bulk insert performance
+    db.variants.beginBulkInsert()
+
+    try {
+      // Build the pipeline
+      await pipeline(
+        createDecompressedStream(filePath),
+        parser(),
+        pick({ filter: dataPath }),
+        streamArray(),
+        fieldMapper,
+        batchAccumulator
+      )
+    } finally {
+      // Always restore FTS triggers and update case
+      db.variants.finishBulkInsert(caseId, batchAccumulator.inserted)
+    }
 
     // Get final statistics
     const variantCount = batchAccumulator.inserted
     const skipped = batchAccumulator.skippedCount
     const elapsed = Date.now() - startTime
-
-    // Update case with final variant count
-    db.cases.updateCaseVariantCount(caseId, variantCount)
 
     return {
       caseId,
