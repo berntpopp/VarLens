@@ -72,15 +72,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
+import { ref, watch, onMounted, onUnmounted, provide, nextTick, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import AppToolbar from './components/AppToolbar.vue'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
 import AppFooter from './components/AppFooter.vue'
-import KeyboardShortcutsDialog from './components/KeyboardShortcutsDialog.vue'
-import AppDialogHost from './components/AppDialogHost.vue'
-import VariantDetailsPanel from './components/VariantDetailsPanel.vue'
+import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useDatabaseStore } from './stores/databaseStore'
@@ -91,9 +89,23 @@ import { useResponsiveLayout } from './composables/useResponsiveLayout'
 import { logService } from './services/LogService'
 import { AppStateKey, createAppState } from './composables/useAppState'
 import { useApiService } from './composables/useApiService'
-import ImportStatusBar from './components/ImportStatusBar.vue'
 import { useImportStatusStore } from './stores/importStatusStore'
-import ViewTransitionOverlay from './components/ViewTransitionOverlay.vue'
+
+const ImportStatusBar = defineAsyncComponent(
+  () => import('./components/ImportStatusBar.vue')
+)
+const VariantDetailsPanel = defineAsyncComponent(
+  () => import('./components/VariantDetailsPanel.vue')
+)
+const AppDialogHost = defineAsyncComponent(
+  () => import('./components/AppDialogHost.vue')
+)
+const KeyboardShortcutsDialog = defineAsyncComponent(
+  () => import('./components/KeyboardShortcutsDialog.vue')
+)
+const ViewTransitionOverlay = defineAsyncComponent(
+  () => import('./components/ViewTransitionOverlay.vue')
+)
 
 const router = useRouter()
 const { api } = useApiService()
@@ -144,7 +156,7 @@ const { resetToDefaults: resetCohortColumns } = useColumnPreferences('cohort-tab
 const { resetToDefaults: resetFilterPreferences } = useFilterPreferences()
 
 // Component refs
-const dialogHostRef = ref<InstanceType<typeof AppDialogHost> | null>(null)
+const dialogHostRef = ref<InstanceType<typeof AppDialogHostType> | null>(null)
 const caseListRef = ref<InstanceType<typeof CaseList> | null>(null)
 
 // Sidebar resize

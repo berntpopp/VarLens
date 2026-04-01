@@ -7,6 +7,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import App from '../../src/renderer/src/App.vue'
 
+
 // Mock window.api for all components that need it
 // This must match the API structure in src/preload/index.ts
 const mockApi = {
@@ -151,13 +152,24 @@ const router = createRouter({
   ]
 })
 
+// Stubs for async (lazy-loaded) components — prevents defineAsyncComponent from
+// firing dynamic imports that race with test environment teardown.
+const asyncComponentStubs = {
+  ImportStatusBar: { template: '<div />' },
+  VariantDetailsPanel: { template: '<div />' },
+  AppDialogHost: { template: '<div />' },
+  KeyboardShortcutsDialog: { template: '<div />' },
+  ViewTransitionOverlay: { template: '<div />' }
+}
+
 describe('App.vue', () => {
   it('renders VarLens title', async () => {
     router.push('/')
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [vuetify, createPinia(), router]
+        plugins: [vuetify, createPinia(), router],
+        stubs: asyncComponentStubs
       }
     })
     expect(wrapper.text()).toContain('VarLens')
@@ -168,7 +180,8 @@ describe('App.vue', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [vuetify, createPinia(), router]
+        plugins: [vuetify, createPinia(), router],
+        stubs: asyncComponentStubs
       }
     })
     expect(wrapper.find('.v-application').exists()).toBe(true)
