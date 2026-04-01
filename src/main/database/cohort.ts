@@ -78,29 +78,13 @@ export class CohortService {
   }
 
   /**
-   * Get aggregated cohort variants from pre-computed summary table
+   * Build the WHERE clause and bound parameters for a cohort search.
+   * Extracted so that count-only and export paths can reuse the same logic.
    */
-  getCohortVariants(params: CohortSearchParams): CohortPaginatedResult {
-    const limit = params.limit ?? 50
-    const offset = params.offset ?? 0
-    const validatedSortKey =
-      params.sort_by !== undefined && SORTABLE_COLUMNS[params.sort_by] !== undefined
-        ? params.sort_by
-        : 'carrier_count'
-    const sortBy = SORTABLE_COLUMNS[validatedSortKey]
-    const sortOrder = params.sort_order ?? 'desc'
-
-    // Get total case count (used for cohort_frequency calculation)
-    const totalCasesResult = this.db.prepare('SELECT COUNT(*) as count FROM cases').get() as {
-      count: number
-    }
-    const totalCases = totalCasesResult.count
-
-    if (totalCases === 0) {
-      return { data: [], total_count: 0 }
-    }
-
-    // Build WHERE clause for search and filters
+  private buildWhereClause(params: CohortSearchParams): {
+    whereClause: string
+    paramsArray: (string | number)[]
+  } {
     const whereConditions: string[] = []
     const paramsArray: (string | number)[] = []
 
@@ -232,6 +216,33 @@ export class CohortService {
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
+    return { whereClause, paramsArray }
+  }
+
+  /**
+   * Get aggregated cohort variants from pre-computed summary table
+   */
+  getCohortVariants(params: CohortSearchParams): CohortPaginatedResult {
+    const limit = params.limit ?? 50
+    const offset = params.offset ?? 0
+    const validatedSortKey =
+      params.sort_by !== undefined && SORTABLE_COLUMNS[params.sort_by] !== undefined
+        ? params.sort_by
+        : 'carrier_count'
+    const sortBy = SORTABLE_COLUMNS[validatedSortKey]
+    const sortOrder = params.sort_order ?? 'desc'
+
+    // Get total case count (used for cohort_frequency calculation)
+    const totalCasesResult = this.db.prepare('SELECT COUNT(*) as count FROM cases').get() as {
+      count: number
+    }
+    const totalCases = totalCasesResult.count
+
+    if (totalCases === 0) {
+      return { data: [], total_count: 0 }
+    }
+
+    const { whereClause, paramsArray } = this.buildWhereClause(params)
 
     // Count query (only when filters change, not on page/sort change)
     let totalCount = 0

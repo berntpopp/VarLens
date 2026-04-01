@@ -909,6 +909,25 @@ export class VariantRepository extends BaseRepository {
   }
 
   /**
+   * Return the count of variants matching a filter without fetching any data rows.
+   * Useful for count-only checks (e.g. enforcing limits before an operation).
+   */
+  getFilteredCount(filter: VariantFilter): number {
+    const useTempTable = this.preparePanelIntervals(filter)
+    try {
+      const countQuery = this.buildVariantQuery(filter)
+      const compiled = countQuery.compile()
+      const countSql = `SELECT count(*) as count FROM (${compiled.sql})`
+      const countResult = this.db.prepare(countSql).get(...compiled.parameters) as {
+        count: number
+      }
+      return countResult.count
+    } finally {
+      if (useTempTable) this.cleanupPanelIntervalsTable()
+    }
+  }
+
+  /**
    * Compile the export query to SQL+params for worker thread execution.
    * The worker receives compiled SQL and runs it directly, avoiding
    * filter logic duplication.
