@@ -98,6 +98,14 @@ export const mockApi: WindowAPI = {
         total_count: filtered.length
       }
     },
+    geneSymbols: async (caseId: number, query: string, limit = 50) => {
+      const queryLower = query.toLowerCase()
+      const symbols = variants
+        .filter((v) => v.case_id === caseId)
+        .map((v) => v.gene_symbol)
+        .filter((g): g is string => g != null && g.toLowerCase().includes(queryLower))
+      return [...new Set(symbols)].slice(0, limit)
+    },
     getFilterOptions: async () => mockFilterOptions,
     search: async (caseId, query, limit = 20) => {
       const searchLower = query.toLowerCase()

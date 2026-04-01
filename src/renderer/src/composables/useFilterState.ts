@@ -491,8 +491,7 @@ export function useFilterState(
     loadingSuggestions.value = true
     try {
       // Use optimized geneSymbols API - direct LIKE query instead of FTS5
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const results: string[] = await (api as any).variants.geneSymbols(caseIdRef.value, query, 50)
+      const results: string[] = await api!.variants.geneSymbols(caseIdRef.value, query, 50)
       geneSymbolSuggestions.value = results
     } catch (e) {
       logService.warn(
@@ -570,8 +569,7 @@ export function useFilterState(
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const options = await (api as any).variants.getFilterOptions(caseId)
+      const options = await api!.variants.getFilterOptions(caseId)
       filterOptions.value = options
       cacheFilterOptions(caseId, options)
     } catch (error) {
@@ -647,8 +645,7 @@ export function useFilterState(
     try {
       // Load filter options and tags in parallel
       const [options] = await Promise.all([
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (api as any).variants.getFilterOptions(caseId),
+        api!.variants.getFilterOptions(caseId),
         loadTags()
       ])
       filterOptions.value = options
