@@ -154,7 +154,9 @@ export default function run(task: DbTask): unknown {
           filter,
           params[1] as number,
           params[2] as number,
-          params[3] as Parameters<typeof repos.variants.getVariants>[3]
+          params[3] as Parameters<typeof repos.variants.getVariants>[3],
+          params[4] as boolean | undefined,
+          params[5] as boolean | undefined
         )
       }
 

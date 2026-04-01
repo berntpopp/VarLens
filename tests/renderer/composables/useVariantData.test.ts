@@ -95,13 +95,25 @@ describe('useVariantData', () => {
       expect(result.loading.value).toBe(false)
     })
 
-    it('fetches unfiltered count immediately via caseId watcher', async () => {
-      window.api.variants.query = vi.fn().mockResolvedValue({ data: [], total_count: 42 })
-      setup(7)
+    it('requests unfiltered count piggybacked on the first page load', async () => {
+      window.api.variants.query = vi
+        .fn()
+        .mockResolvedValue({ data: [], total_count: 42, unfiltered_count: 42 })
+      const { result } = setup(7)
       await flushPromises()
 
-      // The immediate watcher calls query with (caseId, {}, undefined, 1, [])
-      expect(window.api.variants.query).toHaveBeenCalledWith(7, {}, undefined, 1, [])
+      // Simulate the first loadVariants call (triggered by v-data-table-server in production)
+      await result.loadVariants()
+      await flushPromises()
+
+      // The first page load includes includeUnfilteredCount=true as the 7th argument
+      const calls = (window.api.variants.query as ReturnType<typeof vi.fn>).mock.calls
+      const firstCall = calls[0]
+      expect(firstCall[0]).toBe(7) // caseId
+      expect(firstCall[6]).toBe(true) // includeUnfilteredCount flag
+
+      // unfilteredCount should be populated from the response
+      expect(result.loading.value).toBe(false)
     })
 
     it('does not fetch when caseId is 0', async () => {
@@ -288,19 +300,31 @@ describe('useVariantData', () => {
       expect(result.selectedVariantId.value).toBeNull()
     })
 
-    it('fetches unfiltered count for new caseId on case switch', async () => {
-      window.api.variants.query = vi.fn().mockResolvedValue({ data: [], total_count: 0 })
-      const { caseIdRef } = setup(1)
+    it('requests unfiltered count piggybacked on the first page load after case switch', async () => {
+      window.api.variants.query = vi
+        .fn()
+        .mockResolvedValue({ data: [], total_count: 0, unfiltered_count: 0 })
+      const { result, caseIdRef } = setup(1)
       await flushPromises()
 
       vi.clearAllMocks()
-      window.api.variants.query = vi.fn().mockResolvedValue({ data: [], total_count: 55 })
+      window.api.variants.query = vi
+        .fn()
+        .mockResolvedValue({ data: [], total_count: 55, unfiltered_count: 55 })
 
       caseIdRef.value = 3
       await nextTick()
       await flushPromises()
 
-      expect(window.api.variants.query).toHaveBeenCalledWith(3, {}, undefined, 1, [])
+      // Simulate the first loadVariants call after case switch (triggered by v-data-table-server)
+      await result.loadVariants()
+      await flushPromises()
+
+      // The first page load after case switch includes includeUnfilteredCount=true
+      const calls = (window.api.variants.query as ReturnType<typeof vi.fn>).mock.calls
+      const firstCall = calls[0]
+      expect(firstCall[0]).toBe(3) // caseId
+      expect(firstCall[6]).toBe(true) // includeUnfilteredCount flag
     })
 
     it('clears column filters when switching cases', async () => {

@@ -37,6 +37,12 @@ export function useVariantData(options: UseVariantDataOptions) {
   // from a previous filter set are never served after a filter change.
   const filterKey = computed(() => JSON.stringify(toRaw(filters.value)))
 
+  // Domain-specific state (declared before useOffsetPagination so fetchPage closure can capture them)
+  const unfilteredCount = ref(0)
+  const selectedVariantId = ref<number | null>(null)
+  // Flag: request unfiltered count to be piggybacked on the next page load
+  let needsUnfilteredCount = true
+
   // Shared offset pagination
   const {
     page,
@@ -72,6 +78,7 @@ export function useVariantData(options: UseVariantDataOptions) {
             }
           : {})
       })
+      const shouldFetchUnfiltered = needsUnfilteredCount
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (api as any).variants.query(
         caseId.value,
@@ -79,8 +86,14 @@ export function useVariantData(options: UseVariantDataOptions) {
         offset,
         limit,
         sortItems,
-        skipCount
+        skipCount,
+        shouldFetchUnfiltered
       )
+
+      if (shouldFetchUnfiltered && result.unfiltered_count !== undefined) {
+        unfilteredCount.value = result.unfiltered_count
+        needsUnfilteredCount = false
+      }
 
       return {
         data: markRaw(result.data),
@@ -91,9 +104,6 @@ export function useVariantData(options: UseVariantDataOptions) {
     filterKey
   })
 
-  // Domain-specific state
-  const unfilteredCount = ref(0)
-  const selectedVariantId = ref<number | null>(null)
   // Use external columnMeta if provided (from useFilterState), otherwise internal ref
   const columnMeta = externalColumnMeta ?? shallowRef<ColumnFilterMeta[]>([])
 
@@ -112,20 +122,18 @@ export function useVariantData(options: UseVariantDataOptions) {
     onCountsUpdate({ filtered, total: unfilteredCount.value })
   })
 
-  // Fetch unfiltered count on case change
+  // Reset state on case change; unfiltered count is fetched with the first page load
   watch(
     caseId,
-    async (newCaseId) => {
+    (newCaseId) => {
       selectedVariantId.value = null
       clearAllColumnFilters()
 
       if (newCaseId !== undefined && newCaseId !== 0) {
         resetState()
         clearAnnotationCache()
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await (api as any).variants.query(newCaseId, {}, undefined, 1, [])
-        unfilteredCount.value = result.total_count
+        needsUnfilteredCount = true
+        // The first loadPage triggered by resetState will include the unfiltered count
       }
     },
     { immediate: true }

@@ -32,7 +32,8 @@ export function registerVariantHandlers({ ipcMain, getDb, getDbPool }: HandlerDe
       filters: unknown,
       offset: unknown,
       limit: unknown,
-      sortBy: unknown
+      sortBy: unknown,
+      includeUnfilteredCount: unknown
     ) => {
       return wrapHandler(async () => {
         // ANTI-07: Runtime validation at IPC boundary
@@ -137,15 +138,31 @@ export function registerVariantHandlers({ ipcMain, getDb, getDbPool }: HandlerDe
           }
         }
 
+        const validatedIncludeUnfilteredCount = includeUnfilteredCount === true
+
         if (pool) {
           return await pool.run({
             type: 'variants:query',
-            params: [fullFilter, validatedLimit, validatedOffset, validatedSortBy]
+            params: [
+              fullFilter,
+              validatedLimit,
+              validatedOffset,
+              validatedSortBy,
+              undefined,
+              validatedIncludeUnfilteredCount
+            ]
           })
         }
 
         const db = getDb()
-        return db.variants.getVariants(fullFilter, validatedLimit, validatedOffset, validatedSortBy)
+        return db.variants.getVariants(
+          fullFilter,
+          validatedLimit,
+          validatedOffset,
+          validatedSortBy,
+          undefined,
+          validatedIncludeUnfilteredCount
+        )
       })
     }
   )

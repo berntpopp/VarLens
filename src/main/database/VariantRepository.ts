@@ -822,8 +822,9 @@ export class VariantRepository extends BaseRepository {
     limit: number,
     offset: number = 0,
     sortBy?: SortItem[],
-    skipCount?: boolean
-  ): PaginatedResult<Variant> {
+    skipCount?: boolean,
+    includeUnfilteredCount?: boolean
+  ): PaginatedResult<Variant> & { unfiltered_count?: number } {
     const useTempTable = this.preparePanelIntervals(filter)
     try {
       let total_count = 0
@@ -845,7 +846,19 @@ export class VariantRepository extends BaseRepository {
       const sortedQuery = this.applySort(dataQuery, sortBy).limit(limit).offset(offset)
       const data = this.execAll<Variant>(sortedQuery)
 
-      return { data, total_count }
+      let unfiltered_count: number | undefined
+      if (includeUnfilteredCount === true) {
+        const result = this.db
+          .prepare('SELECT COUNT(*) as count FROM variants WHERE case_id = ?')
+          .get(filter.case_id) as { count: number }
+        unfiltered_count = result.count
+      }
+
+      return {
+        data,
+        total_count,
+        ...(unfiltered_count !== undefined ? { unfiltered_count } : {})
+      }
     } finally {
       if (useTempTable) this.cleanupPanelIntervalsTable()
     }
