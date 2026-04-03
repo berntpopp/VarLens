@@ -61,7 +61,7 @@ import type {
   GeneList,
   GeneListWithCount,
   RegionFile
-} from '../../main/database/types'
+} from './database'
 import type { ProgressUpdate, ImportResult } from '../../main/import/types'
 import type { VcfPreviewResult } from '../../main/import/vcf/types'
 import type { SerializableError } from './errors'
