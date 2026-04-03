@@ -1053,5 +1053,9 @@ export const mockApi: WindowAPI = {
       success: false as const,
       error: 'Mock mode - ClinVar API not available'
     })
+  },
+
+  perf: {
+    reportInteractive: () => {}
   }
 }

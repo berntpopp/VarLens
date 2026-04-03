@@ -233,6 +233,9 @@ export type MockApi = {
     removeMember: ReturnType<typeof vi.fn>
     getForCase: ReturnType<typeof vi.fn>
   }
+  perf: {
+    reportInteractive: ReturnType<typeof vi.fn>
+  }
 }
 
 /**
@@ -506,6 +509,10 @@ export function createMockApi(): MockApi {
       addMember: vi.fn().mockResolvedValue(undefined),
       removeMember: vi.fn().mockResolvedValue(undefined),
       getForCase: vi.fn().mockResolvedValue([])
+    },
+
+    perf: {
+      reportInteractive: vi.fn()
     }
   }
 }

@@ -590,6 +590,10 @@ const api = {
       ipcRenderer.invoke('gnomad:clinvar', geneSymbol, dataset)
   },
 
+  perf: {
+    reportInteractive: () => ipcRenderer.send('perf:interactive')
+  },
+
   presets: {
     list: () => ipcRenderer.invoke('presets:list'),
 

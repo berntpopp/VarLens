@@ -1,4 +1,4 @@
-import { app, dialog, shell, nativeImage, BrowserWindow } from 'electron'
+import { app, dialog, shell, nativeImage, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3-multiple-ciphers'
@@ -8,6 +8,7 @@ import { mainLogger } from './services/MainLogger'
 import { initAutoUpdater, scheduleUpdateChecks } from './services/AutoUpdater'
 import { APP_CONFIG } from '../shared/config'
 import { isUrlSafeForExternal } from './utils/url-validation'
+import { markMilestone } from './services/MainPerfTrace'
 
 // Disable GPU hardware acceleration when --disable-gpu flag is passed.
 // This prevents blank/white windows on Windows systems with outdated or
@@ -111,6 +112,8 @@ if (gotTheLock !== true) {
   // initialization and is ready to create browser windows.
   // Some APIs can only be used after this event occurs.
   app.whenReady().then(async () => {
+    markMilestone('app-ready')
+
     // Set app user model id for windows
     electronApp.setAppUserModelId('com.varlens.app')
 
@@ -196,6 +199,11 @@ if (gotTheLock !== true) {
 
     // Create window after security handlers are registered
     createWindow()
+    markMilestone('window-created')
+
+    ipcMain.once('perf:interactive', () => {
+      markMilestone('renderer-interactive')
+    })
 
     // Deferred by 5s to avoid competing with startup data loading and rendering
     setTimeout(() => {

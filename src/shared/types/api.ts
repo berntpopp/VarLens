@@ -691,6 +691,10 @@ export interface GnomadAPI {
   ) => Promise<ClinVarFetchResult | ProteinApiError>
 }
 
+export interface PerfAPI {
+  reportInteractive: () => void
+}
+
 export interface WindowAPI {
   cases: CasesAPI
   variants: VariantsAPI
@@ -723,6 +727,7 @@ export interface WindowAPI {
   analysisGroups: AnalysisGroupsAPI
   protein: ProteinAPI
   gnomad: GnomadAPI
+  perf: PerfAPI
 }
 
 export interface PresetsAPI {

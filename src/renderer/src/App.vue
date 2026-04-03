@@ -348,6 +348,11 @@ onMounted(() => {
     )
   })
 
+  // Report to main process that renderer is interactive
+  if (import.meta.env.DEV) {
+    api?.perf.reportInteractive()
+  }
+
   if (api) {
     cleanupImportComplete = api.batchImport.onComplete((result) => {
       // Update the import store so the status bar reflects completion
