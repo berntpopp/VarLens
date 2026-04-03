@@ -8,6 +8,8 @@ import { useColumnFilters } from '../../composables/useColumnFilters'
 import { useDebounce } from '../../composables/useDebounce'
 import { useApiService } from '../../composables/useApiService'
 import { cloneForIpc } from '../../utils/cloneForIpc'
+import { traceStart, traceEnd } from '../../services/PerfTrace'
+import type { PerfBudgetKey } from '../../../../shared/config/perf-budgets'
 
 interface UseVariantDataOptions {
   caseId: Ref<number>
@@ -21,6 +23,10 @@ interface UseVariantDataOptions {
 export function useVariantData(options: UseVariantDataOptions) {
   const { caseId, filters, columnMeta: externalColumnMeta, onCountsUpdate, onSortUpdate } = options
   const { api } = useApiService()
+
+  // Flow-level tracing: track active user-flow trace across watchers
+  let activeFlowTraceId: string | null = null
+  let activeFlowBudget: PerfBudgetKey | undefined = undefined
 
   // Annotations
   const {
@@ -130,6 +136,13 @@ export function useVariantData(options: UseVariantDataOptions) {
       clearAllColumnFilters()
 
       if (newCaseId !== undefined && newCaseId !== 0) {
+        if (import.meta.env.DEV) {
+          if (activeFlowTraceId !== null) {
+            traceEnd(activeFlowTraceId, activeFlowBudget)
+          }
+          activeFlowTraceId = traceStart('case-switch')
+          activeFlowBudget = 'CASE_SWITCH'
+        }
         resetState()
         clearAnnotationCache()
         needsUnfilteredCount = true
@@ -140,7 +153,16 @@ export function useVariantData(options: UseVariantDataOptions) {
   )
 
   // Reload when filters change (serialized key avoids deep reactive traversal)
-  watch(filterKey, invalidateAndReload)
+  watch(filterKey, () => {
+    if (import.meta.env.DEV) {
+      if (activeFlowTraceId !== null) {
+        traceEnd(activeFlowTraceId, activeFlowBudget)
+      }
+      activeFlowTraceId = traceStart('filter-apply')
+      activeFlowBudget = 'FILTER_APPLY'
+    }
+    invalidateAndReload()
+  })
 
   // Debounced reload when per-column filters change
   const { debouncedFn: debouncedColumnFilterReload } = useDebounce(invalidateAndReload, 300)
@@ -154,6 +176,11 @@ export function useVariantData(options: UseVariantDataOptions) {
       invalidateAnnotationGeneration()
       if (newVariants.length > 0 && caseId.value !== undefined && caseId.value !== 0) {
         await loadAnnotationsBatch(caseId.value, newVariants)
+      }
+      // Flow complete: data fetched + annotations hydrated
+      if (import.meta.env.DEV && activeFlowTraceId !== null) {
+        traceEnd(activeFlowTraceId, activeFlowBudget)
+        activeFlowTraceId = null
       }
     },
     { immediate: true }
