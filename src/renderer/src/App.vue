@@ -68,6 +68,8 @@
     <KeyboardShortcutsDialog v-model="showKeyboardHelp" />
 
     <ViewTransitionOverlay :model-value="transitioning" />
+
+    <component :is="PerfOverlay" v-if="PerfOverlay !== null" />
   </v-app>
 </template>
 
@@ -102,6 +104,9 @@ const KeyboardShortcutsDialog = defineAsyncComponent(
 const ViewTransitionOverlay = defineAsyncComponent(
   () => import('./components/ViewTransitionOverlay.vue')
 )
+const PerfOverlay = import.meta.env.DEV
+  ? defineAsyncComponent(() => import('./components/dev/PerfOverlay.vue'))
+  : null
 
 const router = useRouter()
 const { api } = useApiService()
