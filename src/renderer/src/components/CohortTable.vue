@@ -126,6 +126,7 @@ import type { CohortQueryParams } from '../composables/useCohortData'
 import type { ColumnFiltersParam } from '../../../shared/types/column-filters'
 import { mdiDatabaseSync, mdiRefresh } from '@mdi/js'
 import { isIpcError } from '../../../shared/types/errors'
+import type { AcmgClassification } from '../../../shared/config/domain.config'
 
 // Emit for navigation and row click
 const emit = defineEmits<{
@@ -393,7 +394,7 @@ const handleStarToggle = (item: CohortVariant) => {
 
 const handleAcmgSelect = (payload: {
   item: CohortVariant
-  classification: import('../../../main/database/types').AcmgClassification | null
+  classification: AcmgClassification | null
 }) => {
   annotationDialogsRef.value?.handleQuickAcmgSelect(payload.item, payload.classification)
 }
