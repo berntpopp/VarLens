@@ -5,7 +5,13 @@
  */
 
 import type { VepResponse, VepTranscriptConsequence } from './vep'
-import type { HpoTerm } from '../../main/services/api/schemas/hpo-response'
+
+export interface HpoTerm {
+  /** HPO ID in format HP:XXXXXXX */
+  id: string
+  /** Human-readable term name */
+  name: string
+}
 
 /**
  * Cache metadata for UI display

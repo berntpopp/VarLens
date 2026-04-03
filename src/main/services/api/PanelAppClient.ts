@@ -64,20 +64,8 @@ const PanelAppSearchResponseSchema = z
 // Types
 // ---------------------------------------------------------------------------
 
-export interface PanelAppSearchResult {
-  id: number
-  name: string
-  version: string
-  disease_group: string
-  disease_sub_group: string
-  status: string
-  relevant_disorders: string[]
-  stats: {
-    number_of_genes: number
-  }
-  types: Array<{ name: string; slug: string }>
-  region: 'uk' | 'aus'
-}
+import type { PanelAppSearchResult } from '../../../shared/types/panels'
+export type { PanelAppSearchResult }
 
 export interface PanelAppGene {
   gene_data: {

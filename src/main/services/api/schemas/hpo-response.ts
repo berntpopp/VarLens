@@ -34,9 +34,4 @@ export type HpoAutocompleteResponse = z.infer<typeof HpoAutocompleteResponseSche
  * Parsed HPO term for application use
  * Transformed from tuple format to object for better ergonomics
  */
-export interface HpoTerm {
-  /** HPO ID in format HP:XXXXXXX */
-  id: string
-  /** Human-readable term name */
-  name: string
-}
+export type { HpoTerm } from '../../../../shared/types/api-enrichment'
