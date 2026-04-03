@@ -121,6 +121,46 @@ function extractMockApiKeys(): string[] {
   return keys.sort()
 }
 
+/**
+ * Extract method keys for a specific API sub-interface from api.ts.
+ */
+function extractSubInterfaceKeys(interfaceName: string): string[] {
+  const content = readFileSync(resolve(ROOT, 'src/shared/types/api.ts'), 'utf-8')
+  const re = new RegExp(`export interface ${interfaceName}\\s*\\{([^}]+)\\}`)
+  const match = content.match(re)
+  if (!match) return []
+
+  const keys: string[] = []
+  for (const line of match[1].split('\n')) {
+    const m = line.match(/^\s+(\w+)\s*:/)
+    if (m) keys.push(m[1])
+  }
+  return keys.sort()
+}
+
+describe('Preload contract — per-module method alignment', () => {
+  const apiContent = readFileSync(resolve(ROOT, 'src/shared/types/api.ts'), 'utf-8')
+
+  // Extract module→interface mapping from WindowAPI
+  const windowApiBlock = apiContent.match(/export interface WindowAPI\s*\{([^}]+)\}/)
+  if (!windowApiBlock) throw new Error('Cannot find WindowAPI')
+
+  const moduleEntries: Array<{ key: string; interfaceName: string }> = []
+  for (const line of windowApiBlock[1].split('\n')) {
+    const match = line.match(/^\s+(\w+)\s*:\s*(\w+)/)
+    if (match) {
+      moduleEntries.push({ key: match[1], interfaceName: match[2] })
+    }
+  }
+
+  for (const { key, interfaceName } of moduleEntries) {
+    it(`${key} (${interfaceName}) has methods defined`, () => {
+      const methods = extractSubInterfaceKeys(interfaceName)
+      expect(methods.length).toBeGreaterThan(0)
+    })
+  }
+})
+
 describe('Preload contract alignment', () => {
   const windowApiKeys = extractWindowApiKeys()
   const preloadKeys = extractPreloadApiKeys()
