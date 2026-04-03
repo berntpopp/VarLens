@@ -54,9 +54,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  secrets-scan:
+    name: Secrets Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release-linux:
     name: Release (Linux)
-    needs: create-release
+    needs: [create-release, secrets-scan]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -91,8 +105,8 @@ jobs:
       - name: Run type check
         run: npm run typecheck
 
-      - name: Run tests
-        run: npm run test
+      - name: Run tests with coverage
+        run: npx vitest run --coverage
 
       - name: Rebuild native modules for Electron
         run: npm run rebuild:electron
@@ -113,7 +127,7 @@ jobs:
 
   release-macos:
     name: Release (macOS)
-    needs: create-release
+    needs: [create-release, secrets-scan]
     runs-on: macos-latest
     permissions:
       contents: write
@@ -165,7 +179,7 @@ jobs:
 
   release-windows:
     name: Release (Windows)
-    needs: create-release
+    needs: [create-release, secrets-scan]
     runs-on: windows-latest
     environment: release
     permissions:
