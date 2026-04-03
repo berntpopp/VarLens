@@ -68,7 +68,6 @@
     <KeyboardShortcutsDialog v-model="showKeyboardHelp" />
 
     <ViewTransitionOverlay :model-value="transitioning" />
-
   </v-app>
 </template>
 
