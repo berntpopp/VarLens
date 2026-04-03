@@ -88,16 +88,24 @@ export function useFilterPreferences(options?: UseFilterPreferencesOptions) {
     const stored = storedPrefs.value.groups ?? []
     const storedIds = new Set(stored.map((g) => g.id))
 
+    /** Legacy stored format (pre-v0.48) used `active` instead of `visible`+`expanded` */
+    interface LegacyFilterGroupPreference {
+      id: string
+      order: number
+      active?: boolean
+      visible?: boolean
+      expanded?: boolean
+    }
+
     // Migrate old format (active) to new format (visible + expanded)
     const migrated = stored.map((g) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const anyG = g as any
-      if (anyG.active !== undefined && g.visible === undefined) {
+      const legacy = g as LegacyFilterGroupPreference
+      if (legacy.active !== undefined && g.visible === undefined) {
         return {
           id: g.id,
           order: g.order,
-          visible: anyG.active,
-          expanded: anyG.active
+          visible: legacy.active,
+          expanded: legacy.active
         }
       }
       return {
