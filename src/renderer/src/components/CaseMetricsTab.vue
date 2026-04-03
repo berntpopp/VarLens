@@ -27,9 +27,9 @@
             <v-list-item v-bind="itemProps">
               <template #subtitle>
                 <span class="text-caption">
-                  {{ (item as any).raw?.category ?? '' }}
-                  <template v-if="(item as any).raw?.unit">
-                    &middot; {{ (item as any).raw.unit }}
+                  {{ (item as unknown as AutocompleteItem).raw?.category ?? '' }}
+                  <template v-if="(item as unknown as AutocompleteItem).raw?.unit">
+                    &middot; {{ (item as unknown as AutocompleteItem).raw.unit }}
                   </template>
                 </span>
               </template>
@@ -187,6 +187,12 @@
 import { ref, computed, watch } from 'vue'
 import { useCaseMetrics } from '../composables/useCaseMetrics'
 import type { MetricDefinition, CaseMetricWithDefinition } from '../../../shared/types/api'
+
+interface AutocompleteItem {
+  raw: MetricDefinition
+  title: string
+  value: unknown
+}
 import { EMPTY_VALUE_PLACEHOLDER } from '../utils/formatters'
 import { mdiDeleteOutline } from '@mdi/js'
 import { logService } from '../services/LogService'
