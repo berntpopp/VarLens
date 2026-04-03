@@ -113,6 +113,8 @@ import { useAnnotations } from '../composables/useAnnotations'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
+import { traceStart, traceEnd } from '../services/PerfTrace'
+import type { PerfBudgetKey } from '../../../shared/config/perf-budgets'
 import { useDebounce } from '../composables/useDebounce'
 // Sub-components
 import CohortFilterBar from './cohort/CohortFilterBar.vue'
@@ -176,6 +178,10 @@ const {
 const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
   useColumnPreferences('cohort-table')
 const { orderedColumns, visibleHeaders } = useCohortColumns(prefs)
+
+// Flow trace tracking
+let activeFlowTraceId: string | null = null
+let activeFlowBudget: PerfBudgetKey | undefined = undefined
 
 // Ref to CohortFilterBar for accessing DSL column filters
 const cohortFilterBarRef = ref<InstanceType<typeof CohortFilterBar> | null>(null)
@@ -347,9 +353,21 @@ const annotationActions = {
 }
 
 // Event handlers
-const handleFilterChange = () => invalidateAndReload()
+const handleFilterChange = () => {
+  if (import.meta.env.DEV) {
+    if (activeFlowTraceId !== null) traceEnd(activeFlowTraceId, activeFlowBudget)
+    activeFlowTraceId = traceStart('cohort-filter-apply')
+    activeFlowBudget = 'FILTER_APPLY'
+  }
+  invalidateAndReload()
+}
 
 const handleClearAll = async () => {
+  if (import.meta.env.DEV) {
+    if (activeFlowTraceId !== null) traceEnd(activeFlowTraceId, activeFlowBudget)
+    activeFlowTraceId = traceStart('cohort-filter-apply')
+    activeFlowBudget = 'FILTER_APPLY'
+  }
   clearAllFilters()
   cohortDataTableRef.value?.clearAllColumnFilters()
   resetSort()
@@ -441,6 +459,11 @@ const { debouncedFn: debouncedLoadAnnotations } = useDebounce(
 )
 watch(variants, (newVariants) => {
   debouncedLoadAnnotations(newVariants)
+  // End flow trace when new data arrives (primary visual update)
+  if (import.meta.env.DEV && activeFlowTraceId !== null) {
+    traceEnd(activeFlowTraceId, activeFlowBudget)
+    activeFlowTraceId = null
+  }
 })
 
 // Auto-refresh when summary rebuild completes
