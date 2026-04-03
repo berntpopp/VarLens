@@ -165,7 +165,9 @@
   },
   "overrides": {
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-    "@xmldom/xmldom": "^0.8.12"
+    "@xmldom/xmldom": "^0.8.12",
+    "lodash": "^4.18.1",
+    "esbuild": ">=0.25.0"
   },
   "prettier": {
     "semi": false,
