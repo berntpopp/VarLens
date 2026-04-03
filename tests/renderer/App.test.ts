@@ -83,6 +83,9 @@ const mockApi = {
     installUpdate: vi.fn().mockResolvedValue(undefined),
     getStatus: vi.fn().mockResolvedValue({ state: 'idle' }),
     onStatusChange: vi.fn(() => vi.fn()) // Returns cleanup function
+  },
+  perf: {
+    reportInteractive: vi.fn()
   }
 }
 

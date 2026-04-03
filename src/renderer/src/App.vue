@@ -355,7 +355,7 @@ onMounted(() => {
 
   // Report to main process that renderer is interactive
   if (import.meta.env.DEV) {
-    api?.perf.reportInteractive()
+    api?.perf?.reportInteractive()
   }
 
   if (api) {
