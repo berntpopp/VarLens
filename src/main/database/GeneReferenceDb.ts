@@ -12,7 +12,13 @@ import type {
   AssemblyInfo,
   GeneRefInfo
 } from '../../shared/types/gene-reference'
-export type { GeneValidationResult, GeneAutocompleteResult, GeneCoordinates, AssemblyInfo, GeneRefInfo }
+export type {
+  GeneValidationResult,
+  GeneAutocompleteResult,
+  GeneCoordinates,
+  AssemblyInfo,
+  GeneRefInfo
+}
 
 // ---------------------------------------------------------------------------
 // Internal row types (raw DB results)

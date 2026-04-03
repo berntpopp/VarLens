@@ -84,8 +84,19 @@ import type { FilterPreset, FilterPresetCreate, FilterPresetUpdate } from './fil
 import type { LogMessage } from './log'
 import type { TranscriptAnnotation, TranscriptInsertRow } from './transcript'
 import type { DatabaseOverview } from './database-overview'
-import type { GeneValidationResult, GeneAutocompleteResult, GeneRefInfo, AssemblyInfo } from './gene-reference'
-import type { PanelRow, PanelWithCount, PanelGeneRow, ActivePanelRow, PanelAppSearchResult } from './panels'
+import type {
+  GeneValidationResult,
+  GeneAutocompleteResult,
+  GeneRefInfo,
+  AssemblyInfo
+} from './gene-reference'
+import type {
+  PanelRow,
+  PanelWithCount,
+  PanelGeneRow,
+  ActivePanelRow,
+  PanelAppSearchResult
+} from './panels'
 import type {
   ProteinMappingResult,
   ProteinDomainResult,

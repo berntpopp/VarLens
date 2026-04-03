@@ -4,8 +4,22 @@ import { sqlPlaceholders } from './sql-utils'
 
 // ── Types ────────────────────────────────────────────────────
 
-import type { GenomicInterval, CreatePanelInput, PanelRow, PanelWithCount, PanelGeneRow, ActivePanelRow } from '../../shared/types/panels'
-export type { GenomicInterval, CreatePanelInput, PanelRow, PanelWithCount, PanelGeneRow, ActivePanelRow }
+import type {
+  GenomicInterval,
+  CreatePanelInput,
+  PanelRow,
+  PanelWithCount,
+  PanelGeneRow,
+  ActivePanelRow
+} from '../../shared/types/panels'
+export type {
+  GenomicInterval,
+  CreatePanelInput,
+  PanelRow,
+  PanelWithCount,
+  PanelGeneRow,
+  ActivePanelRow
+}
 
 // ── Repository ───────────────────────────────────────────────
 

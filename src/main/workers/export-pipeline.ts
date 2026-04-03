@@ -71,6 +71,12 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
 
   const stream = createWriteStream(outputFilePath, { encoding: 'utf8' })
 
+  // Attach error handler immediately to catch open/write failures
+  let streamError: Error | null = null
+  stream.on('error', (err) => {
+    streamError = err
+  })
+
   // Write header row
   const headerRow = EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',')
   const headerOk = stream.write(headerRow + '\r\n')

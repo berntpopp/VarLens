@@ -147,9 +147,7 @@ describe('rebuildFts', () => {
     runMigrations(db)
     rebuildFts(db)
     // The FTS virtual table should exist and be queryable
-    expect(() =>
-      db.prepare("SELECT COUNT(*) as c FROM variants_fts").get()
-    ).not.toThrow()
+    expect(() => db.prepare('SELECT COUNT(*) as c FROM variants_fts').get()).not.toThrow()
   })
 })
 

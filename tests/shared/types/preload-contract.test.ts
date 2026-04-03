@@ -123,18 +123,41 @@ function extractMockApiKeys(): string[] {
 
 /**
  * Extract method keys for a specific API sub-interface from api.ts.
+ * Uses brace-depth tracking to handle nested object types in return signatures
+ * (e.g., `Promise<{ data: T[]; total_count: number }>`).
  */
 function extractSubInterfaceKeys(interfaceName: string): string[] {
   const content = readFileSync(resolve(ROOT, 'src/shared/types/api.ts'), 'utf-8')
-  const re = new RegExp(`export interface ${interfaceName}\\s*\\{([^}]+)\\}`)
-  const match = content.match(re)
-  if (!match) return []
 
+  // Find the start of the interface
+  const startMarker = `export interface ${interfaceName}`
+  const startIdx = content.indexOf(startMarker)
+  if (startIdx === -1) return []
+
+  // Track brace depth to find the matching closing brace
+  const lines = content.slice(startIdx).split('\n')
+  let depth = 0
+  let inBlock = false
   const keys: string[] = []
-  for (const line of match[1].split('\n')) {
-    const m = line.match(/^\s+(\w+)\s*:/)
-    if (m) keys.push(m[1])
+
+  for (const line of lines) {
+    // Top-level properties are at depth === 1 (inside the outer interface brace)
+    if (depth === 1) {
+      const m = line.match(/^\s+(\w+)\s*:/)
+      if (m) keys.push(m[1])
+    }
+
+    for (const ch of line) {
+      if (ch === '{') {
+        depth++
+        inBlock = true
+      }
+      if (ch === '}') depth--
+    }
+
+    if (inBlock && depth === 0) break
   }
+
   return keys.sort()
 }
 
