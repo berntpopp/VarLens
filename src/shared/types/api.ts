@@ -62,8 +62,7 @@ import type {
   GeneListWithCount,
   RegionFile
 } from './database'
-import type { ProgressUpdate, ImportResult } from '../../main/import/types'
-import type { VcfPreviewResult } from '../../main/import/vcf/types'
+import type { ProgressUpdate, ImportResult, VcfPreviewResult } from './import'
 import type { SerializableError } from './errors'
 import type {
   CohortVariant,

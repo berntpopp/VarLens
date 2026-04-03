@@ -7,6 +7,9 @@
  */
 
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
+import type { AnnotationType } from '../../../shared/types/import'
+
+export type { AnnotationType, VcfPreviewResult } from '../../../shared/types/import'
 
 // ── Header types ─────────────────────────────────────────────
 
@@ -31,9 +34,6 @@ export interface ContigDef {
   id: string
   length?: number
 }
-
-/** Annotation type detected from VCF header */
-export type AnnotationType = 'csq' | 'ann' | 'none'
 
 /** Parsed VCF header -- produced by vcf-header-parser */
 export interface VcfHeader {
@@ -180,21 +180,7 @@ export interface VcfMappedVariant {
 
 // ── Preview / import option types ────────────────────────────
 
-/** VCF preview result returned by the import:vcfPreview IPC channel */
-export interface VcfPreviewResult {
-  fileformat: string
-  samples: string[]
-  variantCountEstimate: number
-  annotationType: AnnotationType
-  detectedGenomeBuild: string | null
-  infoFields: Array<{
-    id: string
-    type: string
-    number: string
-    description: string
-    mapsToColumn: string | null
-  }>
-}
+// VcfPreviewResult and AnnotationType are re-exported from shared/types/import above
 
 /** VCF-specific import options extending the base ImportOptions */
 export interface VcfImportOptions {
