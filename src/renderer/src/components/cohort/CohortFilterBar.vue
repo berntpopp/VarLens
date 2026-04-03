@@ -154,6 +154,7 @@ import {
 import { cloneForIpc } from '../../utils/cloneForIpc'
 import { logService } from '../../services/LogService'
 import { isIpcError } from '../../../../shared/types/errors'
+import { useApiService } from '../../composables/useApiService'
 
 interface Props {
   totalCount: number | null
@@ -167,6 +168,8 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const { api } = useApiService()
 
 const emit = defineEmits<{
   'filter-change': []
@@ -405,15 +408,11 @@ const searchGeneSymbols = async (query: string) => {
     return
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (typeof window === 'undefined' || typeof (window as any).api === 'undefined') {
-    return
-  }
+  if (api == null) return
 
   loadingGeneSuggestions.value = true
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (window as any).api.cohort.getVariants({
+    const result = await api.cohort.getVariants({
       gene_symbol: query,
       limit: 100
     })

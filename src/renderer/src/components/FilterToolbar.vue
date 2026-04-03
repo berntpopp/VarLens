@@ -173,6 +173,7 @@ import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from
 import { cloneForIpc } from '../utils/cloneForIpc'
 import { isIpcError } from '../../../shared/types/errors'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
+import { useApiService } from '../composables/useApiService'
 import {
   mdiCommentText,
   mdiCommentTextOutline,
@@ -213,6 +214,8 @@ interface Emits {
 }
 
 const emit = defineEmits<Emits>()
+
+const { api } = useApiService()
 
 // Forward ref for DSL column filters — populated by useDslFilterIntegration below.
 // Used in onFiltersUpdate closure to merge DSL column filters into the emitted payload.
@@ -496,12 +499,12 @@ const exportToExcel = async () => {
   if (!result.success && result.error !== undefined && result.error !== '') {
     emit('export-error', result.error)
   } else if (result.success && result.filePath !== undefined && result.filePath !== '') {
+    const filePath = result.filePath
     emit('export-success', {
-      filePath: result.filePath,
+      filePath,
       action: {
         text: 'Open folder',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        callback: () => (window as any).api.shell.showItemInFolder(result.filePath)
+        callback: () => api?.shell.showItemInFolder(filePath)
       }
     })
   }
