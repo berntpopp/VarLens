@@ -96,7 +96,7 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
     })
   })
 
-  ipcMain.handle('cohort:geneBurdenCompare', async (event, params: unknown) => {
+  ipcMain.handle('cohort:geneBurdenCompare', async (_event, params: unknown) => {
     return wrapHandler(async () => {
       const validated = AssociationConfigSchema.safeParse(params)
       if (!validated.success) {
@@ -105,7 +105,7 @@ export function registerCohortHandlers({ ipcMain, getDb, getDbPool }: HandlerDep
       }
 
       return runGeneBurdenCompare(validated.data, getDb, getDbPool, (data) =>
-        event.sender.send('cohort:geneBurdenProgress', data)
+        safeEmit('cohort:geneBurdenProgress', data)
       )
     })
   })
