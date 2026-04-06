@@ -156,7 +156,7 @@
     "pinia": "^3.0.4",
     "piscina": "^5.1.4",
     "plotly.js-basic-dist-min": "^3.4.0",
-    "stream-json": "^1.9.1",
+    "stream-json": "^2.1.0",
     "vue-router": "^5.0.4",
     "vuedraggable": "^4.1.0",
     "vuetify": "^4.0.4",
