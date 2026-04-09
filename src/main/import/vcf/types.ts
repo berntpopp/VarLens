@@ -176,6 +176,23 @@ export interface VcfMappedVariant {
   info_json: string | null
   source_format: string | null
   _transcripts?: TranscriptInsertRow[]
+
+  /** Variant type discriminator */
+  variant_type: string
+  /** End position for SV/CNV/STR */
+  end_pos: number | null
+  /** SV type: DEL, DUP, INV, INS, BND */
+  sv_type: string | null
+  /** SV length */
+  sv_length: number | null
+  /** Detected caller name */
+  caller: string | null
+  /** SV extension data */
+  _sv?: import('./extension-parsers').SvExtensionRow
+  /** CNV extension data */
+  _cnv?: import('./extension-parsers').CnvExtensionRow
+  /** STR extension data */
+  _str?: import('./extension-parsers').StrExtensionRow
 }
 
 // ── Preview / import option types ────────────────────────────

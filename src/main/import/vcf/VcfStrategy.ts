@@ -17,6 +17,7 @@ import { parseVcfHeaderFromLines } from './vcf-header-parser'
 import { parseVcfLine } from './vcf-line-parser'
 import { mapVcfRecord } from './VcfMapper'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from './info-field-registry'
+import { detectCaller } from './caller-detector'
 export class VcfStrategy implements ImportStrategy {
   readonly formatId = 'vcf' as const
 
@@ -44,6 +45,7 @@ export class VcfStrategy implements ImportStrategy {
     let totalInserted = 0
     let totalSkipped = 0
     const errors: string[] = []
+    let callerName: string | null = null
     let batch: VcfMappedVariant[] = []
 
     // Drop FTS triggers for bulk insert performance
@@ -73,6 +75,9 @@ export class VcfStrategy implements ImportStrategy {
             errors.push('No sample found in VCF file')
             break
           }
+
+          const callerInfo = detectCaller(header.rawHeaderLines)
+          callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
         }
 
         // Parse the data line
@@ -82,7 +87,13 @@ export class VcfStrategy implements ImportStrategy {
             totalSkipped++
             continue
           }
-          const mapped = mapVcfRecord(record, header, activeSample, DEFAULT_INFO_FIELD_MAPPINGS)
+          const mapped = mapVcfRecord(
+            record,
+            header,
+            activeSample,
+            DEFAULT_INFO_FIELD_MAPPINGS,
+            callerName
+          )
 
           if (mapped.length === 0) {
             totalSkipped++

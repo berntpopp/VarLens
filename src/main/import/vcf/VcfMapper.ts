@@ -10,6 +10,15 @@ import { splitMultiAllelic } from './vcf-allele-splitter'
 import { parseAnnotation } from './vcf-annotation-parser'
 import { parseGenotype } from './vcf-genotype-parser'
 import { applyInfoFieldRegistry } from './info-field-registry'
+import { detectVariantType } from './variant-type-detector'
+import { extractSvFields, extractCnvFields, extractStrFields } from './extension-parsers'
+
+/** Parse integer from string, returning null for missing/invalid values */
+function parseIntOrNull(val: string | undefined): number | null {
+  if (val === undefined || val === '' || val === '.') return null
+  const n = parseInt(val, 10)
+  return Number.isNaN(n) ? null : n
+}
 
 /**
  * Map a VcfRawRecord into zero or more VcfMappedVariant objects.
@@ -22,13 +31,15 @@ import { applyInfoFieldRegistry } from './info-field-registry'
  * @param header - Parsed VCF header
  * @param sampleName - Which sample to extract genotype for
  * @param registry - INFO field mappings
+ * @param callerName - Detected caller name (null if unknown)
  * @returns Array of mapped variants (may be empty)
  */
 export function mapVcfRecord(
   record: VcfRawRecord,
   header: VcfHeader,
   sampleName: string,
-  registry: InfoFieldMapping[]
+  registry: InfoFieldMapping[],
+  callerName: string | null = null
 ): VcfMappedVariant[] {
   // Step 1: Split multi-allelic into biallelic records
   const splitRecords = splitMultiAllelic(record, header.infoDefs, header.formatDefs)
@@ -58,8 +69,19 @@ export function mapVcfRecord(
     // Step 4: Apply INFO field registry
     const infoResult = applyInfoFieldRegistry(rec.info, registry, annotation)
 
-    // Step 5: Assemble the mapped variant
-    const variant: VcfMappedVariant = {
+    // Step 5: Build sample raw FORMAT values for extension parsers
+    const sampleRawValues = new Map<string, string>()
+    const sampleVals = rec.samples.get(sampleName)
+    if (rec.format.length > 0 && sampleVals !== undefined) {
+      for (let i = 0; i < rec.format.length; i++) {
+        if (i < sampleVals.length && sampleVals[i] !== undefined) {
+          sampleRawValues.set(rec.format[i], sampleVals[i])
+        }
+      }
+    }
+
+    // Step 6: Assemble the mapped variant
+    const mapped: VcfMappedVariant = {
       chr: rec.chrom,
       pos: rec.pos,
       ref: rec.ref,
@@ -89,10 +111,25 @@ export function mapVcfRecord(
       filter: rec.filter,
       info_json: infoResult.infoJson ? JSON.stringify(infoResult.infoJson) : null,
       source_format: 'vcf',
-      _transcripts: annotation.transcripts.length > 0 ? annotation.transcripts : undefined
+      _transcripts: annotation.transcripts.length > 0 ? annotation.transcripts : undefined,
+      variant_type: detectVariantType(rec.ref, altAllele, rec.info, callerName),
+      end_pos: parseIntOrNull(rec.info.get('END')),
+      sv_type: rec.info.get('SVTYPE') ?? null,
+      sv_length: parseIntOrNull(rec.info.get('SVLEN')),
+      caller: callerName
     }
 
-    results.push(variant)
+    // Step 7: Attach extension data for non-SNV/indel variant types
+    const vt = mapped.variant_type
+    if (vt === 'sv') {
+      mapped._sv = extractSvFields(rec.info, sampleRawValues)
+    } else if (vt === 'cnv') {
+      mapped._cnv = extractCnvFields(rec.info, sampleRawValues)
+    } else if (vt === 'str') {
+      mapped._str = extractStrFields(rec.info, sampleRawValues)
+    }
+
+    results.push(mapped)
   }
 
   return results
