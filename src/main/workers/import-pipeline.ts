@@ -58,9 +58,31 @@ export function prepareStatements(db: DatabaseType) {
     INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, omim_mim_number,
       consequence, gnomad_af, cadd, clinvar, gt_num, func, qual,
       hpo_sim_score, transcript, cdna, aa_change, moi,
-      gq, dp, ad_ref, ad_alt, ab, filter, info_json, source_format)
+      gq, dp, ad_ref, ad_alt, ab, filter, info_json, source_format,
+      variant_type, end_pos, sv_type, sv_length, caller)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?)
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  const insertSvStmt = db.prepare(`
+    INSERT INTO variant_sv (variant_id, sv_is_precise, cipos_left, cipos_right,
+      ciend_left, ciend_right, support, coverage, strand, stdev_len, stdev_pos,
+      vaf, dr, dv, pe_support, sr_support, event_id, mate_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  const insertCnvStmt = db.prepare(`
+    INSERT INTO variant_cnv (variant_id, copy_number, copy_number_quality,
+      homozygosity_ref, homozygosity_alt, sm, bin_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  const insertStrStmt = db.prepare(`
+    INSERT INTO variant_str (variant_id, repeat_id, variant_catalog_id,
+      repeat_unit, display_repeat_unit, ref_copies, alt_copies, repeat_length,
+      str_status, normal_max, pathologic_min, disease, inheritance_mode,
+      source_display, rank_score, locus_coverage, support_type, confidence_interval)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const insertTranscriptStmt = db.prepare(`
@@ -121,12 +143,18 @@ export function prepareStatements(db: DatabaseType) {
         v.ab ?? null,
         v.filter ?? null,
         v.info_json ?? null,
-        v.source_format ?? null
+        v.source_format ?? null,
+        v.variant_type ?? 'snv',
+        v.end_pos ?? null,
+        v.sv_type ?? null,
+        v.sv_length ?? null,
+        v.caller ?? null
       )
+
+      const variantId = result.lastInsertRowid
 
       const transcripts = v._transcripts as Array<Record<string, unknown>> | undefined
       if (transcripts && transcripts.length > 0) {
-        const variantId = result.lastInsertRowid
         for (const t of transcripts) {
           insertTranscriptStmt.run(
             variantId,
@@ -140,6 +168,64 @@ export function prepareStatements(db: DatabaseType) {
             t.is_selected
           )
         }
+      }
+
+      // Insert extension table row if present
+      if (v._sv !== undefined) {
+        const s = v._sv as Record<string, unknown>
+        insertSvStmt.run(
+          variantId,
+          s.sv_is_precise,
+          s.cipos_left,
+          s.cipos_right,
+          s.ciend_left,
+          s.ciend_right,
+          s.support,
+          s.coverage,
+          s.strand,
+          s.stdev_len,
+          s.stdev_pos,
+          s.vaf,
+          s.dr,
+          s.dv,
+          s.pe_support,
+          s.sr_support,
+          s.event_id,
+          s.mate_id
+        )
+      } else if (v._cnv !== undefined) {
+        const c = v._cnv as Record<string, unknown>
+        insertCnvStmt.run(
+          variantId,
+          c.copy_number,
+          c.copy_number_quality,
+          c.homozygosity_ref,
+          c.homozygosity_alt,
+          c.sm,
+          c.bin_count
+        )
+      } else if (v._str !== undefined) {
+        const t = v._str as Record<string, unknown>
+        insertStrStmt.run(
+          variantId,
+          t.repeat_id,
+          t.variant_catalog_id,
+          t.repeat_unit,
+          t.display_repeat_unit,
+          t.ref_copies,
+          t.alt_copies,
+          t.repeat_length,
+          t.str_status,
+          t.normal_max,
+          t.pathologic_min,
+          t.disease,
+          t.inheritance_mode,
+          t.source_display,
+          t.rank_score,
+          t.locus_coverage,
+          t.support_type,
+          t.confidence_interval
+        )
       }
     }
   })

@@ -7,8 +7,25 @@ import type { Variant, VariantFilter, PaginatedResult, SortItem } from './types'
 import type { FilterOptions } from '../../shared/types/api'
 import type { ColumnFilterMeta } from '../../shared/types/column-filters'
 import type { TranscriptInsertRow } from '../../shared/types/transcript'
+import type {
+  SvExtensionRow,
+  CnvExtensionRow,
+  StrExtensionRow
+} from '../import/vcf/extension-parsers'
 import { createFTSTriggers } from './schema'
 import { mainLogger } from '../services/MainLogger'
+
+/** Extended variant fields for multi-type import (SV/CNV/STR) */
+interface VariantExtensionFields {
+  variant_type?: string
+  end_pos?: number | null
+  sv_type?: string | null
+  sv_length?: number | null
+  caller?: string | null
+  _sv?: SvExtensionRow
+  _cnv?: CnvExtensionRow
+  _str?: StrExtensionRow
+}
 
 import { DATABASE_CONFIG } from '../../shared/config'
 import { VariantFilterBuilder, SORTABLE_COLUMNS } from './VariantFilterBuilder'
@@ -54,11 +71,15 @@ export class VariantRepository extends BaseRepository {
    * Does not update case variant_count — that is done in `finishBulkInsert()`.
    */
   insertBatch(
-    variants: (Omit<Variant, 'id' | 'case_id'> & { _transcripts?: TranscriptInsertRow[] })[],
+    variants: (Omit<Variant, 'id' | 'case_id'> &
+      VariantExtensionFields & { _transcripts?: TranscriptInsertRow[] })[],
     caseId: number
   ): void {
     const runTransaction = this.db.transaction(
-      (batch: (Omit<Variant, 'id' | 'case_id'> & { _transcripts?: TranscriptInsertRow[] })[]) => {
+      (
+        batch: (Omit<Variant, 'id' | 'case_id'> &
+          VariantExtensionFields & { _transcripts?: TranscriptInsertRow[] })[]
+      ) => {
         for (const v of batch) {
           const result = this.execRun(
             this.kysely.insertInto('variants').values({
@@ -88,12 +109,18 @@ export class VariantRepository extends BaseRepository {
               ab: v.ab ?? null,
               filter: v.filter ?? null,
               info_json: v.info_json ?? null,
-              source_format: v.source_format ?? null
+              source_format: v.source_format ?? null,
+              variant_type: v.variant_type ?? 'snv',
+              end_pos: v.end_pos ?? null,
+              sv_type: v.sv_type ?? null,
+              sv_length: v.sv_length ?? null,
+              caller: v.caller ?? null
             })
           )
 
+          const variantId = result.lastInsertRowid as number
+
           if (v._transcripts !== undefined && v._transcripts.length > 0) {
-            const variantId = result.lastInsertRowid as number
             for (const t of v._transcripts) {
               this.execRun(
                 this.kysely.insertInto('variant_transcripts').values({
@@ -109,6 +136,30 @@ export class VariantRepository extends BaseRepository {
                 })
               )
             }
+          }
+
+          // Insert extension table row if present
+          if (v._sv !== undefined) {
+            this.execRun(
+              this.kysely.insertInto('variant_sv').values({
+                variant_id: variantId,
+                ...v._sv
+              })
+            )
+          } else if (v._cnv !== undefined) {
+            this.execRun(
+              this.kysely.insertInto('variant_cnv').values({
+                variant_id: variantId,
+                ...v._cnv
+              })
+            )
+          } else if (v._str !== undefined) {
+            this.execRun(
+              this.kysely.insertInto('variant_str').values({
+                variant_id: variantId,
+                ...v._str
+              })
+            )
           }
         }
       }
@@ -164,7 +215,8 @@ export class VariantRepository extends BaseRepository {
    */
   insertVariantsBatch(
     caseId: number,
-    variants: (Omit<Variant, 'id' | 'case_id'> & { _transcripts?: TranscriptInsertRow[] })[]
+    variants: (Omit<Variant, 'id' | 'case_id'> &
+      VariantExtensionFields & { _transcripts?: TranscriptInsertRow[] })[]
   ): number {
     this.cases.getCase(caseId)
 
