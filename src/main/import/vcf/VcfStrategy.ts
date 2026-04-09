@@ -18,6 +18,7 @@ import { parseVcfLine } from './vcf-line-parser'
 import { mapVcfRecord } from './VcfMapper'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from './info-field-registry'
 import { detectCaller } from './caller-detector'
+import type { ImportFilters } from './import-filters'
 export class VcfStrategy implements ImportStrategy {
   readonly formatId = 'vcf' as const
 
@@ -29,7 +30,8 @@ export class VcfStrategy implements ImportStrategy {
     filePath: string,
     options: ImportOptions,
     context: StrategyContext,
-    vcfOptions?: VcfImportOptions
+    vcfOptions?: VcfImportOptions,
+    importFilters?: ImportFilters
   ): Promise<ImportResult> {
     const { db, caseId, startTime } = context
     const batchSize = options.batchSize ?? 5000
@@ -87,13 +89,70 @@ export class VcfStrategy implements ImportStrategy {
             totalSkipped++
             continue
           }
-          const mapped = mapVcfRecord(
+
+          // ── Import-time filter gates (pre-mapping) ──
+          if (importFilters !== undefined) {
+            // FILTER column check
+            if (importFilters.passOnly && record.filter !== 'PASS' && record.filter !== '.') {
+              totalSkipped++
+              continue
+            }
+
+            // QUAL threshold check
+            if (
+              importFilters.minQual !== null &&
+              record.qual !== null &&
+              record.qual < importFilters.minQual
+            ) {
+              totalSkipped++
+              continue
+            }
+
+            // BED region check
+            if (importFilters.bedFilter !== undefined) {
+              const endPos = record.info.get('END')
+              if (endPos !== undefined && endPos !== '') {
+                // SV/CNV: check range overlap
+                if (
+                  !importFilters.bedFilter.containsRange(
+                    record.chrom,
+                    record.pos,
+                    parseInt(endPos, 10)
+                  )
+                ) {
+                  totalSkipped++
+                  continue
+                }
+              } else {
+                // SNV/indel: check point
+                if (!importFilters.bedFilter.contains(record.chrom, record.pos)) {
+                  totalSkipped++
+                  continue
+                }
+              }
+            }
+          }
+
+          let mapped = mapVcfRecord(
             record,
             header,
             activeSample,
             DEFAULT_INFO_FIELD_MAPPINGS,
             callerName
           )
+
+          // ── Post-mapping genotype quality filter ──
+          if (importFilters !== undefined) {
+            mapped = mapped.filter((v) => {
+              if (importFilters.minGq !== null && v.gq !== null && v.gq < importFilters.minGq) {
+                return false
+              }
+              if (importFilters.minDp !== null && v.dp !== null && v.dp < importFilters.minDp) {
+                return false
+              }
+              return true
+            })
+          }
 
           if (mapped.length === 0) {
             totalSkipped++
