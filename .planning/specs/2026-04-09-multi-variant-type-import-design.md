@@ -141,7 +141,41 @@ CREATE INDEX idx_str_repeat_id ON variant_str(repeat_id);
 CREATE INDEX idx_str_disease ON variant_str(disease);
 ```
 
-### 3.5 Cohort Summary Table Updates
+### 3.5 Case Provenance — Multi-File Import Model
+
+The current `cases` table stores a single `file_path` and `file_size` set at case creation (`CaseRepository.createCase()`). Multi-file import requires tracking provenance for each imported file.
+
+**New child table:**
+
+```sql
+CREATE TABLE case_import_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  case_id INTEGER NOT NULL,
+  file_path TEXT NOT NULL,
+  file_size INTEGER NOT NULL,
+  variant_type TEXT NOT NULL,    -- 'snv', 'indel', 'sv', 'cnv', 'str'
+  caller TEXT,                   -- Detected caller name
+  variant_count INTEGER NOT NULL DEFAULT 0,
+  annotation_format TEXT,        -- 'csq', 'ann', 'nirvana', 'none'
+  imported_at INTEGER NOT NULL,  -- Unix timestamp
+  FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_case_import_files_case ON case_import_files(case_id);
+```
+
+**How existing columns are handled:**
+- `cases.file_path` and `cases.file_size` remain for backward compatibility and store the **first** imported file (the "canonical" file that created the case)
+- `cases.variant_count` remains as the **total** across all imported files for the case
+- New imports for an existing case add rows to `case_import_files` and increment `cases.variant_count`
+- The import dialog shows `case_import_files` to indicate which files have already been imported for a case
+
+**Import flow:**
+1. User creates a new case → `CaseRepository.createCase()` sets `file_path` and `file_size` from the first file (unchanged API)
+2. `case_import_files` row inserted for each file in the import session
+3. For subsequent imports to the same case, `cases.file_path`/`file_size` are NOT updated — they remain as original provenance
+
+### 3.6 Cohort Summary Table Updates
 
 ```sql
 -- Add to cohort_variant_summary composite key
@@ -152,21 +186,34 @@ ALTER TABLE cohort_variant_summary ADD COLUMN genome_build TEXT NOT NULL DEFAULT
 ALTER TABLE gene_burden_summary ADD COLUMN genome_build TEXT NOT NULL DEFAULT 'GRCh38';
 ```
 
-### 3.6 Migration Strategy
+### 3.7 Migration Strategy
 
 ```sql
--- Existing variants: classify by REF/ALT lengths
+-- Step 1: Add new columns to variants table (with defaults)
+ALTER TABLE variants ADD COLUMN variant_type TEXT NOT NULL DEFAULT 'snv';
+-- ... other ALTER TABLE statements for end_pos, sv_type, sv_length, caller
+
+-- Step 2: Classify existing variants by REF/ALT lengths
 UPDATE variants SET variant_type = 
   CASE 
     WHEN length(ref) = 1 AND length(alt) = 1 THEN 'snv'
     ELSE 'indel'
   END;
 
--- Existing cohort summary: defaults
-UPDATE cohort_variant_summary 
-  SET variant_type = 'snv', genome_build = 'GRCh38';
+-- Step 3: Create extension tables (empty — populated only by new imports)
+-- CREATE TABLE variant_sv (...), variant_cnv (...), variant_str (...)
 
--- Extension tables are new — no data migration needed
+-- Step 4: Create case_import_files table (empty)
+
+-- Step 5: Add columns to cohort summary tables
+ALTER TABLE cohort_variant_summary ADD COLUMN variant_type TEXT NOT NULL DEFAULT 'snv';
+ALTER TABLE cohort_variant_summary ADD COLUMN genome_build TEXT NOT NULL DEFAULT 'GRCh38';
+
+-- Step 6: FULL REBUILD of cohort_variant_summary and gene_burden_summary
+-- Do NOT backfill summary rows with defaults — the rebuild SQL will
+-- derive variant_type and genome_build from the variants and cases tables,
+-- producing correct per-type and per-build aggregation.
+-- This avoids silently misclassifying existing indels as 'snv'.
 ```
 
 ---
@@ -266,12 +313,14 @@ All within existing prepared-statement batch + transaction pattern.
 
 ### 4.6 Multi-File Import
 
-Sequential processing of multiple files into one case:
+Sequential processing of multiple files into one case as a single import session:
 
 1. All files validated for reference genome match (case-level lock)
-2. Each file processed independently through VcfStrategy
-3. Incremental cohort summary update after each file
-4. Progress tracked per file with running totals
+2. Each file processed independently through VcfStrategy, inserting into the same case_id
+3. A `case_import_files` row is created for each file with its variant_type, caller, and count
+4. Cohort summary updated **once after the entire session completes**, not after each file — this avoids incorrect incremental carrier counts when multiple files contribute to the same case (the existing `INCREMENTAL_ADD_SQL` assumes one case = one carrier increment per coordinate, which breaks if we increment mid-session)
+5. If any file fails, variants from already-processed files remain (partial import is acceptable — user can delete the case and retry)
+6. Progress tracked per file with running totals
 
 ---
 
@@ -288,8 +337,9 @@ Enhanced `detectGenomeBuild()` in `vcf-header-parser.ts`:
 
 ### 5.2 Case-Level Lock
 
-- First file imported sets `cases.genome_build` (NOT NULL)
-- Subsequent files for same case: detected build must match or import is rejected
+- `cases.genome_build` already exists in the schema (migration v19, `database-schema.ts:17`, `CaseRepository.ts:46`) with default `'GRCh38'`
+- For a **newly created case**, the first imported file's detected build is passed to `createCase()` which already accepts a `genomeBuild` parameter
+- For subsequent files imported into an **existing case**: detected build must match `cases.genome_build` or import is rejected
 - Error message: "Reference mismatch: this file is GRCh37 but case X uses GRCh38"
 
 ### 5.3 Cohort-Level Enforcement
@@ -379,6 +429,14 @@ Cohort Analysis  [GRCh38 ▼]  [SNV/Indel ▼]
 - All queries scoped by both selectors
 - Association testing inherits both filters
 
+**SV/CNV/STR cohort semantics — exact-match only (initial scope):**
+
+The existing cohort summary keys by exact `(chr, pos, ref, alt)` identity. This works for SNVs/indels but will fragment equivalent SV/CNV events across callers and samples — the same deletion may be reported at slightly different breakpoints by Sniffles2 in different samples, producing separate summary rows instead of a single aggregated event.
+
+For the initial implementation, SV/CNV/STR cohort support uses **exact-match browsing only**: users can browse and filter SV/CNV/STR variants in cohort mode, but `carrier_count` and `cohort_frequency` reflect exact coordinate matches, not overlapping events. This is clearly labeled in the UI (e.g., "Exact match — 3 carriers" rather than implying fuzzy aggregation).
+
+True SV/CNV frequency analysis with overlap-based clustering (reciprocal overlap thresholds, breakpoint tolerance windows) is deferred to a future enhancement. This requires a fundamentally different aggregation strategy (e.g., bedtools-style interval clustering at rebuild time, or a separate `sv_cohort_summary` table with overlap-merged events).
+
 ### 7.3 Import Dialog — Smart Wizard
 
 **Step 1:** Drag & drop or browse for VCF files (+ optional Nirvana JSON)
@@ -411,8 +469,8 @@ Cohort Analysis  [GRCh38 ▼]  [SNV/Indel ▼]
 ### 8.2 Migration
 
 - Existing variants classified as snv/indel by REF/ALT length
-- Existing cohort summary gets default variant_type='snv', genome_build='GRCh38'
-- Extension tables created empty — populated only by new imports
+- Cohort summary tables (`cohort_variant_summary`, `gene_burden_summary`) get new columns then are **fully rebuilt** from the `variants` and `cases` tables — no backfill defaults that could misclassify existing indels as 'snv'
+- Extension tables and `case_import_files` created empty — populated only by new imports
 - No data loss, no re-import required
 
 ### 8.3 Strategy Registry
@@ -447,16 +505,20 @@ Format detection enhanced but backward compatible — existing JSON/VCF patterns
 
 | File | Change |
 |---|---|
-| `src/main/database/migrations.ts` | New migration: extension tables, variant columns, cohort summary columns |
-| `src/main/database/schema.ts` | Extension table CREATE statements |
-| `src/main/database/repositories/VariantRepository.ts` | Extended insertBatch, queryVariants with type filter + extension JOINs |
+| `src/main/database/migrations.ts` | New migration: extension tables, case_import_files, variant columns, cohort summary columns, full cohort rebuild |
+| `src/main/database/schema.ts` | Extension table + case_import_files CREATE statements |
+| `src/main/database/VariantRepository.ts` | Extended insertBatch, queryVariants with type filter + extension JOINs |
+| `src/main/database/CaseRepository.ts` | Multi-file provenance: case_import_files insert, query import history |
 | `src/main/database/cohort.ts` | genome_build + variant_type filters on all queries |
-| `src/shared/sql/cohort-summary-rebuild.ts` | GROUP BY variant_type, genome_build; per-build frequency |
+| `src/main/database/CohortSummaryService.ts` | Rebuild SQL with variant_type + genome_build grouping |
+| `src/shared/sql/cohort-summary-rebuild.ts` | GROUP BY variant_type, genome_build; per-build frequency denominator |
 | `src/main/import/vcf/VcfStrategy.ts` | Import filter gates, variant type routing, extension field extraction |
 | `src/main/import/vcf/vcf-header-parser.ts` | Enhanced genome build detection, caller detection |
 | `src/main/import/vcf/VcfMapper.ts` | Extended VcfMappedVariant with variant_type + extension rows |
 | `src/main/import/vcf/types.ts` | New types: ImportFilters, SvExtensionRow, CnvExtensionRow, StrExtensionRow |
-| `src/shared/types/database.ts` | Variant type, extension table interfaces |
+| `src/main/import/ImportService.ts` | Multi-file session: sequential import, single cohort update at end |
+| `src/shared/types/database.ts` | Variant type, extension table, CaseImportFile interfaces |
+| `src/shared/types/database-schema.ts` | Kysely types for new tables (variant_sv, variant_cnv, variant_str, case_import_files) |
 | `src/shared/types/cohort.ts` | genome_build + variant_type in CohortSearchParams |
 | `src/main/ipc/handlers/cohort-logic.ts` | Parameterized genome_build (remove hardcoded 'GRCh38') |
 | `src/main/ipc/handlers/panelIntervalHelper.ts` | Use selected genome_build from params |
@@ -464,7 +526,6 @@ Format detection enhanced but backward compatible — existing JSON/VCF patterns
 | `src/renderer/src/components/CohortView.vue` (or wrapper) | Build selector dropdown |
 | `src/renderer/src/composables/useCohortData.ts` | genomeBuild ref, pass to IPC |
 | `src/renderer/src/components/cohort/useCohortColumns.ts` | Type-aware column sets |
-| `src/renderer/src/components/variant/useVariantColumns.ts` | Type-specific column definitions |
 | Import dialog components | Multi-file, type/caller display, BED filter, quality filters |
 
 ---
@@ -472,19 +533,20 @@ Format detection enhanced but backward compatible — existing JSON/VCF patterns
 ## 10. Implementation Phases
 
 ### Phase 1: Schema + Import Filtering (foundation)
-- Database migration: extension tables, variant columns, cohort summary columns
+- Database migration: extension tables, case_import_files, variant columns, cohort summary columns
+- Existing variant migration (snv/indel classification by REF/ALT length)
+- Full rebuild of cohort_variant_summary and gene_burden_summary (not backfill defaults)
 - BED region filter module
 - Quality pre-filter module
 - Import filter integration in VcfStrategy streaming loop
-- Existing variant migration (snv/indel classification)
 
 ### Phase 2: SV/CNV/STR Import (ONT callers)
 - Variant type detector
 - Caller detector (Clair3, Sniffles2, Spectre, Straglr)
 - Extension field extractors (SV, CNV, STR)
-- Extended VariantRepository.insertBatch
-- Multi-file import for one case
-- Reference genome detection + case-level lock
+- Extended VariantRepository.insertBatch with extension table inserts
+- Multi-file import session: sequential files, case_import_files provenance, single cohort update at session end
+- Reference genome detection + case-level lock enforcement
 
 ### Phase 3: Frontend — Type Tabs + Cohort Build Selector
 - VariantTypeTabs component in case view
