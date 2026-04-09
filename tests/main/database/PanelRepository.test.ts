@@ -54,7 +54,7 @@ describe('PanelRepository', () => {
 
     it('sets user_version to latest', () => {
       const version = db.pragma('user_version', { simple: true })
-      expect(version).toBe(24)
+      expect(version).toBe(25)
     })
   })
 

@@ -127,7 +127,7 @@ describe('Schema Migrations', () => {
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(24)
+      expect(versionResult.user_version).toBe(25)
 
       service.close()
 
@@ -137,7 +137,7 @@ describe('Schema Migrations', () => {
       const versionAfterReopen = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionAfterReopen.user_version).toBe(24)
+      expect(versionAfterReopen.user_version).toBe(25)
 
       service.close()
     })
@@ -464,7 +464,7 @@ describe('Schema Migrations', () => {
       let versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(24)
+      expect(versionResult.user_version).toBe(25)
 
       service.close()
 
@@ -484,7 +484,7 @@ describe('Schema Migrations', () => {
       versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(24)
+      expect(versionResult.user_version).toBe(25)
 
       service.close()
     })
@@ -518,7 +518,7 @@ describe('Schema Migrations', () => {
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(24)
+      expect(versionResult.user_version).toBe(25)
 
       service.close()
     })
@@ -756,7 +756,7 @@ describe('Schema Migrations', () => {
       const version = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(version.user_version).toBe(24)
+      expect(version.user_version).toBe(25)
 
       service.close()
     })
@@ -797,7 +797,7 @@ describe('Schema Migrations', () => {
 
       // Verify user_version = 18 (v15 + v16 + v17 + v18 all run)
       const version = db.pragma('user_version', { simple: true }) as number
-      expect(version).toBe(24)
+      expect(version).toBe(25)
 
       service.close()
     })
