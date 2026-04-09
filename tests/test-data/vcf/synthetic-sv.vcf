@@ -1,0 +1,36 @@
+##fileformat=VCFv4.2
+##source=Sniffles2_2.6.3
+##contig=<ID=chr1,length=248956422>
+##contig=<ID=chr2,length=242193529>
+##contig=<ID=chr22,length=50818468>
+##ALT=<ID=INS,Description="Insertion">
+##ALT=<ID=DEL,Description="Deletion">
+##ALT=<ID=DUP,Description="Duplication">
+##ALT=<ID=INV,Description="Inversion">
+##ALT=<ID=BND,Description="Breakend; Translocation">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
+##FORMAT=<ID=DR,Number=1,Type=Integer,Description="Number of reference reads">
+##FORMAT=<ID=DV,Number=1,Type=Integer,Description="Number of variant reads">
+##FORMAT=<ID=PS,Number=1,Type=Integer,Description="Phase-block">
+##FORMAT=<ID=ID,Number=1,Type=String,Description="Individual SV ID">
+##FILTER=<ID=GT,Description="Genotype filter">
+##FILTER=<ID=SUPPORT_MIN,Description="Minimum read support">
+##INFO=<ID=PRECISE,Number=0,Type=Flag,Description="Precise breakpoints">
+##INFO=<ID=IMPRECISE,Number=0,Type=Flag,Description="Imprecise breakpoints">
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">
+##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Length of the SV">
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position">
+##INFO=<ID=SUPPORT,Number=1,Type=Integer,Description="Number of reads supporting the SV">
+##INFO=<ID=COVERAGE,Number=.,Type=Float,Description="Coverage near breakpoints">
+##INFO=<ID=STRAND,Number=1,Type=String,Description="Strand of SV">
+##INFO=<ID=STDEV_LEN,Number=1,Type=Float,Description="Std dev of SV length">
+##INFO=<ID=STDEV_POS,Number=1,Type=Float,Description="Std dev of SV position">
+##INFO=<ID=VAF,Number=1,Type=Float,Description="Variant allele fraction">
+##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO' ">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE1
+chr1	1000000	Sniffles2.DEL.1	N	<DEL>	60	PASS	PRECISE;SVTYPE=DEL;SVLEN=-5000;END=1005000;SUPPORT=15;COVERAGE=20,18,22,19,21;STRAND=+-;STDEV_LEN=10.5;STDEV_POS=3.2;VAF=0.75;ANN=<DEL>|exon_loss_variant|HIGH|GENE1|GENE1|transcript|NM_001.1|protein_coding|3/10|c.100_500del||||||	GT:GQ:DR:DV:PS:ID	0/1:40:5:15:1000000:Sniffles2.DEL.1
+chr1	2000000	Sniffles2.INS.2	C	CAAAAAAAAAA	45	PASS	PRECISE;SVTYPE=INS;SVLEN=10;END=2000000;SUPPORT=12;COVERAGE=15,14,16;STRAND=+;STDEV_LEN=1.5;STDEV_POS=0;VAF=0.6	GT:GQ:DR:DV:PS:ID	1/1:50:0:12:0:Sniffles2.INS.2
+chr22	29000000	Sniffles2.DUP.3	N	<DUP>	30	PASS	IMPRECISE;SVTYPE=DUP;SVLEN=20000;END=29020000;SUPPORT=8;COVERAGE=10,25,12;STRAND=+;STDEV_LEN=50.0;STDEV_POS=100.0;VAF=0.4	GT:GQ:DR:DV:PS:ID	0/1:20:12:8:0:Sniffles2.DUP.3
+chr2	5000000	Sniffles2.INV.4	N	<INV>	15	SUPPORT_MIN	IMPRECISE;SVTYPE=INV;SVLEN=8000;END=5008000;SUPPORT=3;COVERAGE=5,4,6;STRAND=++;STDEV_LEN=200.0;STDEV_POS=150.0;VAF=0.2	GT:GQ:DR:DV:PS:ID	0/1:5:12:3:0:Sniffles2.INV.4
+chr1	9000000	Sniffles2.BND.5	N	]chr2:3000000]N	20	PASS	PRECISE;SVTYPE=BND;SUPPORT=10;STRAND=+-;VAF=0.5	GT:GQ:DR:DV:PS:ID	0/1:30:10:10:0:Sniffles2.BND.5

@@ -1,0 +1,41 @@
+##fileformat=VCFv4.1
+##source=strglr_1.4.5
+##reference=file://GRCh38.fasta
+##contig=<ID=chr1,length=248956422>
+##contig=<ID=chr14,length=107043718>
+##contig=<ID=chr21,length=46709983>
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position">
+##INFO=<ID=REF,Number=1,Type=Integer,Description="Reference copy number">
+##INFO=<ID=REPID,Number=1,Type=String,Description="Repeat identifier">
+##INFO=<ID=VARID,Number=1,Type=String,Description="Variant identifier">
+##INFO=<ID=RL,Number=1,Type=Integer,Description="Reference length in bp">
+##INFO=<ID=RU,Number=1,Type=String,Description="Repeat unit">
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">
+##INFO=<ID=STR_STATUS,Number=A,Type=String,Description="Repeat expansion status">
+##INFO=<ID=STR_NORMAL_MAX,Number=1,Type=Integer,Description="Max normal repeats">
+##INFO=<ID=STR_PATHOLOGIC_MIN,Number=1,Type=Integer,Description="Min pathologic repeats">
+##INFO=<ID=Disease,Number=1,Type=String,Description="Associated disorder">
+##INFO=<ID=InheritanceMode,Number=1,Type=String,Description="Mode of inheritance">
+##INFO=<ID=DisplayRU,Number=1,Type=String,Description="Display repeat unit">
+##INFO=<ID=HGNCId,Number=1,Type=Integer,Description="HGNC gene id">
+##INFO=<ID=RankScore,Number=1,Type=String,Description="Rank score">
+##INFO=<ID=SourceDisplay,Number=1,Type=String,Description="Source display">
+##INFO=<ID=Source,Number=1,Type=String,Description="Source">
+##INFO=<ID=SourceId,Number=1,Type=String,Description="Source id">
+##FILTER=<ID=LowDepth,Description="Low depth">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=SO,Number=1,Type=String,Description="Support type">
+##FORMAT=<ID=REPCN,Number=1,Type=String,Description="Repeat copy number">
+##FORMAT=<ID=REPCI,Number=1,Type=String,Description="Confidence interval">
+##FORMAT=<ID=ADSP,Number=1,Type=String,Description="Spanning reads">
+##FORMAT=<ID=ADFL,Number=1,Type=String,Description="Flanking reads">
+##FORMAT=<ID=ADIR,Number=1,Type=String,Description="In-repeat reads">
+##FORMAT=<ID=LC,Number=1,Type=Float,Description="Locus coverage">
+##ALT=<ID=STR24,Description="Allele of 24 repeat units">
+##ALT=<ID=STR15,Description="Allele of 15 repeat units">
+##ALT=<ID=STR17,Description="Allele of 17 repeat units">
+##ALT=<ID=STR50,Description="Allele of 50 repeat units">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE1
+chr14	92071010	.	C	<STR24>,<STR15>	.	PASS	SVTYPE=DUP;END=92071042;REF=11;RL=33;RU=CTG;REPID=ATXN3;VARID=ATXN3;STR_STATUS=normal,normal;STR_NORMAL_MAX=44;STR_PATHOLOGIC_MIN=60;RankScore=1:10;HGNCId=7106;InheritanceMode=AD;DisplayRU=CAG;SourceDisplay=GeneReviews;Source=GeneReviews;SourceId=NBK535148;Disease=MJD	GT:SO:REPCN:REPCI:ADSP:ADFL:ADIR:LC	1/2:SPANNING/SPANNING:24/15:24-24/15-15:1/1:0/0:0/0:3
+chr21	43776444	.	C	<STR50>	.	PASS	SVTYPE=DUP;END=43776479;REF=5;RL=36;RU=GCGGGGC;REPID=CSTB;VARID=CSTB;STR_STATUS=full_mutation;STR_NORMAL_MAX=3;STR_PATHOLOGIC_MIN=30;RankScore=1:20;HGNCId=2482;InheritanceMode=AR;DisplayRU=CCCCGCCCCGCG;SourceDisplay=GeneReviews;Source=GeneReviews;SourceId=NBK535148;Disease=EPM1	GT:SO:REPCN:REPCI:ADSP:ADFL:ADIR:LC	1/1:SPANNING/SPANNING:50/50:48-52/48-52:5/5:0/0:0/0:12
+chr1	149390803	.	G	<STR17>	.	LowDepth	SVTYPE=DUP;END=149390841;REF=13;RL=39;RU=GGC;REPID=NOTCH2NLC;VARID=NOTCH2NLC;STR_STATUS=normal;STR_NORMAL_MAX=38;STR_PATHOLOGIC_MIN=66;RankScore=1:10;HGNCId=53924;InheritanceMode=AD;DisplayRU=CGG;SourceDisplay=GeneReviews;Source=GeneReviews;SourceId=NBK535148;Disease=NIID	GT:SO:REPCN:REPCI:ADSP:ADFL:ADIR:LC	1/1:SPANNING/SPANNING:17/17:17-17/17-17:0.5/0.5:0/0:0/0:2

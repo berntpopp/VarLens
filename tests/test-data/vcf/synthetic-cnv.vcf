@@ -1,0 +1,22 @@
+##fileformat=VCFv4.2
+##source=Spectre
+##contig=<ID=chr1,length=248956422>
+##contig=<ID=chr22,length=50818468>
+##ALT=<ID=DEL,Description="Deletion">
+##ALT=<ID=DUP,Description="Duplication">
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position">
+##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Length of the SV">
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of CNV">
+##INFO=<ID=CN,Number=1,Type=Integer,Description="Copy number">
+##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO' ">
+##INFO=<ID=CLNSIG,Number=.,Type=String,Description="ClinVar significance">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=HO,Number=2,Type=Float,Description="Homozygosity proportion">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
+##FORMAT=<ID=CN,Number=1,Type=Integer,Description="Copy number">
+##FORMAT=<ID=ID,Number=1,Type=String,Description="Population ID">
+##PredictedSexChromosomeKaryotype=XX
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE1
+chr1	5000000	Spectre.DEL.1	N	<DEL>	.	PASS	END=5500000;SVLEN=500000;SVTYPE=DEL;CN=1;ANN=<DEL>|exon_loss_variant|HIGH|GENE_A|GENE_A|transcript|NM_002.1|protein_coding|2/5|c.50_300del||||||;CLNSIG=Pathogenic	GT:HO:GQ:CN:ID	0/1:0.45,0.55:30:1:Spectre.DEL.1
+chr1	10000000	Spectre.DUP.2	N	<DUP>	.	PASS	END=10200000;SVLEN=200000;SVTYPE=DUP;CN=3;ANN=<DUP>|duplication|MODERATE|GENE_B|GENE_B|transcript|NM_003.1|protein_coding|1/8|c.-5000_*10000dup||||||	GT:HO:GQ:CN:ID	0/1:0.3,0.7:25:3:Spectre.DUP.2
+chr22	29500000	Spectre.DEL.3	N	<DEL>	.	PASS	END=29600000;SVLEN=100000;SVTYPE=DEL;CN=0	GT:HO:GQ:CN:ID	1/1:0.0,1.0:40:0:Spectre.DEL.3
