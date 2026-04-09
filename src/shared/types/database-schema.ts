@@ -50,6 +50,11 @@ export interface VariantsTable {
   filter: string | null
   info_json: string | null
   source_format: string | null
+  variant_type: string
+  end_pos: number | null
+  sv_type: string | null
+  sv_length: number | null
+  caller: string | null
 }
 
 // ── Variant Transcripts ────────────────────────────────────
@@ -361,6 +366,74 @@ export interface AnalysisGroupMembersTable {
   individual_id: string | null
 }
 
+// ── Variant SV Extension ─────────────────────────────────
+export interface VariantSvTable {
+  variant_id: number
+  sv_is_precise: number | null
+  cipos_left: number | null
+  cipos_right: number | null
+  ciend_left: number | null
+  ciend_right: number | null
+  support: number | null
+  coverage: string | null
+  strand: string | null
+  stdev_len: number | null
+  stdev_pos: number | null
+  vaf: number | null
+  dr: number | null
+  dv: number | null
+  pe_support: number | null
+  sr_support: number | null
+  event_id: string | null
+  mate_id: string | null
+}
+
+// ── Variant CNV Extension ────────────────────────────────
+export interface VariantCnvTable {
+  variant_id: number
+  copy_number: number | null
+  copy_number_quality: number | null
+  homozygosity_ref: number | null
+  homozygosity_alt: number | null
+  sm: number | null
+  bin_count: number | null
+}
+
+// ── Variant STR Extension ────────────────────────────────
+export interface VariantStrTable {
+  variant_id: number
+  repeat_id: string | null
+  variant_catalog_id: string | null
+  repeat_unit: string | null
+  display_repeat_unit: string | null
+  ref_copies: number | null
+  alt_copies: string | null
+  repeat_length: number | null
+  str_status: string | null
+  normal_max: number | null
+  pathologic_min: number | null
+  disease: string | null
+  inheritance_mode: string | null
+  source_display: string | null
+  rank_score: string | null
+  locus_coverage: number | null
+  support_type: string | null
+  confidence_interval: string | null
+}
+
+// ── Case Import Files ────────────────────────────────────
+export interface CaseImportFilesTable {
+  id: Generated<number>
+  case_id: number
+  file_path: string
+  file_size: number
+  variant_type: string
+  caller: string | null
+  variant_count: number
+  annotation_format: string | null
+  imported_at: number
+}
+
 // ── Full Database Schema ──────────────────────────────────
 export interface VarlensDatabase {
   cases: CasesTable
@@ -394,4 +467,8 @@ export interface VarlensDatabase {
   variant_frequency: VariantFrequencyTable
   analysis_groups: AnalysisGroupsTable
   analysis_group_members: AnalysisGroupMembersTable
+  variant_sv: VariantSvTable
+  variant_cnv: VariantCnvTable
+  variant_str: VariantStrTable
+  case_import_files: CaseImportFilesTable
 }

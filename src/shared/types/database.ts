@@ -59,6 +59,19 @@ export interface Case {
   genome_build: string
 }
 
+/** Case import file provenance record */
+export interface CaseImportFile {
+  id: number
+  case_id: number
+  file_path: string
+  file_size: number
+  variant_type: string
+  caller: string | null
+  variant_count: number
+  annotation_format: string | null
+  imported_at: number
+}
+
 /**
  * Variant entity - represents a single genomic variant
  */
@@ -119,6 +132,16 @@ export interface Variant {
   info_json: string | null
   /** Import source format (e.g., 'vcf', 'tsv'), nullable */
   source_format: string | null
+  /** Variant type discriminator: snv, indel, sv, cnv, str */
+  variant_type?: string
+  /** End position for SV/CNV/STR */
+  end_pos?: number | null
+  /** SV type: DEL, DUP, INV, INS, BND */
+  sv_type?: string | null
+  /** SV length (SVLEN) */
+  sv_length?: number | null
+  /** Detected caller name */
+  caller?: string | null
   /** Internal allele frequency across all cases (computed, not stored on variants table) */
   internal_af?: number | null
 }

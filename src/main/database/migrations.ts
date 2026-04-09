@@ -37,6 +37,8 @@ import { BUILT_IN_PRESETS } from './built-in-presets'
  * - 21: analysis_groups + analysis_group_members for family/trio support (#107)
  * - 22: Cross-case variant coordinate index for trio inheritance queries (#107)
  * - 23: VCF import columns on variants + cases (#42)
+ * - 24: Normalize ACMG classification labels to ClinVar sentence case
+ * - 25: Multi-variant type support (SV/CNV/STR extension tables, case_import_files)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1396,5 +1398,147 @@ export function runMigrations(db: Database.Database): void {
     }
 
     db.exec('PRAGMA user_version = 24')
+  }
+
+  // ── v25: Multi-variant type support (SV/CNV/STR extension tables) ──
+  if (currentVersion < 25) {
+    // 1. New columns on variants table
+    const varCols = db.pragma('table_info(variants)') as Array<{ name: string }>
+    if (!varCols.some((c) => c.name === 'variant_type')) {
+      db.exec("ALTER TABLE variants ADD COLUMN variant_type TEXT NOT NULL DEFAULT 'snv'")
+      db.exec('ALTER TABLE variants ADD COLUMN end_pos INTEGER')
+      db.exec('ALTER TABLE variants ADD COLUMN sv_type TEXT')
+      db.exec('ALTER TABLE variants ADD COLUMN sv_length INTEGER')
+      db.exec('ALTER TABLE variants ADD COLUMN caller TEXT')
+    }
+
+    // 2. Classify existing variants by REF/ALT length
+    db.exec(`
+      UPDATE variants SET variant_type =
+        CASE
+          WHEN length(ref) = 1 AND length(alt) = 1 THEN 'snv'
+          ELSE 'indel'
+        END
+    `)
+
+    // 3. Indexes on new columns
+    db.exec('CREATE INDEX IF NOT EXISTS idx_variants_type ON variants(variant_type)')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_variants_type_case ON variants(variant_type, case_id)')
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_variants_end_pos ON variants(chr, end_pos) WHERE end_pos IS NOT NULL'
+    )
+
+    // 4. SV extension table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS variant_sv (
+        variant_id INTEGER PRIMARY KEY,
+        sv_is_precise INTEGER,
+        cipos_left INTEGER, cipos_right INTEGER,
+        ciend_left INTEGER, ciend_right INTEGER,
+        support INTEGER, coverage TEXT, strand TEXT,
+        stdev_len REAL, stdev_pos REAL, vaf REAL,
+        dr INTEGER, dv INTEGER,
+        pe_support INTEGER, sr_support INTEGER,
+        event_id TEXT, mate_id TEXT,
+        FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE
+      )
+    `)
+
+    // 5. CNV extension table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS variant_cnv (
+        variant_id INTEGER PRIMARY KEY,
+        copy_number INTEGER, copy_number_quality INTEGER,
+        homozygosity_ref REAL, homozygosity_alt REAL,
+        sm REAL, bin_count INTEGER,
+        FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE
+      )
+    `)
+    db.exec('CREATE INDEX IF NOT EXISTS idx_cnv_copy_number ON variant_cnv(copy_number)')
+
+    // 6. STR extension table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS variant_str (
+        variant_id INTEGER PRIMARY KEY,
+        repeat_id TEXT, variant_catalog_id TEXT,
+        repeat_unit TEXT, display_repeat_unit TEXT,
+        ref_copies REAL, alt_copies TEXT,
+        repeat_length INTEGER,
+        str_status TEXT, normal_max INTEGER, pathologic_min INTEGER,
+        disease TEXT, inheritance_mode TEXT,
+        source_display TEXT, rank_score TEXT,
+        locus_coverage REAL, support_type TEXT, confidence_interval TEXT,
+        FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE
+      )
+    `)
+    db.exec('CREATE INDEX IF NOT EXISTS idx_str_repeat_id ON variant_str(repeat_id)')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_str_disease ON variant_str(disease)')
+
+    // 7. Case import files provenance table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS case_import_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        variant_type TEXT NOT NULL,
+        caller TEXT,
+        variant_count INTEGER NOT NULL DEFAULT 0,
+        annotation_format TEXT,
+        imported_at INTEGER NOT NULL,
+        FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+      )
+    `)
+    db.exec('CREATE INDEX IF NOT EXISTS idx_case_import_files_case ON case_import_files(case_id)')
+
+    // 8. Add variant_type + genome_build to cohort summary tables (if they exist)
+    const cvsExists = (
+      db
+        .prepare(
+          "SELECT COUNT(*) as c FROM sqlite_master WHERE type='table' AND name='cohort_variant_summary'"
+        )
+        .get() as { c: number }
+    ).c
+    if (cvsExists > 0) {
+      const cvsCols = db.pragma('table_info(cohort_variant_summary)') as Array<{ name: string }>
+      if (!cvsCols.some((c) => c.name === 'variant_type')) {
+        db.exec(
+          "ALTER TABLE cohort_variant_summary ADD COLUMN variant_type TEXT NOT NULL DEFAULT 'snv'"
+        )
+        db.exec(
+          "ALTER TABLE cohort_variant_summary ADD COLUMN genome_build TEXT NOT NULL DEFAULT 'GRCh38'"
+        )
+      }
+    }
+
+    const gbsExists = (
+      db
+        .prepare(
+          "SELECT COUNT(*) as c FROM sqlite_master WHERE type='table' AND name='gene_burden_summary'"
+        )
+        .get() as { c: number }
+    ).c
+    if (gbsExists > 0) {
+      const gbsCols = db.pragma('table_info(gene_burden_summary)') as Array<{ name: string }>
+      if (!gbsCols.some((c) => c.name === 'genome_build')) {
+        db.exec(
+          "ALTER TABLE gene_burden_summary ADD COLUMN genome_build TEXT NOT NULL DEFAULT 'GRCh38'"
+        )
+      }
+    }
+
+    // 9. Mark cohort summary as stale for full rebuild (derives variant_type from variants)
+    const metaExists = (
+      db
+        .prepare(
+          "SELECT COUNT(*) as c FROM sqlite_master WHERE type='table' AND name='cohort_summary_meta'"
+        )
+        .get() as { c: number }
+    ).c
+    if (metaExists > 0) {
+      db.exec("INSERT OR REPLACE INTO cohort_summary_meta (key, value) VALUES ('is_stale', '1')")
+    }
+
+    db.exec('PRAGMA user_version = 25')
   }
 }
