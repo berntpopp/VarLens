@@ -18,7 +18,11 @@
     />
 
     <v-navigation-drawer v-model="sidebarOpen" :width="sidebarWidth" :scrim="tier === 'narrow'">
-      <AppSidebar :case-count="caseCount" @import-click="dialogHostRef?.showImportDialog()">
+      <AppSidebar
+        :case-count="caseCount"
+        @import-click="dialogHostRef?.showImportDialog()"
+        @vcf-import-click="dialogHostRef?.showVcfImportDialog()"
+      >
         <CaseList
           ref="caseListRef"
           @case-selected="handleCaseSelected"
