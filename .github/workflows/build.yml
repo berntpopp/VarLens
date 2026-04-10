@@ -9,7 +9,45 @@ on:
 permissions:
   contents: read
 
+# Cancel stale in-flight runs on the same PR branch when a new push arrives.
+# Gated on pull_request so a push-to-main or release run is never cancelled
+# mid-flight. Pattern: https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # ── 1. Change detection (always runs, ~5 s) ─────────────────────────
+  # Docs-only / .planning-only PRs skip the whole code pipeline and the
+  # aggregation gate still reports success. Job-level filter is used
+  # instead of workflow-level `paths-ignore` because the latter leaves
+  # required status checks in permanent "pending" and blocks merges.
+  # See https://github.com/orgs/community/discussions/54877
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'tests/**'
+              - '!tests/e2e/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'electron.vite.config.ts'
+              - 'tsconfig*.json'
+              - 'eslint.config.js'
+              - '.prettierignore'
+              - '.github/workflows/build.yml'
+              - 'vitest.config.ts'
+              - 'Makefile'
+
   secrets-scan:
     name: Secrets Scan
     runs-on: ubuntu-latest
@@ -24,24 +62,114 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  # ── 2. Ubuntu-only fast checks (lint + format + typecheck + test) ──
+  # Lint/typecheck/test are deterministic and don't need per-OS runs.
+  # Running them three times on the matrix was pure waste. The
+  # cross-platform `package` job below still catches OS-specific
+  # issues at the compiled-build step.
+  checks:
+    name: Checks (Ubuntu)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev build-essential git-restore-mtime
+
+      # Restore mtimes so TypeScript's --incremental cache stays warm across
+      # CI runs. actions/checkout rewrites mtimes to the checkout time,
+      # which normally invalidates .tsbuildinfo. See
+      # https://github.com/microsoft/TypeScript/issues/59152
+      - name: Restore git mtimes
+        run: git restore-mtime
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules for Node.js
+        run: npm run rebuild:node
+
+      # Cache ESLint + Prettier results across CI runs. Key on lockfile +
+      # lint/format config so stale caches auto-invalidate when rules change.
+      - name: Restore lint caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .eslintcache
+            .prettiercache
+          key: lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js', '.prettierignore') }}-${{ github.sha }}
+          restore-keys: |
+            lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js', '.prettierignore') }}-
+            lint-${{ runner.os }}-
+
+      # Cache TypeScript --incremental build info. Partial restores are fine
+      # because tsc/vue-tsc use content hashes inside .tsbuildinfo to decide
+      # what to recheck. Pattern per actions/cache#459 discussion.
+      - name: Restore tsbuildinfo cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/tsbuildinfo
+          key: tsbuildinfo-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig*.json') }}-${{ github.sha }}
+          restore-keys: |
+            tsbuildinfo-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig*.json') }}-
+            tsbuildinfo-${{ runner.os }}-
+
+      - name: Run linter
+        run: npm run lint:check
+
+      - name: Run format check
+        run: npm run format:check
+
+      - name: Run type check
+        run: npm run typecheck
+
+      # Coverage only on push-to-main — PRs run plain `vitest run` for speed.
+      - name: Run tests (PR)
+        if: github.event_name == 'pull_request'
+        run: npm run test
+
+      - name: Run tests with coverage (main)
+        if: github.event_name == 'push'
+        run: npm run test:coverage
+
+      - name: Upload coverage
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/coverage-summary.json
+
+  # ── 3. Cross-platform compiled-build validation ────────────────────
+  # Only runs after `checks` passes. Validates that electron-vite +
+  # electron-builder can produce a working artifact on each target OS.
+  # Uses `actions/checkout` + `setup-node` fresh on each runner — the
+  # Electron-ABI native binary can't be shared with the Ubuntu checks
+  # job because it's a different Node environment.
+  package:
+    name: Package (${{ matrix.os }})
+    needs: [changes, checks]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Configure git line endings
         run: git config --global core.autocrlf false
 
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -55,48 +183,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native modules for Node.js
-        run: npm run rebuild:node
-
-      # Cache ESLint + Prettier results across CI runs. Key on the lockfile
-      # + lint config so stale caches auto-invalidate when rules change.
-      # Content strategy (in the scripts) is reliable on CI where git
-      # checkouts rewrite file mtimes.
-      - name: Restore lint caches
-        uses: actions/cache@v4
-        with:
-          path: |
-            .eslintcache
-            .prettiercache
-          key: lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js', '.prettierignore') }}-${{ github.sha }}
-          restore-keys: |
-            lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js', '.prettierignore') }}-
-            lint-${{ runner.os }}-
-
-      - name: Run linter
-        run: npm run lint:check
-
-      - name: Run format check
-        run: npm run format:check
-
-      - name: Run type check
-        run: npm run typecheck
-
-      - name: Run tests
-        if: runner.os != 'Linux'
-        run: npm run test
-
-      - name: Run tests with coverage
-        if: runner.os == 'Linux'
-        run: npx vitest run --coverage
-
-      - name: Upload coverage
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage/coverage-summary.json
-
       - name: Rebuild native modules for Electron
         run: npm run rebuild:electron
 
@@ -104,3 +190,24 @@ jobs:
         run: npx electron-vite build && npx electron-builder --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+  # ── 4. Required-status-check aggregator ────────────────────────────
+  # Branch protection should require THIS job (and secrets-scan) only.
+  # It succeeds when all upstream jobs succeeded OR were correctly
+  # skipped (docs-only PRs). This avoids the `paths-ignore` pending-
+  # forever trap.
+  ci:
+    name: CI
+    needs: [changes, secrets-scan, checks, package]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job failed
+        run: |
+          if [[ "${{ needs.secrets-scan.result }}" == "failure" ]] \
+             || [[ "${{ needs.checks.result }}"       == "failure" ]] \
+             || [[ "${{ needs.package.result }}"      == "failure" ]]; then
+            echo "One or more required jobs failed"
+            exit 1
+          fi
+          echo "All required jobs passed or were correctly skipped"
