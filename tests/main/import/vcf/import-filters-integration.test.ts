@@ -54,17 +54,21 @@ describe('SV VCF import (Sniffles2)', () => {
     expect(variants.length).toBe(5)
   })
 
-  it('classifies symbolic ALT variants as sv', () => {
+  it('classifies all SVTYPE variants as sv (including INS with sequence ALT)', () => {
     const { variants } = parseVcfFile(SV_VCF)
     // DEL (<DEL>), DUP (<DUP>), INV (<INV>) use symbolic ALT -> sv
     // BND uses breakend notation -> sv
-    // INS has sequence ALT (CAAAAAAAAAA) -> indel (not sv)
+    // INS has sequence ALT but SVTYPE=INS -> sv (real Sniffles2 insertions
+    // emit sequence ALTs rather than <INS>, so we trust SVTYPE over ALT format)
     const svVariants = variants.filter((v) => v.variant_type === 'sv')
-    expect(svVariants.length).toBe(4)
+    expect(svVariants.length).toBe(5)
 
     const indelVariants = variants.filter((v) => v.variant_type === 'indel')
-    expect(indelVariants.length).toBe(1)
-    expect(indelVariants[0].sv_type).toBe('INS')
+    expect(indelVariants.length).toBe(0)
+
+    // Verify the INS record is present in sv variants
+    const insVariant = svVariants.find((v) => v.sv_type === 'INS')
+    expect(insVariant).toBeDefined()
   })
 
   it('extracts SV extension fields for DEL', () => {
