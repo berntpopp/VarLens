@@ -33,7 +33,9 @@ const api = {
     query: (params: CaseSearchParams) => ipcRenderer.invoke('cases:query', params),
     delete: (id: number) => ipcRenderer.invoke('cases:delete', id),
     deleteAll: (): Promise<number> => ipcRenderer.invoke('cases:deleteAll'),
-    deleteBatch: (ids: number[]): Promise<number> => ipcRenderer.invoke('cases:deleteBatch', ids)
+    deleteBatch: (ids: number[]): Promise<number> => ipcRenderer.invoke('cases:deleteBatch', ids),
+    availableBuilds: (): Promise<Array<{ build: string; caseCount: number }>> =>
+      ipcRenderer.invoke('cases:availableBuilds')
   },
 
   variants: {

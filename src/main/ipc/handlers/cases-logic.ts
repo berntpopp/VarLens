@@ -106,6 +106,25 @@ export async function queryCases(
 }
 
 /**
+ * Get distinct genome builds used across cases with per-build counts.
+ * Used by the cohort view to populate the genome build selector.
+ */
+export async function getAvailableBuilds(
+  getDb: () => DatabaseService,
+  getDbPool?: () => DbPool | null
+): Promise<Array<{ build: string; caseCount: number }>> {
+  const pool = getDbPool?.()
+  if (pool) {
+    return (await pool.run({ type: 'cases:availableBuilds', params: [] })) as Array<{
+      build: string
+      caseCount: number
+    }>
+  }
+  const db = getDb()
+  return db.cases.getAvailableGenomeBuilds()
+}
+
+/**
  * Delete a single case by ID.
  * Decrements frequencies before deletion and recomputes on failure.
  */

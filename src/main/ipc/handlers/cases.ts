@@ -9,7 +9,8 @@ import {
   queryCases,
   deleteSingleCase,
   deleteAllCases,
-  deleteBatchCases
+  deleteBatchCases,
+  getAvailableBuilds
 } from './cases-logic'
 import type { DeleteCallbacks } from './cases-logic'
 
@@ -29,6 +30,10 @@ const deleteCallbacks: DeleteCallbacks = {
 export function registerCaseHandlers({ ipcMain, getDb, getDbPool }: HandlerDependencies): void {
   ipcMain.handle('cases:list', async () => {
     return wrapHandler(() => listCases(getDb, getDbPool))
+  })
+
+  ipcMain.handle('cases:availableBuilds', async () => {
+    return wrapHandler(() => getAvailableBuilds(getDb, getDbPool))
   })
 
   ipcMain.handle('cases:query', async (_event, params: unknown) => {

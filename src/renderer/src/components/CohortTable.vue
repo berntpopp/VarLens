@@ -153,6 +153,8 @@ const {
   summary,
   summaryStale,
   columnMeta,
+  genomeBuild,
+  selectedVariantType,
   fetchSummary,
   fetchColumnMeta,
   buildIpcParams,
@@ -301,7 +303,9 @@ const exportToExcel = async (): Promise<void> => {
       clinvars: filters.value.clinvars.length > 0 ? [...filters.value.clinvars] : undefined,
       gnomad_af_max: filters.value.maxGnomadAf ?? undefined,
       cadd_min: filters.value.minCadd ?? undefined,
-      max_internal_af: filters.value.maxInternalAf ?? undefined
+      max_internal_af: filters.value.maxInternalAf ?? undefined,
+      genome_build: genomeBuild.value || undefined,
+      variant_type: selectedVariantType.value || undefined
     }
     const result = await api.export.cohort(plainParams)
 

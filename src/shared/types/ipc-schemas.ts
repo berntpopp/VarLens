@@ -137,6 +137,10 @@ export const CohortSearchParamsSchema = z.object({
     .nullish()
     .transform((val) => val ?? undefined),
 
+  // Genome build / variant type scoping (Phase 3 multi-variant-type)
+  genome_build: nullishString(),
+  variant_type: nullishString(),
+
   // Count optimization flag
   _count_needed: z.boolean().optional()
 })

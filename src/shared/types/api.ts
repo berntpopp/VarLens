@@ -161,6 +161,7 @@ export interface CasesAPI {
   delete: (id: number) => Promise<void>
   deleteAll: () => Promise<number>
   deleteBatch: (ids: number[]) => Promise<number>
+  availableBuilds: () => Promise<Array<{ build: string; caseCount: number }>>
 }
 
 export interface VariantsAPI {

@@ -49,7 +49,8 @@ export const mockApi: WindowAPI = {
       const before = cases.length
       cases = cases.filter((c) => !ids.includes(c.id))
       return before - cases.length
-    }
+    },
+    availableBuilds: async () => [{ build: 'GRCh38', caseCount: cases.length }]
   },
 
   variants: {

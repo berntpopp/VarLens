@@ -1,5 +1,31 @@
 <template>
   <div class="cohort-content">
+    <div class="cohort-header d-flex align-center ga-2 pa-2 flex-grow-0">
+      <v-select
+        v-model="genomeBuild"
+        :items="availableBuilds"
+        :item-title="(b) => `${b.build} (${b.caseCount} cases)`"
+        item-value="build"
+        density="compact"
+        variant="outlined"
+        hide-details
+        label="Genome Build"
+        style="max-width: 220px"
+      />
+      <v-select
+        v-model="selectedVariantType"
+        :items="variantTypeOptions"
+        item-title="label"
+        item-value="value"
+        density="compact"
+        variant="outlined"
+        hide-details
+        label="Variant Type"
+        style="max-width: 180px"
+      />
+      <v-spacer />
+    </div>
+
     <v-tabs v-model="activeTab" color="primary" density="compact" class="cohort-tabs flex-grow-0">
       <v-tab value="variants">Variants</v-tab>
       <v-tab value="burden">Gene Burden</v-tab>
@@ -28,10 +54,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, provide, onActivated, watch } from 'vue'
+import { ref, provide, onActivated, onMounted, watch } from 'vue'
 import CohortTable from './CohortTable.vue'
 import GeneBurdenView from './association/GeneBurdenView.vue'
 import { FiltersKey, createFilters } from '../composables/useFilters'
+import { CohortDataKey, useCohortData } from '../composables/useCohortData'
 import { useAppState } from '../composables/useAppState'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import { logService } from '../services/LogService'
@@ -39,6 +66,21 @@ import { logService } from '../services/LogService'
 // Create and provide filter state for child components (CohortTable, CohortFilterBar)
 const filtersInstance = createFilters()
 provide(FiltersKey, filtersInstance)
+
+// Create and provide cohort data state so the genome build / variant type
+// selectors in this header share the same refs as the CohortTable below.
+// CohortTable's internal useCohortData() call will inject this same instance.
+const cohortDataInstance = useCohortData()
+provide(CohortDataKey, cohortDataInstance)
+const { genomeBuild, selectedVariantType, availableBuilds, loadAvailableBuilds } =
+  cohortDataInstance
+
+const variantTypeOptions = [
+  { value: 'snv', label: 'SNV/Indel' },
+  { value: 'sv', label: 'SV' },
+  { value: 'cnv', label: 'CNV' },
+  { value: 'str', label: 'STR' }
+]
 
 // KeepAlive stale data detection: refresh if data changed while view was cached
 const { dataGeneration } = useAppState()
@@ -83,6 +125,33 @@ const refresh = async (): Promise<void> => {
     await burdenViewRef.value?.refresh()
   }
 }
+
+onMounted(async () => {
+  try {
+    await loadAvailableBuilds()
+  } catch (error) {
+    logService.error(
+      'Failed to load available genome builds: ' +
+        (error instanceof Error ? error.message : String(error)),
+      'cohort'
+    )
+  }
+})
+
+// Refetch cohort data when the user changes genome build or variant type.
+// Skip the initial `ref` assignment — refresh() is a no-op before the table
+// has mounted, and the first table fetch already uses the current values.
+watch([genomeBuild, selectedVariantType], async () => {
+  try {
+    await refresh()
+  } catch (error) {
+    logService.error(
+      'Failed to refresh cohort view after selector change: ' +
+        (error instanceof Error ? error.message : String(error)),
+      'cohort'
+    )
+  }
+})
 
 onActivated(async () => {
   if (dataGeneration.value !== lastSeenGeneration.value) {

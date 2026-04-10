@@ -190,6 +190,9 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
       case 'cases:query':
         return repos.cases.queryCases(params[0] as Parameters<typeof repos.cases.queryCases>[0])
 
+      case 'cases:availableBuilds':
+        return repos.cases.getAvailableGenomeBuilds()
+
       // ── Annotations ───────────────────────────────────────
       case 'annotations:getGlobal':
         return repos.annotations.getGlobalAnnotation(

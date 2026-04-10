@@ -164,6 +164,10 @@ export interface CohortSearchParams {
   panel_padding_bp?: number
   /** Pre-computed genomic intervals from panel genes (set by IPC handler) */
   panel_intervals?: Array<{ chr: string; start: number; end: number }>
+  /** Genome build to scope the cohort summary to (e.g. GRCh38, GRCh37) */
+  genome_build?: string
+  /** Variant type to scope the cohort summary to (snv, sv, cnv, str) */
+  variant_type?: string
   /** Whether the total count needs to be recomputed (false = use cached count) */
   _count_needed?: boolean
 }

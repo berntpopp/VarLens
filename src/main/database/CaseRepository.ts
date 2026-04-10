@@ -103,6 +103,29 @@ export class CaseRepository extends BaseRepository {
     )
   }
 
+  /**
+   * Return distinct genome builds used across cases with per-build case counts.
+   * Sorted so the most-represented build appears first — the renderer uses
+   * the first entry as the default selection in the cohort view.
+   */
+  getAvailableGenomeBuilds(): Array<{ build: string; caseCount: number }> {
+    const compiled = this.kysely
+      .selectFrom('cases')
+      .select(['genome_build as build'])
+      .select((eb) => eb.fn.countAll<number>().as('caseCount'))
+      .groupBy('genome_build')
+      .orderBy('caseCount', 'desc')
+      .compile()
+    const rows = this.db.prepare(compiled.sql).all(...compiled.parameters) as Array<{
+      build: string | null
+      caseCount: number
+    }>
+    return rows.map((row) => ({
+      build: row.build ?? 'GRCh38',
+      caseCount: Number(row.caseCount)
+    }))
+  }
+
   updateCaseVariantCount(id: number, count: number): void {
     const result = this.execRun(
       this.kysely.updateTable('cases').set({ variant_count: count }).where('id', '=', id)

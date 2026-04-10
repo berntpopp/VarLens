@@ -25,6 +25,7 @@ export type DbTaskType =
   // Cases
   | 'cases:list'
   | 'cases:query'
+  | 'cases:availableBuilds'
   // Annotations
   | 'annotations:getGlobal'
   | 'annotations:getPerCase'

@@ -83,15 +83,20 @@ export async function queryCohortVariants(
   const cohortParams = { ...params } as typeof params & {
     panel_intervals?: Array<{ chr: string; start: number; end: number }>
     genome_build?: string
+    variant_type?: string
   }
+
+  // Use client-provided build or default to GRCh38 for backward compatibility.
+  // The renderer populates this from the cohort view's genome build selector,
+  // which is seeded from cases:availableBuilds.
+  cohortParams.genome_build = cohortParams.genome_build ?? 'GRCh38'
 
   const pool = getDbPool?.()
 
   if (cohortParams.active_panel_ids && cohortParams.active_panel_ids.length > 0) {
     if (pool) {
       // Pool path: let the worker resolve intervals off the main thread.
-      // Cohort mode defaults to GRCh38 (no per-case genome build).
-      cohortParams.genome_build = 'GRCh38'
+      // Panel interval resolution relies on genome_build being set above.
       // active_panel_ids and panel_padding_bp are forwarded as-is
     } else {
       // Fallback (no pool): compute panel intervals on the main thread

@@ -170,6 +170,22 @@ export class CohortService {
       paramsArray.push(...params.acmg_classifications)
     }
 
+    // Genome build scope (added in Phase 3 multi-variant-type)
+    // The cohort summary is grouped per variant_type + genome_build, so we
+    // always filter to the selected build to avoid cross-build cohort_frequency.
+    if (params.genome_build !== undefined && params.genome_build !== '') {
+      whereConditions.push('cvs.genome_build = ?')
+      paramsArray.push(params.genome_build)
+    }
+
+    // Variant type scope (added in Phase 3 multi-variant-type)
+    // Filters the cohort summary to SNV/SV/CNV/STR variants so the dropdown
+    // in the cohort view renders only the selected class.
+    if (params.variant_type !== undefined && params.variant_type !== '') {
+      whereConditions.push('cvs.variant_type = ?')
+      paramsArray.push(params.variant_type)
+    }
+
     // Panel interval filter (region-based)
     if (params.panel_intervals && params.panel_intervals.length > 0) {
       const intervalConditions = params.panel_intervals.map((iv) => {
