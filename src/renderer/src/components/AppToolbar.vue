@@ -114,7 +114,7 @@
         <v-list-item
           :prepend-icon="mdiFileDocumentMultiple"
           title="Import VCF Files"
-          subtitle="Multi-file case (SNV + SV + CNV)"
+          subtitle="Multi-file case (SNV + SV + CNV + STR)"
           @click="$emit('vcf-import-click')"
         />
         <v-divider class="my-1" />
