@@ -15,6 +15,11 @@ export function detectVariantType(
   callerName: string | null
 ): VariantType {
   const svtype = info.get('SVTYPE')
+  const cnvCallers = ['Spectre', 'DRAGEN_CNV', 'CNVkit', 'ExomeDepth', 'GATK_gCNV']
+  const isCnvCaller =
+    callerName !== null &&
+    callerName !== '' &&
+    cnvCallers.some((c) => callerName.includes(c))
 
   // Symbolic ALT alleles
   if (alt.startsWith('<')) {
@@ -26,14 +31,7 @@ export function detectVariantType(
 
     // DEL/DUP: caller disambiguates CNV vs SV
     if (alt === '<DEL>' || alt === '<DUP>') {
-      const cnvCallers = ['Spectre', 'DRAGEN_CNV', 'CNVkit', 'ExomeDepth', 'GATK_gCNV']
-      if (
-        callerName !== null &&
-        callerName !== '' &&
-        cnvCallers.some((c) => callerName.includes(c))
-      ) {
-        return 'cnv'
-      }
+      if (isCnvCaller) return 'cnv'
       return 'sv'
     }
 
@@ -44,7 +42,17 @@ export function detectVariantType(
   // Breakend notation
   if (alt.includes('[') || alt.includes(']')) return 'sv'
 
-  // Sequence ALT: SNV vs indel
+  // Sequence ALT with SVTYPE info: trust the caller — it's a structural variant
+  // even though it's written as a sequence (e.g., Sniffles2 INS records).
+  if (svtype !== undefined && svtype !== '') {
+    if (svtype === 'STR') return 'str'
+    if (svtype === 'CNV') return 'cnv'
+    if ((svtype === 'DEL' || svtype === 'DUP') && isCnvCaller) return 'cnv'
+    // INS, DEL, DUP, INV, BND from SV callers
+    return 'sv'
+  }
+
+  // Sequence ALT without SVTYPE: SNV vs indel by length
   if (ref.length === 1 && alt.length === 1) return 'snv'
   return 'indel'
 }

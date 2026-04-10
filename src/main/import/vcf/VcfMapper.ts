@@ -57,7 +57,11 @@ export function mapVcfRecord(
     const gtFieldValue = gtIdx >= 0 && gtIdx < sampleValues.length ? sampleValues[gtIdx] : '.'
 
     // Skip if sample does not carry the ALT allele (ref-hom, no-call, or other ALT)
-    if (shouldSkipGenotype(gtFieldValue)) continue
+    // Exception: symbolic ALTs (SV/CNV/STR) use caller-specific fields like CN
+    // instead of diploid genotypes, so allow ./. for those (e.g., Spectre CNVs
+    // emit GT=./. with CN as the actual finding).
+    const altIsSymbolic = rec.alt[0].startsWith('<')
+    if (!altIsSymbolic && shouldSkipGenotype(gtFieldValue)) continue
 
     // Parse full genotype data (with altAlleleIndex=1 since already split)
     const genotype = parseGenotype(sampleValues, rec.format, 1)
