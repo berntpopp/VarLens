@@ -27,6 +27,26 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      # Belt-and-suspenders gate: refuse to release a tag whose SHA didn't
+      # pass build.yml. Branch protection already blocks merges on failing
+      # CI, but direct tag pushes bypass branch protection — this catches
+      # that case before any OS builder spins up and wastes runner minutes.
+      # Tags don't trigger build.yml (it only runs on push-to-main and PRs),
+      # so we look up the latest build.yml run on the exact tagged SHA.
+      - name: Verify build.yml passed on tagged SHA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA=$(git rev-parse "${{ github.ref_name }}")
+          STATUS=$(gh run list --workflow=build.yml --commit="$SHA" \
+            --json conclusion --jq '.[0].conclusion // "missing"')
+          if [ "$STATUS" != "success" ]; then
+            echo "::error::build.yml did not succeed on $SHA (got: $STATUS)"
+            echo "::error::Refusing to release a tag whose CI did not pass."
+            exit 1
+          fi
+          echo "build.yml passed on $SHA — proceeding with release"
+
       - name: Generate release notes
         run: |
           PREV_TAG=$(git tag --sort=-v:refname | sed -n '2p')
@@ -96,17 +116,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native modules for Node.js
-        run: npm run rebuild:node
-
-      - name: Run linter
-        run: npm run lint:check
-
-      - name: Run type check
-        run: npm run typecheck
-
-      - name: Run tests with coverage
-        run: npx vitest run --coverage
+      # lint/typecheck/test are validated by build.yml on the tagged SHA
+      # before the tag is pushed. The create-release gate above refuses to
+      # proceed when build.yml didn't succeed, so re-running those checks
+      # here would be pure duplication.
 
       - name: Rebuild native modules for Electron
         run: npm run rebuild:electron
@@ -148,17 +161,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native modules for Node.js
-        run: npm run rebuild:node
-
-      - name: Run linter
-        run: npm run lint:check
-
-      - name: Run type check
-        run: npm run typecheck
-
-      - name: Run tests
-        run: npm run test
+      # lint/typecheck/test already validated by build.yml on the tagged SHA.
 
       - name: Rebuild native modules for Electron
         run: npm run rebuild:electron
@@ -201,17 +204,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native modules for Node.js
-        run: npm run rebuild:node
-
-      - name: Run linter
-        run: npm run lint:check
-
-      - name: Run type check
-        run: npm run typecheck
-
-      - name: Run tests
-        run: npm run test
+      # lint/typecheck/test already validated by build.yml on the tagged SHA.
 
       - name: Rebuild native modules for Electron
         run: npm run rebuild:electron
