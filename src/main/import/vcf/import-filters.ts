@@ -91,11 +91,7 @@ export function passesPreMappingFilters(
   // Rationale: SV/CNV/STR callers routinely leave QUAL empty and scoring
   // happens via caller-specific INFO/FORMAT fields. Treating missing as
   // a failure would silently wipe entire SV callsets.
-  if (
-    filters.minQual !== null &&
-    record.qual !== null &&
-    record.qual < filters.minQual
-  ) {
+  if (filters.minQual !== null && record.qual !== null && record.qual < filters.minQual) {
     return false
   }
 

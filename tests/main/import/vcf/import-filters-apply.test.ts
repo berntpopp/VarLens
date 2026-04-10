@@ -120,9 +120,9 @@ describe('passesPreMappingFilters', () => {
     })
 
     it('rejects records with multiple failed filters (semicolon list)', () => {
-      expect(
-        passesPreMappingFilters(rawRecord({ filter: 'LowQual;HighStrand' }), passOnly)
-      ).toBe(false)
+      expect(passesPreMappingFilters(rawRecord({ filter: 'LowQual;HighStrand' }), passOnly)).toBe(
+        false
+      )
     })
 
     it('trims whitespace before comparing', () => {
@@ -163,33 +163,23 @@ describe('passesPreMappingFilters', () => {
     const withBed: ImportFilters = { ...DEFAULT_IMPORT_FILTERS, bedFilter: bed }
 
     it('keeps SNV inside the BED interval', () => {
-      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr1', pos: 1500 }), withBed)).toBe(
-        true
-      )
+      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr1', pos: 1500 }), withBed)).toBe(true)
     })
 
     it('keeps SNV at the interval left edge', () => {
-      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr1', pos: 1000 }), withBed)).toBe(
-        true
-      )
+      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr1', pos: 1000 }), withBed)).toBe(true)
     })
 
     it('rejects SNV before the interval', () => {
-      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr1', pos: 500 }), withBed)).toBe(
-        false
-      )
+      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr1', pos: 500 }), withBed)).toBe(false)
     })
 
     it('rejects SNV after the interval', () => {
-      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr1', pos: 3000 }), withBed)).toBe(
-        false
-      )
+      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr1', pos: 3000 }), withBed)).toBe(false)
     })
 
     it('rejects variant on a chromosome that has no BED regions', () => {
-      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr22', pos: 1500 }), withBed)).toBe(
-        false
-      )
+      expect(passesPreMappingFilters(rawRecord({ chrom: 'chr22', pos: 1500 }), withBed)).toBe(false)
     })
   })
 
@@ -389,15 +379,13 @@ describe('passesPostMappingFilters', () => {
     it('keeps variants with null GQ (SV/CNV/STR pass through — see docstring)', () => {
       // Critical per-type semantic: SVs don't populate FORMAT/GQ, must not
       // be wiped.
-      expect(
-        passesPostMappingFilters(mapped({ variant_type: 'sv', gq: null }), minGq20)
-      ).toBe(true)
-      expect(
-        passesPostMappingFilters(mapped({ variant_type: 'cnv', gq: null }), minGq20)
-      ).toBe(true)
-      expect(
-        passesPostMappingFilters(mapped({ variant_type: 'str', gq: null }), minGq20)
-      ).toBe(true)
+      expect(passesPostMappingFilters(mapped({ variant_type: 'sv', gq: null }), minGq20)).toBe(true)
+      expect(passesPostMappingFilters(mapped({ variant_type: 'cnv', gq: null }), minGq20)).toBe(
+        true
+      )
+      expect(passesPostMappingFilters(mapped({ variant_type: 'str', gq: null }), minGq20)).toBe(
+        true
+      )
     })
   })
 
@@ -413,9 +401,7 @@ describe('passesPostMappingFilters', () => {
     })
 
     it('keeps variants with null DP (SV/CNV/STR pass through)', () => {
-      expect(passesPostMappingFilters(mapped({ variant_type: 'sv', dp: null }), minDp10)).toBe(
-        true
-      )
+      expect(passesPostMappingFilters(mapped({ variant_type: 'sv', dp: null }), minDp10)).toBe(true)
     })
   })
 

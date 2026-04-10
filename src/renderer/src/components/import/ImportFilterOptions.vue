@@ -16,21 +16,19 @@
           <em>all</em> variant types (SNV, indel, SV, CNV, STR).
         </li>
         <li>
-          <strong>Min QUAL</strong>: applies to records with a numeric
-          <code>QUAL</code>. SV/CNV/STR records typically leave
-          <code>QUAL=.</code> and pass through unchanged — use caller-specific
-          metrics in the case view instead.
+          <strong>Min QUAL</strong>: applies to records with a numeric <code>QUAL</code>. SV/CNV/STR
+          records typically leave <code>QUAL=.</code> and pass through unchanged — use
+          caller-specific metrics in the case view instead.
         </li>
         <li>
-          <strong>Min GQ</strong> &amp; <strong>Min DP</strong>: apply to
-          variants that expose <code>FORMAT/GQ</code> and <code>FORMAT/DP</code>
-          — effectively SNV/indel only. SV/CNV/STR records are NOT filtered by
-          these thresholds.
+          <strong>Min GQ</strong> &amp; <strong>Min DP</strong>: apply to variants that expose
+          <code>FORMAT/GQ</code> and <code>FORMAT/DP</code>
+          — effectively SNV/indel only. SV/CNV/STR records are NOT filtered by these thresholds.
         </li>
         <li>
-          <strong>BED region</strong>: uses <em>interval overlap</em> when the
-          record has an <code>END</code> (SV/CNV/STR) and a <em>point check on
-          POS</em> for SNV/indel and breakends.
+          <strong>BED region</strong>: uses <em>interval overlap</em> when the record has an
+          <code>END</code> (SV/CNV/STR) and a <em>point check on POS</em> for SNV/indel and
+          breakends.
         </li>
       </ul>
     </v-alert>

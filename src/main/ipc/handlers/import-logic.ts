@@ -234,10 +234,7 @@ export async function startMultiFileImport(
    * infer transitions from "count reset" heuristics — brittle, and it
    * misattributed variant counts across files in some orderings.
    */
-  function wrapCallbacksForFile(
-    spec: MultiFileImportSpec,
-    fileIndex: number
-  ): ImportCallbacks {
+  function wrapCallbacksForFile(spec: MultiFileImportSpec, fileIndex: number): ImportCallbacks {
     return {
       onProgress: (data) => {
         callbacks.onProgress?.({

@@ -32,10 +32,7 @@ import { detectCaller } from '../../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../../import/vcf/info-field-registry'
 import type { VcfHeader, VcfMappedVariant } from '../../import/vcf/types'
 import type { ImportFilters } from '../../import/vcf/import-filters'
-import {
-  passesPreMappingFilters,
-  passesPostMappingFilters
-} from '../../import/vcf/import-filters'
+import { passesPreMappingFilters, passesPostMappingFilters } from '../../import/vcf/import-filters'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { ImportCallbacks, ImportResult, VcfImportOptions } from './import-logic'
 

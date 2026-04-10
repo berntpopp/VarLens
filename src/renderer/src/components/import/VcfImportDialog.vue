@@ -718,9 +718,7 @@ function handleProgressUpdate(update: ProgressUpdate): void {
   // the currently-tracked file only for single-file imports (which omit the
   // new fields).
   const activeFilePath =
-    update.filePath !== undefined && update.filePath !== ''
-      ? update.filePath
-      : currentFile.value
+    update.filePath !== undefined && update.filePath !== '' ? update.filePath : currentFile.value
   if (activeFilePath === null) return
 
   // Transition handling: if the active file changed, mark all previously-
@@ -773,8 +771,7 @@ function handleProgressUpdate(update: ProgressUpdate): void {
   importStore.updateProgress({
     fileIndex: Math.max(0, activeFileIndex),
     totalFiles: update.totalFiles ?? totalFilesInWizard,
-    fileName:
-      update.fileName ?? fileName(activeFilePath),
+    fileName: update.fileName ?? fileName(activeFilePath),
     overallPercent: overallPercent.value,
     phase: update.phase,
     variantCount: totalVariantsAcrossFiles,
