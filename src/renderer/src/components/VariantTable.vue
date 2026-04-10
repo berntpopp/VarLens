@@ -313,11 +313,14 @@ interface Props {
   annotationScope?: AnnotationScope
   /** Per-column metadata from useFilterState (avoids duplicate IPC call) */
   columnMeta?: ColumnFilterMeta[]
+  /** Variant type discriminator — drives column set selection (snv, sv, cnv, str) */
+  variantType?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   annotationScope: 'case',
-  columnMeta: () => []
+  columnMeta: () => [],
+  variantType: 'snv'
 })
 
 const emit = defineEmits<{
@@ -365,9 +368,10 @@ const annotationActions = {
 // Links
 const { linksStore, buildOmimEntryUrl, resolveLink, openExternalLink } = useVariantLinks()
 
-// Column preferences and column definitions
+// Column preferences and column definitions — swap columns on variant type change
 const { prefs } = useColumnPreferences('variant-table')
-const { headers, visibleHeaders, filterableColumns } = useVariantColumns(prefs)
+const variantTypeRef = toRef(props, 'variantType')
+const { headers, visibleHeaders, filterableColumns } = useVariantColumns(prefs, variantTypeRef)
 
 // Data loading and state
 const {

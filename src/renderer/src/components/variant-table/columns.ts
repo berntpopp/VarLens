@@ -1,4 +1,4 @@
-import { computed, type ComputedRef } from 'vue'
+import { computed, type ComputedRef, type Ref } from 'vue'
 import type { useColumnPreferences } from '../../composables/useColumnPreferences'
 import { useVariantLinks } from '../../composables/useVariantLinks'
 import { svHeaders } from './sv-columns'
@@ -56,15 +56,31 @@ export const baseHeaders: ColumnDef[] = [
 
 /**
  * Composable that computes dynamic, ordered, and visible column sets.
+ *
+ * @param prefs - Column preferences from useColumnPreferences
+ * @param variantType - Optional reactive variant type; swaps base column set when
+ *   set to 'sv', 'cnv', or 'str'. Defaults to SNV/Indel columns.
  */
-export function useVariantColumns(prefs: ReturnType<typeof useColumnPreferences>['prefs']) {
+export function useVariantColumns(
+  prefs: ReturnType<typeof useColumnPreferences>['prefs'],
+  variantType?: Ref<string> | ComputedRef<string>
+) {
   const { linksStore } = useVariantLinks()
 
   /** All headers including dynamic virtual link columns from store. */
   const headers: ComputedRef<ColumnDef[]> = computed(() => {
-    const allHeaders: ColumnDef[] = [...baseHeaders]
-    for (const link of linksStore.virtualLinks) {
-      allHeaders.push({ title: link.name, key: `_link_${link.id}`, sortable: false, width: '80px' })
+    const typeHeaders = getHeadersForType(variantType?.value ?? 'snv')
+    const allHeaders: ColumnDef[] = [...typeHeaders]
+    // Only add virtual link columns for SNV/Indel view (type-specific views have curated columns)
+    if ((variantType?.value ?? 'snv') === 'snv') {
+      for (const link of linksStore.virtualLinks) {
+        allHeaders.push({
+          title: link.name,
+          key: `_link_${link.id}`,
+          sortable: false,
+          width: '80px'
+        })
+      }
     }
     return allHeaders
   })
