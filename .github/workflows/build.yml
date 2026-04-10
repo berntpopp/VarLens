@@ -183,7 +183,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Cache the Electron-ABI native binary. Key must include runner.os,
+      # runner.arch, the exact Electron version spec from package.json, and
+      # the lockfile hash — a partial match would leave a wrong-ABI `.node`
+      # on disk and silently corrupt the build. No restore-keys fallback
+      # for the same reason.
+      - name: Extract Electron version
+        id: electron-ver
+        shell: bash
+        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache native module for Electron ABI
+        id: native-cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/better-sqlite3-multiple-ciphers/build/Release
+          key: native-electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+
       - name: Rebuild native modules for Electron
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: npm run rebuild:electron
 
       - name: Build Electron app
