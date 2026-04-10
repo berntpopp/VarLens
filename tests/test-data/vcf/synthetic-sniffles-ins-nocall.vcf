@@ -1,0 +1,11 @@
+##fileformat=VCFv4.2
+##source=Sniffles2_2.6.3
+##contig=<ID=chr1,length=248956422>
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position">
+##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="SV length">
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="SV type">
+##INFO=<ID=SUPPORT,Number=1,Type=Integer,Description="Number of reads supporting the variant">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Depth">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE1
+chr1	2000000	Sniffles.INS.nocall.1	A	ACCCCCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAA	60	PASS	END=2000000;SVLEN=39;SVTYPE=INS;SUPPORT=12	GT:DP	./.:20

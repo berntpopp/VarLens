@@ -1,0 +1,15 @@
+##fileformat=VCFv4.2
+##source=Spectre
+##contig=<ID=chr1,length=248956422>
+##ALT=<ID=DEL,Description="Deletion">
+##ALT=<ID=DUP,Description="Duplication">
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position">
+##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Length of the SV">
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of CNV">
+##INFO=<ID=CN,Number=1,Type=Integer,Description="Copy number">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=CN,Number=1,Type=Integer,Description="Copy number">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE1
+chr1	5000000	Spectre.DEL.nocall.1	N	<DEL>	.	PASS	END=5500000;SVLEN=500000;SVTYPE=DEL;CN=1	GT:CN:GQ	./.:1:30
+chr1	10000000	Spectre.DUP.nocall.2	N	<DUP>	.	PASS	END=10200000;SVLEN=200000;SVTYPE=DUP;CN=3	GT:CN:GQ	./.:3:25

@@ -1524,7 +1524,9 @@ describe('Variant Operations', () => {
       expect(opts.maxGnomadAf).toBe(0.05)
 
       // columnMeta array should have entries for all SORTABLE_COLUMNS (16 columns)
-      expect(opts.columnMeta).toHaveLength(16)
+      // 21 entries: 16 pre-v25 sortable columns + 5 new (variant_type, end_pos,
+      // sv_type, sv_length, caller) added to SORTABLE_COLUMNS in migration v25.
+      expect(opts.columnMeta).toHaveLength(21)
 
       // Check a specific numeric column
       const caddMeta = opts.columnMeta.find((m) => m.key === 'cadd')
@@ -1564,7 +1566,9 @@ describe('Variant Operations', () => {
       expect(opts.maxCadd).toBeNull()
       expect(opts.minGnomadAf).toBeNull()
       expect(opts.maxGnomadAf).toBeNull()
-      expect(opts.columnMeta).toHaveLength(16)
+      // 21 entries: 16 pre-v25 sortable columns + 5 new (variant_type, end_pos,
+      // sv_type, sv_length, caller) added to SORTABLE_COLUMNS in migration v25.
+      expect(opts.columnMeta).toHaveLength(21)
       expect(opts.columnMeta.every((m) => m.distinctCount === 0)).toBe(true)
     })
 

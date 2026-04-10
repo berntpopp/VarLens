@@ -20,6 +20,13 @@ const SV_VCF = path.join(__dirname, '../../../test-data/vcf/synthetic-sv.vcf')
 const CNV_VCF = path.join(__dirname, '../../../test-data/vcf/synthetic-cnv.vcf')
 const STR_VCF = path.join(__dirname, '../../../test-data/vcf/synthetic-str.vcf')
 const BED_FILE = path.join(__dirname, '../../../test-data/vcf/test-regions.bed')
+// Regression fixtures — see "Genotype no-call bypass for structural variants"
+// describe block at the bottom of this file.
+const CNV_NOCALL_VCF = path.join(__dirname, '../../../test-data/vcf/synthetic-cnv-nocall.vcf')
+const SV_NOCALL_VCF = path.join(
+  __dirname,
+  '../../../test-data/vcf/synthetic-sniffles-ins-nocall.vcf'
+)
 
 function parseVcfFile(filePath: string) {
   const content = readFileSync(filePath, 'utf-8')
@@ -306,5 +313,54 @@ describe('BED filter integration', () => {
     })
 
     expect(filtered.length).toBe(variants.length)
+  })
+})
+
+/**
+ * Regression tests for structural-variant genotype-skip bypass.
+ *
+ * VarLens normally skips variant records whose selected sample GT is no-call
+ * (e.g. `./.`) because it indicates the sample doesn't actually carry the ALT
+ * allele. But structural-variant callers (Spectre for CNVs, Sniffles2 for
+ * insertions) legitimately emit `GT=./.` on variants they ARE reporting —
+ * the finding is encoded in caller-specific fields (CN, SUPPORT, VAF) rather
+ * than a diploid genotype.
+ *
+ * Two real-world bugs we fixed:
+ *   1. Spectre CNV VCFs with `GT=./.` + `<DEL>`/`<DUP>` symbolic ALTs were
+ *      silently dropped during import, producing 0-variant imports for the
+ *      entire CNV callset. Fixed by bypassing shouldSkipGenotype when the
+ *      ALT is symbolic.
+ *   2. Sniffles2 INS records use sequence ALTs (not symbolic `<INS>`) but
+ *      still declare `SVTYPE=INS`. With `GT=./.` they hit the skip filter
+ *      because `alt.startsWith('<')` returned false. Fixed by ALSO bypassing
+ *      when the record has any SVTYPE or breakend notation.
+ *
+ * These tests lock in both bypasses so the bugs cannot silently regress.
+ */
+describe('Structural variant GT=./. bypass (regression #94)', () => {
+  it('keeps Spectre <DEL>/<DUP> CNVs with GT=./. no-call genotype', () => {
+    const { variants } = parseVcfFile(CNV_NOCALL_VCF)
+    expect(variants.length).toBe(2)
+    for (const v of variants) {
+      expect(v.variant_type).toBe('cnv')
+      expect(v.gt_num).toBe('./.')
+      expect(v._cnv).toBeDefined()
+    }
+    const del = variants.find((v) => v.sv_type === 'DEL')
+    expect(del).toBeDefined()
+    expect(del!._cnv!.copy_number).toBe(1)
+  })
+
+  it('keeps Sniffles2 sequence-ALT INS with SVTYPE=INS and GT=./. no-call', () => {
+    const { variants } = parseVcfFile(SV_NOCALL_VCF)
+    expect(variants.length).toBe(1)
+    const ins = variants[0]
+    expect(ins.variant_type).toBe('sv')
+    expect(ins.sv_type).toBe('INS')
+    expect(ins.gt_num).toBe('./.')
+    // Sequence ALT, not symbolic — confirms the bypass depends on SVTYPE, not `<…>`
+    expect(ins.alt.startsWith('<')).toBe(false)
+    expect(ins._sv).toBeDefined()
   })
 })

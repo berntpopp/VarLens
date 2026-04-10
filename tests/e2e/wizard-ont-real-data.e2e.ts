@@ -11,7 +11,15 @@
  * - wf_str.vcf.gz (Straglr, 16 STR loci)
  * - regions.bed.gz (sibling BED for auto-suggest)
  *
- * Run with: xvfb-run --auto-servernum npx playwright test tests/e2e/wizard-ont-real-data.e2e.ts
+ * Point this test at your local ONT test dataset by setting the env var
+ * `ONT_TEST_DATA_DIR`. The directory must contain files matching the
+ * `LB*.wf_sv.vcf.gz` / `.wf_cnv.vcf.gz` / `.wf_str.vcf.gz` naming pattern.
+ * When the env var is unset (CI and most dev machines), the suite is
+ * skipped at beforeAll so runs are clean.
+ *
+ * Run with:
+ *   ONT_TEST_DATA_DIR=/path/to/ont-data \
+ *     xvfb-run --auto-servernum npx playwright test tests/e2e/wizard-ont-real-data.e2e.ts
  */
 import {
   test,
@@ -20,13 +28,26 @@ import {
   type ElectronApplication,
   type Page
 } from '@playwright/test'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync } from 'fs'
+import { join } from 'path'
 
-const ONT_DIR = '/home/bernt-popp/Downloads/OneDrive_1_4-9-2026'
-const SV_VCF = `${ONT_DIR}/LB20251210-LB25-4957_NBD114_HCP.wf_sv.vcf.gz`
-const CNV_VCF = `${ONT_DIR}/LB20251210-LB25-4957_NBD114_HCP.wf_cnv.vcf.gz`
-const STR_VCF = `${ONT_DIR}/LB20251210-LB25-4957_NBD114_HCP.wf_str.vcf.gz`
-const BED_FILE = `${ONT_DIR}/LB20251210-LB25-4957_NBD114_HCP.regions.bed.gz`
+const ONT_DIR = process.env.ONT_TEST_DATA_DIR ?? ''
+
+function findFileBySuffix(dir: string, suffix: string): string | null {
+  if (dir === '' || !existsSync(dir)) return null
+  try {
+    const entries = readdirSync(dir)
+    const match = entries.find((e) => e.endsWith(suffix))
+    return match !== undefined ? join(dir, match) : null
+  } catch {
+    return null
+  }
+}
+
+const SV_VCF = findFileBySuffix(ONT_DIR, '.wf_sv.vcf.gz') ?? ''
+const CNV_VCF = findFileBySuffix(ONT_DIR, '.wf_cnv.vcf.gz') ?? ''
+const STR_VCF = findFileBySuffix(ONT_DIR, '.wf_str.vcf.gz') ?? ''
+const BED_FILE = findFileBySuffix(ONT_DIR, '.regions.bed.gz') ?? ''
 
 const CASE_NAME = 'ONT_P2_LB25-4957_Wizard'
 
@@ -34,9 +55,15 @@ let app: ElectronApplication
 let window: Page
 
 test.beforeAll(async () => {
-  // Skip suite if ONT data isn't available
-  if (!existsSync(SV_VCF)) {
-    test.skip(true, `ONT test data not available at ${ONT_DIR}`)
+  // Skip suite if ONT_TEST_DATA_DIR is unset or resolved paths don't exist.
+  // CI and dev machines without the test dataset should clean-skip.
+  if (ONT_DIR === '' || SV_VCF === '' || !existsSync(SV_VCF)) {
+    test.skip(
+      true,
+      ONT_DIR === ''
+        ? 'Set ONT_TEST_DATA_DIR to enable this suite'
+        : `ONT test data not available at ${ONT_DIR}`
+    )
   }
 
   app = await electron.launch({
