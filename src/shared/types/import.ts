@@ -81,4 +81,23 @@ export interface VcfPreviewResult {
     description: string
     mapsToColumn: string | null
   }>
+  /** Detected variant caller name from ##source= or ##command= header lines */
+  callerName: string | null
+  /** Caller version extracted from header (e.g., '2.6.3') */
+  callerVersion: string | null
+  /** Default variant type inferred from caller (snv, sv, cnv, str) */
+  defaultVariantType: string
+  /** Absolute file path (used for multi-file preview) */
+  filePath: string
+  /** File size in bytes */
+  fileSize: number
+}
+
+/** Result of scanning multiple VCF files plus optional sibling BED files */
+export interface VcfMultiPreviewResult {
+  files: VcfPreviewResult[]
+  /** Sibling BED files found in the same directory as the selected VCFs */
+  siblingBedFiles: string[]
+  /** Derived case name from sample ID (stripped of path + extension) */
+  suggestedCaseName: string
 }

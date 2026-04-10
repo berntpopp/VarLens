@@ -146,3 +146,12 @@ export async function getVcfPreview(filePath: string): Promise<unknown> {
   const { getVcfPreview: vcfPreview } = await import('../../import/vcf/vcf-preview')
   return vcfPreview(filePath)
 }
+
+/**
+ * Get VCF preview for multiple files at once, plus sibling BED files
+ * and a suggested case name. Used by the multi-file import wizard.
+ */
+export async function getVcfMultiPreview(filePaths: string[]): Promise<unknown> {
+  const { getVcfMultiPreview: multiPreview } = await import('../../import/vcf/vcf-preview')
+  return multiPreview(filePaths)
+}

@@ -195,12 +195,15 @@ export interface FilterOptions {
 
 export interface ImportAPI {
   selectFile: () => Promise<string | null>
+  selectFiles: () => Promise<string[]>
+  selectBedFile: () => Promise<string | null>
   start: (
     filePath: string,
     caseName: string,
     vcfOptions?: { selectedSample?: string; genomeBuild?: string }
   ) => Promise<ImportResult | SerializableError>
   vcfPreview: (filePath: string) => Promise<VcfPreviewResult>
+  vcfMultiPreview: (filePaths: string[]) => Promise<import('./import').VcfMultiPreviewResult>
   onProgress: (callback: (progress: ProgressUpdate) => void) => () => void
   cancel: () => Promise<void>
 }

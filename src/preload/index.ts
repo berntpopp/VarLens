@@ -74,6 +74,8 @@ const api = {
 
   import: {
     selectFile: () => ipcRenderer.invoke('import:selectFile'),
+    selectFiles: () => ipcRenderer.invoke('import:selectFiles'),
+    selectBedFile: () => ipcRenderer.invoke('import:selectBedFile'),
 
     start: (
       filePath: string,
@@ -82,6 +84,8 @@ const api = {
     ) => ipcRenderer.invoke('import:start', filePath, caseName, vcfOptions),
 
     vcfPreview: (filePath: string) => ipcRenderer.invoke('import:vcfPreview', filePath),
+    vcfMultiPreview: (filePaths: string[]) =>
+      ipcRenderer.invoke('import:vcfMultiPreview', filePaths),
 
     /**
      * Register progress listener. Returns cleanup function.

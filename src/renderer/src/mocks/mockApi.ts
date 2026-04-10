@@ -139,6 +139,8 @@ export const mockApi: WindowAPI = {
 
   import: {
     selectFile: async () => '/mock/selected/file.json',
+    selectFiles: async () => ['/mock/selected/file.vcf.gz'],
+    selectBedFile: async () => '/mock/regions.bed',
     start: async () => ({
       caseId: cases.length + 1,
       variantCount: 1000,
@@ -150,9 +152,19 @@ export const mockApi: WindowAPI = {
       fileformat: 'VCFv4.2',
       samples: ['SAMPLE1'],
       variantCountEstimate: 100,
-      annotationType: 'none',
+      annotationType: 'none' as const,
       detectedGenomeBuild: 'GRCh38',
-      infoFields: []
+      infoFields: [],
+      callerName: null,
+      callerVersion: null,
+      defaultVariantType: 'snv',
+      filePath: '/mock/file.vcf.gz',
+      fileSize: 1000
+    }),
+    vcfMultiPreview: async () => ({
+      files: [],
+      siblingBedFiles: [],
+      suggestedCaseName: 'MockCase'
     }),
     onProgress: () => () => {},
     cancel: async () => {}
