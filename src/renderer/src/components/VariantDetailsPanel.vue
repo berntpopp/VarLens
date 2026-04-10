@@ -40,6 +40,9 @@
             @open-protein-view="openProteinView"
           />
 
+          <!-- Extension details for SV/CNV/STR variants -->
+          <ExtensionDetailsSection :variant="variant as unknown as Record<string, unknown>" />
+
           <!-- Transcript Section (case + cohort mode) -->
           <TranscriptSection
             :variant-id="mode === 'case' && 'id' in variant ? (variant as Variant).id : null"
@@ -192,6 +195,7 @@ import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
 import AnnotationScoresSection from './AnnotationScoresSection.vue'
 import TranscriptSection from './TranscriptSection.vue'
+import ExtensionDetailsSection from './variant-details/ExtensionDetailsSection.vue'
 
 // Lazy-load non-critical panel sections to speed up initial open
 import SectionSkeleton from './SectionSkeleton.vue'
