@@ -1,9 +1,5 @@
 <template>
   <div>
-    <!-- TODO: Backend ImportFilters are not yet wired through startMultiFileImport (Phase 4 Task 2).
-         This component collects filter options that will be forwarded to the IPC call, but the
-         backend will currently ignore them. Remove this note once wiring is complete. -->
-
     <!-- Quality filters -->
     <div class="text-body-2 font-weight-medium mb-2 d-flex align-center ga-2">
       <v-icon :icon="mdiFilterVariant" size="18" />

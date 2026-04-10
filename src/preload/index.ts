@@ -91,8 +91,16 @@ const api = {
         caller: string | null
         annotationFormat: string | null
       }>,
-      vcfOptions?: { selectedSample?: string; genomeBuild?: string }
-    ) => ipcRenderer.invoke('import:startMultiFile', caseName, files, vcfOptions),
+      vcfOptions?: { selectedSample?: string; genomeBuild?: string },
+      filters?: {
+        bedFile?: string | null
+        bedPadding?: number
+        passOnly?: boolean
+        minQual?: number | null
+        minGq?: number | null
+        minDp?: number | null
+      }
+    ) => ipcRenderer.invoke('import:startMultiFile', caseName, files, vcfOptions, filters),
 
     vcfPreview: (filePath: string) => ipcRenderer.invoke('import:vcfPreview', filePath),
     vcfMultiPreview: (filePaths: string[]) =>

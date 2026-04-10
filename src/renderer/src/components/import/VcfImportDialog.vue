@@ -588,14 +588,29 @@ async function startImport(): Promise<void> {
   phase.value = 'progress'
 
   try {
-    // Note: backend currently ignores filters via startMultiFile — see ImportFilterOptions.vue TODO
+    // Map the wizard's filter state into the serializable IPC payload shape.
+    // Only meaningful filter content is sent; an empty payload skips the filter
+    // code path in the main process entirely.
+    const filtersPayload = {
+      bedFile:
+        filters.value.bedPath !== undefined && filters.value.bedPath !== ''
+          ? filters.value.bedPath
+          : null,
+      bedPadding: filters.value.bedPadding,
+      passOnly: filters.value.passOnly,
+      minQual: filters.value.minQual,
+      minGq: filters.value.minGq,
+      minDp: filters.value.minDp
+    }
+
     const result = await api.import.startMultiFile(
       caseName.value.trim(),
       specs,
       previewResult.value.files[0].detectedGenomeBuild !== null &&
         previewResult.value.files[0].detectedGenomeBuild !== ''
         ? { genomeBuild: previewResult.value.files[0].detectedGenomeBuild }
-        : undefined
+        : undefined,
+      filtersPayload
     )
 
     if (isIpcError(result)) {

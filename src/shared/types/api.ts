@@ -227,7 +227,15 @@ export interface ImportAPI {
   startMultiFile: (
     caseName: string,
     files: MultiFileImportSpec[],
-    vcfOptions?: { selectedSample?: string; genomeBuild?: string }
+    vcfOptions?: { selectedSample?: string; genomeBuild?: string },
+    filters?: {
+      bedFile?: string | null
+      bedPadding?: number
+      passOnly?: boolean
+      minQual?: number | null
+      minGq?: number | null
+      minDp?: number | null
+    }
   ) => Promise<MultiFileImportResult | SerializableError>
   vcfPreview: (filePath: string) => Promise<VcfPreviewResult>
   vcfMultiPreview: (filePaths: string[]) => Promise<import('./import').VcfMultiPreviewResult>

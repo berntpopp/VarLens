@@ -181,9 +181,18 @@ export class CohortService {
     // Variant type scope (added in Phase 3 multi-variant-type)
     // Filters the cohort summary to SNV/SV/CNV/STR variants so the dropdown
     // in the cohort view renders only the selected class.
+    //
+    // Semantic: the 'SNV/Indel' tab is labelled 'snv' in the UI but must match
+    // BOTH 'snv' and 'indel' rows (the same collapsing the case view applies
+    // in VariantFilterBuilder). Without this, the cohort selector would hide
+    // all indels while the UI claims otherwise. All other types are exact.
     if (params.variant_type !== undefined && params.variant_type !== '') {
-      whereConditions.push('cvs.variant_type = ?')
-      paramsArray.push(params.variant_type)
+      if (params.variant_type === 'snv') {
+        whereConditions.push("cvs.variant_type IN ('snv', 'indel')")
+      } else {
+        whereConditions.push('cvs.variant_type = ?')
+        paramsArray.push(params.variant_type)
+      }
     }
 
     // Panel interval filter (region-based)
