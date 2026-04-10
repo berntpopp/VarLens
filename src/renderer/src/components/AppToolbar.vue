@@ -111,6 +111,12 @@
           subtitle="Ctrl+I"
           @click="$emit('import-click')"
         />
+        <v-list-item
+          :prepend-icon="mdiFileDocumentMultiple"
+          title="Import VCF Files"
+          subtitle="Multi-file case (SNV + SV + CNV)"
+          @click="$emit('vcf-import-click')"
+        />
         <v-divider class="my-1" />
         <v-list-subheader>Settings</v-list-subheader>
         <v-list-item
@@ -180,6 +186,7 @@ import {
   mdiCog,
   mdiDatabaseImport,
   mdiDeleteSweep,
+  mdiFileDocumentMultiple,
   mdiFilterOff,
   mdiInformationOutline,
   mdiLink,
@@ -216,6 +223,7 @@ defineEmits<{
   'show-preferences': []
   'show-import-progress': []
   'import-click': []
+  'vcf-import-click': []
   'reset-columns': []
   'reset-filters': []
   'delete-all-cases': []

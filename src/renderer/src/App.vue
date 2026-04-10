@@ -4,6 +4,7 @@
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
       @show-database-overview="dialogHostRef?.showDatabaseOverview()"
       @import-click="dialogHostRef?.showImportDialog()"
+      @vcf-import-click="dialogHostRef?.showVcfImportDialog()"
       @show-external-links="dialogHostRef?.showExternalLinks()"
       @show-tag-management="dialogHostRef?.showTagManagement()"
       @show-panel-manager="dialogHostRef?.showPanelManager()"

@@ -4,6 +4,11 @@
     @import-complete="handleImportComplete"
     @batch-import-complete="handleBatchImportComplete"
   />
+  <VcfImportDialog
+    v-if="vcfImportMounted"
+    v-model:open="vcfImportOpen"
+    @case-imported="handleVcfCaseImported"
+  />
   <AppSnackbar ref="snackbarRef" />
   <LogViewer v-model:open="logViewerOpen" />
   <DisclaimerDialog ref="disclaimerRef" @acknowledged="handleDisclaimerAcknowledged" />
@@ -40,6 +45,7 @@ const TagManagementDialog = defineAsyncComponent(() => import('./TagManagementDi
 const DatabaseOverviewDialog = defineAsyncComponent(() => import('./DatabaseOverviewDialog.vue'))
 const DeleteAllCasesDialog = defineAsyncComponent(() => import('./DeleteAllCasesDialog.vue'))
 const PanelManagerDialog = defineAsyncComponent(() => import('./panels/PanelManagerDialog.vue'))
+const VcfImportDialog = defineAsyncComponent(() => import('./import/VcfImportDialog.vue'))
 import { useAppState } from '../composables/useAppState'
 import { useVersionGating } from '../composables/useVersionGating'
 import { logService } from '../services/LogService'
@@ -81,6 +87,8 @@ const dbOverviewMounted = ref(false)
 const deleteAllMounted = ref(false)
 const panelManagerMounted = ref(false)
 const panelManagerOpen = ref(false)
+const vcfImportMounted = ref(false)
+const vcfImportOpen = ref(false)
 
 /**
  * Wait for a lazy-loaded dialog ref to become available after setting its mount flag.
@@ -139,6 +147,18 @@ const handleBatchImportComplete = (result: { totalImported: number }): void => {
   snackbarRef.value?.show(message, 'success')
 }
 
+const handleVcfCaseImported = (result: {
+  caseId: number
+  caseName: string
+  variantCount: number
+}): void => {
+  emit('import-complete', result)
+  snackbarRef.value?.show(
+    `Case imported: ${result.caseName} (${result.variantCount.toLocaleString()} variants)`,
+    'success'
+  )
+}
+
 // Check initial disclaimer acknowledgment state
 const { needsAcknowledgment } = useVersionGating()
 disclaimerAcknowledged.value = !needsAcknowledgment()
@@ -150,6 +170,11 @@ onMounted(() => {
 // Expose dialog triggers for parent coordination
 defineExpose({
   showImportDialog: () => importWizardRef.value?.show(),
+  showVcfImportDialog: async () => {
+    vcfImportMounted.value = true
+    await nextTick()
+    vcfImportOpen.value = true
+  },
   showDisclaimer: () => disclaimerRef.value?.show(),
   showFaq: async () => {
     faqMounted.value = true
