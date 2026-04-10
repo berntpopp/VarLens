@@ -443,26 +443,66 @@ const handleDelete = async (): Promise<void> => {
 
   const caseToDelete = contextMenuCase.value
   const confirmed = await dialogRef.value?.show(caseToDelete.name, caseToDelete.variant_count)
+  if (confirmed !== true) return
 
-  if (confirmed === true) {
-    await api!.cases.delete(caseToDelete.id)
-    emit('case-deleted', caseToDelete.id)
+  // ── Optimistic UI update ──
+  // The IPC handler already runs the delete inside a worker thread on the
+  // main process (see src/main/ipc/handlers/cases-logic.ts#deleteSingleCase),
+  // but the renderer was previously `await`ing the whole operation — which
+  // meant the deleted case stayed visible for the full duration of the
+  // worker run (seconds for large cases). That opened a window where a
+  // user could re-click the deleted case, navigate into it, or click
+  // delete again. We now remove the case from the list immediately and
+  // fire the IPC async; failures re-insert the case and show an error
+  // snackbar.
+  const deletedId = caseToDelete.id
+  const deletedName = caseToDelete.name
+  const priorIndex = cases.value.findIndex((c) => c.id === deletedId)
+  const priorSnapshot = priorIndex >= 0 ? cases.value[priorIndex] : null
 
-    // If deleted case was selected, clear selection
-    if (selected.value.includes(caseToDelete.id) === true) {
-      selected.value = []
-    }
-
-    // Remove from multi-select if present
-    if (multiSelected.value.has(caseToDelete.id)) {
-      const newSet = new Set(multiSelected.value)
-      newSet.delete(caseToDelete.id)
-      multiSelected.value = newSet
-    }
-
-    snackbarRef.value?.show(`Deleted "${caseToDelete.name}"`)
-    resetList()
+  // Remove from the visible list + clear any stale selection state.
+  cases.value = markRaw(cases.value.filter((c) => c.id !== deletedId))
+  if (totalCaseCount.value > 0) totalCaseCount.value -= 1
+  if (selected.value.includes(deletedId) === true) {
+    selected.value = []
   }
+  if (multiSelected.value.has(deletedId)) {
+    const newSet = new Set(multiSelected.value)
+    newSet.delete(deletedId)
+    multiSelected.value = newSet
+  }
+
+  // Emit so the parent (App.vue) can clear its own routing state — crucial
+  // because the app-level `selectedCaseId` keeps the variant panel open on
+  // the now-deleted case otherwise.
+  emit('case-deleted', deletedId)
+  snackbarRef.value?.show(`Deleting "${deletedName}"…`)
+
+  // Fire-and-forget — still catch errors and roll back the optimistic
+  // update if the worker rejects the delete. We intentionally do NOT
+  // `await` so the UI stays responsive during large deletes.
+  api!.cases
+    .delete(deletedId)
+    .then(() => {
+      snackbarRef.value?.show(`Deleted "${deletedName}"`)
+    })
+    .catch((error) => {
+      logService.error(
+        `Failed to delete case ${deletedId}: ${error instanceof Error ? error.message : String(error)}`,
+        'case-list'
+      )
+      // Roll back: re-insert at the original position.
+      if (priorSnapshot !== null) {
+        const next = [...cases.value]
+        const insertAt = Math.min(priorIndex, next.length)
+        next.splice(insertAt, 0, priorSnapshot)
+        cases.value = markRaw(next)
+        totalCaseCount.value += 1
+      }
+      snackbarRef.value?.show(
+        `Failed to delete "${deletedName}": ${error instanceof Error ? error.message : String(error)}`
+      )
+    })
 }
 
 const handleDeleteSelected = async (): Promise<void> => {
@@ -478,26 +518,50 @@ const handleDeleteSelected = async (): Promise<void> => {
   }, 0)
 
   const confirmed = await dialogRef.value?.showBatch(ids.length, totalVariants)
+  if (confirmed !== true) return
 
-  if (confirmed === true) {
-    const deleted = await api!.cases.deleteBatch(ids)
-
-    // Emit deleted event for each case
-    for (const id of ids) {
-      emit('case-deleted', id)
-    }
-
-    // Clear single selection if it was deleted
-    if (selected.value.length > 0 && ids.includes(selected.value[0])) {
-      selected.value = []
-    }
-
-    // Clear multi-select
-    multiSelected.value = new Set()
-
-    snackbarRef.value?.show(`Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`)
-    resetList()
+  // ── Optimistic UI update (same rationale as handleDelete above) ──
+  const idSet = new Set(ids)
+  const priorSnapshots = cases.value.filter((c) => idSet.has(c.id))
+  cases.value = markRaw(cases.value.filter((c) => !idSet.has(c.id)))
+  if (totalCaseCount.value > 0) {
+    totalCaseCount.value = Math.max(0, totalCaseCount.value - ids.length)
   }
+
+  // Clear single selection if it was part of the batch
+  if (selected.value.length > 0 && ids.includes(selected.value[0])) {
+    selected.value = []
+  }
+  multiSelected.value = new Set()
+
+  // Emit so the parent clears routing state for any currently-selected case.
+  for (const id of ids) {
+    emit('case-deleted', id)
+  }
+  snackbarRef.value?.show(`Deleting ${ids.length} ${ids.length === 1 ? 'case' : 'cases'}…`)
+
+  api!.cases
+    .deleteBatch(ids)
+    .then((deleted) => {
+      snackbarRef.value?.show(`Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`)
+    })
+    .catch((error) => {
+      logService.error(
+        `Failed to delete cases [${ids.join(', ')}]: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        'case-list'
+      )
+      // Roll back: re-insert all affected cases. Order is approximate
+      // (they may not land in their original positions) but they reappear.
+      if (priorSnapshots.length > 0) {
+        cases.value = markRaw([...priorSnapshots, ...cases.value])
+        totalCaseCount.value += priorSnapshots.length
+      }
+      snackbarRef.value?.show(
+        `Failed to delete cases: ${error instanceof Error ? error.message : String(error)}`
+      )
+    })
 }
 
 // Expose methods for parent to call after import/delete/db-switch
