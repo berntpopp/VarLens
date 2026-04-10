@@ -1,6 +1,9 @@
 import { computed, type ComputedRef } from 'vue'
 import type { useColumnPreferences } from '../../composables/useColumnPreferences'
 import { useVariantLinks } from '../../composables/useVariantLinks'
+import { svHeaders } from './sv-columns'
+import { cnvHeaders } from './cnv-columns'
+import { strHeaders } from './str-columns'
 
 export interface ColumnDef {
   title: string
@@ -8,6 +11,24 @@ export interface ColumnDef {
   sortable: boolean
   width?: string
   align?: 'start' | 'end' | 'center'
+}
+
+/**
+ * Returns the appropriate column definitions for a given variant type.
+ * Used by the variant table tabs to swap column sets when switching between
+ * SNV/Indel, SV, CNV, and STR views.
+ */
+export function getHeadersForType(variantType: string): ColumnDef[] {
+  switch (variantType) {
+    case 'sv':
+      return svHeaders
+    case 'cnv':
+      return cnvHeaders
+    case 'str':
+      return strHeaders
+    default:
+      return baseHeaders
+  }
 }
 
 /** Static base column definitions for the variant table. */
