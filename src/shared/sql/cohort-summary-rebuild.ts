@@ -155,7 +155,7 @@ export const INCREMENTAL_ADD_SQL = `
   JOIN cases c ON c.id = v.case_id
   WHERE v.case_id = ?
   GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build
-  ON CONFLICT(chr, pos, ref, alt) DO UPDATE SET
+  ON CONFLICT(chr, pos, ref, alt, variant_type, genome_build) DO UPDATE SET
     carrier_count = cohort_variant_summary.carrier_count + 1,
     het_count = cohort_variant_summary.het_count + excluded.het_count,
     hom_count = cohort_variant_summary.hom_count + excluded.hom_count;
@@ -167,17 +167,20 @@ export const INCREMENTAL_REMOVE_SQL = `
     het_count = cohort_variant_summary.het_count - sub.het_count,
     hom_count = cohort_variant_summary.hom_count - sub.hom_count
   FROM (
-    SELECT chr, pos, ref, alt,
-      CASE WHEN MAX(gt_num) IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END AS het_count,
-      CASE WHEN MAX(gt_num) IN ('1/1','1|1') THEN 1 ELSE 0 END AS hom_count
-    FROM variants
-    WHERE case_id = ?
-    GROUP BY chr, pos, ref, alt
+    SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
+      CASE WHEN MAX(v.gt_num) IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END AS het_count,
+      CASE WHEN MAX(v.gt_num) IN ('1/1','1|1') THEN 1 ELSE 0 END AS hom_count
+    FROM variants v
+    JOIN cases c ON c.id = v.case_id
+    WHERE v.case_id = ?
+    GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build
   ) sub
   WHERE cohort_variant_summary.chr = sub.chr
     AND cohort_variant_summary.pos = sub.pos
     AND cohort_variant_summary.ref = sub.ref
-    AND cohort_variant_summary.alt = sub.alt;
+    AND cohort_variant_summary.alt = sub.alt
+    AND cohort_variant_summary.variant_type = sub.variant_type
+    AND cohort_variant_summary.genome_build = sub.genome_build;
 `
 
 export const CLEANUP_ZERO_CARRIERS_SQL = `

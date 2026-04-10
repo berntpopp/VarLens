@@ -1491,41 +1491,77 @@ export function runMigrations(db: Database.Database): void {
     `)
     db.exec('CREATE INDEX IF NOT EXISTS idx_case_import_files_case ON case_import_files(case_id)')
 
-    // 8. Add variant_type + genome_build to cohort summary tables (if they exist)
-    const cvsExists = (
-      db
-        .prepare(
-          "SELECT COUNT(*) as c FROM sqlite_master WHERE type='table' AND name='cohort_variant_summary'"
-        )
-        .get() as { c: number }
-    ).c
-    if (cvsExists > 0) {
-      const cvsCols = db.pragma('table_info(cohort_variant_summary)') as Array<{ name: string }>
-      if (!cvsCols.some((c) => c.name === 'variant_type')) {
-        db.exec(
-          "ALTER TABLE cohort_variant_summary ADD COLUMN variant_type TEXT NOT NULL DEFAULT 'snv'"
-        )
-        db.exec(
-          "ALTER TABLE cohort_variant_summary ADD COLUMN genome_build TEXT NOT NULL DEFAULT 'GRCh38'"
-        )
-      }
-    }
+    // 8. Rebuild cohort_variant_summary + gene_burden_summary with composite PKs.
+    //
+    // The previous schemas used PK (chr,pos,ref,alt) and gene_symbol alone.
+    // With multi-variant-type + multi-build support, the same coordinate can
+    // legitimately exist multiple times under different (variant_type, genome_build)
+    // combinations, so those PKs are no longer sufficient. ALTER TABLE cannot
+    // change a PRIMARY KEY in SQLite, so we DROP and recreate — the data is
+    // fully derivable from the `variants` table, and we mark the summary as
+    // stale so the next cohort access rebuilds it from scratch.
+    db.exec('DROP INDEX IF EXISTS idx_cvs_gene')
+    db.exec('DROP INDEX IF EXISTS idx_cvs_carrier')
+    db.exec('DROP INDEX IF EXISTS idx_cvs_filters')
+    db.exec('DROP INDEX IF EXISTS idx_cvs_consequence')
+    db.exec('DROP INDEX IF EXISTS idx_cvs_cohort_freq')
+    db.exec('DROP INDEX IF EXISTS idx_cvs_covering_common')
+    db.exec('DROP INDEX IF EXISTS idx_cvs_gene_covering')
+    db.exec('DROP TABLE IF EXISTS cohort_variant_summary')
+    db.exec(`
+      CREATE TABLE cohort_variant_summary (
+        chr TEXT NOT NULL,
+        pos INTEGER NOT NULL,
+        ref TEXT NOT NULL,
+        alt TEXT NOT NULL,
+        variant_type TEXT NOT NULL DEFAULT 'snv',
+        genome_build TEXT NOT NULL DEFAULT 'GRCh38',
+        gene_symbol TEXT,
+        cdna TEXT,
+        aa_change TEXT,
+        consequence TEXT,
+        func TEXT,
+        clinvar TEXT,
+        gnomad_af REAL,
+        cadd REAL,
+        transcript TEXT,
+        omim_mim_number TEXT,
+        carrier_count INTEGER NOT NULL,
+        het_count INTEGER NOT NULL,
+        hom_count INTEGER NOT NULL,
+        variant_key TEXT NOT NULL,
+        has_star INTEGER NOT NULL DEFAULT 0,
+        has_comment INTEGER NOT NULL DEFAULT 0,
+        acmg_best TEXT,
+        cohort_frequency REAL,
+        PRIMARY KEY (chr, pos, ref, alt, variant_type, genome_build)
+      )
+    `)
+    db.exec(`
+      CREATE INDEX idx_cvs_carrier ON cohort_variant_summary(carrier_count);
+      CREATE INDEX idx_cvs_filters ON cohort_variant_summary(gnomad_af, cadd);
+      CREATE INDEX idx_cvs_cohort_freq ON cohort_variant_summary(cohort_frequency);
+      CREATE INDEX idx_cvs_covering_common
+        ON cohort_variant_summary(consequence, gnomad_af, carrier_count);
+      CREATE INDEX idx_cvs_gene_covering
+        ON cohort_variant_summary(gene_symbol, carrier_count);
+      CREATE INDEX idx_cvs_type_build ON cohort_variant_summary(variant_type, genome_build);
+    `)
 
-    const gbsExists = (
-      db
-        .prepare(
-          "SELECT COUNT(*) as c FROM sqlite_master WHERE type='table' AND name='gene_burden_summary'"
-        )
-        .get() as { c: number }
-    ).c
-    if (gbsExists > 0) {
-      const gbsCols = db.pragma('table_info(gene_burden_summary)') as Array<{ name: string }>
-      if (!gbsCols.some((c) => c.name === 'genome_build')) {
-        db.exec(
-          "ALTER TABLE gene_burden_summary ADD COLUMN genome_build TEXT NOT NULL DEFAULT 'GRCh38'"
-        )
-      }
-    }
+    db.exec('DROP INDEX IF EXISTS idx_gbs_affected')
+    db.exec('DROP TABLE IF EXISTS gene_burden_summary')
+    db.exec(`
+      CREATE TABLE gene_burden_summary (
+        gene_symbol TEXT NOT NULL,
+        genome_build TEXT NOT NULL DEFAULT 'GRCh38',
+        variant_count INTEGER NOT NULL,
+        unique_variant_count INTEGER NOT NULL,
+        affected_case_count INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (gene_symbol, genome_build)
+      )
+    `)
+    db.exec('CREATE INDEX idx_gbs_affected ON gene_burden_summary(affected_case_count DESC)')
 
     // 9. Mark cohort summary as stale for full rebuild (derives variant_type from variants)
     const metaExists = (
