@@ -1,9 +1,17 @@
 // Progress update for import callbacks
 export interface ProgressUpdate {
   phase: 'reading' | 'parsing' | 'inserting'
-  count: number // Variants processed so far
+  count: number // Variants processed so far (within the current file)
   elapsed: number // Milliseconds since start
   skipped?: number // Variants skipped due to validation errors
+  // Multi-file session metadata: identifies WHICH file within a multi-file
+  // import session this event belongs to. The orchestrator (`startMultiFileImport`)
+  // injects these per file so the renderer no longer has to infer transitions
+  // from "count reset" heuristics. Single-file imports omit both fields.
+  fileIndex?: number
+  totalFiles?: number
+  filePath?: string
+  fileName?: string
 }
 
 // Callback type for progress reporting

@@ -217,6 +217,15 @@ defineExpose({
     snackbarRef.value?.show(message, type),
   reopenImportDialog: () => importWizardRef.value?.reopen(),
   reopenBatchImportDialog: () => importWizardRef.value?.reopen(),
+  reopenVcfImportDialog: async () => {
+    // Re-surface the multi-file VCF wizard after the user dismissed it via
+    // "Continue in Background". The wizard component keeps its progress
+    // state intact while unmounted-but-kept-alive (see the guarded
+    // `resetToSelect` call in `VcfImportDialog.vue`'s open watcher).
+    vcfImportMounted.value = true
+    await nextTick()
+    vcfImportOpen.value = true
+  },
   toggleLogViewer: () => {
     logViewerOpen.value = !logViewerOpen.value
   },

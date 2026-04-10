@@ -191,6 +191,13 @@
         />
       </v-card-text>
 
+      <v-divider v-if="phase === 'progress'" />
+
+      <v-card-actions v-if="phase === 'progress'" class="pa-3">
+        <v-spacer />
+        <v-btn variant="text" @click="continueInBackground">Continue in Background</v-btn>
+      </v-card-actions>
+
       <!-- =========================================================== -->
       <!-- PHASE: SUMMARY                                               -->
       <!-- =========================================================== -->
@@ -238,6 +245,7 @@ import type { VcfMultiPreviewResult } from '../../../../shared/types/import'
 import { isIpcError } from '../../../../shared/types/errors'
 import { useApiService } from '../../composables/useApiService'
 import { useAppState } from '../../composables/useAppState'
+import { useImportStatusStore } from '../../stores/importStatusStore'
 import { logService } from '../../services/LogService'
 import VcfFileList, { type VariantTypeOverride } from './VcfFileList.vue'
 import ImportFilterOptions, { type ImportFilterState } from './ImportFilterOptions.vue'
@@ -274,6 +282,13 @@ const { api } = useApiService()
 const router = useRouter()
 const { selectedCaseId, selectedCaseName, selectedVariantCount, selectedCreatedAt, activeTab } =
   useAppState()
+// Shared store that drives the bottom `ImportStatusBar` pill. Wiring the VCF
+// wizard into the same store gives the multi-file import the same "Continue
+// in Background" capability the JSON batch importer already has: once the
+// user dismisses the dialog, the store keeps reflecting live progress via
+// the persistent status bar, and the user can expand the dialog again to
+// return to the full per-file view.
+const importStore = useImportStatusStore()
 
 // ---------------------------------------------------------------------------
 // Phase state
@@ -410,7 +425,6 @@ const currentFile = ref<string | null>(null)
 const overallPercent = ref(0)
 
 let cleanupProgress: (() => void) | null = null
-let lastProgressCount = 0
 
 // ---------------------------------------------------------------------------
 // Summary phase
@@ -423,7 +437,11 @@ const importResult = ref<MultiFileImportResult | null>(null)
 watch(
   () => props.open,
   (open) => {
-    if (open) {
+    // Only reset when opening a FRESH session. If the user dismissed the
+    // dialog via "Continue in Background" while an import was running and
+    // is now reopening it (via ImportStatusBar's Expand button), we want
+    // to resume in the progress phase with the running state intact.
+    if (open && phase.value !== 'progress') {
       resetToSelect()
     }
   }
@@ -456,6 +474,17 @@ function handleClose(): void {
   emit('close')
 }
 
+/**
+ * Dismiss the dialog while keeping the import running. The shared
+ * `importStatusStore` continues to reflect progress via the bottom
+ * `ImportStatusBar` pill, and the user can click "Expand" on the pill
+ * to reopen this dialog and return to the full per-file view.
+ */
+function continueInBackground(): void {
+  emit('update:open', false)
+  emit('close')
+}
+
 function resetToSelect(): void {
   phase.value = 'select'
   errorMessage.value = null
@@ -477,7 +506,6 @@ function resetToSelect(): void {
   currentFile.value = null
   overallPercent.value = 0
   importResult.value = null
-  lastProgressCount = 0
 }
 
 // ---------------------------------------------------------------------------
@@ -580,10 +608,14 @@ async function startImport(): Promise<void> {
   fileStatuses.value = statuses
   currentFile.value = specs[0].filePath
   overallPercent.value = 0
-  lastProgressCount = 0
 
   // Mark first file as importing
   markFileStatus(specs[0].filePath, { status: 'importing', phase: 'reading', liveCount: 0 })
+
+  // Wire the shared status store so the bottom `ImportStatusBar` pill
+  // starts reflecting progress and the user can dismiss the dialog to
+  // "Continue in Background" — matches the JSON batch import flow.
+  importStore.startImport(specs.length)
 
   phase.value = 'progress'
 
@@ -639,6 +671,10 @@ async function startImport(): Promise<void> {
     importResult.value = serverResult
     phase.value = 'summary'
 
+    // Reset the shared store — the import is finished so the
+    // `ImportStatusBar` pill should disappear.
+    importStore.reset()
+
     emit('case-imported', {
       caseId: serverResult.caseId,
       caseName: caseName.value.trim(),
@@ -657,61 +693,93 @@ async function startImport(): Promise<void> {
       })
     }
     errorMessage.value = err instanceof Error ? err.message : String(err)
+    // Clear the background pill — the import stopped.
+    importStore.reset()
     // Return to review so the user can retry or adjust
     phase.value = 'review'
   }
 }
 
 /**
- * Progress events from the backend do not carry a file path. Because
- * startMultiFileImport processes files strictly in order, we advance
- * `currentFile` whenever the progress count resets (new file begins with
- * phase=reading, count=0).
+ * Progress events from the backend are now tagged with an explicit
+ * `fileIndex` + `filePath` (see `startMultiFileImport#wrapCallbacksForFile`
+ * and the `ProgressUpdate` type). The previous implementation had to
+ * infer file transitions from a "count reset" heuristic, which
+ * occasionally misattributed counts between files (for example the CNV
+ * file's card would display the SV file's cumulative count after a fast
+ * transition). Now we trust the backend's identification completely.
  */
 function handleProgressUpdate(update: ProgressUpdate): void {
   if (phase.value !== 'progress' || previewResult.value === null) return
 
   const filesList = previewResult.value.files
-  const current = currentFile.value
-  if (current === null) return
 
-  // Detect transition to next file: count dropped back near zero in reading phase
-  if (update.phase === 'reading' && update.count < lastProgressCount) {
-    // Previous file finished — mark as done (variantCount will be reconciled at end)
-    markFileStatus(current, { status: 'done', variantCount: lastProgressCount })
-    const idx = filesList.findIndex((f) => f.filePath === current)
-    if (idx >= 0 && idx < filesList.length - 1) {
-      const nextPath = filesList[idx + 1].filePath
-      currentFile.value = nextPath
-      markFileStatus(nextPath, {
-        status: 'importing',
-        phase: update.phase,
-        liveCount: update.count
-      })
+  // Prefer the explicit file identification from the backend. Fall back to
+  // the currently-tracked file only for single-file imports (which omit the
+  // new fields).
+  const activeFilePath =
+    update.filePath !== undefined && update.filePath !== ''
+      ? update.filePath
+      : currentFile.value
+  if (activeFilePath === null) return
+
+  // Transition handling: if the active file changed, mark all previously-
+  // active files as done. The backend guarantees in-order processing, so
+  // any file with an index < activeFileIndex is definitely complete.
+  const activeFileIndex =
+    update.fileIndex ?? filesList.findIndex((f) => f.filePath === activeFilePath)
+
+  if (activeFileIndex >= 0) {
+    for (let i = 0; i < activeFileIndex; i++) {
+      const priorPath = filesList[i].filePath
+      const priorEntry = fileStatuses.value.get(priorPath)
+      if (priorEntry !== undefined && priorEntry.status === 'importing') {
+        markFileStatus(priorPath, {
+          status: 'done',
+          variantCount: priorEntry.liveCount ?? priorEntry.variantCount ?? 0
+        })
+      }
     }
-  } else {
-    // Update current file progress
-    markFileStatus(current, {
-      status: 'importing',
-      phase: update.phase,
-      liveCount: update.count
-    })
   }
 
-  lastProgressCount = update.count
+  currentFile.value = activeFilePath
+  markFileStatus(activeFilePath, {
+    status: 'importing',
+    phase: update.phase,
+    liveCount: update.count
+  })
 
-  // Update overall percent heuristically: weight each file equally by count
+  // Overall progress = fully-done files contribute 100%, the in-progress
+  // file contributes a phase-weighted partial share. Capped at 95% until
+  // the IPC call resolves so the final tick to 100% feels deterministic.
   const doneCount = Array.from(fileStatuses.value.values()).filter(
     (s) => s.status === 'done' || s.status === 'error'
   ).length
-  const totalFiles = filesList.length
-  // Base progress: completed files contribute full share; current file contributes partial
-  const basePercent = (doneCount / totalFiles) * 100
-  // Assume current file is ~halfway through as a visual cue; cap at 95% until completion
+  const totalFilesInWizard = filesList.length
+  const basePercent = (doneCount / totalFilesInWizard) * 100
   const currentFilePercent =
     update.phase === 'inserting' ? 0.8 : update.phase === 'parsing' ? 0.5 : 0.2
-  const addedPercent = (currentFilePercent / totalFiles) * 100
+  const addedPercent = (currentFilePercent / totalFilesInWizard) * 100
   overallPercent.value = Math.min(95, Math.round(basePercent + addedPercent))
+
+  // Mirror the same state into the shared store so the `ImportStatusBar`
+  // pill reflects live progress even when the dialog is dismissed. The
+  // variant count shown in the pill is the running total across ALL files
+  // — which matches the JSON batch importer's behavior for consistency.
+  const totalVariantsAcrossFiles = Array.from(fileStatuses.value.values()).reduce(
+    (sum, entry) => sum + (entry.variantCount ?? entry.liveCount ?? 0),
+    0
+  )
+  importStore.updateProgress({
+    fileIndex: Math.max(0, activeFileIndex),
+    totalFiles: update.totalFiles ?? totalFilesInWizard,
+    fileName:
+      update.fileName ?? fileName(activeFilePath),
+    overallPercent: overallPercent.value,
+    phase: update.phase,
+    variantCount: totalVariantsAcrossFiles,
+    skipped: update.skipped ?? 0
+  })
 }
 
 function markFileStatus(filePath: string, entry: Partial<FileStatusEntry>): void {

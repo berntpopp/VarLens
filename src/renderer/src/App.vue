@@ -309,6 +309,7 @@ const handleDatabaseSwitched = async (): Promise<void> => {
 const handleShowImportProgress = (): void => {
   dialogHostRef.value?.reopenImportDialog()
   dialogHostRef.value?.reopenBatchImportDialog()
+  void dialogHostRef.value?.reopenVcfImportDialog()
 }
 
 const handleCancelImport = async (): Promise<void> => {

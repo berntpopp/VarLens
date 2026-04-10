@@ -13,7 +13,19 @@ import type { ImportFilters } from '../../import/vcf/import-filters'
 
 /** Callbacks for emitting events to the renderer during import operations. */
 export interface ImportCallbacks {
-  onProgress?: (data: { phase: string; count: number; elapsed: number; skipped: number }) => void
+  onProgress?: (data: {
+    phase: string
+    count: number
+    elapsed: number
+    skipped: number
+    // Multi-file session metadata — set by `startMultiFileImport` per file
+    // so the renderer can attribute progress events to the correct file
+    // without heuristics.
+    fileIndex?: number
+    totalFiles?: number
+    filePath?: string
+    fileName?: string
+  }) => void
 }
 
 /** Result of a successful import. */
@@ -213,9 +225,41 @@ export async function startMultiFileImport(
   const { importAdditionalFileToCase, detectGenomeBuildFromFile } =
     await import('./import-logic-append')
 
+  const totalFiles = files.length
+
+  /**
+   * Wrap the caller-supplied `onProgress` callback so every event the
+   * underlying importer (worker or append loop) emits is augmented with
+   * the current file's index + path. The renderer previously had to
+   * infer transitions from "count reset" heuristics — brittle, and it
+   * misattributed variant counts across files in some orderings.
+   */
+  function wrapCallbacksForFile(
+    spec: MultiFileImportSpec,
+    fileIndex: number
+  ): ImportCallbacks {
+    return {
+      onProgress: (data) => {
+        callbacks.onProgress?.({
+          ...data,
+          fileIndex,
+          totalFiles,
+          filePath: spec.filePath,
+          fileName: spec.filePath.split(/[\\/]/).pop() ?? spec.filePath
+        })
+      }
+    }
+  }
+
   // Import first file — creates the case
   const firstFile = files[0]
-  const firstResult = await startImport(firstFile.filePath, caseName, vcfOptions, getDb, callbacks)
+  const firstResult = await startImport(
+    firstFile.filePath,
+    caseName,
+    vcfOptions,
+    getDb,
+    wrapCallbacksForFile(firstFile, 0)
+  )
 
   if (firstResult.caseId === 0) {
     throw new Error(
@@ -302,7 +346,7 @@ export async function startMultiFileImport(
           spec.filePath,
           vcfOptions,
           getDb,
-          callbacks,
+          wrapCallbacksForFile(spec, i),
           importFilters
         )
 
