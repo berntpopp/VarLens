@@ -1,5 +1,40 @@
 <template>
   <div>
+    <!-- Help: explain per-variant-type filter semantics up-front so users
+         aren't confused when min QUAL / min GQ silently no-op on SVs. -->
+    <v-alert
+      type="info"
+      variant="tonal"
+      density="compact"
+      class="mb-3"
+      :icon="mdiInformationOutline"
+    >
+      <div class="text-body-2 mb-1 font-weight-medium">How filters apply per variant type</div>
+      <ul class="text-caption ma-0 ps-4">
+        <li>
+          <strong>PASS-only</strong> &amp; <strong>BED region</strong>: apply to
+          <em>all</em> variant types (SNV, indel, SV, CNV, STR).
+        </li>
+        <li>
+          <strong>Min QUAL</strong>: applies to records with a numeric
+          <code>QUAL</code>. SV/CNV/STR records typically leave
+          <code>QUAL=.</code> and pass through unchanged — use caller-specific
+          metrics in the case view instead.
+        </li>
+        <li>
+          <strong>Min GQ</strong> &amp; <strong>Min DP</strong>: apply to
+          variants that expose <code>FORMAT/GQ</code> and <code>FORMAT/DP</code>
+          — effectively SNV/indel only. SV/CNV/STR records are NOT filtered by
+          these thresholds.
+        </li>
+        <li>
+          <strong>BED region</strong>: uses <em>interval overlap</em> when the
+          record has an <code>END</code> (SV/CNV/STR) and a <em>point check on
+          POS</em> for SNV/indel and breakends.
+        </li>
+      </ul>
+    </v-alert>
+
     <!-- Quality filters -->
     <div class="text-body-2 font-weight-medium mb-2 d-flex align-center ga-2">
       <v-icon :icon="mdiFilterVariant" size="18" />
@@ -136,6 +171,7 @@ import {
   mdiFileDocumentOutline,
   mdiFilterVariant,
   mdiFolderOpen,
+  mdiInformationOutline,
   mdiLightbulbOutline,
   mdiMapMarkerRadiusOutline
 } from '@mdi/js'

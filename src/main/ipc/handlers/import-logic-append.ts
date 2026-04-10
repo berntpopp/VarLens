@@ -32,6 +32,10 @@ import { detectCaller } from '../../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../../import/vcf/info-field-registry'
 import type { VcfHeader, VcfMappedVariant } from '../../import/vcf/types'
 import type { ImportFilters } from '../../import/vcf/import-filters'
+import {
+  passesPreMappingFilters,
+  passesPostMappingFilters
+} from '../../import/vcf/import-filters'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { ImportCallbacks, ImportResult, VcfImportOptions } from './import-logic'
 
@@ -107,45 +111,13 @@ export async function importAdditionalFileToCase(
           continue
         }
 
-        // ── Import-time filter gates (pre-mapping) ──
-        if (importFilters !== undefined) {
-          // FILTER column check
-          if (importFilters.passOnly && record.filter !== 'PASS' && record.filter !== '.') {
-            totalSkipped++
-            continue
-          }
-
-          // QUAL threshold check
-          if (
-            importFilters.minQual !== null &&
-            record.qual !== null &&
-            record.qual < importFilters.minQual
-          ) {
-            totalSkipped++
-            continue
-          }
-
-          // BED region check
-          if (importFilters.bedFilter !== undefined) {
-            const endPos = record.info.get('END')
-            if (endPos !== undefined && endPos !== '') {
-              if (
-                !importFilters.bedFilter.containsRange(
-                  record.chrom,
-                  record.pos,
-                  parseInt(endPos, 10)
-                )
-              ) {
-                totalSkipped++
-                continue
-              }
-            } else {
-              if (!importFilters.bedFilter.contains(record.chrom, record.pos)) {
-                totalSkipped++
-                continue
-              }
-            }
-          }
+        // Pre-mapping filter gate — shared with `VcfStrategy` via
+        // `import-filters.ts` so the worker path (first file) and the
+        // main-thread append path (2nd..Nth files) stay semantically
+        // identical.
+        if (!passesPreMappingFilters(record, importFilters)) {
+          totalSkipped++
+          continue
         }
 
         let mapped = mapVcfRecord(
@@ -156,17 +128,9 @@ export async function importAdditionalFileToCase(
           callerName
         )
 
-        // ── Post-mapping genotype quality filter ──
+        // Post-mapping filter gate — FORMAT/GQ and FORMAT/DP.
         if (importFilters !== undefined) {
-          mapped = mapped.filter((v) => {
-            if (importFilters.minGq !== null && v.gq !== null && v.gq < importFilters.minGq) {
-              return false
-            }
-            if (importFilters.minDp !== null && v.dp !== null && v.dp < importFilters.minDp) {
-              return false
-            }
-            return true
-          })
+          mapped = mapped.filter((v) => passesPostMappingFilters(v, importFilters))
         }
 
         if (mapped.length === 0) {
