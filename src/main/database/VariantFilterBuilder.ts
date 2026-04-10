@@ -29,7 +29,24 @@ export const SORTABLE_COLUMNS: Record<string, string> = {
   qual: 'qual',
   hpo_sim_score: 'hpo_sim_score',
   clinvar: 'clinvar',
-  moi: 'moi'
+  moi: 'moi',
+  // Multi-variant type (SV/CNV/STR) discriminator columns — added in
+  // migration v25 as real columns on the variants table. Without these
+  // entries, clicking sort headers on the SV/CNV/STR tabs silently no-ops
+  // because VariantFilterBuilder drops unknown sort keys and getColumnMeta
+  // would not gather per-column metadata.
+  //
+  // NOTE: Columns living on the extension tables (variant_sv / variant_cnv /
+  // variant_str — e.g. `sv.support`, `cnv.copy_number`) are intentionally
+  // NOT in this map. `getColumnMeta` runs aggregate queries directly against
+  // the `variants` table without joining the extensions, so adding those
+  // aliases here would break filter-options loading. Extension columns are
+  // marked `sortable: false` in the per-type column definitions instead.
+  variant_type: 'variant_type',
+  end_pos: 'end_pos',
+  sv_type: 'sv_type',
+  sv_length: 'sv_length',
+  caller: 'caller'
 }
 
 /**

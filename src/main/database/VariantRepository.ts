@@ -171,12 +171,13 @@ export class VariantRepository extends BaseRepository {
   }
 
   /**
-   * Rebuild FTS, recreate triggers, update case variant_count, run ANALYZE and optimize.
-   * Call this once after all `insertBatch()` calls to complete a bulk insert session.
+   * Rebuild FTS, recreate triggers, run ANALYZE and optimize. Does NOT update
+   * the case's variant_count — callers that need it updated should use
+   * `finishBulkInsert()` (for single-file imports) or call
+   * `recalculateCaseVariantCount()` afterwards (for multi-file sessions where
+   * the final count is the sum across all appended files).
    */
-  finishBulkInsert(caseId: number, totalInserted: number): void {
-    this.cases.updateCaseVariantCount(caseId, totalInserted)
-
+  finishBulkInsertNoCount(): void {
     // Always rebuild FTS and restore triggers, even if a step fails
     try {
       this.db.exec("INSERT INTO variants_fts(variants_fts) VALUES('rebuild')")
@@ -203,6 +204,31 @@ export class VariantRepository extends BaseRepository {
     } catch (error) {
       mainLogger.error(`Failed to optimize FTS index: ${error}`, 'VariantRepository')
     }
+  }
+
+  /**
+   * Rebuild FTS, recreate triggers, update case variant_count, run ANALYZE and optimize.
+   * Call this once after all `insertBatch()` calls to complete a bulk insert session.
+   */
+  finishBulkInsert(caseId: number, totalInserted: number): void {
+    this.cases.updateCaseVariantCount(caseId, totalInserted)
+    this.finishBulkInsertNoCount()
+  }
+
+  /**
+   * Recompute a case's variant_count from the variants table and write it back
+   * in a single atomic UPDATE. Used after multi-file import sessions where the
+   * final count should reflect all appended files, and is resilient to any
+   * ordering between per-file inserts and a final variant_count refresh.
+   */
+  recalculateCaseVariantCount(caseId: number): void {
+    this.db
+      .prepare(
+        `UPDATE cases SET variant_count = (
+          SELECT COUNT(*) FROM variants WHERE case_id = ?
+        ) WHERE id = ?`
+      )
+      .run(caseId, caseId)
   }
 
   /**

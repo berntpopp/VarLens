@@ -9,6 +9,16 @@
  * This runs on the main thread (not in a worker) because the worker
  * pipeline always creates a new case. That is slower for very large files
  * but simpler and sufficient for the initial multi-file import session.
+ *
+ * Contract:
+ *   - The caller MUST have already called `db.variants.beginBulkInsert()`
+ *     so FTS triggers are dropped for the duration of the append loop.
+ *   - The caller MUST call `db.variants.finishBulkInsertNoCount()` and
+ *     `db.variants.recalculateCaseVariantCount(caseId)` once all appends
+ *     are complete (so FTS is rebuilt exactly once and variant_count
+ *     reflects the sum across all appended files atomically).
+ *   - The caller MUST ensure any genome build lock is enforced before
+ *     calling this function (see checkGenomeBuildOrThrow below).
  */
 import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
@@ -21,7 +31,7 @@ import { mapVcfRecord } from '../../import/vcf/VcfMapper'
 import { detectCaller } from '../../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../../import/vcf/info-field-registry'
 import type { VcfHeader, VcfMappedVariant } from '../../import/vcf/types'
-import { mainLogger } from '../../services/MainLogger'
+import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { ImportCallbacks, ImportResult, VcfImportOptions } from './import-logic'
 
@@ -29,15 +39,21 @@ const APPEND_BATCH_SIZE = 5000
 
 /**
  * Append a VCF file to an existing case by streaming it on the main thread.
- * Does NOT touch FTS triggers or rebuild the cohort summary — the caller
- * (startMultiFileImport) is responsible for any end-of-session housekeeping.
+ *
+ * Does NOT touch FTS triggers, does NOT update variant_count, and does NOT
+ * rebuild the cohort summary — the caller (startMultiFileImport) manages all
+ * end-of-session housekeeping across every appended file.
+ *
+ * Applies the same import filters (PASS-only, minQual, BED, minGq, minDp) as
+ * the worker-backed single-file path (VcfStrategy).
  */
 export async function importAdditionalFileToCase(
   caseId: number,
   filePath: string,
   vcfOptions: VcfImportOptions | undefined,
   getDb: () => DatabaseService,
-  callbacks: ImportCallbacks
+  callbacks: ImportCallbacks,
+  importFilters?: ImportFilters
 ): Promise<ImportResult> {
   const db = getDb()
   const startTime = Date.now()
@@ -91,13 +107,67 @@ export async function importAdditionalFileToCase(
           continue
         }
 
-        const mapped = mapVcfRecord(
+        // ── Import-time filter gates (pre-mapping) ──
+        if (importFilters !== undefined) {
+          // FILTER column check
+          if (importFilters.passOnly && record.filter !== 'PASS' && record.filter !== '.') {
+            totalSkipped++
+            continue
+          }
+
+          // QUAL threshold check
+          if (
+            importFilters.minQual !== null &&
+            record.qual !== null &&
+            record.qual < importFilters.minQual
+          ) {
+            totalSkipped++
+            continue
+          }
+
+          // BED region check
+          if (importFilters.bedFilter !== undefined) {
+            const endPos = record.info.get('END')
+            if (endPos !== undefined && endPos !== '') {
+              if (
+                !importFilters.bedFilter.containsRange(
+                  record.chrom,
+                  record.pos,
+                  parseInt(endPos, 10)
+                )
+              ) {
+                totalSkipped++
+                continue
+              }
+            } else {
+              if (!importFilters.bedFilter.contains(record.chrom, record.pos)) {
+                totalSkipped++
+                continue
+              }
+            }
+          }
+        }
+
+        let mapped = mapVcfRecord(
           record,
           header,
           activeSample,
           DEFAULT_INFO_FIELD_MAPPINGS,
           callerName
         )
+
+        // ── Post-mapping genotype quality filter ──
+        if (importFilters !== undefined) {
+          mapped = mapped.filter((v) => {
+            if (importFilters.minGq !== null && v.gq !== null && v.gq < importFilters.minGq) {
+              return false
+            }
+            if (importFilters.minDp !== null && v.dp !== null && v.dp < importFilters.minDp) {
+              return false
+            }
+            return true
+          })
+        }
 
         if (mapped.length === 0) {
           totalSkipped++
@@ -142,21 +212,6 @@ export async function importAdditionalFileToCase(
     raw.destroy()
   }
 
-  // Increment (not replace) the case's variant_count to reflect the
-  // additional variants appended from this file. We read the current count
-  // first and write back the sum so we don't overwrite previous files.
-  try {
-    const existing = db.cases.getCase(caseId)
-    db.cases.updateCaseVariantCount(caseId, existing.variant_count + totalInserted)
-  } catch (e) {
-    mainLogger.warn(
-      `Failed to update variant count after append for case ${caseId}: ${
-        e instanceof Error ? e.message : String(e)
-      }`,
-      'import'
-    )
-  }
-
   return {
     caseId,
     variantCount: totalInserted,
@@ -164,4 +219,36 @@ export async function importAdditionalFileToCase(
     errors,
     elapsed: Date.now() - startTime
   }
+}
+
+/**
+ * Parse the VCF header of an appended file and return its detected genome
+ * build (or null if the header doesn't declare one).
+ *
+ * Used by the multi-file session to enforce a per-case genome build lock:
+ * if a subsequent file declares a different build than the case was created
+ * with, the session aborts before any variants are inserted.
+ */
+export async function detectGenomeBuildFromFile(filePath: string): Promise<string | null> {
+  const raw = createReadStream(filePath)
+  const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
+  const rl = createInterface({ input: stream, crlfDelay: Infinity })
+
+  const headerLines: string[] = []
+  try {
+    for await (const line of rl) {
+      if (line.startsWith('#')) {
+        headerLines.push(line)
+        continue
+      }
+      // First data line — header is complete, stop reading.
+      break
+    }
+  } finally {
+    raw.destroy()
+  }
+
+  if (headerLines.length === 0) return null
+  const header = parseVcfHeaderFromLines(headerLines)
+  return header.genomeBuild ?? null
 }

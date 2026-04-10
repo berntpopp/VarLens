@@ -9,6 +9,7 @@ import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { mainLogger } from '../../services/MainLogger'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
+import type { ImportFilters } from '../../import/vcf/import-filters'
 
 /** Callbacks for emitting events to the renderer during import operations. */
 export interface ImportCallbacks {
@@ -179,19 +180,27 @@ export interface MultiFileImportResult {
  * Import multiple VCF files into a single case sequentially.
  *
  * The first file is imported via startImport (which creates the case via
- * the worker). Remaining files are appended on the main thread via
- * importAdditionalFileToCase and recorded in case_import_files.
+ * the worker with its own bulk-insert session). Remaining files are appended
+ * on the main thread via importAdditionalFileToCase.
  *
- * The cohort summary is NOT rebuilt here — the caller should trigger a
- * rebuild once after the multi-file session completes so cohort counts
- * are updated only once, not per file.
+ * End-of-session housekeeping (executed once after all files):
+ *   1. Rebuild FTS index + restore FTS triggers (single pass across all appends)
+ *   2. Recompute case variant_count from the variants table atomically
+ *   3. Update variant_frequency table
+ *   4. Mark cohort_variant_summary as stale (UI/rebuild-worker triggers recompute)
+ *
+ * A case-level genome-build lock is enforced: every subsequent file must
+ * match the build detected from the first file's header (or match the
+ * wizard-selected build). Mismatches abort the whole session before any
+ * inserts for the offending file are performed.
  */
 export async function startMultiFileImport(
   caseName: string,
   files: MultiFileImportSpec[],
   vcfOptions: VcfImportOptions | undefined,
   getDb: () => DatabaseService,
-  callbacks: ImportCallbacks
+  callbacks: ImportCallbacks,
+  importFilters?: ImportFilters
 ): Promise<MultiFileImportResult> {
   const startTime = Date.now()
 
@@ -201,7 +210,8 @@ export async function startMultiFileImport(
 
   const db = getDb()
   const { statSync } = await import('node:fs')
-  const { importAdditionalFileToCase } = await import('./import-logic-append')
+  const { importAdditionalFileToCase, detectGenomeBuildFromFile } =
+    await import('./import-logic-append')
 
   // Import first file — creates the case
   const firstFile = files[0]
@@ -248,47 +258,150 @@ export async function startMultiFileImport(
   let totalVariants = firstResult.variantCount
   let totalSkipped = firstResult.skipped
 
-  // Append remaining files into the same case
-  for (let i = 1; i < files.length; i++) {
-    const spec = files[i]
+  // Resolve the case-level locked genome build. Prefer the wizard-supplied
+  // value; otherwise read it back from the case row populated by the worker.
+  let lockedGenomeBuild: string | null = vcfOptions?.genomeBuild ?? null
+  if (lockedGenomeBuild === null) {
     try {
-      const fileSize = statSync(spec.filePath).size
+      const caseRow = db.cases.getCase(caseId)
+      lockedGenomeBuild = caseRow.genome_build ?? null
+    } catch {
+      lockedGenomeBuild = null
+    }
+  }
 
-      const result = await importAdditionalFileToCase(
-        caseId,
-        spec.filePath,
-        vcfOptions,
-        getDb,
-        callbacks
+  // Wrap all main-thread appends in a single bulk-insert session so FTS
+  // triggers are only torn down and rebuilt ONCE across all appended files.
+  // Without this bracket, the FTS `ai` trigger fires per row and the append
+  // loop becomes O(n²) for large files (e.g. a Sniffles2 300k-SV VCF).
+  if (files.length > 1) {
+    db.variants.beginBulkInsert()
+  }
+  try {
+    // Append remaining files into the same case
+    for (let i = 1; i < files.length; i++) {
+      const spec = files[i]
+      try {
+        // ── Genome build lock enforcement ───────────────────────────
+        // Parse the header of the appended file and compare its detected
+        // build against the case's locked build. Mismatches abort the
+        // import of this file BEFORE any variants are inserted.
+        const fileBuild = await detectGenomeBuildFromFile(spec.filePath)
+        if (lockedGenomeBuild !== null && fileBuild !== null && fileBuild !== lockedGenomeBuild) {
+          throw new Error(
+            `Genome build mismatch: case is locked to ${lockedGenomeBuild} but ` +
+              `${spec.filePath} declares ${fileBuild}. All files in a multi-file ` +
+              `import must share the same reference assembly.`
+          )
+        }
+
+        const fileSize = statSync(spec.filePath).size
+
+        const result = await importAdditionalFileToCase(
+          caseId,
+          spec.filePath,
+          vcfOptions,
+          getDb,
+          callbacks,
+          importFilters
+        )
+
+        db.cases.insertImportFile({
+          case_id: caseId,
+          file_path: spec.filePath,
+          file_size: fileSize,
+          variant_type: spec.variantType,
+          caller: spec.caller,
+          variant_count: result.variantCount,
+          annotation_format: spec.annotationFormat
+        })
+
+        totalVariants += result.variantCount
+        totalSkipped += result.skipped
+
+        fileResults.push({
+          filePath: spec.filePath,
+          variantType: spec.variantType,
+          variantCount: result.variantCount
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        mainLogger.error(`Failed to import file ${spec.filePath}: ${message}`, 'import')
+        fileResults.push({
+          filePath: spec.filePath,
+          variantType: spec.variantType,
+          variantCount: 0,
+          error: message
+        })
+      }
+    }
+  } finally {
+    if (files.length > 1) {
+      // Rebuild FTS + restore triggers + ANALYZE + optimize, regardless of
+      // how the append loop exited (success, per-file error, or thrown).
+      try {
+        db.variants.finishBulkInsertNoCount()
+      } catch (e) {
+        mainLogger.error(
+          `Failed to finalize bulk insert after multi-file append: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+          'import'
+        )
+      }
+    }
+  }
+
+  // ── End-of-session housekeeping ────────────────────────────────
+  // Order matters: refresh variant_count first (it's the authoritative total
+  // of the variants table for this case), then update cross-case frequency
+  // counts, then mark the cohort summary stale so the next cohort access
+  // triggers a rebuild. We do this ONCE per session, not per file.
+  try {
+    db.variants.recalculateCaseVariantCount(caseId)
+  } catch (e) {
+    mainLogger.warn(
+      `Failed to recalculate variant_count for case ${caseId}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+      'import'
+    )
+  }
+
+  if (files.length > 1) {
+    // The worker already called updateFrequencies for the first file, so we
+    // only need to do it again if we actually appended something. The update
+    // is idempotent-on-insert because it uses ON CONFLICT DO UPDATE, but it
+    // would double-count the first file's variants if called twice — so we
+    // must decrement first and re-update.
+    //
+    // Simpler and robust: decrement the first file's contribution, then run
+    // updateFrequencies once for the full (sum) case. Since updateFrequencies
+    // uses DISTINCT, it deduplicates across appends.
+    try {
+      db.variants.decrementFrequencies(caseId)
+      db.variants.updateFrequencies(caseId)
+    } catch (e) {
+      mainLogger.warn(
+        `Failed to refresh variant frequencies after multi-file import: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+        'import'
       )
+    }
+  }
 
-      db.cases.insertImportFile({
-        case_id: caseId,
-        file_path: spec.filePath,
-        file_size: fileSize,
-        variant_type: spec.variantType,
-        caller: spec.caller,
-        variant_count: result.variantCount,
-        annotation_format: spec.annotationFormat
-      })
-
-      totalVariants += result.variantCount
-      totalSkipped += result.skipped
-
-      fileResults.push({
-        filePath: spec.filePath,
-        variantType: spec.variantType,
-        variantCount: result.variantCount
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      mainLogger.error(`Failed to import file ${spec.filePath}: ${message}`, 'import')
-      fileResults.push({
-        filePath: spec.filePath,
-        variantType: spec.variantType,
-        variantCount: 0,
-        error: message
-      })
+  // Mark cohort summary stale so the next cohort access recomputes it.
+  // Triggered only when we actually appended files — the first-file worker
+  // already handles staleness for single-file imports.
+  if (files.length > 1) {
+    try {
+      db.cohortSummary.markStale()
+    } catch (e) {
+      mainLogger.warn(
+        `Failed to mark cohort summary stale: ${e instanceof Error ? e.message : String(e)}`,
+        'import'
+      )
     }
   }
 

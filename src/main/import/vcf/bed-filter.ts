@@ -46,9 +46,16 @@ export class BedFilter {
       if (parts.length < 3) continue
 
       const chr = parts[0]
-      // BED is 0-based half-open -> convert to 1-based inclusive, then apply padding
-      const start = Math.max(1, parseInt(parts[1], 10) + 1 - padding)
-      const end = parseInt(parts[2], 10) + padding
+      // BED is 0-based half-open -> convert to 1-based inclusive, then apply padding.
+      // Reject malformed rows where columns 2 or 3 don't parse as integers —
+      // `Number.isInteger` catches both NaN (non-numeric) and fractional values.
+      const startRaw = parseInt(parts[1], 10)
+      const endRaw = parseInt(parts[2], 10)
+      if (!Number.isInteger(startRaw) || !Number.isInteger(endRaw)) continue
+      if (endRaw < startRaw) continue
+
+      const start = Math.max(1, startRaw + 1 - padding)
+      const end = endRaw + padding
 
       if (!intervals.has(chr)) {
         intervals.set(chr, [])

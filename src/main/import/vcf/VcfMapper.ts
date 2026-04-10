@@ -57,11 +57,22 @@ export function mapVcfRecord(
     const gtFieldValue = gtIdx >= 0 && gtIdx < sampleValues.length ? sampleValues[gtIdx] : '.'
 
     // Skip if sample does not carry the ALT allele (ref-hom, no-call, or other ALT)
-    // Exception: symbolic ALTs (SV/CNV/STR) use caller-specific fields like CN
-    // instead of diploid genotypes, so allow ./. for those (e.g., Spectre CNVs
-    // emit GT=./. with CN as the actual finding).
-    const altIsSymbolic = rec.alt[0].startsWith('<')
-    if (!altIsSymbolic && shouldSkipGenotype(gtFieldValue)) continue
+    // Exception: structural variants (SV/CNV/STR) use caller-specific fields like
+    // CN, VAF, SUPPORT instead of diploid genotypes, so we must NOT filter them by
+    // GT. Structural callers signal their variants in three ways:
+    //   1. Symbolic ALT (<DEL>, <CNV>, <STRn>, ...) — Spectre CNV, Straglr STR
+    //   2. Breakend notation ([/]) — Manta BND records
+    //   3. SVTYPE INFO field — Sniffles2 INS uses sequence ALTs but sets SVTYPE=INS
+    // All three cases must bypass the genotype-skip filter; otherwise Spectre's
+    // `GT=./.` and Sniffles' `GT=./.` on sequence-ALT INSes silently drop the
+    // variant even though the caller reported a finding.
+    const rawAlt = rec.alt[0]
+    const isStructural =
+      rawAlt.startsWith('<') ||
+      rawAlt.includes('[') ||
+      rawAlt.includes(']') ||
+      rec.info.has('SVTYPE')
+    if (!isStructural && shouldSkipGenotype(gtFieldValue)) continue
 
     // Parse full genotype data (with altAlleleIndex=1 since already split)
     const genotype = parseGenotype(sampleValues, rec.format, 1)
