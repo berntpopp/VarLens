@@ -148,6 +148,13 @@ export const mockApi: WindowAPI = {
       errors: [],
       elapsed: 1500
     }),
+    startMultiFile: async () => ({
+      caseId: cases.length + 1,
+      totalVariants: 0,
+      totalSkipped: 0,
+      files: [],
+      elapsed: 0
+    }),
     vcfPreview: async () => ({
       fileformat: 'VCFv4.2',
       samples: ['SAMPLE1'],

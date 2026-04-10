@@ -193,6 +193,28 @@ export interface FilterOptions {
   columnMeta: ColumnFilterMeta[]
 }
 
+export interface MultiFileImportSpec {
+  filePath: string
+  variantType: string
+  caller: string | null
+  annotationFormat: string | null
+}
+
+export interface MultiFileImportFileResult {
+  filePath: string
+  variantType: string
+  variantCount: number
+  error?: string
+}
+
+export interface MultiFileImportResult {
+  caseId: number
+  totalVariants: number
+  totalSkipped: number
+  files: MultiFileImportFileResult[]
+  elapsed: number
+}
+
 export interface ImportAPI {
   selectFile: () => Promise<string | null>
   selectFiles: () => Promise<string[]>
@@ -202,6 +224,11 @@ export interface ImportAPI {
     caseName: string,
     vcfOptions?: { selectedSample?: string; genomeBuild?: string }
   ) => Promise<ImportResult | SerializableError>
+  startMultiFile: (
+    caseName: string,
+    files: MultiFileImportSpec[],
+    vcfOptions?: { selectedSample?: string; genomeBuild?: string }
+  ) => Promise<MultiFileImportResult | SerializableError>
   vcfPreview: (filePath: string) => Promise<VcfPreviewResult>
   vcfMultiPreview: (filePaths: string[]) => Promise<import('./import').VcfMultiPreviewResult>
   onProgress: (callback: (progress: ProgressUpdate) => void) => () => void

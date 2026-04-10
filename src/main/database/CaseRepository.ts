@@ -133,6 +133,58 @@ export class CaseRepository extends BaseRepository {
     if (result.changes === 0) throw new NotFoundError('Case', id)
   }
 
+  /**
+   * Insert a case_import_files row recording that a VCF file was imported
+   * into this case with the given variant type and caller. Used by the
+   * multi-file import session to preserve per-file provenance.
+   */
+  insertImportFile(params: {
+    case_id: number
+    file_path: string
+    file_size: number
+    variant_type: string
+    caller: string | null
+    variant_count: number
+    annotation_format: string | null
+  }): number {
+    const result = this.execRun(
+      this.kysely.insertInto('case_import_files').values({
+        case_id: params.case_id,
+        file_path: params.file_path,
+        file_size: params.file_size,
+        variant_type: params.variant_type,
+        caller: params.caller,
+        variant_count: params.variant_count,
+        annotation_format: params.annotation_format,
+        imported_at: Date.now()
+      })
+    )
+    return Number(result.lastInsertRowid)
+  }
+
+  /**
+   * Get all import files recorded for a case, ordered by import time.
+   */
+  getImportFiles(caseId: number): Array<{
+    id: number
+    case_id: number
+    file_path: string
+    file_size: number
+    variant_type: string
+    caller: string | null
+    variant_count: number
+    annotation_format: string | null
+    imported_at: number
+  }> {
+    return this.execAll(
+      this.kysely
+        .selectFrom('case_import_files')
+        .selectAll()
+        .where('case_id', '=', caseId)
+        .orderBy('imported_at', 'asc')
+    )
+  }
+
   deleteCase(id: number): void {
     const result = this.execRun(this.kysely.deleteFrom('cases').where('id', '=', id))
     if (result.changes === 0) throw new NotFoundError('Case', id)

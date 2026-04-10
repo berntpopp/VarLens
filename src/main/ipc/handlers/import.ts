@@ -4,8 +4,14 @@ import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { safeEmit } from '../utils/safeEmit'
 import { loadSettings, saveSettings } from '../utils/settings-io'
-import { startImport, cancelImport, getVcfPreview, getVcfMultiPreview } from './import-logic'
-import type { ImportCallbacks } from './import-logic'
+import {
+  startImport,
+  cancelImport,
+  getVcfPreview,
+  getVcfMultiPreview,
+  startMultiFileImport
+} from './import-logic'
+import type { ImportCallbacks, MultiFileImportSpec } from './import-logic'
 
 /** Shared callbacks that wire logic-layer events to renderer via safeEmit. */
 const importCallbacks: ImportCallbacks = {
@@ -50,6 +56,20 @@ export function registerImportHandlers({ ipcMain, getDb }: HandlerDependencies):
     ) => {
       return wrapHandler(async () => {
         return startImport(filePath, caseName, vcfOptions, getDb, importCallbacks)
+      })
+    }
+  )
+
+  ipcMain.handle(
+    'import:startMultiFile',
+    async (
+      _event,
+      caseName: string,
+      files: MultiFileImportSpec[],
+      vcfOptions?: { selectedSample?: string; genomeBuild?: string }
+    ) => {
+      return wrapHandler(async () => {
+        return startMultiFileImport(caseName, files, vcfOptions, getDb, importCallbacks)
       })
     }
   )
