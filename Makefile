@@ -71,6 +71,12 @@ lint: ## Lint and auto-fix code
 lint-check: ## Check linting without auto-fix
 	npm run lint:check
 
+format: ## Format all files with Prettier
+	npm run format
+
+format-check: ## Check Prettier formatting without writing
+	npm run format:check
+
 typecheck: ## Run TypeScript type checking
 	npm run typecheck
 
@@ -91,27 +97,30 @@ test-coverage: ## Run tests with coverage report
 # CI / Full Checks (mirrors GitHub Actions exactly)
 #---------------------------------------------------------------------------
 
-ci: lint-check typecheck rebuild-node test ## Run all CI checks (lint, typecheck, rebuild, test)
+ci: lint-check format-check typecheck rebuild-node test ## Run all CI checks (lint, format, typecheck, rebuild, test)
 
 ci-full: ## Run FULL CI pipeline (exactly mirrors GitHub Actions)
 	@echo "=== CI Pipeline (mirrors GitHub Actions build.yml) ==="
 	@echo ""
-	@echo "Step 1/6: Installing dependencies..."
+	@echo "Step 1/7: Installing dependencies..."
 	npm ci
 	@echo ""
-	@echo "Step 2/6: Rebuilding native modules for Node.js (tests need Node-compatible binaries)..."
+	@echo "Step 2/7: Rebuilding native modules for Node.js (tests need Node-compatible binaries)..."
 	npm run rebuild:node
 	@echo ""
-	@echo "Step 3/6: Running linter..."
+	@echo "Step 3/7: Running linter..."
 	npm run lint:check
 	@echo ""
-	@echo "Step 4/6: Running type check..."
+	@echo "Step 4/7: Running Prettier format check..."
+	npm run format:check
+	@echo ""
+	@echo "Step 5/7: Running type check..."
 	npm run typecheck
 	@echo ""
-	@echo "Step 5/6: Running tests..."
+	@echo "Step 6/7: Running tests..."
 	npm run test
 	@echo ""
-	@echo "Step 6/6: Rebuilding native modules for Electron..."
+	@echo "Step 7/7: Rebuilding native modules for Electron..."
 	npm run rebuild:electron
 	@echo ""
 	@echo "=== CI Pipeline PASSED ==="

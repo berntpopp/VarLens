@@ -1,0 +1,46 @@
+# Keep the Prettier --check scope aligned with eslint.config.js's ignore list
+# so `npm run lint:check && npm run format:check` covers the same files.
+
+# Dependencies & build output
+node_modules/
+out/
+dist/
+release/
+coverage/
+
+# Third-party bundles & pre-generated assets
+src/renderer/public/
+resources/
+
+# Type declarations (generated)
+**/*.d.ts
+
+# Docs (rendered by VitePress — uses its own formatting)
+docs/
+
+# Planning & internal notes (freeform markdown)
+.planning/
+
+# Test fixtures — JSON references and raw VCF data deliberately kept
+# as authored, not as Prettier wants them.
+tests/test-data/
+tests/fixtures/golden/
+tests/fixtures/import/
+tests/e2e/
+e2e-*.mjs
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# tsconfigs use trailing comments Prettier doesn't respect
+tsconfig.node.json
+tsconfig.renderer.json
+
+# Top-level project docs — authored markdown, not subject to Prettier
+README.md
+CLAUDE.md
+
+# GitHub config files — YAML style is managed by Dependabot/Actions UI
+.github/dependabot.yml

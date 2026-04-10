@@ -1,8 +1,16 @@
 import eslint from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import pluginVue from 'eslint-plugin-vue'
-import prettierRecommended from 'eslint-plugin-prettier/recommended'
+import prettierConfig from 'eslint-config-prettier/flat'
 import globals from 'globals'
+
+// Performance note: we deliberately use `eslint-config-prettier` (turns off
+// conflicting stylistic rules) instead of `eslint-plugin-prettier` (runs
+// Prettier as an ESLint rule). The plugin approach roughly doubles lint time
+// on large repos because Prettier has to re-parse every file. Prettier is
+// run separately via `npm run format:check`. See
+// https://prettier.io/docs/integrating-with-linters and
+// https://typescript-eslint.io/troubleshooting/typed-linting/performance/
 
 export default [
   {
@@ -14,14 +22,21 @@ export default [
       'docs/**',
       'tests/e2e/**',
       'e2e-*.mjs',
-      '.planning/**'
+      '.planning/**',
+      // Third-party bundles shipped directly to the renderer's public
+      // folder — not authored in this repo, never meant to be linted.
+      'src/renderer/public/**'
     ]
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
-  prettierRecommended,
+  prettierConfig,
   {
+    // Type-aware linting: only applies to src/**. This is the expensive
+    // pipeline (projectService loads the TS program and rules like
+    // strict-boolean-expressions request type info per file). Tests and
+    // scripts deliberately skip it so they lint in milliseconds, not seconds.
     files: ['src/**/*.{ts,tsx,vue}'],
     languageOptions: {
       parserOptions: {
