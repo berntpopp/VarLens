@@ -12,7 +12,13 @@
     "noImplicitAny": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    // See tsconfig.renderer.json for rationale. Works identically for plain
+    // tsc without vue-tsc — this is the officially supported `tsc --noEmit
+    // --incremental` mode documented at typescriptlang.org/tsconfig/incremental.
+    "incremental": true,
+    "tsBuildInfoFile": "./.cache/tsbuildinfo/node.tsbuildinfo",
+    "assumeChangesOnlyAffectDirectDependencies": true
   },
   "include": [
     "electron.vite.config.ts",

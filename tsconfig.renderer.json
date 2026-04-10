@@ -1,7 +1,16 @@
 {
   "extends": "./tsconfig.json",
-  "include": [
-    "src/renderer/**/*"
-  ],
+  "compilerOptions": {
+    // Incremental typecheck — stores dependency graph in .cache/tsbuildinfo
+    // so a second run only re-checks files whose hash or transitive deps
+    // changed. Works correctly with --noEmit since TypeScript 4.x and with
+    // vue-tsc 3.2+ (the earlier silent-error bug was fixed in volar.js#158).
+    "incremental": true,
+    "tsBuildInfoFile": "./.cache/tsbuildinfo/renderer.tsbuildinfo",
+    // Trade-off: cross-module type inference changes may be missed, but
+    // CI always does a fresh full run on main and PR diffs are small.
+    "assumeChangesOnlyAffectDirectDependencies": true
+  },
+  "include": ["src/renderer/**/*"],
   "references": []
 }
