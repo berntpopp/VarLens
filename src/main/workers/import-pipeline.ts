@@ -23,6 +23,7 @@ import { createFTSTriggers } from '../database/schema'
 import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
 import { parseVcfLine } from '../import/vcf/vcf-line-parser'
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
+import { detectCaller } from '../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
 import type { VcfHeader } from '../import/vcf/types'
 
@@ -365,6 +366,7 @@ export async function streamInsertVcf(
   const headerLines: string[] = []
   let header: VcfHeader | null = null
   let activeSample = ''
+  let callerName: string | null = null
 
   let batch: Array<Record<string, unknown>> = []
   let totalInserted = 0
@@ -391,13 +393,23 @@ export async function streamInsertVcf(
         if (activeSample === '') {
           break
         }
+
+        // Detect caller from header lines for variant type routing
+        const callerInfo = detectCaller(headerLines)
+        callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
       }
 
       // Parse the data line
       try {
         const record = parseVcfLine(line, header.samples)
         if (record === null) continue // Skip truncated/corrupt lines
-        const mapped = mapVcfRecord(record, header, activeSample, DEFAULT_INFO_FIELD_MAPPINGS)
+        const mapped = mapVcfRecord(
+          record,
+          header,
+          activeSample,
+          DEFAULT_INFO_FIELD_MAPPINGS,
+          callerName
+        )
 
         for (const variant of mapped) {
           batch.push(variant as unknown as Record<string, unknown>)
