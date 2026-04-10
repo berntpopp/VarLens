@@ -277,6 +277,12 @@ export const VariantFilterPartialSchema = z.object({
   consider_phasing: z
     .boolean()
     .nullish()
+    .transform((val) => val ?? undefined),
+
+  // Variant type discriminator filter (snv, indel, sv, cnv, str)
+  variant_type: z
+    .enum(['snv', 'indel', 'sv', 'cnv', 'str'])
+    .nullish()
     .transform((val) => val ?? undefined)
 })
 

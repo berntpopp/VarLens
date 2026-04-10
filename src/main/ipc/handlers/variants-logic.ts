@@ -159,3 +159,23 @@ export async function getGeneSymbols(
   const db = getDb()
   return db.variants.getGeneSymbols(caseId, query, limit)
 }
+
+/**
+ * Get variant type counts per case for tab badges (snv, indel, sv, cnv, str).
+ */
+export async function getVariantTypeCounts(
+  caseId: number,
+  getDb: () => DatabaseService,
+  getDbPool?: () => DbPool | null
+): Promise<Record<string, number>> {
+  const pool = getDbPool?.()
+  if (pool) {
+    return (await pool.run({
+      type: 'variants:typeCounts',
+      params: [caseId]
+    })) as Record<string, number>
+  }
+
+  const db = getDb()
+  return db.variants.getVariantTypeCounts(caseId)
+}

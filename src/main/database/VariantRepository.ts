@@ -252,6 +252,30 @@ export class VariantRepository extends BaseRepository {
     return result?.count ?? 0
   }
 
+  /**
+   * Get variant counts grouped by variant_type for a case.
+   * Used for variant type tab badges in the case view.
+   *
+   * Returns a map like: { snv: 1234, indel: 56, sv: 12, cnv: 3, str: 7 }
+   * Missing types are not included in the returned record.
+   */
+  getVariantTypeCounts(caseId: number): Record<string, number> {
+    const rows = this.execAll<{ variant_type: string; count: number }>(
+      this.kysely
+        .selectFrom('variants')
+        .select(['variant_type'])
+        .select(({ fn }) => fn.countAll<number>().as('count'))
+        .where('case_id', '=', caseId)
+        .groupBy('variant_type')
+    )
+
+    const counts: Record<string, number> = {}
+    for (const row of rows) {
+      counts[row.variant_type] = row.count
+    }
+    return counts
+  }
+
   // ── Query methods ────────────────────────────────────────────
 
   getVariants(

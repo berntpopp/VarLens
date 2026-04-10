@@ -202,6 +202,8 @@ export interface VariantFilter {
   analysis_group_id?: number
   /** Whether to consider phasing for compound het */
   consider_phasing?: boolean
+  /** Filter by variant type discriminator: snv, indel, sv, cnv, str. If 'snv', includes both 'snv' and 'indel'. */
+  variant_type?: string
 }
 
 /**

@@ -80,6 +80,61 @@ export class VariantFilterBuilder {
       totalCaseCount = countResult?.cnt ?? 0
     }
 
+    // Variant type filter (snv includes both snv and indel)
+    query = query.$if(filter.variant_type !== undefined && filter.variant_type !== '', (qb) => {
+      if (filter.variant_type === 'snv') {
+        return qb.where((eb) =>
+          eb.or([
+            eb('variants.variant_type', '=', 'snv'),
+            eb('variants.variant_type', '=', 'indel')
+          ])
+        )
+      }
+      return qb.where('variants.variant_type', '=', filter.variant_type!)
+    })
+
+    // Extension table JOINs for type-specific queries
+    if (filter.variant_type === 'sv') {
+      query = query
+        .leftJoin('variant_sv as sv', 'sv.variant_id', 'variants.id')
+        .select([
+          'sv.support as _sv_support',
+          'sv.dr as _sv_dr',
+          'sv.dv as _sv_dv',
+          'sv.vaf as _sv_vaf',
+          'sv.sv_is_precise as _sv_is_precise',
+          'sv.strand as _sv_strand',
+          'sv.coverage as _sv_coverage',
+          'sv.stdev_len as _sv_stdev_len',
+          'sv.stdev_pos as _sv_stdev_pos'
+        ])
+    } else if (filter.variant_type === 'cnv') {
+      query = query
+        .leftJoin('variant_cnv as cnv', 'cnv.variant_id', 'variants.id')
+        .select([
+          'cnv.copy_number as _cnv_copy_number',
+          'cnv.copy_number_quality as _cnv_gq',
+          'cnv.homozygosity_ref as _cnv_ho_ref',
+          'cnv.homozygosity_alt as _cnv_ho_alt'
+        ])
+    } else if (filter.variant_type === 'str') {
+      query = query
+        .leftJoin('variant_str as str_ext', 'str_ext.variant_id', 'variants.id')
+        .select([
+          'str_ext.repeat_id as _str_repeat_id',
+          'str_ext.repeat_unit as _str_repeat_unit',
+          'str_ext.display_repeat_unit as _str_display_ru',
+          'str_ext.ref_copies as _str_ref_copies',
+          'str_ext.alt_copies as _str_alt_copies',
+          'str_ext.str_status as _str_status',
+          'str_ext.normal_max as _str_normal_max',
+          'str_ext.pathologic_min as _str_pathologic_min',
+          'str_ext.disease as _str_disease',
+          'str_ext.inheritance_mode as _str_inheritance_mode',
+          'str_ext.rank_score as _str_rank_score'
+        ])
+    }
+
     // Simple filters via $if
     query = query.$if(filter.gene_symbol !== undefined && filter.gene_symbol !== '', (qb) =>
       qb.where('gene_symbol', 'like', `%${filter.gene_symbol}%`)

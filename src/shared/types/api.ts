@@ -176,6 +176,8 @@ export interface VariantsAPI {
   getFilterOptions: (caseId: number) => Promise<FilterOptions>
   search: (caseId: number, query: string, limit?: number) => Promise<Variant[]>
   geneSymbols: (caseId: number, query: string, limit?: number) => Promise<string[]>
+  /** Get variant type counts per case for tab badges (snv/indel/sv/cnv/str) */
+  typeCounts: (caseId: number) => Promise<Record<string, number>>
 }
 
 export interface FilterOptions {

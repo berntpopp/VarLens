@@ -149,6 +149,9 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
           params[2] as number
         )
 
+      case 'variants:typeCounts':
+        return repos.variants.getVariantTypeCounts(params[0] as number)
+
       // ── Cohort ────────────────────────────────────────────
       case 'cohort:variants': {
         const cohortParams = params[0] as PanelAwareFilter &

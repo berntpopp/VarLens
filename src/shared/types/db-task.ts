@@ -14,6 +14,7 @@ export type DbTaskType =
   | 'variants:filterOptions'
   | 'variants:search'
   | 'variants:geneSymbols'
+  | 'variants:typeCounts'
   // Cohort
   | 'cohort:variants'
   | 'cohort:columnMeta'

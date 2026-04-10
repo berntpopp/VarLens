@@ -64,7 +64,10 @@ const api = {
 
     /** Get gene symbols for autocomplete (optimized LIKE query - faster than FTS5) */
     geneSymbols: (caseId: number, query: string, limit?: number) =>
-      ipcRenderer.invoke('variants:geneSymbols', caseId, query, limit ?? 50)
+      ipcRenderer.invoke('variants:geneSymbols', caseId, query, limit ?? 50),
+
+    /** Get variant type counts per case for tab badges (snv/indel/sv/cnv/str) */
+    typeCounts: (caseId: number) => ipcRenderer.invoke('variants:typeCounts', caseId)
   },
 
   import: {

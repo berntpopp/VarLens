@@ -16,7 +16,8 @@ import {
   queryVariants,
   getFilterOptions,
   searchVariants,
-  getGeneSymbols
+  getGeneSymbols,
+  getVariantTypeCounts
 } from './variants-logic'
 
 // Re-export for consumers that import from this module
@@ -239,4 +240,24 @@ export function registerVariantHandlers({ ipcMain, getDb, getDbPool }: HandlerDe
       })
     }
   )
+
+  /**
+   * Get variant type counts per case (for tab badges).
+   * Channel: variants:typeCounts
+   * Returns: Record<string, number> e.g. { snv: 1234, indel: 56, sv: 12 }
+   */
+  ipcMain.handle('variants:typeCounts', async (_event, caseId: unknown) => {
+    return wrapHandler(async () => {
+      const validatedCaseId = CaseIdSchema.safeParse(caseId)
+      if (!validatedCaseId.success) {
+        mainLogger.error(
+          `Invalid variants:typeCounts caseId: ${validatedCaseId.error.message}`,
+          'variants'
+        )
+        throw new Error('Invalid case ID')
+      }
+
+      return getVariantTypeCounts(validatedCaseId.data, getDb, getDbPool)
+    })
+  })
 }

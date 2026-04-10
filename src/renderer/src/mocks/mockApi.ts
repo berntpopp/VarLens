@@ -124,6 +124,15 @@ export const mockApi: WindowAPI = {
           return geneMatch || chrMatch || clinvarMatch
         })
       return filtered.slice(0, limit)
+    },
+    typeCounts: async (caseId: number) => {
+      const counts: Record<string, number> = {}
+      for (const v of variants) {
+        if (v.case_id !== caseId) continue
+        const type = v.variant_type ?? 'snv'
+        counts[type] = (counts[type] ?? 0) + 1
+      }
+      return counts
     }
   },
 
