@@ -227,6 +227,13 @@ jobs:
 
       - name: Run packaged smoke (Linux)
         if: runner.os == 'Linux'
+        # The packaged Electron binary ships `chrome-sandbox` unpacked; the
+        # runtime requires it to be root-owned mode 4755, which GitHub Actions
+        # runners do not set up. `VARLENS_E2E_NO_SANDBOX=1` tells the smoke
+        # helper to launch with `--no-sandbox`. The fuse baseline under test
+        # is unaffected by this flag.
+        env:
+          VARLENS_E2E_NO_SANDBOX: '1'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" npx playwright test tests/e2e/packaged-smoke.e2e.ts --workers=1
 
       - name: Upload packaged smoke artifacts (Linux)
