@@ -1,4 +1,4 @@
-.PHONY: help rebuild dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-actions docs docs-dev docs-preview docs-screenshots
+.PHONY: help rebuild dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -174,6 +174,15 @@ ci-package-linux: ## Run the Linux package validation job under Node $(CI_NODE_V
 	@echo ""
 	@echo "=== Package (ubuntu-latest) PASSED ==="
 
+ci-packaged-smoke-linux: ## Run the packaged-binary smoke on Linux (requires a built Linux artifact in release/)
+	@echo "=== Packaged Smoke (Linux) using Node $(CI_NODE_VERSION) ==="
+	$(ensure_ci_node)
+	@echo ""
+	@echo "Step 1/1: Running packaged smoke against release/linux-unpacked/varlens..."
+	$(XVFB_RUN)npx playwright test tests/e2e/packaged-smoke.e2e.ts --workers=1
+	@echo ""
+	@echo "=== Packaged Smoke (Linux) PASSED ==="
+
 ci-full: ci-actions ## Run the local GitHub Actions parity pipeline
 
 ci-actions: ## Run the required local GitHub Actions parity pipeline under Node $(CI_NODE_VERSION)
@@ -181,6 +190,7 @@ ci-actions: ## Run the required local GitHub Actions parity pipeline under Node 
 	$(MAKE) ci-checks
 	$(MAKE) ci-startup-smoke
 	$(MAKE) ci-package-linux
+	$(MAKE) ci-packaged-smoke-linux
 	@echo ""
 	@echo "=== GitHub Actions parity pipeline PASSED ==="
 
