@@ -225,6 +225,19 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Run packaged smoke (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" npx playwright test tests/e2e/packaged-smoke.e2e.ts --workers=1
+
+      - name: Upload packaged smoke artifacts (Linux)
+        if: runner.os == 'Linux' && always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
+        with:
+          name: packaged-smoke-linux
+          path: |
+            test-results/
+            .planning/artifacts/perf/phase1/baseline/packaged-smoke/
+
   # ── 4. Required-status-check aggregator ────────────────────────────
   # Branch protection should require THIS job (and secrets-scan) only.
   # It succeeds when all upstream jobs succeeded OR were correctly
