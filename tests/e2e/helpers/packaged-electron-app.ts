@@ -54,11 +54,13 @@ export async function launchPackagedLinuxApp(
 
   const collectedLines: string[] = []
 
-  // --no-sandbox disables Chromium's OS-level renderer sandbox, which is
-  // required on CI containers that lack user-namespace support. This is a
-  // test-only relaxation: real users launch without --no-sandbox and get
-  // the full sandbox. The fuse baseline under test is unaffected.
-  const child = spawn(executablePath, ['--no-sandbox'], {
+  // Gate --no-sandbox behind VARLENS_E2E_NO_SANDBOX=1. Default is the full
+  // Chromium sandbox (matches how real users launch) so the smoke catches
+  // sandbox-related regressions. Set the env var only on environments where
+  // the sandbox cannot initialize (e.g. containers without user-namespace
+  // support).
+  const launchArgs = process.env.VARLENS_E2E_NO_SANDBOX === '1' ? ['--no-sandbox'] : []
+  const child = spawn(executablePath, launchArgs, {
     env: {
       ...process.env,
       NODE_ENV: 'production',
@@ -87,7 +89,19 @@ export async function launchPackagedLinuxApp(
   child.stdout?.on('data', bufferLines)
   child.stderr?.on('data', bufferLines)
 
-  await new Promise<void>((resolveReady, rejectReady) => {
+  async function bestEffortCleanup(): Promise<void> {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL')
+    }
+    try {
+      rmSync(isolationRoot, { recursive: true, force: true })
+    } catch {
+      // best-effort cleanup; ignore failures on long-lived CI mounts
+    }
+  }
+
+  try {
+    await new Promise<void>((resolveReady, rejectReady) => {
     const timer = setTimeout(() => {
       detach()
       rejectReady(
@@ -133,11 +147,18 @@ export async function launchPackagedLinuxApp(
       )
     }
 
-    child.stdout?.on('data', readyWatcher)
-    child.stderr?.on('data', readyWatcher)
-    child.on('error', onError)
-    child.on('exit', onExit)
-  })
+      child.stdout?.on('data', readyWatcher)
+      child.stderr?.on('data', readyWatcher)
+      child.on('error', onError)
+      child.on('exit', onExit)
+    })
+  } catch (err) {
+    // The child is spawned and temp dirs exist before the ready-wait begins,
+    // so a rejection here would otherwise leak both. Clean up then rethrow
+    // so callers see the original failure reason.
+    await bestEffortCleanup()
+    throw err
+  }
 
   return {
     isolationRoot,
@@ -146,7 +167,7 @@ export async function launchPackagedLinuxApp(
     executablePath,
     collectedLines,
     cleanup: async () => {
-      if (!child.killed) {
+      if (child.exitCode === null && child.signalCode === null) {
         child.kill('SIGTERM')
         await new Promise<void>((done) => {
           const t = setTimeout(() => {
