@@ -154,11 +154,29 @@ Test data lives at `tests/test-data/vcf/` (GIAB Chinese Trio, chr22:29M–30.5M,
 ## Security Defaults
 
 - Electron window creation enforces `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`. See `src/main/index.ts`. **Do not weaken these.**
-- Packaged builds also harden Electron fuses in `package.json` (`build.electronFuses`). Keep `runAsNode` disabled unless the app intentionally adds a main-process `fork()` dependency, and reassess fuses before changing packaging/load behavior.
+- Packaged builds harden Electron fuses via `scripts/configure-fuses.mjs`, invoked from electron-builder's `afterPack` hook. See the "Electron fuse baseline" subsection below.
 - Large renderer-side runtimes such as `pdbe-molstar` should be loaded through Vite's asset graph, not via copied public JS files or raw `file://` script injection. Prefer lazy `import(...)` over bespoke script-tag loaders so Electron packaging stays deterministic across platforms.
 - Renderer talks to main only through the typed `window.api` exposed by `src/preload/index.ts` — no raw `ipcRenderer`. Adding a new IPC channel means adding to the shared contract, preload, main handler, and (ideally) the preload contract test.
 - External URLs are validated before `shell.openExternal`. Do not add a shortcut path that skips that validation.
 - SQLite databases can be encrypted (`better-sqlite3-multiple-ciphers`). User keys are never logged; tests must not commit real user data.
+
+### Electron fuse baseline
+
+`scripts/configure-fuses.mjs` owns the packaged fuse configuration. `strictlyRequireAllFuses: true` forces the baseline to declare every fuse known to the pinned `@electron/fuses` version — an Electron upgrade that introduces a new fuse makes the build fail until the baseline declares an explicit value.
+
+Current baseline (read the script for the authoritative list):
+
+- `RunAsNode: false` — blocks repurposing the packaged binary as a generic Node.js runtime.
+- `EnableCookieEncryption: true` — at-rest cookie encryption for the session.
+- `EnableNodeOptionsEnvironmentVariable: false` — disables `NODE_OPTIONS` injection paths.
+- `EnableNodeCliInspectArguments: false` — disables CLI inspector attachment.
+- `EnableEmbeddedAsarIntegrityValidation: true` — validates the shipped asar against its hash; pairs with `OnlyLoadAppFromAsar` per Electron guidance (see https://www.electronjs.org/docs/latest/tutorial/asar-integrity).
+- `OnlyLoadAppFromAsar: true` — refuses to launch the main app from any location other than `app.asar`.
+- `LoadBrowserProcessSpecificV8Snapshot: false` — current default preserved.
+- `GrantFileProtocolExtraPrivileges: true` — current default preserved; tightening this fuse is a separate, deliberate decision.
+- `resetAdHocDarwinSignature: true` — re-ad-hoc-signs the macOS binary after fuse flipping so local ad-hoc builds remain launchable.
+
+The baseline lives only in `scripts/configure-fuses.mjs`. Do not reintroduce `build.electronFuses` in `package.json`; the hook owns the flip and `doAddElectronFuses` short-circuits when the declarative block is absent.
 
 ## What NOT to do
 
