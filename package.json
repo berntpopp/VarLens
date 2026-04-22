@@ -87,13 +87,7 @@
     "productName": "Varlens",
     "icon": "build/icon.png",
     "npmRebuild": false,
-    "electronFuses": {
-      "runAsNode": false,
-      "enableCookieEncryption": true,
-      "enableNodeOptionsEnvironmentVariable": false,
-      "enableNodeCliInspectArguments": false,
-      "enableEmbeddedAsarIntegrityValidation": true
-    },
+    "afterPack": "scripts/configure-fuses.mjs",
     "extraResources": [
       {
         "from": "resources/gene_reference.db",
