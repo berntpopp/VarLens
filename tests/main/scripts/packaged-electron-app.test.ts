@@ -44,6 +44,8 @@ describe('resolveLinuxPackagedBinary', () => {
 
   it('throws when linux-unpacked/varlens is missing', () => {
     const root = makeReleaseDir({ unpackedBinary: false, otherFiles: ['Varlens-0.56.5.AppImage'] })
-    expect(() => resolveLinuxPackagedBinary(root)).toThrow(/Expected .*linux-unpacked\/varlens to exist/)
+    expect(() => resolveLinuxPackagedBinary(root)).toThrow(
+      /Expected .*linux-unpacked\/varlens to exist/
+    )
   })
 })
