@@ -41,6 +41,7 @@
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@electron/fuses": "^1.8.0",
     "@electron/rebuild": "^4.0.3",
     "@eslint/js": "^10.0.1",
     "@mdi/js": "^7.4.47",
