@@ -4,7 +4,6 @@ import { join, resolve } from 'path'
 import { spawn } from 'child_process'
 
 export interface LaunchPackagedAppResult {
-  pid: number
   isolationRoot: string
   userDataDir: string
   appDataDir: string
@@ -55,6 +54,10 @@ export async function launchPackagedLinuxApp(
 
   const collectedLines: string[] = []
 
+  // --no-sandbox disables Chromium's OS-level renderer sandbox, which is
+  // required on CI containers that lack user-namespace support. This is a
+  // test-only relaxation: real users launch without --no-sandbox and get
+  // the full sandbox. The fuse baseline under test is unaffected.
   const child = spawn(executablePath, ['--no-sandbox'], {
     env: {
       ...process.env,
@@ -136,10 +139,7 @@ export async function launchPackagedLinuxApp(
     child.on('exit', onExit)
   })
 
-  const pid = child.pid ?? 0
-
   return {
-    pid,
     isolationRoot,
     userDataDir,
     appDataDir,
