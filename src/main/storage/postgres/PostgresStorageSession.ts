@@ -47,7 +47,7 @@ export class PostgresStorageSession implements StorageSession {
       schema: options.config.schema
     }
 
-    this.pool.on('error', error => {
+    this.pool.on('error', (error: Error) => {
       const message = error instanceof Error ? error.message : String(error)
       mainLogger.warn(`Postgres pool error: ${message}`, 'storage')
     })

@@ -70,10 +70,14 @@ export function getPostgresStorageConfig(
     throw new Error('VARLENS_PG_SCHEMA must not be blank')
   }
 
+  const applicationNameRaw = env.VARLENS_PG_APPLICATION_NAME?.trim()
   const applicationName =
-    env.VARLENS_PG_APPLICATION_NAME?.trim() || DEFAULT_PG_APPLICATION_NAME
+    applicationNameRaw === undefined || applicationNameRaw === ''
+      ? DEFAULT_PG_APPLICATION_NAME
+      : applicationNameRaw
 
-  const sslMode = (env.VARLENS_PG_SSL_MODE?.trim() || DEFAULT_PG_SSL_MODE) as PostgresSslMode
+  const sslModeRaw = env.VARLENS_PG_SSL_MODE?.trim()
+  const sslMode = sslModeRaw === undefined || sslModeRaw === '' ? DEFAULT_PG_SSL_MODE : sslModeRaw
   if (sslMode !== 'disable' && sslMode !== 'prefer' && sslMode !== 'require') {
     throw new Error(`Invalid VARLENS_PG_SSL_MODE: ${sslMode}`)
   }

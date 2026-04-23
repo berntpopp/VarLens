@@ -34,9 +34,7 @@ describe('PostgresStorageSession', () => {
 
     expect(pool.on).toHaveBeenCalledWith('error', expect.any(Function))
     expect(session.workspace.kind).toBe('postgres')
-    expect(session.workspace.connectionUrlRedacted).toBe(
-      'postgres://127.0.0.1:55432/varlens_dev'
-    )
+    expect(session.workspace.connectionUrlRedacted).toBe('postgres://127.0.0.1:55432/varlens_dev')
     expect(session.workspace.connectionLabel).toBe('127.0.0.1:55432/varlens_dev (public)')
     expect(session.capabilities).toEqual({
       backend: 'postgres',
