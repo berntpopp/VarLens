@@ -170,6 +170,7 @@
     "markdown-it": "^14.1.0",
     "nanoid": "^5.1.9",
     "pdbe-molstar": "^3.11.0",
+    "pg": "^8.20.0",
     "pinia": "^3.0.4",
     "piscina": "^5.1.4",
     "plotly.js-basic-dist-min": "^3.5.0",
