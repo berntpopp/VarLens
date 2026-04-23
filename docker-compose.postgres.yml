@@ -4,11 +4,11 @@ services:
     container_name: varlens-postgres-dev
     restart: unless-stopped
     ports:
-      - '127.0.0.1:5432:5432'
+      - '127.0.0.1:${VARLENS_PG_PORT}:5432'
     env_file:
       - .env.postgres.local
     volumes:
-      - varlens_postgres_data:/var/lib/postgresql/data
+      - varlens_postgres_data:/var/lib/postgresql
       - ./scripts/postgres/init-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
