@@ -22,7 +22,7 @@ let databaseManager: DatabaseManager | null = null
  * @returns DatabaseManager singleton instance
  * @throws DatabaseError if the default database cannot be opened
  */
-export function initDatabaseManager(): DatabaseManager {
+export async function initDatabaseManager(): Promise<DatabaseManager> {
   if (!databaseManager) {
     const settingsPath = join(app.getPath('userData'), 'varlens-settings.json')
     const recentDatabases = new RecentDatabasesService(settingsPath)
@@ -30,7 +30,7 @@ export function initDatabaseManager(): DatabaseManager {
 
     // Open default database
     const dbPath = join(app.getPath('userData'), 'varlens.db')
-    databaseManager.open(dbPath)
+    await databaseManager.open(dbPath)
   }
   return databaseManager
 }
@@ -83,9 +83,9 @@ export function getDatabaseService() {
  *
  * Call during application shutdown.
  */
-export function closeDatabaseManager(): void {
+export async function closeDatabaseManager(): Promise<void> {
   if (databaseManager) {
-    databaseManager.close()
+    await databaseManager.close()
     databaseManager = null
   }
 }

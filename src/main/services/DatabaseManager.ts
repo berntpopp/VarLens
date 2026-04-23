@@ -9,7 +9,8 @@ import { DatabaseService } from '../database/DatabaseService'
 import { DatabaseError, WrongPasswordError } from '../database/errors'
 import { RecentDatabasesService, type RecentDatabase } from './RecentDatabasesService'
 import { mainLogger } from './MainLogger'
-import { basename } from 'path'
+import { SqliteStorageSession } from '../storage/sqlite/SqliteStorageSession'
+import type { StorageSession } from '../storage/session'
 
 /**
  * DatabaseManager class
@@ -18,8 +19,7 @@ import { basename } from 'path'
  * Ensures safe switching between databases with rollback on failure.
  */
 export class DatabaseManager {
-  private currentDb: DatabaseService | null = null
-  private currentPath: string | null = null
+  private currentSession: StorageSession | null = null
   private recentDatabases: RecentDatabasesService
 
   /**
@@ -41,49 +41,27 @@ export class DatabaseManager {
    * @throws WrongPasswordError if password is incorrect
    * @throws DatabaseError if database cannot be opened
    */
-  open(dbPath: string, key?: string): void {
-    // Close current database if open
-    this.close()
+  async open(dbPath: string, key?: string): Promise<void> {
+    await this.close()
 
     try {
-      // Create new database connection
-      const newDb = new DatabaseService(dbPath, key)
-
-      // If key provided, validate by attempting a simple query
-      if (key !== undefined && key.length > 0) {
-        try {
-          newDb.database.prepare('SELECT count(*) FROM sqlite_master').get()
-        } catch (error) {
-          // Close the failed connection
-          newDb.close()
-
-          // Check if error indicates wrong password
-          if (
-            error instanceof Error &&
-            error.message.includes('file is encrypted or is not a database')
-          ) {
-            throw new WrongPasswordError()
-          }
-          throw error
-        }
-      }
-
-      // Success - store as current
-      this.currentDb = newDb
-      this.currentPath = dbPath
+      const newSession = this.createSqliteSession(dbPath, key)
+      this.currentSession = newSession
       this.recentDatabases.addRecent(dbPath)
     } catch (error) {
-      // Propagate WrongPasswordError as-is
       if (error instanceof WrongPasswordError) {
         throw error
       }
 
-      // Wrap other errors
       throw new DatabaseError(
         `Failed to open database at ${dbPath}`,
         error instanceof Error ? error : undefined
       )
     }
+  }
+
+  async openSqlite(path: string, key?: string): Promise<void> {
+    await this.open(path, key)
   }
 
   /**
@@ -97,16 +75,12 @@ export class DatabaseManager {
     let testDb: DatabaseService | null = null
 
     try {
-      // Try opening without key
       testDb = new DatabaseService(dbPath)
       testDb.database.prepare('SELECT count(*) FROM sqlite_master').get()
-
-      // Success - database is plaintext
       testDb.close()
       return { needsPassword: false }
     } catch (error) {
-      // Clean up test connection
-      if (testDb) {
+      if (testDb !== null) {
         try {
           testDb.close()
         } catch (e) {
@@ -118,7 +92,6 @@ export class DatabaseManager {
         }
       }
 
-      // Check if error indicates encryption
       if (
         error instanceof Error &&
         error.message.includes('file is encrypted or is not a database')
@@ -126,12 +99,15 @@ export class DatabaseManager {
         return { needsPassword: true }
       }
 
-      // Other error - database is likely corrupt or invalid
       throw new DatabaseError(
         `Failed to read database at ${dbPath}`,
         error instanceof Error ? error : undefined
       )
     }
+  }
+
+  detectSqliteEncryption(path: string): { needsPassword: boolean } {
+    return this.openDetectEncryption(path)
   }
 
   /**
@@ -143,17 +119,12 @@ export class DatabaseManager {
    * @param key - Optional encryption key
    * @throws DatabaseError if database cannot be created
    */
-  createDatabase(dbPath: string, key?: string): void {
-    // Close current database if open
-    this.close()
+  async createDatabase(dbPath: string, key?: string): Promise<void> {
+    await this.close()
 
     try {
-      // Create new database (constructor handles PRAGMA key + schema init)
-      const newDb = new DatabaseService(dbPath, key)
-
-      // Store as current
-      this.currentDb = newDb
-      this.currentPath = dbPath
+      const newSession = this.createSqliteSession(dbPath, key)
+      this.currentSession = newSession
       this.recentDatabases.addRecent(dbPath)
     } catch (error) {
       throw new DatabaseError(
@@ -161,6 +132,10 @@ export class DatabaseManager {
         error instanceof Error ? error : undefined
       )
     }
+  }
+
+  async createSqlite(path: string, key?: string): Promise<void> {
+    await this.createDatabase(path, key)
   }
 
   /**
@@ -174,52 +149,22 @@ export class DatabaseManager {
    * @throws WrongPasswordError if password is incorrect
    * @throws DatabaseError if switch fails and rollback succeeds
    */
-  switchDatabase(newPath: string, key?: string): void {
-    // Save reference to previous database
-    const previousDb = this.currentDb
-    const previousPath = this.currentPath
+  async switchDatabase(newPath: string, key?: string): Promise<void> {
+    const previousSession = this.currentSession
 
     try {
-      // Null out current before attempting to open new
-      this.currentDb = null
-      this.currentPath = null
+      this.currentSession = null
+      const newSession = this.createSqliteSession(newPath, key)
 
-      // Try to open new database
-      const newDb = new DatabaseService(newPath, key)
-
-      // If key provided, validate by attempting a simple query
-      if (key !== undefined && key.length > 0) {
-        try {
-          newDb.database.prepare('SELECT count(*) FROM sqlite_master').get()
-        } catch (error) {
-          // Close the failed connection
-          newDb.close()
-
-          // Check if error indicates wrong password
-          if (
-            error instanceof Error &&
-            error.message.includes('file is encrypted or is not a database')
-          ) {
-            throw new WrongPasswordError()
-          }
-          throw error
-        }
+      if (previousSession !== null) {
+        await previousSession.close()
       }
 
-      // Success - close previous and store new
-      if (previousDb) {
-        previousDb.close()
-      }
-
-      this.currentDb = newDb
-      this.currentPath = newPath
+      this.currentSession = newSession
       this.recentDatabases.addRecent(newPath)
     } catch (error) {
-      // Rollback - restore previous database
-      this.currentDb = previousDb
-      this.currentPath = previousPath
+      this.currentSession = previousSession
 
-      // Propagate error
       if (error instanceof WrongPasswordError) {
         throw error
       }
@@ -231,18 +176,30 @@ export class DatabaseManager {
     }
   }
 
+  async switchToSqlite(path: string, key?: string): Promise<void> {
+    await this.switchDatabase(path, key)
+  }
+
   /**
    * Close the current database
    *
    * Safely closes the database connection and clears cached statements.
    * Safe to call even if no database is open.
    */
-  close(): void {
-    if (this.currentDb) {
-      this.currentDb.close()
-      this.currentDb = null
-      this.currentPath = null
+  async close(): Promise<void> {
+    if (this.currentSession !== null) {
+      const session = this.currentSession
+      this.currentSession = null
+      await session.close()
     }
+  }
+
+  getCurrentSession(): StorageSession {
+    if (this.currentSession === null) {
+      throw new DatabaseError('No database is currently open')
+    }
+
+    return this.currentSession
   }
 
   /**
@@ -252,10 +209,7 @@ export class DatabaseManager {
    * @throws DatabaseError if no database is open
    */
   getCurrent(): DatabaseService {
-    if (!this.currentDb) {
-      throw new DatabaseError('No database is currently open')
-    }
-    return this.currentDb
+    return this.getCurrentSession().getDatabaseService()
   }
 
   /**
@@ -264,7 +218,11 @@ export class DatabaseManager {
    * @returns Path to current database, or null if none open
    */
   getCurrentPath(): string | null {
-    return this.currentPath
+    if (this.currentSession?.workspace.kind !== 'sqlite') {
+      return null
+    }
+
+    return this.currentSession.workspace.path
   }
 
   /**
@@ -273,14 +231,14 @@ export class DatabaseManager {
    * @returns Database info object, or null if no database is open
    */
   getCurrentInfo(): { path: string; name: string; encrypted: boolean } | null {
-    if (this.currentDb === null || this.currentPath === null) {
+    if (this.currentSession?.workspace.kind !== 'sqlite') {
       return null
     }
 
     return {
-      path: this.currentPath,
-      name: basename(this.currentPath),
-      encrypted: this.currentDb.isEncrypted()
+      path: this.currentSession.workspace.path,
+      name: this.currentSession.workspace.name,
+      encrypted: this.currentSession.workspace.encrypted
     }
   }
 
@@ -291,8 +249,7 @@ export class DatabaseManager {
    * @throws DatabaseError if no database is open or rekey fails
    */
   rekey(newPassword: string): void {
-    const db = this.getCurrent()
-    db.rekey(newPassword)
+    this.getCurrentSession().rekey(newPassword)
   }
 
   /**
@@ -311,5 +268,31 @@ export class DatabaseManager {
    */
   removeRecentDatabase(dbPath: string): void {
     this.recentDatabases.removeRecent(dbPath)
+  }
+
+  private createSqliteSession(dbPath: string, key?: string): StorageSession {
+    const newDb = new DatabaseService(dbPath, key)
+
+    if (key !== undefined && key.length > 0) {
+      try {
+        newDb.database.prepare('SELECT count(*) FROM sqlite_master').get()
+      } catch (error) {
+        newDb.close()
+
+        if (
+          error instanceof Error &&
+          error.message.includes('file is encrypted or is not a database')
+        ) {
+          throw new WrongPasswordError()
+        }
+
+        throw error
+      }
+    }
+
+    return new SqliteStorageSession({
+      databaseService: newDb,
+      dbPool: null
+    })
   }
 }

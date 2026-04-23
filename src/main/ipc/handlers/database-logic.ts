@@ -58,7 +58,7 @@ export async function openDatabase(
 
   // Switch to new database with rollback on failure
   try {
-    manager.switchDatabase(vPath, vPassword)
+    await manager.switchDatabase(vPath, vPassword)
     mainLogger.info(`Switched to database: ${vPath}`, 'database')
 
     // Initialise worker pool for off-thread reads (best effort)
@@ -102,7 +102,7 @@ export async function createDatabase(
   callbacks: Pick<DatabaseLifecycleCallbacks, 'initDbPool'>
 ): Promise<{ success: boolean; info: { path: string; name: string; encrypted: boolean } }> {
   const manager = getDbManager()
-  manager.createDatabase(params.path, params.password)
+  await manager.createDatabase(params.path, params.password)
 
   // Initialise worker pool (best effort)
   try {

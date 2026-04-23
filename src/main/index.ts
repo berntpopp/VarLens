@@ -179,7 +179,7 @@ if (gotTheLock !== true) {
     // Wrapped in try/catch so a corrupted/locked default DB does not prevent
     // the window from opening — the user can still switch databases from the UI.
     try {
-      initDatabaseManager()
+      await initDatabaseManager()
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       mainLogger.error(`Failed to open default database: ${msg}`, 'database')
@@ -234,7 +234,12 @@ if (gotTheLock !== true) {
         'app'
       )
     })
-    closeDatabaseManager()
+    closeDatabaseManager().catch((e) => {
+      mainLogger.warn(
+        `DatabaseManager close failed during quit: ${e instanceof Error ? e.message : String(e)}`,
+        'app'
+      )
+    })
   })
 
   // Quit when all windows are closed, except on macOS. There, it's common
