@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # Cancel stale in-flight runs on the same PR branch when a new push arrives.
 # Gated on pull_request so a push-to-main or release run is never cancelled
 # mid-flight. Pattern: https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency
