@@ -58,6 +58,20 @@ describe('getPostgresStorageConfig', () => {
     ).toThrow('VARLENS_PG_QUERY_TIMEOUT_MS')
   })
 
+  it.each([
+    ['VARLENS_PG_QUERY_TIMEOUT_MS', '1.5'],
+    ['VARLENS_PG_QUERY_TIMEOUT_MS', '10ms'],
+    ['VARLENS_PG_QUERY_TIMEOUT_MS', '1e3'],
+    ['VARLENS_PG_POOL_MAX', '2.5']
+  ])('rejects malformed integer env values for %s=%s', (envName, value) => {
+    expect(() =>
+      getPostgresStorageConfig({
+        VARLENS_PG_URL: 'postgres://varlens:secret@127.0.0.1:55432/varlens_dev',
+        [envName]: value
+      })
+    ).toThrow(envName)
+  })
+
   it('rejects pool sizes smaller than 1', () => {
     expect(() =>
       getPostgresStorageConfig({
@@ -112,5 +126,14 @@ describe('buildPostgresPoolConfig', () => {
     expect(buildPostgresPoolConfig(config!)).toMatchObject({
       ssl: expect.any(Object)
     })
+  })
+
+  it('rejects ssl mode prefer until fallback semantics are implemented correctly', () => {
+    const config = getPostgresStorageConfig({
+      VARLENS_PG_URL: 'postgres://varlens:secret@127.0.0.1:55432/varlens_dev',
+      VARLENS_PG_SSL_MODE: 'prefer'
+    })
+
+    expect(() => buildPostgresPoolConfig(config!)).toThrow('VARLENS_PG_SSL_MODE=prefer')
   })
 })

@@ -26,6 +26,7 @@ const DEFAULT_PG_IDLE_IN_TX_TIMEOUT_MS = 10000
 const DEFAULT_PG_POOL_MAX = 4
 
 const URL_SSL_PARAMS = ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']
+const NON_NEGATIVE_INTEGER_PATTERN = /^\d+$/
 
 function parseNonNegativeInteger(
   value: string | undefined,
@@ -36,12 +37,12 @@ function parseNonNegativeInteger(
     return fallback
   }
 
-  const parsed = Number.parseInt(value, 10)
-  if (!Number.isInteger(parsed) || parsed < 0) {
+  const normalized = value.trim()
+  if (!NON_NEGATIVE_INTEGER_PATTERN.test(normalized)) {
     throw new Error(`${envName} must be a non-negative integer`)
   }
 
-  return parsed
+  return Number(normalized)
 }
 
 function assertNoManagedSslConflict(url: string): void {
@@ -151,6 +152,12 @@ export function buildPostgresConnectionLabel(redactedUrl: string, schema: string
 function buildPostgresSslConfig(sslMode: PostgresSslMode): PoolConfig['ssl'] {
   if (sslMode === 'disable') {
     return undefined
+  }
+
+  if (sslMode === 'prefer') {
+    throw new Error(
+      'VARLENS_PG_SSL_MODE=prefer is not supported in Phase 2 because pg does not provide safe fallback semantics through this config path'
+    )
   }
 
   return {
