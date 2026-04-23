@@ -40,6 +40,22 @@ describe('getPostgresStorageConfig', () => {
     ).toThrow('Invalid VARLENS_PG_SSL_MODE')
   })
 
+  it('rejects a malformed postgres url with a var-specific error', () => {
+    expect(() =>
+      getPostgresStorageConfig({
+        VARLENS_PG_URL: 'not a url'
+      })
+    ).toThrow('VARLENS_PG_URL')
+  })
+
+  it('rejects non-postgres url schemes early', () => {
+    expect(() =>
+      getPostgresStorageConfig({
+        VARLENS_PG_URL: 'https://example.com/not-postgres'
+      })
+    ).toThrow('VARLENS_PG_URL')
+  })
+
   it('rejects a blank schema after trimming', () => {
     expect(() =>
       getPostgresStorageConfig({
@@ -88,6 +104,14 @@ describe('redactPostgresConnectionUrl', () => {
       redactPostgresConnectionUrl('postgres://varlens:secret@127.0.0.1:55432/varlens_dev')
     ).toBe('postgres://127.0.0.1:55432/varlens_dev')
   })
+
+  it('removes query parameters from the redacted url', () => {
+    expect(
+      redactPostgresConnectionUrl(
+        'postgres://varlens:secret@127.0.0.1:55432/varlens_dev?application_name=foo&sslmode=require'
+      )
+    ).toBe('postgres://127.0.0.1:55432/varlens_dev')
+  })
 })
 
 describe('buildPostgresConnectionLabel', () => {
@@ -124,7 +148,9 @@ describe('buildPostgresPoolConfig', () => {
     })
 
     expect(buildPostgresPoolConfig(config!)).toMatchObject({
-      ssl: expect.any(Object)
+      ssl: {
+        rejectUnauthorized: true
+      }
     })
   })
 

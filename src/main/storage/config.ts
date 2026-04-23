@@ -28,6 +28,24 @@ const DEFAULT_PG_POOL_MAX = 4
 const URL_SSL_PARAMS = ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']
 const NON_NEGATIVE_INTEGER_PATTERN = /^\d+$/
 
+function parsePostgresUrl(url: string): URL {
+  let parsed: URL
+
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error(
+      'VARLENS_PG_URL must be a valid PostgreSQL connection URL (for example, postgres://user:password@host:5432/database or postgresql://user:password@host:5432/database)'
+    )
+  }
+
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
+    throw new Error('VARLENS_PG_URL must use the postgres: or postgresql: scheme')
+  }
+
+  return parsed
+}
+
 function parseNonNegativeInteger(
   value: string | undefined,
   envName: string,
@@ -46,7 +64,7 @@ function parseNonNegativeInteger(
 }
 
 function assertNoManagedSslConflict(url: string): void {
-  const parsed = new URL(url)
+  const parsed = parsePostgresUrl(url)
 
   for (const param of URL_SSL_PARAMS) {
     if (parsed.searchParams.has(param)) {
@@ -135,9 +153,10 @@ export function getPostgresStorageConfig(
 }
 
 export function redactPostgresConnectionUrl(url: string): string {
-  const parsed = new URL(url)
+  const parsed = parsePostgresUrl(url)
   parsed.username = ''
   parsed.password = ''
+  parsed.search = ''
   return parsed.toString()
 }
 
@@ -161,7 +180,7 @@ function buildPostgresSslConfig(sslMode: PostgresSslMode): PoolConfig['ssl'] {
   }
 
   return {
-    rejectUnauthorized: false
+    rejectUnauthorized: true
   }
 }
 
