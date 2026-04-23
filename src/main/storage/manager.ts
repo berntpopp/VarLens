@@ -5,7 +5,7 @@ export interface StorageManager {
   createSqlite(path: string, key?: string): Promise<void>
   switchToSqlite(path: string, key?: string): Promise<void>
   detectSqliteEncryption(path: string): { needsPassword: boolean }
-  getCurrent(): StorageSession
+  getCurrentSession(): StorageSession
   getCurrentPath(): string | null
   close(): Promise<void>
 }

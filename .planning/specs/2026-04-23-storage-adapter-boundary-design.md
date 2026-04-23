@@ -21,8 +21,8 @@ This is a more honest design for the current codebase and a safer path to an exp
 
 The previous draft assumed a low-level `StorageAdapter` could isolate SQLite specifics while leaving most repository code structurally intact. That does not match the current codebase:
 
-- [`DatabaseService`](</home/bernt-popp/development/VarLens/src/main/database/DatabaseService.ts:43>) is already the SQLite runtime. It opens the connection, applies PRAGMAs, initializes schema, runs migrations, builds repositories, and exposes the raw handle.
-- [`BaseRepository`](</home/bernt-popp/development/VarLens/src/main/database/BaseRepository.ts:13>) compiles Kysely SQL but executes directly through `better-sqlite3`.
+- [`DatabaseService`](<../../src/main/database/DatabaseService.ts>) is already the SQLite runtime. It opens the connection, applies PRAGMAs, initializes schema, runs migrations, builds repositories, and exposes the raw handle.
+- [`BaseRepository`](<../../src/main/database/BaseRepository.ts>) compiles Kysely SQL but executes directly through `better-sqlite3`.
 - Repositories and services depend on SQLite semantics such as `db.transaction(...)`, `db.exec(...)`, `lastInsertRowid`, `changes`, PRAGMAs, FTS5, and `sqlite_master`.
 - Workers open SQLite databases by file path and encryption key. That architecture is explicitly file-backed.
 
@@ -50,11 +50,11 @@ Because of that, a low-level “portable adapter” below the repositories is th
 
 The storage lifecycle today is built around these layers:
 
-- [`DatabaseManager`](</home/bernt-popp/development/VarLens/src/main/services/DatabaseManager.ts:20>) owns the current open database and file-based switching.
-- [`DatabaseService`](</home/bernt-popp/development/VarLens/src/main/database/DatabaseService.ts:43>) owns the SQLite runtime.
-- [`createRepositories`](</home/bernt-popp/development/VarLens/src/main/database/createRepositories.ts:28>) centralizes repository assembly.
-- [`DbPool`](</home/bernt-popp/development/VarLens/src/main/database/DbPool.ts:33>) and [`db-worker`](</home/bernt-popp/development/VarLens/src/main/workers/db-worker.ts:1>) provide SQLite-specific read offloading.
-- write-side workers such as [`import-worker.ts`](</home/bernt-popp/development/VarLens/src/main/workers/import-worker.ts:1>) and [`worker-db.ts`](</home/bernt-popp/development/VarLens/src/main/workers/worker-db.ts:1>) also assume a local SQLite file.
+- [`DatabaseManager`](<../../src/main/services/DatabaseManager.ts>) owns the current open database and file-based switching.
+- [`DatabaseService`](<../../src/main/database/DatabaseService.ts>) owns the SQLite runtime.
+- [`createRepositories`](<../../src/main/database/createRepositories.ts>) centralizes repository assembly.
+- [`DbPool`](<../../src/main/database/DbPool.ts>) and [`db-worker`](<../../src/main/workers/db-worker.ts>) provide SQLite-specific read offloading.
+- write-side workers such as [`import-worker.ts`](<../../src/main/workers/import-worker.ts>) and [`worker-db.ts`](<../../src/main/workers/worker-db.ts>) also assume a local SQLite file.
 
 The design must fit that shape rather than attempting to bypass it.
 
@@ -131,7 +131,7 @@ export interface StorageManager {
   createSqlite(path: string, key?: string): Promise<void>
   switchToSqlite(path: string, key?: string): Promise<void>
   detectSqliteEncryption(path: string): { needsPassword: boolean }
-  getCurrent(): StorageSession
+  getCurrentSession(): StorageSession
   getCurrentPath(): string | null
   close(): Promise<void>
 }
@@ -139,7 +139,7 @@ export interface StorageManager {
 
 Compatibility rule:
 
-- Existing code that still expects `DatabaseService` can continue to work through a compatibility getter such as `getCurrent().getDatabaseService()`.
+- Existing code that still expects `DatabaseService` can continue to work through a compatibility getter such as `getCurrentSession().getDatabaseService()`.
 - Existing file-based UX remains intact in the SQLite path.
 
 ## Shared types
@@ -335,4 +335,4 @@ This design is satisfied when:
 
 ## Relationship to the plan
 
-The implementation plan at [2026-04-23-storage-adapter-phase-1-scaffold-plan.md](/home/bernt-popp/development/VarLens/.planning/plans/2026-04-23-storage-adapter-phase-1-scaffold-plan.md) is the execution document for Phase 1 of this design.
+The implementation plan at [2026-04-23-storage-adapter-phase-1-scaffold-plan.md](../plans/2026-04-23-storage-adapter-phase-1-scaffold-plan.md) is the execution document for Phase 1 of this design.

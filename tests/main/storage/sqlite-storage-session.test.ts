@@ -35,4 +35,22 @@ describe('SqliteStorageSession', () => {
 
     await session.close()
   })
+
+  it('returns a failed health result when the underlying database handle is closed', async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'varlens-storage-session-'))
+    const dbPath = join(tempDir, 'session.db')
+    const db = new DatabaseService(dbPath)
+
+    const session = new SqliteStorageSession({
+      databaseService: db,
+      dbPool: null
+    })
+
+    db.close()
+
+    await expect(session.health()).resolves.toMatchObject({
+      ok: false,
+      backend: 'sqlite'
+    })
+  })
 })

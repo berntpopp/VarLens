@@ -42,9 +42,9 @@ export class DatabaseManager {
    * @throws DatabaseError if database cannot be opened
    */
   async open(dbPath: string, key?: string): Promise<void> {
-    await this.close()
-
     try {
+      await this.close()
+
       const newSession = this.createSqliteSession(dbPath, key)
       this.currentSession = newSession
       this.recentDatabases.addRecent(dbPath)
@@ -120,9 +120,9 @@ export class DatabaseManager {
    * @throws DatabaseError if database cannot be created
    */
   async createDatabase(dbPath: string, key?: string): Promise<void> {
-    await this.close()
-
     try {
+      await this.close()
+
       const newSession = this.createSqliteSession(dbPath, key)
       this.currentSession = newSession
       this.recentDatabases.addRecent(dbPath)
@@ -151,22 +151,41 @@ export class DatabaseManager {
    */
   async switchDatabase(newPath: string, key?: string): Promise<void> {
     const previousSession = this.currentSession
+    let newSession: StorageSession | null = null
 
     try {
-      this.currentSession = null
-      const newSession = this.createSqliteSession(newPath, key)
-
-      if (previousSession !== null) {
-        await previousSession.close()
-      }
-
+      newSession = this.createSqliteSession(newPath, key)
       this.currentSession = newSession
       this.recentDatabases.addRecent(newPath)
+
+      if (previousSession !== null) {
+        try {
+          await previousSession.close()
+        } catch (error) {
+          mainLogger.warn(
+            'Failed to close previous session during database switch: ' +
+              (error instanceof Error ? error.message : String(error)),
+            'DatabaseManager'
+          )
+        }
+      }
     } catch (error) {
       this.currentSession = previousSession
 
       if (error instanceof WrongPasswordError) {
         throw error
+      }
+
+      if (newSession !== null && newSession !== previousSession) {
+        try {
+          await newSession.close()
+        } catch (closeError) {
+          mainLogger.warn(
+            'Failed to close newly created session after switch failure: ' +
+              (closeError instanceof Error ? closeError.message : String(closeError)),
+            'DatabaseManager'
+          )
+        }
       }
 
       throw new DatabaseError(

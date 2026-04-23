@@ -68,12 +68,22 @@ export class SqliteStorageSession implements StorageSession {
 
   async health(): Promise<StorageHealth> {
     const startedAt = Date.now()
-    this.databaseService.database.prepare('SELECT 1').get()
 
-    return {
-      ok: true,
-      backend: 'sqlite',
-      roundTripMs: Date.now() - startedAt
+    try {
+      this.databaseService.database.prepare('SELECT 1').get()
+
+      return {
+        ok: true,
+        backend: 'sqlite',
+        roundTripMs: Date.now() - startedAt
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        backend: 'sqlite',
+        message: error instanceof Error ? error.message : String(error),
+        roundTripMs: Date.now() - startedAt
+      }
     }
   }
 }
