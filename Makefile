@@ -1,4 +1,4 @@
-.PHONY: help rebuild dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots
+.PHONY: help rebuild dev build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots pg-up pg-down pg-logs pg-psql pg-reset
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -213,6 +213,25 @@ docs-preview: ## Preview built documentation site
 
 docs-screenshots: rebuild build ## Generate documentation screenshots from Electron app
 	npm run docs:screenshots
+
+#---------------------------------------------------------------------------
+# PostgreSQL Development
+#---------------------------------------------------------------------------
+
+pg-up: ## Start local PostgreSQL dev container
+	docker compose -f docker-compose.postgres.yml --env-file .env.postgres.local up -d
+
+pg-down: ## Stop local PostgreSQL dev container
+	docker compose -f docker-compose.postgres.yml --env-file .env.postgres.local down
+
+pg-logs: ## Tail local PostgreSQL dev container logs
+	docker compose -f docker-compose.postgres.yml --env-file .env.postgres.local logs -f postgres
+
+pg-psql: ## Open psql in the local PostgreSQL dev container
+	docker compose -f docker-compose.postgres.yml --env-file .env.postgres.local exec postgres sh -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+
+pg-reset: ## Destroy local PostgreSQL dev container and volume
+	docker compose -f docker-compose.postgres.yml --env-file .env.postgres.local down -v
 
 #---------------------------------------------------------------------------
 # Setup & Cleanup
