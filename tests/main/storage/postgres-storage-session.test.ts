@@ -197,4 +197,28 @@ describe('PostgresStorageSession', () => {
       total_count: 1
     })
   })
+
+  it('routes cases:availableBuilds through the session-owned postgres read executor', async () => {
+    const pool = {
+      query: vi.fn().mockResolvedValue({
+        rows: [{ build: 'GRCh38', case_count: 2 }]
+      }),
+      end: vi.fn().mockResolvedValue(undefined),
+      on: vi.fn()
+    }
+    const session = new PostgresStorageSession({
+      config: makeConfig({ schema: 'phase5_cases' }),
+      pool: pool as never
+    })
+
+    await expect(
+      session.getReadExecutor().execute({
+        type: 'cases:availableBuilds',
+        params: []
+      })
+    ).resolves.toEqual([{ build: 'GRCh38', caseCount: 2 }])
+
+    expect(pool.query).toHaveBeenCalledTimes(1)
+    expect(pool.query.mock.calls[0][0]).toContain('"phase5_cases"."cases"')
+  })
 })

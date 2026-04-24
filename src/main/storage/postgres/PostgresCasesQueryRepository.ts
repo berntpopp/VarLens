@@ -2,10 +2,7 @@ import type { Pool } from 'pg'
 
 import type { CaseWithCohorts, PaginatedResult } from '../../../shared/types/database'
 import type { ValidatedCaseSearchParams } from '../../../shared/types/ipc-schemas'
-
-function quoteIdentifier(identifier: string): string {
-  return `"${identifier.split('"').join('""')}"`
-}
+import { quoteIdentifier } from './identifiers'
 
 export class PostgresCasesQueryRepository {
   constructor(

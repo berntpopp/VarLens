@@ -4,6 +4,7 @@ import { mainLogger } from '../../services/MainLogger'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
 import type { Case } from '../../../shared/types/database'
+import { PostgresAvailableBuildsRepository } from './PostgresAvailableBuildsRepository'
 import { PostgresCaseListRepository } from './PostgresCaseListRepository'
 import { PostgresCasesQueryRepository } from './PostgresCasesQueryRepository'
 import { PostgresReadExecutor } from './PostgresReadExecutor'
@@ -50,9 +51,10 @@ export class PostgresStorageSession implements StorageSession {
 
   constructor(options: PostgresStorageSessionOptions) {
     this.pool = options.pool
-    this.readExecutor = new PostgresReadExecutor(
-      new PostgresCasesQueryRepository(options.pool, options.config.schema)
-    )
+    this.readExecutor = new PostgresReadExecutor({
+      casesQuery: new PostgresCasesQueryRepository(options.pool, options.config.schema),
+      availableBuilds: new PostgresAvailableBuildsRepository(options.pool, options.config.schema)
+    })
     this.createCaseListRepository =
       options.createCaseListRepository ??
       ((pool: Pool, schema: string) => new PostgresCaseListRepository(pool, schema))
