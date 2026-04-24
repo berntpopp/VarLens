@@ -1,7 +1,11 @@
 import { describe, expectTypeOf, it } from 'vitest'
 
 import type { ValidatedCaseSearchParams } from '../../../src/shared/types/ipc-schemas'
-import type { StorageReadExecutor, StorageReadTask } from '../../../src/main/storage/read-executor'
+import type {
+  AvailableBuild,
+  StorageReadExecutor,
+  StorageReadTask
+} from '../../../src/main/storage/read-executor'
 
 describe('StorageReadExecutor contract', () => {
   it('accepts the narrow Phase 4 cases:query task union', () => {
@@ -18,6 +22,17 @@ describe('StorageReadExecutor contract', () => {
     } satisfies StorageReadTask
 
     expectTypeOf(queryTask).toMatchTypeOf<StorageReadTask>()
+    expectTypeOf<StorageReadExecutor['execute']>().returns.toEqualTypeOf<Promise<unknown>>()
+  })
+
+  it('supports cases:availableBuilds as a typed read task', () => {
+    const task = {
+      type: 'cases:availableBuilds',
+      params: []
+    } satisfies StorageReadTask
+
+    expectTypeOf(task.params).toEqualTypeOf<[]>()
+    expectTypeOf<AvailableBuild>().toEqualTypeOf<{ build: string; caseCount: number }>()
     expectTypeOf<StorageReadExecutor['execute']>().returns.toEqualTypeOf<Promise<unknown>>()
   })
 })

@@ -19,6 +19,16 @@ export class SqliteReadExecutor implements StorageReadExecutor {
         }
 
         return this.databaseService.cases.queryCases(task.params)
+
+      case 'cases:availableBuilds':
+        if (this.dbPool !== null) {
+          return await this.dbPool.run({
+            type: 'cases:availableBuilds',
+            params: []
+          })
+        }
+
+        return this.databaseService.cases.getAvailableGenomeBuilds()
     }
   }
 }
