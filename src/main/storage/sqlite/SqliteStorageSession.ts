@@ -1,5 +1,6 @@
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
+import type { Case } from '../../../shared/types/database'
 import type { StorageSession } from '../session'
 import type { StorageCapabilities, StorageHealth, WorkspaceRef } from '../types'
 
@@ -40,6 +41,14 @@ export class SqliteStorageSession implements StorageSession {
 
   getDatabaseService(): DatabaseService {
     return this.databaseService
+  }
+
+  async listCases(): Promise<Case[]> {
+    if (this.dbPool !== null) {
+      return (await this.dbPool.run({ type: 'cases:list', params: [] })) as Case[]
+    }
+
+    return this.databaseService.cases.getAllCases()
   }
 
   getDbPool(): DbPool | null {

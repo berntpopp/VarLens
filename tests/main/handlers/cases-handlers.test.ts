@@ -102,6 +102,58 @@ describe('cases IPC handlers', () => {
     })
   })
   /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  it('routes cases:list through the active storage session', async () => {
+    const listCases = vi.fn().mockResolvedValue([
+      {
+        id: 1,
+        name: 'Postgres Case',
+        file_path: '/tmp/postgres-case.vcf',
+        file_size: 123,
+        variant_count: 5,
+        created_at: 100,
+        genome_build: 'GRCh38'
+      }
+    ])
+
+    const currentSession = {
+      listCases
+    }
+
+    const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    const { registerCaseHandlers } = await import('../../../src/main/ipc/handlers/cases')
+
+    registerCaseHandlers({
+      ipcMain: ipcMain as never,
+      getDb: (() => {
+        throw new Error('getDb should not be called for cases:list')
+      }) as never,
+      getDbManager: (() => ({
+        getCurrentSession: () => currentSession
+      })) as never,
+      getDbPool: (() => {
+        throw new Error('getDbPool should not be called for cases:list')
+      }) as never
+    })
+
+    const handler = handlers.get('cases:list')
+    expect(handler).toBeTypeOf('function')
+
+    const result = await handler!()
+
+    expect(listCases).toHaveBeenCalledTimes(1)
+    expect(result).toEqual([
+      expect.objectContaining({
+        name: 'Postgres Case'
+      })
+    ])
+  })
 })
 
 describe('database:overview handler', () => {

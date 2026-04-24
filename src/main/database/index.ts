@@ -9,6 +9,7 @@ import { DatabaseManager } from '../services/DatabaseManager'
 import { RecentDatabasesService } from '../services/RecentDatabasesService'
 import { app } from 'electron'
 import { join } from 'path'
+import { openConfiguredDatabase } from './startup'
 
 // Singleton instance of DatabaseManager
 let databaseManager: DatabaseManager | null = null
@@ -28,9 +29,10 @@ export async function initDatabaseManager(): Promise<DatabaseManager> {
     const recentDatabases = new RecentDatabasesService(settingsPath)
     databaseManager = new DatabaseManager(recentDatabases)
 
-    // Open default database
-    const dbPath = join(app.getPath('userData'), 'varlens.db')
-    await databaseManager.open(dbPath)
+    await openConfiguredDatabase(databaseManager, {
+      env: process.env,
+      userDataPath: app.getPath('userData')
+    })
   }
   return databaseManager
 }

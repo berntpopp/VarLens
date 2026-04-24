@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS cases (
+  id BIGINT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  file_path TEXT NOT NULL,
+  file_size BIGINT NOT NULL,
+  variant_count BIGINT NOT NULL DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  genome_build TEXT NOT NULL DEFAULT 'GRCh38'
+);

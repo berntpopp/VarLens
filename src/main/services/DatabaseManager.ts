@@ -199,6 +199,11 @@ export class DatabaseManager {
     await this.switchDatabase(path, key)
   }
 
+  async openPostgresSession(session: StorageSession): Promise<void> {
+    await this.close()
+    this.currentSession = session
+  }
+
   /**
    * Close the current database
    *

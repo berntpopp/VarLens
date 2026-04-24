@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import type { Case } from '../../../src/shared/types/database'
 import type { PostgresStorageConfig } from '../../../src/main/storage/config'
 import { PostgresStorageSession } from '../../../src/main/storage/postgres/PostgresStorageSession'
 
@@ -111,5 +112,38 @@ describe('PostgresStorageSession', () => {
 
     await session.close()
     expect(pool.end).toHaveBeenCalledTimes(1)
+  })
+
+  it('delegates listCases to a repository created from the pool and schema', async () => {
+    const pool = {
+      query: vi.fn(),
+      end: vi.fn().mockResolvedValue(undefined),
+      on: vi.fn()
+    }
+    const expectedCases: Case[] = [
+      {
+        id: 1,
+        name: 'postgres-case',
+        file_path: '/postgres.vcf',
+        file_size: 1024,
+        variant_count: 2,
+        created_at: 1_000,
+        genome_build: 'GRCh38'
+      }
+    ]
+    const repository = {
+      listCases: vi.fn().mockResolvedValue(expectedCases)
+    }
+    const createCaseListRepository = vi.fn().mockReturnValue(repository)
+
+    const session = new PostgresStorageSession({
+      config: makeConfig({ schema: 'varlens_app' }),
+      pool: pool as never,
+      createCaseListRepository
+    })
+
+    await expect(session.listCases()).resolves.toEqual(expectedCases)
+    expect(createCaseListRepository).toHaveBeenCalledWith(pool, 'varlens_app')
+    expect(repository.listCases).toHaveBeenCalledTimes(1)
   })
 })

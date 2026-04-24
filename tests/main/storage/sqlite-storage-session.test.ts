@@ -53,4 +53,57 @@ describe('SqliteStorageSession', () => {
       backend: 'sqlite'
     })
   })
+
+  it('lists cases in descending created_at order from the database service', async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'varlens-storage-session-'))
+    const dbPath = join(tempDir, 'session.db')
+    const db = new DatabaseService(dbPath)
+
+    const olderCaseId = db.cases.createCase('older-case', '/older.vcf', 100)
+    const newerCaseId = db.cases.createCase('newer-case', '/newer.vcf', 200)
+
+    db.database.prepare('UPDATE cases SET created_at = ? WHERE id = ?').run(1_000, olderCaseId)
+    db.database.prepare('UPDATE cases SET created_at = ? WHERE id = ?').run(2_000, newerCaseId)
+
+    const session = new SqliteStorageSession({
+      databaseService: db,
+      dbPool: null
+    })
+
+    const cases = await session.listCases()
+
+    expect(cases.map((entry) => entry.name)).toEqual(['newer-case', 'older-case'])
+
+    await session.close()
+  })
+
+  it('uses the worker read pool for listCases when one is available', async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'varlens-storage-session-'))
+    const dbPath = join(tempDir, 'session.db')
+    const db = new DatabaseService(dbPath)
+    const pooledCases = [
+      {
+        id: 2,
+        name: 'pooled-case',
+        file_path: '/pooled.vcf',
+        file_size: 512,
+        variant_count: 4,
+        created_at: 2_000,
+        genome_build: 'GRCh38'
+      }
+    ]
+    const dbPool = {
+      run: async () => pooledCases,
+      destroy: async () => undefined
+    }
+
+    const session = new SqliteStorageSession({
+      databaseService: db,
+      dbPool: dbPool as never
+    })
+
+    await expect(session.listCases()).resolves.toEqual(pooledCases)
+
+    await session.close()
+  })
 })

@@ -3,6 +3,8 @@ import type { Pool } from 'pg'
 import { mainLogger } from '../../services/MainLogger'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
+import type { Case } from '../../../shared/types/database'
+import { PostgresCaseListRepository } from './PostgresCaseListRepository'
 import {
   buildPostgresConnectionLabel,
   redactPostgresConnectionUrl,
@@ -14,6 +16,7 @@ import type { StorageCapabilities, StorageHealth, WorkspaceRef } from '../types'
 interface PostgresStorageSessionOptions {
   config: PostgresStorageConfig
   pool: Pool
+  createCaseListRepository?: (pool: Pool, schema: string) => PostgresCaseListRepository
 }
 
 const POSTGRES_CAPABILITIES: StorageCapabilities = {
@@ -33,10 +36,18 @@ export class PostgresStorageSession implements StorageSession {
   readonly capabilities = POSTGRES_CAPABILITIES
   readonly workspace: WorkspaceRef
 
+  private readonly createCaseListRepository: (
+    pool: Pool,
+    schema: string
+  ) => PostgresCaseListRepository
   private readonly pool: Pool
+  private cases: PostgresCaseListRepository | null = null
 
   constructor(options: PostgresStorageSessionOptions) {
     this.pool = options.pool
+    this.createCaseListRepository =
+      options.createCaseListRepository ??
+      ((pool: Pool, schema: string) => new PostgresCaseListRepository(pool, schema))
 
     const connectionUrlRedacted = redactPostgresConnectionUrl(options.config.url)
 
@@ -51,6 +62,17 @@ export class PostgresStorageSession implements StorageSession {
       const message = error instanceof Error ? error.message : String(error)
       mainLogger.warn(`Postgres pool error: ${message}`, 'storage')
     })
+  }
+
+  async listCases(): Promise<Case[]> {
+    if (this.cases === null) {
+      this.cases = this.createCaseListRepository(
+        this.pool,
+        this.workspace.kind === 'postgres' ? this.workspace.schema : 'public'
+      )
+    }
+
+    return await this.cases.listCases()
   }
 
   getDatabaseService(): DatabaseService {

@@ -34,6 +34,10 @@ export const useDatabaseStore = defineStore('database', () => {
       currentPath.value = info.path
       currentName.value = info.name
       isEncrypted.value = info.encrypted
+    } else {
+      currentPath.value = null
+      currentName.value = ''
+      isEncrypted.value = false
     }
     await fetchRecent()
   }

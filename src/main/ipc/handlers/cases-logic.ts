@@ -10,6 +10,7 @@ import { resolve } from 'node:path'
 import { mainLogger } from '../../services/MainLogger'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
+import type { StorageSession } from '../../storage/session'
 import type { DeleteWorkerRequest, DeleteWorkerResponse } from '../../workers/delete-worker'
 import type { ValidatedCaseSearchParams } from '../../../shared/types/ipc-schemas'
 
@@ -77,16 +78,8 @@ export function runDeleteWorker(request: DeleteWorkerRequest): Promise<number> {
 /**
  * List all cases. Uses pool if available, otherwise direct db access.
  */
-export async function listCases(
-  getDb: () => DatabaseService,
-  getDbPool?: () => DbPool | null
-): Promise<unknown> {
-  const pool = getDbPool?.()
-  if (pool) {
-    return await pool.run({ type: 'cases:list', params: [] })
-  }
-  const db = getDb()
-  return db.cases.getAllCases()
+export async function listCases(getSession: () => StorageSession): Promise<unknown> {
+  return await getSession().listCases()
 }
 
 /**
