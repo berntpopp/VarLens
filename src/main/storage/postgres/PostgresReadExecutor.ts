@@ -18,5 +18,8 @@ export class PostgresReadExecutor implements StorageReadExecutor {
       case 'cases:availableBuilds':
         return await this.repositories.availableBuilds.getAvailableGenomeBuilds()
     }
+
+    const _exhaustive: never = task
+    throw new Error(`Unhandled read task: ${JSON.stringify(_exhaustive)}`)
   }
 }

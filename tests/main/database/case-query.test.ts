@@ -27,6 +27,27 @@ describe('CaseRepository.queryCases', () => {
     return result.lastInsertRowid as number
   }
 
+  /** Insert a case with an explicit genome build value, including null. */
+  const insertCaseWithBuild = (
+    name: string,
+    genomeBuild: string | null,
+    variantCount = 0,
+    createdAt?: number
+  ): number => {
+    const stmt = db.prepare(
+      'INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    const result = stmt.run(
+      name,
+      `/test/${name}.json`,
+      1000,
+      variantCount,
+      createdAt ?? Date.now(),
+      genomeBuild
+    )
+    return result.lastInsertRowid as number
+  }
+
   /** Insert case_metadata for a case */
   const insertMetadata = (
     caseId: number,
@@ -221,6 +242,19 @@ describe('CaseRepository.queryCases', () => {
 
       const result = caseRepo.queryCases({ limit: 50 })
       expect(result.total_count).toBe(5)
+    })
+  })
+
+  describe('available genome builds', () => {
+    it('merges null genome_build rows into the GRCh38 bucket before counting', () => {
+      insertCaseWithBuild('GRCh38 Case', 'GRCh38')
+      insertCaseWithBuild('Legacy Null Case', null)
+      insertCaseWithBuild('GRCh37 Case', 'GRCh37')
+
+      expect(caseRepo.getAvailableGenomeBuilds()).toEqual([
+        { build: 'GRCh38', caseCount: 2 },
+        { build: 'GRCh37', caseCount: 1 }
+      ])
     })
   })
 

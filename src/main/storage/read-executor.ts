@@ -1,9 +1,6 @@
 import type { ValidatedCaseSearchParams } from '../../shared/types/ipc-schemas'
 
-export interface AvailableBuild {
-  build: string
-  caseCount: number
-}
+export type { AvailableBuild } from '../../shared/types/database'
 
 export type StorageReadTask =
   | {

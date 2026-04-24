@@ -6,19 +6,19 @@ describe('PostgresAvailableBuildsRepository', () => {
   it('returns available genome builds with numeric counts and null-build fallback', async () => {
     const query = vi.fn().mockResolvedValue({
       rows: [
-        { build: 'GRCh38', case_count: '3' },
-        { build: null, case_count: 1 }
+        { build: 'GRCh38', case_count: '4' },
+        { build: 'GRCh37', case_count: 1 }
       ]
     })
     const repository = new PostgresAvailableBuildsRepository({ query } as never, 'public')
 
     await expect(repository.getAvailableGenomeBuilds()).resolves.toEqual([
-      { build: 'GRCh38', caseCount: 3 },
-      { build: 'GRCh38', caseCount: 1 }
+      { build: 'GRCh38', caseCount: 4 },
+      { build: 'GRCh37', caseCount: 1 }
     ])
   })
 
-  it('quotes the configured schema and groups by the stored genome build', async () => {
+  it('quotes the configured schema and groups by the normalized genome build', async () => {
     const query = vi.fn().mockResolvedValue({
       rows: [{ build: 'GRCh38', case_count: 1 }]
     })
@@ -29,7 +29,8 @@ describe('PostgresAvailableBuildsRepository', () => {
     expect(query).toHaveBeenCalledTimes(1)
     const sql = query.mock.calls[0][0] as string
     expect(sql).toContain('"tenant""schema"."cases"')
-    expect(sql).toContain('GROUP BY genome_build')
+    expect(sql).toContain("COALESCE(genome_build, 'GRCh38') AS build")
+    expect(sql).toContain('GROUP BY 1')
     expect(sql).toContain('ORDER BY case_count DESC')
   })
 })

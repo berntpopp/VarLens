@@ -19,14 +19,29 @@ import { DATABASE_CONFIG } from '../../shared/config'
 // Use require() to load piscina — avoids Vite's static import analysis
 // which cannot resolve Node.js-only modules during test transforms
 
-let PiscinaClass: (new (opts: Record<string, unknown>) => PiscinaInstance) | null = null
-
 interface PiscinaInstance {
   run: (task: DbTask) => Promise<unknown>
   destroy: () => Promise<void>
 }
 
-function getPiscina(): new (opts: Record<string, unknown>) => PiscinaInstance {
+interface DbPoolInitOptions {
+  filename: string
+  minThreads: number
+  maxThreads: number
+  idleTimeout: number
+  workerData: {
+    dbPath: string
+    encryptionKey?: string
+    geneRefDbPath?: string
+  }
+  execArgv?: string[]
+}
+
+type PiscinaConstructor = new (opts: DbPoolInitOptions) => PiscinaInstance
+
+let PiscinaClass: PiscinaConstructor | null = null
+
+function getPiscina(): PiscinaConstructor {
   if (PiscinaClass === null) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     PiscinaClass = require('piscina') as typeof PiscinaClass
@@ -36,6 +51,7 @@ function getPiscina(): new (opts: Record<string, unknown>) => PiscinaInstance {
 
 export class DbPool {
   private pool: PiscinaInstance | null = null
+  private initOptions: DbPoolInitOptions | null = null
 
   /**
    * Initialise the worker pool.
@@ -55,34 +71,39 @@ export class DbPool {
       geneRefDbPath?: string
     }
   ): void {
-    if (this.pool !== null) return // already initialised
+    if (this.initOptions !== null) return // already initialised
 
     const filename = options?.workerPath ?? resolve(__dirname, 'db-worker.js')
-    const Piscina = getPiscina()
     const maxThreads = options?.maxThreads ?? Math.max(1, os.cpus().length - 1)
 
-    this.pool = new Piscina({
+    this.initOptions = {
       filename,
       minThreads: 1,
       maxThreads,
       idleTimeout: DATABASE_CONFIG.WORKER_IDLE_TIMEOUT_MS,
       workerData: { dbPath, encryptionKey, geneRefDbPath: options?.geneRefDbPath },
       ...(options?.execArgv !== undefined ? { execArgv: options.execArgv } : {})
-    })
+    }
   }
 
   /**
    * Check whether the pool has been initialised.
    */
   isInitialised(): boolean {
-    return this.pool !== null
+    return this.initOptions !== null
   }
 
   /**
    * Dispatch a read-only task to the pool.
    */
   async run<T>(task: DbTask): Promise<T> {
-    if (this.pool === null) throw new Error('DbPool not initialized — call init() first')
+    if (this.initOptions === null) throw new Error('DbPool not initialized — call init() first')
+
+    if (this.pool === null) {
+      const Piscina = getPiscina()
+      this.pool = new Piscina(this.initOptions)
+    }
+
     return this.pool.run(task) as Promise<T>
   }
 
@@ -94,5 +115,7 @@ export class DbPool {
       await this.pool.destroy()
       this.pool = null
     }
+
+    this.initOptions = null
   }
 }

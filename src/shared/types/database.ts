@@ -32,6 +32,12 @@ export interface CaseSearchParams {
   _count_needed?: boolean
 }
 
+/** Genome build option returned by cases:availableBuilds. */
+export interface AvailableBuild {
+  build: string
+  caseCount: number
+}
+
 /**
  * Database entity types for Varlens
  *

@@ -1,5 +1,6 @@
 import { BaseRepository } from './BaseRepository'
 import type {
+  AvailableBuild,
   Case,
   CaseWithCohorts,
   CaseSearchParams,
@@ -108,15 +109,19 @@ export class CaseRepository extends BaseRepository {
    * Sorted so the most-represented build appears first — the renderer uses
    * the first entry as the default selection in the cohort view.
    */
-  getAvailableGenomeBuilds(): Array<{ build: string; caseCount: number }> {
-    const compiled = this.kysely
-      .selectFrom('cases')
-      .select(['genome_build as build'])
-      .select((eb) => eb.fn.countAll<number>().as('caseCount'))
-      .groupBy('genome_build')
-      .orderBy('caseCount', 'desc')
-      .compile()
-    const rows = this.db.prepare(compiled.sql).all(...compiled.parameters) as Array<{
+  getAvailableGenomeBuilds(): AvailableBuild[] {
+    const rows = this.db
+      .prepare(
+        `
+          SELECT
+            COALESCE(genome_build, 'GRCh38') AS build,
+            COUNT(*) AS caseCount
+          FROM cases
+          GROUP BY build
+          ORDER BY caseCount DESC
+        `
+      )
+      .all() as Array<{
       build: string | null
       caseCount: number
     }>

@@ -1,6 +1,6 @@
 import type { Pool } from 'pg'
 
-import type { AvailableBuild } from '../read-executor'
+import type { AvailableBuild } from '../../../shared/types/database'
 import { quoteIdentifier } from './identifiers'
 
 interface AvailableBuildRow {
@@ -18,10 +18,10 @@ export class PostgresAvailableBuildsRepository {
     const schemaName = quoteIdentifier(this.schema)
     const query = `
       SELECT
-        genome_build AS build,
+        COALESCE(genome_build, 'GRCh38') AS build,
         COUNT(*)::int AS case_count
       FROM ${schemaName}."cases"
-      GROUP BY genome_build
+      GROUP BY 1
       ORDER BY case_count DESC
     `
 

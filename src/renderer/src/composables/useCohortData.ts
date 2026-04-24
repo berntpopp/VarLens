@@ -20,16 +20,11 @@ import type { Ref, ShallowRef, InjectionKey } from 'vue'
 import type { CohortVariant, CohortSummary } from '../../../shared/types/cohort'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { ColumnFiltersParam } from '../../../shared/types/column-filters'
+import type { AvailableBuild } from '../../../shared/types/database'
 import { useApiService } from './useApiService'
 import { cloneForIpc } from '../utils/cloneForIpc'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
-
-/** A single entry in the available genome builds list returned by cases:availableBuilds */
-export interface AvailableBuild {
-  build: string
-  caseCount: number
-}
 
 /**
  * Query parameters for cohort variant fetching

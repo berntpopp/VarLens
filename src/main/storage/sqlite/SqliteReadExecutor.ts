@@ -30,5 +30,8 @@ export class SqliteReadExecutor implements StorageReadExecutor {
 
         return this.databaseService.cases.getAvailableGenomeBuilds()
     }
+
+    const _exhaustive: never = task
+    throw new Error(`Unhandled read task: ${JSON.stringify(_exhaustive)}`)
   }
 }

@@ -9,9 +9,10 @@ import { Worker } from 'worker_threads'
 import { resolve } from 'node:path'
 import { mainLogger } from '../../services/MainLogger'
 import type { DatabaseService } from '../../database/DatabaseService'
-import type { AvailableBuild, StorageReadTask } from '../../storage/read-executor'
+import type { StorageReadTask } from '../../storage/read-executor'
 import type { StorageSession } from '../../storage/session'
 import type { DeleteWorkerRequest, DeleteWorkerResponse } from '../../workers/delete-worker'
+import type { AvailableBuild } from '../../../shared/types/database'
 import type { ValidatedCaseSearchParams } from '../../../shared/types/ipc-schemas'
 
 /** Callbacks for emitting events to the renderer during delete operations. */
