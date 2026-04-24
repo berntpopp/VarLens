@@ -48,9 +48,20 @@ export async function openConfiguredDatabase(
         new PostgresStorageSession({ config: pgConfig, pool }))
 
     const pool = poolFactory(config)
-    const session = sessionFactory(config, pool)
-    await manager.openPostgresSession(session)
-    return
+    let session: StorageSession | undefined
+
+    try {
+      session = sessionFactory(config, pool)
+      await manager.openPostgresSession(session)
+      return
+    } catch (error) {
+      if (session !== undefined) {
+        await session.close()
+      } else {
+        await pool.end()
+      }
+      throw error
+    }
   }
 
   await manager.open(join(options.userDataPath, 'varlens.db'))

@@ -83,4 +83,22 @@ describe('DatabaseManager storage-session compatibility', () => {
 
     await manager.close()
   })
+
+  it('rejects sqlite-backed sessions passed to openPostgresSession', async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'varlens-storage-manager-'))
+    const settingsPath = join(tempDir, 'settings.json')
+    const dbPath = join(tempDir, 'test.db')
+    const manager = new DatabaseManager(new RecentDatabasesService(settingsPath))
+
+    await manager.open(dbPath)
+    const sqliteSession = manager.getCurrentSession()
+
+    await expect(manager.openPostgresSession(sqliteSession)).rejects.toThrow(
+      'openPostgresSession requires a postgres-backed session'
+    )
+
+    expect(manager.getCurrentSession()).toBe(sqliteSession)
+
+    await manager.close()
+  })
 })

@@ -76,7 +76,10 @@ export function runDeleteWorker(request: DeleteWorkerRequest): Promise<number> {
 }
 
 /**
- * List all cases. Uses pool if available, otherwise direct db access.
+ * List all cases through the active storage session.
+ *
+ * Backend-specific dispatch lives at the session layer so SQLite and PostgreSQL
+ * can implement the slice differently without changing the IPC surface.
  */
 export async function listCases(getSession: () => StorageSession): Promise<unknown> {
   return await getSession().listCases()
