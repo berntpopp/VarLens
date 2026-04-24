@@ -205,6 +205,46 @@ describe('cases IPC handlers', () => {
     })
   })
 
+  it('routes cases:availableBuilds through the active storage read executor', async () => {
+    const expected = [{ build: 'GRCh38', caseCount: 2 }]
+    const execute = vi.fn().mockResolvedValue(expected)
+    const currentSession = {
+      getReadExecutor: () => ({ execute })
+    }
+    const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    const { registerCaseHandlers } = await import('../../../src/main/ipc/handlers/cases')
+
+    registerCaseHandlers({
+      ipcMain: ipcMain as never,
+      getDb: (() => {
+        throw new Error('getDb should not be called for cases:availableBuilds')
+      }) as never,
+      getDbManager: (() => ({
+        getCurrentSession: () => currentSession
+      })) as never,
+      getDbPool: (() => {
+        throw new Error('getDbPool should not be called for cases:availableBuilds')
+      }) as never
+    })
+
+    const handler = handlers.get('cases:availableBuilds')
+    expect(handler).toBeTypeOf('function')
+
+    const result = await handler!()
+
+    expect(result).toBe(expected)
+    expect(execute).toHaveBeenCalledWith({
+      type: 'cases:availableBuilds',
+      params: []
+    })
+  })
+
   it('rejects worker-backed case deletes for postgres sessions before sqlite access', async () => {
     const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
     const ipcMain = {

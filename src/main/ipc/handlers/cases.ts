@@ -37,18 +37,13 @@ function assertFileBackedWorkerWritesSupported(
  * Cases IPC handlers
  * Channels: cases:list, cases:query, cases:delete, cases:deleteAll, cases:deleteBatch
  */
-export function registerCaseHandlers({
-  ipcMain,
-  getDb,
-  getDbPool,
-  getDbManager
-}: HandlerDependencies): void {
+export function registerCaseHandlers({ ipcMain, getDb, getDbManager }: HandlerDependencies): void {
   ipcMain.handle('cases:list', async () => {
     return wrapHandler(() => listCases(() => getDbManager().getCurrentSession()))
   })
 
   ipcMain.handle('cases:availableBuilds', async () => {
-    return wrapHandler(() => getAvailableBuilds(getDb, getDbPool))
+    return wrapHandler(() => getAvailableBuilds(() => getDbManager().getCurrentSession()))
   })
 
   ipcMain.handle('cases:query', async (_event, params: unknown) => {
