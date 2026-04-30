@@ -187,7 +187,7 @@
     "vuedraggable": "^4.1.0",
     "vuetify": "^4.0.6",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-    "zod": "^4.4.0"
+    "zod": "^4.4.1"
   },
   "overrides": {
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
