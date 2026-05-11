@@ -172,7 +172,7 @@
     "electron-updater": "^6.8.3",
     "file-saver": "^2.0.5",
     "jstat": "^1.9.6",
-    "kysely": "^0.28.16",
+    "kysely": "^0.28.17",
     "markdown-it": "^14.1.0",
     "nanoid": "^5.1.9",
     "pdbe-molstar": "^3.12.0",
