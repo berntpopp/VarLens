@@ -109,7 +109,7 @@ function parseArgs(argv) {
   return options
 }
 
-function validateRoot(root, baselinePath) {
+function validateRoot(root) {
   try {
     if (!statSync(root).isDirectory()) {
       usageError(`--root must exist and be a directory: ${root}`)
@@ -128,7 +128,7 @@ function validateRoot(root, baselinePath) {
   }
 
   const hasRootMarker = ROOT_MARKERS.some((marker) => existsSync(resolve(root, marker)))
-  if (!hasRootMarker && !existsSync(baselinePath)) {
+  if (!hasRootMarker) {
     usageError(`Root does not look like a VarLens repository: ${root}`)
   }
 }
@@ -368,7 +368,7 @@ function printReport(options, comparison) {
 }
 
 const options = parseArgs(process.argv.slice(2))
-validateRoot(options.root, options.baseline)
+validateRoot(options.root)
 const current = buildCurrentInventory(options)
 
 if (options.printCurrentJson) {

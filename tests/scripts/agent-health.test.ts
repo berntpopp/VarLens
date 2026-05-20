@@ -16,9 +16,15 @@ type AgentHealthInventoryEntry = {
   reason: string
 }
 
-function createTempRepo(): string {
+function createTempRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'varlens-agent-health-'))
   tempRoots.push(root)
+  return root
+}
+
+function createTempRepo(): string {
+  const root = createTempRoot()
+  writeFileSync(join(root, 'package.json'), '{}\n', 'utf8')
   return root
 }
 
@@ -239,7 +245,7 @@ describe('check-agent-health', () => {
   })
 
   it('returns usage error when root does not exist', () => {
-    const root = createTempRepo()
+    const root = createTempRoot()
 
     const result = spawnSync(
       process.execPath,
@@ -263,7 +269,7 @@ describe('check-agent-health', () => {
   })
 
   it('returns usage error when root has no scan roots', () => {
-    const root = createTempRepo()
+    const root = createTempRoot()
 
     const result = runAgentCheck(root)
 
@@ -272,9 +278,10 @@ describe('check-agent-health', () => {
     expect(result.stderr).toContain('Root does not contain any scan roots')
   })
 
-  it('returns usage error when root has scan roots but no repository marker or baseline', () => {
-    const root = createTempRepo()
+  it('returns usage error when root has scan roots but no repository marker', () => {
+    const root = createTempRoot()
     writeLines(root, 'src/main/small.ts', 5)
+    writeJson(root, 'scripts/agent-health-baseline.json', { version: 1, files: [] })
 
     const result = spawnSync(
       process.execPath,
