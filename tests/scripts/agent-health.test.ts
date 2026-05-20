@@ -307,10 +307,10 @@ describe('check-agent-health', () => {
     ])
   })
 
-  it('prints valid committed baseline JSON for the real repository', () => {
+  it('prints valid current inventory JSON for the real repository', () => {
     const result = spawnSync(
       process.execPath,
-      [SCRIPT_PATH, '--print-current-json', '--baseline', 'scripts/agent-health-baseline.json'],
+      [SCRIPT_PATH, '--print-current-json'],
       {
         cwd: process.cwd(),
         encoding: 'utf8',
@@ -320,6 +320,7 @@ describe('check-agent-health', () => {
 
     expectNoSpawnError(result)
     expect(result.status).toBe(0)
+    expect(result.stderr).toBe('')
     const parsed = JSON.parse(result.stdout) as { version?: unknown; files?: unknown }
     expect(parsed.version).toBe(1)
     expect(Array.isArray(parsed.files)).toBe(true)
