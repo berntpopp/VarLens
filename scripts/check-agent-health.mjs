@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { relative, resolve, sep } from 'node:path'
 
 const VERSION = 1
@@ -108,6 +108,16 @@ function parseArgs(argv) {
   return options
 }
 
+function validateRoot(root) {
+  try {
+    if (!statSync(root).isDirectory()) {
+      usageError(`--root must exist and be a directory: ${root}`)
+    }
+  } catch {
+    usageError(`--root must exist and be a directory: ${root}`)
+  }
+}
+
 function toPosixPath(path) {
   return path.split(sep).join('/')
 }
@@ -210,6 +220,15 @@ function validateEntry(entry, index) {
   }
   if (entry.category !== 'source' && entry.category !== 'test') {
     throw new Error(`files[${index}].category must be "source" or "test"`)
+  }
+  if (
+    (entry.path.startsWith('src/') || entry.path.startsWith('scripts/')) &&
+    entry.category !== 'source'
+  ) {
+    throw new Error(`files[${index}].category must be "source" for ${entry.path}`)
+  }
+  if (entry.path.startsWith('tests/') && entry.category !== 'test') {
+    throw new Error(`files[${index}].category must be "test" for ${entry.path}`)
   }
   if (typeof entry.reason !== 'string') {
     throw new Error(`files[${index}].reason must be a string`)
@@ -334,6 +353,7 @@ function printReport(options, comparison) {
 }
 
 const options = parseArgs(process.argv.slice(2))
+validateRoot(options.root)
 const current = buildCurrentInventory(options)
 
 if (options.printCurrentJson) {

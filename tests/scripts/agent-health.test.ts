@@ -238,6 +238,54 @@ describe('check-agent-health', () => {
     expect(result.stderr).toContain('Failed to read baseline')
   })
 
+  it('returns usage error when root does not exist', () => {
+    const root = createTempRepo()
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        SCRIPT_PATH,
+        '--root',
+        join(root, 'missing-root'),
+        '--baseline',
+        'scripts/agent-health-baseline.json'
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: 10_000
+      }
+    )
+
+    expectNoSpawnError(result)
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('--root must exist and be a directory')
+  })
+
+  it('returns usage error when baseline path and category do not match', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/bad.ts', 11)
+    writeJson(root, 'scripts/agent-health-baseline.json', {
+      version: 1,
+      files: [
+        {
+          path: 'src/main/bad.ts',
+          lines: 11,
+          threshold: 10,
+          category: 'test',
+          reason: 'invalid category'
+        }
+      ]
+    })
+
+    const result = runAgentCheck(root)
+
+    expectNoSpawnError(result)
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('Invalid baseline')
+    expect(result.stderr).toContain('files[0].category must be "source" for src/main/bad.ts')
+  })
+
   it('can print the current oversized-file inventory as JSON', () => {
     const root = createTempRepo()
     writeLines(root, 'src/main/too-large.ts', 11)
