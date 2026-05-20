@@ -147,6 +147,7 @@ describe('check-agent-health', () => {
     writeLines(root, 'src/renderer/src/mocks/fixtures/variants.ts', 40)
     writeLines(root, 'src/generated/schema.ts', 40)
     writeLines(root, 'out/main/index.js', 40)
+    writeLines(root, 'tests/.cache/generated.ts', 40)
     writeLines(root, '.planning/artifacts/perf/result.ts', 40)
     writeJson(root, 'scripts/agent-health-baseline.json', { version: 1, files: [] })
 
@@ -156,6 +157,7 @@ describe('check-agent-health', () => {
     expect(result.stdout).toContain('Agent health check passed')
     expect(result.stdout).not.toContain('migrations.ts')
     expect(result.stdout).not.toContain('fixtures/variants.ts')
+    expect(result.stdout).not.toContain('tests/.cache/generated.ts')
   })
 
   it('returns usage error when the baseline is malformed', () => {
