@@ -106,7 +106,30 @@ describe('check-agent-health', () => {
     expect(result.stdout).toContain('13 -> 14')
   })
 
-  it('passes when a baseline source file is unchanged or smaller', () => {
+  it('passes when a baseline source file is unchanged', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/baseline.ts', 13)
+    writeJson(root, 'scripts/agent-health-baseline.json', {
+      version: 1,
+      files: [
+        {
+          path: 'src/main/baseline.ts',
+          lines: 13,
+          threshold: 10,
+          category: 'source',
+          reason: 'existing oversized source module'
+        }
+      ]
+    })
+
+    const result = runAgentCheck(root)
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('Existing oversized files unchanged or improved')
+    expect(result.stdout).toContain('13 -> 13')
+  })
+
+  it('passes when a baseline source file is smaller', () => {
     const root = createTempRepo()
     writeLines(root, 'src/main/baseline.ts', 12)
     writeJson(root, 'scripts/agent-health-baseline.json', {
