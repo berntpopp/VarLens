@@ -8,6 +8,14 @@ const SCRIPT_PATH = resolve(process.cwd(), 'scripts/check-agent-health.mjs')
 
 const tempRoots: string[] = []
 
+type AgentHealthInventoryEntry = {
+  path: string
+  lines: number
+  threshold: number
+  category: 'source' | 'test'
+  reason: string
+}
+
 function createTempRepo(): string {
   const root = mkdtempSync(join(tmpdir(), 'varlens-agent-health-'))
   tempRoots.push(root)
@@ -44,9 +52,36 @@ function runAgentCheck(root: string, extraArgs: string[] = []) {
     ],
     {
       cwd: root,
-      encoding: 'utf8'
+      encoding: 'utf8',
+      timeout: 10_000
     }
   )
+}
+
+function expectNoSpawnError(result: { error?: Error }): void {
+  expect(result.error).toBeUndefined()
+}
+
+function expectInventoryEntry(value: unknown): asserts value is AgentHealthInventoryEntry {
+  expect(value).toEqual(
+    expect.objectContaining({
+      path: expect.any(String),
+      lines: expect.any(Number),
+      threshold: expect.any(Number),
+      category: expect.stringMatching(/^(source|test)$/),
+      reason: expect.any(String)
+    })
+  )
+
+  const entry = value as AgentHealthInventoryEntry
+  expect(entry.path).not.toBe('')
+  expect(entry.path).not.toMatch(/^([A-Za-z]:)?[\\/]/)
+  expect(Number.isInteger(entry.lines)).toBe(true)
+  expect(entry.lines).toBeGreaterThan(0)
+  expect(Number.isInteger(entry.threshold)).toBe(true)
+  expect(entry.threshold).toBeGreaterThan(0)
+  expect(entry.lines).toBeGreaterThan(entry.threshold)
+  expect(entry.reason.trim()).not.toBe('')
 }
 
 afterEach(() => {
@@ -64,6 +99,7 @@ describe('check-agent-health', () => {
 
     const result = runAgentCheck(root)
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('Agent health check passed')
     expect(result.stdout).toContain('Source threshold: 10')
@@ -77,6 +113,7 @@ describe('check-agent-health', () => {
 
     const result = runAgentCheck(root)
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(1)
     expect(result.stdout).toContain('New oversized source files')
     expect(result.stdout).toContain('src/main/too-large.ts')
@@ -100,6 +137,7 @@ describe('check-agent-health', () => {
 
     const result = runAgentCheck(root)
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(1)
     expect(result.stdout).toContain('Baseline oversized files that grew')
     expect(result.stdout).toContain('src/main/baseline.ts')
@@ -124,6 +162,7 @@ describe('check-agent-health', () => {
 
     const result = runAgentCheck(root)
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('Existing oversized files unchanged or improved')
     expect(result.stdout).toContain('13 -> 13')
@@ -147,6 +186,7 @@ describe('check-agent-health', () => {
 
     const result = runAgentCheck(root)
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('Existing oversized files unchanged or improved')
     expect(result.stdout).toContain('13 -> 12')
@@ -159,6 +199,7 @@ describe('check-agent-health', () => {
 
     const result = runAgentCheck(root)
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('Oversized test files reported only')
     expect(result.stdout).toContain('tests/main/large.test.ts')
@@ -176,6 +217,7 @@ describe('check-agent-health', () => {
 
     const result = runAgentCheck(root)
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('Agent health check passed')
     expect(result.stdout).not.toContain('migrations.ts')
@@ -191,6 +233,7 @@ describe('check-agent-health', () => {
 
     const result = runAgentCheck(root)
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('Failed to read baseline')
   })
@@ -202,6 +245,7 @@ describe('check-agent-health', () => {
 
     const result = runAgentCheck(root, ['--print-current-json'])
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(0)
     const parsed = JSON.parse(result.stdout)
     expect(parsed.files).toEqual([
@@ -221,14 +265,23 @@ describe('check-agent-health', () => {
       [SCRIPT_PATH, '--print-current-json', '--baseline', 'scripts/agent-health-baseline.json'],
       {
         cwd: process.cwd(),
-        encoding: 'utf8'
+        encoding: 'utf8',
+        timeout: 30_000
       }
     )
 
+    expectNoSpawnError(result)
     expect(result.status).toBe(0)
-    const parsed = JSON.parse(result.stdout)
+    const parsed = JSON.parse(result.stdout) as { version?: unknown; files?: unknown }
     expect(parsed.version).toBe(1)
-    expect(parsed.files.some((entry: { path: string }) => entry.path === 'src/preload/index.ts')).toBe(
+    expect(Array.isArray(parsed.files)).toBe(true)
+
+    const files = parsed.files as unknown[]
+    for (const entry of files) {
+      expectInventoryEntry(entry)
+    }
+
+    expect(files.some((entry) => (entry as AgentHealthInventoryEntry).category === 'source')).toBe(
       true
     )
   })
