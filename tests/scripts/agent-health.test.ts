@@ -1,0 +1,210 @@
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+
+const SCRIPT_PATH = resolve(process.cwd(), 'scripts/check-agent-health.mjs')
+
+const tempRoots: string[] = []
+
+function createTempRepo(): string {
+  const root = mkdtempSync(join(tmpdir(), 'varlens-agent-health-'))
+  tempRoots.push(root)
+  return root
+}
+
+function writeLines(root: string, relativePath: string, lineCount: number): void {
+  const target = join(root, relativePath)
+  mkdirSync(dirname(target), { recursive: true })
+  const lines = Array.from({ length: lineCount }, (_, index) => `line ${index + 1}`)
+  writeFileSync(target, `${lines.join('\n')}\n`, 'utf8')
+}
+
+function writeJson(root: string, relativePath: string, value: unknown): void {
+  const target = join(root, relativePath)
+  mkdirSync(dirname(target), { recursive: true })
+  writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+function runAgentCheck(root: string, extraArgs: string[] = []) {
+  return spawnSync(
+    process.execPath,
+    [
+      SCRIPT_PATH,
+      '--root',
+      root,
+      '--baseline',
+      'scripts/agent-health-baseline.json',
+      '--source-threshold',
+      '10',
+      '--test-threshold',
+      '12',
+      ...extraArgs
+    ],
+    {
+      cwd: root,
+      encoding: 'utf8'
+    }
+  )
+}
+
+afterEach(() => {
+  for (const root of tempRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+describe('check-agent-health', () => {
+  it('passes when authored files stay under thresholds', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/small.ts', 5)
+    writeLines(root, 'scripts/small-tool.mjs', 6)
+    writeJson(root, 'scripts/agent-health-baseline.json', { version: 1, files: [] })
+
+    const result = runAgentCheck(root)
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('Agent health check passed')
+    expect(result.stdout).toContain('Source threshold: 10')
+    expect(result.stderr).toBe('')
+  })
+
+  it('fails when a new source file exceeds the threshold', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/too-large.ts', 11)
+    writeJson(root, 'scripts/agent-health-baseline.json', { version: 1, files: [] })
+
+    const result = runAgentCheck(root)
+
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain('New oversized source files')
+    expect(result.stdout).toContain('src/main/too-large.ts')
+  })
+
+  it('fails when a baseline source file grows', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/baseline.ts', 14)
+    writeJson(root, 'scripts/agent-health-baseline.json', {
+      version: 1,
+      files: [
+        {
+          path: 'src/main/baseline.ts',
+          lines: 13,
+          threshold: 10,
+          category: 'source',
+          reason: 'existing oversized source module'
+        }
+      ]
+    })
+
+    const result = runAgentCheck(root)
+
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain('Baseline oversized files that grew')
+    expect(result.stdout).toContain('src/main/baseline.ts')
+    expect(result.stdout).toContain('13 -> 14')
+  })
+
+  it('passes when a baseline source file is unchanged or smaller', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/baseline.ts', 12)
+    writeJson(root, 'scripts/agent-health-baseline.json', {
+      version: 1,
+      files: [
+        {
+          path: 'src/main/baseline.ts',
+          lines: 13,
+          threshold: 10,
+          category: 'source',
+          reason: 'existing oversized source module'
+        }
+      ]
+    })
+
+    const result = runAgentCheck(root)
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('Existing oversized files unchanged or improved')
+    expect(result.stdout).toContain('13 -> 12')
+  })
+
+  it('reports oversized tests without failing phase 1', () => {
+    const root = createTempRepo()
+    writeLines(root, 'tests/main/large.test.ts', 13)
+    writeJson(root, 'scripts/agent-health-baseline.json', { version: 1, files: [] })
+
+    const result = runAgentCheck(root)
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('Oversized test files reported only')
+    expect(result.stdout).toContain('tests/main/large.test.ts')
+  })
+
+  it('ignores generated, fixture, migration, build, and cache paths', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/database/migrations.ts', 40)
+    writeLines(root, 'src/renderer/src/mocks/fixtures/variants.ts', 40)
+    writeLines(root, 'src/generated/schema.ts', 40)
+    writeLines(root, 'out/main/index.js', 40)
+    writeLines(root, '.planning/artifacts/perf/result.ts', 40)
+    writeJson(root, 'scripts/agent-health-baseline.json', { version: 1, files: [] })
+
+    const result = runAgentCheck(root)
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('Agent health check passed')
+    expect(result.stdout).not.toContain('migrations.ts')
+    expect(result.stdout).not.toContain('fixtures/variants.ts')
+  })
+
+  it('returns usage error when the baseline is malformed', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/small.ts', 5)
+    mkdirSync(join(root, 'scripts'), { recursive: true })
+    writeFileSync(join(root, 'scripts/agent-health-baseline.json'), '{', 'utf8')
+
+    const result = runAgentCheck(root)
+
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('Failed to read baseline')
+  })
+
+  it('can print the current oversized-file inventory as JSON', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/too-large.ts', 11)
+    writeJson(root, 'scripts/agent-health-baseline.json', { version: 1, files: [] })
+
+    const result = runAgentCheck(root, ['--print-current-json'])
+
+    expect(result.status).toBe(0)
+    const parsed = JSON.parse(result.stdout)
+    expect(parsed.files).toEqual([
+      {
+        path: 'src/main/too-large.ts',
+        lines: 11,
+        threshold: 10,
+        category: 'source',
+        reason: 'current oversized source file'
+      }
+    ])
+  })
+
+  it('prints valid committed baseline JSON for the real repository', () => {
+    const result = spawnSync(
+      process.execPath,
+      [SCRIPT_PATH, '--print-current-json', '--baseline', 'scripts/agent-health-baseline.json'],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      }
+    )
+
+    expect(result.status).toBe(0)
+    const parsed = JSON.parse(result.stdout)
+    expect(parsed.version).toBe(1)
+    expect(parsed.files.some((entry: { path: string }) => entry.path === 'src/preload/index.ts')).toBe(
+      true
+    )
+  })
+})
