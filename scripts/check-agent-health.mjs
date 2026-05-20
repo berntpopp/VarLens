@@ -116,6 +116,15 @@ function validateRoot(root) {
   } catch {
     usageError(`--root must exist and be a directory: ${root}`)
   }
+
+  const hasScanRoot = SCAN_ROOTS.some((scanRoot) => {
+    const path = resolve(root, scanRoot)
+    return existsSync(path) && statSync(path).isDirectory()
+  })
+
+  if (!hasScanRoot) {
+    usageError(`Root does not contain any scan roots (${SCAN_ROOTS.join(', ')}): ${root}`)
+  }
 }
 
 function toPosixPath(path) {

@@ -262,6 +262,16 @@ describe('check-agent-health', () => {
     expect(result.stderr).toContain('--root must exist and be a directory')
   })
 
+  it('returns usage error when root has no scan roots', () => {
+    const root = createTempRepo()
+
+    const result = runAgentCheck(root)
+
+    expectNoSpawnError(result)
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('Root does not contain any scan roots')
+  })
+
   it('returns usage error when baseline path and category do not match', () => {
     const root = createTempRepo()
     writeLines(root, 'src/main/bad.ts', 11)
