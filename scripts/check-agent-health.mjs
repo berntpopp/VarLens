@@ -8,6 +8,7 @@ const SOURCE_THRESHOLD = 600
 const TEST_THRESHOLD = 800
 const DEFAULT_BASELINE = 'scripts/agent-health-baseline.json'
 const SCAN_ROOTS = ['src', 'scripts', 'tests']
+const ROOT_MARKERS = ['.git', 'package.json', 'Makefile', 'AGENTS.md']
 const AUTHORED_EXTENSIONS = new Set(['.js', '.mjs', '.ts', '.tsx', '.vue'])
 const IGNORED_NAMES = new Set([
   '.git',
@@ -108,7 +109,7 @@ function parseArgs(argv) {
   return options
 }
 
-function validateRoot(root) {
+function validateRoot(root, baselinePath) {
   try {
     if (!statSync(root).isDirectory()) {
       usageError(`--root must exist and be a directory: ${root}`)
@@ -124,6 +125,11 @@ function validateRoot(root) {
 
   if (!hasScanRoot) {
     usageError(`Root does not contain any scan roots (${SCAN_ROOTS.join(', ')}): ${root}`)
+  }
+
+  const hasRootMarker = ROOT_MARKERS.some((marker) => existsSync(resolve(root, marker)))
+  if (!hasRootMarker && !existsSync(baselinePath)) {
+    usageError(`Root does not look like a VarLens repository: ${root}`)
   }
 }
 
@@ -362,7 +368,7 @@ function printReport(options, comparison) {
 }
 
 const options = parseArgs(process.argv.slice(2))
-validateRoot(options.root)
+validateRoot(options.root, options.baseline)
 const current = buildCurrentInventory(options)
 
 if (options.printCurrentJson) {

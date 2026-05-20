@@ -272,6 +272,35 @@ describe('check-agent-health', () => {
     expect(result.stderr).toContain('Root does not contain any scan roots')
   })
 
+  it('returns usage error when root has scan roots but no repository marker or baseline', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/small.ts', 5)
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        SCRIPT_PATH,
+        '--root',
+        root,
+        '--baseline',
+        'scripts/agent-health-baseline.json',
+        '--source-threshold',
+        '10',
+        '--test-threshold',
+        '12'
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: 10_000
+      }
+    )
+
+    expectNoSpawnError(result)
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('Root does not look like a VarLens repository')
+  })
+
   it('returns usage error when baseline path and category do not match', () => {
     const root = createTempRepo()
     writeLines(root, 'src/main/bad.ts', 11)
