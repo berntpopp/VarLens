@@ -355,17 +355,17 @@ describe('check-agent-health', () => {
     expect(result.stderr).toContain('Root does not look like a VarLens repository')
   })
 
-  it('returns usage error when baseline path and category do not match', () => {
+  it('returns usage error when a source baseline path does not identify a source file', () => {
     const root = createTempRepo()
-    writeLines(root, 'src/main/bad.ts', 11)
+    writeLines(root, 'tests/main/bad.test.ts', 13)
     writeJson(root, 'scripts/agent-health-baseline.json', {
       version: 1,
       files: [
         {
-          path: 'src/main/bad.ts',
-          lines: 11,
-          threshold: 10,
-          category: 'test',
+          path: 'tests/main/bad.test.ts',
+          lines: 13,
+          threshold: 12,
+          category: 'source',
           reason: 'invalid category'
         }
       ]
@@ -376,7 +376,57 @@ describe('check-agent-health', () => {
     expectNoSpawnError(result)
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('Invalid baseline')
-    expect(result.stderr).toContain('files[0].category must be "source" for src/main/bad.ts')
+    expect(result.stderr).toContain('files[0].path must start with "src/" or "scripts/"')
+  })
+
+  it('returns usage error when a baseline path is not repo-relative POSIX', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/small.ts', 5)
+    writeJson(root, 'scripts/agent-health-baseline.json', {
+      version: 1,
+      files: [
+        {
+          path: '../outside.ts',
+          lines: 11,
+          threshold: 10,
+          category: 'source',
+          reason: 'invalid path'
+        }
+      ]
+    })
+
+    const result = runAgentCheck(root)
+
+    expectNoSpawnError(result)
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('Invalid baseline')
+    expect(result.stderr).toContain('files[0].path must be a normalized repo-relative POSIX path')
+  })
+
+  it('returns usage error when baseline contains test entries', () => {
+    const root = createTempRepo()
+    writeLines(root, 'tests/main/large.test.ts', 13)
+    writeJson(root, 'scripts/agent-health-baseline.json', {
+      version: 1,
+      files: [
+        {
+          path: 'tests/main/large.test.ts',
+          lines: 13,
+          threshold: 12,
+          category: 'test',
+          reason: 'test baselines are report-only'
+        }
+      ]
+    })
+
+    const result = runAgentCheck(root)
+
+    expectNoSpawnError(result)
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('Invalid baseline')
+    expect(result.stderr).toContain(
+      'files[0].category must be "source"; test files are report-only'
+    )
   })
 
   it('can print the current oversized-file inventory as JSON', () => {
@@ -418,9 +468,5 @@ describe('check-agent-health', () => {
     for (const entry of files) {
       expectInventoryEntry(entry)
     }
-
-    expect(files.some((entry) => (entry as AgentHealthInventoryEntry).category === 'source')).toBe(
-      true
-    )
   })
 })

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { relative, resolve, sep } from 'node:path'
+import { posix, relative, resolve, sep } from 'node:path'
 
 const VERSION = 1
 const SOURCE_THRESHOLD = 600
@@ -109,18 +109,22 @@ function parseArgs(argv) {
   return options
 }
 
-function validateRoot(root) {
+function isDirectory(path) {
   try {
-    if (!statSync(root).isDirectory()) {
-      usageError(`--root must exist and be a directory: ${root}`)
-    }
+    return statSync(path).isDirectory()
   } catch {
+    return false
+  }
+}
+
+function validateRoot(root) {
+  if (!isDirectory(root)) {
     usageError(`--root must exist and be a directory: ${root}`)
   }
 
   const hasScanRoot = SCAN_ROOTS.some((scanRoot) => {
     const path = resolve(root, scanRoot)
-    return existsSync(path) && statSync(path).isDirectory()
+    return isDirectory(path)
   })
 
   if (!hasScanRoot) {
@@ -135,6 +139,14 @@ function validateRoot(root) {
 
 function toPosixPath(path) {
   return path.split(sep).join('/')
+}
+
+function isRepoRelativePosixPath(path) {
+  if (path.trim() === '' || path.trim() !== path) return false
+  if (path.includes('\\')) return false
+  if (path.startsWith('/') || /^[A-Za-z]:/.test(path)) return false
+  if (path.split('/').some((part) => part === '..')) return false
+  return posix.normalize(path) === path
 }
 
 function hasIgnoredPath(relativePath) {
@@ -227,6 +239,9 @@ function validateEntry(entry, index) {
   if (typeof entry.path !== 'string' || entry.path.trim() === '') {
     throw new Error(`files[${index}].path must be a non-empty string`)
   }
+  if (!isRepoRelativePosixPath(entry.path)) {
+    throw new Error(`files[${index}].path must be a normalized repo-relative POSIX path`)
+  }
   if (!Number.isInteger(entry.lines) || entry.lines < 0) {
     throw new Error(`files[${index}].lines must be a non-negative integer`)
   }
@@ -236,14 +251,11 @@ function validateEntry(entry, index) {
   if (entry.category !== 'source' && entry.category !== 'test') {
     throw new Error(`files[${index}].category must be "source" or "test"`)
   }
-  if (
-    (entry.path.startsWith('src/') || entry.path.startsWith('scripts/')) &&
-    entry.category !== 'source'
-  ) {
-    throw new Error(`files[${index}].category must be "source" for ${entry.path}`)
+  if (entry.category !== 'source') {
+    throw new Error(`files[${index}].category must be "source"; test files are report-only`)
   }
-  if (entry.path.startsWith('tests/') && entry.category !== 'test') {
-    throw new Error(`files[${index}].category must be "test" for ${entry.path}`)
+  if (!entry.path.startsWith('src/') && !entry.path.startsWith('scripts/')) {
+    throw new Error(`files[${index}].path must start with "src/" or "scripts/"`)
   }
   if (typeof entry.reason !== 'string') {
     throw new Error(`files[${index}].reason must be a string`)
