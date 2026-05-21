@@ -1,4 +1,4 @@
-.PHONY: help rebuild dev dev-postgres build preview lint lint-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots pg-up pg-down pg-logs pg-psql pg-query-perf pg-seed-dev pg-hosted-smoke pg-reset
+.PHONY: help rebuild dev dev-postgres build preview lint lint-check agent-check test test-watch test-coverage typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots pg-up pg-down pg-logs pg-psql pg-query-perf pg-seed-dev pg-hosted-smoke pg-reset
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -86,6 +86,9 @@ lint: ## Lint and auto-fix code
 
 lint-check: ## Check linting without auto-fix
 	npm run lint:check
+
+agent-check: ## Check LLM-sustainable source size and context guardrails
+	npm run agent:check
 
 format: ## Format all files with Prettier
 	npm run format

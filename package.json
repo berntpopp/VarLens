@@ -23,6 +23,7 @@
     "rebuild:node": "npm rebuild better-sqlite3-multiple-ciphers",
     "lint": "eslint . --cache --cache-strategy content --concurrency=auto --fix",
     "lint:check": "eslint . --cache --cache-strategy content --concurrency=auto",
+    "agent:check": "node scripts/check-agent-health.mjs",
     "format": "prettier --cache --write .",
     "format:check": "prettier --cache --check .",
     "test": "vitest run",
