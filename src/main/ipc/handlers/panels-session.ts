@@ -1,10 +1,11 @@
 import { mainLogger } from '../../services/MainLogger'
+import type { z } from 'zod'
 import type { GeneReferenceDb } from '../../database/GeneReferenceDb'
-import type { PanelAppPanel } from '../../services/api/PanelAppClient'
-import type { PanelAppClient } from '../../services/api/PanelAppClient'
+import type { PanelAppClient, PanelAppPanel } from '../../services/api/PanelAppClient'
 import type { StringDbClient } from '../../services/api/StringDbClient'
 import type { StorageSession } from '../../storage/session'
 import type { CreatePanelInput, PanelGeneRow, PanelRow } from '../../../shared/types/panels'
+import type { PanelAppImportSchema } from '../../../shared/types/ipc-schemas'
 import type { PanelCacheCallbacks } from './panels-logic'
 
 const GREEN_LEVELS = new Set(['3', '4', 'green'])
@@ -21,6 +22,8 @@ interface ValidationResult {
   symbol?: string
   currentSymbol?: string
 }
+
+type PanelAppImportParams = z.infer<typeof PanelAppImportSchema>
 
 function resolveValidatedGenes(validationResults: ValidationResult[]): ResolvedGene[] {
   const resolved: ResolvedGene[] = []
@@ -70,12 +73,7 @@ async function createPanelWithGenes(
 
 export async function importPanelAppForSession(
   session: StorageSession,
-  params: {
-    panelId: number
-    region: 'uk' | 'aus'
-    confidenceThreshold: string
-    name?: string
-  },
+  params: PanelAppImportParams,
   geneRef: GeneReferenceDb,
   client: PanelAppClient,
   callbacks: PanelCacheCallbacks
