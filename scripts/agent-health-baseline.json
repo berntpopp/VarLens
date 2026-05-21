@@ -44,13 +44,6 @@
       "reason": "existing large storage/import module; must not grow before responsibility split"
     },
     {
-      "path": "src/preload/index.ts",
-      "lines": 796,
-      "threshold": 600,
-      "category": "source",
-      "reason": "existing legacy preload surface; must not grow before domain extraction"
-    },
-    {
       "path": "src/renderer/src/components/CaseList.vue",
       "lines": 635,
       "threshold": 600,

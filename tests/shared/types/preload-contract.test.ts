@@ -53,13 +53,16 @@ function extractWindowApiKeys(): string[] {
  * Matches lines like: `  cases: {` at the top nesting level.
  */
 function extractPreloadApiKeys(): string[] {
-  const content = readFileSync(resolve(ROOT, 'src/preload/index.ts'), 'utf-8')
+  const content = readFileSync(
+    resolve(ROOT, 'src/preload/window-api/create-window-api.ts'),
+    'utf-8'
+  )
 
-  // Find `const api = {` or `const api: WindowAPI = {`
-  const match = content.match(/const api(?::\s*WindowAPI)?\s*=\s*\{/)
-  if (!match) throw new Error('Could not find preload api object in preload/index.ts')
+  // Find the WindowAPI assembly object returned by createWindowApi().
+  const match = content.match(/return\s+\{/)
+  if (!match) throw new Error('Could not find preload api object in create-window-api.ts')
   const startIdx = match.index ?? -1
-  if (startIdx === -1) throw new Error('Could not find preload api object in preload/index.ts')
+  if (startIdx === -1) throw new Error('Could not find preload api object in create-window-api.ts')
 
   // Track brace depth to find the matching closing brace
   let depth = 0
@@ -70,9 +73,9 @@ function extractPreloadApiKeys(): string[] {
   for (const line of lines) {
     // Check match BEFORE updating depth for this line
     // Top-level keys are at depth === 1 (inside the outer object)
-    // They look like: `  someName: {` or `  someName: (`
+    // They look like: `  someName: core.someName` or `  someName: {`
     if (depth === 1) {
-      const match = line.match(/^\s+(\w+)\s*:\s*[{(]/)
+      const match = line.match(/^\s+(\w+)\s*:/)
       if (match) {
         keys.push(match[1])
       }
@@ -264,6 +267,15 @@ describe('Preload contract alignment', () => {
   const preloadKeys = extractPreloadApiKeys()
   const mockApiKeys = extractMockApiKeys()
   const preloadSource = readFileSync(resolve(ROOT, 'src/preload/index.ts'), 'utf-8')
+  const createWindowApiSource = readFileSync(
+    resolve(ROOT, 'src/preload/window-api/create-window-api.ts'),
+    'utf-8'
+  )
+  const domainFactorySource = readFileSync(
+    resolve(ROOT, 'src/preload/window-api/domains.ts'),
+    'utf-8'
+  )
+  const coreApiSource = readFileSync(resolve(ROOT, 'src/preload/window-api/core-api.ts'), 'utf-8')
   const casesDomainSource = readFileSync(resolve(ROOT, 'src/preload/domains/cases.ts'), 'utf-8')
   const databaseDomainSource = readFileSync(
     resolve(ROOT, 'src/preload/domains/database.ts'),
@@ -283,13 +295,13 @@ describe('Preload contract alignment', () => {
   })
 
   it('preload imports the cases domain factory', () => {
-    expect(preloadSource).toContain("import { createCasesApi } from './domains/cases'")
+    expect(domainFactorySource).toContain("import { createCasesApi } from '../domains/cases'")
   })
 
   it('preload imports the database and filter presets domain factories', () => {
-    expect(preloadSource).toContain("import { createDatabaseApi } from './domains/database'")
-    expect(preloadSource).toContain(
-      "import { createFilterPresetsApi } from './domains/filter-presets'"
+    expect(domainFactorySource).toContain("import { createDatabaseApi } from '../domains/database'")
+    expect(domainFactorySource).toContain(
+      "import { createFilterPresetsApi } from '../domains/filter-presets'"
     )
   })
 
@@ -326,20 +338,20 @@ describe('Preload contract alignment', () => {
     expect(databaseDomainSource).toContain("'database:postgresProfileTest'")
     expect(databaseDomainSource).toContain('postgresProfileOpen:')
     expect(databaseDomainSource).toContain("'database:postgresProfileOpen'")
-    expect(preloadSource).toContain(
+    expect(coreApiSource).toContain(
       'postgresProfilesList: () => databaseDomain.postgresProfilesList()'
     )
-    expect(preloadSource).toContain(
+    expect(coreApiSource).toContain(
       'postgresProfileSave: (input) => databaseDomain.postgresProfileSave(input)'
     )
-    expect(preloadSource).toContain(
-      'postgresProfileRemove: (profileId: string) => databaseDomain.postgresProfileRemove(profileId)'
+    expect(coreApiSource).toContain(
+      'postgresProfileRemove: (profileId) => databaseDomain.postgresProfileRemove(profileId)'
     )
-    expect(preloadSource).toContain(
+    expect(coreApiSource).toContain(
       'postgresProfileTest: (input) => databaseDomain.postgresProfileTest(input)'
     )
-    expect(preloadSource).toContain(
-      'postgresProfileOpen: (profileId: string) => databaseDomain.postgresProfileOpen(profileId)'
+    expect(coreApiSource).toContain(
+      'postgresProfileOpen: (profileId) => databaseDomain.postgresProfileOpen(profileId)'
     )
     expect(databaseDomainSource).toContain(
       "showInFolder: (path) => ipcRenderer.invoke('database:showInFolder', path)"
@@ -400,6 +412,10 @@ describe('Preload contract alignment', () => {
 
   it('preload domain modules and WindowAPI stay aligned', () => {
     expect(preloadKeys).toEqual(windowApiKeys)
+    expect(createWindowApiSource).toContain('export function createWindowApi(): WindowAPI')
+    expect(preloadSource).toContain(
+      "import { createWindowApi } from './window-api/create-window-api'"
+    )
   })
 
   it('mockApi keys match WindowAPI interface keys exactly', () => {
