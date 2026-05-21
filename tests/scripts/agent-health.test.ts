@@ -198,6 +198,53 @@ describe('check-agent-health', () => {
     expect(result.stdout).toContain('13 -> 12')
   })
 
+  it('reports actual line count when a baseline source file falls below threshold', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/baseline.ts', 8)
+    writeJson(root, 'scripts/agent-health-baseline.json', {
+      version: 1,
+      files: [
+        {
+          path: 'src/main/baseline.ts',
+          lines: 13,
+          threshold: 10,
+          category: 'source',
+          reason: 'existing oversized source module'
+        }
+      ]
+    })
+
+    const result = runAgentCheck(root)
+
+    expectNoSpawnError(result)
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('13 -> 8')
+    expect(result.stdout).toMatch(/below threshold|remove from baseline/)
+  })
+
+  it('reports missing baseline source files as stale entries', () => {
+    const root = createTempRepo()
+    writeLines(root, 'src/main/small.ts', 5)
+    writeJson(root, 'scripts/agent-health-baseline.json', {
+      version: 1,
+      files: [
+        {
+          path: 'src/main/deleted.ts',
+          lines: 13,
+          threshold: 10,
+          category: 'source',
+          reason: 'existing oversized source module'
+        }
+      ]
+    })
+
+    const result = runAgentCheck(root)
+
+    expectNoSpawnError(result)
+    expect(result.status).toBe(0)
+    expect(result.stdout).toMatch(/missing|remove from baseline/)
+  })
+
   it('reports oversized tests without failing phase 1', () => {
     const root = createTempRepo()
     writeLines(root, 'tests/main/large.test.ts', 13)

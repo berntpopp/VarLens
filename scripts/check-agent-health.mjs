@@ -284,7 +284,22 @@ function readBaseline(path) {
   }
 }
 
-function compareInventory(current, baseline) {
+function readExistingBaselineFile(root, baselineEntry) {
+  const path = resolve(root, baselineEntry.path)
+  if (!existsSync(path)) {
+    return { status: 'missing' }
+  }
+
+  const lines = countLines(readFileSync(path, 'utf8'))
+  const threshold = baselineEntry.threshold
+  return {
+    status: lines > threshold ? 'oversized' : 'below-threshold',
+    lines,
+    threshold
+  }
+}
+
+function compareInventory(current, baseline, root) {
   const baselineByPath = new Map(baseline.files.map((entry) => [entry.path, entry]))
   const currentByPath = new Map(current.map((entry) => [entry.path, entry]))
   const newSourceFiles = []
@@ -311,7 +326,11 @@ function compareInventory(current, baseline) {
   for (const baselineEntry of baseline.files) {
     if (baselineEntry.category !== 'source') continue
     if (currentByPath.has(baselineEntry.path)) continue
-    unchangedOrImproved.push({ baseline: baselineEntry, current: null })
+    unchangedOrImproved.push({
+      baseline: baselineEntry,
+      current: null,
+      resolvedCurrent: readExistingBaselineFile(root, baselineEntry)
+    })
   }
 
   const byPath = (left, right) => {
@@ -354,7 +373,18 @@ function printReport(options, comparison) {
   })
 
   printSection('Existing oversized files unchanged or improved', comparison.unchangedOrImproved, (entry) => {
-    const currentLines = entry.current?.lines ?? 0
+    if (entry.resolvedCurrent?.status === 'missing') {
+      return `${entry.baseline.path}: ${entry.baseline.lines} -> missing (remove from baseline)`
+    }
+
+    if (entry.resolvedCurrent?.status === 'below-threshold') {
+      return [
+        `${entry.baseline.path}: ${entry.baseline.lines} -> ${entry.resolvedCurrent.lines} lines`,
+        '(below threshold; remove from baseline)'
+      ].join(' ')
+    }
+
+    const currentLines = entry.current?.lines ?? entry.resolvedCurrent?.lines ?? 0
     return `${entry.baseline.path}: ${entry.baseline.lines} -> ${currentLines} lines`
   })
 
@@ -377,5 +407,5 @@ if (options.printCurrentJson) {
 }
 
 const baseline = readBaseline(options.baseline)
-const comparison = compareInventory(current, baseline)
+const comparison = compareInventory(current, baseline, options.root)
 process.exit(printReport(options, comparison))
