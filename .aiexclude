@@ -1,0 +1,52 @@
+# Dependencies and build output
+node_modules/
+out/
+dist/
+release/
+
+# Tool caches and generated reports
+.cache/
+.eslintcache
+.prettiercache
+coverage/
+test-results/
+playwright-report/
+playwright-output/
+.playwright-mcp/
+
+# Local databases, logs, and temporary files
+*.db
+*.db-journal
+*.log
+tmp/
+temp/
+*.tmp
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# Large local or generated planning artifacts
+.planning/artifacts/perf/
+tests/.cache/
+
+# Sensitive or very large genomic/clinical data
+test-data/
+plan/
+*.json.gz
+*.vcf
+*.vcf.gz
+*.bam
+*.sam
+*.cram
+*.bed
+*.fastq
+*.fq
+*.fastq.gz
+*.fq.gz
+*.ped
+
+# Public vendor bundles copied from dependencies
+src/renderer/public/pdbe-molstar-component.js
+src/renderer/public/pdbe-molstar-light.css
