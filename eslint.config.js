@@ -72,6 +72,14 @@ export default [
     }
   },
   {
+    files: ['scripts/**/*.{js,mjs,ts}'],
+    languageOptions: {
+      globals: {
+        ...globals.node
+      }
+    }
+  },
+  {
     files: ['**/*.config.{js,ts}', 'eslint.config.js'],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
