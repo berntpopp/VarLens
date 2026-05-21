@@ -83,6 +83,7 @@ The **Makefile is the source of truth**. GitHub Actions workflows mirror it targ
 | `make typecheck`                                                    | `vue-tsc` (renderer) + `tsc` (node) in parallel                            |
 | `make test`                                                         | Vitest once (run `make rebuild-node` first)                                |
 | `make test-watch` / `make test-coverage`                            | Vitest watch / with coverage                                               |
+| `make agent-check`                                                  | Check LLM-sustainable source size and context guardrails                   |
 | `make build`                                                        | `electron-vite build` into `out/`                                          |
 | `make dist` / `make dist-linux` / `make dist-mac` / `make dist-win` | Build + package                                                            |
 | `make ci`                                                           | Local minimum: lint-check + format-check + typecheck + rebuild-node + test |
@@ -136,6 +137,7 @@ A linter enforces formatting and generic TypeScript rules. What follows is what 
 VarLens should stay easy for coding agents and humans to inspect in bounded context. Treat these as review gates for all new or substantially changed code:
 
 - **Keep source files under 600 lines** whenever practical. Prefer 150-400 lines. If a touched file exceeds 600 lines, either split it by responsibility or explain in the PR why the boundary would be worse. Generated code, static fixtures, migrations, snapshots, and lockfiles are exempt.
+- **Run `make agent-check` before PRs that touch authored source structure.** Existing oversized files are tracked in `scripts/agent-health-baseline.json`; they must not grow unless the PR explains why the added code cannot be split safely.
 - **Keep functions small and purpose-built.** A function over ~80 lines or with several unrelated branches should usually become smaller named helpers. The helper names should explain the domain step, not just the syntax.
 - **One module, one reason to change.** Do not mix UI rendering, IPC calls, parsing, persistence, and business rules in one file unless the surrounding pattern already does so and the file remains small.
 - **Make boundaries explicit.** Shared behavior belongs in typed contracts, composables, services, or parser modules with clear inputs and outputs. Avoid hidden global state and cross-layer imports that force agents to read half the repository to make a local change.
