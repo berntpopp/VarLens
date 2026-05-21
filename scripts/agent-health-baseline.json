@@ -23,13 +23,6 @@
       "reason": "existing large storage/import module; must not grow before responsibility split"
     },
     {
-      "path": "src/main/ipc/handlers/panels.ts",
-      "lines": 614,
-      "threshold": 600,
-      "category": "source",
-      "reason": "existing legacy IPC handler surface; must not grow before domain extraction"
-    },
-    {
       "path": "src/main/storage/postgres/PostgresCohortRepository.ts",
       "lines": 957,
       "threshold": 600,
