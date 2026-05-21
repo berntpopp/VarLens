@@ -372,21 +372,25 @@ function printReport(options, comparison) {
     return `${entry.current.path}: ${entry.baseline.lines} -> ${entry.current.lines} lines`
   })
 
-  printSection('Existing oversized files unchanged or improved', comparison.unchangedOrImproved, (entry) => {
-    if (entry.resolvedCurrent?.status === 'missing') {
-      return `${entry.baseline.path}: ${entry.baseline.lines} -> missing (remove from baseline)`
-    }
+  printSection(
+    'Existing oversized files unchanged or improved',
+    comparison.unchangedOrImproved,
+    (entry) => {
+      if (entry.resolvedCurrent?.status === 'missing') {
+        return `${entry.baseline.path}: ${entry.baseline.lines} -> missing (remove from baseline)`
+      }
 
-    if (entry.resolvedCurrent?.status === 'below-threshold') {
-      return [
-        `${entry.baseline.path}: ${entry.baseline.lines} -> ${entry.resolvedCurrent.lines} lines`,
-        '(below threshold; remove from baseline)'
-      ].join(' ')
-    }
+      if (entry.resolvedCurrent?.status === 'below-threshold') {
+        return [
+          `${entry.baseline.path}: ${entry.baseline.lines} -> ${entry.resolvedCurrent.lines} lines`,
+          '(below threshold; remove from baseline)'
+        ].join(' ')
+      }
 
-    const currentLines = entry.current?.lines ?? entry.resolvedCurrent?.lines ?? 0
-    return `${entry.baseline.path}: ${entry.baseline.lines} -> ${currentLines} lines`
-  })
+      const currentLines = entry.current?.lines ?? entry.resolvedCurrent?.lines ?? 0
+      return `${entry.baseline.path}: ${entry.baseline.lines} -> ${currentLines} lines`
+    }
+  )
 
   printSection('Oversized test files reported only', comparison.oversizedTests, (entry) => {
     return `${entry.path}: ${entry.lines} lines (threshold ${entry.threshold})`

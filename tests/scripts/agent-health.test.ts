@@ -401,15 +401,11 @@ describe('check-agent-health', () => {
   })
 
   it('prints valid current inventory JSON for the real repository', () => {
-    const result = spawnSync(
-      process.execPath,
-      [SCRIPT_PATH, '--print-current-json'],
-      {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-        timeout: 30_000
-      }
-    )
+    const result = spawnSync(process.execPath, [SCRIPT_PATH, '--print-current-json'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      timeout: 30_000
+    })
 
     expectNoSpawnError(result)
     expect(result.status).toBe(0)
