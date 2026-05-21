@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "scripts/postgres/seed-dev-workspace.mjs",
+      "lines": 667,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing script module; must not grow before responsibility split"
+    },
+    {
+      "path": "src/main/database/VariantFilterBuilder.ts",
+      "lines": 782,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large storage/import module; must not grow before responsibility split"
+    },
+    {
+      "path": "src/main/database/VariantRepository.ts",
+      "lines": 758,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large storage/import module; must not grow before responsibility split"
+    },
+    {
+      "path": "src/main/ipc/handlers/panels.ts",
+      "lines": 614,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing legacy IPC handler surface; must not grow before domain extraction"
+    },
+    {
+      "path": "src/main/storage/postgres/PostgresCohortRepository.ts",
+      "lines": 957,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large storage/import module; must not grow before responsibility split"
+    },
+    {
+      "path": "src/main/workers/postgres-import-worker.ts",
+      "lines": 964,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large storage/import module; must not grow before responsibility split"
+    },
+    {
+      "path": "src/preload/index.ts",
+      "lines": 796,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing legacy preload surface; must not grow before domain extraction"
+    },
+    {
+      "path": "src/renderer/src/components/CaseList.vue",
+      "lines": 635,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/components/cohort/CohortDataTable.vue",
+      "lines": 627,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/components/cohort/CohortFilterBar.vue",
+      "lines": 642,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/components/cohort/CohortFilterDrawer.vue",
+      "lines": 680,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/components/CohortTable.vue",
+      "lines": 760,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/components/FilterDrawer.vue",
+      "lines": 857,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/components/FilterToolbar.vue",
+      "lines": 737,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/components/import/ImportWizard.vue",
+      "lines": 779,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/components/import/VcfImportDialog.vue",
+      "lines": 831,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/components/VariantTable.vue",
+      "lines": 668,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer component; must not grow before component split"
+    },
+    {
+      "path": "src/renderer/src/composables/useAnnotations.ts",
+      "lines": 923,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer composable; must not grow before responsibility split"
+    },
+    {
+      "path": "src/renderer/src/composables/useGeneStructurePlot.ts",
+      "lines": 654,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer composable; must not grow before responsibility split"
+    },
+    {
+      "path": "src/renderer/src/composables/useLollipopPlot.ts",
+      "lines": 982,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer composable; must not grow before responsibility split"
+    },
+    {
+      "path": "src/renderer/src/mocks/mockApi.ts",
+      "lines": 1214,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing large renderer mock surface; must not grow before responsibility split"
+    },
+    {
+      "path": "src/shared/types/api.ts",
+      "lines": 906,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing shared contract surface; must not grow before contract split"
+    },
+    {
+      "path": "src/shared/types/database.ts",
+      "lines": 672,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing shared contract surface; must not grow before contract split"
+    },
+    {
+      "path": "src/shared/types/ipc-schemas.ts",
+      "lines": 1009,
+      "threshold": 600,
+      "category": "source",
+      "reason": "existing shared contract surface; must not grow before contract split"
+    }
+  ]
+}
