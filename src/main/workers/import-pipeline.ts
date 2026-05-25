@@ -9,7 +9,7 @@ import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { createGunzip } from 'node:zlib'
 import type { Readable } from 'node:stream'
-import parser from 'stream-json'
+import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
 
@@ -437,7 +437,7 @@ export async function createMapperPipeline(
   switch (formatInfo.format) {
     case 'simple': {
       const stream = createDecompressedStream(filePath)
-        .pipe(parser())
+        .pipe(parser.asStream())
         .pipe(pick.asStream({ filter: 'variants' }))
         .pipe(streamArray.asStream())
         .pipe(createObjectFormatMapper())
@@ -447,7 +447,7 @@ export async function createMapperPipeline(
     case 'object': {
       const samplePath = `samples.${formatInfo.caseKey}.variants`
       const stream = createDecompressedStream(filePath)
-        .pipe(parser())
+        .pipe(parser.asStream())
         .pipe(pick.asStream({ filter: samplePath }))
         .pipe(streamArray.asStream())
         .pipe(createObjectFormatMapper())
@@ -463,7 +463,7 @@ export async function createMapperPipeline(
       const fieldMapper = createFieldMapper(dictionaries, columnIndices)
 
       const stream = createDecompressedStream(filePath)
-        .pipe(parser())
+        .pipe(parser.asStream())
         .pipe(pick.asStream({ filter: dataPath }))
         .pipe(streamArray.asStream())
         .pipe(fieldMapper)
@@ -498,7 +498,7 @@ export async function parseHeader(
     let resolved = false
 
     const stream = createDecompressedStream(filePath)
-      .pipe(parser())
+      .pipe(parser.asStream())
       .pipe(pick.asStream({ filter: headerPath }))
       .pipe(streamArray.asStream())
 

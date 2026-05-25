@@ -1,5 +1,5 @@
 import { pipeline } from 'node:stream/promises'
-import parser from 'stream-json'
+import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
 import { createObjectFormatMapper } from '../transforms/ObjectFormatMapper'
@@ -52,7 +52,7 @@ export class ObjectStrategy implements ImportStrategy {
       // Build the pipeline for object format
       await pipeline(
         createDecompressedStream(filePath),
-        parser(),
+        parser.asStream(),
         pick.asStream({ filter: `samples.${formatInfo.caseKey}.variants` }),
         streamArray.asStream(),
         objectMapper,

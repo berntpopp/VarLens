@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs'
 import { createGunzip } from 'node:zlib'
 import { createInterface } from 'node:readline'
-import parser from 'stream-json'
+import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
 import type { Readable } from 'node:stream'
@@ -78,7 +78,7 @@ export async function detectFormat(filePath: string): Promise<FormatInfo> {
     }
   }
   return new Promise((resolve, reject) => {
-    const stream = createDecompressedStream(filePath).pipe(parser())
+    const stream = createDecompressedStream(filePath).pipe(parser.asStream())
 
     const topLevelKeys: string[] = []
     let depth = 0
@@ -199,7 +199,7 @@ export async function detectFormat(filePath: string): Promise<FormatInfo> {
  */
 export async function extractFirstSampleId(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const stream = createDecompressedStream(filePath).pipe(parser())
+    const stream = createDecompressedStream(filePath).pipe(parser.asStream())
 
     let inSamples = false
     let sampleId: string | null = null
@@ -270,7 +270,7 @@ export async function createDataPipeline(filePath: string): Promise<{
 }> {
   const formatInfo = await detectFormat(filePath)
   const decompressed = createDecompressedStream(filePath)
-  const jsonParser = parser()
+  const jsonParser = parser.asStream()
 
   let stream: Readable
 

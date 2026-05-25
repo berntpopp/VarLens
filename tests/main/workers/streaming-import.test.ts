@@ -19,7 +19,7 @@ import { resolve } from 'node:path'
 import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { createGunzip } from 'node:zlib'
-import parser from 'stream-json'
+import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
@@ -175,14 +175,14 @@ async function streamInsertJson(
   let mapperStream
   if (formatInfo.format === 'simple') {
     mapperStream = createDecompressedStream(filePath)
-      .pipe(parser())
+      .pipe(parser.asStream())
       .pipe(pick.asStream({ filter: 'variants' }))
       .pipe(streamArray.asStream())
       .pipe(createObjectFormatMapper())
   } else if (formatInfo.format === 'object') {
     const samplePath = `samples.${formatInfo.caseKey}.variants`
     mapperStream = createDecompressedStream(filePath)
-      .pipe(parser())
+      .pipe(parser.asStream())
       .pipe(pick.asStream({ filter: samplePath }))
       .pipe(streamArray.asStream())
       .pipe(createObjectFormatMapper())

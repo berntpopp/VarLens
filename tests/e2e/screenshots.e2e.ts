@@ -20,6 +20,17 @@ let app: ElectronApplication
 let window: Page
 let tempGzipPath: string
 
+function expectSuccessfulIpcResult<T>(result: T): T {
+  expect(result).not.toEqual(
+    expect.objectContaining({
+      code: expect.any(String),
+      message: expect.any(String),
+      userMessage: expect.any(String)
+    })
+  )
+  return result
+}
+
 /** Save a screenshot to the docs screenshot directory */
 async function saveScreenshot(page: Page, name: string): Promise<void> {
   const filePath = path.join(SCREENSHOT_DIR, `${name}.png`)
@@ -274,7 +285,8 @@ test.describe('Documentation Screenshots', () => {
       return JSON.parse(JSON.stringify(result))
     }, tempGzipPath)
 
-    expect((importResult as { variantCount?: number }).variantCount).toBeGreaterThan(0)
+    const importPayload = expectSuccessfulIpcResult(importResult as { variantCount?: number })
+    expect(importPayload.variantCount).toBeGreaterThan(0)
 
     // Reload the page to force the sidebar to pick up the new case
     await window.reload()

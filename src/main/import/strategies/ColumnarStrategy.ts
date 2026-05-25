@@ -1,5 +1,5 @@
 import { pipeline } from 'node:stream/promises'
-import parser from 'stream-json'
+import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
 import { createFieldMapper } from '../transforms/FieldMapper'
@@ -72,7 +72,7 @@ export class ColumnarStrategy implements ImportStrategy {
       // Build the pipeline
       await pipeline(
         createDecompressedStream(filePath),
-        parser(),
+        parser.asStream(),
         pick.asStream({ filter: dataPath }),
         streamArray.asStream(),
         fieldMapper,
@@ -117,7 +117,7 @@ export class ColumnarStrategy implements ImportStrategy {
       let resolved = false
 
       const stream = createDecompressedStream(filePath)
-        .pipe(parser())
+        .pipe(parser.asStream())
         .pipe(pick.asStream({ filter: headerPath }))
         .pipe(streamArray.asStream())
 

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { Writable } from 'node:stream'
-import parser from 'stream-json'
+import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
 import { createDecompressedStream } from '../../../src/main/import/stream-utils'
@@ -29,7 +29,7 @@ describe('mapper pipeline output shape', () => {
 
     await pipeline(
       createDecompressedStream(filePath),
-      parser(),
+      parser.asStream(),
       pick.asStream({ filter: 'variants' }),
       streamArray.asStream(),
       createObjectFormatMapper(),
@@ -69,7 +69,7 @@ describe('mapper pipeline output shape', () => {
 
     await pipeline(
       createDecompressedStream(filePath),
-      parser(),
+      parser.asStream(),
       pick.asStream({ filter: samplePath }),
       streamArray.asStream(),
       createObjectFormatMapper(),
