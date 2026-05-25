@@ -69,7 +69,7 @@
     "globals": "^17.6.0",
     "happy-dom": "^20.9.0",
     "nock": "^14.0.15",
-    "npm-run-all2": "^8.0.4",
+    "npm-run-all2": "^9.0.1",
     "playwright": "^1.59.1",
     "png2icons": "^2.0.1",
     "prettier": "^3.8.2",
