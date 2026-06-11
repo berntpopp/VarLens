@@ -75,8 +75,10 @@ Backups are the operator's responsibility for hosted PostgreSQL workspaces. At m
 For a schema-scoped workspace, a typical logical backup is:
 
 ```bash
-pg_dump --format=custom --schema=workspace_a --file=varlens-workspace-a.dump postgresql://backup_user@db.example.org/varlens
+pg_dump --format=custom --schema=workspace_a --schema=varlens_audit --file=varlens-workspace-a.dump postgresql://backup_user@db.example.org/varlens
 ```
+
+Always include `--schema=varlens_audit`: the audit trail lives in that shared schema, not in the workspace schema, and a workspace-only dump silently drops it.
 
 For a database-scoped workspace, dump the full database:
 
