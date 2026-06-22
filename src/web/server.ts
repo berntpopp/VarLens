@@ -23,12 +23,14 @@
 import { isAbsolute } from 'path'
 
 import Fastify, { type FastifyInstance } from 'fastify'
+import { Pool } from 'pg'
 
-import { getPostgresStorageConfig } from '../main/storage/config'
+import { buildPostgresPoolConfig, getPostgresStorageConfig } from '../main/storage/config'
 import { createPostgresStorageSession } from '../main/storage/postgres/createPostgresStorageSession'
 import type { PostgresStorageSession } from '../main/storage/postgres/PostgresStorageSession'
 import type { StorageSession } from '../main/storage/session'
 import { AdminAlreadyExistsError, PostgresWebAuthService } from './auth/PostgresWebAuthService'
+import { HostedUserDbRouter } from './hosted-user-db-router'
 import { buildDispatcher, registerDispatcher } from './server/dispatcher'
 import { registerSessions } from './server/auth'
 import { registerEventStream, WebEventHub } from './server/events'
@@ -83,20 +85,25 @@ export interface BuildAppOptions {
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const topology = readWebDbTopology(process.env)
-  if (topology.mode === 'hosted') {
-    throw new Error(
-      'VARLENS_WEB_DB_TOPOLOGY=hosted is configured, but hosted workspace routing is not implemented in this build.'
-    )
-  }
 
   // Validate Postgres config BEFORE building the app; any later
   // failure path means we'd hold a partially-spun Fastify instance,
   // which the SIGTERM tests can't cleanly tear down.
-  const pgConfig = getPostgresStorageConfig(process.env)
+  const pgConfig =
+    topology.mode === 'hosted'
+      ? getPostgresStorageConfig({
+          ...process.env,
+          VARLENS_PG_URL: topology.controlStateUrl,
+          VARLENS_PG_POOL_MAX: String(topology.pools.controlPoolMax),
+          VARLENS_PG_APPLICATION_NAME: 'varlens-web-control'
+        })
+      : getPostgresStorageConfig(process.env)
   if (pgConfig === null) {
     throw new Error(
-      'VARLENS_PG_URL must be set. The web server is Postgres-only; ' +
-        'set it to the Postgres connection URL before starting the server.'
+      topology.mode === 'hosted'
+        ? 'VARLENS_CONTROL_STATE_PG_URL must be set when VARLENS_WEB_DB_TOPOLOGY=hosted.'
+        : 'VARLENS_PG_URL must be set. The web server is Postgres-only; ' +
+            'set it to the Postgres connection URL before starting the server.'
     )
   }
 
@@ -119,6 +126,21 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     pool,
     schema: pgConfig.schema
   })
+  const publicAnnotationPool =
+    topology.mode === 'hosted' && topology.publicAnnotationUrl !== undefined
+      ? new Pool(
+          buildPostgresPoolConfig({
+            ...pgConfig,
+            url: topology.publicAnnotationUrl,
+            applicationName: 'varlens-web-public-annotations',
+            poolMax: topology.pools.publicAnnotationPoolMax
+          })
+        )
+      : null
+  const hostedRouter =
+    topology.mode === 'hosted'
+      ? new HostedUserDbRouter({ topology, authService })
+      : null
 
   if (options.admin !== undefined) {
     await maybeBootstrapAdmin(authService, options.admin, app.log)
@@ -141,7 +163,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const dispatcherDeps = {
     session: session as StorageSession,
     authService,
-    events
+    events,
+    ...(hostedRouter !== null
+      ? { resolveSession: (request: Parameters<HostedUserDbRouter['resolveSession']>[0]) =>
+          hostedRouter.resolveSession(request) }
+      : {})
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
   registerImportUploadRoutes(app, dispatcherDeps)
@@ -154,12 +180,24 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const readinessHandler = async (_request: unknown, reply: import('fastify').FastifyReply) => {
     const open = await isPostgresHealthy(pool)
+    const publicAnnotationOpen =
+      publicAnnotationPool === null ? true : await isPostgresHealthy(publicAnnotationPool)
     metrics.setDatabaseHealthy(open)
-    if (!open) {
+    if (!open || !publicAnnotationOpen) {
       reply.code(503)
-      return { status: 'unhealthy', version: pkg.version, db: { open: false } }
+      return {
+        status: 'unhealthy',
+        version: pkg.version,
+        db: { open },
+        publicAnnotationDb: { open: publicAnnotationOpen }
+      }
     }
-    return { status: 'ok', version: pkg.version, db: { open: true } }
+    return {
+      status: 'ok',
+      version: pkg.version,
+      db: { open: true },
+      publicAnnotationDb: { open: publicAnnotationOpen }
+    }
   }
 
   app.get('/readyz', { schema: { hide: true } }, readinessHandler)
@@ -169,6 +207,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.addHook('onClose', async () => {
     try {
+      await hostedRouter?.close()
+      await publicAnnotationPool?.end()
       await session.close()
     } catch {
       // ignore close errors during shutdown

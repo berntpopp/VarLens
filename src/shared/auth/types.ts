@@ -29,6 +29,9 @@ export interface User {
   created_at: string
   created_by: number | null
   updated_at: string | null
+  private_db_secret_ref?: string | null
+  private_db_status?: string | null
+  public_annotation_snapshot_id?: string | null
 }
 
 export interface AuthResult {

@@ -49,6 +49,13 @@ export async function createPostgresStorageSession(
   }
 }
 
+export async function openPostgresStorageSessionWithoutMigrating(
+  config: PostgresStorageConfig
+): Promise<PostgresStorageSession> {
+  const pool = new Pool(buildPostgresPoolConfig(config))
+  return new PostgresStorageSession({ config, pool: wrapPoolForCounters(pool) })
+}
+
 function toPostgresFailureError(error: unknown): Error {
   const message = classifyPostgresFailureMessage(error)
   if (error instanceof Error) {

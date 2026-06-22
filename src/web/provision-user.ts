@@ -9,6 +9,8 @@ interface Options {
   displayName: string
   createdBy: string
   credential: { kind: 'hash'; value: string } | { kind: 'password'; value: string }
+  privateDbSecretRef?: string
+  publicAnnotationSnapshotId?: string
 }
 
 function readArg(args: string[], name: string): string | undefined {
@@ -42,6 +44,8 @@ function parseOptions(args: string[]): Options {
   const username = readArg(args, '--username')?.trim()
   const displayName = readArg(args, '--display-name')?.trim()
   const createdBy = readArg(args, '--created-by')?.trim() ?? 'admin'
+  const privateDbSecretRef = readArg(args, '--private-db-secret-ref')?.trim()
+  const publicAnnotationSnapshotId = readArg(args, '--public-annotation-snapshot-id')?.trim()
   const credential = readCredential(args)
 
   if (username === undefined || username === '') {
@@ -57,7 +61,21 @@ function parseOptions(args: string[]): Options {
     throw new Error(`${credential.kind} must not be blank`)
   }
 
-  return { username, displayName, createdBy, credential }
+  if (privateDbSecretRef === '') {
+    throw new Error('--private-db-secret-ref must not be blank when provided')
+  }
+  if (publicAnnotationSnapshotId === '') {
+    throw new Error('--public-annotation-snapshot-id must not be blank when provided')
+  }
+
+  return {
+    username,
+    displayName,
+    createdBy,
+    credential,
+    ...(privateDbSecretRef !== undefined ? { privateDbSecretRef } : {}),
+    ...(publicAnnotationSnapshotId !== undefined ? { publicAnnotationSnapshotId } : {})
+  }
 }
 
 async function main(): Promise<void> {
@@ -87,12 +105,21 @@ async function main(): Promise<void> {
             options.credential.value,
             options.createdBy
           )
+    if (options.privateDbSecretRef !== undefined) {
+      await auth.assignPrivateDatabase(
+        options.username,
+        options.privateDbSecretRef,
+        options.publicAnnotationSnapshotId
+      )
+    }
     process.stdout.write(
       JSON.stringify({
         ok: true,
         username: result.username,
         role: result.role,
-        must_change_password: result.must_change_password === 1
+        must_change_password: result.must_change_password === 1,
+        private_db_secret_ref: options.privateDbSecretRef ?? null,
+        public_annotation_snapshot_id: options.publicAnnotationSnapshotId ?? null
       }) + '\n'
     )
   } finally {
