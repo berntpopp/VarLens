@@ -5,6 +5,7 @@ import type { FastifyRequest } from 'fastify'
 
 import { getPostgresStorageConfig } from '../main/storage/config'
 import { openPostgresStorageSessionWithoutMigrating } from '../main/storage/postgres/createPostgresStorageSession'
+import type { PostgresPublicAnnotationRepository } from '../main/storage/postgres/PostgresPublicAnnotationRepository'
 import type { PostgresStorageSession } from '../main/storage/postgres/PostgresStorageSession'
 import type { StorageSession } from '../main/storage/session'
 import type { HostedWebDbTopology } from './topology'
@@ -24,6 +25,7 @@ export class HostedUserDbRouter {
     private readonly options: {
       topology: HostedWebDbTopology
       authService: PostgresWebAuthService
+      publicAnnotations?: PostgresPublicAnnotationRepository
     }
   ) {}
 
@@ -86,7 +88,9 @@ export class HostedUserDbRouter {
   }
 
   private async openSession(secretRef: string): Promise<PostgresStorageSession> {
-    const url = (await readFile(join(this.options.topology.workspaceSecretDir, secretRef), 'utf8')).trim()
+    const url = (
+      await readFile(join(this.options.topology.workspaceSecretDir, secretRef), 'utf8')
+    ).trim()
     if (url === '') {
       throw new Error(`hosted private DB secret file is empty: ${secretRef}`)
     }
@@ -97,9 +101,16 @@ export class HostedUserDbRouter {
       VARLENS_PG_APPLICATION_NAME: `varlens-web-user-${secretRef}`
     })
     if (config === null) {
-      throw new Error(`hosted private DB secret file did not contain a PostgreSQL URL: ${secretRef}`)
+      throw new Error(
+        `hosted private DB secret file did not contain a PostgreSQL URL: ${secretRef}`
+      )
     }
-    return await openPostgresStorageSessionWithoutMigrating(config)
+    return await openPostgresStorageSessionWithoutMigrating(
+      config,
+      this.options.publicAnnotations !== undefined
+        ? { publicAnnotations: this.options.publicAnnotations }
+        : {}
+    )
   }
 
   private scheduleIdleClose(

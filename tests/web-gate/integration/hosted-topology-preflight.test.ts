@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 describe('web server - hosted topology preflight', () => {
-  test('hosted mode validates hosted env and fails closed before single-PG fallback', async () => {
+  test('hosted mode validates hosted env and boots against the control DB instead of single-PG fallback', async () => {
     const previous = {
       topology: process.env.VARLENS_WEB_DB_TOPOLOGY,
       pgUrl: process.env.VARLENS_PG_URL,
@@ -24,7 +24,7 @@ describe('web server - hosted topology preflight', () => {
 
     try {
       const { buildApp } = await import('../../../src/web/server')
-      await expect(buildApp()).rejects.toThrow(/hosted workspace routing is not implemented/i)
+      await expect(buildApp()).rejects.toThrow(/PostgreSQL connection unavailable/i)
     } finally {
       restoreEnv('VARLENS_WEB_DB_TOPOLOGY', previous.topology)
       restoreEnv('VARLENS_PG_URL', previous.pgUrl)
