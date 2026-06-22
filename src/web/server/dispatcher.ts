@@ -76,6 +76,17 @@ import {
  */
 const PRE_ROTATION_ALLOWED = new Set<string>(['auth:changePassword', 'auth:logout'])
 const DEV_API_LATENCY_ENV = 'VARLENS_WEB_API_LATENCY_MS'
+const CONTROL_DB_METHODS = new Set<string>([
+  'auth:login',
+  'auth:logout',
+  'auth:currentUser',
+  'auth:isAccountsEnabled',
+  'auth:changePassword',
+  'auth:listUsers',
+  'auth:deactivateUser',
+  'auth:resetPassword',
+  'database:capabilities'
+])
 
 function toSerializableWebError(error: unknown): SerializableError {
   if (isIpcError(error)) return error
@@ -185,6 +196,20 @@ export function buildDispatcher(_deps: DispatcherDeps): {
   return { overrides, publicMethods: publicOverrideKeys(overrides) }
 }
 
+async function resolveDepsForMethod(
+  deps: DispatcherDeps,
+  key: string,
+  request: Parameters<OverrideHandler['handle']>[1]
+): Promise<DispatcherDeps> {
+  if (deps.resolveSession === undefined || CONTROL_DB_METHODS.has(key)) {
+    return deps
+  }
+  return {
+    ...deps,
+    session: await deps.resolveSession(request)
+  }
+}
+
 /**
  * Register the single dispatcher route. All `POST /api/<domain>/<method>`
  * traffic from the browser lands here.
@@ -253,17 +278,18 @@ export function registerDispatcher(
       }
 
       if (override !== undefined) {
+        const requestDeps = await resolveDepsForMethod(deps, key, request)
         const result = await invokeAsIpcResult(reply, () =>
-          override.handle(args, request, reply, deps)
+          override.handle(args, request, reply, requestDeps)
         )
         if (reply.statusCode < 400 && (isWriteTaskType(key) || shouldAuditOverrideWrite(key))) {
           const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
+            recordApiWriteAudit(requestDeps, { key, username: request.session?.user?.username })
           )
           if (reply.statusCode >= 400) return auditResult
         } else if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
           const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiReadAudit(deps, { key, username: request.session?.user?.username })
+            recordApiReadAudit(requestDeps, { key, username: request.session?.user?.username })
           )
           if (reply.statusCode >= 400) return auditResult
         }
@@ -271,13 +297,14 @@ export function registerDispatcher(
       }
 
       if (isReadTaskType(key)) {
+        const requestDeps = await resolveDepsForMethod(deps, key, request)
         const task = { type: key, params: args } as StorageReadTask
         const result = await invokeAsIpcResult(reply, () =>
-          deps.session.getReadExecutor().execute(task)
+          requestDeps.session.getReadExecutor().execute(task)
         )
         if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
           const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiReadAudit(deps, { key, username: request.session?.user?.username })
+            recordApiReadAudit(requestDeps, { key, username: request.session?.user?.username })
           )
           if (reply.statusCode >= 400) return auditResult
         }
@@ -285,13 +312,14 @@ export function registerDispatcher(
       }
 
       if (isWriteTaskType(key)) {
+        const requestDeps = await resolveDepsForMethod(deps, key, request)
         const task = { type: key, params: args } as StorageWriteTask
         const result = await invokeAsIpcResult(reply, () =>
-          deps.session.getWriteExecutor().execute(task)
+          requestDeps.session.getWriteExecutor().execute(task)
         )
         if (reply.statusCode < 400) {
           const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
+            recordApiWriteAudit(requestDeps, { key, username: request.session?.user?.username })
           )
           if (reply.statusCode >= 400) return auditResult
         }

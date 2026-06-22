@@ -193,7 +193,20 @@ function mapPgRowToUser(raw: Record<string, unknown>): User {
     password_changed_at: toIso(raw.password_changed_at),
     created_at: toIso(raw.created_at) ?? '',
     created_by: toNumberOrNull(raw.created_by),
-    updated_at: toIso(raw.updated_at)
+    updated_at: toIso(raw.updated_at),
+    private_db_secret_ref:
+      raw.private_db_secret_ref === null || raw.private_db_secret_ref === undefined
+        ? null
+        : String(raw.private_db_secret_ref),
+    private_db_status:
+      raw.private_db_status === null || raw.private_db_status === undefined
+        ? null
+        : String(raw.private_db_status),
+    public_annotation_snapshot_id:
+      raw.public_annotation_snapshot_id === null ||
+      raw.public_annotation_snapshot_id === undefined
+        ? null
+        : String(raw.public_annotation_snapshot_id)
   }
 }
 
@@ -424,6 +437,26 @@ export class PostgresWebAuthService {
       username,
       role: ROLE_USER,
       must_change_password: 1
+    }
+  }
+
+  async assignPrivateDatabase(
+    username: string,
+    privateDbSecretRef: string,
+    publicAnnotationSnapshotId?: string
+  ): Promise<void> {
+    const sch = this.schemaQuoted
+    const result = await this.pool.query(
+      `UPDATE ${sch}."users"
+          SET private_db_secret_ref = $1,
+              private_db_status = 'active',
+              public_annotation_snapshot_id = $2,
+              updated_at = now()
+        WHERE username = $3 AND is_active = TRUE`,
+      [privateDbSecretRef, publicAnnotationSnapshotId ?? null, username]
+    )
+    if ((result.rowCount ?? 0) === 0) {
+      throw new Error(`User not found or inactive: ${username}`)
     }
   }
 

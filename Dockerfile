@@ -54,6 +54,8 @@ RUN node -e "(async () => { \
     require('./out/web/postgres-import-worker.cjs'); \
     require('node:fs').accessSync('./out/web/provision-user.cjs'); \
     require('./out/web/provision-user.cjs'); \
+    require('node:fs').accessSync('./out/web/migrate-db.cjs'); \
+    require('./out/web/migrate-db.cjs'); \
     const Database = require('better-sqlite3-multiple-ciphers'); \
     new Database(':memory:').prepare('SELECT 1').get(); \
     const argon2 = require('@node-rs/argon2'); \
