@@ -348,6 +348,42 @@ describe('PostgresWebAuthService — production hash bootstrap', () => {
   })
 })
 
+describe('PostgresWebAuthService — provisioned user creation', () => {
+  it('creates a normal user from a precomputed hash and forces password rotation', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({
+      rows: [pgUserRow({ id: '5', username: 'admin', role: ROLE_ADMIN })],
+      rowCount: 1
+    })
+    pool.enqueueResponse({ rows: [{ id: '7' }], rowCount: 1 })
+
+    const result = await svc.createUserFromHash('alice', 'Alice', FIXTURE_ARGON2ID_HASH, 'admin')
+
+    expect(result).toEqual({
+      id: 7,
+      username: 'alice',
+      role: ROLE_USER,
+      must_change_password: 1
+    })
+    const insert = pool.queries.find((q) => /INSERT INTO[\s\S]+users/i.test(q.text))
+    expect(insert?.values).toEqual(['alice', 'Alice', FIXTURE_ARGON2ID_HASH, ROLE_USER, 5])
+    expect(insert?.text).toMatch(/must_change_password/)
+    expect(insert?.text).toMatch(/TRUE/)
+    expect(insert?.values).not.toContain(`hashed::${FIXTURE_ARGON2ID_HASH}`)
+  })
+
+  it('rejects plaintext provisioned user passwords before any database write', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+
+    await expect(svc.createUserFromHash('alice', 'Alice', 'plaintext', 'admin')).rejects.toThrow(
+      /argon2id hash/i
+    )
+    expect(pool.queries.length).toBe(0)
+  })
+})
+
 const RUN_POSTGRES_AUTH_E2E = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
   process.env.VARLENS_PG_URL ??

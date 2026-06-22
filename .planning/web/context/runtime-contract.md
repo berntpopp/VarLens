@@ -12,6 +12,7 @@ repository and consume the image as an immutable artifact.
 | --- | --- |
 | Image | `ghcr.io/<owner>/varlens-web:<tag>` or a pinned digest |
 | Process | `node out/web/server.cjs` via `tini` |
+| Operator command | `node out/web/provision-user.cjs` for one-shot app-semantic user creation from a precomputed Argon2id hash |
 | User | uid/gid `1001` (`varlens`) |
 | Internal port | `8080` |
 | Health endpoint | `GET /healthz` |
@@ -19,8 +20,14 @@ repository and consume the image as an immutable artifact.
 
 Operators may remap the external port and route traffic through any reverse
 proxy. The container's internal port and healthcheck remain fixed at `8080`.
+The operator command is for deployment/IAC Jobs only; it is not an HTTP API and
+must not be reachable from request-serving runtime.
 
 ## Required Runtime Environment
+
+Current web mode uses a single PostgreSQL URL. Web 11 is planned to add a
+hosted topology switch; see `../backlog/web11-hosted-db-foundation-contract.md`.
+Until that work lands, the variables below remain the current boot contract.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |

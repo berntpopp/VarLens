@@ -102,7 +102,14 @@ function normalizeMetricsPath(path: string | undefined): string {
 
 export function resolveMetricsRoute(method: string, url: string): string {
   const pathname = pathName(url)
-  if (pathname === '/healthz' || pathname === '/api/openapi.json') return pathname
+  if (
+    pathname === '/livez' ||
+    pathname === '/readyz' ||
+    pathname === '/healthz' ||
+    pathname === '/api/openapi.json'
+  ) {
+    return pathname
+  }
 
   if (method === 'POST' && /^\/api\/[^/]+\/[^/]+$/.test(pathname)) {
     return documentedApiPaths.has(pathname) ? pathname : 'unknown'
