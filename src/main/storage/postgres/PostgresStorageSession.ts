@@ -19,6 +19,7 @@ import type { PostgresHealthDiagnosticResult } from './PostgresHealthDiagnostics
 import { PostgresImportExecutor } from './PostgresImportExecutor'
 import { PostgresOverviewRepository } from './PostgresOverviewRepository'
 import { PostgresPanelsRepository } from './PostgresPanelsRepository'
+import { PostgresPublicAnnotationRepository } from './PostgresPublicAnnotationRepository'
 import { PostgresReadExecutor } from './PostgresReadExecutor'
 import { PostgresShortlistService } from './PostgresShortlistService'
 import { PostgresTagsRepository } from './PostgresTagsRepository'
@@ -44,6 +45,7 @@ interface PostgresStorageSessionOptions {
   pool: Pool
   migrationResult?: PostgresMigrationResult
   createCaseListRepository?: (pool: Pool, schema: string) => PostgresCaseListRepository
+  publicAnnotations?: PostgresPublicAnnotationRepository
 }
 
 export const POSTGRES_CAPABILITIES: StorageCapabilities = {
@@ -187,7 +189,10 @@ export class PostgresStorageSession implements StorageSession {
       audit,
       transcripts,
       caseMetadata,
-      variants
+      variants,
+      ...(options.publicAnnotations !== undefined
+        ? { publicAnnotations: options.publicAnnotations }
+        : {})
     })
     this.writeExecutor = new PostgresWriteExecutor(
       caseMetadata,
