@@ -3,14 +3,27 @@
 Status: backlog.
 
 The default manifest-backed parity set already covers the minimum type matrix from
-`../active/data/01-source-inventory.md`. These public sources remain useful for a later expansion
+`../completed/data/01-source-inventory.md`. These public sources remain useful for a later expansion
 pass when the team wants less synthetic evidence or larger realism checks.
+
+Public availability is not enough to make a fixture safe to redistribute or to
+publish into a shared annotation snapshot.
+
+For committed test fixtures, every new source subset needs an explicit
+license/provenance/privacy review, a pinned URL or accession, checksums, and a
+storage class. Unknown or mixed license state must fall back to synthetic/private
+test fixtures.
+
+For public annotation snapshot input, the stricter field-aware license matrix in
+`../../specs/2026-06-22-public-private-annotation-db-boundary.md` applies,
+including redistribution class, license text hash, attribution, and default
+blocklist handling.
 
 | Need | Candidate Source | Why It Helps | Notes |
 | --- | --- | --- | --- |
 | Small variant VCF and BED truth regions | NIST GIAB | Stable public benchmark data, already used by current fixtures | Use subsets only; record exact release URL and checksum. |
 | Trio/multisample VCF | GIAB Chinese Trio | Exercises selected sample, trio metadata, and multisample parsing | Existing fixtures already use HG005/HG006/HG007 region data. |
-| ClinVar VCF | NCBI ClinVar GRCh38 VCF | Exercises `CLNSIG` and public clinical annotation fields | ClinVar VCF is weekly and large. Pin archived/monthly release or record retrieval date. |
+| ClinVar VCF | NCBI ClinVar GRCh38 VCF | Exercises `CLNSIG` and public clinical annotation fields | ClinVar VCF is weekly and large. Pin archived/monthly release with checksum and license evidence. |
 | Long-read bundle | Oxford Nanopore `wf-human-variation` demo/output shape | Matches `.wf_snp.vcf.gz`, `.wf_sv.vcf.gz`, `.wf_cnv.vcf.gz`, `.wf_str.vcf.gz` bundle names that VarLens already expects | Verify downloadable demo terms before deriving fixtures. |
 | SV VCF | Sniffles2 output from ONT or caller examples | Exercises SV extension mapping: `SVTYPE`, `END`, `SUPPORT`, `VAF`, breakends | Prefer small demo output over full WGS. |
 | CNV VCF | Spectre output from ONT workflow or Spectre examples | Exercises CNV extension mapping: `CN`, `GQ`, `HO`, `SM`, `BC` | CNV examples are variable; keep a synthetic fallback. |

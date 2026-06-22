@@ -1,6 +1,6 @@
 /**
  * Serves the built browser bundle (`out/web/public/`) and falls back
- * to `index.html` for any non-`/api/*`, non-`/healthz` GET so Vue
+ * to `index.html` for any non-`/api/*`, non-probe GET so Vue
  * Router's history-mode routes resolve.
  *
  * Disabled when the build output isn't present — keeps tests that
@@ -52,7 +52,7 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
       reply.code(404)
       return { error: 'not found' }
     }
-    if (url.startsWith('/api/') || url === '/healthz') {
+    if (url.startsWith('/api/') || url === '/livez' || url === '/readyz' || url === '/healthz') {
       reply.code(404)
       return { error: 'not found' }
     }

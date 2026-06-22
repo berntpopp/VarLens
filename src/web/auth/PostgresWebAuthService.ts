@@ -427,6 +427,38 @@ export class PostgresWebAuthService {
     }
   }
 
+  async createUserFromHash(
+    username: string,
+    displayName: string,
+    passwordHash: string,
+    createdByUsername: string
+  ): Promise<{ id: number; username: string; role: UserRole; must_change_password: number }> {
+    const sch = this.schemaQuoted
+    if (!isLikelyArgon2idHash(passwordHash)) {
+      throw new Error(
+        'createUserFromHash: passwordHash does not look like an Argon2id hash. ' +
+          'Generate one with `npm run varlens:hash-password`.'
+      )
+    }
+    assertArgon2idHashMatchesProviderPolicy(passwordHash)
+    const creator = await this.getUser(createdByUsername)
+
+    const inserted = await this.pool.query<{ id: string }>(
+      `INSERT INTO ${sch}."users"
+        (username, display_name, password_hash, role, must_change_password, created_by, password_changed_at)
+       VALUES ($1, $2, $3, $4, TRUE, $5, now())
+       RETURNING id`,
+      [username, displayName, passwordHash, ROLE_USER, creator?.id ?? null]
+    )
+
+    return {
+      id: Number(inserted.rows[0].id),
+      username,
+      role: ROLE_USER,
+      must_change_password: 1
+    }
+  }
+
   async getUser(username: string): Promise<User | undefined> {
     const sch = this.schemaQuoted
     const sel = await this.pool.query<Record<string, unknown>>(

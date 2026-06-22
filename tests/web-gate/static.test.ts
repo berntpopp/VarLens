@@ -55,4 +55,24 @@ describe('web static serving', () => {
       await rm(publicDir, { recursive: true, force: true })
     }
   })
+
+  test('does not serve the SPA shell for probe paths', async () => {
+    const publicDir = await mkdtemp(join(tmpdir(), 'varlens-web-public-'))
+    process.env.VARLENS_WEB_PUBLIC_DIR = publicDir
+    await writeFile(join(publicDir, 'index.html'), '<html><body>VarLens web</body></html>')
+
+    const app = fastify()
+    try {
+      await registerStatic(app)
+
+      for (const url of ['/livez', '/readyz', '/healthz']) {
+        const response = await app.inject({ method: 'GET', url })
+        expect(response.statusCode, url).toBe(404)
+        expect(response.body, url).not.toContain('VarLens web')
+      }
+    } finally {
+      await app.close()
+      await rm(publicDir, { recursive: true, force: true })
+    }
+  })
 })

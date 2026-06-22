@@ -25,4 +25,8 @@ Created: 2026-05-12
 
 - `publish-web.yml` proves the image before publishing the rolling tag.
 - The external deploy/operator repo proves the image before deploying a versioned tag.
-- Failure output includes app logs and enough Postgres connection context to debug quickly.
+- Failure output includes app logs and enough redacted Postgres connection
+  context to debug quickly, but never full URLs, passwords, tokens, hostnames,
+  database names that embed workspace identifiers, or raw query parameters.
+- The smoke lane has a redaction negative check before artifact upload/log
+  emission for credentialed URLs, tokens, and query parameters.
