@@ -8,6 +8,7 @@ export interface DispatcherDeps {
   session: StorageSession
   authService: PostgresWebAuthService
   events: WebEventHub
+  resolveSession?: (request: FastifyRequest) => Promise<StorageSession>
 }
 
 export interface InvokeBodyPayload {

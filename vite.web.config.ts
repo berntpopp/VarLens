@@ -85,7 +85,8 @@ export default defineConfig({
       input: {
         server: resolve(__dirname, 'src/web/server.ts'),
         'postgres-import-worker': resolve(__dirname, 'src/main/workers/postgres-import-worker.ts'),
-        'provision-user': resolve(__dirname, 'src/web/provision-user.ts')
+        'provision-user': resolve(__dirname, 'src/web/provision-user.ts'),
+        'migrate-db': resolve(__dirname, 'src/web/migrate-db.ts')
       },
       output: {
         entryFileNames: (chunkInfo) => (chunkInfo.name === 'server' ? 'server.cjs' : '[name].cjs'),
