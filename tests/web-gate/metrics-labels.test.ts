@@ -9,6 +9,9 @@ import {
 
 describe('web metrics route labels', () => {
   test('uses documented OpenAPI paths as stable API route labels', () => {
+    expect(resolveMetricsRoute('GET', '/livez')).toBe('/livez')
+    expect(resolveMetricsRoute('GET', '/readyz')).toBe('/readyz')
+    expect(resolveMetricsRoute('GET', '/healthz')).toBe('/healthz')
     expect(resolveMetricsRoute('POST', '/api/auth/login')).toBe('/api/auth/login')
     expect(resolveMetricsRoute('POST', '/api/cases/list')).toBe('/api/cases/list')
     expect(resolveMetricsRoute('GET', '/api/openapi.json')).toBe('/api/openapi.json')

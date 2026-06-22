@@ -5,7 +5,7 @@
  * Desktop SQLite stays untouched in src/main/.
  *
  *   - Fastify app with Pino JSON logging
- *   - `/healthz` (200/503)
+ *   - `/livez` (process-only), `/readyz` (DB readiness), `/healthz` (readiness alias)
  *   - SIGTERM/SIGINT graceful shutdown
  *   - Postgres-backed StorageSession (cases, variants) and
  *     PostgresWebAuthService (auth)
@@ -38,6 +38,7 @@ import { registerWebRateLimit } from './server/rate-limit'
 import { registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
+import { readWebDbTopology } from './topology'
 import {
   type AppMetrics,
   createAppMetricsFromEnv,
@@ -81,6 +82,13 @@ export interface BuildAppOptions {
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
+  const topology = readWebDbTopology(process.env)
+  if (topology.mode === 'hosted') {
+    throw new Error(
+      'VARLENS_WEB_DB_TOPOLOGY=hosted is configured, but hosted workspace routing is not implemented in this build.'
+    )
+  }
+
   // Validate Postgres config BEFORE building the app; any later
   // failure path means we'd hold a partially-spun Fastify instance,
   // which the SIGTERM tests can't cleanly tear down.
@@ -124,7 +132,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   // unauthenticated GETs to it. Registered before the dispatcher and
   // static handler so the explicit `/login` route wins over the SPA
   // fallback, and so the gate runs before any route handler ships
-  // bytes. `/api/*`, `/healthz`, and `/login*` are passthrough.
+  // bytes. `/api/*`, `/livez`, `/readyz`, `/healthz`, and `/login*`
+  // are passthrough.
   const appPathPrefix = resolveAppPathPrefix()
   registerLoginRoute(app)
   registerPageGate(app, { appPathPrefix })
@@ -139,7 +148,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerDispatcher(app, dispatcherDeps, overrides)
   registerEventStream(app, events)
 
-  app.get('/healthz', { schema: { hide: true } }, async (_request, reply) => {
+  app.get('/livez', { schema: { hide: true } }, async () => {
+    return { status: 'ok', version: pkg.version }
+  })
+
+  const readinessHandler = async (_request: unknown, reply: import('fastify').FastifyReply) => {
     const open = await isPostgresHealthy(pool)
     metrics.setDatabaseHealthy(open)
     if (!open) {
@@ -147,7 +160,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return { status: 'unhealthy', version: pkg.version, db: { open: false } }
     }
     return { status: 'ok', version: pkg.version, db: { open: true } }
-  })
+  }
+
+  app.get('/readyz', { schema: { hide: true } }, readinessHandler)
+  app.get('/healthz', { schema: { hide: true } }, readinessHandler)
 
   await registerStatic(app)
 
