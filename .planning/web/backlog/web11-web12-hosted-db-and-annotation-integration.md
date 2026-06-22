@@ -8,7 +8,8 @@ Created: 2026-06-22
 The web track now needs two separate steps:
 
 1. **Web 11** prepares hosted-mode storage for high-sensitivity genomic data.
-2. **Web 12** imports annotation workflow bundles through a VarLens-owned adapter.
+2. **Web 12** syncs public annotation snapshots through a VarLens-owned command
+   and enriches VarLens lookups from the shared public annotation DB.
 
 Keep these separate. The database boundary must be settled before the annotation
 bundle importer decides where raw evidence, promoted fields, public snapshot
@@ -23,7 +24,7 @@ VarLens owns:
 
 - the web runtime contract
 - storage abstractions and migrations used by the app
-- bundle import and reannotation orchestration
+- public annotation snapshot sync, schema, lookup, and reannotation orchestration
 - first-class annotation mapping
 - raw/provenance storage in the private workspace database
 - audit events emitted by app behavior
@@ -38,7 +39,7 @@ Deployment/operator repositories own:
 
 The annotation workflow repository owns:
 
-- bundle production
+- bundle and public snapshot production
 - manifest and checksum contract
 - snapshot build metadata
 - validator fixtures
@@ -109,13 +110,15 @@ target safety boundary for hosted sensitive workspaces.
 - Kubernetes, Helm, CloudNativePG, PgBouncer, backup, or restore
   implementation.
 
-## Web 12 — Annotation Bundle Integration
+## Web 12 — Public Annotation Integration
 
 ### Target Behavior
 
-VarLens imports annotation workflow output through a VarLens-owned adapter. The
-annotation workflow repository produces files and manifests; VarLens decides how
-to map, store, audit, and expose them.
+VarLens owns the public annotation sync command and public annotation schema.
+The operator repository may start the command as a Kubernetes Job, but it must
+not validate annotation manifests, define annotation tables, or normalize
+annotation content. The annotation workflow repository produces files and
+manifests; VarLens decides how to validate, map, store, audit, and expose them.
 
 Expected bundle families:
 
@@ -127,8 +130,9 @@ Expected bundle families:
 - Straglr TSV sidecars
 - report and manifest files
 
-The bundle is private case data unless a field is explicitly classified as
-license-cleared public reference data.
+User-uploaded case bundles remain private workspace data. Annotation-repository
+public snapshots are shared reference data and are written only to the Public
+Annotation DB by the VarLens-owned sync command.
 
 The Web 12 handoff is not just "read a folder." It needs a versioned bundle
 contract with paths, required versus optional files, indexes, checksums,
@@ -137,24 +141,30 @@ import ordering, and failure semantics.
 
 ### Order Of Work
 
-1. **Bundle contract reader.** Parse manifest, file inventory, checksums,
+1. **Public sync command.** Provide a build artifact such as
+   `out/web/sync-public-annotations.cjs` that validates public snapshot or
+   bundle-reference manifests and writes only public snapshot registry tables.
+2. **Bundle contract reader.** Parse manifest, file inventory, checksums,
    genome build, tool versions, source metadata, required/optional files, and
    import ordering.
-2. **File validation.** Fail before import when required files, indexes,
+3. **File validation.** Fail before import when required files, indexes,
    checksums, genome build, or variant type declarations are inconsistent.
-3. **Variant identity.** Normalize SNV/indel, SV/CNV, and STR identity using
+4. **Variant identity.** Normalize SNV/indel, SV/CNV, and STR identity using
    explicit matching rules. STRs must not be forced into a `chr,pos,ref,alt`
    identity model when a locus/repeat-catalog key is required.
-4. **Promoted mapping.** Materialize only fields needed for filtering, sorting,
+5. **Promoted mapping.** Materialize only fields needed for filtering, sorting,
    display, and review as first-class columns/tables.
-5. **Raw evidence.** Preserve raw VCF INFO/CSQ/ANN and TSV sidecar values with
+6. **Raw evidence.** Preserve raw VCF INFO/CSQ/ANN and TSV sidecar values with
    provenance in the private workspace DB.
-6. **Public snapshot reference.** Store the public annotation snapshot ID,
+7. **Public snapshot reference.** Store the public annotation snapshot ID,
    field contract version, and mapping version used for each import or
    reannotation job.
-7. **Import report.** Record counts, skipped records, withheld fields,
+8. **Lookup enrichment.** Consult the shared Public Annotation DB read-only from
+   annotation/list/detail/export paths where a normalized private variant key can
+   be matched to the selected public snapshot.
+9. **Import report.** Record counts, skipped records, withheld fields,
    mapping warnings, and sidecar join failures.
-8. **Reannotation.** Treat reannotation as an explicit job that produces a diff.
+10. **Reannotation.** Treat reannotation as an explicit job that produces a diff.
    New public snapshots must not silently rewrite old case interpretations.
 
 Before implementation, Web 12 must define:
@@ -184,9 +194,14 @@ workflow needs it.
 ### App-Level Acceptance Checks
 
 - Valid fixture bundle imports into a private workspace DB.
+- Valid public snapshot manifest syncs into the Public Annotation DB through the
+  VarLens command, not through deployment-repository SQL.
 - Invalid manifest/checksum/genome-build fixtures fail before writes.
 - Same input plus same snapshot plus same mapping version is deterministic.
 - Public annotation DB receives no private case, sample, genotype, or user data.
+- Deployment/operator code starts the VarLens sync command and provisions
+  DB/RBAC/Secrets only; it does not contain public annotation DDL or manifest
+  normalization logic.
 - Restricted or unknown-license fields are withheld explicitly rather than
   silently dropped.
 - AnnotSV and Straglr sidecars are retained with provenance even when only a
@@ -221,6 +236,7 @@ workflow needs it.
 Web 11 exits when the app contract and tests are good enough for an operator
 repository to implement the topology without guessing app behavior.
 
-Web 12 exits when a representative annotation bundle can be imported through
-the VarLens adapter into a private workspace DB, with public snapshot
-references, provenance, import report, and deterministic reannotation behavior.
+Web 12 exits when public annotation snapshots can be synced through the VarLens
+command into the shared Public Annotation DB, representative private uploads can
+reference those snapshots, and VarLens lookups enrich private variants with
+read-only public reference data deterministically.
