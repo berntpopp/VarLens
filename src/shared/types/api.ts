@@ -459,9 +459,39 @@ export interface VariantKey {
  */
 export type BatchAnnotationKey = VariantKey & { variantId?: number }
 
+export interface PublicAnnotationSnapshotSummary {
+  snapshotId: string
+  bundleId: string | null
+  genomeBuild: string | null
+  mappingVersion: string
+  contentHash: string
+  manifestChecksum: string
+  licenseMatrixChecksum: string
+  publicFileCount: number
+  privateCaseData: boolean
+  ingestedAt: string | null
+}
+
+export interface PublicAnnotationVariantRecord {
+  snapshotId: string
+  sourceId: string | null
+  fieldName: string
+  fieldValue: unknown
+  evidence: unknown
+  provenance: unknown
+}
+
+export interface PublicAnnotationReferences {
+  snapshots: PublicAnnotationSnapshotSummary[]
+  variantRecords: PublicAnnotationVariantRecord[]
+}
+
+export type PublicAnnotationBatchReferences = Record<string, PublicAnnotationReferences>
+
 export interface VariantAnnotationsResult {
   global: VariantAnnotation | null
   perCase: CaseVariantAnnotation | null
+  publicReferences?: PublicAnnotationReferences
 }
 
 export interface AnnotationsAPI {

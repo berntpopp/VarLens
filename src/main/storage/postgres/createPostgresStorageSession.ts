@@ -5,10 +5,12 @@ import { classifyPostgresFailureMessage } from './PostgresHealthDiagnostics'
 import { PostgresStorageSession } from './PostgresStorageSession'
 import { POSTGRES_MIGRATIONS } from './migrations/definitions'
 import { PostgresMigrationRunner } from './migrations/PostgresMigrationRunner'
+import type { PostgresPublicAnnotationRepository } from './PostgresPublicAnnotationRepository'
 import { wrapPoolForCounters } from './query-counters'
 
 export async function createPostgresStorageSession(
-  config: PostgresStorageConfig
+  config: PostgresStorageConfig,
+  options: { publicAnnotations?: PostgresPublicAnnotationRepository } = {}
 ): Promise<PostgresStorageSession> {
   const pool = new Pool(buildPostgresPoolConfig(config))
 
@@ -24,7 +26,10 @@ export async function createPostgresStorageSession(
     return new PostgresStorageSession({
       config,
       pool: wrappedPool,
-      migrationResult
+      migrationResult,
+      ...(options.publicAnnotations !== undefined
+        ? { publicAnnotations: options.publicAnnotations }
+        : {})
     })
   } catch (error) {
     try {
@@ -50,10 +55,17 @@ export async function createPostgresStorageSession(
 }
 
 export async function openPostgresStorageSessionWithoutMigrating(
-  config: PostgresStorageConfig
+  config: PostgresStorageConfig,
+  options: { publicAnnotations?: PostgresPublicAnnotationRepository } = {}
 ): Promise<PostgresStorageSession> {
   const pool = new Pool(buildPostgresPoolConfig(config))
-  return new PostgresStorageSession({ config, pool: wrapPoolForCounters(pool) })
+  return new PostgresStorageSession({
+    config,
+    pool: wrapPoolForCounters(pool),
+    ...(options.publicAnnotations !== undefined
+      ? { publicAnnotations: options.publicAnnotations }
+      : {})
+  })
 }
 
 function toPostgresFailureError(error: unknown): Error {

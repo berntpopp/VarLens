@@ -1,4 +1,5 @@
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
+import type { VariantAnnotationsResult } from '../../../shared/types/api'
 import type { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
 import type { PostgresAvailableBuildsRepository } from './PostgresAvailableBuildsRepository'
 import type { PostgresAnalysisGroupsRepository } from './PostgresAnalysisGroupsRepository'
@@ -11,6 +12,7 @@ import type { PostgresExportRepository } from './PostgresExportRepository'
 import type { PostgresFilterPresetsRepository } from './PostgresFilterPresetsRepository'
 import type { PostgresOverviewRepository } from './PostgresOverviewRepository'
 import type { PostgresPanelsRepository } from './PostgresPanelsRepository'
+import type { PostgresPublicAnnotationRepository } from './PostgresPublicAnnotationRepository'
 import type { PostgresShortlistService } from './PostgresShortlistService'
 import type { PostgresTagsRepository } from './PostgresTagsRepository'
 import type { PostgresTranscriptsRepository } from './PostgresTranscriptsRepository'
@@ -36,6 +38,10 @@ interface PostgresReadExecutorRepositories {
   annotations: Pick<
     PostgresAnnotationsRepository,
     'getGlobalAnnotation' | 'getPerCaseAnnotation' | 'getAnnotationsForVariant' | 'getBatch'
+  >
+  publicAnnotations?: Pick<
+    PostgresPublicAnnotationRepository,
+    'getReferencesForVariant' | 'getBatchReferences'
   >
   commentsMetrics: Pick<
     PostgresCommentsMetricsRepository,
@@ -212,16 +218,22 @@ export class PostgresReadExecutor implements StorageReadExecutor {
         )
 
       case 'annotations:getForVariant':
-        return await this.repositories.annotations.getAnnotationsForVariant(
-          task.params[0],
-          task.params[1].chr,
-          task.params[1].pos,
-          task.params[1].ref,
-          task.params[1].alt
+        return await this.withPublicReferences(
+          await this.repositories.annotations.getAnnotationsForVariant(
+            task.params[0],
+            task.params[1].chr,
+            task.params[1].pos,
+            task.params[1].ref,
+            task.params[1].alt
+          ),
+          task.params[1]
         )
 
       case 'annotations:batchGet':
-        return await this.repositories.annotations.getBatch(task.params[0], task.params[1])
+        return await this.withBatchPublicReferences(
+          await this.repositories.annotations.getBatch(task.params[0], task.params[1]),
+          task.params[1]
+        )
 
       case 'case-comments:list':
         return await this.repositories.commentsMetrics.listCaseComments(task.params[0])
@@ -277,5 +289,32 @@ export class PostgresReadExecutor implements StorageReadExecutor {
 
     const _exhaustive: never = task
     throw new Error(`Unhandled read task: ${JSON.stringify(_exhaustive)}`)
+  }
+
+  private async withPublicReferences(
+    result: VariantAnnotationsResult,
+    key: { chr: string; pos: number; ref: string; alt: string }
+  ): Promise<VariantAnnotationsResult> {
+    if (this.repositories.publicAnnotations === undefined) return result
+    return {
+      ...result,
+      publicReferences: await this.repositories.publicAnnotations.getReferencesForVariant(key)
+    }
+  }
+
+  private async withBatchPublicReferences(
+    result: Record<string, VariantAnnotationsResult>,
+    keys: Array<{ chr: string; pos: number; ref: string; alt: string }>
+  ): Promise<Record<string, VariantAnnotationsResult>> {
+    if (this.repositories.publicAnnotations === undefined) return result
+    const publicReferences = await this.repositories.publicAnnotations.getBatchReferences(keys)
+    const merged: Record<string, VariantAnnotationsResult> = { ...result }
+    for (const [key, value] of Object.entries(result)) {
+      merged[key] = {
+        ...value,
+        publicReferences: publicReferences[key] ?? { snapshots: [], variantRecords: [] }
+      }
+    }
+    return merged
   }
 }

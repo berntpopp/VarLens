@@ -27,6 +27,7 @@ import { Pool } from 'pg'
 
 import { buildPostgresPoolConfig, getPostgresStorageConfig } from '../main/storage/config'
 import { createPostgresStorageSession } from '../main/storage/postgres/createPostgresStorageSession'
+import { PostgresPublicAnnotationRepository } from '../main/storage/postgres/PostgresPublicAnnotationRepository'
 import type { PostgresStorageSession } from '../main/storage/postgres/PostgresStorageSession'
 import type { StorageSession } from '../main/storage/session'
 import { AdminAlreadyExistsError, PostgresWebAuthService } from './auth/PostgresWebAuthService'
@@ -137,9 +138,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
           })
         )
       : null
+  const publicAnnotations =
+    publicAnnotationPool === null
+      ? undefined
+      : new PostgresPublicAnnotationRepository(publicAnnotationPool)
   const hostedRouter =
     topology.mode === 'hosted'
-      ? new HostedUserDbRouter({ topology, authService })
+      ? new HostedUserDbRouter({
+          topology,
+          authService,
+          ...(publicAnnotations !== undefined ? { publicAnnotations } : {})
+        })
       : null
 
   if (options.admin !== undefined) {
@@ -165,8 +174,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     authService,
     events,
     ...(hostedRouter !== null
-      ? { resolveSession: (request: Parameters<HostedUserDbRouter['resolveSession']>[0]) =>
-          hostedRouter.resolveSession(request) }
+      ? {
+          resolveSession: (request: Parameters<HostedUserDbRouter['resolveSession']>[0]) =>
+            hostedRouter.resolveSession(request)
+        }
       : {})
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
