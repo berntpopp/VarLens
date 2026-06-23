@@ -4,6 +4,12 @@
 **Scope:** Planning only; no implementation in this document.
 **Motivation:** VarLens hosted/web work for high-sensitivity genomics data, annotation-bundle import, and public annotation snapshot reuse.
 
+**Implementation note 2026-06-23:** fork main now has the first hosted/public
+annotation implementation path. A local synthetic manifest was synced through
+the VarLens public annotation command into a local PostgreSQL Public Annotation
+DB and produced only non-private public annotation records. This validates the
+boundary mechanically, but not the production annotation content contract.
+
 ## Summary
 
 VarLens should treat sensitive case-level genomics data and reusable public annotation snapshots as different data classes with different persistence boundaries.
