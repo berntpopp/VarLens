@@ -119,6 +119,7 @@ function basePayload(): PublicAnnotationSyncPayload {
     sourceManifestPath: '/tmp/public-snapshot.json',
     sourceManifestChecksum: checksum('9'),
     privateCaseData: false,
+    sourcePrivateCaseDataRedacted: false,
     snapshot: {
       snapshotId: 'clinvar-2026-06-22-aaaaaaaaaaaa',
       bundleId: null,
@@ -233,7 +234,8 @@ describe('sync-public-annotations command helpers', () => {
 
     const payload = await buildPublicAnnotationSyncPayload(manifestPath)
 
-    expect(payload.privateCaseData).toBe(true)
+    expect(payload.privateCaseData).toBe(false)
+    expect(payload.sourcePrivateCaseDataRedacted).toBe(true)
     expect(payload.files).toEqual([])
     expect(payload.variantRecordSources).toHaveLength(1)
     expect(payload.snapshot.snapshotId).toBe('clinvar-2026-06-22-aaaaaaaaaaaa')
@@ -254,6 +256,7 @@ describe('sync-public-annotations command helpers', () => {
     const payload = await buildPublicAnnotationSyncPayload(manifestPath)
 
     expect(payload.privateCaseData).toBe(false)
+    expect(payload.sourcePrivateCaseDataRedacted).toBe(false)
     expect(payload.schemaVersion).toBe('varlens.public-annotation-snapshot.v1')
     expect(payload.snapshot.licenseMatrixChecksum).toBe(checksum('e'))
     expect(payload.storedManifest).toMatchObject({ privacy: { noPrivateData: true } })
@@ -295,7 +298,8 @@ describe('sync-public-annotations command helpers', () => {
     const payload: PublicAnnotationSyncPayload = {
       ...basePayload(),
       schemaVersion: 'varlens.annotation-bundle.v1',
-      privateCaseData: true,
+      privateCaseData: false,
+      sourcePrivateCaseDataRedacted: true,
       snapshot: {
         ...basePayload().snapshot,
         bundleId: 'bundle-2026-06-22-aaaaaaaaaaaa',
