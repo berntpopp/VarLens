@@ -1,7 +1,23 @@
 # Web 11 / Web 12 — hosted DB foundation and annotation integration
 
-Status: backlog / not current execution
+Status: implementation started on fork main; local public sync proof complete
 Created: 2026-06-22
+
+## Implementation Status
+
+Fork main now contains the first Web 11/Web 12 implementation pieces: hosted DB
+boundary work, the VarLens-owned public annotation sync command, and lookup
+plumbing for the shared Public Annotation DB.
+
+Local proof completed on 2026-06-23 with a synthetic annotation bundle manifest
+synced through `out/web/sync-public-annotations.cjs` into a local PostgreSQL
+Public Annotation DB. The run created one snapshot, three fixture variants, and
+33 public annotation records with `private_case_data = false`.
+
+This proves the command and DB write path. It does not close production Web 12.
+Still open: a real annotation workflow run, source/license release gates,
+normalization beyond the SNV fixture path, structured ClinVar/VEP transcript
+mapping, and end-to-end lookup/reannotation acceptance tests.
 
 ## Why This Exists
 
