@@ -49,6 +49,7 @@ export interface PublicAnnotationSyncPayload {
   sourceManifestPath: string
   sourceManifestChecksum: string
   privateCaseData: boolean
+  sourcePrivateCaseDataRedacted: boolean
   snapshot: SnapshotPayload
   files: FilePayload[]
   variantRecordSources: PublicVariantRecordSource[]
@@ -164,7 +165,8 @@ export async function buildPublicAnnotationSyncPayload(
       schemaVersion: 'varlens.annotation-bundle.v1',
       sourceManifestPath: absoluteManifestPath,
       sourceManifestChecksum,
-      privateCaseData: true,
+      privateCaseData: false,
+      sourcePrivateCaseDataRedacted: true,
       snapshot: {
         snapshotId: manifest.publicSnapshot.snapshotId,
         bundleId: manifest.bundleId,
@@ -190,6 +192,7 @@ export async function buildPublicAnnotationSyncPayload(
       sourceManifestPath: absoluteManifestPath,
       sourceManifestChecksum,
       privateCaseData: false,
+      sourcePrivateCaseDataRedacted: false,
       snapshot: {
         snapshotId: manifest.snapshotId,
         bundleId: null,
@@ -508,7 +511,7 @@ async function main(): Promise<void> {
         schemaVersion: payload.schemaVersion,
         publicFileCount: payload.files.length,
         publicVariantRecordCount: result.variantRecordCount,
-        privateCaseDataRedacted: payload.privateCaseData
+        privateCaseDataRedacted: payload.sourcePrivateCaseDataRedacted
       }) + '\n'
     )
   } finally {
