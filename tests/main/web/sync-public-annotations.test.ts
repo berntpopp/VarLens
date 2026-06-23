@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
@@ -128,6 +129,7 @@ function basePayload(): PublicAnnotationSyncPayload {
       licenseMatrixChecksum: checksum('e')
     },
     files: [],
+    variantRecordSources: [],
     storedManifest: validPublicSnapshotManifest()
   }
 }
@@ -164,7 +166,16 @@ describe('sync-public-annotations command helpers', () => {
     await mkdir(join(root, 'vcf'), { recursive: true })
 
     const report = await writeFixture(join(root, 'reports/report.json'), '{"ok":true}\n')
-    const vcf = await writeFixture(join(root, 'vcf/snv.vcf.gz'), '##fileformat=VCFv4.3\n')
+    const vcf = await writeFixture(
+      join(root, 'vcf/snv.vcf.gz'),
+      [
+        '##fileformat=VCFv4.3',
+        '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature|HGVSc|HGVSp|ClinVarCurrent_CLNSIG|ClinVarCurrent_CLNREVSTAT|ClinVarCurrent_CLNDN|ClinVarCurrent_ALLELEID|CADD_phred">',
+        '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
+        '1\t12345\t.\tA\tG\t.\tPASS\tCSQ=G|missense_variant|MODERATE|GENE1|ENSG0001|ENST0001|c.1A>G|p.Lys1Arg|Pathogenic|reviewed_by_expert_panel|Disease one|123|30.1',
+        ''
+      ].join('\n')
+    )
     const tbi = await writeFixture(join(root, 'vcf/snv.vcf.gz.tbi'), 'index\n')
     const manifestPath = join(root, 'annotation-bundle.json')
     const manifest = {
@@ -224,6 +235,7 @@ describe('sync-public-annotations command helpers', () => {
 
     expect(payload.privateCaseData).toBe(true)
     expect(payload.files).toEqual([])
+    expect(payload.variantRecordSources).toHaveLength(1)
     expect(payload.snapshot.snapshotId).toBe('clinvar-2026-06-22-aaaaaaaaaaaa')
     expect(payload.storedManifest).toMatchObject({
       files: {
@@ -251,14 +263,61 @@ describe('sync-public-annotations command helpers', () => {
     const client = new FakeClient()
     const pool = { connect: async () => client }
 
-    await syncPublicAnnotationPayload(pool, basePayload())
+    await expect(syncPublicAnnotationPayload(pool, basePayload())).resolves.toStrictEqual({
+      variantRecordCount: 0
+    })
 
     const sql = client.queries.map((query) => query.text).join('\n')
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS public_annotation_snapshots')
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS public_annotation_variant_records')
     expect(sql).toContain('INSERT INTO public_annotation_snapshots')
     expect(sql).toContain('INSERT INTO public_annotation_sync_events')
     expect(client.queries.at(-1)?.text).toBe('COMMIT')
     expect(client.released).toBe(true)
+  })
+
+  test('imports public-safe variant records from the annotation bundle SNV VCF', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'varlens-sync-public-records-'))
+    await mkdir(join(root, 'vcf'), { recursive: true })
+    const vcfPath = join(root, 'vcf/snv.vcf.gz')
+    await writeFile(
+      vcfPath,
+      gzipSync(
+        [
+          '##fileformat=VCFv4.3',
+          '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature|HGVSc|HGVSp|ClinVarCurrent_CLNSIG|ClinVarCurrent_CLNREVSTAT|ClinVarCurrent_CLNDN|ClinVarCurrent_ALLELEID|CADD_phred|SpliceAI_pred_DS_AG">',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
+          '1\t12345\t.\tA\tG\t.\tPASS\tCSQ=G|missense_variant|MODERATE|GENE1|ENSG0001|ENST0001|c.1A>G|p.Lys1Arg|Pathogenic|reviewed_by_expert_panel|Disease one|123|30.1|0.8',
+          ''
+        ].join('\n')
+      )
+    )
+    const payload: PublicAnnotationSyncPayload = {
+      ...basePayload(),
+      schemaVersion: 'varlens.annotation-bundle.v1',
+      privateCaseData: true,
+      snapshot: {
+        ...basePayload().snapshot,
+        bundleId: 'bundle-2026-06-22-aaaaaaaaaaaa',
+        mappingVersion: 'annotation-bundle-map-v1'
+      },
+      variantRecordSources: [{ role: 'snv_vcf', absolutePath: vcfPath }]
+    }
+    const client = new FakeClient()
+    const pool = { connect: async () => client }
+
+    await expect(syncPublicAnnotationPayload(pool, payload)).resolves.toStrictEqual({
+      variantRecordCount: 11
+    })
+
+    const variantInsert = client.queries.find((query) =>
+      query.text.includes('INSERT INTO public_annotation_variant_records')
+    )
+    expect(variantInsert?.values).toContain('clinical_significance')
+    expect(variantInsert?.values).toContain('"Pathogenic"')
+    expect(variantInsert?.values).toContain('gene_symbol')
+    expect(variantInsert?.values).not.toContain('CADD_phred')
+    expect(variantInsert?.values).not.toContain('SpliceAI_pred_DS_AG')
   })
 
   test('rejects snapshot ID reuse with changed immutable checksums', async () => {

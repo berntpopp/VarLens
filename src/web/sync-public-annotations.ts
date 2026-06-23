@@ -15,6 +15,12 @@ import {
   validatePublicAnnotationSnapshotManifest
 } from '../shared/annotations/public-snapshot'
 import { buildPostgresPoolConfig, getPostgresStorageConfig } from '../main/storage/config'
+import {
+  buildPublicVariantRecordSources,
+  extractPublicVariantRecords,
+  type PublicVariantRecordPayload,
+  type PublicVariantRecordSource
+} from './public-annotation-bundle-records'
 
 interface SnapshotPayload {
   snapshotId: string
@@ -45,7 +51,12 @@ export interface PublicAnnotationSyncPayload {
   privateCaseData: boolean
   snapshot: SnapshotPayload
   files: FilePayload[]
+  variantRecordSources: PublicVariantRecordSource[]
   storedManifest: unknown
+}
+
+export interface PublicAnnotationSyncResult {
+  variantRecordCount: number
 }
 
 type QueryableClient = Pick<PoolClient, 'query' | 'release'>
@@ -164,6 +175,9 @@ export async function buildPublicAnnotationSyncPayload(
         licenseMatrixChecksum: manifest.publicSnapshot.licenseMatrixChecksum
       },
       files: [],
+      variantRecordSources: buildPublicVariantRecordSources(manifest, (file) =>
+        resolveManifestFile(manifestDir, file.path)
+      ),
       storedManifest: redactedManifestForPublicDb(manifest)
     }
   }
@@ -186,6 +200,7 @@ export async function buildPublicAnnotationSyncPayload(
         licenseMatrixChecksum: manifest.licenseMatrix.matrixChecksum
       },
       files: [],
+      variantRecordSources: [],
       storedManifest: manifest
     }
   }
@@ -202,7 +217,7 @@ export async function buildPublicAnnotationSyncPayload(
 export async function syncPublicAnnotationPayload(
   pool: TransactionPool,
   payload: PublicAnnotationSyncPayload
-): Promise<void> {
+): Promise<PublicAnnotationSyncResult> {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -247,6 +262,25 @@ export async function syncPublicAnnotationPayload(
         private_case_data boolean NOT NULL,
         synced_at timestamptz NOT NULL DEFAULT now()
       )
+    `)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS public_annotation_variant_records (
+        snapshot_id text NOT NULL REFERENCES public_annotation_snapshots(snapshot_id) ON DELETE CASCADE,
+        chr text NOT NULL,
+        pos bigint NOT NULL,
+        ref text NOT NULL,
+        alt text NOT NULL,
+        source_id text NOT NULL,
+        field_name text NOT NULL,
+        field_value jsonb NOT NULL,
+        evidence_json jsonb NOT NULL,
+        provenance_json jsonb NOT NULL,
+        PRIMARY KEY (snapshot_id, chr, pos, ref, alt, source_id, field_name)
+      )
+    `)
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS public_annotation_variant_records_lookup_idx
+      ON public_annotation_variant_records (chr, pos, ref, alt)
     `)
 
     const existing = await client.query<{
@@ -309,6 +343,9 @@ export async function syncPublicAnnotationPayload(
     await client.query('DELETE FROM public_annotation_files WHERE snapshot_id = $1', [
       payload.snapshot.snapshotId
     ])
+    await client.query('DELETE FROM public_annotation_variant_records WHERE snapshot_id = $1', [
+      payload.snapshot.snapshotId
+    ])
     for (const file of payload.files) {
       await client.query(
         `
@@ -339,6 +376,7 @@ export async function syncPublicAnnotationPayload(
         ]
       )
     }
+    const variantRecordCount = await syncVariantRecords(client, payload)
     await client.query(
       `
         INSERT INTO public_annotation_sync_events (
@@ -356,6 +394,7 @@ export async function syncPublicAnnotationPayload(
       ]
     )
     await client.query('COMMIT')
+    return { variantRecordCount }
   } catch (error) {
     try {
       await client.query('ROLLBACK')
@@ -366,6 +405,79 @@ export async function syncPublicAnnotationPayload(
   } finally {
     client.release()
   }
+}
+
+async function syncVariantRecords(
+  client: QueryableClient,
+  payload: PublicAnnotationSyncPayload
+): Promise<number> {
+  let count = 0
+  let batch: PublicVariantRecordPayload[] = []
+  for (const source of payload.variantRecordSources) {
+    for await (const record of extractPublicVariantRecords(source, {
+      bundleId: payload.snapshot.bundleId ?? payload.snapshot.snapshotId,
+      publicSnapshotId: payload.snapshot.snapshotId,
+      mappingVersion: payload.snapshot.mappingVersion
+    })) {
+      batch.push(record)
+      if (batch.length >= 500) {
+        await insertVariantRecordBatch(client, payload.snapshot.snapshotId, batch)
+        count += batch.length
+        batch = []
+      }
+    }
+  }
+  if (batch.length > 0) {
+    await insertVariantRecordBatch(client, payload.snapshot.snapshotId, batch)
+    count += batch.length
+  }
+  return count
+}
+
+async function insertVariantRecordBatch(
+  client: QueryableClient,
+  snapshotId: string,
+  records: readonly PublicVariantRecordPayload[]
+): Promise<void> {
+  const values: unknown[] = []
+  const rows = records.map((record, index) => {
+    const offset = index * 10
+    values.push(
+      snapshotId,
+      record.chr,
+      record.pos,
+      record.ref,
+      record.alt,
+      record.sourceId,
+      record.fieldName,
+      JSON.stringify(record.fieldValue),
+      JSON.stringify(record.evidence),
+      JSON.stringify(record.provenance)
+    )
+    return `($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8}::jsonb,$${offset + 9}::jsonb,$${offset + 10}::jsonb)`
+  })
+
+  await client.query(
+    `
+      INSERT INTO public_annotation_variant_records (
+        snapshot_id,
+        chr,
+        pos,
+        ref,
+        alt,
+        source_id,
+        field_name,
+        field_value,
+        evidence_json,
+        provenance_json
+      ) VALUES ${rows.join(',')}
+      ON CONFLICT (snapshot_id, chr, pos, ref, alt, source_id, field_name) DO UPDATE SET
+        field_value = EXCLUDED.field_value,
+        evidence_json = EXCLUDED.evidence_json,
+        provenance_json = EXCLUDED.provenance_json
+    `,
+    values
+  )
 }
 
 async function main(): Promise<void> {
@@ -388,13 +500,14 @@ async function main(): Promise<void> {
   const payload = await buildPublicAnnotationSyncPayload(manifestPath)
   const pool = new Pool(buildPostgresPoolConfig(config))
   try {
-    await syncPublicAnnotationPayload(pool, payload)
+    const result = await syncPublicAnnotationPayload(pool, payload)
     process.stdout.write(
       JSON.stringify({
         ok: true,
         snapshotId: payload.snapshot.snapshotId,
         schemaVersion: payload.schemaVersion,
         publicFileCount: payload.files.length,
+        publicVariantRecordCount: result.variantRecordCount,
         privateCaseDataRedacted: payload.privateCaseData
       }) + '\n'
     )
