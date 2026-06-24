@@ -115,6 +115,7 @@ export type { AuthResult, User }
 
 export interface PostgresWebAuthServiceOptions {
   pool: Pool
+  readPool?: Pick<Pool, 'query'>
   schema: string
   passwordProvider?: PasswordProvider
 }
@@ -203,8 +204,7 @@ function mapPgRowToUser(raw: Record<string, unknown>): User {
         ? null
         : String(raw.private_db_status),
     public_annotation_snapshot_id:
-      raw.public_annotation_snapshot_id === null ||
-      raw.public_annotation_snapshot_id === undefined
+      raw.public_annotation_snapshot_id === null || raw.public_annotation_snapshot_id === undefined
         ? null
         : String(raw.public_annotation_snapshot_id)
   }
@@ -220,11 +220,13 @@ function quoteSchema(schema: string): string {
 
 export class PostgresWebAuthService {
   private readonly pool: Pool
+  private readonly readPool: Pick<Pool, 'query'>
   private readonly schemaQuoted: string
   private readonly passwordProvider: PasswordProvider
 
   constructor(options: PostgresWebAuthServiceOptions) {
     this.pool = options.pool
+    this.readPool = options.readPool ?? options.pool
     this.schemaQuoted = quoteSchema(options.schema)
     this.passwordProvider = options.passwordProvider ?? defaultPasswordProvider
   }
@@ -243,7 +245,7 @@ export class PostgresWebAuthService {
    */
   async hasAdmin(): Promise<boolean> {
     const sch = this.schemaQuoted
-    const sel = await this.pool.query(
+    const sel = await this.readPool.query(
       `SELECT 1 FROM ${sch}."users" WHERE role = $1 AND is_active = TRUE LIMIT 1`,
       [ROLE_ADMIN]
     )
@@ -359,7 +361,7 @@ export class PostgresWebAuthService {
 
   async authenticate(username: string, password: string): Promise<AuthResult> {
     const sch = this.schemaQuoted
-    const sel = await this.pool.query<Record<string, unknown>>(
+    const sel = await this.readPool.query<Record<string, unknown>>(
       `SELECT * FROM ${sch}."users" WHERE username = $1 AND is_active = TRUE`,
       [username]
     )
@@ -494,7 +496,7 @@ export class PostgresWebAuthService {
 
   async getUser(username: string): Promise<User | undefined> {
     const sch = this.schemaQuoted
-    const sel = await this.pool.query<Record<string, unknown>>(
+    const sel = await this.readPool.query<Record<string, unknown>>(
       `SELECT * FROM ${sch}."users" WHERE username = $1`,
       [username]
     )
@@ -504,7 +506,7 @@ export class PostgresWebAuthService {
 
   async listUsers(): Promise<Omit<User, 'password_hash'>[]> {
     const sch = this.schemaQuoted
-    const sel = await this.pool.query<Record<string, unknown>>(
+    const sel = await this.readPool.query<Record<string, unknown>>(
       `SELECT * FROM ${sch}."users" ORDER BY created_at`
     )
     return sel.rows.map((row) => {
@@ -517,7 +519,7 @@ export class PostgresWebAuthService {
 
   async deactivateUser(username: string): Promise<void> {
     const sch = this.schemaQuoted
-    const existing = await this.pool.query<{ role: UserRole }>(
+    const existing = await this.readPool.query<{ role: UserRole }>(
       `SELECT role FROM ${sch}."users" WHERE username = $1`,
       [username]
     )
@@ -581,7 +583,7 @@ export class PostgresWebAuthService {
       )
     }
     const sch = this.schemaQuoted
-    const sel = await this.pool.query<Record<string, unknown>>(
+    const sel = await this.readPool.query<Record<string, unknown>>(
       `SELECT * FROM ${sch}."users" WHERE username = $1`,
       [username]
     )
@@ -606,7 +608,7 @@ export class PostgresWebAuthService {
 
   async isAccountsEnabled(): Promise<boolean> {
     const sch = this.schemaQuoted
-    const sel = await this.pool.query<{ value: string }>(
+    const sel = await this.readPool.query<{ value: string }>(
       `SELECT value FROM ${sch}."database_settings" WHERE key = 'accounts_enabled'`
     )
     return sel.rows[0]?.value === 'true'

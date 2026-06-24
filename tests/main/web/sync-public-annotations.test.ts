@@ -379,12 +379,55 @@ describe('sync-public-annotations command helpers', () => {
     expect(variantInsert?.values).not.toContain('*')
   })
 
+  test('skips public records when CSQ allele does not exactly match the VCF ALT', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'varlens-sync-public-csq-mismatch-'))
+    await mkdir(join(root, 'vcf'), { recursive: true })
+    const vcfPath = join(root, 'vcf/sv.vcf.gz')
+    await writeFile(
+      vcfPath,
+      gzipSync(
+        [
+          '##fileformat=VCFv4.3',
+          '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature|HGVSc|HGVSp">',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
+          '1\t100\t.\tN\t<DEL>\t.\tPASS\tCSQ=deletion|transcript_ablation|HIGH|GENE1|ENSG0001|ENST0001|c.1del|p.?',
+          ''
+        ].join('\n')
+      )
+    )
+    const payload: PublicAnnotationSyncPayload = {
+      ...basePayload(),
+      schemaVersion: 'varlens.annotation-bundle.v1',
+      privateCaseData: false,
+      sourcePrivateCaseDataRedacted: true,
+      snapshot: {
+        ...basePayload().snapshot,
+        bundleId: 'bundle-2026-06-22-aaaaaaaaaaaa',
+        mappingVersion: 'annotation-bundle-map-v1'
+      },
+      variantRecordSources: [{ role: 'sv_vcf', absolutePath: vcfPath }]
+    }
+    const client = new FakeClient()
+    const pool = { connect: async () => client }
+
+    await expect(syncPublicAnnotationPayload(pool, payload)).resolves.toStrictEqual({
+      variantRecordCount: 0
+    })
+
+    expect(
+      client.queries.some((query) =>
+        query.text.includes('INSERT INTO public_annotation_variant_records')
+      )
+    ).toBe(false)
+  })
+
   test('rejects snapshot ID reuse with changed immutable checksums', async () => {
     const client = new FakeClient([
       {
         content_hash: checksum('f'),
         manifest_checksum: checksum('b'),
-        license_matrix_checksum: checksum('e')
+        license_matrix_checksum: checksum('e'),
+        source_manifest_checksum: checksum('9')
       }
     ])
     const pool = { connect: async () => client }
@@ -395,5 +438,47 @@ describe('sync-public-annotations command helpers', () => {
 
     expect(client.queries.at(-1)?.text).toBe('ROLLBACK')
     expect(client.released).toBe(true)
+  })
+
+  test('rejects snapshot ID reuse with changed source manifest checksum', async () => {
+    const client = new FakeClient([
+      {
+        content_hash: checksum('a'),
+        manifest_checksum: checksum('b'),
+        license_matrix_checksum: checksum('e'),
+        source_manifest_checksum: checksum('8')
+      }
+    ])
+    const pool = { connect: async () => client }
+
+    await expect(syncPublicAnnotationPayload(pool, basePayload())).rejects.toThrow(
+      'already exists with a different source manifest checksum'
+    )
+
+    expect(client.queries.at(-1)?.text).toBe('ROLLBACK')
+    expect(client.released).toBe(true)
+  })
+
+  test('treats re-sync of the same source manifest as an immutable no-op', async () => {
+    const client = new FakeClient([
+      {
+        content_hash: checksum('a'),
+        manifest_checksum: checksum('b'),
+        license_matrix_checksum: checksum('e'),
+        source_manifest_checksum: checksum('9')
+      }
+    ])
+    const pool = { connect: async () => client }
+
+    await expect(syncPublicAnnotationPayload(pool, basePayload())).resolves.toStrictEqual({
+      variantRecordCount: 0
+    })
+
+    const sql = client.queries.map((query) => query.text).join('\n')
+    expect(sql).not.toContain('DELETE FROM public_annotation_files')
+    expect(sql).not.toContain('DELETE FROM public_annotation_variant_records')
+    expect(sql).not.toContain('INSERT INTO public_annotation_snapshots')
+    expect(sql).toContain('INSERT INTO public_annotation_sync_events')
+    expect(client.queries.at(-1)?.text).toBe('COMMIT')
   })
 })

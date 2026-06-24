@@ -1,7 +1,8 @@
 /**
  * VarLens web server entrypoint — Postgres-only.
  *
- * The web mode requires VARLENS_PG_URL and refuses to boot without it.
+ * Single-DB web mode requires VARLENS_PG_URL and refuses to boot without it.
+ * Hosted web mode uses the explicit control/workspace/public DB topology env.
  * Desktop SQLite stays untouched in src/main/.
  *
  *   - Fastify app with Pino JSON logging
@@ -11,9 +12,9 @@
  *     PostgresWebAuthService (auth)
  *   - Session-secret material lives under VARLENS_RECOVERY_KEY_DIR
  *     (default `/data`)
- *   - Fail-loud boot: missing VARLENS_PG_URL aborts before any port
- *     is bound; missing VARLENS_RECOVERY_KEY_DIR (when admin bootstrap
- *     is requested) likewise.
+ *   - Fail-loud boot: missing required DB topology env aborts before any port
+ *     is bound; missing VARLENS_RECOVERY_KEY_DIR (when admin bootstrap is
+ *     requested) likewise.
  *
  * Two consumers:
  *   - tests import `buildApp` directly (no listen/signals)
@@ -75,7 +76,7 @@ export interface AdminBootstrapOptions {
 
 /**
  * Empty-object options is intentional: every parameter the web server
- * needs comes from the env (VARLENS_PG_URL, VARLENS_RECOVERY_KEY_DIR,
+ * needs comes from the env (DB topology, VARLENS_RECOVERY_KEY_DIR,
  * VARLENS_ADMIN_*).
  * Tests can still pass `admin` to override the env-driven path.
  */
@@ -119,12 +120,24 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const session: PostgresStorageSession = await createPostgresStorageSession(pgConfig)
   // Share the storage session's pool with the auth service so we open
-  // exactly one connection pool per process. The public getPool()
+  // exactly one state-capable control connection pool per process. The public getPool()
   // accessor (added in the QA round on Step 4) makes this contract
   // type-checked rather than a structural cast.
   const pool = session.getPool()
+  const controlReadPool =
+    topology.mode === 'hosted'
+      ? new Pool(
+          buildPostgresPoolConfig({
+            ...pgConfig,
+            url: topology.controlReadUrl,
+            applicationName: 'varlens-web-control-read',
+            poolMax: topology.pools.controlPoolMax
+          })
+        )
+      : null
   const authService = new PostgresWebAuthService({
     pool,
+    ...(controlReadPool !== null ? { readPool: controlReadPool } : {}),
     schema: pgConfig.schema
   })
   const publicAnnotationPool =
@@ -191,15 +204,18 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const readinessHandler = async (_request: unknown, reply: import('fastify').FastifyReply) => {
     const open = await isPostgresHealthy(pool)
+    const controlReadOpen =
+      controlReadPool === null ? true : await isPostgresHealthy(controlReadPool)
     const publicAnnotationOpen =
       publicAnnotationPool === null ? true : await isPostgresHealthy(publicAnnotationPool)
-    metrics.setDatabaseHealthy(open)
-    if (!open || !publicAnnotationOpen) {
+    const allOpen = open && controlReadOpen && publicAnnotationOpen
+    metrics.setDatabaseHealthy(allOpen)
+    if (!allOpen) {
       reply.code(503)
       return {
         status: 'unhealthy',
         version: pkg.version,
-        db: { open },
+        db: { open: allOpen },
         publicAnnotationDb: { open: publicAnnotationOpen }
       }
     }
@@ -219,6 +235,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.addHook('onClose', async () => {
     try {
       await hostedRouter?.close()
+      await controlReadPool?.end()
       await publicAnnotationPool?.end()
       await session.close()
     } catch {

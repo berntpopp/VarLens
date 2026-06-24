@@ -136,9 +136,12 @@ function pgUserRow(overrides: Partial<CannedRow> = {}): CannedRow {
 
 const SCHEMA = 'auth_test'
 type SvcOpts = ConstructorParameters<typeof PostgresWebAuthService>[0]
-function newSvc(pool: FakePool): PostgresWebAuthService {
+function newSvc(pool: FakePool, readPool?: FakePool): PostgresWebAuthService {
   return new PostgresWebAuthService({
     pool: pool as unknown as SvcOpts['pool'],
+    ...(readPool !== undefined
+      ? { readPool: readPool as unknown as NonNullable<SvcOpts['readPool']> }
+      : {}),
     schema: SCHEMA,
     passwordProvider: fakePasswordProvider
   })
@@ -579,6 +582,24 @@ describe('PostgresWebAuthService — createUser', () => {
 })
 
 describe('PostgresWebAuthService — getUser / listUsers / isAccountsEnabled', () => {
+  it('uses the read pool for read-only control lookups', async () => {
+    const statePool = new FakePool()
+    const readPool = new FakePool()
+    const svc = newSvc(statePool, readPool)
+    readPool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
+    readPool.enqueueResponse({ rows: [pgUserRow({ id: '2', username: 'bob' })], rowCount: 1 })
+    readPool.enqueueResponse({ rows: [{ value: 'true' }], rowCount: 1 })
+
+    await expect(svc.getUser('alice')).resolves.toEqual(
+      expect.objectContaining({ username: 'alice' })
+    )
+    await expect(svc.listUsers()).resolves.toHaveLength(1)
+    await expect(svc.isAccountsEnabled()).resolves.toBe(true)
+
+    expect(readPool.queries).toHaveLength(3)
+    expect(statePool.queries).toHaveLength(0)
+  })
+
   it('getUser returns undefined when missing', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
@@ -614,6 +635,24 @@ describe('PostgresWebAuthService — getUser / listUsers / isAccountsEnabled', (
 })
 
 describe('PostgresWebAuthService — deactivateUser / resetPassword / changePassword', () => {
+  it('keeps auth mutations on the state pool after read-pool lookups', async () => {
+    const statePool = new FakePool()
+    const readPool = new FakePool()
+    const svc = newSvc(statePool, readPool)
+    readPool.enqueueResponse({
+      rows: [pgUserRow({ password_hash: `hashed::${FIXTURE_PW}` })],
+      rowCount: 1
+    })
+    statePool.enqueueResponse({ rows: [], rowCount: 1 })
+
+    await expect(svc.changePassword('alice', FIXTURE_PW, FIXTURE_NEW_PW)).resolves.toBe(true)
+
+    expect(readPool.queries).toHaveLength(1)
+    expect(readPool.queries[0].text).toMatch(/SELECT \* FROM[\s\S]+"users"/i)
+    expect(statePool.queries).toHaveLength(1)
+    expect(statePool.queries[0].text).toMatch(/UPDATE[\s\S]+"users"/i)
+  })
+
   it('deactivateUser throws when user not found', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
