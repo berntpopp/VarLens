@@ -330,6 +330,55 @@ describe('sync-public-annotations command helpers', () => {
     expect(variantInsert?.values).not.toContain('"manual-review"')
   })
 
+  test('imports symbolic SV STR and breakend public keys while rejecting multi-alt keys', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'varlens-sync-public-symbolic-records-'))
+    await mkdir(join(root, 'vcf'), { recursive: true })
+    const vcfPath = join(root, 'vcf/sv.vcf.gz')
+    await writeFile(
+      vcfPath,
+      gzipSync(
+        [
+          '##fileformat=VCFv4.3',
+          '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature|HGVSc|HGVSp">',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
+          '1\t100\t.\tN\t<DEL>\t.\tPASS\tCSQ=<DEL>|transcript_ablation|HIGH|GENE1|ENSG0001|ENST0001|c.1del|p.?',
+          '1\t200\t.\tN\t<STR24>\t.\tPASS\tCSQ=<STR24>|repeat_expansion|MODERATE|GENE2|ENSG0002|ENST0002|c.2dup|p.?',
+          '1\t300\t.\tN\tN]2:500]\t.\tPASS\tCSQ=N]2:500]|translocation|MODERATE|GENE3|ENSG0003|ENST0003|c.3?|p.?',
+          '1\t400\t.\tN\tA,T\t.\tPASS\tCSQ=A|missense_variant|MODERATE|GENE4|ENSG0004|ENST0004|c.4A>T|p.X',
+          '1\t500\t.\tN\t*\t.\tPASS\tCSQ=*|missense_variant|MODERATE|GENE5|ENSG0005|ENST0005|c.5A>T|p.X',
+          ''
+        ].join('\n')
+      )
+    )
+    const payload: PublicAnnotationSyncPayload = {
+      ...basePayload(),
+      schemaVersion: 'varlens.annotation-bundle.v1',
+      privateCaseData: false,
+      sourcePrivateCaseDataRedacted: true,
+      snapshot: {
+        ...basePayload().snapshot,
+        bundleId: 'bundle-2026-06-22-aaaaaaaaaaaa',
+        mappingVersion: 'annotation-bundle-map-v1'
+      },
+      variantRecordSources: [{ role: 'sv_vcf', absolutePath: vcfPath }]
+    }
+    const client = new FakeClient()
+    const pool = { connect: async () => client }
+
+    await expect(syncPublicAnnotationPayload(pool, payload)).resolves.toStrictEqual({
+      variantRecordCount: 21
+    })
+
+    const variantInsert = client.queries.find((query) =>
+      query.text.includes('INSERT INTO public_annotation_variant_records')
+    )
+    expect(variantInsert?.values).toContain('<DEL>')
+    expect(variantInsert?.values).toContain('<STR24>')
+    expect(variantInsert?.values).toContain('N]2:500]')
+    expect(variantInsert?.values).not.toContain('A,T')
+    expect(variantInsert?.values).not.toContain('*')
+  })
+
   test('rejects snapshot ID reuse with changed immutable checksums', async () => {
     const client = new FakeClient([
       {

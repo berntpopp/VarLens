@@ -196,12 +196,5 @@ function hasPublicValue(value: string | undefined): value is string {
 }
 
 function isSupportedAlt(alt: string): boolean {
-  return (
-    alt !== '' &&
-    !alt.includes(',') &&
-    !alt.startsWith('<') &&
-    !alt.includes('[') &&
-    !alt.includes(']') &&
-    alt !== '*'
-  )
+  return alt !== '' && !alt.includes(',') && alt !== '*'
 }

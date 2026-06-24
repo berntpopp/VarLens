@@ -300,7 +300,11 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
         }
 
         const validation = validateAnnotationBundleManifest(manifestInput)
-        if (!validation.ok || validation.importPlan === undefined || validation.manifest === undefined) {
+        if (
+          !validation.ok ||
+          validation.importPlan === undefined ||
+          validation.manifest === undefined
+        ) {
           reply.code(400)
           return {
             error: 'invalid-annotation-bundle-manifest',
@@ -309,7 +313,10 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
         }
 
         try {
-          await verifyBundleFiles(inferBundleRoot(resolved.path, validation.manifest.files), validation.manifest.files)
+          await verifyBundleFiles(
+            inferBundleRoot(resolved.path, validation.manifest.files),
+            validation.manifest.files
+          )
         } catch (error) {
           reply.code(400)
           return {
@@ -367,6 +374,7 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
               bundleId: validation.manifest.bundleId,
               mappingVersion: validation.manifest.mappingVersion,
               publicSnapshot: validation.manifest.publicSnapshot,
+              sidecarHandling: 'preserved_metadata_only',
               sidecarFilesPreserved: validation.importPlan.sidecarFiles.map((file) => file.path),
               reportFilesPreserved: validation.importPlan.reportFiles.map((file) => file.path)
             }
