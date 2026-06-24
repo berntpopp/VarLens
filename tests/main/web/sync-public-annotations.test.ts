@@ -288,9 +288,9 @@ describe('sync-public-annotations command helpers', () => {
       gzipSync(
         [
           '##fileformat=VCFv4.3',
-          '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature|HGVSc|HGVSp|ClinVarCurrent_CLNSIG|ClinVarCurrent_CLNREVSTAT|ClinVarCurrent_CLNDN|ClinVarCurrent_ALLELEID|CADD_phred|SpliceAI_pred_DS_AG">',
+          '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature|HGVSc|HGVSp|ClinVarCurrent_CLNSIG|ClinVarCurrent_CLNREVSTAT|ClinVarCurrent_CLNDN|ClinVarCurrent_ALLELEID|CADD_phred|SpliceAI_pred_DS_AG|Sample_ID|Genotype|User_Tag">',
           '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
-          '1\t12345\t.\tA\tG\t.\tPASS\tCSQ=G|missense_variant|MODERATE|GENE1|ENSG0001|ENST0001|c.1A>G|p.Lys1Arg|Pathogenic|reviewed_by_expert_panel|Disease one|123|30.1|0.8',
+          '1\t12345\t.\tA\tG\t.\tPASS\tCSQ=G|missense_variant|MODERATE|GENE1|ENSG0001|ENST0001|c.1A>G|p.Lys1Arg|Pathogenic|reviewed_by_expert_panel|Disease one|123|30.1|0.8|sample-001|0/1|manual-review',
           ''
         ].join('\n')
       )
@@ -322,6 +322,12 @@ describe('sync-public-annotations command helpers', () => {
     expect(variantInsert?.values).toContain('gene_symbol')
     expect(variantInsert?.values).not.toContain('CADD_phred')
     expect(variantInsert?.values).not.toContain('SpliceAI_pred_DS_AG')
+    expect(variantInsert?.values).not.toContain('Sample_ID')
+    expect(variantInsert?.values).not.toContain('"sample-001"')
+    expect(variantInsert?.values).not.toContain('Genotype')
+    expect(variantInsert?.values).not.toContain('"0/1"')
+    expect(variantInsert?.values).not.toContain('User_Tag')
+    expect(variantInsert?.values).not.toContain('"manual-review"')
   })
 
   test('rejects snapshot ID reuse with changed immutable checksums', async () => {
