@@ -71,7 +71,8 @@ ENV NODE_ENV=production \
     VARLENS_METRICS_PORT=9090 \
     VARLENS_LOG_LEVEL=info
 
-# Web mode is Postgres-only. The runtime must provide VARLENS_PG_URL.
+# Web mode is Postgres-only. Single-DB runtime provides VARLENS_PG_URL; hosted
+# runtime provides the explicit Web11 control/workspace/public DB topology env.
 # /data remains the default writable runtime directory for session-secret
 # material and any future operator-mounted app state.
 
