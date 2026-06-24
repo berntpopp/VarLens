@@ -290,9 +290,10 @@ export async function syncPublicAnnotationPayload(
       content_hash: string
       manifest_checksum: string
       license_matrix_checksum: string
+      source_manifest_checksum: string
     }>(
       `
-        SELECT content_hash, manifest_checksum, license_matrix_checksum
+        SELECT content_hash, manifest_checksum, license_matrix_checksum, source_manifest_checksum
         FROM public_annotation_snapshots
         WHERE snapshot_id = $1
         LIMIT 1
@@ -310,76 +311,77 @@ export async function syncPublicAnnotationPayload(
         `public annotation snapshot ${payload.snapshot.snapshotId} already exists with different immutable checksums`
       )
     }
+    if (row !== undefined && row.source_manifest_checksum !== payload.sourceManifestChecksum) {
+      throw new Error(
+        `public annotation snapshot ${payload.snapshot.snapshotId} already exists with a different source manifest checksum`
+      )
+    }
 
-    await client.query(
-      `
-        INSERT INTO public_annotation_snapshots (
-          snapshot_id,
-          schema_version,
-          bundle_id,
-          genome_build,
-          mapping_version,
-          content_hash,
-          manifest_checksum,
-          license_matrix_checksum,
-          source_manifest_checksum,
-          private_case_data,
-          stored_manifest_json
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
-        ON CONFLICT (snapshot_id) DO NOTHING
-      `,
-      [
-        payload.snapshot.snapshotId,
-        payload.schemaVersion,
-        payload.snapshot.bundleId,
-        payload.snapshot.genomeBuild,
-        payload.snapshot.mappingVersion,
-        payload.snapshot.contentHash,
-        payload.snapshot.manifestChecksum,
-        payload.snapshot.licenseMatrixChecksum,
-        payload.sourceManifestChecksum,
-        payload.privateCaseData,
-        JSON.stringify(payload.storedManifest)
-      ]
-    )
-
-    await client.query('DELETE FROM public_annotation_files WHERE snapshot_id = $1', [
-      payload.snapshot.snapshotId
-    ])
-    await client.query('DELETE FROM public_annotation_variant_records WHERE snapshot_id = $1', [
-      payload.snapshot.snapshotId
-    ])
-    for (const file of payload.files) {
+    let variantRecordCount = 0
+    if (row === undefined) {
       await client.query(
         `
-          INSERT INTO public_annotation_files (
+          INSERT INTO public_annotation_snapshots (
             snapshot_id,
-            role,
-            path,
-            checksum,
-            size_bytes,
-            index_path,
-            index_checksum,
-            index_size_bytes,
-            required,
-            format_version
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            schema_version,
+            bundle_id,
+            genome_build,
+            mapping_version,
+            content_hash,
+            manifest_checksum,
+            license_matrix_checksum,
+            source_manifest_checksum,
+            private_case_data,
+            stored_manifest_json
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
         `,
         [
           payload.snapshot.snapshotId,
-          file.role,
-          file.path,
-          file.checksum,
-          file.sizeBytes,
-          file.indexPath,
-          file.indexChecksum,
-          file.indexSizeBytes,
-          file.required,
-          file.formatVersion
+          payload.schemaVersion,
+          payload.snapshot.bundleId,
+          payload.snapshot.genomeBuild,
+          payload.snapshot.mappingVersion,
+          payload.snapshot.contentHash,
+          payload.snapshot.manifestChecksum,
+          payload.snapshot.licenseMatrixChecksum,
+          payload.sourceManifestChecksum,
+          payload.privateCaseData,
+          JSON.stringify(payload.storedManifest)
         ]
       )
+
+      for (const file of payload.files) {
+        await client.query(
+          `
+            INSERT INTO public_annotation_files (
+              snapshot_id,
+              role,
+              path,
+              checksum,
+              size_bytes,
+              index_path,
+              index_checksum,
+              index_size_bytes,
+              required,
+              format_version
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          `,
+          [
+            payload.snapshot.snapshotId,
+            file.role,
+            file.path,
+            file.checksum,
+            file.sizeBytes,
+            file.indexPath,
+            file.indexChecksum,
+            file.indexSizeBytes,
+            file.required,
+            file.formatVersion
+          ]
+        )
+      }
+      variantRecordCount = await syncVariantRecords(client, payload)
     }
-    const variantRecordCount = await syncVariantRecords(client, payload)
     await client.query(
       `
         INSERT INTO public_annotation_sync_events (

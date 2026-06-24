@@ -175,11 +175,7 @@ function selectCsqForAllele(
   if (csqValue === undefined || csqValue === '' || csqFields.length === 0) return null
 
   const annotations = csqValue.split(',').map((entry) => toCsqMap(entry, csqFields))
-  return (
-    annotations.find((annotation) => annotation.get('Allele') === alt) ??
-    annotations.find((annotation) => hasPublicValue(annotation.get('Allele'))) ??
-    null
-  )
+  return annotations.find((annotation) => annotation.get('Allele') === alt) ?? null
 }
 
 function toCsqMap(entry: string, csqFields: readonly string[]): Map<string, string> {
