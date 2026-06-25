@@ -217,7 +217,9 @@ Cypress.Commands.add(
 export function beforeEachAuthenticatedSmoke(): void {
   beforeEach(function () {
     if ((Cypress.env('varlensPassword') as string) === '') {
-      this.skip()
+      throw new Error(
+        'VARLENS_PASSWORD or VARLENS_ADMIN_PASSWORD is required; authenticated smoke tests must not skip silently.'
+      )
     }
 
     cy.varlensLogin()

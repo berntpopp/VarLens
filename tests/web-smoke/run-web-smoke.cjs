@@ -38,6 +38,18 @@ const modeArgs =
         'electron'
       ]
 
+const authRequired = process.env.VARLENS_SMOKE_REQUIRE_AUTH !== '0'
+const smokePassword = process.env.VARLENS_PASSWORD ?? process.env.VARLENS_ADMIN_PASSWORD ?? ''
+if (command !== 'open' && authRequired && smokePassword === '') {
+  console.error(
+    [
+      'Authenticated VarLens web smoke requires VARLENS_PASSWORD or VARLENS_ADMIN_PASSWORD.',
+      'Set VARLENS_SMOKE_REQUIRE_AUTH=0 only for intentionally anonymous smoke runs.'
+    ].join('\n')
+  )
+  process.exit(1)
+}
+
 const result = spawnSync(cypressBin, [...modeArgs, ...passThroughArgs], {
   cwd: rootDir,
   env: process.env,
