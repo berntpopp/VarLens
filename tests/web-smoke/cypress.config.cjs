@@ -34,9 +34,14 @@ module.exports = defineConfig({
     requestTimeout: 15000,
     responseTimeout: 30000,
     env: {
-      varlensUsername: process.env.VARLENS_ADMIN_USERNAME ?? 'admin',
-      varlensPassword: process.env.VARLENS_ADMIN_PASSWORD ?? '',
-      varlensRotatedPassword: process.env.VARLENS_ROTATED_ADMIN_PASSWORD ?? '',
+      varlensUsername:
+        process.env.VARLENS_USERNAME ?? process.env.VARLENS_ADMIN_USERNAME ?? 'admin',
+      varlensPassword: process.env.VARLENS_PASSWORD ?? process.env.VARLENS_ADMIN_PASSWORD ?? '',
+      varlensRotatedPassword:
+        process.env.VARLENS_ROTATED_PASSWORD ?? process.env.VARLENS_ROTATED_ADMIN_PASSWORD ?? '',
+      varlensSecondaryUsername: process.env.VARLENS_SECONDARY_USERNAME ?? '',
+      varlensSecondaryPassword: process.env.VARLENS_SECONDARY_PASSWORD ?? '',
+      varlensSecondaryRotatedPassword: process.env.VARLENS_SECONDARY_ROTATED_PASSWORD ?? '',
       expectedImageTag: process.env.VARLENS_EXPECTED_IMAGE_TAG ?? ''
     }
   }
