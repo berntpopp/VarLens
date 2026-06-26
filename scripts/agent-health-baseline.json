@@ -37,6 +37,13 @@
       "reason": "existing large storage/import module; grew for Sprint A PR-3 C3 — the cohort-summary incrementalAdd/recompute/refreshColumnMetas update MUST run inside the worker's existing post-loop transaction (the worker is the real txn owner, Pass-2 #5), wrapped in a SAVEPOINT and wired into all three commit sites; the logic is already extracted into the named updateCohortSummaryAfterImport helper, so further splitting the worker is a separate responsibility-split task"
     },
     {
+      "path": "src/shared/annotations/public-snapshot.ts",
+      "lines": 618,
+      "threshold": 600,
+      "category": "source",
+      "reason": "Web 11/Web 12 public annotation snapshot contract module; the file groups the Zod manifest schema, fail-closed public/private semantic validation, and redacted error formatting so public-snapshot acceptance tests exercise one boundary. It is intentionally close to the threshold after Prettier formatting; splitting schema fragments before the manifest contract stabilizes would make the safety rules harder to audit."
+    },
+    {
       "path": "src/renderer/src/components/CaseList.vue",
       "lines": 635,
       "threshold": 600,
@@ -136,10 +143,10 @@
     },
     {
       "path": "src/shared/types/api.ts",
-      "lines": 929,
+      "lines": 959,
       "threshold": 600,
       "category": "source",
-      "reason": "existing shared contract surface; must not grow before contract split. Sprint A additions to this central interface are structurally unavoidable: PR-1 A1 added the `BatchAnnotationKey` type (Pass-8 #1) used across the annotations IPC contract; PR-2 added a new top-level WindowAPI domain key (`debug: DebugAPI`) plus its import and the `DebugAPI` alias that resolves the Gate 10c preload-contract test back to the domain contract. PR-3 PR3-17 (C5/Gate 10b) widened the existing `CohortAPI.getVariants` return shape with an optional `warnings?: { staleSummary?: boolean }` field — a same-method contract extension that must live on the central interface and cannot be split out. PR-4 PR4-8 (D4/Gate 11) added a new top-level WindowAPI domain key (`jobs: JobsAPI`) plus its `import type { JobsApi }` import and the `JobsAPI` alias, following the existing DebugAPI alias pattern (+2 lines, 927->929) — the jobs-domain WindowAPI wiring cannot be split out without diverging from the contract. None can be split out without breaking the contract or its tests."
+      "reason": "existing shared contract surface; must not grow before contract split. Sprint A additions to this central interface are structurally unavoidable: PR-1 A1 added the `BatchAnnotationKey` type (Pass-8 #1) used across the annotations IPC contract; PR-2 added a new top-level WindowAPI domain key (`debug: DebugAPI`) plus its import and the `DebugAPI` alias that resolves the Gate 10c preload-contract test back to the domain contract. PR-3 PR3-17 (C5/Gate 10b) widened the existing `CohortAPI.getVariants` return shape with an optional `warnings?: { staleSummary?: boolean }` field — a same-method contract extension that must live on the central interface and cannot be split out. PR-4 PR4-8 (D4/Gate 11) added a new top-level WindowAPI domain key (`jobs: JobsAPI`) plus its `import type { JobsApi }` import and the `JobsAPI` alias, following the existing DebugAPI alias pattern (+2 lines, 927->929). Web 11 adds hosted/public annotation response types to the same API surface so desktop preload and web dispatcher contracts keep one typed source. None can be split out without breaking the contract or its tests."
     },
     {
       "path": "src/shared/types/database.ts",
@@ -154,6 +161,13 @@
       "threshold": 600,
       "category": "source",
       "reason": "existing shared contract surface; must not grow before contract split"
+    },
+    {
+      "path": "src/web/auth/PostgresWebAuthService.ts",
+      "lines": 613,
+      "threshold": 600,
+      "category": "source",
+      "reason": "Web auth service mirrors the desktop AuthService method surface while adding hosted-workspace metadata, Argon2id hash bootstrap validation, lockout handling, and session/workspace selection checks in one transaction-aware boundary. Splitting before the hosted auth contract stabilizes would hide the parity with the desktop service; future growth should extract query helpers or workspace-selection support first."
     }
   ]
 }
