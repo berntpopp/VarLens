@@ -164,10 +164,10 @@
     },
     {
       "path": "src/web/auth/PostgresWebAuthService.ts",
-      "lines": 613,
+      "lines": 616,
       "threshold": 600,
       "category": "source",
-      "reason": "Web auth service mirrors the desktop AuthService method surface while adding hosted-workspace metadata, Argon2id hash bootstrap validation, lockout handling, and session/workspace selection checks in one transaction-aware boundary. Splitting before the hosted auth contract stabilizes would hide the parity with the desktop service; future growth should extract query helpers or workspace-selection support first."
+      "reason": "Web auth service mirrors the desktop AuthService method surface while adding hosted-workspace metadata, Argon2id hash bootstrap validation, lockout handling, and session/workspace selection checks in one transaction-aware boundary. Upstream local-dev bootstrap support added the optional mustChangePassword control while this Web 11 branch was open. Splitting before the hosted auth contract stabilizes would hide the parity with the desktop service; future growth should extract query helpers or workspace-selection support first."
     }
   ]
 }
