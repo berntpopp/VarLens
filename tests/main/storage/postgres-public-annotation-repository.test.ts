@@ -21,9 +21,12 @@ describe('PostgresPublicAnnotationRepository', () => {
       repository.getReferencesForVariant({ chr: '1', pos: 12345, ref: 'A', alt: 'G' })
     ).resolves.toStrictEqual({ snapshots: [], variantRecords: [] })
 
-    expect(pool.query).toHaveBeenCalledWith('SELECT to_regclass($1) IS NOT NULL AS exists', [
-      'public.public_annotation_snapshots'
-    ])
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'SELECT to_regclass($1) IS NOT NULL AS exists',
+        values: ['public.public_annotation_snapshots']
+      })
+    )
   })
 
   it('returns public snapshot summaries from the IAC sync tables', async () => {

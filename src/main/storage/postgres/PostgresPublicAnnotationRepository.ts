@@ -6,6 +6,7 @@ import type {
   PublicAnnotationSnapshotSummary,
   PublicAnnotationVariantRecord
 } from '../../../shared/types/api'
+import { runNamed } from './named-query'
 
 type QueryablePool = Pick<Pool, 'query'>
 
@@ -239,9 +240,12 @@ export class PostgresPublicAnnotationRepository {
     const cached = this.tableExistsCache.get(tableName)
     if (cached !== undefined && cached.expiresAt > now) return cached.value
 
-    const result = await this.pool.query('SELECT to_regclass($1) IS NOT NULL AS exists', [
-      `public.${tableName}`
-    ])
+    const result = await runNamed<{ exists: boolean }>(this.pool as Pool, {
+      name: 'public_annotations:table_exists:v1',
+      text: 'SELECT to_regclass($1) IS NOT NULL AS exists',
+      values: [`public.${tableName}`],
+      schema: 'public'
+    })
     const value = toBoolean(result.rows[0]?.exists)
     this.tableExistsCache.set(tableName, { value, expiresAt: now + METADATA_CACHE_TTL_MS })
     return value
