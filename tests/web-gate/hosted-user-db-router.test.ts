@@ -57,26 +57,24 @@ describe('HostedUserDbRouter', () => {
     users = new Map()
     storageMocks.opened.length = 0
     storageMocks.openSession.mockReset()
-    storageMocks.openSession.mockImplementation(
-      async (config: { url: string; schema: string }) => {
-        const close = vi.fn()
-        storageMocks.opened.push({ url: config.url, close })
-        return {
-          workspace: {
-            kind: 'postgres',
-            schema: config.schema,
-            connectionUrlRedacted: config.url,
-            connectionLabel: config.url
-          },
-          capabilities: { backend: 'postgres' },
-          close,
-          listCases: vi.fn(),
-          getReadExecutor: vi.fn(),
-          getWriteExecutor: vi.fn(),
-          getImportExecutor: vi.fn()
-        }
+    storageMocks.openSession.mockImplementation(async (config: { url: string; schema: string }) => {
+      const close = vi.fn()
+      storageMocks.opened.push({ url: config.url, close })
+      return {
+        workspace: {
+          kind: 'postgres',
+          schema: config.schema,
+          connectionUrlRedacted: config.url,
+          connectionLabel: config.url
+        },
+        capabilities: { backend: 'postgres' },
+        close,
+        listCases: vi.fn(),
+        getReadExecutor: vi.fn(),
+        getWriteExecutor: vi.fn(),
+        getImportExecutor: vi.fn()
       }
-    )
+    })
   })
 
   afterEach(async () => {
@@ -121,13 +119,13 @@ describe('HostedUserDbRouter', () => {
     const hostedRouter = router()
 
     await expect(hostedRouter.resolveSession(request())).rejects.toThrow(/authenticated user/i)
-    await expect(hostedRouter.resolveSession(request('unknown'))).rejects.toThrow(/inactive or missing/i)
+    await expect(hostedRouter.resolveSession(request('unknown'))).rejects.toThrow(
+      /inactive or missing/i
+    )
     await expect(hostedRouter.resolveSession(request('missing-secret'))).rejects.toThrow(
       /secret ref is missing/i
     )
-    await expect(hostedRouter.resolveSession(request('inactive-db'))).rejects.toThrow(
-      /not active/i
-    )
+    await expect(hostedRouter.resolveSession(request('inactive-db'))).rejects.toThrow(/not active/i)
     await expect(hostedRouter.resolveSession(request('unsafe-ref'))).rejects.toThrow(
       /path traversal/i
     )

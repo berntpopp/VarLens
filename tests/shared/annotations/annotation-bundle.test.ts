@@ -206,22 +206,19 @@ describe('annotation bundle manifest contract', () => {
     expect(result.errors.join('\n')).toContain('bundle must include at least one variant VCF')
   })
 
-  test.each(['snv_vcf', 'sv_vcf', 'cnv_vcf', 'str_vcf'] as const)(
-    'requires %s indexes',
-    (role) => {
-      const bundle = validBundle()
-      const file = bundle.files.find((candidate) => candidate.role === role)
-      expect(file).toBeDefined()
-      if (file !== undefined) {
-        delete file.indexPath
-      }
-
-      const result = validateAnnotationBundleManifest(bundle)
-
-      expect(result.ok).toBe(false)
-      expect(result.errors.join('\n')).toContain(`${role} requires an indexPath`)
+  test.each(['snv_vcf', 'sv_vcf', 'cnv_vcf', 'str_vcf'] as const)('requires %s indexes', (role) => {
+    const bundle = validBundle()
+    const file = bundle.files.find((candidate) => candidate.role === role)
+    expect(file).toBeDefined()
+    if (file !== undefined) {
+      delete file.indexPath
     }
-  )
+
+    const result = validateAnnotationBundleManifest(bundle)
+
+    expect(result.ok).toBe(false)
+    expect(result.errors.join('\n')).toContain(`${role} requires an indexPath`)
+  })
 
   test('requires checksum and size metadata for index files', () => {
     const bundle = validBundle()
@@ -251,7 +248,9 @@ describe('annotation bundle manifest contract', () => {
     const result = validateAnnotationBundleManifest(bundle)
 
     expect(result.ok).toBe(false)
-    expect(result.errors.join('\n')).toContain('annotsv_tsv index integrity fields require an indexPath')
+    expect(result.errors.join('\n')).toContain(
+      'annotsv_tsv index integrity fields require an indexPath'
+    )
   })
 
   test('rejects import-order roles that are not present in the inventory', () => {
@@ -341,7 +340,9 @@ describe('annotation bundle manifest contract', () => {
 
     expect(result.ok).toBe(false)
     expect(result.errors.join('\n')).toContain('bundle file path is duplicated')
-    expect(result.errors.join('\n')).toContain('bundle must include at least one required variant VCF')
+    expect(result.errors.join('\n')).toContain(
+      'bundle must include at least one required variant VCF'
+    )
   })
 
   test('assert helper throws concise fail-closed errors', () => {

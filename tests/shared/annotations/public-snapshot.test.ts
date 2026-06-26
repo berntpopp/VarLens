@@ -148,17 +148,21 @@ describe('public annotation snapshot manifest contract', () => {
     expect(result.errors.join('\n')).toContain('source share-alike must be false')
   })
 
-  test.each(['latest', 'clinvar-latest', 'clinvar_latest', 'clinvar.latest', 'latest-clinvar', 'current'])(
-    'rejects mutable snapshot id alias %s',
-    (snapshotId) => {
-      const manifest = { ...validManifest(), snapshotId }
+  test.each([
+    'latest',
+    'clinvar-latest',
+    'clinvar_latest',
+    'clinvar.latest',
+    'latest-clinvar',
+    'current'
+  ])('rejects mutable snapshot id alias %s', (snapshotId) => {
+    const manifest = { ...validManifest(), snapshotId }
 
-      const result = validatePublicAnnotationSnapshotManifest(manifest)
+    const result = validatePublicAnnotationSnapshotManifest(manifest)
 
-      expect(result.ok).toBe(false)
-      expect(result.errors.join('\n')).toContain('immutable release')
-    }
-  )
+    expect(result.ok).toBe(false)
+    expect(result.errors.join('\n')).toContain('immutable release')
+  })
 
   test('rejects fields that look private or case-linked', () => {
     const manifest = validManifest()
@@ -390,7 +394,9 @@ describe('public annotation snapshot manifest contract', () => {
     const result = validatePublicAnnotationSnapshotManifest(manifest)
 
     expect(result.ok).toBe(false)
-    expect(result.errors.join('\n')).toContain('license matrix entry must match source license evidence')
+    expect(result.errors.join('\n')).toContain(
+      'license matrix entry must match source license evidence'
+    )
   })
 
   test('rejects private-looking license and review metadata across the manifest', () => {
@@ -432,9 +438,9 @@ describe('public annotation snapshot manifest contract', () => {
   test('requires a public-eligible license matrix entry for each field', () => {
     const missingEntryManifest = validManifest()
     missingEntryManifest.licenseMatrix.entries = []
-    expect(validatePublicAnnotationSnapshotManifest(missingEntryManifest).errors.join('\n')).toContain(
-      'licenseMatrix.entries'
-    )
+    expect(
+      validatePublicAnnotationSnapshotManifest(missingEntryManifest).errors.join('\n')
+    ).toContain('licenseMatrix.entries')
 
     const unknownFieldManifest = validManifest()
     unknownFieldManifest.licenseMatrix.entries[0].fieldName = 'other_field'

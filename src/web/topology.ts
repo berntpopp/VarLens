@@ -78,11 +78,7 @@ function optionalPostgresUrl(env: NodeJS.ProcessEnv, envName: string): string | 
   return validatePostgresUrl(envName, value.trim())
 }
 
-function parsePositiveInteger(
-  env: NodeJS.ProcessEnv,
-  envName: string,
-  fallback: number
-): number {
+function parsePositiveInteger(env: NodeJS.ProcessEnv, envName: string, fallback: number): number {
   const value = env[envName]
   if (!hasValue(value)) return fallback
 
@@ -144,11 +140,7 @@ export function readWebDbTopology(env: NodeJS.ProcessEnv = process.env): WebDbTo
     ...(publicAnnotationUrl !== undefined ? { publicAnnotationUrl } : {}),
     pools: {
       controlPoolMax: parsePositiveInteger(env, 'VARLENS_CONTROL_POOL_MAX', 4),
-      publicAnnotationPoolMax: parsePositiveInteger(
-        env,
-        'VARLENS_PUBLIC_ANNOTATION_POOL_MAX',
-        4
-      ),
+      publicAnnotationPoolMax: parsePositiveInteger(env, 'VARLENS_PUBLIC_ANNOTATION_POOL_MAX', 4),
       workspacePoolMax: parsePositiveInteger(env, 'VARLENS_WORKSPACE_POOL_MAX', 2),
       workspacePoolGlobalMax: parsePositiveInteger(env, 'VARLENS_WORKSPACE_POOL_GLOBAL_MAX', 20),
       workspacePoolIdleMs: parsePositiveInteger(env, 'VARLENS_WORKSPACE_POOL_IDLE_MS', 300_000)

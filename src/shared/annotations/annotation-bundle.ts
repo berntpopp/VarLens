@@ -151,7 +151,10 @@ function collectBundleSemanticErrors(manifest: AnnotationBundleManifest): string
     if (file.indexPath !== undefined && file.indexSizeBytes === undefined) {
       errors.push(`${file.role} indexPath requires indexSizeBytes`)
     }
-    if (file.indexPath === undefined && (file.indexChecksum !== undefined || file.indexSizeBytes !== undefined)) {
+    if (
+      file.indexPath === undefined &&
+      (file.indexChecksum !== undefined || file.indexSizeBytes !== undefined)
+    ) {
       errors.push(`${file.role} index integrity fields require an indexPath`)
     }
   }
@@ -178,7 +181,11 @@ function collectBundleSemanticErrors(manifest: AnnotationBundleManifest): string
       errors.push(`${role} must have at least one required file`)
     }
   }
-  if ([...VARIANT_ROLES].every((role) => (filesByRole.get(role) ?? []).every((file) => !file.required))) {
+  if (
+    [...VARIANT_ROLES].every((role) =>
+      (filesByRole.get(role) ?? []).every((file) => !file.required)
+    )
+  ) {
     errors.push('bundle must include at least one required variant VCF')
   }
 
