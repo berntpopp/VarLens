@@ -54,7 +54,13 @@ const RedistributionClassSchema = z.enum([
   'prohibited'
 ])
 const ClinicalUseSchema = z.enum(['allowed', 'separate_license', 'noncommercial_only', 'unknown'])
-const DerivativeInheritanceSchema = z.enum(['none', 'attribution', 'share_alike', 'restricted', 'unknown'])
+const DerivativeInheritanceSchema = z.enum([
+  'none',
+  'attribution',
+  'share_alike',
+  'restricted',
+  'unknown'
+])
 const PromotionEligibilitySchema = z.literal('public_snapshot')
 const PublicStorageClassSchema = z.literal('public_reference_annotations')
 const ImmutableSnapshotIdSchema = z
@@ -69,9 +75,12 @@ const RowCountKeySchema = z
   .refine((value) => !fieldNameLooksPrivate(value), {
     message: 'row count key must not look private or case-linked'
   })
-const HttpsPublicUrlSchema = z.string().url().refine((value) => urlHasAllowedPublicShape(value), {
-  message: 'URL must be https and must not contain credential-like query parameters'
-})
+const HttpsPublicUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => urlHasAllowedPublicShape(value), {
+    message: 'URL must be https and must not contain credential-like query parameters'
+  })
 
 const BLOCKED_PUBLIC_SOURCE_IDS = new Set([
   'dbnsfp',
@@ -180,78 +189,84 @@ const LicenseMatrixEntrySchema = z
   })
   .strict()
 
-export const PublicAnnotationSourceSchema = z.object({
-  sourceId: z.string().regex(FIELD_NAME_PATTERN),
-  name: z.string().min(1),
-  version: z.string().min(1),
-  retrievedAt: z.string().datetime({ offset: true }).optional(),
-  license: z
-    .object({
-      licenseId: z.string().regex(FIELD_NAME_PATTERN),
-      name: z.string().min(1),
-      url: HttpsPublicUrlSchema,
-      status: LicenseStatusSchema,
-      redistribution: RedistributionSchema,
-      redistributionClass: RedistributionClassSchema,
-      clinicalUse: ClinicalUseSchema,
-      derivativeInheritance: DerivativeInheritanceSchema,
-      shareAlike: z.boolean(),
-      archivedTextChecksum: z.string().regex(CHECKSUM_PATTERN),
-      attribution: z.string().min(1)
-    })
-    .strict(),
-  provenanceUrl: HttpsPublicUrlSchema,
-  checksum: z.string().regex(CHECKSUM_PATTERN)
-}).strict()
+export const PublicAnnotationSourceSchema = z
+  .object({
+    sourceId: z.string().regex(FIELD_NAME_PATTERN),
+    name: z.string().min(1),
+    version: z.string().min(1),
+    retrievedAt: z.string().datetime({ offset: true }).optional(),
+    license: z
+      .object({
+        licenseId: z.string().regex(FIELD_NAME_PATTERN),
+        name: z.string().min(1),
+        url: HttpsPublicUrlSchema,
+        status: LicenseStatusSchema,
+        redistribution: RedistributionSchema,
+        redistributionClass: RedistributionClassSchema,
+        clinicalUse: ClinicalUseSchema,
+        derivativeInheritance: DerivativeInheritanceSchema,
+        shareAlike: z.boolean(),
+        archivedTextChecksum: z.string().regex(CHECKSUM_PATTERN),
+        attribution: z.string().min(1)
+      })
+      .strict(),
+    provenanceUrl: HttpsPublicUrlSchema,
+    checksum: z.string().regex(CHECKSUM_PATTERN)
+  })
+  .strict()
 
-export const PublicAnnotationFieldSchema = z.object({
-  name: z.string().regex(FIELD_NAME_PATTERN),
-  sourceId: z.string().regex(FIELD_NAME_PATTERN),
-  dataType: z.enum(['boolean', 'integer', 'number', 'string', 'json']),
-  storageClass: PublicStorageClassSchema,
-  nullSemantics: z.string().min(1),
-  description: z.string().min(1),
-  promotionEligibility: PromotionEligibilitySchema,
-  licenseStatus: z.literal('allowed')
-}).strict()
+export const PublicAnnotationFieldSchema = z
+  .object({
+    name: z.string().regex(FIELD_NAME_PATTERN),
+    sourceId: z.string().regex(FIELD_NAME_PATTERN),
+    dataType: z.enum(['boolean', 'integer', 'number', 'string', 'json']),
+    storageClass: PublicStorageClassSchema,
+    nullSemantics: z.string().min(1),
+    description: z.string().min(1),
+    promotionEligibility: PromotionEligibilitySchema,
+    licenseStatus: z.literal('allowed')
+  })
+  .strict()
 
-export const PublicAnnotationSnapshotManifestSchema = z.object({
-  schemaVersion: z.literal('varlens.public-annotation-snapshot.v1'),
-  snapshotId: ImmutableSnapshotIdSchema,
-  createdAt: z.string().datetime({ offset: true }),
-  genomeBuild: z.string().min(1),
-  mappingVersion: z.string().min(1),
-  licenseGate: LicenseGateSchema,
-  licenseMatrix: z
-    .object({
-      matrixId: z.string().regex(FIELD_NAME_PATTERN),
-      policyVersion: z.string().min(1),
-      matrixChecksum: z.string().regex(CHECKSUM_PATTERN),
-      generatedAt: z.string().datetime({ offset: true }),
-      entries: z.array(LicenseMatrixEntrySchema).min(1)
-    })
-    .strict(),
-  mutableLatest: z.literal(false),
-  privacy: z
-    .object({
-      noPrivateData: z.literal(true),
-      noCaseLinkedData: z.literal(true),
-      noPrivateQueryHistory: z.literal(true)
-    })
-    .strict(),
-  sources: z.array(PublicAnnotationSourceSchema).min(1),
-  fields: z.array(PublicAnnotationFieldSchema).min(1),
-  rowCounts: z.record(RowCountKeySchema, z.number().int().nonnegative()),
-  manifestChecksum: z.string().regex(CHECKSUM_PATTERN),
-  contentHash: z.string().regex(CHECKSUM_PATTERN),
-  releaseReview: z
-    .object({
-      reviewer: z.string().min(1),
-      reviewedAt: z.string().datetime({ offset: true }),
-      evidenceChecksum: z.string().regex(CHECKSUM_PATTERN)
-    })
-    .strict()
-}).strict()
+export const PublicAnnotationSnapshotManifestSchema = z
+  .object({
+    schemaVersion: z.literal('varlens.public-annotation-snapshot.v1'),
+    snapshotId: ImmutableSnapshotIdSchema,
+    createdAt: z.string().datetime({ offset: true }),
+    genomeBuild: z.string().min(1),
+    mappingVersion: z.string().min(1),
+    licenseGate: LicenseGateSchema,
+    licenseMatrix: z
+      .object({
+        matrixId: z.string().regex(FIELD_NAME_PATTERN),
+        policyVersion: z.string().min(1),
+        matrixChecksum: z.string().regex(CHECKSUM_PATTERN),
+        generatedAt: z.string().datetime({ offset: true }),
+        entries: z.array(LicenseMatrixEntrySchema).min(1)
+      })
+      .strict(),
+    mutableLatest: z.literal(false),
+    privacy: z
+      .object({
+        noPrivateData: z.literal(true),
+        noCaseLinkedData: z.literal(true),
+        noPrivateQueryHistory: z.literal(true)
+      })
+      .strict(),
+    sources: z.array(PublicAnnotationSourceSchema).min(1),
+    fields: z.array(PublicAnnotationFieldSchema).min(1),
+    rowCounts: z.record(RowCountKeySchema, z.number().int().nonnegative()),
+    manifestChecksum: z.string().regex(CHECKSUM_PATTERN),
+    contentHash: z.string().regex(CHECKSUM_PATTERN),
+    releaseReview: z
+      .object({
+        reviewer: z.string().min(1),
+        reviewedAt: z.string().datetime({ offset: true }),
+        evidenceChecksum: z.string().regex(CHECKSUM_PATTERN)
+      })
+      .strict()
+  })
+  .strict()
 
 export const PublicAnnotationSnapshotReferenceSchema = z
   .object({
@@ -399,7 +414,10 @@ function collectSemanticErrors(manifest: PublicAnnotationSnapshotManifest): stri
   const sourceIds = new Set(manifest.sources.map((source) => source.sourceId))
   const sourcesById = new Map(manifest.sources.map((source) => [source.sourceId, source]))
   const fieldKeys = new Set(manifest.fields.map((field) => `${field.sourceId}\u0000${field.name}`))
-  const hashPrefix = manifest.contentHash.slice('sha256:'.length, 'sha256:'.length + CONTENT_HASH_PREFIX_LENGTH)
+  const hashPrefix = manifest.contentHash.slice(
+    'sha256:'.length,
+    'sha256:'.length + CONTENT_HASH_PREFIX_LENGTH
+  )
 
   if (!manifest.snapshotId.includes(hashPrefix)) {
     errors.push('snapshot ID must include the content hash prefix')
@@ -449,7 +467,10 @@ function collectSemanticErrors(manifest: PublicAnnotationSnapshotManifest): stri
     if (source.license.clinicalUse !== 'allowed') {
       errors.push('source clinical use must be allowed')
     }
-    if (source.license.derivativeInheritance !== 'none' && source.license.derivativeInheritance !== 'attribution') {
+    if (
+      source.license.derivativeInheritance !== 'none' &&
+      source.license.derivativeInheritance !== 'attribution'
+    ) {
       errors.push('source derivative inheritance must be public-compatible')
     }
     if (source.license.shareAlike) {

@@ -139,14 +139,16 @@ describe.skipIf(!RUN_POSTGRES)('hosted user private DB routing - PostgreSQL inte
     const alice = (await router!.resolveSession(request('alice'))) as PostgresStorageSession
     const bob = (await router!.resolveSession(request('bob'))) as PostgresStorageSession
 
-    await expect(alice.getPool().query('SELECT current_database() AS db, current_user AS role')).resolves
-      .toMatchObject({
-        rows: [{ db: aliceDb, role: aliceRole }]
-      })
-    await expect(bob.getPool().query('SELECT current_database() AS db, current_user AS role')).resolves
-      .toMatchObject({
-        rows: [{ db: bobDb, role: bobRole }]
-      })
+    await expect(
+      alice.getPool().query('SELECT current_database() AS db, current_user AS role')
+    ).resolves.toMatchObject({
+      rows: [{ db: aliceDb, role: aliceRole }]
+    })
+    await expect(
+      bob.getPool().query('SELECT current_database() AS db, current_user AS role')
+    ).resolves.toMatchObject({
+      rows: [{ db: bobDb, role: bobRole }]
+    })
 
     const aliceToBob = new Client({
       connectionString: appUrl(process.env.VARLENS_PG_URL!, aliceRole, alicePassword, bobDb)
