@@ -236,6 +236,11 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
         async handle() {
           throw new Error('database unavailable')
         }
+      },
+      'import:start': {
+        async handle() {
+          return { error: 'upload-not-found' }
+        }
       }
     })
 
@@ -285,6 +290,7 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
   test('dispatcher records IPC metrics for overrides, autoroutes, errors, and unknown methods', async () => {
     const { deps, execute, writeExecute } = makeDeps()
     const metrics = new AppMetrics({ app: 'varlens', environment: 'dev' })
+    deps.metrics = metrics
     const app = fastify()
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
@@ -309,6 +315,11 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
         async handle() {
           throw new Error('database unavailable')
         }
+      },
+      'import:start': {
+        async handle() {
+          return { error: 'upload-not-found' }
+        }
       }
     })
 
@@ -332,6 +343,11 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
       url: '/api/variants/query',
       payload: { args: [1, {}] }
     })
+    const importError = await app.inject({
+      method: 'POST',
+      url: '/api/import/start',
+      payload: { args: ['web-upload:missing/case.vcf', 'Case A'] }
+    })
     const preHandlerError = await app.inject({
       method: 'POST',
       url: '/api/auth/isAccountsEnabled',
@@ -348,6 +364,7 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     expect(read.statusCode).toBe(200)
     expect(write.statusCode).toBe(200)
     expect(error.statusCode).toBe(500)
+    expect(importError.statusCode).toBe(200)
     expect(preHandlerError.statusCode).toBe(401)
     expect(unknown.statusCode).toBe(404)
     expect(execute).toHaveBeenCalledWith({ type: 'tags:list', params: [] })
@@ -368,6 +385,9 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     )
     expect(text).toContain(
       'varlens_ipc_requests_total{app="varlens",environment="dev",ipc="variants:query",status="error"} 1'
+    )
+    expect(text).toContain(
+      'varlens_operation_events_total{app="varlens",environment="dev",failure_class="upload-not-found",operation="import",result="error"} 1'
     )
     expect(text).toContain(
       'varlens_ipc_requests_total{app="varlens",environment="dev",ipc="auth:isAccountsEnabled",status="error"} 1'

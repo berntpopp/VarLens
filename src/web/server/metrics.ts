@@ -132,6 +132,15 @@ export function resolveMetricsIpc(method: string, url: string): string | undefin
   return `${toTaskDomain(domain)}:${ipcMethod}`
 }
 
+export type OperationMetricName =
+  | 'auth-change-password'
+  | 'auth-login'
+  | 'batch-import'
+  | 'import'
+  | 'upload-stage'
+
+export type OperationMetricResult = 'success' | 'error'
+
 export class AppMetrics {
   private readonly baseLabels: Labels
   private readonly requests = new Map<string, { labels: Labels; value: number }>()
@@ -141,6 +150,7 @@ export class AppMetrics {
   private readonly ipcInFlight = new Map<string, { labels: Labels; value: number }>()
   private readonly ipcDurations = new Map<string, { labels: Labels; state: HistogramState }>()
   private readonly ipcLastSuccess = new Map<string, { labels: Labels; value: number }>()
+  private readonly operationEvents = new Map<string, { labels: Labels; value: number }>()
   private dbHealthy = 0
   private readonly startedAt = Date.now() / 1000
 
@@ -237,6 +247,23 @@ export class AppMetrics {
     this.dbHealthy = value ? 1 : 0
   }
 
+  recordOperationEvent(params: {
+    operation: OperationMetricName
+    result: OperationMetricResult
+    failureClass?: string
+  }): void {
+    const labels = {
+      ...this.baseLabels,
+      operation: params.operation,
+      result: params.result,
+      failure_class:
+        params.result === 'success' ? 'none' : normalizeFailureClass(params.failureClass)
+    }
+    const key = labelKey(labels)
+    const current = this.operationEvents.get(key)
+    this.operationEvents.set(key, { labels, value: (current?.value ?? 0) + 1 })
+  }
+
   contentType(): string {
     return 'text/plain; version=0.0.4; charset=utf-8'
   }
@@ -277,6 +304,12 @@ export class AppMetrics {
     lines.push('# TYPE varlens_ipc_last_success_timestamp_seconds gauge')
     pushSeries(lines, 'varlens_ipc_last_success_timestamp_seconds', this.ipcLastSuccess.values())
 
+    lines.push(
+      '# HELP varlens_operation_events_total Bounded VarLens operation outcomes for support triage.'
+    )
+    lines.push('# TYPE varlens_operation_events_total counter')
+    pushSeries(lines, 'varlens_operation_events_total', this.operationEvents.values())
+
     lines.push('# HELP process_start_time_seconds Start time of the Node.js process.')
     lines.push('# TYPE process_start_time_seconds gauge')
     lines.push(metricLine('process_start_time_seconds', this.baseLabels, this.startedAt))
@@ -295,6 +328,13 @@ export class AppMetrics {
 
     return `${lines.join('\n')}\n`
   }
+}
+
+function normalizeFailureClass(value: string | undefined): string {
+  const raw = value?.trim().toLowerCase()
+  if (raw === undefined || raw === '') return 'unknown'
+  const normalized = raw.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+  return normalized === '' ? 'unknown' : normalized.slice(0, 64)
 }
 
 export function createAppMetricsFromEnv(env: NodeJS.ProcessEnv = process.env): AppMetrics {

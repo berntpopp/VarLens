@@ -62,6 +62,7 @@ import {
   DispatcherInvokeBodySchema,
   DispatcherParamsSchema
 } from '../../shared/api/schemas/dispatcher'
+import type { AppMetrics, OperationMetricName } from './metrics'
 
 /**
  * Methods reachable to a session that still has
@@ -142,6 +143,73 @@ async function applyDevApiLatency(): Promise<void> {
   const delayMs = resolveDevApiLatencyMs()
   if (delayMs <= 0) return
   await new Promise((resolve) => setTimeout(resolve, delayMs))
+}
+
+function operationMetricForKey(key: string): OperationMetricName | undefined {
+  if (key.startsWith('batch-import:')) return 'batch-import'
+  if (key.startsWith('import:')) return 'import'
+  return undefined
+}
+
+function recordDispatcherOperationMetrics(params: {
+  metrics: AppMetrics | undefined
+  key: string
+  statusCode: number
+  result: unknown
+}): void {
+  const operation = operationMetricForKey(params.key)
+  if (operation === undefined) return
+  const failed = params.statusCode >= 400 || resultLooksLikeFailure(params.result)
+  params.metrics?.recordOperationEvent({
+    operation,
+    result: failed ? 'error' : 'success',
+    failureClass: failed ? failureClassForResult(params.result, params.statusCode) : undefined
+  })
+}
+
+function resultLooksLikeFailure(result: unknown): boolean {
+  if (result === null || typeof result !== 'object') return false
+  const body = result as Record<string, unknown>
+  if (typeof body.error === 'string' && body.error.trim() !== '') return true
+  if (Array.isArray(body.errors) && body.errors.length > 0) return true
+  return typeof body.code === 'string' && body.code.trim() !== ''
+}
+
+function failureClassForResult(result: unknown, statusCode: number): string {
+  if (result !== null && typeof result === 'object') {
+    const body = result as Record<string, unknown>
+    const raw =
+      typeof body.error === 'string'
+        ? body.error
+        : typeof body.code === 'string'
+          ? body.code
+          : undefined
+    const mapped = mapKnownFailureClass(raw)
+    if (mapped !== undefined) return mapped
+  }
+  if (statusCode === 400) return 'validation'
+  if (statusCode === 401) return 'unauthenticated'
+  if (statusCode === 403) return 'forbidden'
+  if (statusCode === 404) return 'not-found'
+  if (statusCode >= 500) return 'server-error'
+  return 'unknown'
+}
+
+function mapKnownFailureClass(raw: string | undefined): string | undefined {
+  switch (raw) {
+    case 'FORBIDDEN_ORIGIN':
+      return 'forbidden-origin'
+    case 'NOT_FOUND':
+      return 'not-found'
+    case 'UNAUTHENTICATED':
+      return 'unauthenticated'
+    case 'UNKNOWN':
+      return 'server-error'
+    case 'upload-not-found':
+      return 'upload-not-found'
+    default:
+      return undefined
+  }
 }
 
 export type { DispatcherDeps, InvokeBody, OverrideHandler } from './routes/types'
@@ -282,6 +350,12 @@ export function registerDispatcher(
         const result = await invokeAsIpcResult(reply, () =>
           override.handle(args, request, reply, requestDeps)
         )
+        recordDispatcherOperationMetrics({
+          metrics: requestDeps.metrics,
+          key,
+          statusCode: reply.statusCode,
+          result
+        })
         if (reply.statusCode < 400 && (isWriteTaskType(key) || shouldAuditOverrideWrite(key))) {
           const auditResult = await invokeAsIpcResult(reply, () =>
             recordApiWriteAudit(requestDeps, { key, username: request.session?.user?.username })
@@ -302,6 +376,12 @@ export function registerDispatcher(
         const result = await invokeAsIpcResult(reply, () =>
           requestDeps.session.getReadExecutor().execute(task)
         )
+        recordDispatcherOperationMetrics({
+          metrics: requestDeps.metrics,
+          key,
+          statusCode: reply.statusCode,
+          result
+        })
         if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
           const auditResult = await invokeAsIpcResult(reply, () =>
             recordApiReadAudit(requestDeps, { key, username: request.session?.user?.username })
@@ -317,6 +397,12 @@ export function registerDispatcher(
         const result = await invokeAsIpcResult(reply, () =>
           requestDeps.session.getWriteExecutor().execute(task)
         )
+        recordDispatcherOperationMetrics({
+          metrics: requestDeps.metrics,
+          key,
+          statusCode: reply.statusCode,
+          result
+        })
         if (reply.statusCode < 400) {
           const auditResult = await invokeAsIpcResult(reply, () =>
             recordApiWriteAudit(requestDeps, { key, username: request.session?.user?.username })

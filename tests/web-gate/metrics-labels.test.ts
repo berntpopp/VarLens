@@ -74,6 +74,25 @@ describe('web metrics route labels', () => {
     )
   })
 
+  test('renders bounded operation metrics for support triage', () => {
+    const metrics = new AppMetrics({ app: 'varlens', environment: 'test' })
+
+    metrics.recordOperationEvent({
+      operation: 'auth-login',
+      result: 'error',
+      failureClass: 'invalid-credentials'
+    })
+    metrics.recordOperationEvent({ operation: 'upload-stage', result: 'success' })
+
+    const text = metrics.metricsText()
+    expect(text).toContain(
+      'varlens_operation_events_total{app="varlens",environment="test",failure_class="invalid-credentials",operation="auth-login",result="error"} 1'
+    )
+    expect(text).toContain(
+      'varlens_operation_events_total{app="varlens",environment="test",failure_class="none",operation="upload-stage",result="success"} 1'
+    )
+  })
+
   test('escapes line breaks in label values', () => {
     const metrics = new AppMetrics({ app: 'varlens', environment: 'prod\ncanary' })
     metrics.beginRequest('POST', '/api/auth/login')
