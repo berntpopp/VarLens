@@ -3,11 +3,13 @@ import type { FastifyReply, FastifyRequest } from 'fastify'
 import type { StorageSession } from '../../../main/storage/session'
 import type { PostgresWebAuthService } from '../../auth/PostgresWebAuthService'
 import type { WebEventHub } from '../events'
+import type { AppMetrics } from '../metrics'
 
 export interface DispatcherDeps {
   session: StorageSession
   authService: PostgresWebAuthService
   events: WebEventHub
+  metrics?: AppMetrics
   resolveSession?: (request: FastifyRequest) => Promise<StorageSession>
 }
 

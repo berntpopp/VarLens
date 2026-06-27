@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import Fastify from 'fastify'
 import { describe, expect, test } from 'vitest'
 
+import { AppMetrics } from '../../src/web/server/metrics'
 import { registerImportUploadRoutes } from '../../src/web/server/routes/upload-staging'
 
 const ROOT = process.cwd()
@@ -94,6 +95,7 @@ describe('web upload boundary', () => {
     const uploadDir = mkdtempSync(join(tmpdir(), 'varlens-upload-boundary-'))
     process.env.VARLENS_WEB_UPLOAD_DIR = uploadDir
     process.env.VARLENS_WEB_MAX_UPLOAD_BYTES = '4'
+    const metrics = new AppMetrics({ app: 'varlens', environment: 'test' })
 
     const app = Fastify()
     app.addHook('preHandler', async (request) => {
@@ -102,7 +104,7 @@ describe('web upload boundary', () => {
         user: { id: 1 }
       }
     })
-    registerImportUploadRoutes(app)
+    registerImportUploadRoutes(app, { metrics } as never)
     await app.ready()
 
     try {
@@ -121,6 +123,9 @@ describe('web upload boundary', () => {
         error: 'upload-too-large',
         message: 'Upload exceeds the configured 4 byte limit'
       })
+      expect(metrics.metricsText()).toContain(
+        'varlens_operation_events_total{app="varlens",environment="test",failure_class="upload-too-large",operation="upload-stage",result="error"} 1'
+      )
     } finally {
       await app.close()
       if (previousUploadDir === undefined) delete process.env.VARLENS_WEB_UPLOAD_DIR

@@ -110,11 +110,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   }
 
   const app = Fastify({
+    requestIdHeader: 'x-request-id',
+    requestIdLogLabel: 'request_id',
     logger: {
       level: process.env.VARLENS_LOG_LEVEL ?? 'info'
     }
   })
   const metrics = options.metrics ?? createAppMetricsFromEnv()
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('x-request-id', request.id)
+  })
   registerRequestMetrics(app, metrics)
   await registerWebRateLimit(app)
 
@@ -186,6 +191,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     session: session as StorageSession,
     authService,
     events,
+    metrics,
     ...(hostedRouter !== null
       ? {
           resolveSession: (request: Parameters<HostedUserDbRouter['resolveSession']>[0]) =>

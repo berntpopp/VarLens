@@ -8,6 +8,7 @@ import { jobRunner } from '../../src/main/services/jobs/runner'
 import { ErrorCode } from '../../src/shared/types/errors'
 import { PasswordPolicyError } from '../../src/web/auth/PostgresWebAuthService'
 import { buildDispatcher } from '../../src/web/server/dispatcher'
+import { AppMetrics } from '../../src/web/server/metrics'
 import { stageExistingFileUpload } from '../../src/web/server/routes/upload-staging'
 import { makeDeps } from './helpers/dispatcher-adapters'
 
@@ -35,6 +36,8 @@ describe('web dispatcher adapters: auth and import', () => {
 
   test('auth.login records success and failure audit events without credentials', async () => {
     const { deps, reply, writeExecute } = makeDeps()
+    const metrics = new AppMetrics({ app: 'varlens', environment: 'test' })
+    deps.metrics = metrics
     deps.authService.authenticate = async (username: string, password: string) =>
       password === 'correct'
         ? {
@@ -90,6 +93,13 @@ describe('web dispatcher adapters: auth and import', () => {
     })
     expect(JSON.stringify(writeExecute.mock.calls)).not.toContain('correct')
     expect(JSON.stringify(writeExecute.mock.calls)).not.toContain('wrong')
+    const text = metrics.metricsText()
+    expect(text).toContain(
+      'varlens_operation_events_total{app="varlens",environment="test",failure_class="none",operation="auth-login",result="success"} 1'
+    )
+    expect(text).toContain(
+      'varlens_operation_events_total{app="varlens",environment="test",failure_class="invalid-credentials",operation="auth-login",result="error"} 1'
+    )
   })
 
   test('auth.login records locked failures without leaking submitted usernames', async () => {

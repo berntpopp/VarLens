@@ -18,6 +18,11 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
         const { authService } = deps
         const parsed = LoginArgsSchema.safeParse(args)
         if (!parsed.success) {
+          deps.metrics?.recordOperationEvent({
+            operation: 'auth-login',
+            result: 'error',
+            failureClass: 'validation'
+          })
           reply.code(400)
           return { error: 'username and password (string) required' }
         }
@@ -34,12 +39,19 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
             success: true,
             mustChangePassword: result.mustChangePassword === true
           })
+          deps.metrics?.recordOperationEvent({ operation: 'auth-login', result: 'success' })
         } else {
+          const reason = result.locked === true ? 'locked' : 'invalid-credentials'
           await recordAuthAudit(deps, {
             action_type: 'auth_login_failure',
             username,
             success: false,
-            reason: result.locked === true ? 'locked' : 'invalid-credentials'
+            reason
+          })
+          deps.metrics?.recordOperationEvent({
+            operation: 'auth-login',
+            result: 'error',
+            failureClass: reason
           })
         }
         return result
@@ -83,6 +95,11 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
 
         const parsed = ChangePasswordArgsSchema.safeParse(args)
         if (!parsed.success) {
+          deps.metrics?.recordOperationEvent({
+            operation: 'auth-change-password',
+            result: 'error',
+            failureClass: 'validation'
+          })
           reply.code(400)
           return { error: 'oldPassword and newPassword (string) required' }
         }
@@ -101,6 +118,11 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
               actor: sessionUser.username,
               success: false,
               reason: 'old-password-invalid'
+            })
+            deps.metrics?.recordOperationEvent({
+              operation: 'auth-change-password',
+              result: 'error',
+              failureClass: 'old-password-invalid'
             })
             reply.code(401)
             return { success: false, error: 'old-password-invalid' }
@@ -121,6 +143,10 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
             actor: sessionUser.username,
             success: true
           })
+          deps.metrics?.recordOperationEvent({
+            operation: 'auth-change-password',
+            result: 'success'
+          })
           return { success: true }
         } catch (err) {
           if (err instanceof PasswordPolicyError) {
@@ -130,6 +156,11 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
               actor: sessionUser.username,
               success: false,
               reason: err.code
+            })
+            deps.metrics?.recordOperationEvent({
+              operation: 'auth-change-password',
+              result: 'error',
+              failureClass: err.code
             })
             reply.code(422)
             return { success: false, error: err.code, message: err.message }
