@@ -39,6 +39,8 @@ import {
  */
 export const MIN_PASSWORD_LENGTH = WEB_MIN_PASSWORD_LENGTH
 const PLATFORM_DISABLED_PASSWORD_HASH = 'platform-identity-disabled-local-password'
+type PlatformPrivateDbStatus = 'pending' | 'active' | 'failed' | 'revoked'
+type HostedPrivateDbStatus = 'unassigned' | 'active' | 'migration_failed' | 'disabled'
 
 /**
  * Server-side validation errors that callers need to discriminate
@@ -62,6 +64,13 @@ function assertPasswordMinLength(password: string, label = 'Password'): void {
       `${label} must be at least ${MIN_PASSWORD_LENGTH} characters.`
     )
   }
+}
+
+function hostedPrivateDbStatus(status: PlatformPrivateDbStatus | undefined): HostedPrivateDbStatus {
+  if (status === 'active') return 'active'
+  if (status === 'failed') return 'migration_failed'
+  if (status === 'revoked') return 'disabled'
+  return 'unassigned'
 }
 
 /**
@@ -468,10 +477,14 @@ export class PostgresWebAuthService {
     displayName: string
     role: UserRole
     privateDbSecretRef?: string
-    privateDbStatus?: 'pending' | 'active' | 'failed' | 'revoked'
+    privateDbStatus?: PlatformPrivateDbStatus
     publicAnnotationSnapshotId?: string
   }): Promise<{ id: number; username: string; role: UserRole; private_db_status: string | null }> {
     const sch = this.schemaQuoted
+    const privateDbStatus =
+      input.privateDbSecretRef === undefined
+        ? hostedPrivateDbStatus(undefined)
+        : hostedPrivateDbStatus(input.privateDbStatus ?? 'active')
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
@@ -522,7 +535,7 @@ export class PostgresWebAuthService {
           PLATFORM_DISABLED_PASSWORD_HASH,
           input.role,
           input.privateDbSecretRef ?? null,
-          input.privateDbStatus ?? (input.privateDbSecretRef === undefined ? 'pending' : 'active'),
+          privateDbStatus,
           input.publicAnnotationSnapshotId ?? null,
           PLATFORM_DISABLED_PASSWORD_HASH
         ]
@@ -554,7 +567,7 @@ export class PostgresWebAuthService {
       displayName: string
       role: UserRole
       privateDbSecretRef: string
-      privateDbStatus?: 'pending' | 'active' | 'failed' | 'revoked'
+      privateDbStatus?: PlatformPrivateDbStatus
       publicAnnotationSnapshotId?: string
     }
   ): Promise<{ id: number; username: string; role: UserRole; private_db_status: string | null } | undefined> {
@@ -596,7 +609,7 @@ export class PostgresWebAuthService {
         input.displayName,
         PLATFORM_DISABLED_PASSWORD_HASH,
         input.role,
-        input.privateDbStatus ?? 'active',
+        hostedPrivateDbStatus(input.privateDbStatus ?? 'active'),
         input.publicAnnotationSnapshotId ?? null,
         current.id
       ]

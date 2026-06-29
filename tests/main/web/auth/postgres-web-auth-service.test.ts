@@ -458,6 +458,40 @@ describe('PostgresWebAuthService — platform identity users', () => {
     ).rejects.toThrow(/admin user workspace/i)
     expect(pool.queries.some((q) => /^ROLLBACK$/i.test(q.text))).toBe(true)
   })
+
+  it('maps revoked platform resource status to the hosted disabled DB status', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
+    pool.enqueueResponse({
+      rows: [{ password_hash: 'platform-identity-disabled-local-password' }],
+      rowCount: 1
+    })
+    pool.enqueueResponse({
+      rows: [
+        {
+          id: '9',
+          username: 'keycloak-subject-1',
+          role: ROLE_USER,
+          private_db_status: 'disabled'
+        }
+      ],
+      rowCount: 1
+    })
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
+
+    const result = await svc.upsertPlatformUser({
+      username: 'keycloak-subject-1',
+      displayName: 'Alice',
+      role: ROLE_USER,
+      privateDbSecretRef: 'alice.pgurl',
+      privateDbStatus: 'revoked'
+    })
+
+    expect(result.private_db_status).toBe('disabled')
+    const upsert = pool.queries.find((q) => /ON CONFLICT \(username\)/.test(q.text))
+    expect(upsert?.values[5]).toBe('disabled')
+  })
 })
 
 const RUN_POSTGRES_AUTH_E2E = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
