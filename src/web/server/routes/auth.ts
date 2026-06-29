@@ -7,14 +7,36 @@ import {
 } from '../../../shared/api/schemas/auth'
 import { PasswordPolicyError } from '../../auth/PostgresWebAuthService'
 import { recordAuthAudit } from '../audit'
+import { isPlatformIdentityEnabled } from '../platform-identity-config'
 import { requireAdmin } from './guards'
 import type { OverrideHandler } from './types'
+
+function platformMutationDenied(reply: { code: (statusCode: number) => unknown }): {
+  success: false
+  error: string
+  message: string
+} {
+  reply.code(403)
+  return {
+    success: false,
+    error: 'platform-auth-required',
+    message: 'Local password and user mutations are disabled while platform identity is active.'
+  }
+}
 
 export function buildAuthOverrides(): Record<string, OverrideHandler> {
   return {
     'auth:login': {
       public: true,
       async handle(args, request, reply, deps) {
+        if (isPlatformIdentityEnabled()) {
+          reply.code(403)
+          return {
+            success: false,
+            error: 'platform-auth-required',
+            message: 'Hosted username/password login is disabled while platform identity is active.'
+          }
+        }
         const { authService } = deps
         const parsed = LoginArgsSchema.safeParse(args)
         if (!parsed.success) {
@@ -85,6 +107,9 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
     },
     'auth:changePassword': {
       async handle(args, request, reply, deps) {
+        if (isPlatformIdentityEnabled()) {
+          return platformMutationDenied(reply)
+        }
         const { authService } = deps
         const session = request.session
         const sessionUser = session?.user
@@ -171,6 +196,9 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
     },
     'auth:createUser': {
       async handle(args, request, reply) {
+        if (isPlatformIdentityEnabled()) {
+          return platformMutationDenied(reply)
+        }
         const admin = requireAdmin(request, reply)
         if (admin === undefined) return { error: 'admin-required' }
 
@@ -195,6 +223,9 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
     },
     'auth:deactivateUser': {
       async handle(args, request, reply, deps) {
+        if (isPlatformIdentityEnabled()) {
+          return platformMutationDenied(reply)
+        }
         const { authService } = deps
         const admin = requireAdmin(request, reply)
         if (admin === undefined) return { error: 'admin-required' }
@@ -222,6 +253,9 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
     },
     'auth:resetPassword': {
       async handle(args, request, reply, deps) {
+        if (isPlatformIdentityEnabled()) {
+          return platformMutationDenied(reply)
+        }
         const { authService } = deps
         const admin = requireAdmin(request, reply)
         if (admin === undefined) return { error: 'admin-required' }

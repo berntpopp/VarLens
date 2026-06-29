@@ -38,6 +38,7 @@ import {
  * own (laxer) rule because that surface predates this policy.
  */
 export const MIN_PASSWORD_LENGTH = WEB_MIN_PASSWORD_LENGTH
+const PLATFORM_DISABLED_PASSWORD_HASH = 'platform-identity-disabled-local-password'
 
 /**
  * Server-side validation errors that callers need to discriminate
@@ -459,6 +460,60 @@ export class PostgresWebAuthService {
     )
     if ((result.rowCount ?? 0) === 0) {
       throw new Error(`User not found or inactive: ${username}`)
+    }
+  }
+
+  async upsertPlatformUser(input: {
+    username: string
+    displayName: string
+    role: UserRole
+    privateDbSecretRef?: string
+    privateDbStatus?: 'pending' | 'active' | 'failed' | 'revoked'
+    publicAnnotationSnapshotId?: string
+  }): Promise<{ id: number; username: string; role: UserRole; private_db_status: string | null }> {
+    const sch = this.schemaQuoted
+    const result = await this.pool.query<{
+      id: string
+      username: string
+      role: UserRole
+      private_db_status: string | null
+    }>(
+      `INSERT INTO ${sch}."users" AS platform_target
+        (username, display_name, password_hash, role, must_change_password, is_active,
+         private_db_secret_ref, private_db_status, public_annotation_snapshot_id, password_changed_at)
+       VALUES ($1, $2, $3, $4, FALSE, TRUE, $5, $6, $7, now())
+       ON CONFLICT (username)
+       DO UPDATE SET
+          display_name = EXCLUDED.display_name,
+          role = EXCLUDED.role,
+          is_active = TRUE,
+          must_change_password = FALSE,
+          private_db_secret_ref = EXCLUDED.private_db_secret_ref,
+          private_db_status = EXCLUDED.private_db_status,
+          public_annotation_snapshot_id = EXCLUDED.public_annotation_snapshot_id,
+          updated_at = now()
+       WHERE platform_target.password_hash = $8
+       RETURNING id, username, role, private_db_status`,
+      [
+        input.username,
+        input.displayName,
+        PLATFORM_DISABLED_PASSWORD_HASH,
+        input.role,
+        input.privateDbSecretRef ?? null,
+        input.privateDbStatus ?? (input.privateDbSecretRef === undefined ? 'pending' : 'active'),
+        input.publicAnnotationSnapshotId ?? null,
+        PLATFORM_DISABLED_PASSWORD_HASH
+      ]
+    )
+    if ((result.rowCount ?? 0) === 0) {
+      throw new Error(`Platform identity cannot overwrite local user: ${input.username}`)
+    }
+    const row = result.rows[0]
+    return {
+      id: Number(row.id),
+      username: row.username,
+      role: row.role,
+      private_db_status: row.private_db_status
     }
   }
 

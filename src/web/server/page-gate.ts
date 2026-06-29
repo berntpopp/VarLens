@@ -15,7 +15,8 @@
  *   /api/*                 | passthrough          | auth.ts handles 401
  *   /livez, /readyz,
  *   /healthz               | passthrough          | passthrough  (health probes)
- *   /login, /login/        | passthrough          | passthrough  (the wall itself)
+ *   /login, /login/,
+ *   /auth/platform/*       | passthrough          | passthrough  (the wall itself)
  *   non-GET                | passthrough          | passthrough  (auth.ts/CSRF surface)
  *   anything else (GET)    | passthrough          | 302 → /login?next=<path>
  *
@@ -31,7 +32,15 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
-const ALWAYS_PUBLIC_PATHS = new Set<string>(['/livez', '/readyz', '/healthz', '/login', '/login/'])
+const ALWAYS_PUBLIC_PATHS = new Set<string>([
+  '/livez',
+  '/readyz',
+  '/healthz',
+  '/login',
+  '/login/',
+  '/auth/platform/start',
+  '/auth/platform/callback'
+])
 
 /**
  * Root-level brand/icon assets that must load for an unauthenticated browser
@@ -47,10 +56,6 @@ const PUBLIC_ROOT_ASSETS = new Set<string>([
   '/icon-512.png',
   '/icon-maskable-512.png'
 ])
-
-function isPublicPath(path: string): boolean {
-  return ALWAYS_PUBLIC_PATHS.has(path) || PUBLIC_ROOT_ASSETS.has(path)
-}
 
 /**
  * Build the `?next=` value for the post-login redirect. Returns an
@@ -76,10 +81,18 @@ export interface PageGateOptions {
    * `Location` header for the 302. Defaults are resolved by login-route.ts.
    */
   appPathPrefix: string
+  loginPath?: string
+  platformCallbackPath?: string
+  requirePlatformAuth?: boolean
 }
 
 export function registerPageGate(app: FastifyInstance, options: PageGateOptions): void {
   const { appPathPrefix } = options
+  const loginPath = options.loginPath ?? '/login'
+  const publicPaths = new Set(ALWAYS_PUBLIC_PATHS)
+  if (options.platformCallbackPath !== undefined) {
+    publicPaths.add(options.platformCallbackPath)
+  }
 
   app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
     // Only intercept GETs. POST/PUT/DELETE traffic is API-only and is
@@ -92,10 +105,7 @@ export function registerPageGate(app: FastifyInstance, options: PageGateOptions)
     // `/api/*` is auth.ts's territory — never short-circuit it here, or
     // the API would start redirecting instead of returning JSON 401s.
     if (path.startsWith('/api/')) return
-    if (isPublicPath(path)) return
-
-    const user = request.session?.user
-    if (user !== undefined) return
+    if (publicPaths.has(path) || PUBLIC_ROOT_ASSETS.has(path)) return
 
     // Build the redirect target, prepending the app prefix because a
     // prefix-stripping proxy forwards `/login` to Fastify while the
@@ -103,8 +113,17 @@ export function registerPageGate(app: FastifyInstance, options: PageGateOptions)
     const next = buildNextParam(fullUrl)
     const location =
       appPathPrefix +
-      '/login' +
+      loginPath +
       (next !== '' ? '?next=' + encodeURIComponent(appPathPrefix + next) : '')
+
+    const user = request.session?.user
+    if (user !== undefined) {
+      if (options.requirePlatformAuth === true && request.session.authMode !== 'platform') {
+        request.session.delete()
+      } else {
+        return
+      }
+    }
 
     reply.header('cache-control', 'no-store')
     reply.code(302)

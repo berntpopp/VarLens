@@ -5,8 +5,9 @@
  * The cookie holds `{ user: { id, username, role, passwordChangedAt } }`
  * plus the password-rotation sticky bit; there is no server-side
  * session store. Each protected API request revalidates the cookie
- * against the current DB user row so deactivation or password reset
- * invalidates stale sessions before they reach application logic.
+ * against the current DB user row so deactivation, password reset
+ * or platform-entitlement revocation invalidates stale sessions
+ * before they reach application logic.
  *
  * Secret resolution, in order:
  *
@@ -36,11 +37,20 @@ import type { FastifyInstance } from 'fastify'
 import secureSession from '@fastify/secure-session'
 
 import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
+import type { PlatformIdentityService } from './platform-identity'
 import { registerAuthLoginRateLimit } from './rate-limit'
 
 declare module '@fastify/secure-session' {
   interface SessionData {
     user: { id: number; username: string; role: string; passwordChangedAt: string | null }
+    authMode?: 'local' | 'platform'
+    platformOidc?: {
+      state: string
+      nonce: string
+      codeVerifier: string
+      next: string
+      createdAt: number
+    }
     /**
      * Sticky bit set on login when the authenticated user has
      * must_change_password=TRUE in the DB; cleared by the
@@ -180,10 +190,11 @@ function loadOrCreateSessionKey(): Buffer {
 
 export async function registerSessions(
   app: FastifyInstance,
-  options: { authService: PostgresWebAuthService }
+  options: { authService: PostgresWebAuthService; platformIdentity?: PlatformIdentityService }
 ): Promise<void> {
   const key = loadOrCreateSessionKey()
   const production = isProductionMode()
+  const platformMode = options.platformIdentity !== undefined
 
   await app.register(secureSession, {
     key,
@@ -191,12 +202,10 @@ export async function registerSessions(
     cookie: {
       path: '/',
       httpOnly: true,
-      // SameSite=Strict for an admin-only single-tenant tool with no
-      // cross-site flows (no SSO redirect, no embeds, no third-party
-      // links coming back into authenticated pages). Lax was a
-      // legacy-from-desktop default that opened a window for
-      // cross-site GET-triggered side effects; Strict closes it.
-      sameSite: 'strict',
+      // Local login has no cross-site flow, so Strict is viable.
+      // Platform OIDC needs Lax so the top-level GET callback from
+      // the IdP carries the transient state/nonce session.
+      sameSite: platformMode ? 'lax' : 'strict',
       // Production: Secure is non-negotiable — `__Host-` prefix
       // *requires* Secure, and we never want a session cookie
       // travelling over HTTP. Dev / test: drop Secure so localhost
@@ -261,6 +270,48 @@ export async function registerSessions(
         message: 'session no longer valid',
         userMessage: 'Please log in again.'
       })
+    }
+
+    if (platformMode && request.session.authMode !== 'platform') {
+      request.session.delete()
+      reply.code(401)
+      return reply.send({
+        code: 'UNAUTHENTICATED',
+        message: 'platform login is required',
+        userMessage: 'Please log in again.'
+      })
+    }
+
+    if (request.session.authMode === 'platform') {
+      if (options.platformIdentity === undefined) {
+        request.session.delete()
+        reply.code(401)
+        return reply.send({
+          code: 'UNAUTHENTICATED',
+          message: 'platform identity is not configured',
+          userMessage: 'Please log in again.'
+        })
+      }
+      try {
+        const platformUser = await options.platformIdentity.resolveSessionUser(
+          options.authService,
+          sessionUser.username
+        )
+        if (platformUser.id !== sessionUser.id) {
+          throw new Error('platform user id changed')
+        }
+        request.session.mustChangePassword = false
+        request.session.user = platformUser
+      } catch {
+        request.session.delete()
+        reply.code(401)
+        return reply.send({
+          code: 'UNAUTHENTICATED',
+          message: 'platform session no longer valid',
+          userMessage: 'Please log in again.'
+        })
+      }
+      return
     }
 
     request.session.mustChangePassword = liveUser.must_change_password === 1

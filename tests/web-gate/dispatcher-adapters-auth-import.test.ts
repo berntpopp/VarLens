@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { jobRunner } from '../../src/main/services/jobs/runner'
 import { ErrorCode } from '../../src/shared/types/errors'
@@ -16,6 +16,10 @@ const ZIP_WITH_ONE_JSON_BASE64 =
   'UEsDBBQAAAgIAJRRwVwz5c4EEQAAAA8AAAARAAAAd2ViLXppcC1jYXNlLmpzb26rVkpOLE5Vsl' +
   'IqT01SquUCAFBLAQIUAxQAAAgIAJRRwVwz5c4EEQAAAA8AAAARAAAAAAAAAAAAAACkgQAAAAB3' +
   'ZWItemlwLWNhc2UuanNvblBLBQYAAAAAAQABAD8AAABAAAAAAAA='
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 describe('web dispatcher adapters: auth and import', () => {
   test('auth.isAccountsEnabled delegates to the web auth service', async () => {
@@ -228,6 +232,34 @@ describe('web dispatcher adapters: auth and import', () => {
     ])
     expect(JSON.stringify(writeExecute.mock.calls)).not.toContain('new-password')
     expect(JSON.stringify(writeExecute.mock.calls)).not.toContain('bad-old')
+  })
+
+  test('platform identity disables local password and user mutation handlers', async () => {
+    vi.stubEnv('VARLENS_AUTH_MODE', 'platform')
+    const { deps, reply } = makeDeps()
+    deps.authService.changePassword = vi.fn()
+    deps.authService.resetPassword = vi.fn()
+    deps.authService.deactivateUser = vi.fn()
+    const { overrides } = buildDispatcher(deps)
+    const request = {
+      session: {
+        user: { id: 1, username: 'admin', role: 'admin', passwordChangedAt: null }
+      }
+    }
+
+    for (const action of [
+      'auth:changePassword',
+      'auth:createUser',
+      'auth:deactivateUser',
+      'auth:resetPassword'
+    ]) {
+      const result = await overrides[action].handle([], request as never, reply as never, deps)
+      expect(result).toMatchObject({ success: false, error: 'platform-auth-required' })
+    }
+
+    expect(deps.authService.changePassword).not.toHaveBeenCalled()
+    expect(deps.authService.resetPassword).not.toHaveBeenCalled()
+    expect(deps.authService.deactivateUser).not.toHaveBeenCalled()
   })
 
   test('auth.resetPassword and auth.deactivateUser record admin actions without new passwords', async () => {

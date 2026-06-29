@@ -33,11 +33,14 @@ import type { PostgresStorageSession } from '../main/storage/postgres/PostgresSt
 import type { StorageSession } from '../main/storage/session'
 import { AdminAlreadyExistsError, PostgresWebAuthService } from './auth/PostgresWebAuthService'
 import { HostedUserDbRouter } from './hosted-user-db-router'
+import { recordAuthAudit } from './server/audit'
 import { buildDispatcher, registerDispatcher } from './server/dispatcher'
 import { registerSessions } from './server/auth'
 import { registerEventStream, WebEventHub } from './server/events'
 import { registerLoginRoute, resolveAppPathPrefix } from './server/login-route'
 import { registerPageGate } from './server/page-gate'
+import { PlatformIdentityService, registerPlatformIdentityRoutes } from './server/platform-identity'
+import { readPlatformIdentityConfig } from './server/platform-identity-config'
 import { registerWebRateLimit } from './server/rate-limit'
 import { registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
@@ -87,6 +90,12 @@ export interface BuildAppOptions {
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const topology = readWebDbTopology(process.env)
+  const appPathPrefix = resolveAppPathPrefix()
+  const platformIdentityConfig = readPlatformIdentityConfig(process.env)
+  const platformIdentity =
+    platformIdentityConfig === null
+      ? undefined
+      : new PlatformIdentityService(platformIdentityConfig)
 
   // Validate Postgres config BEFORE building the app; any later
   // failure path means we'd hold a partially-spun Fastify instance,
@@ -173,7 +182,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await maybeBootstrapAdmin(authService, options.admin, app.log)
   }
 
-  await registerSessions(app, { authService })
+  await registerSessions(app, {
+    authService,
+    ...(platformIdentity !== undefined ? { platformIdentity } : {})
+  })
   await registerOpenApi(app)
   const events = new WebEventHub()
 
@@ -183,9 +195,37 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   // fallback, and so the gate runs before any route handler ships
   // bytes. `/api/*`, `/livez`, `/readyz`, `/healthz`, and `/login*`
   // are passthrough.
-  const appPathPrefix = resolveAppPathPrefix()
-  registerLoginRoute(app)
-  registerPageGate(app, { appPathPrefix })
+  if (platformIdentity !== undefined) {
+    registerPlatformIdentityRoutes(app, {
+      identity: platformIdentity,
+      authService,
+      appPathPrefix,
+      audit: async (event) => {
+        await recordAuthAudit(
+          { session: session as StorageSession } as Parameters<typeof recordAuthAudit>[0],
+          {
+            action_type: event.action,
+            username: event.subject ?? 'platform-login-attempt',
+            ...(event.subject !== undefined ? { actor: event.subject } : {}),
+            ...(event.role !== undefined ? { role: event.role } : {}),
+            success: event.action === 'auth_login_success',
+            ...(event.reason !== undefined ? { reason: event.reason } : {})
+          }
+        )
+      }
+    })
+  }
+  registerLoginRoute(app, { platformAuthEnabled: platformIdentity !== undefined })
+  registerPageGate(app, {
+    appPathPrefix,
+    loginPath: platformIdentity !== undefined ? '/auth/platform/start' : '/login',
+    ...(platformIdentity !== undefined
+      ? {
+          platformCallbackPath: platformIdentity.config.callbackPath,
+          requirePlatformAuth: true
+        }
+      : {})
+  })
 
   const dispatcherDeps = {
     session: session as StorageSession,
