@@ -124,6 +124,36 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcript).toBe('T2')
       expect(result.impact).toBe('HIGH')
     })
+
+    it('matches VEP insertion and deletion allele notation', () => {
+      const deletion = parseAnnotation(
+        new Map([
+          [
+            'CSQ',
+            '-|frameshift_variant|HIGH|GENE1|E1|Transcript|T1|protein_coding|||c.1del|p.?||||||||||||||'
+          ]
+        ]),
+        header,
+        'A',
+        'AT'
+      )
+      const insertion = parseAnnotation(
+        new Map([
+          [
+            'CSQ',
+            'TG|inframe_insertion|MODERATE|GENE2|E2|Transcript|T2|protein_coding|||c.2insTG|p.?||||||||||||||'
+          ]
+        ]),
+        header,
+        'ATG',
+        'A'
+      )
+
+      expect(deletion.geneSymbol).toBe('GENE1')
+      expect(deletion.impact).toBe('HIGH')
+      expect(insertion.geneSymbol).toBe('GENE2')
+      expect(insertion.impact).toBe('MODERATE')
+    })
   })
 
   describe('ANN parsing', () => {

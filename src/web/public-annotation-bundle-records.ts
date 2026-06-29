@@ -7,6 +7,11 @@ import type {
   AnnotationBundleFile,
   AnnotationBundleManifest
 } from '../shared/annotations/annotation-bundle'
+import {
+  extractCsqFieldsFromHeaderLine,
+  selectBestCsqTranscriptForAllele
+} from '../shared/vcf/vcf-csq'
+import { parseVcfInfo } from '../shared/vcf/vcf-info'
 
 export interface PublicVariantRecordSource {
   role: AnnotationBundleFile['role']
@@ -84,7 +89,7 @@ export async function* extractPublicVariantRecords(
   let csqFields: string[] = []
   for await (const line of readVcfLines(source.absolutePath)) {
     if (line.startsWith('##')) {
-      const headerFields = extractCsqFields(line)
+      const headerFields = extractCsqFieldsFromHeaderLine(line)
       if (headerFields !== null) csqFields = headerFields
       continue
     }
@@ -97,11 +102,16 @@ export async function* extractPublicVariantRecords(
     const pos = Number(posValue)
     if (!Number.isSafeInteger(pos) || !isSupportedAlt(altValue)) continue
 
-    const csq = selectCsqForAllele(parseInfo(infoValue).get('CSQ'), csqFields, altValue)
+    const csq = selectBestCsqTranscriptForAllele(
+      parseVcfInfo(infoValue).get('CSQ'),
+      csqFields,
+      altValue,
+      ref
+    )
     if (csq === null) continue
 
     for (const mapping of PUBLIC_SAFE_CSQ_FIELDS) {
-      const value = csq.get(mapping.csqField)
+      const value = csq.fields.get(mapping.csqField)
       if (!hasPublicValue(value)) continue
 
       yield {
@@ -113,7 +123,7 @@ export async function* extractPublicVariantRecords(
         fieldName: mapping.fieldName,
         fieldValue: value,
         evidence: {
-          allele: csq.get('Allele') ?? altValue,
+          allele: csq.allele || altValue,
           csqField: mapping.csqField,
           sourceRole: source.role
         },
@@ -146,45 +156,6 @@ async function isGzipFile(path: string): Promise<boolean> {
   } finally {
     await handle.close()
   }
-}
-
-function extractCsqFields(line: string): string[] | null {
-  if (!line.includes('ID=CSQ')) return null
-  const match = /Format: ([^"]+)/u.exec(line)
-  if (match === null) return null
-  return match[1].split('|').map((field) => field.trim())
-}
-
-function parseInfo(info: string): Map<string, string> {
-  const parsed = new Map<string, string>()
-  for (const token of info.split(';')) {
-    if (token === '' || token === '.') continue
-    const [key, ...valueParts] = token.split('=')
-    if (key !== undefined && valueParts.length > 0) {
-      parsed.set(key, valueParts.join('='))
-    }
-  }
-  return parsed
-}
-
-function selectCsqForAllele(
-  csqValue: string | undefined,
-  csqFields: readonly string[],
-  alt: string
-): Map<string, string> | null {
-  if (csqValue === undefined || csqValue === '' || csqFields.length === 0) return null
-
-  const annotations = csqValue.split(',').map((entry) => toCsqMap(entry, csqFields))
-  return annotations.find((annotation) => annotation.get('Allele') === alt) ?? null
-}
-
-function toCsqMap(entry: string, csqFields: readonly string[]): Map<string, string> {
-  const values = entry.split('|')
-  const mapped = new Map<string, string>()
-  csqFields.forEach((field, index) => {
-    mapped.set(field, values[index] ?? '')
-  })
-  return mapped
 }
 
 function hasPublicValue(value: string | undefined): value is string {

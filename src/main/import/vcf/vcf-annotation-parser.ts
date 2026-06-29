@@ -7,6 +7,12 @@
 
 import type { VcfHeader, AnnotationResult } from './types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
+import {
+  filterCsqTranscriptsByAllele,
+  matchesAnnotationAllele,
+  parseCsqTranscripts,
+  selectBestCsqTranscript
+} from '../../../shared/vcf/vcf-csq'
 
 /** Impact severity order for transcript selection */
 const IMPACT_ORDER: Record<string, number> = {
@@ -45,11 +51,6 @@ export function parseAnnotation(
 
 // ── CSQ (VEP) Parser ─────────────────────────────────────────
 
-interface CsqTranscript {
-  fields: Map<string, string>
-  allele: string
-}
-
 function parseCsq(
   info: Map<string, string>,
   csqFieldNames: string[],
@@ -59,27 +60,11 @@ function parseCsq(
   const csqRaw = info.get('CSQ')
   if (csqRaw == null || csqRaw === '') return emptyResult()
 
-  // Split annotations by comma, then each by pipe
-  const annotations = csqRaw.split(',')
-  const parsed: CsqTranscript[] = []
-
-  for (const ann of annotations) {
-    if (ann === '') continue
-    const parts = ann.split('|')
-    const fields = new Map<string, string>()
-
-    for (let i = 0; i < csqFieldNames.length && i < parts.length; i++) {
-      if (parts[i] !== '') {
-        fields.set(csqFieldNames[i], parts[i])
-      }
-    }
-
-    const allele = fields.get('Allele') ?? ''
-    parsed.push({ fields, allele })
-  }
-
-  // Filter by allele: VEP uses the ALT base for SNVs, "-" for deletions, inserted seq for insertions
-  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref))
+  const filtered = filterCsqTranscriptsByAllele(
+    parseCsqTranscripts(csqRaw, csqFieldNames),
+    altAllele,
+    ref
+  )
 
   if (filtered.length === 0) return emptyResult()
 
@@ -104,7 +89,7 @@ function parseCsq(
   const transcripts = Array.from(transcriptMap.values())
 
   // Select best transcript
-  const bestIdx = selectBestTranscript(filtered)
+  const bestIdx = selectBestCsqTranscript(filtered)
   const bestTid = bestIdx >= 0 ? (filtered[bestIdx].fields.get('Feature') ?? '') : ''
   const bestTranscriptRow = transcripts.find((t) => t.transcript_id === bestTid)
   if (bestTranscriptRow) {
@@ -172,7 +157,7 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
   }
 
   // Filter by allele
-  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref))
+  const filtered = parsed.filter((t) => matchesAnnotationAllele(t.allele, altAllele, ref))
 
   if (filtered.length === 0) return emptyResult()
 
@@ -221,59 +206,6 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
 }
 
 // ── Shared helpers ───────────────────────────────────────────
-
-/**
- * Check if an annotation allele matches the target ALT allele.
- * VEP CSQ uses the VCF ALT bases for SNVs, "-" for deletions, inserted bases for insertions.
- * SnpEff ANN uses the full ALT allele string.
- */
-function matchesAllele(annAllele: string, altAllele: string, ref: string): boolean {
-  if (annAllele === altAllele) return true
-  // VEP deletion notation: "-" only matches when ALT is actually shorter than REF
-  if (annAllele === '-' && altAllele.length < ref.length) return true
-  // VEP insertion: the annotation Allele is the inserted bases (ALT minus first base)
-  if (altAllele.length > 1 && annAllele === altAllele.substring(1)) return true
-  return false
-}
-
-/**
- * Select the best CSQ transcript using priority:
- * MANE Select > Canonical > highest IMPACT > first protein_coding
- */
-function selectBestTranscript(transcripts: CsqTranscript[]): number {
-  if (transcripts.length === 0) return -1
-
-  let bestIdx = 0
-  let bestScore = -1
-
-  for (let i = 0; i < transcripts.length; i++) {
-    const t = transcripts[i]
-    let score = 0
-
-    // MANE_SELECT presence: highest priority
-    const mane = t.fields.get('MANE_SELECT')
-    if (mane != null && mane !== '') score += 1000
-
-    // CANONICAL=YES
-    const canonical = t.fields.get('CANONICAL')
-    if (canonical === 'YES') score += 100
-
-    // Impact severity
-    const impact = t.fields.get('IMPACT') ?? 'MODIFIER'
-    score += (IMPACT_ORDER[impact] ?? 0) * 10
-
-    // protein_coding biotype preference
-    const biotype = t.fields.get('BIOTYPE')
-    if (biotype === 'protein_coding') score += 5
-
-    if (score > bestScore) {
-      bestScore = score
-      bestIdx = i
-    }
-  }
-
-  return bestIdx
-}
 
 /**
  * Select the best ANN transcript using priority:

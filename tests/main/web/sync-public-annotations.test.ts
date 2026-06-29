@@ -379,7 +379,60 @@ describe('sync-public-annotations command helpers', () => {
     expect(variantInsert?.values).not.toContain('*')
   })
 
-  test('skips public records when CSQ allele does not exactly match the VCF ALT', async () => {
+  test('imports VEP insertion and deletion CSQ records using canonical allele matching', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'varlens-sync-public-vep-indel-records-'))
+    await mkdir(join(root, 'vcf'), { recursive: true })
+    const vcfPath = join(root, 'vcf/snv.vcf.gz')
+    await writeFile(
+      vcfPath,
+      gzipSync(
+        [
+          '##fileformat=VCFv4.3',
+          '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature|HGVSc|HGVSp">',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
+          '1\t100\t.\tAT\tA\t.\tPASS\tCSQ=-|frameshift_variant|HIGH|GENE1|ENSG0001|ENST0001|c.1del|p.?',
+          '1\t200\t.\tA\tATG\t.\tPASS\tCSQ=TG|inframe_insertion|MODERATE|GENE2|ENSG0002|ENST0002|c.2insTG|p.?',
+          ''
+        ].join('\n')
+      )
+    )
+    const payload: PublicAnnotationSyncPayload = {
+      ...basePayload(),
+      schemaVersion: 'varlens.annotation-bundle.v1',
+      privateCaseData: false,
+      sourcePrivateCaseDataRedacted: true,
+      snapshot: {
+        ...basePayload().snapshot,
+        bundleId: 'bundle-2026-06-22-aaaaaaaaaaaa',
+        mappingVersion: 'annotation-bundle-map-v1'
+      },
+      variantRecordSources: [{ role: 'snv_vcf', absolutePath: vcfPath }]
+    }
+    const client = new FakeClient()
+    const pool = { connect: async () => client }
+
+    await expect(syncPublicAnnotationPayload(pool, payload)).resolves.toStrictEqual({
+      variantRecordCount: 14
+    })
+
+    const variantInsert = client.queries.find((query) =>
+      query.text.includes('INSERT INTO public_annotation_variant_records')
+    )
+    expect(variantInsert?.values).toContain('"GENE1"')
+    expect(variantInsert?.values).toContain('"GENE2"')
+    expect(
+      variantInsert?.values?.some(
+        (value) => typeof value === 'string' && value.includes('"allele":"-"')
+      )
+    ).toBe(true)
+    expect(
+      variantInsert?.values?.some(
+        (value) => typeof value === 'string' && value.includes('"allele":"TG"')
+      )
+    ).toBe(true)
+  })
+
+  test('skips public records when CSQ allele does not match canonical allele rules', async () => {
     const root = await mkdtemp(join(tmpdir(), 'varlens-sync-public-csq-mismatch-'))
     await mkdir(join(root, 'vcf'), { recursive: true })
     const vcfPath = join(root, 'vcf/sv.vcf.gz')

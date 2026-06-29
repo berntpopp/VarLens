@@ -6,6 +6,7 @@
  */
 
 import type { VcfRawRecord } from './types'
+import { parseVcfInfo } from '../../../shared/vcf/vcf-info'
 
 /**
  * Parse a single VCF data line into a raw record.
@@ -41,20 +42,7 @@ export function parseVcfLine(line: string, sampleNames: string[]): VcfRawRecord 
   // Parse QUAL: "." means missing
   const qual = rawQual === '.' || rawQual === undefined ? null : parseFloat(rawQual)
 
-  // Parse INFO: semicolon-separated key=value pairs
-  const info = new Map<string, string>()
-  if (rawInfo !== '.' && rawInfo !== undefined && rawInfo !== '') {
-    const infoParts = rawInfo.split(';')
-    for (const part of infoParts) {
-      const eqIdx = part.indexOf('=')
-      if (eqIdx === -1) {
-        // FLAG field (no value)
-        info.set(part, '')
-      } else {
-        info.set(part.substring(0, eqIdx), part.substring(eqIdx + 1))
-      }
-    }
-  }
+  const info = parseVcfInfo(rawInfo ?? '')
 
   // Parse FORMAT and sample columns
   let format: string[] = []
