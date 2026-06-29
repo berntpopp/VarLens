@@ -1,0 +1,5 @@
+##fileformat=VCFv4.2
+##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from VEP">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE
+chr1	976215	.	A	G	100	PASS	CSQ=missense_variant|||PERM1|NM_001291366.1|protein_coding|||c.976A>G|p.Lys326Arg	GT	0/1
