@@ -15,7 +15,7 @@
  * src/shared/auth/auth-constants — the constants module is process-agnostic
  * and the only thing the two implementations share.
  */
-import type { Pool } from 'pg'
+import type { Pool, PoolClient } from 'pg'
 
 import {
   ARGON2_POLICY,
@@ -472,41 +472,137 @@ export class PostgresWebAuthService {
     publicAnnotationSnapshotId?: string
   }): Promise<{ id: number; username: string; role: UserRole; private_db_status: string | null }> {
     const sch = this.schemaQuoted
-    const result = await this.pool.query<{
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      const existing = await client.query<{ password_hash: string }>(
+        `SELECT password_hash FROM ${sch}."users" WHERE username = $1 FOR UPDATE`,
+        [input.username]
+      )
+      if (
+        (existing.rowCount ?? 0) > 0 &&
+        existing.rows[0].password_hash !== PLATFORM_DISABLED_PASSWORD_HASH
+      ) {
+        throw new Error(`Platform identity cannot overwrite local user: ${input.username}`)
+      }
+
+      if ((existing.rowCount ?? 0) === 0 && input.privateDbSecretRef !== undefined) {
+        const adopted = await this.adoptPlatformUserBySecretRef(client, sch, input)
+        if (adopted !== undefined) {
+          await client.query('COMMIT')
+          return adopted
+        }
+      }
+
+      const result = await client.query<{
+        id: string
+        username: string
+        role: UserRole
+        private_db_status: string | null
+      }>(
+        `INSERT INTO ${sch}."users" AS platform_target
+          (username, display_name, password_hash, role, must_change_password, is_active,
+           private_db_secret_ref, private_db_status, public_annotation_snapshot_id, password_changed_at)
+         VALUES ($1, $2, $3, $4, FALSE, TRUE, $5, $6, $7, now())
+         ON CONFLICT (username)
+         DO UPDATE SET
+            display_name = EXCLUDED.display_name,
+            role = EXCLUDED.role,
+            is_active = TRUE,
+            must_change_password = FALSE,
+            private_db_secret_ref = EXCLUDED.private_db_secret_ref,
+            private_db_status = EXCLUDED.private_db_status,
+            public_annotation_snapshot_id = EXCLUDED.public_annotation_snapshot_id,
+            updated_at = now()
+         WHERE platform_target.password_hash = $8
+         RETURNING id, username, role, private_db_status`,
+        [
+          input.username,
+          input.displayName,
+          PLATFORM_DISABLED_PASSWORD_HASH,
+          input.role,
+          input.privateDbSecretRef ?? null,
+          input.privateDbStatus ?? (input.privateDbSecretRef === undefined ? 'pending' : 'active'),
+          input.publicAnnotationSnapshotId ?? null,
+          PLATFORM_DISABLED_PASSWORD_HASH
+        ]
+      )
+      if ((result.rowCount ?? 0) === 0) {
+        throw new Error(`Platform identity cannot overwrite local user: ${input.username}`)
+      }
+      await client.query('COMMIT')
+      const row = result.rows[0]
+      return {
+        id: Number(row.id),
+        username: row.username,
+        role: row.role,
+        private_db_status: row.private_db_status
+      }
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
+  }
+
+  private async adoptPlatformUserBySecretRef(
+    client: PoolClient,
+    sch: string,
+    input: {
+      username: string
+      displayName: string
+      role: UserRole
+      privateDbSecretRef: string
+      privateDbStatus?: 'pending' | 'active' | 'failed' | 'revoked'
+      publicAnnotationSnapshotId?: string
+    }
+  ): Promise<{ id: number; username: string; role: UserRole; private_db_status: string | null } | undefined> {
+    const existing = await client.query<{ id: string; username: string; role: UserRole }>(
+      `SELECT id, username, role
+         FROM ${sch}."users"
+        WHERE private_db_secret_ref = $1
+        FOR UPDATE`,
+      [input.privateDbSecretRef]
+    )
+    if ((existing.rowCount ?? 0) === 0) {
+      return undefined
+    }
+    const current = existing.rows[0]
+    if (current.role === ROLE_ADMIN) {
+      throw new Error('Platform identity cannot adopt an admin user workspace')
+    }
+    const result = await client.query<{
       id: string
       username: string
       role: UserRole
       private_db_status: string | null
     }>(
-      `INSERT INTO ${sch}."users" AS platform_target
-        (username, display_name, password_hash, role, must_change_password, is_active,
-         private_db_secret_ref, private_db_status, public_annotation_snapshot_id, password_changed_at)
-       VALUES ($1, $2, $3, $4, FALSE, TRUE, $5, $6, $7, now())
-       ON CONFLICT (username)
-       DO UPDATE SET
-          display_name = EXCLUDED.display_name,
-          role = EXCLUDED.role,
-          is_active = TRUE,
-          must_change_password = FALSE,
-          private_db_secret_ref = EXCLUDED.private_db_secret_ref,
-          private_db_status = EXCLUDED.private_db_status,
-          public_annotation_snapshot_id = EXCLUDED.public_annotation_snapshot_id,
-          updated_at = now()
-       WHERE platform_target.password_hash = $8
+      `UPDATE ${sch}."users"
+          SET username = $1,
+              display_name = $2,
+              password_hash = $3,
+              role = $4,
+              must_change_password = FALSE,
+              is_active = TRUE,
+              private_db_status = $5,
+              public_annotation_snapshot_id = $6,
+              password_changed_at = now(),
+              updated_at = now()
+        WHERE id = $7
        RETURNING id, username, role, private_db_status`,
       [
         input.username,
         input.displayName,
         PLATFORM_DISABLED_PASSWORD_HASH,
         input.role,
-        input.privateDbSecretRef ?? null,
-        input.privateDbStatus ?? (input.privateDbSecretRef === undefined ? 'pending' : 'active'),
+        input.privateDbStatus ?? 'active',
         input.publicAnnotationSnapshotId ?? null,
-        PLATFORM_DISABLED_PASSWORD_HASH
+        current.id
       ]
     )
     if ((result.rowCount ?? 0) === 0) {
-      throw new Error(`Platform identity cannot overwrite local user: ${input.username}`)
+      throw new Error(`Platform identity cannot adopt workspace user: ${current.username}`)
     }
     const row = result.rows[0]
     return {

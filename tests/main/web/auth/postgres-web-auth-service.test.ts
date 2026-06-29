@@ -387,6 +387,79 @@ describe('PostgresWebAuthService — provisioned user creation', () => {
   })
 })
 
+describe('PostgresWebAuthService — platform identity users', () => {
+  it('adopts a same-workspace non-admin local user as the platform subject', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // no existing platform subject
+    pool.enqueueResponse({
+      rows: [{ id: '9', username: 'alice', role: ROLE_USER }],
+      rowCount: 1
+    })
+    pool.enqueueResponse({
+      rows: [
+        {
+          id: '9',
+          username: 'keycloak-subject-1',
+          role: ROLE_USER,
+          private_db_status: 'active'
+        }
+      ],
+      rowCount: 1
+    })
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
+
+    const result = await svc.upsertPlatformUser({
+      username: 'keycloak-subject-1',
+      displayName: 'Alice',
+      role: ROLE_USER,
+      privateDbSecretRef: 'alice.pgurl'
+    })
+
+    expect(result).toEqual({
+      id: 9,
+      username: 'keycloak-subject-1',
+      role: ROLE_USER,
+      private_db_status: 'active'
+    })
+    const update = pool.queries.find((q) => /SET username = \$1/.test(q.text))
+    expect(update?.values).toEqual([
+      'keycloak-subject-1',
+      'Alice',
+      'platform-identity-disabled-local-password',
+      ROLE_USER,
+      'active',
+      null,
+      '9'
+    ])
+    expect(pool.queries.every((q) => q.viaClient)).toBe(true)
+    expect(pool.queries.some((q) => /^COMMIT$/i.test(q.text))).toBe(true)
+  })
+
+  it('refuses to adopt an admin workspace row', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // no existing platform subject
+    pool.enqueueResponse({
+      rows: [{ id: '1', username: 'admin', role: ROLE_ADMIN }],
+      rowCount: 1
+    })
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // ROLLBACK
+
+    await expect(
+      svc.upsertPlatformUser({
+        username: 'keycloak-subject-1',
+        displayName: 'Admin',
+        role: ROLE_USER,
+        privateDbSecretRef: 'admin.pgurl'
+      })
+    ).rejects.toThrow(/admin user workspace/i)
+    expect(pool.queries.some((q) => /^ROLLBACK$/i.test(q.text))).toBe(true)
+  })
+})
+
 const RUN_POSTGRES_AUTH_E2E = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
   process.env.VARLENS_PG_URL ??
