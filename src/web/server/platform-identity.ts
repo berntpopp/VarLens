@@ -21,6 +21,7 @@ const ENTITLEMENT_CACHE_TTL_MS = 30 * 1000
 const ENTITLEMENT_CACHE_MAX_ENTRIES = 500
 const OUTBOUND_FETCH_TIMEOUT_MS = 10_000
 const SUPPORTED_JWT_ALG = 'RS256'
+const MAX_PENDING_OIDC_STATES = 5
 
 interface OidcDiscovery {
   issuer: string
@@ -57,6 +58,13 @@ interface EntitlementResponse {
 interface VerifiedJwt {
   header: Record<string, unknown>
   payload: Record<string, unknown>
+}
+
+interface PendingOidcState {
+  nonce: string
+  codeVerifier: string
+  next: string
+  createdAt: number
 }
 
 export interface PlatformSessionUser {
@@ -269,6 +277,48 @@ function redirectWithNoStore(reply: FastifyReply, location: string): FastifyRepl
   return reply
 }
 
+function activePendingOidcStates(
+  states: Record<string, PendingOidcState> | undefined,
+  now: number
+): Record<string, PendingOidcState> {
+  if (states === undefined) return {}
+  return Object.fromEntries(
+    Object.entries(states).filter(([, pending]) => now - pending.createdAt <= OIDC_STATE_TTL_MS)
+  )
+}
+
+function rememberPendingOidcState(params: {
+  request: FastifyRequest
+  state: string
+  pending: PendingOidcState
+  now?: number
+}): void {
+  const now = params.now ?? Date.now()
+  const pendingStates = activePendingOidcStates(params.request.session.platformOidc, now)
+  pendingStates[params.state] = params.pending
+  const bounded = Object.fromEntries(
+    Object.entries(pendingStates)
+      .sort(([, left], [, right]) => right.createdAt - left.createdAt)
+      .slice(0, MAX_PENDING_OIDC_STATES)
+  )
+  params.request.session.platformOidc = bounded
+}
+
+function consumePendingOidcState(params: {
+  request: FastifyRequest
+  state: string
+  now?: number
+}): PendingOidcState | undefined {
+  const now = params.now ?? Date.now()
+  const pendingStates = { ...(params.request.session.platformOidc ?? {}) }
+  const pending = pendingStates[params.state]
+  delete pendingStates[params.state]
+  const activeStates = activePendingOidcStates(pendingStates, now)
+  params.request.session.platformOidc =
+    Object.keys(activeStates).length > 0 ? activeStates : undefined
+  return pending
+}
+
 export class PlatformIdentityService {
   private discoveryCache: Promise<OidcDiscovery> | null = null
   private jwksCache: { expiresAt: number; keys: Jwk[] } | null = null
@@ -469,9 +519,12 @@ export class PlatformIdentityService {
   }
 
   private async fetchDiscovery(): Promise<OidcDiscovery> {
-    const response = await fetchWithTimeout(`${this.config.issuerUrl}/.well-known/openid-configuration`, {
-      headers: { accept: 'application/json' }
-    })
+    const response = await fetchWithTimeout(
+      `${this.config.issuerUrl}/.well-known/openid-configuration`,
+      {
+        headers: { accept: 'application/json' }
+      }
+    )
     if (!response.ok) {
       throw new Error(`OIDC discovery returned HTTP ${response.status}`)
     }
@@ -615,13 +668,16 @@ export function registerPlatformIdentityRoutes(
       appPathPrefix: options.appPathPrefix,
       next
     })
-    request.session.platformOidc = {
+    rememberPendingOidcState({
+      request,
       state: authorization.state,
-      nonce: authorization.nonce,
-      codeVerifier: authorization.codeVerifier,
-      next,
-      createdAt: Date.now()
-    }
+      pending: {
+        nonce: authorization.nonce,
+        codeVerifier: authorization.codeVerifier,
+        next,
+        createdAt: Date.now()
+      }
+    })
     return redirectWithNoStore(reply, authorization.authorizationUrl).send()
   })
 
@@ -640,9 +696,8 @@ export function registerPlatformIdentityRoutes(
         reply.code(400)
         return { error: 'invalid-platform-callback' }
       }
-      const pending = request.session.platformOidc
-      request.session.platformOidc = undefined
-      if (pending === undefined || pending.state !== query.state) {
+      const pending = consumePendingOidcState({ request, state: query.state })
+      if (pending === undefined) {
         await auditBestEffort({ action: 'auth_login_failure', reason: 'invalid-state' })
         reply.code(401)
         return { error: 'invalid-platform-state' }

@@ -44,13 +44,15 @@ declare module '@fastify/secure-session' {
   interface SessionData {
     user: { id: number; username: string; role: string; passwordChangedAt: string | null }
     authMode?: 'local' | 'platform'
-    platformOidc?: {
-      state: string
-      nonce: string
-      codeVerifier: string
-      next: string
-      createdAt: number
-    }
+    platformOidc?: Record<
+      string,
+      {
+        nonce: string
+        codeVerifier: string
+        next: string
+        createdAt: number
+      }
+    >
     /**
      * Sticky bit set on login when the authenticated user has
      * must_change_password=TRUE in the DB; cleared by the

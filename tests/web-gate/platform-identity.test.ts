@@ -2,6 +2,7 @@ import { createSign, generateKeyPairSync } from 'node:crypto'
 
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import fastify from 'fastify'
+import type { InjectResult } from 'light-my-request'
 
 import {
   assertPlatformMfaClaims,
@@ -9,6 +10,8 @@ import {
   registerPlatformIdentityRoutes,
   verifyPlatformJwt
 } from '../../src/web/server/platform-identity'
+import { registerSessions } from '../../src/web/server/auth'
+import { registerWebRateLimit } from '../../src/web/server/rate-limit'
 
 const ISSUER = 'https://identity.example.test/realms/lb-map'
 const CLIENT_ID = 'varlens-dev'
@@ -33,6 +36,8 @@ const rotatedPublicJwk = {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  delete process.env.VARLENS_SESSION_SECRET_HEX
+  delete process.env.NODE_ENV
 })
 
 function encodeJson(value: Record<string, unknown>): string {
@@ -70,6 +75,12 @@ function basePayload(audience = AUDIENCE): Record<string, unknown> {
     acr: REQUIRED_ACR,
     amr: REQUIRED_AMR
   }
+}
+
+function extractCookie(res: InjectResult): string {
+  const setCookie = res.headers['set-cookie']
+  const values = Array.isArray(setCookie) ? setCookie : setCookie !== undefined ? [setCookie] : []
+  return values.map((cookie) => String(cookie).split(';', 1)[0]).join('; ')
 }
 
 describe('platform identity JWT validation', () => {
@@ -356,11 +367,11 @@ describe('platform identity OIDC start', () => {
         })
       }
       if (url.endsWith('/certs')) {
-        const keys = fetchMock.mock.calls.filter(([calledUrl]) =>
-          String(calledUrl).endsWith('/certs')
-        ).length === 1
-          ? [publicJwk]
-          : [rotatedPublicJwk]
+        const keys =
+          fetchMock.mock.calls.filter(([calledUrl]) => String(calledUrl).endsWith('/certs'))
+            .length === 1
+            ? [publicJwk]
+            : [rotatedPublicJwk]
         return new Response(JSON.stringify({ keys }), {
           status: 200,
           headers: { 'content-type': 'application/json' }
@@ -452,6 +463,79 @@ describe('platform identity provisioning route', () => {
       privateDbSecretRef: 'keycloak-subject.pgurl',
       privateDbStatus: 'active'
     })
+    await app.close()
+  })
+})
+
+describe('platform identity callback session state', () => {
+  test('keeps older pending authorization states when a second start happens before callback', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.VARLENS_SESSION_SECRET_HEX = '11'.repeat(32)
+
+    const app = fastify()
+    const completeCallback = vi.fn(async () => ({ subject: 'platform-subject-1' }))
+    const resolveSessionUser = vi.fn(async () => ({
+      id: 42,
+      username: 'platform-subject-1',
+      role: 'user' as const,
+      passwordChangedAt: null
+    }))
+    const identity = {
+      config: { callbackPath: '/auth/platform/callback' },
+      createAuthorizationUrl: vi
+        .fn()
+        .mockResolvedValueOnce({
+          authorizationUrl: 'https://identity.example.test/auth?state=state-1',
+          state: 'state-1',
+          nonce: 'nonce-1',
+          codeVerifier: 'verifier-1'
+        })
+        .mockResolvedValueOnce({
+          authorizationUrl: 'https://identity.example.test/auth?state=state-2',
+          state: 'state-2',
+          nonce: 'nonce-2',
+          codeVerifier: 'verifier-2'
+        }),
+      completeCallback,
+      resolveSessionUser
+    } as unknown as PlatformIdentityService
+
+    await registerWebRateLimit(app)
+    await registerSessions(app, {
+      authService: { getUser: vi.fn() } as never,
+      platformIdentity: identity
+    })
+    registerPlatformIdentityRoutes(app, {
+      identity,
+      authService: {} as never,
+      appPathPrefix: ''
+    })
+
+    const firstStart = await app.inject({ method: 'GET', url: '/auth/platform/start?next=%2F' })
+    const firstCookie = extractCookie(firstStart)
+    const secondStart = await app.inject({
+      method: 'GET',
+      url: '/auth/platform/start?next=%2F',
+      headers: { cookie: firstCookie }
+    })
+    const secondCookie = extractCookie(secondStart)
+
+    const firstCallback = await app.inject({
+      method: 'GET',
+      url: '/auth/platform/callback?state=state-1&code=code-1',
+      headers: { cookie: secondCookie }
+    })
+
+    expect(firstCallback.statusCode).toBe(302)
+    expect(firstCallback.headers.location).toBe('/')
+    expect(completeCallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'code-1',
+        expectedNonce: 'nonce-1',
+        codeVerifier: 'verifier-1'
+      })
+    )
+    expect(resolveSessionUser).toHaveBeenCalledWith(expect.anything(), 'platform-subject-1')
     await app.close()
   })
 })
