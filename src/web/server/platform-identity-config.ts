@@ -113,9 +113,7 @@ export function readPlatformIdentityConfig(
     requiredAmr,
     entitlementsUrl: entitlementsUrl.replace(/\/$/, ''),
     ...(entitlementsToken !== undefined && entitlementsToken !== '' ? { entitlementsToken } : {}),
-    ...(provisioningToken !== undefined && provisioningToken !== ''
-      ? { provisioningToken }
-      : {}),
+    ...(provisioningToken !== undefined && provisioningToken !== '' ? { provisioningToken } : {}),
     requireHostedResource: env.VARLENS_WEB_DB_TOPOLOGY === 'hosted'
   }
 }

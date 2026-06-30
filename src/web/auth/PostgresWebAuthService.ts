@@ -570,7 +570,9 @@ export class PostgresWebAuthService {
       privateDbStatus?: PlatformPrivateDbStatus
       publicAnnotationSnapshotId?: string
     }
-  ): Promise<{ id: number; username: string; role: UserRole; private_db_status: string | null } | undefined> {
+  ): Promise<
+    { id: number; username: string; role: UserRole; private_db_status: string | null } | undefined
+  > {
     const existing = await client.query<{ id: string; username: string; role: UserRole }>(
       `SELECT id, username, role
          FROM ${sch}."users"
