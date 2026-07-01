@@ -295,6 +295,49 @@ describe('platform identity OIDC start', () => {
     expect(new URL(result.authorizationUrl).searchParams.get('max_age')).toBe('0')
   })
 
+  test('does not force a fresh Keycloak login for the internal MFA retry', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            issuer: ISSUER,
+            authorization_endpoint: `${ISSUER}/protocol/openid-connect/auth`,
+            token_endpoint: `${ISSUER}/protocol/openid-connect/token`,
+            jwks_uri: `${ISSUER}/protocol/openid-connect/certs`
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      })
+    )
+    const service = new PlatformIdentityService({
+      mode: 'platform',
+      issuerUrl: ISSUER,
+      clientId: CLIENT_ID,
+      audience: AUDIENCE,
+      callbackPath: '/auth/platform/callback',
+      requiredAcr: REQUIRED_ACR,
+      requiredAmr: REQUIRED_AMR,
+      entitlementsUrl: 'http://ops.internal/api/identity/entitlements/varlens/dev',
+      requireHostedResource: false
+    })
+
+    const result = await service.createAuthorizationUrl({
+      request: {
+        protocol: 'https',
+        headers: { host: 'varlens-dev.example.test' }
+      } as never,
+      appPathPrefix: '',
+      next: '/',
+      forceFreshLogin: false
+    })
+    const params = new URL(result.authorizationUrl).searchParams
+
+    expect(params.get('acr_values')).toBe(REQUIRED_ACR)
+    expect(params.get('prompt')).toBeNull()
+    expect(params.get('max_age')).toBeNull()
+  })
+
   test('does not cache a transient discovery failure forever', async () => {
     const fetchMock = vi
       .fn()
@@ -593,16 +636,17 @@ describe('platform identity callback session state', () => {
     process.env.VARLENS_SESSION_SECRET_HEX = '11'.repeat(32)
 
     const app = fastify()
+    const createAuthorizationUrl = vi.fn().mockResolvedValue({
+      authorizationUrl: 'https://identity.example.test/auth?state=state-1',
+      state: 'state-1',
+      nonce: 'nonce-1',
+      codeVerifier: 'verifier-1'
+    })
     const identity = {
       config: { callbackPath: '/auth/platform/callback' },
       buildStartLocation: (appPathPrefix: string, next: string) =>
         `${appPathPrefix}/auth/platform/start?next=${encodeURIComponent(next)}`,
-      createAuthorizationUrl: vi.fn().mockResolvedValue({
-        authorizationUrl: 'https://identity.example.test/auth?state=state-1',
-        state: 'state-1',
-        nonce: 'nonce-1',
-        codeVerifier: 'verifier-1'
-      }),
+      createAuthorizationUrl,
       completeCallback: vi.fn(async () => {
         throw new PlatformMfaClaimError('required MFA amr is missing: otp', 'amr', 'otp')
       }),
@@ -631,8 +675,110 @@ describe('platform identity callback session state', () => {
       headers: { cookie }
     })
 
+    expect(createAuthorizationUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ forceFreshLogin: false })
+    )
     expect(callback.statusCode).toBe(401)
-    expect(callback.json()).toEqual({ error: 'platform-auth-denied' })
+    expect(callback.headers['content-type']).toContain('text/html')
+    expect(callback.body).toContain('Anmeldung konnte nicht abgeschlossen werden')
+    expect(callback.body).toContain('Erneut anmelden')
+    await app.close()
+  })
+
+  test('restarts login cleanly when a stale callback has no pending state', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.VARLENS_SESSION_SECRET_HEX = '11'.repeat(32)
+
+    const app = fastify()
+    const identity = {
+      config: { callbackPath: '/auth/platform/callback' },
+      buildStartLocation: (appPathPrefix: string, next: string) =>
+        next === ''
+          ? `${appPathPrefix}/auth/platform/start`
+          : `${appPathPrefix}/auth/platform/start?next=${encodeURIComponent(next)}`,
+      createAuthorizationUrl: vi.fn(),
+      completeCallback: vi.fn(),
+      resolveSessionUser: vi.fn()
+    } as unknown as PlatformIdentityService
+
+    await registerWebRateLimit(app)
+    await registerSessions(app, {
+      authService: { getUser: vi.fn() } as never,
+      platformIdentity: identity
+    })
+    registerPlatformIdentityRoutes(app, {
+      identity,
+      authService: {} as never,
+      appPathPrefix: ''
+    })
+
+    const callback = await app.inject({
+      method: 'GET',
+      url: '/auth/platform/callback?state=stale-state&code=code-1'
+    })
+
+    expect(callback.statusCode).toBe(302)
+    expect(callback.headers.location).toBe('/auth/platform/start')
+    expect(callback.body).toBe('')
+    await app.close()
+  })
+
+  test('returns home when an already logged-in user revisits an old callback URL', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.VARLENS_SESSION_SECRET_HEX = '11'.repeat(32)
+
+    const app = fastify()
+    const completeCallback = vi.fn(async () => ({ subject: 'platform-subject-1' }))
+    const identity = {
+      config: { callbackPath: '/auth/platform/callback' },
+      buildStartLocation: (appPathPrefix: string, next: string) =>
+        next === ''
+          ? `${appPathPrefix}/auth/platform/start`
+          : `${appPathPrefix}/auth/platform/start?next=${encodeURIComponent(next)}`,
+      createAuthorizationUrl: vi.fn().mockResolvedValue({
+        authorizationUrl: 'https://identity.example.test/auth?state=state-1',
+        state: 'state-1',
+        nonce: 'nonce-1',
+        codeVerifier: 'verifier-1'
+      }),
+      completeCallback,
+      resolveSessionUser: vi.fn(async () => ({
+        id: 42,
+        username: 'platform-subject-1',
+        role: 'user' as const,
+        passwordChangedAt: null
+      }))
+    } as unknown as PlatformIdentityService
+
+    await registerWebRateLimit(app)
+    await registerSessions(app, {
+      authService: { getUser: vi.fn() } as never,
+      platformIdentity: identity
+    })
+    registerPlatformIdentityRoutes(app, {
+      identity,
+      authService: {} as never,
+      appPathPrefix: ''
+    })
+
+    const start = await app.inject({ method: 'GET', url: '/auth/platform/start?next=%2F' })
+    const startCookie = extractCookie(start)
+    const success = await app.inject({
+      method: 'GET',
+      url: '/auth/platform/callback?state=state-1&code=code-1',
+      headers: { cookie: startCookie }
+    })
+    const authenticatedCookie = extractCookie(success)
+    const staleCallback = await app.inject({
+      method: 'GET',
+      url: '/auth/platform/callback?state=state-1&code=code-1',
+      headers: { cookie: authenticatedCookie }
+    })
+
+    expect(success.statusCode).toBe(302)
+    expect(staleCallback.statusCode).toBe(302)
+    expect(staleCallback.headers.location).toBe('/')
+    expect(completeCallback).toHaveBeenCalledTimes(1)
     await app.close()
   })
 })

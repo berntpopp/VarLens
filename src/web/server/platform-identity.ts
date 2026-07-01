@@ -289,6 +289,82 @@ function redirectWithNoStore(reply: FastifyReply, location: string): FastifyRepl
   return reply
 }
 
+function appendQueryParam(location: string, name: string, value: string): string {
+  const separator = location.includes('?') ? '&' : '?'
+  return `${location}${separator}${encodeURIComponent(name)}=${encodeURIComponent(value)}`
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function platformLoginErrorHtml(params: { retryLocation: string }): string {
+  const retryLocation = escapeHtml(params.retryLocation)
+  return `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anmeldung fehlgeschlagen</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f6f2ed;
+      color: #151515;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(520px, calc(100vw - 32px));
+      padding: 40px;
+      border-top: 4px solid #b49a62;
+      background: #fff;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.16);
+    }
+    h1 {
+      margin: 0 0 14px;
+      font-size: 1.6rem;
+      line-height: 1.2;
+    }
+    p {
+      margin: 0 0 24px;
+      line-height: 1.5;
+    }
+    a {
+      display: inline-block;
+      padding: 12px 18px;
+      border-radius: 4px;
+      background: #6f6755;
+      color: #fff;
+      font-weight: 700;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Anmeldung konnte nicht abgeschlossen werden</h1>
+    <p>Bitte starten Sie die Anmeldung erneut. Falls das Problem weiter besteht, wenden Sie sich an den LB-MAP-Support.</p>
+    <a href="${retryLocation}">Erneut anmelden</a>
+  </main>
+</body>
+</html>`
+}
+
+function sendPlatformLoginError(reply: FastifyReply, retryLocation: string): FastifyReply {
+  reply.header('cache-control', 'no-store')
+  reply.type('text/html; charset=utf-8')
+  reply.code(401)
+  return reply.send(platformLoginErrorHtml({ retryLocation }))
+}
+
 function activePendingOidcStates(
   states: Record<string, PendingOidcState> | undefined,
   now: number
@@ -373,6 +449,7 @@ export class PlatformIdentityService {
     request: FastifyRequest
     appPathPrefix: string
     next: string
+    forceFreshLogin?: boolean
   }): Promise<{ authorizationUrl: string; state: string; nonce: string; codeVerifier: string }> {
     const discovery = await this.discovery()
     const state = randomUrlSafeString()
@@ -389,8 +466,10 @@ export class PlatformIdentityService {
     url.searchParams.set('state', state)
     url.searchParams.set('nonce', nonce)
     url.searchParams.set('acr_values', this.config.requiredAcr)
-    url.searchParams.set('prompt', 'login')
-    url.searchParams.set('max_age', '0')
+    if (params.forceFreshLogin !== false) {
+      url.searchParams.set('prompt', 'login')
+      url.searchParams.set('max_age', '0')
+    }
     url.searchParams.set('code_challenge_method', 'S256')
     url.searchParams.set('code_challenge', buildPkceChallenge(codeVerifier))
     return { authorizationUrl: url.toString(), state, nonce, codeVerifier }
@@ -683,11 +762,13 @@ export function registerPlatformIdentityRoutes(
   app.get('/auth/platform/start', { schema: { hide: true } }, async (request, reply) => {
     const query = (request.query ?? {}) as Record<string, unknown>
     const next = sanitizeNextParam(query.next, options.appPathPrefix)
+    const mfaRetry = query.mfaRetry === '1'
     clearAuthenticatedSession(request)
     const authorization = await options.identity.createAuthorizationUrl({
       request,
       appPathPrefix: options.appPathPrefix,
-      next
+      next,
+      forceFreshLogin: !mfaRetry
     })
     rememberPendingOidcState({
       request,
@@ -697,7 +778,7 @@ export function registerPlatformIdentityRoutes(
         codeVerifier: authorization.codeVerifier,
         next,
         createdAt: Date.now(),
-        ...(query.mfaRetry === '1' ? { mfaRetry: true } : {})
+        ...(mfaRetry ? { mfaRetry: true } : {})
       }
     })
     return redirectWithNoStore(reply, authorization.authorizationUrl).send()
@@ -710,24 +791,39 @@ export function registerPlatformIdentityRoutes(
       const query = callbackQuery(request)
       if (query.error !== undefined) {
         await auditBestEffort({ action: 'auth_login_failure', reason: 'oidc-error' })
-        reply.code(401)
-        return { error: 'platform-auth-failed', message: query.error }
+        request.session.delete()
+        return sendPlatformLoginError(
+          reply,
+          options.identity.buildStartLocation(options.appPathPrefix, '')
+        )
       }
       if (query.code === undefined || query.state === undefined) {
         await auditBestEffort({ action: 'auth_login_failure', reason: 'invalid-callback' })
-        reply.code(400)
-        return { error: 'invalid-platform-callback' }
+        request.session.delete()
+        return redirectWithNoStore(
+          reply,
+          options.identity.buildStartLocation(options.appPathPrefix, '')
+        ).send()
       }
       const pending = consumePendingOidcState({ request, state: query.state })
       if (pending === undefined) {
         await auditBestEffort({ action: 'auth_login_failure', reason: 'invalid-state' })
-        reply.code(401)
-        return { error: 'invalid-platform-state' }
+        if (request.session.user !== undefined) {
+          return redirectWithNoStore(reply, options.appPathPrefix || '/').send()
+        }
+        request.session.delete()
+        return redirectWithNoStore(
+          reply,
+          options.identity.buildStartLocation(options.appPathPrefix, '')
+        ).send()
       }
       if (Date.now() - pending.createdAt > OIDC_STATE_TTL_MS) {
         await auditBestEffort({ action: 'auth_login_failure', reason: 'expired-state' })
-        reply.code(401)
-        return { error: 'expired-platform-state' }
+        request.session.delete()
+        return redirectWithNoStore(
+          reply,
+          options.identity.buildStartLocation(options.appPathPrefix, '')
+        ).send()
       }
 
       try {
@@ -757,16 +853,19 @@ export function registerPlatformIdentityRoutes(
           pending.mfaRetry !== true
         ) {
           await auditBestEffort({ action: 'auth_login_failure', reason: 'missing-otp-amr-retry' })
-          const retryLocation = `${options.identity.buildStartLocation(
-            options.appPathPrefix,
-            pending.next
-          )}&mfaRetry=1`
+          const retryLocation = appendQueryParam(
+            options.identity.buildStartLocation(options.appPathPrefix, pending.next),
+            'mfaRetry',
+            '1'
+          )
           return redirectWithNoStore(reply, retryLocation).send()
         }
         request.log.warn({ err: error }, 'platform identity callback denied')
         await auditBestEffort({ action: 'auth_login_failure', reason: 'platform-denied' })
-        reply.code(401)
-        return { error: 'platform-auth-denied' }
+        return sendPlatformLoginError(
+          reply,
+          options.identity.buildStartLocation(options.appPathPrefix, pending.next)
+        )
       }
     }
   )
