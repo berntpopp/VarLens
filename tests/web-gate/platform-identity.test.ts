@@ -6,6 +6,7 @@ import type { InjectResult } from 'light-my-request'
 
 import {
   assertPlatformMfaClaims,
+  PlatformMfaClaimError,
   PlatformIdentityService,
   registerPlatformIdentityRoutes,
   verifyPlatformJwt
@@ -290,6 +291,8 @@ describe('platform identity OIDC start', () => {
     })
 
     expect(new URL(result.authorizationUrl).searchParams.get('acr_values')).toBe(REQUIRED_ACR)
+    expect(new URL(result.authorizationUrl).searchParams.get('prompt')).toBe('login')
+    expect(new URL(result.authorizationUrl).searchParams.get('max_age')).toBe('0')
   })
 
   test('does not cache a transient discovery failure forever', async () => {
@@ -536,6 +539,100 @@ describe('platform identity callback session state', () => {
       })
     )
     expect(resolveSessionUser).toHaveBeenCalledWith(expect.anything(), 'platform-subject-1')
+    await app.close()
+  })
+
+  test('restarts login once when first TOTP enrollment callback lacks the OTP amr claim', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.VARLENS_SESSION_SECRET_HEX = '11'.repeat(32)
+
+    const app = fastify()
+    const completeCallback = vi.fn(async () => {
+      throw new PlatformMfaClaimError('required MFA amr is missing: otp', 'amr', 'otp')
+    })
+    const identity = {
+      config: { callbackPath: '/auth/platform/callback' },
+      buildStartLocation: (appPathPrefix: string, next: string) =>
+        `${appPathPrefix}/auth/platform/start?next=${encodeURIComponent(next)}`,
+      createAuthorizationUrl: vi.fn().mockResolvedValue({
+        authorizationUrl: 'https://identity.example.test/auth?state=state-1',
+        state: 'state-1',
+        nonce: 'nonce-1',
+        codeVerifier: 'verifier-1'
+      }),
+      completeCallback,
+      resolveSessionUser: vi.fn()
+    } as unknown as PlatformIdentityService
+
+    await registerWebRateLimit(app)
+    await registerSessions(app, {
+      authService: { getUser: vi.fn() } as never,
+      platformIdentity: identity
+    })
+    registerPlatformIdentityRoutes(app, {
+      identity,
+      authService: {} as never,
+      appPathPrefix: ''
+    })
+
+    const start = await app.inject({ method: 'GET', url: '/auth/platform/start?next=%2Fcases' })
+    const cookie = extractCookie(start)
+    const callback = await app.inject({
+      method: 'GET',
+      url: '/auth/platform/callback?state=state-1&code=code-1',
+      headers: { cookie }
+    })
+
+    expect(callback.statusCode).toBe(302)
+    expect(callback.headers.location).toBe('/auth/platform/start?next=%2Fcases&mfaRetry=1')
+    await app.close()
+  })
+
+  test('denies the callback when the forced MFA retry still lacks the OTP amr claim', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.VARLENS_SESSION_SECRET_HEX = '11'.repeat(32)
+
+    const app = fastify()
+    const identity = {
+      config: { callbackPath: '/auth/platform/callback' },
+      buildStartLocation: (appPathPrefix: string, next: string) =>
+        `${appPathPrefix}/auth/platform/start?next=${encodeURIComponent(next)}`,
+      createAuthorizationUrl: vi.fn().mockResolvedValue({
+        authorizationUrl: 'https://identity.example.test/auth?state=state-1',
+        state: 'state-1',
+        nonce: 'nonce-1',
+        codeVerifier: 'verifier-1'
+      }),
+      completeCallback: vi.fn(async () => {
+        throw new PlatformMfaClaimError('required MFA amr is missing: otp', 'amr', 'otp')
+      }),
+      resolveSessionUser: vi.fn()
+    } as unknown as PlatformIdentityService
+
+    await registerWebRateLimit(app)
+    await registerSessions(app, {
+      authService: { getUser: vi.fn() } as never,
+      platformIdentity: identity
+    })
+    registerPlatformIdentityRoutes(app, {
+      identity,
+      authService: {} as never,
+      appPathPrefix: ''
+    })
+
+    const start = await app.inject({
+      method: 'GET',
+      url: '/auth/platform/start?next=%2Fcases&mfaRetry=1'
+    })
+    const cookie = extractCookie(start)
+    const callback = await app.inject({
+      method: 'GET',
+      url: '/auth/platform/callback?state=state-1&code=code-1',
+      headers: { cookie }
+    })
+
+    expect(callback.statusCode).toBe(401)
+    expect(callback.json()).toEqual({ error: 'platform-auth-denied' })
     await app.close()
   })
 })

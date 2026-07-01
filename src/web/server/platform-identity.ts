@@ -65,6 +65,7 @@ interface PendingOidcState {
   codeVerifier: string
   next: string
   createdAt: number
+  mfaRetry?: boolean
 }
 
 export interface PlatformSessionUser {
@@ -218,6 +219,17 @@ export function verifyPlatformJwt(params: {
   return { header, payload }
 }
 
+export class PlatformMfaClaimError extends Error {
+  constructor(
+    message: string,
+    readonly kind: 'nonce' | 'acr' | 'amr',
+    readonly missingAmr?: string
+  ) {
+    super(message)
+    this.name = 'PlatformMfaClaimError'
+  }
+}
+
 export function assertPlatformMfaClaims(params: {
   payload: Record<string, unknown>
   requiredAcr: string
@@ -225,15 +237,15 @@ export function assertPlatformMfaClaims(params: {
   expectedNonce: string
 }): void {
   if (params.payload.nonce !== params.expectedNonce) {
-    throw new Error('OIDC nonce does not match')
+    throw new PlatformMfaClaimError('OIDC nonce does not match', 'nonce')
   }
   if (params.payload.acr !== params.requiredAcr) {
-    throw new Error('required MFA acr is missing')
+    throw new PlatformMfaClaimError('required MFA acr is missing', 'acr')
   }
   const amr = claimStringArray(params.payload.amr)
   for (const required of params.requiredAmr) {
     if (!amr.includes(required)) {
-      throw new Error(`required MFA amr is missing: ${required}`)
+      throw new PlatformMfaClaimError(`required MFA amr is missing: ${required}`, 'amr', required)
     }
   }
 }
@@ -319,6 +331,12 @@ function consumePendingOidcState(params: {
   return pending
 }
 
+function clearAuthenticatedSession(request: FastifyRequest): void {
+  delete request.session.user
+  delete request.session.authMode
+  request.session.mustChangePassword = false
+}
+
 export class PlatformIdentityService {
   private discoveryCache: Promise<OidcDiscovery> | null = null
   private jwksCache: { expiresAt: number; keys: Jwk[] } | null = null
@@ -371,6 +389,8 @@ export class PlatformIdentityService {
     url.searchParams.set('state', state)
     url.searchParams.set('nonce', nonce)
     url.searchParams.set('acr_values', this.config.requiredAcr)
+    url.searchParams.set('prompt', 'login')
+    url.searchParams.set('max_age', '0')
     url.searchParams.set('code_challenge_method', 'S256')
     url.searchParams.set('code_challenge', buildPkceChallenge(codeVerifier))
     return { authorizationUrl: url.toString(), state, nonce, codeVerifier }
@@ -663,6 +683,7 @@ export function registerPlatformIdentityRoutes(
   app.get('/auth/platform/start', { schema: { hide: true } }, async (request, reply) => {
     const query = (request.query ?? {}) as Record<string, unknown>
     const next = sanitizeNextParam(query.next, options.appPathPrefix)
+    clearAuthenticatedSession(request)
     const authorization = await options.identity.createAuthorizationUrl({
       request,
       appPathPrefix: options.appPathPrefix,
@@ -675,7 +696,8 @@ export function registerPlatformIdentityRoutes(
         nonce: authorization.nonce,
         codeVerifier: authorization.codeVerifier,
         next,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        ...(query.mfaRetry === '1' ? { mfaRetry: true } : {})
       }
     })
     return redirectWithNoStore(reply, authorization.authorizationUrl).send()
@@ -728,6 +750,19 @@ export function registerPlatformIdentityRoutes(
         return redirectWithNoStore(reply, pending.next).send()
       } catch (error) {
         request.session.delete()
+        if (
+          error instanceof PlatformMfaClaimError &&
+          error.kind === 'amr' &&
+          error.missingAmr === 'otp' &&
+          pending.mfaRetry !== true
+        ) {
+          await auditBestEffort({ action: 'auth_login_failure', reason: 'missing-otp-amr-retry' })
+          const retryLocation = `${options.identity.buildStartLocation(
+            options.appPathPrefix,
+            pending.next
+          )}&mfaRetry=1`
+          return redirectWithNoStore(reply, retryLocation).send()
+        }
         request.log.warn({ err: error }, 'platform identity callback denied')
         await auditBestEffort({ action: 'auth_login_failure', reason: 'platform-denied' })
         reply.code(401)
