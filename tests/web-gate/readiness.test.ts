@@ -31,15 +31,21 @@ describe('buildReadinessReport', () => {
 
   test('control state down reports db.open false', () => {
     expect(
-      buildReadinessReport({ controlOpen: false, controlReadOpen: true, publicAnnotationOpen: true })
-        .body.db.open
+      buildReadinessReport({
+        controlOpen: false,
+        controlReadOpen: true,
+        publicAnnotationOpen: true
+      }).body.db.open
     ).toBe(false)
   })
 
   test('control read down reports db.open false', () => {
     expect(
-      buildReadinessReport({ controlOpen: true, controlReadOpen: false, publicAnnotationOpen: true })
-        .body.db.open
+      buildReadinessReport({
+        controlOpen: true,
+        controlReadOpen: false,
+        publicAnnotationOpen: true
+      }).body.db.open
     ).toBe(false)
   })
 })
