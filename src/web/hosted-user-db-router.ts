@@ -125,14 +125,49 @@ export class HostedUserDbRouter {
     session: Promise<PostgresStorageSession>
   ): NodeJS.Timeout {
     return setTimeout(() => {
-      const current = this.sessionsBySecretRef.get(secretRef)
-      if (current?.session !== session) return
-      this.sessionsBySecretRef.delete(secretRef)
-      session
-        .then(async (resolved) => resolved.close())
-        .catch(() => {
-          // Session creation failures are already surfaced to the request path.
-        })
+      void this.closeIfIdle(secretRef, session)
     }, this.options.topology.pools.workspacePoolIdleMs)
+  }
+
+  private async closeIfIdle(
+    secretRef: string,
+    session: Promise<PostgresStorageSession>
+  ): Promise<void> {
+    const current = this.sessionsBySecretRef.get(secretRef)
+    if (current?.session !== session) return
+
+    let resolved: PostgresStorageSession
+    try {
+      resolved = await session
+    } catch {
+      // Session creation failures are already surfaced to the request path.
+      return
+    }
+    // Re-check: a request may have re-armed (and swapped the timer) while awaiting.
+    const stillCurrent = this.sessionsBySecretRef.get(secretRef)
+    if (stillCurrent?.session !== session) return
+
+    // A4: idle TTL is measured against activity, not routing time. Do not tear down a
+    // pool that still has borrowed (in-flight) clients — a single request slower than
+    // workspacePoolIdleMs would otherwise race pool teardown. Re-arm and check again.
+    if (this.poolHasBorrowedClients(resolved)) {
+      stillCurrent.idleTimer = this.scheduleIdleClose(secretRef, session)
+      return
+    }
+
+    this.sessionsBySecretRef.delete(secretRef)
+    await resolved.close()
+  }
+
+  private poolHasBorrowedClients(session: PostgresStorageSession): boolean {
+    try {
+      const pool = session.getPool()
+      const total = pool.totalCount ?? 0
+      const idle = pool.idleCount ?? 0
+      return total - idle > 0
+    } catch {
+      // If pool stats are unavailable, prefer keeping the session over a mid-flight close.
+      return false
+    }
   }
 }
