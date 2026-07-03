@@ -42,6 +42,7 @@ import { registerPageGate } from './server/page-gate'
 import { PlatformIdentityService, registerPlatformIdentityRoutes } from './server/platform-identity'
 import { readPlatformIdentityConfig } from './server/platform-identity-config'
 import { registerWebRateLimit } from './server/rate-limit'
+import { buildReadinessReport } from './readiness'
 import { registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
@@ -249,28 +250,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   })
 
   const readinessHandler = async (_request: unknown, reply: import('fastify').FastifyReply) => {
-    const open = await isPostgresHealthy(pool)
+    const controlOpen = await isPostgresHealthy(pool)
     const controlReadOpen =
       controlReadPool === null ? true : await isPostgresHealthy(controlReadPool)
     const publicAnnotationOpen =
       publicAnnotationPool === null ? true : await isPostgresHealthy(publicAnnotationPool)
-    const allOpen = open && controlReadOpen && publicAnnotationOpen
-    metrics.setDatabaseHealthy(allOpen)
-    if (!allOpen) {
+    const report = buildReadinessReport({ controlOpen, controlReadOpen, publicAnnotationOpen })
+    metrics.setDatabaseHealthy(report.ready)
+    if (!report.ready) {
       reply.code(503)
-      return {
-        status: 'unhealthy',
-        version: pkg.version,
-        db: { open: allOpen },
-        publicAnnotationDb: { open: publicAnnotationOpen }
-      }
     }
-    return {
-      status: 'ok',
-      version: pkg.version,
-      db: { open: true },
-      publicAnnotationDb: { open: publicAnnotationOpen }
-    }
+    return { status: report.body.status, version: pkg.version, ...report.body }
   }
 
   app.get('/readyz', { schema: { hide: true } }, readinessHandler)
