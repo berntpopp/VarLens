@@ -15,8 +15,7 @@ describe('VarLens hosted user isolation smoke', () => {
     const secondaryUsername = Cypress.env('varlensSecondaryUsername') as string
     const secondaryPassword = Cypress.env('varlensSecondaryPassword') as string
     const secondaryRotatedPassword = Cypress.env('varlensSecondaryRotatedPassword') as
-      | string
-      | undefined
+      string | undefined
 
     if (secondaryUsername === '' || secondaryPassword === '') {
       throw new Error(
