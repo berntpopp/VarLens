@@ -71,7 +71,7 @@ export function replaceWebUploadPathWithRef<T extends { filePath: string }>(
   return ref === undefined ? item : { ...item, filePath: ref }
 }
 
-export function registerImportUploadRoutes(app: FastifyInstance, deps?: DispatcherDeps): void {
+export function registerImportUploadRoutes(app: FastifyInstance, deps: DispatcherDeps): void {
   app.addContentTypeParser('application/octet-stream', (_request, payload, done) => {
     done(null, payload)
   })
@@ -79,7 +79,7 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
   app.post('/api/import/upload', async (request: UploadRouteBody, reply) => {
     const userId = request.session.user?.id
     if (userId === undefined) {
-      deps?.metrics?.recordOperationEvent({
+      deps.metrics?.recordOperationEvent({
         operation: 'upload-stage',
         result: 'error',
         failureClass: 'unauthenticated'
@@ -94,7 +94,7 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
 
     const originalName = headerString(request.headers['x-varlens-file-name'])
     if (originalName === undefined || originalName.trim() === '') {
-      deps?.metrics?.recordOperationEvent({
+      deps.metrics?.recordOperationEvent({
         operation: 'upload-stage',
         result: 'error',
         failureClass: 'missing-file-name'
@@ -105,7 +105,7 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
 
     const safeName = sanitizeUploadName(originalName)
     if (!isAllowedUploadName(safeName)) {
-      deps?.metrics?.recordOperationEvent({
+      deps.metrics?.recordOperationEvent({
         operation: 'upload-stage',
         result: 'error',
         failureClass: 'unsupported-file-type'
@@ -119,7 +119,7 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
 
     const source = toReadable(request.body)
     if (source === null) {
-      deps?.metrics?.recordOperationEvent({
+      deps.metrics?.recordOperationEvent({
         operation: 'upload-stage',
         result: 'error',
         failureClass: 'missing-body'
@@ -137,7 +137,7 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
       source
     }).catch((error: unknown) => {
       if (error instanceof UploadTooLargeError) {
-        deps?.metrics?.recordOperationEvent({
+        deps.metrics?.recordOperationEvent({
           operation: 'upload-stage',
           result: 'error',
           failureClass: 'upload-too-large'
@@ -153,13 +153,13 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
 
     if (!isStagedUpload(upload)) return upload
 
-    if (deps !== undefined) {
-      await recordApiWriteAudit(deps, {
-        key: 'import:upload',
-        username: request.session.user?.username
-      })
-      deps.metrics?.recordOperationEvent({ operation: 'upload-stage', result: 'success' })
-    }
+    // C4: the append-only upload audit is mandatory. deps is required so a caller
+    // cannot silently register these routes without the audit; metrics stay optional.
+    await recordApiWriteAudit(deps, {
+      key: 'import:upload',
+      username: request.session.user?.username
+    })
+    deps.metrics?.recordOperationEvent({ operation: 'upload-stage', result: 'success' })
 
     return {
       id: upload.id,
