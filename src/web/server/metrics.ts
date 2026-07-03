@@ -133,11 +133,7 @@ export function resolveMetricsIpc(method: string, url: string): string | undefin
 }
 
 export type OperationMetricName =
-  | 'auth-change-password'
-  | 'auth-login'
-  | 'batch-import'
-  | 'import'
-  | 'upload-stage'
+  'auth-change-password' | 'auth-login' | 'batch-import' | 'import' | 'upload-stage'
 
 export type OperationMetricResult = 'success' | 'error'
 
