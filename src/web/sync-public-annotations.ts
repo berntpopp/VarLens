@@ -75,14 +75,19 @@ function readArg(args: string[], name: string): string | undefined {
   return value
 }
 
-function resolvePublicAnnotationWriteUrl(env: NodeJS.ProcessEnv = process.env): string {
+export function resolvePublicAnnotationWriteUrl(env: NodeJS.ProcessEnv = process.env): string {
+  // B2: never fall back to VARLENS_PG_URL. That variable may point at a control or
+  // private workspace DB, and this command self-provisions the public_annotation_*
+  // schema — falling back would create and populate the public tables inside a
+  // private database, the exact boundary this command exists to protect.
   const publicUrl = env.VARLENS_PUBLIC_ANNOTATION_WRITE_PG_URL?.trim()
-  const fallbackUrl = env.VARLENS_PG_URL?.trim()
-  const url = publicUrl !== undefined && publicUrl !== '' ? publicUrl : fallbackUrl
-  if (url === undefined || url === '') {
-    throw new Error('VARLENS_PUBLIC_ANNOTATION_WRITE_PG_URL or VARLENS_PG_URL is required')
+  if (publicUrl === undefined || publicUrl === '') {
+    throw new Error(
+      'VARLENS_PUBLIC_ANNOTATION_WRITE_PG_URL is required to write public annotations; ' +
+        'refusing to fall back to VARLENS_PG_URL, which may point at a private or control DB.'
+    )
   }
-  return url
+  return publicUrl
 }
 
 function redactedManifestForPublicDb(manifest: AnnotationBundleManifest): Record<string, unknown> {
