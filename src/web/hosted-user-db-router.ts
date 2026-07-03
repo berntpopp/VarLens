@@ -54,7 +54,12 @@ export class HostedUserDbRouter {
       existing.idleTimer = this.scheduleIdleClose(secretRef, existing.session)
       return existing.session
     }
-    if (this.sessionsBySecretRef.size >= this.options.topology.pools.workspacePoolGlobalMax) {
+    // A3: VARLENS_WORKSPACE_POOL_GLOBAL_MAX is a TOTAL-CLIENT budget (per the hosted
+    // DB contract's max_connections arithmetic), not a pool count. Each workspace pool
+    // holds up to workspacePoolMax clients, so cap the pool count at
+    // floor(globalMax / poolMax) to keep the worst-case client count within budget.
+    const { workspacePoolGlobalMax, workspacePoolMax } = this.options.topology.pools
+    if ((this.sessionsBySecretRef.size + 1) * workspacePoolMax > workspacePoolGlobalMax) {
       throw new Error('hosted private DB pool limit reached')
     }
 
