@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.69.4] — 2026-07-03
+
+Security + dependency maintenance release.
+
+### Security
+
+- Cleared **all 11 open Dependabot security alerts** by updating build/dev-chain
+  dependencies: **undici** to 6.27.0 / 7.28.0 (9 advisories, including two HIGH SOCKS5
+  CVEs — TLS certificate-validation bypass and cross-origin request routing), **esbuild**
+  to 0.28.1 (dev-server arbitrary file read), and **@babel/core** to 7.29.7
+  (`sourceMappingURL` arbitrary file read). None of these dependencies ship in the
+  packaged installer, so real-world exposure was low.
+
+### Changed
+
+- Bumped production dependencies: fastify 5.9.0, pg 8.22.0,
+  better-sqlite3-multiple-ciphers 12.11.1, vuetify 4.1.2, @fastify/rate-limit 11.1.0,
+  adm-zip 0.5.18, nanoid 5.1.16, pg-query-stream 4.16.0.
+- Bumped development dependencies: electron 40.10.5, vite 7.3.6, vue 3.5.39,
+  typescript-eslint 8.62.0, eslint 10.6.0, prettier 3.9.1, @types/node 26,
+  @playwright/test 1.61.1, @electron/rebuild 4.0.6, and others.
+- Bumped GitHub Actions: actions/checkout 7.0.0, actions/cache 6.1.0,
+  actions/setup-java 5.4.0.
+
 ## [0.68.0] — 2026-05-29
 
 Sprint A — Foundations for 1000-genome scale. Four independently-reviewed PRs
@@ -726,4 +750,5 @@ User-facing feature page: `docs/features/shortlist.md`
 - **7 new Playwright E2E smoke tests** in `tests/e2e/multi-variant-filter.e2e.ts` covering the filter / sort / search flows across SV / CNV / STR extension columns.
 - **Synthetic test fixtures** for SV / CNV / STR / sibling BED / multi-file import scenarios.
 
+[0.69.4]: https://github.com/berntpopp/VarLens/compare/v0.69.3...v0.69.4
 [0.55.0]: https://github.com/berntpopp/VarLens/compare/v0.54.1...v0.55.0
