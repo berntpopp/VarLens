@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import {
   buildPublicAnnotationSyncPayload,
+  resolvePublicAnnotationWriteUrl,
   syncPublicAnnotationPayload,
   type PublicAnnotationSyncPayload
 } from '../../../src/web/sync-public-annotations'
@@ -158,6 +159,20 @@ describe('sync-public-annotations command helpers', () => {
   afterEach(() => {
     delete process.env.VARLENS_PUBLIC_ANNOTATION_WRITE_PG_URL
     delete process.env.VARLENS_PG_URL
+  })
+
+  test('B2: requires the dedicated public write URL and refuses the VARLENS_PG_URL fallback', () => {
+    process.env.VARLENS_PG_URL = 'postgresql://private-workspace/app_private'
+    delete process.env.VARLENS_PUBLIC_ANNOTATION_WRITE_PG_URL
+    expect(() => resolvePublicAnnotationWriteUrl()).toThrow(
+      /VARLENS_PUBLIC_ANNOTATION_WRITE_PG_URL is required/
+    )
+  })
+
+  test('B2: returns the dedicated public write URL when it is set', () => {
+    process.env.VARLENS_PG_URL = 'postgresql://private-workspace/app_private'
+    process.env.VARLENS_PUBLIC_ANNOTATION_WRITE_PG_URL = 'postgresql://public/annotations'
+    expect(resolvePublicAnnotationWriteUrl()).toBe('postgresql://public/annotations')
   })
 
   test('accepts a private annotation bundle but redacts private file inventory for the public DB', async () => {
