@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { Pool, type PoolClient } from 'pg'
 
 import {
+  bundleLicenseClearedFieldKeys,
   type AnnotationBundleFile,
   type AnnotationBundleManifest,
   validateAnnotationBundleManifest
@@ -53,6 +54,8 @@ export interface PublicAnnotationSyncPayload {
   snapshot: SnapshotPayload
   files: FilePayload[]
   variantRecordSources: PublicVariantRecordSource[]
+  /** A2: `(sourceId, fieldName)` keys cleared by the bundle's inline license matrix. */
+  licenseClearedFieldKeys: string[]
   storedManifest: unknown
 }
 
@@ -185,6 +188,7 @@ export async function buildPublicAnnotationSyncPayload(
       variantRecordSources: buildPublicVariantRecordSources(manifest, (file) =>
         resolveManifestFile(manifestDir, file.path)
       ),
+      licenseClearedFieldKeys: [...bundleLicenseClearedFieldKeys(manifest)],
       storedManifest: redactedManifestForPublicDb(manifest)
     }
   }
@@ -209,6 +213,7 @@ export async function buildPublicAnnotationSyncPayload(
       },
       files: [],
       variantRecordSources: [],
+      licenseClearedFieldKeys: [],
       storedManifest: manifest
     }
   }
@@ -423,11 +428,13 @@ async function syncVariantRecords(
 ): Promise<number> {
   let count = 0
   let batch: PublicVariantRecordPayload[] = []
+  const licenseClearedFieldKeys = new Set(payload.licenseClearedFieldKeys)
   for (const source of payload.variantRecordSources) {
     for await (const record of extractPublicVariantRecords(source, {
       bundleId: payload.snapshot.bundleId ?? payload.snapshot.snapshotId,
       publicSnapshotId: payload.snapshot.snapshotId,
-      mappingVersion: payload.snapshot.mappingVersion
+      mappingVersion: payload.snapshot.mappingVersion,
+      licenseClearedFieldKeys
     })) {
       batch.push(record)
       if (batch.length >= 500) {

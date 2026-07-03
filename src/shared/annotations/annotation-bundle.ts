@@ -1,6 +1,8 @@
 import { z } from 'zod'
 
 import {
+  isPublicClearedMatrixEntry,
+  LicenseMatrixSchema,
   PublicAnnotationSnapshotReferenceSchema,
   type PublicAnnotationSnapshotReference
 } from './public-snapshot'
@@ -66,6 +68,9 @@ export const AnnotationBundleManifestSchema = z
     genomeBuild: z.string().min(1),
     mappingVersion: z.string().min(1),
     publicSnapshot: PublicAnnotationSnapshotReferenceSchema,
+    // A2: the bundle carries the full license matrix inline so each published field
+    // can be validated as license-cleared before it is written to the public DB.
+    licenseMatrix: LicenseMatrixSchema,
     files: z.array(AnnotationBundleFileSchema).min(1),
     tools: z.array(AnnotationBundleToolSchema).default([]),
     importOrder: z.array(AnnotationBundleFileRoleSchema).min(1),
@@ -189,7 +194,34 @@ function collectBundleSemanticErrors(manifest: AnnotationBundleManifest): string
     errors.push('bundle must include at least one required variant VCF')
   }
 
+  // A2: the inline license matrix must be the one the bundle pins by reference.
+  if (manifest.licenseMatrix.matrixChecksum !== manifest.publicSnapshot.licenseMatrixChecksum) {
+    errors.push(
+      'bundle licenseMatrix.matrixChecksum must match publicSnapshot.licenseMatrixChecksum'
+    )
+  }
+
   return errors
+}
+
+/** Stable key for a `(sourceId, fieldName)` public annotation field. */
+export function licenseClearedFieldKey(sourceId: string, fieldName: string): string {
+  return `${sourceId}::${fieldName}`
+}
+
+/**
+ * A2 — the set of `(sourceId, fieldName)` keys the bundle's inline license matrix
+ * clears for public promotion. A field absent from this set must not be written to
+ * the public annotation DB (fail closed).
+ */
+export function bundleLicenseClearedFieldKeys(manifest: AnnotationBundleManifest): Set<string> {
+  const cleared = new Set<string>()
+  for (const entry of manifest.licenseMatrix.entries) {
+    if (isPublicClearedMatrixEntry(entry)) {
+      cleared.add(licenseClearedFieldKey(entry.sourceId, entry.fieldName))
+    }
+  }
+  return cleared
 }
 
 function buildImportPlan(manifest: AnnotationBundleManifest): AnnotationBundleImportPlan {

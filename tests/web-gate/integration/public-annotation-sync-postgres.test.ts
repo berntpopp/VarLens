@@ -74,6 +74,19 @@ describe.skipIf(!RUN_POSTGRES)('public annotation sync - PostgreSQL integration'
       },
       files: [],
       variantRecordSources: [{ role: 'snv_vcf', absolutePath: vcfPath }],
+      licenseClearedFieldKeys: [
+        'vep::consequence',
+        'vep::impact',
+        'vep::gene_symbol',
+        'vep::gene_id',
+        'vep::transcript_id',
+        'vep::hgvsc',
+        'vep::hgvsp',
+        'clinvar_current::clinical_significance',
+        'clinvar_current::review_status',
+        'clinvar_current::condition',
+        'clinvar_current::allele_id'
+      ],
       storedManifest: {
         schemaVersion: 'varlens.annotation-bundle.v1',
         files: { redacted: true, count: 3 }
