@@ -16,7 +16,10 @@ import {
   validatePublicAnnotationSnapshotManifest
 } from '../shared/annotations/public-snapshot'
 import { buildPostgresPoolConfig, getPostgresStorageConfig } from '../main/storage/config'
-import { PUBLIC_ANNOTATION_MIGRATIONS } from '../main/storage/postgres/migrations/definitions'
+import {
+  PUBLIC_ANNOTATION_MIGRATION_LEDGER,
+  PUBLIC_ANNOTATION_MIGRATIONS
+} from '../main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../main/storage/postgres/migrations/PostgresMigrationRunner'
 import {
   buildPublicVariantRecordSources,
@@ -462,7 +465,12 @@ async function main(): Promise<void> {
   try {
     // B3: provision the public annotation schema via a versioned migration before
     // syncing, instead of running ad-hoc CREATE TABLE DDL inside the sync transaction.
-    await new PostgresMigrationRunner(pool, config.schema, PUBLIC_ANNOTATION_MIGRATIONS).migrate()
+    await new PostgresMigrationRunner(
+      pool,
+      config.schema,
+      PUBLIC_ANNOTATION_MIGRATIONS,
+      PUBLIC_ANNOTATION_MIGRATION_LEDGER
+    ).migrate()
     const result = await syncPublicAnnotationPayload(pool, payload)
     process.stdout.write(
       JSON.stringify({
