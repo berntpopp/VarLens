@@ -84,7 +84,7 @@ describe('usePanelManager', () => {
 
   it('sets loading state during loadPanels', async () => {
     let resolveList: (value: PanelListItem[]) => void
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window.api as any).panels.list.mockImplementation(
       () =>
         new Promise<PanelListItem[]>((resolve) => {

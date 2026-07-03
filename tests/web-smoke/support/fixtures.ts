@@ -1,7 +1,6 @@
 export type ImportBuffer = ReturnType<(typeof Cypress.Buffer)['from']>
 export type ImportSelectFile =
-  | string
-  | { contents: ImportBuffer; fileName: string; mimeType?: string }
+  string | { contents: ImportBuffer; fileName: string; mimeType?: string }
 
 const SAMPLE_VCF_GZ_BASE64 =
   'H4sIAAAAAAAAE3XOUWuDMBDA8efzU5T6Wmxix8ZgKQSrTtBqTdbX4lxaAjVxiS0I+fDDlsEY29' +

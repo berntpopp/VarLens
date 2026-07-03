@@ -17,8 +17,7 @@ class TestRepository extends BaseRepository {
 
   get(id: number): { id: number; name: string } | undefined {
     return this.db.prepare('SELECT * FROM test_items WHERE id = ?').get(id) as
-      | { id: number; name: string }
-      | undefined
+      { id: number; name: string } | undefined
   }
 
   insertTwo(name1: string, name2: string): void {

@@ -117,8 +117,7 @@ export function createAppState(): AppStateReturn {
 
   // Snackbar callback (set by App.vue, called by views)
   let showSnackbar:
-    | ((message: string, type: string, options?: Record<string, unknown>) => void)
-    | null = null
+    ((message: string, type: string, options?: Record<string, unknown>) => void) | null = null
 
   function setSnackbarHandler(
     fn: (message: string, type: string, options?: Record<string, unknown>) => void

@@ -103,12 +103,7 @@ export interface ClinVarVariant {
 
 /** ClinVar significance categories for filtering */
 export type ClinVarSignificance =
-  | 'pathogenic'
-  | 'likely_pathogenic'
-  | 'uncertain'
-  | 'likely_benign'
-  | 'benign'
-  | 'other'
+  'pathogenic' | 'likely_pathogenic' | 'uncertain' | 'likely_benign' | 'benign' | 'other'
 
 /** ClinVar fetch result with cache info */
 export interface ClinVarFetchResult {
@@ -146,12 +141,7 @@ export interface GeneStructureResult {
 
 /** Consequence category for color mapping */
 export type ConsequenceCategory =
-  | 'missense'
-  | 'truncating'
-  | 'inframe'
-  | 'splice'
-  | 'synonymous'
-  | 'other'
+  'missense' | 'truncating' | 'inframe' | 'splice' | 'synonymous' | 'other'
 
 /** Variant prepared for lollipop plot rendering */
 export interface LollipopVariant {

@@ -69,8 +69,7 @@ describe('VcfStrategy', () => {
 
     // Check that VCF-specific fields are populated
     const firstVariant = variants.find((v) => v.pos === 20000100) as
-      | Record<string, unknown>
-      | undefined
+      Record<string, unknown> | undefined
     expect(firstVariant).toBeDefined()
     expect(firstVariant!.gt_num).toBe('0/1')
     expect(firstVariant!.gq).toBe(99)

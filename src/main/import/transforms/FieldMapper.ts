@@ -68,15 +68,12 @@ export class FieldMapper extends Transform {
           IMPACT_DICTIONARY
         ) as string | null,
         gnomad_af: this.extractValue(row, this.cols.GNOMAD_AF, selectedTranscript, false) as
-          | number
-          | null,
+          number | null,
         cadd: this.extractValue(row, this.cols.CADD, selectedTranscript, false) as number | null,
         clinvar: this.extractValue(row, this.cols.CLINVAR, selectedTranscript, false) as
-          | string
-          | null,
+          string | null,
         gt_num: this.extractValue(row, this.cols.GT_NUM, selectedTranscript, false) as
-          | string
-          | null,
+          string | null,
         func: this.extractValue(row, this.cols.FUNC, selectedTranscript, false) as string | null,
         qual: this.extractValue(row, this.cols.QUAL, selectedTranscript, false) as number | null,
         hpo_sim_score: this.extractNumericFromDict(
@@ -94,8 +91,7 @@ export class FieldMapper extends Transform {
         ) as string | null,
         cdna: this.extractValue(row, this.cols.CDNA, selectedTranscript, false) as string | null,
         aa_change: this.extractValue(row, this.cols.AA_CHANGE, selectedTranscript, false) as
-          | string
-          | null,
+          string | null,
         moi: this.extractValue(
           row,
           this.cols.MOI,
@@ -255,11 +251,9 @@ export class FieldMapper extends Transform {
       transcripts.push({
         transcript_id: transcriptId,
         gene_symbol: this.extractValue(row, this.cols.GENE, i, true, this.dictionaries.gene) as
-          | string
-          | null,
+          string | null,
         consequence: this.extractValue(row, this.cols.IMPACT, i, true, IMPACT_DICTIONARY) as
-          | string
-          | null,
+          string | null,
         cdna: this.extractValue(row, this.cols.CDNA, i, false) as string | null,
         aa_change: this.extractValue(row, this.cols.AA_CHANGE, i, false) as string | null,
         hpo_sim_score: this.extractNumericFromDict(

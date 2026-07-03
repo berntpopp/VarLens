@@ -42,8 +42,7 @@ defineEmits<{
 }>()
 
 type ChipState =
-  | { kind: 'single'; typeKey: string; label: string }
-  | { kind: 'warning'; label: string }
+  { kind: 'single'; typeKey: string; label: string } | { kind: 'warning'; label: string }
 
 const chipState = computed<ChipState | null>(() => {
   const typesSeen = new Set<string>()

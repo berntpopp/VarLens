@@ -168,7 +168,7 @@ describe('useGeneValidation', () => {
 
     it('sets validating flag during validation', async () => {
       let resolveValidation: (value: ValidationResult[]) => void
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(window.api as any).panels.validateSymbols.mockImplementation(
         () =>
           new Promise<ValidationResult[]>((resolve) => {

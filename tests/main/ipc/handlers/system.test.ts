@@ -46,8 +46,7 @@ function getHandler(
   channel: string
 ): HandlerCallback {
   const call = ipcMain.handle.mock.calls.find(([c]) => c === channel) as
-    | [string, HandlerCallback]
-    | undefined
+    [string, HandlerCallback] | undefined
   if (!call) throw new Error(`Handler for ${channel} not registered`)
   return call[1]
 }

@@ -143,8 +143,7 @@ export class VariantFilterBuilder {
         .select(this.kysely.fn.countAll<number>().as('cnt'))
         .compile()
       const countResult = this.db.prepare(compiled.sql).get(...compiled.parameters) as
-        | { cnt: number }
-        | undefined
+        { cnt: number } | undefined
       totalCaseCount = countResult?.cnt ?? 0
     }
 

@@ -63,8 +63,7 @@ export function computePanelIntervals(
   } else {
     // Cohort mode: sample any variant in the database
     const sampleRow = db.database.prepare('SELECT chr FROM variants LIMIT 1').get() as
-      | { chr: string }
-      | undefined
+      { chr: string } | undefined
     chrPrefix = sampleRow?.chr?.startsWith('chr') ?? false
   }
 

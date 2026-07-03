@@ -515,12 +515,7 @@ export interface CaseComment {
   case_id: number
   /** Comment category */
   category:
-    | 'Clinical Note'
-    | 'Lab Result'
-    | 'Interpretation'
-    | 'Follow-up'
-    | 'Family History'
-    | 'Treatment'
+    'Clinical Note' | 'Lab Result' | 'Interpretation' | 'Follow-up' | 'Family History' | 'Treatment'
   /** Comment content */
   content: string
   /** Unix timestamp in milliseconds */
@@ -603,14 +598,7 @@ export interface AnalysisGroup {
 }
 
 export type AnalysisGroupRole =
-  | 'proband'
-  | 'father'
-  | 'mother'
-  | 'sibling'
-  | 'partner'
-  | 'other'
-  | 'tumor'
-  | 'normal'
+  'proband' | 'father' | 'mother' | 'sibling' | 'partner' | 'other' | 'tumor' | 'normal'
 
 export type AffectedStatusValue = 'affected' | 'unaffected' | 'unknown'
 

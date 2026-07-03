@@ -63,8 +63,7 @@ export async function getNumericColumnMetaLive(
     }
   )
   const row = result.rows[0] as
-    | { distinct_count?: unknown; min?: unknown; max?: unknown }
-    | undefined
+    { distinct_count?: unknown; min?: unknown; max?: unknown } | undefined
   const meta: ColumnFilterMeta = {
     key: definition.key,
     dataType: 'numeric',
