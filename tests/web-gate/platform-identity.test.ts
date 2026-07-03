@@ -455,14 +455,9 @@ describe('platform identity OIDC start', () => {
 })
 
 describe('platform identity provisioning route', () => {
-  test('creates a platform user only with the provisioning bearer token', async () => {
+  test('is not reachable from the request-serving app (provisioning is CLI-only)', async () => {
     const app = fastify()
-    const upsertPlatformUser = vi.fn(async () => ({
-      id: 3,
-      username: 'keycloak-subject',
-      role: 'user',
-      private_db_status: 'active'
-    }))
+    const upsertPlatformUser = vi.fn()
     const service = new PlatformIdentityService({
       mode: 'platform',
       issuerUrl: ISSUER,
@@ -472,7 +467,7 @@ describe('platform identity provisioning route', () => {
       requiredAcr: REQUIRED_ACR,
       requiredAmr: REQUIRED_AMR,
       entitlementsUrl: 'http://ops.internal/api/identity/entitlements/varlens/dev',
-      provisioningToken: 'provision-token',
+      provisioningToken: 'provision-token-that-is-at-least-32-chars',
       requireHostedResource: false
     })
     registerPlatformIdentityRoutes(app, {
@@ -481,34 +476,30 @@ describe('platform identity provisioning route', () => {
       appPathPrefix: ''
     })
 
-    const denied = await app.inject({
+    // The provisioning surface must not exist on the serving runtime, with or
+    // without a bearer token: cross-tenant workspace takeover is only possible
+    // if this route is reachable. Provisioning lives in the operator CLI.
+    const withoutToken = await app.inject({
       method: 'POST',
       url: '/platform/provisioning/users',
       payload: { subject: 'keycloak-subject', role: 'user' }
     })
-    expect(denied.statusCode).toBe(403)
+    expect(withoutToken.statusCode).toBe(404)
 
-    const accepted = await app.inject({
+    const withToken = await app.inject({
       method: 'POST',
       url: '/platform/provisioning/users',
-      headers: { authorization: 'Bearer provision-token' },
+      headers: { authorization: 'Bearer provision-token-that-is-at-least-32-chars' },
       payload: {
         subject: 'keycloak-subject',
         displayName: 'Keycloak User',
-        role: 'user',
+        role: 'admin',
         privateDbSecretRef: 'keycloak-subject.pgurl',
         privateDbStatus: 'active'
       }
     })
-
-    expect(accepted.statusCode).toBe(200)
-    expect(upsertPlatformUser).toHaveBeenCalledWith({
-      username: 'keycloak-subject',
-      displayName: 'Keycloak User',
-      role: 'user',
-      privateDbSecretRef: 'keycloak-subject.pgurl',
-      privateDbStatus: 'active'
-    })
+    expect(withToken.statusCode).toBe(404)
+    expect(upsertPlatformUser).not.toHaveBeenCalled()
     await app.close()
   })
 })

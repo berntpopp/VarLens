@@ -1,10 +1,4 @@
-import {
-  createHash,
-  createPublicKey,
-  createVerify,
-  randomBytes,
-  timingSafeEqual
-} from 'node:crypto'
+import { createHash, createPublicKey, createVerify, randomBytes } from 'node:crypto'
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
@@ -113,19 +107,6 @@ function claimStringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((part): part is string => typeof part === 'string')
   if (typeof value === 'string') return [value]
   return []
-}
-
-function bearerToken(request: FastifyRequest): string {
-  const authorization = request.headers.authorization
-  const value = Array.isArray(authorization) ? authorization[0] : authorization
-  if (typeof value !== 'string' || !value.startsWith('Bearer ')) return ''
-  return value.slice('Bearer '.length)
-}
-
-function tokenMatches(candidate: string, expected: string): boolean {
-  const left = Buffer.from(candidate)
-  const right = Buffer.from(expected)
-  return left.length === right.length && timingSafeEqual(left, right)
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
@@ -708,56 +689,13 @@ export function registerPlatformIdentityRoutes(
     }
   }
 
-  app.post('/platform/provisioning/users', { schema: { hide: true } }, async (request, reply) => {
-    const expectedToken = options.identity.config.provisioningToken
-    if (expectedToken === undefined || !tokenMatches(bearerToken(request), expectedToken)) {
-      reply.code(403)
-      return { error: 'forbidden' }
-    }
-
-    const body = (request.body ?? {}) as Record<string, unknown>
-    const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
-    const displayName = typeof body.displayName === 'string' ? body.displayName.trim() : subject
-    const role = typeof body.role === 'string' ? body.role.trim() : 'user'
-    const privateDbSecretRef =
-      typeof body.privateDbSecretRef === 'string' && body.privateDbSecretRef.trim() !== ''
-        ? body.privateDbSecretRef.trim()
-        : undefined
-    const privateDbStatus =
-      typeof body.privateDbStatus === 'string' ? body.privateDbStatus.trim() : undefined
-    const publicAnnotationSnapshotId =
-      typeof body.publicAnnotationSnapshotId === 'string' &&
-      body.publicAnnotationSnapshotId.trim() !== ''
-        ? body.publicAnnotationSnapshotId.trim()
-        : undefined
-
-    if (subject === '' || !isUserRole(role)) {
-      reply.code(400)
-      return { error: 'invalid-platform-user' }
-    }
-    if (
-      privateDbStatus !== undefined &&
-      privateDbStatus !== 'pending' &&
-      privateDbStatus !== 'active' &&
-      privateDbStatus !== 'failed' &&
-      privateDbStatus !== 'revoked'
-    ) {
-      reply.code(400)
-      return { error: 'invalid-private-db-status' }
-    }
-
-    const user = await options.authService.upsertPlatformUser({
-      username: subject,
-      displayName,
-      role,
-      ...(privateDbSecretRef !== undefined ? { privateDbSecretRef } : {}),
-      ...(privateDbStatus !== undefined
-        ? { privateDbStatus: privateDbStatus as 'pending' | 'active' | 'failed' | 'revoked' }
-        : {}),
-      ...(publicAnnotationSnapshotId !== undefined ? { publicAnnotationSnapshotId } : {})
-    })
-    return { user }
-  })
+  // NB: there is deliberately no provisioning HTTP endpoint here. Minting or
+  // rebinding platform users (which can grant admin or take over an existing
+  // owner's workspace via the private-db secret ref) must never be reachable
+  // from the request-serving runtime. Provisioning is an operator-only action
+  // carried by the `provision-user` CLI (see src/web/provision-user.ts and the
+  // web-11 runtime contract). The serving app only starts/completes the OIDC
+  // login flow below.
 
   app.get('/auth/platform/start', { schema: { hide: true } }, async (request, reply) => {
     const query = (request.query ?? {}) as Record<string, unknown>
