@@ -105,12 +105,14 @@ export class HostedUserDbRouter {
         `hosted private DB secret file did not contain a PostgreSQL URL: ${secretRef}`
       )
     }
-    return await openPostgresStorageSessionWithoutMigrating(
-      config,
-      this.options.publicAnnotations !== undefined
+    return await openPostgresStorageSessionWithoutMigrating(config, {
+      // A1: fail closed at routing time when the workspace schema version does not
+      // match the app's compiled migration head, instead of serving broken requests.
+      validateMigrationCompat: true,
+      ...(this.options.publicAnnotations !== undefined
         ? { publicAnnotations: this.options.publicAnnotations }
-        : {}
-    )
+        : {})
+    })
   }
 
   private scheduleIdleClose(
