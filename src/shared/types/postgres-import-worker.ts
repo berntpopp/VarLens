@@ -79,8 +79,7 @@ export interface PostgresImportWorkerCancelMessage {
 }
 
 export type PostgresImportWorkerInboundMessage =
-  | PostgresImportWorkerStartMessage
-  | PostgresImportWorkerCancelMessage
+  PostgresImportWorkerStartMessage | PostgresImportWorkerCancelMessage
 
 export interface PostgresImportWorkerProgressMessage {
   type: 'progress'

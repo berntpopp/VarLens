@@ -622,8 +622,8 @@ describe('SqliteImportExecutor.importMultiFile', () => {
   })
 
   it('uses fallback elapsed (Date.now() - start) when delegate returns elapsed=0', async () => {
-    const delegate = vi.fn(
-      async (): Promise<MultiFileImportResult> => makeFakeResult({ elapsed: 0 })
+    const delegate = vi.fn(async (): Promise<MultiFileImportResult> =>
+      makeFakeResult({ elapsed: 0 })
     )
 
     const executor = new SqliteImportExecutor({

@@ -9,5 +9,4 @@
  * discriminated union is shaped for OIDC retrofit").
  */
 export type Credential =
-  | { kind: 'password'; username: string; password: string }
-  | { kind: 'token'; jwt: string }
+  { kind: 'password'; username: string; password: string } | { kind: 'token'; jwt: string }

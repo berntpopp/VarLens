@@ -30,8 +30,7 @@ export class AnalysisGroupRepository extends BaseRepository {
 
   getGroup(id: number): AnalysisGroup {
     const row = this.db.prepare('SELECT * FROM analysis_groups WHERE id = ?').get(id) as
-      | AnalysisGroup
-      | undefined
+      AnalysisGroup | undefined
     if (!row) throw new Error(`Analysis group ${id} not found`)
     return row
   }

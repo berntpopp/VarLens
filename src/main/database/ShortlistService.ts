@@ -61,8 +61,7 @@ import type { FilterState } from '../../shared/types/filters'
  * the preset repository entirely and returns `presetUsed: null`.
  */
 export type GetShortlistParams =
-  | { caseId: number; presetId: number }
-  | { caseId: number; adHocConfig: ShortlistConfig }
+  { caseId: number; presetId: number } | { caseId: number; adHocConfig: ShortlistConfig }
 
 /**
  * Thrown when one or more per-type Stage-1 queries fail. Aggregates the

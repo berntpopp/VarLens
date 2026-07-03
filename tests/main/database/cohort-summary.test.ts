@@ -47,8 +47,7 @@ describe('Annotation Triggers', () => {
         'SELECT has_star, has_comment, acmg_best FROM cohort_variant_summary WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?'
       )
       .get(chr, pos, ref, alt) as
-      | { has_star: number; has_comment: number; acmg_best: string | null }
-      | undefined
+      { has_star: number; has_comment: number; acmg_best: string | null } | undefined
   }
 
   beforeEach(() => {

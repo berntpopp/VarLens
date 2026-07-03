@@ -75,8 +75,7 @@ export function resolvePanelIntervalsInPlace(
           // Cohort mode: sample any variant to detect chr prefix.
           // Assumes uniform format — mixed chr/non-chr imports are unsupported.
           const sampleRow = db.prepare('SELECT chr FROM variants LIMIT 1').get() as
-            | { chr: string }
-            | undefined
+            { chr: string } | undefined
           return sampleRow?.chr?.startsWith('chr') === true
         })()
 

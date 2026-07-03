@@ -13,18 +13,7 @@
 
 /** Operators supported by the DSL */
 export type DslOperator =
-  | '='
-  | '!='
-  | '<'
-  | '>'
-  | '<='
-  | '>='
-  | '~'
-  | '!~'
-  | '^'
-  | '$'
-  | 'is:null'
-  | 'is:notnull'
+  '=' | '!=' | '<' | '>' | '<=' | '>=' | '~' | '!~' | '^' | '$' | 'is:null' | 'is:notnull'
 
 /** Combinators between filter rules */
 export type DslCombinator = 'AND' | 'OR'

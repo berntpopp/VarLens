@@ -151,8 +151,7 @@ export class AuthService {
 
   getUser(username: string): User | undefined {
     return this.db.prepare('SELECT * FROM users WHERE username = ?').get(username) as
-      | User
-      | undefined
+      User | undefined
   }
 
   listUsers(): Omit<User, 'password_hash'>[] {
@@ -188,8 +187,7 @@ export class AuthService {
     newPassword: string
   ): Promise<boolean> {
     const user = this.db.prepare('SELECT * FROM users WHERE username = ?').get(username) as
-      | User
-      | undefined
+      User | undefined
 
     if (!user) return false
 

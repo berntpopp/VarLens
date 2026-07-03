@@ -22,10 +22,7 @@ export type AuditActionType =
   | 'api_write'
 
 export type AuditEntityType =
-  | 'variant_annotation'
-  | 'case_variant_annotation'
-  | 'user_account'
-  | 'api_call'
+  'variant_annotation' | 'case_variant_annotation' | 'user_account' | 'api_call'
 
 export const AUDIT_ROLE_MEANINGS = Object.freeze({
   [ROLE_ADMIN]: 'App administrator',

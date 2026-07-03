@@ -2,13 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 
 export type ImportPhase =
-  | 'idle'
-  | 'uploading'
-  | 'importing'
-  | 'finalizing'
-  | 'complete'
-  | 'error'
-  | 'cancelled'
+  'idle' | 'uploading' | 'importing' | 'finalizing' | 'complete' | 'error' | 'cancelled'
 
 export interface ImportFileDetail {
   filePath: string

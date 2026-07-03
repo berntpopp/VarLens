@@ -4,10 +4,7 @@
 
 /** Solo modes — always available (no family required) */
 export type SoloInheritanceMode =
-  | 'homozygous'
-  | 'heterozygous'
-  | 'x_hemizygous'
-  | 'candidate_compound_het'
+  'homozygous' | 'heterozygous' | 'x_hemizygous' | 'candidate_compound_het'
 
 /** Trio modes — require family data */
 export type TrioInheritanceMode = 'de_novo' | 'autosomal_recessive' | 'compound_het'
