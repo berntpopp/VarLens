@@ -16,6 +16,8 @@ import {
   validatePublicAnnotationSnapshotManifest
 } from '../shared/annotations/public-snapshot'
 import { buildPostgresPoolConfig, getPostgresStorageConfig } from '../main/storage/config'
+import { PUBLIC_ANNOTATION_MIGRATIONS } from '../main/storage/postgres/migrations/definitions'
+import { PostgresMigrationRunner } from '../main/storage/postgres/migrations/PostgresMigrationRunner'
 import {
   buildPublicVariantRecordSources,
   extractPublicVariantRecords,
@@ -233,68 +235,9 @@ export async function syncPublicAnnotationPayload(
 ): Promise<PublicAnnotationSyncResult> {
   const client = await pool.connect()
   try {
+    // B3: the public_annotation_* schema is provisioned by PUBLIC_ANNOTATION_MIGRATIONS
+    // (run by the sync command before this transaction), not ad-hoc DDL here.
     await client.query('BEGIN')
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS public_annotation_snapshots (
-        snapshot_id text PRIMARY KEY,
-        schema_version text NOT NULL,
-        bundle_id text,
-        genome_build text,
-        mapping_version text NOT NULL,
-        content_hash text NOT NULL,
-        manifest_checksum text NOT NULL,
-        license_matrix_checksum text NOT NULL,
-        source_manifest_checksum text NOT NULL,
-        private_case_data boolean NOT NULL DEFAULT false,
-        stored_manifest_json jsonb NOT NULL,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        ingested_at timestamptz NOT NULL DEFAULT now()
-      )
-    `)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS public_annotation_files (
-        snapshot_id text NOT NULL REFERENCES public_annotation_snapshots(snapshot_id) ON DELETE CASCADE,
-        role text NOT NULL,
-        path text NOT NULL,
-        checksum text,
-        size_bytes bigint,
-        index_path text,
-        index_checksum text,
-        index_size_bytes bigint,
-        required boolean NOT NULL DEFAULT true,
-        format_version text,
-        PRIMARY KEY (snapshot_id, role, path)
-      )
-    `)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS public_annotation_sync_events (
-        event_id bigserial PRIMARY KEY,
-        snapshot_id text NOT NULL REFERENCES public_annotation_snapshots(snapshot_id) ON DELETE CASCADE,
-        source_manifest_checksum text NOT NULL,
-        public_file_count integer NOT NULL,
-        private_case_data boolean NOT NULL,
-        synced_at timestamptz NOT NULL DEFAULT now()
-      )
-    `)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS public_annotation_variant_records (
-        snapshot_id text NOT NULL REFERENCES public_annotation_snapshots(snapshot_id) ON DELETE CASCADE,
-        chr text NOT NULL,
-        pos bigint NOT NULL,
-        ref text NOT NULL,
-        alt text NOT NULL,
-        source_id text NOT NULL,
-        field_name text NOT NULL,
-        field_value jsonb NOT NULL,
-        evidence_json jsonb NOT NULL,
-        provenance_json jsonb NOT NULL,
-        PRIMARY KEY (snapshot_id, chr, pos, ref, alt, source_id, field_name)
-      )
-    `)
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS public_annotation_variant_records_lookup_idx
-      ON public_annotation_variant_records (chr, pos, ref, alt)
-    `)
 
     const existing = await client.query<{
       content_hash: string
@@ -517,6 +460,9 @@ async function main(): Promise<void> {
   const payload = await buildPublicAnnotationSyncPayload(manifestPath)
   const pool = new Pool(buildPostgresPoolConfig(config))
   try {
+    // B3: provision the public annotation schema via a versioned migration before
+    // syncing, instead of running ad-hoc CREATE TABLE DDL inside the sync transaction.
+    await new PostgresMigrationRunner(pool, config.schema, PUBLIC_ANNOTATION_MIGRATIONS).migrate()
     const result = await syncPublicAnnotationPayload(pool, payload)
     process.stdout.write(
       JSON.stringify({

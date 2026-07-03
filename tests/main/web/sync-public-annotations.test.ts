@@ -335,8 +335,8 @@ describe('sync-public-annotations command helpers', () => {
     })
 
     const sql = client.queries.map((query) => query.text).join('\n')
-    expect(sql).toContain('CREATE TABLE IF NOT EXISTS public_annotation_snapshots')
-    expect(sql).toContain('CREATE TABLE IF NOT EXISTS public_annotation_variant_records')
+    // B3: schema DDL is now owned by PUBLIC_ANNOTATION_MIGRATIONS, not this transaction.
+    expect(sql).not.toContain('CREATE TABLE')
     expect(sql).toContain('INSERT INTO public_annotation_snapshots')
     expect(sql).toContain('INSERT INTO public_annotation_sync_events')
     expect(client.queries.at(-1)?.text).toBe('COMMIT')

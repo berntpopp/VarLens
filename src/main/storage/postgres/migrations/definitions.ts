@@ -93,6 +93,28 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigration[] = MIGRATION_FILES
   }
 )
 
+// Migrations for the dedicated public annotation database. Kept OUT of
+// POSTGRES_MIGRATIONS so the public_annotation_* schema is never created in
+// workspace/control DBs; applied only by the sync-public-annotations command.
+const PUBLIC_ANNOTATION_MIGRATION_FILES: readonly MigrationFile[] = [
+  {
+    version: '0015',
+    name: 'public_annotation_schema',
+    fileName: '0015_public_annotation_schema.sql'
+  }
+]
+
+export const PUBLIC_ANNOTATION_MIGRATIONS: readonly PostgresMigration[] =
+  PUBLIC_ANNOTATION_MIGRATION_FILES.map(({ version, name, fileName }) => {
+    const sql = readMigrationSql(fileName)
+    return {
+      version,
+      name,
+      sql,
+      checksum: createHash('sha256').update(sql).digest('hex')
+    }
+  })
+
 async function seedWorkflowDefaults(
   client: Parameters<NonNullable<PostgresMigration['afterApply']>>[0],
   schema: string
