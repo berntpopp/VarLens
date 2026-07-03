@@ -21,6 +21,7 @@
  *   - production runs `node out/web/server.cjs` via main()
  */
 
+import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'path'
 
 import Fastify, { type FastifyInstance } from 'fastify'
@@ -112,7 +113,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   }
 
   const app = Fastify({
-    requestIdHeader: 'x-request-id',
+    // C3: never adopt the client-supplied x-request-id (spoofable, collidable, and an
+    // unbounded log-injection vector on a directly reachable endpoint). Generate a
+    // random UUID per request instead of the default sequential req-N counter, which
+    // would otherwise be reflected back as a traffic side channel.
+    genReqId: () => randomUUID(),
     requestIdLogLabel: 'request_id',
     logger: {
       level: process.env.VARLENS_LOG_LEVEL ?? 'info'
