@@ -149,21 +149,45 @@ describe('HostedUserDbRouter', () => {
     expect(storageMocks.openSession).toHaveBeenCalledTimes(1)
   })
 
-  test('enforces the hosted workspace pool global limit', async () => {
+  test('A3: enforces the workspace pool budget in CLIENTS, not pool count', async () => {
     await writeFile(join(workspaceSecretDir, 'alice.pgurl'), 'postgresql://alice/app_private_a')
     await writeFile(join(workspaceSecretDir, 'bob.pgurl'), 'postgresql://bob/app_private_b')
     users.set('alice', user('alice.pgurl'))
     users.set('bob', user('bob.pgurl'))
+    // GLOBAL_MAX is a total-client budget. With poolMax=2 and globalMax=2, exactly
+    // one workspace pool (2 clients) fits; a second pool (4 clients) exceeds the budget.
     const hostedRouter = router({
       pools: {
         ...topology(workspaceSecretDir).pools,
-        workspacePoolGlobalMax: 1
+        workspacePoolMax: 2,
+        workspacePoolGlobalMax: 2
       }
     })
 
     await expect(hostedRouter.resolveSession(request('alice'))).resolves.toBeTruthy()
     await expect(hostedRouter.resolveSession(request('bob'))).rejects.toThrow(/pool limit/i)
     expect(storageMocks.openSession).toHaveBeenCalledTimes(1)
+    await hostedRouter.close()
+  })
+
+  test('A3: admits floor(globalMax / poolMax) distinct workspace pools', async () => {
+    for (const name of ['alice', 'bob', 'carol']) {
+      await writeFile(join(workspaceSecretDir, `${name}.pgurl`), `postgresql://${name}/app_${name}`)
+      users.set(name, user(`${name}.pgurl`))
+    }
+    // poolMax=2, globalMax=4 -> at most 2 pools (4 clients); the third is refused.
+    const hostedRouter = router({
+      pools: {
+        ...topology(workspaceSecretDir).pools,
+        workspacePoolMax: 2,
+        workspacePoolGlobalMax: 4
+      }
+    })
+
+    await expect(hostedRouter.resolveSession(request('alice'))).resolves.toBeTruthy()
+    await expect(hostedRouter.resolveSession(request('bob'))).resolves.toBeTruthy()
+    await expect(hostedRouter.resolveSession(request('carol'))).rejects.toThrow(/pool limit/i)
+    expect(storageMocks.openSession).toHaveBeenCalledTimes(2)
     await hostedRouter.close()
   })
 
