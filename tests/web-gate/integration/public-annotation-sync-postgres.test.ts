@@ -6,7 +6,10 @@ import { gzipSync } from 'node:zlib'
 import { Pool } from 'pg'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
-import { PUBLIC_ANNOTATION_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
+import {
+  PUBLIC_ANNOTATION_MIGRATION_LEDGER,
+  PUBLIC_ANNOTATION_MIGRATIONS
+} from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresPublicAnnotationRepository } from '../../../src/main/storage/postgres/PostgresPublicAnnotationRepository'
 import {
@@ -29,7 +32,12 @@ describe.skipIf(!RUN_POSTGRES)('public annotation sync - PostgreSQL integration'
     pool = new Pool({ connectionString: process.env.VARLENS_PG_URL, max: 1 })
     // B3: the sync command provisions the public schema via a migration; mirror that
     // here since this test drives syncPublicAnnotationPayload directly.
-    await new PostgresMigrationRunner(pool, 'public', PUBLIC_ANNOTATION_MIGRATIONS).migrate()
+    await new PostgresMigrationRunner(
+      pool,
+      'public',
+      PUBLIC_ANNOTATION_MIGRATIONS,
+      PUBLIC_ANNOTATION_MIGRATION_LEDGER
+    ).migrate()
     root = await mkdtemp(join(tmpdir(), 'varlens-public-annotation-sync-'))
     await mkdir(join(root, 'vcf'), { recursive: true })
   })

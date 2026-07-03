@@ -2,9 +2,11 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { Client } from 'pg'
+import { Client, Pool } from 'pg'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
+import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
+import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import type { PostgresStorageSession } from '../../../src/main/storage/postgres/PostgresStorageSession'
 import { HostedUserDbRouter } from '../../../src/web/hosted-user-db-router'
 import type { HostedWebDbTopology } from '../../../src/web/topology'
@@ -84,6 +86,27 @@ describe.skipIf(!RUN_POSTGRES)('hosted user private DB routing - PostgreSQL inte
       join(workspaceSecretDir, 'bob.pgurl'),
       appUrl(process.env.VARLENS_PG_URL!, bobRole, bobPassword, bobDb)
     )
+
+    // Provision each fresh workspace DB to the app's migration head so the router's
+    // request-time migration-compat gate (A1) admits it, and grant the app role read
+    // access to the migrated schema.
+    for (const [database, role] of [
+      [aliceDb, aliceRole],
+      [bobDb, bobRole]
+    ]) {
+      const adminDbUrl = new URL(process.env.VARLENS_PG_URL!)
+      adminDbUrl.pathname = `/${database}`
+      const migratePool = new Pool({ connectionString: adminDbUrl.toString(), max: 1 })
+      try {
+        await new PostgresMigrationRunner(migratePool, 'public', POSTGRES_MIGRATIONS).migrate()
+        await migratePool.query(`GRANT USAGE ON SCHEMA public TO ${quoteIdent(role)}`)
+        await migratePool.query(
+          `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${quoteIdent(role)}`
+        )
+      } finally {
+        await migratePool.end()
+      }
+    }
 
     const users = new Map([
       [

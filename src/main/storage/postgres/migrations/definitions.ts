@@ -122,6 +122,10 @@ const PUBLIC_ANNOTATION_MIGRATION_FILES: readonly MigrationFile[] = [
   }
 ]
 
+// Separate ledger table so public-annotation versions (0015+) never appear in the
+// main app's schema_migrations, even when both run against the same schema in tests.
+export const PUBLIC_ANNOTATION_MIGRATION_LEDGER = 'public_annotation_schema_migrations'
+
 export const PUBLIC_ANNOTATION_MIGRATIONS: readonly PostgresMigration[] =
   PUBLIC_ANNOTATION_MIGRATION_FILES.map(({ version, name, fileName }) => {
     const sql = readMigrationSql(fileName)

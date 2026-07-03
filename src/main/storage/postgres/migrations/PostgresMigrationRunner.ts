@@ -13,13 +13,19 @@ type MigrationClient = Pick<PoolClient, 'query' | 'release'>
 
 export class PostgresMigrationRunner {
   private readonly schemaName: string
+  private readonly ledger: string
 
   constructor(
     private readonly pool: MigrationPool,
     private readonly schema: string,
-    private readonly migrations: readonly PostgresMigration[]
+    private readonly migrations: readonly PostgresMigration[],
+    // The migration ledger table. A separate track (e.g. the public annotation DB)
+    // uses its own ledger so its versions never appear in — and fail the validation
+    // of — the main app's `schema_migrations`, even when they share a schema.
+    ledgerTable = 'schema_migrations'
   ) {
     this.schemaName = quoteIdentifier(schema)
+    this.ledger = quoteIdentifier(ledgerTable)
   }
 
   async migrate(): Promise<PostgresMigrationResult> {
@@ -32,7 +38,7 @@ export class PostgresMigrationRunner {
       await this.acquireMigrationLocks(client)
       await client.query(`CREATE SCHEMA IF NOT EXISTS ${this.schemaName}`)
       await client.query(`
-        CREATE TABLE IF NOT EXISTS ${this.schemaName}."schema_migrations" (
+        CREATE TABLE IF NOT EXISTS ${this.schemaName}.${this.ledger} (
           version TEXT PRIMARY KEY,
           name TEXT NOT NULL,
           checksum TEXT NOT NULL,
@@ -42,7 +48,7 @@ export class PostgresMigrationRunner {
       `)
 
       const appliedResult = await client.query<MigrationRow>(
-        `SELECT version, checksum FROM ${this.schemaName}."schema_migrations" ORDER BY version`
+        `SELECT version, checksum FROM ${this.schemaName}.${this.ledger} ORDER BY version`
       )
       const applied = new Map(appliedResult.rows.map((row) => [row.version, row.checksum]))
       this.validateAppliedMigrations(applied)
@@ -58,7 +64,7 @@ export class PostgresMigrationRunner {
           await migration.afterApply(client, this.schema)
         }
         await client.query(
-          `INSERT INTO ${this.schemaName}."schema_migrations" (version, name, checksum, execution_ms)
+          `INSERT INTO ${this.schemaName}.${this.ledger} (version, name, checksum, execution_ms)
            VALUES ($1, $2, $3, $4)`,
           [migration.version, migration.name, migration.checksum, Date.now() - startedAt]
         )
