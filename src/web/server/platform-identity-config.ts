@@ -64,6 +64,28 @@ function requirePath(name: string, raw: string): string {
   return raw.length > 1 && raw.endsWith('/') ? raw.slice(0, -1) : raw
 }
 
+/**
+ * Provisioning / entitlements bearer tokens gate privileged upstream calls, so
+ * they must meet the same 32-byte strength floor the session secret enforces
+ * (see src/web/server/auth.ts). A non-empty-but-weak token is a
+ * misconfiguration we fail loudly on; an absent token keeps the feature off.
+ *
+ * A general secret must be at least 32 characters. A hex-encoded secret must
+ * additionally decode to at least 32 bytes (i.e. at least 64 hex characters),
+ * so a 32-hex-char/16-byte value is rejected even though it clears the raw
+ * character floor.
+ */
+function assertStrongPlatformToken(name: string, value: string): void {
+  const looksHex = /^[0-9a-fA-F]+$/.test(value)
+  const decodedBytes = looksHex && value.length % 2 === 0 ? value.length / 2 : null
+  const strongEnough = value.length >= 32 && (decodedBytes === null || decodedBytes >= 32)
+  if (!strongEnough) {
+    throw new Error(
+      `${name} must be at least 32 characters (or, if hex-encoded, decode to at least 32 bytes)`
+    )
+  }
+}
+
 function parseRequiredAmr(raw: string): string[] {
   const values = raw
     .split(',')
@@ -101,7 +123,13 @@ export function readPlatformIdentityConfig(
       : '/auth/platform/callback'
   )
   const entitlementsToken = env.VARLENS_PLATFORM_ENTITLEMENTS_TOKEN?.trim()
+  if (entitlementsToken !== undefined && entitlementsToken !== '') {
+    assertStrongPlatformToken('VARLENS_PLATFORM_ENTITLEMENTS_TOKEN', entitlementsToken)
+  }
   const provisioningToken = env.VARLENS_PLATFORM_PROVISIONING_TOKEN?.trim()
+  if (provisioningToken !== undefined && provisioningToken !== '') {
+    assertStrongPlatformToken('VARLENS_PLATFORM_PROVISIONING_TOKEN', provisioningToken)
+  }
 
   return {
     mode: 'platform',
