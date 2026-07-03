@@ -454,6 +454,71 @@ describe('platform identity OIDC start', () => {
   })
 })
 
+describe('platform identity opaque access tokens', () => {
+  test('completes login with an opaque access_token when access-token JWT verification is off', async () => {
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const idToken = signJwt({
+      ...basePayload(CLIENT_ID),
+      exp: nowSeconds + 600,
+      iat: nowSeconds - 60
+    })
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/.well-known/openid-configuration')) {
+        return new Response(
+          JSON.stringify({
+            issuer: ISSUER,
+            authorization_endpoint: `${ISSUER}/protocol/openid-connect/auth`,
+            token_endpoint: `${ISSUER}/protocol/openid-connect/token`,
+            jwks_uri: `${ISSUER}/protocol/openid-connect/certs`
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }
+      if (url.endsWith('/token')) {
+        // Opaque, non-JWT access token (single segment) — a real Keycloak
+        // reference token. Only the id_token is a JWT here.
+        return new Response(
+          JSON.stringify({ id_token: idToken, access_token: 'opaque-reference-token-abc123' }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }
+      if (url.endsWith('/certs')) {
+        return new Response(JSON.stringify({ keys: [publicJwk] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      }
+      throw new Error(`unexpected URL ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const service = new PlatformIdentityService({
+      mode: 'platform',
+      issuerUrl: ISSUER,
+      clientId: CLIENT_ID,
+      audience: AUDIENCE,
+      callbackPath: '/auth/platform/callback',
+      requiredAcr: REQUIRED_ACR,
+      requiredAmr: REQUIRED_AMR,
+      entitlementsUrl: 'http://ops.internal/api/identity/entitlements/varlens/dev',
+      requireHostedResource: false
+      // verifyAccessToken omitted → defaults to off
+    })
+
+    const result = await service.completeCallback({
+      request: {
+        protocol: 'https',
+        headers: { host: 'varlens-dev.example.test' }
+      } as never,
+      appPathPrefix: '',
+      code: 'code-1',
+      expectedNonce: 'nonce-1',
+      codeVerifier: 'verifier-1'
+    })
+
+    expect(result.subject).toBe('platform-subject-1')
+  })
+})
+
 describe('platform identity provisioning route', () => {
   test('is not reachable from the request-serving app (provisioning is CLI-only)', async () => {
     const app = fastify()

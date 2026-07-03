@@ -12,6 +12,17 @@ export interface PlatformIdentityConfig {
   entitlementsToken?: string
   provisioningToken?: string
   requireHostedResource: boolean
+  /**
+   * Whether to JWT-verify the OIDC access_token in addition to the id_token.
+   * Default false: many IdPs issue opaque (non-JWT) access tokens, which would
+   * otherwise fail the 3-segment JWT check and break login. The id_token is
+   * always verified; the access_token is only verified when an operator opts in
+   * (their IdP is known to issue RS256 JWT access tokens for this audience).
+   *
+   * Optional on the type so inline test configs may omit it; absent is treated
+   * as false. readPlatformIdentityConfig always sets it explicitly.
+   */
+  verifyAccessToken?: boolean
 }
 
 function hasValue(value: string | undefined): value is string {
@@ -142,7 +153,8 @@ export function readPlatformIdentityConfig(
     entitlementsUrl: entitlementsUrl.replace(/\/$/, ''),
     ...(entitlementsToken !== undefined && entitlementsToken !== '' ? { entitlementsToken } : {}),
     ...(provisioningToken !== undefined && provisioningToken !== '' ? { provisioningToken } : {}),
-    requireHostedResource: env.VARLENS_WEB_DB_TOPOLOGY === 'hosted'
+    requireHostedResource: env.VARLENS_WEB_DB_TOPOLOGY === 'hosted',
+    verifyAccessToken: env.VARLENS_PLATFORM_VERIFY_ACCESS_TOKEN === 'true'
   }
 }
 

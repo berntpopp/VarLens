@@ -483,12 +483,18 @@ export class PlatformIdentityService {
       requiredAmr: this.config.requiredAmr,
       expectedNonce: params.expectedNonce
     })
-    await this.verifyJwtWithJwks({
-      token: tokenResponse.access_token,
-      issuer: this.config.issuerUrl,
-      audience: this.config.audience,
-      discovery
-    })
+    // The id_token carries identity + MFA claims and is always verified. The
+    // access_token is only JWT-verified when explicitly enabled: many IdPs
+    // issue opaque (non-JWT) access tokens, which would otherwise fail the
+    // 3-segment JWT check and break an otherwise valid login.
+    if (this.config.verifyAccessToken === true) {
+      await this.verifyJwtWithJwks({
+        token: tokenResponse.access_token,
+        issuer: this.config.issuerUrl,
+        audience: this.config.audience,
+        discovery
+      })
+    }
     return { subject: requireStringClaim(idToken.payload, 'sub') }
   }
 
