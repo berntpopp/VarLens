@@ -7,6 +7,7 @@ import {
   isLikelyArgon2idHash,
   PostgresWebAuthService
 } from '../../../../src/web/auth/PostgresWebAuthService'
+import { PostgresPlatformUserStore } from '../../../../src/web/auth/PostgresPlatformUserStore'
 import {
   LOCKOUT_DURATION_MINUTES,
   MAX_FAILED_ATTEMPTS,
@@ -144,6 +145,14 @@ function newSvc(pool: FakePool, readPool?: FakePool): PostgresWebAuthService {
       : {}),
     schema: SCHEMA,
     passwordProvider: fakePasswordProvider
+  })
+}
+
+type StoreOpts = ConstructorParameters<typeof PostgresPlatformUserStore>[0]
+function newStore(pool: FakePool): PostgresPlatformUserStore {
+  return new PostgresPlatformUserStore({
+    pool: pool as unknown as StoreOpts['pool'],
+    schema: SCHEMA
   })
 }
 
@@ -390,7 +399,7 @@ describe('PostgresWebAuthService — provisioned user creation', () => {
 describe('PostgresWebAuthService — platform identity users', () => {
   it('adopts an unclaimed placeholder workspace as the platform subject', async () => {
     const pool = new FakePool()
-    const svc = newSvc(pool)
+    const store = newStore(pool)
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // no existing platform subject
     pool.enqueueResponse({
@@ -418,7 +427,7 @@ describe('PostgresWebAuthService — platform identity users', () => {
     })
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
 
-    const result = await svc.upsertPlatformUser({
+    const result = await store.upsertPlatformUser({
       username: 'keycloak-subject-1',
       displayName: 'Alice',
       role: ROLE_USER,
@@ -447,7 +456,7 @@ describe('PostgresWebAuthService — platform identity users', () => {
 
   it('refuses to adopt an active local user holding the secret ref and rolls back', async () => {
     const pool = new FakePool()
-    const svc = newSvc(pool)
+    const store = newStore(pool)
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // no existing platform subject by username
     pool.enqueueResponse({
@@ -465,7 +474,7 @@ describe('PostgresWebAuthService — platform identity users', () => {
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // ROLLBACK
 
     await expect(
-      svc.upsertPlatformUser({
+      store.upsertPlatformUser({
         username: 'keycloak-subject-1',
         displayName: 'Alice',
         role: ROLE_USER,
@@ -479,7 +488,7 @@ describe('PostgresWebAuthService — platform identity users', () => {
 
   it('rebinds an active local workspace holder when the operator names it explicitly', async () => {
     const pool = new FakePool()
-    const svc = newSvc(pool)
+    const store = newStore(pool)
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // no existing platform subject by username
     pool.enqueueResponse({
@@ -501,7 +510,7 @@ describe('PostgresWebAuthService — platform identity users', () => {
     })
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
 
-    const result = await svc.upsertPlatformUser({
+    const result = await store.upsertPlatformUser({
       username: 'keycloak-subject-1',
       displayName: 'Alice',
       role: ROLE_USER,
@@ -526,7 +535,7 @@ describe('PostgresWebAuthService — platform identity users', () => {
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // ROLLBACK
 
     await expect(
-      svc.upsertPlatformUser({
+      store.upsertPlatformUser({
         username: 'keycloak-subject-1',
         displayName: 'Admin',
         role: ROLE_USER,
@@ -557,7 +566,7 @@ describe('PostgresWebAuthService — platform identity users', () => {
     })
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
 
-    const result = await svc.upsertPlatformUser({
+    const result = await store.upsertPlatformUser({
       username: 'keycloak-subject-1',
       displayName: 'Alice',
       role: ROLE_USER,

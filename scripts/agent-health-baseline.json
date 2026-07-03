@@ -38,10 +38,10 @@
     },
     {
       "path": "src/shared/annotations/public-snapshot.ts",
-      "lines": 618,
+      "lines": 642,
       "threshold": 600,
       "category": "source",
-      "reason": "Web 11/Web 12 public annotation snapshot contract module; the file groups the Zod manifest schema, fail-closed public/private semantic validation, and redacted error formatting so public-snapshot acceptance tests exercise one boundary. It is intentionally close to the threshold after Prettier formatting; splitting schema fragments before the manifest contract stabilizes would make the safety rules harder to audit."
+      "reason": "Web 11/Web 12 public annotation snapshot contract module; the file groups the Zod manifest schema, fail-closed public/private semantic validation, and redacted error formatting so public-snapshot acceptance tests exercise one boundary. It is intentionally close to the threshold after Prettier formatting; splitting schema fragments before the manifest contract stabilizes would make the safety rules harder to audit. Baseline bumped 618->642 to match the hosted-DB-foundation review fix that added the inline bundle->public license matrix (fix(web): gate bundle->public promotion with an inline license matrix); the growth is the license-safety table, not new feature code, and splitting it would separate the license gate from the schema it guards."
     },
     {
       "path": "src/renderer/src/components/CaseList.vue",
@@ -161,13 +161,6 @@
       "threshold": 600,
       "category": "source",
       "reason": "existing shared contract surface; must not grow before contract split"
-    },
-    {
-      "path": "src/web/auth/PostgresWebAuthService.ts",
-      "lines": 616,
-      "threshold": 600,
-      "category": "source",
-      "reason": "Web auth service mirrors the desktop AuthService method surface while adding hosted-workspace metadata, Argon2id hash bootstrap validation, lockout handling, and session/workspace selection checks in one transaction-aware boundary. Upstream local-dev bootstrap support added the optional mustChangePassword control while this Web 11 branch was open. Splitting before the hosted auth contract stabilizes would hide the parity with the desktop service; future growth should extract query helpers or workspace-selection support first."
     }
   ]
 }

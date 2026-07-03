@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { getPostgresStorageConfig } from '../main/storage/config'
 import { createPostgresStorageSession } from '../main/storage/postgres/createPostgresStorageSession'
+import { PostgresPlatformUserStore } from './auth/PostgresPlatformUserStore'
 import { PostgresWebAuthService } from './auth/PostgresWebAuthService'
 
 interface Options {
@@ -112,7 +113,11 @@ async function main(): Promise<void> {
             options.createdBy
           )
     if (options.privateDbSecretRef !== undefined) {
-      await auth.assignPrivateDatabase(
+      const platformStore = new PostgresPlatformUserStore({
+        pool: session.getPool(),
+        schema: config.schema
+      })
+      await platformStore.assignPrivateDatabase(
         options.username,
         options.privateDbSecretRef,
         options.publicAnnotationSnapshotId
