@@ -166,4 +166,39 @@ describe('HostedUserDbRouter', () => {
     expect(storageMocks.openSession).toHaveBeenCalledTimes(1)
     await hostedRouter.close()
   })
+
+  test('A1: opens the workspace pool with request-time migration-compat validation', async () => {
+    await writeFile(join(workspaceSecretDir, 'alice.pgurl'), 'postgresql://alice/app_private_a')
+    users.set('alice', user('alice.pgurl'))
+    const hostedRouter = router()
+
+    await hostedRouter.resolveSession(request('alice'))
+
+    expect(storageMocks.openSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ validateMigrationCompat: true })
+    )
+    await hostedRouter.close()
+  })
+
+  test('A1: fails closed and does not cache when the workspace migration is incompatible', async () => {
+    await writeFile(join(workspaceSecretDir, 'alice.pgurl'), 'postgresql://alice/app_private_a')
+    users.set('alice', user('alice.pgurl'))
+    const hostedRouter = router()
+
+    storageMocks.openSession.mockRejectedValueOnce(
+      new Error('workspace migration incompatible: expected head 0014, found 0001')
+    )
+
+    await expect(hostedRouter.resolveSession(request('alice'))).rejects.toThrow(
+      /migration.*incompatible/i
+    )
+
+    // A controlled provisioning fix must be retryable — the failed session is not cached.
+    await expect(hostedRouter.resolveSession(request('alice'))).resolves.toEqual(
+      expect.objectContaining({ workspace: expect.objectContaining({ kind: 'postgres' }) })
+    )
+    expect(storageMocks.openSession).toHaveBeenCalledTimes(2)
+    await hostedRouter.close()
+  })
 })

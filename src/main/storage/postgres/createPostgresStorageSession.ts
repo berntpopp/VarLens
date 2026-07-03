@@ -1,5 +1,6 @@
 import { Pool } from 'pg'
 
+import { assertPostgresMigrationCompatible } from './assertMigrationCompatible'
 import { buildPostgresPoolConfig, type PostgresStorageConfig } from '../config'
 import { classifyPostgresFailureMessage } from './PostgresHealthDiagnostics'
 import { PostgresStorageSession } from './PostgresStorageSession'
@@ -56,9 +57,26 @@ export async function createPostgresStorageSession(
 
 export async function openPostgresStorageSessionWithoutMigrating(
   config: PostgresStorageConfig,
-  options: { publicAnnotations?: PostgresPublicAnnotationRepository } = {}
+  options: {
+    publicAnnotations?: PostgresPublicAnnotationRepository
+    validateMigrationCompat?: boolean
+  } = {}
 ): Promise<PostgresStorageSession> {
   const pool = new Pool(buildPostgresPoolConfig(config))
+
+  if (options.validateMigrationCompat === true) {
+    try {
+      await assertPostgresMigrationCompatible(pool, config.schema)
+    } catch (error) {
+      try {
+        await pool.end()
+      } catch {
+        // Ignore cleanup failures; the original compat error is more useful.
+      }
+      throw toPostgresFailureError(error)
+    }
+  }
+
   return new PostgresStorageSession({
     config,
     pool: wrapPoolForCounters(pool),
