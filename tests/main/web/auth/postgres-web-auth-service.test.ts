@@ -525,7 +525,7 @@ describe('PostgresWebAuthService — platform identity users', () => {
 
   it('refuses to adopt an admin workspace row', async () => {
     const pool = new FakePool()
-    const svc = newSvc(pool)
+    const store = newStore(pool)
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // no existing platform subject
     pool.enqueueResponse({
@@ -547,7 +547,7 @@ describe('PostgresWebAuthService — platform identity users', () => {
 
   it('maps revoked platform resource status to the hosted disabled DB status', async () => {
     const pool = new FakePool()
-    const svc = newSvc(pool)
+    const store = newStore(pool)
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
     pool.enqueueResponse({
       rows: [{ password_hash: 'platform-identity-disabled-local-password' }],

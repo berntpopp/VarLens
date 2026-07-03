@@ -17,7 +17,10 @@
  */
 import type { Pool } from 'pg'
 
-import { defaultPasswordProvider, type PasswordProvider } from '../../main/auth/providers/argon2-provider'
+import {
+  defaultPasswordProvider,
+  type PasswordProvider
+} from '../../main/auth/providers/argon2-provider'
 import {
   LOCKOUT_DURATION_MINUTES,
   MAX_FAILED_ATTEMPTS,
@@ -65,7 +68,10 @@ import {
 } from './argon2-phc-validation'
 
 // Re-exported so the IPC/test import surface stays anchored on this module.
-export { isLikelyArgon2idHash, assertArgon2idHashMatchesProviderPolicy } from './argon2-phc-validation'
+export {
+  isLikelyArgon2idHash,
+  assertArgon2idHashMatchesProviderPolicy
+} from './argon2-phc-validation'
 // Cross-backend User + AuthResult shape: both implementations import the same
 // types so shape parity is enforced at compile time.
 import type { AuthResult, User } from '../../shared/auth/types'
