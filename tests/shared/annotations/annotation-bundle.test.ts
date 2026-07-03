@@ -2,11 +2,42 @@ import { describe, expect, test } from 'vitest'
 
 import {
   assertAnnotationBundleManifest,
+  bundleLicenseClearedFieldKeys,
+  licenseClearedFieldKey,
   validateAnnotationBundleManifest,
   type AnnotationBundleManifest
 } from '../../../src/shared/annotations/annotation-bundle'
 
 const checksum = (char: string): string => `sha256:${char.repeat(64)}`
+
+function licenseMatrix(matrixChecksum: string): AnnotationBundleManifest['licenseMatrix'] {
+  return {
+    matrixId: 'varlens_public_snapshot_policy',
+    policyVersion: '2026-06-22',
+    matrixChecksum,
+    generatedAt: '2026-06-22T09:00:00.000Z',
+    entries: [
+      {
+        entryId: 'vep_consequence_policy',
+        sourceId: 'vep',
+        fieldName: 'consequence',
+        sourceUrl: 'https://example.org/vep',
+        licenseId: 'ensembl_vep_public',
+        licenseUrl: 'https://example.org/vep-license',
+        archivedTextChecksum: checksum('c'),
+        redistributionClass: 'public_redistributable',
+        clinicalUse: 'allowed',
+        attribution: 'Ensembl VEP',
+        derivativeInheritance: 'none',
+        shareAlike: false,
+        promotionEligibility: 'public_snapshot',
+        reviewer: 'license_review',
+        reviewedAt: '2026-06-22T09:30:00.000Z',
+        evidenceChecksum: checksum('d')
+      }
+    ]
+  }
+}
 
 function validBundle(): AnnotationBundleManifest {
   return {
@@ -22,6 +53,7 @@ function validBundle(): AnnotationBundleManifest {
       manifestChecksum: checksum('b'),
       licenseMatrixChecksum: checksum('e')
     },
+    licenseMatrix: licenseMatrix(checksum('e')),
     files: [
       {
         role: 'manifest',
@@ -351,6 +383,37 @@ describe('annotation bundle manifest contract', () => {
 
     expect(() => assertAnnotationBundleManifest(bundle)).toThrow(
       /Invalid annotation bundle manifest/
+    )
+  })
+
+  test('A2: rejects a bundle whose inline license matrix checksum does not match the reference', () => {
+    const bundle = validBundle()
+    bundle.licenseMatrix = licenseMatrix(checksum('f'))
+
+    const result = validateAnnotationBundleManifest(bundle)
+
+    expect(result.ok).toBe(false)
+    expect(result.errors.join('\n')).toContain(
+      'licenseMatrix.matrixChecksum must match publicSnapshot.licenseMatrixChecksum'
+    )
+  })
+
+  test('A2: bundleLicenseClearedFieldKeys returns only public-cleared fields', () => {
+    const bundle = validBundle()
+    bundle.licenseMatrix.entries.push({
+      ...bundle.licenseMatrix.entries[0],
+      entryId: 'clinvar_restricted_policy',
+      sourceId: 'clinvar_current',
+      fieldName: 'clinical_significance',
+      redistributionClass: 'restricted',
+      clinicalUse: 'separate_license'
+    })
+
+    const cleared = bundleLicenseClearedFieldKeys(bundle)
+
+    expect(cleared.has(licenseClearedFieldKey('vep', 'consequence'))).toBe(true)
+    expect(cleared.has(licenseClearedFieldKey('clinvar_current', 'clinical_significance'))).toBe(
+      false
     )
   })
 })

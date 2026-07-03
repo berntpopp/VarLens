@@ -132,7 +132,55 @@ function basePayload(): PublicAnnotationSyncPayload {
     },
     files: [],
     variantRecordSources: [],
+    licenseClearedFieldKeys: ALL_PUBLIC_SAFE_FIELD_KEYS,
     storedManifest: validPublicSnapshotManifest()
+  }
+}
+
+// The `(sourceId, fieldName)` keys for every field on PUBLIC_SAFE_CSQ_FIELDS,
+// as a bundle's inline license matrix would clear them.
+const ALL_PUBLIC_SAFE_FIELD_KEYS = [
+  'vep::consequence',
+  'vep::impact',
+  'vep::gene_symbol',
+  'vep::gene_id',
+  'vep::transcript_id',
+  'vep::hgvsc',
+  'vep::hgvsp',
+  'clinvar_current::clinical_significance',
+  'clinvar_current::review_status',
+  'clinvar_current::condition',
+  'clinvar_current::allele_id'
+]
+
+function bundleLicenseMatrixFixture(matrixChecksum: string): Record<string, unknown> {
+  const entry = (sourceId: string, fieldName: string): Record<string, unknown> => ({
+    entryId: `${sourceId}_${fieldName}_policy`,
+    sourceId,
+    fieldName,
+    sourceUrl: 'https://example.org/source',
+    licenseId: 'public_domain',
+    licenseUrl: 'https://example.org/license',
+    archivedTextChecksum: checksum('c'),
+    redistributionClass: 'public_redistributable',
+    clinicalUse: 'allowed',
+    attribution: 'Public source',
+    derivativeInheritance: 'none',
+    shareAlike: false,
+    promotionEligibility: 'public_snapshot',
+    reviewer: 'license_review',
+    reviewedAt: '2026-06-22T09:30:00.000Z',
+    evidenceChecksum: checksum('d')
+  })
+  return {
+    matrixId: 'varlens_public_snapshot_policy',
+    policyVersion: '2026-06-22',
+    matrixChecksum,
+    generatedAt: '2026-06-22T09:00:00.000Z',
+    entries: ALL_PUBLIC_SAFE_FIELD_KEYS.map((key) => {
+      const [sourceId, fieldName] = key.split('::')
+      return entry(sourceId, fieldName)
+    })
   }
 }
 
@@ -207,6 +255,7 @@ describe('sync-public-annotations command helpers', () => {
         manifestChecksum: checksum('b'),
         licenseMatrixChecksum: checksum('e')
       },
+      licenseMatrix: bundleLicenseMatrixFixture(checksum('e')),
       files: [
         {
           role: 'manifest',
@@ -343,6 +392,53 @@ describe('sync-public-annotations command helpers', () => {
     expect(variantInsert?.values).not.toContain('"0/1"')
     expect(variantInsert?.values).not.toContain('User_Tag')
     expect(variantInsert?.values).not.toContain('"manual-review"')
+  })
+
+  test('A2: fails closed on fields the license matrix does not clear (drops ClinVar rows)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'varlens-sync-public-a2-'))
+    await mkdir(join(root, 'vcf'), { recursive: true })
+    const vcfPath = join(root, 'vcf/snv.vcf.gz')
+    await writeFile(
+      vcfPath,
+      gzipSync(
+        [
+          '##fileformat=VCFv4.3',
+          '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature|HGVSc|HGVSp|ClinVarCurrent_CLNSIG|ClinVarCurrent_CLNREVSTAT|ClinVarCurrent_CLNDN|ClinVarCurrent_ALLELEID">',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
+          '1\t12345\t.\tA\tG\t.\tPASS\tCSQ=G|missense_variant|MODERATE|GENE1|ENSG0001|ENST0001|c.1A>G|p.Lys1Arg|Pathogenic|reviewed_by_expert_panel|Disease one|123',
+          ''
+        ].join('\n')
+      )
+    )
+    // Only the seven VEP fields are license-cleared; the four ClinVar fields are not.
+    const clearedVepOnly = ALL_PUBLIC_SAFE_FIELD_KEYS.filter((key) => key.startsWith('vep::'))
+    const payload: PublicAnnotationSyncPayload = {
+      ...basePayload(),
+      schemaVersion: 'varlens.annotation-bundle.v1',
+      privateCaseData: false,
+      sourcePrivateCaseDataRedacted: true,
+      snapshot: {
+        ...basePayload().snapshot,
+        bundleId: 'bundle-2026-06-22-aaaaaaaaaaaa',
+        mappingVersion: 'annotation-bundle-map-v1'
+      },
+      variantRecordSources: [{ role: 'snv_vcf', absolutePath: vcfPath }],
+      licenseClearedFieldKeys: clearedVepOnly
+    }
+    const client = new FakeClient()
+    const pool = { connect: async () => client }
+
+    // 7 VEP fields written, 0 ClinVar fields (matrix did not clear them).
+    await expect(syncPublicAnnotationPayload(pool, payload)).resolves.toStrictEqual({
+      variantRecordCount: 7
+    })
+
+    const variantInsert = client.queries.find((query) =>
+      query.text.includes('INSERT INTO public_annotation_variant_records')
+    )
+    expect(variantInsert?.values).toContain('consequence')
+    expect(variantInsert?.values).not.toContain('clinical_significance')
+    expect(variantInsert?.values).not.toContain('"Pathogenic"')
   })
 
   test('imports symbolic SV STR and breakend public keys while rejecting multi-alt keys', async () => {
