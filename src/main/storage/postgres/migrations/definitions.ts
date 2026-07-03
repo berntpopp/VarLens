@@ -93,6 +93,24 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigration[] = MIGRATION_FILES
   }
 )
 
+// A5a: the hosted CONTROL DB stores only routing/auth/audit/operational state and
+// must not receive case-data DDL (cases, variants, workflow, search, cohort). These
+// case-data migration versions are filtered out for the control-DB migration run.
+const CASE_DATA_MIGRATION_VERSIONS = new Set([
+  '0001', // create_cases
+  '0002', // create_case_metadata
+  '0003', // create_variants
+  '0004', // generated_search_documents
+  '0005', // create_workflow_tables (+ filter/metric seeds)
+  '0007', // perf_indexes (on variants)
+  '0009', // idx_variants_coords
+  '0010' // cohort_summary
+])
+
+export const CONTROL_DB_MIGRATIONS: readonly PostgresMigration[] = POSTGRES_MIGRATIONS.filter(
+  (migration) => !CASE_DATA_MIGRATION_VERSIONS.has(migration.version)
+)
+
 // Migrations for the dedicated public annotation database. Kept OUT of
 // POSTGRES_MIGRATIONS so the public_annotation_* schema is never created in
 // workspace/control DBs; applied only by the sync-public-annotations command.
