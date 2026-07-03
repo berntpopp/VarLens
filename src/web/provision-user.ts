@@ -24,23 +24,29 @@ function readArg(args: string[], name: string): string | undefined {
 }
 
 function readCredential(args: string[]): Options['credential'] {
+  // B4b: an inline --password value is visible in process listings and shell
+  // history. Refuse it explicitly and require a file- or hash-based secret source.
+  if (args.includes('--password')) {
+    throw new Error(
+      'Inline --password is not supported (it leaks via process listings and shell history). ' +
+        'Use --password-file, --password-hash, or --password-hash-file.'
+    )
+  }
   const inline = readArg(args, '--password-hash')
   const file = readArg(args, '--password-hash-file')
-  const password = readArg(args, '--password')
   const passwordFile = readArg(args, '--password-file')
-  const provided = [inline, file, password, passwordFile].filter((value) => value !== undefined)
+  const provided = [inline, file, passwordFile].filter((value) => value !== undefined)
   if (provided.length !== 1) {
     throw new Error(
-      'Provide exactly one of --password-hash, --password-hash-file, --password, or --password-file'
+      'Provide exactly one of --password-hash, --password-hash-file, or --password-file'
     )
   }
   if (inline !== undefined) return { kind: 'hash', value: inline.trim() }
   if (file !== undefined) return { kind: 'hash', value: readFileSync(file, 'utf8').trim() }
-  if (password !== undefined) return { kind: 'password', value: password }
   return { kind: 'password', value: readFileSync(passwordFile as string, 'utf8').trim() }
 }
 
-function parseOptions(args: string[]): Options {
+export function parseOptions(args: string[]): Options {
   const username = readArg(args, '--username')?.trim()
   const displayName = readArg(args, '--display-name')?.trim()
   const createdBy = readArg(args, '--created-by')?.trim() ?? 'admin'
