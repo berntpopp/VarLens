@@ -47,7 +47,7 @@ import { buildReadinessReport } from './readiness'
 import { registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
-import { readWebDbTopology } from './topology'
+import { legacyPgUrlWarning, readWebDbTopology } from './topology'
 import {
   type AppMetrics,
   createAppMetricsFromEnv,
@@ -128,6 +128,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     }
   })
   const metrics = options.metrics ?? createAppMetricsFromEnv()
+  const legacyWarning = legacyPgUrlWarning(topology)
+  if (legacyWarning !== null) {
+    app.log.warn({ env: legacyWarning.env }, legacyWarning.msg)
+  }
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id)
   })

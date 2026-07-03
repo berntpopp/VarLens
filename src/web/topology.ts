@@ -105,6 +105,22 @@ function requireAbsoluteDirectoryEnv(env: NodeJS.ProcessEnv, envName: string): s
   return value
 }
 
+/**
+ * Hosted topology ignores the legacy single-DB VARLENS_PG_URL (it routes
+ * through the explicit control/workspace URLs). Setting it under hosted mode is
+ * a silent no-op that masks a misconfiguration, so boot emits a warning. Pure
+ * helper so the decision is unit-testable without booting the server.
+ */
+export function legacyPgUrlWarning(topology: WebDbTopology): { env: string; msg: string } | null {
+  if (topology.mode !== 'hosted' || !topology.legacySinglePgUrlPresent) return null
+  return {
+    env: 'VARLENS_PG_URL',
+    msg:
+      'VARLENS_PG_URL is set under hosted topology but is ignored; hosted mode routes through ' +
+      'VARLENS_CONTROL_STATE_PG_URL / VARLENS_CONTROL_RO_PG_URL. Remove VARLENS_PG_URL to avoid confusion.'
+  }
+}
+
 export function assertSafeWorkspaceSecretRef(secretRef: string): void {
   if (!hasValue(secretRef)) {
     throw new Error('workspace secret ref must not be blank')

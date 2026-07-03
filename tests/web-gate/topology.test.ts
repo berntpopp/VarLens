@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest'
 
-import { assertSafeWorkspaceSecretRef, readWebDbTopology } from '../../src/web/topology'
+import {
+  assertSafeWorkspaceSecretRef,
+  legacyPgUrlWarning,
+  readWebDbTopology
+} from '../../src/web/topology'
 
 describe('web DB topology contract', () => {
   test('defaults to the existing single-Postgres topology', () => {
@@ -101,6 +105,33 @@ describe('web DB topology contract', () => {
         VARLENS_WORKSPACE_POOL_MAX: '0'
       })
     ).toThrow(/VARLENS_WORKSPACE_POOL_MAX/i)
+  })
+
+  test('flags a legacy VARLENS_PG_URL under hosted topology for a boot warning', () => {
+    const topology = readWebDbTopology({
+      VARLENS_WEB_DB_TOPOLOGY: 'hosted',
+      VARLENS_CONTROL_RO_PG_URL: 'postgresql://control-ro/db',
+      VARLENS_CONTROL_STATE_PG_URL: 'postgresql://control-state/db',
+      VARLENS_WORKSPACE_DB_SECRET_DIR: '/var/run/varlens/workspaces',
+      VARLENS_PG_URL: 'postgresql://legacy-single/db'
+    })
+
+    expect(topology).toMatchObject({ mode: 'hosted', legacySinglePgUrlPresent: true })
+    const warning = legacyPgUrlWarning(topology)
+    expect(warning).not.toBeNull()
+    expect(warning?.env).toBe('VARLENS_PG_URL')
+    expect(warning?.msg).toMatch(/ignored/i)
+  })
+
+  test('does not warn when no legacy VARLENS_PG_URL is present', () => {
+    expect(legacyPgUrlWarning({ mode: 'single' })).toBeNull()
+    const hosted = readWebDbTopology({
+      VARLENS_WEB_DB_TOPOLOGY: 'hosted',
+      VARLENS_CONTROL_RO_PG_URL: 'postgresql://control-ro/db',
+      VARLENS_CONTROL_STATE_PG_URL: 'postgresql://control-state/db',
+      VARLENS_WORKSPACE_DB_SECRET_DIR: '/var/run/varlens/workspaces'
+    })
+    expect(legacyPgUrlWarning(hosted)).toBeNull()
   })
 
   test('rejects unsafe workspace secret refs', () => {
