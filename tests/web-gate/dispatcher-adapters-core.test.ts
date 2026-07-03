@@ -402,6 +402,75 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     await app.close()
   })
 
+  test('C1: an import returning warnings (non-empty errors[]) on HTTP 200 counts as success', async () => {
+    const { deps } = makeDeps()
+    const metrics = new AppMetrics({ app: 'varlens', environment: 'dev' })
+    deps.metrics = metrics
+    const app = fastify()
+    app.setValidatorCompiler(validatorCompiler)
+    app.setSerializerCompiler(serializerCompiler)
+    registerRequestMetrics(app, metrics)
+    registerDispatcher(app, deps, {
+      'import:start': {
+        async handle() {
+          // ImportResult with skipped rows: errors[] is a summary array, not a failure.
+          return {
+            caseId: 1,
+            variantCount: 10,
+            skipped: 2,
+            errors: ['Line 5: malformed row'],
+            elapsed: 5
+          }
+        }
+      }
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/import/start',
+      payload: { args: ['web-upload:x/case.vcf', 'Case A'] }
+    })
+    expect(res.statusCode).toBe(200)
+
+    const text = metrics.metricsText()
+    expect(text).toMatch(/operation="import",result="success"/)
+    expect(text).not.toMatch(/operation="import",result="error"/)
+    await app.close()
+  })
+
+  test('C2: import file-picker RPCs do not inflate the import operation metric', async () => {
+    const { deps } = makeDeps()
+    const metrics = new AppMetrics({ app: 'varlens', environment: 'dev' })
+    deps.metrics = metrics
+    const app = fastify()
+    app.setValidatorCompiler(validatorCompiler)
+    app.setSerializerCompiler(serializerCompiler)
+    registerRequestMetrics(app, metrics)
+    registerDispatcher(app, deps, {
+      'import:selectFile': {
+        async handle() {
+          return null
+        }
+      },
+      'import:start': {
+        async handle() {
+          return { caseId: 1, variantCount: 1, skipped: 0, errors: [], elapsed: 1 }
+        }
+      }
+    })
+
+    await app.inject({ method: 'POST', url: '/api/import/selectFile', payload: { args: [] } })
+    expect(metrics.metricsText()).not.toMatch(/operation="import"/)
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/import/start',
+      payload: { args: ['web-upload:x/case.vcf', 'Case'] }
+    })
+    expect(metrics.metricsText()).toContain('operation="import",result="success"')
+    await app.close()
+  })
+
   test('dispatcher audits successful web writes but does not expose audit append as API route', async () => {
     const { deps, writeExecute } = makeDeps()
     const app = fastify()

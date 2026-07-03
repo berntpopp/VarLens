@@ -145,10 +145,17 @@ async function applyDevApiLatency(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, delayMs))
 }
 
+// C2: only the actual import/execute methods count toward the operation metric.
+// File pickers, previews, cancel, and zip helpers must NOT inflate import counts.
+const OPERATION_METRIC_KEYS: Record<string, OperationMetricName> = {
+  'import:start': 'import',
+  'import:startMultiFile': 'import',
+  'import:startAnnotationBundle': 'import',
+  'batch-import:start': 'batch-import'
+}
+
 function operationMetricForKey(key: string): OperationMetricName | undefined {
-  if (key.startsWith('batch-import:')) return 'batch-import'
-  if (key.startsWith('import:')) return 'import'
-  return undefined
+  return OPERATION_METRIC_KEYS[key]
 }
 
 function recordDispatcherOperationMetrics(params: {
@@ -170,8 +177,11 @@ function recordDispatcherOperationMetrics(params: {
 function resultLooksLikeFailure(result: unknown): boolean {
   if (result === null || typeof result !== 'object') return false
   const body = result as Record<string, unknown>
+  // C1: key failure on the SerializableError contract (error/code strings on a 4xx/5xx
+  // body), NOT on `errors[]`. ImportResult.errors is a summary array that is routinely
+  // non-empty on a successful (HTTP 200) import with skipped/malformed rows, so treating
+  // it as failure miscounts successful imports as errors.
   if (typeof body.error === 'string' && body.error.trim() !== '') return true
-  if (Array.isArray(body.errors) && body.errors.length > 0) return true
   return typeof body.code === 'string' && body.code.trim() !== ''
 }
 
