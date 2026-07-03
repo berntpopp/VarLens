@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 const storageMocks = vi.hoisted(() => ({
   openSession: vi.fn(),
-  opened: [] as Array<{ url: string; close: ReturnType<typeof vi.fn> }>
+  opened: [] as Array<{
+    url: string
+    close: ReturnType<typeof vi.fn>
+    poolState: { totalCount: number; idleCount: number }
+  }>
 }))
 
 vi.mock('../../src/main/storage/postgres/createPostgresStorageSession', () => ({
@@ -59,7 +63,8 @@ describe('HostedUserDbRouter', () => {
     storageMocks.openSession.mockReset()
     storageMocks.openSession.mockImplementation(async (config: { url: string; schema: string }) => {
       const close = vi.fn()
-      storageMocks.opened.push({ url: config.url, close })
+      const poolState = { totalCount: 0, idleCount: 0 }
+      storageMocks.opened.push({ url: config.url, close, poolState })
       return {
         workspace: {
           kind: 'postgres',
@@ -69,6 +74,7 @@ describe('HostedUserDbRouter', () => {
         },
         capabilities: { backend: 'postgres' },
         close,
+        getPool: () => poolState,
         listCases: vi.fn(),
         getReadExecutor: vi.fn(),
         getWriteExecutor: vi.fn(),
@@ -224,5 +230,38 @@ describe('HostedUserDbRouter', () => {
     )
     expect(storageMocks.openSession).toHaveBeenCalledTimes(2)
     await hostedRouter.close()
+  })
+
+  test('A4: does not tear down a workspace pool with in-flight clients; re-arms instead', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await writeFile(join(workspaceSecretDir, 'alice.pgurl'), 'postgresql://alice/app_private_a')
+      users.set('alice', user('alice.pgurl'))
+      const hostedRouter = router({
+        pools: { ...topology(workspaceSecretDir).pools, workspacePoolIdleMs: 1000 }
+      })
+
+      const session = await hostedRouter.resolveSession(request('alice'))
+      const opened = storageMocks.opened[0]!
+
+      // A borrowed (non-idle) client is in flight when the idle timer fires.
+      opened.poolState.totalCount = 1
+      opened.poolState.idleCount = 0
+      await vi.advanceTimersByTimeAsync(1001)
+      expect(opened.close).not.toHaveBeenCalled()
+      // Still cached and reused, not reopened.
+      expect(await hostedRouter.resolveSession(request('alice'))).toBe(session)
+      expect(storageMocks.openSession).toHaveBeenCalledTimes(1)
+
+      // Once the pool is fully idle, the next idle window tears it down.
+      opened.poolState.totalCount = 1
+      opened.poolState.idleCount = 1
+      await vi.advanceTimersByTimeAsync(1001)
+      expect(opened.close).toHaveBeenCalledTimes(1)
+
+      await hostedRouter.close()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
