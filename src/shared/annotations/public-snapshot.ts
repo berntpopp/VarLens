@@ -189,6 +189,38 @@ const LicenseMatrixEntrySchema = z
   })
   .strict()
 
+/**
+ * The license matrix embedded in public snapshots (and, per A2, inlined into
+ * annotation bundles) so a field can be validated as license-cleared before it is
+ * published to the shared public annotation DB.
+ */
+export const LicenseMatrixSchema = z
+  .object({
+    matrixId: z.string().regex(FIELD_NAME_PATTERN),
+    policyVersion: z.string().min(1),
+    matrixChecksum: z.string().regex(CHECKSUM_PATTERN),
+    generatedAt: z.string().datetime({ offset: true }),
+    entries: z.array(LicenseMatrixEntrySchema).min(1)
+  })
+  .strict()
+
+export type LicenseMatrixEntry = z.infer<typeof LicenseMatrixEntrySchema>
+export type LicenseMatrix = z.infer<typeof LicenseMatrixSchema>
+
+/**
+ * Fail-closed public-clearance test for a single license-matrix entry. A field may
+ * only be promoted to the public annotation DB when its entry passes this policy.
+ */
+export function isPublicClearedMatrixEntry(entry: {
+  redistributionClass: z.infer<typeof RedistributionClassSchema>
+  clinicalUse: z.infer<typeof ClinicalUseSchema>
+  derivativeInheritance: z.infer<typeof DerivativeInheritanceSchema>
+  shareAlike: boolean
+  promotionEligibility: z.infer<typeof PromotionEligibilitySchema>
+}): boolean {
+  return publicCompatibleMatrixPolicy(entry)
+}
+
 export const PublicAnnotationSourceSchema = z
   .object({
     sourceId: z.string().regex(FIELD_NAME_PATTERN),
@@ -236,15 +268,7 @@ export const PublicAnnotationSnapshotManifestSchema = z
     genomeBuild: z.string().min(1),
     mappingVersion: z.string().min(1),
     licenseGate: LicenseGateSchema,
-    licenseMatrix: z
-      .object({
-        matrixId: z.string().regex(FIELD_NAME_PATTERN),
-        policyVersion: z.string().min(1),
-        matrixChecksum: z.string().regex(CHECKSUM_PATTERN),
-        generatedAt: z.string().datetime({ offset: true }),
-        entries: z.array(LicenseMatrixEntrySchema).min(1)
-      })
-      .strict(),
+    licenseMatrix: LicenseMatrixSchema,
     mutableLatest: z.literal(false),
     privacy: z
       .object({

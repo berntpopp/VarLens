@@ -3,9 +3,10 @@ import { open } from 'node:fs/promises'
 import { createInterface } from 'node:readline'
 import { createGunzip } from 'node:zlib'
 
-import type {
-  AnnotationBundleFile,
-  AnnotationBundleManifest
+import {
+  licenseClearedFieldKey,
+  type AnnotationBundleFile,
+  type AnnotationBundleManifest
 } from '../shared/annotations/annotation-bundle'
 
 export interface PublicVariantRecordSource {
@@ -29,6 +30,12 @@ export interface PublicVariantRecordContext {
   bundleId: string
   publicSnapshotId: string
   mappingVersion: string
+  /**
+   * A2: `(sourceId, fieldName)` keys the bundle's inline license matrix cleared for
+   * public promotion (see `bundleLicenseClearedFieldKeys`). A structurally-safe CSQ
+   * field is written only when it is also present here — fail closed otherwise.
+   */
+  licenseClearedFieldKeys: ReadonlySet<string>
 }
 
 interface FieldMapping {
@@ -101,6 +108,15 @@ export async function* extractPublicVariantRecords(
     if (csq === null) continue
 
     for (const mapping of PUBLIC_SAFE_CSQ_FIELDS) {
+      // A2: fail closed — never publish a field the bundle's license matrix has not
+      // cleared, even if it is on the structural PUBLIC_SAFE_CSQ_FIELDS allowlist.
+      if (
+        !context.licenseClearedFieldKeys.has(
+          licenseClearedFieldKey(mapping.sourceId, mapping.fieldName)
+        )
+      ) {
+        continue
+      }
       const value = csq.get(mapping.csqField)
       if (!hasPublicValue(value)) continue
 
