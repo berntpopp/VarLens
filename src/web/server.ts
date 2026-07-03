@@ -28,6 +28,7 @@ import { Pool } from 'pg'
 
 import { buildPostgresPoolConfig, getPostgresStorageConfig } from '../main/storage/config'
 import { createPostgresStorageSession } from '../main/storage/postgres/createPostgresStorageSession'
+import { CONTROL_DB_MIGRATIONS } from '../main/storage/postgres/migrations/definitions'
 import { PostgresPublicAnnotationRepository } from '../main/storage/postgres/PostgresPublicAnnotationRepository'
 import type { PostgresStorageSession } from '../main/storage/postgres/PostgresStorageSession'
 import type { StorageSession } from '../main/storage/session'
@@ -119,7 +120,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerRequestMetrics(app, metrics)
   await registerWebRateLimit(app)
 
-  const session: PostgresStorageSession = await createPostgresStorageSession(pgConfig)
+  // A5a: the hosted control DB holds only routing/auth/audit state, so it runs the
+  // control-scoped migration set (no case-data DDL). Desktop/single-DB web runs the full set.
+  const session: PostgresStorageSession = await createPostgresStorageSession(
+    pgConfig,
+    topology.mode === 'hosted' ? { migrations: CONTROL_DB_MIGRATIONS } : {}
+  )
   // Share the storage session's pool with the auth service so we open
   // exactly one state-capable control connection pool per process. The public getPool()
   // accessor (added in the QA round on Step 4) makes this contract

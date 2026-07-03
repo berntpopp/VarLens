@@ -6,12 +6,16 @@ import { classifyPostgresFailureMessage } from './PostgresHealthDiagnostics'
 import { PostgresStorageSession } from './PostgresStorageSession'
 import { POSTGRES_MIGRATIONS } from './migrations/definitions'
 import { PostgresMigrationRunner } from './migrations/PostgresMigrationRunner'
+import type { PostgresMigration } from './migrations/types'
 import type { PostgresPublicAnnotationRepository } from './PostgresPublicAnnotationRepository'
 import { wrapPoolForCounters } from './query-counters'
 
 export async function createPostgresStorageSession(
   config: PostgresStorageConfig,
-  options: { publicAnnotations?: PostgresPublicAnnotationRepository } = {}
+  options: {
+    publicAnnotations?: PostgresPublicAnnotationRepository
+    migrations?: readonly PostgresMigration[]
+  } = {}
 ): Promise<PostgresStorageSession> {
   const pool = new Pool(buildPostgresPoolConfig(config))
 
@@ -19,7 +23,7 @@ export async function createPostgresStorageSession(
     const migrationResult = await new PostgresMigrationRunner(
       pool,
       config.schema,
-      POSTGRES_MIGRATIONS
+      options.migrations ?? POSTGRES_MIGRATIONS
     ).migrate()
 
     const wrappedPool = wrapPoolForCounters(pool)
