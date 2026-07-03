@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.69.5] — 2026-07-03
+
+Dependency maintenance release.
+
+### Changed
+
+- Bumped markdown-it 14.3.0 (production dependency) and @electron/fuses 2.1.3 +
+  vue-tsc 3.3.6 (development dependencies).
+
+### Fixed
+
+- `PanelEditorDialog` ambiguous-gene `v-select` now guards the null (cleared)
+  `update:model-value` emit, a latent unsoundness surfaced by the vue-tsc 3.3.6 upgrade.
+
 ## [0.69.4] — 2026-07-03
 
 Security + dependency maintenance release.
