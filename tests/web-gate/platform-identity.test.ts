@@ -210,6 +210,79 @@ describe('platform identity entitlement validation', () => {
     })
   })
 
+  test('grants no session when the entitlement is denied even if the DB row is admin', async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          entitlement: { active: false, reason: 'suspended', status: 'suspended' }
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const service = new PlatformIdentityService({
+      mode: 'platform',
+      issuerUrl: ISSUER,
+      clientId: CLIENT_ID,
+      audience: AUDIENCE,
+      callbackPath: '/auth/platform/callback',
+      requiredAcr: REQUIRED_ACR,
+      requiredAmr: REQUIRED_AMR,
+      entitlementsUrl: 'http://ops.internal/api/identity/entitlements/varlens/dev',
+      requireHostedResource: false
+    })
+    const authService = {
+      // A provisioned admin row must NOT confer access without an active entitlement.
+      getUser: vi.fn(async () => ({
+        id: 7,
+        username: 'platform-subject-1',
+        role: 'admin',
+        is_active: 1,
+        password_changed_at: null
+      }))
+    } as never
+
+    await expect(service.resolveSessionUser(authService, 'platform-subject-1')).rejects.toThrow(
+      /entitlement/
+    )
+  })
+
+  test('derives the session role from the entitlement, not the DB row', async () => {
+    // Entitlement says user; DB row says admin. The entitlement wins.
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          entitlement: { active: true, role: 'user', status: 'active', resourceStatus: 'active' }
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const service = new PlatformIdentityService({
+      mode: 'platform',
+      issuerUrl: ISSUER,
+      clientId: CLIENT_ID,
+      audience: AUDIENCE,
+      callbackPath: '/auth/platform/callback',
+      requiredAcr: REQUIRED_ACR,
+      requiredAmr: REQUIRED_AMR,
+      entitlementsUrl: 'http://ops.internal/api/identity/entitlements/varlens/dev',
+      requireHostedResource: false
+    })
+    const authService = {
+      getUser: vi.fn(async () => ({
+        id: 7,
+        username: 'platform-subject-1',
+        role: 'admin',
+        is_active: 1,
+        password_changed_at: null
+      }))
+    } as never
+
+    const result = await service.resolveSessionUser(authService, 'platform-subject-1')
+    expect(result.role).toBe('user')
+  })
+
   test('caches active entitlement decisions for the short revalidation window', async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
