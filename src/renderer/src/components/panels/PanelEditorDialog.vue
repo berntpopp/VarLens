@@ -153,8 +153,8 @@
                     placeholder="Choose..."
                     class="ambiguous-select"
                     @update:model-value="
-                      (chosen: { symbol: string; hgncId: string }) =>
-                        resolveAmbiguous(index, chosen)
+                      (chosen: { symbol: string; hgncId: string } | null) =>
+                        chosen && resolveAmbiguous(index, chosen)
                     "
                   />
                   <v-btn
