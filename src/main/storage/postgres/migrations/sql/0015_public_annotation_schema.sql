@@ -6,7 +6,7 @@
 -- annotation database by the `sync-public-annotations` command, replacing the ad-hoc
 -- CREATE TABLE IF NOT EXISTS DDL that previously ran inside each sync transaction.
 
-CREATE TABLE IF NOT EXISTS public_annotation_snapshots (
+CREATE TABLE IF NOT EXISTS "__schema__"."public_annotation_snapshots" (
   snapshot_id text PRIMARY KEY,
   schema_version text NOT NULL,
   bundle_id text,
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS public_annotation_snapshots (
   ingested_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS public_annotation_files (
-  snapshot_id text NOT NULL REFERENCES public_annotation_snapshots(snapshot_id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS "__schema__"."public_annotation_files" (
+  snapshot_id text NOT NULL REFERENCES "__schema__"."public_annotation_snapshots"(snapshot_id) ON DELETE CASCADE,
   role text NOT NULL,
   path text NOT NULL,
   checksum text,
@@ -36,17 +36,17 @@ CREATE TABLE IF NOT EXISTS public_annotation_files (
   PRIMARY KEY (snapshot_id, role, path)
 );
 
-CREATE TABLE IF NOT EXISTS public_annotation_sync_events (
+CREATE TABLE IF NOT EXISTS "__schema__"."public_annotation_sync_events" (
   event_id bigserial PRIMARY KEY,
-  snapshot_id text NOT NULL REFERENCES public_annotation_snapshots(snapshot_id) ON DELETE CASCADE,
+  snapshot_id text NOT NULL REFERENCES "__schema__"."public_annotation_snapshots"(snapshot_id) ON DELETE CASCADE,
   source_manifest_checksum text NOT NULL,
   public_file_count integer NOT NULL,
   private_case_data boolean NOT NULL,
   synced_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS public_annotation_variant_records (
-  snapshot_id text NOT NULL REFERENCES public_annotation_snapshots(snapshot_id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS "__schema__"."public_annotation_variant_records" (
+  snapshot_id text NOT NULL REFERENCES "__schema__"."public_annotation_snapshots"(snapshot_id) ON DELETE CASCADE,
   chr text NOT NULL,
   pos bigint NOT NULL,
   ref text NOT NULL,
@@ -60,4 +60,4 @@ CREATE TABLE IF NOT EXISTS public_annotation_variant_records (
 );
 
 CREATE INDEX IF NOT EXISTS public_annotation_variant_records_lookup_idx
-  ON public_annotation_variant_records (chr, pos, ref, alt);
+  ON "__schema__"."public_annotation_variant_records" (chr, pos, ref, alt);

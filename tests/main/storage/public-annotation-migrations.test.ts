@@ -13,8 +13,10 @@ import {
 describe('PUBLIC_ANNOTATION_MIGRATIONS', () => {
   test('provisions the public_annotation schema', () => {
     const sql = PUBLIC_ANNOTATION_MIGRATIONS.map((migration) => migration.sql).join('\n')
-    expect(sql).toContain('CREATE TABLE IF NOT EXISTS public_annotation_snapshots')
-    expect(sql).toContain('CREATE TABLE IF NOT EXISTS public_annotation_variant_records')
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS "__schema__"\."public_annotation_snapshots"/)
+    expect(sql).toMatch(
+      /CREATE TABLE IF NOT EXISTS "__schema__"\."public_annotation_variant_records"/
+    )
     expect(
       PUBLIC_ANNOTATION_MIGRATIONS.every((migration) => migration.checksum.length === 64)
     ).toBe(true)

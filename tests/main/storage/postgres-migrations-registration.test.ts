@@ -4,7 +4,14 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
+import {
+  POSTGRES_MIGRATIONS,
+  PUBLIC_ANNOTATION_MIGRATIONS
+} from '../../../src/main/storage/postgres/migrations/definitions'
+
+// Every .sql file must be registered in one of the migration lists (the main
+// workspace/control set or the dedicated public annotation set).
+const ALL_REGISTERED_MIGRATIONS = [...POSTGRES_MIGRATIONS, ...PUBLIC_ANNOTATION_MIGRATIONS]
 
 /**
  * Static gate over the Postgres migrations directory.
@@ -38,7 +45,7 @@ function listSqlFiles(): string[] {
 describe('postgres migration registration', () => {
   it('every registered migration has a matching file on disk', () => {
     const onDisk = new Set(listSqlFiles())
-    for (const m of POSTGRES_MIGRATIONS) {
+    for (const m of ALL_REGISTERED_MIGRATIONS) {
       const expectedFile = `${m.version}_${m.name}.sql`
       expect(
         onDisk,
@@ -48,7 +55,7 @@ describe('postgres migration registration', () => {
   })
 
   it('every .sql file on disk is registered', () => {
-    const registered = new Set(POSTGRES_MIGRATIONS.map((m) => `${m.version}_${m.name}.sql`))
+    const registered = new Set(ALL_REGISTERED_MIGRATIONS.map((m) => `${m.version}_${m.name}.sql`))
     for (const file of listSqlFiles()) {
       expect(
         registered,
