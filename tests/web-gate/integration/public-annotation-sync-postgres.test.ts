@@ -151,4 +151,40 @@ describe.skipIf(!RUN_POSTGRES)('public annotation sync - PostgreSQL integration'
     )
     expect(JSON.stringify(references.variantRecords)).not.toContain('sample-001')
   })
+
+  test('B1: a private_case_data snapshot and its variant records are excluded from reads', async () => {
+    const privateId = `private-2026-06-22-${suffix}`
+    try {
+      await pool!.query(
+        `INSERT INTO public_annotation_snapshots (
+           snapshot_id, schema_version, mapping_version, content_hash, manifest_checksum,
+           license_matrix_checksum, source_manifest_checksum, private_case_data, stored_manifest_json
+         ) VALUES ($1,'varlens.annotation-bundle.v1','m',$2,$3,$4,$5,true,'{}'::jsonb)`,
+        [privateId, checksum('a'), checksum('b'), checksum('c'), checksum('9')]
+      )
+      await pool!.query(
+        `INSERT INTO public_annotation_variant_records (
+           snapshot_id, chr, pos, ref, alt, source_id, field_name, field_value, evidence_json, provenance_json
+         ) VALUES ($1,'9',99999,'A','T','clinvar_current','clinical_significance',
+           '"Pathogenic"'::jsonb,'{}'::jsonb,'{}'::jsonb)`,
+        [privateId]
+      )
+
+      const repository = new PostgresPublicAnnotationRepository(pool!)
+      const refs = await repository.getReferencesForVariant({
+        chr: '9',
+        pos: 99999,
+        ref: 'A',
+        alt: 'T'
+      })
+
+      // The private snapshot must not surface in the snapshot list or the variant records.
+      expect(refs.snapshots.map((s) => s.snapshotId)).not.toContain(privateId)
+      expect(refs.variantRecords).toEqual([])
+    } finally {
+      await pool!
+        .query('DELETE FROM public_annotation_snapshots WHERE snapshot_id = $1', [privateId])
+        .catch(() => {})
+    }
+  })
 })

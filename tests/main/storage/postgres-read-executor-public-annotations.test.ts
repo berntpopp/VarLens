@@ -85,18 +85,20 @@ describe('PostgresReadExecutor public annotation references', () => {
     }
     const getBatch = vi.fn(async () => privateAnnotations)
     const getBatchReferences = vi.fn(async () => ({
-      '1:12345:A:G': {
-        snapshots: [],
-        variantRecords: [
-          {
-            snapshotId: 'snapshot-2026-06-22-aaaaaaaaaaaa',
-            sourceId: 'clinvar',
-            fieldName: 'clinical_significance',
-            fieldValue: 'pathogenic',
-            evidence: null,
-            provenance: null
-          }
-        ]
+      snapshots: [],
+      byVariant: {
+        '1:12345:A:G': {
+          variantRecords: [
+            {
+              snapshotId: 'snapshot-2026-06-22-aaaaaaaaaaaa',
+              sourceId: 'clinvar',
+              fieldName: 'clinical_significance',
+              fieldValue: 'pathogenic',
+              evidence: null,
+              provenance: null
+            }
+          ]
+        }
       }
     }))
     const executor = makeExecutor({

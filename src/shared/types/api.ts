@@ -486,7 +486,15 @@ export interface PublicAnnotationReferences {
   variantRecords: PublicAnnotationVariantRecord[]
 }
 
-export type PublicAnnotationBatchReferences = Record<string, PublicAnnotationReferences>
+/**
+ * B4a: the released public snapshot list is identical for every variant in a batch,
+ * so it is hoisted to a single top-level `snapshots` field instead of being repeated
+ * under each variant key (which duplicated it across the IPC/JSON payload).
+ */
+export interface PublicAnnotationBatchReferences {
+  snapshots: PublicAnnotationSnapshotSummary[]
+  byVariant: Record<string, { variantRecords: PublicAnnotationVariantRecord[] }>
+}
 
 export interface VariantAnnotationsResult {
   global: VariantAnnotation | null

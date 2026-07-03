@@ -312,7 +312,10 @@ export class PostgresReadExecutor implements StorageReadExecutor {
     for (const [key, value] of Object.entries(result)) {
       merged[key] = {
         ...value,
-        publicReferences: publicReferences[key] ?? { snapshots: [], variantRecords: [] }
+        publicReferences: {
+          snapshots: publicReferences.snapshots,
+          variantRecords: publicReferences.byVariant[key]?.variantRecords ?? []
+        }
       }
     }
     return merged

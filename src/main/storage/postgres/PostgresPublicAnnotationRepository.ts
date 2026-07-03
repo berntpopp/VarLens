@@ -93,23 +93,25 @@ export class PostgresPublicAnnotationRepository {
 
   async getReferencesForVariant(key: VariantKey): Promise<PublicAnnotationReferences> {
     const batch = await this.getBatchReferences([key])
-    return batch[variantKey(key)] ?? { snapshots: [], variantRecords: [] }
+    return {
+      snapshots: batch.snapshots,
+      variantRecords: batch.byVariant[variantKey(key)]?.variantRecords ?? []
+    }
   }
 
   async getBatchReferences(keys: VariantKey[]): Promise<PublicAnnotationBatchReferences> {
-    const result: PublicAnnotationBatchReferences = {}
+    const result: PublicAnnotationBatchReferences = { snapshots: [], byVariant: {} }
     const uniqueKeys = new Map<string, VariantKey>()
     for (const key of keys) {
       const id = variantKey(key)
       uniqueKeys.set(id, key)
-      result[id] = { snapshots: [], variantRecords: [] }
+      result.byVariant[id] = { variantRecords: [] }
     }
     if (uniqueKeys.size === 0) return result
 
     const snapshots = await this.listSnapshots()
-    for (const id of uniqueKeys.keys()) {
-      result[id].snapshots = snapshots
-    }
+    // B4a: one shared snapshot list at the top level, not repeated per variant key.
+    result.snapshots = snapshots
     if (snapshots.length === 0) return result
 
     const variantRecordTableReady = await this.tableHasColumns(
@@ -148,6 +150,11 @@ export class PostgresPublicAnnotationRepository {
            AND r.pos = k.pos
            AND r.ref = k.ref
            AND r.alt = k.alt
+          -- B1: fence private-classified rows out of the public read surface (defence
+          -- in depth) rather than trusting the writer to keep them out.
+          INNER JOIN public.public_annotation_snapshots s
+            ON s.snapshot_id = r.snapshot_id
+           AND s.private_case_data = false
         )
         SELECT
           key_chr,
@@ -179,7 +186,7 @@ export class PostgresPublicAnnotationRepository {
         ref: String(row.key_ref),
         alt: String(row.key_alt)
       })
-      result[id]?.variantRecords.push(toVariantRecord(row))
+      result.byVariant[id]?.variantRecords.push(toVariantRecord(row))
     }
 
     return result
@@ -214,6 +221,7 @@ export class PostgresPublicAnnotationRepository {
         FROM public.public_annotation_snapshots s
         LEFT JOIN public.public_annotation_files f
           ON f.snapshot_id = s.snapshot_id
+        WHERE s.private_case_data = false
         GROUP BY
           s.snapshot_id,
           s.bundle_id,
