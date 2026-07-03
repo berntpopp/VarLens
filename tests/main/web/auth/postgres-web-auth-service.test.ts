@@ -388,13 +388,21 @@ describe('PostgresWebAuthService — provisioned user creation', () => {
 })
 
 describe('PostgresWebAuthService — platform identity users', () => {
-  it('adopts a same-workspace non-admin local user as the platform subject', async () => {
+  it('adopts an unclaimed placeholder workspace as the platform subject', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // no existing platform subject
     pool.enqueueResponse({
-      rows: [{ id: '9', username: 'alice', role: ROLE_USER }],
+      rows: [
+        {
+          id: '9',
+          username: 'alice',
+          role: ROLE_USER,
+          // Adoptable: an unclaimed platform placeholder, not a real local user.
+          password_hash: 'platform-identity-disabled-local-password'
+        }
+      ],
       rowCount: 1
     })
     pool.enqueueResponse({
@@ -434,6 +442,75 @@ describe('PostgresWebAuthService — platform identity users', () => {
       '9'
     ])
     expect(pool.queries.every((q) => q.viaClient)).toBe(true)
+    expect(pool.queries.some((q) => /^COMMIT$/i.test(q.text))).toBe(true)
+  })
+
+  it('refuses to adopt an active local user holding the secret ref and rolls back', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // no existing platform subject by username
+    pool.enqueueResponse({
+      rows: [
+        {
+          id: '9',
+          username: 'alice',
+          role: ROLE_USER,
+          // A real Argon2id hash: this is an active local user, not a placeholder.
+          password_hash: FIXTURE_ARGON2ID_HASH
+        }
+      ],
+      rowCount: 1
+    })
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // ROLLBACK
+
+    await expect(
+      svc.upsertPlatformUser({
+        username: 'keycloak-subject-1',
+        displayName: 'Alice',
+        role: ROLE_USER,
+        privateDbSecretRef: 'alice.pgurl'
+      })
+    ).rejects.toThrow(/without explicit intent/i)
+    expect(pool.queries.some((q) => /^ROLLBACK$/i.test(q.text))).toBe(true)
+    // No UPDATE/rename must have been issued against the local user's row.
+    expect(pool.queries.some((q) => /SET username = \$1/.test(q.text))).toBe(false)
+  })
+
+  it('rebinds an active local workspace holder when the operator names it explicitly', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // no existing platform subject by username
+    pool.enqueueResponse({
+      rows: [
+        {
+          id: '9',
+          username: 'alice',
+          role: ROLE_USER,
+          password_hash: FIXTURE_ARGON2ID_HASH
+        }
+      ],
+      rowCount: 1
+    })
+    pool.enqueueResponse({
+      rows: [
+        { id: '9', username: 'keycloak-subject-1', role: ROLE_USER, private_db_status: 'active' }
+      ],
+      rowCount: 1
+    })
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
+
+    const result = await svc.upsertPlatformUser({
+      username: 'keycloak-subject-1',
+      displayName: 'Alice',
+      role: ROLE_USER,
+      privateDbSecretRef: 'alice.pgurl',
+      expectedCurrentUsername: 'alice'
+    })
+
+    expect(result.username).toBe('keycloak-subject-1')
+    expect(pool.queries.some((q) => /SET username = \$1/.test(q.text))).toBe(true)
     expect(pool.queries.some((q) => /^COMMIT$/i.test(q.text))).toBe(true)
   })
 

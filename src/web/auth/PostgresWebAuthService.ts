@@ -479,6 +479,14 @@ export class PostgresWebAuthService {
     privateDbSecretRef?: string
     privateDbStatus?: PlatformPrivateDbStatus
     publicAnnotationSnapshotId?: string
+    /**
+     * Operator-supplied intent to rebind a specific existing workspace holder
+     * by its current username. Without it, adoption is only allowed when the
+     * current holder is an unclaimed platform placeholder (see
+     * adoptPlatformUserBySecretRef); an active local user is never silently
+     * taken over.
+     */
+    expectedCurrentUsername?: string
   }): Promise<{ id: number; username: string; role: UserRole; private_db_status: string | null }> {
     const sch = this.schemaQuoted
     const privateDbStatus =
@@ -569,12 +577,18 @@ export class PostgresWebAuthService {
       privateDbSecretRef: string
       privateDbStatus?: PlatformPrivateDbStatus
       publicAnnotationSnapshotId?: string
+      expectedCurrentUsername?: string
     }
   ): Promise<
     { id: number; username: string; role: UserRole; private_db_status: string | null } | undefined
   > {
-    const existing = await client.query<{ id: string; username: string; role: UserRole }>(
-      `SELECT id, username, role
+    const existing = await client.query<{
+      id: string
+      username: string
+      role: UserRole
+      password_hash: string
+    }>(
+      `SELECT id, username, role, password_hash
          FROM ${sch}."users"
         WHERE private_db_secret_ref = $1
         FOR UPDATE`,
@@ -586,6 +600,20 @@ export class PostgresWebAuthService {
     const current = existing.rows[0]
     if (current.role === ROLE_ADMIN) {
       throw new Error('Platform identity cannot adopt an admin user workspace')
+    }
+    // Only adopt a workspace whose current holder is an unclaimed platform
+    // placeholder, unless the operator explicitly names the holder to rebind.
+    // A real local user (any password hash other than the placeholder sentinel)
+    // is never silently overwritten/renamed — that would be a cross-tenant
+    // takeover. The caller wraps this in a transaction and ROLLBACKs on throw.
+    const isAdoptablePlaceholder = current.password_hash === PLATFORM_DISABLED_PASSWORD_HASH
+    const explicitIntentMatches =
+      input.expectedCurrentUsername !== undefined &&
+      input.expectedCurrentUsername === current.username
+    if (!isAdoptablePlaceholder && !explicitIntentMatches) {
+      throw new Error(
+        `Platform identity refuses to adopt an active local workspace holder without explicit intent: ${current.username}`
+      )
     }
     const result = await client.query<{
       id: string
