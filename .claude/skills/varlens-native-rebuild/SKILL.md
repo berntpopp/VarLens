@@ -2,7 +2,7 @@
 name: varlens-native-rebuild
 description: Use when a VarLens test or app run fails to load the native SQLite module — errors like NODE_MODULE_VERSION mismatch, "compiled against a different Node.js version", ERR_MODULE_NOT_FOUND on out/main/db-worker.js, or "was compiled against a different Node.js ABI" — or BEFORE running vitest, the Electron app, or packaging, to rebuild the module for the correct ABI first.
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   updated: "2026-07-06"
 ---
 
@@ -27,10 +27,13 @@ rebuilding for the new loader. This is the single most common footgun in the rep
 | `make test`, `vitest`, `make ci`, any unit/integration test | `make rebuild-node` | `npm rebuild better-sqlite3-multiple-ciphers` |
 | `make dev`, `make build`, `make dist*`, packaging, Playwright `_electron` E2E | `make rebuild` | `npx @electron/rebuild -f -w better-sqlite3-multiple-ciphers` |
 
-`make dev` and `make build`/`make dist` already run `rebuild` (Electron) as a
-prerequisite, so you rarely call it by hand. **Tests do NOT auto-rebuild** — you
-must run `make rebuild-node` yourself before Vitest whenever the binary was last
-built for Electron.
+`make dev` runs `rebuild` (Electron) for you as a prerequisite. **Packaging does
+not** — `make build` and `make dist` are just `electron-vite build` (+ `electron-builder`)
+with no rebuild step. They assume the binary is already on the Electron ABI, which is
+true right after `npm ci` (whose `postinstall` rebuilds for Electron) but **not** after
+you've run tests. So if you last built for Node — i.e. you ran Vitest — run `make rebuild`
+yourself before packaging. **Tests never auto-rebuild** either: run `make rebuild-node`
+before Vitest whenever the binary was last built for Electron.
 
 After `npm ci`, `postinstall` rebuilds for **Electron**. So a fresh install is
 ready to run the app but will ABI-fail on tests until you `make rebuild-node`.

@@ -2,7 +2,7 @@
 name: varlens-cohort-parity
 description: Use when changing filtering, sorting, searching, column definitions, column metadata, or filter-related UI on the VarLens single-case variant view — or the cohort view — before deciding scope, writing the plan/spec, or opening the PR. Symptoms of about to violate: editing useFilterState.ts / FilterToolbar.vue / VariantTable.vue / variant-table/columns.ts and thinking "I'll add the cohort side later", "cohort is out of scope for this PR", or "the cohort view can catch up separately".
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   updated: "2026-07-06"
 ---
 
@@ -38,7 +38,7 @@ Don't duplicate — put shared logic in the shared module and wire both adapters
 | If you touch (case) | Also touch (cohort) | Logic belongs in |
 |---|---|---|
 | `useFilterState.ts` (add/change a filter field) | `useFilters.ts` | `composables/useFilterCore.ts` (+ `shared/types/filters.ts`, `shared/filters/filterDefaults.ts`) |
-| `FilterToolbar.vue` (control/chip) | `cohort/CohortFilterBar.vue` | `SlimFilterToolbar.vue`, `PresetBar.vue`, `FilterTypeNarrowingChip.vue`, `utils/filters/` |
+| `FilterToolbar.vue` (control/chip) | `cohort/CohortFilterBar.vue` | `SlimFilterToolbar.vue`, `PresetBar.vue`, `filters/FilterTypeNarrowingChip.vue`, `utils/filters/` |
 | `FilterDrawer.vue` + `filterDrawerTypes.ts` (new panel) | `cohort/CohortFilterDrawer.vue` + `cohort/cohortFilterDrawerTypes.ts` | shared `components/filters/*` + `ExtensionColumnFilters.vue` |
 | `variant-table/columns.ts` (+ `sv/cnv/str-columns.ts`) | `cohort/useCohortColumns.ts` | no shared list today — **edit both** (a real drift risk; consolidating is a good follow-up) |
 | `VariantTable.vue` (per-column filter/header/sort/cell) | `cohort/CohortDataTable.vue` | `VariantColumnHeader.vue`, `useColumnFilters.ts`, `useColumnFilterMeta.ts`, `table-cells/` |

@@ -2,7 +2,7 @@
 name: varlens-verify-before-done
 description: Use when about to claim a VarLens change is done, working, fixed, or ready to commit/PR — to pick and run the right make target for what you changed and report its actual output. Symptoms of about to skip this: "the diff looks clean", "types should pass", "this is a trivial change", "I'll let CI catch it", or claiming a UI change works without opening the app.
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   updated: "2026-07-06"
 ---
 
@@ -42,7 +42,7 @@ see `NODE_MODULE_VERSION` errors, that's ABI, not your code — see `varlens-nat
 
 State what you ran and what it printed:
 
-- ✅ "Ran `make ci` — lint, format, typecheck, and 553 tests passed."
+- ✅ "Ran `make ci` — lint, format, typecheck, and the full test suite passed (report the count `make test` prints)."
 - ✅ "`make test` fails: `useFilters.test.ts` expects the new field. Fixing the test."
 - ✅ "Typecheck passes. Could not run `make ci-full` here (no Electron display); startup smoke unverified."
 - ❌ "Done — the change looks correct." (no command run)

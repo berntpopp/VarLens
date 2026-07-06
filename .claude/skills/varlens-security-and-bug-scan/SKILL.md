@@ -2,7 +2,7 @@
 name: varlens-security-and-bug-scan
 description: Use when reviewing a VarLens change for security issues or bugs before commit/PR/merge — auditing IPC, Electron window/fuses, database-key, external-URL, or import code — or running a pre-merge scan. Symptoms: adding an IPC channel that takes untrusted input, changing webPreferences/fuses, handling SQLcipher keys, calling shell.openExternal, adding a dependency, or hunting a suspected bug in a diff.
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   updated: "2026-07-06"
 ---
 
@@ -36,15 +36,16 @@ Run these against the pending change (a branch diff or staged working tree):
 These are load-bearing. A change that relaxes any of them is a security regression, even if
 tests pass.
 
-- **Electron window hardening** (`src/main/index.ts:75-79`): `sandbox: true`,
-  `contextIsolation: true`, `nodeIntegration: false`. Never flip any of these, and never
-  add `webSecurity: false`.
+- **Electron window hardening** (the `webPreferences` block in `src/main/index.ts`):
+  `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`. Never flip any of
+  these, and never add `webSecurity: false`.
 - **Fuses baseline** (`scripts/configure-fuses.mjs`, `strictlyRequireAllFuses: true`):
   `RunAsNode: false`, cookie encryption, asar integrity + `OnlyLoadAppFromAsar`, node-CLI
   inspector off, etc. Don't lower a fuse, and **do not reintroduce `build.electronFuses`
   in `package.json`** — the `afterPack` hook owns the flip.
 - **IPC boundary**: the renderer reaches main **only** through the typed `window.api`
-  (lint-enforced — `eslint.config.js:94` bans renderer→main imports). No raw `ipcRenderer`
+  (lint-enforced — `eslint.config.js` bans renderer→main imports via `no-restricted-imports`).
+  No raw `ipcRenderer`
   in renderer code. In handlers, **Zod-validate untrusted args** (`safeParse`) before use,
   and let `wrapHandler` convert throws to `SerializableError` — don't hand-catch. See
   `varlens-ipc-channel`.
@@ -52,8 +53,8 @@ tests pass.
   (`src/main/ipc/handlers/shell.ts`, `isMainWindowNavigationAllowed`). Never add a path that
   opens or navigates to a URL without passing that validation.
 - **Database keys**: SQLcipher user keys are **never logged**. `assertNotHexLiteralKey`
-  guards key entry (`src/main/database/DatabaseService.ts:69,308`,
-  `sqlcipher-key-guard.ts`). Don't log secrets, keys, passwords, or patient/variant PHI —
+  (`src/main/database/sqlcipher-key-guard.ts`) guards key entry — `DatabaseService.ts` calls
+  it on both open and `rekey`. Don't log secrets, keys, passwords, or patient/variant PHI —
   use the structured loggers, never `console.*`.
 - **Large renderer runtimes** (e.g. `pdbe-molstar`) load through Vite's asset graph / lazy
   `import(...)`, not raw `file://` script injection.
