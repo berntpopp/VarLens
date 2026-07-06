@@ -217,18 +217,18 @@ async function loadDataInfo(): Promise<void> {
       api.geneLists.list(),
       api.regionFiles.list()
     ])
-    dataInfo.value = info
-    externalIds.value = ids ?? []
+    dataInfo.value = unwrapIpcResult(info)
+    externalIds.value = unwrapIpcResult(ids) ?? []
 
     // Merge DB platforms with defaults, deduplicated
     const defaults = ['Exome', 'Genome', 'Targeted Panel']
-    const dbPlatforms = (platforms as string[]) ?? []
+    const dbPlatforms = unwrapIpcResult(platforms) ?? []
     const all = new Set([...defaults, ...dbPlatforms])
     platformSuggestions.value = [...all].sort()
 
-    idTypeSuggestions.value = (idTypes as string[]) ?? []
-    geneLists.value = unwrapIpcResult(gLists as GeneListItem[]) ?? []
-    regionFiles.value = unwrapIpcResult(rFiles as RegionFileItem[]) ?? []
+    idTypeSuggestions.value = unwrapIpcResult(idTypes) ?? []
+    geneLists.value = unwrapIpcResult(gLists) ?? []
+    regionFiles.value = unwrapIpcResult(rFiles) ?? []
 
     if (info != null) {
       platform.value = info.platform
@@ -356,5 +356,15 @@ onBeforeUnmount(() => {
     clearTimeout(platformDebounce)
     platformDebounce = null
   }
+})
+
+// Exposed for component tests to assert loader post-conditions
+// (dataInfo/externalIds/platformSuggestions/idTypeSuggestions) without
+// reaching into Vuetify child-component internals. No behavior change.
+defineExpose({
+  dataInfo,
+  externalIds,
+  platformSuggestions,
+  idTypeSuggestions
 })
 </script>
