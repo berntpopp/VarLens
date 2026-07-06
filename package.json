@@ -189,7 +189,7 @@
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
     "fastify": "^5.9.0",
-    "fastify-type-provider-zod": "^6.1.0",
+    "fastify-type-provider-zod": "^7.0.0",
     "file-saver": "^2.0.5",
     "jstat": "^1.9.6",
     "kysely": "^0.29.2",
