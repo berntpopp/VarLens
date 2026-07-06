@@ -113,6 +113,9 @@ docs/.vitepress/cache/
 
 # Worktrees
 .worktrees/
+# Claude Code agent runtime: skills under .claude/skills/ are tracked and shared;
+# ephemeral agent worktrees are not.
+.claude/worktrees/
 
 # Preventive: common genomic formats
 *.vcf
