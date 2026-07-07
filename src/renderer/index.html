@@ -16,9 +16,15 @@
       rel="stylesheet"
     />
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
-    <!-- Note: 'unsafe-eval' is required by the bundled Mol* / pdbe-molstar runtime for WebGL shader compilation.
-         blob: is needed for Mol* internal worker/data handling.
-         External connect-src entries enable AlphaFold, PDB, gnomAD, UniProt, InterPro APIs. -->
+    <!-- 'unsafe-eval' is REQUIRED by the bundled Mol* / pdbe-molstar runtime: during
+         structure loading it generates code at runtime (new Function) inside a web
+         worker. Dropping 'unsafe-eval' silently breaks the 3D viewer — the structure
+         never renders and no WebGL canvas is created. Verified by the PR-G G0 spike
+         (a real-GPU Playwright differential) and guarded by
+         tests/e2e/csp-molstar-eval.e2e.ts. 'wasm-unsafe-eval' + blob: cover Mol*'s
+         WASM and worker/blob data handling. External connect-src entries enable the
+         AlphaFold, PDB, gnomAD, UniProt, InterPro structure/annotation APIs.
+         Keep this policy IDENTICAL to src/web/index.html (Codex F-08). -->
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' data: https://alphafold.ebi.ac.uk https://www.ebi.ac.uk https://files.rcsb.org https://models.rcsb.org https://data.rcsb.org https://rest.ensembl.org https://gnomad.broadinstitute.org https://www.proteins.uniprot.org https://rest.uniprot.org https://www.interpro.ebi.ac.uk blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"

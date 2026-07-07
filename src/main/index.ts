@@ -217,9 +217,11 @@ if (gotTheLock !== true) {
       optimizer.watchWindowShortcuts(window)
     })
 
-    // Suppress the "Insecure Content-Security-Policy" dev warning. This fires
-    // because 'unsafe-eval' is required by Mol*/pdbe-molstar for WebGL shader
-    // compilation. The warning does not appear in packaged builds.
+    // Suppress the "Insecure Content-Security-Policy" dev warning. It fires
+    // because the meta CSP grants 'unsafe-eval', which the bundled Mol* /
+    // pdbe-molstar worker runtime requires during structure loading (see
+    // src/renderer/index.html and the PR-G G0 spike). The warning does not
+    // appear in packaged builds.
     if (is.dev) {
       process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
     }
