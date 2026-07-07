@@ -247,10 +247,10 @@ if (gotTheLock !== true) {
       })
     })
 
-    // Global defense-in-depth guard for every webContents (main window,
-    // any future secondary windows, <webview> guests). The main window's
-    // own will-navigate / setWindowOpenHandler listeners (below, in
-    // createWindow()) are unaffected — see src/main/security/web-contents-guard.ts.
+    // Global defense-in-depth for every webContents: hardens <webview> guest
+    // preferences (strips preload, forces sandbox/no-node). Top-level nav
+    // hardening stays with the main window's own will-navigate (S2/PR-F).
+    // See src/main/security/web-contents-guard.ts.
     installWebContentsSecurityGuards()
 
     // Create window after security handlers are registered

@@ -1,15 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { guardWebContents } from '../../../src/main/security/web-contents-guard'
 
-vi.mock('../../../src/main/services/MainLogger', () => ({
-  mainLogger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn()
-  }
-}))
-
 /**
  * Minimal structurally-compatible stand-in for `Electron.WebContents`. The
  * guard only calls `.on(event, handler)`, so this fake captures registered
@@ -36,29 +27,7 @@ describe('guardWebContents', () => {
     const fake = createFakeWebContents()
     contents = fake.contents
     handlers = fake.handlers
-    guardWebContents(contents, 'http://localhost:5173')
-  })
-
-  describe('will-navigate', () => {
-    it('prevents navigation to a disallowed URL', () => {
-      const event = { preventDefault: vi.fn() }
-      handlers['will-navigate'](event, 'https://evil.example')
-      expect(event.preventDefault).toHaveBeenCalledTimes(1)
-    })
-
-    it('does not prevent navigation to an allowed app-doc URL', () => {
-      // isMainWindowNavigationAllowed() permits any `file://` URL
-      // unconditionally (see src/main/window-navigation-policy.ts).
-      const event = { preventDefault: vi.fn() }
-      handlers['will-navigate'](event, 'file:///app/out/renderer/index.html')
-      expect(event.preventDefault).not.toHaveBeenCalled()
-    })
-
-    it('does not prevent navigation to the allowed dev renderer origin', () => {
-      const event = { preventDefault: vi.fn() }
-      handlers['will-navigate'](event, 'http://localhost:5173/some-route')
-      expect(event.preventDefault).not.toHaveBeenCalled()
-    })
+    guardWebContents(contents)
   })
 
   describe('will-attach-webview', () => {
@@ -77,6 +46,12 @@ describe('guardWebContents', () => {
       expect(webPreferences.nodeIntegration).toBe(false)
       expect(webPreferences.contextIsolation).toBe(true)
       expect(webPreferences.sandbox).toBe(true)
+    })
+
+    it('does not register a will-navigate handler (top-level nav is S2/PR-F scope)', () => {
+      // The guard is intentionally webview-only; it must not reuse the
+      // main window's navigation predicate. See web-contents-guard.ts.
+      expect(handlers['will-navigate']).toBeUndefined()
     })
   })
 })

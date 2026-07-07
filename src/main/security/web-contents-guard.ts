@@ -1,52 +1,41 @@
 /**
  * Global `web-contents-created` security guard.
  *
- * The main window already installs its own `will-navigate` and
- * `setWindowOpenHandler` listeners in `createWindow()` (see
- * `src/main/index.ts`). This module is defense-in-depth for ANY OTHER
- * webContents the app might create now or in the future (e.g. a devtools
- * window, an accidental `<webview>` guest page, a future secondary
- * BrowserWindow) — those would otherwise inherit Electron's permissive
- * defaults instead of VarLens's navigation policy.
+ * Defense-in-depth for ANY webContents the app might create now or in the
+ * future (a devtools window, an accidental `<webview>` guest page, a future
+ * secondary BrowserWindow) — those would otherwise inherit Electron's
+ * permissive defaults.
  *
- * Two behaviors, deliberately narrow in scope:
+ * Scope: webview hardening only. If anything ever attaches a `<webview>` tag,
+ * its `webPreferences` are stripped of `preload` and forced to
+ * `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true` — the
+ * same posture the main window uses — before the guest page loads. A guest
+ * page with no preload and no node integration cannot reach the `window.api`
+ * bridge regardless of where it navigates, so this neutralizes the privileged-
+ * navigation risk for secondary webContents without needing a navigation gate.
  *
- * 1. Deny-by-default navigation. Every webContents gets a `will-navigate`
- *    listener that reuses the SAME allow-check as the main window
- *    (`isMainWindowNavigationAllowed`), so legitimate app-document and
- *    dev-server navigations keep working while everything else is blocked.
- * 2. Webview hardening. If anything ever attaches a `<webview>` tag, its
- *    `webPreferences` are stripped of `preload` and forced to
- *    `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true` —
- *    the same posture the main window itself uses — before the guest page
- *    loads.
+ * Top-level navigation hardening for the MAIN window is deliberately NOT done
+ * here. That is finding S2, owned by PR-F (`fix/url-nav-path-hardening`), which
+ * tightens `isMainWindowNavigationAllowed` (exact packaged-document match +
+ * WHATWG origin comparison) and applies it to the main window's own
+ * `will-navigate` in `createWindow()`. Reusing that predicate here would (a)
+ * add no security over the pre-existing per-window handler, since it is the
+ * same predicate, and (b) couple this module to a function whose signature
+ * PR-F changes. This guard stays independent of that work.
  *
- * This guard intentionally does NOT call `setWindowOpenHandler`: the main
- * window owns that path already, and overriding it here would risk
- * conflicting with that handler.
+ * This guard also does NOT call `setWindowOpenHandler`: the main window owns
+ * that path already (deny-by-default + validated `openExternal`).
  */
 
 import { app } from 'electron'
-import { isMainWindowNavigationAllowed } from '../window-navigation-policy'
-import { mainLogger } from '../services/MainLogger'
 
 /**
- * Attaches the deny-by-default navigation guard and webview hardening to a
- * single webContents instance. Pure with respect to Electron globals (aside
- * from the passed-in `contents`), so it is testable against a structurally
- * compatible fake without a real Electron runtime.
+ * Hardens `<webview>` attachment on a single webContents instance. Pure with
+ * respect to Electron globals (aside from the passed-in `contents`), so it is
+ * testable against a structurally compatible fake without a real Electron
+ * runtime.
  */
-export function guardWebContents(
-  contents: Electron.WebContents,
-  rendererUrl: string | undefined
-): void {
-  contents.on('will-navigate', (event, url) => {
-    if (!isMainWindowNavigationAllowed(url, rendererUrl)) {
-      mainLogger.warn(`Blocked navigation to disallowed URL: ${url}`, 'web-contents-guard')
-      event.preventDefault()
-    }
-  })
-
+export function guardWebContents(contents: Electron.WebContents): void {
   contents.on('will-attach-webview', (_event, webPreferences) => {
     delete webPreferences.preload
     webPreferences.nodeIntegration = false
@@ -63,6 +52,6 @@ export function guardWebContents(
  */
 export function installWebContentsSecurityGuards(): void {
   app.on('web-contents-created', (_event, contents) => {
-    guardWebContents(contents, process.env['ELECTRON_RENDERER_URL'])
+    guardWebContents(contents)
   })
 }
