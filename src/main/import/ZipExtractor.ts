@@ -105,14 +105,31 @@ export class ZipExtractor {
   /**
    * Test if a ZIP archive can be opened with the given password.
    * Attempts to read the first entry as a verification check.
+   *
+   * Distinguishes two failure classes deliberately:
+   * - The archive itself cannot be opened/parsed (corrupt file, wrong format,
+   *   unreadable path) — this is an infrastructure fault, not a password
+   *   problem, so it throws rather than being reported as "wrong password".
+   * - The archive opens fine but decrypting the first entry with the given
+   *   password fails — this is the legitimate "wrong password" outcome and
+   *   is reported as `false`.
    */
   testPassword(zipPath: string, password: string): boolean {
+    let entries: AdmZip.IZipEntry[]
     try {
       const zip = new AdmZip(zipPath)
-      const entries = zip.getEntries()
-      if (entries.length === 0) return true
-      const firstFile = entries.find((e) => !e.isDirectory)
-      if (firstFile === undefined) return true
+      entries = zip.getEntries()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      mainLogger.error(`Failed to open ZIP archive for password test: ${message}`, 'ZipExtractor')
+      throw new Error(`Failed to open ZIP archive: ${message}`, { cause: e })
+    }
+
+    if (entries.length === 0) return true
+    const firstFile = entries.find((e) => !e.isDirectory)
+    if (firstFile === undefined) return true
+
+    try {
       // adm-zip runtime accepts password arg but @types/adm-zip doesn't declare it
       const getDataWithPassword = firstFile as unknown as {
         getData: (pass: string) => Buffer
