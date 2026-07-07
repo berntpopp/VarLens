@@ -1,8 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { gzipSync } from 'node:zlib'
-import { BedFilter } from '../../../../src/main/import/vcf/bed-filter'
+import {
+  BedFilter,
+  MAX_BED_FILTER_DECOMPRESSED_BYTES
+} from '../../../../src/main/import/vcf/bed-filter'
 import { DecompressedSizeExceededError } from '../../../../src/main/import/stream-utils'
 import path from 'path'
 
@@ -102,6 +105,15 @@ describe('BedFilter', () => {
       tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-dos-'))
       const filePath = path.join(tmpDir, 'giant.bed')
       writeFileSync(filePath, 'chr1\t1\t2\n'.repeat(1000)) // ~9000 bytes > 1000-byte cap
+
+      expect(() => BedFilter.fromFile(filePath, 0)).toThrow(DecompressedSizeExceededError)
+    })
+
+    it('uses a BED-specific cap instead of the import-wide 256 GiB default', () => {
+      tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-specific-cap-'))
+      const filePath = path.join(tmpDir, 'oversized.bed')
+      writeFileSync(filePath, '')
+      truncateSync(filePath, MAX_BED_FILTER_DECOMPRESSED_BYTES + 1)
 
       expect(() => BedFilter.fromFile(filePath, 0)).toThrow(DecompressedSizeExceededError)
     })

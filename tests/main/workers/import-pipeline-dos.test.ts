@@ -144,4 +144,39 @@ describe('streamInsertVcf DoS guards (import-pipeline.ts, live SQLite worker pat
 
     expect(count).toBe(1)
   })
+
+  it('reports malformed POS lines through the skip callback while importing valid rows', async () => {
+    const filePath = join(tmpDir, 'invalid-pos.vcf')
+    writeFileSync(
+      filePath,
+      [
+        '##fileformat=VCFv4.2',
+        '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+        '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005',
+        'chr1\tNOTNUM\trs-bad\tA\tG\t99\tPASS\t.\tGT\t0/1',
+        'chr1\t100\trs-good\tA\tG\t99\tPASS\t.\tGT\t0/1'
+      ].join('\n') + '\n'
+    )
+
+    const caseId = svc.cases.createCase('test-invalid-pos', filePath, 1000)
+    const stmts = prepareStatements(svc.database)
+    stmts.beginBulkInsert()
+    const skips: string[] = []
+
+    const count = await streamInsertVcf(
+      filePath,
+      VCF_FORMAT,
+      caseId,
+      5000,
+      stmts,
+      () => false,
+      ['HG005'],
+      () => {},
+      (reason) => skips.push(reason)
+    )
+
+    expect(count).toBe(1)
+    expect(skips).toHaveLength(1)
+    expect(skips[0]).toMatch(/invalid POS/i)
+  })
 })

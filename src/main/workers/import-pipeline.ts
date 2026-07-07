@@ -327,7 +327,8 @@ export async function streamInsertVcf(
   stmts: ReturnType<typeof prepareStatements>,
   isCancelled: () => boolean,
   vcfSelectedSamples: string[] | undefined,
-  onProgress: (count: number) => void
+  onProgress: (count: number) => void,
+  onSkip?: (reason: string) => void
 ): Promise<number> {
   if (vcfSelectedSamples && vcfSelectedSamples.length > 1) {
     throw new Error(
@@ -381,7 +382,7 @@ export async function streamInsertVcf(
 
       // Parse the data line
       try {
-        const record = parseVcfLine(line, header.samples)
+        const record = parseVcfLine(line, header.samples, onSkip)
         if (record === null) continue // Skip truncated/corrupt lines
         const mapped = mapVcfRecord(
           record,

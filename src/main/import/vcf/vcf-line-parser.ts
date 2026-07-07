@@ -7,6 +7,8 @@
 
 import type { VcfRawRecord } from './types'
 
+const QUAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
+
 /**
  * Parse a single VCF data line into a raw record.
  *
@@ -61,8 +63,8 @@ export function parseVcfLine(
   // spec, so a bad value doesn't invalidate the record.
   let qual: number | null = null
   if (rawQual !== '.' && rawQual !== undefined) {
-    const parsedQual = Number.parseFloat(rawQual)
-    qual = Number.isNaN(parsedQual) ? null : parsedQual
+    const parsedQual = QUAL_NUMBER_PATTERN.test(rawQual) ? Number(rawQual) : Number.NaN
+    qual = Number.isFinite(parsedQual) ? parsedQual : null
   }
 
   // Parse INFO: semicolon-separated key=value pairs

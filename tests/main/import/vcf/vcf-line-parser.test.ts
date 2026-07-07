@@ -167,5 +167,29 @@ describe('vcf-line-parser', () => {
       expect(record!.chrom).toBe('chr22')
       expect(record!.pos).toBe(100)
     })
+
+    it('does not accept numeric prefixes with trailing garbage', () => {
+      const line = 'chr22\t100\t.\tA\tG\t99abc\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).not.toBeNull()
+      expect(record!.qual).toBeNull()
+    })
+
+    it('does not accept non-finite QUAL values', () => {
+      const line = 'chr22\t100\t.\tA\tG\t1e309\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).not.toBeNull()
+      expect(record!.qual).toBeNull()
+    })
+
+    it('still accepts finite exponent notation', () => {
+      const line = 'chr22\t100\t.\tA\tG\t1.5e2\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).not.toBeNull()
+      expect(record!.qual).toBe(150)
+    })
   })
 })

@@ -1,5 +1,7 @@
 import { isAbsolute, resolve } from 'path'
-import { readCappedFileSync } from '../stream-utils'
+import { readCappedFileSync, resolveMaxDecompressedBytes } from '../stream-utils'
+
+export const MAX_BED_FILTER_DECOMPRESSED_BYTES = 256 * 1024 * 1024 // 256 MiB
 
 interface Interval {
   start: number // 1-based inclusive
@@ -40,7 +42,10 @@ export class BedFilter {
     // .bed.gz inflating to many GB) and against an unexpectedly huge plain
     // .bed file, instead of the previous unbounded gunzipSync(readFileSync())
     // full-file slurp. See stream-utils.ts for the shared cap rationale.
-    const raw = readCappedFileSync(filePath)
+    const raw = readCappedFileSync(
+      filePath,
+      Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
+    )
 
     const intervals = new Map<string, Interval[]>()
 

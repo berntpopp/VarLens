@@ -142,6 +142,101 @@ describe('postgres-import-worker runImport', () => {
     expect(complete?.result.variantCount).toBe(1)
   })
 
+  it('deletes a partially committed single-file VCF case when the stream fails after a batch commit', async () => {
+    const queries: string[] = []
+    const client = {
+      connect: vi.fn(async () => undefined),
+      query: vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
+        const text = typeof sql === 'string' ? sql : sql.text
+        queries.push(text)
+        if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') return { rows: [] }
+        if (text.startsWith('SELECT id FROM') && text.includes('"cases"')) return { rows: [] }
+        if (text.startsWith('INSERT INTO') && text.includes('"cases"'))
+          return { rows: [{ id: 13 }] }
+        if (text.includes('pg_get_serial_sequence') && text.includes('generate_series')) {
+          const n = (params?.[1] as number) ?? 0
+          return {
+            rows: Array.from({ length: n }, (_, i) => ({
+              ordinal: String(i),
+              id: String(5000 + i)
+            }))
+          }
+        }
+        return { rows: [] }
+      }),
+      end: vi.fn(async () => undefined)
+    }
+    const messages: unknown[] = []
+    const fakeVariant = {
+      chr: '1',
+      pos: 100,
+      ref: 'A',
+      alt: 'T',
+      gene_symbol: null,
+      omim_mim_number: null,
+      consequence: null,
+      gnomad_af: null,
+      cadd: null,
+      clinvar: null,
+      gt_num: null,
+      func: null,
+      qual: null,
+      hpo_sim_score: null,
+      transcript: null,
+      cdna: null,
+      aa_change: null,
+      hpo_match: null,
+      moi: null,
+      gq: null,
+      dp: null,
+      ad_ref: null,
+      ad_alt: null,
+      ab: null,
+      filter: null,
+      info_json: null,
+      source_format: 'vcf',
+      variant_type: 'snv',
+      end_pos: null,
+      sv_type: null,
+      sv_length: null,
+      caller: null
+    }
+
+    async function* rows(): AsyncGenerator<typeof fakeVariant, void, void> {
+      yield fakeVariant
+      throw new Error('stream failed after committed batch')
+    }
+
+    await runImport(
+      {
+        createClient: () => client as never,
+        detectFormat: async () => ({ format: 'vcf', caseKey: '' }) as never,
+        createVcfMappedStream: async () => rows() as never,
+        createMapperPipeline: async () => Readable.from([]),
+        statFile: () => ({ size: 0 })
+      },
+      {
+        type: 'start',
+        client: { connectionString: 'postgres://x' },
+        schema: 'public',
+        mode: 'single-file',
+        caseName: 'VCF case',
+        filePath: '/tmp/a.vcf.gz',
+        format: 'vcf',
+        vcfOptions: { selectedSample: 'NA12878', genomeBuild: 'GRCh38' },
+        batchSize: 1
+      },
+      (m) => messages.push(m)
+    )
+
+    expect(queries).toContain('ROLLBACK')
+    expect(queries).toContain('DELETE FROM "public"."cases" WHERE id = $1')
+    const error = messages.find((m): m is { type: 'error'; message: string } => {
+      return (m as { type: string }).type === 'error'
+    })
+    expect(error?.message).toMatch(/stream failed after committed batch/)
+  })
+
   it('runs one transaction per file in multi-file mode and surfaces per-file errors', async () => {
     const queries: string[] = []
     // Track how many times a variant batch insert has been attempted so we can

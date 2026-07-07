@@ -92,7 +92,8 @@ process.on('unhandledRejection', (reason) => {
 export async function* streamMappedVcfRows(
   filePath: string,
   selectedSample: string,
-  filters?: ImportFilters
+  filters?: ImportFilters,
+  onSkip?: (reason: string) => void
 ): AsyncGenerator<VcfMappedVariant, void, void> {
   // Fail fast (synchronously, with a stack we can attach to the per-file
   // result) for the most common open-time error class: missing/unreadable
@@ -148,7 +149,7 @@ export async function* streamMappedVcfRows(
       }
 
       try {
-        const record = parseVcfLine(line, header.samples)
+        const record = parseVcfLine(line, header.samples, onSkip)
         if (record === null) continue
         // Apply pre-mapping filters (FILTER column, QUAL, BED region) before
         // the expensive mapVcfRecord call — skips multi-allelic expansion too.
@@ -190,7 +191,12 @@ export interface RunImportDeps {
   /** VCF mapped-row producer for the PG worker's VCF branch. */
   createVcfMappedStream: (
     filePath: string,
-    options: { selectedSample: string; genomeBuild: string; filters?: ImportFilters }
+    options: {
+      selectedSample: string
+      genomeBuild: string
+      filters?: ImportFilters
+      onSkip?: (reason: string) => void
+    }
   ) => Promise<AsyncIterable<VcfMappedVariant>>
 }
 
@@ -200,7 +206,34 @@ const defaultDeps: RunImportDeps = {
   createMapperPipeline: defaultCreateMapperPipeline,
   statFile: (path: string) => ({ size: statSync(path).size }),
   createVcfMappedStream: async (filePath, options) =>
-    streamMappedVcfRows(filePath, options.selectedSample, options.filters)
+    streamMappedVcfRows(filePath, options.selectedSample, options.filters, options.onSkip)
+}
+
+async function cleanupIncompleteSingleFileVcfCase(args: {
+  client: Pick<Client, 'query'>
+  schema: string
+  caseId: number
+}): Promise<void> {
+  const { client, schema, caseId } = args
+  await client.query('BEGIN')
+  try {
+    await client.query(`DELETE FROM ${quoteIdentifier(schema)}."cases" WHERE id = $1`, [caseId])
+    await client.query('COMMIT')
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK')
+    } catch {
+      // Preserve the original cleanup failure.
+    }
+    throw err
+  }
+}
+
+function recordParseSkip(args: { reason: string; errors: string[]; prefix?: string }): void {
+  const { reason, errors, prefix } = args
+  if (errors.length < 10) {
+    errors.push(prefix === undefined ? reason : `${prefix}: ${reason}`)
+  }
 }
 
 /**
@@ -325,6 +358,7 @@ export async function runImport(
   const client = deps.createClient(clientConfigFromMessage(start.client))
   let beganTransaction = false
   let committed = false
+  let incompleteSingleFileVcfCaseId: number | null = null
 
   try {
     await client.connect()
@@ -382,10 +416,16 @@ export async function runImport(
           const repo = new PostgresVcfImportRepository(start.schema)
           // Single-file imports reject filters at the executor level, but pass
           // undefined defensively to keep the contract consistent.
+          let totalSkipped = 0
+          const errors: string[] = []
           const stream = await deps.createVcfMappedStream(filePath, {
             selectedSample,
             genomeBuild,
-            filters: undefined
+            filters: undefined,
+            onSkip: (reason) => {
+              totalSkipped += 1
+              recordParseSkip({ reason, errors })
+            }
           })
 
           let variants: Array<Record<string, unknown>> = []
@@ -444,7 +484,10 @@ export async function runImport(
               repo.writeVcfFile(client as unknown as Pick<PoolClient, 'query'>, request)
             )
             profileCount('batch', 1)
-            if (!firstWritten) caseId = result.caseId
+            if (!firstWritten) {
+              caseId = result.caseId
+              incompleteSingleFileVcfCaseId = caseId
+            }
             totalInserted += result.variantCount
             firstWritten = true
             post({ type: 'progress', phase: 'inserting', rowsProcessed: totalInserted, filePath })
@@ -527,6 +570,7 @@ export async function runImport(
             await client.query('COMMIT')
           }
           committed = true
+          incompleteSingleFileVcfCaseId = null
 
           profileFlush()
           post({
@@ -535,8 +579,8 @@ export async function runImport(
             result: {
               caseId,
               variantCount: totalInserted,
-              skipped: 0,
-              errors: [],
+              skipped: totalSkipped,
+              errors,
               elapsed: Date.now() - startedAt
             }
           })
@@ -683,6 +727,8 @@ export async function runImport(
         }> = []
         let caseId = 0
         let totalVariantCount = 0
+        let totalSkipped = 0
+        const parseErrors: string[] = []
         const repo = new PostgresVcfImportRepository(start.schema)
         const selectedSample = start.vcfOptions?.selectedSample ?? ''
         const genomeBuild = start.vcfOptions?.genomeBuild ?? 'GRCh38'
@@ -747,7 +793,15 @@ export async function runImport(
             const stream = await deps.createVcfMappedStream(fileSpec.filePath, {
               selectedSample,
               genomeBuild,
-              filters: start.files.length > 1 && i === 0 ? undefined : importFilters
+              filters: start.files.length > 1 && i === 0 ? undefined : importFilters,
+              onSkip: (reason) => {
+                totalSkipped += 1
+                recordParseSkip({
+                  reason,
+                  errors: parseErrors,
+                  prefix: basename(fileSpec.filePath)
+                })
+              }
             })
 
             let variants: Array<Record<string, unknown>> = []
@@ -989,8 +1043,8 @@ export async function runImport(
             caseId,
             variantCount: totalVariantCount,
             files: fileResults,
-            skipped: 0,
-            errors: cancelled ? [POSTGRES_IMPORT_CANCELLATION_MESSAGE] : [],
+            skipped: totalSkipped,
+            errors: cancelled ? [POSTGRES_IMPORT_CANCELLATION_MESSAGE] : parseErrors,
             elapsed: Date.now() - startedAt
           }
         })
@@ -1006,12 +1060,31 @@ export async function runImport(
     if (beganTransaction && !committed) {
       try {
         await client.query('ROLLBACK')
+        beganTransaction = false
       } catch (rollbackErr) {
         // Worker has no mainLogger access; console.warn is the documented
         // worker exception (see AGENTS.md). Swallow but preserve diagnostics.
         console.warn(
           '[postgres-import-worker] ROLLBACK failed:',
           rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+        )
+      }
+    }
+    if (
+      incompleteSingleFileVcfCaseId !== null &&
+      message !== POSTGRES_IMPORT_CANCELLATION_MESSAGE
+    ) {
+      try {
+        await cleanupIncompleteSingleFileVcfCase({
+          client,
+          schema: start.schema,
+          caseId: incompleteSingleFileVcfCaseId
+        })
+        incompleteSingleFileVcfCaseId = null
+      } catch (cleanupErr) {
+        console.warn(
+          '[postgres-import-worker] Failed to delete incomplete single-file VCF case:',
+          cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
         )
       }
     }

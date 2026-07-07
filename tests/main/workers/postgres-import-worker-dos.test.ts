@@ -103,4 +103,28 @@ describe('streamMappedVcfRows DoS guards (postgres-import-worker.ts, live PG wor
     const rows = await drain(streamMappedVcfRows(filePath, 'HG005'))
     expect(rows.length).toBe(1)
   })
+
+  it('reports malformed POS lines through the skip callback while yielding valid rows', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'varlens-pg-worker-invalid-pos-'))
+    const filePath = join(tmpDir, 'invalid-pos.vcf')
+    writeFileSync(
+      filePath,
+      [
+        '##fileformat=VCFv4.2',
+        '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+        '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005',
+        'chr1\tNOTNUM\trs-bad\tA\tG\t99\tPASS\t.\tGT\t0/1',
+        'chr1\t100\trs-good\tA\tG\t99\tPASS\t.\tGT\t0/1'
+      ].join('\n') + '\n'
+    )
+    const skips: string[] = []
+
+    const rows = await drain(
+      streamMappedVcfRows(filePath, 'HG005', undefined, (reason) => skips.push(reason))
+    )
+
+    expect(rows.length).toBe(1)
+    expect(skips).toHaveLength(1)
+    expect(skips[0]).toMatch(/invalid POS/i)
+  })
 })

@@ -134,7 +134,7 @@ port.on('message', async (msg: MainMessage) => {
 
           const startTime = Date.now()
           let variantCount = 0
-          const fileSkipped = 0
+          let fileSkipped = 0
 
           try {
             // Emit parsing phase progress
@@ -179,7 +179,13 @@ port.on('message', async (msg: MainMessage) => {
                   stmts,
                   () => cancelled,
                   file.vcfSelectedSamples,
-                  onProgress
+                  onProgress,
+                  (reason) => {
+                    fileSkipped += 1
+                    if (fileSkipped <= 10) {
+                      console.warn(`[import-worker] VCF line skipped in ${fileName}:`, reason)
+                    }
+                  }
                 )
               } else {
                 variantCount = await streamInsertJson(
