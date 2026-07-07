@@ -26,15 +26,18 @@ const PATIENT_ID_PATTERN = /\b(PATIENT|SAMPLE|SUBJECT|ID)[_:-]?[A-Z0-9]{3,}\b/gi
  * Defense-in-depth only (no known active leak) — the "keys are never
  * logged" invariant otherwise rests entirely on call-site discipline.
  *
- * Deliberately requires a QUOTED value (`key='...'`, `key="..."`,
- * `PRAGMA key = "..."`, `rekey='...'`). Unlike `password`/`secret`/`token`,
- * the bare word "key" is extremely common in ordinary log prose (cache
- * key, sort key, primary key, map key: value, ...), so an unquoted
- * `key=`/`key:` match would false-redact normal text. SQLcipher's own
- * pragma syntax always quotes the key value, so requiring a quote loses
- * nothing for the case this pattern actually needs to catch.
+ * Deliberately requires a QUOTED value AND the `=` operator (`key='...'`,
+ * `key="..."`, `PRAGMA key = "..."`, `rekey='...'`). Unlike
+ * `password`/`secret`/`token`, the bare word "key" is extremely common in
+ * ordinary log prose, and critically so is "key" followed by a COLON —
+ * "sort key: 'chromosome'", "cache key: 'lookup'" are everyday log
+ * sentences that happen to use a quoted value after the colon. SQLcipher's
+ * own pragma syntax is always the `=` form (`PRAGMA key = "..."`,
+ * `key='...'`), never `key: '...'`, so requiring `=` loses nothing for the
+ * case this pattern actually needs to catch while eliminating the
+ * colon-prose false-positive.
  */
-const SQLCIPHER_KEY_PATTERN = /\b((?:re)?key)\b\s*[=:]\s*(?:'[^']*'|"[^"]*")/gi
+const SQLCIPHER_KEY_PATTERN = /\b((?:re)?key)\b\s*=\s*(?:'[^']*'|"[^"]*")/gi
 
 /**
  * Regex pattern for generic secret key-value pairs: `password`,
@@ -60,6 +63,30 @@ const SECRET_VALUE_PATTERN =
   /\b(passphrase|password|secret|token)\b\s*(?:[=:]\s*(?:'([^']*)'|"([^"]*)")|=\s*(\S+?)(?=[;,\s]|$))/gi
 
 /**
+ * Regex pattern for JSON-style quoted-key secrets: `"password":"hunter2"`,
+ * `"token":"ghp_x"`, `"secret":"..."`, `"passphrase":"..."`.
+ *
+ * SerializableErrors and structured log objects are frequently
+ * JSON-serialized before being written out, so a JSON-quoted key is a
+ * first-class leak surface — not merely the prose-ambiguous case the bare
+ * `keyword:`/`keyword=` forms above have to hedge against. Requiring BOTH
+ * the key and the value to be quoted is what makes this branch safe to be
+ * broad: `"password":"..."` cannot be mistaken for ordinary prose the way
+ * a bare `password:` can, so there is no false-positive tradeoff here.
+ *
+ * Deliberately excludes `key`/`rekey`. Unlike password/passphrase/secret/
+ * token, "key" is an extremely common JSON property name for non-secret
+ * data (sort key, cache key, map key, primary key), so a bare
+ * `"key":"..."` in a structured log is far more likely to be an ordinary
+ * field than a SQLCipher key leak. The SQLCipher key pattern above already
+ * covers the one construct that actually matters for that keyword
+ * (`key='...'`/`PRAGMA key = "..."`), and SQLCipher never emits its key
+ * pragma as a bare JSON object, so nothing is lost by leaving JSON
+ * `"key"` un-redacted here.
+ */
+const JSON_SECRET_KEY_PATTERN = /"(passphrase|password|secret|token)"\s*[:=]\s*"[^"]*"/gi
+
+/**
  * Sanitizes log messages by redacting sensitive genetic and medical data
  *
  * @param message - The log message to sanitize
@@ -70,14 +97,20 @@ export function sanitizeLogMessage(message: string): string {
 
   // Quick pre-check for a quoted SQLcipher key='...'/rekey="..." pragma
   // form. Checked first so a secret value never survives to be matched by
-  // a downstream pattern.
-  if (/\b((?:re)?key)\b\s*[=:]\s*['"]/i.test(sanitized) === true) {
+  // a downstream pattern. Requires "=" — "key:"/"rekey:" is prose-ambiguous
+  // (see SQLCIPHER_KEY_PATTERN doc comment) and is intentionally not matched.
+  if (/\b((?:re)?key)\b\s*=\s*['"]/i.test(sanitized) === true) {
     sanitized = sanitized.replace(SQLCIPHER_KEY_PATTERN, '$1=[REDACTED:KEY]')
   }
 
   // Quick pre-check for generic secret keyword + value (quoted or not).
   if (/\b(passphrase|password|secret|token)\b\s*[=:]/i.test(sanitized) === true) {
     sanitized = sanitized.replace(SECRET_VALUE_PATTERN, '$1=[REDACTED:KEY]')
+  }
+
+  // Quick pre-check for JSON-style quoted-key secrets (`"password":"..."`).
+  if (/"(?:passphrase|password|secret|token)"\s*[:=]\s*"/i.test(sanitized) === true) {
+    sanitized = sanitized.replace(JSON_SECRET_KEY_PATTERN, '"$1":"[REDACTED:KEY]"')
   }
 
   // Quick pre-check for HGVS notation (contains '.' followed by digit)

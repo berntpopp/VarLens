@@ -208,6 +208,40 @@ describe('sanitizeLogMessage', () => {
     })
   })
 
+  describe('JSON-style quoted-key secret redaction (Task H-log)', () => {
+    it('redacts a JSON-style "password":"..." pair', () => {
+      const result = sanitizeLogMessage('{"password":"hunter2"}')
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('hunter2')
+    })
+
+    it('redacts a JSON-style "token":"..." pair', () => {
+      const result = sanitizeLogMessage('{"token":"ghp_secret"}')
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('ghp_secret')
+    })
+
+    it('redacts a JSON-style "secret":"..." pair', () => {
+      const result = sanitizeLogMessage('{"secret":"x"}')
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('"x"')
+    })
+  })
+
+  describe('"key:" prose guard (Task H-log): SQLcipher key/rekey now requires "="', () => {
+    it('does NOT redact a quoted "sort key: \'chromosome\'" (colon, prose)', () => {
+      const result = sanitizeLogMessage("sort key: 'chromosome'")
+      expect(result).not.toContain('[REDACTED:KEY]')
+      expect(result).toBe("sort key: 'chromosome'")
+    })
+
+    it('does NOT redact "cache key: lookup" (colon, prose)', () => {
+      const result = sanitizeLogMessage('cache key: lookup')
+      expect(result).not.toContain('[REDACTED:KEY]')
+      expect(result).toBe('cache key: lookup')
+    })
+  })
+
   describe('interaction with existing PHI redaction', () => {
     it('still redacts HGVS notation unchanged when no key/password present', () => {
       const result = sanitizeLogMessage('Variant c.123A>G found')
