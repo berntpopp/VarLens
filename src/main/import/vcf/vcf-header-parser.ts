@@ -5,10 +5,8 @@
  * Extracts sample names, INFO/FORMAT definitions, contigs, and annotation type.
  */
 
-import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
-import { createGunzip } from 'node:zlib'
-import { isGzipped } from '../stream-utils'
+import { createCappedLineStream } from '../stream-utils'
 import { detectGenomeBuildFromVcfHeaders } from '../../services/GenomeBuildDetector'
 import type { VcfHeader, InfoFieldDef, FormatFieldDef, ContigDef, AnnotationType } from './types'
 
@@ -197,8 +195,9 @@ export function parseVcfHeaderFromLines(lines: string[]): VcfHeader {
  */
 export async function parseVcfHeader(filePath: string): Promise<VcfHeaderParseResult> {
   return new Promise((resolve, reject) => {
-    const raw = createReadStream(filePath)
-    const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
+    // Shared capped reader guards against a giant single line and a
+    // decompression bomb -- see stream-utils.ts for the cap rationale.
+    const { stream } = createCappedLineStream(filePath)
 
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
 

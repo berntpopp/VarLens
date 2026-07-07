@@ -1,6 +1,5 @@
-import { readFileSync } from 'fs'
 import { isAbsolute, resolve } from 'path'
-import { gunzipSync } from 'zlib'
+import { readCappedFileSync } from '../stream-utils'
 
 interface Interval {
   start: number // 1-based inclusive
@@ -37,9 +36,11 @@ export class BedFilter {
       throw new Error(`BedFilter.fromFile: path must not contain '..' segments: ${filePath}`)
     }
 
-    const raw = filePath.endsWith('.gz')
-      ? gunzipSync(readFileSync(filePath)).toString('utf-8')
-      : readFileSync(filePath, 'utf-8')
+    // Bounded, gzip-aware read: guards against a gzip bomb (a tiny
+    // .bed.gz inflating to many GB) and against an unexpectedly huge plain
+    // .bed file, instead of the previous unbounded gunzipSync(readFileSync())
+    // full-file slurp. See stream-utils.ts for the shared cap rationale.
+    const raw = readCappedFileSync(filePath)
 
     const intervals = new Map<string, Interval[]>()
 

@@ -6,10 +6,8 @@
  * annotations and genotypes, then inserts via the existing bulk insert pipeline.
  */
 
-import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
-import { createGunzip } from 'node:zlib'
-import { isGzipped } from '../stream-utils'
+import { createCappedLineStream } from '../stream-utils'
 import type { ImportOptions, ImportResult } from '../types'
 import type { ImportStrategy, FormatInfo, StrategyContext } from '../strategies/ImportStrategy'
 import type { VcfImportOptions, VcfMappedVariant, VcfHeader } from './types'
@@ -37,9 +35,10 @@ export class VcfStrategy implements ImportStrategy {
     const { db, caseId, startTime } = context
     const batchSize = options.batchSize ?? 5000
 
-    // Read file line by line
-    const raw = createReadStream(filePath)
-    const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
+    // Read file line by line. Shared capped reader guards against a giant
+    // single line and a decompression bomb -- see stream-utils.ts for the
+    // cap rationale.
+    const { stream } = createCappedLineStream(filePath)
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
 
     const headerLines: string[] = []

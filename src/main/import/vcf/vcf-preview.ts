@@ -3,11 +3,10 @@
  * Reads only headers + counts data lines without full parsing.
  */
 
-import { createReadStream, statSync, readdirSync } from 'node:fs'
+import { statSync, readdirSync } from 'node:fs'
 import { dirname, basename, extname, resolve as pathResolve } from 'node:path'
 import { createInterface } from 'node:readline'
-import { createGunzip } from 'node:zlib'
-import { isGzipped } from '../stream-utils'
+import { createCappedLineStream } from '../stream-utils'
 import { parseVcfHeaderFromLines } from './vcf-header-parser'
 import { getFieldColumnMapping, DEFAULT_INFO_FIELD_MAPPINGS } from './info-field-registry'
 import { detectCaller } from './caller-detector'
@@ -22,13 +21,14 @@ const MAX_COUNTED_LINES = 100_000
  * Reads headers for metadata and counts data lines for variant estimate.
  */
 export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult> {
-  // Check gzip before creating stream — isGzipped uses openSync which throws for missing files
-  const gzipped = isGzipped(filePath)
+  // statSync throws synchronously for a missing file, failing fast before
+  // the stream/Promise machinery below is even set up.
   const fileSize = statSync(filePath).size
 
   return new Promise((resolve, reject) => {
-    const raw = createReadStream(filePath)
-    const stream = gzipped ? raw.pipe(createGunzip()) : raw
+    // Shared capped reader guards against a giant single line and a
+    // decompression bomb -- see stream-utils.ts for the cap rationale.
+    const { stream, rawBytesRead } = createCappedLineStream(filePath)
 
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
 
@@ -45,9 +45,9 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
         dataLineCount++
         if (dataLineCount >= MAX_COUNTED_LINES) {
           capped = true
-          bytesReadAtCap = raw.bytesRead
+          bytesReadAtCap = rawBytesRead()
           rl.close()
-          raw.destroy()
+          stream.destroy()
         }
       }
     })

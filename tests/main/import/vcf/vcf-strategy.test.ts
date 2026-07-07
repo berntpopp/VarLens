@@ -4,11 +4,19 @@ import { resolve } from 'node:path'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { DatabaseService } from '../../../../src/main/database/DatabaseService'
 import { VcfStrategy } from '../../../../src/main/import/vcf/VcfStrategy'
 import { detectFormat } from '../../../../src/main/import/format-detection'
+import {
+  MAX_LINE_BYTES,
+  LineTooLongError,
+  DecompressedSizeExceededError
+} from '../../../../src/main/import/stream-utils'
 import type { ImportOptions } from '../../../../src/main/import/types'
 import type { StrategyContext } from '../../../../src/main/import/strategies/ImportStrategy'
+
+const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
 
 const SYNTHETIC_VCF = resolve(__dirname, '../../../test-data/vcf/synthetic-unit-test.vcf')
 const SINGLE_SAMPLE_VCF = resolve(__dirname, '../../../test-data/vcf/single-sample.vcf.gz')
@@ -233,6 +241,86 @@ describe('VcfStrategy', () => {
     } finally {
       rmSync(tmpDir, { recursive: true, force: true })
     }
+  })
+
+  describe('DoS guards', () => {
+    afterEach(() => {
+      delete process.env[DECOMPRESSED_CAP_ENV_VAR]
+    })
+
+    it('rejects a VCF containing a line over MAX_LINE_BYTES with LineTooLongError', async () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'varlens-vcf-strategy-dos-'))
+      const filePath = join(tmpDir, 'giant-line.vcf')
+
+      try {
+        const giantLine = 'A'.repeat(MAX_LINE_BYTES + 1)
+        writeFileSync(
+          filePath,
+          [
+            '##fileformat=VCFv4.2',
+            '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+            '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005',
+            giantLine,
+            'chr1\t100\trs1\tA\tG\t99\tPASS\t.\tGT\t0/1'
+          ].join('\n') + '\n'
+        )
+
+        const caseId = db.cases.createCase('test-giant-line', filePath, 1000)
+        const options: ImportOptions = { caseName: 'test-giant-line' }
+        const context: StrategyContext = {
+          db,
+          formatInfo: { format: 'vcf', caseKey: '' },
+          caseId,
+          startTime: Date.now()
+        }
+
+        await expect(
+          strategy.import(filePath, options, context, {
+            selectedSamples: ['HG005'],
+            genomeBuild: 'GRCh38'
+          })
+        ).rejects.toThrow(LineTooLongError)
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('rejects a decompression bomb once decompressed bytes exceed the configured cap', async () => {
+      process.env[DECOMPRESSED_CAP_ENV_VAR] = '1000'
+      const tmpDir = mkdtempSync(join(tmpdir(), 'varlens-vcf-strategy-bomb-'))
+      const filePath = join(tmpDir, 'bomb.vcf.gz')
+
+      try {
+        const inflated =
+          [
+            '##fileformat=VCFv4.2',
+            '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+            '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005'
+          ].join('\n') +
+          '\n' +
+          'A'.repeat(1_000_000) +
+          '\n'
+        writeFileSync(filePath, gzipSync(Buffer.from(inflated)))
+
+        const caseId = db.cases.createCase('test-bomb', filePath, 1000)
+        const options: ImportOptions = { caseName: 'test-bomb' }
+        const context: StrategyContext = {
+          db,
+          formatInfo: { format: 'vcf', caseKey: '' },
+          caseId,
+          startTime: Date.now()
+        }
+
+        await expect(
+          strategy.import(filePath, options, context, {
+            selectedSamples: ['HG005'],
+            genomeBuild: 'GRCh38'
+          })
+        ).rejects.toThrow(DecompressedSizeExceededError)
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
   })
 })
 

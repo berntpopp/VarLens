@@ -1,11 +1,20 @@
-import { describe, it, expect } from 'vitest'
-import { resolve } from 'node:path'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { resolve, join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { gzipSync } from 'node:zlib'
 import {
   parseVcfHeader,
   parseVcfHeaderFromLines
 } from '../../../../src/main/import/vcf/vcf-header-parser'
+import {
+  MAX_LINE_BYTES,
+  LineTooLongError,
+  DecompressedSizeExceededError
+} from '../../../../src/main/import/stream-utils'
 
 const SYNTHETIC_VCF = resolve(__dirname, '../../../test-data/vcf/synthetic-unit-test.vcf')
+const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
 
 describe('vcf-header-parser', () => {
   describe('parseVcfHeaderFromLines', () => {
@@ -123,6 +132,36 @@ describe('vcf-header-parser', () => {
       expect(result.header.genomeBuild).toBe('GRCh38')
       expect(result.firstDataLine).toBeTruthy()
       expect(result.firstDataLine).toContain('chr22')
+    })
+  })
+
+  describe('parseVcfHeader DoS guards', () => {
+    let tmpDir: string
+
+    beforeEach(() => {
+      tmpDir = mkdtempSync(join(tmpdir(), 'varlens-header-dos-'))
+    })
+
+    afterEach(() => {
+      delete process.env[DECOMPRESSED_CAP_ENV_VAR]
+      rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('rejects a file containing a line over MAX_LINE_BYTES with LineTooLongError', async () => {
+      const filePath = join(tmpDir, 'giant-line.vcf')
+      const giantLine = 'A'.repeat(MAX_LINE_BYTES + 1)
+      writeFileSync(filePath, `##fileformat=VCFv4.2\n${giantLine}\n#CHROM\tPOS\n`)
+
+      await expect(parseVcfHeader(filePath)).rejects.toThrow(LineTooLongError)
+    })
+
+    it('rejects a decompression bomb once decompressed bytes exceed the configured cap', async () => {
+      process.env[DECOMPRESSED_CAP_ENV_VAR] = '1000'
+      const filePath = join(tmpDir, 'bomb.vcf.gz')
+      const inflated = '##fileformat=VCFv4.2\n' + 'A'.repeat(1_000_000) + '\n'
+      writeFileSync(filePath, gzipSync(Buffer.from(inflated)))
+
+      await expect(parseVcfHeader(filePath)).rejects.toThrow(DecompressedSizeExceededError)
     })
   })
 })

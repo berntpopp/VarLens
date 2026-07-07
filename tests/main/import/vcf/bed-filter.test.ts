@@ -1,8 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { gzipSync } from 'node:zlib'
 import { BedFilter } from '../../../../src/main/import/vcf/bed-filter'
+import { DecompressedSizeExceededError } from '../../../../src/main/import/stream-utils'
 import path from 'path'
 
 const BED_PATH = path.join(__dirname, '../../../test-data/vcf/test-regions.bed')
+const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
 
 describe('BedFilter', () => {
   describe('fromFile worker-safe defensive check', () => {
@@ -81,6 +86,43 @@ describe('BedFilter', () => {
       const filter = BedFilter.empty()
       expect(filter.contains('chr1', 12345)).toBe(true)
       expect(filter.containsRange('chr1', 100, 200)).toBe(true)
+    })
+  })
+
+  describe('fromFile DoS guards (replaces unbounded gunzipSync(readFileSync()) full-slurp)', () => {
+    let tmpDir: string
+
+    afterEach(() => {
+      delete process.env[DECOMPRESSED_CAP_ENV_VAR]
+      if (tmpDir) rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('rejects a plain BED file whose size exceeds the configured total-byte cap', () => {
+      process.env[DECOMPRESSED_CAP_ENV_VAR] = '1000'
+      tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-dos-'))
+      const filePath = path.join(tmpDir, 'giant.bed')
+      writeFileSync(filePath, 'chr1\t1\t2\n'.repeat(1000)) // ~9000 bytes > 1000-byte cap
+
+      expect(() => BedFilter.fromFile(filePath, 0)).toThrow(DecompressedSizeExceededError)
+    })
+
+    it('rejects a gzip decompression bomb once decompressed bytes exceed the configured cap', () => {
+      process.env[DECOMPRESSED_CAP_ENV_VAR] = '1000'
+      tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-bomb-'))
+      const filePath = path.join(tmpDir, 'bomb.bed.gz')
+      // Highly compressible content: a tiny gzip payload that inflates far
+      // past the small test cap -- stands in for a real decompression bomb.
+      const inflated = 'chr1\t1\t2\n'.repeat(200_000)
+      writeFileSync(filePath, gzipSync(Buffer.from(inflated)))
+
+      expect(() => BedFilter.fromFile(filePath, 0)).toThrow(DecompressedSizeExceededError)
+    })
+
+    it('still loads a legitimate BED file under the default cap', () => {
+      // No env override -- exercises the real default (256 GiB) cap, proving
+      // no false rejection of a normal-sized file.
+      const filter = BedFilter.fromFile(BED_PATH, 0)
+      expect(filter.intervalCount()).toBe(4)
     })
   })
 })
