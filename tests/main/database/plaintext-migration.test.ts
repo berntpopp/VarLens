@@ -14,12 +14,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync } from 'fs'
+import { mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync, truncateSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, basename, dirname } from 'path'
 import Database from 'better-sqlite3-multiple-ciphers'
 import {
   migratePlaintextToEncrypted,
+  realVerifyEncrypted,
   PlaintextMigrationError
 } from '../../../src/main/database/plaintext-migration'
 import { DbKeyStore, type SafeStorageLike } from '../../../src/main/database/db-key-store'
@@ -218,12 +219,10 @@ describe('migratePlaintextToEncrypted (core algorithm)', () => {
           verifyEncrypted: (filePath, dek) => {
             calls += 1
             if (calls === 1) {
-              // Pre-swap verification (step 4) must succeed for the swap to happen at all.
-              const db = new Database(filePath)
-              db.pragma(`key='${dek}'`)
-              db.pragma('integrity_check', { simple: true })
-              db.close()
-              return { userVersion: 7, tableRowCounts: { marker: 3, other: 1 } }
+              // Pre-swap verification (step 4) must succeed for real for the
+              // swap to happen at all -- delegate to the real implementation
+              // rather than hand-crafting a fake signal.
+              return realVerifyEncrypted(filePath, dek)
             }
             // Post-swap verification (step 7): simulate a failure here specifically.
             throw new Error('simulated failure re-opening the swapped-in encrypted file')
@@ -246,6 +245,123 @@ describe('migratePlaintextToEncrypted (core algorithm)', () => {
 
     // The key-store entry was rolled back.
     expect(keyStore.resolveKeyForPath(dbPath).ok).toBe(false)
+  })
+
+  it('rollback — corrupt/truncated backup is rejected BEFORE the swap: original untouched, no swap happened', () => {
+    const keyStore = new DbKeyStore({
+      registryPath: join(tmpDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(true)
+    })
+    const managed = keyStore.createManagedKey(dbPath)
+    if (!managed.ok) throw new Error('expected ok')
+
+    const originalLabels = readMarkerLabels(dbPath)
+
+    expect(() =>
+      migratePlaintextToEncrypted(
+        { path: dbPath, dek: managed.dek, keyId: managed.keyId, keyStore },
+        {
+          // Truncate the REAL backup file right after it's written, then let
+          // the REAL backup-verification logic (open with no key,
+          // integrity_check, content signal) run against the truncated
+          // bytes -- proving the shipped code detects this, not a stub.
+          afterBackupCopy: (backupPath) => {
+            truncateSync(backupPath, 4)
+          }
+        }
+      )
+    ).toThrow(PlaintextMigrationError)
+
+    // Original untouched: still plaintext, still has the real seeded rows.
+    expect(readMarkerLabels(dbPath)).toEqual(originalLabels)
+    const rawNoKey = new Database(dbPath)
+    expect(() => rawNoKey.prepare('SELECT count(*) FROM sqlite_master').get()).not.toThrow()
+    rawNoKey.close()
+
+    // No swap happened and no leftover `.encrypting-*.tmp` or
+    // `.plaintext-backup-*` files -- the corrupt backup was cleaned up.
+    expect(siblingFiles(dbPath)).toEqual([])
+
+    // The key-store entry created before the attempt was rolled back.
+    expect(keyStore.resolveKeyForPath(dbPath).ok).toBe(false)
+  })
+
+  it('rollback — a same-cardinality content divergence (row COUNT matches, content differs) is rejected', () => {
+    const keyStore = new DbKeyStore({
+      registryPath: join(tmpDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(true)
+    })
+    const managed = keyStore.createManagedKey(dbPath)
+    if (!managed.ok) throw new Error('expected ok')
+
+    const originalLabels = readMarkerLabels(dbPath)
+
+    expect(() =>
+      migratePlaintextToEncrypted(
+        { path: dbPath, dek: managed.dek, keyId: managed.keyId, keyStore },
+        {
+          // Mutate ONE row's content in the REAL encrypting candidate right
+          // after it's rekeyed -- same row count (3 marker rows), same
+          // `user_version`, different bytes. A plain COUNT(*)+user_version
+          // signal cannot see this; the strengthened per-table content hash
+          // must.
+          afterCandidateRekey: (candidatePath, dek) => {
+            const db = new Database(candidatePath)
+            db.pragma(`key='${dek}'`)
+            db.prepare("UPDATE marker SET label = 'tampered' WHERE label = 'beta'").run()
+            db.close()
+          }
+        }
+      )
+    ).toThrow(PlaintextMigrationError)
+
+    // Original untouched: the divergence was caught before the swap.
+    expect(readMarkerLabels(dbPath)).toEqual(originalLabels)
+    const rawNoKey = new Database(dbPath)
+    expect(() => rawNoKey.prepare('SELECT count(*) FROM sqlite_master').get()).not.toThrow()
+    rawNoKey.close()
+
+    // No leftover `.encrypting-*.tmp` candidate file.
+    const leftovers = siblingFiles(dbPath).filter((f) => f.includes('.encrypting-'))
+    expect(leftovers).toEqual([])
+
+    // The key-store entry created before the attempt was rolled back.
+    expect(keyStore.resolveKeyForPath(dbPath).ok).toBe(false)
+  })
+
+  it('rollback — a failure in the earliest step (already-encrypted) also rolls back the key-store entry', () => {
+    // Regression test for the I2b hardening review's MINOR-4 finding: every
+    // failure path of `migratePlaintextToEncrypted`, INCLUDING the earliest
+    // one (before the `rollbackBeforeSwap` closure even exists), must roll
+    // back a real, previously-minted key-store entry -- not just the later
+    // steps.
+    const encryptedPath = join(tmpDir, 'already-encrypted-2.db')
+    const seedDb = new Database(encryptedPath)
+    seedDb.pragma("key='some-existing-key'")
+    seedDb.exec('CREATE TABLE t (id INTEGER)')
+    seedDb.close()
+
+    const keyStore = new DbKeyStore({
+      registryPath: join(tmpDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(true)
+    })
+    const managed = keyStore.createManagedKey(encryptedPath)
+    if (!managed.ok) throw new Error('expected ok')
+    expect(keyStore.resolveKeyForPath(encryptedPath).ok).toBe(true)
+
+    expect(() =>
+      migratePlaintextToEncrypted({
+        path: encryptedPath,
+        dek: managed.dek,
+        keyId: managed.keyId,
+        keyStore
+      })
+    ).toThrow(PlaintextMigrationError)
+
+    // The key-store entry minted before the attempt was rolled back, even
+    // though the failure happened before any tmp/backup file was created.
+    expect(keyStore.resolveKeyForPath(encryptedPath).ok).toBe(false)
+    expect(siblingFiles(encryptedPath)).toEqual([])
   })
 
   it('idempotence: migrating an already-encrypted database is a typed no-op error', () => {

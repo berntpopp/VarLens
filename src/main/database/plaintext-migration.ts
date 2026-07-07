@@ -16,9 +16,11 @@
  *      typed no-op error -- nothing is written.
  *   2. CHECKPOINT the original's WAL (if any) so its main `.db` file is a
  *      complete, self-contained snapshot, and capture a content signal
- *      (row counts per table + `user_version`). This makes every later
- *      byte-copy of `path` correct without also copying `-wal`/`-shm`
- *      sidecars.
+ *      (row counts + a per-table content hash, per table, plus
+ *      `user_version`). The WAL checkpoint (`PRAGMA journal_mode = DELETE`)
+ *      return value is asserted -- a candidate/backup byte-copy of `path` is
+ *      only correct without also copying `-wal`/`-shm` sidecars if this
+ *      pragma actually took effect.
  *   3. Produce an ENCRYPTED CANDIDATE at a new temp file:
  *        - byte-copy `path` -> `<path>.encrypting-<nonce>.tmp`
  *        - `PRAGMA rekey` the COPY in place with the DEK.
@@ -41,10 +43,19 @@
  *      error; the candidate is deleted and the ORIGINAL is untouched.
  *   5. BACKUP the original: byte-copy `path` -> a timestamped
  *      `<path>.plaintext-backup-<ts>` file (plus `-wal`/`-shm` sidecars, if
- *      any still exist). Verified to exist with a non-zero size -- this
- *      backup MUST exist before the swap in step 6.
- *   6. ATOMIC SWAP: `fs.renameSync(tmp, path)` -- same directory, atomic on
- *      POSIX/Windows.
+ *      any still exist), then OPEN the backup with NO key, require
+ *      `PRAGMA integrity_check` = `'ok'`, AND that its content signal
+ *      matches the ORIGINAL's -- all BEFORE the swap in step 6. A partial or
+ *      truncated backup copy is caught here, not discovered later during a
+ *      rollback that depends on it.
+ *   6. ATOMIC SWAP: fsync the candidate file, then `fs.renameSync(tmp,
+ *      path)` -- same directory, atomic on POSIX/Windows -- then
+ *      best-effort fsync the containing directory. CRASH RECOVERY: a
+ *      `*.plaintext-backup-*` sibling sitting next to an ENCRYPTED `path`
+ *      means a migration may not have durably completed (this step's
+ *      fsyncs, or step 7, or the caller's post-migration reopen, never
+ *      finished) -- that backup IS the recovery source: copy it back over
+ *      `path` to restore the plaintext original.
  *   7. POST-SWAP VERIFY: re-open `path` WITH the DEK and re-run the same
  *      check as step 4. This is normally redundant with step 4 (rename does
  *      not alter bytes), but it is the one place a failure means `path`'s
@@ -58,11 +69,28 @@
 
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
-import { existsSync, copyFileSync, renameSync, unlinkSync, statSync } from 'fs'
+import {
+  existsSync,
+  copyFileSync,
+  renameSync,
+  unlinkSync,
+  statSync,
+  openSync,
+  closeSync,
+  fsyncSync
+} from 'fs'
 import { randomUUID } from 'crypto'
+import { dirname } from 'path'
 import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
 import { isNotADatabaseError } from './sqlite-error'
 import type { DbKeyStoreLike } from './db-key-store'
+import {
+  computeContentSignal,
+  signalsMatch,
+  type ContentSignal
+} from './plaintext-migration-signal'
+
+export type { ContentSignal }
 
 export type PlaintextMigrationFailureReason =
   'already-encrypted' | 'source-missing' | 'verification-failed' | 'swap-failed'
@@ -97,11 +125,6 @@ export interface MigratePlaintextToEncryptedResult {
   backupPath: string
 }
 
-interface ContentSignal {
-  userVersion: number
-  tableRowCounts: Record<string, number>
-}
-
 /**
  * Injectable seam so tests can fault-inject specifically the POST-swap
  * verification (step 7) without affecting the PRE-swap verification (step
@@ -110,51 +133,40 @@ interface ContentSignal {
  */
 export interface PlaintextMigrationDeps {
   verifyEncrypted?: (filePath: string, dek: string) => ContentSignal
+  /**
+   * Test-only hook invoked immediately after the plaintext backup file (and
+   * its sidecars) are written in step 5, before the backup is verified. Lets
+   * tests simulate a truncated/corrupted backup copy against the REAL
+   * verification logic below, without mocking the filesystem. No-op in
+   * production.
+   */
+  afterBackupCopy?: (backupPath: string) => void
+  /**
+   * Test-only hook invoked immediately after the encrypting candidate (step
+   * 3) is copied and rekeyed, before it is verified in step 4. Lets tests
+   * construct a same-cardinality content divergence (same row count,
+   * different values) against the REAL candidate file, so step 4's
+   * strengthened content signal can be proven to catch it via the real
+   * verification code path. No-op in production.
+   */
+  afterCandidateRekey?: (candidatePath: string, dek: string) => void
 }
 
 function quoteSqlLiteral(value: string): string {
   return value.split("'").join("''")
 }
 
-function quoteIdentifier(name: string): string {
-  return name.replace(/"/g, '""')
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function computeContentSignal(db: DatabaseType): ContentSignal {
-  const tables = db
-    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
-    .all() as Array<{ name: string }>
-
-  const tableRowCounts: Record<string, number> = {}
-  for (const { name } of tables) {
-    const row = db.prepare(`SELECT COUNT(*) as c FROM "${quoteIdentifier(name)}"`).get() as {
-      c: number
-    }
-    tableRowCounts[name] = row.c
-  }
-
-  const userVersion = db.pragma('user_version', { simple: true }) as number
-  return { userVersion, tableRowCounts }
-}
-
-function signalsMatch(a: ContentSignal, b: ContentSignal): boolean {
-  if (a.userVersion !== b.userVersion) {
-    return false
-  }
-  const aKeys = Object.keys(a.tableRowCounts)
-  const bKeys = Object.keys(b.tableRowCounts)
-  if (aKeys.length !== bKeys.length) {
-    return false
-  }
-  return aKeys.every((key) => a.tableRowCounts[key] === b.tableRowCounts[key])
-}
-
-/** Real implementation of the injectable verify seam (step 4 and step 7). */
-function realVerifyEncrypted(filePath: string, dek: string): ContentSignal {
+/**
+ * Real implementation of the injectable verify seam (step 4 and step 7).
+ * Exported (in addition to being the default) so tests can let ONE of the
+ * two `deps.verifyEncrypted` calls in a fault-injection test run for real,
+ * without duplicating the content-signal algorithm in test code.
+ */
+export function realVerifyEncrypted(filePath: string, dek: string): ContentSignal {
   const db = new Database(filePath)
   try {
     // CRITICAL: the key pragma must be the first pragma issued (matches
@@ -170,6 +182,25 @@ function realVerifyEncrypted(filePath: string, dek: string): ContentSignal {
     return computeContentSignal(db)
   } finally {
     db.close()
+  }
+}
+
+/**
+ * Assert that `PRAGMA journal_mode = DELETE` actually landed in `'delete'`
+ * mode, rather than trusting the pragma silently. SQLite always returns the
+ * RESULTING journal mode from this statement (whether or not the requested
+ * change took effect -- e.g. it cannot leave WAL mode while another
+ * connection still has the database open), so a truthful check is just
+ * comparing the returned value.
+ */
+function checkpointOutOfWalMode(db: DatabaseType, context: string): void {
+  const journalMode = db.pragma('journal_mode = DELETE', { simple: true }) as string
+  if (journalMode !== 'delete') {
+    throw new PlaintextMigrationError(
+      `Failed to checkpoint ${context} out of WAL mode (journal_mode is '${journalMode}', ` +
+        `expected 'delete') -- refusing to proceed with a possibly-incomplete snapshot`,
+      'verification-failed'
+    )
   }
 }
 
@@ -196,14 +227,36 @@ function assertPlaintextAndCaptureSignal(path: string): ContentSignal {
     throw error
   }
 
-  // Fold any pending WAL frames into the main file and drop WAL mode so a
-  // plain byte-copy of `path` afterward (both for the encrypting candidate
-  // and, later, for the plaintext backup) is a complete, self-contained
-  // snapshot -- no separate `-wal`/`-shm` sidecar needs to travel with it.
-  db.pragma('journal_mode = DELETE')
-  const signal = computeContentSignal(db)
-  db.close()
-  return signal
+  try {
+    // Fold any pending WAL frames into the main file and drop WAL mode so a
+    // plain byte-copy of `path` afterward (both for the encrypting candidate
+    // and, later, for the plaintext backup) is a complete, self-contained
+    // snapshot -- no separate `-wal`/`-shm` sidecar needs to travel with it.
+    // The candidate's and backup's completeness DEPEND on this pragma
+    // actually taking effect, so its return value is asserted, not trusted.
+    checkpointOutOfWalMode(db, 'the source database')
+    const signal = computeContentSignal(db)
+    return signal
+  } finally {
+    db.close()
+  }
+}
+
+/** Open a PLAINTEXT file with NO key, verify integrity, and return its content signal. */
+function realVerifyPlaintextBackup(filePath: string): ContentSignal {
+  const db = new Database(filePath)
+  try {
+    const integrity = db.pragma('integrity_check', { simple: true }) as string
+    if (integrity !== 'ok') {
+      throw new PlaintextMigrationError(
+        `Plaintext backup failed integrity_check (${integrity})`,
+        'verification-failed'
+      )
+    }
+    return computeContentSignal(db)
+  } finally {
+    db.close()
+  }
 }
 
 function cleanupFile(path: string): void {
@@ -227,6 +280,43 @@ function copySidecarsIfPresent(fromPath: string, toPath: string): void {
 }
 
 /**
+ * Fsync a regular file so its bytes are durably on disk before the atomic
+ * rename that makes it `path` -- a failure here is treated as a real,
+ * proceed-blocking error (see the step-6 call site), not best-effort.
+ */
+function fsyncFile(filePath: string): void {
+  const fd = openSync(filePath, 'r')
+  try {
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/**
+ * Best-effort fsync of the directory containing `filePath`, so the
+ * just-renamed directory entry is itself durable, not only the file's
+ * contents. Some platforms (notably Windows) cannot open/fsync a directory
+ * handle at all -- that failure (and any other failure here) is expected and
+ * intentionally swallowed: by the time this runs, `renameSync` has already
+ * succeeded, so failing the whole migration over this extra durability nicety
+ * would trigger an unnecessary backup-restore for a non-data-loss condition.
+ */
+function fsyncContainingDirectory(filePath: string): void {
+  try {
+    const fd = openSync(dirname(filePath), 'r')
+    try {
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+  } catch {
+    // Expected on platforms that don't support directory fsync; best-effort
+    // everywhere else. The rename itself already completed either way.
+  }
+}
+
+/**
  * Migrate a plaintext SQLite database at `path` to encrypted-at-rest with
  * `dek`, following the algorithm documented at the top of this file. Throws
  * `PlaintextMigrationError` on any failure; on success returns the backup
@@ -239,11 +329,22 @@ export function migratePlaintextToEncrypted(
 ): MigratePlaintextToEncryptedResult {
   const { path, dek, keyId, keyStore } = params
   const verifyEncrypted = deps.verifyEncrypted ?? realVerifyEncrypted
+  const afterBackupCopy = deps.afterBackupCopy ?? (() => undefined)
+  const afterCandidateRekey = deps.afterCandidateRekey ?? (() => undefined)
 
   assertNotHexLiteralKey(dek)
 
   // Steps 1-2: precondition + checkpoint + capture the original's signal.
-  const originalSignal = assertPlaintextAndCaptureSignal(path)
+  // No stale key-store entry may survive ANY failure path -- including this
+  // earliest one (source missing / already encrypted / WAL checkpoint
+  // didn't take) -- so this is rolled back exactly like the later steps.
+  let originalSignal: ContentSignal
+  try {
+    originalSignal = assertPlaintextAndCaptureSignal(path)
+  } catch (error) {
+    keyStore.removeKey(keyId)
+    throw error
+  }
 
   const tmpPath = `${path}.encrypting-${randomUUID()}.tmp`
 
@@ -265,11 +366,12 @@ export function migratePlaintextToEncrypted(
     copyFileSync(path, tmpPath)
     const tmpDb = new Database(tmpPath)
     try {
-      tmpDb.pragma('journal_mode = DELETE') // rekey requires a non-WAL journal mode
+      checkpointOutOfWalMode(tmpDb, 'the encrypting candidate') // rekey requires a non-WAL journal mode
       tmpDb.pragma(`rekey='${quoteSqlLiteral(dek)}'`)
     } finally {
       tmpDb.close()
     }
+    afterCandidateRekey(tmpPath, dek)
   } catch (error) {
     return rollbackBeforeSwap(error)
   }
@@ -291,14 +393,26 @@ export function migratePlaintextToEncrypted(
     )
   }
 
-  // Step 5: back up the original -- this MUST exist before the swap.
+  // Step 5: back up the original, then VERIFY the backup is genuinely
+  // openable and complete -- BEFORE the swap depends on it. A silent
+  // partial/truncated copy accepted here would later be relied on by
+  // `rollbackAfterSwap` -- restoring from a corrupt backup is permanent data
+  // loss, so this must fail loudly, before the swap, not during a rollback.
   const backupPath = `${path}.plaintext-backup-${Date.now()}`
   try {
     copyFileSync(path, backupPath)
     copySidecarsIfPresent(path, backupPath)
+    afterBackupCopy(backupPath)
     const stat = statSync(backupPath)
     if (stat.size === 0) {
       throw new Error('Backup file was created but is empty')
+    }
+    const backupSignal = realVerifyPlaintextBackup(backupPath)
+    if (!signalsMatch(originalSignal, backupSignal)) {
+      throw new PlaintextMigrationError(
+        'Plaintext backup content does not match the original -- refusing to proceed',
+        'verification-failed'
+      )
     }
   } catch (error) {
     cleanupFile(backupPath)
@@ -306,11 +420,28 @@ export function migratePlaintextToEncrypted(
   }
 
   // Step 6: atomic swap.
+  //
+  // fsync the candidate's bytes to disk before the rename gates on them, and
+  // best-effort fsync the containing directory after the rename lands, to
+  // narrow the window in which a crash could leave a rename that "happened"
+  // in the page cache but never reached disk. CRASH RECOVERY: a
+  // `*.plaintext-backup-*` sibling sitting next to an ENCRYPTED `path` means
+  // a migration may not have durably completed (this step, step 7, or the
+  // caller's post-migration reopen never finished) -- that backup IS the
+  // recovery source; copy it back over `path` to restore the plaintext
+  // original.
+  try {
+    fsyncFile(tmpPath)
+  } catch (error) {
+    return rollbackBeforeSwap(error)
+  }
+
   try {
     renameSync(tmpPath, path)
   } catch (error) {
     return rollbackAfterSwap(path, backupPath, tmpPath, keyId, keyStore, error)
   }
+  fsyncContainingDirectory(path)
 
   // Step 7: post-swap verification. On failure, `path` has already changed
   // -- restore from the backup so the user is never left without a working DB.

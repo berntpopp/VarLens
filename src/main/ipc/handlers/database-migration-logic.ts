@@ -73,6 +73,21 @@ export async function migrateCurrentToEncrypted(
       ? options.recoveryPassphrase
       : undefined
 
+  // `createManagedKey`/`wrapNewDekWithPassphrase` mint AND PERSIST the
+  // key-store entry immediately, before the database file has been touched
+  // at all -- so every branch below that can fail without ever reaching
+  // `migratePlaintextToEncrypted` (the `manager.close()` catch just below)
+  // rolls the entry back via `keyStore.removeKey`, mirroring the same
+  // pattern `migratePlaintextToEncrypted` itself now applies to EVERY one of
+  // its own failure paths -- including its earliest ones (source missing /
+  // already encrypted / WAL checkpoint failure) -- so no stale entry can
+  // survive a failed/aborted migration this process can catch. A genuine
+  // hard crash (SIGKILL, power loss) between this mint and a completed swap
+  // is the one scenario no in-process rollback can observe; a retry at the
+  // same path would then see `path-already-keyed` even though the database
+  // is still plaintext on disk -- a known, low-probability residual risk
+  // (see the I2b hardening review, finding 4) that would need a
+  // registry-side reconciliation step to close entirely.
   const managed = keyStore.createManagedKey(currentPath)
   let dek: string
   let keyId: string
