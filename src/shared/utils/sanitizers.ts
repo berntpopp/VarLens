@@ -37,7 +37,8 @@ const PATIENT_ID_PATTERN = /\b(PATIENT|SAMPLE|SUBJECT|ID)[_:-]?[A-Z0-9]{3,}\b/gi
  * case this pattern actually needs to catch while eliminating the
  * colon-prose false-positive.
  */
-const SQLCIPHER_KEY_PATTERN = /\b((?:re)?key)\b\s*=\s*(?:'[^']*'|"[^"]*")/gi
+const SQLCIPHER_KEY_PATTERN =
+  /\b((?:re)?key)\b\s*=\s*(?:'(?:''|\\.|[^'\\])*'|"(?:\\.|""|[^"\\])*")/gi
 
 /**
  * Regex pattern for generic secret key-value pairs: `password`,
@@ -60,7 +61,7 @@ const SQLCIPHER_KEY_PATTERN = /\b((?:re)?key)\b\s*=\s*(?:'[^']*'|"[^"]*")/gi
  * secret value is redacted — surrounding text is preserved.
  */
 const SECRET_VALUE_PATTERN =
-  /\b(passphrase|password|secret|token)\b\s*(?:[=:]\s*(?:'([^']*)'|"([^"]*)")|=\s*(\S+?)(?=[;,\s]|$))/gi
+  /\b(passphrase|password|secret|token)\b\s*(?:[=:]\s*(?:'((?:''|\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)")|=\s*(\S+?)(?=[;,\s]|$))/gi
 
 /**
  * Regex pattern for JSON-style quoted-key secrets: `"password":"hunter2"`,
@@ -84,7 +85,7 @@ const SECRET_VALUE_PATTERN =
  * pragma as a bare JSON object, so nothing is lost by leaving JSON
  * `"key"` un-redacted here.
  */
-const JSON_SECRET_KEY_PATTERN = /"(passphrase|password|secret|token)"\s*[:=]\s*"[^"]*"/gi
+const JSON_SECRET_KEY_PATTERN = /"(passphrase|password|secret|token)"\s*[:=]\s*"(?:\\.|[^"\\])*"/gi
 
 /**
  * Sanitizes log messages by redacting sensitive genetic and medical data

@@ -49,6 +49,13 @@ describe('sanitizeLogMessage', () => {
       expect(result).toContain('done')
     })
 
+    it('redacts a SQLcipher key value containing a doubled single quote escape', () => {
+      const result = sanitizeLogMessage("PRAGMA key='abc''def'; next")
+      expect(result).toBe('PRAGMA key=[REDACTED:KEY]; next')
+      expect(result).not.toContain('abc')
+      expect(result).not.toContain('def')
+    })
+
     it('redacts a quoted rekey= value', () => {
       const result = sanitizeLogMessage("running rekey='N3wSecret$' now")
       expect(result).toContain('[REDACTED:KEY]')
@@ -213,6 +220,13 @@ describe('sanitizeLogMessage', () => {
       const result = sanitizeLogMessage('{"password":"hunter2"}')
       expect(result).toContain('[REDACTED:KEY]')
       expect(result).not.toContain('hunter2')
+    })
+
+    it('redacts a JSON-style value containing an escaped quote', () => {
+      const result = sanitizeLogMessage('{"password":"abc\\"def","ok":true}')
+      expect(result).toBe('{"password":"[REDACTED:KEY]","ok":true}')
+      expect(result).not.toContain('abc')
+      expect(result).not.toContain('def')
     })
 
     it('redacts a JSON-style "token":"..." pair', () => {
