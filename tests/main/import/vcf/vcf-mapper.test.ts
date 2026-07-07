@@ -194,7 +194,10 @@ describe('VcfMapper', () => {
       ...header,
       formatDefs: new Map([
         ['GT', { id: 'GT', number: '1', type: 'String' as const, description: 'Genotype' }],
-        ['GQ', { id: 'GQ', number: '1', type: 'Integer' as const, description: 'Genotype Quality' }],
+        [
+          'GQ',
+          { id: 'GQ', number: '1', type: 'Integer' as const, description: 'Genotype Quality' }
+        ],
         ['DP', { id: 'DP', number: '1', type: 'Integer' as const, description: 'Read Depth' }]
         // No AD def — the VCF omits ##FORMAT=<ID=AD,Number=R,...>
       ])

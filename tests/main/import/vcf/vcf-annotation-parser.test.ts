@@ -163,7 +163,7 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcripts).toHaveLength(1)
     })
 
-    it('does not cross-contaminate multi-deletion splits when a block\'s ALLELE_NUM is declared but empty', () => {
+    it("does not cross-contaminate multi-deletion splits when a block's ALLELE_NUM is declared but empty", () => {
       // REF=CAT, ALT=C,CA — same two-deletion site as above, but block 2 (GENE2)
       // has NO ALLELE_NUM value even though the CSQ header declares the field.
       // Falling back to the lossy "-"/length heuristic here would let GENE2
@@ -272,7 +272,7 @@ describe('vcf-annotation-parser', () => {
       expect(resultAllele2.transcript).toBe('T2')
     })
 
-    it('does not cross-attach a shorter split\'s ANN block via the VEP insertion-suffix heuristic', () => {
+    it("does not cross-attach a shorter split's ANN block via the VEP insertion-suffix heuristic", () => {
       // REF=A, ALT=AT,T — a mixed insertion/SNV multi-allelic site. SnpEff's ANN
       // allele field is always the full raw ALT string (confirmed against real
       // SnpEff output, e.g. tests/test-data/vcf/single-sample.snpeff.vcf.gz
