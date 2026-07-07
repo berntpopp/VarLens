@@ -166,6 +166,38 @@ describe('vcf-allele-splitter', () => {
     expect(results[1].samples.get('S1')![3]).toBe('25,5')
   })
 
+  it('defaults AD to Number=R when the header def is missing (no ##FORMAT AD line)', () => {
+    // Simulates a VCF whose header omits ##FORMAT=<ID=AD,Number=R,...> for AD.
+    const formatDefsNoAD = makeFormatDefs([
+      { id: 'GT', number: '1', type: 'String' },
+      { id: 'GQ', number: '1', type: 'Integer' },
+      { id: 'DP', number: '1', type: 'Integer' }
+      // No AD entry at all — formatDefs.get('AD') will be undefined
+    ])
+
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 300,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'GQ', 'DP', 'AD'],
+      samples: new Map([['S1', ['0/2', '90', '48', '10,3,7']]])
+    }
+
+    const results = splitMultiAllelic(record, infoDefs, formatDefsNoAD)
+
+    // Split for ALT=G (altIdx=0): AD should be ref,alt1 = 10,3
+    expect(results[0].samples.get('S1')![3]).toBe('10,3')
+
+    // Split for ALT=T (altIdx=1): AD should be ref,alt2 = 10,7 — NOT 10,3
+    // (the bug reused ALT#1's depth for every subsequent split allele).
+    expect(results[1].samples.get('S1')![3]).toBe('10,7')
+  })
+
   it('handles triallelic with three ALT alleles', () => {
     const record: VcfRawRecord = {
       chrom: 'chr1',

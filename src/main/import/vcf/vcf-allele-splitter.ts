@@ -128,7 +128,18 @@ function splitSampleFields(
       }
 
       const def = formatDefs.get(field)
-      const number = def?.number ?? '.'
+      let number = def?.number ?? '.'
+
+      // AD (allele depths) is conventionally Number=R (one value per allele,
+      // REF included). Some VCFs omit the ##FORMAT=<ID=AD,...> header line
+      // entirely, which otherwise falls through to "keep as-is" below and
+      // leaves the full multi-allele AD unreduced. Downstream genotype
+      // parsing assumes an already-split, biallelic AD (it reads index 1 for
+      // "this" ALT's depth), so default AD to Number=R when its def is
+      // missing or its declared Number isn't already R/A.
+      if (field === 'AD' && number !== 'R' && number !== 'A') {
+        number = 'R'
+      }
 
       if (number === 'R') {
         // Per-allele (REF + ALTs) — keep REF + current ALT

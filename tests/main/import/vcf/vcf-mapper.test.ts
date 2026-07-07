@@ -189,6 +189,41 @@ describe('VcfMapper', () => {
     expect(resultsHG006[0].alt).toBe('T')
   })
 
+  it('assigns each split ALT its own AD depth when the AD header lacks Number=R', () => {
+    const headerNoAdDef: VcfHeader = {
+      ...header,
+      formatDefs: new Map([
+        ['GT', { id: 'GT', number: '1', type: 'String' as const, description: 'Genotype' }],
+        ['GQ', { id: 'GQ', number: '1', type: 'Integer' as const, description: 'Genotype Quality' }],
+        ['DP', { id: 'DP', number: '1', type: 'Integer' as const, description: 'Read Depth' }]
+        // No AD def — the VCF omits ##FORMAT=<ID=AD,Number=R,...>
+      ])
+    }
+
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 20005000,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'GQ', 'DP', 'AD'],
+      samples: new Map([['HG005', ['0/2', '90', '48', '10,3,7']]])
+    }
+
+    // HG005 carries genotype 0/2 -> only the second ALT (T, altIdx=1) is relevant
+    const results = mapVcfRecord(record, headerNoAdDef, 'HG005', DEFAULT_INFO_FIELD_MAPPINGS)
+
+    expect(results).toHaveLength(1)
+    expect(results[0].alt).toBe('T')
+    expect(results[0].ad_ref).toBe(10)
+    // Must be ALT#2's own depth (7), not ALT#1's depth (3) reused via a hardcoded index.
+    expect(results[0].ad_alt).toBe(7)
+    expect(results[0].ab).toBeCloseTo(7 / 17, 4)
+  })
+
   it('maps ANN-annotated variant with standalone INFO fields', () => {
     const annHeader: VcfHeader = {
       ...header,
