@@ -158,6 +158,8 @@ describe('DbKeyStore', () => {
     // "Machine A": no keyring available, so the no-keyring create path is used.
     const storeA = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(false) })
     const created = storeA.wrapNewDekWithPassphrase(dbPath, 'correct horse battery staple')
+    expect(created.ok).toBe(true)
+    if (!created.ok) throw new Error('expected ok result')
 
     // "Machine B": a fresh store instance over the SAME registry file, safeStorage also unavailable.
     const storeB = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(false) })
@@ -173,10 +175,58 @@ describe('DbKeyStore', () => {
     const dbPath = join(tmpDir, 'case.db')
 
     const created = store.wrapNewDekWithPassphrase(dbPath, 'hunter2')
+    expect(created.ok).toBe(true)
+    if (!created.ok) throw new Error('expected ok result')
 
     const raw = JSON.parse(readFileSync(registryPath, 'utf-8'))
     expect(raw.keys[created.keyId].safeWrap).toBeUndefined()
     expect(raw.keys[created.keyId].passWrap).toBeDefined()
+  })
+
+  it('createManagedKey on an already-keyed path returns path-already-keyed and does not change the resolved DEK', () => {
+    const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+    const dbPath = join(tmpDir, 'case.db')
+
+    const original = store.createManagedKey(dbPath)
+    expect(original.ok).toBe(true)
+    if (!original.ok) throw new Error('expected ok result')
+
+    const second = store.createManagedKey(dbPath)
+    expect(second.ok).toBe(false)
+    if (second.ok) throw new Error('expected failure result')
+    expect(second.reason).toBe('path-already-keyed')
+
+    const resolved = store.resolveKeyForPath(dbPath)
+    expect(resolved.ok).toBe(true)
+    if (!resolved.ok) throw new Error('expected ok result')
+    expect(resolved.dek).toBe(original.dek)
+
+    const raw = JSON.parse(readFileSync(registryPath, 'utf-8'))
+    expect(raw.pathIndex[dbPath]).toBe(original.keyId)
+    expect(Object.keys(raw.keys)).toHaveLength(1)
+  })
+
+  it('wrapNewDekWithPassphrase on an already-keyed path returns path-already-keyed and does not orphan the existing key', () => {
+    const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(false) })
+    const dbPath = join(tmpDir, 'case.db')
+
+    const original = store.wrapNewDekWithPassphrase(dbPath, 'hunter2')
+    expect(original.ok).toBe(true)
+    if (!original.ok) throw new Error('expected ok result')
+
+    const second = store.wrapNewDekWithPassphrase(dbPath, 'different-passphrase')
+    expect(second.ok).toBe(false)
+    if (second.ok) throw new Error('expected failure result')
+    expect(second.reason).toBe('path-already-keyed')
+
+    const resolved = store.resolveKeyWithPassphrase(dbPath, 'hunter2')
+    expect(resolved.ok).toBe(true)
+    if (!resolved.ok) throw new Error('expected ok result')
+    expect(resolved.dek).toBe(original.dek)
+
+    const raw = JSON.parse(readFileSync(registryPath, 'utf-8'))
+    expect(raw.pathIndex[dbPath]).toBe(original.keyId)
+    expect(Object.keys(raw.keys)).toHaveLength(1)
   })
 
   it('7. removeKey deletes both the keyId entry and the path mapping', () => {

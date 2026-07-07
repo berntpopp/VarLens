@@ -81,7 +81,11 @@ interface Registry {
 }
 
 export type CreateManagedKeyResult =
-  { ok: true; keyId: string; dek: string } | { ok: false; reason: 'safe-storage-unavailable' }
+  | { ok: true; keyId: string; dek: string }
+  | { ok: false; reason: 'safe-storage-unavailable' | 'path-already-keyed' }
+
+export type WrapNewDekWithPassphraseResult =
+  { ok: true; keyId: string; dek: string } | { ok: false; reason: 'path-already-keyed' }
 
 export type ResolveKeyResult =
   { ok: true; dek: string } | { ok: false; reason: 'not-found' | 'needs-passphrase' }
@@ -184,9 +188,18 @@ export class DbKeyStore {
   /**
    * Create a new managed (keyring-wrapped) DEK for `dbPath`.
    * Fails with a typed result (never throws) when safeStorage is unavailable,
-   * so the caller can fall back to `wrapNewDekWithPassphrase`.
+   * so the caller can fall back to `wrapNewDekWithPassphrase`. Also fails
+   * with `path-already-keyed` when `dbPath` is already mapped to a key —
+   * minting a second DEK for an already-keyed path would repoint
+   * `pathIndex[dbPath]` at the new key and orphan the DEK the database was
+   * actually encrypted with, making the database unopenable.
    */
   createManagedKey(dbPath: string): CreateManagedKeyResult {
+    const registry = this.load()
+    if (registry.pathIndex[dbPath] !== undefined) {
+      return { ok: false, reason: 'path-already-keyed' }
+    }
+
     if (!this.safeStorage.isEncryptionAvailable()) {
       return { ok: false, reason: 'safe-storage-unavailable' }
     }
@@ -204,7 +217,6 @@ export class DbKeyStore {
     }
 
     const keyId = randomUUID()
-    const registry = this.load()
     registry.keys[keyId] = { path: dbPath, safeWrap }
     registry.pathIndex[dbPath] = keyId
     this.save(registry)
@@ -214,20 +226,27 @@ export class DbKeyStore {
 
   /**
    * The no-keyring create path: generate a DEK, wrap it with ONLY a
-   * passphrase (no safeWrap), and map `dbPath` to it. Always succeeds —
-   * unlike `createManagedKey`, it has no safeStorage dependency.
+   * passphrase (no safeWrap), and map `dbPath` to it. Fails with a typed
+   * result (never throws) when `dbPath` is already mapped to a key —
+   * minting a second DEK for an already-keyed path would repoint
+   * `pathIndex[dbPath]` at the new key and orphan the DEK the database was
+   * actually encrypted with, making the database unopenable.
    */
-  wrapNewDekWithPassphrase(dbPath: string, passphrase: string): { keyId: string; dek: string } {
+  wrapNewDekWithPassphrase(dbPath: string, passphrase: string): WrapNewDekWithPassphraseResult {
+    const registry = this.load()
+    if (registry.pathIndex[dbPath] !== undefined) {
+      return { ok: false, reason: 'path-already-keyed' }
+    }
+
     const dek = generateDek()
     const keyId = randomUUID()
     const passWrap = wrapPassphrase(dek, passphrase)
 
-    const registry = this.load()
     registry.keys[keyId] = { path: dbPath, passWrap }
     registry.pathIndex[dbPath] = keyId
     this.save(registry)
 
-    return { keyId, dek }
+    return { ok: true, keyId, dek }
   }
 
   /**
