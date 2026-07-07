@@ -15,6 +15,7 @@ import { AssociationDataBuilder } from '../database/AssociationDataBuilder'
 import type { VariantFilters } from '../statistics/types'
 import type { VariantFilter } from '../database/types'
 import { convertBigInts } from '../utils/convertBigInts'
+import { mainLogger } from '../services/MainLogger'
 
 /** Dependencies injected by the caller (db-worker or tests) */
 export interface DispatchDependencies {
@@ -48,6 +49,13 @@ export interface PanelAwareFilter {
  * @param db        Raw database handle (for cohort-mode chr-prefix detection)
  * @param caseId    When set, chr prefix is derived from the specified case.
  *                  Omit for cohort mode — a sample variant row is queried instead.
+ * @throws If a configured panel's interval computation itself fails (e.g. a
+ *         corrupt gene reference DB or a panel/gene lookup error). This MUST
+ *         propagate — `dispatchTask` lets it bubble to the pool caller so the
+ *         failure surfaces as a SerializableError instead of silently running
+ *         the query unfiltered under an active gene-panel restriction (a
+ *         clinical-safety hazard: a dropped filter must not look identical to
+ *         "panel matched everything").
  */
 export function resolvePanelIntervalsInPlace(
   filter: PanelAwareFilter,
@@ -79,6 +87,9 @@ export function resolvePanelIntervalsInPlace(
           return sampleRow?.chr?.startsWith('chr') === true
         })()
 
+  // A panel IS active here (panelIds is non-empty and geneRefDb is available),
+  // so a thrown error means the computation itself failed — it must propagate
+  // rather than be swallowed into a silent unfiltered query.
   try {
     const intervals = repos.panels.computeIntervals(
       panelIds,
@@ -90,11 +101,13 @@ export function resolvePanelIntervalsInPlace(
     if (intervals.length > 0) {
       filter.panel_intervals = intervals
     }
-  } catch (e) {
-    console.warn(
-      '[db-worker] Panel interval computation failed (proceeding without panel filtering):',
-      e instanceof Error ? e.message : String(e)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.error(
+      `Failed to compute panel intervals for active gene panel(s): ${message}`,
+      'db-worker'
     )
+    throw error instanceof Error ? error : new Error(message)
   }
 
   delete filter.active_panel_ids
