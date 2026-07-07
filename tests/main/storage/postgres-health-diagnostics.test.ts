@@ -62,7 +62,7 @@ describe('PostgresHealthDiagnostics', () => {
         // asserting the exact param value also proves it isn't silently
         // dropped or mismatched by the rewrite.
         expect(sql).toContain('to_regclass($1)')
-        expect(sql).not.toContain("'\"Workspace-A\"")
+        expect(sql).not.toContain('\'"Workspace-A"')
         expect(params).toEqual([`"Workspace-A"."schema_migrations"`])
         return { rows: [{ relation: '"Workspace-A".schema_migrations' }] }
       }
