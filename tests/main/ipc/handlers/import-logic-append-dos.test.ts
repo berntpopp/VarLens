@@ -66,13 +66,7 @@ describe('import-logic-append.ts DoS guards', () => {
       svc.variants.beginBulkInsert()
 
       await expect(
-        importAdditionalFileToCase(
-          caseId,
-          filePath,
-          { selectedSample: 'HG005' },
-          () => svc,
-          {}
-        )
+        importAdditionalFileToCase(caseId, filePath, { selectedSample: 'HG005' }, () => svc, {})
       ).rejects.toThrow(LineTooLongError)
     })
 
@@ -94,13 +88,7 @@ describe('import-logic-append.ts DoS guards', () => {
       svc.variants.beginBulkInsert()
 
       await expect(
-        importAdditionalFileToCase(
-          caseId,
-          filePath,
-          { selectedSample: 'HG005' },
-          () => svc,
-          {}
-        )
+        importAdditionalFileToCase(caseId, filePath, { selectedSample: 'HG005' }, () => svc, {})
       ).rejects.toThrow(DecompressedSizeExceededError)
     })
 
