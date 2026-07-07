@@ -25,9 +25,7 @@ function extractDirective(policy: string, directiveName: string): string {
 function readMetaCspFromHtml(): string {
   const htmlPath = join(__dirname, '../../../src/renderer/index.html')
   const html = readFileSync(htmlPath, 'utf-8')
-  const match = html.match(
-    /<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"\s*\/>/
-  )
+  const match = html.match(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"\s*\/>/)
   if (match === null) {
     throw new Error(`Could not find meta CSP tag in ${htmlPath}`)
   }

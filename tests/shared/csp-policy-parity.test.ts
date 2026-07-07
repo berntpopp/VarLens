@@ -12,9 +12,7 @@ const EXPECTED_SCRIPT_SRC = "'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:"
  * tag from raw HTML source. Robust to attribute ordering and surrounding whitespace.
  */
 function extractCspContent(html: string): string {
-  const metaMatch = html.match(
-    /<meta\s+[^>]*http-equiv="Content-Security-Policy"[^>]*>/i
-  )
+  const metaMatch = html.match(/<meta\s+[^>]*http-equiv="Content-Security-Policy"[^>]*>/i)
   if (!metaMatch) {
     throw new Error('No <meta http-equiv="Content-Security-Policy"> tag found')
   }
