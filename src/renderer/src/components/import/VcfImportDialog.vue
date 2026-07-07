@@ -511,7 +511,7 @@ function resetToSelect(): void {
 async function browseFiles(): Promise<void> {
   if (api === undefined) return
   try {
-    const paths = await api.import.selectFiles()
+    const paths = unwrapIpcResult(await api.import.selectFiles())
     if (paths.length === 0) return
     await loadPreview(paths)
   } catch (err) {

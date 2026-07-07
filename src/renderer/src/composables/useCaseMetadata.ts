@@ -286,7 +286,7 @@ export function useCaseMetadata() {
     }
 
     try {
-      await api.caseMetadata.setCohorts(caseId, cohortIds)
+      unwrapIpcResult(await api.caseMetadata.setCohorts(caseId, cohortIds))
     } catch (error) {
       logService.error(
         'Failed to set cohorts: ' + (error instanceof Error ? error.message : String(error)),
@@ -394,7 +394,7 @@ export function useCaseMetadata() {
     }
 
     try {
-      await api.caseMetadata.removeHpoTerm(caseId, hpoId)
+      unwrapIpcResult(await api.caseMetadata.removeHpoTerm(caseId, hpoId))
     } catch (error) {
       logService.error(
         'Failed to remove HPO term: ' + (error instanceof Error ? error.message : String(error)),

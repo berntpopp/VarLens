@@ -90,6 +90,7 @@ import { ref, computed, onMounted } from 'vue'
 import { mdiClose, mdiTune } from '@mdi/js'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useApiService } from '../composables/useApiService'
+import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
 
 const settings = useSettingsStore()
@@ -109,11 +110,12 @@ const defaultCaseTabOptions = [
 onMounted(async () => {
   try {
     if (api?.system?.getCpuCount) {
-      cpuCount.value = await api.system.getCpuCount()
+      cpuCount.value = unwrapIpcResult(await api.system.getCpuCount())
     }
   } catch (e) {
     logService.warn(
-      'Failed to get CPU count from main process: ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to get CPU count from main process: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
       'settings'
     )
   }

@@ -94,6 +94,10 @@ import StatusSelector from './StatusSelector.vue'
 import CohortCombobox from './CohortCombobox.vue'
 import HpoTermSelector from './HpoTermSelector.vue'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
+import { useAppState } from '../composables/useAppState'
+import { isIpcError } from '../../../shared/types/errors'
+import { logService } from '../services/LogService'
+import { APP_CONFIG } from '../../../shared/config/app.config'
 import type { AffectedStatus, CaseSex, CohortGroup } from '../../../shared/types/api'
 import { mdiGenderMaleFemale } from '@mdi/js'
 
@@ -120,6 +124,8 @@ const {
   removeHpoTerm,
   cohortGroupsCache
 } = useCaseMetadata()
+
+const { showSnack } = useAppState()
 
 const sexOptions = [
   { label: 'Unknown', value: 'unknown' },
@@ -177,8 +183,23 @@ async function handleCohortsChange(cohorts: CohortGroup[]) {
 }
 
 async function handleCreateCohort(name: string) {
-  await createAndAssignCohort(props.caseId, name)
-  emit('changed')
+  try {
+    await createAndAssignCohort(props.caseId, name)
+    emit('changed')
+  } catch (error) {
+    // createAndAssignCohort (unlike its optimistic-update siblings) has no
+    // internal try/catch — it throws on a DB failure (e.g. a UNIQUE
+    // violation on a duplicate cohort name). Surface it instead of letting
+    // it become an unhandled promise rejection.
+    const message =
+      error instanceof Error
+        ? error.message
+        : isIpcError(error)
+          ? (error.userMessage ?? error.message)
+          : 'Failed to create cohort.'
+    logService.error(`Failed to create cohort: ${message}`, 'CaseMetadataCard')
+    showSnack(message, 'error', { timeout: APP_CONFIG.SNACKBAR_ERROR_MS })
+  }
 }
 
 async function handleAddHpoTerm(term: { hpoId: string; hpoLabel: string }) {

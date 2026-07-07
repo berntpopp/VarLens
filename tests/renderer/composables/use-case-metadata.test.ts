@@ -217,6 +217,85 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
     })
   })
 
+  describe('setCaseCohorts', () => {
+    const caseId = 1
+
+    it('optimistically replaces cohorts and keeps them on success', async () => {
+      window.api.caseMetadata.setCohorts = vi.fn().mockResolvedValue(undefined)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.cohortGroupsCache.value.push(fakeCohort)
+      result.metadataCache.value.set(caseId, makeFullMetadata())
+
+      await result.setCaseCohorts(caseId, [fakeCohort.id])
+
+      const cached = result.metadataCache.value.get(caseId)
+      expect(cached?.cohorts).toEqual([fakeCohort])
+      expect(window.api.caseMetadata.setCohorts).toHaveBeenCalledWith(caseId, [fakeCohort.id])
+    })
+
+    it('reverts the optimistic cohort replacement when setCohorts fails', async () => {
+      window.api.caseMetadata.setCohorts = vi.fn().mockResolvedValue(fakeSerializableError)
+      window.api.caseMetadata.getFullMetadata = vi.fn().mockResolvedValue(makeFullMetadata())
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.cohortGroupsCache.value.push(fakeCohort)
+      const seeded = makeFullMetadata({ cohorts: [] })
+      result.metadataCache.value.set(caseId, seeded)
+
+      await result.setCaseCohorts(caseId, [fakeCohort.id])
+      await flushPromises()
+
+      // Reverted to the pre-optimistic value (empty), never left holding the
+      // optimistically-applied cohort that the backend actually rejected.
+      const cached = result.metadataCache.value.get(caseId)
+      expect(cached?.cohorts).toEqual([])
+      expect(logService.error).toHaveBeenCalled()
+    })
+  })
+
+  describe('removeHpoTerm', () => {
+    const caseId = 1
+    const existingTerm: CaseHpoTerm = {
+      id: 5,
+      case_id: caseId,
+      hpo_id: 'HP:0001250',
+      hpo_label: 'Seizure',
+      created_at: 1_700_000_000_000
+    }
+
+    it('optimistically removes the term and keeps it removed on success', async () => {
+      window.api.caseMetadata.removeHpoTerm = vi.fn().mockResolvedValue(undefined)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(caseId, makeFullMetadata({ hpoTerms: [existingTerm] }))
+
+      await result.removeHpoTerm(caseId, existingTerm.hpo_id)
+
+      const cached = result.metadataCache.value.get(caseId)
+      expect(cached?.hpoTerms).toEqual([])
+    })
+
+    it('reverts the optimistic removal when removeHpoTerm fails', async () => {
+      window.api.caseMetadata.removeHpoTerm = vi.fn().mockResolvedValue(fakeSerializableError)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(caseId, makeFullMetadata({ hpoTerms: [existingTerm] }))
+
+      await result.removeHpoTerm(caseId, existingTerm.hpo_id)
+
+      // Reverted back to the pre-optimistic term list — the SerializableError
+      // must never have been treated as a success that lets the removal stand.
+      const cached = result.metadataCache.value.get(caseId)
+      expect(cached?.hpoTerms).toEqual([existingTerm])
+      expect(logService.error).toHaveBeenCalled()
+    })
+  })
+
   describe('metadata upsert paths (affected-status/sex/age/dob)', () => {
     const caseId = 1
 

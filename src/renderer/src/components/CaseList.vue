@@ -266,14 +266,15 @@ const availableHpoTerms = ref<Array<{ hpo_id: string; label: string }>>([])
 async function loadHpoTerms(): Promise<void> {
   if (!api) return
   try {
-    const terms = await api.caseMetadata.distinctHpoTerms()
+    const terms = unwrapIpcResult(await api.caseMetadata.distinctHpoTerms())
     availableHpoTerms.value = terms.map((t) => ({
       hpo_id: t.hpo_id,
       label: `${t.hpo_label} (${t.hpo_id})`
     }))
   } catch (e) {
     logService.warn(
-      'Failed to load HPO terms: ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to load HPO terms: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
       'case-list'
     )
     availableHpoTerms.value = []

@@ -432,7 +432,7 @@ async function selectSource(mode: ImportMode): Promise<void> {
     let filePaths: string[]
 
     if (mode === 'single') {
-      const path = await api!.import.selectFile()
+      const path = unwrapIpcResult(await api!.import.selectFile())
       if (path === null) return
       filePaths = [path]
     } else if (mode === 'files') {

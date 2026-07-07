@@ -39,11 +39,27 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(
     username: string,
     password: string
-  ): Promise<{ success: boolean; mustChangePassword?: boolean; locked?: boolean }> {
+  ): Promise<{
+    success: boolean
+    mustChangePassword?: boolean
+    locked?: boolean
+    error?: string
+  }> {
     if (!api) {
       return { success: false }
     }
     const result = await api.auth.login(username, password)
+    // wrapHandler resolves an IpcResult even on failure — a backend fault
+    // (DB down, thrown validation error, etc.) comes back shaped like a
+    // SerializableError, not the { success, user? } business-logic result
+    // that `authenticate()` returns for a plain wrong-password attempt.
+    // Branch here so the caller can distinguish "backend error" from
+    // "invalid credentials" instead of silently reading `.success` off an
+    // error object (always undefined, indistinguishable from a rejected login).
+    if (isIpcError(result)) {
+      logService.error('Login request failed: ' + (result.userMessage ?? result.message), 'auth')
+      return { success: false, error: result.userMessage ?? result.message }
+    }
     if (result.success === true && result.user !== null && result.user !== undefined) {
       currentUser.value = result.user
     }
