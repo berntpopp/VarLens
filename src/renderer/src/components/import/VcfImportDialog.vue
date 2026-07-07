@@ -673,18 +673,20 @@ async function startImport(): Promise<void> {
       variantCount: serverResult.totalVariants
     })
   } catch (err) {
-    logService.error(
-      `Multi-file VCF import failed: ${err instanceof Error ? err.message : String(err)}`,
-      'VcfImportDialog'
-    )
+    // `unwrapIpcResult` throws the raw `SerializableError` object (a plain
+    // object, not an `Error` instance) on a backend fault — route through
+    // the shared formatter so `userMessage`/`message` surface instead of
+    // `String(err)` producing "[object Object]" (matches `handleError` below).
+    const message = formatErrorMessage(err, String(err))
+    logService.error(`Multi-file VCF import failed: ${message}`, 'VcfImportDialog')
     // Mark current file as errored
     if (currentFile.value !== null) {
       markFileStatus(currentFile.value, {
         status: 'error',
-        error: err instanceof Error ? err.message : String(err)
+        error: message
       })
     }
-    errorMessage.value = err instanceof Error ? err.message : String(err)
+    errorMessage.value = message
     // Clear the background pill — the import stopped.
     importStore.reset()
     // Return to review so the user can retry or adjust
