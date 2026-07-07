@@ -272,6 +272,36 @@ describe('vcf-annotation-parser', () => {
       expect(resultAllele2.transcript).toBe('T2')
     })
 
+    it('does not cross-attach a shorter split\'s ANN block via the VEP insertion-suffix heuristic', () => {
+      // REF=A, ALT=AT,T — a mixed insertion/SNV multi-allelic site. SnpEff's ANN
+      // allele field is always the full raw ALT string (confirmed against real
+      // SnpEff output, e.g. tests/test-data/vcf/single-sample.snpeff.vcf.gz
+      // REF=T ALT=TTATC -> ANN=TTATC|...), so "AT" and "T" disambiguate by exact
+      // match. VEP's "inserted bases only" heuristic ("AT".substring(1) === "T")
+      // must NOT apply to ANN — otherwise the T block would falsely cross-attach
+      // to the AT split.
+      const info = new Map([
+        [
+          'ANN',
+          'AT|frameshift_variant|HIGH|GENE_AT|E1|transcript|T1|protein_coding|1/1|c.1_2insT|p.X1fs|||||,' +
+            'T|missense_variant|MODERATE|GENE_T|E2|transcript|T2|protein_coding|1/1|c.1A>T|p.X1Y|||||'
+        ]
+      ])
+
+      // Split record for ALT=AT must match ONLY the GENE_AT/T1 block.
+      const resultAt = parseAnnotation(info, header, 'AT', 'A')
+      expect(resultAt.transcripts).toHaveLength(1)
+      expect(resultAt.geneSymbol).toBe('GENE_AT')
+      expect(resultAt.transcript).toBe('T1')
+
+      // Split record for ALT=T must match ONLY the GENE_T/T2 block — it must NOT
+      // also pick up the AT block via the substring(1) cross-match.
+      const resultT = parseAnnotation(info, header, 'T', 'A')
+      expect(resultT.transcripts).toHaveLength(1)
+      expect(resultT.geneSymbol).toBe('GENE_T')
+      expect(resultT.transcript).toBe('T2')
+    })
+
     it('handles compound annotations (frameshift&splice_region)', () => {
       const info = new Map([
         [
