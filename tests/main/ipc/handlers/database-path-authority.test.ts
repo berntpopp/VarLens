@@ -4,7 +4,7 @@
  * database:open, database:create, database:showInFolder, and
  * database:removeRecent must only accept a path that was picked via a
  * dialog this session (database:selectFile / database:selectSaveLocation,
- * sharing the import allowlist's dialog-enrolled set), already appears in
+ * using a database-scoped dialog-enrolled set), already appears in
  * the recent databases list, or is the currently active database. This
  * mirrors the deleteFile precedent (recent-list + active-DB refusal) plus
  * the import-path-allowlist's dialog-enrollment mechanism.
@@ -54,7 +54,11 @@ import {
   createDatabase,
   removeRecentDatabase
 } from '../../../../src/main/ipc/handlers/database-logic'
-import { __resetAllowlistForTests } from '../../../../src/main/security/import-path-allowlist'
+import {
+  addAllowedImportPath,
+  __resetAllowlistForTests
+} from '../../../../src/main/security/import-path-allowlist'
+import { __resetDatabasePathAllowlistForTests } from '../../../../src/main/security/database-path-allowlist'
 
 type HandlerCallback = (event: unknown, ...args: unknown[]) => Promise<unknown>
 
@@ -127,6 +131,7 @@ describe('database path-authority gate', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     __resetAllowlistForTests()
+    __resetDatabasePathAllowlistForTests()
   })
 
   describe('database:open', () => {
@@ -190,6 +195,17 @@ describe('database path-authority gate', () => {
         'database:open',
         '/nonexistent-electron-app-path/leaked.db'
       )
+
+      expectInvalidParametersResult(result)
+      expect(openDatabase).not.toHaveBeenCalled()
+    })
+
+    it('rejects a path enrolled only through the import path allowlist', async () => {
+      addAllowedImportPath(UNAUTHORIZED_PATH)
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:open', UNAUTHORIZED_PATH)
 
       expectInvalidParametersResult(result)
       expect(openDatabase).not.toHaveBeenCalled()

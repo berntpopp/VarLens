@@ -13,7 +13,10 @@ import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
-import { addAllowedImportPath, isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
+import {
+  addAllowedDatabasePath,
+  isStrictlyEnrolledDatabasePath
+} from '../../security/database-path-allowlist'
 import type { DatabaseManager } from '../../services/DatabaseManager'
 import {
   DatabaseOpenSchema,
@@ -208,13 +211,13 @@ function createInsecureLocalPostgresSecretStore(userDataPath: string): SecretSto
  *
  * A path is allowed only if it was picked via a dialog this session
  * (`database:selectFile` / `database:selectSaveLocation`, which enroll into
- * the same session allowlist `import.ts` uses for import paths), already
+ * a database-scoped session allowlist), already
  * appears in the recent databases list, or is the currently active
  * database. This mirrors the `deleteDbFile` precedent (recent-list +
  * active-DB checks) while still allowing `create`/`open` to work with a
  * freshly dialog-selected path that isn't in the recent list yet.
  *
- * Uses the STRICT enrollment check (`isStrictlyEnrolledPath`), not the
+ * Uses the database-scoped STRICT enrollment check, not the
  * permissive `isAllowedImportPath` — the automatic home/userData/temp roots
  * that predicate grants for the original import flow do not apply here.
  * An arbitrary renderer-supplied string with no dialog/recent/active
@@ -222,7 +225,7 @@ function createInsecureLocalPostgresSecretStore(userDataPath: string): SecretSto
  * directory or the OS temp dir.
  */
 function isAllowedDatabasePath(candidate: string, getDbManager: () => DatabaseManager): boolean {
-  if (isStrictlyEnrolledPath(candidate)) return true
+  if (isStrictlyEnrolledDatabasePath(candidate)) return true
   if (!isAbsolute(candidate)) return false
 
   const canonical = resolve(candidate)
@@ -271,7 +274,7 @@ export function registerDatabaseHandlers({
     }
 
     const filePath = result.filePaths[0]
-    addAllowedImportPath(filePath)
+    addAllowedDatabasePath(filePath)
     return filePath
   })
 
@@ -301,7 +304,7 @@ export function registerDatabaseHandlers({
       return null
     }
 
-    addAllowedImportPath(result.filePath)
+    addAllowedDatabasePath(result.filePath)
     return result.filePath
   })
 
