@@ -10,25 +10,14 @@
  * that would pull in Electron dependencies.
  */
 
-import { describe, it, expect, expectTypeOf, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { ErrorCode } from '../../../src/shared/types/errors'
-import type {
-  WindowAPI,
-  Case,
-  BatchAnnotationKey,
-  CaseDataInfo,
-  CaseMetadata,
-  CaseExternalId,
-  CohortGroup,
-  GeneListWithCount
-} from '../../../src/shared/types/api'
-import type { IpcResult } from '../../../src/shared/types/errors'
+import type { WindowAPI, BatchAnnotationKey } from '../../../src/shared/types/api'
 import type { ImportResult } from '../../../src/shared/types/import'
 import { DEBUG_CHANNELS } from '../../../src/shared/ipc/domains/debug'
 import { JOBS_CHANNELS } from '../../../src/shared/ipc/domains/jobs'
-import type { Job } from '../../../src/shared/types/jobs'
 
 const ROOT = resolve(__dirname, '..', '..', '..')
 
@@ -438,13 +427,12 @@ describe('Preload contract alignment', () => {
     expect(mockApiKeys).toEqual(windowApiKeys)
   })
 
-  it('exposes IpcResult for scoped wrapHandler-backed methods', () => {
-    type CasesListReturn = Awaited<ReturnType<WindowAPI['cases']['list']>>
-    type CohortRunAssociationReturn = Awaited<ReturnType<WindowAPI['cohort']['runAssociation']>>
+  // The compile-time half of this check (CasesListReturn/CohortRunAssociationReturn
+  // must equal IpcResult<...>) lives in preload-contract.test-d.ts — see that
+  // file's docblock for why `expectTypeOf(...).toEqualTypeOf(...)` is a
+  // runtime no-op and must run under a real typechecker to mean anything.
+  it('exposes IpcResult for scoped wrapHandler-backed methods (source strings)', () => {
     const apiSource = readFileSync(resolve(ROOT, 'src/shared/types/api.ts'), 'utf-8')
-
-    expectTypeOf<CasesListReturn>().toEqualTypeOf<IpcResult<Case[]>>()
-    expectTypeOf<CohortRunAssociationReturn>().toEqualTypeOf<IpcResult<unknown>>()
 
     expect(apiSource).toContain('export type CasesAPI = CasesDomainContract')
     expect(apiSource).toContain('getSummary: () => Promise<IpcResult<CohortSummary>>')
@@ -589,11 +577,9 @@ describe('debug domain — Sprint A PR-2 Gate 10c', () => {
     expect(source).toContain('debug: createDebugApi()')
   })
 
-  it('compile-time check: WindowAPI debug methods return IpcResult', () => {
-    expectTypeOf<Awaited<ReturnType<WindowAPI['debug']['queryCountersReset']>>>().toEqualTypeOf<
-      IpcResult<{ enabled: boolean }>
-    >()
-  })
+  // Compile-time check moved to preload-contract.test-d.ts — see that
+  // file's docblock for why an `expectTypeOf` assertion left in a plain
+  // `.test.ts` file never actually runs under a typechecker.
 })
 
 describe('jobs domain — Sprint A PR-4 Gate 11', () => {
@@ -626,23 +612,13 @@ describe('jobs domain — Sprint A PR-4 Gate 11', () => {
     expect(source).toContain('registerJobsHandlers()')
   })
 
-  it('compile-time check: WindowAPI jobs methods return IpcResult', () => {
-    expectTypeOf<Awaited<ReturnType<WindowAPI['jobs']['list']>>>().toEqualTypeOf<IpcResult<Job[]>>()
-    expectTypeOf<Awaited<ReturnType<WindowAPI['jobs']['get']>>>().toEqualTypeOf<
-      IpcResult<Job | null>
-    >()
-    expectTypeOf<Awaited<ReturnType<WindowAPI['jobs']['progress']>>>().toEqualTypeOf<
-      IpcResult<Job['progress']>
-    >()
-  })
+  // Compile-time checks (jobs list/get/progress return IpcResult; the
+  // import:start contract is unchanged) moved to preload-contract.test-d.ts.
 
-  it('existing import contract is unchanged by the jobs domain', () => {
-    // Byte-identity guard: the import domain's start signature and the
-    // import:progress event channel must be untouched by PR-4.
-    expectTypeOf<Awaited<ReturnType<WindowAPI['import']['start']>>>().toEqualTypeOf<
-      IpcResult<ImportResult>
-    >()
-
+  it('existing import contract is unchanged by the jobs domain (source string)', () => {
+    // Byte-identity guard: the import:progress event channel must be
+    // untouched by PR-4. The type-level half of this guard (the
+    // import:start return-type shape) lives in preload-contract.test-d.ts.
     const coreApiSource = readFileSync(resolve(ROOT, 'src/preload/window-api/core-api.ts'), 'utf-8')
     expect(coreApiSource).toContain("subscribeToIpcEvent('import:progress', callback)")
   })
@@ -688,11 +664,8 @@ describe('cohort domain — Sprint A PR-3 Gate 10b', () => {
     expect(withWarnings.warnings?.staleSummary).toBe(true)
   })
 
-  it('getSummaryStatus contract shape is unchanged ({ is_stale, last_rebuilt_at:number })', () => {
-    expectTypeOf<Awaited<ReturnType<WindowAPI['cohort']['getSummaryStatus']>>>().toEqualTypeOf<
-      IpcResult<{ is_stale: boolean; last_rebuilt_at: number }>
-    >()
-  })
+  // 'getSummaryStatus contract shape is unchanged' compile-time check moved
+  // to preload-contract.test-d.ts.
 
   it('ImportResult shape unchanged — no warnings field (Pass-4 HIGH #3)', () => {
     const result: ImportResult = {
@@ -782,31 +755,14 @@ describe('case-metadata domain — Task A4 IpcResult laundering guard', () => {
     expect(appApiSource).not.toContain("as WindowAPI['caseMetadata']")
   })
 
-  it('compile-time check: WindowAPI caseMetadata methods return IpcResult (regression guard for C1)', () => {
-    // This is the exact shape of the CaseDataInfoTab.vue bug: `getDataInfo`
-    // must resolve `IpcResult<CaseDataInfo | null>`, not the naked value, so
-    // a raw `dataInfo.value = await api.caseMetadata.getDataInfo(...)` (no
-    // `unwrapIpcResult`) fails to compile.
-    expectTypeOf<Awaited<ReturnType<WindowAPI['caseMetadata']['getDataInfo']>>>().toEqualTypeOf<
-      IpcResult<CaseDataInfo | null>
-    >()
-    expectTypeOf<Awaited<ReturnType<WindowAPI['caseMetadata']['upsert']>>>().toEqualTypeOf<
-      IpcResult<CaseMetadata>
-    >()
-    expectTypeOf<Awaited<ReturnType<WindowAPI['caseMetadata']['createCohort']>>>().toEqualTypeOf<
-      IpcResult<CohortGroup>
-    >()
-    expectTypeOf<Awaited<ReturnType<WindowAPI['caseMetadata']['listExternalIds']>>>().toEqualTypeOf<
-      IpcResult<CaseExternalId[]>
-    >()
-  })
-
-  it('compile-time check: WindowAPI geneLists methods already return IpcResult (no drift to guard)', () => {
-    // gene-lists was already honest before this task; lock it too so a
-    // future refactor of GeneListsAPI can't silently launder it back to a
-    // naked `Promise<T>` the way CaseMetadataAPI once was.
-    expectTypeOf<Awaited<ReturnType<WindowAPI['geneLists']['list']>>>().toEqualTypeOf<
-      IpcResult<GeneListWithCount[]>
-    >()
-  })
+  // The two compile-time checks that used to live here (WindowAPI
+  // caseMetadata methods return IpcResult — the C1 regression guard — and
+  // WindowAPI geneLists methods return IpcResult) moved to
+  // preload-contract.test-d.ts, which actually runs under a typechecker.
+  // See PR-A Item 3: `expectTypeOf(...).toEqualTypeOf(...)` is a runtime
+  // no-op (`expect-type`'s implementation is literally `() => true`), so
+  // leaving these assertions in a plain `.test.ts` file — never covered by
+  // `make typecheck` (tests/ is outside tsconfig.node.json/tsconfig.renderer.json)
+  // nor by `vitest run` (no typecheck mode) — made them inert: reverting
+  // `CaseMetadataAPI` to a naked `Promise<T>` would not fail any command.
 })

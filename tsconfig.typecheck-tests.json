@@ -1,0 +1,30 @@
+{
+  // Narrow tsconfig for vitest's typecheck mode (see vitest.config.ts's
+  // 'contract-typecheck' project). Scoped to the *.test-d.ts files that
+  // hold compile-time-only IpcResult locks (PR-A Item 3) plus the
+  // src/shared types they reference, so this run can't cascade tsc across
+  // all of src/main, src/renderer, or the rest of tests/ (which aren't
+  // written to this narrow contract and would surface unrelated
+  // pre-existing type errors).
+  //
+  // This file is intentionally NOT referenced from tsconfig.json /
+  // tsconfig.node.json / tsconfig.renderer.json — those own `make
+  // typecheck`'s src/ coverage. This one is spawned directly by vitest's
+  // typechecker (Typechecker.spawn() passes `-p <tsconfig>` verbatim to
+  // `tsc --noEmit`).
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true
+  },
+  "include": ["tests/shared/types/**/*.test-d.ts", "src/shared/**/*"]
+}
