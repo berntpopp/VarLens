@@ -61,10 +61,14 @@ describe('sanitizeLogMessage', () => {
       expect(result).not.toContain('TopSecretValue123')
     })
 
-    it('redacts an unquoted password: value', () => {
+    it('does NOT redact an unquoted password: value (bare colon, ambiguous with prose)', () => {
+      // A bare `password:` is structurally identical to prose like
+      // "password reset: check your email" — see the tradeoff comment on
+      // SECRET_VALUE_PATTERN. Only `=` is treated as a strong enough
+      // key-value signal for unquoted values; `:` requires a quote.
       const result = sanitizeLogMessage('password: hunter2')
-      expect(result).toContain('[REDACTED:KEY]')
-      expect(result).not.toContain('hunter2')
+      expect(result).not.toContain('[REDACTED:KEY]')
+      expect(result).toBe('password: hunter2')
     })
 
     it('redacts an unquoted password= value', () => {
@@ -124,6 +128,83 @@ describe('sanitizeLogMessage', () => {
       expect(result).not.toContain("'abc'")
       expect(result.startsWith('opening db with key=')).toBe(true)
       expect(result.endsWith('before import')).toBe(true)
+    })
+  })
+
+  describe('over-redaction guards (Task H-log): bare "keyword:" must not swallow prose', () => {
+    it('does not redact "refresh token: expired, renewing session"', () => {
+      const result = sanitizeLogMessage('refresh token: expired, renewing session')
+      expect(result).not.toContain('[REDACTED:KEY]')
+      expect(result).toBe('refresh token: expired, renewing session')
+    })
+
+    it('does not redact "It is a secret: nobody knows the recipe"', () => {
+      const result = sanitizeLogMessage('It is a secret: nobody knows the recipe')
+      expect(result).not.toContain('[REDACTED:KEY]')
+      expect(result).toBe('It is a secret: nobody knows the recipe')
+    })
+
+    it('does not redact "password reset: check your email"', () => {
+      const result = sanitizeLogMessage('password reset: check your email')
+      expect(result).not.toContain('[REDACTED:KEY]')
+      expect(result).toBe('password reset: check your email')
+    })
+
+    it('does not redact "the token: value pair"', () => {
+      const result = sanitizeLogMessage('the token: value pair')
+      expect(result).not.toContain('[REDACTED:KEY]')
+      expect(result).toBe('the token: value pair')
+    })
+  })
+
+  describe('under-redaction still works (Task H-log): = or quotes remain a strong signal', () => {
+    it('redacts password=hunter2', () => {
+      const result = sanitizeLogMessage('password=hunter2')
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('hunter2')
+    })
+
+    it('redacts secret=abc123;next', () => {
+      const result = sanitizeLogMessage('secret=abc123;next')
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('abc123')
+      expect(result).toContain('next')
+    })
+
+    it('redacts token=xyz', () => {
+      const result = sanitizeLogMessage('token=xyz')
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('xyz')
+    })
+
+    it("redacts password='hunter2' (quoted)", () => {
+      const result = sanitizeLogMessage("password='hunter2'")
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('hunter2')
+    })
+
+    it('redacts token="abc" (quoted)', () => {
+      const result = sanitizeLogMessage('token="abc"')
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('abc')
+    })
+
+    it("redacts key='S3cr3t' (quoted SQLcipher form)", () => {
+      const result = sanitizeLogMessage("key='S3cr3t'")
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('S3cr3t')
+    })
+
+    it("redacts rekey='...' (quoted SQLcipher form)", () => {
+      const result = sanitizeLogMessage("rekey='NewKeyValue'")
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('NewKeyValue')
+    })
+
+    it('redacts PRAGMA key = "..." (quoted SQLcipher pragma form)', () => {
+      const result = sanitizeLogMessage('PRAGMA key = "TopSecretValue123"')
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain('TopSecretValue123')
     })
   })
 

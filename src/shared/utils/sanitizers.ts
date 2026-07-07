@@ -40,14 +40,24 @@ const SQLCIPHER_KEY_PATTERN = /\b((?:re)?key)\b\s*[=:]\s*(?:'[^']*'|"[^"]*")/gi
  * Regex pattern for generic secret key-value pairs: `password`,
  * `passphrase`, `secret`, `token`.
  *
- * These keywords are rare enough in ordinary log prose (unlike "key") that
- * both quoted (`password='...'`) and unquoted (`password: hunter2`) forms
- * are redacted. The value is captured up to the closing quote (if quoted)
- * or up to the next whitespace/`;`/`,` delimiter (if unquoted), so only the
+ * Quoted values (`password='...'`, `token="..."`) are always redacted — a
+ * quote is a strong, low-false-positive signal of a literal value, so it is
+ * accepted with either `=` or `:` as the operator.
+ *
+ * Unquoted values are redacted ONLY after `=` (`password=hunter2`), never
+ * after a bare `:`. A bare `keyword:` is structurally identical to ordinary
+ * prose ("token: expired, renewing session", "a secret: nobody knows the
+ * recipe") — there is no reliable way to distinguish a leaked secret from a
+ * sentence using the same word as a common noun (entropy/length heuristics
+ * are unreliable too). This redaction is defense-in-depth, not the primary
+ * safeguard (call-site discipline is), so the tradeoff deliberately favors
+ * under-redacting a rare unquoted-colon secret over corrupting common log
+ * prose. The value is captured up to the closing quote (if quoted) or up to
+ * the next whitespace/`;`/`,` delimiter (if unquoted via `=`), so only the
  * secret value is redacted — surrounding text is preserved.
  */
 const SECRET_VALUE_PATTERN =
-  /\b(passphrase|password|secret|token)\b\s*[=:]\s*(?:'([^']*)'|"([^"]*)"|(\S+?)(?=[;,\s]|$))/gi
+  /\b(passphrase|password|secret|token)\b\s*(?:[=:]\s*(?:'([^']*)'|"([^"]*)")|=\s*(\S+?)(?=[;,\s]|$))/gi
 
 /**
  * Sanitizes log messages by redacting sensitive genetic and medical data
