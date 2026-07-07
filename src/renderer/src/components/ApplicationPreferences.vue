@@ -126,9 +126,23 @@ const workerThreadsValue = computed({
   set: (val: number) => {
     settings.workerThreads = val
     // Sync to main process DbPool — takes effect on next database open
-    api?.system?.setWorkerThreads(val)
+    void syncWorkerThreads(val)
   }
 })
+
+async function syncWorkerThreads(value: number): Promise<void> {
+  try {
+    if (api?.system?.setWorkerThreads) {
+      unwrapIpcResult(await api.system.setWorkerThreads(value))
+    }
+  } catch (e) {
+    logService.warn(
+      'Failed to set worker thread count in main process: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
+      'settings'
+    )
+  }
+}
 
 const show = (): void => {
   isOpen.value = true

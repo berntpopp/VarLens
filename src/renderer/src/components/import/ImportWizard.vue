@@ -436,9 +436,9 @@ async function selectSource(mode: ImportMode): Promise<void> {
       if (path === null) return
       filePaths = [path]
     } else if (mode === 'files') {
-      filePaths = await api!.batchImport.selectFiles()
+      filePaths = unwrapIpcResult(await api!.batchImport.selectFiles())
     } else {
-      filePaths = await api!.batchImport.selectFolder()
+      filePaths = unwrapIpcResult(await api!.batchImport.selectFolder())
     }
 
     if (filePaths.length === 0) return

@@ -273,12 +273,12 @@ export interface ImportAPI {
 }
 
 export interface SystemAPI {
-  getVersion: () => Promise<{ app: string; electron: string }>
-  getUserDataPath: () => Promise<string>
-  getCpuCount: () => Promise<number>
-  setWorkerThreads: (count: number) => Promise<void>
-  getWorkerThreads: () => Promise<number>
-  getLogFilePath: () => Promise<string>
+  getVersion: () => Promise<IpcResult<{ app: string; electron: string }>>
+  getUserDataPath: () => Promise<IpcResult<string>>
+  getCpuCount: () => Promise<IpcResult<number>>
+  setWorkerThreads: (count: number) => Promise<IpcResult<void>>
+  getWorkerThreads: () => Promise<IpcResult<number>>
+  getLogFilePath: () => Promise<IpcResult<string>>
 }
 
 export interface ShellOpenExternalResult {
@@ -353,8 +353,8 @@ export interface DuplicateCheckResult {
 }
 
 export interface BatchImportAPI {
-  selectFiles: () => Promise<string[]>
-  selectFolder: () => Promise<string[]>
+  selectFiles: () => Promise<IpcResult<string[]>>
+  selectFolder: () => Promise<IpcResult<string[]>>
   checkDuplicates: (
     filePaths: string[],
     stripText?: string

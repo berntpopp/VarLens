@@ -224,9 +224,9 @@ const show = async (mode: 'files' | 'folder' | 'zip'): Promise<void> => {
   let filePaths: string[]
 
   if (mode === 'files') {
-    filePaths = await api!.batchImport.selectFiles()
+    filePaths = unwrapIpcResult(await api!.batchImport.selectFiles())
   } else {
-    filePaths = await api!.batchImport.selectFolder()
+    filePaths = unwrapIpcResult(await api!.batchImport.selectFolder())
   }
 
   if (filePaths.length === 0) return

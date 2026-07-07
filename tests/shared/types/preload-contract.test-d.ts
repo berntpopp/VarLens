@@ -90,6 +90,29 @@ describe('jobs domain — Sprint A PR-4 Gate 11', () => {
   })
 })
 
+describe('batch-import and system domains — C1 renderer unwrap guards', () => {
+  it('compile-time check: batch-import picker methods return IpcResult', () => {
+    expectTypeOf<Awaited<ReturnType<WindowAPI['batchImport']['selectFiles']>>>().toEqualTypeOf<
+      IpcResult<string[]>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['batchImport']['selectFolder']>>>().toEqualTypeOf<
+      IpcResult<string[]>
+    >()
+  })
+
+  it('compile-time check: system worker-thread methods return IpcResult', () => {
+    expectTypeOf<Awaited<ReturnType<WindowAPI['system']['getCpuCount']>>>().toEqualTypeOf<
+      IpcResult<number>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['system']['setWorkerThreads']>>>().toEqualTypeOf<
+      IpcResult<void>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['system']['getWorkerThreads']>>>().toEqualTypeOf<
+      IpcResult<number>
+    >()
+  })
+})
+
 describe('cohort domain — Sprint A PR-3 Gate 10b', () => {
   it('getSummaryStatus contract shape is unchanged ({ is_stale, last_rebuilt_at:number })', () => {
     expectTypeOf<Awaited<ReturnType<WindowAPI['cohort']['getSummaryStatus']>>>().toEqualTypeOf<
