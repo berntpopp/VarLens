@@ -72,6 +72,7 @@ export class TranscriptRepository extends BaseRepository {
       const transcript = this.execFirst<{
         gene_symbol: string | null
         consequence: string | null
+        func: string | null
         cdna: string | null
         aa_change: string | null
         hpo_sim_score: number | null
@@ -79,7 +80,15 @@ export class TranscriptRepository extends BaseRepository {
       }>(
         this.kysely
           .selectFrom('variant_transcripts')
-          .select(['gene_symbol', 'consequence', 'cdna', 'aa_change', 'hpo_sim_score', 'moi'])
+          .select([
+            'gene_symbol',
+            'consequence',
+            'func',
+            'cdna',
+            'aa_change',
+            'hpo_sim_score',
+            'moi'
+          ])
           .where('variant_id', '=', variantId)
           .where('transcript_id', '=', transcriptId)
       )!
@@ -91,6 +100,7 @@ export class TranscriptRepository extends BaseRepository {
             transcript: transcriptId,
             gene_symbol: transcript.gene_symbol,
             consequence: transcript.consequence,
+            func: transcript.func,
             cdna: transcript.cdna,
             aa_change: transcript.aa_change,
             hpo_sim_score: transcript.hpo_sim_score,

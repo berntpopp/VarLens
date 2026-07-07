@@ -101,6 +101,7 @@ describe('PostgresTranscriptsRepository', () => {
             transcript_id: 'NM_000059.4',
             gene_symbol: 'BRCA2',
             consequence: 'HIGH',
+            func: 'stop_gained',
             cdna: 'c.1A>G',
             aa_change: 'p.M1V',
             hpo_sim_score: 0.8,
@@ -127,7 +128,7 @@ describe('PostgresTranscriptsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       4,
       expect.stringContaining('UPDATE "case_schema".variants'),
-      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'c.1A>G', 'p.M1V', 0.8, 'AD']
+      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'stop_gained', 'c.1A>G', 'p.M1V', 0.8, 'AD']
     )
     expect(query).toHaveBeenNthCalledWith(5, 'COMMIT')
     expect(release).toHaveBeenCalledOnce()
@@ -157,6 +158,7 @@ describe('PostgresTranscriptsRepository', () => {
             transcript_id: 'NM_000059.4',
             gene_symbol: 'BRCA2',
             consequence: 'HIGH',
+            func: 'missense_variant',
             cdna: 'c.1A>G',
             aa_change: 'p.M1V',
             hpo_sim_score: 0.8,
@@ -193,7 +195,7 @@ describe('PostgresTranscriptsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       5,
       expect.stringContaining('UPDATE "case_schema".variants'),
-      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'c.1A>G', 'p.M1V', 0.8, 'AD']
+      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'missense_variant', 'c.1A>G', 'p.M1V', 0.8, 'AD']
     )
     expect(query).toHaveBeenNthCalledWith(6, 'COMMIT')
     expect(release).toHaveBeenCalledOnce()

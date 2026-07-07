@@ -148,16 +148,18 @@ export class PostgresTranscriptsRepository {
           SET transcript = $2,
               gene_symbol = $3,
               consequence = $4,
-              cdna = $5,
-              aa_change = $6,
-              hpo_sim_score = $7,
-              moi = $8
+              func = $5,
+              cdna = $6,
+              aa_change = $7,
+              hpo_sim_score = $8,
+              moi = $9
         WHERE id = $1`,
       [
         variantId,
         transcript.transcript_id,
         transcript.gene_symbol,
         transcript.consequence,
+        transcript.func,
         transcript.cdna,
         transcript.aa_change,
         transcript.hpo_sim_score,
