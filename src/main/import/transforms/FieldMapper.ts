@@ -254,6 +254,7 @@ export class FieldMapper extends Transform {
           string | null,
         consequence: this.extractValue(row, this.cols.IMPACT, i, true, IMPACT_DICTIONARY) as
           string | null,
+        func: this.extractValue(row, this.cols.FUNC, i, false) as string | null,
         cdna: this.extractValue(row, this.cols.CDNA, i, false) as string | null,
         aa_change: this.extractValue(row, this.cols.AA_CHANGE, i, false) as string | null,
         hpo_sim_score: this.extractNumericFromDict(

@@ -43,6 +43,10 @@ import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
  * - 26: v0.55.0 FTS5 virtual tables for variant_sv + variant_str (multi-variant filter/sort/search)
  * - 27: filter_presets.kind discriminator + built-in shortlist preset seeds (unified Shortlist tab)
  * - 28: idx_variants_case_type for case_id-first cohort scans
+ * - 29: covering index on variants(chr, pos, ref, alt)
+ * - 30: end_pos on cohort_variant_summary for SV/CNV interval-overlap
+ * - 31: projects registry
+ * - 32: variant_transcripts.func — canonical transcript impact/SO model (D1)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1773,5 +1777,39 @@ export function runMigrations(db: Database.Database): void {
         VALUES (1, 'default', 'main');
     `)
     db.exec('PRAGMA user_version = 31')
+  }
+
+  // ── Migration v32: canonical transcript impact/SO model (D1) ──
+  //
+  // variant_transcripts.consequence is conflated: JSON import writes the
+  // IMPACT level there (correct per the variants.consequence/variants.func
+  // convention), but VCF import (VEP CSQ / SnpEff ANN) writes the raw
+  // Sequence Ontology term instead — corrupting impact/rarity filters once
+  // the transcript-switch denormalization copies it onto variants.consequence.
+  //
+  // Fix: add a `func` column mirroring variants.func, and fix every import
+  // path (this migration + application code) so variant_transcripts.consequence
+  // = IMPACT and variant_transcripts.func = SO term on every path, matching
+  // the variants table's existing convention.
+  //
+  // Backfill: additive only, no data mutation. Legacy rows are NOT rewritten:
+  //   - JSON-imported rows already have the correct IMPACT in `consequence`;
+  //     the original per-transcript SO term was discarded at import time and
+  //     cannot be recovered from the database alone, so `func` stays NULL.
+  //   - VCF-imported rows keep their historically mislabeled `consequence`
+  //     (which actually holds an SO term, not an IMPACT level). Inferring the
+  //     correct IMPACT from a bare SO term would require embedding a static
+  //     VEP/SnpEff severity-ranking table as a guess — explicitly out of
+  //     scope ("do NOT guess an impact you can't derive"). `func` stays NULL
+  //     for these rows too. A full re-import of the affected case corrects
+  //     both columns going forward.
+  if (currentVersion < 32) {
+    const vtCols = db.prepare('PRAGMA table_info(variant_transcripts)').all() as {
+      name: string
+    }[]
+    if (!vtCols.some((c) => c.name === 'func')) {
+      db.exec('ALTER TABLE variant_transcripts ADD COLUMN func TEXT')
+    }
+    db.exec('PRAGMA user_version = 32')
   }
 }

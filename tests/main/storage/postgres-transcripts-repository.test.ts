@@ -13,6 +13,7 @@ describe('PostgresTranscriptsRepository', () => {
             transcript_id: 'NM_000059.4',
             gene_symbol: 'BRCA2',
             consequence: 'HIGH',
+            func: 'stop_gained',
             cdna: null,
             aa_change: null,
             hpo_sim_score: null,
@@ -33,6 +34,7 @@ describe('PostgresTranscriptsRepository', () => {
         transcript_id: 'NM_000059.4',
         gene_symbol: 'BRCA2',
         consequence: 'HIGH',
+        func: 'stop_gained',
         cdna: null,
         aa_change: null,
         hpo_sim_score: null,
@@ -54,6 +56,7 @@ describe('PostgresTranscriptsRepository', () => {
             transcript_id: 'NM_007294.4',
             gene_symbol: 'BRCA1',
             consequence: 'MODERATE',
+            func: 'missense_variant',
             cdna: null,
             aa_change: null,
             hpo_sim_score: null,
@@ -74,6 +77,7 @@ describe('PostgresTranscriptsRepository', () => {
         transcript_id: 'NM_007294.4',
         gene_symbol: 'BRCA1',
         consequence: 'MODERATE',
+        func: 'missense_variant',
         cdna: null,
         aa_change: null,
         hpo_sim_score: null,
@@ -134,6 +138,7 @@ describe('PostgresTranscriptsRepository', () => {
       transcript_id: 'NM_000059.4',
       gene_symbol: 'BRCA2',
       consequence: 'HIGH',
+      func: 'missense_variant',
       cdna: 'c.1A>G',
       aa_change: 'p.M1V',
       hpo_sim_score: 0.8,
@@ -174,7 +179,7 @@ describe('PostgresTranscriptsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('ON CONFLICT (variant_id, transcript_id)\n         DO NOTHING'),
-      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'c.1A>G', 'p.M1V', 0.8, 'AD']
+      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'missense_variant', 'c.1A>G', 'p.M1V', 0.8, 'AD']
     )
     expect(query).toHaveBeenNthCalledWith(
       3,

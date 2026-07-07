@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS variant_transcripts (
   transcript_id TEXT NOT NULL,
   gene_symbol TEXT,
   consequence TEXT,
+  func TEXT,
   cdna TEXT,
   aa_change TEXT,
   hpo_sim_score REAL,

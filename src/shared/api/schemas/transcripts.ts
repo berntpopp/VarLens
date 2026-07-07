@@ -7,6 +7,7 @@ export const TranscriptInsertRowSchema = z.object({
   transcript_id: z.string().min(1),
   gene_symbol: z.string().nullable(),
   consequence: z.string().nullable(),
+  func: z.string().nullable(),
   cdna: z.string().nullable(),
   aa_change: z.string().nullable(),
   hpo_sim_score: z.number().nullable(),

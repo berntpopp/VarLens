@@ -29,7 +29,7 @@ function toNullableBoolean(value: unknown): boolean | null {
 }
 
 const transcriptColumns = `
-  id, variant_id, transcript_id, gene_symbol, consequence, cdna, aa_change,
+  id, variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change,
   hpo_sim_score, moi, is_selected, is_mane_select, is_canonical
 `
 
@@ -86,9 +86,9 @@ export class PostgresTranscriptsRepository {
       await client.query('BEGIN')
       await client.query(
         `INSERT INTO ${this.schemaName}.variant_transcripts
-           (variant_id, transcript_id, gene_symbol, consequence, cdna, aa_change,
+           (variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change,
             hpo_sim_score, moi, is_selected, is_mane_select, is_canonical)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NULL, NULL)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, NULL, NULL)
          ON CONFLICT (variant_id, transcript_id)
          DO NOTHING`,
         [
@@ -96,6 +96,7 @@ export class PostgresTranscriptsRepository {
           transcript.transcript_id,
           transcript.gene_symbol,
           transcript.consequence,
+          transcript.func,
           transcript.cdna,
           transcript.aa_change,
           transcript.hpo_sim_score,
@@ -179,6 +180,7 @@ export class PostgresTranscriptsRepository {
       transcript_id: row.transcript_id as string,
       gene_symbol: (row.gene_symbol as string | null) ?? null,
       consequence: (row.consequence as string | null) ?? null,
+      func: (row.func as string | null) ?? null,
       cdna: (row.cdna as string | null) ?? null,
       aa_change: (row.aa_change as string | null) ?? null,
       hpo_sim_score: (row.hpo_sim_score as number | null) ?? null,

@@ -87,8 +87,8 @@ export function prepareStatements(db: DatabaseType) {
 
   const insertTranscriptStmt = db.prepare(`
     INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol,
-      consequence, cdna, aa_change, hpo_sim_score, moi, is_selected)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      consequence, func, cdna, aa_change, hpo_sim_score, moi, is_selected)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const insertCaseStmt = db.prepare(`
@@ -161,6 +161,7 @@ export function prepareStatements(db: DatabaseType) {
             t.transcript_id,
             t.gene_symbol,
             t.consequence,
+            t.func,
             t.cdna,
             t.aa_change,
             t.hpo_sim_score,

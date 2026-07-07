@@ -142,6 +142,7 @@ function vepToInsertRow(vep: VepTranscriptConsequence): TranscriptInsertRow {
     transcript_id: normalizeTranscriptId(vep.transcript_id),
     gene_symbol: vep.gene_symbol ?? null,
     consequence: vep.impact ?? null,
+    func: vep.consequence_terms.length > 0 ? vep.consequence_terms.join(', ') : null,
     cdna: null,
     aa_change: null,
     hpo_sim_score: null,

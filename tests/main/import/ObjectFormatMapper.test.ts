@@ -31,7 +31,8 @@ describe('ObjectFormatMapper transcript output', () => {
         ref: 'A',
         alt: 'G',
         gene_symbol: 'BRCA1',
-        consequence: 'missense_variant',
+        consequence: 'MODERATE',
+        func: 'missense_variant',
         transcript: 'NM_007294.4',
         cdna: 'c.123A>G',
         aa_change: 'p.His41Arg',
@@ -45,6 +46,10 @@ describe('ObjectFormatMapper transcript output', () => {
     expect(transcripts[0].transcript_id).toBe('NM_007294.4')
     expect(transcripts[0].is_selected).toBe(1)
     expect(transcripts[0].gene_symbol).toBe('BRCA1')
+    // Canonical model (D1): consequence = IMPACT, func = SO term, both
+    // passed through from the top-level mapped variant onto the transcript row.
+    expect(transcripts[0].consequence).toBe('MODERATE')
+    expect(transcripts[0].func).toBe('missense_variant')
   })
 
   it('should NOT emit _transcripts when transcript is null', async () => {

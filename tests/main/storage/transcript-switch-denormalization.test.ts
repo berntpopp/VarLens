@@ -96,7 +96,8 @@ const TRANSCRIPT_B: TranscriptFixture = {
 const TRANSCRIPT_C: TranscriptInsertRow = {
   transcript_id: 'ENST_CCC.1',
   gene_symbol: 'GENEC',
-  consequence: 'splice_acceptor_variant',
+  consequence: 'HIGH',
+  func: 'splice_acceptor_variant',
   cdna: 'c.3-1G>A',
   aa_change: null,
   hpo_sim_score: 0.55,

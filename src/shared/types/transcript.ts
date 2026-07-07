@@ -7,7 +7,10 @@ export interface TranscriptAnnotation {
   variant_id: number
   transcript_id: string
   gene_symbol: string | null
+  /** IMPACT level (HIGH/MODERATE/LOW/MODIFIER) — same convention as variants.consequence. */
   consequence: string | null
+  /** Sequence Ontology term (missense_variant, stop_gained, ...) — same convention as variants.func. */
+  func: string | null
   cdna: string | null
   aa_change: string | null
   hpo_sim_score: number | null
@@ -24,7 +27,10 @@ export interface TranscriptAnnotation {
 export interface TranscriptInsertRow {
   transcript_id: string
   gene_symbol: string | null
+  /** IMPACT level (HIGH/MODERATE/LOW/MODIFIER) — same convention as variants.consequence. */
   consequence: string | null
+  /** Sequence Ontology term (missense_variant, stop_gained, ...) — same convention as variants.func. */
+  func: string | null
   cdna: string | null
   aa_change: string | null
   hpo_sim_score: number | null

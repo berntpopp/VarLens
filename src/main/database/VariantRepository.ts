@@ -131,6 +131,7 @@ export class VariantRepository extends BaseRepository {
                   transcript_id: t.transcript_id,
                   gene_symbol: t.gene_symbol,
                   consequence: t.consequence,
+                  func: t.func,
                   cdna: t.cdna,
                   aa_change: t.aa_change,
                   hpo_sim_score: t.hpo_sim_score,

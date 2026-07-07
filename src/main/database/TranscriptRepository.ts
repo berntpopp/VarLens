@@ -9,6 +9,7 @@ export class TranscriptRepository extends BaseRepository {
       transcript_id: string
       gene_symbol: string | null
       consequence: string | null
+      func: string | null
       cdna: string | null
       aa_change: string | null
       hpo_sim_score: number | null
@@ -25,6 +26,7 @@ export class TranscriptRepository extends BaseRepository {
           'transcript_id',
           'gene_symbol',
           'consequence',
+          'func',
           'cdna',
           'aa_change',
           'hpo_sim_score',
@@ -109,6 +111,7 @@ export class TranscriptRepository extends BaseRepository {
             transcript_id: transcript.transcript_id,
             gene_symbol: transcript.gene_symbol,
             consequence: transcript.consequence,
+            func: transcript.func,
             cdna: transcript.cdna,
             aa_change: transcript.aa_change,
             hpo_sim_score: transcript.hpo_sim_score,
