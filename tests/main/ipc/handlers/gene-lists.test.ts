@@ -72,6 +72,29 @@ describe('region-files:importBed IPC handler', () => {
     expect(deps.getDb().geneLists.importBedEntries).not.toHaveBeenCalled()
   })
 
+  it('rejects a path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
+    // This gate must use the STRICT enrollment check, not the permissive
+    // isAllowedImportPath — a path merely living under the OS temp dir (or
+    // home/userData) is not proof the user picked it via a dialog this
+    // session. Previously this leaked in via isAllowedImportPath's
+    // automatic-root grant, letting a compromised renderer read any file
+    // under those roots without dialog enrollment.
+    const ipcMain = makeIpcMain()
+    const deps = makeDeps(ipcMain)
+    registerGeneListHandlers(deps as never)
+
+    const result = await invokeHandler(
+      ipcMain,
+      'region-files:importBed',
+      1,
+      '/tmp/not-dialog-enrolled.bed'
+    )
+
+    expect(isIpcError(result)).toBe(true)
+    expect(readFile).not.toHaveBeenCalled()
+    expect(deps.getDb().geneLists.importBedEntries).not.toHaveBeenCalled()
+  })
+
   it('accepts a dialog-enrolled BED path and imports its entries', async () => {
     const ipcMain = makeIpcMain()
     const deps = makeDeps(ipcMain)

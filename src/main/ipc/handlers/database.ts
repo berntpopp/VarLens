@@ -13,7 +13,7 @@ import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
-import { addAllowedImportPath, isAllowedImportPath } from '../../security/import-path-allowlist'
+import { addAllowedImportPath, isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
 import type { DatabaseManager } from '../../services/DatabaseManager'
 import {
   DatabaseOpenSchema,
@@ -214,12 +214,15 @@ function createInsecureLocalPostgresSecretStore(userDataPath: string): SecretSto
  * active-DB checks) while still allowing `create`/`open` to work with a
  * freshly dialog-selected path that isn't in the recent list yet.
  *
- * Unlike `isAllowedImportPath`'s automatic home/userData/temp roots (which
- * remain in play via the shared allowlist), an arbitrary renderer-supplied
- * string with no dialog/recent/active provenance is rejected.
+ * Uses the STRICT enrollment check (`isStrictlyEnrolledPath`), not the
+ * permissive `isAllowedImportPath` — the automatic home/userData/temp roots
+ * that predicate grants for the original import flow do not apply here.
+ * An arbitrary renderer-supplied string with no dialog/recent/active
+ * provenance is rejected even if it happens to live under the user's home
+ * directory or the OS temp dir.
  */
 function isAllowedDatabasePath(candidate: string, getDbManager: () => DatabaseManager): boolean {
-  if (isAllowedImportPath(candidate)) return true
+  if (isStrictlyEnrolledPath(candidate)) return true
   if (!isAbsolute(candidate)) return false
 
   const canonical = resolve(candidate)

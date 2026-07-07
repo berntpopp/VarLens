@@ -131,6 +131,20 @@ describe('batch-import IPC handlers', () => {
       expect(isIpcError(result)).toBe(false)
       expect(checkDuplicateFiles).toHaveBeenCalledWith(expect.any(Function), [filePath], undefined)
     })
+
+    it('rejects a path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
+      // Strict enrollment gate: a path merely living under an automatic
+      // root (home/userData/temp) is not proof of dialog provenance.
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(ipcMain, 'batch-import:checkDuplicates', [
+        '/tmp/not-dialog-enrolled.json'
+      ])
+
+      expectInvalidParametersResult(result)
+      expect(checkDuplicateFiles).not.toHaveBeenCalled()
+    })
   })
 
   describe('batch-import:start', () => {
@@ -177,6 +191,21 @@ describe('batch-import IPC handlers', () => {
       expect(isIpcError(result)).toBe(false)
       expect(startBatchImport).toHaveBeenCalled()
     })
+
+    it('rejects a path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'batch-import:start',
+        ['/tmp/not-dialog-enrolled.json'],
+        'overwrite'
+      )
+
+      expectInvalidParametersResult(result)
+      expect(startBatchImport).not.toHaveBeenCalled()
+    })
   })
 
   describe('batch-import:testZipPassword', () => {
@@ -216,6 +245,21 @@ describe('batch-import IPC handlers', () => {
       expect(isIpcError(result)).toBe(false)
       expect(testZipPassword).toHaveBeenCalledWith(zipPath, 'pw')
     })
+
+    it('rejects a zip path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'batch-import:testZipPassword',
+        '/tmp/not-dialog-enrolled.zip',
+        'pw'
+      )
+
+      expectInvalidParametersResult(result)
+      expect(testZipPassword).not.toHaveBeenCalled()
+    })
   })
 
   describe('batch-import:extractZip', () => {
@@ -239,6 +283,20 @@ describe('batch-import IPC handlers', () => {
 
       expect(isIpcError(result)).toBe(false)
       expect(extractZip).toHaveBeenCalledWith(zipPath, undefined)
+    })
+
+    it('rejects a zip path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'batch-import:extractZip',
+        '/tmp/not-dialog-enrolled.zip'
+      )
+
+      expectInvalidParametersResult(result)
+      expect(extractZip).not.toHaveBeenCalled()
     })
   })
 

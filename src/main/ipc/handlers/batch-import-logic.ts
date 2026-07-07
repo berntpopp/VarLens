@@ -10,6 +10,7 @@ import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import { checkDuplicates } from '../../import/batch-utils'
 import { ZipExtractor, TempDirectoryManager } from '../../import'
+import { addAllowedImportPath } from '../../security/import-path-allowlist'
 import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { API_CONFIG } from '../../../shared/config'
 import type { FileImportRequest } from '../../../shared/types/import-worker'
@@ -278,6 +279,14 @@ export async function extractZip(
     const targetDir = zipTempManager.create()
 
     const result = await zipExtractor.extract(zipPath, targetDir, password)
+
+    // Files extracted from a dialog-enrolled ZIP were never themselves
+    // picked via a dialog. Enroll each one explicitly so the strict
+    // path-authority gate (batch-import:checkDuplicates / batch-import:start)
+    // accepts them in the subsequent review/import step.
+    for (const extractedFile of result.extractedFiles) {
+      addAllowedImportPath(extractedFile)
+    }
 
     return JSON.parse(
       JSON.stringify({

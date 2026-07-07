@@ -97,5 +97,23 @@ describe('shell IPC handlers', () => {
       expect(isIpcError(result)).toBe(false)
       expect(shell.showItemInFolder).toHaveBeenCalledWith(filePath)
     })
+
+    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
+      // isAllowedImportPath grants app.getPath('home')/userData/temp for the
+      // original import flow; this gate must use the STRICT check so a path
+      // merely living under the mocked "home" root (but never picked via a
+      // dialog this session) is still rejected.
+      const ipcMain = makeIpcMain()
+      registerShellHandlers({ ipcMain } as never)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'shell:showItemInFolder',
+        '/nonexistent-electron-app-path/leaked-file.xlsx'
+      )
+
+      expect(isIpcError(result)).toBe(true)
+      expect(shell.showItemInFolder).not.toHaveBeenCalled()
+    })
   })
 })

@@ -8,7 +8,7 @@ import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
 import { loadSettings, saveSettings } from '../utils/settings-io'
 import { safeEmit } from '../utils/safeEmit'
-import { addAllowedImportPath, isAllowedImportPath } from '../../security/import-path-allowlist'
+import { addAllowedImportPath, isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
 import {
   BatchImportCheckDuplicatesParamsSchema,
   BatchImportExtractZipParamsSchema,
@@ -136,7 +136,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
         }
         const [validatedFilePaths, validatedStripText] = parsed.data
         validatedFilePaths.forEach((filePath, index) => {
-          if (!isAllowedImportPath(filePath)) {
+          if (!isStrictlyEnrolledPath(filePath)) {
             throwUnallowedBatchPath('batch-import:checkDuplicates', filePath, `filePaths[${index}]`)
           }
         })
@@ -164,7 +164,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
         }
         const [validatedFilePaths, validatedStrategy, validatedStripText] = parsed.data
         validatedFilePaths.forEach((filePath, index) => {
-          if (!isAllowedImportPath(filePath)) {
+          if (!isStrictlyEnrolledPath(filePath)) {
             throwUnallowedBatchPath('batch-import:start', filePath, `filePaths[${index}]`)
           }
         })
@@ -228,7 +228,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
           )
         }
         const [validatedZipPath, validatedPassword] = parsed.data
-        if (!isAllowedImportPath(validatedZipPath)) {
+        if (!isStrictlyEnrolledPath(validatedZipPath)) {
           throwUnallowedBatchPath('batch-import:testZipPassword', validatedZipPath, 'zipPath')
         }
         return testZipPassword(validatedZipPath, validatedPassword)
@@ -247,7 +247,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
           )
         }
         const [validatedZipPath, validatedPassword] = parsed.data
-        if (!isAllowedImportPath(validatedZipPath)) {
+        if (!isStrictlyEnrolledPath(validatedZipPath)) {
           throwUnallowedBatchPath('batch-import:extractZip', validatedZipPath, 'zipPath')
         }
         return extractZip(validatedZipPath, validatedPassword)

@@ -176,6 +176,24 @@ describe('database path-authority gate', () => {
       expect(isIpcError(result)).toBe(false)
       expect(openDatabase).toHaveBeenCalled()
     })
+
+    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
+      // isAllowedImportPath grants app.getPath('home')/userData/temp for the
+      // original import flow; the DB gate must use the STRICT check so a
+      // path merely living under the mocked "home" root (but never picked
+      // via a dialog, recent list, or active session) is still rejected.
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'database:open',
+        '/nonexistent-electron-app-path/leaked.db'
+      )
+
+      expectInvalidParametersResult(result)
+      expect(openDatabase).not.toHaveBeenCalled()
+    })
   })
 
   describe('database:create', () => {
@@ -204,6 +222,20 @@ describe('database path-authority gate', () => {
 
       expect(isIpcError(result)).toBe(false)
       expect(createDatabase).toHaveBeenCalled()
+    })
+
+    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'database:create',
+        '/nonexistent-electron-app-path/leaked.db'
+      )
+
+      expectInvalidParametersResult(result)
+      expect(createDatabase).not.toHaveBeenCalled()
     })
   })
 
@@ -248,6 +280,20 @@ describe('database path-authority gate', () => {
 
       expect(isIpcError(result)).toBe(false)
       expect(shell.showItemInFolder).toHaveBeenCalledWith(UNAUTHORIZED_PATH)
+    })
+
+    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'database:showInFolder',
+        '/nonexistent-electron-app-path/leaked.db'
+      )
+
+      expectInvalidParametersResult(result)
+      expect(shell.showItemInFolder).not.toHaveBeenCalled()
     })
   })
 })
