@@ -106,6 +106,7 @@ import type { CasesDomainContract } from '../ipc/domains/cases'
 import type { DatabaseDomainContract } from '../ipc/domains/database'
 import type { DebugApi } from '../ipc/domains/debug'
 import type { JobsApi } from '../ipc/domains/jobs'
+import type { CaseMetadataDomainContract } from '../ipc/domains/case-metadata'
 export type { DatabaseInfo, DatabaseOpenResult, RecentDatabase } from '../ipc/domains/database'
 
 // Re-export for convenience
@@ -553,44 +554,21 @@ export interface FullCaseMetadata {
   externalIds: CaseExternalId[]
 }
 
-export interface CaseMetadataAPI {
-  get: (caseId: number) => Promise<IpcResult<CaseMetadata | null>>
-  upsert: (caseId: number, updates: CaseMetadataUpdates) => Promise<CaseMetadata>
-  getFullMetadata: (caseId: number) => Promise<IpcResult<FullCaseMetadata>>
-
-  // Cohort groups
-  listCohorts: () => Promise<IpcResult<CohortGroup[]>>
-  createCohort: (name: string, description?: string | null) => Promise<CohortGroup>
-  updateCohort: (
-    cohortId: number,
-    updates: { name?: string; description?: string | null }
-  ) => Promise<CohortGroup>
-  deleteCohort: (cohortId: number) => Promise<void>
-  getCohortByName: (name: string) => Promise<CohortGroup | null>
-
-  // Case-cohort links
-  getCaseCohorts: (caseId: number) => Promise<CohortGroup[]>
-  assignCohort: (caseId: number, cohortId: number) => Promise<void>
-  removeCohort: (caseId: number, cohortId: number) => Promise<void>
-  setCohorts: (caseId: number, cohortIds: number[]) => Promise<void>
-
-  // HPO terms
-  getHpoTerms: (caseId: number) => Promise<CaseHpoTerm[]>
-  assignHpoTerm: (caseId: number, hpoId: string, hpoLabel: string) => Promise<CaseHpoTerm>
-  removeHpoTerm: (caseId: number, hpoId: string) => Promise<void>
-
-  // Data info (import provenance, platform, pre-filtering)
-  getDataInfo: (caseId: number) => Promise<CaseDataInfo | null>
-  upsertDataInfo: (caseId: number, updates: CaseDataInfoUpdates) => Promise<CaseDataInfo>
-
-  // External IDs
-  listExternalIds: (caseId: number) => Promise<CaseExternalId[]>
-  upsertExternalId: (caseId: number, idType: string, idValue: string) => Promise<CaseExternalId>
-  deleteExternalId: (caseId: number, idType: string) => Promise<void>
-  distinctHpoTerms: () => Promise<Array<{ hpo_id: string; hpo_label: string }>>
-  distinctPlatforms: () => Promise<string[]>
-  distinctExternalIdTypes: () => Promise<string[]>
-}
+/**
+ * Aliased directly to the honest shared domain contract (Task A4).
+ *
+ * A prior version of this interface declared plain `Promise<T>` return types
+ * for most methods (e.g. `upsert`, `getDataInfo`, `createCohort`) instead of
+ * `Promise<IpcResult<T>>`, even though the runtime value returned by
+ * `wrapHandler` is always an `IpcResult<T>` (it never rejects). That mismatch
+ * let `tsc` accept a raw, un-unwrapped assignment as if it were the resolved
+ * data — silently storing a `SerializableError` as application state on a
+ * backend failure. Aliasing to `CaseMetadataDomainContract` (already honest,
+ * see `src/shared/ipc/domains/case-metadata.ts`) makes a missing
+ * `unwrapIpcResult(...)`/`isIpcError(...)` call a compile-time error instead.
+ * See `tests/shared/types/preload-contract.test.ts` for the regression lock.
+ */
+export type CaseMetadataAPI = CaseMetadataDomainContract
 
 export interface CaseCommentsAPI {
   list: (caseId: number) => Promise<IpcResult<CaseComment[]>>

@@ -124,6 +124,7 @@ import RegionFileImportDialog from './case-data-info/RegionFileImportDialog.vue'
 import { mdiChip, mdiFileImportOutline, mdiNoteTextOutline } from '@mdi/js'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import type { WindowAPI } from '../../../shared/types/api'
 
 const props = defineProps<{
   caseId: number
@@ -200,9 +201,8 @@ const regionFileItems = computed(() =>
   }))
 )
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getApi(): any {
-  return (window as unknown as Record<string, unknown>).api
+function getApi(): WindowAPI {
+  return window.api
 }
 
 async function loadDataInfo(): Promise<void> {
@@ -230,14 +230,14 @@ async function loadDataInfo(): Promise<void> {
     geneLists.value = unwrapIpcResult(gLists) ?? []
     regionFiles.value = unwrapIpcResult(rFiles) ?? []
 
-    if (info != null) {
-      platform.value = info.platform
-      platformDetails.value = info.platform_details ?? ''
-      afFilter.value = info.af_filter ?? ''
-      qualityFilter.value = info.quality_filter ?? ''
-      dataNotes.value = info.data_notes ?? ''
-      selectedGeneListId.value = info.gene_list_id
-      selectedRegionFileId.value = info.region_file_id
+    if (dataInfo.value != null) {
+      platform.value = dataInfo.value.platform
+      platformDetails.value = dataInfo.value.platform_details ?? ''
+      afFilter.value = dataInfo.value.af_filter ?? ''
+      qualityFilter.value = dataInfo.value.quality_filter ?? ''
+      dataNotes.value = dataInfo.value.data_notes ?? ''
+      selectedGeneListId.value = dataInfo.value.gene_list_id
+      selectedRegionFileId.value = dataInfo.value.region_file_id
     }
   } catch (e) {
     logService.warn(
@@ -281,8 +281,8 @@ async function addExternalId(idType: string, idValue: string): Promise<void> {
       api.listExternalIds(props.caseId),
       api.distinctExternalIdTypes()
     ])
-    externalIds.value = ids
-    idTypeSuggestions.value = idTypes ?? []
+    externalIds.value = unwrapIpcResult(ids)
+    idTypeSuggestions.value = unwrapIpcResult(idTypes) ?? []
   } catch (e) {
     logService.warn(
       'Failed to add external ID: ' + (e instanceof Error ? e.message : String(e)),

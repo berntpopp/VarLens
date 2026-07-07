@@ -66,7 +66,7 @@ export function createAppApi(domains: PreloadDomainApis): AppWindowApi {
       distinctHpoTerms: () => caseMetadataDomain.distinctHpoTerms(),
       distinctPlatforms: () => caseMetadataDomain.distinctPlatforms(),
       distinctExternalIdTypes: () => caseMetadataDomain.distinctExternalIdTypes()
-    } as WindowAPI['caseMetadata'],
+    },
 
     caseComments: {
       list: (caseId) => caseCommentsDomain.list(caseId),

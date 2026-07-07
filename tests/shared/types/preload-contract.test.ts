@@ -14,7 +14,16 @@ import { describe, it, expect, expectTypeOf, vi, beforeEach, afterEach } from 'v
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { ErrorCode } from '../../../src/shared/types/errors'
-import type { WindowAPI, Case, BatchAnnotationKey } from '../../../src/shared/types/api'
+import type {
+  WindowAPI,
+  Case,
+  BatchAnnotationKey,
+  CaseDataInfo,
+  CaseMetadata,
+  CaseExternalId,
+  CohortGroup,
+  GeneListWithCount
+} from '../../../src/shared/types/api'
 import type { IpcResult } from '../../../src/shared/types/errors'
 import type { ImportResult } from '../../../src/shared/types/import'
 import { DEBUG_CHANNELS } from '../../../src/shared/ipc/domains/debug'
@@ -28,7 +37,8 @@ const DOMAIN_CONTRACT_PATHS: Record<string, string> = {
   DatabaseDomainContract: 'src/shared/ipc/domains/database.ts',
   FilterPresetsDomainContract: 'src/shared/ipc/domains/filter-presets.ts',
   DebugApi: 'src/shared/ipc/domains/debug.ts',
-  JobsApi: 'src/shared/ipc/domains/jobs.ts'
+  JobsApi: 'src/shared/ipc/domains/jobs.ts',
+  CaseMetadataDomainContract: 'src/shared/ipc/domains/case-metadata.ts'
 }
 
 /**
@@ -751,5 +761,52 @@ describe('debug preload domain behavior', () => {
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'debug:queryCounters:get')
     expect(invoke).toHaveBeenNthCalledWith(2, 'debug:queryCounters:reset')
+  })
+})
+
+describe('case-metadata domain — Task A4 IpcResult laundering guard', () => {
+  const apiSource = readFileSync(resolve(ROOT, 'src/shared/types/api.ts'), 'utf-8')
+  const appApiSource = readFileSync(resolve(ROOT, 'src/preload/window-api/app-api.ts'), 'utf-8')
+
+  it('WindowAPI caseMetadata is aliased to the honest domain contract, not a laundered interface', () => {
+    // A prior `CaseMetadataAPI` interface declared plain `Promise<T>` returns
+    // (e.g. `upsert`, `getDataInfo`, `createCohort`) instead of
+    // `Promise<IpcResult<T>>`, even though `wrapHandler` always resolves an
+    // `IpcResult<T>` at runtime. That let a raw, un-unwrapped assignment
+    // (the C1 bug class) pass `tsc` silently. Locking the alias here means a
+    // future edit can't reintroduce a hand-written, laundered interface.
+    expect(apiSource).toContain('export type CaseMetadataAPI = CaseMetadataDomainContract')
+  })
+
+  it('preload no longer launders caseMetadata through an `as WindowAPI[...]` cast', () => {
+    expect(appApiSource).not.toContain("as WindowAPI['caseMetadata']")
+  })
+
+  it('compile-time check: WindowAPI caseMetadata methods return IpcResult (regression guard for C1)', () => {
+    // This is the exact shape of the CaseDataInfoTab.vue bug: `getDataInfo`
+    // must resolve `IpcResult<CaseDataInfo | null>`, not the naked value, so
+    // a raw `dataInfo.value = await api.caseMetadata.getDataInfo(...)` (no
+    // `unwrapIpcResult`) fails to compile.
+    expectTypeOf<Awaited<ReturnType<WindowAPI['caseMetadata']['getDataInfo']>>>().toEqualTypeOf<
+      IpcResult<CaseDataInfo | null>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['caseMetadata']['upsert']>>>().toEqualTypeOf<
+      IpcResult<CaseMetadata>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['caseMetadata']['createCohort']>>>().toEqualTypeOf<
+      IpcResult<CohortGroup>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['caseMetadata']['listExternalIds']>>>().toEqualTypeOf<
+      IpcResult<CaseExternalId[]>
+    >()
+  })
+
+  it('compile-time check: WindowAPI geneLists methods already return IpcResult (no drift to guard)', () => {
+    // gene-lists was already honest before this task; lock it too so a
+    // future refactor of GeneListsAPI can't silently launder it back to a
+    // naked `Promise<T>` the way CaseMetadataAPI once was.
+    expectTypeOf<Awaited<ReturnType<WindowAPI['geneLists']['list']>>>().toEqualTypeOf<
+      IpcResult<GeneListWithCount[]>
+    >()
   })
 })
