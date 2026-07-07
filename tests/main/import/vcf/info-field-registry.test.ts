@@ -95,6 +95,52 @@ describe('info-field-registry', () => {
     expect(result.mappedValues.has('gnomad_af')).toBe(false)
   })
 
+  it('does not map plain AF (caller VAF) to gnomad_af — it is not a gnomAD population frequency', () => {
+    const info = new Map([['AF', '0.3']])
+    const annotation: AnnotationResult = {
+      geneSymbol: null,
+      consequence: null,
+      impact: null,
+      transcript: null,
+      cdna: null,
+      aaChange: null,
+      gnomadAf: null,
+      cadd: null,
+      clinvar: null,
+      transcripts: []
+    }
+
+    const result = applyInfoFieldRegistry(info, DEFAULT_INFO_FIELD_MAPPINGS, annotation)
+
+    expect(result.mappedValues.has('gnomad_af')).toBe(false)
+    expect(result.infoJson).not.toBeNull()
+    expect(result.infoJson!['AF']).toBe('0.3')
+  })
+
+  it('keeps the real gnomAD value when both a gnomAD field and plain AF are present', () => {
+    const info = new Map([
+      ['gnomAD_AF', '0.001'],
+      ['AF', '0.3']
+    ])
+    const annotation: AnnotationResult = {
+      geneSymbol: null,
+      consequence: null,
+      impact: null,
+      transcript: null,
+      cdna: null,
+      aaChange: null,
+      gnomadAf: null,
+      cadd: null,
+      clinvar: null,
+      transcripts: []
+    }
+
+    const result = applyInfoFieldRegistry(info, DEFAULT_INFO_FIELD_MAPPINGS, annotation)
+
+    expect(result.mappedValues.get('gnomad_af')).toBeCloseTo(0.001, 6)
+    expect(result.infoJson!['AF']).toBe('0.3')
+  })
+
   it('unmapped INFO fields go to info_json', () => {
     const info = new Map([
       ['gnomADe_AF', '0.001'], // mapped

@@ -256,6 +256,11 @@ describe('VcfMapper', () => {
     expect(v.chr).toBe('chr22')
     expect(v.gt_num).toBe('0/1')
     expect(v.gene_symbol).toBeNull()
-    expect(v.gnomad_af).toBeCloseTo(0.1, 4) // mapped from AF via registry
+    // Plain AF is the caller's sample allele frequency, not a gnomAD population
+    // frequency — it must not be mapped to gnomad_af, but it must still be
+    // preserved in info_json rather than silently dropped.
+    expect(v.gnomad_af).toBeNull()
+    expect(v.info_json).not.toBeNull()
+    expect(JSON.parse(v.info_json!)['AF']).toBe('0.1')
   })
 })
