@@ -11,6 +11,7 @@ import { isUrlSafeForExternal } from './utils/url-validation'
 import { markMilestone } from './services/MainPerfTrace'
 import { isMainWindowNavigationAllowed } from './window-navigation-policy'
 import { buildContentSecurityPolicy } from './security/csp-header'
+import { installWebContentsSecurityGuards } from './security/web-contents-guard'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -245,6 +246,12 @@ if (gotTheLock !== true) {
         }
       })
     })
+
+    // Global defense-in-depth guard for every webContents (main window,
+    // any future secondary windows, <webview> guests). The main window's
+    // own will-navigate / setWindowOpenHandler listeners (below, in
+    // createWindow()) are unaffected — see src/main/security/web-contents-guard.ts.
+    installWebContentsSecurityGuards()
 
     // Create window after security handlers are registered
     createWindow()
