@@ -62,4 +62,10 @@ describe('buildContentSecurityPolicy', () => {
     const headerScriptSrc = extractDirective(policy, 'script-src')
     expect(headerScriptSrc).toBe(metaScriptSrc)
   })
+
+  it('anti-drift: the full session-header policy is byte-identical to the meta CSP plus frame-ancestors', () => {
+    const policy = buildContentSecurityPolicy()
+    const metaCsp = readMetaCspFromHtml()
+    expect(policy).toBe(`${metaCsp}; frame-ancestors 'none'`)
+  })
 })
