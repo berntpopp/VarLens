@@ -8,10 +8,13 @@
 
 import { app, dialog, safeStorage, shell } from 'electron'
 import { mkdir, readFile, writeFile } from 'fs/promises'
-import { dirname, join } from 'path'
+import { dirname, isAbsolute, join, resolve } from 'path'
 import { wrapHandler } from '../errorHandler'
+import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
+import { addAllowedImportPath, isAllowedImportPath } from '../../security/import-path-allowlist'
+import type { DatabaseManager } from '../../services/DatabaseManager'
 import {
   DatabaseOpenSchema,
   DatabaseCreateSchema,
@@ -199,6 +202,44 @@ function createInsecureLocalPostgresSecretStore(userDataPath: string): SecretSto
   )
 }
 
+/**
+ * DB path-authority gate for `database:open` / `database:create` /
+ * `database:showInFolder` / `database:removeRecent`.
+ *
+ * A path is allowed only if it was picked via a dialog this session
+ * (`database:selectFile` / `database:selectSaveLocation`, which enroll into
+ * the same session allowlist `import.ts` uses for import paths), already
+ * appears in the recent databases list, or is the currently active
+ * database. This mirrors the `deleteDbFile` precedent (recent-list +
+ * active-DB checks) while still allowing `create`/`open` to work with a
+ * freshly dialog-selected path that isn't in the recent list yet.
+ *
+ * Unlike `isAllowedImportPath`'s automatic home/userData/temp roots (which
+ * remain in play via the shared allowlist), an arbitrary renderer-supplied
+ * string with no dialog/recent/active provenance is rejected.
+ */
+function isAllowedDatabasePath(candidate: string, getDbManager: () => DatabaseManager): boolean {
+  if (isAllowedImportPath(candidate)) return true
+  if (!isAbsolute(candidate)) return false
+
+  const canonical = resolve(candidate)
+  if (canonical !== candidate) return false
+
+  const manager = getDbManager()
+
+  const currentPath = manager.getCurrentPath()
+  if (currentPath !== null && resolve(currentPath) === canonical) return true
+
+  return manager.getRecentDatabases().some((db) => resolve(db.path) === canonical)
+}
+
+function throwUnallowedDatabasePath(channel: string, path: string): never {
+  throw new InvalidParametersError(
+    `${channel}: path is not in the database path authority set: ${path}`,
+    'The selected database file is not in an allowed location.'
+  )
+}
+
 export function registerDatabaseHandlers({
   ipcMain,
   getDb,
@@ -226,7 +267,9 @@ export function registerDatabaseHandlers({
       return null
     }
 
-    return result.filePaths[0]
+    const filePath = result.filePaths[0]
+    addAllowedImportPath(filePath)
+    return filePath
   })
 
   /**
@@ -255,6 +298,7 @@ export function registerDatabaseHandlers({
       return null
     }
 
+    addAllowedImportPath(result.filePath)
     return result.filePath
   })
 
@@ -267,6 +311,9 @@ export function registerDatabaseHandlers({
       if (!validated.success) {
         mainLogger.error(`Invalid database:open params: ${validated.error.message}`, 'database')
         throw new Error('Invalid database open parameters')
+      }
+      if (!isAllowedDatabasePath(validated.data.path, getDbManager)) {
+        throwUnallowedDatabasePath('database:open', validated.data.path)
       }
       return openDatabase(validated.data, getDb, getDbManager, lifecycleCallbacks)
     })
@@ -281,6 +328,9 @@ export function registerDatabaseHandlers({
       if (!validated.success) {
         mainLogger.error(`Invalid database:create params: ${validated.error.message}`, 'database')
         throw new Error('Invalid database create parameters')
+      }
+      if (!isAllowedDatabasePath(validated.data.path, getDbManager)) {
+        throwUnallowedDatabasePath('database:create', validated.data.path)
       }
       return createDatabase(validated.data, getDbManager)
     })
@@ -441,6 +491,9 @@ export function registerDatabaseHandlers({
         )
         throw new Error('Invalid file path')
       }
+      if (!isAllowedDatabasePath(validated.data, getDbManager)) {
+        throwUnallowedDatabasePath('database:removeRecent', validated.data)
+      }
       return removeRecentDatabase(validated.data, getDbManager)
     })
   })
@@ -467,6 +520,9 @@ export function registerDatabaseHandlers({
       const validated = FilePathSchema.safeParse(path)
       if (!validated.success) {
         throw new Error('Invalid file path')
+      }
+      if (!isAllowedDatabasePath(validated.data, getDbManager)) {
+        throwUnallowedDatabasePath('database:showInFolder', validated.data)
       }
       shell.showItemInFolder(validated.data)
       return { success: true }

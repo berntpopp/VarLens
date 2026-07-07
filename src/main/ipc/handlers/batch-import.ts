@@ -3,11 +3,18 @@ import { dirname, join } from 'path'
 import { readdir } from 'fs/promises'
 import type { HandlerDependencies } from '../types'
 import { ZipExtractor } from '../../import'
-import type { DuplicateChoice } from '../../../shared/types/api'
 import { mainLogger } from '../../services/MainLogger'
 import { wrapHandler } from '../errorHandler'
+import { InvalidParametersError } from '../errors'
 import { loadSettings, saveSettings } from '../utils/settings-io'
 import { safeEmit } from '../utils/safeEmit'
+import { addAllowedImportPath, isAllowedImportPath } from '../../security/import-path-allowlist'
+import {
+  BatchImportCheckDuplicatesParamsSchema,
+  BatchImportExtractZipParamsSchema,
+  BatchImportStartParamsSchema,
+  BatchImportTestZipPasswordParamsSchema
+} from '../../../shared/ipc/domains/batch-import-schemas'
 import {
   checkDuplicateFiles,
   startBatchImport,
@@ -17,6 +24,13 @@ import {
   cleanupZipTemp
 } from './batch-import-logic'
 import type { BatchImportCallbacks } from './batch-import-logic'
+
+function throwUnallowedBatchPath(channel: string, filePath: string, label = 'filePath'): never {
+  throw new InvalidParametersError(
+    `${channel}: ${label} is not in the allowed import paths: ${filePath}`,
+    'The selected file is not in an allowed location.'
+  )
+}
 
 // ZIP extractor for isEncrypted check (stays in handler — used with dialog)
 const zipExtractor = new ZipExtractor()
@@ -50,6 +64,10 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
 
       const firstFile = result.filePaths[0]
       await saveSettings({ ...settings, lastImportDirectory: dirname(firstFile) })
+
+      for (const p of result.filePaths) {
+        addAllowedImportPath(p)
+      }
 
       return result.filePaths
     })
@@ -87,6 +105,14 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
           })
           .map((entry) => join(folderPath, entry.name))
 
+        // The user only picked the containing folder via a dialog, not each
+        // file individually — enroll every file discovered inside it so the
+        // later checkDuplicates/start calls (which validate against the
+        // allowlist) accept them.
+        for (const f of files) {
+          addAllowedImportPath(f)
+        }
+
         return files
       } catch (error) {
         mainLogger.error(`Failed to read directory: ${error}`, 'import')
@@ -100,9 +126,21 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
    */
   ipcMain.handle(
     'batch-import:checkDuplicates',
-    async (_event, filePaths: string[], stripText?: string) => {
+    async (_event, filePaths: unknown, stripText?: unknown) => {
       return wrapHandler(async () => {
-        return checkDuplicateFiles(getDb, filePaths, stripText)
+        const parsed = BatchImportCheckDuplicatesParamsSchema.safeParse([filePaths, stripText])
+        if (!parsed.success) {
+          throw new InvalidParametersError(
+            `Invalid batch-import:checkDuplicates params: ${parsed.error.message}`
+          )
+        }
+        const [validatedFilePaths, validatedStripText] = parsed.data
+        validatedFilePaths.forEach((filePath, index) => {
+          if (!isAllowedImportPath(filePath)) {
+            throwUnallowedBatchPath('batch-import:checkDuplicates', filePath, `filePaths[${index}]`)
+          }
+        })
+        return checkDuplicateFiles(getDb, validatedFilePaths, validatedStripText)
       })
     }
   )
@@ -112,13 +150,29 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
    */
   ipcMain.handle(
     'batch-import:start',
-    async (_event, filePaths: string[], duplicateStrategy: DuplicateChoice, stripText?: string) => {
+    async (_event, filePaths: unknown, duplicateStrategy: unknown, stripText?: unknown) => {
       return wrapHandler(async () => {
-        return startBatchImport(
-          getDb,
+        const parsed = BatchImportStartParamsSchema.safeParse([
           filePaths,
           duplicateStrategy,
-          stripText,
+          stripText
+        ])
+        if (!parsed.success) {
+          throw new InvalidParametersError(
+            `Invalid batch-import:start params: ${parsed.error.message}`
+          )
+        }
+        const [validatedFilePaths, validatedStrategy, validatedStripText] = parsed.data
+        validatedFilePaths.forEach((filePath, index) => {
+          if (!isAllowedImportPath(filePath)) {
+            throwUnallowedBatchPath('batch-import:start', filePath, `filePaths[${index}]`)
+          }
+        })
+        return startBatchImport(
+          getDb,
+          validatedFilePaths,
+          validatedStrategy,
+          validatedStripText,
           batchImportCallbacks
         )
       })
@@ -152,6 +206,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
 
         const filePath = result.filePaths[0]
         await saveSettings({ ...settings, lastImportDirectory: dirname(filePath) })
+        addAllowedImportPath(filePath)
 
         const isEncrypted = zipExtractor.isEncrypted(filePath)
         return { filePath, isEncrypted }
@@ -164,18 +219,41 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
 
   ipcMain.handle(
     'batch-import:testZipPassword',
-    async (_event, zipPath: string, password: string) => {
+    async (_event, zipPath: unknown, password: unknown) => {
       return wrapHandler(async () => {
-        return testZipPassword(zipPath, password)
+        const parsed = BatchImportTestZipPasswordParamsSchema.safeParse([zipPath, password])
+        if (!parsed.success) {
+          throw new InvalidParametersError(
+            `Invalid batch-import:testZipPassword params: ${parsed.error.message}`
+          )
+        }
+        const [validatedZipPath, validatedPassword] = parsed.data
+        if (!isAllowedImportPath(validatedZipPath)) {
+          throwUnallowedBatchPath('batch-import:testZipPassword', validatedZipPath, 'zipPath')
+        }
+        return testZipPassword(validatedZipPath, validatedPassword)
       })
     }
   )
 
-  ipcMain.handle('batch-import:extractZip', async (_event, zipPath: string, password?: string) => {
-    return wrapHandler(async () => {
-      return extractZip(zipPath, password)
-    })
-  })
+  ipcMain.handle(
+    'batch-import:extractZip',
+    async (_event, zipPath: unknown, password?: unknown) => {
+      return wrapHandler(async () => {
+        const parsed = BatchImportExtractZipParamsSchema.safeParse([zipPath, password])
+        if (!parsed.success) {
+          throw new InvalidParametersError(
+            `Invalid batch-import:extractZip params: ${parsed.error.message}`
+          )
+        }
+        const [validatedZipPath, validatedPassword] = parsed.data
+        if (!isAllowedImportPath(validatedZipPath)) {
+          throwUnallowedBatchPath('batch-import:extractZip', validatedZipPath, 'zipPath')
+        }
+        return extractZip(validatedZipPath, validatedPassword)
+      })
+    }
+  )
 
   ipcMain.handle('batch-import:cleanupZipTemp', async () => {
     return wrapHandler(async () => {

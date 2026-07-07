@@ -1,0 +1,253 @@
+/**
+ * DB path-authority gate tests (F-path, Part B / S6, Codex F-03).
+ *
+ * database:open, database:create, database:showInFolder, and
+ * database:removeRecent must only accept a path that was picked via a
+ * dialog this session (database:selectFile / database:selectSaveLocation,
+ * sharing the import allowlist's dialog-enrolled set), already appears in
+ * the recent databases list, or is the currently active database. This
+ * mirrors the deleteFile precedent (recent-list + active-DB refusal) plus
+ * the import-path-allowlist's dialog-enrollment mechanism.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ErrorCode, isIpcError } from '../../../../src/shared/types/errors'
+
+vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn(() => '/nonexistent-electron-app-path'),
+    isPackaged: false
+  },
+  dialog: {
+    showOpenDialog: vi.fn(),
+    showSaveDialog: vi.fn()
+  },
+  safeStorage: {
+    decryptString: vi.fn(),
+    encryptString: vi.fn(),
+    isEncryptionAvailable: vi.fn(() => true)
+  },
+  shell: {
+    showItemInFolder: vi.fn()
+  }
+}))
+
+vi.mock('../../../../src/main/ipc/handlers/database-logic', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../../../src/main/ipc/handlers/database-logic')
+  >('../../../../src/main/ipc/handlers/database-logic')
+  return {
+    ...actual,
+    openDatabase: vi
+      .fn()
+      .mockResolvedValue({ success: true, info: { path: '', name: '', encrypted: false } }),
+    createDatabase: vi
+      .fn()
+      .mockResolvedValue({ success: true, info: { path: '', name: '', encrypted: false } }),
+    removeRecentDatabase: vi.fn().mockReturnValue({ success: true })
+  }
+})
+
+import { dialog, shell } from 'electron'
+import { registerDatabaseHandlers } from '../../../../src/main/ipc/handlers/database'
+import {
+  openDatabase,
+  createDatabase,
+  removeRecentDatabase
+} from '../../../../src/main/ipc/handlers/database-logic'
+import { __resetAllowlistForTests } from '../../../../src/main/security/import-path-allowlist'
+
+type HandlerCallback = (event: unknown, ...args: unknown[]) => Promise<unknown>
+
+function makeIpcMain(): { handle: ReturnType<typeof vi.fn> } {
+  return { handle: vi.fn() }
+}
+
+function makeDbManager(overrides: {
+  currentPath?: string | null
+  recentPaths?: string[]
+}): ReturnType<typeof vi.fn> {
+  return vi.fn().mockReturnValue({
+    getCurrentPath: vi.fn().mockReturnValue(overrides.currentPath ?? null),
+    getRecentDatabases: vi
+      .fn()
+      .mockReturnValue(
+        (overrides.recentPaths ?? []).map((path) => ({ path, name: path, lastOpened: 0 }))
+      )
+  })
+}
+
+function makeDeps(
+  ipcMain: { handle: ReturnType<typeof vi.fn> },
+  dbManagerOverrides: { currentPath?: string | null; recentPaths?: string[] } = {}
+): {
+  ipcMain: typeof ipcMain
+  getDb: ReturnType<typeof vi.fn>
+  getDbManager: ReturnType<typeof vi.fn>
+} {
+  return {
+    ipcMain,
+    getDb: vi.fn(),
+    getDbManager: makeDbManager(dbManagerOverrides)
+  }
+}
+
+function getHandler(
+  ipcMain: { handle: ReturnType<typeof vi.fn> },
+  channel: string
+): HandlerCallback {
+  const call = ipcMain.handle.mock.calls.find(([c]) => c === channel) as
+    [string, HandlerCallback] | undefined
+  if (!call) throw new Error(`Handler for ${channel} not registered`)
+  return call[1]
+}
+
+async function invokeHandler(
+  ipcMain: { handle: ReturnType<typeof vi.fn> },
+  channel: string,
+  ...args: unknown[]
+): Promise<unknown> {
+  const handler = getHandler(ipcMain, channel)
+  return handler({}, ...args)
+}
+
+function expectInvalidParametersResult(result: unknown): void {
+  expect(isIpcError(result)).toBe(true)
+  if (isIpcError(result)) {
+    // Path-authority rejections surface as UNKNOWN via wrapHandler's generic
+    // Error path (mirrors deleteDbFile's existing precedent).
+    expect([ErrorCode.INVALID_PARAMETERS, ErrorCode.UNKNOWN]).toContain(result.code)
+  }
+}
+
+// Path guaranteed to be outside any automatic root (home/userData/temp are
+// all mocked to '/nonexistent-electron-app-path' above) and never enrolled.
+const UNAUTHORIZED_PATH = '/some/other/mount/unrelated.db'
+
+describe('database path-authority gate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    __resetAllowlistForTests()
+  })
+
+  describe('database:open', () => {
+    it('rejects a path with no dialog/recent/active authority', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:open', UNAUTHORIZED_PATH)
+
+      expectInvalidParametersResult(result)
+      expect(openDatabase).not.toHaveBeenCalled()
+    })
+
+    it('accepts a path selected via database:selectFile this session', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+      vi.mocked(dialog.showOpenDialog).mockResolvedValue({
+        canceled: false,
+        filePaths: [UNAUTHORIZED_PATH]
+      } as never)
+
+      const selected = await invokeHandler(ipcMain, 'database:selectFile')
+      expect(selected).toBe(UNAUTHORIZED_PATH)
+
+      const result = await invokeHandler(ipcMain, 'database:open', UNAUTHORIZED_PATH)
+
+      expect(isIpcError(result)).toBe(false)
+      expect(openDatabase).toHaveBeenCalled()
+    })
+
+    it('accepts a path already in the recent databases list', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain, { recentPaths: [UNAUTHORIZED_PATH] }) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:open', UNAUTHORIZED_PATH)
+
+      expect(isIpcError(result)).toBe(false)
+      expect(openDatabase).toHaveBeenCalled()
+    })
+
+    it('accepts the currently active database path', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain, { currentPath: UNAUTHORIZED_PATH }) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:open', UNAUTHORIZED_PATH)
+
+      expect(isIpcError(result)).toBe(false)
+      expect(openDatabase).toHaveBeenCalled()
+    })
+  })
+
+  describe('database:create', () => {
+    it('rejects a path with no dialog authority', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:create', UNAUTHORIZED_PATH)
+
+      expectInvalidParametersResult(result)
+      expect(createDatabase).not.toHaveBeenCalled()
+    })
+
+    it('accepts a path selected via database:selectSaveLocation this session', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+      vi.mocked(dialog.showSaveDialog).mockResolvedValue({
+        canceled: false,
+        filePath: UNAUTHORIZED_PATH
+      } as never)
+
+      const selected = await invokeHandler(ipcMain, 'database:selectSaveLocation', 'new-db.sqlite')
+      expect(selected).toBe(UNAUTHORIZED_PATH)
+
+      const result = await invokeHandler(ipcMain, 'database:create', UNAUTHORIZED_PATH)
+
+      expect(isIpcError(result)).toBe(false)
+      expect(createDatabase).toHaveBeenCalled()
+    })
+  })
+
+  describe('database:removeRecent', () => {
+    it('rejects a path with no authority', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:removeRecent', UNAUTHORIZED_PATH)
+
+      expectInvalidParametersResult(result)
+      expect(removeRecentDatabase).not.toHaveBeenCalled()
+    })
+
+    it('accepts a path already in the recent databases list', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain, { recentPaths: [UNAUTHORIZED_PATH] }) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:removeRecent', UNAUTHORIZED_PATH)
+
+      expect(isIpcError(result)).toBe(false)
+      expect(removeRecentDatabase).toHaveBeenCalled()
+    })
+  })
+
+  describe('database:showInFolder', () => {
+    it('rejects a path with no authority', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:showInFolder', UNAUTHORIZED_PATH)
+
+      expectInvalidParametersResult(result)
+      expect(shell.showItemInFolder).not.toHaveBeenCalled()
+    })
+
+    it('accepts the currently active database path', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain, { currentPath: UNAUTHORIZED_PATH }) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:showInFolder', UNAUTHORIZED_PATH)
+
+      expect(isIpcError(result)).toBe(false)
+      expect(shell.showItemInFolder).toHaveBeenCalledWith(UNAUTHORIZED_PATH)
+    })
+  })
+})

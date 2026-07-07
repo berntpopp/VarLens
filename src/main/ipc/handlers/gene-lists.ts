@@ -1,4 +1,5 @@
 import { wrapHandler } from '../errorHandler'
+import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import { readFile } from 'node:fs/promises'
 import {
@@ -9,6 +10,7 @@ import {
   BedImportSchema
 } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
+import { isAllowedImportPath } from '../../security/import-path-allowlist'
 
 /**
  * Gene Lists and Region Files IPC handlers
@@ -213,6 +215,13 @@ export function registerGeneListHandlers({
           'gene-lists'
         )
         throw new Error('Invalid BED import parameters')
+      }
+
+      if (!isAllowedImportPath(validated.data.filePath)) {
+        throw new InvalidParametersError(
+          `region-files:importBed: filePath is not in the allowed import paths: ${validated.data.filePath}`,
+          'The selected file is not in an allowed location.'
+        )
       }
 
       const content = await readFile(validated.data.filePath, 'utf-8')
