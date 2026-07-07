@@ -92,6 +92,23 @@ describe('extractZip', () => {
     await expect(logic.extractZip(garbagePath)).rejects.toThrow()
   })
 
+  it('throws when every candidate entry fails to extract (0 files, N errors) instead of returning a silent no-op success', async () => {
+    // Every importable-looking entry is rejected as a path-traversal attempt,
+    // so ZipExtractor.extract resolves with { extractedFiles: [], errors: [...] }
+    // -- zero files but non-empty errors. A caller reading only `.files` (see
+    // ImportWizard.vue's extractAndAdvance) would otherwise see this as an
+    // empty-but-successful extraction and silently no-op.
+    const dir = makeTempDir()
+    const traversalPath = join(dir, 'all-entries-rejected.zip')
+    const zip = new AdmZip()
+    zip.addFile('placeholder.json', Buffer.from('{}'))
+    const entry = zip.getEntries()[0]
+    entry.entryName = '../evil.json'
+    zip.writeZip(traversalPath)
+
+    await expect(logic.extractZip(traversalPath)).rejects.toThrow(/all 1 candidate entry/)
+  })
+
   it('preserves the legitimate outcome: an archive with no importable files resolves to an empty result', async () => {
     const dir = makeTempDir()
     const validPath = join(dir, 'no-importable-files.zip')

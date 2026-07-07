@@ -287,6 +287,20 @@ export async function extractZip(
 
     const result = await zipExtractor.extract(zipPath, targetDir, password)
 
+    // An archive where every candidate entry failed to extract (0 files
+    // extracted, but 1+ per-entry errors) is a genuine extraction failure,
+    // not a legitimate empty result — the renderer only inspects `files`
+    // (see ImportWizard.vue's extractAndAdvance), so returning this shape
+    // as a success would be a silent no-op. A genuinely empty/benign
+    // archive (0 files, 0 errors — nothing importable present) and a
+    // partial success (some files, some errors) both remain unchanged.
+    if (result.errors.length > 0 && result.extractedFiles.length === 0) {
+      throw new Error(
+        `ZIP extraction failed for all ${result.errors.length} candidate ` +
+          `entr${result.errors.length === 1 ? 'y' : 'ies'}: ${result.errors.join('; ')}`
+      )
+    }
+
     return JSON.parse(
       JSON.stringify({
         files: result.extractedFiles,
@@ -295,10 +309,11 @@ export async function extractZip(
     )
   } catch (error) {
     // A genuinely empty/all-benign extraction is reported by ZipExtractor.extract
-    // as a normal resolved result ({ extractedFiles: [], errors: [...] }) — it
+    // as a normal resolved result ({ extractedFiles: [], errors: [] }) — it
     // never reaches this catch. Anything that lands here (unreadable/corrupt
-    // archive, fs failure) is an infrastructure fault and must not be reshaped
-    // into a fake-success zero-file result.
+    // archive, fs failure, or the all-entries-failed case thrown above) is an
+    // infrastructure fault and must not be reshaped into a fake-success
+    // zero-file result.
     mainLogger.error(`batch-import:extractZip error: ${error}`, 'import')
     if (zipTempManager !== null) {
       zipTempManager.cleanup()

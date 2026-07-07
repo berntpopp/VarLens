@@ -41,7 +41,8 @@ export interface PanelAwareFilter {
  * `active_panel_ids` / `panel_padding_bp` / `genome_build` so the
  * repository does not see IPC-only fields.
  *
- * No-op when the gene reference DB is unavailable.
+ * No-op only when NO panel is actually configured (`active_panel_ids` is
+ * absent or empty) — that is the sole legitimate "nothing to resolve" case.
  *
  * @param filter    Query filter object (variants or cohort)
  * @param repos     Repository collection (for variant chr-prefix detection)
@@ -49,13 +50,15 @@ export interface PanelAwareFilter {
  * @param db        Raw database handle (for cohort-mode chr-prefix detection)
  * @param caseId    When set, chr prefix is derived from the specified case.
  *                  Omit for cohort mode — a sample variant row is queried instead.
- * @throws If a configured panel's interval computation itself fails (e.g. a
- *         corrupt gene reference DB or a panel/gene lookup error). This MUST
- *         propagate — `dispatchTask` lets it bubble to the pool caller so the
- *         failure surfaces as a SerializableError instead of silently running
- *         the query unfiltered under an active gene-panel restriction (a
- *         clinical-safety hazard: a dropped filter must not look identical to
- *         "panel matched everything").
+ * @throws If a panel IS configured (`active_panel_ids` non-empty) but
+ *         `geneRefDb` is unavailable, or if a configured panel's interval
+ *         computation itself fails (e.g. a corrupt gene reference DB or a
+ *         panel/gene lookup error). This MUST propagate — `dispatchTask`
+ *         lets it bubble to the pool caller so the failure surfaces as a
+ *         SerializableError instead of silently running the query unfiltered
+ *         under an active gene-panel restriction (a clinical-safety hazard:
+ *         a dropped filter must not look identical to "panel matched
+ *         everything").
  */
 export function resolvePanelIntervalsInPlace(
   filter: PanelAwareFilter,
@@ -65,11 +68,24 @@ export function resolvePanelIntervalsInPlace(
   caseId?: number
 ): void {
   const panelIds = filter.active_panel_ids
-  if (panelIds === undefined || panelIds.length === 0 || geneRefDb === null) {
+  if (panelIds === undefined || panelIds.length === 0) {
     delete filter.active_panel_ids
     delete filter.panel_padding_bp
     delete filter.genome_build
     return
+  }
+
+  if (geneRefDb === null) {
+    // A panel IS configured (active_panel_ids is non-empty) but there is no
+    // gene reference DB to resolve it against. This must not be treated as
+    // "no panel" and silently run the query unfiltered — that would look
+    // identical to the panel legitimately matching every variant, which is
+    // a clinical-safety hazard for a diagnostic tool. Throw so the caller
+    // sees a structured error instead of a silently dropped filter.
+    const message =
+      'Cannot resolve active gene panel filter: gene reference database is unavailable'
+    mainLogger.error(message, 'db-worker')
+    throw new Error(message)
   }
 
   const paddingBp = filter.panel_padding_bp ?? 5000

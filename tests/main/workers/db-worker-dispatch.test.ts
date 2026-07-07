@@ -396,17 +396,24 @@ describe('resolvePanelIntervalsInPlace', () => {
     expect(filter.genome_build).toBeUndefined()
   })
 
-  it('removes IPC-only fields when geneRefDb is null', () => {
+  it('throws when a panel is active but geneRefDb is null instead of silently dropping the filter', () => {
+    // A non-empty active_panel_ids with a null geneRefDb means the panel
+    // cannot be resolved -- this must surface as an error, not silently
+    // clear the panel fields and let the query run unfiltered (clinical-
+    // safety hazard: a dropped filter must not look identical to "panel
+    // matched everything").
     const filter: PanelAwareFilter = {
       active_panel_ids: [1, 2],
       panel_padding_bp: 3000,
       genome_build: 'GRCh37'
     }
     const repos = createRepositories(db)
-    resolvePanelIntervalsInPlace(filter, repos, null, db)
-    expect(filter.active_panel_ids).toBeUndefined()
-    expect(filter.panel_padding_bp).toBeUndefined()
-    expect(filter.genome_build).toBeUndefined()
+    expect(() => resolvePanelIntervalsInPlace(filter, repos, null, db)).toThrow(
+      /gene reference database is unavailable/i
+    )
+    // The filter must NOT have been silently downgraded to "no panel
+    // restriction" before the throw.
+    expect(filter.active_panel_ids).toEqual([1, 2])
     expect(filter.panel_intervals).toBeUndefined()
   })
 
