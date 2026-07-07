@@ -96,7 +96,11 @@ const fakeExternalIds: ExternalId[] = [{ id_type: 'MRN', id_value: '12345' }]
 
 function installMockApi(
   getDataInfoResolvedValue: unknown,
-  overrides: { upsertDataInfo?: unknown; deleteExternalId?: unknown; upsertExternalId?: unknown } = {}
+  overrides: {
+    upsertDataInfo?: unknown
+    deleteExternalId?: unknown
+    upsertExternalId?: unknown
+  } = {}
 ): {
   upsertDataInfo: ReturnType<typeof vi.fn>
   deleteExternalId: ReturnType<typeof vi.fn>
@@ -126,7 +130,13 @@ function installMockApi(
       list: vi.fn().mockResolvedValue([])
     }
   }
-  return { upsertDataInfo, deleteExternalId, upsertExternalId, listExternalIds, distinctExternalIdTypes }
+  return {
+    upsertDataInfo,
+    deleteExternalId,
+    upsertExternalId,
+    listExternalIds,
+    distinctExternalIdTypes
+  }
 }
 
 function mountTab(): ReturnType<typeof mount> {
@@ -235,10 +245,7 @@ describe('CaseDataInfoTab addExternalId()', () => {
     // failed insert.
     expect(mocks.listExternalIds).not.toHaveBeenCalled()
     expect(mocks.distinctExternalIdTypes).not.toHaveBeenCalled()
-    expect(logService.warn).toHaveBeenCalledWith(
-      expect.stringContaining('boom'),
-      'case-data-info'
-    )
+    expect(logService.warn).toHaveBeenCalledWith(expect.stringContaining('boom'), 'case-data-info')
   })
 
   it('refreshes the list on success', async () => {
