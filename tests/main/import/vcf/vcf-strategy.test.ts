@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { resolve } from 'node:path'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { DatabaseService } from '../../../../src/main/database/DatabaseService'
 import { VcfStrategy } from '../../../../src/main/import/vcf/VcfStrategy'
 import { detectFormat } from '../../../../src/main/import/format-detection'
@@ -180,6 +183,56 @@ describe('VcfStrategy', () => {
       .prepare('SELECT * FROM variants WHERE case_id = ? AND gene_symbol IS NOT NULL')
       .all(caseId) as Array<Record<string, unknown>>
     expect(variants.length).toBeGreaterThan(0)
+  })
+
+  it('rejects a malformed POS with a reasoned skip instead of a silent NaN row', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'varlens-vcf-strategy-'))
+    const malformedVcf = join(tmpDir, 'malformed-pos.vcf')
+
+    try {
+      writeFileSync(
+        malformedVcf,
+        [
+          '##fileformat=VCFv4.2',
+          '##FILTER=<ID=PASS,Description="All filters passed">',
+          '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005',
+          'chr1\tNOTNUM\t.\tA\tG\t99\tPASS\t.\tGT\t0/1',
+          'chr1\t100\trs1\tA\tG\t99\tPASS\t.\tGT\t0/1'
+        ].join('\n') + '\n'
+      )
+
+      const caseId = db.cases.createCase('test-malformed-pos', malformedVcf, 1000)
+
+      const options: ImportOptions = { caseName: 'test-malformed-pos' }
+      const context: StrategyContext = {
+        db,
+        formatInfo: { format: 'vcf', caseKey: '' },
+        caseId,
+        startTime: Date.now()
+      }
+
+      const result = await strategy.import(malformedVcf, options, context, {
+        selectedSamples: ['HG005'],
+        genomeBuild: 'GRCh38'
+      })
+
+      // Only the valid line is inserted; the malformed-POS line is rejected.
+      expect(result.variantCount).toBe(1)
+      expect(result.skipped).toBeGreaterThanOrEqual(1)
+
+      // The skip carries a reason -- not a silent drop.
+      expect(result.errors.length).toBeGreaterThan(0)
+      expect(result.errors.some((e) => /invalid POS/i.test(e))).toBe(true)
+
+      // No NaN-position row reached the database.
+      const variants = db.database
+        .prepare('SELECT pos FROM variants WHERE case_id = ?')
+        .all(caseId) as Array<{ pos: number }>
+      expect(variants.every((v) => Number.isInteger(v.pos))).toBe(true)
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 })
 

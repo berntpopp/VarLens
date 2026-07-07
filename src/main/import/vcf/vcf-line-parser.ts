@@ -12,9 +12,17 @@ import type { VcfRawRecord } from './types'
  *
  * @param line - Tab-separated VCF data line (non-header, non-comment)
  * @param sampleNames - Sample names from the VCF header (#CHROM line columns 10+)
- * @returns Parsed raw record
+ * @param onSkip - Optional callback invoked with a human-readable reason when
+ *   the line is rejected. Callers with a diagnostics/errors channel should
+ *   wire this through so a malformed line is a *counted, reasoned* skip
+ *   rather than a silent one.
+ * @returns Parsed raw record, or `null` if the line is rejected
  */
-export function parseVcfLine(line: string, sampleNames: string[]): VcfRawRecord | null {
+export function parseVcfLine(
+  line: string,
+  sampleNames: string[],
+  onSkip?: (reason: string) => void
+): VcfRawRecord | null {
   const cols = line.split('\t')
 
   // VCF requires at least 8 fixed columns (CHROM through INFO)
@@ -24,7 +32,7 @@ export function parseVcfLine(line: string, sampleNames: string[]): VcfRawRecord 
 
   // VCF has 8 fixed columns, optionally FORMAT + sample columns
   const chrom = cols[0]
-  const pos = parseInt(cols[1], 10)
+  const rawPos = cols[1]
   const rawId = cols[2]
   const ref = cols[3]
   const rawAlt = cols[4]
@@ -32,14 +40,30 @@ export function parseVcfLine(line: string, sampleNames: string[]): VcfRawRecord 
   const filter = cols[6]
   const rawInfo = cols[7]
 
+  // Parse POS: must be a positive integer per the VCF spec. A malformed POS
+  // (non-numeric, zero, negative, or fractional) is rejected outright rather
+  // than allowed to flow forward as `NaN` — a NaN row would otherwise pass
+  // silently through downstream mapping/insert paths.
+  const pos = Number.parseInt(rawPos, 10)
+  if (!Number.isInteger(pos) || pos <= 0 || !/^\d+$/.test(rawPos)) {
+    onSkip?.(`invalid POS "${rawPos}" (must be a positive integer)`)
+    return null
+  }
+
   // Parse ID: "." means missing
   const id = rawId === '.' ? null : rawId
 
   // Parse ALT: comma-separated alleles
   const alt = rawAlt.split(',')
 
-  // Parse QUAL: "." means missing
-  const qual = rawQual === '.' || rawQual === undefined ? null : parseFloat(rawQual)
+  // Parse QUAL: "." (or absent) means missing; a malformed (non-numeric)
+  // QUAL becomes `null` rather than `NaN` — QUAL is optional per the VCF
+  // spec, so a bad value doesn't invalidate the record.
+  let qual: number | null = null
+  if (rawQual !== '.' && rawQual !== undefined) {
+    const parsedQual = Number.parseFloat(rawQual)
+    qual = Number.isNaN(parsedQual) ? null : parsedQual
+  }
 
   // Parse INFO: semicolon-separated key=value pairs
   const info = new Map<string, string>()

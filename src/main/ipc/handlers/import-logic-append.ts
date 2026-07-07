@@ -102,7 +102,11 @@ export async function importAdditionalFileToCase(
       }
 
       try {
-        const record = parseVcfLine(line, header.samples)
+        const record = parseVcfLine(line, header.samples, (reason) => {
+          if (errors.length < 10) {
+            errors.push(`Line skipped at ${line.substring(0, 50)}: ${reason}`)
+          }
+        })
         if (record === null) {
           totalSkipped++
           continue
