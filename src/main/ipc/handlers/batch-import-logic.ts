@@ -10,7 +10,6 @@ import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import { checkDuplicates } from '../../import/batch-utils'
 import { ZipExtractor, TempDirectoryManager } from '../../import'
-import { addAllowedImportPath } from '../../security/import-path-allowlist'
 import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { API_CONFIG } from '../../../shared/config'
 import type { FileImportRequest } from '../../../shared/types/import-worker'
@@ -268,7 +267,8 @@ export function testZipPassword(zipPath: string, password: string): { success: b
  */
 export async function extractZip(
   zipPath: string,
-  password?: string
+  password?: string,
+  onExtractedFile?: (filePath: string) => void
 ): Promise<{ files: string[]; errors: string[] }> {
   try {
     if (zipTempManager !== null) {
@@ -280,12 +280,10 @@ export async function extractZip(
 
     const result = await zipExtractor.extract(zipPath, targetDir, password)
 
-    // Files extracted from a dialog-enrolled ZIP were never themselves
-    // picked via a dialog. Enroll each one explicitly so the strict
-    // path-authority gate (batch-import:checkDuplicates / batch-import:start)
-    // accepts them in the subsequent review/import step.
-    for (const extractedFile of result.extractedFiles) {
-      addAllowedImportPath(extractedFile)
+    if (onExtractedFile !== undefined) {
+      for (const extractedFile of result.extractedFiles) {
+        onExtractedFile(extractedFile)
+      }
     }
 
     return JSON.parse(

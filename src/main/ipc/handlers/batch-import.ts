@@ -250,7 +250,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
         if (!isStrictlyEnrolledPath(validatedZipPath)) {
           throwUnallowedBatchPath('batch-import:extractZip', validatedZipPath, 'zipPath')
         }
-        return extractZip(validatedZipPath, validatedPassword)
+        return extractZip(validatedZipPath, validatedPassword, addAllowedImportPath)
       })
     }
   )

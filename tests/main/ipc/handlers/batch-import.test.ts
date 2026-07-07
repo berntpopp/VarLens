@@ -282,7 +282,7 @@ describe('batch-import IPC handlers', () => {
       const result = await invokeHandler(ipcMain, 'batch-import:extractZip', zipPath)
 
       expect(isIpcError(result)).toBe(false)
-      expect(extractZip).toHaveBeenCalledWith(zipPath, undefined)
+      expect(extractZip).toHaveBeenCalledWith(zipPath, undefined, addAllowedImportPath)
     })
 
     it('rejects a zip path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {

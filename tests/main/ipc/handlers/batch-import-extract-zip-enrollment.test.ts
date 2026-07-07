@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { extractZip, cleanupZipTemp } from '../../../../src/main/ipc/handlers/batch-import-logic'
 import {
   __resetAllowlistForTests,
+  addAllowedImportPath,
   isStrictlyEnrolledPath
 } from '../../../../src/main/security/import-path-allowlist'
 
@@ -45,7 +46,9 @@ describe('extractZip — enrolls extracted files for the strict path-authority g
     zip.writeZip(zipPath)
 
     // Nothing extracted yet is enrolled (the temp dir doesn't even exist).
-    const result = await extractZip(zipPath)
+    // The desktop IPC handler passes addAllowedImportPath here after it has
+    // validated the ZIP path against the strict dialog-enrolled allowlist.
+    const result = await extractZip(zipPath, undefined, addAllowedImportPath)
 
     expect(result.errors).toEqual([])
     expect(result.files.length).toBe(2)

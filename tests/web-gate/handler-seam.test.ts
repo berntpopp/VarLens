@@ -22,7 +22,7 @@ const TASK_TYPES_PATH = 'src/web/server/task-types.ts'
 const WEB_ROUTES_DIR = 'src/web/server/routes'
 
 const FLAT_HANDLERS = new Set(['shell', 'shortlist', 'system', 'updater'])
-const SHARED_DOMAIN_HELPERS = new Set(['import-schemas'])
+const SHARED_DOMAIN_HELPERS = new Set(['batch-import-schemas', 'import-schemas', 'jobs-schemas'])
 const ROUTE_OVERRIDE_LOGIC_EXCEPTIONS: Record<string, string> = {
   'analysis-groups.ts': 'thin storage-executor adapters with web-only argument validation',
   'audit-log.ts': 'admin-gated audit-trail read adapters over the storage read executor',
