@@ -1,8 +1,7 @@
 import { parentPort } from 'node:worker_threads'
 import { basename } from 'node:path'
-import { statSync, createReadStream } from 'node:fs'
+import { statSync } from 'node:fs'
 import type { Readable } from 'node:stream'
-import { createGunzip } from 'node:zlib'
 import { createInterface } from 'node:readline'
 import { Client, type ClientConfig, type Pool, type PoolClient } from 'pg'
 
@@ -38,7 +37,7 @@ import { parseVcfLine } from '../import/vcf/vcf-line-parser'
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
 import { detectCaller } from '../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
-import { isGzipped } from '../import/stream-utils'
+import { createCappedLineStream } from '../import/stream-utils'
 import type { VcfHeader, VcfMappedVariant } from '../import/vcf/types'
 import { BedFilter } from '../import/vcf/bed-filter'
 import {
@@ -90,7 +89,7 @@ process.on('unhandledRejection', (reason) => {
  * threshold, BED region) are applied before `mapVcfRecord`, and post-mapping
  * filters (GQ, DP) are applied to each emitted variant independently.
  */
-async function* streamMappedVcfRows(
+export async function* streamMappedVcfRows(
   filePath: string,
   selectedSample: string,
   filters?: ImportFilters
@@ -104,22 +103,25 @@ async function* streamMappedVcfRows(
   // Task 15 root cause).
   statSync(filePath)
 
-  const raw = createReadStream(filePath)
-  const gunzip = isGzipped(filePath) ? createGunzip() : null
-  const stream = gunzip !== null ? raw.pipe(gunzip) : raw
+  // Shared capped reader guards against a giant single line and a
+  // decompression bomb -- see stream-utils.ts for the cap rationale.
+  const { stream } = createCappedLineStream(filePath)
   const rl = createInterface({ input: stream, crlfDelay: Infinity })
 
   // Belt-and-suspenders: also capture any post-open stream errors (gzip
-  // corruption mid-file, EIO, etc.) and re-throw them from the generator so
-  // the caller's per-file `try/catch` handles them. Without this an
-  // unhandled `error` event would still surface as `uncaughtException`.
+  // corruption mid-file, DoS cap trip, EIO, etc.) and re-throw them from the
+  // generator so the caller's per-file `try/catch` handles them. Without
+  // this an unhandled `error` event would still surface as an
+  // `uncaughtException`. `stream` here is the composed capped pipeline --
+  // `stream.compose()` (see stream-utils.ts) forwards an error from any
+  // stage (raw read, gunzip, byte cap, line cap) to a single 'error' event
+  // on this one object, so one listener covers every failure mode.
   let streamError: Error | null = null
   const onStreamError = (err: Error): void => {
     if (streamError === null) streamError = err
     rl.close()
   }
-  raw.on('error', onStreamError)
-  gunzip?.on('error', onStreamError)
+  stream.on('error', onStreamError)
 
   const headerLines: string[] = []
   let header: VcfHeader | null = null
@@ -175,9 +177,8 @@ async function* streamMappedVcfRows(
     // gunzip integrity check at end-of-stream) still need to propagate.
     if (streamError !== null) throw streamError
   } finally {
-    raw.off('error', onStreamError)
-    gunzip?.off('error', onStreamError)
-    raw.destroy()
+    stream.off('error', onStreamError)
+    stream.destroy()
   }
 }
 

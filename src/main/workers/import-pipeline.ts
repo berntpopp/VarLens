@@ -5,9 +5,7 @@
  * worker_threads imports. This module is testable in isolation.
  */
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
-import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
-import { createGunzip } from 'node:zlib'
 import type { Readable } from 'node:stream'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
@@ -18,7 +16,7 @@ import type { FormatInfo } from '../import/strategies/ImportStrategy'
 import { createFieldMapper } from '../import/transforms/FieldMapper'
 import { createObjectFormatMapper } from '../import/transforms/ObjectFormatMapper'
 import { resolveColumnIndices } from '../import/config/fieldMapping'
-import { createDecompressedStream, isGzipped } from '../import/stream-utils'
+import { createDecompressedStream, createCappedLineStream } from '../import/stream-utils'
 import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
 import { parseVcfLine } from '../import/vcf/vcf-line-parser'
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
@@ -340,8 +338,9 @@ export async function streamInsertVcf(
   // Suppress unused-variable warning — formatInfo kept for API consistency
   void formatInfo
 
-  const raw = createReadStream(filePath)
-  const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
+  // Shared capped reader guards against a giant single line and a
+  // decompression bomb -- see stream-utils.ts for the cap rationale.
+  const { stream } = createCappedLineStream(filePath)
   const rl = createInterface({ input: stream, crlfDelay: Infinity })
 
   const headerLines: string[] = []
@@ -417,7 +416,7 @@ export async function streamInsertVcf(
       onProgress(totalInserted)
     }
     // Ensure stream resources are released
-    raw.destroy()
+    stream.destroy()
   }
 
   return totalInserted

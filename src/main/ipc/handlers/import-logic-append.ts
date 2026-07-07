@@ -20,12 +20,10 @@
  *   - The caller MUST ensure any genome build lock is enforced before
  *     calling this function (see checkGenomeBuildOrThrow below).
  */
-import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
-import { createGunzip } from 'node:zlib'
 
-import { isGzipped } from '../../import/stream-utils'
-import { parseVcfHeaderFromLines } from '../../import/vcf/vcf-header-parser'
+import { createCappedLineStream } from '../../import/stream-utils'
+import { parseVcfHeader, parseVcfHeaderFromLines } from '../../import/vcf/vcf-header-parser'
 import { parseVcfLine } from '../../import/vcf/vcf-line-parser'
 import { mapVcfRecord } from '../../import/vcf/VcfMapper'
 import { detectCaller } from '../../import/vcf/caller-detector'
@@ -59,8 +57,9 @@ export async function importAdditionalFileToCase(
   const db = getDb()
   const startTime = Date.now()
 
-  const raw = createReadStream(filePath)
-  const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
+  // Shared capped reader guards against a giant single line and a
+  // decompression bomb -- see stream-utils.ts for the cap rationale.
+  const { stream } = createCappedLineStream(filePath)
   const rl = createInterface({ input: stream, crlfDelay: Infinity })
 
   const headerLines: string[] = []
@@ -174,7 +173,7 @@ export async function importAdditionalFileToCase(
     }
   } finally {
     // Ensure the file descriptor is released even on error
-    raw.destroy()
+    stream.destroy()
   }
 
   return {
@@ -193,27 +192,12 @@ export async function importAdditionalFileToCase(
  * Used by the multi-file session to enforce a per-case genome build lock:
  * if a subsequent file declares a different build than the case was created
  * with, the session aborts before any variants are inserted.
+ *
+ * Delegates to the shared `parseVcfHeader`, which is already routed through
+ * the capped reader (giant-line + decompression-bomb guards) -- see
+ * stream-utils.ts for the cap rationale.
  */
 export async function detectGenomeBuildFromFile(filePath: string): Promise<string | null> {
-  const raw = createReadStream(filePath)
-  const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
-  const rl = createInterface({ input: stream, crlfDelay: Infinity })
-
-  const headerLines: string[] = []
-  try {
-    for await (const line of rl) {
-      if (line.startsWith('#')) {
-        headerLines.push(line)
-        continue
-      }
-      // First data line — header is complete, stop reading.
-      break
-    }
-  } finally {
-    raw.destroy()
-  }
-
-  if (headerLines.length === 0) return null
-  const header = parseVcfHeaderFromLines(headerLines)
+  const { header } = await parseVcfHeader(filePath)
   return header.genomeBuild ?? null
 }
