@@ -68,6 +68,7 @@ import { ref, computed, watch } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { mdiClose, mdiFileUploadOutline } from '@mdi/js'
 import { logService } from '../../services/LogService'
+import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 
 interface RegionFileItem {
   id: number
@@ -143,15 +144,22 @@ async function importRegionFile(): Promise<void> {
   importingRegion.value = true
   try {
     const regionFilesApi = api.regionFiles
-    const created = await regionFilesApi.create(name, regionFileDescription.value.trim() || null)
-    await regionFilesApi.importBed(created.id, selectedBedPath.value)
+    // wrapHandler resolves an IpcResult even on failure — a raw await here
+    // would store a SerializableError as if it were the created RegionFile
+    // (or the refreshed list), then feed `created.id` (undefined) into
+    // importBed and emit a corrupted `imported` payload to the parent.
+    const created = unwrapIpcResult(
+      await regionFilesApi.create(name, regionFileDescription.value.trim() || null)
+    )
+    unwrapIpcResult(await regionFilesApi.importBed(created.id, selectedBedPath.value))
 
-    const updatedFiles = await regionFilesApi.list()
+    const updatedFiles = unwrapIpcResult(await regionFilesApi.list())
     emit('imported', { regionFileId: created.id, regionFiles: updatedFiles })
     emit('update:modelValue', false)
   } catch (e) {
     logService.error(
-      'Failed to import region file: ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to import region file: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
       'region-import'
     )
   } finally {
