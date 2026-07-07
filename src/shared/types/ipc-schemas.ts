@@ -479,7 +479,9 @@ export const DatabaseOpenSchema = z.object({
  */
 export const DatabaseCreateSchema = z.object({
   path: FilePathSchema,
-  password: z.string().max(256).optional()
+  password: z.string().max(256).optional(),
+  /** First-run passphrase-setup completion; see DatabaseDomainContract.create. */
+  setupPassphrase: z.string().max(256).optional()
 })
 
 /**

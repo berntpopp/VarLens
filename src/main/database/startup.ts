@@ -1,7 +1,10 @@
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { Pool } from 'pg'
 
+import type { DbKeyStoreLike } from './db-key-store'
 import type { DatabaseManager } from '../services/DatabaseManager'
+import { mainLogger } from '../services/MainLogger'
 import {
   buildPostgresPoolConfig,
   getPostgresStorageConfig,
@@ -17,6 +20,28 @@ interface OpenConfiguredDatabaseOptions {
   getPostgresConfig?: (env: NodeJS.ProcessEnv) => PostgresStorageConfig | null
   createPostgresPool?: (config: PostgresStorageConfig) => Pool
   createPostgresSession?: (config: PostgresStorageConfig, pool: Pool) => StorageSession
+  /**
+   * DB key-store used to encrypt a freshly-created default database by
+   * default, and to transparently resolve an existing encrypted default
+   * database on subsequent launches. Optional so callers that only exercise
+   * the postgres branch (or want today's always-unencrypted default DB in a
+   * test) don't need to supply one; defaults to a store that always reports
+   * "unavailable" -- this module stays Electron-free (no `safeStorage`
+   * import) so it can be unit-tested without mocking `electron`. The real
+   * app wires the actual singleton in from `database/index.ts`.
+   */
+  keyStore?: DbKeyStoreLike
+  /** Injectable for tests; defaults to `fs.existsSync`. */
+  fileExists?: (path: string) => boolean
+}
+
+function createUnavailableKeyStore(): DbKeyStoreLike {
+  return {
+    createManagedKey: () => ({ ok: false, reason: 'safe-storage-unavailable' }),
+    wrapNewDekWithPassphrase: () => ({ ok: false, reason: 'path-already-keyed' }),
+    resolveKeyForPath: () => ({ ok: false, reason: 'not-found' }),
+    resolveKeyWithPassphrase: () => ({ ok: false, reason: 'not-found' })
+  }
 }
 
 function getExperimentalBackend(env: NodeJS.ProcessEnv): string | null {
@@ -64,7 +89,60 @@ export async function openConfiguredDatabase(
     }
   }
 
-  await manager.open(join(options.userDataPath, 'varlens.db'))
+  await openDefaultSqliteDatabase(
+    manager,
+    options.userDataPath,
+    options.keyStore ?? createUnavailableKeyStore(),
+    options.fileExists ?? existsSync
+  )
+}
+
+/**
+ * Open (or create) the default SQLite database at `<userDataPath>/varlens.db`.
+ *
+ * - File doesn't exist yet (fresh install): create it encrypted by default
+ *   via a managed key. If the key-store can't mint one (safeStorage
+ *   unavailable pre-window, or a stale registry entry for this exact path),
+ *   fall back to creating it unencrypted -- startup must never block on
+ *   encryption -- and log clearly so the gap is visible. A later flow (I2b)
+ *   can offer to encrypt it once the window is up and a passphrase can be
+ *   collected.
+ * - File exists: open as today, but first try to resolve a managed key
+ *   transparently so a default DB that a PRIOR launch auto-encrypted keeps
+ *   opening without a prompt. A DB with no key-store entry (plaintext, or
+ *   encrypted some other way) opens exactly as before.
+ */
+async function openDefaultSqliteDatabase(
+  manager: DatabaseManager,
+  userDataPath: string,
+  keyStore: DbKeyStoreLike,
+  fileExists: (path: string) => boolean
+): Promise<void> {
+  const defaultDbPath = join(userDataPath, 'varlens.db')
+
+  if (fileExists(defaultDbPath)) {
+    const resolved = keyStore.resolveKeyForPath(defaultDbPath)
+    if (resolved.ok) {
+      await manager.open(defaultDbPath, resolved.dek)
+    } else {
+      await manager.open(defaultDbPath)
+    }
+    return
+  }
+
+  const managed = keyStore.createManagedKey(defaultDbPath)
+  if (managed.ok) {
+    await manager.createDatabase(defaultDbPath, managed.dek)
+    return
+  }
+
+  mainLogger.warn(
+    `Default database created without encryption (reason: ${managed.reason}). Secure key ` +
+      'storage is unavailable before the application window opens, so the default database ' +
+      'could not be encrypted automatically at startup. It can be encrypted later.',
+    'database-startup'
+  )
+  await manager.createDatabase(defaultDbPath)
 }
 
 async function closePostgresStartupResources({

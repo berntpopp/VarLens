@@ -108,10 +108,16 @@ export const useDatabaseStore = defineStore('database', () => {
     }
   }
 
-  async function createDatabase(path: string, password?: string): Promise<DatabaseOpenResult> {
+  async function createDatabase(
+    path: string,
+    password?: string,
+    setupPassphrase?: string
+  ): Promise<DatabaseOpenResult> {
     isLoading.value = true
     try {
-      const result = unwrapIpcResult(await getApi().database.create(path, password))
+      const result = unwrapIpcResult(
+        await getApi().database.create(path, password, setupPassphrase)
+      )
       if (result.success && result.info) {
         currentPath.value = result.info.path
         currentName.value = result.info.name

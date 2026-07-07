@@ -18,6 +18,7 @@ import {
   DatabaseRekeySchema,
   FilePathSchema
 } from '../../../shared/types/ipc-schemas'
+import { getDbKeyStore as getDefaultDbKeyStore } from '../../database/db-key-store-instance'
 import { triggerStartupRebuildIfNeeded } from './cohort'
 import {
   openDatabase,
@@ -205,6 +206,7 @@ export function registerDatabaseHandlers({
   getDbManager,
   getDbPool,
   getPostgresProfileStore = getDefaultPostgresProfileStore,
+  getDbKeyStore = getDefaultDbKeyStore,
   createPostgresPool = createDefaultPostgresPool,
   createPostgresSession = createPostgresStorageSession,
   collectPostgresDiagnostics
@@ -268,23 +270,26 @@ export function registerDatabaseHandlers({
         mainLogger.error(`Invalid database:open params: ${validated.error.message}`, 'database')
         throw new Error('Invalid database open parameters')
       }
-      return openDatabase(validated.data, getDb, getDbManager, lifecycleCallbacks)
+      return openDatabase(validated.data, getDb, getDbManager, lifecycleCallbacks, getDbKeyStore())
     })
   })
 
   /**
    * Create a new database at the specified path
    */
-  ipcMain.handle('database:create', async (_event, path: unknown, password?: unknown) => {
-    return wrapHandler(async () => {
-      const validated = DatabaseCreateSchema.safeParse({ path, password })
-      if (!validated.success) {
-        mainLogger.error(`Invalid database:create params: ${validated.error.message}`, 'database')
-        throw new Error('Invalid database create parameters')
-      }
-      return createDatabase(validated.data, getDbManager)
-    })
-  })
+  ipcMain.handle(
+    'database:create',
+    async (_event, path: unknown, password?: unknown, setupPassphrase?: unknown) => {
+      return wrapHandler(async () => {
+        const validated = DatabaseCreateSchema.safeParse({ path, password, setupPassphrase })
+        if (!validated.success) {
+          mainLogger.error(`Invalid database:create params: ${validated.error.message}`, 'database')
+          throw new Error('Invalid database create parameters')
+        }
+        return createDatabase(validated.data, getDbManager, getDbKeyStore())
+      })
+    }
+  )
 
   /**
    * Change the encryption key for the current database

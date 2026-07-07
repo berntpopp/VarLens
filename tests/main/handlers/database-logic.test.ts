@@ -265,6 +265,14 @@ describe('postgres profile logic', () => {
   })
 })
 
+/** A key-store stub that never resolves/mints anything -- for tests that don't exercise it. */
+const unusedKeyStore = {
+  createManagedKey: vi.fn(),
+  wrapNewDekWithPassphrase: vi.fn(),
+  resolveKeyForPath: vi.fn(),
+  resolveKeyWithPassphrase: vi.fn()
+}
+
 describe('database lifecycle logic', () => {
   it('does not require handler-level pool initialization after opening a database', async () => {
     const initDbPool = vi.fn()
@@ -287,12 +295,67 @@ describe('database lifecycle logic', () => {
         { path: '/tmp/varlens.db' },
         () => db as never,
         () => manager as never,
-        callbacks
+        callbacks,
+        unusedKeyStore
       )
     ).resolves.toMatchObject({ success: true })
 
     expect(initDbPool).not.toHaveBeenCalled()
     expect(triggerStartupRebuild).toHaveBeenCalledWith(db)
+    expect(unusedKeyStore.resolveKeyForPath).not.toHaveBeenCalled()
+  })
+
+  it('opening an encrypted database with no password resolves the key transparently via the key-store', async () => {
+    const triggerStartupRebuild = vi.fn()
+    const manager = {
+      openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+      switchDatabase: vi.fn().mockResolvedValue(undefined),
+      getCurrentInfo: vi.fn().mockReturnValue({
+        path: '/tmp/varlens.db',
+        name: 'varlens.db',
+        encrypted: true
+      })
+    }
+    const keyStore = {
+      ...unusedKeyStore,
+      resolveKeyForPath: vi.fn().mockReturnValue({ ok: true, dek: 'the-dek' })
+    }
+
+    await expect(
+      logic.openDatabase(
+        { path: '/tmp/varlens.db' },
+        () => ({}) as never,
+        () => manager as never,
+        { triggerStartupRebuild },
+        keyStore
+      )
+    ).resolves.toMatchObject({ success: true })
+
+    expect(keyStore.resolveKeyForPath).toHaveBeenCalledWith('/tmp/varlens.db')
+    expect(manager.switchDatabase).toHaveBeenCalledWith('/tmp/varlens.db', 'the-dek')
+  })
+
+  it('opening an encrypted database the key-store cannot resolve falls back to needsPassword', async () => {
+    const manager = {
+      openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+      switchDatabase: vi.fn()
+    }
+    const keyStore = {
+      ...unusedKeyStore,
+      resolveKeyForPath: vi.fn().mockReturnValue({ ok: false, reason: 'not-found' })
+    }
+
+    await expect(
+      logic.openDatabase(
+        { path: '/tmp/varlens.db' },
+        () => ({}) as never,
+        () => manager as never,
+        { triggerStartupRebuild: vi.fn() },
+        keyStore
+      )
+    ).resolves.toEqual({ success: false, needsPassword: true })
+
+    expect(manager.switchDatabase).not.toHaveBeenCalled()
   })
 
   it('does not require handler-level pool initialization after creating a database', async () => {
@@ -305,12 +368,84 @@ describe('database lifecycle logic', () => {
         encrypted: false
       })
     }
+    const keyStore = {
+      ...unusedKeyStore,
+      createManagedKey: vi.fn().mockReturnValue({ ok: true, keyId: 'k1', dek: 'the-dek' })
+    }
 
     await expect(
-      logic.createDatabase({ path: '/tmp/varlens.db' }, () => manager as never)
+      logic.createDatabase({ path: '/tmp/varlens.db' }, () => manager as never, keyStore)
     ).resolves.toMatchObject({ success: true })
 
     expect(initDbPool).not.toHaveBeenCalled()
+    expect(manager.createDatabase).toHaveBeenCalledWith('/tmp/varlens.db', 'the-dek')
+  })
+
+  it('creating a database with an explicit password never consults the key-store', async () => {
+    const manager = {
+      createDatabase: vi.fn().mockResolvedValue(undefined),
+      getCurrentInfo: vi.fn().mockReturnValue({
+        path: '/tmp/varlens.db',
+        name: 'varlens.db',
+        encrypted: true
+      })
+    }
+
+    await expect(
+      logic.createDatabase(
+        { path: '/tmp/varlens.db', password: 'literal-pw' },
+        () => manager as never,
+        unusedKeyStore
+      )
+    ).resolves.toMatchObject({ success: true })
+
+    expect(manager.createDatabase).toHaveBeenCalledWith('/tmp/varlens.db', 'literal-pw')
+    expect(unusedKeyStore.createManagedKey).not.toHaveBeenCalled()
+  })
+
+  it('creating a database when safeStorage is unavailable returns needsPassphraseSetup without creating anything', async () => {
+    const manager = { createDatabase: vi.fn(), getCurrentInfo: vi.fn() }
+    const keyStore = {
+      ...unusedKeyStore,
+      createManagedKey: vi.fn().mockReturnValue({ ok: false, reason: 'safe-storage-unavailable' })
+    }
+
+    await expect(
+      logic.createDatabase({ path: '/tmp/varlens.db' }, () => manager as never, keyStore)
+    ).resolves.toEqual({ success: false, needsPassphraseSetup: true })
+
+    expect(manager.createDatabase).not.toHaveBeenCalled()
+  })
+
+  it('completing passphrase setup wraps a fresh DEK and creates the database with it', async () => {
+    const manager = {
+      createDatabase: vi.fn().mockResolvedValue(undefined),
+      getCurrentInfo: vi.fn().mockReturnValue({
+        path: '/tmp/varlens.db',
+        name: 'varlens.db',
+        encrypted: true
+      })
+    }
+    const keyStore = {
+      ...unusedKeyStore,
+      wrapNewDekWithPassphrase: vi
+        .fn()
+        .mockReturnValue({ ok: true, keyId: 'k1', dek: 'wrapped-dek' })
+    }
+
+    await expect(
+      logic.createDatabase(
+        { path: '/tmp/varlens.db', setupPassphrase: 'my passphrase' },
+        () => manager as never,
+        keyStore
+      )
+    ).resolves.toMatchObject({ success: true })
+
+    expect(keyStore.wrapNewDekWithPassphrase).toHaveBeenCalledWith(
+      '/tmp/varlens.db',
+      'my passphrase'
+    )
+    expect(manager.createDatabase).toHaveBeenCalledWith('/tmp/varlens.db', 'wrapped-dek')
   })
 })
 

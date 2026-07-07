@@ -1,6 +1,7 @@
 import type { IpcMain } from 'electron'
 import type { DatabaseService } from '../database/DatabaseService'
 import type { DatabaseManager } from '../services/DatabaseManager'
+import type { DbKeyStoreLike } from '../database/db-key-store'
 import type { DbPool } from '../database/DbPool'
 import type { PostgresPoolLike, PostgresProfileStoreLike } from './handlers/database-logic'
 import type { PostgresStorageConfig } from '../storage/config'
@@ -21,6 +22,8 @@ export interface HandlerDependencies {
   getDbPool?: () => DbPool | null
   /** Optional PostgreSQL profile store factory for hosted workspace profile IPC. */
   getPostgresProfileStore?: () => PostgresProfileStoreLike
+  /** Optional DB key-store factory so tests can inject a fake registry/safeStorage. */
+  getDbKeyStore?: () => DbKeyStoreLike
   /** Optional PostgreSQL pool factory so tests can avoid a real server. */
   createPostgresPool?: (config: PostgresStorageConfig) => PostgresPoolLike
   /** Optional PostgreSQL session factory so tests can avoid building repository graph. */

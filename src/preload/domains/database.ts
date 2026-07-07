@@ -7,7 +7,8 @@ export function createDatabaseApi(): DatabaseDomainContract {
     selectSaveLocation: (defaultName) =>
       ipcRenderer.invoke('database:selectSaveLocation', defaultName),
     open: (path, password) => ipcRenderer.invoke('database:open', path, password),
-    create: (path, password) => ipcRenderer.invoke('database:create', path, password),
+    create: (path, password, setupPassphrase) =>
+      ipcRenderer.invoke('database:create', path, password, setupPassphrase),
     rekey: (newPassword) => ipcRenderer.invoke('database:rekey', newPassword),
     info: () => ipcRenderer.invoke('database:info'),
     capabilities: () => ipcRenderer.invoke('database:capabilities'),

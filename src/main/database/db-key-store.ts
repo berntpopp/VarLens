@@ -417,3 +417,13 @@ export class DbKeyStore {
     renameSync(tmpPath, this.registryPath)
   }
 }
+
+/**
+ * The subset of `DbKeyStore` consumed by the DB create/open flow
+ * (`database-logic.ts`, `database/startup.ts`). Narrowed so those modules
+ * can accept an injected fake in tests without depending on the full class.
+ */
+export type DbKeyStoreLike = Pick<
+  DbKeyStore,
+  'createManagedKey' | 'wrapNewDekWithPassphrase' | 'resolveKeyForPath' | 'resolveKeyWithPassphrase'
+>

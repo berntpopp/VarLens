@@ -18,6 +18,12 @@ export interface DatabaseInfo {
 export interface DatabaseOpenResult {
   success: boolean
   needsPassword?: boolean
+  /**
+   * Set on a `create` call when no password/DEK could be minted transparently
+   * (safeStorage unavailable). The caller must collect a passphrase from the
+   * user and re-call `create(path, undefined, setupPassphrase)`.
+   */
+  needsPassphraseSetup?: boolean
   error?: string
   info?: DatabaseInfo
 }
@@ -36,7 +42,16 @@ export interface DatabaseDomainContract {
   selectFile: () => Promise<string | null>
   selectSaveLocation: (defaultName: string) => Promise<string | null>
   open: (path: string, password?: string) => Promise<IpcResult<DatabaseOpenResult>>
-  create: (path: string, password?: string) => Promise<IpcResult<DatabaseOpenResult>>
+  /**
+   * `setupPassphrase` is only used to complete the safeStorage-unavailable
+   * fallback signalled by a prior `create` call's `needsPassphraseSetup`.
+   * It wraps a freshly generated DEK -- it is never itself the SQLCipher key.
+   */
+  create: (
+    path: string,
+    password?: string,
+    setupPassphrase?: string
+  ) => Promise<IpcResult<DatabaseOpenResult>>
   rekey: (newPassword: string) => Promise<IpcResult<DatabaseActionResult>>
   info: () => Promise<IpcResult<DatabaseInfo | null>>
   capabilities: () => Promise<IpcResult<StorageCapabilities>>

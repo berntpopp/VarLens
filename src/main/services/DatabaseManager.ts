@@ -7,6 +7,7 @@
 
 import { DatabaseService } from '../database/DatabaseService'
 import { DatabaseError, WrongPasswordError } from '../database/errors'
+import { isNotADatabaseError } from '../database/sqlite-error'
 import { RecentDatabasesService, type RecentDatabase } from './RecentDatabasesService'
 import { mainLogger } from './MainLogger'
 import { createSqliteStorageSession } from '../storage/sqlite/createSqliteStorageSession'
@@ -92,10 +93,7 @@ export class DatabaseManager {
         }
       }
 
-      if (
-        error instanceof Error &&
-        error.message.includes('file is encrypted or is not a database')
-      ) {
+      if (isNotADatabaseError(error)) {
         return { needsPassword: true }
       }
 

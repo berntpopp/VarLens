@@ -21,7 +21,8 @@ describe('openConfiguredDatabase', () => {
 
       await openConfiguredDatabase(manager as never, {
         env: {},
-        userDataPath: '/tmp/varlens-user-data'
+        userDataPath: '/tmp/varlens-user-data',
+        fileExists: () => true
       })
 
       expect(manager.open).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db')
@@ -32,7 +33,7 @@ describe('openConfiguredDatabase', () => {
     }
   })
 
-  it('opens the default sqlite database when no experimental backend is requested', async () => {
+  it('opens the default sqlite database when no experimental backend is requested and it already exists', async () => {
     const manager = {
       open: vi.fn().mockResolvedValue(undefined),
       openPostgresSession: vi.fn().mockResolvedValue(undefined)
@@ -42,11 +43,104 @@ describe('openConfiguredDatabase', () => {
 
     await openConfiguredDatabase(manager as never, {
       env: {},
-      userDataPath: '/tmp/varlens-user-data'
+      userDataPath: '/tmp/varlens-user-data',
+      fileExists: () => true
     })
 
     expect(manager.open).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db')
     expect(manager.openPostgresSession).not.toHaveBeenCalled()
+  })
+
+  it('creates the default sqlite database encrypted by default via a managed key when it does not exist yet', async () => {
+    const manager = {
+      open: vi.fn().mockResolvedValue(undefined),
+      createDatabase: vi.fn().mockResolvedValue(undefined),
+      openPostgresSession: vi.fn().mockResolvedValue(undefined)
+    }
+    const keyStore = {
+      createManagedKey: vi.fn().mockReturnValue({ ok: true, keyId: 'k1', dek: 'the-dek' }),
+      wrapNewDekWithPassphrase: vi.fn(),
+      resolveKeyForPath: vi.fn(),
+      resolveKeyWithPassphrase: vi.fn()
+    }
+
+    const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
+
+    await openConfiguredDatabase(manager as never, {
+      env: {},
+      userDataPath: '/tmp/varlens-user-data',
+      fileExists: () => false,
+      keyStore
+    })
+
+    expect(keyStore.createManagedKey).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db')
+    expect(manager.createDatabase).toHaveBeenCalledWith(
+      '/tmp/varlens-user-data/varlens.db',
+      'the-dek'
+    )
+    expect(manager.open).not.toHaveBeenCalled()
+  })
+
+  it('falls back to an unencrypted default database (with a warning) when the key-store cannot mint a managed key pre-window', async () => {
+    const manager = {
+      open: vi.fn().mockResolvedValue(undefined),
+      createDatabase: vi.fn().mockResolvedValue(undefined),
+      openPostgresSession: vi.fn().mockResolvedValue(undefined)
+    }
+    const keyStore = {
+      createManagedKey: vi.fn().mockReturnValue({ ok: false, reason: 'safe-storage-unavailable' }),
+      wrapNewDekWithPassphrase: vi.fn(),
+      resolveKeyForPath: vi.fn(),
+      resolveKeyWithPassphrase: vi.fn()
+    }
+
+    const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
+    // Fetched via the same dynamic import so the spy targets the exact
+    // `mainLogger` module instance `startup.ts` resolved -- a prior test's
+    // `vi.resetModules()` can otherwise leave a statically-imported binding
+    // pointing at a stale module instance.
+    const { mainLogger: startupMainLogger } = await import('../../../src/main/services/MainLogger')
+    const warnSpy = vi.spyOn(startupMainLogger, 'warn').mockImplementation(() => undefined)
+
+    try {
+      await openConfiguredDatabase(manager as never, {
+        env: {},
+        userDataPath: '/tmp/varlens-user-data',
+        fileExists: () => false,
+        keyStore
+      })
+
+      expect(manager.createDatabase).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db')
+      expect(warnSpy).toHaveBeenCalledOnce()
+      expect(warnSpy.mock.calls[0]?.[0]).toContain('safe-storage-unavailable')
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('resolves an existing encrypted default database transparently via the key-store on a later launch', async () => {
+    const manager = {
+      open: vi.fn().mockResolvedValue(undefined),
+      openPostgresSession: vi.fn().mockResolvedValue(undefined)
+    }
+    const keyStore = {
+      createManagedKey: vi.fn(),
+      wrapNewDekWithPassphrase: vi.fn(),
+      resolveKeyForPath: vi.fn().mockReturnValue({ ok: true, dek: 'the-dek' }),
+      resolveKeyWithPassphrase: vi.fn()
+    }
+
+    const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
+
+    await openConfiguredDatabase(manager as never, {
+      env: {},
+      userDataPath: '/tmp/varlens-user-data',
+      fileExists: () => true,
+      keyStore
+    })
+
+    expect(keyStore.resolveKeyForPath).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db')
+    expect(manager.open).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db', 'the-dek')
   })
 
   it('opens a postgres session when the experimental backend is explicitly requested', async () => {
