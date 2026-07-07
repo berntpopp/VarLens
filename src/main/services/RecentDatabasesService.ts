@@ -148,6 +148,12 @@ export class RecentDatabasesService {
           'database'
         )
       } catch (logError) {
+        // Documented console.* exception (see AGENTS.md): mainLogger.warn
+        // itself threw above, so this is the last line of defense. Calling
+        // mainLogger again here could repeat the same failure (or recurse
+        // through MainLogger's own error path), so this stays a raw,
+        // best-effort console fallback. Logs only the logging error's
+        // message — no keys/PHI ever reach this branch.
         console.warn(
           '[RecentDatabasesService] Failed to save recent databases and logging unavailable:',
           logError instanceof Error ? logError.message : String(logError)
