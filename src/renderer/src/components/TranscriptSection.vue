@@ -127,7 +127,16 @@ function vepSourceColor(vepSource: string | null): string {
   return 'grey'
 }
 
+/**
+ * SO term (e.g. "missense_variant") shown as the consequence chip's tooltip.
+ * Prefers the canonical `func` field (populated for both DB- and VEP-sourced
+ * rows); falls back to `consequence_terms` for defense-in-depth in case a
+ * caller only populated the latter.
+ */
 function consequenceTooltip(row: UnifiedTranscriptRow): string | null {
+  if (row.func !== null && row.func.length > 0) {
+    return row.func
+  }
   if (row.consequence_terms !== null && row.consequence_terms.length > 0) {
     return row.consequence_terms.join(', ')
   }
