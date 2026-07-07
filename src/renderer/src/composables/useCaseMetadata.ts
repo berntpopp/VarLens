@@ -140,7 +140,9 @@ export function useCaseMetadata() {
     }
 
     try {
-      const updated = await api.caseMetadata.upsert(caseId, { affected_status: status })
+      const updated = unwrapIpcResult(
+        await api.caseMetadata.upsert(caseId, { affected_status: status })
+      )
       // Update cache with server response
       const cached = metadataCache.value.get(caseId)
       if (cached) {
@@ -177,7 +179,7 @@ export function useCaseMetadata() {
     }
 
     try {
-      const updated = await api.caseMetadata.upsert(caseId, { sex })
+      const updated = unwrapIpcResult(await api.caseMetadata.upsert(caseId, { sex }))
       const cached = metadataCache.value.get(caseId)
       if (cached) {
         cached.metadata = updated
@@ -212,7 +214,7 @@ export function useCaseMetadata() {
     }
 
     try {
-      const updated = await api.caseMetadata.upsert(caseId, { age })
+      const updated = unwrapIpcResult(await api.caseMetadata.upsert(caseId, { age }))
       const cached = metadataCache.value.get(caseId)
       if (cached) {
         cached.metadata = updated
@@ -247,9 +249,11 @@ export function useCaseMetadata() {
     }
 
     try {
-      const updated = await api.caseMetadata.upsert(caseId, {
-        date_of_birth: dateOfBirth
-      })
+      const updated = unwrapIpcResult(
+        await api.caseMetadata.upsert(caseId, {
+          date_of_birth: dateOfBirth
+        })
+      )
       const cached = metadataCache.value.get(caseId)
       if (cached) {
         cached.metadata = updated
@@ -301,13 +305,13 @@ export function useCaseMetadata() {
   // Create new cohort and assign to case
   async function createAndAssignCohort(caseId: number, name: string): Promise<CohortGroup | null> {
     if (!api) return null
-    const newCohort = await api.caseMetadata.createCohort(name)
+    const newCohort = unwrapIpcResult(await api.caseMetadata.createCohort(name))
 
     // Add to global cohort groups cache
     cohortGroupsCache.value.push(newCohort)
 
     // Assign to case
-    await api.caseMetadata.assignCohort(caseId, newCohort.id)
+    unwrapIpcResult(await api.caseMetadata.assignCohort(caseId, newCohort.id))
 
     // Update case metadata cache
     const current = metadataCache.value.get(caseId)
@@ -329,7 +333,7 @@ export function useCaseMetadata() {
     }
 
     // Create new cohort
-    const newCohort = await api.caseMetadata.createCohort(name)
+    const newCohort = unwrapIpcResult(await api.caseMetadata.createCohort(name))
 
     // Add to cache
     cohortGroupsCache.value.push(newCohort)
@@ -357,7 +361,7 @@ export function useCaseMetadata() {
     }
 
     try {
-      const created = await api.caseMetadata.assignHpoTerm(caseId, hpoId, hpoLabel)
+      const created = unwrapIpcResult(await api.caseMetadata.assignHpoTerm(caseId, hpoId, hpoLabel))
       if (current) {
         const index = current.hpoTerms.findIndex((t) => t.hpo_id === hpoId)
         if (index !== -1) {
