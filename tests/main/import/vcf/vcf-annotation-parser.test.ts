@@ -162,6 +162,48 @@ describe('vcf-annotation-parser', () => {
       expect(result.geneSymbol).toBe('GENE1')
       expect(result.transcripts).toHaveLength(1)
     })
+
+    it('does not cross-contaminate multi-deletion splits when a block\'s ALLELE_NUM is declared but empty', () => {
+      // REF=CAT, ALT=C,CA — same two-deletion site as above, but block 2 (GENE2)
+      // has NO ALLELE_NUM value even though the CSQ header declares the field.
+      // Falling back to the lossy "-"/length heuristic here would let GENE2
+      // cross-match BOTH split records (VEP emits "-" for every deletion ALT).
+      // Correct behavior: without ALLELE_NUM to disambiguate, a "-" block must
+      // not guess — it must match neither split, while GENE1 (which does carry
+      // ALLELE_NUM=1) still matches only its own allele.
+      const fields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'ALLELE_NUM']
+      const alleleNumHeader = makeHeader({ annotationType: 'csq', csqFields: fields })
+      const info = new Map([
+        ['CSQ', '-|frameshift_variant|HIGH|GENE1|T1|1,-|inframe_deletion|MODERATE|GENE2|T2|']
+      ])
+
+      // Split record for ALT index 1 (C): GENE1 matches via its explicit
+      // ALLELE_NUM=1; GENE2 (no ALLELE_NUM) must NOT cross-attach.
+      const resultAllele1 = parseAnnotation(info, alleleNumHeader, 'C', 'CAT', 1)
+      expect(resultAllele1.transcripts).toHaveLength(1)
+      expect(resultAllele1.geneSymbol).toBe('GENE1')
+
+      // Split record for ALT index 2 (CA): GENE1 is excluded (ALLELE_NUM=1 !== 2)
+      // and GENE2 must ALSO be excluded — it cannot be disambiguated, so it must
+      // match nothing rather than guessing via the dash/length heuristic.
+      const resultAllele2 = parseAnnotation(info, alleleNumHeader, 'CA', 'CAT', 2)
+      expect(resultAllele2.transcripts).toHaveLength(0)
+      expect(resultAllele2.geneSymbol).toBeNull()
+    })
+
+    it('still matches a block by exact sequence when ALLELE_NUM is declared but empty and Allele is concrete', () => {
+      // Unlike the lossy "-" deletion notation, a concrete Allele sequence (e.g.
+      // an insertion's inserted bases) is unambiguous on its own — it should
+      // still match its own ALT via the exact-sequence/insertion heuristic even
+      // without ALLELE_NUM to help disambiguate.
+      const fields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'ALLELE_NUM']
+      const alleleNumHeader = makeHeader({ annotationType: 'csq', csqFields: fields })
+      const info = new Map([['CSQ', 'TT|frameshift_variant|HIGH|GENE3|T3|']])
+
+      const result = parseAnnotation(info, alleleNumHeader, 'ATT', 'A', 1)
+      expect(result.transcripts).toHaveLength(1)
+      expect(result.geneSymbol).toBe('GENE3')
+    })
   })
 
   describe('ANN parsing', () => {

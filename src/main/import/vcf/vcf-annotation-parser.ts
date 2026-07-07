@@ -87,8 +87,13 @@ function parseCsq(
   // so at a multi-deletion multi-allelic site the Allele/length heuristic alone
   // cannot tell two deletions apart. When the CSQ config declares ALLELE_NUM
   // (the 1-based index of the ALT this block annotates), prefer it — it is the
-  // only reliable discriminator for that case. Fall back to the Allele-string
-  // heuristic when ALLELE_NUM isn't configured, or is missing on a given block.
+  // only reliable discriminator for that case. Fall back to the full Allele-string
+  // heuristic (including the "-" deletion shortcut) only when ALLELE_NUM isn't
+  // configured at all. When ALLELE_NUM *is* configured but a given block's value
+  // is missing/empty, we're in disambiguation mode without a discriminator for
+  // that block — route it through the dash-disabled path so a "-" block can't
+  // guess and cross-contaminate every deletion split, while a block with a
+  // concrete Allele sequence still matches its own allele by exact match.
   const hasAlleleNumField = csqFieldNames.includes('ALLELE_NUM')
   const filtered = parsed.filter((t) => {
     if (hasAlleleNumField && alleleIndex !== undefined) {
@@ -96,6 +101,7 @@ function parseCsq(
       if (alleleNumStr !== undefined) {
         return parseInt(alleleNumStr, 10) === alleleIndex
       }
+      return matchesAllele(t.allele, altAllele, ref, false)
     }
     return matchesAllele(t.allele, altAllele, ref)
   })
