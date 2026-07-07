@@ -175,6 +175,7 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
       transcript_id: 'NM_000059.4',
       gene_symbol: 'BRCA2',
       consequence: 'HIGH',
+      func: 'missense_variant',
       cdna: 'c.1A>G',
       aa_change: 'p.M1V',
       hpo_sim_score: 0.8,
