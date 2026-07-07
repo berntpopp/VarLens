@@ -425,5 +425,9 @@ export class DbKeyStore {
  */
 export type DbKeyStoreLike = Pick<
   DbKeyStore,
-  'createManagedKey' | 'wrapNewDekWithPassphrase' | 'resolveKeyForPath' | 'resolveKeyWithPassphrase'
+  | 'createManagedKey'
+  | 'wrapNewDekWithPassphrase'
+  | 'resolveKeyForPath'
+  | 'resolveKeyWithPassphrase'
+  | 'removeKey'
 >

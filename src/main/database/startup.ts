@@ -40,7 +40,8 @@ function createUnavailableKeyStore(): DbKeyStoreLike {
     createManagedKey: () => ({ ok: false, reason: 'safe-storage-unavailable' }),
     wrapNewDekWithPassphrase: () => ({ ok: false, reason: 'path-already-keyed' }),
     resolveKeyForPath: () => ({ ok: false, reason: 'not-found' }),
-    resolveKeyWithPassphrase: () => ({ ok: false, reason: 'not-found' })
+    resolveKeyWithPassphrase: () => ({ ok: false, reason: 'not-found' }),
+    removeKey: () => undefined
   }
 }
 
@@ -132,7 +133,16 @@ async function openDefaultSqliteDatabase(
 
   const managed = keyStore.createManagedKey(defaultDbPath)
   if (managed.ok) {
-    await manager.createDatabase(defaultDbPath, managed.dek)
+    try {
+      await manager.createDatabase(defaultDbPath, managed.dek)
+    } catch (error) {
+      // The registry entry was written before the DB file exists. If
+      // creation fails, roll it back so the path isn't permanently burned --
+      // otherwise the NEXT launch would find a stale `path-already-keyed`
+      // entry here and silently fall through to an unencrypted default DB.
+      keyStore.removeKey(managed.keyId)
+      throw error
+    }
     return
   }
 

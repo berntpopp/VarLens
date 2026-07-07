@@ -270,7 +270,8 @@ const unusedKeyStore = {
   createManagedKey: vi.fn(),
   wrapNewDekWithPassphrase: vi.fn(),
   resolveKeyForPath: vi.fn(),
-  resolveKeyWithPassphrase: vi.fn()
+  resolveKeyWithPassphrase: vi.fn(),
+  removeKey: vi.fn()
 }
 
 describe('database lifecycle logic', () => {
@@ -446,6 +447,48 @@ describe('database lifecycle logic', () => {
       'my passphrase'
     )
     expect(manager.createDatabase).toHaveBeenCalledWith('/tmp/varlens.db', 'wrapped-dek')
+  })
+
+  it('rolls back the managed key-store entry when createDatabase throws after minting it', async () => {
+    const manager = {
+      createDatabase: vi.fn().mockRejectedValue(new Error('disk full')),
+      getCurrentInfo: vi.fn()
+    }
+    const keyStore = {
+      ...unusedKeyStore,
+      createManagedKey: vi.fn().mockReturnValue({ ok: true, keyId: 'k1', dek: 'the-dek' }),
+      removeKey: vi.fn()
+    }
+
+    await expect(
+      logic.createDatabase({ path: '/tmp/varlens.db' }, () => manager as never, keyStore)
+    ).rejects.toThrow('disk full')
+
+    expect(keyStore.removeKey).toHaveBeenCalledWith('k1')
+  })
+
+  it('rolls back the passphrase-wrapped key-store entry when createDatabase throws after minting it', async () => {
+    const manager = {
+      createDatabase: vi.fn().mockRejectedValue(new Error('disk full')),
+      getCurrentInfo: vi.fn()
+    }
+    const keyStore = {
+      ...unusedKeyStore,
+      wrapNewDekWithPassphrase: vi
+        .fn()
+        .mockReturnValue({ ok: true, keyId: 'k1', dek: 'wrapped-dek' }),
+      removeKey: vi.fn()
+    }
+
+    await expect(
+      logic.createDatabase(
+        { path: '/tmp/varlens.db', setupPassphrase: 'my passphrase' },
+        () => manager as never,
+        keyStore
+      )
+    ).rejects.toThrow('disk full')
+
+    expect(keyStore.removeKey).toHaveBeenCalledWith('k1')
   })
 })
 

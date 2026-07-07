@@ -61,7 +61,8 @@ describe('openConfiguredDatabase', () => {
       createManagedKey: vi.fn().mockReturnValue({ ok: true, keyId: 'k1', dek: 'the-dek' }),
       wrapNewDekWithPassphrase: vi.fn(),
       resolveKeyForPath: vi.fn(),
-      resolveKeyWithPassphrase: vi.fn()
+      resolveKeyWithPassphrase: vi.fn(),
+      removeKey: vi.fn()
     }
 
     const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
@@ -81,6 +82,38 @@ describe('openConfiguredDatabase', () => {
     expect(manager.open).not.toHaveBeenCalled()
   })
 
+  it('rolls back the managed key-store entry and rethrows when creating the default sqlite database fails', async () => {
+    const manager = {
+      open: vi.fn().mockResolvedValue(undefined),
+      createDatabase: vi.fn().mockRejectedValue(new Error('disk full')),
+      openPostgresSession: vi.fn().mockResolvedValue(undefined)
+    }
+    const keyStore = {
+      createManagedKey: vi.fn().mockReturnValue({ ok: true, keyId: 'k1', dek: 'the-dek' }),
+      wrapNewDekWithPassphrase: vi.fn(),
+      resolveKeyForPath: vi.fn(),
+      resolveKeyWithPassphrase: vi.fn(),
+      removeKey: vi.fn()
+    }
+
+    const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
+
+    await expect(
+      openConfiguredDatabase(manager as never, {
+        env: {},
+        userDataPath: '/tmp/varlens-user-data',
+        fileExists: () => false,
+        keyStore
+      })
+    ).rejects.toThrow('disk full')
+
+    // The registry entry minted before `createDatabase` was attempted must be
+    // rolled back -- otherwise the NEXT launch would find a stale
+    // `path-already-keyed` entry and silently fall through to an unencrypted
+    // default DB.
+    expect(keyStore.removeKey).toHaveBeenCalledWith('k1')
+  })
+
   it('falls back to an unencrypted default database (with a warning) when the key-store cannot mint a managed key pre-window', async () => {
     const manager = {
       open: vi.fn().mockResolvedValue(undefined),
@@ -91,7 +124,8 @@ describe('openConfiguredDatabase', () => {
       createManagedKey: vi.fn().mockReturnValue({ ok: false, reason: 'safe-storage-unavailable' }),
       wrapNewDekWithPassphrase: vi.fn(),
       resolveKeyForPath: vi.fn(),
-      resolveKeyWithPassphrase: vi.fn()
+      resolveKeyWithPassphrase: vi.fn(),
+      removeKey: vi.fn()
     }
 
     const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
@@ -127,7 +161,8 @@ describe('openConfiguredDatabase', () => {
       createManagedKey: vi.fn(),
       wrapNewDekWithPassphrase: vi.fn(),
       resolveKeyForPath: vi.fn().mockReturnValue({ ok: true, dek: 'the-dek' }),
-      resolveKeyWithPassphrase: vi.fn()
+      resolveKeyWithPassphrase: vi.fn(),
+      removeKey: vi.fn()
     }
 
     const { openConfiguredDatabase } = await import('../../../src/main/database/startup')

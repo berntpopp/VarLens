@@ -222,4 +222,48 @@ describe('encrypt-by-default for NEW databases', () => {
     expect(result.needsPassphraseSetup).toBeUndefined()
     expect(existsSync(dbPath)).toBe(false)
   })
+
+  it('a failed managed create rolls back the key-store entry so a retry at the same path is not burned', async () => {
+    const keyStore = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+    const dbPath = join(tmpDir, 'case.db')
+    const failingManager = {
+      createDatabase: async () => {
+        throw new Error('disk full')
+      },
+      getCurrentInfo: () => null
+    }
+
+    await expect(
+      createDatabase({ path: dbPath }, () => failingManager as never, keyStore)
+    ).rejects.toThrow('disk full')
+
+    // The registry must have NO entry for this path -- a fresh managed-key
+    // create at the same path must succeed instead of hitting
+    // `path-already-keyed`.
+    const retry = keyStore.createManagedKey(dbPath)
+    expect(retry.ok).toBe(true)
+  })
+
+  it('a failed passphrase-setup create rolls back the key-store entry so a retry at the same path is not burned', async () => {
+    const keyStore = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(false) })
+    const dbPath = join(tmpDir, 'case.db')
+    const failingManager = {
+      createDatabase: async () => {
+        throw new Error('disk full')
+      },
+      getCurrentInfo: () => null
+    }
+
+    await expect(
+      createDatabase(
+        { path: dbPath, setupPassphrase: 'correct horse battery staple' },
+        () => failingManager as never,
+        keyStore
+      )
+    ).rejects.toThrow('disk full')
+
+    // Same rollback guarantee for the passphrase-wrap path.
+    const retry = keyStore.wrapNewDekWithPassphrase(dbPath, 'correct horse battery staple')
+    expect(retry.ok).toBe(true)
+  })
 })

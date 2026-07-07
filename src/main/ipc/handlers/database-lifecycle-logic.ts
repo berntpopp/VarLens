@@ -136,14 +136,30 @@ export async function createDatabase(
     if (!wrapped.ok) {
       return { success: false, error: PATH_ALREADY_KEYED_ERROR }
     }
-    await manager.createDatabase(params.path, wrapped.dek)
+    try {
+      await manager.createDatabase(params.path, wrapped.dek)
+    } catch (error) {
+      // The registry entry was written before the DB file exists. If creation
+      // fails (disk full, permission error, path collision), roll it back so
+      // the path isn't permanently burned -- a retry must be able to mint a
+      // fresh key for the same path instead of hitting `path-already-keyed`.
+      keyStore.removeKey(wrapped.keyId)
+      throw error
+    }
     const info = manager.getCurrentInfo()
     return { success: true, info: info! }
   }
 
   const managed = keyStore.createManagedKey(params.path)
   if (managed.ok) {
-    await manager.createDatabase(params.path, managed.dek)
+    try {
+      await manager.createDatabase(params.path, managed.dek)
+    } catch (error) {
+      // Same rollback as the passphrase path above: don't leave a stale
+      // key-store entry when the DB file was never actually created.
+      keyStore.removeKey(managed.keyId)
+      throw error
+    }
     const info = manager.getCurrentInfo()
     return { success: true, info: info! }
   }
