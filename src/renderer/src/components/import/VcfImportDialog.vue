@@ -242,6 +242,7 @@ import type {
 } from '../../../../shared/types/api'
 import type { VcfMultiPreviewResult } from '../../../../shared/types/import'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
+import { formatErrorMessage } from '../../../../shared/errors/format-error-message'
 import { useApiService } from '../../composables/useApiService'
 import { useAppState } from '../../composables/useAppState'
 import { useImportStatusStore } from '../../stores/importStatusStore'
@@ -801,7 +802,7 @@ function fileName(filePath: string): string {
 }
 
 function handleError(context: string, err: unknown): void {
-  const message = err instanceof Error ? err.message : String(err)
+  const message = formatErrorMessage(err, String(err))
   errorMessage.value = `${context}: ${message}`
   logService.error(`${context}: ${message}`, 'VcfImportDialog')
 }
