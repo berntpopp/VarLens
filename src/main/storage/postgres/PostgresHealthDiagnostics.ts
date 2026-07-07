@@ -41,9 +41,9 @@ export class PostgresHealthDiagnostics {
       const [version, user, migrationRelation, readProbe, writeProbe] = await Promise.all([
         this.pool.query('SELECT version() AS version'),
         this.pool.query('SELECT current_user'),
-        this.pool.query(
-          `SELECT to_regclass(${literalString(`${this.schemaName}."schema_migrations"`)}) AS relation`
-        ),
+        this.pool.query(`SELECT to_regclass($1) AS relation`, [
+          `${this.schemaName}."schema_migrations"`
+        ]),
         this.pool.query(
           `SELECT has_schema_privilege(current_user, $1, 'USAGE') AS can_read_schema`,
           [this.schema]
@@ -98,10 +98,6 @@ export function classifyPostgresFailureMessage(error: unknown): string {
   }
 
   return redactPostgresFailureMessage(message)
-}
-
-function literalString(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`
 }
 
 function getErrorCode(error: unknown): string | undefined {

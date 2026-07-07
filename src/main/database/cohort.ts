@@ -221,7 +221,10 @@ export class CohortService {
     }
 
     // Build ORDER BY — use PK columns as tiebreaker instead of variant_key
-    const direction = sortOrder.toUpperCase()
+    // Normalize at the sink rather than trusting sortOrder's upstream
+    // 'asc' | 'desc' type — this is the cohort-view sink, so this ternary
+    // also satisfies the cohort-parity requirement for S7.
+    const direction = sortOrder === 'asc' ? 'ASC' : 'DESC'
     const orderByClause = `ORDER BY ${sortBy} ${direction} NULLS LAST, chr ASC, pos ASC, ref ASC, alt ASC`
 
     // Data query — no window function, LIMIT benefits from early termination

@@ -6,7 +6,7 @@
  * must be called after inserting test data and before querying.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { CohortService } from '../../../src/main/database/cohort'
 import { initializeSchema } from '../../../src/main/database/schema'
@@ -462,6 +462,31 @@ describe('CohortService', () => {
           sort_order: 'asc'
         })
         expect(page2.data.map((v) => v.pos)).toEqual([103, 104, 105])
+      })
+
+      it('normalizes sort_order to a literal ASC/DESC even when it bypasses the zod enum (S7)', () => {
+        // sort_order is typed 'asc' | 'desc', but that type only guards
+        // callers going through the IPC schema. This SQL sink must not rely
+        // solely on that upstream enum — it must normalize the value itself.
+        const caseId = insertCase('Test Case')
+        insertVariant(caseId, '1', 100, 'A', 'G')
+        rebuildSummary()
+
+        const prepareSpy = vi.spyOn(db, 'prepare')
+        const untypedSortOrder = 'asc; DROP TABLE cases; --' as unknown as 'asc' | 'desc'
+
+        expect(() =>
+          cohortService.getCohortVariants({ sort_by: 'pos', sort_order: untypedSortOrder })
+        ).not.toThrow()
+
+        const orderBySql = prepareSpy.mock.calls
+          .map(([sql]) => sql as string)
+          .find((sql) => sql.includes('ORDER BY'))
+        expect(orderBySql).toBeDefined()
+        expect(orderBySql).toMatch(/ORDER BY pos (ASC|DESC) NULLS LAST/)
+        expect(orderBySql).not.toContain('DROP TABLE')
+
+        prepareSpy.mockRestore()
       })
 
       it('should handle NULL sort values across pages', () => {
