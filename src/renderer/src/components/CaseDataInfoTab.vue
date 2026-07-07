@@ -256,18 +256,24 @@ async function save(): Promise<void> {
       typeof platform.value === 'string' && platform.value.trim() !== ''
         ? platform.value.trim()
         : null
-    await getApi().caseMetadata.upsertDataInfo(props.caseId, {
-      platform: platformVal,
-      platform_details: platformDetails.value || null,
-      af_filter: afFilter.value || null,
-      quality_filter: qualityFilter.value || null,
-      data_notes: dataNotes.value || null,
-      gene_list_id: selectedGeneListId.value,
-      region_file_id: selectedRegionFileId.value
-    })
+    // wrapHandler resolves an IpcResult even on failure — a raw, discarded
+    // await here would swallow write failures silently (the catch below
+    // would never fire). Unwrap so a failure throws.
+    unwrapIpcResult(
+      await getApi().caseMetadata.upsertDataInfo(props.caseId, {
+        platform: platformVal,
+        platform_details: platformDetails.value || null,
+        af_filter: afFilter.value || null,
+        quality_filter: qualityFilter.value || null,
+        data_notes: dataNotes.value || null,
+        gene_list_id: selectedGeneListId.value,
+        region_file_id: selectedRegionFileId.value
+      })
+    )
   } catch (e) {
     logService.warn(
-      'Failed to save case data info: ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to save case data info: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
       'case-data-info'
     )
   }
@@ -293,11 +299,16 @@ async function addExternalId(idType: string, idValue: string): Promise<void> {
 
 async function deleteExternalId(idType: string): Promise<void> {
   try {
-    await getApi().caseMetadata.deleteExternalId(props.caseId, idType)
+    // wrapHandler resolves an IpcResult even on failure — unwrap so a
+    // failure throws BEFORE the optimistic UI removal below runs. Without
+    // this, a swallowed failure would still filter the row out of the UI
+    // while it remains in the database.
+    unwrapIpcResult(await getApi().caseMetadata.deleteExternalId(props.caseId, idType))
     externalIds.value = externalIds.value.filter((e) => e.id_type !== idType)
   } catch (e) {
     logService.warn(
-      'Failed to delete external ID: ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to delete external ID: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
       'case-data-info'
     )
   }
@@ -358,13 +369,16 @@ onBeforeUnmount(() => {
   }
 })
 
-// Exposed for component tests to assert loader post-conditions
-// (dataInfo/externalIds/platformSuggestions/idTypeSuggestions) without
+// Exposed for component tests to assert loader/save/delete post-conditions
+// (dataInfo/externalIds/platformSuggestions/idTypeSuggestions, plus save()
+// and deleteExternalId() to drive their failure paths directly) without
 // reaching into Vuetify child-component internals. No behavior change.
 defineExpose({
   dataInfo,
   externalIds,
   platformSuggestions,
-  idTypeSuggestions
+  idTypeSuggestions,
+  save,
+  deleteExternalId
 })
 </script>

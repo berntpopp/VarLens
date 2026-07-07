@@ -133,6 +133,14 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <!-- Error snackbar (mirrors PanelManagerDialog's errorSnackbar/errorSnackbarText pattern) -->
+  <v-snackbar v-model="errorSnackbar" color="error" :timeout="6000" location="bottom">
+    {{ errorSnackbarText }}
+    <template #actions>
+      <v-btn variant="text" @click="errorSnackbar = false">Close</v-btn>
+    </template>
+  </v-snackbar>
 </template>
 
 <script setup lang="ts">
@@ -149,6 +157,7 @@ import {
   mdiPencil
 } from '@mdi/js'
 import { logService } from '../../services/LogService'
+import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 
 const props = defineProps<{
   cohortGroups: OverviewCohortGroup[]
@@ -172,6 +181,19 @@ const cohortSaving = ref(false)
 const cohortDeleteDialog = ref(false)
 const cohortToDelete = ref<OverviewCohortGroup | null>(null)
 const cohortDeleting = ref(false)
+
+// Error feedback for failed edit/delete IPC calls
+const errorSnackbar = ref(false)
+const errorSnackbarText = ref('')
+
+/** Extract a user-facing message from a caught IPC/JS error. */
+function describeError(err: unknown): string {
+  return isIpcError(err)
+    ? (err.userMessage ?? err.message)
+    : err instanceof Error
+      ? err.message
+      : String(err)
+}
 
 // Cohort name validation
 const cohortNameError = computed(() => {
@@ -215,17 +237,23 @@ async function saveCohortEdit(): Promise<void> {
 
   cohortSaving.value = true
   try {
-    await api!.caseMetadata.updateCohort(editingCohort.value.id, {
-      name: cohortEditForm.value.name.trim(),
-      description: cohortEditForm.value.description.trim() || null
-    })
+    // wrapHandler resolves an IpcResult even on failure — a raw await here
+    // would let a failed rename (e.g. a UNIQUE constraint violation) fall
+    // through as if it had succeeded, closing the edit form and refreshing
+    // the parent as though nothing went wrong.
+    unwrapIpcResult(
+      await api!.caseMetadata.updateCohort(editingCohort.value.id, {
+        name: cohortEditForm.value.name.trim(),
+        description: cohortEditForm.value.description.trim() || null
+      })
+    )
     cancelCohortEdit()
     emit('refresh')
   } catch (err) {
-    logService.error(
-      'Failed to update cohort group: ' + (err instanceof Error ? err.message : String(err)),
-      'cohort'
-    )
+    const message = describeError(err)
+    logService.error('Failed to update cohort group: ' + message, 'cohort')
+    errorSnackbarText.value = message
+    errorSnackbar.value = true
   } finally {
     cohortSaving.value = false
   }
@@ -243,7 +271,9 @@ async function executeDeleteCohort(): Promise<void> {
 
   cohortDeleting.value = true
   try {
-    await api!.caseMetadata.deleteCohort(cohortToDelete.value.id)
+    // Same discard-write hazard as saveCohortEdit: unwrap so a failed
+    // delete throws instead of silently running the success branch below.
+    unwrapIpcResult(await api!.caseMetadata.deleteCohort(cohortToDelete.value.id))
 
     // If we're editing the deleted group, close the edit form
     if (editingCohort.value?.id === cohortToDelete.value.id) {
@@ -252,16 +282,32 @@ async function executeDeleteCohort(): Promise<void> {
 
     emit('refresh')
   } catch (err) {
-    logService.error(
-      'Failed to delete cohort group: ' + (err instanceof Error ? err.message : String(err)),
-      'cohort'
-    )
+    const message = describeError(err)
+    logService.error('Failed to delete cohort group: ' + message, 'cohort')
+    errorSnackbarText.value = message
+    errorSnackbar.value = true
   } finally {
     cohortDeleting.value = false
     cohortDeleteDialog.value = false
     cohortToDelete.value = null
   }
 }
+
+// Exposed for component tests to assert edit/delete failure behavior
+// (does not close-and-refresh-as-success, surfaces the error) without
+// reaching into Vuetify's menu/list internals. No behavior change.
+defineExpose({
+  editingCohort,
+  cohortEditForm,
+  cohortToDelete,
+  cohortDeleteDialog,
+  errorSnackbar,
+  errorSnackbarText,
+  startEditCohort,
+  saveCohortEdit,
+  confirmDeleteCohort,
+  executeDeleteCohort
+})
 </script>
 
 <style scoped>

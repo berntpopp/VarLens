@@ -1,5 +1,5 @@
 /**
- * Tests for CaseDataInfoTab.vue's loader.
+ * Tests for CaseDataInfoTab.vue's loader, save(), and deleteExternalId().
  *
  * `wrapHandler` in the main process *resolves* an `IpcResult<T>` on failure
  * (it never rejects), so a raw `await api.caseMetadata.getDataInfo(...)`
@@ -7,6 +7,14 @@
  * pass every `caseMetadata.*` result through `unwrapIpcResult(...)` so a
  * failure throws into the surrounding try/catch instead of being stored as
  * `dataInfo`/`externalIds`/`platformSuggestions`/`idTypeSuggestions`.
+ *
+ * `save()` and `deleteExternalId()` have the same root cause in a different
+ * shape ("discard-write"): they awaited a write call and discarded the
+ * result, so a failure never threw into the surrounding catch.
+ * `deleteExternalId()` was the worse of the two — it then optimistically
+ * filtered the row out of `externalIds.value` regardless of whether the
+ * backend delete actually succeeded, so a swallowed failure removed the row
+ * from the UI while it still existed in the database.
  */
 
 import { describe, it, expect, vi } from 'vitest'
@@ -29,6 +37,7 @@ vi.mock('../../../src/renderer/src/services/LogService', () => ({
 }))
 
 import CaseDataInfoTab from '../../../src/renderer/src/components/CaseDataInfoTab.vue'
+import { logService } from '../../../src/renderer/src/services/LogService'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -56,6 +65,8 @@ interface CaseDataInfoTabVm {
   externalIds: ExternalId[]
   platformSuggestions: string[]
   idTypeSuggestions: string[]
+  save: () => Promise<void>
+  deleteExternalId: (idType: string) => Promise<void>
 }
 
 // Runtime shape of a main-process SerializableError (src/shared/types/errors.ts).
@@ -82,16 +93,21 @@ const fakeDataInfo: DataInfo = {
 
 const fakeExternalIds: ExternalId[] = [{ id_type: 'MRN', id_value: '12345' }]
 
-function installMockApi(getDataInfoResolvedValue: unknown): void {
+function installMockApi(
+  getDataInfoResolvedValue: unknown,
+  overrides: { upsertDataInfo?: unknown; deleteExternalId?: unknown } = {}
+): { upsertDataInfo: ReturnType<typeof vi.fn>; deleteExternalId: ReturnType<typeof vi.fn> } {
+  const upsertDataInfo = vi.fn().mockResolvedValue(overrides.upsertDataInfo ?? undefined)
+  const deleteExternalId = vi.fn().mockResolvedValue(overrides.deleteExternalId ?? undefined)
   ;(window as unknown as Record<string, unknown>).api = {
     caseMetadata: {
       getDataInfo: vi.fn().mockResolvedValue(getDataInfoResolvedValue),
       listExternalIds: vi.fn().mockResolvedValue(fakeExternalIds),
       distinctPlatforms: vi.fn().mockResolvedValue(['CustomPlatformXYZ']),
       distinctExternalIdTypes: vi.fn().mockResolvedValue(['MRN']),
-      upsertDataInfo: vi.fn().mockResolvedValue(undefined),
+      upsertDataInfo,
       upsertExternalId: vi.fn().mockResolvedValue(undefined),
-      deleteExternalId: vi.fn().mockResolvedValue(undefined)
+      deleteExternalId
     },
     geneLists: {
       list: vi.fn().mockResolvedValue([])
@@ -100,6 +116,7 @@ function installMockApi(getDataInfoResolvedValue: unknown): void {
       list: vi.fn().mockResolvedValue([])
     }
   }
+  return { upsertDataInfo, deleteExternalId }
 }
 
 function mountTab(): ReturnType<typeof mount> {
@@ -144,5 +161,78 @@ describe('CaseDataInfoTab loader', () => {
       'Targeted Panel'
     ])
     expect(vm.idTypeSuggestions).toEqual(['MRN'])
+  })
+})
+
+const fakeSerializableErrorWithMessage = {
+  code: 'DB_ERROR',
+  message: 'save failed',
+  userMessage: 'Could not save data info'
+}
+
+describe('CaseDataInfoTab save()', () => {
+  it('logs a warning when upsertDataInfo fails (discard-write regression guard)', async () => {
+    const mocks = installMockApi(fakeDataInfo, { upsertDataInfo: fakeSerializableErrorWithMessage })
+
+    const wrapper = mountTab()
+    await flushPromises()
+    vi.mocked(logService.warn).mockClear()
+
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    await vm.save()
+
+    expect(mocks.upsertDataInfo).toHaveBeenCalled()
+    // Before the fix, a raw (un-unwrapped) await never threw, so this catch
+    // branch never ran and no warning was logged for a failed save.
+    expect(logService.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Could not save data info'),
+      'case-data-info'
+    )
+  })
+
+  it('does not log a warning when upsertDataInfo succeeds', async () => {
+    installMockApi(fakeDataInfo)
+
+    const wrapper = mountTab()
+    await flushPromises()
+    vi.mocked(logService.warn).mockClear()
+
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    await vm.save()
+
+    expect(logService.warn).not.toHaveBeenCalled()
+  })
+})
+
+describe('CaseDataInfoTab deleteExternalId()', () => {
+  it('removes the row on success', async () => {
+    installMockApi(fakeDataInfo)
+
+    const wrapper = mountTab()
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    expect(vm.externalIds).toEqual(fakeExternalIds)
+
+    await vm.deleteExternalId('MRN')
+
+    expect(vm.externalIds).toEqual([])
+  })
+
+  it('does NOT remove the row and surfaces the error when deleteExternalId fails', async () => {
+    installMockApi(fakeDataInfo, { deleteExternalId: fakeSerializableError })
+
+    const wrapper = mountTab()
+    await flushPromises()
+    vi.mocked(logService.warn).mockClear()
+
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    await vm.deleteExternalId('MRN')
+
+    // Before the fix, a raw (un-unwrapped) await never threw, so the
+    // optimistic filter ran unconditionally and removed the row even though
+    // the backend delete failed.
+    expect(vm.externalIds).toEqual(fakeExternalIds)
+    expect(logService.warn).toHaveBeenCalledWith(expect.stringContaining('boom'), 'case-data-info')
   })
 })
