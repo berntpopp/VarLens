@@ -282,7 +282,10 @@ async function save(): Promise<void> {
 async function addExternalId(idType: string, idValue: string): Promise<void> {
   try {
     const api = getApi().caseMetadata
-    await api.upsertExternalId(props.caseId, idType, idValue)
+    // wrapHandler resolves an IpcResult even on failure — a raw, discarded
+    // await here would swallow write failures silently (the catch below
+    // would never fire, and the refresh calls below would still run).
+    unwrapIpcResult(await api.upsertExternalId(props.caseId, idType, idValue))
     const [ids, idTypes] = await Promise.all([
       api.listExternalIds(props.caseId),
       api.distinctExternalIdTypes()
@@ -291,7 +294,8 @@ async function addExternalId(idType: string, idValue: string): Promise<void> {
     idTypeSuggestions.value = unwrapIpcResult(idTypes) ?? []
   } catch (e) {
     logService.warn(
-      'Failed to add external ID: ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to add external ID: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
       'case-data-info'
     )
   }
@@ -370,15 +374,17 @@ onBeforeUnmount(() => {
 })
 
 // Exposed for component tests to assert loader/save/delete post-conditions
-// (dataInfo/externalIds/platformSuggestions/idTypeSuggestions, plus save()
-// and deleteExternalId() to drive their failure paths directly) without
-// reaching into Vuetify child-component internals. No behavior change.
+// (dataInfo/externalIds/platformSuggestions/idTypeSuggestions, plus save(),
+// addExternalId(), and deleteExternalId() to drive their failure paths
+// directly) without reaching into Vuetify child-component internals. No
+// behavior change.
 defineExpose({
   dataInfo,
   externalIds,
   platformSuggestions,
   idTypeSuggestions,
   save,
+  addExternalId,
   deleteExternalId
 })
 </script>

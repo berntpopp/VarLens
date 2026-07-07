@@ -66,6 +66,7 @@ interface CaseDataInfoTabVm {
   platformSuggestions: string[]
   idTypeSuggestions: string[]
   save: () => Promise<void>
+  addExternalId: (idType: string, idValue: string) => Promise<void>
   deleteExternalId: (idType: string) => Promise<void>
 }
 
@@ -95,18 +96,27 @@ const fakeExternalIds: ExternalId[] = [{ id_type: 'MRN', id_value: '12345' }]
 
 function installMockApi(
   getDataInfoResolvedValue: unknown,
-  overrides: { upsertDataInfo?: unknown; deleteExternalId?: unknown } = {}
-): { upsertDataInfo: ReturnType<typeof vi.fn>; deleteExternalId: ReturnType<typeof vi.fn> } {
+  overrides: { upsertDataInfo?: unknown; deleteExternalId?: unknown; upsertExternalId?: unknown } = {}
+): {
+  upsertDataInfo: ReturnType<typeof vi.fn>
+  deleteExternalId: ReturnType<typeof vi.fn>
+  upsertExternalId: ReturnType<typeof vi.fn>
+  listExternalIds: ReturnType<typeof vi.fn>
+  distinctExternalIdTypes: ReturnType<typeof vi.fn>
+} {
   const upsertDataInfo = vi.fn().mockResolvedValue(overrides.upsertDataInfo ?? undefined)
   const deleteExternalId = vi.fn().mockResolvedValue(overrides.deleteExternalId ?? undefined)
+  const upsertExternalId = vi.fn().mockResolvedValue(overrides.upsertExternalId ?? undefined)
+  const listExternalIds = vi.fn().mockResolvedValue(fakeExternalIds)
+  const distinctExternalIdTypes = vi.fn().mockResolvedValue(['MRN'])
   ;(window as unknown as Record<string, unknown>).api = {
     caseMetadata: {
       getDataInfo: vi.fn().mockResolvedValue(getDataInfoResolvedValue),
-      listExternalIds: vi.fn().mockResolvedValue(fakeExternalIds),
+      listExternalIds,
       distinctPlatforms: vi.fn().mockResolvedValue(['CustomPlatformXYZ']),
-      distinctExternalIdTypes: vi.fn().mockResolvedValue(['MRN']),
+      distinctExternalIdTypes,
       upsertDataInfo,
-      upsertExternalId: vi.fn().mockResolvedValue(undefined),
+      upsertExternalId,
       deleteExternalId
     },
     geneLists: {
@@ -116,7 +126,7 @@ function installMockApi(
       list: vi.fn().mockResolvedValue([])
     }
   }
-  return { upsertDataInfo, deleteExternalId }
+  return { upsertDataInfo, deleteExternalId, upsertExternalId, listExternalIds, distinctExternalIdTypes }
 }
 
 function mountTab(): ReturnType<typeof mount> {
@@ -201,6 +211,48 @@ describe('CaseDataInfoTab save()', () => {
     await vm.save()
 
     expect(logService.warn).not.toHaveBeenCalled()
+  })
+})
+
+describe('CaseDataInfoTab addExternalId()', () => {
+  it('logs a warning and does not refresh the list when upsertExternalId fails (discard-write regression guard)', async () => {
+    const mocks = installMockApi(fakeDataInfo, {
+      upsertExternalId: fakeSerializableError
+    })
+
+    const wrapper = mountTab()
+    await flushPromises()
+    vi.mocked(logService.warn).mockClear()
+    mocks.listExternalIds.mockClear()
+    mocks.distinctExternalIdTypes.mockClear()
+
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    await vm.addExternalId('MRN', '99999')
+
+    expect(mocks.upsertExternalId).toHaveBeenCalledWith(1, 'MRN', '99999')
+    // Before the fix, a raw (un-unwrapped) await never threw, so the refresh
+    // calls below ran unconditionally and no warning was logged for a
+    // failed insert.
+    expect(mocks.listExternalIds).not.toHaveBeenCalled()
+    expect(mocks.distinctExternalIdTypes).not.toHaveBeenCalled()
+    expect(logService.warn).toHaveBeenCalledWith(
+      expect.stringContaining('boom'),
+      'case-data-info'
+    )
+  })
+
+  it('refreshes the list on success', async () => {
+    installMockApi(fakeDataInfo)
+
+    const wrapper = mountTab()
+    await flushPromises()
+    vi.mocked(logService.warn).mockClear()
+
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    await vm.addExternalId('MRN', '99999')
+
+    expect(logService.warn).not.toHaveBeenCalled()
+    expect(vm.externalIds).toEqual(fakeExternalIds)
   })
 })
 

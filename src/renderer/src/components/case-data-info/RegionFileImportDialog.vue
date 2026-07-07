@@ -115,13 +115,18 @@ async function selectBedFile(): Promise<void> {
 
   importingRegion.value = true
   try {
-    const result = await api.import.selectBedFile()
+    // wrapHandler resolves an IpcResult even on failure — a raw await here
+    // would only fail the `typeof result === 'string'` guard silently below,
+    // leaving the user with no feedback that the dialog failed to open.
+    // Unwrap so a failure throws into the catch below.
+    const result = unwrapIpcResult(await api.import.selectBedFile())
     if (typeof result === 'string') {
       applySelectedBedFile(result)
     }
   } catch (e) {
     logService.warn(
-      'Failed to select BED file: ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to select BED file: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
       'region-import'
     )
   } finally {

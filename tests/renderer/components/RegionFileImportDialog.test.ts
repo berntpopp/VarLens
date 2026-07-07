@@ -121,6 +121,24 @@ describe('RegionFileImportDialog — importRegionFile IpcResult unwrapping', () 
     expect(logService.error).not.toHaveBeenCalled()
   })
 
+  it('surfaces the error and does not apply a path when selectBedFile fails', async () => {
+    // `import:selectBedFile` is wrapHandler-backed, so a failure resolves a
+    // SerializableError rather than rejecting. Before the fix, the raw
+    // (un-unwrapped) result only failed the `typeof result === 'string'`
+    // guard silently — no warning was ever logged, so the user saw nothing
+    // happen with no explanation.
+    mockApi.import.selectBedFile = vi.fn().mockResolvedValue(fakeSerializableError)
+
+    mountDialog()
+    await fillNameAndBedFile()
+
+    expect(document.body.textContent).not.toContain('regions.bed')
+    expect(logService.warn).toHaveBeenCalledWith(
+      expect.stringContaining('A region file with this name already exists'),
+      'region-import'
+    )
+  })
+
   it('does not import the BED file or emit success when create fails', async () => {
     mockApi.regionFiles.create.mockResolvedValue(fakeSerializableError)
 
