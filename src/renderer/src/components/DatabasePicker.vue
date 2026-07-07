@@ -194,6 +194,17 @@
           <v-list-item-title>Change Password...</v-list-item-title>
         </v-list-item>
       </template>
+
+      <!-- Encrypt database (only for a currently open, plaintext SQLite database) -->
+      <template v-if="databaseStore.unencryptedMigratable">
+        <v-divider />
+        <v-list-item @click="handleEncryptDatabase">
+          <template #prepend>
+            <v-icon :icon="mdiLock" />
+          </template>
+          <v-list-item-title>Encrypt Database...</v-list-item-title>
+        </v-list-item>
+      </template>
     </v-list>
   </v-menu>
 
@@ -201,6 +212,11 @@
   <PasswordDialog ref="passwordDialogRef" />
   <CreateDatabaseDialog ref="createDialogRef" @database-created="handleDatabaseCreated" />
   <ChangePasswordDialog ref="changePasswordDialogRef" @password-changed="handlePasswordChanged" />
+  <EncryptDatabaseDialog
+    ref="encryptDialogRef"
+    @database-migrated="handleDatabaseMigrated"
+    @error="handleEncryptDatabaseError"
+  />
   <PostgresConnectionDialog
     ref="postgresDialogRef"
     @saved="handlePostgresProfileSaved"
@@ -233,6 +249,7 @@ import { isWebRuntime } from '../utils/runtime-mode'
 import PasswordDialog from './PasswordDialog.vue'
 import CreateDatabaseDialog from './CreateDatabaseDialog.vue'
 import ChangePasswordDialog from './ChangePasswordDialog.vue'
+import EncryptDatabaseDialog from './EncryptDatabaseDialog.vue'
 import PostgresConnectionDialog from './PostgresConnectionDialog.vue'
 import type { RecentDatabase } from '../../../shared/types/api'
 import type { PostgresConnectionProfilePublic } from '../../../shared/types/postgres-profile'
@@ -260,6 +277,7 @@ const isWebMode = isWebRuntime()
 const passwordDialogRef = ref<InstanceType<typeof PasswordDialog> | null>(null)
 const createDialogRef = ref<InstanceType<typeof CreateDatabaseDialog> | null>(null)
 const changePasswordDialogRef = ref<InstanceType<typeof ChangePasswordDialog> | null>(null)
+const encryptDialogRef = ref<InstanceType<typeof EncryptDatabaseDialog> | null>(null)
 const postgresDialogRef = ref<InstanceType<typeof PostgresConnectionDialog> | null>(null)
 
 // Track pending password authentication
@@ -327,6 +345,18 @@ function handleEditPostgresProfile(profile: PostgresConnectionProfilePublic): vo
 
 function handleChangePassword(): void {
   changePasswordDialogRef.value?.show()
+}
+
+function handleEncryptDatabase(): void {
+  encryptDialogRef.value?.show()
+}
+
+function handleDatabaseMigrated(): void {
+  emit('database-switched')
+}
+
+function handleEncryptDatabaseError(message: string): void {
+  emit('error', message)
 }
 
 async function handlePasswordSubmit(

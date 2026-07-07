@@ -181,6 +181,8 @@ export function createMockApi(): MockApi {
       open: vi.fn().mockResolvedValue({ success: true }),
       create: vi.fn().mockResolvedValue({ success: true }),
       rekey: vi.fn().mockResolvedValue({ success: true }),
+      migrateToEncrypted: vi.fn().mockResolvedValue({ success: true }),
+      deletePlaintextBackup: vi.fn().mockResolvedValue({ success: true }),
       info: vi.fn().mockResolvedValue({ path: '/tmp/test.db', encrypted: false }),
       capabilities: vi.fn().mockResolvedValue(TEST_SQLITE_CAPABILITIES),
       postgresDiagnostics: vi.fn().mockResolvedValue({ ok: false, schema: '' }),

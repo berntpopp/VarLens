@@ -491,6 +491,22 @@ export const DatabaseRekeySchema = z.object({
   newPassword: z.string().max(256)
 })
 
+/**
+ * Schema for the plaintext-to-encrypted migration action. `consent` must be
+ * literally `true` -- migration is never performed silently or by default.
+ */
+export const DatabaseMigrateToEncryptedSchema = z.object({
+  consent: z.literal(true),
+  recoveryPassphrase: z.string().max(256).optional()
+})
+
+/**
+ * Schema for deleting a plaintext backup produced by a prior migration.
+ */
+export const DatabaseDeletePlaintextBackupSchema = z.object({
+  backupPath: FilePathSchema
+})
+
 // ============================================================
 // Gene List Schemas
 // ============================================================

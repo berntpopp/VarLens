@@ -431,3 +431,14 @@ export type DbKeyStoreLike = Pick<
   | 'resolveKeyWithPassphrase'
   | 'removeKey'
 >
+
+/**
+ * Adds `setPassphrase` on top of `DbKeyStoreLike` -- consumed by the
+ * plaintext-to-encrypted migration orchestration (task I2b), which offers a
+ * recovery passphrase on a freshly-minted managed key so keyring loss can't
+ * make the migrated data unrecoverable. Kept separate from `DbKeyStoreLike`
+ * so existing consumers of that narrower type (e.g. `database/startup.ts`'s
+ * hand-rolled "unavailable" fake) don't need to implement a method they
+ * never call.
+ */
+export type DbKeyStoreWithPassphraseLike = DbKeyStoreLike & Pick<DbKeyStore, 'setPassphrase'>

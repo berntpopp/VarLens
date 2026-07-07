@@ -16,6 +16,8 @@ import {
   DatabaseOpenSchema,
   DatabaseCreateSchema,
   DatabaseRekeySchema,
+  DatabaseMigrateToEncryptedSchema,
+  DatabaseDeletePlaintextBackupSchema,
   FilePathSchema
 } from '../../../shared/types/ipc-schemas'
 import { getDbKeyStore as getDefaultDbKeyStore } from '../../database/db-key-store-instance'
@@ -41,6 +43,7 @@ import {
   PostgresProfileIdSchema
 } from './database-logic'
 import type { DatabaseLifecycleCallbacks } from './database-logic'
+import { migrateCurrentToEncrypted, deletePlaintextBackup } from './database-migration-logic'
 import { PostgresProfileStore, type SecretStore } from '../../storage/postgres/PostgresProfileStore'
 import {
   PostgresConnectionProfileInputSchema,
@@ -302,6 +305,46 @@ export function registerDatabaseHandlers({
         throw new Error('Invalid encryption key')
       }
       return rekeyDatabase(validated.data.newPassword, getDbManager)
+    })
+  })
+
+  /**
+   * Migrate the currently-open, plaintext SQLite database to encrypted-at-rest.
+   * Requires explicit consent; see `database-migration-logic.ts`.
+   */
+  ipcMain.handle('database:migrateToEncrypted', async (_event, options: unknown) => {
+    return wrapHandler(async () => {
+      const validated = DatabaseMigrateToEncryptedSchema.safeParse(options)
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid database:migrateToEncrypted params: ${validated.error.message}`,
+          'database'
+        )
+        throw new Error('Invalid migration parameters')
+      }
+      return migrateCurrentToEncrypted(
+        validated.data,
+        getDbManager,
+        getDbKeyStore(),
+        lifecycleCallbacks
+      )
+    })
+  })
+
+  /**
+   * Delete a plaintext backup produced by a prior migration.
+   */
+  ipcMain.handle('database:deletePlaintextBackup', async (_event, backupPath: unknown) => {
+    return wrapHandler(async () => {
+      const validated = DatabaseDeletePlaintextBackupSchema.safeParse({ backupPath })
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid database:deletePlaintextBackup params: ${validated.error.message}`,
+          'database'
+        )
+        throw new Error('Invalid backup path')
+      }
+      return deletePlaintextBackup(validated.data.backupPath, getDbManager)
     })
   })
 

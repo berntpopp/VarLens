@@ -10,6 +10,9 @@ export function createDatabaseApi(): DatabaseDomainContract {
     create: (path, password, setupPassphrase) =>
       ipcRenderer.invoke('database:create', path, password, setupPassphrase),
     rekey: (newPassword) => ipcRenderer.invoke('database:rekey', newPassword),
+    migrateToEncrypted: (options) => ipcRenderer.invoke('database:migrateToEncrypted', options),
+    deletePlaintextBackup: (backupPath) =>
+      ipcRenderer.invoke('database:deletePlaintextBackup', backupPath),
     info: () => ipcRenderer.invoke('database:info'),
     capabilities: () => ipcRenderer.invoke('database:capabilities'),
     postgresDiagnostics: () => ipcRenderer.invoke('database:postgresDiagnostics'),

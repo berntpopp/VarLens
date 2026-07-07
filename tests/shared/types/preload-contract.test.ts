@@ -362,6 +362,10 @@ describe('Preload contract alignment', () => {
     expect(databaseDomainSource).toContain(
       "showInFolder: (path) => ipcRenderer.invoke('database:showInFolder', path)"
     )
+    expect(databaseDomainSource).toContain(
+      "migrateToEncrypted: (options) => ipcRenderer.invoke('database:migrateToEncrypted', options)"
+    )
+    expect(databaseDomainSource).toContain("'database:deletePlaintextBackup'")
     expect(preloadSource).not.toContain('unwrapIpcResult(await databaseDomain.open')
   })
 

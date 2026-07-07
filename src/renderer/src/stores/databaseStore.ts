@@ -8,6 +8,11 @@ import { defineStore } from 'pinia'
 import type { DatabaseOpenResult, RecentDatabase, WindowAPI } from '../../../shared/types/api'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import type {
+  DatabaseInfo,
+  MigrateToEncryptedOptions,
+  MigrateToEncryptedResult
+} from '../../../shared/ipc/domains/database'
+import type {
   PostgresConnectionProfileInput,
   PostgresConnectionProfilePublic,
   PostgresConnectionProfileSaveInput,
@@ -31,6 +36,7 @@ export const useDatabaseStore = defineStore('database', () => {
   const currentPath = ref<string | null>(null)
   const currentName = ref<string>('')
   const isEncrypted = ref<boolean>(false)
+  const unencryptedMigratable = ref<boolean>(false)
   const isLoading = ref<boolean>(false)
   const recentDatabases = ref<RecentDatabase[]>([])
   const capabilities = ref<StorageCapabilities | null>(null)
@@ -38,17 +44,25 @@ export const useDatabaseStore = defineStore('database', () => {
   const isTestingPostgres = ref<boolean>(false)
 
   // Actions
+
+  /** Applies a `DatabaseInfo` snapshot to the current-database state refs. */
+  function applyInfo(info: DatabaseInfo): void {
+    currentPath.value = info.path
+    currentName.value = info.name
+    isEncrypted.value = info.encrypted
+    unencryptedMigratable.value = info.unencryptedMigratable ?? false
+  }
+
   async function fetchInfo(): Promise<void> {
     const info = unwrapIpcResult(await getApi().database.info())
     if (info) {
-      currentPath.value = info.path
-      currentName.value = info.name
-      isEncrypted.value = info.encrypted
+      applyInfo(info)
       await loadCapabilities()
     } else {
       currentPath.value = null
       currentName.value = ''
       isEncrypted.value = false
+      unencryptedMigratable.value = false
       capabilities.value = null
     }
     await fetchRecent()
@@ -96,9 +110,7 @@ export const useDatabaseStore = defineStore('database', () => {
     try {
       const result = unwrapIpcResult(await getApi().database.open(path, password))
       if (result.success && result.info) {
-        currentPath.value = result.info.path
-        currentName.value = result.info.name
-        isEncrypted.value = result.info.encrypted
+        applyInfo(result.info)
         await loadCapabilities()
         await fetchRecent()
       }
@@ -119,9 +131,7 @@ export const useDatabaseStore = defineStore('database', () => {
         await getApi().database.create(path, password, setupPassphrase)
       )
       if (result.success && result.info) {
-        currentPath.value = result.info.path
-        currentName.value = result.info.name
-        isEncrypted.value = result.info.encrypted
+        applyInfo(result.info)
         await loadCapabilities()
         await fetchRecent()
       }
@@ -136,9 +146,7 @@ export const useDatabaseStore = defineStore('database', () => {
     try {
       const result = unwrapIpcResult(await getApi().database.postgresProfileOpen(profileId))
       if (result.success && result.info) {
-        currentPath.value = result.info.path
-        currentName.value = result.info.name
-        isEncrypted.value = result.info.encrypted
+        applyInfo(result.info)
         await loadCapabilities()
         await fetchRecent()
         await fetchPostgresProfiles()
@@ -167,10 +175,39 @@ export const useDatabaseStore = defineStore('database', () => {
     return unwrapIpcResult(await getApi().database.rekey(newPassword))
   }
 
+  /**
+   * Migrate the currently-open plaintext database to encrypted-at-rest.
+   * Requires explicit consent (`options.consent === true`). On success,
+   * refreshes the current-database state (now encrypted) and the recent
+   * list, matching `openDatabase`/`createDatabase`.
+   */
+  async function migrateToEncrypted(
+    options: MigrateToEncryptedOptions
+  ): Promise<MigrateToEncryptedResult> {
+    isLoading.value = true
+    try {
+      const result = unwrapIpcResult(await getApi().database.migrateToEncrypted(options))
+      if (result.success && result.info) {
+        applyInfo(result.info)
+        await loadCapabilities()
+        await fetchRecent()
+      }
+      return result
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /** Delete a plaintext backup produced by a prior `migrateToEncrypted` call. */
+  async function deletePlaintextBackup(backupPath: string): Promise<{ success: boolean }> {
+    return unwrapIpcResult(await getApi().database.deletePlaintextBackup(backupPath))
+  }
+
   return {
     currentPath,
     currentName,
     isEncrypted,
+    unencryptedMigratable,
     isLoading,
     recentDatabases,
     capabilities,
@@ -188,6 +225,8 @@ export const useDatabaseStore = defineStore('database', () => {
     openPostgresProfile,
     selectAndOpenFile,
     selectSaveLocation,
-    changePassword
+    changePassword,
+    migrateToEncrypted,
+    deletePlaintextBackup
   }
 })

@@ -13,6 +13,12 @@ export interface DatabaseInfo {
   path: string
   name: string
   encrypted: boolean
+  /**
+   * True when this is a currently-open, plaintext, local SQLite database --
+   * i.e. it is eligible for the `migrateToEncrypted` action. Absent/false for
+   * encrypted databases and for non-SQLite (e.g. PostgreSQL) sessions.
+   */
+  unencryptedMigratable?: boolean
 }
 
 export interface DatabaseOpenResult {
@@ -38,6 +44,34 @@ export interface DatabaseActionResult {
   success: boolean
 }
 
+export interface MigrateToEncryptedOptions {
+  /**
+   * Must be `true` -- migration is only ever performed with explicit user
+   * consent. Never inferred or defaulted; a request without consent is
+   * refused before anything is touched.
+   */
+  consent: boolean
+  /**
+   * Recovery passphrase for the migrated database's key.
+   *  - REQUIRED when no OS keyring (safeStorage) is available -- the DEK is
+   *    then wrapped ONLY by this passphrase.
+   *  - OPTIONAL (but strongly encouraged) when a keyring is available -- it
+   *    is set as an additional recovery wrap on the managed key, so keyring
+   *    loss (e.g. OS reinstall) does not make the data unrecoverable.
+   */
+  recoveryPassphrase?: string
+}
+
+export interface MigrateToEncryptedResult {
+  success: boolean
+  error?: string
+  /** Path to the plaintext backup kept alongside the database after a successful migration. */
+  backupPath?: string
+  /** Whether a recovery passphrase is now set on the migrated key. */
+  recoveryPassphraseSet?: boolean
+  info?: DatabaseInfo
+}
+
 export interface DatabaseDomainContract {
   selectFile: () => Promise<string | null>
   selectSaveLocation: (defaultName: string) => Promise<string | null>
@@ -53,6 +87,21 @@ export interface DatabaseDomainContract {
     setupPassphrase?: string
   ) => Promise<IpcResult<DatabaseOpenResult>>
   rekey: (newPassword: string) => Promise<IpcResult<DatabaseActionResult>>
+  /**
+   * Migrate the currently-open, plaintext SQLite database to encrypted-at-rest.
+   * Requires explicit consent; see `MigrateToEncryptedOptions`. Reversible:
+   * a plaintext backup is kept until the caller explicitly deletes it via
+   * `deletePlaintextBackup`.
+   */
+  migrateToEncrypted: (
+    options: MigrateToEncryptedOptions
+  ) => Promise<IpcResult<MigrateToEncryptedResult>>
+  /**
+   * Delete a plaintext backup produced by a prior `migrateToEncrypted` call.
+   * Only accepts a path that matches the currently-open database's backup
+   * naming pattern -- cannot target an arbitrary file.
+   */
+  deletePlaintextBackup: (backupPath: string) => Promise<IpcResult<DatabaseActionResult>>
   info: () => Promise<IpcResult<DatabaseInfo | null>>
   capabilities: () => Promise<IpcResult<StorageCapabilities>>
   postgresDiagnostics: () => Promise<IpcResult<PostgresHealthDiagnosticResult>>

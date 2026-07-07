@@ -14,7 +14,7 @@ import { WrongPasswordError } from '../../database/errors'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DatabaseManager } from '../../services/DatabaseManager'
 import type { DbKeyStoreLike } from '../../database/db-key-store'
-import type { DatabaseOpenResult } from '../../../shared/ipc/domains/database'
+import type { DatabaseInfo, DatabaseOpenResult } from '../../../shared/ipc/domains/database'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import type { PostgresHealthDiagnosticResult } from '../../../shared/types/postgres-profile'
 
@@ -184,9 +184,7 @@ export function rekeyDatabase(
   return { success: true }
 }
 
-export function getDatabaseInfo(
-  getDbManager: () => DatabaseManager
-): { path: string; name: string; encrypted: boolean } | null {
+export function getDatabaseInfo(getDbManager: () => DatabaseManager): DatabaseInfo | null {
   const manager = getDbManager()
   return manager.getCurrentInfo()
 }

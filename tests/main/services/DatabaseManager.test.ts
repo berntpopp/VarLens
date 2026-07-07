@@ -67,7 +67,8 @@ describe('DatabaseManager', () => {
         expect(manager.getCurrentInfo()).toEqual({
           path: dbPath,
           name: expect.stringContaining('.db'),
-          encrypted: false
+          encrypted: false,
+          unencryptedMigratable: true
         })
       } finally {
         await manager.close()
@@ -404,7 +405,8 @@ describe('DatabaseManager', () => {
         expect(info).toEqual({
           path: dbPath,
           name: expect.any(String),
-          encrypted: false
+          encrypted: false,
+          unencryptedMigratable: true
         })
       } finally {
         await manager.close()
