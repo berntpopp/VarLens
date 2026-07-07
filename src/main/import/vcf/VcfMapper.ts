@@ -78,8 +78,9 @@ export function mapVcfRecord(
     const genotype = parseGenotype(sampleValues, rec.format, 1)
 
     // Step 3: Parse annotation (CSQ or ANN)
+    // altIdx is 0-based across splitRecords; VEP's ALLELE_NUM is 1-based.
     const altAllele = rec.alt[0]
-    const annotation = parseAnnotation(rec.info, header, altAllele, rec.ref)
+    const annotation = parseAnnotation(rec.info, header, altAllele, rec.ref, altIdx + 1)
 
     // Step 4: Apply INFO field registry
     const infoResult = applyInfoFieldRegistry(rec.info, registry, annotation)

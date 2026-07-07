@@ -24,16 +24,20 @@ const IMPACT_ORDER: Record<string, number> = {
  * @param header - Parsed VCF header with annotation type info
  * @param altAllele - The ALT allele to filter annotations for
  * @param ref - The REF allele (used to disambiguate deletion matching)
+ * @param alleleIndex - 1-based index of altAllele among the original ALT list
+ *   (matches VEP CSQ's ALLELE_NUM). Required to disambiguate multi-allelic
+ *   deletion sites, where VEP emits "-" for every deletion ALT.
  * @returns Annotation result with selected transcript and all transcripts
  */
 export function parseAnnotation(
   info: Map<string, string>,
   header: VcfHeader,
   altAllele: string,
-  ref?: string
+  ref?: string,
+  alleleIndex?: number
 ): AnnotationResult {
   if (header.annotationType === 'csq' && header.csqFields !== null) {
-    return parseCsq(info, header.csqFields, altAllele, ref ?? '')
+    return parseCsq(info, header.csqFields, altAllele, ref ?? '', alleleIndex)
   }
 
   if (header.annotationType === 'ann') {
@@ -54,7 +58,8 @@ function parseCsq(
   info: Map<string, string>,
   csqFieldNames: string[],
   altAllele: string,
-  ref: string
+  ref: string,
+  alleleIndex?: number
 ): AnnotationResult {
   const csqRaw = info.get('CSQ')
   if (csqRaw == null || csqRaw === '') return emptyResult()
@@ -78,8 +83,22 @@ function parseCsq(
     parsed.push({ fields, allele })
   }
 
-  // Filter by allele: VEP uses the ALT base for SNVs, "-" for deletions, inserted seq for insertions
-  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref))
+  // Filter by allele. VEP's Allele field is "-" for every deletion ALT at a site,
+  // so at a multi-deletion multi-allelic site the Allele/length heuristic alone
+  // cannot tell two deletions apart. When the CSQ config declares ALLELE_NUM
+  // (the 1-based index of the ALT this block annotates), prefer it — it is the
+  // only reliable discriminator for that case. Fall back to the Allele-string
+  // heuristic when ALLELE_NUM isn't configured, or is missing on a given block.
+  const hasAlleleNumField = csqFieldNames.includes('ALLELE_NUM')
+  const filtered = parsed.filter((t) => {
+    if (hasAlleleNumField && alleleIndex !== undefined) {
+      const alleleNumStr = t.fields.get('ALLELE_NUM')
+      if (alleleNumStr !== undefined) {
+        return parseInt(alleleNumStr, 10) === alleleIndex
+      }
+    }
+    return matchesAllele(t.allele, altAllele, ref)
+  })
 
   if (filtered.length === 0) return emptyResult()
 
@@ -171,8 +190,12 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
     parsed.push({ parts, allele })
   }
 
-  // Filter by allele
-  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref))
+  // Filter by allele. Unlike VEP CSQ, SnpEff's ANN field 0 is always the real ALT
+  // sequence (never "-" and never an index), so deletions disambiguate by exact
+  // sequence match. The "-" shortcut in matchesAllele exists only for VEP's
+  // lossy deletion notation and must never fire here — otherwise a malformed or
+  // unexpected "-" block could cross-match any shorter ALT at a multi-deletion site.
+  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref, false))
 
   if (filtered.length === 0) return emptyResult()
 
@@ -225,12 +248,24 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
 /**
  * Check if an annotation allele matches the target ALT allele.
  * VEP CSQ uses the VCF ALT bases for SNVs, "-" for deletions, inserted bases for insertions.
- * SnpEff ANN uses the full ALT allele string.
+ * SnpEff ANN uses the full ALT allele string (real sequence, never "-").
+ *
+ * @param allowDeletionDash - Whether the VEP "-" deletion shortcut may fire. VEP's
+ *   Allele field is lossy ("-" for every deletion ALT at a multi-allelic site), so
+ *   this is only a safe heuristic for VEP CSQ, and only as a fallback when
+ *   ALLELE_NUM disambiguation isn't available. SnpEff ANN callers must pass
+ *   `false` — ANN's allele field is always a concrete sequence, so a literal "-"
+ *   there is never a real allele and must not cross-match a shorter ALT.
  */
-function matchesAllele(annAllele: string, altAllele: string, ref: string): boolean {
+function matchesAllele(
+  annAllele: string,
+  altAllele: string,
+  ref: string,
+  allowDeletionDash: boolean = true
+): boolean {
   if (annAllele === altAllele) return true
   // VEP deletion notation: "-" only matches when ALT is actually shorter than REF
-  if (annAllele === '-' && altAllele.length < ref.length) return true
+  if (allowDeletionDash && annAllele === '-' && altAllele.length < ref.length) return true
   // VEP insertion: the annotation Allele is the inserted bases (ALT minus first base)
   if (altAllele.length > 1 && annAllele === altAllele.substring(1)) return true
   return false

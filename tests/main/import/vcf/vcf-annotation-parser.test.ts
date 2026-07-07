@@ -124,6 +124,44 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcript).toBe('T2')
       expect(result.impact).toBe('HIGH')
     })
+
+    it('disambiguates multi-allelic deletions via ALLELE_NUM when both use "-" notation', () => {
+      // REF=CAT, ALT=C,CA — a two-deletion multi-allelic site. VEP emits "-" for
+      // BOTH deletion ALTs, so the Allele-string heuristic alone cannot tell them
+      // apart. ALLELE_NUM (1-based index of the ALT this block annotates) must
+      // disambiguate: block 1 belongs to ALT index 1 (C), block 2 to ALT index 2 (CA).
+      const fields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'ALLELE_NUM']
+      const alleleNumHeader = makeHeader({ annotationType: 'csq', csqFields: fields })
+      const info = new Map([
+        ['CSQ', '-|frameshift_variant|HIGH|GENE1|T1|1,-|inframe_deletion|MODERATE|GENE2|T2|2']
+      ])
+
+      // Split record for ALT index 1 (C) must get ONLY the GENE1/T1 annotation.
+      const resultAllele1 = parseAnnotation(info, alleleNumHeader, 'C', 'CAT', 1)
+      expect(resultAllele1.transcripts).toHaveLength(1)
+      expect(resultAllele1.geneSymbol).toBe('GENE1')
+      expect(resultAllele1.consequence).toBe('frameshift_variant')
+      expect(resultAllele1.transcript).toBe('T1')
+
+      // Split record for ALT index 2 (CA) must get ONLY the GENE2/T2 annotation.
+      const resultAllele2 = parseAnnotation(info, alleleNumHeader, 'CA', 'CAT', 2)
+      expect(resultAllele2.transcripts).toHaveLength(1)
+      expect(resultAllele2.geneSymbol).toBe('GENE2')
+      expect(resultAllele2.consequence).toBe('inframe_deletion')
+      expect(resultAllele2.transcript).toBe('T2')
+    })
+
+    it('falls back to the Allele/length heuristic when ALLELE_NUM is absent from the CSQ config', () => {
+      // Same csqFields as the main describe block (no ALLELE_NUM) — single-deletion
+      // site, so the "-" shortcut alone is unambiguous and must still work.
+      const info = new Map([
+        ['CSQ', '-|frameshift_variant|HIGH|GENE1|E1|Transcript|T1|protein_coding||||||||||||||||']
+      ])
+
+      const result = parseAnnotation(info, header, 'C', 'CAT')
+      expect(result.geneSymbol).toBe('GENE1')
+      expect(result.transcripts).toHaveLength(1)
+    })
   })
 
   describe('ANN parsing', () => {
@@ -162,6 +200,34 @@ describe('vcf-annotation-parser', () => {
       // MODERATE should be selected over MODIFIER
       expect(result.transcript).toBe('T1')
       expect(result.geneSymbol).toBe('LZTR1')
+    })
+
+    it('disambiguates multi-allelic deletions by exact sequence, never via the "-" shortcut', () => {
+      // REF=CAT, ALT=C,CA. Unlike VEP, SnpEff's ANN allele field (index 0) always
+      // carries the real ALT sequence, so C and CA disambiguate by exact match.
+      // A third, pathological block using literal "-" (as VEP would) proves the
+      // "-"/length shortcut is disabled for ANN — it must never cross-match a
+      // real deletion allele just because it's shorter than REF.
+      const info = new Map([
+        [
+          'ANN',
+          'C|frameshift_variant|HIGH|GENE1|E1|transcript|T1|protein_coding|1/1|c.1_2del|p.X1fs|||||,' +
+            'CA|inframe_deletion|MODERATE|GENE2|E2|transcript|T2|protein_coding|1/1|c.2del|p.X2del|||||,' +
+            '-|intergenic_region|MODIFIER|GENE3|E3|transcript|T3|protein_coding|||||||||'
+        ]
+      ])
+
+      // Split record for ALT=C must match ONLY the GENE1/T1 block by exact sequence.
+      const resultAllele1 = parseAnnotation(info, header, 'C', 'CAT')
+      expect(resultAllele1.transcripts).toHaveLength(1)
+      expect(resultAllele1.geneSymbol).toBe('GENE1')
+      expect(resultAllele1.transcript).toBe('T1')
+
+      // Split record for ALT=CA must match ONLY the GENE2/T2 block.
+      const resultAllele2 = parseAnnotation(info, header, 'CA', 'CAT')
+      expect(resultAllele2.transcripts).toHaveLength(1)
+      expect(resultAllele2.geneSymbol).toBe('GENE2')
+      expect(resultAllele2.transcript).toBe('T2')
     })
 
     it('handles compound annotations (frameshift&splice_region)', () => {
