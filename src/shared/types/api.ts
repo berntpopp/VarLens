@@ -352,8 +352,8 @@ export interface DuplicateCheckResult {
 }
 
 export interface BatchImportAPI {
-  selectFiles: () => Promise<string[]>
-  selectFolder: () => Promise<string[]>
+  selectFiles: () => Promise<IpcResult<string[]>>
+  selectFolder: () => Promise<IpcResult<string[]>>
   checkDuplicates: (
     filePaths: string[],
     stripText?: string

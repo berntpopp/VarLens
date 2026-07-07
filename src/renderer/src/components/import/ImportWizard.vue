@@ -436,9 +436,9 @@ async function selectSource(mode: ImportMode): Promise<void> {
       if (path === null) return
       filePaths = [path]
     } else if (mode === 'files') {
-      filePaths = await api!.batchImport.selectFiles()
+      filePaths = unwrapIpcResult(await api!.batchImport.selectFiles())
     } else {
-      filePaths = await api!.batchImport.selectFolder()
+      filePaths = unwrapIpcResult(await api!.batchImport.selectFolder())
     }
 
     if (filePaths.length === 0) return
@@ -497,17 +497,24 @@ async function checkDuplicatesAndAdvance(filePaths: string[]): Promise<void> {
 async function unlockZip(): Promise<void> {
   zipUnlocking.value = true
   zipError.value = ''
-  const { success } = unwrapIpcResult(
-    await api!.batchImport.testZipPassword(zipPath.value, zipPassword.value)
-  )
-  zipUnlocking.value = false
+  try {
+    const { success } = unwrapIpcResult(
+      await api!.batchImport.testZipPassword(zipPath.value, zipPassword.value)
+    )
 
-  if (!success) {
-    zipError.value = 'Incorrect password'
-    return
+    if (!success) {
+      zipError.value = 'Incorrect password'
+      return
+    }
+
+    await extractAndAdvance(zipPath.value)
+  } catch (err) {
+    const message = formatErrorMessage(err, 'Could not unlock ZIP archive')
+    zipError.value = message
+    logService.error(`ZIP unlock failed: ${message}`, 'ImportWizard')
+  } finally {
+    zipUnlocking.value = false
   }
-
-  await extractAndAdvance(zipPath.value)
 }
 
 function cancelZip(): void {

@@ -7,8 +7,18 @@
  *
  * Also tests cancel behavior and error handling.
  */
-import { describe, it, expect } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { createVuetify } from 'vuetify'
+import * as components from 'vuetify/components'
+import * as directives from 'vuetify/directives'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { ref, isProxy } from 'vue'
+import ImportWizard from '../../../src/renderer/src/components/import/ImportWizard.vue'
+import ImportSourceSelector from '../../../src/renderer/src/components/import/ImportSourceSelector.vue'
+import { createMockApi, type MockApi } from '../../utils/mock-api'
+
+const vuetify = createVuetify({ components, directives })
 
 /**
  * Simulates Electron's structured clone validation.
@@ -159,5 +169,60 @@ describe('ImportWizard IPC safety', () => {
         'userMessage' in errorResponse ? errorResponse.userMessage : 'Import failed unexpectedly'
       expect(errorMsg).toBe('An unexpected error occurred.')
     })
+  })
+})
+
+describe('ImportWizard ZIP password unlock', () => {
+  let mockApi: MockApi
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockApi = createMockApi()
+    window.api = mockApi as unknown as typeof window.api
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+    vi.restoreAllMocks()
+  })
+
+  it('surfaces password-test IPC errors and clears loading', async () => {
+    mockApi.batchImport.selectZip = vi.fn().mockResolvedValue({
+      filePath: '/tmp/corrupt.zip',
+      isEncrypted: true
+    })
+    mockApi.batchImport.testZipPassword = vi.fn().mockResolvedValue({
+      code: 'PARSE_ERROR',
+      message: 'zip central directory missing',
+      userMessage: 'Could not read ZIP archive'
+    })
+
+    const wrapper = mount(ImportWizard, {
+      global: {
+        plugins: [vuetify]
+      },
+      attachTo: document.body
+    })
+    wrapper.vm.show()
+    await flushPromises()
+
+    wrapper.findComponent(ImportSourceSelector).vm.$emit('select', 'zip')
+    await flushPromises()
+
+    const password = document.body.querySelector('input[type="password"]')
+    expect(password).toBeInstanceOf(HTMLInputElement)
+    ;(password as HTMLInputElement).value = 'secret'
+    password!.dispatchEvent(new Event('input', { bubbles: true }))
+    const unlock = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Unlock')
+    )
+    expect(unlock).toBeInstanceOf(HTMLButtonElement)
+    unlock!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('Could not read ZIP archive')
+    expect(document.body.textContent).not.toContain('[object Object]')
+    expect(document.body.querySelector('.v-progress-circular')).toBeNull()
   })
 })
