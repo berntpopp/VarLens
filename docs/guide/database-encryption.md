@@ -56,12 +56,18 @@ file. That means, unless you have set a recovery passphrase:
 To keep your data recoverable and portable, **set a recovery passphrase**:
 
 1. Open the database.
-2. Use **Set a database password / recovery passphrase**.
+2. From the database menu, use **Set Recovery Passphrase...**.
 3. Store that passphrase somewhere safe (a password manager).
 
 A recovery passphrase wraps the same database key, so the database can then be
 opened on any machine — or after a keyring loss — by entering the passphrase. Set
 one **before** backing up or transferring a database.
+
+Setting a recovery passphrase also writes a small `<db>.varlens-recovery.json`
+sidecar file next to your database. Portability requires copying **both** the
+`.db` file **and** its `.varlens-recovery.json` sidecar, plus knowing the
+passphrase — copying the `.db` file alone is not enough, even with a recovery
+passphrase set.
 
 ## Encrypting an existing (unencrypted) database
 
@@ -96,6 +102,6 @@ place defeats the purpose of encrypting.
   you to set a password (and never fakes encryption).
 - **Set a recovery passphrase** before moving or backing up a database — the
   transparent key does not travel with the file, and losing it means losing the
-  data.
+  data. Bring the `.varlens-recovery.json` sidecar along with the `.db` file.
 - Existing unencrypted databases can be encrypted with a consented, backed-up,
   reversible migration; delete the plaintext backup afterward.
