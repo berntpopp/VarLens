@@ -2,10 +2,13 @@
  * Database logic smoke tests plus domain registration coverage.
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { mkdtempSync, readFileSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { resolve, join } from 'path'
 import * as logic from '../../../src/main/ipc/handlers/database-logic'
+import { writeRecoverySidecar } from '../../../src/main/database/recovery-sidecar'
+import type { PassphraseWrap } from '../../../src/main/database/db-key-store'
 import type {
   PostgresConnectionProfileInput,
   PostgresConnectionProfilePublic
@@ -271,6 +274,10 @@ const unusedKeyStore = {
   wrapNewDekWithPassphrase: vi.fn(),
   resolveKeyForPath: vi.fn(),
   resolveKeyWithPassphrase: vi.fn(),
+  resolveKeyWithPassphraseFromSidecar: vi.fn(),
+  findManagedKeyIdForDek: vi.fn(),
+  enrollRecoveredKey: vi.fn(),
+  updatePath: vi.fn(),
   removeKey: vi.fn()
 }
 
@@ -357,6 +364,153 @@ describe('database lifecycle logic', () => {
     ).resolves.toEqual({ success: false, needsPassword: true })
 
     expect(manager.switchDatabase).not.toHaveBeenCalled()
+  })
+
+  describe('opening with a supplied password — recovery sidecar resolution', () => {
+    let tmpDir: string
+    let dbPath: string
+    const dummyPassWrap: PassphraseWrap = {
+      saltB64: 'salt',
+      ivB64: 'iv',
+      ctB64: 'ct',
+      tagB64: 'tag'
+    }
+
+    beforeEach(() => {
+      tmpDir = mkdtempSync(join(tmpdir(), 'varlens-open-sidecar-'))
+      dbPath = join(tmpDir, 'moved.db')
+    })
+
+    afterEach(() => {
+      rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('a wrong passphrase against a genuine sidecar is reported as WRONG_PASSWORD, never falls through to a raw-key attempt', async () => {
+      writeRecoverySidecar(dbPath, dummyPassWrap)
+      const manager = {
+        openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+        switchDatabase: vi.fn()
+      }
+      const keyStore = {
+        ...unusedKeyStore,
+        resolveKeyWithPassphrase: vi.fn().mockReturnValue({ ok: false, reason: 'not-found' }),
+        resolveKeyWithPassphraseFromSidecar: vi
+          .fn()
+          .mockReturnValue({ ok: false, reason: 'wrong-passphrase' })
+      }
+
+      await expect(
+        logic.openDatabase(
+          { path: dbPath, password: 'wrong-guess' },
+          () => ({}) as never,
+          () => manager as never,
+          { triggerStartupRebuild: vi.fn() },
+          keyStore
+        )
+      ).resolves.toEqual({ success: false, error: 'WRONG_PASSWORD' })
+
+      expect(manager.switchDatabase).not.toHaveBeenCalled()
+      expect(keyStore.enrollRecoveredKey).not.toHaveBeenCalled()
+      expect(keyStore.updatePath).not.toHaveBeenCalled()
+    })
+
+    it('same-machine move self-heal: a sidecar-recovered DEK that matches an existing LOCAL managed entry repoints that entry via updatePath instead of enrolling a new one', async () => {
+      writeRecoverySidecar(dbPath, dummyPassWrap)
+      const manager = {
+        openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+        switchDatabase: vi.fn().mockResolvedValue(undefined),
+        getCurrentInfo: vi.fn().mockReturnValue({ path: dbPath, name: 'moved.db', encrypted: true })
+      }
+      const keyStore = {
+        ...unusedKeyStore,
+        resolveKeyWithPassphrase: vi.fn().mockReturnValue({ ok: false, reason: 'not-found' }),
+        resolveKeyWithPassphraseFromSidecar: vi
+          .fn()
+          .mockReturnValue({ ok: true, dek: 'recovered-dek' }),
+        findManagedKeyIdForDek: vi.fn().mockReturnValue('existing-key-id'),
+        updatePath: vi.fn(),
+        enrollRecoveredKey: vi.fn()
+      }
+
+      await expect(
+        logic.openDatabase(
+          { path: dbPath, password: 'correct horse battery staple' },
+          () => ({}) as never,
+          () => manager as never,
+          { triggerStartupRebuild: vi.fn() },
+          keyStore
+        )
+      ).resolves.toMatchObject({ success: true })
+
+      expect(keyStore.findManagedKeyIdForDek).toHaveBeenCalledWith('recovered-dek')
+      expect(keyStore.updatePath).toHaveBeenCalledWith('existing-key-id', dbPath)
+      expect(keyStore.enrollRecoveredKey).not.toHaveBeenCalled()
+      expect(manager.switchDatabase).toHaveBeenCalledWith(dbPath, 'recovered-dek')
+    })
+
+    it('genuinely new machine: a sidecar-recovered DEK with no matching local entry is enrolled fresh via enrollRecoveredKey', async () => {
+      writeRecoverySidecar(dbPath, dummyPassWrap)
+      const manager = {
+        openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+        switchDatabase: vi.fn().mockResolvedValue(undefined),
+        getCurrentInfo: vi.fn().mockReturnValue({ path: dbPath, name: 'moved.db', encrypted: true })
+      }
+      const keyStore = {
+        ...unusedKeyStore,
+        resolveKeyWithPassphrase: vi.fn().mockReturnValue({ ok: false, reason: 'not-found' }),
+        resolveKeyWithPassphraseFromSidecar: vi
+          .fn()
+          .mockReturnValue({ ok: true, dek: 'recovered-dek' }),
+        findManagedKeyIdForDek: vi.fn().mockReturnValue(null),
+        updatePath: vi.fn(),
+        enrollRecoveredKey: vi.fn().mockReturnValue({ ok: true, keyId: 'new-key-id' })
+      }
+
+      await expect(
+        logic.openDatabase(
+          { path: dbPath, password: 'correct horse battery staple' },
+          () => ({}) as never,
+          () => manager as never,
+          { triggerStartupRebuild: vi.fn() },
+          keyStore
+        )
+      ).resolves.toMatchObject({ success: true })
+
+      expect(keyStore.enrollRecoveredKey).toHaveBeenCalledWith(
+        dbPath,
+        'recovered-dek',
+        dummyPassWrap
+      )
+      expect(keyStore.updatePath).not.toHaveBeenCalled()
+      expect(manager.switchDatabase).toHaveBeenCalledWith(dbPath, 'recovered-dek')
+    })
+
+    it('no sidecar and no registry entry at this path: legacy fallback treats the supplied value as a raw SQLCipher key, unchanged', async () => {
+      // Deliberately no `writeRecoverySidecar` call -- this path has neither a
+      // registry entry nor a sidecar.
+      const manager = {
+        openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+        switchDatabase: vi.fn().mockResolvedValue(undefined),
+        getCurrentInfo: vi.fn().mockReturnValue({ path: dbPath, name: 'moved.db', encrypted: true })
+      }
+      const keyStore = {
+        ...unusedKeyStore,
+        resolveKeyWithPassphrase: vi.fn().mockReturnValue({ ok: false, reason: 'not-found' })
+      }
+
+      await expect(
+        logic.openDatabase(
+          { path: dbPath, password: 'literal-sqlcipher-key' },
+          () => ({}) as never,
+          () => manager as never,
+          { triggerStartupRebuild: vi.fn() },
+          keyStore
+        )
+      ).resolves.toMatchObject({ success: true })
+
+      expect(manager.switchDatabase).toHaveBeenCalledWith(dbPath, 'literal-sqlcipher-key')
+      expect(keyStore.resolveKeyWithPassphraseFromSidecar).not.toHaveBeenCalled()
+    })
   })
 
   it('does not require handler-level pool initialization after creating a database', async () => {

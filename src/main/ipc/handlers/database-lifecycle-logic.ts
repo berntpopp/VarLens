@@ -13,7 +13,12 @@ import { mainLogger } from '../../services/MainLogger'
 import { WrongPasswordError } from '../../database/errors'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DatabaseManager } from '../../services/DatabaseManager'
-import type { DbKeyStoreLike } from '../../database/db-key-store'
+import type {
+  DbKeyStoreLike,
+  DbKeyStoreWithRecoveryLike,
+  PassphraseWrap
+} from '../../database/db-key-store'
+import { readRecoverySidecar, recoverySidecarExists } from '../../database/recovery-sidecar'
 import type { DatabaseInfo, DatabaseOpenResult } from '../../../shared/ipc/domains/database'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import type { PostgresHealthDiagnosticResult } from '../../../shared/types/postgres-profile'
@@ -36,23 +41,104 @@ export interface DatabaseCreateParams {
   setupPassphrase?: string
 }
 
+/** Outcome of resolving a user-supplied password/passphrase attempt. */
+type PasswordResolution = { kind: 'resolved'; dek: string } | { kind: 'wrong-passphrase' }
+
+/**
+ * After a successful sidecar-based passphrase recovery, make future opens at
+ * `vPath` transparent on THIS machine: repoint an existing LOCAL entry for
+ * the SAME DEK (the "same-machine move" case -- the `.db` file, plus its
+ * sidecar, moved to a new path on a machine that already has a keyring entry
+ * for that exact DEK under the old, now-stale path) rather than minting a
+ * redundant, orphaned key. Otherwise enroll a brand-new entry from the
+ * sidecar's wrap so a genuinely new/wiped machine also becomes transparent
+ * next time. Never fails the open itself -- a failure to enroll here is
+ * logged and the caller proceeds with the already-recovered `dek`.
+ */
+function enrollOrRepointSidecarRecovery(
+  vPath: string,
+  dek: string,
+  passWrap: PassphraseWrap,
+  keyStore: DbKeyStoreWithRecoveryLike
+): void {
+  const existingKeyId = keyStore.findManagedKeyIdForDek(dek)
+  if (existingKeyId !== null) {
+    keyStore.updatePath(existingKeyId, vPath)
+    return
+  }
+
+  const enrolled = keyStore.enrollRecoveredKey(vPath, dek, passWrap)
+  if (!enrolled.ok) {
+    // Defensive only: step 1 (resolveKeyWithPassphrase) already failed to
+    // resolve this exact path, so `path-already-keyed` here would mean
+    // someone else enrolled it concurrently. Not fatal to this open.
+    mainLogger.warn(
+      `Recovered a database via its portable recovery sidecar, but enrolling a local key ` +
+        `entry failed (${enrolled.reason}); this open proceeds, but future opens on this ` +
+        `machine may prompt for the passphrase again.`,
+      'database'
+    )
+  }
+}
+
+/**
+ * Resolve a supplied password/passphrase attempt against, in order: the
+ * key-store's own passphrase wrap for this exact path (unchanged today's
+ * behavior), then a portable recovery sidecar next to the database file
+ * (self-healing the registry on success -- see
+ * `enrollOrRepointSidecarRecovery`), then the legacy fallback of treating the
+ * supplied value as a raw SQLCipher key. A wrong passphrase against a
+ * genuine sidecar is a typed failure -- it never falls through to being
+ * treated as a raw key.
+ */
+function resolvePasswordAttempt(
+  vPath: string,
+  vPassword: string,
+  keyStore: DbKeyStoreWithRecoveryLike
+): PasswordResolution {
+  const viaRegistry = keyStore.resolveKeyWithPassphrase(vPath, vPassword)
+  if (viaRegistry.ok) {
+    return { kind: 'resolved', dek: viaRegistry.dek }
+  }
+
+  if (recoverySidecarExists(vPath)) {
+    const sidecar = readRecoverySidecar(vPath)
+    if (sidecar !== null) {
+      const viaSidecar = keyStore.resolveKeyWithPassphraseFromSidecar(sidecar.passWrap, vPassword)
+      if (!viaSidecar.ok) {
+        return { kind: 'wrong-passphrase' }
+      }
+      enrollOrRepointSidecarRecovery(vPath, viaSidecar.dek, sidecar.passWrap, keyStore)
+      return { kind: 'resolved', dek: viaSidecar.dek }
+    }
+  }
+
+  // No registry entry and no (parseable) sidecar at this path: legacy
+  // fallback -- treat the supplied value as a raw SQLCipher key, unchanged.
+  return { kind: 'resolved', dek: vPassword }
+}
+
 /**
  * Open a database: detect encryption, resolve/validate a key, switch connection.
  *
  * Resolution order when the target is encrypted and no explicit password is
  * supplied: try the key-store's managed (safeStorage-wrapped) key first --
  * transparent, no prompt. If that can't resolve (moved machine, no keyring
- * entry), fall back to the existing `needsPassword` prompt flow. When the
- * caller later supplies a password, it is tried as a key-store passphrase
- * first (for a managed DB whose safeStorage wrap can't resolve here), then
- * as a direct SQLCipher key (today's explicit-password behavior, unchanged).
+ * entry), fall back to the existing `needsPassword` prompt flow -- a
+ * portable recovery sidecar alone is never enough without a passphrase, so
+ * this branch doesn't need to know it exists.
+ *
+ * When the caller supplies a password/passphrase attempt, see
+ * `resolvePasswordAttempt` for the full resolution order (registry
+ * passphrase wrap -> recovery sidecar with same-machine self-heal -> legacy
+ * raw-key fallback).
  */
 export async function openDatabase(
   params: { path: string; password?: string },
   getDb: () => DatabaseService,
   getDbManager: () => DatabaseManager,
   callbacks: DatabaseLifecycleCallbacks,
-  keyStore: DbKeyStoreLike
+  keyStore: DbKeyStoreWithRecoveryLike
 ): Promise<DatabaseOpenResult> {
   const manager = getDbManager()
   const { path: vPath, password: vPassword } = params
@@ -70,8 +156,11 @@ export async function openDatabase(
       }
       effectiveKey = resolved.dek
     } else {
-      const resolved = keyStore.resolveKeyWithPassphrase(vPath, vPassword)
-      effectiveKey = resolved.ok ? resolved.dek : vPassword
+      const resolution = resolvePasswordAttempt(vPath, vPassword, keyStore)
+      if (resolution.kind === 'wrong-passphrase') {
+        return { success: false, error: 'WRONG_PASSWORD' }
+      }
+      effectiveKey = resolution.dek
     }
   }
 

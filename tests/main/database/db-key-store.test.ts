@@ -13,11 +13,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'fs'
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { assertNotHexLiteralKey } from '../../../src/main/database/sqlcipher-key-guard'
 import { DbKeyStore, type SafeStorageLike } from '../../../src/main/database/db-key-store'
+import { recoverySidecarPathFor } from '../../../src/main/database/recovery-sidecar'
 
 /** Reversible fake "encryption" so round-trips work in tests. */
 function fakeSafeStorage(available = true): SafeStorageLike {
@@ -281,5 +282,171 @@ describe('DbKeyStore', () => {
     // The store must still be usable after encountering a corrupt file.
     const created = store.createManagedKey(join(tmpDir, 'case.db'))
     expect(created.ok).toBe(true)
+  })
+
+  describe('recovery sidecar portability', () => {
+    it('wrapNewDekWithPassphrase writes a sidecar at <dbPath>.varlens-recovery.json matching the registry passWrap', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(false) })
+      const dbPath = join(tmpDir, 'case.db')
+
+      const result = store.wrapNewDekWithPassphrase(dbPath, 'hunter2')
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error('expected ok result')
+      expect(result.sidecarWritten).toBe(true)
+
+      const sidecarPath = recoverySidecarPathFor(dbPath)
+      expect(existsSync(sidecarPath)).toBe(true)
+
+      const sidecar = JSON.parse(readFileSync(sidecarPath, 'utf-8'))
+      expect(sidecar.version).toBe(1)
+
+      const raw = JSON.parse(readFileSync(registryPath, 'utf-8'))
+      const registryPassWrap = raw.keys[result.keyId].passWrap
+      expect(sidecar.passWrap).toEqual(registryPassWrap)
+    })
+
+    it('setPassphrase on an existing managed-key entry also writes/overwrites the sidecar at the entry stored path', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+      const dbPath = join(tmpDir, 'case.db')
+
+      const created = store.createManagedKey(dbPath)
+      expect(created.ok).toBe(true)
+      if (!created.ok) throw new Error('expected ok result')
+
+      const sidecarPath = recoverySidecarPathFor(dbPath)
+      expect(existsSync(sidecarPath)).toBe(false)
+
+      const setResult = store.setPassphrase(created.keyId, 'hunter2')
+      expect(setResult.ok).toBe(true)
+      if (!setResult.ok) throw new Error('expected ok result')
+      expect(setResult.sidecarWritten).toBe(true)
+      expect(existsSync(sidecarPath)).toBe(true)
+
+      const sidecar = JSON.parse(readFileSync(sidecarPath, 'utf-8'))
+      const raw = JSON.parse(readFileSync(registryPath, 'utf-8'))
+      expect(sidecar.passWrap).toEqual(raw.keys[created.keyId].passWrap)
+
+      // A second setPassphrase call overwrites the sidecar with the new wrap.
+      const secondSet = store.setPassphrase(created.keyId, 'different-passphrase')
+      expect(secondSet.ok).toBe(true)
+      const sidecarAfter = JSON.parse(readFileSync(sidecarPath, 'utf-8'))
+      const rawAfter = JSON.parse(readFileSync(registryPath, 'utf-8'))
+      expect(sidecarAfter.passWrap).toEqual(rawAfter.keys[created.keyId].passWrap)
+      expect(sidecarAfter.passWrap).not.toEqual(sidecar.passWrap)
+    })
+
+    it('resolveKeyWithPassphraseFromSidecar: correct passphrase resolves the DEK; wrong passphrase returns a typed wrong-passphrase result, never a wrong key', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(false) })
+      const dbPath = join(tmpDir, 'case.db')
+
+      const created = store.wrapNewDekWithPassphrase(dbPath, 'correct horse battery staple')
+      expect(created.ok).toBe(true)
+      if (!created.ok) throw new Error('expected ok result')
+
+      const raw = JSON.parse(readFileSync(registryPath, 'utf-8'))
+      const passWrap = raw.keys[created.keyId].passWrap
+
+      const correct = store.resolveKeyWithPassphraseFromSidecar(
+        passWrap,
+        'correct horse battery staple'
+      )
+      expect(correct.ok).toBe(true)
+      if (!correct.ok) throw new Error('expected ok result')
+      expect(correct.dek).toBe(created.dek)
+
+      const wrong = store.resolveKeyWithPassphraseFromSidecar(passWrap, 'wrong-passphrase')
+      expect(wrong.ok).toBe(false)
+      if (wrong.ok) throw new Error('expected failure result')
+      expect(wrong.reason).toBe('wrong-passphrase')
+    })
+
+    it('enrollRecoveredKey: succeeds on an un-keyed path, mapping a fresh keyId to it with the given passWrap (and a safeWrap too, when safeStorage is available)', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+      const dbPath = join(tmpDir, 'recovered.db')
+      const passWrap = {
+        saltB64: 'salt',
+        ivB64: 'iv',
+        ctB64: 'ct',
+        tagB64: 'tag'
+      }
+
+      const result = store.enrollRecoveredKey(dbPath, 'a'.repeat(64), passWrap)
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error('expected ok result')
+
+      const raw = JSON.parse(readFileSync(registryPath, 'utf-8'))
+      expect(raw.pathIndex[dbPath]).toBe(result.keyId)
+      expect(raw.keys[result.keyId].path).toBe(dbPath)
+      expect(raw.keys[result.keyId].passWrap).toEqual(passWrap)
+      expect(typeof raw.keys[result.keyId].safeWrap).toBe('string')
+
+      // No sidecar is (re-)written by enrollment -- the passWrap came FROM
+      // the sidecar and is already correct and current on disk.
+      expect(existsSync(recoverySidecarPathFor(dbPath))).toBe(false)
+    })
+
+    it('enrollRecoveredKey: refuses a path that is already keyed, without mutating the registry', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+      const dbPath = join(tmpDir, 'case.db')
+      const original = store.createManagedKey(dbPath)
+      expect(original.ok).toBe(true)
+      if (!original.ok) throw new Error('expected ok result')
+
+      const before = readFileSync(registryPath, 'utf-8')
+
+      const result = store.enrollRecoveredKey(dbPath, 'a'.repeat(64), {
+        saltB64: 'salt',
+        ivB64: 'iv',
+        ctB64: 'ct',
+        tagB64: 'tag'
+      })
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('expected failure result')
+      expect(result.reason).toBe('path-already-keyed')
+
+      const after = readFileSync(registryPath, 'utf-8')
+      expect(after).toBe(before)
+    })
+
+    it('findManagedKeyIdForDek: returns the matching keyId when a local safeWrap-bearing entry decrypts to that DEK', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+      const dbPath = join(tmpDir, 'case.db')
+      const created = store.createManagedKey(dbPath)
+      expect(created.ok).toBe(true)
+      if (!created.ok) throw new Error('expected ok result')
+
+      const found = store.findManagedKeyIdForDek(created.dek)
+      expect(found).toBe(created.keyId)
+    })
+
+    it('findManagedKeyIdForDek: returns null when no entry matches', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+      store.createManagedKey(join(tmpDir, 'case.db'))
+
+      expect(store.findManagedKeyIdForDek('nonexistent-dek')).toBeNull()
+    })
+
+    it('findManagedKeyIdForDek: returns null when safeStorage is unavailable, even with matching local entries', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(false) })
+      const dbPath = join(tmpDir, 'case.db')
+      const created = store.wrapNewDekWithPassphrase(dbPath, 'hunter2')
+      expect(created.ok).toBe(true)
+      if (!created.ok) throw new Error('expected ok result')
+
+      // No safeWrap exists at all on a passphrase-only entry, and safeStorage
+      // is unavailable regardless -- nothing can match.
+      expect(store.findManagedKeyIdForDek(created.dek)).toBeNull()
+    })
+
+    it('getKeyIdForPath: returns the mapped keyId, or null for an unknown path', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+      const dbPath = join(tmpDir, 'case.db')
+      const created = store.createManagedKey(dbPath)
+      expect(created.ok).toBe(true)
+      if (!created.ok) throw new Error('expected ok result')
+
+      expect(store.getKeyIdForPath(dbPath)).toBe(created.keyId)
+      expect(store.getKeyIdForPath(join(tmpDir, 'never-created.db'))).toBeNull()
+    })
   })
 })

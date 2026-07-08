@@ -38,6 +38,7 @@ import { dirname } from 'path'
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID, scryptSync } from 'crypto'
 import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
 import { mainLogger } from '../services/MainLogger'
+import { writeRecoverySidecar } from './recovery-sidecar'
 
 /** Default registry filename, intended to live under Electron's `userData` dir. */
 export const DEFAULT_DB_KEY_REGISTRY_FILENAME = 'varlens-db-keys.json'
@@ -53,7 +54,7 @@ export interface SafeStorageLike {
 }
 
 /** AES-256-GCM passphrase wrap of a DEK. All fields are base64-encoded. */
-interface PassphraseWrap {
+export interface PassphraseWrap {
   saltB64: string
   ivB64: string
   ctB64: string
@@ -85,7 +86,8 @@ export type CreateManagedKeyResult =
   | { ok: false; reason: 'safe-storage-unavailable' | 'path-already-keyed' }
 
 export type WrapNewDekWithPassphraseResult =
-  { ok: true; keyId: string; dek: string } | { ok: false; reason: 'path-already-keyed' }
+  | { ok: true; keyId: string; dek: string; sidecarWritten: boolean }
+  | { ok: false; reason: 'path-already-keyed' }
 
 export type ResolveKeyResult =
   { ok: true; dek: string } | { ok: false; reason: 'not-found' | 'needs-passphrase' }
@@ -93,8 +95,19 @@ export type ResolveKeyResult =
 export type ResolveKeyWithPassphraseResult =
   { ok: true; dek: string } | { ok: false; reason: 'not-found' | 'wrong-passphrase' }
 
+/**
+ * Result of resolving a DEK from a `PassphraseWrap` read directly from a
+ * recovery sidecar (no registry lookup involved). Never `'not-found'` --
+ * the caller already knows the sidecar exists before calling this.
+ */
+export type ResolveKeyWithPassphraseFromSidecarResult =
+  { ok: true; dek: string } | { ok: false; reason: 'wrong-passphrase' }
+
 export type SetPassphraseResult =
-  { ok: true } | { ok: false; reason: 'not-found' | 'cannot-resolve-dek' }
+  { ok: true; sidecarWritten: boolean } | { ok: false; reason: 'not-found' | 'cannot-resolve-dek' }
+
+export type EnrollRecoveredKeyResult =
+  { ok: true; keyId: string } | { ok: false; reason: 'path-already-keyed' }
 
 /** scrypt cost parameters. N=16384, r=8, p=1 derives ~16 MiB, under Node's default 32 MiB maxmem. */
 const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1 } as const
@@ -246,7 +259,9 @@ export class DbKeyStore {
     registry.pathIndex[dbPath] = keyId
     this.save(registry)
 
-    return { ok: true, keyId, dek }
+    const sidecarWritten = this.tryWriteRecoverySidecar(dbPath, passWrap)
+
+    return { ok: true, keyId, dek, sidecarWritten }
   }
 
   /**
@@ -291,6 +306,24 @@ export class DbKeyStore {
   }
 
   /**
+   * Resolve a DEK from a `PassphraseWrap` read directly from a recovery
+   * sidecar -- no registry or filesystem access here, purely a wrapper
+   * around `unwrapPassphrase`. AES-GCM's auth tag means a wrong passphrase
+   * can only ever produce `null` (never a different, plausible-looking
+   * wrong key), so this can only fail as `wrong-passphrase`.
+   */
+  resolveKeyWithPassphraseFromSidecar(
+    passWrap: PassphraseWrap,
+    passphrase: string
+  ): ResolveKeyWithPassphraseFromSidecarResult {
+    const dek = unwrapPassphrase(passWrap, passphrase)
+    if (dek === null) {
+      return { ok: false, reason: 'wrong-passphrase' }
+    }
+    return { ok: true, dek }
+  }
+
+  /**
    * Add or replace the passphrase wrap for an existing DEK identified by
    * `keyId`. The DEK is resolved internally via the entry's existing
    * safeStorage wrap — this store never wraps a DEK it cannot itself
@@ -310,7 +343,82 @@ export class DbKeyStore {
 
     entry.passWrap = wrapPassphrase(dek, passphrase)
     this.save(registry)
-    return { ok: true }
+    const sidecarWritten = this.tryWriteRecoverySidecar(entry.path, entry.passWrap)
+    return { ok: true, sidecarWritten }
+  }
+
+  /**
+   * Direct `pathIndex` lookup, with no attempt to resolve/unwrap the DEK.
+   * Consumed by the (separately implemented) `setRecoveryPassphrase` IPC
+   * action, which needs the `keyId` for an already-open database's path
+   * before it can call `setPassphrase`.
+   */
+  getKeyIdForPath(dbPath: string): string | null {
+    const registry = this.load()
+    return registry.pathIndex[dbPath] ?? null
+  }
+
+  /**
+   * Find a LOCAL registry entry whose safeStorage-wrapped DEK equals `dek`,
+   * regardless of which path it's currently mapped to. Powers the
+   * "same-machine move" self-heal: if a `.db` file (plus its recovery
+   * sidecar) was moved to a new path on a machine that ALREADY has a
+   * keyring entry for that exact DEK under the old path, this lets the
+   * caller repoint that existing entry via `updatePath` instead of minting
+   * a redundant, orphaned key. Returns `null` when nothing matches or
+   * safeStorage is unavailable.
+   */
+  findManagedKeyIdForDek(dek: string): string | null {
+    const registry = this.load()
+    for (const [keyId, entry] of Object.entries(registry.keys)) {
+      if (entry === undefined || entry.safeWrap === undefined) continue
+      if (this.tryUnwrapWithSafeStorage(entry) === dek) {
+        return keyId
+      }
+    }
+    return null
+  }
+
+  /**
+   * Enroll a DEK recovered from a portable sidecar as a brand-new registry
+   * entry for `dbPath`, so future opens on THIS machine are transparent.
+   * Guards `dbPath` being already keyed exactly like `createManagedKey`/
+   * `wrapNewDekWithPassphrase` do, to avoid orphaning an existing key.
+   * Best-effort ALSO adds a safeStorage wrap when available (non-fatal on
+   * failure — the passphrase wrap being enrolled is enough on its own).
+   * Does NOT re-write the sidecar: `passWrap` came FROM the sidecar, so it
+   * is already on disk, correct, and current.
+   */
+  enrollRecoveredKey(
+    dbPath: string,
+    dek: string,
+    passWrap: PassphraseWrap
+  ): EnrollRecoveredKeyResult {
+    const registry = this.load()
+    if (registry.pathIndex[dbPath] !== undefined) {
+      return { ok: false, reason: 'path-already-keyed' }
+    }
+
+    const keyId = randomUUID()
+    const entry: KeyEntry = { path: dbPath, passWrap }
+
+    if (this.safeStorage.isEncryptionAvailable()) {
+      try {
+        entry.safeWrap = this.safeStorage.encryptString(dek).toString('base64')
+      } catch (e) {
+        mainLogger.warn(
+          `safeStorage.encryptString failed while enrolling a recovered key (continuing with ` +
+            `the passphrase wrap alone): ${errorMessage(e)}`,
+          'DbKeyStore'
+        )
+      }
+    }
+
+    registry.keys[keyId] = entry
+    registry.pathIndex[dbPath] = keyId
+    this.save(registry)
+
+    return { ok: true, keyId }
   }
 
   /**
@@ -345,6 +453,26 @@ export class DbKeyStore {
       if (id === keyId) delete registry.pathIndex[path]
     }
     this.save(registry)
+  }
+
+  /**
+   * Best-effort write of a recovery sidecar alongside `dbPath`. Never
+   * throws: a failure here (disk full, read-only filesystem, …) must not
+   * fail the registry write it accompanies, so it is logged and reported
+   * back to the caller as `sidecarWritten: false` instead.
+   */
+  private tryWriteRecoverySidecar(dbPath: string, passWrap: PassphraseWrap): boolean {
+    try {
+      writeRecoverySidecar(dbPath, passWrap)
+      return true
+    } catch (e) {
+      mainLogger.warn(
+        `Failed to write recovery sidecar for the database at this path (portability recovery ` +
+          `will be unavailable if the registry is later lost): ${errorMessage(e)}`,
+        'DbKeyStore'
+      )
+      return false
+    }
   }
 
   /** Attempt to unwrap `entry.safeWrap` via the injected safeStorage; null on any failure. */
@@ -442,3 +570,23 @@ export type DbKeyStoreLike = Pick<
  * never call.
  */
 export type DbKeyStoreWithPassphraseLike = DbKeyStoreLike & Pick<DbKeyStore, 'setPassphrase'>
+
+/**
+ * Consumed by `openDatabase`'s recovery-sidecar flow: transparent resolve,
+ * registry-based and sidecar-based passphrase resolution, the same-machine
+ * move self-heal (`findManagedKeyIdForDek` + `updatePath`), and enrolling a
+ * brand-new local entry when a sidecar recovers a DEK this machine has never
+ * seen before (`enrollRecoveredKey`). Kept separate from `DbKeyStoreLike` so
+ * existing narrower consumers (e.g. `createDatabase`, `database/startup.ts`)
+ * don't need to implement methods they never call.
+ */
+export type DbKeyStoreWithRecoveryLike = Pick<
+  DbKeyStore,
+  | 'resolveKeyForPath'
+  | 'resolveKeyWithPassphrase'
+  | 'resolveKeyWithPassphraseFromSidecar'
+  | 'findManagedKeyIdForDek'
+  | 'enrollRecoveredKey'
+  | 'updatePath'
+  | 'removeKey'
+>

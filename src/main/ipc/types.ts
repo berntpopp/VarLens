@@ -1,7 +1,10 @@
 import type { IpcMain } from 'electron'
 import type { DatabaseService } from '../database/DatabaseService'
 import type { DatabaseManager } from '../services/DatabaseManager'
-import type { DbKeyStoreWithPassphraseLike } from '../database/db-key-store'
+import type {
+  DbKeyStoreWithPassphraseLike,
+  DbKeyStoreWithRecoveryLike
+} from '../database/db-key-store'
 import type { DbPool } from '../database/DbPool'
 import type { PostgresPoolLike, PostgresProfileStoreLike } from './handlers/database-logic'
 import type { PostgresStorageConfig } from '../storage/config'
@@ -25,9 +28,14 @@ export interface HandlerDependencies {
   /**
    * Optional DB key-store factory so tests can inject a fake registry/safeStorage.
    * Widened to include `setPassphrase` (task I2b's plaintext-migration orchestration
-   * needs it); the real singleton (`DbKeyStore`) always implements it.
+   * needs it) and the recovery-sidecar surface `openDatabase` needs
+   * (`resolveKeyWithPassphraseFromSidecar`, `findManagedKeyIdForDek`,
+   * `enrollRecoveredKey`, …) -- the same accessor feeds `openDatabase`,
+   * `createDatabase`, and `migrateCurrentToEncrypted`, so it must satisfy all
+   * three narrower `DbKeyStore*Like` types at once. The real singleton
+   * (`DbKeyStore`) always implements the full surface.
    */
-  getDbKeyStore?: () => DbKeyStoreWithPassphraseLike
+  getDbKeyStore?: () => DbKeyStoreWithPassphraseLike & DbKeyStoreWithRecoveryLike
   /** Optional PostgreSQL pool factory so tests can avoid a real server. */
   createPostgresPool?: (config: PostgresStorageConfig) => PostgresPoolLike
   /** Optional PostgreSQL session factory so tests can avoid building repository graph. */
