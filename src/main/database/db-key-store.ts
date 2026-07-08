@@ -39,6 +39,7 @@ import { createCipheriv, createDecipheriv, randomBytes, randomUUID, scryptSync }
 import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
 import { mainLogger } from '../services/MainLogger'
 import { writeRecoverySidecar } from './recovery-sidecar'
+import { fsyncContainingDirectory, fsyncFile } from './fs-durability'
 
 /** Default registry filename, intended to live under Electron's `userData` dir. */
 export const DEFAULT_DB_KEY_REGISTRY_FILENAME = 'varlens-db-keys.json'
@@ -535,14 +536,16 @@ export class DbKeyStore {
     }
   }
 
-  /** Write the registry to disk (mkdir -p + write-then-rename for atomicity). */
+  /** Write registry to disk (mkdir -p + write-temp + fsync + rename + best-effort dir fsync). */
   private save(registry: Registry): void {
     const dir = dirname(this.registryPath)
     mkdirSync(dir, { recursive: true })
     const json = JSON.stringify(registry, null, 2)
     const tmpPath = `${this.registryPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
     writeFileSync(tmpPath, json, 'utf-8')
+    fsyncFile(tmpPath)
     renameSync(tmpPath, this.registryPath)
+    fsyncContainingDirectory(this.registryPath)
   }
 }
 
@@ -593,4 +596,5 @@ export type DbKeyStoreWithRecoveryLike = Pick<
   | 'enrollRecoveredKey'
   | 'updatePath'
   | 'removeKey'
+  | 'getKeyIdForPath'
 >

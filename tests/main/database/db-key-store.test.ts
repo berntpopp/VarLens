@@ -12,7 +12,7 @@
  * 8. Registry persistence across store instances reading the same file
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -447,6 +447,65 @@ describe('DbKeyStore', () => {
 
       expect(store.getKeyIdForPath(dbPath)).toBe(created.keyId)
       expect(store.getKeyIdForPath(join(tmpDir, 'never-created.db'))).toBeNull()
+    })
+  })
+
+  describe('registry write durability (power-loss safety)', () => {
+    afterEach(() => {
+      vi.doUnmock('fs')
+      vi.resetModules()
+    })
+
+    it('fsyncs the temp file before the rename, and best-effort fsyncs the directory after it', async () => {
+      const calls: string[] = []
+      vi.resetModules()
+      vi.doMock('fs', async (importOriginal) => {
+        const actual = await importOriginal<typeof import('fs')>()
+        return {
+          ...actual,
+          fsyncSync: vi.fn((...args: Parameters<typeof actual.fsyncSync>) => {
+            calls.push('fsync')
+            return actual.fsyncSync(...args)
+          }),
+          renameSync: vi.fn((...args: Parameters<typeof actual.renameSync>) => {
+            calls.push('rename')
+            return actual.renameSync(...args)
+          })
+        }
+      })
+
+      const { DbKeyStore: FreshDbKeyStore } =
+        await import('../../../src/main/database/db-key-store')
+      const store = new FreshDbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+      const created = store.createManagedKey(join(tmpDir, 'case.db'))
+      expect(created.ok).toBe(true)
+
+      // At least two fsyncs: the temp file (blocking) and the containing
+      // directory (best-effort) -- and the file fsync must precede the
+      // rename that makes the write visible.
+      expect(calls.filter((c) => c === 'fsync').length).toBeGreaterThanOrEqual(2)
+      expect(calls[0]).toBe('fsync')
+      expect(calls).toContain('rename')
+      expect(calls.indexOf('fsync')).toBeLessThan(calls.indexOf('rename'))
+    })
+
+    it('a managed key is durably persisted on disk before the caller can proceed to create the database', () => {
+      const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+      const dbPath = join(tmpDir, 'case.db')
+
+      const created = store.createManagedKey(dbPath)
+      expect(created.ok).toBe(true)
+
+      // Synchronous by construction: by the time `createManagedKey` returns,
+      // the registry write (including its fsyncs) has already completed, so
+      // a fresh read from disk must already see the new key -- a caller that
+      // creates the database file next never races ahead of durable key
+      // material.
+      expect(existsSync(registryPath)).toBe(true)
+      const onDisk = JSON.parse(readFileSync(registryPath, 'utf-8')) as {
+        pathIndex: Record<string, string>
+      }
+      expect(onDisk.pathIndex[dbPath]).toBeDefined()
     })
   })
 })

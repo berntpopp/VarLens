@@ -38,6 +38,16 @@ export const useDatabaseStore = defineStore('database', () => {
   const currentName = ref<string>('')
   const isEncrypted = ref<boolean>(false)
   const unencryptedMigratable = ref<boolean>(false)
+  /**
+   * True when the current database has a key-store registry entry --
+   * created encrypted-by-default, or migrated to encrypted. Gates the
+   * "Change Password..." action in `DatabasePicker.vue`: a managed
+   * database's `PRAGMA rekey` would desynchronize the live SQLCipher key
+   * from the key-store's wrapped DEK, so managed databases must use
+   * "Set Recovery Passphrase..." instead. See `rekeyDatabase` in
+   * `database-lifecycle-logic.ts`.
+   */
+  const keyManaged = ref<boolean>(false)
   const isLoading = ref<boolean>(false)
   const recentDatabases = ref<RecentDatabase[]>([])
   const capabilities = ref<StorageCapabilities | null>(null)
@@ -52,6 +62,7 @@ export const useDatabaseStore = defineStore('database', () => {
     currentName.value = info.name
     isEncrypted.value = info.encrypted
     unencryptedMigratable.value = info.unencryptedMigratable ?? false
+    keyManaged.value = info.keyManaged ?? false
   }
 
   async function fetchInfo(): Promise<void> {
@@ -64,6 +75,7 @@ export const useDatabaseStore = defineStore('database', () => {
       currentName.value = ''
       isEncrypted.value = false
       unencryptedMigratable.value = false
+      keyManaged.value = false
       capabilities.value = null
     }
     await fetchRecent()
@@ -220,6 +232,7 @@ export const useDatabaseStore = defineStore('database', () => {
     currentName,
     isEncrypted,
     unencryptedMigratable,
+    keyManaged,
     isLoading,
     recentDatabases,
     capabilities,

@@ -114,7 +114,7 @@ describe('openConfiguredDatabase', () => {
     expect(keyStore.removeKey).toHaveBeenCalledWith('k1')
   })
 
-  it('falls back to an unencrypted default database (with a warning) when the key-store cannot mint a managed key pre-window', async () => {
+  it('BLOCKER 2: does NOT fall back to a plaintext default database when the key-store cannot mint a managed key pre-window; starts with no active database instead', async () => {
     const manager = {
       open: vi.fn().mockResolvedValue(undefined),
       createDatabase: vi.fn().mockResolvedValue(undefined),
@@ -144,12 +144,73 @@ describe('openConfiguredDatabase', () => {
         keyStore
       })
 
-      expect(manager.createDatabase).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db')
+      // Never silently fall back to plaintext: neither create nor open is
+      // called at all, so the manager stays in its natural "no active
+      // database" state -- exactly what `initDatabaseManagerSafe` produces.
+      expect(manager.createDatabase).not.toHaveBeenCalled()
+      expect(manager.open).not.toHaveBeenCalled()
       expect(warnSpy).toHaveBeenCalledOnce()
       expect(warnSpy.mock.calls[0]?.[0]).toContain('safe-storage-unavailable')
+      expect(warnSpy.mock.calls[0]?.[0]).not.toContain('created without encryption')
     } finally {
       warnSpy.mockRestore()
     }
+  })
+
+  it('BLOCKER 2: does NOT fall back to plaintext when the key-store reports path-already-keyed pre-window either', async () => {
+    const manager = {
+      open: vi.fn().mockResolvedValue(undefined),
+      createDatabase: vi.fn().mockResolvedValue(undefined),
+      openPostgresSession: vi.fn().mockResolvedValue(undefined)
+    }
+    const keyStore = {
+      createManagedKey: vi.fn().mockReturnValue({ ok: false, reason: 'path-already-keyed' }),
+      wrapNewDekWithPassphrase: vi.fn(),
+      resolveKeyForPath: vi.fn(),
+      resolveKeyWithPassphrase: vi.fn(),
+      removeKey: vi.fn()
+    }
+
+    const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
+
+    await openConfiguredDatabase(manager as never, {
+      env: {},
+      userDataPath: '/tmp/varlens-user-data',
+      fileExists: () => false,
+      keyStore
+    })
+
+    expect(manager.createDatabase).not.toHaveBeenCalled()
+    expect(manager.open).not.toHaveBeenCalled()
+  })
+
+  it('BLOCKER 2: an EXISTING plaintext default database still opens as before (no key-store entry, safeStorage unavailable)', async () => {
+    const manager = {
+      open: vi.fn().mockResolvedValue(undefined),
+      createDatabase: vi.fn().mockResolvedValue(undefined),
+      openPostgresSession: vi.fn().mockResolvedValue(undefined)
+    }
+    const keyStore = {
+      createManagedKey: vi.fn().mockReturnValue({ ok: false, reason: 'safe-storage-unavailable' }),
+      wrapNewDekWithPassphrase: vi.fn(),
+      resolveKeyForPath: vi.fn().mockReturnValue({ ok: false, reason: 'not-found' }),
+      resolveKeyWithPassphrase: vi.fn(),
+      removeKey: vi.fn()
+    }
+
+    const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
+
+    await openConfiguredDatabase(manager as never, {
+      env: {},
+      userDataPath: '/tmp/varlens-user-data',
+      fileExists: () => true,
+      keyStore
+    })
+
+    // File already exists (a pre-existing plaintext DB): the create path is
+    // never reached, so a missing keyring can't block opening it.
+    expect(manager.open).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db')
+    expect(manager.createDatabase).not.toHaveBeenCalled()
   })
 
   it('resolves an existing encrypted default database transparently via the key-store on a later launch', async () => {

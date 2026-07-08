@@ -26,6 +26,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
 import type { PassphraseWrap } from './db-key-store'
+import { fsyncContainingDirectory, fsyncFile } from './fs-durability'
 
 /** Sidecar filename suffix, appended directly to the database's absolute path. */
 export const RECOVERY_SIDECAR_SUFFIX = '.varlens-recovery.json'
@@ -62,6 +63,11 @@ function isValidPassphraseWrapShape(value: unknown): value is PassphraseWrap {
  * permission denied, …) propagate -- the caller decides whether that's
  * fatal; this is always called as a best-effort step alongside a registry
  * write that has already succeeded.
+ *
+ * Fsyncs the temp file's bytes to disk BEFORE the rename that makes them
+ * live, then best-effort fsyncs the containing directory after the rename --
+ * a crash between "file exists" and "bytes durable" must never be able to
+ * leave the portable recovery wrap unrecoverable. See `fs-durability.ts`.
  */
 export function writeRecoverySidecar(dbPath: string, passWrap: PassphraseWrap): void {
   const sidecarPath = recoverySidecarPathFor(dbPath)
@@ -71,7 +77,9 @@ export function writeRecoverySidecar(dbPath: string, passWrap: PassphraseWrap): 
   const json = JSON.stringify(sidecar, null, 2)
   const tmpPath = `${sidecarPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
   writeFileSync(tmpPath, json, 'utf-8')
+  fsyncFile(tmpPath)
   renameSync(tmpPath, sidecarPath)
+  fsyncContainingDirectory(sidecarPath)
 }
 
 /**

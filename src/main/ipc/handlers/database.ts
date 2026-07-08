@@ -306,7 +306,7 @@ export function registerDatabaseHandlers({
         mainLogger.error(`Invalid database:rekey params: ${validated.error.message}`, 'database')
         throw new Error('Invalid encryption key')
       }
-      return rekeyDatabase(validated.data.newPassword, getDbManager)
+      return rekeyDatabase(validated.data.newPassword, getDbManager, getDbKeyStore())
     })
   })
 
@@ -374,7 +374,7 @@ export function registerDatabaseHandlers({
    */
   ipcMain.handle('database:info', async () => {
     return wrapHandler(async () => {
-      return getDatabaseInfo(getDbManager)
+      return getDatabaseInfo(getDbManager, getDbKeyStore())
     })
   })
 

@@ -33,6 +33,32 @@ export interface DatabaseLifecycleCallbacks {
   triggerStartupRebuild: (db: DatabaseService) => void
 }
 
+/**
+ * Attach `keyManaged` to a `DatabaseInfo` snapshot by checking whether its
+ * `path` has a key-store registry entry. `null` passes through unchanged. A
+ * non-SQLite (PostgreSQL) session's `path` is never registered in the
+ * SQLite key-store, so this naturally resolves to `keyManaged: false` for it
+ * without needing a separate backend check.
+ */
+function attachKeyManaged(
+  info: DatabaseInfo | null,
+  keyStore: Pick<DbKeyStoreWithRecoveryLike, 'getKeyIdForPath'>
+): DatabaseInfo | null {
+  if (info === null) return null
+  return { ...info, keyManaged: keyStore.getKeyIdForPath(info.path) !== null }
+}
+
+/**
+ * Attach a statically-known `keyManaged` value to a `DatabaseInfo` snapshot.
+ * Used by `createDatabase`, whose three branches already know for certain
+ * whether a key-store entry was (or wasn't) minted for the path just
+ * created, so no registry lookup is needed.
+ */
+function withKeyManaged(info: DatabaseInfo | null, keyManaged: boolean): DatabaseInfo | null {
+  if (info === null) return null
+  return { ...info, keyManaged }
+}
+
 /** Params accepted by `createDatabase`. See task-I2a-brief.md for the 3-path design. */
 export interface DatabaseCreateParams {
   path: string
@@ -45,9 +71,6 @@ export interface DatabaseCreateParams {
    */
   setupPassphrase?: string
 }
-
-/** Outcome of resolving a user-supplied password/passphrase attempt. */
-type PasswordResolution = { kind: 'resolved'; dek: string } | { kind: 'wrong-passphrase' }
 
 /**
  * After a successful sidecar-based passphrase recovery, make future opens at
@@ -92,35 +115,45 @@ function enrollOrRepointSidecarRecovery(
  * behavior), then a portable recovery sidecar next to the database file
  * (self-healing the registry on success -- see
  * `enrollOrRepointSidecarRecovery`), then the legacy fallback of treating the
- * supplied value as a raw SQLCipher key. A wrong passphrase against a
- * genuine sidecar is a typed failure -- it never falls through to being
- * treated as a raw key.
+ * supplied value as a raw SQLCipher key.
+ *
+ * A sidecar unwrap failure (wrong passphrase against a genuine sidecar, OR a
+ * STALE sidecar left behind by a legacy `rekeyDatabase` call that changed
+ * the real SQLCipher key without updating the sidecar/registry) is NEVER
+ * terminal here: it falls through to the legacy raw-key fallback below, so
+ * the database's actual current password can still open it. If that raw-key
+ * attempt is also wrong, `manager.switchDatabase` in `openDatabase` throws
+ * `WrongPasswordError`, which is what ultimately surfaces `WRONG_PASSWORD`
+ * to the caller -- this function itself never fails closed.
  */
 function resolvePasswordAttempt(
   vPath: string,
   vPassword: string,
   keyStore: DbKeyStoreWithRecoveryLike
-): PasswordResolution {
+): string {
   const viaRegistry = keyStore.resolveKeyWithPassphrase(vPath, vPassword)
   if (viaRegistry.ok) {
-    return { kind: 'resolved', dek: viaRegistry.dek }
+    return viaRegistry.dek
   }
 
   if (recoverySidecarExists(vPath)) {
     const sidecar = readRecoverySidecar(vPath)
     if (sidecar !== null) {
       const viaSidecar = keyStore.resolveKeyWithPassphraseFromSidecar(sidecar.passWrap, vPassword)
-      if (!viaSidecar.ok) {
-        return { kind: 'wrong-passphrase' }
+      if (viaSidecar.ok) {
+        enrollOrRepointSidecarRecovery(vPath, viaSidecar.dek, sidecar.passWrap, keyStore)
+        return viaSidecar.dek
       }
-      enrollOrRepointSidecarRecovery(vPath, viaSidecar.dek, sidecar.passWrap, keyStore)
-      return { kind: 'resolved', dek: viaSidecar.dek }
+      // Sidecar unwrap failed -- fall through to the raw-key fallback below
+      // rather than failing closed. See the doc comment above.
     }
   }
 
-  // No registry entry and no (parseable) sidecar at this path: legacy
-  // fallback -- treat the supplied value as a raw SQLCipher key, unchanged.
-  return { kind: 'resolved', dek: vPassword }
+  // No registry entry and no successful sidecar resolution at this path:
+  // legacy fallback -- treat the supplied value as a raw SQLCipher key,
+  // unchanged. A wrong value here surfaces as WRONG_PASSWORD from the actual
+  // `switchDatabase` attempt, not from this function.
+  return vPassword
 }
 
 /**
@@ -161,11 +194,7 @@ export async function openDatabase(
       }
       effectiveKey = resolved.dek
     } else {
-      const resolution = resolvePasswordAttempt(vPath, vPassword, keyStore)
-      if (resolution.kind === 'wrong-passphrase') {
-        return { success: false, error: 'WRONG_PASSWORD' }
-      }
-      effectiveKey = resolution.dek
+      effectiveKey = resolvePasswordAttempt(vPath, vPassword, keyStore)
     }
   }
 
@@ -185,7 +214,7 @@ export async function openDatabase(
       )
     }
 
-    const info = manager.getCurrentInfo()
+    const info = attachKeyManaged(manager.getCurrentInfo(), keyStore)
     return { success: true, info: info! }
   } catch (error) {
     if (error instanceof WrongPasswordError) {
@@ -221,7 +250,7 @@ export async function createDatabase(
 
   if (params.password !== undefined && params.password !== '') {
     await manager.createDatabase(params.path, params.password)
-    const info = manager.getCurrentInfo()
+    const info = withKeyManaged(manager.getCurrentInfo(), false)
     return { success: true, info: info! }
   }
 
@@ -240,7 +269,7 @@ export async function createDatabase(
       keyStore.removeKey(wrapped.keyId)
       throw error
     }
-    const info = manager.getCurrentInfo()
+    const info = withKeyManaged(manager.getCurrentInfo(), true)
     return { success: true, info: info! }
   }
 
@@ -254,7 +283,7 @@ export async function createDatabase(
       keyStore.removeKey(managed.keyId)
       throw error
     }
-    const info = manager.getCurrentInfo()
+    const info = withKeyManaged(manager.getCurrentInfo(), true)
     return { success: true, info: info! }
   }
 
@@ -267,13 +296,38 @@ export async function createDatabase(
 }
 
 /**
- * Change the encryption key for the current database.
+ * Change the encryption key for the current database via `PRAGMA rekey`.
+ *
+ * REFUSED for a key-store-managed database (one with a registry entry for
+ * its current path -- i.e. created encrypted-by-default, or migrated to
+ * encrypted). A `PRAGMA rekey` changes the LIVE SQLCipher key directly,
+ * without touching the key-store's wrapped DEK/registry entry/recovery
+ * sidecar/live session key -- the next open would then resolve the STALE
+ * DEK and fail with `WRONG_PASSWORD`, and a mismatched recovery sidecar left
+ * behind by the stale DEK could otherwise make even the correct raw
+ * password unusable. Managed databases must use `setRecoveryPassphrase`
+ * instead, which re-wraps the SAME DEK and never touches the live key.
+ *
+ * Legacy `rekey` stays valid ONLY for explicit-user-password databases that
+ * have no key-store entry for their current path.
  */
 export function rekeyDatabase(
   newPassword: string,
-  getDbManager: () => DatabaseManager
+  getDbManager: () => DatabaseManager,
+  keyStore: Pick<DbKeyStoreWithPassphraseLike, 'getKeyIdForPath'>
 ): { success: boolean } {
   const manager = getDbManager()
+  const currentPath = manager.getCurrentPath()
+
+  if (currentPath !== null && keyStore.getKeyIdForPath(currentPath) !== null) {
+    throw new DatabaseError(
+      'This database uses a managed encryption key and cannot have its password changed this ' +
+        'way -- doing so would desynchronize it from the encryption key registry and could make ' +
+        'the database unopenable. Use "Set Recovery Passphrase..." instead to add or replace a ' +
+        'portable recovery passphrase without changing the underlying encryption key.'
+    )
+  }
+
   manager.rekey(newPassword)
   return { success: true }
 }
@@ -336,9 +390,12 @@ export function setRecoveryPassphrase(
   return { success: true, recoveryPassphraseSet: true, sidecarWritten: result.sidecarWritten }
 }
 
-export function getDatabaseInfo(getDbManager: () => DatabaseManager): DatabaseInfo | null {
+export function getDatabaseInfo(
+  getDbManager: () => DatabaseManager,
+  keyStore: Pick<DbKeyStoreWithRecoveryLike, 'getKeyIdForPath'>
+): DatabaseInfo | null {
   const manager = getDbManager()
-  return manager.getCurrentInfo()
+  return attachKeyManaged(manager.getCurrentInfo(), keyStore)
 }
 
 export function getDatabaseCapabilities(getDbManager: () => DatabaseManager): StorageCapabilities {

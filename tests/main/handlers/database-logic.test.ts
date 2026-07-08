@@ -8,7 +8,7 @@ import { tmpdir } from 'os'
 import { resolve, join } from 'path'
 import * as logic from '../../../src/main/ipc/handlers/database-logic'
 import { writeRecoverySidecar } from '../../../src/main/database/recovery-sidecar'
-import { DatabaseError } from '../../../src/main/database/errors'
+import { DatabaseError, WrongPasswordError } from '../../../src/main/database/errors'
 import type { PassphraseWrap } from '../../../src/main/database/db-key-store'
 import type {
   PostgresConnectionProfileInput,
@@ -280,7 +280,8 @@ const unusedKeyStore = {
   findManagedKeyIdForDek: vi.fn(),
   enrollRecoveredKey: vi.fn(),
   updatePath: vi.fn(),
-  removeKey: vi.fn()
+  removeKey: vi.fn(),
+  getKeyIdForPath: vi.fn().mockReturnValue(null)
 }
 
 describe('database lifecycle logic', () => {
@@ -387,11 +388,11 @@ describe('database lifecycle logic', () => {
       rmSync(tmpDir, { recursive: true, force: true })
     })
 
-    it('a wrong passphrase against a genuine sidecar is reported as WRONG_PASSWORD, never falls through to a raw-key attempt', async () => {
+    it('BLOCKER 1: a sidecar unwrap failure is NOT terminal -- it falls through to a raw-key attempt, and a wrong raw key still surfaces as WRONG_PASSWORD', async () => {
       writeRecoverySidecar(dbPath, dummyPassWrap)
       const manager = {
         openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
-        switchDatabase: vi.fn()
+        switchDatabase: vi.fn().mockRejectedValue(new WrongPasswordError())
       }
       const keyStore = {
         ...unusedKeyStore,
@@ -411,9 +412,44 @@ describe('database lifecycle logic', () => {
         )
       ).resolves.toEqual({ success: false, error: 'WRONG_PASSWORD' })
 
-      expect(manager.switchDatabase).not.toHaveBeenCalled()
+      // Falls through to the raw-key fallback -- switchDatabase IS attempted
+      // with the supplied value, unlike the old terminal-on-sidecar-failure
+      // behavior. It's the actual DB-open failure that reports WRONG_PASSWORD.
+      expect(manager.switchDatabase).toHaveBeenCalledWith(dbPath, 'wrong-guess')
       expect(keyStore.enrollRecoveredKey).not.toHaveBeenCalled()
       expect(keyStore.updatePath).not.toHaveBeenCalled()
+    })
+
+    it('BLOCKER 1: a stale/wrong recovery sidecar is not terminal -- the actual (raw) SQLCipher password still opens the database', async () => {
+      // Regression scenario: a legacy `rekeyDatabase` call changed the live
+      // SQLCipher key directly without updating the sidecar, so the sidecar
+      // on disk no longer decrypts with ANY passphrase that matches the
+      // real key. The user supplies the actual current raw password.
+      writeRecoverySidecar(dbPath, dummyPassWrap)
+      const manager = {
+        openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+        switchDatabase: vi.fn().mockResolvedValue(undefined),
+        getCurrentInfo: vi.fn().mockReturnValue({ path: dbPath, name: 'moved.db', encrypted: true })
+      }
+      const keyStore = {
+        ...unusedKeyStore,
+        resolveKeyWithPassphrase: vi.fn().mockReturnValue({ ok: false, reason: 'not-found' }),
+        resolveKeyWithPassphraseFromSidecar: vi
+          .fn()
+          .mockReturnValue({ ok: false, reason: 'wrong-passphrase' })
+      }
+
+      await expect(
+        logic.openDatabase(
+          { path: dbPath, password: 'the-real-post-rekey-password' },
+          () => ({}) as never,
+          () => manager as never,
+          { triggerStartupRebuild: vi.fn() },
+          keyStore
+        )
+      ).resolves.toMatchObject({ success: true })
+
+      expect(manager.switchDatabase).toHaveBeenCalledWith(dbPath, 'the-real-post-rekey-password')
     })
 
     it('same-machine move self-heal: a sidecar-recovered DEK that matches an existing LOCAL managed entry repoints that entry via updatePath instead of enrolling a new one', async () => {
@@ -512,6 +548,129 @@ describe('database lifecycle logic', () => {
 
       expect(manager.switchDatabase).toHaveBeenCalledWith(dbPath, 'literal-sqlcipher-key')
       expect(keyStore.resolveKeyWithPassphraseFromSidecar).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('keyManaged attachment (BLOCKER 1: renderer UI gating for Change Password vs Set Recovery Passphrase)', () => {
+    it('openDatabase reports keyManaged: true when the opened path has a key-store registry entry', async () => {
+      const manager = {
+        openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: false }),
+        switchDatabase: vi.fn().mockResolvedValue(undefined),
+        getCurrentInfo: vi
+          .fn()
+          .mockReturnValue({ path: '/tmp/managed.db', name: 'managed.db', encrypted: true })
+      }
+      const keyStore = { ...unusedKeyStore, getKeyIdForPath: vi.fn().mockReturnValue('key-1') }
+
+      const result = await logic.openDatabase(
+        { path: '/tmp/managed.db' },
+        () => ({}) as never,
+        () => manager as never,
+        { triggerStartupRebuild: vi.fn() },
+        keyStore
+      )
+
+      expect(result).toMatchObject({ success: true, info: { keyManaged: true } })
+      expect(keyStore.getKeyIdForPath).toHaveBeenCalledWith('/tmp/managed.db')
+    })
+
+    it('openDatabase reports keyManaged: false for a legacy explicit-password database with no registry entry', async () => {
+      const manager = {
+        openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: false }),
+        switchDatabase: vi.fn().mockResolvedValue(undefined),
+        getCurrentInfo: vi
+          .fn()
+          .mockReturnValue({ path: '/tmp/legacy.db', name: 'legacy.db', encrypted: true })
+      }
+      const keyStore = { ...unusedKeyStore, getKeyIdForPath: vi.fn().mockReturnValue(null) }
+
+      const result = await logic.openDatabase(
+        { path: '/tmp/legacy.db' },
+        () => ({}) as never,
+        () => manager as never,
+        { triggerStartupRebuild: vi.fn() },
+        keyStore
+      )
+
+      expect(result).toMatchObject({ success: true, info: { keyManaged: false } })
+    })
+
+    it('createDatabase reports keyManaged: false for an explicit-password create', async () => {
+      const manager = {
+        createDatabase: vi.fn().mockResolvedValue(undefined),
+        getCurrentInfo: vi
+          .fn()
+          .mockReturnValue({ path: '/tmp/explicit.db', name: 'explicit.db', encrypted: true })
+      }
+
+      const result = await logic.createDatabase(
+        { path: '/tmp/explicit.db', password: 'literal-pw' },
+        () => manager as never,
+        unusedKeyStore
+      )
+
+      expect(result).toMatchObject({ success: true, info: { keyManaged: false } })
+    })
+
+    it('createDatabase reports keyManaged: true for a setupPassphrase create', async () => {
+      const manager = {
+        createDatabase: vi.fn().mockResolvedValue(undefined),
+        getCurrentInfo: vi
+          .fn()
+          .mockReturnValue({ path: '/tmp/passphrase.db', name: 'passphrase.db', encrypted: true })
+      }
+      const keyStore = {
+        ...unusedKeyStore,
+        wrapNewDekWithPassphrase: vi
+          .fn()
+          .mockReturnValue({ ok: true, keyId: 'k1', dek: 'wrapped-dek', sidecarWritten: true })
+      }
+
+      const result = await logic.createDatabase(
+        { path: '/tmp/passphrase.db', setupPassphrase: 'hunter2' },
+        () => manager as never,
+        keyStore
+      )
+
+      expect(result).toMatchObject({ success: true, info: { keyManaged: true } })
+    })
+
+    it('createDatabase reports keyManaged: true for a default encrypted-by-default create', async () => {
+      const manager = {
+        createDatabase: vi.fn().mockResolvedValue(undefined),
+        getCurrentInfo: vi
+          .fn()
+          .mockReturnValue({ path: '/tmp/default.db', name: 'default.db', encrypted: true })
+      }
+      const keyStore = {
+        ...unusedKeyStore,
+        createManagedKey: vi.fn().mockReturnValue({ ok: true, keyId: 'k1', dek: 'the-dek' })
+      }
+
+      const result = await logic.createDatabase(
+        { path: '/tmp/default.db' },
+        () => manager as never,
+        keyStore
+      )
+
+      expect(result).toMatchObject({ success: true, info: { keyManaged: true } })
+    })
+
+    it('getDatabaseInfo attaches keyManaged based on the registry, and passes null through unchanged', () => {
+      const managerManaged = {
+        getCurrentInfo: vi
+          .fn()
+          .mockReturnValue({ path: '/tmp/managed.db', name: 'managed.db', encrypted: true })
+      }
+      const managedKeyStore = { getKeyIdForPath: vi.fn().mockReturnValue('key-1') }
+      expect(logic.getDatabaseInfo(() => managerManaged as never, managedKeyStore)).toMatchObject({
+        keyManaged: true
+      })
+
+      const managerNoDb = { getCurrentInfo: vi.fn().mockReturnValue(null) }
+      const unusedLookup = { getKeyIdForPath: vi.fn() }
+      expect(logic.getDatabaseInfo(() => managerNoDb as never, unusedLookup)).toBeNull()
+      expect(unusedLookup.getKeyIdForPath).not.toHaveBeenCalled()
     })
   })
 
@@ -645,6 +804,55 @@ describe('database lifecycle logic', () => {
     ).rejects.toThrow('disk full')
 
     expect(keyStore.removeKey).toHaveBeenCalledWith('k1')
+  })
+
+  describe('rekeyDatabase', () => {
+    it('BLOCKER 1: refuses to rekey a key-store-managed database -- no PRAGMA rekey is executed', () => {
+      const manager = {
+        getCurrentPath: vi.fn().mockReturnValue('/tmp/managed.db'),
+        rekey: vi.fn()
+      }
+      const keyStore = { getKeyIdForPath: vi.fn().mockReturnValue('key-id-1') }
+
+      expect(() => logic.rekeyDatabase('new-password', () => manager as never, keyStore)).toThrow(
+        DatabaseError
+      )
+      expect(() => logic.rekeyDatabase('new-password', () => manager as never, keyStore)).toThrow(
+        /managed encryption key/i
+      )
+
+      expect(manager.rekey).not.toHaveBeenCalled()
+      expect(keyStore.getKeyIdForPath).toHaveBeenCalledWith('/tmp/managed.db')
+    })
+
+    it('still rekeys a legacy explicit-password database with no key-store entry', () => {
+      const manager = {
+        getCurrentPath: vi.fn().mockReturnValue('/tmp/legacy.db'),
+        rekey: vi.fn()
+      }
+      const keyStore = { getKeyIdForPath: vi.fn().mockReturnValue(null) }
+
+      expect(logic.rekeyDatabase('new-password', () => manager as never, keyStore)).toEqual({
+        success: true
+      })
+
+      expect(manager.rekey).toHaveBeenCalledWith('new-password')
+    })
+
+    it('rekeys when no database is currently open (unchanged edge-case behavior)', () => {
+      const manager = {
+        getCurrentPath: vi.fn().mockReturnValue(null),
+        rekey: vi.fn()
+      }
+      const keyStore = { getKeyIdForPath: vi.fn() }
+
+      expect(logic.rekeyDatabase('new-password', () => manager as never, keyStore)).toEqual({
+        success: true
+      })
+
+      expect(manager.rekey).toHaveBeenCalledWith('new-password')
+      expect(keyStore.getKeyIdForPath).not.toHaveBeenCalled()
+    })
   })
 
   describe('setRecoveryPassphrase', () => {

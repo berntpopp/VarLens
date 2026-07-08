@@ -146,13 +146,24 @@ async function openDefaultSqliteDatabase(
     return
   }
 
+  // A managed (safeStorage-wrapped) key could not be minted for the default
+  // database -- most commonly because no OS keyring is available before the
+  // application window opens. Encryption-by-default means the app must
+  // NEVER silently fall back to creating a PLAINTEXT default database here:
+  // leave the manager with no active database open (it already tolerates
+  // this state -- see `initDatabaseManagerSafe`) so the renderer's
+  // passphrase-required create flow (`needsPassphraseSetup`, handled in
+  // `createDatabase` in `database-lifecycle-logic.ts`) is what actually
+  // creates the (still encrypted, passphrase-wrapped) database once the user
+  // supplies a passphrase.
   mainLogger.warn(
-    `Default database created without encryption (reason: ${managed.reason}). Secure key ` +
-      'storage is unavailable before the application window opens, so the default database ' +
-      'could not be encrypted automatically at startup. It can be encrypted later.',
+    `Default database was NOT created (reason: ${managed.reason}). Secure key storage is ` +
+      'unavailable before the application window opens, so an encrypted-by-default database ' +
+      'could not be created automatically at startup, and creating it unencrypted would break ' +
+      'the encryption-by-default guarantee. Starting with no active database -- create one from ' +
+      'the UI to set a passphrase.',
     'database-startup'
   )
-  await manager.createDatabase(defaultDbPath)
 }
 
 async function closePostgresStartupResources({

@@ -193,7 +193,18 @@
           </template>
           <v-list-item-title>Set Recovery Passphrase...</v-list-item-title>
         </v-list-item>
-        <v-list-item @click="handleChangePassword">
+        <!--
+          "Change Password..." performs a raw `PRAGMA rekey`, which changes
+          the LIVE SQLCipher key directly. For a key-store-managed database
+          (created encrypted-by-default, or migrated to encrypted) that would
+          desynchronize the live key from the key-store's wrapped DEK and can
+          make the database unopenable -- see `rekeyDatabase` in
+          `database-lifecycle-logic.ts`. Managed databases use
+          "Set Recovery Passphrase..." above instead, which safely re-wraps
+          the SAME key. Only offer "Change Password..." for legacy
+          explicit-password databases that have no managed key.
+        -->
+        <v-list-item v-if="!databaseStore.keyManaged" @click="handleChangePassword">
           <template #prepend>
             <v-icon :icon="mdiLockReset" />
           </template>

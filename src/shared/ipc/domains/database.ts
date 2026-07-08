@@ -19,6 +19,18 @@ export interface DatabaseInfo {
    * encrypted databases and for non-SQLite (e.g. PostgreSQL) sessions.
    */
   unencryptedMigratable?: boolean
+  /**
+   * True when the currently-open database has a key-store registry entry
+   * for its path -- i.e. it was created encrypted-by-default, or migrated
+   * to encrypted, so its SQLCipher key is a key-store-managed DEK. Managed
+   * databases must use `setRecoveryPassphrase` instead of the legacy
+   * `rekey` action: `rekey` (`PRAGMA rekey`) changes the live SQLCipher key
+   * directly without updating the key-store's wrapped DEK, which would
+   * desynchronize the two and make the database unopenable. Absent/false
+   * for explicit-user-password databases, unencrypted databases, and
+   * non-SQLite sessions.
+   */
+  keyManaged?: boolean
 }
 
 export interface DatabaseOpenResult {
