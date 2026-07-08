@@ -366,6 +366,8 @@ describe('Preload contract alignment', () => {
       "migrateToEncrypted: (options) => ipcRenderer.invoke('database:migrateToEncrypted', options)"
     )
     expect(databaseDomainSource).toContain("'database:deletePlaintextBackup'")
+    expect(databaseDomainSource).toContain('setRecoveryPassphrase:')
+    expect(databaseDomainSource).toContain("'database:setRecoveryPassphrase'")
     expect(preloadSource).not.toContain('unwrapIpcResult(await databaseDomain.open')
   })
 

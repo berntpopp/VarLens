@@ -8,6 +8,7 @@ import { tmpdir } from 'os'
 import { resolve, join } from 'path'
 import * as logic from '../../../src/main/ipc/handlers/database-logic'
 import { writeRecoverySidecar } from '../../../src/main/database/recovery-sidecar'
+import { DatabaseError } from '../../../src/main/database/errors'
 import type { PassphraseWrap } from '../../../src/main/database/db-key-store'
 import type {
   PostgresConnectionProfileInput,
@@ -68,6 +69,7 @@ describe('database-logic exports', () => {
     expect(typeof logic.openDatabase).toBe('function')
     expect(typeof logic.createDatabase).toBe('function')
     expect(typeof logic.rekeyDatabase).toBe('function')
+    expect(typeof logic.setRecoveryPassphrase).toBe('function')
     expect(typeof logic.getDatabaseInfo).toBe('function')
     expect(typeof logic.getRecentDatabases).toBe('function')
     expect(typeof logic.getDatabaseOverview).toBe('function')
@@ -643,6 +645,106 @@ describe('database lifecycle logic', () => {
     ).rejects.toThrow('disk full')
 
     expect(keyStore.removeKey).toHaveBeenCalledWith('k1')
+  })
+
+  describe('setRecoveryPassphrase', () => {
+    it('throws a typed DatabaseError when no database is currently open', () => {
+      const manager = { getCurrentPath: vi.fn().mockReturnValue(null) }
+      const keyStore = { setPassphrase: vi.fn(), getKeyIdForPath: vi.fn() }
+
+      expect(() =>
+        logic.setRecoveryPassphrase('my recovery passphrase', () => manager as never, keyStore)
+      ).toThrow(DatabaseError)
+      expect(() =>
+        logic.setRecoveryPassphrase('my recovery passphrase', () => manager as never, keyStore)
+      ).toThrow('No database is currently open.')
+
+      expect(keyStore.getKeyIdForPath).not.toHaveBeenCalled()
+      expect(keyStore.setPassphrase).not.toHaveBeenCalled()
+    })
+
+    it('throws a distinct typed DatabaseError when the open database has no managed key', () => {
+      const manager = { getCurrentPath: vi.fn().mockReturnValue('/tmp/explicit-password.db') }
+      const keyStore = {
+        setPassphrase: vi.fn(),
+        getKeyIdForPath: vi.fn().mockReturnValue(null)
+      }
+
+      let thrown: unknown
+      try {
+        logic.setRecoveryPassphrase('my recovery passphrase', () => manager as never, keyStore)
+      } catch (e) {
+        thrown = e
+      }
+
+      expect(thrown).toBeInstanceOf(DatabaseError)
+      expect((thrown as Error).message).not.toBe('No database is currently open.')
+      expect((thrown as Error).message).toMatch(/no managed encryption key/i)
+      expect(keyStore.setPassphrase).not.toHaveBeenCalled()
+    })
+
+    it('throws a typed DatabaseError when the key-store cannot resolve the DEK to wrap', () => {
+      const manager = { getCurrentPath: vi.fn().mockReturnValue('/tmp/varlens.db') }
+      const keyStore = {
+        getKeyIdForPath: vi.fn().mockReturnValue('key-1'),
+        setPassphrase: vi.fn().mockReturnValue({ ok: false, reason: 'cannot-resolve-dek' })
+      }
+
+      expect(() =>
+        logic.setRecoveryPassphrase('my recovery passphrase', () => manager as never, keyStore)
+      ).toThrow(DatabaseError)
+      expect(keyStore.setPassphrase).toHaveBeenCalledWith('key-1', 'my recovery passphrase')
+    })
+
+    it('succeeds non-destructively: calls only keyStore.setPassphrase, never a rekey/database-write path', () => {
+      const manager = {
+        getCurrentPath: vi.fn().mockReturnValue('/tmp/varlens.db'),
+        rekey: vi.fn(),
+        createDatabase: vi.fn(),
+        switchDatabase: vi.fn()
+      }
+      const keyStore = {
+        getKeyIdForPath: vi.fn().mockReturnValue('key-1'),
+        setPassphrase: vi.fn().mockReturnValue({ ok: true, sidecarWritten: true })
+      }
+
+      const result = logic.setRecoveryPassphrase(
+        'my recovery passphrase',
+        () => manager as never,
+        keyStore
+      )
+
+      expect(result).toEqual({
+        success: true,
+        recoveryPassphraseSet: true,
+        sidecarWritten: true
+      })
+      expect(keyStore.getKeyIdForPath).toHaveBeenCalledWith('/tmp/varlens.db')
+      expect(keyStore.setPassphrase).toHaveBeenCalledWith('key-1', 'my recovery passphrase')
+      expect(manager.rekey).not.toHaveBeenCalled()
+      expect(manager.createDatabase).not.toHaveBeenCalled()
+      expect(manager.switchDatabase).not.toHaveBeenCalled()
+    })
+
+    it('still reports success when the passphrase wrap succeeds but the sidecar write fails', () => {
+      const manager = { getCurrentPath: vi.fn().mockReturnValue('/tmp/varlens.db') }
+      const keyStore = {
+        getKeyIdForPath: vi.fn().mockReturnValue('key-1'),
+        setPassphrase: vi.fn().mockReturnValue({ ok: true, sidecarWritten: false })
+      }
+
+      const result = logic.setRecoveryPassphrase(
+        'my recovery passphrase',
+        () => manager as never,
+        keyStore
+      )
+
+      expect(result).toEqual({
+        success: true,
+        recoveryPassphraseSet: true,
+        sidecarWritten: false
+      })
+    })
   })
 })
 

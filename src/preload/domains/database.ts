@@ -13,6 +13,8 @@ export function createDatabaseApi(): DatabaseDomainContract {
     migrateToEncrypted: (options) => ipcRenderer.invoke('database:migrateToEncrypted', options),
     deletePlaintextBackup: (backupPath) =>
       ipcRenderer.invoke('database:deletePlaintextBackup', backupPath),
+    setRecoveryPassphrase: (passphrase) =>
+      ipcRenderer.invoke('database:setRecoveryPassphrase', passphrase),
     info: () => ipcRenderer.invoke('database:info'),
     capabilities: () => ipcRenderer.invoke('database:capabilities'),
     postgresDiagnostics: () => ipcRenderer.invoke('database:postgresDiagnostics'),

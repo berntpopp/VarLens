@@ -10,16 +10,21 @@
  * there for the same pattern.
  */
 import { mainLogger } from '../../services/MainLogger'
-import { WrongPasswordError } from '../../database/errors'
+import { DatabaseError, WrongPasswordError } from '../../database/errors'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DatabaseManager } from '../../services/DatabaseManager'
 import type {
   DbKeyStoreLike,
+  DbKeyStoreWithPassphraseLike,
   DbKeyStoreWithRecoveryLike,
   PassphraseWrap
 } from '../../database/db-key-store'
 import { readRecoverySidecar, recoverySidecarExists } from '../../database/recovery-sidecar'
-import type { DatabaseInfo, DatabaseOpenResult } from '../../../shared/ipc/domains/database'
+import type {
+  DatabaseInfo,
+  DatabaseOpenResult,
+  SetRecoveryPassphraseResult
+} from '../../../shared/ipc/domains/database'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import type { PostgresHealthDiagnosticResult } from '../../../shared/types/postgres-profile'
 
@@ -271,6 +276,64 @@ export function rekeyDatabase(
   const manager = getDbManager()
   manager.rekey(newPassword)
   return { success: true }
+}
+
+/**
+ * Set (or replace) a recovery passphrase on the CURRENTLY OPEN database's
+ * managed key. Non-destructive: envelope-wraps the SAME DEK via
+ * `keyStore.setPassphrase` -- unlike `rekeyDatabase` (a `PRAGMA rekey` that
+ * changes the live SQLCipher key), this never touches the database file or
+ * its actual encryption key. Also writes the escrow recovery sidecar next to
+ * the database (see `db-key-store.ts`'s `setPassphrase`).
+ *
+ * Gated to the currently open database's path via `getDbManager().getCurrentPath()`
+ * -- there is no caller-supplied path parameter to spoof. A database that was
+ * never registered in the key-store (an explicit-password database, or an
+ * unencrypted one) has no `keyId` for its path, so it is rejected with a
+ * typed error rather than silently doing nothing -- this doubles as the
+ * "managed-key databases only" gate without a separate check.
+ */
+export function setRecoveryPassphrase(
+  passphrase: string,
+  getDbManager: () => DatabaseManager,
+  keyStore: Pick<DbKeyStoreWithPassphraseLike, 'setPassphrase' | 'getKeyIdForPath'>
+): SetRecoveryPassphraseResult {
+  const manager = getDbManager()
+  const currentPath = manager.getCurrentPath()
+  if (currentPath === null) {
+    throw new DatabaseError('No database is currently open.')
+  }
+
+  const keyId = keyStore.getKeyIdForPath(currentPath)
+  if (keyId === null) {
+    throw new DatabaseError(
+      'The current database has no managed encryption key to set a recovery passphrase on. ' +
+        'This action is only available for databases created with encryption-by-default.'
+    )
+  }
+
+  const result = keyStore.setPassphrase(keyId, passphrase)
+  if (!result.ok) {
+    if (result.reason === 'cannot-resolve-dek') {
+      throw new DatabaseError(
+        'Could not unlock the managed encryption key on this machine right now, so a recovery ' +
+          "passphrase could not be set. Check that this system's secure key storage " +
+          '(keyring) is available and try again.'
+      )
+    }
+    throw new DatabaseError('The managed encryption key for this database could not be found.')
+  }
+
+  if (!result.sidecarWritten) {
+    mainLogger.warn(
+      'Recovery passphrase was set on the managed key, but writing the portable recovery ' +
+        'sidecar file failed -- the passphrase works on this machine but the database is not ' +
+        'yet portable to another machine or a fresh key registry.',
+      'database'
+    )
+  }
+
+  return { success: true, recoveryPassphraseSet: true, sidecarWritten: result.sidecarWritten }
 }
 
 export function getDatabaseInfo(getDbManager: () => DatabaseManager): DatabaseInfo | null {

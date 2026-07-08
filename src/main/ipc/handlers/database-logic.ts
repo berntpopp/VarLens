@@ -169,6 +169,7 @@ export {
   openDatabase,
   createDatabase,
   rekeyDatabase,
+  setRecoveryPassphrase,
   getDatabaseInfo,
   getDatabaseCapabilities,
   getPostgresDiagnostics

@@ -561,15 +561,19 @@ export type DbKeyStoreLike = Pick<
 >
 
 /**
- * Adds `setPassphrase` on top of `DbKeyStoreLike` -- consumed by the
- * plaintext-to-encrypted migration orchestration (task I2b), which offers a
- * recovery passphrase on a freshly-minted managed key so keyring loss can't
- * make the migrated data unrecoverable. Kept separate from `DbKeyStoreLike`
- * so existing consumers of that narrower type (e.g. `database/startup.ts`'s
- * hand-rolled "unavailable" fake) don't need to implement a method they
- * never call.
+ * Adds `setPassphrase` and `getKeyIdForPath` on top of `DbKeyStoreLike`.
+ * `setPassphrase` alone is consumed by the plaintext-to-encrypted migration
+ * orchestration (task I2b), which offers a recovery passphrase on a
+ * freshly-minted managed key so keyring loss can't make the migrated data
+ * unrecoverable. Both together are consumed by the `setRecoveryPassphrase`
+ * IPC action (`database-lifecycle-logic.ts`), which resolves an already-open
+ * database's `keyId` from its path before calling `setPassphrase` on it.
+ * Kept separate from `DbKeyStoreLike` so existing consumers of that narrower
+ * type (e.g. `database/startup.ts`'s hand-rolled "unavailable" fake) don't
+ * need to implement methods they never call.
  */
-export type DbKeyStoreWithPassphraseLike = DbKeyStoreLike & Pick<DbKeyStore, 'setPassphrase'>
+export type DbKeyStoreWithPassphraseLike = DbKeyStoreLike &
+  Pick<DbKeyStore, 'setPassphrase' | 'getKeyIdForPath'>
 
 /**
  * Consumed by `openDatabase`'s recovery-sidecar flow: transparent resolve,

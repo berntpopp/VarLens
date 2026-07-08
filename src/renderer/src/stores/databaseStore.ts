@@ -10,7 +10,8 @@ import { unwrapIpcResult } from '../../../shared/types/errors'
 import type {
   DatabaseInfo,
   MigrateToEncryptedOptions,
-  MigrateToEncryptedResult
+  MigrateToEncryptedResult,
+  SetRecoveryPassphraseResult
 } from '../../../shared/ipc/domains/database'
 import type {
   PostgresConnectionProfileInput,
@@ -203,6 +204,17 @@ export const useDatabaseStore = defineStore('database', () => {
     return unwrapIpcResult(await getApi().database.deletePlaintextBackup(backupPath))
   }
 
+  /**
+   * Set (or replace) a recovery passphrase on the current database's managed
+   * key. Non-destructive -- unlike `changePassword`, this never re-keys the
+   * live database; it only envelope-wraps the existing DEK and writes the
+   * portable recovery sidecar. Throws (via `unwrapIpcResult`) a typed error
+   * for databases with no managed key (explicit-password or unencrypted).
+   */
+  async function setRecoveryPassphrase(passphrase: string): Promise<SetRecoveryPassphraseResult> {
+    return unwrapIpcResult(await getApi().database.setRecoveryPassphrase(passphrase))
+  }
+
   return {
     currentPath,
     currentName,
@@ -227,6 +239,7 @@ export const useDatabaseStore = defineStore('database', () => {
     selectSaveLocation,
     changePassword,
     migrateToEncrypted,
-    deletePlaintextBackup
+    deletePlaintextBackup,
+    setRecoveryPassphrase
   }
 })

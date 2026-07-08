@@ -72,6 +72,21 @@ export interface MigrateToEncryptedResult {
   info?: DatabaseInfo
 }
 
+export interface SetRecoveryPassphraseResult {
+  success: boolean
+  error?: string
+  /** Whether a recovery passphrase is now set on the current database's key. */
+  recoveryPassphraseSet?: boolean
+  /**
+   * Whether the portable recovery sidecar (`<db>.varlens-recovery.json`) was
+   * written alongside the database. A `false` here (with `success: true`)
+   * means the passphrase wrap itself succeeded but its on-disk escrow copy
+   * did not -- the recovery passphrase still works on this machine, but the
+   * database is not yet portable to another machine/registry.
+   */
+  sidecarWritten?: boolean
+}
+
 export interface DatabaseDomainContract {
   selectFile: () => Promise<string | null>
   selectSaveLocation: (defaultName: string) => Promise<string | null>
@@ -102,6 +117,15 @@ export interface DatabaseDomainContract {
    * naming pattern -- cannot target an arbitrary file.
    */
   deletePlaintextBackup: (backupPath: string) => Promise<IpcResult<DatabaseActionResult>>
+  /**
+   * Set (or replace) a recovery passphrase on the CURRENTLY OPEN database's
+   * managed key. Non-destructive: envelope-wraps the SAME DEK -- unlike
+   * `rekey`, it never changes the live SQLCipher key. Also writes the escrow
+   * recovery sidecar next to the database file. Requires a currently open,
+   * key-store-managed database; gated to the current session's path (no path
+   * parameter -- there is nothing for a caller to spoof).
+   */
+  setRecoveryPassphrase: (passphrase: string) => Promise<IpcResult<SetRecoveryPassphraseResult>>
   info: () => Promise<IpcResult<DatabaseInfo | null>>
   capabilities: () => Promise<IpcResult<StorageCapabilities>>
   postgresDiagnostics: () => Promise<IpcResult<PostgresHealthDiagnosticResult>>

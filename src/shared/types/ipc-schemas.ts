@@ -507,6 +507,15 @@ export const DatabaseDeletePlaintextBackupSchema = z.object({
   backupPath: FilePathSchema
 })
 
+/**
+ * Schema for setting a recovery passphrase on the current database's managed
+ * key. Non-empty -- an empty recovery passphrase would be a silent no-op
+ * footgun (unlike `DatabaseRekeySchema`, which allows an empty string today).
+ */
+export const DatabaseSetRecoveryPassphraseSchema = z.object({
+  passphrase: z.string().min(1).max(256)
+})
+
 // ============================================================
 // Gene List Schemas
 // ============================================================

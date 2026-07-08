@@ -84,8 +84,13 @@
             density="compact"
             class="mb-4"
           >
-            No recovery passphrase is set on this key. If this system's secure key storage is ever
-            lost, this database cannot be recovered. Use "Change Password..." to add one later.
+            <p class="mb-2">
+              No recovery passphrase is set on this key. If this system's secure key storage is ever
+              lost, this database cannot be recovered.
+            </p>
+            <v-btn variant="tonal" color="warning" size="small" @click="requestRecoveryPassphrase">
+              Set Recovery Passphrase Now
+            </v-btn>
           </v-alert>
 
           <p class="mb-2">A plaintext backup of the original, unencrypted database was kept at:</p>
@@ -136,6 +141,7 @@ const recoveryPassphraseSet = ref(false)
 // Emits
 const emit = defineEmits<{
   'database-migrated': []
+  'request-recovery-passphrase': []
   error: [message: string]
 }>()
 
@@ -218,6 +224,16 @@ async function submit(): Promise<void> {
 
 function cancel(): void {
   hide()
+}
+
+/**
+ * Opens `SetRecoveryPassphraseDialog` on top of this one (owned by
+ * `DatabasePicker.vue`, which handles the emit) rather than closing this
+ * dialog first -- the plaintext-backup decision below is still pending and
+ * should not be lost just because the user set a passphrase first.
+ */
+function requestRecoveryPassphrase(): void {
+  emit('request-recovery-passphrase')
 }
 
 function keepBackup(): void {

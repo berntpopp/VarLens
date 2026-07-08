@@ -18,6 +18,7 @@ import {
   DatabaseRekeySchema,
   DatabaseMigrateToEncryptedSchema,
   DatabaseDeletePlaintextBackupSchema,
+  DatabaseSetRecoveryPassphraseSchema,
   FilePathSchema
 } from '../../../shared/types/ipc-schemas'
 import { getDbKeyStore as getDefaultDbKeyStore } from '../../database/db-key-store-instance'
@@ -26,6 +27,7 @@ import {
   openDatabase,
   createDatabase,
   rekeyDatabase,
+  setRecoveryPassphrase,
   getDatabaseInfo,
   getDatabaseCapabilities,
   getPostgresDiagnostics,
@@ -305,6 +307,25 @@ export function registerDatabaseHandlers({
         throw new Error('Invalid encryption key')
       }
       return rekeyDatabase(validated.data.newPassword, getDbManager)
+    })
+  })
+
+  /**
+   * Set (or replace) a recovery passphrase on the currently open database's
+   * managed key. Non-destructive -- see `setRecoveryPassphrase` in
+   * `database-lifecycle-logic.ts` for the full contract.
+   */
+  ipcMain.handle('database:setRecoveryPassphrase', async (_event, passphrase: unknown) => {
+    return wrapHandler(async () => {
+      const validated = DatabaseSetRecoveryPassphraseSchema.safeParse({ passphrase })
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid database:setRecoveryPassphrase params: ${validated.error.message}`,
+          'database'
+        )
+        throw new Error('Invalid recovery passphrase')
+      }
+      return setRecoveryPassphrase(validated.data.passphrase, getDbManager, getDbKeyStore())
     })
   })
 
