@@ -220,10 +220,10 @@ if (gotTheLock !== true) {
     })
 
     // Suppress the "Insecure Content-Security-Policy" dev warning. It fires
-    // because the meta CSP grants 'unsafe-eval', which the bundled Mol* /
-    // pdbe-molstar worker runtime requires during structure loading (see
-    // src/renderer/index.html and the PR-G G0 spike). The warning does not
-    // appear in packaged builds.
+    // because the meta CSP grants 'unsafe-eval', which the bundled
+    // pdbe-molstar -> Mol* MP4 export -> h264-mp4-encoder Emscripten chain
+    // requires during viewer initialization (see src/renderer/index.html and
+    // the PR-G G0 spike). The warning does not appear in packaged builds.
     if (is.dev) {
       process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
     }
@@ -247,11 +247,13 @@ if (gotTheLock !== true) {
       })
     })
 
-    // Global defense-in-depth for every webContents: hardens <webview> guest
-    // preferences (strips preload, forces sandbox/no-node). Top-level nav
-    // hardening stays with the main window's own will-navigate (S2/PR-F).
-    // See src/main/security/web-contents-guard.ts.
-    installWebContentsSecurityGuards()
+    // Global defense-in-depth for every webContents: apply the same navigation
+    // policy as the main window and harden <webview> guest preferences. The
+    // policy is injected so its implementation remains owned by
+    // window-navigation-policy.ts (and can be tightened independently).
+    installWebContentsSecurityGuards((url) =>
+      isMainWindowNavigationAllowed(url, process.env['ELECTRON_RENDERER_URL'])
+    )
 
     // Create window after security handlers are registered
     createWindow()

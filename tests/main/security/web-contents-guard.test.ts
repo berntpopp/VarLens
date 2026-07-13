@@ -22,12 +22,50 @@ function createFakeWebContents(): {
 describe('guardWebContents', () => {
   let contents: Electron.WebContents
   let handlers: Record<string, FakeHandler>
+  let isNavigationAllowed: ReturnType<typeof vi.fn<(url: string) => boolean>>
 
   beforeEach(() => {
     const fake = createFakeWebContents()
     contents = fake.contents
     handlers = fake.handlers
-    guardWebContents(contents)
+    isNavigationAllowed = vi.fn<(url: string) => boolean>(() => false)
+    guardWebContents(contents, isNavigationAllowed)
+  })
+
+  describe('will-navigate', () => {
+    it('denies arbitrary navigation on a synthetic secondary webContents', () => {
+      const event = { preventDefault: vi.fn() }
+      const arbitraryUrl = 'https://attacker.example/escape'
+
+      expect(handlers['will-navigate']).toBeDefined()
+      handlers['will-navigate'](event, arbitraryUrl)
+
+      expect(isNavigationAllowed).toHaveBeenCalledWith(arbitraryUrl)
+      expect(event.preventDefault).toHaveBeenCalledOnce()
+    })
+
+    it('allows navigation accepted by the injected app policy', () => {
+      const event = { preventDefault: vi.fn() }
+      const appUrl = 'file:///app/renderer/index.html'
+      isNavigationAllowed.mockReturnValue(true)
+
+      handlers['will-navigate'](event, appUrl)
+
+      expect(isNavigationAllowed).toHaveBeenCalledWith(appUrl)
+      expect(event.preventDefault).not.toHaveBeenCalled()
+    })
+
+    it('fails closed when the injected app policy throws', () => {
+      const event = { preventDefault: vi.fn() }
+      isNavigationAllowed.mockImplementation(() => {
+        throw new Error('policy unavailable')
+      })
+
+      expect(() =>
+        handlers['will-navigate'](event, 'https://attacker.example/escape')
+      ).not.toThrow()
+      expect(event.preventDefault).toHaveBeenCalledOnce()
+    })
   })
 
   describe('will-attach-webview', () => {
@@ -46,12 +84,6 @@ describe('guardWebContents', () => {
       expect(webPreferences.nodeIntegration).toBe(false)
       expect(webPreferences.contextIsolation).toBe(true)
       expect(webPreferences.sandbox).toBe(true)
-    })
-
-    it('does not register a will-navigate handler (top-level nav is S2/PR-F scope)', () => {
-      // The guard is intentionally webview-only; it must not reuse the
-      // main window's navigation predicate. See web-contents-guard.ts.
-      expect(handlers['will-navigate']).toBeUndefined()
     })
   })
 })

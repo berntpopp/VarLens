@@ -16,11 +16,12 @@
       rel="stylesheet"
     />
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
-    <!-- 'unsafe-eval' is REQUIRED by the bundled Mol* / pdbe-molstar runtime: during
-         structure loading it generates code at runtime (new Function) inside a web
-         worker. Dropping 'unsafe-eval' silently breaks the 3D viewer — the structure
-         never renders and no WebGL canvas is created. Verified by the PR-G G0 spike
-         (a real-GPU Playwright differential) and guarded by
+    <!-- 'unsafe-eval' is REQUIRED by the bundled dependency chain: pdbe-molstar@3.12.0
+         statically imports Mol*'s MP4 export, which imports h264-mp4-encoder@1.0.12.
+         Its Emscripten web bundle executes new Function("body", ...) in
+         createNamedFunction while initializing embind error classes. Dropping
+         'unsafe-eval' breaks lazy viewer initialization, so no structure renders.
+         Verified by the PR-G G0 real-GPU differential and guarded by
          tests/e2e/csp-molstar-eval.e2e.ts. 'wasm-unsafe-eval' + blob: cover Mol*'s
          WASM and worker/blob data handling. External connect-src entries enable the
          AlphaFold, PDB, gnomAD, UniProt, InterPro structure/annotation APIs.

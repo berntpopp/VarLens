@@ -8,9 +8,11 @@
  * express (it must be set via a response header). There is no dev/prod
  * split — one uniform policy.
  *
- * `'unsafe-eval'` is REQUIRED by the bundled Mol* / pdbe-molstar worker
- * runtime (PR-G G0 spike) — do not remove it from `script-src`. See
- * `tests/e2e/csp-molstar-eval.e2e.ts` for the regression guard.
+ * `'unsafe-eval'` is REQUIRED by the bundled pdbe-molstar dependency chain:
+ * pdbe-molstar@3.12.0 statically imports Mol*'s MP4 export, which imports
+ * h264-mp4-encoder@1.0.12. Its Emscripten web bundle executes
+ * `new Function("body", ...)` in `createNamedFunction` while initializing
+ * embind error classes. See `tests/e2e/csp-molstar-eval.e2e.ts`.
  *
  * `tests/main/security/csp-header.test.ts` asserts this stays byte-identical
  * to the meta CSP's `script-src` directive by reading it from

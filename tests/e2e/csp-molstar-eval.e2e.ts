@@ -7,10 +7,10 @@
  * it (keeping `'wasm-unsafe-eval'`). A Playwright `_electron` differential on a
  * real GPU proved this BREAKS the viewer: with `'unsafe-eval'` the structure
  * renders (canvas + Mol* plugin mount); without it, structure load fails and no
- * WebGL canvas is created. The runtime code generation happens inside a Mol*
- * WEB WORKER during structure loading, so it never surfaces as a main-page
- * `securitypolicyviolation` or console error — which is exactly how a naive
- * "no console errors" check would miss the regression. This test is the guard.
+ * WebGL canvas is created. The exact bundled callsite is
+ * h264-mp4-encoder@1.0.12's Emscripten `createNamedFunction`, which executes
+ * `new Function("body", ...)` while initializing embind error classes. It is
+ * pulled in by pdbe-molstar@3.12.0 -> Mol* MP4 export. This test is the guard.
  *
  * FAIL vs SKIP (important — the guard must not skip on the regression it catches):
  *   - `.molstar-element` is present in the DOM (attached, though CSS-hidden until
@@ -128,7 +128,7 @@ async function findAndRenderStructure(
       detail:
         `variant row ${i} is structure-bearing (.molstar-element attached) but the ` +
         `3D viewer never rendered within 60s. This is the 'unsafe-eval'-removed ` +
-        `regression signature (Mol* worker codegen blocked → structure load fails). ` +
+        `regression signature (bundled Emscripten codegen blocked → viewer init fails). ` +
         `Viewer error box: ${errText}`
     }
   }
@@ -150,7 +150,8 @@ test('CSP guard: Mol* 3D viewer renders a structure under the shipped CSP', asyn
     await window.waitForSelector('.v-application', { timeout: 30_000 })
 
     // Document the requirement: the shipped CSP grants 'unsafe-eval' because the
-    // Mol* worker runtime needs it. If this ever changes, revisit the G0 spike.
+    // The bundled h264-mp4-encoder Emscripten runtime needs it. If this ever
+    // changes, revisit the G0 spike and the exact callsite documented above.
     const csp = await window.evaluate(
       () =>
         document
