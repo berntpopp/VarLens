@@ -8,9 +8,6 @@ import {
   BedImportSchema
 } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
-import { MAX_BED_FILTER_DECOMPRESSED_BYTES } from '../../import/vcf/bed-filter'
-import { readBedEntries } from '../../import/vcf/bed-reader'
-import { resolveMaxDecompressedBytes } from '../../import/stream-utils'
 
 /**
  * Gene Lists and Region Files IPC handlers
@@ -217,20 +214,11 @@ export function registerGeneListHandlers({
         throw new Error('Invalid BED import parameters')
       }
 
-      const entries: Array<{ chr: string; start: number; end: number; label?: string }> = []
-      const maxBytes = Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
-      for await (const entry of readBedEntries(validated.data.filePath, maxBytes)) {
-        entries.push(entry)
-      }
-
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'region-files:importBed',
-          params: [validated.data.fileId, entries]
-        })
-      }
-      return getDb().geneLists.importBedEntries(validated.data.fileId, entries)
+      return await session.getWriteExecutor().execute({
+        type: 'region-files:importBed',
+        params: [validated.data.fileId, validated.data.filePath, { rejectMalformedRows: false }]
+      })
     })
   })
 }

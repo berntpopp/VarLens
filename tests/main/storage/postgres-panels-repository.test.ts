@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import {
   PostgresPanelsRepository,
@@ -21,12 +24,16 @@ function makePool() {
 }
 
 describe('PostgresPanelsRepository', () => {
+  let tempDir: string
+
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(now)
+    tempDir = mkdtempSync(join(tmpdir(), 'varlens-pg-bed-'))
   })
 
   afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true })
     vi.useRealTimers()
   })
 
@@ -345,12 +352,13 @@ describe('PostgresPanelsRepository', () => {
       region_count: 0,
       total_bases: 0
     })
-    await expect(
-      repo.importBedEntries(1, [
-        { chr: '1', start: 100, end: 200, label: 'A' },
-        { chr: '2', start: 20, end: 70 }
-      ])
-    ).resolves.toMatchObject({ id: 1, region_count: 2, total_bases: 150 })
+    const bedPath = join(tempDir, 'regions.bed')
+    writeFileSync(bedPath, '1\t100\t200\tA\n2\t20\t70\n')
+    await expect(repo.importBedFile(1, bedPath)).resolves.toMatchObject({
+      id: 1,
+      region_count: 2,
+      total_bases: 150
+    })
     await expect(repo.listRegionFiles()).resolves.toStrictEqual([
       { id: 1, name: 'Exome BED', region_count: 2, total_bases: 150 }
     ])
@@ -399,14 +407,17 @@ describe('PostgresPanelsRepository', () => {
       }
       return { rows: [] }
     })
-    const entries = Array.from({ length: REGION_FILE_INSERT_CHUNK_SIZE + 1 }, (_, index) => ({
-      chr: '1',
-      start: index * 2,
-      end: index * 2 + 1
-    }))
+    const entryCount = REGION_FILE_INSERT_CHUNK_SIZE + 1
+    const bedPath = join(tempDir, 'large.bed')
+    writeFileSync(
+      bedPath,
+      Array.from({ length: entryCount }, (_, index) => `1\t${index * 2}\t${index * 2 + 1}`)
+        .join('\n')
+        .concat('\n')
+    )
     const repo = new PostgresPanelsRepository(pool as never, 'public')
 
-    await repo.importBedEntries(1, entries)
+    await repo.importBedFile(1, bedPath)
 
     const insertCalls = client.query.mock.calls.filter(([sql]) =>
       String(sql).includes('UNNEST($2::text[], $3::bigint[], $4::bigint[], $5::text[])')
@@ -418,9 +429,28 @@ describe('PostgresPanelsRepository', () => {
     ])
     expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining('SET region_count = $1, total_bases = $2, updated_at = $3'),
-      [entries.length, entries.length, now, 1]
+      [entryCount, entryCount, now, 1]
     )
     expect(client.query).toHaveBeenLastCalledWith('COMMIT')
+  })
+
+  it('rolls back a strict BED replacement when streaming encounters a malformed row', async () => {
+    const { client, pool } = makePool()
+    const bedPath = join(tempDir, 'malformed.bed')
+    writeFileSync(bedPath, '1\t0\t10\n1\tbad\t20\n')
+    const repo = new PostgresPanelsRepository(pool as never, 'public')
+
+    await expect(repo.importBedFile(1, bedPath, { rejectMalformedRows: true })).rejects.toThrow(
+      /invalid bed row/i
+    )
+
+    expect(client.query).toHaveBeenNthCalledWith(1, 'BEGIN')
+    expect(client.query).toHaveBeenCalledWith(
+      'DELETE FROM "public"."region_file_entries" WHERE region_file_id = $1',
+      [1]
+    )
+    expect(client.query).toHaveBeenLastCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalledOnce()
   })
 
   it('rolls back replace operations and releases clients', async () => {

@@ -83,7 +83,7 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
         | 'setGeneListGenes'
         | 'createRegionFile'
         | 'deleteRegionFile'
-        | 'importBedEntries'
+        | 'importBedFile'
       >
       filterPresets: Pick<
         PostgresFilterPresetsRepository,
@@ -268,7 +268,7 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
         return await this.workflow.panels.deleteRegionFile(task.params[0])
 
       case 'region-files:importBed':
-        return await this.workflow.panels.importBedEntries(...task.params)
+        return await this.workflow.panels.importBedFile(...task.params)
 
       case 'presets:create':
         return await this.workflow.filterPresets.createPreset(task.params[0])

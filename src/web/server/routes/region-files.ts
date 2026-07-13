@@ -1,23 +1,9 @@
 import { isAbsolute } from 'node:path'
 
 import { RegionFileImportBedArgsSchema } from '../../../shared/api/schemas/region-files'
-import { resolveMaxDecompressedBytes } from '../../../main/import/stream-utils'
-import { MAX_BED_FILTER_DECOMPRESSED_BYTES } from '../../../main/import/vcf/bed-filter'
-import { readBedEntries } from '../../../main/import/vcf/bed-reader'
 import { serverPathImportDisabled, serverPathImportDisabledResponse } from './server-path-import'
 import type { OverrideHandler } from './types'
 import { isWebUploadRef, resolveWebUploadPath } from './upload-staging'
-
-async function collectBedEntries(
-  filePath: string
-): Promise<Array<{ chr: string; start: number; end: number; label?: string }>> {
-  const entries: Array<{ chr: string; start: number; end: number; label?: string }> = []
-  const maxBytes = Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
-  for await (const entry of readBedEntries(filePath, maxBytes, { rejectMalformedRows: true })) {
-    entries.push(entry)
-  }
-  return entries
-}
 
 export function buildRegionFileOverrides(): Record<string, OverrideHandler> {
   return {
@@ -43,7 +29,7 @@ export function buildRegionFileOverrides(): Record<string, OverrideHandler> {
         }
         return await session.getWriteExecutor().execute({
           type: 'region-files:importBed',
-          params: [fileId, await collectBedEntries(resolvedPath)]
+          params: [fileId, resolvedPath, { rejectMalformedRows: true }]
         })
       }
     }

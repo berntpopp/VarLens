@@ -12,15 +12,18 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { tmpdir } from 'node:os'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createWriteStream, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { gzipSync } from 'node:zlib'
+import { createGzip, gzipSync } from 'node:zlib'
 import { createInterface } from 'node:readline'
+import { once } from 'node:events'
 import {
   createCappedLineStream,
   LineTooLongError,
   DecompressedSizeExceededError,
-  DecompressionRatioExceededError
+  DecompressionRatioExceededError,
+  MAX_GZIP_COMPRESSION_RATIO,
+  MIN_GZIP_RATIO_CHECK_BYTES
 } from '../../../src/main/import/stream-utils'
 
 let tmpDir: string
@@ -66,6 +69,36 @@ function collectLines(
       reject(error)
     })
   })
+}
+
+async function writeHighSampleVcfGzip(
+  filePath: string
+): Promise<{ decompressedBytes: number; expectedLines: number }> {
+  const sampleCount = 500
+  const rowCount = 35_000
+  const gzip = createGzip()
+  const output = createWriteStream(filePath)
+  gzip.pipe(output)
+
+  const fileformat = '##fileformat=VCFv4.2\n'
+  const header = `#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t${Array.from(
+    { length: sampleCount },
+    (_, index) => `S${index}`
+  ).join('\t')}\n`
+  gzip.write(fileformat)
+  gzip.write(header)
+  let decompressedBytes = Buffer.byteLength(fileformat) + Buffer.byteLength(header)
+  const genotypes = Array.from({ length: sampleCount }, () => '0/0').join('\t')
+  for (let position = 1; position <= rowCount; position += 1) {
+    const row = `1\t${position}\t.\tA\tG\t30\tPASS\t.\tGT\t${genotypes}\n`
+    decompressedBytes += Buffer.byteLength(row)
+    if (!gzip.write(row)) {
+      await once(gzip, 'drain')
+    }
+  }
+  gzip.end()
+  await once(output, 'close')
+  return { decompressedBytes, expectedLines: rowCount + 2 }
 }
 
 describe('createCappedLineStream', () => {
@@ -125,6 +158,18 @@ describe('createCappedLineStream', () => {
     ).rejects.toThrow(DecompressionRatioExceededError)
   })
 
+  it('rejects a gzip bomb made of many individually short lines', async () => {
+    const filePath = join(tmpDir, 'short-line-ratio-bomb.vcf.gz')
+    writeFileSync(filePath, gzipSync(Buffer.from('A\n'.repeat(1_000_000))))
+
+    await expect(
+      collectLines(filePath, {
+        maxDecompressedBytes: 3_000_000,
+        minCompressionRatioBytes: 1_000
+      })
+    ).rejects.toThrow(DecompressionRatioExceededError)
+  })
+
   it('measures consumed gzip bytes so trailing padding cannot defeat the ratio guard', async () => {
     const filePath = join(tmpDir, 'padded-ratio-bomb.vcf.gz')
     const compressed = gzipSync(Buffer.from('A'.repeat(2_000_000) + '\n'))
@@ -168,6 +213,16 @@ describe('createCappedLineStream', () => {
         minCompressionRatioBytes: 8_000
       })
     ).resolves.toEqual(['A'.repeat(5_000)])
+  })
+
+  it('accepts a valid high-sample VCF above the production ratio-check floor', async () => {
+    const filePath = join(tmpDir, 'joint-cohort.vcf.gz')
+    const { decompressedBytes, expectedLines } = await writeHighSampleVcfGzip(filePath)
+
+    expect(decompressedBytes).toBeGreaterThan(MIN_GZIP_RATIO_CHECK_BYTES)
+    expect(decompressedBytes / statSync(filePath).size).toBeGreaterThan(MAX_GZIP_COMPRESSION_RATIO)
+
+    await expect(collectLines(filePath)).resolves.toHaveLength(expectedLines)
   })
 
   it('reads a legitimate small file without false rejection (default caps)', async () => {

@@ -108,6 +108,21 @@ describe('PostgresWriteExecutor', () => {
     expect(workflow.panels.createPanel).toHaveBeenCalledWith({ name: 'Panel', source: 'manual' })
   })
 
+  it('routes BED paths and parsing policy without materializing entries', async () => {
+    const workflow = workflowRepositories()
+    workflow.panels = { importBedFile: vi.fn().mockResolvedValue({ id: 4 }) } as never
+    const executor = new PostgresWriteExecutor({} as never, {} as never, workflow)
+
+    await executor.execute({
+      type: 'region-files:importBed',
+      params: [4, '/tmp/regions.bed', { rejectMalformedRows: true }]
+    })
+
+    expect(workflow.panels.importBedFile).toHaveBeenCalledWith(4, '/tmp/regions.bed', {
+      rejectMalformedRows: true
+    })
+  })
+
   it('routes audit append tasks to the postgres audit repository', async () => {
     const workflow = workflowRepositories()
     workflow.audit = {

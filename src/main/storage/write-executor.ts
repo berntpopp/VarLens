@@ -102,10 +102,7 @@ export type StorageWriteTask =
   | { type: 'region-files:delete'; params: [fileId: number] }
   | {
       type: 'region-files:importBed'
-      params: [
-        fileId: number,
-        entries: Array<{ chr: string; start: number; end: number; label?: string }>
-      ]
+      params: [fileId: number, filePath: string, options: { rejectMalformedRows: boolean }]
     }
   | { type: 'presets:create'; params: [params: FilterPresetCreate] }
   | { type: 'presets:update'; params: [id: number, updates: FilterPresetUpdate] }
