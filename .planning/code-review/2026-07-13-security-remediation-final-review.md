@@ -62,6 +62,27 @@ All corrected source heads are ancestors of the integration branch:
 - PR312 exact head `4c350b38` has green GitHub CodeQL, Build, Web CI, package,
   and secrets checks.
 
-Final command evidence is recorded after release metadata is committed. The release is not accepted
-until `make ci`, `VARLENS_WEB=1 make ci`, `make ci-full`, docs, PostgreSQL migration tests,
-formatting, lint, typecheck, and agent-health gates pass on the exact versioned integration commit.
+Local command evidence on integration source candidate `5979dee2`:
+
+- `make ci`: passed; 409 Vitest files passed, 4 skipped; 4,526 tests passed, 91 skipped.
+- `VARLENS_WEB=1 make ci` with `.env.postgres.local` sourced: passed; 441 Vitest files passed,
+  16 skipped; 4,729 tests passed, 1 expected fail, 121 skipped.
+- `VARLENS_RUN_POSTGRES_E2E=1 npx vitest run tests/main/storage/postgres-import-visibility.test.ts
+  tests/main/storage/postgres-migration-definitions.test.ts`: passed; 2 files, 5 tests, no type
+  errors.
+- `make ci-full`: passed; Ubuntu checks, startup smoke, Linux packaging, and packaged smoke all
+  completed successfully.
+- `make docs`: passed; VitePress build completed.
+- `make rebuild-node && make agent-check`: passed; no new oversized source files and no grown
+  baseline source files (`ImportWizard.vue` improved from 876 to 862 lines; `mockApi.ts` remained
+  1225 lines).
+- `git diff --check`: passed.
+- `package.json` and `package-lock.json`: both report version `0.70.0`.
+- Ancestor verification: all nine corrected PR heads listed above are ancestors of the integration
+  candidate.
+
+If this review record is committed after the source-candidate verification, the exact branch head
+must be re-verified before push/merge. The release remains unaccepted until `make ci`,
+`VARLENS_WEB=1 make ci`, real PostgreSQL migration/import visibility tests, `make ci-full`,
+`make docs`, `make agent-check`, `git diff --check`, version checks, and clean worktree checks pass
+on that exact final head.
