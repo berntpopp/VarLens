@@ -199,6 +199,10 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
           if (resolved.ref !== null) pathToRef.set(resolved.path, resolved.ref)
         }
 
+        if (hasRawBedFilterPath(filters)) {
+          reply.code(403)
+          return serverPathImportDisabledResponse()
+        }
         const resolvedFilters = resolveFilterUploadRefs(filters, request.session.user?.id)
         if (resolvedFilters === null) {
           reply.code(404)
@@ -292,4 +296,10 @@ function resolveFilterUploadRefs(
   const resolved = resolveWebUploadPath(raw.bedFile, userId)
   if (resolved === null) return null
   return { ...raw, bedFile: resolved }
+}
+
+function hasRawBedFilterPath(filters: unknown): boolean {
+  if (filters === null || typeof filters !== 'object') return false
+  const bedFile = (filters as Record<string, unknown>).bedFile
+  return typeof bedFile === 'string' && !isWebUploadRef(bedFile)
 }
