@@ -74,6 +74,10 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     return activeBatchRunId.value === runId
   }
 
+  function clearBatchRun(runId: string): void {
+    if (activeBatchRunId.value === runId) activeBatchRunId.value = null
+  }
+
   function updateUploadProgress(data: {
     fileIndex: number
     totalFiles: number
@@ -175,6 +179,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     updateUploadProgress,
     startImport,
     isCurrentBatchRun,
+    clearBatchRun,
     updateProgress,
     fileComplete,
     importComplete,

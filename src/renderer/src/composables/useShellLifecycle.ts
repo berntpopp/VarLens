@@ -85,6 +85,9 @@ export function useShellLifecycle({
           status: d.status === 'success' ? 'success' : d.status === 'failed' ? 'failed' : 'skipped'
         }))
       })
+      // Consume ownership here, after accepting the event. ImportWizard uses
+      // its own run ID, so listener order cannot suppress its terminal update.
+      importStore.clearBatchRun(result.runId)
       void handleBatchImportComplete()
     })
   }

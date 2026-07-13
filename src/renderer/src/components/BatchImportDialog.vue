@@ -291,6 +291,7 @@ const extractAndShowReview = async (zipFilePath: string, password?: string): Pro
  * User confirmed in review phase, start import
  */
 const confirmAndStartImport = async (): Promise<void> => {
+  if (importStore.isActive) return
   const runId = globalThis.crypto.randomUUID()
   activeBatchRunId = runId
   phase.value = 'importing'
