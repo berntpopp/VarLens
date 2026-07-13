@@ -28,14 +28,16 @@ import {
 
 describe('extractZip — enrolls extracted files for the strict path-authority gate', () => {
   let sourceDir: string
+  let extractionIds: string[]
 
   beforeEach(() => {
     __resetAllowlistForTests()
+    extractionIds = []
     sourceDir = mkdtempSync(join(tmpdir(), 'varlens-zip-src-'))
   })
 
   afterEach(() => {
-    cleanupZipTemp()
+    for (const extractionId of extractionIds) cleanupZipTemp(extractionId)
     rmSync(sourceDir, { recursive: true, force: true })
   })
 
@@ -55,6 +57,7 @@ describe('extractZip — enrolls extracted files for the strict path-authority g
       addAllowedImportPath,
       removeAllowedImportPath
     )
+    extractionIds.push(result.extractionId)
 
     expect(result.errors).toEqual([])
     expect(result.files.length).toBe(2)
@@ -62,7 +65,7 @@ describe('extractZip — enrolls extracted files for the strict path-authority g
       expect(isStrictlyEnrolledPath(extractedFile)).toBe(true)
     }
 
-    cleanupZipTemp()
+    cleanupZipTemp(result.extractionId)
     for (const extractedFile of result.files) {
       expect(isStrictlyEnrolledPath(extractedFile)).toBe(false)
     }
