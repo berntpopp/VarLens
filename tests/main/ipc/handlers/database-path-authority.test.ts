@@ -124,8 +124,7 @@ function expectInvalidParametersResult(result: unknown): void {
   }
 }
 
-// Path guaranteed to be outside any automatic root (home/userData/temp are
-// all mocked to '/nonexistent-electron-app-path' above) and never enrolled.
+// Path that is never enrolled and has no database recent/current authority.
 const UNAUTHORIZED_PATH = resolve('external', 'unrelated.db')
 
 describe('database path-authority gate', () => {
@@ -183,11 +182,9 @@ describe('database path-authority gate', () => {
       expect(openDatabase).toHaveBeenCalled()
     })
 
-    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
-      // isAllowedImportPath grants app.getPath('home')/userData/temp for the
-      // original import flow; the DB gate must use the STRICT check so a
-      // path merely living under the mocked "home" root (but never picked
-      // via a dialog, recent list, or active session) is still rejected.
+    it('rejects a home path that was never dialog-enrolled', async () => {
+      // Filesystem location is not database authority: the path also needs
+      // dialog, recent-list, or active-session provenance.
       const ipcMain = makeIpcMain()
       registerDatabaseHandlers(makeDeps(ipcMain) as never)
 
@@ -241,7 +238,7 @@ describe('database path-authority gate', () => {
       expect(createDatabase).toHaveBeenCalled()
     })
 
-    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
+    it('rejects a home path that was never dialog-enrolled', async () => {
       const ipcMain = makeIpcMain()
       registerDatabaseHandlers(makeDeps(ipcMain) as never)
 
@@ -299,7 +296,7 @@ describe('database path-authority gate', () => {
       expect(shell.showItemInFolder).toHaveBeenCalledWith(UNAUTHORIZED_PATH)
     })
 
-    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
+    it('rejects a home path that was never dialog-enrolled', async () => {
       const ipcMain = makeIpcMain()
       registerDatabaseHandlers(makeDeps(ipcMain) as never)
 

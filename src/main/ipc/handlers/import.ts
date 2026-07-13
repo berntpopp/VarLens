@@ -6,7 +6,7 @@ import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import { safeEmit } from '../utils/safeEmit'
 import { loadSettings, saveSettings } from '../utils/settings-io'
-import { addAllowedImportPath, isAllowedImportPath } from '../../security/import-path-allowlist'
+import { addAllowedImportPath, isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
 import {
   ImportFiltersIpcPayloadSchema,
   ImportStartMultiFileParamsSchema,
@@ -142,7 +142,7 @@ export function registerImportHandlers({
         }
 
         const [validatedPath, validatedCaseName, validatedOptions] = parsed.data
-        if (!isAllowedImportPath(validatedPath)) {
+        if (!isStrictlyEnrolledPath(validatedPath)) {
           throwUnallowedImportPath('import:start', validatedPath)
         }
         return startImport(
@@ -181,7 +181,7 @@ export function registerImportHandlers({
         const [validatedCaseName, validatedFiles, validatedOptions, validatedFiltersPayload] =
           parsed.data
         validatedFiles.forEach((file, index) => {
-          if (!isAllowedImportPath(file.filePath)) {
+          if (!isStrictlyEnrolledPath(file.filePath)) {
             throwUnallowedImportPath(
               'import:startMultiFile',
               file.filePath,
@@ -195,7 +195,7 @@ export function registerImportHandlers({
           bedFile !== undefined &&
           bedFile !== null &&
           bedFile !== '' &&
-          !isAllowedImportPath(bedFile)
+          !isStrictlyEnrolledPath(bedFile)
         ) {
           throwUnallowedImportPath('import:startMultiFile', bedFile, 'filtersPayload.bedFile')
         }
@@ -234,7 +234,7 @@ export function registerImportHandlers({
       }
 
       const [validatedPath] = parsed.data
-      if (!isAllowedImportPath(validatedPath)) {
+      if (!isStrictlyEnrolledPath(validatedPath)) {
         throwUnallowedImportPath('import:vcfPreview', validatedPath)
       }
       return getVcfPreview(validatedPath)
@@ -252,7 +252,7 @@ export function registerImportHandlers({
 
       const [validatedPaths] = parsed.data
       validatedPaths.forEach((filePath, index) => {
-        if (!isAllowedImportPath(filePath)) {
+        if (!isStrictlyEnrolledPath(filePath)) {
           throwUnallowedImportPath('import:vcfMultiPreview', filePath, `filePaths[${index}]`)
         }
       })

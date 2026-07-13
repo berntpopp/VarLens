@@ -64,8 +64,7 @@ describe('region-files:importBed IPC handler', () => {
     const deps = makeDeps(ipcMain)
     registerGeneListHandlers(deps as never)
 
-    // Path outside all automatic roots (home/userData/temp) and never
-    // enrolled via a dialog this session.
+    // The path was never enrolled via a dialog this session.
     const result = await invokeHandler(ipcMain, 'region-files:importBed', 1, '/etc/passwd')
 
     expect(isIpcError(result)).toBe(true)
@@ -73,13 +72,9 @@ describe('region-files:importBed IPC handler', () => {
     expect(deps.getDb().geneLists.importBedEntries).not.toHaveBeenCalled()
   })
 
-  it('rejects a path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
-    // This gate must use the STRICT enrollment check, not the permissive
-    // isAllowedImportPath — a path merely living under the OS temp dir (or
-    // home/userData) is not proof the user picked it via a dialog this
-    // session. Previously this leaked in via isAllowedImportPath's
-    // automatic-root grant, letting a compromised renderer read any file
-    // under those roots without dialog enrollment.
+  it('rejects a temp path that was never dialog-enrolled', async () => {
+    // Filesystem location is not authority: living under temp is not proof
+    // the user picked the path through a trusted selector.
     const ipcMain = makeIpcMain()
     const deps = makeDeps(ipcMain)
     registerGeneListHandlers(deps as never)

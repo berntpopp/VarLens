@@ -216,12 +216,10 @@ function createInsecureLocalPostgresSecretStore(userDataPath: string): SecretSto
  * active-DB checks) while still allowing `create`/`open` to work with a
  * freshly dialog-selected path that isn't in the recent list yet.
  *
- * Uses the database-scoped STRICT enrollment check, not the
- * permissive `isAllowedImportPath` — the automatic home/userData/temp roots
- * that predicate grants for the original import flow do not apply here.
- * An arbitrary renderer-supplied string with no dialog/recent/active
- * provenance is rejected even if it happens to live under the user's home
- * directory or the OS temp dir.
+ * Uses the database-scoped enrollment check so import-file authority cannot
+ * authorize a database operation. An arbitrary renderer-supplied string with
+ * no dialog/recent/active provenance is rejected even if it happens to live
+ * under the user's home directory or the OS temp dir.
  */
 function throwUnallowedDatabasePath(channel: string, path: string): never {
   throw new InvalidParametersError(

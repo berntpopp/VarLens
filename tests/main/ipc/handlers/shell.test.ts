@@ -126,11 +126,9 @@ describe('shell IPC handlers', () => {
       }
     })
 
-    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
-      // isAllowedImportPath grants app.getPath('home')/userData/temp for the
-      // original import flow; this gate must use the STRICT check so a path
-      // merely living under the mocked "home" root (but never picked via a
-      // dialog this session) is still rejected.
+    it('rejects a home path that was never dialog-enrolled', async () => {
+      // Filesystem location is not authority: living under the mocked home
+      // root must never substitute for explicit user selection.
       const ipcMain = makeIpcMain()
       registerShellHandlers({ ipcMain } as never)
 

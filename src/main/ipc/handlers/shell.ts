@@ -64,10 +64,9 @@ export function registerShellHandlers({ ipcMain, getDbManager }: HandlerDependen
    * Show file in system file manager
    * Used for export feedback ("Open folder" action). The path always
    * originates from a path this session's dialogs produced (an export
-   * save-dialog result, a picked import/BED/database file, ...), so it must
-   * be strictly dialog-enrolled -- the automatic home/userData/temp roots
-   * `isAllowedImportPath` grants for the import flow do not apply here, so
-   * an arbitrary renderer-supplied path under those roots is still rejected.
+   * save-dialog result, a picked import/BED/database file, ...), so an
+   * arbitrary renderer-supplied path is rejected even when it is under the
+   * user's home directory or the OS temp directory.
    */
   ipcMain.handle('shell:showItemInFolder', async (_event, filePath: unknown) => {
     return wrapHandler(async () => {

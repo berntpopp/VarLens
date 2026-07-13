@@ -52,7 +52,7 @@ import {
 import {
   __resetAllowlistForTests,
   addAllowedImportPath,
-  isAllowedImportPath,
+  isStrictlyEnrolledPath,
   removeAllowedImportPath
 } from '../../../../src/main/security/import-path-allowlist'
 
@@ -136,9 +136,8 @@ describe('batch-import IPC handlers', () => {
       expect(checkDuplicateFiles).toHaveBeenCalledWith(expect.any(Function), [filePath], undefined)
     })
 
-    it('rejects a path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
-      // Strict enrollment gate: a path merely living under an automatic
-      // root (home/userData/temp) is not proof of dialog provenance.
+    it('rejects a temp path that was never dialog-enrolled', async () => {
+      // Filesystem location is not proof of dialog provenance.
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
 
@@ -196,7 +195,7 @@ describe('batch-import IPC handlers', () => {
       expect(startBatchImport).toHaveBeenCalled()
     })
 
-    it('rejects a path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
+    it('rejects a temp path that was never dialog-enrolled', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
 
@@ -250,7 +249,7 @@ describe('batch-import IPC handlers', () => {
       expect(testZipPassword).toHaveBeenCalledWith(zipPath, 'pw')
     })
 
-    it('rejects a zip path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
+    it('rejects a temp ZIP path that was never dialog-enrolled', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
 
@@ -294,7 +293,7 @@ describe('batch-import IPC handlers', () => {
       )
     })
 
-    it('rejects a zip path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
+    it('rejects a temp ZIP path that was never dialog-enrolled', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
 
@@ -319,11 +318,11 @@ describe('batch-import IPC handlers', () => {
         filePaths: [filePath]
       } as never)
 
-      expect(isAllowedImportPath(filePath)).toBe(false)
+      expect(isStrictlyEnrolledPath(filePath)).toBe(false)
       const result = await invokeHandler(ipcMain, 'batch-import:selectFiles')
 
       expect(result).toEqual([filePath])
-      expect(isAllowedImportPath(filePath)).toBe(true)
+      expect(isStrictlyEnrolledPath(filePath)).toBe(true)
     })
 
     it('enrolls the zip picked via batch-import:selectZip', async () => {
@@ -335,10 +334,10 @@ describe('batch-import IPC handlers', () => {
         filePaths: [zipPath]
       } as never)
 
-      expect(isAllowedImportPath(zipPath)).toBe(false)
+      expect(isStrictlyEnrolledPath(zipPath)).toBe(false)
       await invokeHandler(ipcMain, 'batch-import:selectZip')
 
-      expect(isAllowedImportPath(zipPath)).toBe(true)
+      expect(isStrictlyEnrolledPath(zipPath)).toBe(true)
     })
 
     it('enrolls files discovered when a folder is selected via batch-import:selectFolder', async () => {
@@ -346,17 +345,19 @@ describe('batch-import IPC handlers', () => {
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
       const folderPath = join(EXTERNAL_ROOT, 'cases')
       const discoveredFile = join(folderPath, 'case1.json')
+      const undiscoveredSibling = join(folderPath, 'case2.json')
       vi.mocked(dialog.showOpenDialog).mockResolvedValue({
         canceled: false,
         filePaths: [folderPath]
       } as never)
       vi.mocked(readdir).mockResolvedValue([{ name: 'case1.json', isFile: () => true }] as never)
 
-      expect(isAllowedImportPath(discoveredFile)).toBe(false)
+      expect(isStrictlyEnrolledPath(discoveredFile)).toBe(false)
       const result = await invokeHandler(ipcMain, 'batch-import:selectFolder')
 
       expect(result).toEqual([discoveredFile])
-      expect(isAllowedImportPath(discoveredFile)).toBe(true)
+      expect(isStrictlyEnrolledPath(discoveredFile)).toBe(true)
+      expect(isStrictlyEnrolledPath(undiscoveredSibling)).toBe(false)
     })
   })
 })

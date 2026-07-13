@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   __resetAllowlistForTests,
-  isAllowedImportPath
+  isStrictlyEnrolledPath
 } from '../../../src/main/security/import-path-allowlist'
 
 const mocks = vi.hoisted(() => ({
@@ -67,10 +67,10 @@ describe('postgres export IPC routing', () => {
       getDbPool: (() => null) as never
     })
 
-    expect(isAllowedImportPath(outputPath)).toBe(false)
+    expect(isStrictlyEnrolledPath(outputPath)).toBe(false)
     const handler = handlers.get('export:variants')
     await handler!(undefined, 5, { gene_symbol: 'BRCA1' }, 'Postgres Case')
-    expect(isAllowedImportPath(outputPath)).toBe(true)
+    expect(isStrictlyEnrolledPath(outputPath)).toBe(true)
   })
 
   it('streams postgres variant exports through the active storage read executor', async () => {
