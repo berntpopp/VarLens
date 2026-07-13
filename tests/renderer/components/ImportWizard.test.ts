@@ -41,6 +41,7 @@ interface ImportWizardVm {
   startVcfImport: () => Promise<void>
   startImport: () => Promise<void>
   cancelImport: () => Promise<void>
+  show: () => void
 }
 
 function deferred<T>(): {
@@ -197,7 +198,9 @@ describe('ImportWizard IPC safety', () => {
         message: 'worker did not acknowledge cancellation',
         userMessage: 'Could not cancel the import'
       }
+      const pendingStart = deferred<BatchResult>()
       let completeImport: ((result: BatchResult) => void) | undefined
+      mockApi.batchImport.start.mockReturnValue(pendingStart.promise)
       mockApi.batchImport.cancel.mockResolvedValue(cancelError)
       mockApi.batchImport.onComplete.mockImplementation((callback) => {
         completeImport = callback
@@ -209,8 +212,8 @@ describe('ImportWizard IPC safety', () => {
       const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
       const store = useImportStatusStore(pinia)
       const vm = wrapper.vm as unknown as ImportWizardVm
-      store.startImport(1)
-      vm.step = 3
+      const importRun = vm.startImport()
+      await Promise.resolve()
 
       await vm.cancelImport()
 
@@ -227,6 +230,8 @@ describe('ImportWizard IPC safety', () => {
       }
       expect(completeImport).toBeDefined()
       completeImport!(realResult)
+      pendingStart.resolve(realResult)
+      await importRun
 
       expect(vm.step).toBe(4)
       expect(store.phase).toBe('complete')
@@ -265,8 +270,10 @@ describe('ImportWizard IPC safety', () => {
     it('does not overwrite a real completion with a late cancel acknowledgement', async () => {
       const mockApi = createMockApi()
       const pendingCancel = deferred<undefined>()
+      const pendingStart = deferred<BatchResult>()
       let completeImport: ((result: BatchResult) => void) | undefined
       mockApi.batchImport.cancel.mockReturnValue(pendingCancel.promise)
+      mockApi.batchImport.start.mockReturnValue(pendingStart.promise)
       mockApi.batchImport.onComplete.mockImplementation((callback) => {
         completeImport = callback
         return vi.fn()
@@ -277,8 +284,8 @@ describe('ImportWizard IPC safety', () => {
       const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
       const store = useImportStatusStore(pinia)
       const vm = wrapper.vm as unknown as ImportWizardVm
-      store.startImport(1)
-      vm.step = 3
+      const importRun = vm.startImport()
+      await Promise.resolve()
 
       const cancellation = vm.cancelImport()
       const realResult: BatchResult = {
@@ -291,6 +298,8 @@ describe('ImportWizard IPC safety', () => {
       completeImport!(realResult)
       pendingCancel.resolve(undefined)
       await cancellation
+      pendingStart.resolve(realResult)
+      await importRun
 
       expect(vm.step).toBe(4)
       expect(store.phase).toBe('complete')
@@ -376,6 +385,106 @@ describe('ImportWizard IPC safety', () => {
       expect(store.phase).toBe('cancelled')
       expect(vm.summary.cancelled).toBe(true)
       expect(vm.step).toBe(4)
+      wrapper.unmount()
+    })
+
+    it('ignores an old VCF completion after cancel, reset, and a new import start', async () => {
+      const mockApi = createMockApi()
+      const oldStart = deferred<{ variantCount: number }>()
+      const newStart = deferred<{ variantCount: number }>()
+      mockApi.import.start
+        .mockReturnValueOnce(oldStart.promise)
+        .mockReturnValueOnce(newStart.promise)
+      window.api = mockApi
+
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const vm = wrapper.vm as unknown as ImportWizardVm
+      vm.isVcfImport = true
+      vm.vcfFilePath = '/old.vcf'
+      vm.vcfSelectedSamples = ['OLD']
+      vm.vcfCaseNames = new Map([['OLD', 'Old case']])
+
+      const oldRun = vm.startVcfImport()
+      await Promise.resolve()
+      await vm.cancelImport()
+
+      vm.show()
+      vm.isVcfImport = true
+      vm.vcfFilePath = '/new.vcf'
+      vm.vcfSelectedSamples = ['NEW']
+      vm.vcfCaseNames = new Map([['NEW', 'New case']])
+      const newRun = vm.startVcfImport()
+      await Promise.resolve()
+
+      oldStart.resolve({ variantCount: 99 })
+      await oldRun
+
+      expect(store.phase).toBe('importing')
+      expect(vm.step).toBe(3)
+      expect(vm.summary.details).toEqual([])
+
+      newStart.resolve({ variantCount: 1 })
+      await newRun
+      expect(store.phase).toBe('complete')
+      expect(vm.summary.details).toEqual([
+        expect.objectContaining({ caseName: 'New case', variantCount: 1 })
+      ])
+      wrapper.unmount()
+    })
+
+    it('ignores an old batch completion event after cancel and a new VCF start', async () => {
+      const mockApi = createMockApi()
+      const oldBatchStart = deferred<BatchResult>()
+      const newVcfStart = deferred<{ variantCount: number }>()
+      let completeBatch: ((result: BatchResult) => void) | undefined
+      mockApi.batchImport.start.mockReturnValue(oldBatchStart.promise)
+      mockApi.batchImport.onComplete.mockImplementation((callback) => {
+        completeBatch = callback
+        return vi.fn()
+      })
+      mockApi.import.start.mockReturnValue(newVcfStart.promise)
+      window.api = mockApi
+
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const vm = wrapper.vm as unknown as ImportWizardVm
+
+      const oldRun = vm.startImport()
+      await Promise.resolve()
+      await vm.cancelImport()
+
+      vm.show()
+      vm.isVcfImport = true
+      vm.vcfFilePath = '/new.vcf'
+      vm.vcfSelectedSamples = ['NEW']
+      vm.vcfCaseNames = new Map([['NEW', 'New case']])
+      const newRun = vm.startVcfImport()
+      await Promise.resolve()
+
+      const oldResult: BatchResult = {
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+        cancelled: false,
+        details: []
+      }
+      completeBatch!(oldResult)
+      oldBatchStart.resolve(oldResult)
+      await oldRun
+
+      expect(store.phase).toBe('importing')
+      expect(vm.step).toBe(3)
+      expect(vm.summary.details).toEqual([])
+
+      newVcfStart.resolve({ variantCount: 1 })
+      await newRun
+      expect(store.phase).toBe('complete')
+      expect(vm.summary.details).toEqual([
+        expect.objectContaining({ caseName: 'New case', variantCount: 1 })
+      ])
       wrapper.unmount()
     })
   })
