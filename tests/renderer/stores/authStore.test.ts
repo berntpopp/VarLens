@@ -68,4 +68,26 @@ describe('authStore.login', () => {
     expect(result.success).toBe(true)
     expect(store.currentUser).toEqual(user)
   })
+
+  it('preserves the current user when logout resolves a SerializableError', async () => {
+    const user = { id: 1, username: 'alice', role: 'admin' }
+    window.api.auth.logout = vi.fn().mockResolvedValue(fakeBackendFault)
+    const store = useAuthStore()
+    store.currentUser = user
+
+    await expect(store.logout()).rejects.toMatchObject({ code: 'DB_ERROR' })
+
+    expect(store.currentUser).toEqual(user)
+  })
+
+  it('clears the current user after logout succeeds', async () => {
+    const user = { id: 1, username: 'alice', role: 'admin' }
+    window.api.auth.logout = vi.fn().mockResolvedValue(undefined)
+    const store = useAuthStore()
+    store.currentUser = user
+
+    await store.logout()
+
+    expect(store.currentUser).toBeNull()
+  })
 })

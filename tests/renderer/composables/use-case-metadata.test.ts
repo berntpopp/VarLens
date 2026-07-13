@@ -206,14 +206,19 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
 
       const baselineLength = result.metadataCache.value.get(caseId)?.hpoTerms.length ?? 0
 
-      await result.assignHpoTerm(caseId, 'HP:0001250', 'Seizure')
+      await expect(result.assignHpoTerm(caseId, 'HP:0001250', 'Seizure')).rejects.toMatchObject({
+        code: 'DB_ERROR'
+      })
 
       const cached = result.metadataCache.value.get(caseId)
       // Reverted back to baseline — no error-shaped object and no orphaned
       // optimistic entry left behind.
       expect(cached?.hpoTerms.length).toBe(baselineLength)
       expect(cached?.hpoTerms.some((t) => t.hpo_id === 'HP:0001250')).toBe(false)
-      expect(logService.error).toHaveBeenCalled()
+      expect(logService.error).toHaveBeenCalledWith(
+        expect.stringContaining('A cohort with this name already exists'),
+        'case-metadata'
+      )
     })
   })
 
@@ -245,14 +250,19 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       const seeded = makeFullMetadata({ cohorts: [] })
       result.metadataCache.value.set(caseId, seeded)
 
-      await result.setCaseCohorts(caseId, [fakeCohort.id])
+      await expect(result.setCaseCohorts(caseId, [fakeCohort.id])).rejects.toMatchObject({
+        code: 'DB_ERROR'
+      })
       await flushPromises()
 
       // Reverted to the pre-optimistic value (empty), never left holding the
       // optimistically-applied cohort that the backend actually rejected.
       const cached = result.metadataCache.value.get(caseId)
       expect(cached?.cohorts).toEqual([])
-      expect(logService.error).toHaveBeenCalled()
+      expect(logService.error).toHaveBeenCalledWith(
+        expect.stringContaining('A cohort with this name already exists'),
+        'case-metadata'
+      )
     })
   })
 
@@ -286,13 +296,18 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       app = appInstance
       result.metadataCache.value.set(caseId, makeFullMetadata({ hpoTerms: [existingTerm] }))
 
-      await result.removeHpoTerm(caseId, existingTerm.hpo_id)
+      await expect(result.removeHpoTerm(caseId, existingTerm.hpo_id)).rejects.toMatchObject({
+        code: 'DB_ERROR'
+      })
 
       // Reverted back to the pre-optimistic term list — the SerializableError
       // must never have been treated as a success that lets the removal stand.
       const cached = result.metadataCache.value.get(caseId)
       expect(cached?.hpoTerms).toEqual([existingTerm])
-      expect(logService.error).toHaveBeenCalled()
+      expect(logService.error).toHaveBeenCalledWith(
+        expect.stringContaining('A cohort with this name already exists'),
+        'case-metadata'
+      )
     })
   })
 
@@ -335,14 +350,17 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
         seeded.metadata = { ...seeded.metadata!, [field]: previous }
         result.metadataCache.value.set(caseId, seeded)
 
-        await call(result)
+        await expect(call(result)).rejects.toMatchObject({ code: 'DB_ERROR' })
         await flushPromises()
 
         const cached = result.metadataCache.value.get(caseId)
         // Must be reverted to the pre-optimistic value, never the raw
         // SerializableError object.
         expect(cached?.metadata?.[field]).toBe(previous)
-        expect(logService.error).toHaveBeenCalled()
+        expect(logService.error).toHaveBeenCalledWith(
+          expect.stringContaining('A cohort with this name already exists'),
+          'case-metadata'
+        )
       }
     )
 

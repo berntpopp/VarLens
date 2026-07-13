@@ -70,6 +70,17 @@ interface CaseDataInfoTabVm {
   deleteExternalId: (idType: string) => Promise<void>
 }
 
+function deferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+} {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 // Runtime shape of a main-process SerializableError (src/shared/types/errors.ts).
 // `isIpcError` discriminates on the presence of `code`/`message`/`userMessage`.
 const fakeSerializableError = {
@@ -182,6 +193,57 @@ describe('CaseDataInfoTab loader', () => {
     ])
     expect(vm.idTypeSuggestions).toEqual(['MRN'])
   })
+
+  it('clears the previous case atomically and blocks save when a later loader fails', async () => {
+    const mocks = installMockApi(fakeDataInfo)
+    const wrapper = mountTab()
+    await flushPromises()
+
+    window.api.regionFiles.list = vi.fn().mockResolvedValue(fakeSerializableError)
+    await wrapper.setProps({ caseId: 2 })
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    expect(vm.dataInfo).toBeNull()
+    expect(vm.externalIds).toEqual([])
+    expect(vm.platformSuggestions).toEqual(['Exome', 'Genome', 'Targeted Panel'])
+    expect(vm.idTypeSuggestions).toEqual([])
+
+    await vm.save()
+    expect(mocks.upsertDataInfo).not.toHaveBeenCalled()
+  })
+
+  it('ignores an older load that completes after the current case', async () => {
+    const firstInfo = deferred<unknown>()
+    const mocks = installMockApi(fakeDataInfo)
+    const secondInfo = { ...fakeDataInfo, import_file_name: 'second.vcf', platform: 'Genome' }
+    const secondIds = [{ id_type: 'LAB', id_value: 'second' }]
+    window.api.caseMetadata.getDataInfo = vi.fn((caseId) =>
+      caseId === 1 ? firstInfo.promise : Promise.resolve(secondInfo)
+    )
+    window.api.caseMetadata.listExternalIds = vi.fn((caseId) =>
+      Promise.resolve(caseId === 1 ? fakeExternalIds : secondIds)
+    )
+
+    const wrapper = mountTab()
+    await wrapper.setProps({ caseId: 2 })
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    expect(vm.dataInfo).toEqual(secondInfo)
+    expect(vm.externalIds).toEqual(secondIds)
+
+    firstInfo.resolve(fakeDataInfo)
+    await flushPromises()
+
+    expect(vm.dataInfo).toEqual(secondInfo)
+    expect(vm.externalIds).toEqual(secondIds)
+    await vm.save()
+    expect(mocks.upsertDataInfo).toHaveBeenLastCalledWith(
+      2,
+      expect.objectContaining({ platform: 'Genome' })
+    )
+  })
 })
 
 const fakeSerializableErrorWithMessage = {
@@ -293,5 +355,24 @@ describe('CaseDataInfoTab deleteExternalId()', () => {
     // the backend delete failed.
     expect(vm.externalIds).toEqual(fakeExternalIds)
     expect(logService.warn).toHaveBeenCalledWith(expect.stringContaining('boom'), 'case-data-info')
+  })
+
+  it('does not apply an old case deletion after a new case has loaded', async () => {
+    const pendingDelete = deferred<unknown>()
+    const mocks = installMockApi(fakeDataInfo)
+    const wrapper = mountTab()
+    await flushPromises()
+    mocks.deleteExternalId.mockReturnValueOnce(pendingDelete.promise)
+
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    const deletion = vm.deleteExternalId('MRN')
+    await wrapper.setProps({ caseId: 2 })
+    await flushPromises()
+    expect(vm.externalIds).toEqual(fakeExternalIds)
+
+    pendingDelete.resolve(undefined)
+    await deletion
+
+    expect(vm.externalIds).toEqual(fakeExternalIds)
   })
 })

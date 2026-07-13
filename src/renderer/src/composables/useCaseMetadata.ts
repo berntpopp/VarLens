@@ -27,7 +27,8 @@ import type {
   CaseSex,
   FullCaseMetadata
 } from '../../../shared/types/api'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { formatErrorMessage } from '../../../shared/errors/format-error-message'
+import { unwrapIpcResult } from '../../../shared/types/errors'
 
 /** Maximum cached case metadata entries — evicts oldest on overflow */
 const MAX_METADATA_CACHE_SIZE = 200
@@ -80,12 +81,7 @@ export function useCaseMetadata() {
       triggerCacheUpdate()
     } catch (error) {
       logService.error(
-        'Failed to load case metadata: ' +
-          (error instanceof Error
-            ? error.message
-            : isIpcError(error)
-              ? (error.userMessage ?? error.message)
-              : String(error)),
+        'Failed to load case metadata: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
     } finally {
@@ -102,12 +98,7 @@ export function useCaseMetadata() {
       cohortGroupsCache.value = cohorts
     } catch (error) {
       logService.error(
-        'Failed to load cohort groups: ' +
-          (error instanceof Error
-            ? error.message
-            : isIpcError(error)
-              ? (error.userMessage ?? error.message)
-              : String(error)),
+        'Failed to load cohort groups: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
     }
@@ -151,7 +142,7 @@ export function useCaseMetadata() {
       }
     } catch (error) {
       logService.error(
-        'Failed to update status: ' + (error instanceof Error ? error.message : String(error)),
+        'Failed to update status: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
       // Revert optimistic update
@@ -159,6 +150,7 @@ export function useCaseMetadata() {
         current.metadata.affected_status = previousStatus
         triggerCacheUpdate()
       }
+      throw error
     }
   }
 
@@ -187,13 +179,14 @@ export function useCaseMetadata() {
       }
     } catch (error) {
       logService.error(
-        'Failed to update sex: ' + (error instanceof Error ? error.message : String(error)),
+        'Failed to update sex: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
       if (current && current.metadata) {
         current.metadata.sex = previousSex
         triggerCacheUpdate()
       }
+      throw error
     }
   }
 
@@ -222,13 +215,14 @@ export function useCaseMetadata() {
       }
     } catch (error) {
       logService.error(
-        'Failed to update age: ' + (error instanceof Error ? error.message : String(error)),
+        'Failed to update age: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
       if (current && current.metadata) {
         current.metadata.age = previousAge
         triggerCacheUpdate()
       }
+      throw error
     }
   }
 
@@ -261,14 +255,14 @@ export function useCaseMetadata() {
       }
     } catch (error) {
       logService.error(
-        'Failed to update date of birth: ' +
-          (error instanceof Error ? error.message : String(error)),
+        'Failed to update date of birth: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
       if (current && current.metadata) {
         current.metadata.date_of_birth = previousDob
         triggerCacheUpdate()
       }
+      throw error
     }
   }
 
@@ -289,7 +283,7 @@ export function useCaseMetadata() {
       unwrapIpcResult(await api.caseMetadata.setCohorts(caseId, cohortIds))
     } catch (error) {
       logService.error(
-        'Failed to set cohorts: ' + (error instanceof Error ? error.message : String(error)),
+        'Failed to set cohorts: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
       if (current) {
@@ -299,6 +293,7 @@ export function useCaseMetadata() {
       // Reload full metadata to ensure consistency
       metadataCache.value.delete(caseId)
       await loadMetadata(caseId)
+      throw error
     }
   }
 
@@ -371,13 +366,14 @@ export function useCaseMetadata() {
       }
     } catch (error) {
       logService.error(
-        'Failed to assign HPO term: ' + (error instanceof Error ? error.message : String(error)),
+        'Failed to assign HPO term: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
       if (current) {
         current.hpoTerms = current.hpoTerms.filter((t) => t.hpo_id !== hpoId)
         triggerCacheUpdate()
       }
+      throw error
     }
   }
 
@@ -397,13 +393,14 @@ export function useCaseMetadata() {
       unwrapIpcResult(await api.caseMetadata.removeHpoTerm(caseId, hpoId))
     } catch (error) {
       logService.error(
-        'Failed to remove HPO term: ' + (error instanceof Error ? error.message : String(error)),
+        'Failed to remove HPO term: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
       if (current) {
         current.hpoTerms = previousTerms
         triggerCacheUpdate()
       }
+      throw error
     }
   }
 

@@ -48,7 +48,11 @@ import type {
   GeneListWithCount
 } from '../../../src/shared/types/api'
 import type { IpcResult } from '../../../src/shared/types/errors'
-import type { ImportResult } from '../../../src/shared/types/import'
+import type {
+  ImportResult,
+  VcfMultiPreviewResult,
+  VcfPreviewResult
+} from '../../../src/shared/types/import'
 import type { Job } from '../../../src/shared/types/jobs'
 
 describe('Preload contract alignment — compile-time IpcResult shapes', () => {
@@ -91,6 +95,41 @@ describe('jobs domain — Sprint A PR-4 Gate 11', () => {
 })
 
 describe('batch-import and system domains — C1 renderer unwrap guards', () => {
+  it('compile-time check: every import picker, preview, and cancel method returns IpcResult', () => {
+    expectTypeOf<Awaited<ReturnType<WindowAPI['import']['selectFile']>>>().toEqualTypeOf<
+      IpcResult<string | null>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['import']['selectFiles']>>>().toEqualTypeOf<
+      IpcResult<string[]>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['import']['selectBedFile']>>>().toEqualTypeOf<
+      IpcResult<string | null>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['import']['vcfPreview']>>>().toEqualTypeOf<
+      IpcResult<VcfPreviewResult>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['import']['vcfMultiPreview']>>>().toEqualTypeOf<
+      IpcResult<VcfMultiPreviewResult>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['import']['cancel']>>>().toEqualTypeOf<
+      IpcResult<void>
+    >()
+  })
+
+  it('compile-time check: auth login and logout return IpcResult', () => {
+    expectTypeOf<Awaited<ReturnType<WindowAPI['auth']['login']>>>().toEqualTypeOf<
+      IpcResult<{
+        success: boolean
+        user?: { id: number; username: string; role: string }
+        mustChangePassword?: boolean
+        locked?: boolean
+      }>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['auth']['logout']>>>().toEqualTypeOf<
+      IpcResult<void>
+    >()
+  })
+
   it('compile-time check: batch-import picker methods return IpcResult', () => {
     expectTypeOf<Awaited<ReturnType<WindowAPI['batchImport']['selectFiles']>>>().toEqualTypeOf<
       IpcResult<string[]>

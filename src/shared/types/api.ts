@@ -56,7 +56,7 @@ import type {
   GeneListWithCount,
   RegionFile
 } from './database'
-import type { ProgressUpdate, ImportResult, VcfPreviewResult } from './import'
+import type { ProgressUpdate, ImportResult } from './import'
 import type { IpcResult } from './errors'
 import type {
   CohortVariant,
@@ -107,6 +107,8 @@ import type { DatabaseDomainContract } from '../ipc/domains/database'
 import type { DebugApi } from '../ipc/domains/debug'
 import type { JobsApi } from '../ipc/domains/jobs'
 import type { CaseMetadataDomainContract } from '../ipc/domains/case-metadata'
+import type { ImportDomainContract } from '../ipc/domains/import'
+import type { AuthDomainContract } from '../ipc/domains/auth'
 export type { DatabaseInfo, DatabaseOpenResult, RecentDatabase } from '../ipc/domains/database'
 
 // Re-export for convenience
@@ -242,34 +244,8 @@ export interface MultiFileImportResult {
   elapsed: number
 }
 
-export interface ImportAPI {
-  selectFile: () => Promise<string | null>
-  selectFiles: () => Promise<string[]>
-  selectBedFile: () => Promise<string | null>
-  start: (
-    filePath: string,
-    caseName: string,
-    vcfOptions?: { selectedSample?: string; genomeBuild?: string }
-  ) => Promise<IpcResult<ImportResult>>
-  startMultiFile: (
-    caseName: string,
-    files: MultiFileImportSpec[],
-    vcfOptions?: { selectedSample?: string; genomeBuild?: string },
-    filters?: {
-      bedFile?: string | null
-      bedPadding?: number
-      passOnly?: boolean
-      minQual?: number | null
-      minGq?: number | null
-      minDp?: number | null
-    }
-  ) => Promise<IpcResult<MultiFileImportResult>>
-  vcfPreview: (filePath: string) => Promise<VcfPreviewResult>
-  vcfMultiPreview: (
-    filePaths: string[]
-  ) => Promise<IpcResult<import('./import').VcfMultiPreviewResult>>
+export interface ImportAPI extends ImportDomainContract {
   onProgress: (callback: (progress: ProgressUpdate) => void) => () => void
-  cancel: () => Promise<void>
 }
 
 export interface SystemAPI {
@@ -849,42 +825,7 @@ export interface PresetsAPI {
   reorder: (items: { id: number; sortOrder: number }[]) => Promise<IpcResult<void>>
 }
 
-export interface AuthAPI {
-  login: (
-    username: string,
-    password: string
-  ) => Promise<{
-    success: boolean
-    user?: { id: number; username: string; role: string }
-    mustChangePassword?: boolean
-    locked?: boolean
-  }>
-  logout: () => Promise<void>
-  currentUser: () => Promise<IpcResult<{ id: number; username: string; role: string } | null>>
-  isAccountsEnabled: () => Promise<IpcResult<boolean>>
-  createUser: (
-    username: string,
-    displayName: string,
-    tempPassword: string
-  ) => Promise<IpcResult<void>>
-  listUsers: () => Promise<
-    IpcResult<
-      Array<{
-        id: number
-        username: string
-        display_name: string | null
-        role: string
-        is_active: number
-        must_change_password: number
-        failed_login_count: number
-        created_at: string
-      }>
-    >
-  >
-  deactivateUser: (username: string) => Promise<IpcResult<void>>
-  resetPassword: (username: string, newPassword: string) => Promise<IpcResult<void>>
-  changePassword: (oldPassword: string, newPassword: string) => Promise<IpcResult<void>>
-}
+export type AuthAPI = AuthDomainContract
 
 /**
  * Broadcast payload for the `variants:annotationChanged` event.

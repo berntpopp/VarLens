@@ -166,7 +166,7 @@ export function createAppApi(domains: PreloadDomainApis): AppWindowApi {
       resetPassword: (username, newPassword) => authDomain.resetPassword(username, newPassword),
       changePassword: (oldPassword, newPassword) =>
         authDomain.changePassword(oldPassword, newPassword)
-    } as WindowAPI['auth'],
+    },
 
     analysisGroups: {
       list: () => analysisGroupsDomain.list(),

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
+import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -66,10 +67,21 @@ export const useAuthStore = defineStore('auth', () => {
     return result
   }
 
-  function logout(): void {
-    currentUser.value = null
-    if (!api) return
-    api.auth.logout().catch(() => {})
+  async function logout(): Promise<void> {
+    if (!api) {
+      currentUser.value = null
+      return
+    }
+    try {
+      unwrapIpcResult(await api.auth.logout())
+      currentUser.value = null
+    } catch (error) {
+      logService.error(
+        'Logout request failed: ' + formatErrorMessage(error, 'Unknown error'),
+        'auth'
+      )
+      throw error
+    }
   }
 
   return {

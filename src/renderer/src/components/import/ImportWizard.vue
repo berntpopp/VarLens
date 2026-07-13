@@ -687,12 +687,15 @@ async function startImport(): Promise<void> {
 
 function cancelImport(): void {
   if (isWebRuntime() && isVcfImport.value) {
-    void api!.import.cancel().catch((error) => {
-      logService.warn(
-        `VCF import cancel failed: ${formatIpcError(error, 'cancel failed')}`,
-        'ImportWizard'
-      )
-    })
+    void api!.import
+      .cancel()
+      .then((result) => unwrapIpcResult(result))
+      .catch((error) => {
+        logService.warn(
+          `VCF import cancel failed: ${formatIpcError(error, 'cancel failed')}`,
+          'ImportWizard'
+        )
+      })
   } else {
     void api!.batchImport
       .cancel()
@@ -706,9 +709,6 @@ function cancelImport(): void {
         )
       })
   }
-  // Transition to summary step showing cancellation, and reset import store.
-  // The onComplete callback may also fire with cancelled=true, but we handle
-  // it here immediately so the user sees feedback right away.
   summary.value = {
     succeeded: 0,
     failed: 0,

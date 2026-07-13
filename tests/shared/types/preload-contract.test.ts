@@ -27,7 +27,9 @@ const DOMAIN_CONTRACT_PATHS: Record<string, string> = {
   FilterPresetsDomainContract: 'src/shared/ipc/domains/filter-presets.ts',
   DebugApi: 'src/shared/ipc/domains/debug.ts',
   JobsApi: 'src/shared/ipc/domains/jobs.ts',
-  CaseMetadataDomainContract: 'src/shared/ipc/domains/case-metadata.ts'
+  CaseMetadataDomainContract: 'src/shared/ipc/domains/case-metadata.ts',
+  ImportDomainContract: 'src/shared/ipc/domains/import.ts',
+  AuthDomainContract: 'src/shared/ipc/domains/auth.ts'
 }
 
 /**
@@ -210,6 +212,17 @@ function extractSubInterfaceKeys(interfaceName: string): string[] {
     return [...new Set([...keys, ...inheritedKeys])].sort()
   }
 
+  const directExtendsMatch = content
+    .slice(startIdx)
+    .match(new RegExp(`export interface ${interfaceName}\\s+extends\\s+(\\w+)`))
+  if (directExtendsMatch) {
+    const domainPath = DOMAIN_CONTRACT_PATHS[directExtendsMatch[1]]
+    if (!domainPath) return keys.sort()
+
+    const inheritedKeys = extractInterfaceKeysFromFile(domainPath, directExtendsMatch[1])
+    return [...new Set([...keys, ...inheritedKeys])].sort()
+  }
+
   return keys.sort()
 }
 
@@ -281,6 +294,7 @@ describe('Preload contract alignment', () => {
     'utf-8'
   )
   const coreApiSource = readFileSync(resolve(ROOT, 'src/preload/window-api/core-api.ts'), 'utf-8')
+  const appApiSource = readFileSync(resolve(ROOT, 'src/preload/window-api/app-api.ts'), 'utf-8')
   const casesDomainSource = readFileSync(resolve(ROOT, 'src/preload/domains/cases.ts'), 'utf-8')
   const databaseDomainSource = readFileSync(
     resolve(ROOT, 'src/preload/domains/database.ts'),
@@ -297,6 +311,11 @@ describe('Preload contract alignment', () => {
 
   it('preload const api has expected keys', () => {
     expect(preloadKeys.length).toBeGreaterThan(10)
+  })
+
+  it('import and auth preload objects are checked without contract-bypassing casts', () => {
+    expect(coreApiSource).not.toContain("as WindowAPI['import']")
+    expect(appApiSource).not.toContain("as WindowAPI['auth']")
   })
 
   it('preload imports the cases domain factory', () => {

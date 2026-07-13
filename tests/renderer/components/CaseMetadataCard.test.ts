@@ -19,6 +19,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import CaseMetadataCard from '../../../src/renderer/src/components/CaseMetadataCard.vue'
 import CohortCombobox from '../../../src/renderer/src/components/CohortCombobox.vue'
+import HpoTermSelector from '../../../src/renderer/src/components/HpoTermSelector.vue'
 import { useCaseMetadata } from '../../../src/renderer/src/composables/useCaseMetadata'
 import { AppStateKey, createAppState } from '../../../src/renderer/src/composables/useAppState'
 import { createMockApi } from '../../utils/mock-api'
@@ -111,5 +112,48 @@ describe('CaseMetadataCard — handleCreateCohort', () => {
 
     expect(showSnackSpy).not.toHaveBeenCalled()
     expect(wrapper.emitted('changed')).toBeTruthy()
+  })
+
+  it('does not emit changed when a resolved setCohorts error is propagated', async () => {
+    window.api.caseMetadata.setCohorts = vi.fn().mockResolvedValue(fakeSerializableError)
+    window.api.caseMetadata.getFullMetadata = vi.fn().mockResolvedValue({
+      metadata: null,
+      cohorts: [],
+      hpoTerms: [],
+      comments: [],
+      metrics: [],
+      dataInfo: null,
+      externalIds: []
+    })
+    const { wrapper, showSnackSpy } = mountCard(1)
+    await flushPromises()
+
+    await wrapper.findComponent(CohortCombobox).vm.$emit('update:modelValue', [])
+    await flushPromises()
+
+    expect(wrapper.emitted('changed')).toBeFalsy()
+    expect(showSnackSpy).toHaveBeenCalledWith(
+      'A cohort with this name already exists',
+      'error',
+      expect.objectContaining({ timeout: expect.any(Number) })
+    )
+  })
+
+  it('does not emit changed when a resolved HPO assignment error is propagated', async () => {
+    window.api.caseMetadata.assignHpoTerm = vi.fn().mockResolvedValue(fakeSerializableError)
+    const { wrapper, showSnackSpy } = mountCard(1)
+    await flushPromises()
+
+    await wrapper
+      .findComponent(HpoTermSelector)
+      .vm.$emit('add:term', { hpoId: 'HP:0001250', hpoLabel: 'Seizure' })
+    await flushPromises()
+
+    expect(wrapper.emitted('changed')).toBeFalsy()
+    expect(showSnackSpy).toHaveBeenCalledWith(
+      'A cohort with this name already exists',
+      'error',
+      expect.objectContaining({ timeout: expect.any(Number) })
+    )
   })
 })

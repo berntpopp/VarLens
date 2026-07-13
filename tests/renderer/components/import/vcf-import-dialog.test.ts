@@ -93,7 +93,7 @@ describe('VcfImportDialog — browseFiles error surfacing', () => {
   it('surfaces the SerializableError userMessage, not "[object Object]"', async () => {
     ;(
       mockApi.import as unknown as { selectFiles: ReturnType<typeof vi.fn> }
-    ).selectFiles.mockRejectedValue(fakeSerializableError)
+    ).selectFiles.mockResolvedValue(fakeSerializableError)
 
     mountDialog()
     await flushPromises()
@@ -196,7 +196,7 @@ describe('VcfImportDialog — startImport error surfacing', () => {
   it('surfaces the SerializableError userMessage from startImport\'s catch, not "[object Object]"', async () => {
     ;(
       mockApi.import as unknown as { startMultiFile: ReturnType<typeof vi.fn> }
-    ).startMultiFile.mockRejectedValue(fakeSerializableError)
+    ).startMultiFile.mockResolvedValue(fakeSerializableError)
 
     mountDialog()
     await flushPromises()
