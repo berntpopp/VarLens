@@ -49,7 +49,7 @@ export function parseGenotype(
       const adParts = adStr.split(',')
       if (adParts.length >= 2) {
         const refVal = parseInt(adParts[0], 10)
-        const altVal = parseInt(adParts[altAlleleIndex] || adParts[1], 10)
+        const altVal = parseInt(adParts[altAlleleIndex] ?? '', 10)
         adRef = isNaN(refVal) ? null : refVal
         adAlt = isNaN(altVal) ? null : altVal
       }
