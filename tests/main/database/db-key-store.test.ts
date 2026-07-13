@@ -198,6 +198,23 @@ describe('DbKeyStore', () => {
     expect(['not-found', 'needs-passphrase']).toContain(resolvedOld.reason)
   })
 
+  it('keeps the registry readable when repointing displaces a stale path entry', () => {
+    const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+    const sourcePath = join(tmpDir, 'source.db')
+    const destinationPath = join(tmpDir, 'destination.db')
+    const moved = store.createManagedKey(sourcePath)
+    const stale = store.createManagedKey(destinationPath)
+    expect(moved.ok).toBe(true)
+    expect(stale.ok).toBe(true)
+    if (!moved.ok || !stale.ok) throw new Error('expected managed keys')
+
+    store.updatePath(moved.keyId, destinationPath)
+
+    const freshStore = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+    expect(freshStore.resolveKeyForPath(destinationPath)).toEqual({ ok: true, dek: moved.dek })
+    expect(freshStore.findManagedKeyIdForDek(stale.dek)).toBe(stale.keyId)
+  })
+
   it('resolveKeyForPath on a totally unknown path returns not-found', () => {
     const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
     const resolved = store.resolveKeyForPath(join(tmpDir, 'never-created.db'))
