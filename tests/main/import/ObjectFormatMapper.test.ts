@@ -58,4 +58,25 @@ describe('ObjectFormatMapper transcript output', () => {
     const v = results[0] as Record<string, unknown>
     expect(v._transcripts).toBeUndefined()
   })
+
+  it('keeps non-IMPACT legacy consequence text out of consequence', async () => {
+    const [mapped] = await runObjectTransform([
+      {
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'G',
+        consequence: 'missense_variant',
+        transcript: 'NM_1'
+      }
+    ])
+
+    const variant = mapped as Record<string, unknown>
+    expect(variant.consequence).toBeNull()
+    expect(variant.func).toBe('missense_variant')
+    expect((variant._transcripts as Record<string, unknown>[])[0]).toMatchObject({
+      consequence: null,
+      func: 'missense_variant'
+    })
+  })
 })

@@ -75,6 +75,24 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcripts[0].func).toBe('synonymous_variant')
     })
 
+    it('rejects a non-enum IMPACT while preserving its SO consequence', () => {
+      const info = new Map([
+        [
+          'CSQ',
+          'T|synonymous_variant|SEVERE|COMT|ENSG1|Transcript|ENST1|protein_coding||||||||||YES||||||'
+        ]
+      ])
+
+      const result = parseAnnotation(info, header, 'T')
+
+      expect(result.impact).toBeNull()
+      expect(result.consequence).toBe('synonymous_variant')
+      expect(result.transcripts[0]).toMatchObject({
+        consequence: null,
+        func: 'synonymous_variant'
+      })
+    })
+
     it('selects MANE Select transcript over others', () => {
       // First transcript is MANE_SELECT + CANONICAL, second is not
       const info = new Map([
