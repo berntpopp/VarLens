@@ -487,7 +487,9 @@ export class DbKeyStore {
       raw = readFileSync(this.registryPath, 'utf-8')
     } catch (e) {
       mainLogger.warn(`Failed to read key registry file: ${errorMessage(e)}`, 'DbKeyStore')
-      throw new Error('The database key registry could not be read; no key changes were made')
+      throw new Error('The database key registry could not be read; no key changes were made', {
+        cause: e
+      })
     }
 
     try {
@@ -502,7 +504,9 @@ export class DbKeyStore {
         `Key registry file was corrupt or invalid; refusing to replace it and preserving a backup at ${this.registryPath}.bak: ${errorMessage(e)}`,
         'DbKeyStore'
       )
-      throw new Error('The database key registry is corrupt or invalid; no key changes were made')
+      throw new Error('The database key registry is corrupt or invalid; no key changes were made', {
+        cause: e
+      })
     }
   }
 
