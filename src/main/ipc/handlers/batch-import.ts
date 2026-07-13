@@ -8,7 +8,11 @@ import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
 import { loadSettings, saveSettings } from '../utils/settings-io'
 import { safeEmit } from '../utils/safeEmit'
-import { addAllowedImportPath, isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
+import {
+  addAllowedImportPath,
+  isStrictlyEnrolledPath,
+  removeAllowedImportPath
+} from '../../security/import-path-allowlist'
 import {
   BatchImportCheckDuplicatesParamsSchema,
   BatchImportExtractZipParamsSchema,
@@ -250,7 +254,12 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
         if (!isStrictlyEnrolledPath(validatedZipPath)) {
           throwUnallowedBatchPath('batch-import:extractZip', validatedZipPath, 'zipPath')
         }
-        return extractZip(validatedZipPath, validatedPassword, addAllowedImportPath)
+        return extractZip(
+          validatedZipPath,
+          validatedPassword,
+          addAllowedImportPath,
+          removeAllowedImportPath
+        )
       })
     }
   )

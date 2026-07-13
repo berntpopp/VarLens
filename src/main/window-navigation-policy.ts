@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url'
+
 /**
  * Decide whether the main frame is allowed to navigate to `url` (fired from
  * the `will-navigate` webContents event).
@@ -32,7 +34,9 @@ export function isMainWindowNavigationAllowed(
     return (
       target.protocol === 'file:' &&
       doc.protocol === 'file:' &&
-      decodeURIComponent(target.pathname) === decodeURIComponent(doc.pathname)
+      target.host === doc.host &&
+      target.search === '' &&
+      fileURLToPath(target) === fileURLToPath(doc)
     )
   } catch {
     return false

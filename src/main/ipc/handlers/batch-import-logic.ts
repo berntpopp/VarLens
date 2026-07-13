@@ -30,6 +30,8 @@ let workerClient: ImportWorkerClient | null = null
 // ZIP extraction utilities
 const zipExtractor = new ZipExtractor()
 let zipTempManager: TempDirectoryManager | null = null
+let zipEnrolledPaths: string[] = []
+let revokeZipEnrollment: ((filePath: string) => void) | undefined
 
 /**
  * Check which files have duplicate case names in the database.
@@ -268,9 +270,11 @@ export function testZipPassword(zipPath: string, password: string): { success: b
 export async function extractZip(
   zipPath: string,
   password?: string,
-  onExtractedFile?: (filePath: string) => void
+  onExtractedFile?: (filePath: string) => void,
+  onRemoveExtractedFile?: (filePath: string) => void
 ): Promise<{ files: string[]; errors: string[] }> {
   try {
+    revokeExtractedPaths()
     if (zipTempManager !== null) {
       zipTempManager.cleanup()
     }
@@ -284,6 +288,8 @@ export async function extractZip(
       for (const extractedFile of result.extractedFiles) {
         onExtractedFile(extractedFile)
       }
+      zipEnrolledPaths = [...result.extractedFiles]
+      revokeZipEnrollment = onRemoveExtractedFile
     }
 
     return JSON.parse(
@@ -298,6 +304,7 @@ export async function extractZip(
       zipTempManager.cleanup()
       zipTempManager = null
     }
+    revokeExtractedPaths()
     return {
       files: [],
       errors: [error instanceof Error ? error.message : 'Extraction failed']
@@ -309,8 +316,19 @@ export async function extractZip(
  * Clean up temporary ZIP extraction directory.
  */
 export function cleanupZipTemp(): void {
+  revokeExtractedPaths()
   if (zipTempManager !== null) {
     zipTempManager.cleanup()
     zipTempManager = null
   }
+}
+
+function revokeExtractedPaths(): void {
+  if (revokeZipEnrollment !== undefined) {
+    for (const filePath of zipEnrolledPaths) {
+      revokeZipEnrollment(filePath)
+    }
+  }
+  zipEnrolledPaths = []
+  revokeZipEnrollment = undefined
 }

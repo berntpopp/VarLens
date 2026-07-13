@@ -1,6 +1,8 @@
 import { realpathSync } from 'fs'
 import { app } from 'electron'
 import { isAbsolute, relative, resolve, sep } from 'path'
+import { homedir, tmpdir } from 'node:os'
+import { PathAuthorityStore } from './path-authority-store'
 
 /**
  * In-memory session allow-list of paths the user explicitly picked via an
@@ -23,16 +25,14 @@ import { isAbsolute, relative, resolve, sep } from 'path'
  * validated. BedFilter.fromFile keeps a worker-safe defensive check as
  * defence-in-depth.
  */
-const dialogAllowedPaths = new Set<string>()
+const dialogAllowedPaths = new PathAuthorityStore()
 
 export function addAllowedImportPath(absolutePath: string): void {
-  const resolved = resolve(absolutePath)
-  dialogAllowedPaths.add(resolved)
+  dialogAllowedPaths.add(absolutePath)
+}
 
-  const realPath = tryRealpath(resolved)
-  if (realPath !== null) {
-    dialogAllowedPaths.add(realPath)
-  }
+export function removeAllowedImportPath(absolutePath: string): void {
+  dialogAllowedPaths.remove(absolutePath)
 }
 
 /**
@@ -41,9 +41,8 @@ export function addAllowedImportPath(absolutePath: string): void {
  * the automatic home/userData/temp roots below.
  */
 function isDialogEnrolled(abs: string, realCandidate: string | null): boolean {
-  return (
-    dialogAllowedPaths.has(abs) || (realCandidate !== null && dialogAllowedPaths.has(realCandidate))
-  )
+  void realCandidate
+  return dialogAllowedPaths.isAuthorized(abs)
 }
 
 /**
@@ -78,8 +77,8 @@ export function isAllowedImportPath(candidate: string): boolean {
 
   const realCandidate = tryRealpath(abs)
 
-  if (isDialogEnrolled(abs, realCandidate)) {
-    return true
+  if (dialogAllowedPaths.hasEnrollment(abs)) {
+    return isDialogEnrolled(abs, realCandidate)
   }
 
   const roots: string[] = []
@@ -92,7 +91,7 @@ export function isAllowedImportPath(candidate: string): boolean {
     if (process.env.HOME !== undefined && process.env.HOME !== '') {
       roots.push(process.env.HOME)
     }
-    roots.push('/tmp')
+    roots.push(homedir(), tmpdir())
   }
 
   return roots.some((root) => isUnderAutomaticRoot(abs, realCandidate, root))

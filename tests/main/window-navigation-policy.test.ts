@@ -25,6 +25,25 @@ describe('main window navigation policy', () => {
     expect(isMainWindowNavigationAllowed('file:///etc/passwd', undefined, APP_DOC_URL)).toBe(false)
   })
 
+  it('blocks a remote file authority even when its pathname matches the app document', () => {
+    expect(
+      isMainWindowNavigationAllowed(
+        'file://attacker/app/renderer/index.html',
+        undefined,
+        APP_DOC_URL
+      )
+    ).toBe(false)
+  })
+
+  it('allows router fragments but rejects query-bearing packaged document URLs', () => {
+    expect(isMainWindowNavigationAllowed(`${APP_DOC_URL}#/variants`, undefined, APP_DOC_URL)).toBe(
+      true
+    )
+    expect(isMainWindowNavigationAllowed(`${APP_DOC_URL}?next=evil`, undefined, APP_DOC_URL)).toBe(
+      false
+    )
+  })
+
   it('blocks a dev-origin spoof that merely starts with the renderer URL (S2)', () => {
     // http://localhost:5173.evil.com starts with 'http://localhost:5173' as a
     // string, but is a different WHATWG origin entirely.

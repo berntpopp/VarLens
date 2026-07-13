@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { join, parse } from 'node:path'
 import { ErrorCode, isIpcError } from '../../../../src/shared/types/errors'
 
 vi.mock('electron', () => ({
@@ -51,10 +52,13 @@ import {
 import {
   __resetAllowlistForTests,
   addAllowedImportPath,
-  isAllowedImportPath
+  isAllowedImportPath,
+  removeAllowedImportPath
 } from '../../../../src/main/security/import-path-allowlist'
 
 type HandlerCallback = (event: unknown, ...args: unknown[]) => Promise<unknown>
+
+const EXTERNAL_ROOT = join(parse(process.cwd()).root, 'varlens-external')
 
 function makeIpcMain(): { handle: ReturnType<typeof vi.fn> } {
   return { handle: vi.fn() }
@@ -123,7 +127,7 @@ describe('batch-import IPC handlers', () => {
     it('accepts a dialog-enrolled file path', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
-      const filePath = '/some/custom/mount/case1.json'
+      const filePath = join(EXTERNAL_ROOT, 'case1.json')
       addAllowedImportPath(filePath)
 
       const result = await invokeHandler(ipcMain, 'batch-import:checkDuplicates', [filePath])
@@ -151,7 +155,7 @@ describe('batch-import IPC handlers', () => {
     it('returns INVALID_PARAMETERS for malformed duplicateStrategy', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
-      const filePath = '/some/custom/mount/case1.json'
+      const filePath = join(EXTERNAL_ROOT, 'case1.json')
       addAllowedImportPath(filePath)
 
       const result = await invokeHandler(
@@ -183,7 +187,7 @@ describe('batch-import IPC handlers', () => {
     it('accepts a dialog-enrolled file path', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
-      const filePath = '/some/custom/mount/case1.json'
+      const filePath = join(EXTERNAL_ROOT, 'case1.json')
       addAllowedImportPath(filePath)
 
       const result = await invokeHandler(ipcMain, 'batch-import:start', [filePath], 'overwrite')
@@ -237,7 +241,7 @@ describe('batch-import IPC handlers', () => {
     it('accepts a dialog-enrolled zip path', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
-      const zipPath = '/some/custom/mount/batch.zip'
+      const zipPath = join(EXTERNAL_ROOT, 'batch.zip')
       addAllowedImportPath(zipPath)
 
       const result = await invokeHandler(ipcMain, 'batch-import:testZipPassword', zipPath, 'pw')
@@ -276,13 +280,18 @@ describe('batch-import IPC handlers', () => {
     it('accepts a dialog-enrolled zip path', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
-      const zipPath = '/some/custom/mount/batch.zip'
+      const zipPath = join(EXTERNAL_ROOT, 'batch.zip')
       addAllowedImportPath(zipPath)
 
       const result = await invokeHandler(ipcMain, 'batch-import:extractZip', zipPath)
 
       expect(isIpcError(result)).toBe(false)
-      expect(extractZip).toHaveBeenCalledWith(zipPath, undefined, addAllowedImportPath)
+      expect(extractZip).toHaveBeenCalledWith(
+        zipPath,
+        undefined,
+        addAllowedImportPath,
+        removeAllowedImportPath
+      )
     })
 
     it('rejects a zip path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
@@ -304,7 +313,7 @@ describe('batch-import IPC handlers', () => {
     it('enrolls files picked via batch-import:selectFiles', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
-      const filePath = '/some/custom/mount/case1.json'
+      const filePath = join(EXTERNAL_ROOT, 'case1.json')
       vi.mocked(dialog.showOpenDialog).mockResolvedValue({
         canceled: false,
         filePaths: [filePath]
@@ -320,7 +329,7 @@ describe('batch-import IPC handlers', () => {
     it('enrolls the zip picked via batch-import:selectZip', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
-      const zipPath = '/some/custom/mount/batch.zip'
+      const zipPath = join(EXTERNAL_ROOT, 'batch.zip')
       vi.mocked(dialog.showOpenDialog).mockResolvedValue({
         canceled: false,
         filePaths: [zipPath]
@@ -335,8 +344,8 @@ describe('batch-import IPC handlers', () => {
     it('enrolls files discovered when a folder is selected via batch-import:selectFolder', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
-      const folderPath = '/some/custom/mount/cases'
-      const discoveredFile = '/some/custom/mount/cases/case1.json'
+      const folderPath = join(EXTERNAL_ROOT, 'cases')
+      const discoveredFile = join(folderPath, 'case1.json')
       vi.mocked(dialog.showOpenDialog).mockResolvedValue({
         canceled: false,
         filePaths: [folderPath]

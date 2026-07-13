@@ -1,16 +1,11 @@
-import { realpathSync } from 'fs'
 import { isAbsolute, resolve } from 'path'
+import type { DatabaseManager } from '../services/DatabaseManager'
+import { PathAuthorityStore } from './path-authority-store'
 
-const dialogAllowedDatabasePaths = new Set<string>()
+const dialogAllowedDatabasePaths = new PathAuthorityStore()
 
 export function addAllowedDatabasePath(absolutePath: string): void {
-  const resolved = resolve(absolutePath)
-  dialogAllowedDatabasePaths.add(resolved)
-
-  const realPath = tryRealpath(resolved)
-  if (realPath !== null) {
-    dialogAllowedDatabasePaths.add(realPath)
-  }
+  dialogAllowedDatabasePaths.add(absolutePath)
 }
 
 export function isStrictlyEnrolledDatabasePath(candidate: string): boolean {
@@ -19,22 +14,26 @@ export function isStrictlyEnrolledDatabasePath(candidate: string): boolean {
   const resolved = resolve(candidate)
   if (resolved !== candidate) return false
 
-  const realCandidate = tryRealpath(resolved)
-  return (
-    dialogAllowedDatabasePaths.has(resolved) ||
-    (realCandidate !== null && dialogAllowedDatabasePaths.has(realCandidate))
-  )
+  return dialogAllowedDatabasePaths.isAuthorized(resolved)
+}
+
+export function isAllowedDatabasePath(
+  candidate: string,
+  getDbManager: () => DatabaseManager
+): boolean {
+  if (isStrictlyEnrolledDatabasePath(candidate)) return true
+  if (!isAbsolute(candidate)) return false
+
+  const canonical = resolve(candidate)
+  if (canonical !== candidate) return false
+
+  const manager = getDbManager()
+  const currentPath = manager.getCurrentPath()
+  if (currentPath !== null && resolve(currentPath) === canonical) return true
+  return manager.getRecentDatabases().some((db) => resolve(db.path) === canonical)
 }
 
 /** Test-only reset helper. Do not call from production code. */
 export function __resetDatabasePathAllowlistForTests(): void {
   dialogAllowedDatabasePaths.clear()
-}
-
-function tryRealpath(filePath: string): string | null {
-  try {
-    return realpathSync.native(filePath)
-  } catch {
-    return null
-  }
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { resolve } from 'node:path'
 import { isIpcError } from '../../../../src/shared/types/errors'
 
 vi.mock('node:fs/promises', () => ({
@@ -100,7 +101,7 @@ describe('region-files:importBed IPC handler', () => {
     const deps = makeDeps(ipcMain)
     registerGeneListHandlers(deps as never)
 
-    const bedPath = '/some/custom/mount/regions.bed'
+    const bedPath = resolve('external', 'regions.bed')
     addAllowedImportPath(bedPath)
     vi.mocked(readFile).mockResolvedValue('chr1\t100\t200\tregion1\n')
 

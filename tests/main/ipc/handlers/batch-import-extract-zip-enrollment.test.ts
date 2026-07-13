@@ -22,7 +22,8 @@ import { extractZip, cleanupZipTemp } from '../../../../src/main/ipc/handlers/ba
 import {
   __resetAllowlistForTests,
   addAllowedImportPath,
-  isStrictlyEnrolledPath
+  isStrictlyEnrolledPath,
+  removeAllowedImportPath
 } from '../../../../src/main/security/import-path-allowlist'
 
 describe('extractZip — enrolls extracted files for the strict path-authority gate', () => {
@@ -48,12 +49,22 @@ describe('extractZip — enrolls extracted files for the strict path-authority g
     // Nothing extracted yet is enrolled (the temp dir doesn't even exist).
     // The desktop IPC handler passes addAllowedImportPath here after it has
     // validated the ZIP path against the strict dialog-enrolled allowlist.
-    const result = await extractZip(zipPath, undefined, addAllowedImportPath)
+    const result = await extractZip(
+      zipPath,
+      undefined,
+      addAllowedImportPath,
+      removeAllowedImportPath
+    )
 
     expect(result.errors).toEqual([])
     expect(result.files.length).toBe(2)
     for (const extractedFile of result.files) {
       expect(isStrictlyEnrolledPath(extractedFile)).toBe(true)
+    }
+
+    cleanupZipTemp()
+    for (const extractedFile of result.files) {
+      expect(isStrictlyEnrolledPath(extractedFile)).toBe(false)
     }
   })
 })

@@ -10,6 +10,7 @@
  * the import-path-allowlist's dialog-enrollment mechanism.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { resolve } from 'node:path'
 import { ErrorCode, isIpcError } from '../../../../src/shared/types/errors'
 
 vi.mock('electron', () => ({
@@ -125,7 +126,7 @@ function expectInvalidParametersResult(result: unknown): void {
 
 // Path guaranteed to be outside any automatic root (home/userData/temp are
 // all mocked to '/nonexistent-electron-app-path' above) and never enrolled.
-const UNAUTHORIZED_PATH = '/some/other/mount/unrelated.db'
+const UNAUTHORIZED_PATH = resolve('external', 'unrelated.db')
 
 describe('database path-authority gate', () => {
   beforeEach(() => {

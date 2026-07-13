@@ -8,16 +8,15 @@
 
 import { app, dialog, safeStorage, shell } from 'electron'
 import { mkdir, readFile, writeFile } from 'fs/promises'
-import { dirname, isAbsolute, join, resolve } from 'path'
+import { dirname, join } from 'path'
 import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
 import {
   addAllowedDatabasePath,
-  isStrictlyEnrolledDatabasePath
+  isAllowedDatabasePath
 } from '../../security/database-path-allowlist'
-import type { DatabaseManager } from '../../services/DatabaseManager'
 import {
   DatabaseOpenSchema,
   DatabaseCreateSchema,
@@ -224,21 +223,6 @@ function createInsecureLocalPostgresSecretStore(userDataPath: string): SecretSto
  * provenance is rejected even if it happens to live under the user's home
  * directory or the OS temp dir.
  */
-function isAllowedDatabasePath(candidate: string, getDbManager: () => DatabaseManager): boolean {
-  if (isStrictlyEnrolledDatabasePath(candidate)) return true
-  if (!isAbsolute(candidate)) return false
-
-  const canonical = resolve(candidate)
-  if (canonical !== candidate) return false
-
-  const manager = getDbManager()
-
-  const currentPath = manager.getCurrentPath()
-  if (currentPath !== null && resolve(currentPath) === canonical) return true
-
-  return manager.getRecentDatabases().some((db) => resolve(db.path) === canonical)
-}
-
 function throwUnallowedDatabasePath(channel: string, path: string): never {
   throw new InvalidParametersError(
     `${channel}: path is not in the database path authority set: ${path}`,

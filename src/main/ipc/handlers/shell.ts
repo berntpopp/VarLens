@@ -6,6 +6,7 @@ import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
 import { setUserDomains, isUrlSafeForExternal } from '../../utils/url-validation'
 import { isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
+import { isAllowedDatabasePath } from '../../security/database-path-allowlist'
 
 /**
  * Shell IPC handlers
@@ -25,7 +26,7 @@ const FilePathSchema = z.string().min(1).max(1024)
 /** Schema for user domains array */
 const UserDomainsSchema = z.array(z.string().min(1).max(253)).max(100)
 
-export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
+export function registerShellHandlers({ ipcMain, getDbManager }: HandlerDependencies): void {
   ipcMain.handle('shell:updateUserDomains', async (_event, domains: unknown) => {
     return wrapHandler(async () => {
       // ANTI-07: Runtime validation at IPC boundary
@@ -80,9 +81,14 @@ export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
         throw new Error('Invalid parameters')
       }
 
-      if (!isStrictlyEnrolledPath(validated.data)) {
+      const hasImportAuthority = isStrictlyEnrolledPath(validated.data)
+      const hasDatabaseAuthority =
+        !hasImportAuthority && getDbManager !== undefined
+          ? isAllowedDatabasePath(validated.data, getDbManager)
+          : false
+      if (!hasImportAuthority && !hasDatabaseAuthority) {
         throw new InvalidParametersError(
-          `shell:showItemInFolder: filePath is not in the allowed import paths: ${validated.data}`,
+          `shell:showItemInFolder: filePath is not in the path authority set: ${validated.data}`,
           'The selected file is not in an allowed location.'
         )
       }
