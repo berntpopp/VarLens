@@ -36,14 +36,14 @@
 
       <!-- Error display -->
       <v-alert
-        v-if="importStore.phase === 'error' && importStore.errorMessage"
+        v-if="cancelError || (importStore.phase === 'error' && importStore.errorMessage)"
         type="error"
         variant="tonal"
         closable
         class="mx-4 mt-3"
-        @click:close="importStore.reset()"
+        @click:close="cancelError ? (cancelError = '') : importStore.reset()"
       >
-        {{ importStore.errorMessage }}
+        {{ cancelError || importStore.errorMessage }}
       </v-alert>
 
       <!-- Step 1: Source Selection -->
@@ -240,6 +240,7 @@ const emit = defineEmits<{
 
 const dialog = ref(false)
 const step = ref(1)
+const cancelError = ref('')
 
 // VCF import state
 const isVcfImport = ref(false)
@@ -594,6 +595,7 @@ async function startVcfImport(): Promise<void> {
       }
     }
 
+    cancelError.value = ''
     summary.value = results
     step.value = 4
     importStore.importComplete({
@@ -607,6 +609,7 @@ async function startVcfImport(): Promise<void> {
   } catch (err) {
     const message = formatIpcError(err, 'VCF import failed')
     logService.error(`VCF import failed: ${message}`, 'ImportWizard')
+    cancelError.value = ''
     summary.value = {
       succeeded: 0,
       failed: vcfSelectedSamples.value.length,
@@ -649,6 +652,7 @@ async function startImport(): Promise<void> {
 
     // Result also arrives via onComplete callback; guard against double-processing
     if (step.value === 3) {
+      cancelError.value = ''
       summary.value = result
       step.value = 4
 
@@ -672,6 +676,7 @@ async function startImport(): Promise<void> {
     // handled it (race: safeEmit fires before resolve, so the event
     // listener may have already set the correct summary + step 4).
     if (step.value === 3) {
+      cancelError.value = ''
       summary.value = {
         succeeded: 0,
         failed: fileCount.value,
@@ -685,45 +690,32 @@ async function startImport(): Promise<void> {
   }
 }
 
-function cancelImport(): void {
-  if (isWebRuntime() && isVcfImport.value) {
-    void api!.import
-      .cancel()
-      .then((result) => unwrapIpcResult(result))
-      .catch((error) => {
-        logService.warn(
-          `VCF import cancel failed: ${formatIpcError(error, 'cancel failed')}`,
-          'ImportWizard'
-        )
-      })
-  } else {
-    void api!.batchImport
-      .cancel()
-      .then((result) => {
-        unwrapIpcResult(result)
-      })
-      .catch((error) => {
-        logService.warn(
-          `Batch import cancel failed: ${formatIpcError(error, 'cancel failed')}`,
-          'ImportWizard'
-        )
-      })
+async function cancelImport(): Promise<void> {
+  cancelError.value = ''
+  try {
+    const result =
+      isWebRuntime() && isVcfImport.value
+        ? await api!.import.cancel()
+        : await api!.batchImport.cancel()
+    unwrapIpcResult(result)
+  } catch (error) {
+    if (step.value !== 3) return
+    cancelError.value = formatIpcError(error, 'Cancellation failed')
+    logService.warn(`Import cancel failed: ${cancelError.value}`, 'ImportWizard')
+    return
   }
-  summary.value = {
+  if (step.value !== 3) return
+
+  const cancelledResult: BatchResult = {
     succeeded: 0,
     failed: 0,
     skipped: 0,
     cancelled: true,
     details: []
   }
+  summary.value = cancelledResult
   step.value = 4
-  importStore.importComplete({
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    cancelled: true,
-    details: []
-  })
+  importStore.importComplete({ ...cancelledResult, details: [] })
 }
 
 function continueInBackground(): void {
@@ -745,6 +737,7 @@ function handleClose(): void {
 
 function resetState(): void {
   step.value = 1
+  cancelError.value = ''
   selectedMode.value = null
   selectedFilePaths.value = []
   isVcfImport.value = false
@@ -843,6 +836,7 @@ onMounted(() => {
     cleanupComplete = api.batchImport.onComplete((result: BatchResult) => {
       // Guard: startImport() await may have already handled this
       if (step.value === 3) {
+        cancelError.value = ''
         summary.value = result
         step.value = 4
 
