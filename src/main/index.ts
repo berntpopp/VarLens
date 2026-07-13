@@ -257,8 +257,9 @@ if (gotTheLock !== true) {
     // policy as the main window and harden <webview> guest preferences. The
     // policy is injected so its implementation remains owned by
     // window-navigation-policy.ts (and can be tightened independently).
+    const appDocUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
     installWebContentsSecurityGuards((url) =>
-      isMainWindowNavigationAllowed(url, process.env['ELECTRON_RENDERER_URL'])
+      isMainWindowNavigationAllowed(url, process.env['ELECTRON_RENDERER_URL'], appDocUrl)
     )
 
     // Create window after security handlers are registered
