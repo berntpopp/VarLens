@@ -144,6 +144,7 @@ export class ObjectFormatMapper extends Transform {
             transcript_id: mapped.transcript,
             gene_symbol: mapped.gene_symbol,
             consequence: mapped.consequence,
+            func: mapped.func,
             cdna: mapped.cdna,
             aa_change: mapped.aa_change,
             hpo_sim_score: mapped.hpo_sim_score,

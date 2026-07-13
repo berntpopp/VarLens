@@ -64,6 +64,7 @@ export interface VariantTranscriptsTable {
   transcript_id: string
   gene_symbol: string | null
   consequence: string | null
+  func: string | null
   cdna: string | null
   aa_change: string | null
   hpo_sim_score: number | null

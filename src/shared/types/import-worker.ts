@@ -70,6 +70,7 @@ export const TRANSCRIPT_INSERT_COLUMNS = [
   'transcript_id',
   'gene_symbol',
   'consequence',
+  'func',
   'cdna',
   'aa_change',
   'hpo_sim_score',

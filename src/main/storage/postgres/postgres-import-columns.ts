@@ -55,6 +55,7 @@ export const VARIANT_TRANSCRIPT_COLUMNS = [
   'transcript_id',
   'gene_symbol',
   'consequence',
+  'func',
   'cdna',
   'aa_change',
   'hpo_sim_score',
@@ -156,8 +157,9 @@ export const VARIANT_STR_COPY_COLUMNS = VARIANT_STR_COLUMNS
 // using encodeBoolean would throw because the encoder is strict.
 //
 // Where a column name appears in multiple tables (e.g. `gene_symbol`,
-// `consequence`, `cdna`, `aa_change`, `hpo_sim_score`, `moi`, `variant_id`),
-// the type is identical across tables, so a single shared entry is correct.
+// `consequence`, `func`, `cdna`, `aa_change`, `hpo_sim_score`, `moi`,
+// `variant_id`), the type is identical across tables, so a single shared
+// entry is correct.
 // ---------------------------------------------------------------------------
 
 export const VARIANT_COLUMN_ENCODERS: Record<string, CopyColumnEncoder> = {

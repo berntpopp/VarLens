@@ -58,6 +58,7 @@ const TRANSCRIPT_RECORDSET_TYPES: Record<string, string> = {
   transcript_id: 'text',
   gene_symbol: 'text',
   consequence: 'text',
+  func: 'text',
   cdna: 'text',
   aa_change: 'text',
   hpo_sim_score: 'double precision',

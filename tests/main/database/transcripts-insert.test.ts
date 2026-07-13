@@ -47,7 +47,8 @@ describe('insertVariantsBatch with transcripts', () => {
           {
             transcript_id: 'NM_007294.4',
             gene_symbol: 'BRCA1',
-            consequence: 'missense_variant',
+            consequence: 'MODERATE',
+            func: 'missense_variant',
             cdna: 'c.123A>G',
             aa_change: 'p.His41Arg',
             hpo_sim_score: null,
@@ -57,7 +58,8 @@ describe('insertVariantsBatch with transcripts', () => {
           {
             transcript_id: 'NM_007299.4',
             gene_symbol: 'BRCA1',
-            consequence: 'synonymous_variant',
+            consequence: 'LOW',
+            func: 'synonymous_variant',
             cdna: 'c.456C>T',
             aa_change: null,
             hpo_sim_score: null,
@@ -77,8 +79,13 @@ describe('insertVariantsBatch with transcripts', () => {
     expect(txRows).toHaveLength(2)
     expect(txRows[0].transcript_id).toBe('NM_007294.4')
     expect(txRows[0].is_selected).toBe(1)
+    // Canonical model (D1): consequence = IMPACT, func = SO term.
+    expect(txRows[0].consequence).toBe('MODERATE')
+    expect(txRows[0].func).toBe('missense_variant')
     expect(txRows[1].transcript_id).toBe('NM_007299.4')
     expect(txRows[1].is_selected).toBe(0)
+    expect(txRows[1].consequence).toBe('LOW')
+    expect(txRows[1].func).toBe('synonymous_variant')
   })
 
   it('should work without _transcripts (backwards compatible)', () => {

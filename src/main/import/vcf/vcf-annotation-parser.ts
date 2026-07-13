@@ -114,7 +114,9 @@ function parseCsq(
       transcriptMap.set(tid, {
         transcript_id: tid,
         gene_symbol: t.fields.get('SYMBOL') ?? null,
-        consequence: t.fields.get('Consequence') ?? null,
+        // Canonical model: consequence = IMPACT level, func = SO term.
+        consequence: t.fields.get('IMPACT') ?? null,
+        func: t.fields.get('Consequence') ?? null,
         cdna: t.fields.get('HGVSc') ?? null,
         aa_change: t.fields.get('HGVSp') ?? null,
         hpo_sim_score: null,
@@ -221,7 +223,9 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
       transcriptMap.set(tid, {
         transcript_id: tid,
         gene_symbol: t.parts[ANN_GENE_NAME] ?? null,
-        consequence: t.parts[ANN_ANNOTATION] ?? null,
+        // Canonical model: consequence = IMPACT level, func = SO term.
+        consequence: t.parts[ANN_IMPACT] ?? null,
+        func: t.parts[ANN_ANNOTATION] ?? null,
         cdna: t.parts[ANN_HGVSC] ?? null,
         aa_change: t.parts[ANN_HGVSP] ?? null,
         hpo_sim_score: null,

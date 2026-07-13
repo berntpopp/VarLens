@@ -68,6 +68,11 @@ describe('vcf-annotation-parser', () => {
       expect(result.clinvar).toBeNull() // empty field
       expect(result.transcripts).toHaveLength(1)
       expect(result.transcripts[0].is_selected).toBe(1)
+      // Canonical model (issue C4/F-02): per-transcript `consequence` must be
+      // the IMPACT level, and the new `func` column must carry the SO term —
+      // the same split already used on the top-level `variants` row.
+      expect(result.transcripts[0].consequence).toBe('LOW')
+      expect(result.transcripts[0].func).toBe('synonymous_variant')
     })
 
     it('selects MANE Select transcript over others', () => {
@@ -248,6 +253,9 @@ describe('vcf-annotation-parser', () => {
       expect(result.cdna).toBe('c.310T>C')
       expect(result.aaChange).toBe('p.Ser104Pro')
       expect(result.transcripts).toHaveLength(1)
+      // Canonical model: per-transcript `consequence` = IMPACT, `func` = SO term.
+      expect(result.transcripts[0].consequence).toBe('MODERATE')
+      expect(result.transcripts[0].func).toBe('missense_variant')
     })
 
     it('handles multi-annotation ANN with allele filtering', () => {

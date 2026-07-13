@@ -18,6 +18,8 @@ export interface UnifiedTranscriptRow {
   gene_symbol: string | null
   consequence: string | null
   impact: string | null
+  /** Sequence Ontology term (missense_variant, stop_gained, ...), joined if multiple. */
+  func: string | null
   consequence_terms: string[] | null
   cdna: string | null
   aa_change: string | null
@@ -80,6 +82,7 @@ export function mergeTranscripts(
       gene_symbol: db.gene_symbol,
       consequence: db.consequence,
       impact: null,
+      func: db.func,
       consequence_terms: null,
       cdna: db.cdna,
       aa_change: db.aa_change,
@@ -106,6 +109,8 @@ export function mergeTranscripts(
       existing.vep_source = vep.source ?? null
       existing.impact = vep.impact ?? null
       existing.consequence_terms = vep.consequence_terms ?? null
+      existing.func =
+        vep.consequence_terms.length > 0 ? vep.consequence_terms.join(', ') : existing.func
       existing.biotype = vep.biotype ?? null
       // Fill in MANE/canonical from VEP if DB didn't have them
       if (existing.is_mane_select === null && vep.mane_select !== undefined) {
@@ -122,6 +127,7 @@ export function mergeTranscripts(
         gene_symbol: vep.gene_symbol ?? null,
         consequence: vep.impact ?? null,
         impact: vep.impact ?? null,
+        func: vep.consequence_terms.length > 0 ? vep.consequence_terms.join(', ') : null,
         consequence_terms: vep.consequence_terms ?? null,
         cdna: null,
         aa_change: null,

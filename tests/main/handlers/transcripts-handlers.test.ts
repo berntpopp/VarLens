@@ -27,6 +27,7 @@ describe('transcript PostgreSQL executor routing', () => {
       transcript_id: 'NM_000059.4',
       gene_symbol: 'BRCA2',
       consequence: 'HIGH',
+      func: 'missense_variant',
       cdna: 'c.1A>G',
       aa_change: 'p.M1V',
       hpo_sim_score: 0.8,
@@ -67,5 +68,43 @@ describe('transcript PostgreSQL executor routing', () => {
       type: 'transcripts:insertAndSwitch',
       params: [9, transcript]
     })
+  })
+
+  it('rejects a non-IMPACT consequence before it reaches a write executor', async () => {
+    const writeExecute = vi.fn()
+    const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const { registerTranscriptHandlers } =
+      await import('../../../src/main/ipc/handlers/transcripts')
+
+    registerTranscriptHandlers({
+      ipcMain: ipcMain as never,
+      getDb: vi.fn() as never,
+      getDbManager: (() => ({
+        getCurrentSession: () => ({
+          capabilities: { backend: 'postgres' },
+          getWriteExecutor: () => ({ execute: writeExecute })
+        })
+      })) as never
+    })
+
+    const result = await handlers.get('transcripts:insertAndSwitch')!(undefined, 9, {
+      transcript_id: 'NM_BAD.1',
+      gene_symbol: 'BRCA2',
+      consequence: 'stop_gained',
+      func: 'stop_gained',
+      cdna: null,
+      aa_change: null,
+      hpo_sim_score: null,
+      moi: null,
+      is_selected: 0
+    })
+
+    expect(result).toMatchObject({ code: 'UNKNOWN', message: 'Invalid parameters' })
+    expect(writeExecute).not.toHaveBeenCalled()
   })
 })

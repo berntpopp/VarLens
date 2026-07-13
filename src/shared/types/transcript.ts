@@ -1,3 +1,14 @@
+export const TRANSCRIPT_IMPACT_VALUES = ['HIGH', 'MODERATE', 'LOW', 'MODIFIER'] as const
+
+export function isTranscriptImpact(
+  value: unknown
+): value is (typeof TRANSCRIPT_IMPACT_VALUES)[number] {
+  return (
+    typeof value === 'string' &&
+    TRANSCRIPT_IMPACT_VALUES.includes(value as (typeof TRANSCRIPT_IMPACT_VALUES)[number])
+  )
+}
+
 /**
  * TranscriptAnnotation — full row from variant_transcripts table.
  * Returned by getVariantTranscripts() to the renderer.
@@ -7,7 +18,10 @@ export interface TranscriptAnnotation {
   variant_id: number
   transcript_id: string
   gene_symbol: string | null
+  /** IMPACT level (HIGH/MODERATE/LOW/MODIFIER) — same convention as variants.consequence. */
   consequence: string | null
+  /** Sequence Ontology term (missense_variant, stop_gained, ...) — same convention as variants.func. */
+  func: string | null
   cdna: string | null
   aa_change: string | null
   hpo_sim_score: number | null
@@ -24,7 +38,10 @@ export interface TranscriptAnnotation {
 export interface TranscriptInsertRow {
   transcript_id: string
   gene_symbol: string | null
+  /** IMPACT level (HIGH/MODERATE/LOW/MODIFIER) — same convention as variants.consequence. */
   consequence: string | null
+  /** Sequence Ontology term (missense_variant, stop_gained, ...) — same convention as variants.func. */
+  func: string | null
   cdna: string | null
   aa_change: string | null
   hpo_sim_score: number | null
