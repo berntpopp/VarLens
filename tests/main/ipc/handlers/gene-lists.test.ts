@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { resolve } from 'node:path'
 import { isIpcError } from '../../../../src/shared/types/errors'
 
-vi.mock('node:fs/promises', () => ({
-  readFile: vi.fn()
+vi.mock('../../../../src/main/import/vcf/bed-reader', () => ({
+  readBedEntries: vi.fn()
 }))
 
-import { readFile } from 'node:fs/promises'
+import { readBedEntries } from '../../../../src/main/import/vcf/bed-reader'
 import { registerGeneListHandlers } from '../../../../src/main/ipc/handlers/gene-lists'
 import {
   __resetAllowlistForTests,
@@ -69,7 +69,7 @@ describe('region-files:importBed IPC handler', () => {
     const result = await invokeHandler(ipcMain, 'region-files:importBed', 1, '/etc/passwd')
 
     expect(isIpcError(result)).toBe(true)
-    expect(readFile).not.toHaveBeenCalled()
+    expect(readBedEntries).not.toHaveBeenCalled()
     expect(deps.getDb().geneLists.importBedEntries).not.toHaveBeenCalled()
   })
 
@@ -92,7 +92,7 @@ describe('region-files:importBed IPC handler', () => {
     )
 
     expect(isIpcError(result)).toBe(true)
-    expect(readFile).not.toHaveBeenCalled()
+    expect(readBedEntries).not.toHaveBeenCalled()
     expect(deps.getDb().geneLists.importBedEntries).not.toHaveBeenCalled()
   })
 
@@ -103,12 +103,16 @@ describe('region-files:importBed IPC handler', () => {
 
     const bedPath = resolve('external', 'regions.bed')
     addAllowedImportPath(bedPath)
-    vi.mocked(readFile).mockResolvedValue('chr1\t100\t200\tregion1\n')
+    vi.mocked(readBedEntries).mockReturnValue(
+      (async function* () {
+        yield { chr: 'chr1', start: 100, end: 200, label: 'region1' }
+      })()
+    )
 
     const result = await invokeHandler(ipcMain, 'region-files:importBed', 1, bedPath)
 
     expect(isIpcError(result)).toBe(false)
-    expect(readFile).toHaveBeenCalledWith(bedPath, 'utf-8')
+    expect(readBedEntries).toHaveBeenCalledWith(bedPath, expect.any(Number))
     expect(deps.getDb().geneLists.importBedEntries).toHaveBeenCalledWith(1, [
       { chr: 'chr1', start: 100, end: 200, label: 'region1' }
     ])

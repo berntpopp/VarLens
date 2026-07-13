@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { parseVcfLine } from '../../../../src/main/import/vcf/vcf-line-parser'
 
 const SAMPLE_NAMES = ['HG005', 'HG006', 'HG007']
@@ -104,5 +104,92 @@ describe('vcf-line-parser', () => {
 
     expect(record.ref).toBe('G')
     expect(record.alt).toEqual(['GACC'])
+  })
+
+  describe('invalid POS', () => {
+    it('rejects a non-numeric POS instead of producing a NaN row', () => {
+      const line = 'chr1\tNOTNUM\t.\tA\tG\t.\t.\t.'
+      const record = parseVcfLine(line, [])
+
+      expect(record).toBeNull()
+    })
+
+    it('rejects POS = "0"', () => {
+      const line = 'chr1\t0\t.\tA\tG\t.\t.\t.'
+      const record = parseVcfLine(line, [])
+
+      expect(record).toBeNull()
+    })
+
+    it('rejects POS = "-5"', () => {
+      const line = 'chr1\t-5\t.\tA\tG\t.\t.\t.'
+      const record = parseVcfLine(line, [])
+
+      expect(record).toBeNull()
+    })
+
+    it('rejects a fractional POS ("1.5")', () => {
+      const line = 'chr1\t1.5\t.\tA\tG\t.\t.\t.'
+      const record = parseVcfLine(line, [])
+
+      expect(record).toBeNull()
+    })
+
+    it('invokes the onSkip callback with a reason when POS is invalid', () => {
+      const line = 'chr1\tNOTNUM\t.\tA\tG\t.\t.\t.'
+      const reasons: string[] = []
+      const record = parseVcfLine(line, [], (reason) => reasons.push(reason))
+
+      expect(record).toBeNull()
+      expect(reasons).toHaveLength(1)
+      expect(reasons[0]).toMatch(/pos/i)
+    })
+
+    it('does not invoke onSkip for a valid line', () => {
+      const line = 'chr22\t100\trs1\tA\tG\t99\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const onSkip = vi.fn()
+      const record = parseVcfLine(line, SAMPLE_NAMES, onSkip)
+
+      expect(record).not.toBeNull()
+      expect(onSkip).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('malformed QUAL', () => {
+    it('parses a malformed (non-numeric) QUAL as null, not NaN', () => {
+      const line = 'chr22\t100\t.\tA\tG\tabc\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).not.toBeNull()
+      expect(record!.qual).toBeNull()
+      expect(Number.isNaN(record!.qual)).toBe(false)
+      // The rest of the record still parses correctly.
+      expect(record!.chrom).toBe('chr22')
+      expect(record!.pos).toBe(100)
+    })
+
+    it('does not accept numeric prefixes with trailing garbage', () => {
+      const line = 'chr22\t100\t.\tA\tG\t99abc\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).not.toBeNull()
+      expect(record!.qual).toBeNull()
+    })
+
+    it('does not accept non-finite QUAL values', () => {
+      const line = 'chr22\t100\t.\tA\tG\t1e309\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).not.toBeNull()
+      expect(record!.qual).toBeNull()
+    })
+
+    it('still accepts finite exponent notation', () => {
+      const line = 'chr22\t100\t.\tA\tG\t1.5e2\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).not.toBeNull()
+      expect(record!.qual).toBe(150)
+    })
   })
 })

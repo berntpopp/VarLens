@@ -1,8 +1,18 @@
-import { describe, it, expect } from 'vitest'
-import { resolve } from 'node:path'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { resolve, join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { gzipSync } from 'node:zlib'
 import { getVcfPreview } from '../../../../src/main/import/vcf/vcf-preview'
+import {
+  LineTooLongError,
+  DecompressedSizeExceededError
+} from '../../../../src/main/import/stream-utils'
 
 const SYNTHETIC_VCF = resolve(__dirname, '../../../test-data/vcf/synthetic-unit-test.vcf')
+const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
+const LINE_CAP_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
+const TEST_LINE_CAP = 1024
 
 describe('vcf-preview', () => {
   it('returns preview result for synthetic VCF', async () => {
@@ -42,5 +52,37 @@ describe('vcf-preview', () => {
 
   it('rejects for non-existent file', async () => {
     await expect(getVcfPreview('/tmp/does-not-exist.vcf')).rejects.toThrow('ENOENT')
+  })
+
+  describe('DoS guards', () => {
+    let tmpDir: string
+
+    beforeEach(() => {
+      tmpDir = mkdtempSync(join(tmpdir(), 'varlens-preview-dos-'))
+    })
+
+    afterEach(() => {
+      delete process.env[DECOMPRESSED_CAP_ENV_VAR]
+      delete process.env[LINE_CAP_ENV_VAR]
+      rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('rejects a file containing a line over the production call-path cap', async () => {
+      process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
+      const filePath = join(tmpDir, 'giant-line.vcf')
+      const giantLine = 'A'.repeat(TEST_LINE_CAP + 1)
+      writeFileSync(filePath, `##fileformat=VCFv4.2\n${giantLine}\nchr1\t100\n`)
+
+      await expect(getVcfPreview(filePath)).rejects.toThrow(LineTooLongError)
+    })
+
+    it('rejects a decompression bomb once decompressed bytes exceed the configured cap', async () => {
+      process.env[DECOMPRESSED_CAP_ENV_VAR] = '1000'
+      const filePath = join(tmpDir, 'bomb.vcf.gz')
+      const inflated = '##fileformat=VCFv4.2\n' + 'A'.repeat(1_000_000) + '\n'
+      writeFileSync(filePath, gzipSync(Buffer.from(inflated)))
+
+      await expect(getVcfPreview(filePath)).rejects.toThrow(DecompressedSizeExceededError)
+    })
   })
 })

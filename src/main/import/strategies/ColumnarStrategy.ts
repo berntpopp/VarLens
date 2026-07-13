@@ -1,3 +1,4 @@
+import { compose } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
@@ -116,13 +117,14 @@ export class ColumnarStrategy implements ImportStrategy {
       const fieldsToExtract = new Set(['Gene', 'Transcript', 'HpoSimScore', 'MoI'])
       let resolved = false
 
-      const stream = createDecompressedStream(filePath)
-        .pipe(parser.asStream())
-        .pipe(pick.asStream({ filter: headerPath }))
-        .pipe(streamArray.asStream())
+      const stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: headerPath }),
+        streamArray.asStream()
+      )
 
       const cleanup = (): void => {
-        stream.removeAllListeners()
         stream.destroy()
       }
 

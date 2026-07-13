@@ -90,6 +90,9 @@ export interface FileImportRequest {
   vcfGenomeBuild?: string
 }
 
+/** Maximum number of representative skip reasons retained per imported file. */
+export const MAX_IMPORT_SKIP_REASONS = 10
+
 /** Worker -> Main messages */
 export type WorkerMessage =
   | {
@@ -110,6 +113,8 @@ export type WorkerMessage =
         caseName: string
         variantCount: number
         skipped: number
+        /** Representative reasons, capped at MAX_IMPORT_SKIP_REASONS. */
+        skipReasons: string[]
         elapsed: number
       }
     }

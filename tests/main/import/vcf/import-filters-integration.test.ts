@@ -239,9 +239,9 @@ describe('STR VCF import (Straglr)', () => {
 })
 
 describe('BED filter integration', () => {
-  it('filters SV variants by BED region', () => {
+  it('filters SV variants by BED region', async () => {
     const { variants } = parseVcfFile(SV_VCF)
-    const bedFilter = BedFilter.fromFile(BED_FILE, 0)
+    const bedFilter = await BedFilter.fromFile(BED_FILE, 0)
 
     const filtered = variants.filter((v) => {
       if (v.end_pos !== null && v.end_pos !== undefined) {
@@ -258,9 +258,9 @@ describe('BED filter integration', () => {
     expect(filtered.length).toBe(2)
   })
 
-  it('filters CNV variants by BED region', () => {
+  it('filters CNV variants by BED region', async () => {
     const { variants } = parseVcfFile(CNV_VCF)
-    const bedFilter = BedFilter.fromFile(BED_FILE, 0)
+    const bedFilter = await BedFilter.fromFile(BED_FILE, 0)
 
     const filtered = variants.filter((v) => {
       if (v.end_pos !== null && v.end_pos !== undefined) {
@@ -275,9 +275,9 @@ describe('BED filter integration', () => {
     expect(filtered.length).toBe(2)
   })
 
-  it('applies padding to expand BED regions', () => {
+  it('applies padding to expand BED regions', async () => {
     const { variants } = parseVcfFile(SV_VCF)
-    const bedFilter = BedFilter.fromFile(BED_FILE, 1000000) // 1M padding
+    const bedFilter = await BedFilter.fromFile(BED_FILE, 1000000) // 1M padding
 
     const filtered = variants.filter((v) => {
       if (v.end_pos !== null && v.end_pos !== undefined) {

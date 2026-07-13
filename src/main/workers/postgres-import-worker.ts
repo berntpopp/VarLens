@@ -1,9 +1,7 @@
 import { parentPort } from 'node:worker_threads'
 import { basename } from 'node:path'
-import { statSync, createReadStream } from 'node:fs'
+import { statSync } from 'node:fs'
 import type { Readable } from 'node:stream'
-import { createGunzip } from 'node:zlib'
-import { createInterface } from 'node:readline'
 import { Client, type ClientConfig, type Pool, type PoolClient } from 'pg'
 
 import {
@@ -33,19 +31,12 @@ import { PostgresCohortSummaryRepository } from '../storage/postgres/PostgresCoh
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
 import type { FormatInfo } from '../import/strategies/ImportStrategy'
 import { createMapperPipeline as defaultCreateMapperPipeline } from './import-pipeline'
-import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
-import { parseVcfLine } from '../import/vcf/vcf-line-parser'
-import { mapVcfRecord } from '../import/vcf/VcfMapper'
-import { detectCaller } from '../import/vcf/caller-detector'
-import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
-import { isGzipped } from '../import/stream-utils'
-import type { VcfHeader, VcfMappedVariant } from '../import/vcf/types'
+import type { VcfMappedVariant } from '../import/vcf/types'
 import { BedFilter } from '../import/vcf/bed-filter'
-import {
-  passesPreMappingFilters,
-  passesPostMappingFilters,
-  type ImportFilters
-} from '../import/vcf/import-filters'
+import type { ImportFilters } from '../import/vcf/import-filters'
+import { streamMappedVcfRows } from './postgres-vcf-stream'
+
+export { streamMappedVcfRows } from './postgres-vcf-stream'
 
 const POSTGRES_JSON_IMPORT_BATCH_SIZE = 1000
 
@@ -81,106 +72,6 @@ process.on('unhandledRejection', (reason) => {
   } satisfies PostgresImportWorkerOutboundMessage)
 })
 
-/**
- * Async generator yielding mapped VCF variants one at a time.
- * Mirrors the streamInsertVcf parsing pipeline (header lines, parseVcfLine,
- * mapVcfRecord) but emits mapped variants instead of inserting them.
- *
- * When `filters` is provided, pre-mapping filters (FILTER column, QUAL
- * threshold, BED region) are applied before `mapVcfRecord`, and post-mapping
- * filters (GQ, DP) are applied to each emitted variant independently.
- */
-async function* streamMappedVcfRows(
-  filePath: string,
-  selectedSample: string,
-  filters?: ImportFilters
-): AsyncGenerator<VcfMappedVariant, void, void> {
-  // Fail fast (synchronously, with a stack we can attach to the per-file
-  // result) for the most common open-time error class: missing/unreadable
-  // file. createReadStream defers `open(2)` to the next tick, so an ENOENT
-  // would otherwise surface as an asynchronous `error` event on the raw
-  // stream — and if no listener is attached when it fires, Node escalates
-  // it to an `uncaughtException`, tearing the whole worker down (Phase 9
-  // Task 15 root cause).
-  statSync(filePath)
-
-  const raw = createReadStream(filePath)
-  const gunzip = isGzipped(filePath) ? createGunzip() : null
-  const stream = gunzip !== null ? raw.pipe(gunzip) : raw
-  const rl = createInterface({ input: stream, crlfDelay: Infinity })
-
-  // Belt-and-suspenders: also capture any post-open stream errors (gzip
-  // corruption mid-file, EIO, etc.) and re-throw them from the generator so
-  // the caller's per-file `try/catch` handles them. Without this an
-  // unhandled `error` event would still surface as `uncaughtException`.
-  let streamError: Error | null = null
-  const onStreamError = (err: Error): void => {
-    if (streamError === null) streamError = err
-    rl.close()
-  }
-  raw.on('error', onStreamError)
-  gunzip?.on('error', onStreamError)
-
-  const headerLines: string[] = []
-  let header: VcfHeader | null = null
-  let activeSample = ''
-  let callerName: string | null = null
-
-  try {
-    for await (const line of rl) {
-      if (streamError !== null) throw streamError
-      if (line.startsWith('#')) {
-        headerLines.push(line)
-        continue
-      }
-
-      if (header === null) {
-        header = parseVcfHeaderFromLines(headerLines)
-        activeSample = selectedSample !== '' ? selectedSample : (header.samples[0] ?? '')
-        if (activeSample === '') {
-          // No selectable sample — drain quietly.
-          break
-        }
-        const callerInfo = detectCaller(headerLines)
-        callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
-      }
-
-      try {
-        const record = parseVcfLine(line, header.samples)
-        if (record === null) continue
-        // Apply pre-mapping filters (FILTER column, QUAL, BED region) before
-        // the expensive mapVcfRecord call — skips multi-allelic expansion too.
-        if (!passesPreMappingFilters(record, filters)) continue
-        const mapped = mapVcfRecord(
-          record,
-          header,
-          activeSample,
-          DEFAULT_INFO_FIELD_MAPPINGS,
-          callerName
-        )
-        for (const variant of mapped) {
-          // Apply post-mapping filters (GQ, DP) per emitted variant.
-          if (!passesPostMappingFilters(variant, filters)) continue
-          yield variant
-        }
-      } catch (e) {
-        // Skip unparseable lines — same behavior as streamInsertVcf
-        console.warn(
-          '[postgres-import-worker] Skipping unparseable VCF line:',
-          e instanceof Error ? e.message : String(e)
-        )
-      }
-    }
-    // Stream errors that fire AFTER the readline iterator drains (e.g. a
-    // gunzip integrity check at end-of-stream) still need to propagate.
-    if (streamError !== null) throw streamError
-  } finally {
-    raw.off('error', onStreamError)
-    gunzip?.off('error', onStreamError)
-    raw.destroy()
-  }
-}
-
 export interface RunImportDeps {
   createClient: (config: ClientConfig) => Client
   detectFormat: (filePath: string) => Promise<FormatInfo>
@@ -189,7 +80,12 @@ export interface RunImportDeps {
   /** VCF mapped-row producer for the PG worker's VCF branch. */
   createVcfMappedStream: (
     filePath: string,
-    options: { selectedSample: string; genomeBuild: string; filters?: ImportFilters }
+    options: {
+      selectedSample: string
+      genomeBuild: string
+      filters?: ImportFilters
+      onSkip?: (reason: string) => void
+    }
   ) => Promise<AsyncIterable<VcfMappedVariant>>
 }
 
@@ -199,7 +95,34 @@ const defaultDeps: RunImportDeps = {
   createMapperPipeline: defaultCreateMapperPipeline,
   statFile: (path: string) => ({ size: statSync(path).size }),
   createVcfMappedStream: async (filePath, options) =>
-    streamMappedVcfRows(filePath, options.selectedSample, options.filters)
+    streamMappedVcfRows(filePath, options.selectedSample, options.filters, options.onSkip)
+}
+
+async function cleanupIncompleteSingleFileVcfCase(args: {
+  client: Pick<Client, 'query'>
+  schema: string
+  caseId: number
+}): Promise<void> {
+  const { client, schema, caseId } = args
+  await client.query('BEGIN')
+  try {
+    await client.query(`DELETE FROM ${quoteIdentifier(schema)}."cases" WHERE id = $1`, [caseId])
+    await client.query('COMMIT')
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK')
+    } catch {
+      // Preserve the original cleanup failure.
+    }
+    throw err
+  }
+}
+
+function recordParseSkip(args: { reason: string; errors: string[]; prefix?: string }): void {
+  const { reason, errors, prefix } = args
+  if (errors.length < 10) {
+    errors.push(prefix === undefined ? reason : `${prefix}: ${reason}`)
+  }
 }
 
 /**
@@ -324,6 +247,7 @@ export async function runImport(
   const client = deps.createClient(clientConfigFromMessage(start.client))
   let beganTransaction = false
   let committed = false
+  let incompleteSingleFileVcfCaseId: number | null = null
 
   try {
     await client.connect()
@@ -381,10 +305,16 @@ export async function runImport(
           const repo = new PostgresVcfImportRepository(start.schema)
           // Single-file imports reject filters at the executor level, but pass
           // undefined defensively to keep the contract consistent.
+          let totalSkipped = 0
+          const errors: string[] = []
           const stream = await deps.createVcfMappedStream(filePath, {
             selectedSample,
             genomeBuild,
-            filters: undefined
+            filters: undefined,
+            onSkip: (reason) => {
+              totalSkipped += 1
+              recordParseSkip({ reason, errors })
+            }
           })
 
           let variants: Array<Record<string, unknown>> = []
@@ -443,7 +373,10 @@ export async function runImport(
               repo.writeVcfFile(client as unknown as Pick<PoolClient, 'query'>, request)
             )
             profileCount('batch', 1)
-            if (!firstWritten) caseId = result.caseId
+            if (!firstWritten) {
+              caseId = result.caseId
+              incompleteSingleFileVcfCaseId = caseId
+            }
             totalInserted += result.variantCount
             firstWritten = true
             post({ type: 'progress', phase: 'inserting', rowsProcessed: totalInserted, filePath })
@@ -526,6 +459,7 @@ export async function runImport(
             await client.query('COMMIT')
           }
           committed = true
+          incompleteSingleFileVcfCaseId = null
 
           profileFlush()
           post({
@@ -534,8 +468,8 @@ export async function runImport(
             result: {
               caseId,
               variantCount: totalInserted,
-              skipped: 0,
-              errors: [],
+              skipped: totalSkipped,
+              errors,
               elapsed: Date.now() - startedAt
             }
           })
@@ -682,12 +616,14 @@ export async function runImport(
         }> = []
         let caseId = 0
         let totalVariantCount = 0
+        let totalSkipped = 0
+        const parseErrors: string[] = []
         const repo = new PostgresVcfImportRepository(start.schema)
         const selectedSample = start.vcfOptions?.selectedSample ?? ''
         const genomeBuild = start.vcfOptions?.genomeBuild ?? 'GRCh38'
 
-        // Build ImportFilters once before the per-file loop so that
-        // BedFilter.fromFile (a sync file read) runs in the worker, not main.
+        // Build ImportFilters once before the per-file loop so BED parsing runs
+        // in the worker, not main. An explicit BED load must fail closed.
         let importFilters: ImportFilters | undefined
         if (start.filters !== undefined) {
           let bedFilter: BedFilter | undefined
@@ -696,20 +632,10 @@ export async function runImport(
             start.filters.bedFilePath !== undefined &&
             start.filters.bedFilePath !== ''
           ) {
-            try {
-              bedFilter = BedFilter.fromFile(
-                start.filters.bedFilePath,
-                start.filters.bedPadding ?? 0
-              )
-            } catch (err) {
-              // Worker can't use mainLogger; console.warn is the documented
-              // worker exception (see AGENTS.md). Continue without BED filtering
-              // rather than fail the whole import.
-              console.warn(
-                '[postgres-import-worker] BedFilter.fromFile failed:',
-                err instanceof Error ? err.message : String(err)
-              )
-            }
+            bedFilter = await BedFilter.fromFile(
+              start.filters.bedFilePath,
+              start.filters.bedPadding ?? 0
+            )
           }
           importFilters = {
             bedFilter,
@@ -746,7 +672,15 @@ export async function runImport(
             const stream = await deps.createVcfMappedStream(fileSpec.filePath, {
               selectedSample,
               genomeBuild,
-              filters: start.files.length > 1 && i === 0 ? undefined : importFilters
+              filters: start.files.length > 1 && i === 0 ? undefined : importFilters,
+              onSkip: (reason) => {
+                totalSkipped += 1
+                recordParseSkip({
+                  reason,
+                  errors: parseErrors,
+                  prefix: basename(fileSpec.filePath)
+                })
+              }
             })
 
             let variants: Array<Record<string, unknown>> = []
@@ -988,8 +922,8 @@ export async function runImport(
             caseId,
             variantCount: totalVariantCount,
             files: fileResults,
-            skipped: 0,
-            errors: cancelled ? [POSTGRES_IMPORT_CANCELLATION_MESSAGE] : [],
+            skipped: totalSkipped,
+            errors: cancelled ? [POSTGRES_IMPORT_CANCELLATION_MESSAGE] : parseErrors,
             elapsed: Date.now() - startedAt
           }
         })
@@ -1005,12 +939,31 @@ export async function runImport(
     if (beganTransaction && !committed) {
       try {
         await client.query('ROLLBACK')
+        beganTransaction = false
       } catch (rollbackErr) {
         // Worker has no mainLogger access; console.warn is the documented
         // worker exception (see AGENTS.md). Swallow but preserve diagnostics.
         console.warn(
           '[postgres-import-worker] ROLLBACK failed:',
           rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+        )
+      }
+    }
+    if (
+      incompleteSingleFileVcfCaseId !== null &&
+      message !== POSTGRES_IMPORT_CANCELLATION_MESSAGE
+    ) {
+      try {
+        await cleanupIncompleteSingleFileVcfCase({
+          client,
+          schema: start.schema,
+          caseId: incompleteSingleFileVcfCaseId
+        })
+        incompleteSingleFileVcfCaseId = null
+      } catch (cleanupErr) {
+        console.warn(
+          '[postgres-import-worker] Failed to delete incomplete single-file VCF case:',
+          cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
         )
       }
     }

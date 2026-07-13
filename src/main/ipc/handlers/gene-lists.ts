@@ -1,7 +1,6 @@
 import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
-import { readFile } from 'node:fs/promises'
 import {
   GeneListIdSchema,
   GeneListCreateSchema,
@@ -11,6 +10,9 @@ import {
 } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
 import { isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
+import { MAX_BED_FILTER_DECOMPRESSED_BYTES } from '../../import/vcf/bed-filter'
+import { readBedEntries } from '../../import/vcf/bed-reader'
+import { resolveMaxDecompressedBytes } from '../../import/stream-utils'
 
 /**
  * Gene Lists and Region Files IPC handlers
@@ -223,33 +225,10 @@ export function registerGeneListHandlers({
           'The selected file is not in an allowed location.'
         )
       }
-
-      const content = await readFile(validated.data.filePath, 'utf-8')
       const entries: Array<{ chr: string; start: number; end: number; label?: string }> = []
-
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim()
-        if (
-          trimmed === '' ||
-          trimmed.startsWith('#') ||
-          trimmed.startsWith('browser') ||
-          trimmed.startsWith('track')
-        ) {
-          continue
-        }
-        const parts = trimmed.split('\t')
-        if (parts.length >= 3) {
-          const start = parseInt(parts[1], 10)
-          const end = parseInt(parts[2], 10)
-          if (!isNaN(start) && !isNaN(end)) {
-            entries.push({
-              chr: parts[0],
-              start,
-              end,
-              label: parts.length >= 4 ? parts[3] : undefined
-            })
-          }
-        }
+      const maxBytes = Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
+      for await (const entry of readBedEntries(validated.data.filePath, maxBytes)) {
+        entries.push(entry)
       }
 
       const session = getDbManager().getCurrentSession()

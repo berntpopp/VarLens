@@ -20,6 +20,13 @@ describe('import worker types', () => {
     }>()
   })
 
+  it('WorkerMessage file-complete carries bounded skip diagnostics', () => {
+    expectTypeOf<Extract<WorkerMessage, { type: 'file-complete' }>['result']>().toMatchTypeOf<{
+      skipped: number
+      skipReasons: string[]
+    }>()
+  })
+
   it('MainMessage start variant has required fields', () => {
     expectTypeOf<Extract<MainMessage, { type: 'start' }>>().toMatchTypeOf<{
       type: 'start'
