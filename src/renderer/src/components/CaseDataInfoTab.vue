@@ -163,6 +163,11 @@ interface RegionFileItem {
   total_bases: number
 }
 
+interface CaseRequest {
+  caseId: number
+  generation: number
+}
+
 const loading = ref(true)
 const loadedCaseId = ref<number | null>(null)
 const dataInfo = ref<DataInfo | null>(null)
@@ -183,11 +188,13 @@ const geneLists = ref<GeneListItem[]>([])
 const selectedGeneListId = ref<number | null>(null)
 const geneListDialog = ref(false)
 const editGeneListId = ref<number | null>(null)
+const geneListDialogRequest = ref<CaseRequest | null>(null)
 
 // Region files
 const regionFiles = ref<RegionFileItem[]>([])
 const selectedRegionFileId = ref<number | null>(null)
 const regionFileDialog = ref(false)
+const regionFileDialogRequest = ref<CaseRequest | null>(null)
 
 const geneListItems = computed(() =>
   geneLists.value.map((gl) => ({
@@ -226,9 +233,11 @@ function resetLoadedState(): void {
   selectedGeneListId.value = null
   geneListDialog.value = false
   editGeneListId.value = null
+  geneListDialogRequest.value = null
   regionFiles.value = []
   selectedRegionFileId.value = null
   regionFileDialog.value = false
+  regionFileDialogRequest.value = null
 }
 
 function isCurrentCaseRequest(caseId: number, generation: number): boolean {
@@ -379,6 +388,8 @@ function onPlatformChange(): void {
 }
 
 function openGeneListEditor(): void {
+  if (loadedCaseId.value !== props.caseId) return
+  geneListDialogRequest.value = { caseId: props.caseId, generation: loadGeneration }
   editGeneListId.value = selectedGeneListId.value
   geneListDialog.value = true
 }
@@ -387,18 +398,26 @@ async function onGeneListSaved(payload: {
   listId: number
   geneLists: GeneListItem[]
 }): Promise<void> {
+  const request = geneListDialogRequest.value
+  if (!request || !isCurrentCaseRequest(request.caseId, request.generation)) return
+  geneListDialogRequest.value = null
   geneLists.value = payload.geneLists
   selectedGeneListId.value = payload.listId
   await save()
 }
 
 async function onGeneListDeleted(payload: { geneLists: GeneListItem[] }): Promise<void> {
+  const request = geneListDialogRequest.value
+  if (!request || !isCurrentCaseRequest(request.caseId, request.generation)) return
+  geneListDialogRequest.value = null
   geneLists.value = payload.geneLists
   selectedGeneListId.value = null
   await save()
 }
 
 function openRegionFileImport(): void {
+  if (loadedCaseId.value !== props.caseId) return
+  regionFileDialogRequest.value = { caseId: props.caseId, generation: loadGeneration }
   regionFileDialog.value = true
 }
 
@@ -406,6 +425,9 @@ async function onRegionFileImported(payload: {
   regionFileId: number
   regionFiles: RegionFileItem[]
 }): Promise<void> {
+  const request = regionFileDialogRequest.value
+  if (!request || !isCurrentCaseRequest(request.caseId, request.generation)) return
+  regionFileDialogRequest.value = null
   regionFiles.value = payload.regionFiles
   selectedRegionFileId.value = payload.regionFileId
   await save()
@@ -432,6 +454,11 @@ defineExpose({
   idTypeSuggestions,
   save,
   addExternalId,
-  deleteExternalId
+  deleteExternalId,
+  openGeneListEditor,
+  onGeneListSaved,
+  onGeneListDeleted,
+  openRegionFileImport,
+  onRegionFileImported
 })
 </script>

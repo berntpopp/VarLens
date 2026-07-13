@@ -45,6 +45,14 @@ const fakeCohort: CohortGroup = {
   created_at: 1_700_000_000_000
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 function makeFullMetadata(overrides: Partial<FullCaseMetadata> = {}): FullCaseMetadata {
   return {
     metadata: {
@@ -386,6 +394,162 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
 
       const cached = result.metadataCache.value.get(caseId)
       expect(cached?.metadata).toEqual(updated)
+    })
+  })
+
+  describe('overlapping case mutations', () => {
+    const caseId = 1
+
+    it('continues with a newer status update after the earlier update fails', async () => {
+      const firstResult = deferred<unknown>()
+      const secondResult = deferred<unknown>()
+      window.api.caseMetadata.upsert = vi
+        .fn()
+        .mockReturnValueOnce(firstResult.promise)
+        .mockReturnValueOnce(secondResult.promise)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      const seeded = makeFullMetadata()
+      seeded.metadata = { ...seeded.metadata!, affected_status: 'unaffected' }
+      result.metadataCache.value.set(caseId, seeded)
+
+      const firstUpdate = result.updateStatus(caseId, 'affected')
+      await flushPromises()
+      const secondUpdate = result.updateStatus(caseId, 'unknown')
+      await flushPromises()
+
+      expect(window.api.caseMetadata.upsert).toHaveBeenCalledTimes(1)
+      expect(result.metadataCache.value.get(caseId)?.metadata?.affected_status).toBe('affected')
+
+      const firstFailure = expect(firstUpdate).rejects.toMatchObject({ code: 'DB_ERROR' })
+      firstResult.resolve(fakeSerializableError)
+      await firstFailure
+      await flushPromises()
+
+      expect(window.api.caseMetadata.upsert).toHaveBeenCalledTimes(2)
+      expect(result.metadataCache.value.get(caseId)?.metadata?.affected_status).toBe('unknown')
+
+      secondResult.resolve({ ...seeded.metadata!, affected_status: 'unknown' })
+      await secondUpdate
+      expect(result.metadataCache.value.get(caseId)?.metadata?.affected_status).toBe('unknown')
+    })
+
+    it('keeps the confirmed age when the queued newer age update fails', async () => {
+      const firstResult = deferred<unknown>()
+      const secondResult = deferred<unknown>()
+      window.api.caseMetadata.upsert = vi
+        .fn()
+        .mockReturnValueOnce(firstResult.promise)
+        .mockReturnValueOnce(secondResult.promise)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      const seeded = makeFullMetadata()
+      seeded.metadata = { ...seeded.metadata!, age: 10 }
+      result.metadataCache.value.set(caseId, seeded)
+
+      const firstUpdate = result.updateAge(caseId, 20)
+      await flushPromises()
+      const secondUpdate = result.updateAge(caseId, 30)
+      await flushPromises()
+
+      expect(window.api.caseMetadata.upsert).toHaveBeenCalledTimes(1)
+      expect(result.metadataCache.value.get(caseId)?.metadata?.age).toBe(20)
+
+      firstResult.resolve({ ...seeded.metadata!, age: 20 })
+      await firstUpdate
+      await flushPromises()
+
+      expect(window.api.caseMetadata.upsert).toHaveBeenCalledTimes(2)
+      expect(result.metadataCache.value.get(caseId)?.metadata?.age).toBe(30)
+
+      const secondFailure = expect(secondUpdate).rejects.toMatchObject({ code: 'DB_ERROR' })
+      secondResult.resolve(fakeSerializableError)
+      await secondFailure
+      expect(result.metadataCache.value.get(caseId)?.metadata?.age).toBe(20)
+    })
+
+    it('rolls a failed queued cohort replacement back to the confirmed cohorts', async () => {
+      const secondCohort: CohortGroup = { ...fakeCohort, id: 43, name: 'Trio B' }
+      const firstResult = deferred<unknown>()
+      const secondResult = deferred<unknown>()
+      window.api.caseMetadata.setCohorts = vi
+        .fn()
+        .mockReturnValueOnce(firstResult.promise)
+        .mockReturnValueOnce(secondResult.promise)
+      window.api.caseMetadata.getFullMetadata = vi
+        .fn()
+        .mockResolvedValue(makeFullMetadata({ cohorts: [fakeCohort] }))
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.cohortGroupsCache.value.push(fakeCohort, secondCohort)
+      result.metadataCache.value.set(caseId, makeFullMetadata())
+
+      const firstUpdate = result.setCaseCohorts(caseId, [fakeCohort.id])
+      await flushPromises()
+      const secondUpdate = result.setCaseCohorts(caseId, [secondCohort.id])
+      await flushPromises()
+
+      expect(window.api.caseMetadata.setCohorts).toHaveBeenCalledTimes(1)
+      expect(result.metadataCache.value.get(caseId)?.cohorts).toEqual([fakeCohort])
+
+      firstResult.resolve(undefined)
+      await firstUpdate
+      await flushPromises()
+
+      expect(window.api.caseMetadata.setCohorts).toHaveBeenCalledTimes(2)
+      expect(result.metadataCache.value.get(caseId)?.cohorts).toEqual([secondCohort])
+
+      const secondFailure = expect(secondUpdate).rejects.toMatchObject({ code: 'DB_ERROR' })
+      secondResult.resolve(fakeSerializableError)
+      await secondFailure
+      expect(result.metadataCache.value.get(caseId)?.cohorts).toEqual([fakeCohort])
+    })
+
+    it('runs a queued HPO assignment after an earlier assignment fails', async () => {
+      const firstResult = deferred<unknown>()
+      const secondResult = deferred<unknown>()
+      const secondTerm: CaseHpoTerm = {
+        id: 12,
+        case_id: caseId,
+        hpo_id: 'HP:0004322',
+        hpo_label: 'Short stature',
+        created_at: 1_700_000_000_001
+      }
+      window.api.caseMetadata.assignHpoTerm = vi
+        .fn()
+        .mockReturnValueOnce(firstResult.promise)
+        .mockReturnValueOnce(secondResult.promise)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(caseId, makeFullMetadata())
+
+      const firstUpdate = result.assignHpoTerm(caseId, 'HP:0001250', 'Seizure')
+      await flushPromises()
+      const secondUpdate = result.assignHpoTerm(caseId, secondTerm.hpo_id, secondTerm.hpo_label)
+      await flushPromises()
+
+      expect(window.api.caseMetadata.assignHpoTerm).toHaveBeenCalledTimes(1)
+      expect(result.metadataCache.value.get(caseId)?.hpoTerms.map((term) => term.hpo_id)).toEqual([
+        'HP:0001250'
+      ])
+
+      const firstFailure = expect(firstUpdate).rejects.toMatchObject({ code: 'DB_ERROR' })
+      firstResult.resolve(fakeSerializableError)
+      await firstFailure
+      await flushPromises()
+
+      expect(window.api.caseMetadata.assignHpoTerm).toHaveBeenCalledTimes(2)
+      expect(result.metadataCache.value.get(caseId)?.hpoTerms.map((term) => term.hpo_id)).toEqual([
+        secondTerm.hpo_id
+      ])
+
+      secondResult.resolve(secondTerm)
+      await secondUpdate
+      expect(result.metadataCache.value.get(caseId)?.hpoTerms).toEqual([secondTerm])
     })
   })
 })

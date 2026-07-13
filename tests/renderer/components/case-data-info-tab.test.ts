@@ -68,6 +68,19 @@ interface CaseDataInfoTabVm {
   save: () => Promise<void>
   addExternalId: (idType: string, idValue: string) => Promise<void>
   deleteExternalId: (idType: string) => Promise<void>
+  openGeneListEditor: () => void
+  onGeneListSaved: (payload: {
+    listId: number
+    geneLists: Array<{ id: number; name: string; gene_count: number }>
+  }) => Promise<void>
+  onGeneListDeleted: (payload: {
+    geneLists: Array<{ id: number; name: string; gene_count: number }>
+  }) => Promise<void>
+  openRegionFileImport: () => void
+  onRegionFileImported: (payload: {
+    regionFileId: number
+    regionFiles: Array<{ id: number; name: string; region_count: number; total_bases: number }>
+  }) => Promise<void>
 }
 
 function deferred<T>(): {
@@ -374,5 +387,85 @@ describe('CaseDataInfoTab deleteExternalId()', () => {
     await deletion
 
     expect(vm.externalIds).toEqual(fakeExternalIds)
+  })
+})
+
+describe('CaseDataInfoTab child-dialog case authority', () => {
+  it('ignores a gene-list save emitted after another case loads', async () => {
+    const mocks = installMockApi(fakeDataInfo)
+    const wrapper = mountTab()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    vm.openGeneListEditor()
+
+    window.api.caseMetadata.getDataInfo = vi
+      .fn()
+      .mockResolvedValue({ ...fakeDataInfo, gene_list_id: 77 })
+    await wrapper.setProps({ caseId: 2 })
+    await flushPromises()
+    mocks.upsertDataInfo.mockClear()
+
+    await vm.onGeneListSaved({
+      listId: 99,
+      geneLists: [{ id: 99, name: 'Old case genes', gene_count: 3 }]
+    })
+
+    expect(mocks.upsertDataInfo).not.toHaveBeenCalled()
+    await vm.save()
+    expect(mocks.upsertDataInfo).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ gene_list_id: 77 })
+    )
+  })
+
+  it('ignores a gene-list delete emitted after another case loads', async () => {
+    const mocks = installMockApi(fakeDataInfo)
+    const wrapper = mountTab()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    vm.openGeneListEditor()
+
+    window.api.caseMetadata.getDataInfo = vi
+      .fn()
+      .mockResolvedValue({ ...fakeDataInfo, gene_list_id: 77 })
+    await wrapper.setProps({ caseId: 2 })
+    await flushPromises()
+    mocks.upsertDataInfo.mockClear()
+
+    await vm.onGeneListDeleted({ geneLists: [] })
+
+    expect(mocks.upsertDataInfo).not.toHaveBeenCalled()
+    await vm.save()
+    expect(mocks.upsertDataInfo).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ gene_list_id: 77 })
+    )
+  })
+
+  it('ignores a region-file import emitted after another case loads', async () => {
+    const mocks = installMockApi(fakeDataInfo)
+    const wrapper = mountTab()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+    vm.openRegionFileImport()
+
+    window.api.caseMetadata.getDataInfo = vi
+      .fn()
+      .mockResolvedValue({ ...fakeDataInfo, region_file_id: 88 })
+    await wrapper.setProps({ caseId: 2 })
+    await flushPromises()
+    mocks.upsertDataInfo.mockClear()
+
+    await vm.onRegionFileImported({
+      regionFileId: 99,
+      regionFiles: [{ id: 99, name: 'Old case regions', region_count: 4, total_bases: 400 }]
+    })
+
+    expect(mocks.upsertDataInfo).not.toHaveBeenCalled()
+    await vm.save()
+    expect(mocks.upsertDataInfo).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ region_file_id: 88 })
+    )
   })
 })
