@@ -1,5 +1,6 @@
 import { app, dialog, shell, nativeImage, BrowserWindow, ipcMain, session } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { registerIpcHandlers, destroyDbPool } from './ipc'
@@ -10,7 +11,7 @@ import { APP_CONFIG } from '../shared/config'
 import { isUrlSafeForExternal } from './utils/url-validation'
 import { markMilestone } from './services/MainPerfTrace'
 import { isMainWindowNavigationAllowed } from './window-navigation-policy'
-import { buildContentSecurityPolicy } from './security/csp-header'
+import { createContentSecurityPolicyHeaderHandler } from './security/csp-header'
 import { installWebContentsSecurityGuards } from './security/web-contents-guard'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
@@ -231,29 +232,31 @@ if (gotTheLock !== true) {
     // Authoritative session-level CSP response header, mirroring the meta CSP
     // in src/renderer/index.html plus frame-ancestors 'none' (a directive meta
     // tags cannot express — it blocks the app document from being framed).
-    // Applied only to the top-level document; sub-resource responses pass
-    // through untouched. See src/main/security/csp-header.ts.
-    const cspPolicy = buildContentSecurityPolicy()
-    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      if (details.resourceType !== 'mainFrame') {
-        callback({ responseHeaders: details.responseHeaders })
-        return
-      }
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [cspPolicy]
+    // Applied to the app document as either a main frame or a subframe:
+    // frame-ancestors is enforced on the framed document's response, which
+    // Electron classifies as `subFrame`. Other documents and subresources
+    // pass through untouched. See src/main/security/csp-header.ts.
+    const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+    const appDocUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
+    const isAppDocumentUrl = (url: string): boolean => {
+      try {
+        if (rendererUrl !== undefined && rendererUrl !== '') {
+          return new URL(url).origin === new URL(rendererUrl).origin
         }
-      })
-    })
+        return new URL(url).href === appDocUrl
+      } catch {
+        return false
+      }
+    }
+    session.defaultSession.webRequest.onHeadersReceived(
+      createContentSecurityPolicyHeaderHandler(isAppDocumentUrl)
+    )
 
     // Global defense-in-depth for every webContents: apply the same navigation
     // policy as the main window and harden <webview> guest preferences. The
     // policy is injected so its implementation remains owned by
     // window-navigation-policy.ts (and can be tightened independently).
-    installWebContentsSecurityGuards((url) =>
-      isMainWindowNavigationAllowed(url, process.env['ELECTRON_RENDERER_URL'])
-    )
+    installWebContentsSecurityGuards((url) => isMainWindowNavigationAllowed(url, rendererUrl))
 
     // Create window after security handlers are registered
     createWindow()

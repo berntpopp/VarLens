@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { buildContentSecurityPolicy } from '../../../src/main/security/csp-header'
 
 /**
@@ -65,5 +65,69 @@ describe('buildContentSecurityPolicy', () => {
     const policy = buildContentSecurityPolicy()
     const metaCsp = readMetaCspFromHtml()
     expect(policy).toBe(`${metaCsp}; frame-ancestors 'none'`)
+  })
+
+  it('applies the authoritative header to app documents loaded as either main or subframes', async () => {
+    const module = (await import('../../../src/main/security/csp-header')) as Record<
+      string,
+      unknown
+    >
+    const createHandler = module.createContentSecurityPolicyHeaderHandler
+
+    expect(createHandler).toBeTypeOf('function')
+    if (typeof createHandler !== 'function') return
+
+    const appUrl = 'file:///app/renderer/index.html'
+    const handler = createHandler((url: string) => url === appUrl) as (
+      details: Partial<Electron.OnHeadersReceivedListenerDetails>,
+      callback: (response: Electron.HeadersReceivedResponse) => void
+    ) => void
+
+    for (const resourceType of ['mainFrame', 'subFrame'] as const) {
+      const callback = vi.fn()
+      handler(
+        {
+          resourceType,
+          url: appUrl,
+          responseHeaders: { 'Existing-Header': ['kept'] }
+        },
+        callback
+      )
+
+      expect(callback).toHaveBeenCalledWith({
+        responseHeaders: {
+          'Existing-Header': ['kept'],
+          'Content-Security-Policy': [buildContentSecurityPolicy()]
+        }
+      })
+    }
+  })
+
+  it('does not rewrite subresources or unrelated frame documents', async () => {
+    const module = (await import('../../../src/main/security/csp-header')) as Record<
+      string,
+      unknown
+    >
+    const createHandler = module.createContentSecurityPolicyHeaderHandler
+
+    expect(createHandler).toBeTypeOf('function')
+    if (typeof createHandler !== 'function') return
+
+    const appUrl = 'file:///app/renderer/index.html'
+    const handler = createHandler((url: string) => url === appUrl) as (
+      details: Partial<Electron.OnHeadersReceivedListenerDetails>,
+      callback: (response: Electron.HeadersReceivedResponse) => void
+    ) => void
+
+    for (const details of [
+      { resourceType: 'script', url: appUrl },
+      { resourceType: 'subFrame', url: 'https://attacker.example/frame' }
+    ]) {
+      const callback = vi.fn()
+      handler({ ...details, responseHeaders: { 'Existing-Header': ['kept'] } }, callback)
+      expect(callback).toHaveBeenCalledWith({
+        responseHeaders: { 'Existing-Header': ['kept'] }
+      })
+    }
   })
 })

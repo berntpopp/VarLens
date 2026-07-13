@@ -45,3 +45,38 @@ const CSP_DIRECTIVES: readonly string[] = [
 export function buildContentSecurityPolicy(): string {
   return CSP_DIRECTIVES.join('; ')
 }
+
+export type AppDocumentUrlPredicate = (url: string) => boolean
+
+/**
+ * Build the session `onHeadersReceived` listener for renderer documents.
+ *
+ * `frame-ancestors` is evaluated on the response of the document being
+ * framed. Electron reports that response as `subFrame`, so limiting the
+ * header to `mainFrame` would silently disable the clickjacking protection
+ * in the exact context it is meant to cover. URL authority stays injected:
+ * unrelated documents and ordinary subresources must keep their own headers.
+ */
+export function createContentSecurityPolicyHeaderHandler(
+  isAppDocumentUrl: AppDocumentUrlPredicate
+): (
+  details: Electron.OnHeadersReceivedListenerDetails,
+  callback: (response: Electron.HeadersReceivedResponse) => void
+) => void {
+  const policy = buildContentSecurityPolicy()
+
+  return (details, callback): void => {
+    const isDocument = details.resourceType === 'mainFrame' || details.resourceType === 'subFrame'
+    if (!isDocument || !isAppDocumentUrl(details.url)) {
+      callback({ responseHeaders: details.responseHeaders })
+      return
+    }
+
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [policy]
+      }
+    })
+  }
+}
