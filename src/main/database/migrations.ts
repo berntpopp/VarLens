@@ -1793,9 +1793,9 @@ export function runMigrations(db: Database.Database): void {
   // the variants table's existing convention.
   //
   // Backfill without guessing an impact:
-  //   - JSON-imported rows already have the correct IMPACT in `consequence`;
-  //     the original per-transcript SO term was discarded at import time and
-  //     cannot be recovered from the database alone, so `func` stays NULL.
+  //   - JSON-imported rows already have the correct IMPACT in `consequence`.
+  //     Recover `func` for the selected row when the parent still names that
+  //     transcript and retains its SO term; other unavailable terms stay NULL.
   //   - A non-enum `consequence` is provably not an IMPACT value. Preserve it
   //     as the SO term in `func`. For the selected transcript only, recover the
   //     parent IMPACT when the parent names that same transcript; all other
@@ -1808,6 +1808,25 @@ export function runMigrations(db: Database.Database): void {
       db.exec('ALTER TABLE variant_transcripts ADD COLUMN func TEXT')
     }
     db.exec(`
+      UPDATE variant_transcripts AS vt
+         SET func = (
+           SELECT v.func
+             FROM variants AS v
+            WHERE v.id = vt.variant_id
+              AND v.transcript = vt.transcript_id
+              AND v.func IS NOT NULL
+         )
+       WHERE vt.func IS NULL
+         AND vt.is_selected = 1
+         AND vt.consequence IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
+         AND EXISTS (
+           SELECT 1
+             FROM variants AS v
+            WHERE v.id = vt.variant_id
+              AND v.transcript = vt.transcript_id
+              AND v.func IS NOT NULL
+         );
+
       UPDATE variant_transcripts AS vt
          SET func = vt.consequence,
              consequence = CASE

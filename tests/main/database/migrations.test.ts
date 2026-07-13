@@ -1389,6 +1389,7 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
         ref TEXT NOT NULL,
         alt TEXT NOT NULL,
         consequence TEXT,
+        func TEXT,
         transcript TEXT,
         FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
       );
@@ -1437,6 +1438,20 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
        VALUES (?, ?, ?, ?, ?)`
     ).run(variantId, 'NM_IMPACT.1', 'LEGACYGENE', 'HIGH', 0)
 
+    const jsonVariantId = db
+      .prepare(
+        `INSERT INTO variants (case_id, chr, pos, ref, alt, consequence, func, transcript)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(caseId, '1', 101, 'C', 'T', 'LOW', 'synonymous_variant', 'NM_JSON.1')
+      .lastInsertRowid as number
+    // Pre-v32 JSON rows retained the selected parent transcript's SO term on
+    // variants.func even though variant_transcripts had nowhere to store it.
+    db.prepare(
+      `INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, is_selected)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(jsonVariantId, 'NM_JSON.1', 'JSONGENE', 'LOW', 1)
+
     runMigrations(db)
 
     const columns = db.prepare(`PRAGMA table_info(variant_transcripts)`).all() as Array<{
@@ -1471,6 +1486,16 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
         func: 'missense_variant'
       }
     ])
+
+    expect(
+      db
+        .prepare(
+          `SELECT consequence, func
+             FROM variant_transcripts
+            WHERE variant_id = ? AND transcript_id = ?`
+        )
+        .get(jsonVariantId, 'NM_JSON.1')
+    ).toEqual({ consequence: 'LOW', func: 'synonymous_variant' })
 
     expect(db.pragma('user_version', { simple: true })).toBe(32)
   })
