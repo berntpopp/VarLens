@@ -7,7 +7,6 @@
     transition="dialog-bottom-transition"
   >
     <v-card>
-      <!-- Header with step indicator -->
       <v-card-title class="d-flex align-center">
         <v-icon :icon="mdiDatabaseImport" class="mr-2" />
         Import Data
@@ -17,7 +16,6 @@
         </v-btn>
       </v-card-title>
 
-      <!-- Step indicator -->
       <div v-if="step > 1" class="d-flex align-center px-4 pb-2 ga-1">
         <template v-for="(s, i) in stepLabels" :key="i">
           <v-chip
@@ -34,7 +32,6 @@
 
       <v-divider />
 
-      <!-- Error display -->
       <v-alert
         v-if="cancelError || (importStore.phase === 'error' && importStore.errorMessage)"
         type="error"
@@ -46,7 +43,6 @@
         {{ cancelError || importStore.errorMessage }}
       </v-alert>
 
-      <!-- Step 1: Source Selection -->
       <v-card-text v-if="step === 1" class="pa-4">
         <ImportSourceSelector
           :sources="allSources"
@@ -61,7 +57,6 @@
           @cancel="cancelUploadSelection"
         />
 
-        <!-- ZIP password (inline, shown when needed) -->
         <v-expand-transition>
           <div v-if="zipPasswordNeeded" class="mt-4">
             <v-divider class="mb-3" />
@@ -93,7 +88,6 @@
         </v-expand-transition>
       </v-card-text>
 
-      <!-- Step 2 (VCF only): VCF Preview -->
       <v-card-text v-else-if="isVcfImport && step === 2">
         <VcfPreviewStep
           :file-path="vcfFilePath"
@@ -102,7 +96,6 @@
         />
       </v-card-text>
 
-      <!-- Step 2 (non-VCF): Review -->
       <v-card-text v-else-if="step === 2">
         <BatchReviewPhase
           v-model:strip-text="stripText"
@@ -114,7 +107,6 @@
         />
       </v-card-text>
 
-      <!-- Step 3: Progress -->
       <v-card-text v-else-if="step === 3">
         <BatchProgressPhase
           :current-file-name="currentFileName"
@@ -125,14 +117,12 @@
         />
       </v-card-text>
 
-      <!-- Step 4: Summary -->
       <v-card-text v-else-if="step === 4">
         <BatchSummaryPhase :summary="summary" />
       </v-card-text>
 
       <v-divider />
 
-      <!-- Actions -->
       <v-card-actions>
         <v-btn v-if="step === 2" variant="text" size="small" @click="handleBack">Back</v-btn>
         <v-spacer />
@@ -141,7 +131,6 @@
         </v-btn>
         <v-btn v-if="step === 3" variant="text" size="small" @click="cancelImport">Cancel</v-btn>
 
-        <!-- VCF import button -->
         <v-btn
           v-if="isVcfImport && step === 2"
           color="primary"
@@ -157,7 +146,6 @@
           }}
         </v-btn>
 
-        <!-- Non-VCF import button -->
         <v-btn
           v-if="!isVcfImport && step === 2"
           color="primary"
@@ -243,7 +231,6 @@ const dialog = ref(false)
 const step = ref(1)
 const cancelError = ref('')
 
-// VCF import state
 const isVcfImport = ref(false)
 const vcfFilePath = ref('')
 const vcfSelectedSamples = ref<string[]>([])
@@ -279,7 +266,6 @@ const allSources: ImportSourceOption[] = [
   { mode: 'zip' as ImportMode, icon: mdiZipBox, title: 'ZIP Archive', subtitle: 'Extract & import' }
 ]
 
-// File selection state
 const selectedMode = ref<ImportMode | null>(null)
 const selectedFilePaths = ref<string[]>([])
 const isZipImport = ref(false)
@@ -292,14 +278,12 @@ const uploadFileIndex = ref(1)
 const uploadTotalFiles = ref(0)
 const uploadPercent = ref<number | null>(null)
 
-// ZIP password state
 const zipPasswordNeeded = ref(false)
 const zipPassword = ref('')
 const showZipPassword = ref(false)
 const zipError = ref('')
 const zipUnlocking = ref(false)
 
-// Review state
 const reviewFiles = ref<DuplicateCheckItem[]>([])
 const duplicateCount = ref(0)
 const fileCount = computed(() => reviewFiles.value.length)
@@ -307,14 +291,12 @@ const duplicateStrategy = ref<DuplicateChoice>('skip')
 const stripText = ref('')
 const hasEmptyCaseNames = computed(() => reviewFiles.value.some((f) => f.caseName.trim() === ''))
 
-// Progress state
 const currentIndex = ref(0)
 const totalFiles = ref(0)
 const currentFileName = ref('')
 const overallPercent = ref(0)
 const variantCount = ref(0)
 
-// Summary state
 const summary = ref<BatchResult>({
   succeeded: 0,
   failed: 0,
@@ -427,7 +409,6 @@ function abandonZipImport(context: string): void {
   sourceFlowGeneration += 1
   abandonZipImportState(context)
 }
-// Re-check duplicates when strip text changes
 watch(stripText, scheduleDuplicateRecheck)
 
 async function selectSource(mode: ImportMode): Promise<void> {
@@ -462,13 +443,12 @@ async function selectSource(mode: ImportMode): Promise<void> {
     }
     if (filePaths.length === 0) return
     selectedFilePaths.value = filePaths
-    // Detect VCF file: single file with .vcf or .vcf.gz extension
     if (filePaths.length === 1) {
       const fp = filePaths[0].toLowerCase()
       if (fp.endsWith('.vcf') || fp.endsWith('.vcf.gz')) {
         isVcfImport.value = true
         vcfFilePath.value = filePaths[0]
-        step.value = 2 // Go to VCF Preview step
+        step.value = 2
         return
       }
     }
@@ -540,7 +520,6 @@ function cancelZip(): void {
 }
 
 function onVcfPreviewLoaded(_preview: VcfPreviewResult): void {
-  // Preview data is stored in the child component; we just note it loaded
   logService.info('VCF preview loaded successfully', 'ImportWizard')
 }
 
@@ -611,8 +590,6 @@ const { startVcfImport } = useVcfImportExecution({
 })
 
 async function startImport(): Promise<void> {
-  // Prevent starting a new import while one is already running.
-  // This avoids resetting the store state and losing progress on the active import.
   if (importStore.isActive) {
     logService.warn('Import already in progress — cannot start another', 'ImportWizard')
     return
@@ -635,8 +612,6 @@ async function startImport(): Promise<void> {
   importStore.dialogOpen = true
 
   try {
-    // Spread reactive arrays to plain arrays — Vue Proxies cannot be
-    // structured-cloned by Electron's IPC serialization.
     const result = unwrapIpcResult(
       await api!.batchImport.start(
         [...selectedFilePaths.value],
@@ -646,7 +621,6 @@ async function startImport(): Promise<void> {
       )
     )
 
-    // Result also arrives via onComplete callback; guard against double-processing
     if (
       !isImportTerminal(generation) &&
       activeBatchRunGeneration === generation &&
@@ -672,9 +646,6 @@ async function startImport(): Promise<void> {
     }
   } catch (err) {
     const message = formatIpcError(err, 'Import failed')
-    // Only overwrite summary if the onComplete callback hasn't already
-    // handled it (race: safeEmit fires before resolve, so the event
-    // listener may have already set the correct summary + step 4).
     if (
       !isImportTerminal(generation) &&
       activeBatchRunGeneration === generation &&
@@ -712,7 +683,6 @@ async function cancelImport(): Promise<void> {
   try {
     const result = isVcfImport.value ? await api!.import.cancel() : await api!.batchImport.cancel()
     unwrapIpcResult(result)
-    // Terminal result handlers own the summary and extraction cleanup.
   } catch (error) {
     if (isImportTerminal(generation)) return
     cancelError.value = formatIpcError(error, 'Cancellation failed')
@@ -737,7 +707,6 @@ function handleClose(): void {
   }
   abandonZipImport('dialog close')
   dialog.value = false
-  // Reset import store when closing from summary/error step
   if (step.value === 4 || importStore.phase === 'error') {
     importStore.reset()
   }
@@ -787,9 +756,6 @@ const show = (): void => {
   dialog.value = true
 }
 
-// Reset import store when dialog is closed by any means (outside click, Esc, etc.)
-// handleClose() covers explicit close, but the dialog can also close via v-model
-// when persistent=false (step !== 3).
 watch(dialog, (open) => {
   if (!open && step.value !== 3) {
     abandonZipImport('dialog dismissal')
@@ -858,7 +824,6 @@ onMounted(() => {
     cleanupComplete = api.batchImport.onComplete((result: BatchCompleteEvent) => {
       if (result.runId !== activeBatchRunId) return
       const generation = activeBatchRunGeneration
-      // Guard: startImport() await may have already handled this
       if (generation !== null && !isImportTerminal(generation)) {
         const { runId, ...batchResult } = result
         activeBatchRunGeneration = null

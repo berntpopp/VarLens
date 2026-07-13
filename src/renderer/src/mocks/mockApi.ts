@@ -354,7 +354,6 @@ export const mockApi: WindowAPI = {
     deleteFile: async () => ({ success: true }),
     showInFolder: async () => ({ success: true })
   },
-
   batchImport: {
     selectFiles: async () => [],
     selectFolder: async () => [],
