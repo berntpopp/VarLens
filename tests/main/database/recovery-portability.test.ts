@@ -267,6 +267,16 @@ describe('recovery sidecar portability (openDatabase end-to-end)', () => {
     copyFileSync(replacementPath, stalePath)
     copyFileSync(recoverySidecarPathFor(replacementPath), recoverySidecarPathFor(stalePath))
 
+    const detected = await openDatabase(
+      { path: stalePath },
+      () => staleManager.getCurrent(),
+      () => staleManager,
+      noopCallbacks,
+      keyStore
+    )
+    expect(detected).toEqual({ success: false, needsPassword: true })
+    expect(keyStore.getKeyIdForPath(stalePath)).toBe(staleKeyId)
+
     const opened = await openDatabase(
       { path: stalePath, password: PASSPHRASE },
       () => staleManager.getCurrent(),

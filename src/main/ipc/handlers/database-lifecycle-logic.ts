@@ -287,6 +287,13 @@ export async function openDatabase(
     return { success: true, info: info! }
   } catch (error) {
     if (error instanceof WrongPasswordError) {
+      if (needsPassword && (vPassword === undefined || vPassword === '')) {
+        // A transparent registry key can be stale when a different encrypted
+        // database was restored over the same path. Surface the normal
+        // passphrase prompt so the verified sidecar/raw candidate flow above
+        // remains reachable instead of stranding a valid recovery sidecar.
+        return { success: false, needsPassword: true }
+      }
       return { success: false, error: 'WRONG_PASSWORD' }
     }
     throw error
