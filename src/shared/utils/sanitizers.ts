@@ -56,7 +56,7 @@ const SQLCIPHER_KEY_PATTERN =
  * secret value is redacted — surrounding text is preserved.
  */
 const SECRET_VALUE_PATTERN =
-  /\b(passphrase|password|secret|token)\b\s*(?:[=:]\s*(?:'((?:''|\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)")|=\s*(\S+?)(?=[;,\s]|$))/gi
+  /\b(passphrase|password|secret|token)\b\s*(?:[=:]\s*(?:'((?:''|\\.|[^'\\])*)'|"((?:\\.|""|[^"\\])*)")|=\s*(\S+?)(?=[;,\s]|$))/gi
 
 /**
  * Assignment-shaped environment/config identifiers whose final segment is
@@ -64,22 +64,104 @@ const SECRET_VALUE_PATTERN =
  * Requiring both an underscore prefix and `=` keeps ordinary prose out.
  */
 const SUFFIXED_SECRET_VALUE_PATTERN =
-  /\b((?:[a-z0-9]+_)+(?:passphrase|password|secret|token))\b\s*=\s*(?:'(?:''|\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|\S+?)(?=[;,\s]|$)/gi
+  /\b((?:[a-z0-9]+_)+(?:passphrase|password|secret|token))\b\s*=\s*(?:'(?:''|\\.|[^'\\])*'|"(?:\\.|""|[^"\\])*"|\S+?)(?=[;,\s]|$)/gi
+
+const STRUCTURAL_SECRET_KEYWORD_PATTERN =
+  /\b((?:[a-z0-9]+_)*(?:passphrase|password|secret|token))\b/gi
+const STRUCTURAL_BOUNDARIES = new Set(['[', '{', ',', ':', ';', '\n', '\r'])
+const STRUCTURAL_VALUE_DELIMITERS = new Set([',', ';', '}', ']', '\n', '\r'])
 
 /**
- * A structural passphrase may legitimately contain spaces, so redact its
- * whole value through the next object delimiter or line end.
+ * Redact assignment-shaped colon credentials with a single forward scan.
+ *
+ * This deliberately avoids a nested-quantifier regular expression: log text
+ * is untrusted, and long runs of horizontal whitespace must remain O(n).
+ * Values consume through the next object/line delimiter. Quoted values are
+ * scanned atomically so embedded commas/semicolons and escaped quotes cannot
+ * leave a secret suffix behind.
  */
-const STRUCTURAL_COLON_PASSPHRASE_PATTERN =
-  /(^[\t ]*|[\x5b{,:;][\t ]*)(passphrase)\b[\t ]*:[\t ]*[^,;\r\n}\]]+(?=[,;}\]]|$)/gim
+function redactStructuralColonSecrets(message: string): string {
+  STRUCTURAL_SECRET_KEYWORD_PATTERN.lastIndex = 0
+  let cursor = 0
+  let result = ''
+  let match: RegExpExecArray | null
 
-/**
- * Other unquoted colon credentials remain single-token values. This avoids
- * swallowing unrelated message text (including PHI that later patterns must
- * independently redact) while still covering config and log-prefix forms.
- */
-const STRUCTURAL_COLON_SECRET_PATTERN =
-  /(^[\t ]*|[\x5b{,:;][\t ]*)(password|secret|token)\b[\t ]*:[\t ]*(\S+?)(?=[;,\s}\]]|$)/gim
+  while ((match = STRUCTURAL_SECRET_KEYWORD_PATTERN.exec(message)) !== null) {
+    let boundaryIndex = match.index - 1
+    while (boundaryIndex >= 0 && isHorizontalWhitespace(message[boundaryIndex])) boundaryIndex -= 1
+    if (boundaryIndex >= 0 && !STRUCTURAL_BOUNDARIES.has(message[boundaryIndex])) continue
+
+    let operatorIndex = STRUCTURAL_SECRET_KEYWORD_PATTERN.lastIndex
+    while (operatorIndex < message.length && isHorizontalWhitespace(message[operatorIndex])) {
+      operatorIndex += 1
+    }
+    if (message[operatorIndex] !== ':') continue
+
+    let valueStart = operatorIndex + 1
+    while (valueStart < message.length && isHorizontalWhitespace(message[valueStart]))
+      valueStart += 1
+
+    let valueEnd = valueStart
+    const quote = message[valueStart]
+    if (quote === '"' || quote === "'") {
+      valueEnd = scanQuotedValueEnd(message, valueStart, quote)
+    } else {
+      while (valueEnd < message.length && !STRUCTURAL_VALUE_DELIMITERS.has(message[valueEnd])) {
+        valueEnd += 1
+      }
+    }
+    if (valueEnd === valueStart) continue
+
+    const consumedValue = message.slice(valueStart, valueEnd)
+    result += message.slice(cursor, match.index)
+    result += `${match[0]}=[REDACTED:KEY]`
+    result += markersForConsumedPhi(consumedValue)
+    cursor = valueEnd
+    STRUCTURAL_SECRET_KEYWORD_PATTERN.lastIndex = valueEnd
+  }
+
+  return result + message.slice(cursor)
+}
+
+function scanQuotedValueEnd(message: string, start: number, quote: '"' | "'"): number {
+  let index = start + 1
+  while (index < message.length) {
+    if (message[index] === '\\') {
+      index = Math.min(index + 2, message.length)
+      continue
+    }
+    if (message[index] === quote) {
+      if (message[index + 1] === quote) {
+        index += 2
+        continue
+      }
+      return index + 1
+    }
+    if (message[index] === '\n' || message[index] === '\r') return index
+    index += 1
+  }
+  return index
+}
+
+function isHorizontalWhitespace(char: string | undefined): boolean {
+  return char === ' ' || char === '\t'
+}
+
+function markersForConsumedPhi(value: string): string {
+  const markers: string[] = []
+  if (containsGlobalPattern(value, HGVS_PATTERN)) markers.push('[REDACTED:HGVS]')
+  if (containsGlobalPattern(value, GENOMIC_COORD_PATTERN)) markers.push('[REDACTED:COORD]')
+  if (containsGlobalPattern(value, PATIENT_ID_PATTERN)) markers.push('[REDACTED:ID]')
+
+  return markers.length > 0 ? ` ${markers.join(' ')}` : ''
+}
+
+function containsGlobalPattern(value: string, pattern: RegExp): boolean {
+  pattern.lastIndex = 0
+  const matched = pattern.test(value)
+  pattern.lastIndex = 0
+  return matched
+}
 
 /**
  * Regex pattern for JSON-style quoted-key secrets: `"password":"hunter2"`,
@@ -131,12 +213,7 @@ export function sanitizeLogMessage(message: string): string {
   // Treat a bare colon as a credential assignment only at the strong
   // structural boundaries encoded above. Run this before the single-token
   // generic pattern so multi-word passphrases are removed as one value.
-  if (
-    /(?:^|[\x5b{,:;])[\t ]*(?:passphrase|password|secret|token)\b[\t ]*:/im.test(sanitized) === true
-  ) {
-    sanitized = sanitized.replace(STRUCTURAL_COLON_PASSPHRASE_PATTERN, '$1$2=[REDACTED:KEY]')
-    sanitized = sanitized.replace(STRUCTURAL_COLON_SECRET_PATTERN, '$1$2=[REDACTED:KEY]')
-  }
+  sanitized = redactStructuralColonSecrets(sanitized)
 
   // Generic bare secret keyword + quoted or assignment-shaped value.
   if (/\b(passphrase|password|secret|token)\b\s*[=:]/i.test(sanitized) === true) {
