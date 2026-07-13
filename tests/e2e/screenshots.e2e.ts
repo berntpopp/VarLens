@@ -274,14 +274,35 @@ test.describe('Documentation Screenshots', () => {
   })
 
   test('03 - import demo case', async () => {
-    // Import via the preload IPC API (window.api.import.start)
+    await app.evaluate(async ({ dialog }, filePath) => {
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [filePath]
+      })
+    }, tempGzipPath)
+
     const importResult = await window.evaluate(async (filePath) => {
       const api = (
         window as unknown as {
-          api: { import: { start: (p: string, n: string) => Promise<unknown> } }
+          api: {
+            cases: { deleteAll: () => Promise<number> }
+            import: {
+              selectFile: () => Promise<string | null>
+              start: (p: string, n: string) => Promise<unknown>
+            }
+          }
         }
       ).api
-      const result = await api.import.start(filePath, 'DemoCase')
+      await api.cases.deleteAll()
+      const selectedPath = await api.import.selectFile()
+      if (selectedPath !== filePath) {
+        return {
+          code: 'SCREENSHOT_SELECTION_FAILED',
+          message: `Expected selected path ${filePath}, got ${selectedPath ?? 'null'}`,
+          userMessage: 'Screenshot fixture selection failed.'
+        }
+      }
+      const result = await api.import.start(selectedPath, 'DemoCase')
       return JSON.parse(JSON.stringify(result))
     }, tempGzipPath)
 
