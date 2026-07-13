@@ -135,28 +135,32 @@ function enrollOrRepointSidecarRecovery(
  * SQLite accepts the DEK), then the legacy fallback of treating the supplied
  * value as a raw SQLCipher key.
  *
- * A sidecar unwrap failure (wrong passphrase against a genuine sidecar, OR a
- * STALE sidecar left behind by a legacy `rekeyDatabase` call that changed
- * the real SQLCipher key without updating the sidecar/registry) is NEVER
- * terminal here: it falls through to the legacy raw-key fallback below, so
- * the database's actual current password can still open it. If that raw-key
- * attempt is also wrong, `manager.switchDatabase` in `openDatabase` throws
- * `WrongPasswordError`, which is what ultimately surfaces `WRONG_PASSWORD`
- * to the caller -- this function itself never fails closed.
+ * Unwrapped values are candidates, not trusted answers. SQLite verifies each
+ * candidate in order because a stale registry wrap can authenticate the same
+ * reused passphrase while belonging to a different database that previously
+ * occupied this path. Registry repointing/enrollment remains deferred until
+ * one candidate actually opens the target database.
  */
-interface ResolvedPasswordAttempt {
-  effectiveKey: string
+interface ResolvedPasswordCandidate {
+  effectiveKey?: string
   pendingSidecarRecovery?: { dek: string; passWrap: PassphraseWrap }
 }
 
-function resolvePasswordAttempt(
+function resolvePasswordCandidates(
   vPath: string,
   vPassword: string,
   keyStore: DbKeyStoreWithRecoveryLike
-): ResolvedPasswordAttempt {
+): ResolvedPasswordCandidate[] {
+  const candidates: ResolvedPasswordCandidate[] = []
+  const addCandidate = (candidate: ResolvedPasswordCandidate): void => {
+    if (!candidates.some((existing) => existing.effectiveKey === candidate.effectiveKey)) {
+      candidates.push(candidate)
+    }
+  }
+
   const viaRegistry = keyStore.resolveKeyWithPassphrase(vPath, vPassword)
   if (viaRegistry.ok) {
-    return { effectiveKey: viaRegistry.dek }
+    addCandidate({ effectiveKey: viaRegistry.dek })
   }
 
   if (recoverySidecarExists(vPath)) {
@@ -164,21 +168,36 @@ function resolvePasswordAttempt(
     if (sidecar !== null) {
       const viaSidecar = keyStore.resolveKeyWithPassphraseFromSidecar(sidecar.passWrap, vPassword)
       if (viaSidecar.ok) {
-        return {
+        addCandidate({
           effectiveKey: viaSidecar.dek,
           pendingSidecarRecovery: { dek: viaSidecar.dek, passWrap: sidecar.passWrap }
-        }
+        })
       }
-      // Sidecar unwrap failed -- fall through to the raw-key fallback below
-      // rather than failing closed. See the doc comment above.
     }
   }
 
-  // No registry entry and no successful sidecar resolution at this path:
-  // legacy fallback -- treat the supplied value as a raw SQLCipher key,
-  // unchanged. A wrong value here surfaces as WRONG_PASSWORD from the actual
-  // `switchDatabase` attempt, not from this function.
-  return { effectiveKey: vPassword }
+  // Always retain the legacy raw-key attempt as the final candidate. A stale
+  // registry or sidecar wrap may authenticate the same user passphrase while
+  // describing a different database that previously occupied this path; only
+  // SQLite can authoritatively choose among the successfully unwrapped keys.
+  addCandidate({ effectiveKey: vPassword })
+  return candidates
+}
+
+async function switchDatabaseWithVerifiedCandidate(
+  manager: DatabaseManager,
+  vPath: string,
+  candidates: ResolvedPasswordCandidate[]
+): Promise<ResolvedPasswordCandidate> {
+  for (const candidate of candidates) {
+    try {
+      await manager.switchDatabase(vPath, candidate.effectiveKey)
+      return candidate
+    } catch (error) {
+      if (!(error instanceof WrongPasswordError)) throw error
+    }
+  }
+  throw new WrongPasswordError()
 }
 
 /**
@@ -192,9 +211,9 @@ function resolvePasswordAttempt(
  * this branch doesn't need to know it exists.
  *
  * When the caller supplies a password/passphrase attempt, see
- * `resolvePasswordAttempt` for the full resolution order (registry
- * passphrase wrap -> recovery sidecar with same-machine self-heal -> legacy
- * raw-key fallback).
+ * `resolvePasswordCandidates` for the full verified order (registry
+ * passphrase wrap -> recovery sidecar with deferred same-machine self-heal ->
+ * legacy raw-key fallback).
  */
 export async function openDatabase(
   params: { path: string; password?: string },
@@ -211,8 +230,7 @@ export async function openDatabase(
   const pendingKeyId =
     keyStore.getKeyStateForPath(vPath) === 'pending' ? keyStore.getKeyIdForPath(vPath) : null
 
-  let effectiveKey = vPassword
-  let pendingSidecarRecovery: ResolvedPasswordAttempt['pendingSidecarRecovery']
+  let candidates: ResolvedPasswordCandidate[]
 
   if (needsPassword) {
     if (vPassword === undefined || vPassword === '') {
@@ -220,17 +238,18 @@ export async function openDatabase(
       if (!resolved.ok) {
         return { success: false, needsPassword: true }
       }
-      effectiveKey = resolved.dek
+      candidates = [{ effectiveKey: resolved.dek }]
     } else {
-      const resolved = resolvePasswordAttempt(vPath, vPassword, keyStore)
-      effectiveKey = resolved.effectiveKey
-      pendingSidecarRecovery = resolved.pendingSidecarRecovery
+      candidates = resolvePasswordCandidates(vPath, vPassword, keyStore)
     }
+  } else {
+    candidates = [{ effectiveKey: vPassword }]
   }
 
   // Switch to new database with rollback on failure
   try {
-    await manager.switchDatabase(vPath, effectiveKey)
+    const verifiedCandidate = await switchDatabaseWithVerifiedCandidate(manager, vPath, candidates)
+    const pendingSidecarRecovery = verifiedCandidate.pendingSidecarRecovery
     mainLogger.info(`Switched to database: ${vPath}`, 'database')
 
     if (pendingKeyId !== null) {
