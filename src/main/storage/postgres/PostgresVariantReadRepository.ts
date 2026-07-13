@@ -310,7 +310,9 @@ function buildPostgresVariantOrderBy(sortBy?: SortItem[]): string {
   for (const sort of sortBy ?? []) {
     const sqlColumn = POSTGRES_BASE_SORT_COLUMNS[sort.key]
     if (sqlColumn !== undefined) {
-      orderParts.push(`${sqlColumn} ${sort.order.toUpperCase()} NULLS LAST`)
+      // Normalize at the sink rather than trusting sort.order's upstream
+      // 'asc' | 'desc' type (S7).
+      orderParts.push(`${sqlColumn} ${sort.order === 'asc' ? 'ASC' : 'DESC'} NULLS LAST`)
     }
   }
 

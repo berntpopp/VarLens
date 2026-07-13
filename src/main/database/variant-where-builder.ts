@@ -1,5 +1,6 @@
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { isExtensionColumnKey } from './variant-extension-registry'
+import { BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 
 export interface BuildBaseWhereContext {
   /** SQL alias for base columns: 'v' for variants-backed paths, 'cvs' for cohort listing. */
@@ -142,7 +143,7 @@ export function buildBaseWhere(
   if (filters.column_filters !== undefined) {
     for (const [key, filter] of Object.entries(filters.column_filters)) {
       if (isExtensionColumnKey(key)) continue
-      const clause = translateColumnFilter(key, filter, baseAlias, params)
+      const clause = translateColumnFilter(key, filter, baseAlias, params, scope)
       if (clause !== null) conditions.push(clause)
     }
   }
@@ -152,13 +153,38 @@ export function buildBaseWhere(
 
 const IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
 
+/**
+ * SQL column names on the `variants` table that VariantFilterBuilder already
+ * treats as sortable/filterable for its own column_filters path. `case` and
+ * `cohort-burden` scopes query `variants` directly (baseAlias `v`) and pass
+ * `column_filters` straight into `buildBaseWhere` with no pre-remap step, so
+ * bare keys for those two scopes are gated through this same allowlist
+ * rather than trusting any syntactically valid identifier (S7 info fix) —
+ * `IDENTIFIER_RE` alone blocks metacharacters but not an unintended-but-valid
+ * column reference.
+ */
+const VARIANTS_TABLE_COLUMN_ALLOWLIST = new Set(Object.values(BASE_SORTABLE_COLUMNS))
+
 function translateColumnFilter(
   column: string,
   filter: ColumnFilter,
   baseAlias: string,
-  params: (string | number)[]
+  params: (string | number)[],
+  scope: BuildBaseWhereContext['scope']
 ): string | null {
   if (!IDENTIFIER_RE.test(column)) return null
+  // cohort-listing scope is exempt: cohort.ts remaps + validates bare keys
+  // against its own SORTABLE_COLUMNS (cohort_variant_summary columns,
+  // including cohort-only fields like carrier_count/cohort_frequency that
+  // don't exist on `variants`) before ever calling buildBaseWhere. Applying
+  // the variants-table allowlist here too would incorrectly reject those
+  // legitimate cohort-only fields — a cohort-parity regression.
+  if (
+    (scope === 'case' || scope === 'cohort-burden') &&
+    !VARIANTS_TABLE_COLUMN_ALLOWLIST.has(column)
+  ) {
+    return null
+  }
   const col = `${baseAlias}.${column}`
   const { operator, value, includeEmpty } = filter
   const nullBranch = includeEmpty !== false

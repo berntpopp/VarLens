@@ -77,6 +77,19 @@ describe('MainLogger PHI redaction', () => {
     expect(payload.message).not.toContain('PATIENT-001')
   })
 
+  it('redacts a colon-form credential from the file and IPC paths', async () => {
+    const { mainLogger } = await import('../../../src/main/services/MainLogger')
+    mainLogger.error('password: hunter2', 'database')
+
+    const writtenLine = mockFileLog.error.mock.calls[0][0] as string
+    expect(writtenLine).toContain('[REDACTED:KEY]')
+    expect(writtenLine).not.toContain('hunter2')
+
+    const [, payload] = mockWebContentsSend.mock.calls[0]
+    expect(payload.message).toContain('[REDACTED:KEY]')
+    expect(payload.message).not.toContain('hunter2')
+  })
+
   it('does not redact a benign control message', async () => {
     const { mainLogger } = await import('../../../src/main/services/MainLogger')
     mainLogger.info('startup complete in 1.42s', 'main')

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  buildPostgresVariantQueryParts,
   PostgresVariantReadRepository,
   toPrefixTsQueryForTest
 } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
@@ -300,6 +301,20 @@ describe('PostgresVariantReadRepository', () => {
     expect(sql).toContain('"variant_sv" sv')
     expect(sql).toContain('sv.support >')
     expect(sql).not.toContain('sv.support IS NULL')
+  })
+
+  it('normalizes sort.order to a literal ASC/DESC even when it bypasses the SortItem enum (S7)', () => {
+    // SortItem.order is typed 'asc' | 'desc', but that type only guards
+    // callers going through the shared IPC contract. This SQL sink must not
+    // rely solely on that upstream enum — it must normalize the value itself.
+    const untypedOrder = 'asc; DROP TABLE cases; --' as unknown as 'asc' | 'desc'
+
+    const { orderBySql } = buildPostgresVariantQueryParts({ case_id: 1 }, '"public"', [
+      { key: 'pos', order: untypedOrder }
+    ])
+
+    expect(orderBySql).toMatch(/ORDER BY v\.pos (ASC|DESC) NULLS LAST/)
+    expect(orderBySql).not.toContain('DROP TABLE')
   })
 
   it('rejects unsupported postgres column filter keys instead of ignoring them', async () => {

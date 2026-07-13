@@ -54,11 +54,16 @@ describe('PostgresHealthDiagnostics', () => {
     )
   })
 
-  it('probes migration status with quoted schema identifiers', async () => {
-    const query = vi.fn(async (sql: string) => {
+  it('probes migration status with quoted schema identifiers via a bound parameter (S7 info fix)', async () => {
+    const query = vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes('version()')) return { rows: [{ version: 'PostgreSQL 18' }] }
       if (sql.includes('to_regclass')) {
-        expect(sql).toContain(`to_regclass('"Workspace-A"."schema_migrations"')`)
+        // Must be a bound $1 parameter, not a hand-escaped string literal —
+        // asserting the exact param value also proves it isn't silently
+        // dropped or mismatched by the rewrite.
+        expect(sql).toContain('to_regclass($1)')
+        expect(sql).not.toContain('\'"Workspace-A"')
+        expect(params).toEqual([`"Workspace-A"."schema_migrations"`])
         return { rows: [{ relation: '"Workspace-A".schema_migrations' }] }
       }
       if (sql.includes('schema_migrations')) return { rows: [{ version: '0005' }] }
