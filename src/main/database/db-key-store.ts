@@ -472,10 +472,10 @@ export class DbKeyStore {
   }
 
   /**
-   * Read the registry from disk. Tolerates a missing file (fresh install —
-   * treated as empty, no logging). Never throws on a corrupt file: it is
-   * preserved as `<registryPath>.bak` and a warning is logged, so keys are
-   * not silently lost even though this read returns an empty registry.
+   * Read the registry from disk. A missing file is a fresh install and is
+   * treated as empty. An existing unreadable or invalid registry fails
+   * closed: returning an empty registry would let the next mutation replace
+   * the only copy of every wrapped database key.
    */
   private load(): KeyRegistry {
     if (!existsSync(this.registryPath)) {
@@ -487,7 +487,7 @@ export class DbKeyStore {
       raw = readFileSync(this.registryPath, 'utf-8')
     } catch (e) {
       mainLogger.warn(`Failed to read key registry file: ${errorMessage(e)}`, 'DbKeyStore')
-      return emptyKeyRegistry()
+      throw new Error('The database key registry could not be read; no key changes were made')
     }
 
     try {
@@ -499,10 +499,10 @@ export class DbKeyStore {
     } catch (e) {
       this.preserveCorruptBackup(raw)
       mainLogger.warn(
-        `Key registry file was corrupt or invalid; treating as empty and preserving a backup at ${this.registryPath}.bak: ${errorMessage(e)}`,
+        `Key registry file was corrupt or invalid; refusing to replace it and preserving a backup at ${this.registryPath}.bak: ${errorMessage(e)}`,
         'DbKeyStore'
       )
-      return emptyKeyRegistry()
+      throw new Error('The database key registry is corrupt or invalid; no key changes were made')
     }
   }
 
