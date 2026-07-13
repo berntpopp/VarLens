@@ -28,6 +28,11 @@
       "assignedTo": "transactionFn"
     },
     {
+      "file": "src/main/database/GeneListRepository.ts",
+      "callerFunction": "importBedFile",
+      "assignedTo": "insertChunk"
+    },
+    {
       "file": "src/main/database/migrations.ts",
       "callerFunction": "runMigrations",
       "assignedTo": "cleanupTransaction"

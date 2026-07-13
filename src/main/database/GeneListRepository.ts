@@ -1,5 +1,13 @@
+import { randomUUID } from 'node:crypto'
+
 import { BaseRepository } from './BaseRepository'
 import type { GeneList, GeneListWithCount, RegionFile } from './types'
+import { TransactionError } from './errors'
+import { MAX_BED_FILTER_DECOMPRESSED_BYTES } from '../import/vcf/bed-filter'
+import { readBedEntries, type BedEntry, type BedReaderOptions } from '../import/vcf/bed-reader'
+import { resolveMaxDecompressedBytes } from '../import/stream-utils'
+
+export const SQLITE_REGION_FILE_INSERT_CHUNK_SIZE = 10_000
 
 export class GeneListRepository extends BaseRepository {
   // ============================================================
@@ -115,37 +123,103 @@ export class GeneListRepository extends BaseRepository {
     this.execRun(this.kysely.deleteFrom('region_files').where('id', '=', id))
   }
 
-  importBedEntries(
+  async importBedFile(
     fileId: number,
-    entries: Array<{ chr: string; start: number; end: number; label?: string }>
+    filePath: string,
+    options: BedReaderOptions = {}
+  ): Promise<RegionFile> {
+    const stagingTable = `region_file_import_${randomUUID().replace(/-/gu, '')}`
+    this.db.exec(
+      `CREATE TABLE "${stagingTable}" (
+        chr TEXT NOT NULL,
+        start_pos INTEGER NOT NULL,
+        end_pos INTEGER NOT NULL,
+        label TEXT
+      )`
+    )
+    try {
+      const insertEntry = this.db.prepare(
+        `INSERT INTO "${stagingTable}" (chr, start_pos, end_pos, label) VALUES (?, ?, ?, ?)`
+      )
+      const insertChunk = this.db.transaction((entries: BedEntry[]) => {
+        for (const entry of entries) {
+          insertEntry.run(entry.chr, entry.start, entry.end, entry.label ?? null)
+        }
+      })
+      const persistChunk = (entries: BedEntry[]): void => {
+        try {
+          insertChunk(entries)
+        } catch (error) {
+          throw asTransactionError(error)
+        }
+      }
+      const maxBytes = Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
+      let regionCount = 0
+      let totalBases = 0
+      let chunk: BedEntry[] = []
+      for await (const entry of readBedEntries(filePath, maxBytes, options)) {
+        chunk.push(entry)
+        regionCount += 1
+        totalBases = addSafeBaseCount(totalBases, entry.end - entry.start)
+        if (chunk.length === SQLITE_REGION_FILE_INSERT_CHUNK_SIZE) {
+          persistChunk(chunk)
+          chunk = []
+        }
+      }
+      if (chunk.length > 0) persistChunk(chunk)
+
+      return this.replaceRegionFileEntries(fileId, stagingTable, regionCount, totalBases)
+    } finally {
+      this.db.exec(`DROP TABLE IF EXISTS "${stagingTable}"`)
+    }
+  }
+
+  private replaceRegionFileEntries(
+    fileId: number,
+    stagingTable: string,
+    regionCount: number,
+    totalBases: number
   ): RegionFile {
-    return this.runTransaction(() => {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
       this.execRun(
         this.kysely.deleteFrom('region_file_entries').where('region_file_id', '=', fileId)
       )
-      let totalBases = 0
-      for (const e of entries) {
-        this.execRun(
-          this.kysely.insertInto('region_file_entries').values({
-            region_file_id: fileId,
-            chr: e.chr,
-            start_pos: e.start,
-            end_pos: e.end,
-            label: e.label ?? null
-          })
+      this.db
+        .prepare(
+          `INSERT INTO region_file_entries
+            (region_file_id, chr, start_pos, end_pos, label)
+           SELECT ?, chr, start_pos, end_pos, label FROM "${stagingTable}"`
         )
-        totalBases += e.end - e.start
-      }
+        .run(fileId)
       this.execRun(
         this.kysely
           .updateTable('region_files')
-          .set({ region_count: entries.length, total_bases: totalBases, updated_at: Date.now() })
+          .set({ region_count: regionCount, total_bases: totalBases, updated_at: Date.now() })
           .where('id', '=', fileId)
       )
-
-      return this.execFirst<RegionFile>(
+      const result = this.execFirst<RegionFile>(
         this.kysely.selectFrom('region_files').selectAll().where('id', '=', fileId)
       ) as RegionFile
-    })
+      this.db.exec('COMMIT')
+      return result
+    } catch (error) {
+      if (this.db.inTransaction) this.db.exec('ROLLBACK')
+      throw asTransactionError(error)
+    }
   }
+}
+
+function addSafeBaseCount(total: number, increment: number): number {
+  const next = total + increment
+  if (!Number.isSafeInteger(next)) {
+    throw new RangeError('BED total base count exceeds the safe integer range')
+  }
+  return next
+}
+
+function asTransactionError(error: unknown): TransactionError {
+  return error instanceof TransactionError
+    ? error
+    : new TransactionError('Transaction failed', error instanceof Error ? error : undefined)
 }

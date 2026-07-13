@@ -69,4 +69,48 @@ describe('SqliteWriteExecutor', () => {
     ).rejects.toThrow('SQLite audit append does not support metadata')
     expect(databaseService.auditLog.appendEntry).not.toHaveBeenCalled()
   })
+
+  it('routes BED paths and parsing policy without materializing entries', async () => {
+    const databaseService = {
+      geneLists: {
+        importBedFile: vi.fn().mockResolvedValue({ id: 4 })
+      }
+    }
+    const executor = new SqliteWriteExecutor(databaseService as never)
+
+    await executor.execute({
+      type: 'region-files:importBed',
+      params: [4, '/tmp/regions.bed', { rejectMalformedRows: false }]
+    })
+
+    expect(databaseService.geneLists.importBedFile).toHaveBeenCalledWith(4, '/tmp/regions.bed', {
+      rejectMalformedRows: false
+    })
+  })
+
+  it('serializes later writes behind in-flight streamed BED persistence', async () => {
+    let finishImport!: () => void
+    const importPending = new Promise<void>((resolve) => {
+      finishImport = resolve
+    })
+    const databaseService = {
+      geneLists: {
+        importBedFile: vi.fn().mockReturnValue(importPending),
+        createRegionFile: vi.fn().mockReturnValue({ id: 5 })
+      }
+    }
+    const executor = new SqliteWriteExecutor(databaseService as never)
+
+    const first = executor.execute({
+      type: 'region-files:importBed',
+      params: [4, '/tmp/regions.bed', { rejectMalformedRows: false }]
+    })
+    const second = executor.execute({ type: 'region-files:create', params: ['Next', null] })
+
+    await Promise.resolve()
+    expect(databaseService.geneLists.createRegionFile).not.toHaveBeenCalled()
+    finishImport()
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, { id: 5 }])
+    expect(databaseService.geneLists.createRegionFile).toHaveBeenCalledWith('Next', null)
+  })
 })

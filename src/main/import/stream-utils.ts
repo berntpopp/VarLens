@@ -2,6 +2,7 @@ import { createReadStream, openSync, readSync, closeSync } from 'node:fs'
 import { createGunzip } from 'node:zlib'
 import { compose, Transform } from 'node:stream'
 import type { Readable, TransformCallback } from 'node:stream'
+import { DEFAULT_MAX_GZIP_COMPRESSION_RATIO, GzipRatioPolicy } from './gzip-ratio-policy'
 
 /** Gzip magic number: first two bytes of any gzip file */
 const GZIP_MAGIC = Buffer.from([0x1f, 0x8b])
@@ -65,13 +66,13 @@ export const MAX_LINE_BYTES = 64 * 1024 * 1024 // 64 MiB
 export const DEFAULT_MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024 * 1024 // 256 GiB
 
 /**
- * Reject gzip streams expanding beyond this ratio after the safety floor.
+ * Generic gzip expansion baseline after the safety floor.
  * The shipped VCF gzip corpus tops out at 25.87x (ordinary single/trio and
  * annotated fixtures are 7.83x-16.29x), so 100x keeps almost 4x headroom
- * while stopping highly compressible hostile input far below the 256 GiB
- * WGS-capable absolute ceiling.
+ * for ordinary input. Joint-called VCFs receive a bounded sample-aware
+ * allowance from GzipRatioPolicy; other formats retain this ceiling.
  */
-export const MAX_GZIP_COMPRESSION_RATIO = 100
+export const MAX_GZIP_COMPRESSION_RATIO = DEFAULT_MAX_GZIP_COMPRESSION_RATIO
 
 /** Avoid false positives for small, legitimately repetitive gzip files. */
 export const MIN_GZIP_RATIO_CHECK_BYTES = 64 * 1024 * 1024 // 64 MiB
@@ -160,20 +161,24 @@ class ByteCapTransform extends Transform {
 
 class CompressionRatioCapTransform extends Transform {
   private totalBytes = 0
+  private readonly policy: GzipRatioPolicy
 
   constructor(
     private readonly compressedBytesAccepted: () => number,
-    private readonly maxRatio: number,
+    maxRatio: number,
     private readonly minBytes: number
   ) {
     super()
+    this.policy = new GzipRatioPolicy(maxRatio)
   }
 
   override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
     this.totalBytes += chunk.length
+    this.policy.observe(chunk)
     const ratio = this.totalBytes / Math.max(this.compressedBytesAccepted(), 1)
-    if (this.totalBytes > this.minBytes && ratio > this.maxRatio) {
-      callback(new DecompressionRatioExceededError(this.maxRatio, this.minBytes))
+    const effectiveMaxRatio = this.policy.maxRatio()
+    if (this.totalBytes > this.minBytes && ratio > effectiveMaxRatio) {
+      callback(new DecompressionRatioExceededError(effectiveMaxRatio, this.minBytes))
       return
     }
     callback(null, chunk)
