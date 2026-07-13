@@ -529,6 +529,31 @@ describe('ZipExtractor.testPassword', () => {
 })
 
 describe('ZipExtractor.extract', () => {
+  it('rejects an oversized archive before opening it', async () => {
+    const openArchive = vi.fn(() => ({ getEntries: () => [] }) as unknown as AdmZip)
+    const dir = makeTempDir()
+    const zipPath = join(dir, 'oversized.zip')
+    writeFileSync(zipPath, Buffer.alloc(11))
+    const extractor = new ZipExtractor({ maxArchiveBytes: 10 }, openArchive)
+
+    await expect(extractor.extract(zipPath, makeTempDir())).rejects.toThrow(/archive size limit/i)
+    expect(openArchive).not.toHaveBeenCalled()
+  })
+
+  it('rejects an archive with too many entries before decoding any entry', async () => {
+    const firstRead = vi.fn(() => Buffer.from('{}'))
+    const secondRead = vi.fn(() => Buffer.from('{}'))
+    const { zipPath, openArchive } = makeStubArchive([
+      { entryName: 'first.json', encrypted: false, declaredSize: 2, getData: firstRead },
+      { entryName: 'second.json', encrypted: false, declaredSize: 2, getData: secondRead }
+    ])
+    const extractor = new ZipExtractor({ maxEntries: 1 }, openArchive)
+
+    await expect(extractor.extract(zipPath, makeTempDir())).rejects.toThrow(/entry count limit/i)
+    expect(firstRead).not.toHaveBeenCalled()
+    expect(secondRead).not.toHaveBeenCalled()
+  })
+
   it('rejects a declared entry size above the extraction limit before decoding', async () => {
     const getData = vi.fn(() => Buffer.alloc(5))
     const { zipPath, openArchive } = makeStubArchive([

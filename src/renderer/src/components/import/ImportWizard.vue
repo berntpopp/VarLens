@@ -284,7 +284,9 @@ const selectedMode = ref<ImportMode | null>(null)
 const selectedFilePaths = ref<string[]>([])
 const isZipImport = ref(false)
 const zipPath = ref('')
+const zipExtractionId = ref('')
 const sourceSelectionPending = ref(false)
+const cancellationPending = ref(false)
 const uploadFileName = ref('')
 const uploadFileIndex = ref(1)
 const uploadTotalFiles = ref(0)
@@ -379,13 +381,14 @@ function formatIpcError(error: unknown, fallback: string): string {
 
 const {
   cleanupZipTemp,
-  abandonZipImport,
+  cleanupZipExtraction,
+  abandonZipImport: abandonZipImportState,
   handleBack,
   checkDuplicatesAndAdvance,
   scheduleDuplicateRecheck,
   cancelDuplicateRecheck
 } = useZipImportCleanup({
-  cleanupRequest: () => api!.batchImport.cleanupZipTemp(),
+  cleanupRequest: (extractionId) => api!.batchImport.cleanupZipTemp(extractionId),
   checkDuplicatesRequest: (filePaths, strip) => api!.batchImport.checkDuplicates(filePaths, strip),
   importStore,
   state: {
@@ -396,6 +399,7 @@ const {
     stripText,
     isZipImport,
     zipPath,
+    zipExtractionId,
     zipPasswordNeeded,
     zipPassword,
     zipError,
@@ -404,17 +408,26 @@ const {
   }
 })
 
+let sourceFlowGeneration = 0
+
+function abandonZipImport(context: string): void {
+  sourceFlowGeneration += 1
+  abandonZipImportState(context)
+}
+
 // Re-check duplicates when strip text changes
 watch(stripText, scheduleDuplicateRecheck)
 
 async function selectSource(mode: ImportMode): Promise<void> {
   if (sourceSelectionPending.value) return
+  const generation = sourceFlowGeneration
   selectedMode.value = mode
   sourceSelectionPending.value = true
   resetUploadState()
   try {
     if (mode === 'zip') {
       const result = unwrapIpcResult(await api!.batchImport.selectZip())
+      if (generation !== sourceFlowGeneration) return
       if (result === null) return
       zipPath.value = result.filePath
       isZipImport.value = true
@@ -422,7 +435,7 @@ async function selectSource(mode: ImportMode): Promise<void> {
         zipPasswordNeeded.value = true
         return
       }
-      await extractAndAdvance(result.filePath)
+      await extractAndAdvance(result.filePath, generation)
       return
     }
     let filePaths: string[]
@@ -464,10 +477,18 @@ async function selectSource(mode: ImportMode): Promise<void> {
   }
 }
 
-async function extractAndAdvance(path: string): Promise<void> {
-  const { files } = unwrapIpcResult(
+async function extractAndAdvance(
+  path: string,
+  generation: number = sourceFlowGeneration
+): Promise<void> {
+  const { files, extractionId } = unwrapIpcResult(
     await api!.batchImport.extractZip(path, zipPassword.value || undefined)
   )
+  if (generation !== sourceFlowGeneration || !dialog.value) {
+    await cleanupZipExtraction(extractionId, 'stale ZIP extraction completion')
+    return
+  }
+  zipExtractionId.value = extractionId
   if (files.length === 0) {
     abandonZipImport('empty ZIP extraction')
     throw new Error('No importable files found in archive')
@@ -479,6 +500,7 @@ async function extractAndAdvance(path: string): Promise<void> {
 }
 
 async function unlockZip(): Promise<void> {
+  const generation = sourceFlowGeneration
   zipUnlocking.value = true
   zipError.value = ''
   try {
@@ -491,7 +513,7 @@ async function unlockZip(): Promise<void> {
       return
     }
 
-    await extractAndAdvance(zipPath.value)
+    await extractAndAdvance(zipPath.value, generation)
   } catch (err) {
     const message = formatErrorMessage(err, 'Could not unlock ZIP archive')
     zipError.value = message
@@ -666,11 +688,11 @@ async function startImport(): Promise<void> {
       }
     }
   } catch (err) {
+    const message = formatIpcError(err, 'Import failed')
     // Only overwrite summary if the onComplete callback hasn't already
     // handled it (race: safeEmit fires before resolve, so the event
     // listener may have already set the correct summary + step 4).
     if (step.value === 3) {
-      const message = formatIpcError(err, 'Import failed')
       logService.error(`Import failed: ${message}`, 'ImportWizard')
       cancelError.value = ''
       summary.value = {
@@ -683,32 +705,27 @@ async function startImport(): Promise<void> {
       step.value = 4
       importStore.importError(message)
     }
+    if (isZipImport.value) {
+      await cleanupZipTemp('import start failure')
+    }
   }
 }
 
 async function cancelImport(): Promise<void> {
   cancelError.value = ''
+  if (cancellationPending.value) return
+  cancellationPending.value = true
   try {
     const result = isVcfImport.value ? await api!.import.cancel() : await api!.batchImport.cancel()
     unwrapIpcResult(result)
+    // Terminal result handlers own the summary and extraction cleanup.
   } catch (error) {
     if (step.value !== 3) return
     cancelError.value = formatIpcError(error, 'Cancellation failed')
     logService.warn(`Import cancel failed: ${cancelError.value}`, 'ImportWizard')
-    return
+  } finally {
+    cancellationPending.value = false
   }
-  if (step.value !== 3) return
-
-  const cancelledResult: BatchResult = {
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    cancelled: true,
-    details: []
-  }
-  summary.value = cancelledResult
-  step.value = 4
-  importStore.importComplete({ ...cancelledResult, details: [] })
 }
 
 function continueInBackground(): void {
@@ -741,6 +758,7 @@ function resetState(): void {
   vcfCaseNames.value = new Map()
   isZipImport.value = false
   zipPath.value = ''
+  zipExtractionId.value = ''
   sourceSelectionPending.value = false
   resetUploadState()
   zipPasswordNeeded.value = false
@@ -748,6 +766,7 @@ function resetState(): void {
   zipError.value = ''
   showZipPassword.value = false
   zipUnlocking.value = false
+  cancellationPending.value = false
   reviewFiles.value = []
   duplicateCount.value = 0
   duplicateStrategy.value = 'skip'

@@ -393,7 +393,7 @@ describe('web dispatcher adapters: auth and import', () => {
         request as never,
         reply as never,
         deps
-      )) as { files: string[]; errors: string[] }
+      )) as { files: string[]; errors: string[]; extractionId: string }
 
       expect(reply.code).not.toHaveBeenCalledWith(403)
       expect(result.errors).toEqual([])

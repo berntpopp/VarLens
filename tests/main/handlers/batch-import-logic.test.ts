@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest'
 import AdmZip from 'adm-zip'
-import { mkdtempSync, readdirSync, writeFileSync } from 'fs'
+import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import * as logic from '../../../src/main/ipc/handlers/batch-import-logic'
@@ -122,7 +122,6 @@ describe('extractZip', () => {
   })
 
   it('removes its temporary directory after rejecting a partial extraction', async () => {
-    logic.cleanupZipTemp()
     const before = readdirSync(tmpdir())
       .filter((name) => name.startsWith('varlens-zip-'))
       .sort()
@@ -151,6 +150,56 @@ describe('extractZip', () => {
 
     const result = await logic.extractZip(validPath)
 
-    expect(result).toEqual({ files: [], errors: [] })
+    expect(result).toMatchObject({ files: [], errors: [] })
+    expect(result.extractionId).toMatch(/^[0-9a-f-]{36}$/i)
+    logic.cleanupZipTemp(result.extractionId)
+  })
+
+  it('keeps extraction directories independent and scopes cleanup authority', async () => {
+    const dir = makeTempDir()
+    const firstPath = join(dir, 'first.zip')
+    const secondPath = join(dir, 'second.zip')
+    const first = new AdmZip()
+    first.addFile('first.json', Buffer.from('{}'))
+    first.writeZip(firstPath)
+    const second = new AdmZip()
+    second.addFile('second.json', Buffer.from('{}'))
+    second.writeZip(secondPath)
+
+    const firstResult = await logic.extractZip(firstPath)
+    const secondResult = await logic.extractZip(secondPath)
+    const firstExtractedPath = firstResult.files[0]
+    const secondExtractedPath = secondResult.files[0]
+
+    expect(existsSync(firstExtractedPath)).toBe(true)
+    expect(existsSync(secondExtractedPath)).toBe(true)
+
+    logic.cleanupZipTemp(firstResult.extractionId)
+    expect(existsSync(firstExtractedPath)).toBe(false)
+    expect(existsSync(secondExtractedPath)).toBe(true)
+
+    logic.cleanupZipTemp(secondResult.extractionId)
+    expect(existsSync(secondExtractedPath)).toBe(false)
+  })
+
+  it('bounds active extraction directories when callers omit cleanup', async () => {
+    const dir = makeTempDir()
+    const archivePath = join(dir, 'bounded.zip')
+    const zip = new AdmZip()
+    zip.addFile('case.json', Buffer.from('{}'))
+    zip.writeZip(archivePath)
+    const activeExtractions = []
+
+    try {
+      for (let index = 0; index < 4; index++) {
+        activeExtractions.push(await logic.extractZip(archivePath))
+      }
+
+      await expect(logic.extractZip(archivePath)).rejects.toThrow(/Too many active ZIP extractions/)
+    } finally {
+      for (const extraction of activeExtractions) {
+        logic.cleanupZipTemp(extraction.extractionId)
+      }
+    }
   })
 })

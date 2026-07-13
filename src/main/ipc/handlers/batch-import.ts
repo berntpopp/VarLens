@@ -268,9 +268,12 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
     }
   )
 
-  ipcMain.handle('batch-import:cleanupZipTemp', async () => {
+  ipcMain.handle('batch-import:cleanupZipTemp', async (_event, extractionId: unknown) => {
     return wrapHandler(async () => {
-      cleanupZipTemp()
+      if (typeof extractionId !== 'string' || extractionId.length === 0) {
+        throw new Error('Invalid ZIP extraction cleanup authority')
+      }
+      cleanupZipTemp(extractionId)
     })
   })
 }

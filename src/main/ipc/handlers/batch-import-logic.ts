@@ -6,6 +6,7 @@
  * without mocking Electron internals.
  */
 import { basename } from 'path'
+import { randomUUID } from 'node:crypto'
 import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import { checkDuplicates } from '../../import/batch-utils'
@@ -29,9 +30,14 @@ let workerClient: ImportWorkerClient | null = null
 
 // ZIP extraction utilities
 const zipExtractor = new ZipExtractor()
-let zipTempManager: TempDirectoryManager | null = null
-let zipEnrolledPaths: string[] = []
-let revokeZipEnrollment: ((filePath: string) => void) | undefined
+interface ActiveZipExtraction {
+  manager: TempDirectoryManager
+  enrolledPaths: string[]
+  revokeEnrollment?: (filePath: string) => void
+}
+const zipExtractions = new Map<string, ActiveZipExtraction>()
+const orphanedZipExtractions = new Set<string>()
+const MAX_ACTIVE_ZIP_EXTRACTIONS = 4
 
 /**
  * Check which files have duplicate case names in the database.
@@ -280,15 +286,18 @@ export async function extractZip(
   password?: string,
   onExtractedFile?: (filePath: string) => void,
   onRemoveExtractedFile?: (filePath: string) => void
-): Promise<{ files: string[]; errors: string[] }> {
+): Promise<{ files: string[]; errors: string[]; extractionId: string }> {
+  const manager = new TempDirectoryManager()
+  let extractionId: string | null = null
   try {
-    revokeExtractedPaths()
-    if (zipTempManager !== null) {
-      zipTempManager.cleanup()
+    retryOrphanedZipCleanups()
+    if (zipExtractions.size >= MAX_ACTIVE_ZIP_EXTRACTIONS) {
+      throw new Error('Too many active ZIP extractions; clean up an existing extraction first')
     }
-
-    zipTempManager = new TempDirectoryManager()
-    const targetDir = zipTempManager.create()
+    const targetDir = manager.create()
+    extractionId = randomUUID()
+    const extraction: ActiveZipExtraction = { manager, enrolledPaths: [] }
+    zipExtractions.set(extractionId, extraction)
 
     const result = await zipExtractor.extract(zipPath, targetDir, password)
 
@@ -304,17 +313,18 @@ export async function extractZip(
     }
 
     if (onExtractedFile !== undefined) {
+      extraction.revokeEnrollment = onRemoveExtractedFile
       for (const extractedFile of result.extractedFiles) {
+        extraction.enrolledPaths.push(extractedFile)
         onExtractedFile(extractedFile)
       }
-      zipEnrolledPaths = [...result.extractedFiles]
-      revokeZipEnrollment = onRemoveExtractedFile
     }
 
     return JSON.parse(
       JSON.stringify({
         files: result.extractedFiles,
-        errors: result.errors
+        errors: result.errors,
+        extractionId
       })
     )
   } catch (error) {
@@ -325,11 +335,16 @@ export async function extractZip(
     // infrastructure fault and must not be reshaped into a fake-success
     // zero-file result.
     mainLogger.error(`batch-import:extractZip error: ${error}`, 'import')
-    if (zipTempManager !== null) {
-      zipTempManager.cleanup()
-      zipTempManager = null
+    try {
+      if (extractionId !== null) cleanupZipTemp(extractionId)
+    } catch (cleanupError) {
+      if (extractionId !== null) orphanedZipExtractions.add(extractionId)
+      const cleanupMessage = formatErrorMessage(cleanupError, 'cleanup failed')
+      throw new Error(
+        `${formatErrorMessage(error, 'ZIP extraction failed')}; temporary-file cleanup also failed: ${cleanupMessage}`,
+        { cause: cleanupError }
+      )
     }
-    revokeExtractedPaths()
     throw error
   }
 }
@@ -337,20 +352,32 @@ export async function extractZip(
 /**
  * Clean up temporary ZIP extraction directory.
  */
-export function cleanupZipTemp(): void {
-  revokeExtractedPaths()
-  if (zipTempManager !== null) {
-    zipTempManager.cleanup()
-    zipTempManager = null
+export function cleanupZipTemp(extractionId: string): void {
+  const extraction = zipExtractions.get(extractionId)
+  if (extraction === undefined) return
+  revokeExtractedPaths(extraction)
+  try {
+    extraction.manager.cleanup()
+  } catch (error) {
+    orphanedZipExtractions.add(extractionId)
+    throw error
+  }
+  zipExtractions.delete(extractionId)
+  orphanedZipExtractions.delete(extractionId)
+}
+
+function retryOrphanedZipCleanups(): void {
+  for (const extractionId of [...orphanedZipExtractions]) {
+    cleanupZipTemp(extractionId)
   }
 }
 
-function revokeExtractedPaths(): void {
-  if (revokeZipEnrollment !== undefined) {
-    for (const filePath of zipEnrolledPaths) {
-      revokeZipEnrollment(filePath)
+function revokeExtractedPaths(extraction: ActiveZipExtraction): void {
+  if (extraction.revokeEnrollment !== undefined) {
+    for (const filePath of extraction.enrolledPaths) {
+      extraction.revokeEnrollment(filePath)
     }
   }
-  zipEnrolledPaths = []
-  revokeZipEnrollment = undefined
+  extraction.enrolledPaths = []
+  extraction.revokeEnrollment = undefined
 }

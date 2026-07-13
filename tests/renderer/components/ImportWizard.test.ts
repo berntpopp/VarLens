@@ -421,7 +421,8 @@ describe('ImportWizard ZIP password unlock', () => {
     })
     mockApi.batchImport.extractZip = vi.fn().mockResolvedValue({
       files: ['/tmp/varlens-zip-entry/case.json'],
-      errors: []
+      errors: [],
+      extractionId: '11111111-1111-4111-8111-111111111111'
     })
     mockApi.batchImport.checkDuplicates = vi.fn().mockResolvedValue({
       files: [
@@ -500,7 +501,11 @@ describe('ImportWizard ZIP password unlock', () => {
       filePath: '/tmp/empty.zip',
       isEncrypted: false
     })
-    mockApi.batchImport.extractZip = vi.fn().mockResolvedValue({ files: [], errors: [] })
+    mockApi.batchImport.extractZip = vi.fn().mockResolvedValue({
+      files: [],
+      errors: [],
+      extractionId: '11111111-1111-4111-8111-111111111111'
+    })
 
     const wrapper = mount(ImportWizard, {
       global: { plugins: [vuetify] },
@@ -600,5 +605,132 @@ describe('ImportWizard ZIP password unlock', () => {
     expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledOnce()
     expect(document.body.textContent).toContain('Could not refresh duplicate cases')
     expect(document.body.textContent).not.toContain('case.json')
+  })
+
+  it('cleans a late stale extraction without replacing the current cleanup authority', async () => {
+    const staleExtraction = deferred<{
+      files: string[]
+      errors: string[]
+      extractionId: string
+    }>()
+    mockApi.batchImport.selectZip = vi.fn().mockResolvedValue({
+      filePath: '/tmp/archive.zip',
+      isEncrypted: false
+    })
+    mockApi.batchImport.extractZip = vi
+      .fn()
+      .mockReturnValueOnce(staleExtraction.promise)
+      .mockResolvedValueOnce({
+        files: ['/tmp/current/case.json'],
+        errors: [],
+        extractionId: '22222222-2222-4222-8222-222222222222'
+      })
+    mockApi.batchImport.checkDuplicates = vi.fn().mockResolvedValue({
+      files: [
+        {
+          filePath: '/tmp/current/case.json',
+          fileName: 'case.json',
+          caseName: 'case',
+          isDuplicate: false
+        }
+      ],
+      duplicateCount: 0
+    })
+    const wrapper = mountWizard()
+
+    wrapper.vm.show()
+    await flushPromises()
+    wrapper.findComponent(ImportSourceSelector).vm.$emit('select', 'zip')
+    await flushPromises()
+    wrapper.vm.show()
+    await flushPromises()
+    wrapper.findComponent(ImportSourceSelector).vm.$emit('select', 'zip')
+    await flushPromises()
+
+    staleExtraction.resolve({
+      files: ['/tmp/stale/case.json'],
+      errors: [],
+      extractionId: '11111111-1111-4111-8111-111111111111'
+    })
+    await flushPromises()
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111'
+    )
+
+    wrapper.findComponent({ name: 'VDialog' }).vm.$emit('update:modelValue', false)
+    await flushPromises()
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledWith(
+      '22222222-2222-4222-8222-222222222222'
+    )
+  })
+
+  it('waits for the terminal cancelled result before cleaning ZIP data', async () => {
+    prepareSuccessfulZipReview()
+    const completion = deferred<{
+      succeeded: number
+      failed: number
+      skipped: number
+      cancelled: boolean
+      details: []
+    }>()
+    mockApi.batchImport.start = vi.fn().mockReturnValue(completion.promise)
+    mockApi.batchImport.cancel = vi.fn().mockResolvedValue(undefined)
+    const wrapper = mountWizard()
+    await openZipReview(wrapper)
+
+    const start = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Import 1 file')
+    )
+    expect(start).toBeInstanceOf(HTMLButtonElement)
+    start!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    const cancel = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Cancel')
+    )
+    expect(cancel).toBeInstanceOf(HTMLButtonElement)
+    cancel!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(mockApi.batchImport.cancel).toHaveBeenCalledOnce()
+    expect(mockApi.batchImport.cleanupZipTemp).not.toHaveBeenCalled()
+
+    completion.resolve({
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+      cancelled: true,
+      details: []
+    })
+    await flushPromises()
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111'
+    )
+  })
+
+  it('cleans ZIP data when starting the batch import fails', async () => {
+    prepareSuccessfulZipReview()
+    mockApi.batchImport.start = vi.fn().mockResolvedValue({
+      code: 'UNKNOWN',
+      message: 'worker failed to start',
+      userMessage: 'Could not start import'
+    })
+    const wrapper = mountWizard()
+    await openZipReview(wrapper)
+
+    const start = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Import 1 file')
+    )
+    expect(start).toBeInstanceOf(HTMLButtonElement)
+    start!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111'
+    )
+    expect(document.body.textContent).toContain('Could not start import')
   })
 })

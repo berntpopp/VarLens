@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { join, parse } from 'node:path'
 import { ErrorCode, isIpcError } from '../../../../src/shared/types/errors'
 
+const { cleanupZipTemp } = vi.hoisted(() => ({ cleanupZipTemp: vi.fn() }))
+
 vi.mock('electron', () => ({
   dialog: {
     showOpenDialog: vi.fn()
@@ -31,8 +33,8 @@ vi.mock('../../../../src/main/ipc/handlers/batch-import-logic', () => ({
   }),
   cancelBatchImport: vi.fn(),
   testZipPassword: vi.fn().mockReturnValue({ success: true }),
-  extractZip: vi.fn().mockResolvedValue({ files: [], errors: [] }),
-  cleanupZipTemp: vi.fn()
+  extractZip: vi.fn().mockResolvedValue({ files: [], errors: [], extractionId: 'extraction-id' }),
+  cleanupZipTemp
 }))
 
 vi.mock('../../../../src/main/ipc/utils/settings-io', () => ({
@@ -406,6 +408,32 @@ describe('batch-import IPC handlers', () => {
 
       expect(result).toEqual([discoveredFile])
       expect(isAllowedImportPath(discoveredFile)).toBe(true)
+    })
+  })
+
+  describe('batch-import:cleanupZipTemp', () => {
+    it('passes extraction-scoped cleanup authority to the logic layer', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers({ ipcMain, getDb: vi.fn() } as never)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'batch-import:cleanupZipTemp',
+        '11111111-1111-4111-8111-111111111111'
+      )
+
+      expect(isIpcError(result)).toBe(false)
+      expect(cleanupZipTemp).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111')
+    })
+
+    it('rejects missing cleanup authority instead of performing global cleanup', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers({ ipcMain, getDb: vi.fn() } as never)
+
+      const result = await invokeHandler(ipcMain, 'batch-import:cleanupZipTemp')
+
+      expect(isIpcError(result)).toBe(true)
+      expect(cleanupZipTemp).not.toHaveBeenCalled()
     })
   })
 })
