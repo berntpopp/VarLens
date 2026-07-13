@@ -15,4 +15,5 @@ export interface ExportDomainContract {
     caseName: string
   ) => Promise<IpcResult<ExportResult>>
   cohort: (params: CohortSearchParams) => Promise<IpcResult<ExportResult>>
+  revealInFolder: (filePath: string) => Promise<IpcResult<{ success: boolean }>>
 }

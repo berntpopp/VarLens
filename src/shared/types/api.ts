@@ -264,7 +264,6 @@ export interface ShellOpenExternalResult {
 
 export interface ShellAPI {
   openExternal: (url: string) => Promise<ShellOpenExternalResult>
-  showItemInFolder: (filePath: string) => Promise<void>
   updateDomains: (domains: string[]) => Promise<void>
 }
 
@@ -282,6 +281,7 @@ export interface ExportAPI {
     caseName: string
   ) => Promise<IpcResult<ExportResult>>
   cohort: (params: CohortSearchParams) => Promise<IpcResult<ExportResult>>
+  revealInFolder: (filePath: string) => Promise<IpcResult<{ success: boolean }>>
 }
 
 export type DatabaseAPI = DatabaseDomainContract

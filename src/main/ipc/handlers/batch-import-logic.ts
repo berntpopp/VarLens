@@ -290,14 +290,13 @@ export async function extractZip(
   onRemoveExtractedFile?: (filePath: string) => void
 ): Promise<{ files: string[]; errors: string[]; extractionId: string }> {
   const manager = new TempDirectoryManager()
-  let extractionId: string | null = null
+  const extractionId = randomUUID()
   try {
     retryOrphanedZipCleanups()
     if (zipExtractions.size >= MAX_ACTIVE_ZIP_EXTRACTIONS) {
       throw new Error('Too many active ZIP extractions; clean up an existing extraction first')
     }
     const targetDir = manager.create()
-    extractionId = randomUUID()
     const extraction: ActiveZipExtraction = { manager, enrolledPaths: [] }
     zipExtractions.set(extractionId, extraction)
 
@@ -338,9 +337,9 @@ export async function extractZip(
     // zero-file result.
     mainLogger.error(`batch-import:extractZip error: ${error}`, 'import')
     try {
-      if (extractionId !== null) cleanupZipTemp(extractionId)
+      cleanupZipTemp(extractionId)
     } catch (cleanupError) {
-      if (extractionId !== null) orphanedZipExtractions.add(extractionId)
+      orphanedZipExtractions.add(extractionId)
       const cleanupMessage = formatErrorMessage(cleanupError, 'cleanup failed')
       throw new Error(
         `${formatErrorMessage(error, 'ZIP extraction failed')}; temporary-file cleanup also failed: ${cleanupMessage}`,
@@ -357,6 +356,7 @@ export async function extractZip(
 export function cleanupZipTemp(extractionId: string): void {
   const extraction = zipExtractions.get(extractionId)
   if (extraction === undefined) return
+
   revokeExtractedPaths(extraction)
   try {
     extraction.manager.cleanup()

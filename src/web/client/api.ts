@@ -382,8 +382,22 @@ const SHELL_API = {
     window.open(url, '_blank', 'noopener,noreferrer')
     return Promise.resolve({ success: true } as unknown)
   },
-  showItemInFolder: () => Promise.resolve({ ok: false } as unknown),
   updateDomains: (_domains: string[]) => Promise.resolve(undefined)
+}
+
+function buildExportApi(): unknown {
+  const rpc = buildDomainProxy('export') as Record<string, unknown>
+  return new Proxy(
+    {},
+    {
+      get(_target, prop: string | symbol) {
+        if (prop === 'revealInFolder') {
+          return () => Promise.resolve({ success: false })
+        }
+        return typeof prop === 'string' ? rpc[prop] : undefined
+      }
+    }
+  )
 }
 
 const SYSTEM_API = {
@@ -436,6 +450,10 @@ function buildImportApi(): unknown {
             const refs = await pickAndUploadFiles({ multiple: false, accept: '.bed,.bed.gz,.gz' })
             return refs[0] ?? null
           }
+        }
+        if (prop === 'enrollDroppedFiles') {
+          return async (files: readonly File[]) =>
+            (await uploadImportFiles(files)).map((file) => file.ref)
         }
         return typeof prop === 'string' ? rpc[prop] : undefined
       }
@@ -529,6 +547,7 @@ const DOMAIN_OVERRIDES: Record<string, unknown> = {
   batchImport: buildBatchImportApi(),
   'batch-import': buildBatchImportApi(),
   cohort: buildCohortApi(),
+  export: buildExportApi(),
   import: buildImportApi(),
   perf: PERF_API,
   shell: SHELL_API,

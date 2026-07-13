@@ -76,6 +76,7 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       selectFile: () => importDomain.selectFile(),
       selectFiles: () => importDomain.selectFiles(),
       selectBedFile: () => importDomain.selectBedFile(),
+      enrollDroppedFiles: (files) => importDomain.enrollDroppedFiles(files),
       start: (filePath, caseName, vcfOptions) => importDomain.start(filePath, caseName, vcfOptions),
       startMultiFile: (caseName, files, vcfOptions, filters) =>
         importDomain.startMultiFile(caseName, files, vcfOptions, filters),
@@ -96,13 +97,13 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
 
     export: {
       variants: (caseId, filters, caseName) => exportDomain.variants(caseId, filters, caseName),
-      cohort: (params) => exportDomain.cohort(params)
+      cohort: (params) => exportDomain.cohort(params),
+      revealInFolder: (filePath) => exportDomain.revealInFolder(filePath)
     },
 
     shell: {
       openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
-      updateDomains: (domains) => ipcRenderer.invoke('shell:updateUserDomains', domains),
-      showItemInFolder: (filePath) => ipcRenderer.invoke('shell:showItemInFolder', filePath)
+      updateDomains: (domains) => ipcRenderer.invoke('shell:updateUserDomains', domains)
     },
 
     database: {

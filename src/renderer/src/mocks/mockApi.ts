@@ -239,6 +239,7 @@ export const mockApi: WindowAPI = {
     selectFile: async () => '/mock/selected/file.json',
     selectFiles: async () => ['/mock/selected/file.vcf.gz'],
     selectBedFile: async () => '/mock/regions.bed',
+    enrollDroppedFiles: async (files) => files.map((file) => `/mock/uploads/${file.name}`),
     start: async () => ({
       caseId: cases.length + 1,
       variantCount: 1000,
@@ -284,14 +285,14 @@ export const mockApi: WindowAPI = {
   },
   export: {
     variants: async () => ({ success: true, filePath: '/mock/export.xlsx' }),
-    cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' })
+    cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' }),
+    revealInFolder: async () => ({ success: false })
   },
   shell: {
     openExternal: async (url) => {
       window.open(url, '_blank')
       return { success: true }
     },
-    showItemInFolder: async () => {},
     updateDomains: async () => {}
   },
 

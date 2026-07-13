@@ -6,6 +6,7 @@ export interface ImportDomainContract {
   selectFile: () => Promise<IpcResult<string | null>>
   selectFiles: () => Promise<IpcResult<string[]>>
   selectBedFile: () => Promise<IpcResult<string | null>>
+  enrollDroppedFiles: (files: readonly File[]) => Promise<IpcResult<string[]>>
   start: (
     filePath: string,
     caseName: string,

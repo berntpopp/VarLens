@@ -23,6 +23,7 @@ describe('export preload domain behavior', () => {
         success: true,
         filePath: '/tmp/cohort.xlsx'
       })
+      .mockResolvedValueOnce({ success: true })
 
     vi.doMock('electron', () => ({
       ipcRenderer: { invoke }
@@ -42,6 +43,7 @@ describe('export preload domain behavior', () => {
       success: true,
       filePath: '/tmp/cohort.xlsx'
     })
+    await expect(api.revealInFolder('/tmp/cohort.xlsx')).resolves.toEqual({ success: true })
 
     expect(invoke).toHaveBeenNthCalledWith(
       1,
@@ -57,6 +59,7 @@ describe('export preload domain behavior', () => {
       limit: 50,
       offset: 0
     })
+    expect(invoke).toHaveBeenNthCalledWith(3, 'export:revealInFolder', '/tmp/cohort.xlsx')
   })
 
   it('preload index preserves export transport results when exposing window.api', async () => {

@@ -7,7 +7,7 @@ import type { DuplicateChoice } from '../../types/api'
  * is read or forwarded to the import worker.
  *
  * File-path validation against the dialog-enrolled allowlist happens
- * separately in the handler (`isAllowedImportPath`); these schemas only
+ * separately in the handler (`isStrictlyEnrolledPath`); these schemas only
  * assert shape and primitive bounds, mirroring import-schemas.ts.
  */
 const nonBlankString = (maxLength: number) =>
@@ -47,3 +47,5 @@ export const BatchImportExtractZipParamsSchema = z.tuple([
   NonBlankFilePathSchema,
   ZipPasswordSchema.optional()
 ])
+
+export const BatchImportCleanupZipParamsSchema = z.tuple([nonBlankString(128)])

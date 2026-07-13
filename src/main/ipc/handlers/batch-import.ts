@@ -15,6 +15,7 @@ import {
 } from '../../security/import-path-allowlist'
 import {
   BatchImportCheckDuplicatesParamsSchema,
+  BatchImportCleanupZipParamsSchema,
   BatchImportExtractZipParamsSchema,
   BatchImportStartParamsSchema,
   BatchImportTestZipPasswordParamsSchema
@@ -279,10 +280,13 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
 
   ipcMain.handle('batch-import:cleanupZipTemp', async (_event, extractionId: unknown) => {
     return wrapHandler(async () => {
-      if (typeof extractionId !== 'string' || extractionId.length === 0) {
-        throw new Error('Invalid ZIP extraction cleanup authority')
+      const parsed = BatchImportCleanupZipParamsSchema.safeParse([extractionId])
+      if (!parsed.success) {
+        throw new InvalidParametersError(
+          `Invalid batch-import:cleanupZipTemp params: ${parsed.error.message}`
+        )
       }
-      cleanupZipTemp(extractionId)
+      cleanupZipTemp(parsed.data[0])
     })
   })
 }

@@ -43,8 +43,14 @@ describe('import preload domain behavior', () => {
       })
       .mockResolvedValueOnce(undefined)
 
+    const droppedFile = { name: 'dropped.vcf' } as File
+    const rawString = '/renderer/supplied.vcf'
+    const getPathForFile = vi.fn((file: File) =>
+      file === droppedFile ? '/trusted/dropped.vcf' : ''
+    )
     vi.doMock('electron', () => ({
-      ipcRenderer: { invoke }
+      ipcRenderer: { invoke },
+      webUtils: { getPathForFile }
     }))
 
     const { createImportApi } = await import('../../../../src/preload/domains/import')
@@ -79,6 +85,20 @@ describe('import preload domain behavior', () => {
     })
 
     await expect(api.cancel()).resolves.toBeUndefined()
+
+    await api.enrollDroppedFiles([droppedFile, rawString as unknown as File])
+    expect(getPathForFile).toHaveBeenCalledWith(droppedFile)
+    const droppedFileEnrollmentToken = invoke.mock.calls[8]?.[1]
+    expect(droppedFileEnrollmentToken).toEqual(expect.any(String))
+    expect(invoke).toHaveBeenNthCalledWith(
+      9,
+      'import:registerDroppedFileEnrollmentToken',
+      droppedFileEnrollmentToken
+    )
+    expect(invoke).toHaveBeenNthCalledWith(10, 'import:enrollDroppedFiles', {
+      token: droppedFileEnrollmentToken,
+      filePaths: ['/trusted/dropped.vcf']
+    })
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'import:selectFile')
     expect(invoke).toHaveBeenNthCalledWith(2, 'import:selectFiles')

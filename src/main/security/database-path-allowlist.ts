@@ -1,10 +1,12 @@
-import { isAbsolute, resolve } from 'path'
+import { lstatSync } from 'node:fs'
+import { dirname, isAbsolute, resolve } from 'node:path'
 import type { DatabaseManager } from '../services/DatabaseManager'
 import { PathAuthorityStore } from './path-authority-store'
 
 const dialogAllowedDatabasePaths = new PathAuthorityStore()
 
 export function addAllowedDatabasePath(absolutePath: string): void {
+  if (!isAbsolute(absolutePath) || resolve(absolutePath) !== absolutePath) return
   dialogAllowedDatabasePaths.add(absolutePath)
 }
 
@@ -27,10 +29,40 @@ export function isAllowedDatabasePath(
   const canonical = resolve(candidate)
   if (canonical !== candidate) return false
 
+  // A dialog enrollment is a pinned capability. If its target changed,
+  // fail closed instead of resurrecting the stale path merely because the
+  // same lexical string is still present in current/recent metadata.
+  if (dialogAllowedDatabasePaths.hasEnrollment(canonical)) {
+    return dialogAllowedDatabasePaths.isAuthorized(canonical)
+  }
+
+  // Persisted current/recent metadata records only a lexical path; it does
+  // not retain the real target needed to pin a symlink. Require the user to
+  // select such paths again so the session store can capture that target.
+  if (resolvesThroughSymlink(canonical)) return false
+
   const manager = getDbManager()
   const currentPath = manager.getCurrentPath()
-  if (currentPath !== null && resolve(currentPath) === canonical) return true
-  return manager.getRecentDatabases().some((db) => resolve(db.path) === canonical)
+  if (currentPath !== null && isExactMetadataPath(currentPath, canonical)) return true
+  return manager.getRecentDatabases().some((db) => isExactMetadataPath(db.path, canonical))
+}
+
+function isExactMetadataPath(storedPath: string, candidate: string): boolean {
+  return isAbsolute(storedPath) && resolve(storedPath) === storedPath && storedPath === candidate
+}
+
+function resolvesThroughSymlink(filePath: string): boolean {
+  let cursor = filePath
+  while (true) {
+    try {
+      if (lstatSync(cursor).isSymbolicLink()) return true
+    } catch {
+      // Missing leaf paths may still have a symlinked existing ancestor.
+    }
+    const parent = dirname(cursor)
+    if (parent === cursor) return false
+    cursor = parent
+  }
 }
 
 /** Test-only reset helper. Do not call from production code. */

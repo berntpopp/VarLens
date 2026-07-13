@@ -1,14 +1,22 @@
 import { dialog } from 'electron'
-import { dirname } from 'path'
+import { statSync } from 'node:fs'
+import { dirname, isAbsolute, resolve } from 'node:path'
 import type { z } from 'zod'
 import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import { safeEmit } from '../utils/safeEmit'
 import { loadSettings, saveSettings } from '../utils/settings-io'
-import { addAllowedImportPath, isAllowedImportPath } from '../../security/import-path-allowlist'
+import {
+  addAllowedImportPath,
+  isStrictlyEnrolledPath,
+  isTrustedImportPathEnrollmentToken,
+  registerTrustedImportPathEnrollmentToken
+} from '../../security/import-path-allowlist'
 import {
   ImportFiltersIpcPayloadSchema,
+  ImportEnrollDroppedFilesParamsSchema,
+  ImportRegisterDroppedFileEnrollmentTokenParamsSchema,
   ImportStartMultiFileParamsSchema,
   ImportStartParamsSchema,
   ImportVcfMultiPreviewParamsSchema,
@@ -25,6 +33,8 @@ import type { ImportCallbacks, MultiFileImportSpec } from './import-logic'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { StorageSession } from '../../storage/session'
 import { BedFilter } from '../../import/vcf/bed-filter'
+import { mainLogger } from '../../services/MainLogger'
+import type { VcfMultiPreviewResult } from '../../../shared/types/import'
 
 /**
  * Serializable filter payload sent from the renderer over IPC.
@@ -74,6 +84,40 @@ function throwUnallowedImportPath(channel: string, filePath: string, label = 'fi
     `${channel}: ${label} is not in the allowed import paths: ${filePath}`,
     'The selected file is not in an allowed location.'
   )
+}
+
+function isSupportedDroppedVcf(filePath: string): boolean {
+  if (!isAbsolute(filePath) || resolve(filePath) !== filePath) return false
+  const lower = filePath.toLowerCase()
+  if (!lower.endsWith('.vcf') && !lower.endsWith('.vcf.gz')) return false
+  return isRegularFile(filePath)
+}
+
+function isRegularFile(filePath: string): boolean {
+  try {
+    return statSync(filePath).isFile()
+  } catch {
+    return false
+  }
+}
+
+function enrollTrustedSiblingBeds(
+  preview: VcfMultiPreviewResult,
+  selectedVcfPaths: string[]
+): void {
+  const selectedDirectories = new Set(selectedVcfPaths.map((filePath) => dirname(filePath)))
+  for (const bedFile of preview.siblingBedFiles) {
+    const lower = bedFile.toLowerCase()
+    if (
+      isAbsolute(bedFile) &&
+      resolve(bedFile) === bedFile &&
+      selectedDirectories.has(dirname(bedFile)) &&
+      (lower.endsWith('.bed') || lower.endsWith('.bed.gz')) &&
+      isRegularFile(bedFile)
+    ) {
+      addAllowedImportPath(bedFile)
+    }
+  }
 }
 
 /** Shared callbacks that wire logic-layer events to renderer via safeEmit. */
@@ -132,7 +176,7 @@ export function registerImportHandlers({
         }
 
         const [validatedPath, validatedCaseName, validatedOptions] = parsed.data
-        if (!isAllowedImportPath(validatedPath)) {
+        if (!isStrictlyEnrolledPath(validatedPath)) {
           throwUnallowedImportPath('import:start', validatedPath)
         }
         return startImport(
@@ -171,7 +215,7 @@ export function registerImportHandlers({
         const [validatedCaseName, validatedFiles, validatedOptions, validatedFiltersPayload] =
           parsed.data
         validatedFiles.forEach((file, index) => {
-          if (!isAllowedImportPath(file.filePath)) {
+          if (!isStrictlyEnrolledPath(file.filePath)) {
             throwUnallowedImportPath(
               'import:startMultiFile',
               file.filePath,
@@ -185,7 +229,7 @@ export function registerImportHandlers({
           bedFile !== undefined &&
           bedFile !== null &&
           bedFile !== '' &&
-          !isAllowedImportPath(bedFile)
+          !isStrictlyEnrolledPath(bedFile)
         ) {
           throwUnallowedImportPath('import:startMultiFile', bedFile, 'filtersPayload.bedFile')
         }
@@ -224,7 +268,7 @@ export function registerImportHandlers({
       }
 
       const [validatedPath] = parsed.data
-      if (!isAllowedImportPath(validatedPath)) {
+      if (!isStrictlyEnrolledPath(validatedPath)) {
         throwUnallowedImportPath('import:vcfPreview', validatedPath)
       }
       return getVcfPreview(validatedPath)
@@ -242,11 +286,49 @@ export function registerImportHandlers({
 
       const [validatedPaths] = parsed.data
       validatedPaths.forEach((filePath, index) => {
-        if (!isAllowedImportPath(filePath)) {
+        if (!isStrictlyEnrolledPath(filePath)) {
           throwUnallowedImportPath('import:vcfMultiPreview', filePath, `filePaths[${index}]`)
         }
       })
-      return getVcfMultiPreview(validatedPaths)
+      const preview = (await getVcfMultiPreview(validatedPaths)) as VcfMultiPreviewResult
+      enrollTrustedSiblingBeds(preview, validatedPaths)
+      return preview
+    })
+  })
+
+  // `window.api.import.enrollDroppedFiles` accepts browser File objects, not
+  // strings. Preload converts only genuine Electron-backed Files with
+  // webUtils.getPathForFile and attaches a preload-held token before invoking
+  // this internal channel.
+  ipcMain.handle('import:registerDroppedFileEnrollmentToken', async (_event, token: unknown) => {
+    return wrapHandler(async () => {
+      const parsed = ImportRegisterDroppedFileEnrollmentTokenParamsSchema.safeParse([token])
+      if (!parsed.success) {
+        throw new InvalidParametersError(
+          `Invalid import:registerDroppedFileEnrollmentToken params: ${parsed.error.message}`
+        )
+      }
+      registerTrustedImportPathEnrollmentToken(parsed.data[0])
+    })
+  })
+
+  ipcMain.handle('import:enrollDroppedFiles', async (_event, filePaths: unknown) => {
+    return wrapHandler(async () => {
+      const parsed = ImportEnrollDroppedFilesParamsSchema.safeParse([filePaths])
+      if (!parsed.success) {
+        throw new InvalidParametersError(
+          `Invalid import:enrollDroppedFiles params: ${parsed.error.message}`
+        )
+      }
+      const [payload] = parsed.data
+      if (!isTrustedImportPathEnrollmentToken(payload.token)) {
+        throw new InvalidParametersError(
+          'import:enrollDroppedFiles: missing trusted preload enrollment token'
+        )
+      }
+      const enrolledPaths = payload.filePaths.filter(isSupportedDroppedVcf)
+      for (const filePath of enrolledPaths) addAllowedImportPath(filePath)
+      return enrolledPaths
     })
   })
 

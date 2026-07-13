@@ -1,20 +1,15 @@
-import { mount } from '@vue/test-utils'
-import { createPinia } from 'pinia'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+
 import BatchImportDialog from '../../../src/renderer/src/components/BatchImportDialog.vue'
-import { createMockApi } from '../../utils/mock-api'
+import { createMockApi, type MockApi } from '../../utils/mock-api'
 import type { BatchResult } from '../../../src/shared/types/api'
 
 const vuetify = createVuetify({ components, directives })
-
-interface BatchImportDialogVm {
-  selectedFilePaths: string[]
-  fileCount: number
-  confirmAndStartImport: () => Promise<void>
-}
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve!: (value: T) => void
@@ -24,29 +19,55 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve }
 }
 
-describe('BatchImportDialog run ownership', () => {
+describe('BatchImportDialog ownership', () => {
+  let wrapper: VueWrapper<InstanceType<typeof BatchImportDialog>>
+  let mockApi: MockApi
+
+  beforeEach(() => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    mockApi = createMockApi()
+    window.api = mockApi as unknown as typeof window.api
+    wrapper = mount(BatchImportDialog, {
+      global: { plugins: [vuetify, pinia] },
+      attachTo: document.body
+    })
+  })
+
   afterEach(() => {
+    wrapper.unmount()
+    document.body.innerHTML = ''
     vi.restoreAllMocks()
   })
 
   it('does not transfer ownership to a second start while the first run is active', async () => {
-    const api = createMockApi()
     const completion = deferred<BatchResult>()
-    api.batchImport.start.mockReturnValue(completion.promise)
-    window.api = api
-
-    const wrapper = mount(BatchImportDialog, {
-      global: { plugins: [createPinia(), vuetify] }
+    mockApi.batchImport.selectFiles.mockResolvedValue(['/data/case.json'])
+    mockApi.batchImport.checkDuplicates.mockResolvedValue({
+      files: [
+        {
+          filePath: '/data/case.json',
+          fileName: 'case.json',
+          caseName: 'case',
+          isDuplicate: false
+        }
+      ],
+      duplicateCount: 0
     })
-    const vm = wrapper.vm as unknown as BatchImportDialogVm
-    vm.selectedFilePaths = ['/data/case.json']
-    vm.fileCount = 1
+    mockApi.batchImport.start.mockReturnValue(completion.promise)
 
-    const firstStart = vm.confirmAndStartImport()
-    const rejectedSecondStart = vm.confirmAndStartImport()
-    await Promise.resolve()
+    await wrapper.vm.show('files')
+    await flushPromises()
 
-    expect(api.batchImport.start).toHaveBeenCalledOnce()
+    const startButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Start Import')
+    )
+    expect(startButton).toBeDefined()
+    startButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    startButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(mockApi.batchImport.start).toHaveBeenCalledOnce()
 
     completion.resolve({
       succeeded: 1,
@@ -55,7 +76,48 @@ describe('BatchImportDialog run ownership', () => {
       cancelled: false,
       details: []
     })
-    await Promise.all([firstStart, rejectedSecondStart])
-    wrapper.unmount()
+    await flushPromises()
+  })
+
+  it('releases the exact ZIP extraction as soon as its import reaches a terminal result', async () => {
+    mockApi.batchImport.selectZip.mockResolvedValue({
+      filePath: '/selected/cases.zip',
+      isEncrypted: false
+    })
+    mockApi.batchImport.extractZip.mockResolvedValue({
+      files: ['/tmp/extraction/case.json'],
+      errors: [],
+      extractionId: 'extraction-owned-by-dialog'
+    })
+    mockApi.batchImport.checkDuplicates.mockResolvedValue({
+      files: [
+        {
+          filePath: '/tmp/extraction/case.json',
+          fileName: 'case.json',
+          caseName: 'case',
+          isDuplicate: false
+        }
+      ],
+      duplicateCount: 0
+    })
+    mockApi.batchImport.start.mockResolvedValue({
+      succeeded: 1,
+      failed: 0,
+      skipped: 0,
+      cancelled: false,
+      details: []
+    })
+
+    await wrapper.vm.show('zip')
+    await flushPromises()
+    const startButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Start Import')
+    )
+    expect(startButton).toBeDefined()
+    startButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledTimes(1)
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledWith('extraction-owned-by-dialog')
   })
 })

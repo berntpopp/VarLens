@@ -10,7 +10,9 @@
  * the import-path-allowlist's dialog-enrollment mechanism.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join, resolve } from 'node:path'
 import { ErrorCode, isIpcError } from '../../../../src/shared/types/errors'
 
 vi.mock('electron', () => ({
@@ -59,7 +61,11 @@ import {
   addAllowedImportPath,
   __resetAllowlistForTests
 } from '../../../../src/main/security/import-path-allowlist'
-import { __resetDatabasePathAllowlistForTests } from '../../../../src/main/security/database-path-allowlist'
+import {
+  __resetDatabasePathAllowlistForTests,
+  addAllowedDatabasePath,
+  isStrictlyEnrolledDatabasePath
+} from '../../../../src/main/security/database-path-allowlist'
 
 type HandlerCallback = (event: unknown, ...args: unknown[]) => Promise<unknown>
 
@@ -124,8 +130,7 @@ function expectInvalidParametersResult(result: unknown): void {
   }
 }
 
-// Path guaranteed to be outside any automatic root (home/userData/temp are
-// all mocked to '/nonexistent-electron-app-path' above) and never enrolled.
+// Path that is never enrolled and has no database recent/current authority.
 const UNAUTHORIZED_PATH = resolve('external', 'unrelated.db')
 
 describe('database path-authority gate', () => {
@@ -134,6 +139,125 @@ describe('database path-authority gate', () => {
     __resetAllowlistForTests()
     __resetDatabasePathAllowlistForTests()
   })
+
+  it.each([
+    ['relative', 'relative.db', resolve('relative.db')],
+    ['non-normalized', `${tmpdir()}/authority/../database.db`, join(tmpdir(), 'database.db')]
+  ])('does not enroll a %s database path', (_label, candidate, resolvedAlias) => {
+    addAllowedDatabasePath(candidate)
+
+    expect(isStrictlyEnrolledDatabasePath(candidate)).toBe(false)
+    expect(isStrictlyEnrolledDatabasePath(resolvedAlias)).toBe(false)
+  })
+
+  const symlinkIt = process.platform === 'win32' ? it.skip : it
+  symlinkIt.each(['current', 'recent'])(
+    'rejects a retargeted dialog-enrolled symlink instead of falling through to %s authority',
+    async (fallback) => {
+      const root = mkdtempSync(join(tmpdir(), 'varlens-db-authority-'))
+      try {
+        const targetA = join(root, 'a.db')
+        const targetB = join(root, 'b.db')
+        const selectedPath = join(root, 'selected.db')
+        writeFileSync(targetA, 'a')
+        writeFileSync(targetB, 'b')
+        symlinkSync(targetA, selectedPath)
+        addAllowedDatabasePath(selectedPath)
+        expect(isStrictlyEnrolledDatabasePath(selectedPath)).toBe(true)
+
+        unlinkSync(selectedPath)
+        symlinkSync(targetB, selectedPath)
+
+        const ipcMain = makeIpcMain()
+        registerDatabaseHandlers(
+          makeDeps(ipcMain, {
+            currentPath: fallback === 'current' ? selectedPath : null,
+            recentPaths: fallback === 'recent' ? [selectedPath] : []
+          }) as never
+        )
+
+        const result = await invokeHandler(ipcMain, 'database:open', selectedPath)
+
+        expectInvalidParametersResult(result)
+        expect(openDatabase).not.toHaveBeenCalled()
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+      }
+    }
+  )
+
+  symlinkIt(
+    'rejects an unenrolled current path beneath a retargetable symlinked directory',
+    async () => {
+      const root = mkdtempSync(join(tmpdir(), 'varlens-db-authority-'))
+      try {
+        const targetDir = join(root, 'target')
+        const linkedDir = join(root, 'linked')
+        const target = join(targetDir, 'database.db')
+        mkdirSync(targetDir)
+        writeFileSync(target, 'database')
+        symlinkSync(targetDir, linkedDir, 'dir')
+        const candidate = join(linkedDir, 'database.db')
+        const ipcMain = makeIpcMain()
+        registerDatabaseHandlers(makeDeps(ipcMain, { currentPath: candidate }) as never)
+
+        const result = await invokeHandler(ipcMain, 'database:open', candidate)
+
+        expectInvalidParametersResult(result)
+        expect(openDatabase).not.toHaveBeenCalled()
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+      }
+    }
+  )
+
+  symlinkIt.each(['current', 'recent'])(
+    'rejects an unenrolled %s database symlink because its target was never pinned',
+    async (fallback) => {
+      const root = mkdtempSync(join(tmpdir(), 'varlens-db-authority-'))
+      try {
+        const target = join(root, 'target.db')
+        const symlinkPath = join(root, 'selected.db')
+        writeFileSync(target, 'database')
+        symlinkSync(target, symlinkPath)
+
+        const ipcMain = makeIpcMain()
+        registerDatabaseHandlers(
+          makeDeps(ipcMain, {
+            currentPath: fallback === 'current' ? symlinkPath : null,
+            recentPaths: fallback === 'recent' ? [symlinkPath] : []
+          }) as never
+        )
+
+        const result = await invokeHandler(ipcMain, 'database:open', symlinkPath)
+
+        expectInvalidParametersResult(result)
+        expect(openDatabase).not.toHaveBeenCalled()
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+      }
+    }
+  )
+
+  it.each(['current', 'recent'])(
+    'rejects normalized aliases backed only by a non-normalized %s metadata path',
+    async (fallback) => {
+      const canonical = resolve('database.db')
+      const metadataAlias = `${join(dirname(canonical), 'nested')}/../${basename(canonical)}`
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(
+        makeDeps(ipcMain, {
+          currentPath: fallback === 'current' ? metadataAlias : null,
+          recentPaths: fallback === 'recent' ? [metadataAlias] : []
+        }) as never
+      )
+
+      const result = await invokeHandler(ipcMain, 'database:open', canonical)
+
+      expectInvalidParametersResult(result)
+      expect(openDatabase).not.toHaveBeenCalled()
+    }
+  )
 
   describe('database:open', () => {
     it('rejects a path with no dialog/recent/active authority', async () => {
@@ -183,11 +307,9 @@ describe('database path-authority gate', () => {
       expect(openDatabase).toHaveBeenCalled()
     })
 
-    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
-      // isAllowedImportPath grants app.getPath('home')/userData/temp for the
-      // original import flow; the DB gate must use the STRICT check so a
-      // path merely living under the mocked "home" root (but never picked
-      // via a dialog, recent list, or active session) is still rejected.
+    it('rejects a home path that was never dialog-enrolled', async () => {
+      // Filesystem location is not database authority: the path also needs
+      // dialog, recent-list, or active-session provenance.
       const ipcMain = makeIpcMain()
       registerDatabaseHandlers(makeDeps(ipcMain) as never)
 
@@ -241,7 +363,7 @@ describe('database path-authority gate', () => {
       expect(createDatabase).toHaveBeenCalled()
     })
 
-    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
+    it('rejects a home path that was never dialog-enrolled', async () => {
       const ipcMain = makeIpcMain()
       registerDatabaseHandlers(makeDeps(ipcMain) as never)
 
@@ -299,7 +421,7 @@ describe('database path-authority gate', () => {
       expect(shell.showItemInFolder).toHaveBeenCalledWith(UNAUTHORIZED_PATH)
     })
 
-    it('rejects a path under the automatic home root that was never dialog-enrolled (F-path)', async () => {
+    it('rejects a home path that was never dialog-enrolled', async () => {
       const ipcMain = makeIpcMain()
       registerDatabaseHandlers(makeDeps(ipcMain) as never)
 

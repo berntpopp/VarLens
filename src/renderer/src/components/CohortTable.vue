@@ -449,7 +449,7 @@ const exportToExcel = async (): Promise<void> => {
         actionText: 'Open folder',
         actionCallback: () => {
           if (result.filePath != null && result.filePath !== '')
-            api.shell.showItemInFolder(result.filePath)
+            void api.export.revealInFolder(result.filePath)
         }
       }
     } else if (result?.error != null && result.error !== '') {

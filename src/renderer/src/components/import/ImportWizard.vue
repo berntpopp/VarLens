@@ -218,10 +218,8 @@ import {
 } from '@mdi/js'
 
 type ImportMode = ImportSourceMode
-
 const { api } = useApiService()
 const importStore = useImportStatusStore()
-
 const WEB_UPLOAD_EVENT = 'varlens:web-upload'
 const WEB_UPLOAD_CANCEL_EVENT = 'varlens:web-upload-cancel'
 
@@ -429,7 +427,6 @@ function abandonZipImport(context: string): void {
   sourceFlowGeneration += 1
   abandonZipImportState(context)
 }
-
 // Re-check duplicates when strip text changes
 watch(stripText, scheduleDuplicateRecheck)
 

@@ -522,7 +522,7 @@ async function browseFiles(): Promise<void> {
 
 async function handleDrop(event: DragEvent): Promise<void> {
   isDragging.value = false
-  if (event.dataTransfer === null) return
+  if (api === undefined || event.dataTransfer === null) return
   const files = Array.from(event.dataTransfer.files)
   if (files.length === 0) return
 
@@ -537,18 +537,18 @@ async function handleDrop(event: DragEvent): Promise<void> {
     return
   }
 
-  // Electron exposes full paths on dropped File objects
-  const paths = vcfFiles
-    .map((f) => (f as unknown as { path?: string }).path ?? '')
-    .filter((p) => p !== '')
-
-  if (paths.length === 0) {
-    errorMessage.value =
-      'Could not resolve file paths from dropped files. Use the Browse button instead.'
-    return
+  try {
+    // Preload resolves genuine Electron-backed Files; main enrolls their paths.
+    const paths = unwrapIpcResult(await api.import.enrollDroppedFiles(vcfFiles))
+    if (paths.length === 0) {
+      errorMessage.value =
+        'Could not resolve file paths from dropped files. Use the Browse button instead.'
+      return
+    }
+    await loadPreview(paths)
+  } catch (err) {
+    handleError('File drop failed', err)
   }
-
-  await loadPreview(paths)
 }
 
 async function loadPreview(filePaths: string[]): Promise<void> {
