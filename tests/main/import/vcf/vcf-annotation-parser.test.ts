@@ -267,6 +267,25 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcripts).toHaveLength(1)
     })
 
+    it.each([
+      ['G-C', 'G'],
+      ['C-chr1:123456_A>T', 'C']
+    ])('matches standard compound ANN allele %s to its leading ALT %s', (annAllele, alt) => {
+      const info = new Map([
+        [
+          'ANN',
+          `${annAllele}|missense_variant|MODERATE|GENE1|E1|transcript|T1|protein_coding||||||||`
+        ]
+      ])
+
+      const matched = parseAnnotation(info, header, alt, 'A', 1, [alt, 'T'])
+      const other = parseAnnotation(info, header, 'T', 'A', 2, [alt, 'T'])
+
+      expect(matched.transcripts).toHaveLength(1)
+      expect(matched.geneSymbol).toBe('GENE1')
+      expect(other.transcripts).toHaveLength(0)
+    })
+
     it('handles multi-annotation ANN with allele filtering', () => {
       const info = new Map([
         [
