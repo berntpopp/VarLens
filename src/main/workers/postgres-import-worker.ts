@@ -78,6 +78,7 @@ export interface RunImportDeps {
   detectFormat: (filePath: string) => Promise<FormatInfo>
   createMapperPipeline: (filePath: string, formatInfo: FormatInfo) => Promise<Readable>
   statFile: (filePath: string) => { size: number }
+  isCancellationRequested?: () => boolean
   /** VCF mapped-row producer for the PG worker's VCF branch. */
   createVcfMappedStream: (
     filePath: string,
@@ -234,6 +235,10 @@ export async function runImport(
   let beganTransaction = false
   let provisionalImport: PostgresProvisionalImport | null = null
   let publicationCommitAttempted = false
+  const isCancelled = (): boolean => cancelled || deps.isCancellationRequested?.() === true
+  const throwIfCancelled = (): void => {
+    if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
+  }
 
   try {
     await client.connect()
@@ -397,7 +402,7 @@ export async function runImport(
             throw error
           }
 
-          if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
+          throwIfCancelled()
 
           // Bookkeeping may scan millions of rows, but contains no production
           // COPY. MVCC keeps the previous ready snapshot visible until this
@@ -428,12 +433,14 @@ export async function runImport(
             })
             void stillOwnsTxn
           }
+          throwIfCancelled()
           await repo.finishProvisionalImport(
             client as unknown as Pick<PoolClient, 'query'>,
             caseId,
             vcfFileName,
             'vcf'
           )
+          throwIfCancelled()
           publicationCommitAttempted = true
           await client.query('COMMIT')
           beganTransaction = false
@@ -817,7 +824,7 @@ export async function runImport(
           if (provisionalImport === null) {
             throw new Error('PostgreSQL import lost its provisional operation state')
           }
-          if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
+          throwIfCancelled()
           await client.query('BEGIN')
           beganTransaction = true
           // Force the final commit synchronous so the import only reports
@@ -846,12 +853,14 @@ export async function runImport(
               genomeBuild
             })
             void stillOwnsTxn
+            throwIfCancelled()
             await repo.finishProvisionalImport(
               client as unknown as Pick<PoolClient, 'query'>,
               caseId,
               lastSuccessfulFileName,
               'vcf'
             )
+            throwIfCancelled()
             publicationCommitAttempted = true
             await client.query('COMMIT')
             beganTransaction = false

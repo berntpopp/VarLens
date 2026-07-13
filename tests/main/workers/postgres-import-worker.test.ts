@@ -36,7 +36,10 @@ vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', ()
 }))
 
 import { runImport } from '../../../src/main/workers/postgres-import-worker'
-import type { PostgresImportWorkerStartMessage } from '../../../src/shared/types/postgres-import-worker'
+import {
+  POSTGRES_IMPORT_CANCELLATION_MESSAGE,
+  type PostgresImportWorkerStartMessage
+} from '../../../src/shared/types/postgres-import-worker'
 
 const acquiredImportLock = { rows: [{ locked: true }] }
 
@@ -830,7 +833,8 @@ describe('postgres-import-worker — C3 import wiring', () => {
 
   const runVcfSingleFile = async (
     client: ReturnType<typeof makeClient>,
-    messages: unknown[]
+    messages: unknown[],
+    overrides: { isCancellationRequested?: () => boolean } = {}
   ): Promise<void> => {
     await runImport(
       {
@@ -838,7 +842,8 @@ describe('postgres-import-worker — C3 import wiring', () => {
         detectFormat: async () => ({ format: 'vcf', caseKey: '' }) as never,
         createVcfMappedStream: async () => Readable.from([fakeVariant]) as never,
         createMapperPipeline: async () => Readable.from([]),
-        statFile: () => ({ size: 0 })
+        statFile: () => ({ size: 0 }),
+        ...overrides
       },
       {
         type: 'start',
@@ -921,6 +926,130 @@ describe('postgres-import-worker — C3 import wiring', () => {
     const publicationQueries = queries.slice(publicationBeginIndex, publicationCommitIndex + 1)
     expect(publicationQueries.some((query) => query.includes('"variant_frequency"'))).toBe(true)
     expect(publicationQueries).toContain('SAVEPOINT cohort_summary')
+  })
+
+  it('does not flip single-file visibility when cancellation arrives during final bookkeeping', async () => {
+    const queries: string[] = []
+    const client = makeClient(queries)
+    let cancelledDuringBookkeeping = false
+    const originalQuery = client.query
+    client.query = vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
+      const text = typeof sql === 'string' ? sql : sql.text
+      const result = await originalQuery(sql, params)
+      if (text === 'RELEASE SAVEPOINT cohort_summary') {
+        cancelledDuringBookkeeping = true
+      }
+      return result
+    })
+    const messages: unknown[] = []
+
+    await runVcfSingleFile(client, messages, {
+      isCancellationRequested: () => cancelledDuringBookkeeping
+    })
+
+    expect(queries.some((query) => query.includes("import_status = 'ready'"))).toBe(false)
+    expect(queries).toContain('ROLLBACK')
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: 'complete',
+        result: expect.objectContaining({
+          errors: [POSTGRES_IMPORT_CANCELLATION_MESSAGE]
+        })
+      })
+    )
+  })
+
+  it('rolls back single-file visibility when cancellation arrives before publication commit', async () => {
+    const queries: string[] = []
+    const client = makeClient(queries)
+    let cancelledBeforeCommit = false
+    const originalQuery = client.query
+    client.query = vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
+      const text = typeof sql === 'string' ? sql : sql.text
+      const result = await originalQuery(sql, params)
+      if (text.startsWith('UPDATE') && text.includes("import_status = 'ready'")) {
+        cancelledBeforeCommit = true
+      }
+      return result
+    })
+    const messages: unknown[] = []
+
+    await runVcfSingleFile(client, messages, {
+      isCancellationRequested: () => cancelledBeforeCommit
+    })
+
+    const readyIndex = queries.findIndex((query) => query.includes("import_status = 'ready'"))
+    const firstTxnBoundaryAfterReady = queries.find(
+      (query, index) => index > readyIndex && (query === 'COMMIT' || query === 'ROLLBACK')
+    )
+    expect(readyIndex).toBeGreaterThanOrEqual(0)
+    expect(firstTxnBoundaryAfterReady).toBe('ROLLBACK')
+    expect(
+      queries.findIndex((query, index) => index > readyIndex && query === 'ROLLBACK')
+    ).toBeGreaterThanOrEqual(0)
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: 'complete',
+        result: expect.objectContaining({
+          errors: [POSTGRES_IMPORT_CANCELLATION_MESSAGE]
+        })
+      })
+    )
+  })
+
+  it('does not flip multi-file visibility when cancellation arrives during final bookkeeping', async () => {
+    const queries: string[] = []
+    const client = makeClient(queries)
+    let cancelledDuringBookkeeping = false
+    const originalQuery = client.query
+    client.query = vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
+      const text = typeof sql === 'string' ? sql : sql.text
+      const result = await originalQuery(sql, params)
+      if (text === 'RELEASE SAVEPOINT cohort_summary') {
+        cancelledDuringBookkeeping = true
+      }
+      return result
+    })
+    const messages: unknown[] = []
+
+    await runImport(
+      {
+        createClient: () => client as never,
+        detectFormat: async () => ({ format: 'vcf', caseKey: '' }) as never,
+        createVcfMappedStream: async () => Readable.from([fakeVariant]) as never,
+        createMapperPipeline: async () => Readable.from([]),
+        statFile: () => ({ size: 0 }),
+        isCancellationRequested: () => cancelledDuringBookkeeping
+      },
+      {
+        type: 'start',
+        client: { connectionString: 'postgres://x' },
+        schema: 'public',
+        mode: 'multi-file',
+        caseName: 'VCF case',
+        vcfOptions: { selectedSample: 'NA12878', genomeBuild: 'GRCh38' },
+        files: [
+          {
+            filePath: '/tmp/a.vcf.gz',
+            variantType: 'snv-indel',
+            annotationFormat: null,
+            caller: null
+          }
+        ]
+      },
+      (m) => messages.push(m)
+    )
+
+    expect(queries.some((query) => query.includes("import_status = 'ready'"))).toBe(false)
+    expect(queries).toContain('ROLLBACK')
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: 'complete',
+        result: expect.objectContaining({
+          errors: [POSTGRES_IMPORT_CANCELLATION_MESSAGE]
+        })
+      })
+    )
   })
 
   it('never deletes work when the atomic publication commit outcome is uncertain', async () => {
