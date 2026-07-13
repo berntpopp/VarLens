@@ -184,9 +184,14 @@ async function updateCohortSummaryAfterImport(args: {
         reason: `post_import_summary_failed_case_${caseId}`
       })
     } catch (markErr) {
-      console.warn(
-        '[postgres-import-worker] Failed to mark cohort summary stale after post-import failure:',
-        markErr instanceof Error ? markErr.message : String(markErr)
+      const summaryMessage =
+        savepointErr instanceof Error ? savepointErr.message : String(savepointErr)
+      const staleMessage = markErr instanceof Error ? markErr.message : String(markErr)
+      throw Object.assign(
+        new Error(
+          `Cohort summary update failed (${summaryMessage}) and stale marking failed (${staleMessage})`
+        ),
+        { cause: markErr }
       )
     }
     console.warn(
@@ -586,6 +591,7 @@ export async function runImport(
         let caseId = 0
         let totalVariantCount = 0
         let totalSkipped = 0
+        let lastSuccessfulFileName = ''
         const parseErrors: string[] = []
         const repo = new PostgresVcfImportRepository(start.schema)
         const selectedSample = start.vcfOptions?.selectedSample ?? ''
@@ -751,6 +757,7 @@ export async function runImport(
             if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             caseId = fileCaseId
             totalVariantCount += fileVariantCount
+            lastSuccessfulFileName = fileName
             fileResults.push({
               filePath: fileSpec.filePath,
               variantType: fileSpec.variantType,
@@ -842,7 +849,7 @@ export async function runImport(
             await repo.finishProvisionalImport(
               client as unknown as Pick<PoolClient, 'query'>,
               caseId,
-              basename(start.files[start.files.length - 1]?.filePath ?? ''),
+              lastSuccessfulFileName,
               'vcf'
             )
             publicationCommitAttempted = true

@@ -463,6 +463,12 @@ describe('postgres-import-worker runImport', () => {
     const result = complete!.result
     expect(result.files[0].error).toBeUndefined()
     expect(result.files[1].error).toMatch(/late failure in file 2/)
+
+    const provenanceCall = client.query.mock.calls.find(([sql]) => {
+      const text = typeof sql === 'string' ? sql : sql.text
+      return text.includes('INSERT INTO') && text.includes('"case_data_info"')
+    })
+    expect(provenanceCall?.[1]?.[1]).toBe('a.vcf.gz')
   })
 
   it('opens client, runs BEGIN/COMMIT for single-file JSON, posts complete', async () => {
@@ -977,6 +983,26 @@ describe('postgres-import-worker — C3 import wiring', () => {
       (m): m is { type: 'complete' } => (m as { type: string }).type === 'complete'
     )
     expect(complete).toBeDefined()
+  })
+
+  it('does not publish when summary maintenance and durable stale marking both fail', async () => {
+    incrementalAddSpy.mockRejectedValueOnce(new Error('summary write failed'))
+    markStaleSpy.mockRejectedValueOnce(new Error('stale marker failed'))
+    const queries: string[] = []
+    const client = makeClient(queries)
+    const messages: unknown[] = []
+
+    await runVcfSingleFile(client, messages)
+
+    expect(queries).toContain('ROLLBACK TO SAVEPOINT cohort_summary')
+    expect(queries.some((query) => query.includes("import_status = 'ready'"))).toBe(false)
+    expect(queries.some((query) => query.includes('DELETE FROM "public"."cases_all"'))).toBe(true)
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: 'error',
+        message: expect.stringMatching(/stale marker failed/)
+      })
+    )
   })
 
   it('ImportResult shape carries NO warnings field (Pass-4 HIGH #3)', async () => {
