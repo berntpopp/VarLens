@@ -17,9 +17,9 @@ relative or non-normalized paths fail closed instead of granting authority to a 
 
 Trusted selectors continue to enroll each returned file. Folder selection and ZIP extraction remain
 responsible for enrolling each discovered or extracted file, rather than granting an entire directory
-tree. Database authority remains owned by `database-path-allowlist.ts`. Web import routes remain
-unchanged because they resolve user-scoped uploaded file references in the web server and do not
-register the Electron IPC handlers.
+tree. Database authority remains owned by `database-path-allowlist.ts`. Web imports continue to
+resolve user-scoped uploaded file references rather than registering Electron IPC handlers; their
+client and ZIP route mirror the revised desktop contract without sharing desktop path authority.
 
 Database dialog enrollment uses the same lexical and symlink-pinning rules. Relative or
 non-normalized database enrollment is ignored. If a dialog-enrolled database symlink is later
