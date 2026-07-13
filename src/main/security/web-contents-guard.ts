@@ -6,10 +6,13 @@
  * secondary BrowserWindow) — those would otherwise inherit Electron's
  * permissive defaults.
  *
- * Every webContents receives a fail-closed `will-navigate` handler using an
- * injected app navigation policy. Keeping the policy outside this module lets
- * the main window and future secondary contents share the same decision while
- * allowing that policy to evolve independently.
+ * Every webContents receives fail-closed `will-navigate` and `will-redirect`
+ * handlers using an injected app navigation policy. Electron reports
+ * server-side redirects separately, so guarding only the initial navigation
+ * would allow an accepted URL to redirect to a rejected origin. Keeping the
+ * policy outside this module lets the main window and future secondary
+ * contents share the same decision while allowing that policy to evolve
+ * independently.
  *
  * If anything ever attaches a `<webview>` tag, its `webPreferences` are also
  * stripped of `preload` and forced to `nodeIntegration: false`,
@@ -32,7 +35,7 @@ export function guardWebContents(
   contents: Electron.WebContents,
   isNavigationAllowed: NavigationAllowPredicate
 ): void {
-  contents.on('will-navigate', (event, url) => {
+  const enforceNavigationPolicy = (event: Electron.Event, url: string): void => {
     let allowed = false
     try {
       allowed = isNavigationAllowed(url)
@@ -40,7 +43,10 @@ export function guardWebContents(
       // A policy failure must not turn into a fail-open navigation path.
     }
     if (!allowed) event.preventDefault()
-  })
+  }
+
+  contents.on('will-navigate', enforceNavigationPolicy)
+  contents.on('will-redirect', enforceNavigationPolicy)
 
   contents.on('will-attach-webview', (_event, webPreferences) => {
     delete webPreferences.preload

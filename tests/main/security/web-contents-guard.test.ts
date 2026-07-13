@@ -68,6 +68,29 @@ describe('guardWebContents', () => {
     })
   })
 
+  describe('will-redirect', () => {
+    it('denies a server redirect to an arbitrary destination', () => {
+      const event = { preventDefault: vi.fn() }
+      const arbitraryUrl = 'https://attacker.example/redirect-target'
+
+      expect(handlers['will-redirect']).toBeDefined()
+      handlers['will-redirect'](event, arbitraryUrl)
+
+      expect(isNavigationAllowed).toHaveBeenCalledWith(arbitraryUrl)
+      expect(event.preventDefault).toHaveBeenCalledOnce()
+    })
+
+    it('allows a redirect accepted by the injected app policy', () => {
+      const event = { preventDefault: vi.fn() }
+      const appUrl = 'http://localhost:5173/'
+      isNavigationAllowed.mockReturnValue(true)
+
+      handlers['will-redirect'](event, appUrl)
+
+      expect(event.preventDefault).not.toHaveBeenCalled()
+    })
+  })
+
   describe('will-attach-webview', () => {
     it('strips preload and forces safe webview preferences', () => {
       const event = { preventDefault: vi.fn() }
