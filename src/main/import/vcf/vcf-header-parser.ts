@@ -10,6 +10,14 @@ import { createCappedLineStream } from '../stream-utils'
 import { detectGenomeBuildFromVcfHeaders } from '../../services/GenomeBuildDetector'
 import type { VcfHeader, InfoFieldDef, FormatFieldDef, ContigDef, AnnotationType } from './types'
 import { VcfHeaderBudget, type VcfHeaderLimitOptions } from './vcf-header-limits'
+import {
+  MAX_VCF_ANNOTATION_FIELDS,
+  MAX_VCF_COLUMNS,
+  MAX_VCF_STRUCTURED_HEADER_CHARS,
+  MAX_VCF_STRUCTURED_HEADER_FIELDS,
+  splitBounded,
+  VcfResourceLimitError
+} from './vcf-resource-limits'
 
 /** Parse result includes the header and optionally the first data line */
 export interface VcfHeaderParseResult {
@@ -22,12 +30,18 @@ export interface VcfHeaderParseResult {
  * Handles: ##INFO=<ID=X,Number=Y,Type=Z,Description="...">
  */
 function parseStructuredLine(line: string): Record<string, string> | null {
+  if (line.length > MAX_VCF_STRUCTURED_HEADER_CHARS) {
+    throw new VcfResourceLimitError(
+      `Structured VCF header line exceeds ${MAX_VCF_STRUCTURED_HEADER_CHARS} characters`
+    )
+  }
   const match = line.match(/^##\w+=<(.+)>$/)
   if (!match) return null
 
   const result: Record<string, string> = {}
   const content = match[1]
   let i = 0
+  let fieldCount = 0
 
   while (i < content.length) {
     // Find key
@@ -35,6 +49,12 @@ function parseStructuredLine(line: string): Record<string, string> | null {
     if (eqIdx === -1) break
 
     const key = content.substring(i, eqIdx)
+    fieldCount += 1
+    if (fieldCount > MAX_VCF_STRUCTURED_HEADER_FIELDS) {
+      throw new VcfResourceLimitError(
+        `Structured VCF header has more than ${MAX_VCF_STRUCTURED_HEADER_FIELDS} fields`
+      )
+    }
     i = eqIdx + 1
 
     // Find value
@@ -81,7 +101,13 @@ function extractCsqFields(description: string): string[] | null {
   const match = description.match(/Format:\s*(.+)/)
   if (!match) return null
 
-  return match[1].split('|').map((f) => f.trim())
+  const fields = splitBounded(match[1], '|', MAX_VCF_ANNOTATION_FIELDS)
+  if (fields === null) {
+    throw new VcfResourceLimitError(
+      `CSQ header has more than ${MAX_VCF_ANNOTATION_FIELDS} format fields`
+    )
+  }
+  return fields.map((field) => field.trim())
 }
 
 /**
@@ -156,7 +182,10 @@ export function parseVcfHeaderFromLines(lines: string[]): VcfHeader {
       }
     } else if (line.startsWith('#CHROM')) {
       // #CHROM line — extract sample names from columns 10+
-      const cols = line.split('\t')
+      const cols = splitBounded(line, '\t', MAX_VCF_COLUMNS)
+      if (cols === null) {
+        throw new VcfResourceLimitError(`#CHROM header has more than ${MAX_VCF_COLUMNS} columns`)
+      }
       if (cols.length > 9) {
         for (let i = 9; i < cols.length; i++) {
           samples.push(cols[i].trim())

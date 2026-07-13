@@ -6,6 +6,22 @@
  */
 
 import type { VcfRawRecord, InfoFieldDef, FormatFieldDef } from './types'
+import {
+  MAX_VCF_ALT_ALLELES,
+  splitBounded,
+  splitGenotypeAlleles,
+  VcfResourceLimitError
+} from './vcf-resource-limits'
+
+function splitAlleleValues(value: string): string[] {
+  const parts = splitBounded(value, ',', MAX_VCF_ALT_ALLELES + 1)
+  if (parts === null) {
+    throw new VcfResourceLimitError(
+      `Allele-valued field has more than ${MAX_VCF_ALT_ALLELES + 1} values`
+    )
+  }
+  return parts
+}
 
 function normalizeVectorToken(value: string | undefined): string {
   return value === undefined || value === '' ? '.' : value
@@ -69,14 +85,14 @@ function splitInfoFields(
 
       case 'A': {
         // Per-ALT allele — select value at altIdx
-        const parts = value.split(',')
+        const parts = splitAlleleValues(value)
         result.set(key, normalizeVectorToken(parts[altIdx]))
         break
       }
 
       case 'R': {
         // Per-allele (REF + ALTs) — keep REF (index 0) + current ALT
-        const parts = value.split(',')
+        const parts = splitAlleleValues(value)
         if (parts.length > altIdx + 1) {
           result.set(
             key,
@@ -139,7 +155,7 @@ function splitSampleFields(
 
       if (number === 'R') {
         // Per-allele (REF + ALTs) — keep REF + current ALT
-        const parts = values[fIdx].split(',')
+        const parts = splitAlleleValues(values[fIdx])
         if (parts.length > altIdx + 1) {
           newValues[fIdx] =
             `${normalizeVectorToken(parts[0])},${normalizeVectorToken(parts[altIdx + 1])}`
@@ -148,7 +164,7 @@ function splitSampleFields(
         }
       } else if (number === 'A') {
         // Per-ALT — select value at altIdx
-        const parts = values[fIdx].split(',')
+        const parts = splitAlleleValues(values[fIdx])
         const selected = normalizeVectorToken(parts[altIdx])
         // Genotype parsing consumes AD as a biallelic REF,ALT pair. A
         // non-standard Number=A AD has no reference depth, so retain the ALT
@@ -177,7 +193,8 @@ function splitSampleFields(
 function remapGenotype(gt: string, originalAltAllele: number): string {
   // Determine separator
   const separator = gt.includes('|') ? '|' : '/'
-  const alleles = gt.split(/[/|]/)
+  const alleles = splitGenotypeAlleles(gt)
+  if (alleles === null) throw new VcfResourceLimitError('Genotype ploidy exceeds 64 alleles')
 
   const remapped = alleles.map((a) => {
     if (a === '.') return '.'

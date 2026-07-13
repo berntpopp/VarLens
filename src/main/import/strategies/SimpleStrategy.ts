@@ -8,6 +8,7 @@ import type { ImportOptions, ImportResult } from '../types'
 import type { ImportStrategy, FormatInfo, StrategyContext } from './ImportStrategy'
 import { importRegistry } from './StrategyRegistry'
 import { createDecompressedStream } from '../stream-utils'
+import { createJsonRecordBudget } from '../json-resource-budget'
 
 /**
  * Strategy for simple format: { "person_id": ..., "variants": [...] }
@@ -50,6 +51,7 @@ export class SimpleStrategy implements ImportStrategy {
       createDecompressedStream(filePath),
       parser.asStream(),
       pick.asStream({ filter: 'variants' }),
+      createJsonRecordBudget(),
       streamArray.asStream(),
       objectMapper,
       batchAccumulator

@@ -25,6 +25,10 @@ import {
   DecompressedSizeExceededError
 } from '../../../src/main/import/stream-utils'
 import type { VcfMappedVariant } from '../../../src/main/import/vcf/types'
+import {
+  MAX_VCF_ANNOTATIONS,
+  VcfResourceLimitError
+} from '../../../src/main/import/vcf/vcf-resource-limits'
 
 const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
 const LINE_CAP_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
@@ -131,5 +135,25 @@ describe('streamMappedVcfRows DoS guards (postgres-import-worker.ts, live PG wor
     expect(skips).toHaveLength(2)
     expect(skips.some((reason) => /invalid POS/i.test(reason))).toBe(true)
     expect(skips.some((reason) => /invalid QUAL/i.test(reason))).toBe(true)
+  })
+
+  it('propagates annotation resource limits instead of silently skipping the row', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'varlens-pg-worker-annotation-limit-'))
+    const filePath = join(tmpDir, 'annotation-limit.vcf')
+    const csq = Array.from({ length: MAX_VCF_ANNOTATIONS + 1 }, () => 'G').join(',')
+    writeFileSync(
+      filePath,
+      [
+        '##fileformat=VCFv4.2',
+        '##INFO=<ID=CSQ,Number=.,Type=String,Description="Format: Allele">',
+        '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+        '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005',
+        `chr1\t100\trs1\tA\tG\t99\tPASS\tCSQ=${csq}\tGT\t0/1`
+      ].join('\n') + '\n'
+    )
+
+    await expect(drain(streamMappedVcfRows(filePath, 'HG005'))).rejects.toThrow(
+      VcfResourceLimitError
+    )
   })
 })

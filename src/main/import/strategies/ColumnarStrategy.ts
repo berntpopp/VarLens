@@ -10,6 +10,7 @@ import type { ImportOptions, ImportResult, DataDictionaries } from '../types'
 import type { ImportStrategy, FormatInfo, StrategyContext } from './ImportStrategy'
 import { importRegistry } from './StrategyRegistry'
 import { createDecompressedStream } from '../stream-utils'
+import { createJsonRecordBudget } from '../json-resource-budget'
 
 /** Result of parsing the header: dictionaries + dynamic column positions */
 interface HeaderInfo {
@@ -75,6 +76,7 @@ export class ColumnarStrategy implements ImportStrategy {
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: dataPath }),
+        createJsonRecordBudget(),
         streamArray.asStream(),
         fieldMapper,
         batchAccumulator
@@ -121,6 +123,7 @@ export class ColumnarStrategy implements ImportStrategy {
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: headerPath }),
+        createJsonRecordBudget(),
         streamArray.asStream()
       )
 

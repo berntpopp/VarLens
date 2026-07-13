@@ -98,26 +98,6 @@ const defaultDeps: RunImportDeps = {
     streamMappedVcfRows(filePath, options.selectedSample, options.filters, options.onSkip)
 }
 
-async function cleanupIncompleteSingleFileVcfCase(args: {
-  client: Pick<Client, 'query'>
-  schema: string
-  caseId: number
-}): Promise<void> {
-  const { client, schema, caseId } = args
-  await client.query('BEGIN')
-  try {
-    await client.query(`DELETE FROM ${quoteIdentifier(schema)}."cases" WHERE id = $1`, [caseId])
-    await client.query('COMMIT')
-  } catch (err) {
-    try {
-      await client.query('ROLLBACK')
-    } catch {
-      // Preserve the original cleanup failure.
-    }
-    throw err
-  }
-}
-
 function recordParseSkip(args: { reason: string; errors: string[]; prefix?: string }): void {
   const { reason, errors, prefix } = args
   if (errors.length < 10) {
@@ -247,7 +227,6 @@ export async function runImport(
   const client = deps.createClient(clientConfigFromMessage(start.client))
   let beganTransaction = false
   let committed = false
-  let incompleteSingleFileVcfCaseId: number | null = null
 
   try {
     await client.connect()
@@ -290,14 +269,9 @@ export async function runImport(
             // ignore — used only for provenance
           }
 
-          // Open the first per-batch transaction (formerly the outer BEGIN at
-          // the top of runImport). `SET LOCAL synchronous_commit = OFF` makes
-          // each per-batch COMMIT skip the WAL fsync; the FINAL commit at
-          // the end of the post-loop bookkeeping re-enables synchronous
-          // commit so the import only reports success once every preceding
-          // WAL record has been fsynced (Postgres flushes WAL up to the
-          // last synchronous commit, which transitively makes every earlier
-          // async commit durable).
+          // Keep the entire file in one transaction. Batches bound application
+          // memory, but committing them independently would leave a partial
+          // case behind when a later row violates an import resource limit.
           await client.query('BEGIN')
           beganTransaction = true
           await client.query('SET LOCAL synchronous_commit = OFF')
@@ -375,7 +349,6 @@ export async function runImport(
             profileCount('batch', 1)
             if (!firstWritten) {
               caseId = result.caseId
-              incompleteSingleFileVcfCaseId = caseId
             }
             totalInserted += result.variantCount
             firstWritten = true
@@ -386,18 +359,6 @@ export async function runImport(
             cnv = []
             str = []
             ordinal = 0
-            // Commit per-batch so postgres releases per-tuple bookkeeping and
-            // the pg-node client releases its query/result references. Without
-            // this the worker's working set scales linearly with file size on
-            // large WGS imports — the original single-transaction shape OOMed
-            // multi-GB Node heaps on the GIAB HG002 fixture.
-            await profilePhase('per-batch-commit-begin', async () => {
-              await client.query('COMMIT')
-              await client.query('BEGIN')
-              // Re-apply per-batch synchronous_commit lever — SET LOCAL is
-              // transaction-scoped and must be re-issued after every BEGIN.
-              await client.query('SET LOCAL synchronous_commit = OFF')
-            })
             if (typeof (globalThis as { gc?: () => void }).gc === 'function') {
               ;(globalThis as { gc?: () => void }).gc?.()
             }
@@ -459,7 +420,6 @@ export async function runImport(
             await client.query('COMMIT')
           }
           committed = true
-          incompleteSingleFileVcfCaseId = null
 
           profileFlush()
           post({
@@ -512,9 +472,6 @@ export async function runImport(
           totalInserted += batch.length
           batch = []
           post({ type: 'progress', phase: 'inserting', rowsProcessed: totalInserted, filePath })
-          // Commit per-batch — same rationale as the VCF branch above.
-          await client.query('COMMIT')
-          await client.query('BEGIN')
           if (typeof (globalThis as { gc?: () => void }).gc === 'function') {
             ;(globalThis as { gc?: () => void }).gc?.()
           }
@@ -652,14 +609,14 @@ export async function runImport(
         for (let i = 0; i < start.files.length; i += 1) {
           if (cancelled) break
           const fileSpec = start.files[i]
+          const caseIdBeforeFile = caseId
           let fileVariantCount = 0
           try {
             await client.query('BEGIN')
             beganTransaction = true
-            // Per-file transaction: bound failure semantics ("file N failed"
-            // rolls back any in-flight batch) while the bracket transactions
-            // ABOVE keep the trigger DISABLE durable. SET LOCAL is
-            // transaction-scoped, so re-issue it on every per-file BEGIN.
+            // Each file is atomic: cancellation or any late parse/resource
+            // failure rolls back every batch from this file while preserving
+            // files that completed previously.
             await client.query('SET LOCAL synchronous_commit = OFF')
             const fileName = basename(fileSpec.filePath)
             let fileSize = 0
@@ -700,7 +657,7 @@ export async function runImport(
               //                       (looks up case + writes per-file provenance)
               //   - any file, batch >0: mode: 'append', caseId
               //                       (no lookup, no provenance — saves O(N) queries)
-              const isFirstFileFirstBatch = i === 0 && firstBatch
+              const isFirstFileFirstBatch = caseId === 0 && firstBatch
               const isAppend = !firstBatch && caseId !== 0
               const request: PostgresVcfImportRequest = isAppend
                 ? {
@@ -774,22 +731,13 @@ export async function runImport(
               cnv = []
               str = []
               ordinal = 0
-              // Commit per-batch — same rationale as the single-file branch.
-              // The per-file BEGIN/COMMIT around this loop still bounds the
-              // failure semantics ("file N failed" rolls back any in-flight
-              // batch), but each successful batch is now durable immediately.
-              await client.query('COMMIT')
-              await client.query('BEGIN')
-              // Re-apply per-batch synchronous_commit lever — SET LOCAL is
-              // transaction-scoped and must be re-issued after every BEGIN.
-              await client.query('SET LOCAL synchronous_commit = OFF')
               if (typeof (globalThis as { gc?: () => void }).gc === 'function') {
                 ;(globalThis as { gc?: () => void }).gc?.()
               }
             }
 
             for await (const row of stream) {
-              if (cancelled) break
+              if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
               const { _transcripts, _sv, _cnv, _str, ...base } = row
               variants.push(base as unknown as Record<string, unknown>)
               if (Array.isArray(_transcripts)) {
@@ -811,25 +759,7 @@ export async function runImport(
             }
 
             if (cancelled) {
-              // Flush whatever was buffered before cancellation was detected
-              // then commit and break — partial state is left committed.
-              await flushBatch()
-              await client.query('COMMIT')
-              beganTransaction = false
-              committed = true
-              totalVariantCount += fileVariantCount
-              fileResults.push({
-                filePath: fileSpec.filePath,
-                variantType: fileSpec.variantType,
-                variantCount: fileVariantCount
-              })
-              post({
-                type: 'file-complete',
-                filePath: fileSpec.filePath,
-                caseId,
-                variantCount: fileVariantCount
-              })
-              break
+              throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             }
 
             await flushBatch()
@@ -850,6 +780,7 @@ export async function runImport(
             })
           } catch (err) {
             beganTransaction = false
+            caseId = caseIdBeforeFile
 
             console.warn(
               `[postgres-import-worker] file ${i} (${fileSpec.filePath}) failed:`,
@@ -864,6 +795,7 @@ export async function runImport(
               )
             }
             const message = err instanceof Error ? err.message : String(err)
+            if (message === POSTGRES_IMPORT_CANCELLATION_MESSAGE) break
             fileResults.push({
               filePath: fileSpec.filePath,
               variantType: fileSpec.variantType,
@@ -878,9 +810,9 @@ export async function runImport(
           await client.query('BEGIN')
           beganTransaction = true
           // Force the final commit synchronous so the import only reports
-          // success once the WAL is fsynced. Postgres flushes WAL up to
-          // this commit's LSN, which transitively makes every earlier
-          // async-committed batch (per-file + per-batch) durable on disk.
+          // success once the WAL is fsynced. Postgres flushes WAL up to this
+          // commit's LSN, which transitively makes every earlier per-file
+          // async commit durable on disk.
           await client.query('SET LOCAL synchronous_commit = ON')
           try {
             await client.query(
@@ -946,24 +878,6 @@ export async function runImport(
         console.warn(
           '[postgres-import-worker] ROLLBACK failed:',
           rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
-        )
-      }
-    }
-    if (
-      incompleteSingleFileVcfCaseId !== null &&
-      message !== POSTGRES_IMPORT_CANCELLATION_MESSAGE
-    ) {
-      try {
-        await cleanupIncompleteSingleFileVcfCase({
-          client,
-          schema: start.schema,
-          caseId: incompleteSingleFileVcfCaseId
-        })
-        incompleteSingleFileVcfCaseId = null
-      } catch (cleanupErr) {
-        console.warn(
-          '[postgres-import-worker] Failed to delete incomplete single-file VCF case:',
-          cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
         )
       }
     }

@@ -106,9 +106,11 @@ describe('region-files:importBed IPC handler', () => {
     const result = await invokeHandler(ipcMain, 'region-files:importBed', 1, bedPath)
 
     expect(isIpcError(result)).toBe(false)
-    expect(deps.getDbManager().getCurrentSession().getWriteExecutor().execute).toHaveBeenCalledWith({
-      type: 'region-files:importBed',
-      params: [1, bedPath, { rejectMalformedRows: false }]
-    })
+    expect(deps.getDbManager().getCurrentSession().getWriteExecutor().execute).toHaveBeenCalledWith(
+      {
+        type: 'region-files:importBed',
+        params: [1, bedPath, { rejectMalformedRows: false }]
+      }
+    )
   })
 })

@@ -40,18 +40,19 @@ export interface BedReaderOptions {
   rejectMalformedRows?: boolean
 }
 
-function isIgnoredBedLine(line: string): boolean {
+function isIgnoredBedFirstField(firstField: string | undefined): boolean {
   return (
-    line === '' || line.startsWith('#') || line.startsWith('track') || line.startsWith('browser')
+    firstField === undefined ||
+    firstField.startsWith('#') ||
+    firstField === 'track' ||
+    firstField === 'browser'
   )
 }
 
 export function parseBedEntry(line: string): BedEntry | null {
-  const trimmed = line.trim()
-  if (isIgnoredBedLine(trimmed)) return null
-
-  const parts = trimmed.split(/\s+/u)
-  if (parts.length < 3 || parts[0] === '') return null
+  const parts = scanBedFields(line, 4)
+  if (isIgnoredBedFirstField(parts[0])) return null
+  if (parts.length < 3) return null
   if (!/^\d+$/.test(parts[1]) || !/^\d+$/.test(parts[2])) return null
 
   const start = Number(parts[1])
@@ -64,6 +65,24 @@ export function parseBedEntry(line: string): BedEntry | null {
     end,
     label: parts.length >= 4 ? parts[3] : undefined
   }
+}
+
+/** Read only the BED3/BED4 fields consumed by VarLens; never split a dense remainder. */
+function scanBedFields(line: string, maxFields: number): string[] {
+  const fields: string[] = []
+  let index = 0
+  while (fields.length < maxFields) {
+    while (index < line.length && isBedWhitespace(line.charCodeAt(index))) index += 1
+    if (index === line.length) break
+    const start = index
+    while (index < line.length && !isBedWhitespace(line.charCodeAt(index))) index += 1
+    fields.push(line.slice(start, index))
+  }
+  return fields
+}
+
+function isBedWhitespace(charCode: number): boolean {
+  return charCode === 0x09 || charCode === 0x20 || charCode === 0x0b || charCode === 0x0c
 }
 
 /** Iterate a BED file without materializing its decompressed text. */
@@ -98,7 +117,10 @@ export async function* readBedEntries(
       if (streamError !== null) throw streamError
       const entry = parseBedEntry(line)
       if (entry === null) {
-        if (options.rejectMalformedRows === true && !isIgnoredBedLine(line.trim())) {
+        if (
+          options.rejectMalformedRows === true &&
+          !isIgnoredBedFirstField(scanBedFields(line, 1)[0])
+        ) {
           throw new InvalidBedRowError(line)
         }
         continue

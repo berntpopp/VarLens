@@ -1,3 +1,5 @@
+import { MAX_VCF_ALT_ALLELES, splitBounded } from './vcf-resource-limits'
+
 export interface SvExtensionRow {
   sv_is_precise: number
   cipos_left: number | null
@@ -61,7 +63,8 @@ function parseFloatOrNull(val: string | undefined): number | null {
 
 function parseCiInterval(val: string | undefined): [number | null, number | null] {
   if (val === undefined || val === '') return [null, null]
-  const parts = val.split(',')
+  const parts = splitBounded(val, ',', MAX_VCF_ALT_ALLELES + 1)
+  if (parts === null) return [null, null]
   if (parts.length !== 2) return [null, null]
   return [parseIntOrNull(parts[0]), parseIntOrNull(parts[1])]
 }
@@ -73,8 +76,12 @@ export function extractSvFields(
   const [ciposL, ciposR] = parseCiInterval(info.get('CIPOS'))
   const [ciendL, ciendR] = parseCiInterval(info.get('CIEND'))
 
-  const prParts = formatRaw.get('PR')?.split(',')
-  const srParts = formatRaw.get('SR')?.split(',')
+  const prValue = formatRaw.get('PR')
+  const srValue = formatRaw.get('SR')
+  const prParts =
+    prValue === undefined ? undefined : splitBounded(prValue, ',', MAX_VCF_ALT_ALLELES + 1)
+  const srParts =
+    srValue === undefined ? undefined : splitBounded(srValue, ',', MAX_VCF_ALT_ALLELES + 1)
 
   return {
     sv_is_precise: info.has('PRECISE') ? 1 : 0,
@@ -90,8 +97,14 @@ export function extractSvFields(
     vaf: parseFloatOrNull(info.get('VAF')),
     dr: parseIntOrNull(formatRaw.get('DR')),
     dv: parseIntOrNull(formatRaw.get('DV')),
-    pe_support: prParts !== undefined && prParts.length >= 2 ? parseIntOrNull(prParts[1]) : null,
-    sr_support: srParts !== undefined && srParts.length >= 2 ? parseIntOrNull(srParts[1]) : null,
+    pe_support:
+      prParts !== undefined && prParts !== null && prParts.length >= 2
+        ? parseIntOrNull(prParts[1])
+        : null,
+    sr_support:
+      srParts !== undefined && srParts !== null && srParts.length >= 2
+        ? parseIntOrNull(srParts[1])
+        : null,
     event_id: info.get('EVENT') ?? null,
     mate_id: info.get('MATEID') ?? null
   }
@@ -107,8 +120,8 @@ export function extractCnvFields(
   let hoAlt: number | null = null
   const hoVal = formatRaw.get('HO')
   if (hoVal !== undefined) {
-    const parts = hoVal.split(',')
-    if (parts.length >= 2) {
+    const parts = splitBounded(hoVal, ',', MAX_VCF_ALT_ALLELES + 1)
+    if (parts !== null && parts.length >= 2) {
       hoRef = parseFloatOrNull(parts[0])
       hoAlt = parseFloatOrNull(parts[1])
     }

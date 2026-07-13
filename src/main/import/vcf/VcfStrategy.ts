@@ -19,6 +19,7 @@ import { detectCaller } from './caller-detector'
 import type { ImportFilters } from './import-filters'
 import { passesPreMappingFilters, passesPostMappingFilters } from './import-filters'
 import { VcfHeaderBudget } from './vcf-header-limits'
+import { VcfResourceLimitError } from './vcf-resource-limits'
 export class VcfStrategy implements ImportStrategy {
   readonly formatId = 'vcf' as const
 
@@ -145,6 +146,7 @@ export class VcfStrategy implements ImportStrategy {
             }
           }
         } catch (lineError) {
+          if (lineError instanceof VcfResourceLimitError) throw lineError
           totalSkipped++
           if (errors.length < 10) {
             errors.push(

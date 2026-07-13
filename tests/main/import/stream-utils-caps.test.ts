@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { createGzip, gzipSync } from 'node:zlib'
 import { createInterface } from 'node:readline'
 import { once } from 'node:events'
+import { performance } from 'node:perf_hooks'
 import {
   createCappedLineStream,
   LineTooLongError,
@@ -25,6 +26,11 @@ import {
   MAX_GZIP_COMPRESSION_RATIO,
   MIN_GZIP_RATIO_CHECK_BYTES
 } from '../../../src/main/import/stream-utils'
+import {
+  GzipRatioPolicy,
+  MAX_GZIP_FORMAT_INSPECTION_BYTES,
+  MAX_VCF_GZIP_COMPRESSION_RATIO
+} from '../../../src/main/import/gzip-ratio-policy'
 
 let tmpDir: string
 
@@ -170,6 +176,20 @@ describe('createCappedLineStream', () => {
     ).rejects.toThrow(DecompressionRatioExceededError)
   })
 
+  it('does not grant the VCF allowance to header-shaped input with malformed data rows', async () => {
+    const filePath = join(tmpDir, 'spoofed-cohort.vcf.gz')
+    const samples = Array.from({ length: 1_000 }, (_, index) => `S${index}`).join('\t')
+    const content = `##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t${samples}\n${'A\n'.repeat(1_000_000)}`
+    writeFileSync(filePath, gzipSync(Buffer.from(content)))
+
+    await expect(
+      collectLines(filePath, {
+        maxDecompressedBytes: 3_000_000,
+        minCompressionRatioBytes: 1_000
+      })
+    ).rejects.toThrow(DecompressionRatioExceededError)
+  })
+
   it('measures consumed gzip bytes so trailing padding cannot defeat the ratio guard', async () => {
     const filePath = join(tmpDir, 'padded-ratio-bomb.vcf.gz')
     const compressed = gzipSync(Buffer.from('A'.repeat(2_000_000) + '\n'))
@@ -239,5 +259,32 @@ describe('createCappedLineStream', () => {
 
     const lines = await collectLines(filePath)
     expect(lines).toEqual(['##fileformat=VCFv4.2', 'chr1\t100'])
+  })
+})
+
+describe('GzipRatioPolicy', () => {
+  it('caps the sample-derived VCF allowance at its hard maximum', () => {
+    const samples = Array.from({ length: 2_000 }, (_, index) => `S${index}`).join('\t')
+    const genotypes = Array.from({ length: 2_000 }, () => '0/0').join('\t')
+    const policy = new GzipRatioPolicy(MAX_GZIP_COMPRESSION_RATIO)
+    policy.observe(
+      Buffer.from(
+        `##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t${samples}\n1\t1\t.\tA\tG\t30\tPASS\t.\tGT\t${genotypes}\n`
+      )
+    )
+    expect(policy.maxRatio()).toBe(MAX_VCF_GZIP_COMPRESSION_RATIO)
+  })
+
+  it('stops inspecting a minified non-VCF prefix within a fixed byte budget', () => {
+    const policy = new GzipRatioPolicy(MAX_GZIP_COMPRESSION_RATIO)
+    const minifiedJson = Buffer.alloc(64 * 1024 * 1024, 0x61)
+    minifiedJson.write('{"variants":[')
+    const startedAt = performance.now()
+
+    policy.observe(minifiedJson)
+
+    expect(performance.now() - startedAt).toBeLessThan(100)
+    expect(MAX_GZIP_FORMAT_INSPECTION_BYTES).toBeLessThan(minifiedJson.length)
+    expect(policy.maxRatio()).toBe(MAX_GZIP_COMPRESSION_RATIO)
   })
 })

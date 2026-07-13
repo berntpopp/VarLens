@@ -6,6 +6,16 @@
  */
 
 import type { VcfRawRecord } from './types'
+import {
+  MAX_VCF_ALT_ALLELES,
+  MAX_VCF_COLUMNS,
+  MAX_VCF_FORMAT_FIELDS,
+  MAX_VCF_INFO_CHARS,
+  MAX_VCF_INFO_FIELDS,
+  MAX_VCF_SAMPLE_FIELD_CHARS,
+  MAX_VCF_TOTAL_SAMPLE_VALUES,
+  splitBounded
+} from './vcf-resource-limits'
 
 const QUAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
 
@@ -25,10 +35,15 @@ export function parseVcfLine(
   sampleNames: string[],
   onSkip?: (reason: string) => void
 ): VcfRawRecord | null {
-  const cols = line.split('\t')
+  const cols = splitBounded(line, '\t', MAX_VCF_COLUMNS)
+  if (cols === null) {
+    onSkip?.(`too many VCF columns (maximum ${MAX_VCF_COLUMNS})`)
+    return null
+  }
 
   // VCF requires at least 8 fixed columns (CHROM through INFO)
   if (cols.length < 8) {
+    onSkip?.(`truncated VCF row (${cols.length} columns; expected at least 8)`)
     return null
   }
 
@@ -56,7 +71,11 @@ export function parseVcfLine(
   const id = rawId === '.' ? null : rawId
 
   // Parse ALT: comma-separated alleles
-  const alt = rawAlt.split(',')
+  const alt = splitBounded(rawAlt, ',', MAX_VCF_ALT_ALLELES)
+  if (alt === null) {
+    onSkip?.(`too many ALT alleles (maximum ${MAX_VCF_ALT_ALLELES})`)
+    return null
+  }
 
   // Parse QUAL: "." (or absent) means missing. Any other value must be a
   // complete finite number; malformed QUAL is a reasoned record skip rather
@@ -74,7 +93,15 @@ export function parseVcfLine(
   // Parse INFO: semicolon-separated key=value pairs
   const info = new Map<string, string>()
   if (rawInfo !== '.' && rawInfo !== undefined && rawInfo !== '') {
-    const infoParts = rawInfo.split(';')
+    if (rawInfo.length > MAX_VCF_INFO_CHARS) {
+      onSkip?.(`INFO field exceeds ${MAX_VCF_INFO_CHARS} characters`)
+      return null
+    }
+    const infoParts = splitBounded(rawInfo, ';', MAX_VCF_INFO_FIELDS)
+    if (infoParts === null) {
+      onSkip?.(`too many INFO fields (maximum ${MAX_VCF_INFO_FIELDS})`)
+      return null
+    }
     for (const part of infoParts) {
       const eqIdx = part.indexOf('=')
       if (eqIdx === -1) {
@@ -91,12 +118,32 @@ export function parseVcfLine(
   const samples = new Map<string, string[]>()
 
   if (cols.length > 8 && cols[8] !== undefined && cols[8] !== '') {
-    format = cols[8].split(':')
+    const parsedFormat = splitBounded(cols[8], ':', MAX_VCF_FORMAT_FIELDS)
+    if (parsedFormat === null) {
+      onSkip?.(`too many FORMAT fields (maximum ${MAX_VCF_FORMAT_FIELDS})`)
+      return null
+    }
+    format = parsedFormat
 
+    let totalSampleValues = 0
     for (let i = 0; i < sampleNames.length; i++) {
       const sampleCol = cols[9 + i]
       if (sampleCol !== undefined) {
-        samples.set(sampleNames[i], sampleCol.split(':'))
+        if (sampleCol.length > MAX_VCF_SAMPLE_FIELD_CHARS) {
+          onSkip?.(`sample field exceeds ${MAX_VCF_SAMPLE_FIELD_CHARS} characters`)
+          return null
+        }
+        const values = splitBounded(sampleCol, ':', MAX_VCF_FORMAT_FIELDS)
+        if (values === null) {
+          onSkip?.(`too many sample FORMAT values (maximum ${MAX_VCF_FORMAT_FIELDS})`)
+          return null
+        }
+        totalSampleValues += values.length
+        if (totalSampleValues > MAX_VCF_TOTAL_SAMPLE_VALUES) {
+          onSkip?.(`too many sample FORMAT values (maximum ${MAX_VCF_TOTAL_SAMPLE_VALUES})`)
+          return null
+        }
+        samples.set(sampleNames[i], values)
       }
     }
   }

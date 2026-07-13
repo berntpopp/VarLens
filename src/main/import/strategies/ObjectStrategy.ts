@@ -8,6 +8,7 @@ import type { ImportOptions, ImportResult } from '../types'
 import type { ImportStrategy, FormatInfo, StrategyContext } from './ImportStrategy'
 import { importRegistry } from './StrategyRegistry'
 import { createDecompressedStream } from '../stream-utils'
+import { createJsonRecordBudget } from '../json-resource-budget'
 
 /**
  * Strategy for object format: { "metadata": {...}, "samples": { "<sampleId>": { "variants": [...] } } }
@@ -54,6 +55,7 @@ export class ObjectStrategy implements ImportStrategy {
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: `samples.${formatInfo.caseKey}.variants` }),
+        createJsonRecordBudget(),
         streamArray.asStream(),
         objectMapper,
         batchAccumulator

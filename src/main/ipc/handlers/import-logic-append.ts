@@ -32,6 +32,7 @@ import type { VcfHeader, VcfMappedVariant } from '../../import/vcf/types'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import { passesPreMappingFilters, passesPostMappingFilters } from '../../import/vcf/import-filters'
 import { VcfHeaderBudget } from '../../import/vcf/vcf-header-limits'
+import { VcfResourceLimitError } from '../../import/vcf/vcf-resource-limits'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { ImportCallbacks, ImportResult, VcfImportOptions } from './import-logic'
 
@@ -77,105 +78,108 @@ export async function importAdditionalFileToCase(
   const errors: string[] = []
 
   try {
-    for await (const line of rl) {
-      // Collect header lines
-      if (line.startsWith('#')) {
-        headerBudget.add(line)
-        headerLines.push(line)
-        continue
-      }
-
-      // Parse header once, on the first data line
-      if (header === null) {
-        header = parseVcfHeaderFromLines(headerLines)
-        const selectedSample = vcfOptions?.selectedSample
-        activeSample =
-          selectedSample !== undefined && selectedSample !== ''
-            ? selectedSample
-            : header.samples.length > 0
-              ? header.samples[0]
-              : ''
-
-        if (activeSample === '') {
-          errors.push(`No sample found in VCF file: ${filePath}`)
-          break
+    await db.runAsyncTransaction(async () => {
+      for await (const line of rl) {
+        // Collect header lines
+        if (line.startsWith('#')) {
+          headerBudget.add(line)
+          headerLines.push(line)
+          continue
         }
 
-        const callerInfo = detectCaller(headerLines)
-        callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
-      }
+        // Parse header once, on the first data line
+        if (header === null) {
+          header = parseVcfHeaderFromLines(headerLines)
+          const selectedSample = vcfOptions?.selectedSample
+          activeSample =
+            selectedSample !== undefined && selectedSample !== ''
+              ? selectedSample
+              : header.samples.length > 0
+                ? header.samples[0]
+                : ''
 
-      try {
-        const record = parseVcfLine(line, header.samples, (reason) => {
-          if (errors.length < 10) {
-            errors.push(`Line skipped at ${line.substring(0, 50)}: ${reason}`)
+          if (activeSample === '') {
+            errors.push(`No sample found in VCF file: ${filePath}`)
+            break
           }
-        })
-        if (record === null) {
-          totalSkipped++
-          continue
+
+          const callerInfo = detectCaller(headerLines)
+          callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
         }
 
-        // Pre-mapping filter gate — shared with `VcfStrategy` via
-        // `import-filters.ts` so the worker path (first file) and the
-        // main-thread append path (2nd..Nth files) stay semantically
-        // identical.
-        if (!passesPreMappingFilters(record, importFilters)) {
-          totalSkipped++
-          continue
-        }
-
-        let mapped = mapVcfRecord(
-          record,
-          header,
-          activeSample,
-          DEFAULT_INFO_FIELD_MAPPINGS,
-          callerName
-        )
-
-        // Post-mapping filter gate — FORMAT/GQ and FORMAT/DP.
-        if (importFilters !== undefined) {
-          mapped = mapped.filter((v) => passesPostMappingFilters(v, importFilters))
-        }
-
-        if (mapped.length === 0) {
-          totalSkipped++
-          continue
-        }
-
-        for (const variant of mapped) {
-          batch.push(variant)
-        }
-
-        if (batch.length >= APPEND_BATCH_SIZE) {
-          db.variants.insertBatch(batch, caseId)
-          totalInserted += batch.length
-          batch = []
-
-          callbacks.onProgress?.({
-            phase: 'inserting',
-            count: totalInserted,
-            elapsed: Date.now() - startTime,
-            skipped: totalSkipped
+        try {
+          const record = parseVcfLine(line, header.samples, (reason) => {
+            if (errors.length < 10) {
+              errors.push(`Line skipped at ${line.substring(0, 50)}: ${reason}`)
+            }
           })
-        }
-      } catch (lineError) {
-        totalSkipped++
-        if (errors.length < 10) {
-          errors.push(
-            `Line parse error at ${line.substring(0, 50)}: ${
-              lineError instanceof Error ? lineError.message : String(lineError)
-            }`
+          if (record === null) {
+            totalSkipped++
+            continue
+          }
+
+          // Pre-mapping filter gate — shared with `VcfStrategy` via
+          // `import-filters.ts` so the worker path (first file) and the
+          // main-thread append path (2nd..Nth files) stay semantically
+          // identical.
+          if (!passesPreMappingFilters(record, importFilters)) {
+            totalSkipped++
+            continue
+          }
+
+          let mapped = mapVcfRecord(
+            record,
+            header,
+            activeSample,
+            DEFAULT_INFO_FIELD_MAPPINGS,
+            callerName
           )
+
+          // Post-mapping filter gate — FORMAT/GQ and FORMAT/DP.
+          if (importFilters !== undefined) {
+            mapped = mapped.filter((v) => passesPostMappingFilters(v, importFilters))
+          }
+
+          if (mapped.length === 0) {
+            totalSkipped++
+            continue
+          }
+
+          for (const variant of mapped) {
+            batch.push(variant)
+          }
+
+          if (batch.length >= APPEND_BATCH_SIZE) {
+            db.variants.insertBatch(batch, caseId)
+            totalInserted += batch.length
+            batch = []
+
+            callbacks.onProgress?.({
+              phase: 'inserting',
+              count: totalInserted,
+              elapsed: Date.now() - startTime,
+              skipped: totalSkipped
+            })
+          }
+        } catch (lineError) {
+          if (lineError instanceof VcfResourceLimitError) throw lineError
+          totalSkipped++
+          if (errors.length < 10) {
+            errors.push(
+              `Line parse error at ${line.substring(0, 50)}: ${
+                lineError instanceof Error ? lineError.message : String(lineError)
+              }`
+            )
+          }
         }
       }
-    }
 
-    // Flush remaining batch
-    if (batch.length > 0) {
-      db.variants.insertBatch(batch, caseId)
-      totalInserted += batch.length
-    }
+      // Flush remaining batch
+      if (batch.length > 0) {
+        db.variants.insertBatch(batch, caseId)
+        totalInserted += batch.length
+      }
+    })
   } finally {
     // Ensure the file descriptor is released even on error
     stream.destroy()

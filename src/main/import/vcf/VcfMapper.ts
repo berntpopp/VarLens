@@ -12,6 +12,7 @@ import { parseGenotype } from './vcf-genotype-parser'
 import { applyInfoFieldRegistry } from './info-field-registry'
 import { detectVariantType } from './variant-type-detector'
 import { extractSvFields, extractCnvFields, extractStrFields } from './extension-parsers'
+import { splitGenotypeAlleles, VcfResourceLimitError } from './vcf-resource-limits'
 
 /** Parse integer from string, returning null for missing/invalid values */
 function parseIntOrNull(val: string | undefined): number | null {
@@ -170,7 +171,8 @@ function shouldSkipGenotype(gt: string): boolean {
   if (gt === '.' || gt === './.' || gt === '.|.') return true
 
   // Split on / or |
-  const alleles = gt.split(/[/|]/)
+  const alleles = splitGenotypeAlleles(gt)
+  if (alleles === null) throw new VcfResourceLimitError('Genotype ploidy exceeds 64 alleles')
 
   // Skip if no allele is "1" (the ALT allele after remapping)
   // This covers ref-hom (0/0), no-call (./.), and partial no-call (0/.)

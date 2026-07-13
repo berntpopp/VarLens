@@ -281,6 +281,23 @@ export class DatabaseService {
   }
 
   /**
+   * Keep one SQLite transaction open across a bounded async producer.
+   * Nested repository transactions become savepoints under better-sqlite3,
+   * so streamed batches remain memory-bounded while the whole file is atomic.
+   */
+  async runAsyncTransaction<T>(fn: () => Promise<T>): Promise<T> {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = await fn()
+      this.db.exec('COMMIT')
+      return result
+    } catch (error) {
+      if (this.db.inTransaction) this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  /**
    * Check if this database is encrypted
    */
   isEncrypted(): boolean {

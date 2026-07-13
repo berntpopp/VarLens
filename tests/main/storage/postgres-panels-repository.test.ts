@@ -12,7 +12,9 @@ const now = new Date('2026-04-29T00:00:00.000Z').getTime()
 
 function makePool() {
   const client = {
-    query: vi.fn(async () => ({ rows: [] })),
+    query: vi.fn(async (sql: string) => ({
+      rows: sql.includes('FOR UPDATE') ? [{ id: '1' }] : []
+    })),
     release: vi.fn()
   }
   const pool = {
@@ -332,6 +334,7 @@ describe('PostgresPanelsRepository', () => {
   it('creates, lists, deletes, and imports region file entries transactionally', async () => {
     const { client, pool } = makePool()
     client.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('FOR UPDATE')) return { rows: [{ id: '1' }] }
       if (sql.includes('SELECT * FROM "public"."region_files"')) {
         return { rows: [{ id: '1', name: 'Exome BED', region_count: '2', total_bases: '150' }] }
       }
@@ -393,6 +396,7 @@ describe('PostgresPanelsRepository', () => {
   it('persists large region files in bounded parameter chunks', async () => {
     const { client, pool } = makePool()
     client.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('FOR UPDATE')) return { rows: [{ id: '1' }] }
       if (sql.includes('SELECT * FROM "public"."region_files"')) {
         return {
           rows: [
@@ -451,6 +455,41 @@ describe('PostgresPanelsRepository', () => {
     )
     expect(client.query).toHaveBeenLastCalledWith('ROLLBACK')
     expect(client.release).toHaveBeenCalledOnce()
+  })
+
+  it('locks the parent region file before replacing rows', async () => {
+    const { client, pool } = makePool()
+    const bedPath = join(tempDir, 'locked.bed')
+    writeFileSync(bedPath, '1\t0\t10\n')
+    const repo = new PostgresPanelsRepository(pool as never, 'public')
+
+    await repo.importBedFile(1, bedPath)
+
+    expect(client.query).toHaveBeenNthCalledWith(1, 'BEGIN')
+    expect(client.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('SELECT id FROM "public"."region_files" WHERE id = $1 FOR UPDATE'),
+      [1]
+    )
+    expect(String(client.query.mock.calls[2]?.[0])).toContain('region_file_entries')
+  })
+
+  it('fails a BED replacement when the locked parent row does not exist', async () => {
+    const { client, pool } = makePool()
+    client.query.mockResolvedValue({ rows: [] })
+    const bedPath = join(tempDir, 'missing-parent.bed')
+    writeFileSync(bedPath, '1\t0\t10\n')
+    const repo = new PostgresPanelsRepository(pool as never, 'public')
+
+    await expect(repo.importBedFile(99, bedPath)).rejects.toThrow(/region file 99 not found/i)
+
+    expect(client.query).toHaveBeenNthCalledWith(1, 'BEGIN')
+    expect(client.query).toHaveBeenNthCalledWith(2, expect.stringContaining('FOR UPDATE'), [99])
+    expect(client.query).not.toHaveBeenCalledWith(
+      expect.stringContaining('region_file_entries'),
+      expect.anything()
+    )
+    expect(client.query).toHaveBeenLastCalledWith('ROLLBACK')
   })
 
   it('rolls back replace operations and releases clients', async () => {

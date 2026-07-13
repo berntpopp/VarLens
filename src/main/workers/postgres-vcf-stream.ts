@@ -13,6 +13,7 @@ import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
 import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
 import { parseVcfLine } from '../import/vcf/vcf-line-parser'
 import type { VcfHeader, VcfMappedVariant } from '../import/vcf/types'
+import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
 
 /** Stream mapped VCF variants for the PostgreSQL COPY import path. */
 export async function* streamMappedVcfRows(
@@ -71,6 +72,7 @@ export async function* streamMappedVcfRows(
           if (passesPostMappingFilters(variant, filters)) yield variant
         }
       } catch (error) {
+        if (error instanceof VcfResourceLimitError) throw error
         console.warn(
           '[postgres-import-worker] Skipping unparseable VCF line:',
           error instanceof Error ? error.message : String(error)
