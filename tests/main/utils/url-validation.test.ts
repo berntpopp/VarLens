@@ -59,6 +59,13 @@ describe('isDomainAllowed', () => {
     expect(isDomainAllowed('evil.com')).toBe(false)
     expect(isDomainAllowed('valid.org')).toBe(true)
   })
+
+  it('excludes user-configured domains when includeUserDomains is false (S1)', () => {
+    setUserDomains(['mylab.org'])
+    expect(isDomainAllowed('mylab.org')).toBe(true)
+    expect(isDomainAllowed('mylab.org', { includeUserDomains: false })).toBe(false)
+    expect(isDomainAllowed('github.com', { includeUserDomains: false })).toBe(true)
+  })
 })
 
 describe('isUrlSafeForExternal', () => {
@@ -88,5 +95,36 @@ describe('isUrlSafeForExternal', () => {
 
   it('rejects malformed URL', () => {
     expect(isUrlSafeForExternal('not a url')).toBe(false)
+  })
+
+  it('narrows github.io to the docs subdomain only (S5)', () => {
+    expect(isUrlSafeForExternal('https://attacker.github.io/x')).toBe(false)
+    expect(isUrlSafeForExternal('https://berntpopp.github.io/varlens')).toBe(true)
+  })
+
+  describe('renderer-added domains gate openExternal only (S1)', () => {
+    it('allows a user-added domain by default (openExternal path)', () => {
+      setUserDomains(['evil.com'])
+      expect(isUrlSafeForExternal('https://evil.com')).toBe(true)
+    })
+
+    it('denies a user-added domain when includeUserDomains is false (window-open path)', () => {
+      setUserDomains(['evil.com'])
+      expect(isUrlSafeForExternal('https://evil.com', { includeUserDomains: false })).toBe(false)
+    })
+
+    it('still allows a built-in domain when includeUserDomains is false', () => {
+      setUserDomains(['evil.com'])
+      expect(isUrlSafeForExternal('https://github.com/repo', { includeUserDomains: false })).toBe(
+        true
+      )
+    })
+
+    it('keeps the https-only gate when includeUserDomains is false', () => {
+      setUserDomains(['evil.com'])
+      expect(isUrlSafeForExternal('http://github.com/repo', { includeUserDomains: false })).toBe(
+        false
+      )
+    })
   })
 })

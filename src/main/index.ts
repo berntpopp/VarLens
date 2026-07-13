@@ -1,5 +1,6 @@
 import { app, dialog, shell, nativeImage, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { registerIpcHandlers, destroyDbPool } from './ipc'
@@ -81,6 +82,9 @@ function createWindow(): void {
     }
   })
   const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+  // Same path passed to `mainWindow.loadFile(...)` below — kept as a single
+  // source of truth so the navigation policy always matches what's loaded.
+  const appDocUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
 
   mainWindow.on('ready-to-show', () => {
     if (hideE2eWindow) {
@@ -96,14 +100,16 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isUrlSafeForExternal(url)) {
+    // Renderer-added domains (`shell:updateUserDomains`) must never reach
+    // this sink — only the built-in allowlist may open a new window/tab.
+    if (isUrlSafeForExternal(url, { includeUserDomains: false })) {
       setImmediate(() => shell.openExternal(url))
     }
     return { action: 'deny' }
   })
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowed = isMainWindowNavigationAllowed(url, rendererUrl)
+    const allowed = isMainWindowNavigationAllowed(url, rendererUrl, appDocUrl)
     if (!allowed) {
       mainLogger.warn(`Blocked in-page navigation to disallowed URL: ${url}`, 'main-window')
       event.preventDefault()

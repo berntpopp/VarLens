@@ -4,7 +4,7 @@
  */
 export const ALLOWED_DOMAINS = [
   'github.com',
-  'github.io',
+  'berntpopp.github.io', // VarLens docs site — not bare `github.io` (that would allow *.github.io)
   'opensource.org',
   'gnomad.broadinstitute.org',
   'ncbi.nlm.nih.gov', // Covers PubTator, LitVar, ClinVar

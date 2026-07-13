@@ -10,8 +10,13 @@ import { app, dialog, safeStorage, shell } from 'electron'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import { wrapHandler } from '../errorHandler'
+import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
+import {
+  addAllowedDatabasePath,
+  isAllowedDatabasePath
+} from '../../security/database-path-allowlist'
 import {
   DatabaseOpenSchema,
   DatabaseCreateSchema,
@@ -199,6 +204,32 @@ function createInsecureLocalPostgresSecretStore(userDataPath: string): SecretSto
   )
 }
 
+/**
+ * DB path-authority gate for `database:open` / `database:create` /
+ * `database:showInFolder` / `database:removeRecent`.
+ *
+ * A path is allowed only if it was picked via a dialog this session
+ * (`database:selectFile` / `database:selectSaveLocation`, which enroll into
+ * a database-scoped session allowlist), already
+ * appears in the recent databases list, or is the currently active
+ * database. This mirrors the `deleteDbFile` precedent (recent-list +
+ * active-DB checks) while still allowing `create`/`open` to work with a
+ * freshly dialog-selected path that isn't in the recent list yet.
+ *
+ * Uses the database-scoped STRICT enrollment check, not the
+ * permissive `isAllowedImportPath` — the automatic home/userData/temp roots
+ * that predicate grants for the original import flow do not apply here.
+ * An arbitrary renderer-supplied string with no dialog/recent/active
+ * provenance is rejected even if it happens to live under the user's home
+ * directory or the OS temp dir.
+ */
+function throwUnallowedDatabasePath(channel: string, path: string): never {
+  throw new InvalidParametersError(
+    `${channel}: path is not in the database path authority set: ${path}`,
+    'The selected database file is not in an allowed location.'
+  )
+}
+
 export function registerDatabaseHandlers({
   ipcMain,
   getDb,
@@ -226,7 +257,9 @@ export function registerDatabaseHandlers({
       return null
     }
 
-    return result.filePaths[0]
+    const filePath = result.filePaths[0]
+    addAllowedDatabasePath(filePath)
+    return filePath
   })
 
   /**
@@ -255,6 +288,7 @@ export function registerDatabaseHandlers({
       return null
     }
 
+    addAllowedDatabasePath(result.filePath)
     return result.filePath
   })
 
@@ -267,6 +301,9 @@ export function registerDatabaseHandlers({
       if (!validated.success) {
         mainLogger.error(`Invalid database:open params: ${validated.error.message}`, 'database')
         throw new Error('Invalid database open parameters')
+      }
+      if (!isAllowedDatabasePath(validated.data.path, getDbManager)) {
+        throwUnallowedDatabasePath('database:open', validated.data.path)
       }
       return openDatabase(validated.data, getDb, getDbManager, lifecycleCallbacks)
     })
@@ -281,6 +318,9 @@ export function registerDatabaseHandlers({
       if (!validated.success) {
         mainLogger.error(`Invalid database:create params: ${validated.error.message}`, 'database')
         throw new Error('Invalid database create parameters')
+      }
+      if (!isAllowedDatabasePath(validated.data.path, getDbManager)) {
+        throwUnallowedDatabasePath('database:create', validated.data.path)
       }
       return createDatabase(validated.data, getDbManager)
     })
@@ -441,6 +481,9 @@ export function registerDatabaseHandlers({
         )
         throw new Error('Invalid file path')
       }
+      if (!isAllowedDatabasePath(validated.data, getDbManager)) {
+        throwUnallowedDatabasePath('database:removeRecent', validated.data)
+      }
       return removeRecentDatabase(validated.data, getDbManager)
     })
   })
@@ -467,6 +510,9 @@ export function registerDatabaseHandlers({
       const validated = FilePathSchema.safeParse(path)
       if (!validated.success) {
         throw new Error('Invalid file path')
+      }
+      if (!isAllowedDatabasePath(validated.data, getDbManager)) {
+        throwUnallowedDatabasePath('database:showInFolder', validated.data)
       }
       shell.showItemInFolder(validated.data)
       return { success: true }

@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import {
+  __resetAllowlistForTests,
+  isAllowedImportPath
+} from '../../../src/main/security/import-path-allowlist'
 
 const mocks = vi.hoisted(() => ({
   showSaveDialog: vi.fn(),
@@ -27,6 +31,48 @@ vi.mock('../../../src/main/ipc/handlers/export-logic', () => ({
 }))
 
 describe('postgres export IPC routing', () => {
+  beforeEach(() => {
+    __resetAllowlistForTests()
+  })
+
+  it('enrolls the export:variants save-dialog result so shell:showItemInFolder can reveal it', async () => {
+    const outputPath = '/some/custom/mount/case1_variants.csv'
+    const execute = vi.fn().mockResolvedValue(
+      (async function* () {
+        yield { id: 1 }
+      })()
+    )
+    const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    mocks.showSaveDialog.mockResolvedValue({ canceled: false, filePath: outputPath })
+    mocks.exportPostgresVariants.mockResolvedValue({ success: true, filePath: outputPath })
+
+    const { registerExportHandlers } = await import('../../../src/main/ipc/handlers/export')
+    registerExportHandlers({
+      ipcMain: ipcMain as never,
+      getDb: (() => {
+        throw new Error('getDb should not be called for postgres export:variants')
+      }) as never,
+      getDbManager: (() => ({
+        getCurrentSession: () => ({
+          capabilities: { backend: 'postgres' },
+          getReadExecutor: () => ({ execute })
+        })
+      })) as never,
+      getDbPool: (() => null) as never
+    })
+
+    expect(isAllowedImportPath(outputPath)).toBe(false)
+    const handler = handlers.get('export:variants')
+    await handler!(undefined, 5, { gene_symbol: 'BRCA1' }, 'Postgres Case')
+    expect(isAllowedImportPath(outputPath)).toBe(true)
+  })
+
   it('streams postgres variant exports through the active storage read executor', async () => {
     const rows = (async function* () {
       yield { id: 1 }

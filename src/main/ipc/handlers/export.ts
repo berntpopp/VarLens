@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
+import { addAllowedImportPath } from '../../security/import-path-allowlist'
 import {
   CohortSearchParamsSchema,
   VariantExportParamsSchema
@@ -100,6 +101,11 @@ export function registerExportHandlers({
           outputFilePath = result.filePath
         }
 
+        // The renderer's "Open folder" action calls shell:showItemInFolder
+        // with this same path -- enroll it so that channel's dialog-origin
+        // gate (see shell.ts) accepts it.
+        addAllowedImportPath(outputFilePath)
+
         /** Wire progress events to renderer via safeEmit. */
         const exportCallbacks: ExportCallbacks = {
           onProgress: (data) => {
@@ -190,6 +196,11 @@ export function registerExportHandlers({
           }
           outputFilePath = result.filePath
         }
+
+        // The renderer's "Open folder" action calls shell:showItemInFolder
+        // with this same path -- enroll it so that channel's dialog-origin
+        // gate (see shell.ts) accepts it.
+        addAllowedImportPath(outputFilePath)
 
         /** Wire progress events to renderer via safeEmit. */
         const exportCallbacks: ExportCallbacks = {

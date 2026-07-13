@@ -3,7 +3,10 @@ import { shell } from 'electron'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
 import { wrapHandler } from '../errorHandler'
+import { InvalidParametersError } from '../errors'
 import { setUserDomains, isUrlSafeForExternal } from '../../utils/url-validation'
+import { isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
+import { isAllowedDatabasePath } from '../../security/database-path-allowlist'
 
 /**
  * Shell IPC handlers
@@ -23,7 +26,7 @@ const FilePathSchema = z.string().min(1).max(1024)
 /** Schema for user domains array */
 const UserDomainsSchema = z.array(z.string().min(1).max(253)).max(100)
 
-export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
+export function registerShellHandlers({ ipcMain, getDbManager }: HandlerDependencies): void {
   ipcMain.handle('shell:updateUserDomains', async (_event, domains: unknown) => {
     return wrapHandler(async () => {
       // ANTI-07: Runtime validation at IPC boundary
@@ -59,7 +62,12 @@ export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
 
   /**
    * Show file in system file manager
-   * Used for export feedback ("Open folder" action)
+   * Used for export feedback ("Open folder" action). The path always
+   * originates from a path this session's dialogs produced (an export
+   * save-dialog result, a picked import/BED/database file, ...), so it must
+   * be strictly dialog-enrolled -- the automatic home/userData/temp roots
+   * `isAllowedImportPath` grants for the import flow do not apply here, so
+   * an arbitrary renderer-supplied path under those roots is still rejected.
    */
   ipcMain.handle('shell:showItemInFolder', async (_event, filePath: unknown) => {
     return wrapHandler(async () => {
@@ -71,6 +79,18 @@ export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
           'shell'
         )
         throw new Error('Invalid parameters')
+      }
+
+      const hasImportAuthority = isStrictlyEnrolledPath(validated.data)
+      const hasDatabaseAuthority =
+        !hasImportAuthority && getDbManager !== undefined
+          ? isAllowedDatabasePath(validated.data, getDbManager)
+          : false
+      if (!hasImportAuthority && !hasDatabaseAuthority) {
+        throw new InvalidParametersError(
+          `shell:showItemInFolder: filePath is not in the path authority set: ${validated.data}`,
+          'The selected file is not in an allowed location.'
+        )
       }
 
       shell.showItemInFolder(validated.data)
