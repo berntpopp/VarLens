@@ -45,14 +45,22 @@ export interface PanelIntervalParams {
  * @param caseId - Optional case ID for detecting chr prefix from variants.
  *                 If omitted, falls back to sampling any variant in the database.
  * @param source - Logging source identifier (e.g. 'variants', 'cohort')
- * @returns Array of genomic intervals, or undefined if computation fails
+ * @returns Array of genomic intervals. Empty when the active panel(s) have no
+ *          genes/coordinates to restrict on — that is a legitimate "no
+ *          restriction" result and callers may run the query unfiltered.
+ * @throws If the computation itself fails (e.g. the bundled gene reference
+ *         DB cannot be opened, or the panel/gene lookup errors). Callers
+ *         MUST let this propagate — a caught computation failure must never
+ *         be treated the same as "no panel configured", since that would
+ *         silently widen the query to return unfiltered results under an
+ *         active gene-panel restriction (a clinical-safety hazard).
  */
 export function computePanelIntervals(
   db: DatabaseService,
   params: PanelIntervalParams,
   caseId: number | undefined,
   source: string
-): GenomicInterval[] | undefined {
+): GenomicInterval[] {
   const paddingBp = params.panel_padding_bp ?? 5000
   const genomeBuild = params.genome_build ?? 'GRCh38'
 
@@ -67,19 +75,19 @@ export function computePanelIntervals(
     chrPrefix = sampleRow?.chr?.startsWith('chr') ?? false
   }
 
+  const cacheKey = JSON.stringify({
+    panelIds: params.active_panel_ids,
+    assembly: genomeBuild,
+    paddingBp,
+    chrPrefix
+  })
+
+  const cached = panelIntervalCache.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+
   try {
-    const cacheKey = JSON.stringify({
-      panelIds: params.active_panel_ids,
-      assembly: genomeBuild,
-      paddingBp,
-      chrPrefix
-    })
-
-    const cached = panelIntervalCache.get(cacheKey)
-    if (cached) {
-      return cached
-    }
-
     const geneRefDb = getGeneReferenceDb()
     const intervals = db.panels.computeIntervals(
       params.active_panel_ids,
@@ -91,11 +99,16 @@ export function computePanelIntervals(
     panelIntervalCache.set(cacheKey, intervals)
     return intervals
   } catch (error) {
-    mainLogger.warn(
-      `Failed to compute panel intervals: ${error instanceof Error ? error.message : String(error)}`,
+    const message = error instanceof Error ? error.message : String(error)
+    // Do NOT swallow this into "no panel filter" — a panel IS configured here
+    // (callers only invoke computePanelIntervals when active_panel_ids is
+    // non-empty), so a failure must surface rather than silently widen the
+    // query to unfiltered results. Log for diagnostics, then propagate so
+    // wrapHandler turns it into a SerializableError at the IPC boundary.
+    mainLogger.error(
+      `Failed to compute panel intervals for active gene panel(s): ${message}`,
       source
     )
-    // Continue without panel filtering rather than failing the query
-    return undefined
+    throw error instanceof Error ? error : new Error(message)
   }
 }

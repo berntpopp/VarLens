@@ -94,34 +94,34 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
       const folderPath = result.filePaths[0]
       await saveSettings({ ...settings, lastImportDirectory: folderPath })
 
-      try {
-        const entries = await readdir(folderPath, { withFileTypes: true })
-
-        const files = entries
-          .filter((entry) => {
-            if (entry.isFile() === false) return false
-            const name = entry.name.toLowerCase()
-            return (
-              name.endsWith('.json') === true ||
-              name.endsWith('.json.gz') === true ||
-              name.endsWith('.gz') === true
-            )
-          })
-          .map((entry) => join(folderPath, entry.name))
-
-        // The user only picked the containing folder via a dialog, not each
-        // file individually — enroll every file discovered inside it so the
-        // later checkDuplicates/start calls (which validate against the
-        // allowlist) accept them.
-        for (const f of files) {
-          addAllowedImportPath(f)
-        }
-
-        return files
-      } catch (error) {
+      // A genuinely empty folder resolves normally with zero filtered entries
+      // below. A readdir failure (permission denied, folder removed after
+      // selection, etc.) is an infrastructure fault and must not masquerade
+      // as an empty folder — let it propagate so wrapHandler structures it.
+      const entries = await readdir(folderPath, { withFileTypes: true }).catch((error) => {
         mainLogger.error(`Failed to read directory: ${error}`, 'import')
-        return []
+        throw error
+      })
+
+      const files = entries
+        .filter((entry) => {
+          if (entry.isFile() === false) return false
+          const name = entry.name.toLowerCase()
+          return (
+            name.endsWith('.json') === true ||
+            name.endsWith('.json.gz') === true ||
+            name.endsWith('.gz') === true
+          )
+        })
+        .map((entry) => join(folderPath, entry.name))
+
+      // The folder dialog grants authority to the discovered files, not to
+      // arbitrary later renderer-supplied children of that directory.
+      for (const file of files) {
+        addAllowedImportPath(file)
       }
+
+      return files
     })
   })
 
@@ -191,6 +191,10 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
 
   ipcMain.handle('batch-import:selectZip', async () => {
     return wrapHandler(async () => {
+      // `null` is the legitimate "user cancelled the dialog" outcome, handled
+      // explicitly below. A dialog/settings/fs failure is a different, real
+      // failure and must not be swallowed into that same `null` — that would
+      // be indistinguishable from a cancel and hide a genuine error.
       try {
         const settings = await loadSettings()
 
@@ -216,7 +220,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
         return { filePath, isEncrypted }
       } catch (error) {
         mainLogger.error(`batch-import:selectZip error: ${error}`, 'import')
-        return null
+        throw error
       }
     })
   })

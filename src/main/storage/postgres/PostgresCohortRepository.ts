@@ -657,11 +657,11 @@ export class PostgresCohortRepository {
         panel_intervals: intervals
       }
     } catch (error) {
-      mainLogger.warn(
-        `Failed to resolve PostgreSQL cohort panel intervals: ${error instanceof Error ? error.message : String(error)}`,
+      mainLogger.error(
+        `Failed to resolve PostgreSQL cohort panel intervals for active gene panel(s): ${error instanceof Error ? error.message : String(error)}`,
         'cohort'
       )
-      return withoutActivePanelFields(params)
+      throw error
     }
   }
 

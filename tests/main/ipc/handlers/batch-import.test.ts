@@ -43,6 +43,7 @@ vi.mock('../../../../src/main/ipc/utils/settings-io', () => ({
 import { dialog } from 'electron'
 import { readdir } from 'fs/promises'
 import { registerBatchImportHandlers } from '../../../../src/main/ipc/handlers/batch-import'
+import { saveSettings } from '../../../../src/main/ipc/utils/settings-io'
 import {
   checkDuplicateFiles,
   startBatchImport,
@@ -310,6 +311,54 @@ describe('batch-import IPC handlers', () => {
   })
 
   describe('dialog enrollment', () => {
+    it('surfaces a folder read failure instead of reporting an empty folder', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+      vi.mocked(dialog.showOpenDialog).mockResolvedValue({
+        canceled: false,
+        filePaths: [join(EXTERNAL_ROOT, 'unreadable')]
+      } as never)
+      vi.mocked(readdir).mockRejectedValueOnce(new Error('EACCES: permission denied'))
+
+      const result = await invokeHandler(ipcMain, 'batch-import:selectFolder')
+
+      expect(isIpcError(result)).toBe(true)
+      expect(result).not.toEqual([])
+    })
+
+    it('preserves cancellation and a genuinely empty folder as empty selections', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({
+        canceled: true,
+        filePaths: []
+      } as never)
+
+      expect(await invokeHandler(ipcMain, 'batch-import:selectFolder')).toEqual([])
+
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({
+        canceled: false,
+        filePaths: [join(EXTERNAL_ROOT, 'empty')]
+      } as never)
+      vi.mocked(readdir).mockResolvedValueOnce([])
+      expect(await invokeHandler(ipcMain, 'batch-import:selectFolder')).toEqual([])
+    })
+
+    it('surfaces ZIP settings failures instead of reporting dialog cancellation', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+      vi.mocked(dialog.showOpenDialog).mockResolvedValue({
+        canceled: false,
+        filePaths: [join(EXTERNAL_ROOT, 'archive.zip')]
+      } as never)
+      vi.mocked(saveSettings).mockRejectedValueOnce(new Error('ENOSPC: no space left'))
+
+      const result = await invokeHandler(ipcMain, 'batch-import:selectZip')
+
+      expect(isIpcError(result)).toBe(true)
+      expect(result).not.toBeNull()
+    })
+
     it('enrolls files picked via batch-import:selectFiles', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)

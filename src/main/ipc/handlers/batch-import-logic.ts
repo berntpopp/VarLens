@@ -58,8 +58,11 @@ export function checkDuplicateFiles(
       duplicateCount: result.duplicateCount
     }
   } catch (error) {
+    // A DB/lookup failure here is not the same as "no duplicates found" — let
+    // it propagate so wrapHandler structures it and the caller sees an error
+    // instead of a falsely-empty duplicate check.
     mainLogger.error(`checkDuplicates error: ${error}`, 'import')
-    return { files: [], duplicateCount: 0 }
+    throw error
   }
 }
 
@@ -253,6 +256,11 @@ export function cancelBatchImport(): void {
 
 /**
  * Test a ZIP file password.
+ *
+ * `ZipExtractor.testPassword` already distinguishes a genuine wrong-password
+ * outcome (returns `false`) from an unopenable/corrupt archive (throws). Do
+ * not re-collapse that distinction here: a corrupt archive must propagate as
+ * an error, not be reported as "incorrect password".
  */
 export function testZipPassword(zipPath: string, password: string): { success: boolean } {
   try {
@@ -260,7 +268,7 @@ export function testZipPassword(zipPath: string, password: string): { success: b
     return { success }
   } catch (error) {
     mainLogger.error(`batch-import:testZipPassword error: ${error}`, 'import')
-    return { success: false }
+    throw error
   }
 }
 
@@ -284,6 +292,17 @@ export async function extractZip(
 
     const result = await zipExtractor.extract(zipPath, targetDir, password)
 
+    // Partial extraction is not a safe success state: the renderer cannot
+    // know whether a missing case is optional, corrupt, or failed to write.
+    // Fail the whole archive on any candidate error; the catch below removes
+    // the temporary directory so already-written files cannot be imported.
+    if (result.errors.length > 0) {
+      throw new Error(
+        `ZIP extraction failed for ${result.errors.length} candidate ` +
+          `entr${result.errors.length === 1 ? 'y' : 'ies'}: ${result.errors.join('; ')}`
+      )
+    }
+
     if (onExtractedFile !== undefined) {
       for (const extractedFile of result.extractedFiles) {
         onExtractedFile(extractedFile)
@@ -299,16 +318,19 @@ export async function extractZip(
       })
     )
   } catch (error) {
+    // A genuinely empty/all-benign extraction is reported by ZipExtractor.extract
+    // as a normal resolved result ({ extractedFiles: [], errors: [] }) — it
+    // never reaches this catch. Anything that lands here (unreadable/corrupt
+    // archive, fs failure, or the all-entries-failed case thrown above) is an
+    // infrastructure fault and must not be reshaped into a fake-success
+    // zero-file result.
     mainLogger.error(`batch-import:extractZip error: ${error}`, 'import')
     if (zipTempManager !== null) {
       zipTempManager.cleanup()
       zipTempManager = null
     }
     revokeExtractedPaths()
-    return {
-      files: [],
-      errors: [error instanceof Error ? error.message : 'Extraction failed']
-    }
+    throw error
   }
 }
 

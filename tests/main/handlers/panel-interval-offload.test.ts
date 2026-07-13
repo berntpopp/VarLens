@@ -21,6 +21,7 @@ import type { HandlerDependencies } from '../../../src/main/ipc/types'
 import type { IpcMain } from 'electron'
 import type { DbPool } from '../../../src/main/database/DbPool'
 import type { DatabaseManager } from '../../../src/main/services/DatabaseManager'
+import { isIpcError } from '../../../src/shared/types/errors'
 
 // ── Test helpers ────────────────────────────────────────────────
 
@@ -198,6 +199,206 @@ describe('variants:query — no pool fallback path', () => {
 
     expect(computeSpy).toHaveBeenCalled()
     computeSpy.mockRestore()
+  })
+})
+
+// ── Suite 2b: panel-interval computation failure must surface as an error ──
+//
+// Clinical-safety guarantee: a panel is configured (active_panel_ids is
+// non-empty) but the interval computation itself throws. The query must
+// error visibly, never silently fall back to an unfiltered result — a
+// dropped panel filter must not look identical to "panel returned everything".
+
+describe('panel-interval computation failure surfaces as an error (no silent unfiltered fallback)', () => {
+  let dbService: DatabaseService
+
+  beforeEach(() => {
+    dbService = new DatabaseService(':memory:')
+  })
+
+  afterEach(() => {
+    dbService.close()
+    vi.restoreAllMocks()
+  })
+
+  /**
+   * Stubs getGeneReferenceDb() so the failure test exercises the intended
+   * PanelRepository.computeIntervals() failure path rather than tripping over
+   * Electron's `app` module being unavailable in this test environment.
+   */
+  async function stubGeneReferenceDb(): Promise<void> {
+    const geneRefLoaderModule = await import('../../../src/main/database/geneReferenceLoader')
+    vi.spyOn(geneRefLoaderModule, 'getGeneReferenceDb').mockReturnValue(
+      {} as unknown as import('../../../src/main/database/GeneReferenceDb').GeneReferenceDb
+    )
+  }
+
+  it('computePanelIntervals throws (does not return undefined) when computation fails', async () => {
+    const panel = dbService.panels.createPanel({ name: 'TestPanel', source: 'manual' })
+    dbService.panels.setGenes(panel.id, [{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }])
+
+    await stubGeneReferenceDb()
+    vi.spyOn(dbService.panels, 'computeIntervals').mockImplementation(() => {
+      throw new Error('Simulated panel interval computation failure')
+    })
+
+    const { computePanelIntervals } =
+      await import('../../../src/main/ipc/handlers/panelIntervalHelper')
+
+    expect(() =>
+      computePanelIntervals(dbService, { active_panel_ids: [panel.id] }, undefined, 'variants')
+    ).toThrow('Simulated panel interval computation failure')
+  })
+
+  it('variants:query (no pool, case view) surfaces a SerializableError instead of unfiltered variants', async () => {
+    const caseId = dbService.database
+      .prepare(
+        'INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build) VALUES (?,?,?,?,?,?)'
+      )
+      .run('test-panel-fail', '/t.vcf', 0, 0, Date.now(), 'GRCh38').lastInsertRowid as number
+
+    const panel = dbService.panels.createPanel({ name: 'TestPanel', source: 'manual' })
+    dbService.panels.setGenes(panel.id, [{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }])
+
+    await stubGeneReferenceDb()
+    vi.spyOn(dbService.panels, 'computeIntervals').mockImplementation(() => {
+      throw new Error('Simulated panel interval computation failure')
+    })
+
+    const deps: HandlerDependencies = {
+      ipcMain: { handle: vi.fn() } as unknown as IpcMain,
+      getDb: () => dbService,
+      getDbManager: vi.fn() as unknown as () => DatabaseManager,
+      getDbPool: () => null
+    }
+
+    const { registerVariantHandlers } = await import('../../../src/main/ipc/handlers/variants')
+    let capturedHandler: ((...args: unknown[]) => Promise<unknown>) | null = null
+    ;(deps.ipcMain.handle as ReturnType<typeof vi.fn>).mockImplementation(
+      (channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        if (channel === 'variants:query') capturedHandler = handler
+      }
+    )
+    registerVariantHandlers(deps)
+
+    const filter = { active_panel_ids: [panel.id], panel_padding_bp: 0 }
+    const result = await capturedHandler!(
+      {} as Electron.IpcMainInvokeEvent,
+      caseId,
+      filter,
+      0,
+      50,
+      undefined
+    )
+
+    expect(isIpcError(result)).toBe(true)
+    expect((result as Record<string, unknown>).data).toBeUndefined()
+  })
+
+  it('cohort:variants (no pool, cohort view) surfaces a SerializableError instead of unfiltered variants', async () => {
+    const panel = dbService.panels.createPanel({ name: 'TestPanel', source: 'manual' })
+    dbService.panels.setGenes(panel.id, [{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }])
+
+    await stubGeneReferenceDb()
+    vi.spyOn(dbService.panels, 'computeIntervals').mockImplementation(() => {
+      throw new Error('Simulated panel interval computation failure')
+    })
+
+    const deps: HandlerDependencies = {
+      ipcMain: { handle: vi.fn() } as unknown as IpcMain,
+      getDb: () => dbService,
+      getDbManager: (() => ({
+        getCurrentSession: () => ({ capabilities: { backend: 'sqlite' } })
+      })) as unknown as () => DatabaseManager,
+      getDbPool: () => null
+    }
+
+    const { registerCohortHandlers } = await import('../../../src/main/ipc/handlers/cohort')
+    let capturedHandler: ((...args: unknown[]) => Promise<unknown>) | null = null
+    ;(deps.ipcMain.handle as ReturnType<typeof vi.fn>).mockImplementation(
+      (channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        if (channel === 'cohort:variants') capturedHandler = handler
+      }
+    )
+    registerCohortHandlers(deps)
+
+    const cohortParams = { active_panel_ids: [panel.id], panel_padding_bp: 0 }
+    const result = await capturedHandler!({} as Electron.IpcMainInvokeEvent, cohortParams)
+
+    expect(isIpcError(result)).toBe(true)
+  })
+
+  it('variants:query (pool available) surfaces a SerializableError when the worker rejects on panel-interval failure', async () => {
+    const caseId = dbService.database
+      .prepare(
+        'INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build) VALUES (?,?,?,?,?,?)'
+      )
+      .run('test-panel-fail-pool', '/t.vcf', 0, 0, Date.now(), 'GRCh38').lastInsertRowid as number
+
+    const poolRunSpy = vi.fn(async () => {
+      // Simulates the worker thread throwing inside resolvePanelIntervalsInPlace
+      // and Piscina surfacing it as a rejected task promise.
+      throw new Error('Simulated panel interval computation failure')
+    })
+    const fakePool = { run: poolRunSpy } as unknown as DbPool
+
+    const deps: HandlerDependencies = {
+      ipcMain: { handle: vi.fn() } as unknown as IpcMain,
+      getDb: () => dbService,
+      getDbManager: vi.fn() as unknown as () => DatabaseManager,
+      getDbPool: () => fakePool
+    }
+
+    const { registerVariantHandlers } = await import('../../../src/main/ipc/handlers/variants')
+    let capturedHandler: ((...args: unknown[]) => Promise<unknown>) | null = null
+    ;(deps.ipcMain.handle as ReturnType<typeof vi.fn>).mockImplementation(
+      (channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        if (channel === 'variants:query') capturedHandler = handler
+      }
+    )
+    registerVariantHandlers(deps)
+
+    const filter = { active_panel_ids: [1], panel_padding_bp: 0 }
+    const result = await capturedHandler!(
+      {} as Electron.IpcMainInvokeEvent,
+      caseId,
+      filter,
+      0,
+      50,
+      undefined
+    )
+
+    expect(isIpcError(result)).toBe(true)
+  })
+
+  it('cohort:variants (pool available) surfaces a SerializableError when the worker rejects on panel-interval failure', async () => {
+    const poolRunSpy = vi.fn(async () => {
+      throw new Error('Simulated panel interval computation failure')
+    })
+    const fakePool = { run: poolRunSpy } as unknown as DbPool
+
+    const deps: HandlerDependencies = {
+      ipcMain: { handle: vi.fn() } as unknown as IpcMain,
+      getDb: () => dbService,
+      getDbManager: (() => ({
+        getCurrentSession: () => ({ capabilities: { backend: 'sqlite' } })
+      })) as unknown as () => DatabaseManager,
+      getDbPool: () => fakePool
+    }
+
+    const { registerCohortHandlers } = await import('../../../src/main/ipc/handlers/cohort')
+    let capturedHandler: ((...args: unknown[]) => Promise<unknown>) | null = null
+    ;(deps.ipcMain.handle as ReturnType<typeof vi.fn>).mockImplementation(
+      (channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        if (channel === 'cohort:variants') capturedHandler = handler
+      }
+    )
+    registerCohortHandlers(deps)
+
+    const cohortParams = { active_panel_ids: [3, 4], panel_padding_bp: 2000 }
+    const result = await capturedHandler!({} as Electron.IpcMainInvokeEvent, cohortParams)
+
+    expect(isIpcError(result)).toBe(true)
   })
 })
 

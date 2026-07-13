@@ -12,4 +12,4 @@ export type {
   BatchImportOptions,
   DuplicateChoice
 } from './types'
-export type { ZipExtractionResult } from './ZipExtractor'
+export type { ZipExtractionResult, ZipPasswordValidationLimits } from './ZipExtractor'
