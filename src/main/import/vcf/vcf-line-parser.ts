@@ -46,9 +46,9 @@ export function parseVcfLine(
   // (non-numeric, zero, negative, or fractional) is rejected outright rather
   // than allowed to flow forward as `NaN` — a NaN row would otherwise pass
   // silently through downstream mapping/insert paths.
-  const pos = Number.parseInt(rawPos, 10)
-  if (!Number.isInteger(pos) || pos <= 0 || !/^\d+$/.test(rawPos)) {
-    onSkip?.(`invalid POS "${rawPos}" (must be a positive integer)`)
+  const pos = Number(rawPos)
+  if (!Number.isSafeInteger(pos) || pos <= 0 || !/^\d+$/.test(rawPos)) {
+    onSkip?.(`invalid POS "${rawPos}" (must be a positive safe integer)`)
     return null
   }
 
@@ -58,13 +58,17 @@ export function parseVcfLine(
   // Parse ALT: comma-separated alleles
   const alt = rawAlt.split(',')
 
-  // Parse QUAL: "." (or absent) means missing; a malformed (non-numeric)
-  // QUAL becomes `null` rather than `NaN` — QUAL is optional per the VCF
-  // spec, so a bad value doesn't invalidate the record.
+  // Parse QUAL: "." (or absent) means missing. Any other value must be a
+  // complete finite number; malformed QUAL is a reasoned record skip rather
+  // than being silently reinterpreted as the semantically distinct ".".
   let qual: number | null = null
   if (rawQual !== '.' && rawQual !== undefined) {
     const parsedQual = QUAL_NUMBER_PATTERN.test(rawQual) ? Number(rawQual) : Number.NaN
-    qual = Number.isFinite(parsedQual) ? parsedQual : null
+    if (!Number.isFinite(parsedQual)) {
+      onSkip?.(`invalid QUAL "${rawQual}" (must be "." or a finite number)`)
+      return null
+    }
+    qual = parsedQual
   }
 
   // Parse INFO: semicolon-separated key=value pairs

@@ -2,8 +2,10 @@ import { describe, expect, test } from 'vitest'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 
 import { buildDispatcher } from '../../src/web/server/dispatcher'
+import { DecompressedSizeExceededError } from '../../src/main/import/stream-utils'
 import { stageExistingFileUpload } from '../../src/web/server/routes/upload-staging'
 import { makeDeps } from './helpers/dispatcher-adapters'
 
@@ -228,6 +230,129 @@ describe('web dispatcher adapters: annotations, assets, and exports', () => {
       else process.env.NODE_ENV = prevNodeEnv
       if (prevRecoveryDir === undefined) delete process.env.VARLENS_RECOVERY_KEY_DIR
       else process.env.VARLENS_RECOVERY_KEY_DIR = prevRecoveryDir
+    }
+  })
+
+  test('region-files.importBed streams a staged gzip BED through the shared reader', async () => {
+    const prevNodeEnv = process.env.NODE_ENV
+    const prevRecoveryDir = process.env.VARLENS_RECOVERY_KEY_DIR
+    process.env.NODE_ENV = 'production'
+    const { deps, writeExecute, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const dir = await mkdtemp(join(tmpdir(), 'varlens-bed-gzip-'))
+    process.env.VARLENS_RECOVERY_KEY_DIR = dir
+
+    try {
+      const filePath = join(dir, 'regions.bed.gz')
+      await writeFile(filePath, gzipSync(Buffer.from('chr1\t0\t10\tRegionA\nchr2\t5\t9\n')))
+      const upload = await stageExistingFileUpload({
+        userId: 7,
+        originalName: 'regions.bed.gz',
+        sourcePath: filePath
+      })
+      const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+      await overrides['region-files:importBed'].handle(
+        [4, upload.ref],
+        request as never,
+        reply as never,
+        deps
+      )
+
+      expect(writeExecute).toHaveBeenCalledWith({
+        type: 'region-files:importBed',
+        params: [
+          4,
+          [
+            { chr: 'chr1', start: 0, end: 10, label: 'RegionA' },
+            { chr: 'chr2', start: 5, end: 9 }
+          ]
+        ]
+      })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+      if (prevNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = prevNodeEnv
+      if (prevRecoveryDir === undefined) delete process.env.VARLENS_RECOVERY_KEY_DIR
+      else process.env.VARLENS_RECOVERY_KEY_DIR = prevRecoveryDir
+    }
+  })
+
+  test('region-files.importBed rejects malformed rows before persistence', async () => {
+    const prevNodeEnv = process.env.NODE_ENV
+    const prevRecoveryDir = process.env.VARLENS_RECOVERY_KEY_DIR
+    process.env.NODE_ENV = 'production'
+    const { deps, writeExecute, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const dir = await mkdtemp(join(tmpdir(), 'varlens-bed-malformed-'))
+    process.env.VARLENS_RECOVERY_KEY_DIR = dir
+
+    try {
+      const filePath = join(dir, 'regions.bed')
+      await writeFile(filePath, 'chr1\tbad\t10\n')
+      const upload = await stageExistingFileUpload({
+        userId: 7,
+        originalName: 'regions.bed',
+        sourcePath: filePath
+      })
+      const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+      await expect(
+        overrides['region-files:importBed'].handle(
+          [4, upload.ref],
+          request as never,
+          reply as never,
+          deps
+        )
+      ).rejects.toThrow(/invalid bed row/i)
+      expect(writeExecute).not.toHaveBeenCalled()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+      if (prevNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = prevNodeEnv
+      if (prevRecoveryDir === undefined) delete process.env.VARLENS_RECOVERY_KEY_DIR
+      else process.env.VARLENS_RECOVERY_KEY_DIR = prevRecoveryDir
+    }
+  })
+
+  test('region-files.importBed enforces the shared decompressed-byte cap', async () => {
+    const prevNodeEnv = process.env.NODE_ENV
+    const prevRecoveryDir = process.env.VARLENS_RECOVERY_KEY_DIR
+    const prevMaxBytes = process.env.VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES
+    process.env.NODE_ENV = 'production'
+    process.env.VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES = '100'
+    const { deps, writeExecute, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const dir = await mkdtemp(join(tmpdir(), 'varlens-bed-cap-'))
+    process.env.VARLENS_RECOVERY_KEY_DIR = dir
+
+    try {
+      const filePath = join(dir, 'regions.bed.gz')
+      await writeFile(filePath, gzipSync(Buffer.from('chr1\t0\t10\n'.repeat(1_000))))
+      const upload = await stageExistingFileUpload({
+        userId: 7,
+        originalName: 'regions.bed.gz',
+        sourcePath: filePath
+      })
+      const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+      await expect(
+        overrides['region-files:importBed'].handle(
+          [4, upload.ref],
+          request as never,
+          reply as never,
+          deps
+        )
+      ).rejects.toThrow(DecompressedSizeExceededError)
+      expect(writeExecute).not.toHaveBeenCalled()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+      if (prevNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = prevNodeEnv
+      if (prevRecoveryDir === undefined) delete process.env.VARLENS_RECOVERY_KEY_DIR
+      else process.env.VARLENS_RECOVERY_KEY_DIR = prevRecoveryDir
+      if (prevMaxBytes === undefined) delete process.env.VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES
+      else process.env.VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES = prevMaxBytes
     }
   })
 

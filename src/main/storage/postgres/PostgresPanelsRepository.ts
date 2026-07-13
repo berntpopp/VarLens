@@ -13,6 +13,8 @@ import { quoteIdentifier } from './identifiers'
 type Queryable = Pick<Pool, 'query' | 'connect'>
 type Row = Record<string, unknown>
 
+export const REGION_FILE_INSERT_CHUNK_SIZE = 10_000
+
 const integerFields = new Set([
   'id',
   'panel_id',
@@ -365,7 +367,8 @@ export class PostgresPanelsRepository {
       )
 
       const totalBases = entries.reduce((sum, entry) => sum + (entry.end - entry.start), 0)
-      if (entries.length > 0) {
+      for (let offset = 0; offset < entries.length; offset += REGION_FILE_INSERT_CHUNK_SIZE) {
+        const chunk = entries.slice(offset, offset + REGION_FILE_INSERT_CHUNK_SIZE)
         await client.query(
           `
             INSERT INTO ${this.table('region_file_entries')} (
@@ -381,10 +384,10 @@ export class PostgresPanelsRepository {
           `,
           [
             fileId,
-            entries.map((entry) => entry.chr),
-            entries.map((entry) => entry.start),
-            entries.map((entry) => entry.end),
-            entries.map((entry) => entry.label ?? null)
+            chunk.map((entry) => entry.chr),
+            chunk.map((entry) => entry.start),
+            chunk.map((entry) => entry.end),
+            chunk.map((entry) => entry.label ?? null)
           ]
         )
       }

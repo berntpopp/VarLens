@@ -207,6 +207,7 @@ describe('VcfStrategy', () => {
           '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
           '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005',
           'chr1\tNOTNUM\t.\tA\tG\t99\tPASS\t.\tGT\t0/1',
+          'chr1\t99\t.\tA\tG\tBADQUAL\tPASS\t.\tGT\t0/1',
           'chr1\t100\trs1\tA\tG\t99\tPASS\t.\tGT\t0/1'
         ].join('\n') + '\n'
       )
@@ -228,11 +229,12 @@ describe('VcfStrategy', () => {
 
       // Only the valid line is inserted; the malformed-POS line is rejected.
       expect(result.variantCount).toBe(1)
-      expect(result.skipped).toBeGreaterThanOrEqual(1)
+      expect(result.skipped).toBeGreaterThanOrEqual(2)
 
       // The skip carries a reason -- not a silent drop.
       expect(result.errors.length).toBeGreaterThan(0)
       expect(result.errors.some((e) => /invalid POS/i.test(e))).toBe(true)
+      expect(result.errors.some((e) => /invalid QUAL/i.test(e))).toBe(true)
 
       // No NaN-position row reached the database.
       const variants = db.database
