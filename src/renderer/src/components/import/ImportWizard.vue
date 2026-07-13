@@ -134,7 +134,7 @@
 
       <!-- Actions -->
       <v-card-actions>
-        <v-btn v-if="step === 2" variant="text" size="small" @click="step = 1">Back</v-btn>
+        <v-btn v-if="step === 2" variant="text" size="small" @click="handleBack">Back</v-btn>
         <v-spacer />
         <v-btn v-if="step === 3" variant="text" size="small" @click="continueInBackground">
           Continue in Background
@@ -191,6 +191,7 @@ import type {
 } from '../../../../shared/types/api'
 import type { VcfPreviewResult } from '../../../../shared/types/vcf'
 import { useApiService } from '../../composables/useApiService'
+import { useZipImportCleanup } from '../../composables/useZipImportCleanup'
 import { useImportStatusStore } from '../../stores/importStatusStore'
 import { logService } from '../../services/LogService'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
@@ -322,7 +323,6 @@ const summary = ref<BatchResult>({
 let cleanupProgress: (() => void) | null = null
 let cleanupImportProgress: (() => void) | null = null
 let cleanupComplete: (() => void) | null = null
-let recheckTimeout: ReturnType<typeof setTimeout> | null = null
 
 function resetUploadState(): void {
   uploadFileName.value = ''
@@ -376,35 +376,35 @@ function formatIpcError(error: unknown, fallback: string): string {
   return formatErrorMessage(error, fallback)
 }
 
-function cleanupZipTempInBackground(context: string): void {
-  void api!.batchImport
-    .cleanupZipTemp()
-    .then((cleanupResult) => {
-      unwrapIpcResult(cleanupResult)
-    })
-    .catch((error) => {
-      logService.warn(
-        `ZIP temp cleanup failed after ${context}: ${formatIpcError(error, 'cleanup failed')}`,
-        'ImportWizard'
-      )
-    })
-}
+const {
+  cleanupZipTemp,
+  abandonZipImport,
+  handleBack,
+  checkDuplicatesAndAdvance,
+  scheduleDuplicateRecheck,
+  cancelDuplicateRecheck
+} = useZipImportCleanup({
+  cleanupRequest: () => api!.batchImport.cleanupZipTemp(),
+  checkDuplicatesRequest: (filePaths, strip) => api!.batchImport.checkDuplicates(filePaths, strip),
+  importStore,
+  state: {
+    step,
+    selectedFilePaths,
+    reviewFiles,
+    duplicateCount,
+    stripText,
+    isZipImport,
+    zipPath,
+    zipPasswordNeeded,
+    zipPassword,
+    zipError,
+    showZipPassword,
+    zipUnlocking
+  }
+})
 
 // Re-check duplicates when strip text changes
-watch(stripText, () => {
-  if (recheckTimeout !== null) clearTimeout(recheckTimeout)
-  recheckTimeout = setTimeout(async () => {
-    if (selectedFilePaths.value.length === 0) return
-    const result = unwrapIpcResult(
-      await api!.batchImport.checkDuplicates(
-        [...selectedFilePaths.value],
-        stripText.value || undefined
-      )
-    )
-    reviewFiles.value = result.files
-    duplicateCount.value = result.duplicateCount
-  }, 300)
-})
+watch(stripText, scheduleDuplicateRecheck)
 
 async function selectSource(mode: ImportMode): Promise<void> {
   if (sourceSelectionPending.value) return
@@ -468,22 +468,13 @@ async function extractAndAdvance(path: string): Promise<void> {
     await api!.batchImport.extractZip(path, zipPassword.value || undefined)
   )
   if (files.length === 0) {
+    abandonZipImport('empty ZIP extraction')
     throw new Error('No importable files found in archive')
   }
 
   selectedFilePaths.value = files
   zipPasswordNeeded.value = false
   await checkDuplicatesAndAdvance(files)
-}
-
-async function checkDuplicatesAndAdvance(filePaths: string[]): Promise<void> {
-  const result = unwrapIpcResult(
-    await api!.batchImport.checkDuplicates(filePaths, stripText.value || undefined)
-  )
-
-  reviewFiles.value = result.files
-  duplicateCount.value = result.duplicateCount
-  step.value = 2
 }
 
 async function unlockZip(): Promise<void> {
@@ -510,9 +501,7 @@ async function unlockZip(): Promise<void> {
 }
 
 function cancelZip(): void {
-  zipPasswordNeeded.value = false
-  zipPassword.value = ''
-  zipError.value = ''
+  abandonZipImport('password prompt cancellation')
 }
 
 function onVcfPreviewLoaded(_preview: VcfPreviewResult): void {
@@ -657,7 +646,7 @@ async function startImport(): Promise<void> {
       })
 
       if (isZipImport.value) {
-        cleanupZipTempInBackground('import completion')
+        void cleanupZipTemp('import completion')
       }
 
       if (result.succeeded > 0) {
@@ -735,6 +724,7 @@ function handleClose(): void {
     continueInBackground()
     return
   }
+  abandonZipImport('dialog close')
   dialog.value = false
   // Reset import store when closing from summary/error step
   if (step.value === 4 || importStore.phase === 'error') {
@@ -773,6 +763,7 @@ function resetState(): void {
 }
 
 const show = (): void => {
+  abandonZipImport('next wizard open')
   resetState()
   dialog.value = true
 }
@@ -781,6 +772,9 @@ const show = (): void => {
 // handleClose() covers explicit close, but the dialog can also close via v-model
 // when persistent=false (step !== 3).
 watch(dialog, (open) => {
+  if (!open && step.value !== 3) {
+    abandonZipImport('dialog dismissal')
+  }
   if (!open && (step.value === 4 || importStore.phase === 'error')) {
     importStore.reset()
   }
@@ -854,7 +848,7 @@ onMounted(() => {
         })
 
         if (isZipImport.value) {
-          cleanupZipTempInBackground('dialog close')
+          void cleanupZipTemp('import completion event')
         }
       }
     })
@@ -868,7 +862,8 @@ onUnmounted(() => {
   cleanupProgress?.()
   cleanupImportProgress?.()
   cleanupComplete?.()
-  if (recheckTimeout !== null) clearTimeout(recheckTimeout)
+  cancelDuplicateRecheck()
+  if (step.value !== 3) abandonZipImport('component unmount')
 })
 
 defineExpose({ show, reopen })

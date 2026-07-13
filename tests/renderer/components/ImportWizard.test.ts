@@ -16,6 +16,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { ref, isProxy } from 'vue'
 import ImportWizard from '../../../src/renderer/src/components/import/ImportWizard.vue'
 import ImportSourceSelector from '../../../src/renderer/src/components/import/ImportSourceSelector.vue'
+import BatchReviewPhase from '../../../src/renderer/src/components/batch-import/BatchReviewPhase.vue'
 import { createMockApi, type MockApi } from '../../utils/mock-api'
 
 const vuetify = createVuetify({ components, directives })
@@ -175,6 +176,42 @@ describe('ImportWizard IPC safety', () => {
 describe('ImportWizard ZIP password unlock', () => {
   let mockApi: MockApi
 
+  function mountWizard(): ReturnType<typeof mount> {
+    return mount(ImportWizard, {
+      global: { plugins: [vuetify] },
+      attachTo: document.body
+    })
+  }
+
+  function prepareSuccessfulZipReview(): void {
+    mockApi.batchImport.selectZip = vi.fn().mockResolvedValue({
+      filePath: '/tmp/archive.zip',
+      isEncrypted: false
+    })
+    mockApi.batchImport.extractZip = vi.fn().mockResolvedValue({
+      files: ['/tmp/varlens-zip-entry/case.json'],
+      errors: []
+    })
+    mockApi.batchImport.checkDuplicates = vi.fn().mockResolvedValue({
+      files: [
+        {
+          filePath: '/tmp/varlens-zip-entry/case.json',
+          fileName: 'case.json',
+          caseName: 'case',
+          isDuplicate: false
+        }
+      ],
+      duplicateCount: 0
+    })
+  }
+
+  async function openZipReview(wrapper: ReturnType<typeof mount>): Promise<void> {
+    wrapper.vm.show()
+    await flushPromises()
+    wrapper.findComponent(ImportSourceSelector).vm.$emit('select', 'zip')
+    await flushPromises()
+  }
+
   beforeEach(() => {
     setActivePinia(createPinia())
     mockApi = createMockApi()
@@ -183,6 +220,7 @@ describe('ImportWizard ZIP password unlock', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     document.body.innerHTML = ''
     vi.restoreAllMocks()
   })
@@ -244,5 +282,92 @@ describe('ImportWizard ZIP password unlock', () => {
     await flushPromises()
 
     expect(document.body.textContent).toContain('No importable files found in archive')
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledOnce()
+  })
+
+  it('cleans extracted ZIP data when the review dialog closes', async () => {
+    prepareSuccessfulZipReview()
+    const wrapper = mountWizard()
+    await openZipReview(wrapper)
+
+    wrapper.findComponent({ name: 'VDialog' }).vm.$emit('update:modelValue', false)
+    await flushPromises()
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledOnce()
+  })
+
+  it('cleans extracted ZIP data when navigating back from review', async () => {
+    prepareSuccessfulZipReview()
+    const wrapper = mountWizard()
+    await openZipReview(wrapper)
+
+    const back = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Back')
+    )
+    expect(back).toBeInstanceOf(HTMLButtonElement)
+    back!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledOnce()
+  })
+
+  it('cleans an abandoned ZIP extraction before opening a fresh wizard flow', async () => {
+    prepareSuccessfulZipReview()
+    const wrapper = mountWizard()
+    await openZipReview(wrapper)
+
+    wrapper.vm.show()
+    await flushPromises()
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledOnce()
+  })
+
+  it('cleans ZIP data and surfaces an initial duplicate-check failure', async () => {
+    prepareSuccessfulZipReview()
+    mockApi.batchImport.checkDuplicates = vi.fn().mockResolvedValue({
+      code: 'DATABASE_ERROR',
+      message: 'database is locked',
+      userMessage: 'Could not check duplicate cases'
+    })
+    const wrapper = mountWizard()
+
+    await openZipReview(wrapper)
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledOnce()
+    expect(document.body.textContent).toContain('Could not check duplicate cases')
+  })
+
+  it('invalidates stale review data and surfaces a debounced duplicate-check failure', async () => {
+    vi.useFakeTimers()
+    prepareSuccessfulZipReview()
+    mockApi.batchImport.checkDuplicates = vi
+      .fn()
+      .mockResolvedValueOnce({
+        files: [
+          {
+            filePath: '/tmp/varlens-zip-entry/case.json',
+            fileName: 'case.json',
+            caseName: 'case',
+            isDuplicate: false
+          }
+        ],
+        duplicateCount: 0
+      })
+      .mockResolvedValueOnce({
+        code: 'DATABASE_ERROR',
+        message: 'database is locked',
+        userMessage: 'Could not refresh duplicate cases'
+      })
+    const wrapper = mountWizard()
+    await openZipReview(wrapper)
+
+    wrapper.findComponent(BatchReviewPhase).vm.$emit('update:stripText', '_results')
+    await wrapper.vm.$nextTick()
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledOnce()
+    expect(document.body.textContent).toContain('Could not refresh duplicate cases')
+    expect(document.body.textContent).not.toContain('case.json')
   })
 })
