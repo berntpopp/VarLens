@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PostgresPanelsRepository } from '../../../src/main/storage/postgres/PostgresPanelsRepository'
+import {
+  PostgresPanelsRepository,
+  REGION_FILE_INSERT_CHUNK_SIZE
+} from '../../../src/main/storage/postgres/PostgresPanelsRepository'
 
 const now = new Date('2026-04-29T00:00:00.000Z').getTime()
 
@@ -377,6 +380,47 @@ describe('PostgresPanelsRepository', () => {
       'DELETE FROM "public"."region_files" WHERE id = $1',
       [1]
     )
+  })
+
+  it('persists large region files in bounded parameter chunks', async () => {
+    const { client, pool } = makePool()
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT * FROM "public"."region_files"')) {
+        return {
+          rows: [
+            {
+              id: '1',
+              name: 'Large BED',
+              region_count: String(REGION_FILE_INSERT_CHUNK_SIZE + 1),
+              total_bases: String(REGION_FILE_INSERT_CHUNK_SIZE + 1)
+            }
+          ]
+        }
+      }
+      return { rows: [] }
+    })
+    const entries = Array.from({ length: REGION_FILE_INSERT_CHUNK_SIZE + 1 }, (_, index) => ({
+      chr: '1',
+      start: index * 2,
+      end: index * 2 + 1
+    }))
+    const repo = new PostgresPanelsRepository(pool as never, 'public')
+
+    await repo.importBedEntries(1, entries)
+
+    const insertCalls = client.query.mock.calls.filter(([sql]) =>
+      String(sql).includes('UNNEST($2::text[], $3::bigint[], $4::bigint[], $5::text[])')
+    )
+    expect(insertCalls).toHaveLength(2)
+    expect(insertCalls.map(([, params]) => (params as unknown[][])[1].length)).toEqual([
+      REGION_FILE_INSERT_CHUNK_SIZE,
+      1
+    ])
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('SET region_count = $1, total_bases = $2, updated_at = $3'),
+      [entries.length, entries.length, now, 1]
+    )
+    expect(client.query).toHaveBeenLastCalledWith('COMMIT')
   })
 
   it('rolls back replace operations and releases clients', async () => {

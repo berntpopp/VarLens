@@ -64,6 +64,18 @@ export const MAX_LINE_BYTES = 64 * 1024 * 1024 // 64 MiB
 /** Default total decompressed-byte cap — see rationale above. */
 export const DEFAULT_MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024 * 1024 // 256 GiB
 
+/**
+ * Reject gzip streams expanding beyond this ratio after the safety floor.
+ * The shipped VCF gzip corpus tops out at 25.87x (ordinary single/trio and
+ * annotated fixtures are 7.83x-16.29x), so 100x keeps almost 4x headroom
+ * while stopping highly compressible hostile input far below the 256 GiB
+ * WGS-capable absolute ceiling.
+ */
+export const MAX_GZIP_COMPRESSION_RATIO = 100
+
+/** Avoid false positives for small, legitimately repetitive gzip files. */
+export const MIN_GZIP_RATIO_CHECK_BYTES = 64 * 1024 * 1024 // 64 MiB
+
 /** Environment variable that overrides DEFAULT_MAX_DECOMPRESSED_BYTES, in bytes. */
 const MAX_DECOMPRESSED_BYTES_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
 const TEST_MAX_LINE_BYTES_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
@@ -115,6 +127,16 @@ export class DecompressedSizeExceededError extends Error {
   }
 }
 
+/** Thrown when gzip output is implausibly large relative to its compressed file. */
+export class DecompressionRatioExceededError extends Error {
+  constructor(maxRatio: number, minBytes: number) {
+    super(
+      `Refusing to continue gzip expansion beyond ${maxRatio}x after ${minBytes} bytes (suspected decompression bomb)`
+    )
+    this.name = 'DecompressionRatioExceededError'
+  }
+}
+
 /**
  * Counts bytes flowing through and errors once `maxBytes` is exceeded.
  * Defeats a gzip bomb regardless of line structure.
@@ -136,19 +158,56 @@ class ByteCapTransform extends Transform {
   }
 }
 
+class CompressionRatioCapTransform extends Transform {
+  private totalBytes = 0
+
+  constructor(
+    private readonly compressedBytesAccepted: () => number,
+    private readonly maxRatio: number,
+    private readonly minBytes: number
+  ) {
+    super()
+  }
+
+  override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
+    this.totalBytes += chunk.length
+    const ratio = this.totalBytes / Math.max(this.compressedBytesAccepted(), 1)
+    if (this.totalBytes > this.minBytes && ratio > this.maxRatio) {
+      callback(new DecompressionRatioExceededError(this.maxRatio, this.minBytes))
+      return
+    }
+    callback(null, chunk)
+  }
+}
+
 function composeCappedDecompressedStream(
   raw: Readable,
   gzipped: boolean,
   maxDecompressedBytes: number,
+  maxCompressionRatio: number,
+  minCompressionRatioBytes: number,
   downstream?: Transform
 ): Readable {
   const byteCap = new ByteCapTransform(maxDecompressedBytes)
-  if (downstream !== undefined) {
-    return gzipped
-      ? compose(raw, createGunzip(), byteCap, downstream)
-      : compose(raw, byteCap, downstream)
+  if (gzipped) {
+    const gunzip = createGunzip()
+    // Gunzip.bytesWritten is the compressed input accepted by zlib's engine.
+    // Unlike fs.ReadStream.bytesRead, it excludes filesystem read-ahead and
+    // trailing zero padding after the gzip member, so neither can dilute the
+    // expansion ratio.
+    const ratioCap = new CompressionRatioCapTransform(
+      () => gunzip.bytesWritten,
+      maxCompressionRatio,
+      minCompressionRatioBytes
+    )
+    return downstream !== undefined
+      ? compose(raw, gunzip, ratioCap, byteCap, downstream)
+      : compose(raw, gunzip, ratioCap, byteCap)
   }
-  return gzipped ? compose(raw, createGunzip(), byteCap) : compose(raw, byteCap)
+  if (downstream !== undefined) {
+    return compose(raw, byteCap, downstream)
+  }
+  return compose(raw, byteCap)
 }
 
 /**
@@ -165,7 +224,9 @@ export function createDecompressedStream(
   return composeCappedDecompressedStream(
     raw,
     gzipped,
-    resolveMaxDecompressedBytes(maxDecompressedBytes)
+    resolveMaxDecompressedBytes(maxDecompressedBytes),
+    MAX_GZIP_COMPRESSION_RATIO,
+    MIN_GZIP_RATIO_CHECK_BYTES
   )
 }
 
@@ -211,6 +272,10 @@ export interface CappedLineStreamOptions {
   maxLineBytes?: number
   /** Override the total decompressed-byte cap (tests, or advanced config). */
   maxDecompressedBytes?: number
+  /** Override the gzip expansion ratio. Production call sites should not set this. */
+  maxCompressionRatio?: number
+  /** Override the output floor before ratio checks. Production call sites should not set this. */
+  minCompressionRatioBytes?: number
 }
 
 /** Return value of {@link createCappedLineStream}. */
@@ -243,11 +308,20 @@ export function createCappedLineStream(
 ): CappedLineSource {
   const maxLineBytes = resolveMaxLineBytes(options.maxLineBytes)
   const maxDecompressedBytes = resolveMaxDecompressedBytes(options.maxDecompressedBytes)
+  const maxCompressionRatio = options.maxCompressionRatio ?? MAX_GZIP_COMPRESSION_RATIO
+  const minCompressionRatioBytes = options.minCompressionRatioBytes ?? MIN_GZIP_RATIO_CHECK_BYTES
 
   const gzipped = isGzipped(filePath)
   const raw = createReadStream(filePath)
   const lineCap = new LineLengthCapTransform(maxLineBytes)
-  const stream = composeCappedDecompressedStream(raw, gzipped, maxDecompressedBytes, lineCap)
+  const stream = composeCappedDecompressedStream(
+    raw,
+    gzipped,
+    maxDecompressedBytes,
+    maxCompressionRatio,
+    minCompressionRatioBytes,
+    lineCap
+  )
 
   return { stream, rawBytesRead: () => raw.bytesRead }
 }

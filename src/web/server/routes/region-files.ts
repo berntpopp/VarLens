@@ -1,41 +1,22 @@
-import { readFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 
 import { RegionFileImportBedArgsSchema } from '../../../shared/api/schemas/region-files'
+import { resolveMaxDecompressedBytes } from '../../../main/import/stream-utils'
+import { MAX_BED_FILTER_DECOMPRESSED_BYTES } from '../../../main/import/vcf/bed-filter'
+import { readBedEntries } from '../../../main/import/vcf/bed-reader'
 import { serverPathImportDisabled, serverPathImportDisabledResponse } from './server-path-import'
 import type { OverrideHandler } from './types'
 import { isWebUploadRef, resolveWebUploadPath } from './upload-staging'
 
-function normalizeBedLine(
-  line: string
-): { chr: string; start: number; end: number; label?: string } | null {
-  const trimmed = line.trim()
-  if (trimmed === '' || trimmed.startsWith('#')) return null
-  const [chr, startRaw, endRaw, label] = trimmed.split(/\s+/u)
-  const start = Number(startRaw)
-  const end = Number(endRaw)
-  if (chr === undefined || !Number.isInteger(start) || !Number.isInteger(end)) {
-    throw new Error(`Invalid BED row: ${line}`)
-  }
-  return {
-    chr,
-    start,
-    end,
-    ...(label !== undefined && label !== '' ? { label } : {})
-  }
-}
-
-async function readBedEntries(
+async function collectBedEntries(
   filePath: string
 ): Promise<Array<{ chr: string; start: number; end: number; label?: string }>> {
-  const content = await readFile(filePath, 'utf8')
-  return content
-    .split(/\r?\n/u)
-    .map(normalizeBedLine)
-    .filter(
-      (entry): entry is { chr: string; start: number; end: number; label?: string } =>
-        entry !== null
-    )
+  const entries: Array<{ chr: string; start: number; end: number; label?: string }> = []
+  const maxBytes = Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
+  for await (const entry of readBedEntries(filePath, maxBytes, { rejectMalformedRows: true })) {
+    entries.push(entry)
+  }
+  return entries
 }
 
 export function buildRegionFileOverrides(): Record<string, OverrideHandler> {
@@ -62,7 +43,7 @@ export function buildRegionFileOverrides(): Record<string, OverrideHandler> {
         }
         return await session.getWriteExecutor().execute({
           type: 'region-files:importBed',
-          params: [fileId, await readBedEntries(resolvedPath)]
+          params: [fileId, await collectBedEntries(resolvedPath)]
         })
       }
     }

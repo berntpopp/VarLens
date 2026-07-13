@@ -19,7 +19,8 @@ import { createInterface } from 'node:readline'
 import {
   createCappedLineStream,
   LineTooLongError,
-  DecompressedSizeExceededError
+  DecompressedSizeExceededError,
+  DecompressionRatioExceededError
 } from '../../../src/main/import/stream-utils'
 
 let tmpDir: string
@@ -35,7 +36,12 @@ afterEach(() => {
 /** Collect lines from a capped stream via readline, resolving with lines or rejecting with the stream's error. */
 function collectLines(
   filePath: string,
-  opts?: { maxLineBytes?: number; maxDecompressedBytes?: number }
+  opts?: {
+    maxLineBytes?: number
+    maxDecompressedBytes?: number
+    maxCompressionRatio?: number
+    minCompressionRatioBytes?: number
+  }
 ) {
   return new Promise<string[]>((resolve, reject) => {
     const { stream } = createCappedLineStream(filePath, opts)
@@ -90,6 +96,78 @@ describe('createCappedLineStream', () => {
     await expect(
       collectLines(filePath, { maxDecompressedBytes: 1000, maxLineBytes: 2_000_000 })
     ).rejects.toThrow(DecompressedSizeExceededError)
+  })
+
+  it('rejects a gzip bomb by expansion ratio before the total-byte cap', async () => {
+    const filePath = join(tmpDir, 'ratio-bomb.vcf.gz')
+    writeFileSync(filePath, gzipSync(Buffer.from('A'.repeat(100_000) + '\n')))
+
+    await expect(
+      collectLines(filePath, {
+        maxDecompressedBytes: 1_000_000,
+        maxLineBytes: 200_000,
+        maxCompressionRatio: 5,
+        minCompressionRatioBytes: 1_000
+      })
+    ).rejects.toThrow(DecompressionRatioExceededError)
+  })
+
+  it('applies the production expansion ratio when only the check floor is overridden', async () => {
+    const filePath = join(tmpDir, 'default-ratio-bomb.vcf.gz')
+    writeFileSync(filePath, gzipSync(Buffer.from('A'.repeat(2_000_000) + '\n')))
+
+    await expect(
+      collectLines(filePath, {
+        maxDecompressedBytes: 3_000_000,
+        maxLineBytes: 3_000_000,
+        minCompressionRatioBytes: 1_000
+      })
+    ).rejects.toThrow(DecompressionRatioExceededError)
+  })
+
+  it('measures consumed gzip bytes so trailing padding cannot defeat the ratio guard', async () => {
+    const filePath = join(tmpDir, 'padded-ratio-bomb.vcf.gz')
+    const compressed = gzipSync(Buffer.from('A'.repeat(2_000_000) + '\n'))
+    writeFileSync(filePath, Buffer.concat([compressed, Buffer.alloc(1_000_000)]))
+
+    await expect(
+      collectLines(filePath, {
+        maxDecompressedBytes: 3_000_000,
+        maxLineBytes: 3_000_000,
+        maxCompressionRatio: 50,
+        minCompressionRatioBytes: 1_000
+      })
+    ).rejects.toThrow(DecompressionRatioExceededError)
+  })
+
+  it('accepts a gzip below the configured expansion ratio', async () => {
+    const filePath = join(tmpDir, 'normal-ratio.vcf.gz')
+    const content = Array.from({ length: 500 }, (_, index) => `chr1\t${index}\t${index ** 2}`).join(
+      '\n'
+    )
+    writeFileSync(filePath, gzipSync(Buffer.from(content)))
+
+    await expect(
+      collectLines(filePath, {
+        maxDecompressedBytes: 1_000_000,
+        maxCompressionRatio: 20,
+        minCompressionRatioBytes: 100
+      })
+    ).resolves.toHaveLength(500)
+  })
+
+  it('does not apply the ratio guard below its output floor', async () => {
+    const filePath = join(tmpDir, 'small-compressible.vcf.gz')
+    writeFileSync(filePath, gzipSync(Buffer.from('A'.repeat(5_000) + '\n')))
+
+    await expect(
+      collectLines(filePath, {
+        maxDecompressedBytes: 10_000,
+        maxLineBytes: 10_000,
+        maxCompressionRatio: 1,
+        minCompressionRatioBytes: 8_000
+      })
+    ).resolves.toEqual(['A'.repeat(5_000)])
   })
 
   it('reads a legitimate small file without false rejection (default caps)', async () => {

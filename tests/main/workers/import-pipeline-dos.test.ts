@@ -164,6 +164,7 @@ describe('streamInsertVcf DoS guards (import-pipeline.ts, live SQLite worker pat
         '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
         '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005',
         'chr1\tNOTNUM\trs-bad\tA\tG\t99\tPASS\t.\tGT\t0/1',
+        'chr1\t99\trs-bad-qual\tA\tG\tBADQUAL\tPASS\t.\tGT\t0/1',
         'chr1\t100\trs-good\tA\tG\t99\tPASS\t.\tGT\t0/1'
       ].join('\n') + '\n'
     )
@@ -186,8 +187,9 @@ describe('streamInsertVcf DoS guards (import-pipeline.ts, live SQLite worker pat
     )
 
     expect(count).toBe(1)
-    expect(skips).toHaveLength(1)
-    expect(skips[0]).toMatch(/invalid POS/i)
+    expect(skips).toHaveLength(2)
+    expect(skips.some((reason) => /invalid POS/i.test(reason))).toBe(true)
+    expect(skips.some((reason) => /invalid QUAL/i.test(reason))).toBe(true)
   })
 
   it('rejects a VCF header exceeding the independent header-line budget', async () => {

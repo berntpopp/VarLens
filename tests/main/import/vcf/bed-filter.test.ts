@@ -6,6 +6,11 @@ import {
   BedFilter,
   MAX_BED_FILTER_DECOMPRESSED_BYTES
 } from '../../../../src/main/import/vcf/bed-filter'
+import {
+  BedEntryLimitExceededError,
+  parseBedEntry,
+  readBedEntries
+} from '../../../../src/main/import/vcf/bed-reader'
 import { DecompressedSizeExceededError } from '../../../../src/main/import/stream-utils'
 import path from 'path'
 
@@ -44,6 +49,29 @@ describe('BedFilter', () => {
       // chr1:999000-1010000 with +/-100 -> chr1:998901-1010100 (1-based inclusive)
       expect(filter.contains('chr1', 998950)).toBe(true)
       expect(filter.contains('chr1', 998850)).toBe(false)
+    })
+
+    it('rejects more valid BED rows than the configured entry cap', async () => {
+      const tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-entries-'))
+      const filePath = path.join(tmpDir, 'too-many.bed')
+      writeFileSync(filePath, 'chr1\t0\t1\nchr1\t2\t3\nchr1\t4\t5\n')
+
+      try {
+        const collect = async (): Promise<void> => {
+          for await (const entry of readBedEntries(filePath, 10_000, { maxEntries: 2 })) {
+            void entry
+          }
+        }
+        await expect(collect()).rejects.toThrow(BedEntryLimitExceededError)
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('rejects BED coordinates outside JavaScript safe-integer range', () => {
+      expect(
+        parseBedEntry(`chr1\t${Number.MAX_SAFE_INTEGER + 1}\t${Number.MAX_SAFE_INTEGER + 2}`)
+      ).toBeNull()
     })
   })
 

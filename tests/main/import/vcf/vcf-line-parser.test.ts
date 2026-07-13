@@ -135,6 +135,17 @@ describe('vcf-line-parser', () => {
       expect(record).toBeNull()
     })
 
+    it('rejects a positive integer above Number.MAX_SAFE_INTEGER', () => {
+      const rawPos = String(Number.MAX_SAFE_INTEGER + 1)
+      const reasons: string[] = []
+      const record = parseVcfLine(`chr1\t${rawPos}\t.\tA\tG\t.\t.\t.`, [], (reason) =>
+        reasons.push(reason)
+      )
+
+      expect(record).toBeNull()
+      expect(reasons[0]).toMatch(/safe integer/i)
+    })
+
     it('invokes the onSkip callback with a reason when POS is invalid', () => {
       const line = 'chr1\tNOTNUM\t.\tA\tG\t.\t.\t.'
       const reasons: string[] = []
@@ -156,32 +167,28 @@ describe('vcf-line-parser', () => {
   })
 
   describe('malformed QUAL', () => {
-    it('parses a malformed (non-numeric) QUAL as null, not NaN', () => {
+    it('rejects a malformed non-dot QUAL with a reason', () => {
       const line = 'chr22\t100\t.\tA\tG\tabc\tPASS\t.\tGT\t0/1\t0/0\t0/0'
-      const record = parseVcfLine(line, SAMPLE_NAMES)
+      const reasons: string[] = []
+      const record = parseVcfLine(line, SAMPLE_NAMES, (reason) => reasons.push(reason))
 
-      expect(record).not.toBeNull()
-      expect(record!.qual).toBeNull()
-      expect(Number.isNaN(record!.qual)).toBe(false)
-      // The rest of the record still parses correctly.
-      expect(record!.chrom).toBe('chr22')
-      expect(record!.pos).toBe(100)
+      expect(record).toBeNull()
+      expect(reasons).toHaveLength(1)
+      expect(reasons[0]).toMatch(/qual/i)
     })
 
     it('does not accept numeric prefixes with trailing garbage', () => {
       const line = 'chr22\t100\t.\tA\tG\t99abc\tPASS\t.\tGT\t0/1\t0/0\t0/0'
       const record = parseVcfLine(line, SAMPLE_NAMES)
 
-      expect(record).not.toBeNull()
-      expect(record!.qual).toBeNull()
+      expect(record).toBeNull()
     })
 
     it('does not accept non-finite QUAL values', () => {
       const line = 'chr22\t100\t.\tA\tG\t1e309\tPASS\t.\tGT\t0/1\t0/0\t0/0'
       const record = parseVcfLine(line, SAMPLE_NAMES)
 
-      expect(record).not.toBeNull()
-      expect(record!.qual).toBeNull()
+      expect(record).toBeNull()
     })
 
     it('still accepts finite exponent notation', () => {
@@ -190,6 +197,18 @@ describe('vcf-line-parser', () => {
 
       expect(record).not.toBeNull()
       expect(record!.qual).toBe(150)
+    })
+
+    it('still accepts dot QUAL as an unreasoned missing value', () => {
+      const onSkip = vi.fn()
+      const record = parseVcfLine(
+        'chr22\t100\t.\tA\tG\t.\tPASS\t.\tGT\t0/1\t0/0\t0/0',
+        SAMPLE_NAMES,
+        onSkip
+      )
+
+      expect(record?.qual).toBeNull()
+      expect(onSkip).not.toHaveBeenCalled()
     })
   })
 })
