@@ -68,14 +68,20 @@ describe('sanitizeLogMessage', () => {
       expect(result).not.toContain('TopSecretValue123')
     })
 
-    it('does NOT redact an unquoted password: value (bare colon, ambiguous with prose)', () => {
-      // A bare `password:` is structurally identical to prose like
-      // "password reset: check your email" — see the tradeoff comment on
-      // SECRET_VALUE_PATTERN. Only `=` is treated as a strong enough
-      // key-value signal for unquoted values; `:` requires a quote.
-      const result = sanitizeLogMessage('password: hunter2')
-      expect(result).not.toContain('[REDACTED:KEY]')
-      expect(result).toBe('password: hunter2')
+    it.each([
+      ['password: hunter2', 'hunter2'],
+      ['passphrase: CorrectHorseBatteryStaple', 'CorrectHorseBatteryStaple'],
+      ['secret: abc123XYZ', 'abc123XYZ'],
+      ['token: ghp_abcdef1234567890', 'ghp_abcdef1234567890']
+    ])('redacts an unquoted credential assignment at line start: %s', (message, secretValue) => {
+      const result = sanitizeLogMessage(message)
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).not.toContain(secretValue)
+    })
+
+    it('redacts an unquoted colon credential after a structural delimiter', () => {
+      const result = sanitizeLogMessage('{ password: hunter2, retry: true }')
+      expect(result).toBe('{ password=[REDACTED:KEY], retry: true }')
     })
 
     it('redacts an unquoted password= value', () => {

@@ -2,11 +2,12 @@
  * Tests for RecentDatabasesService - persistence, ordering, and error handling
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { unlinkSync, existsSync, writeFileSync, readFileSync, chmodSync } from 'fs'
+import { writeFileSync, readFileSync, mkdirSync, rmSync, unlinkSync } from 'fs'
 import { RecentDatabasesService } from '../../../src/main/services/RecentDatabasesService'
+import { mainLogger } from '../../../src/main/services/MainLogger'
 
 function tempSettingsPath(): string {
   return join(
@@ -25,15 +26,8 @@ describe('RecentDatabasesService', () => {
   })
 
   afterEach(() => {
-    if (existsSync(settingsPath)) {
-      try {
-        // Restore write permission in case it was removed by a test
-        chmodSync(settingsPath, 0o644)
-        unlinkSync(settingsPath)
-      } catch {
-        // Best effort
-      }
-    }
+    vi.restoreAllMocks()
+    rmSync(settingsPath, { recursive: true, force: true })
   })
 
   describe('addRecent()', () => {
@@ -144,14 +138,32 @@ describe('RecentDatabasesService', () => {
     })
 
     it('handles save failure gracefully (does not throw)', () => {
-      // Write to a read-only path — save should fail silently
-      writeFileSync(settingsPath, '{}')
-      chmodSync(settingsPath, 0o444)
+      // A directory cannot be replaced with the settings JSON file on any
+      // supported platform, unlike chmod-based tests when running as root.
+      mkdirSync(settingsPath)
 
       // Should not throw even though save will fail
       expect(() => {
         service.addRecent('/path/to/test.db')
       }).not.toThrow()
+    })
+
+    it('redacts a sensitive logger error in the non-recursive console fallback', () => {
+      mkdirSync(settingsPath)
+      vi.spyOn(mainLogger, 'warn').mockImplementation((message) => {
+        if (message.startsWith('Failed to save recent databases:')) {
+          throw new Error('password: hunter2 for PATIENT-12345')
+        }
+      })
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+      expect(() => service.addRecent('/path/to/test.db')).not.toThrow()
+
+      const fallbackOutput = consoleWarn.mock.calls.flat().map(String).join(' ')
+      expect(fallbackOutput).toContain('[REDACTED:KEY]')
+      expect(fallbackOutput).toContain('[REDACTED:ID]')
+      expect(fallbackOutput).not.toContain('hunter2')
+      expect(fallbackOutput).not.toContain('PATIENT-12345')
     })
   })
 })

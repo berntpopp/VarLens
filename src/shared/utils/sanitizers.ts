@@ -48,20 +48,24 @@ const SQLCIPHER_KEY_PATTERN =
  * quote is a strong, low-false-positive signal of a literal value, so it is
  * accepted with either `=` or `:` as the operator.
  *
- * Unquoted values are redacted ONLY after `=` (`password=hunter2`), never
- * after a bare `:`. A bare `keyword:` is structurally identical to ordinary
- * prose ("token: expired, renewing session", "a secret: nobody knows the
- * recipe") — there is no reliable way to distinguish a leaked secret from a
- * sentence using the same word as a common noun (entropy/length heuristics
- * are unreliable too). This redaction is defense-in-depth, not the primary
- * safeguard (call-site discipline is), so the tradeoff deliberately favors
- * under-redacting a rare unquoted-colon secret over corrupting common log
- * prose. The value is captured up to the closing quote (if quoted) or up to
- * the next whitespace/`;`/`,` delimiter (if unquoted via `=`), so only the
+ * Unquoted `=` values are handled here. Assignment-shaped unquoted `:`
+ * values are handled separately below because their structural boundary is
+ * what distinguishes `password: hunter2` from prose such as "refresh token:
+ * expired". The value is captured up to the closing quote (if quoted) or up
+ * to the next whitespace/`;`/`,` delimiter (if unquoted via `=`), so only the
  * secret value is redacted — surrounding text is preserved.
  */
 const SECRET_VALUE_PATTERN =
   /\b(passphrase|password|secret|token)\b\s*(?:[=:]\s*(?:'((?:''|\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)")|=\s*(\S+?)(?=[;,\s]|$))/gi
+
+/**
+ * Unquoted colon assignments at a strong structural boundary. A credential
+ * key must start a line (optionally indented) or follow an object/list
+ * delimiter, which catches config-shaped values while preserving ordinary
+ * prose where the keyword follows another word.
+ */
+const STRUCTURAL_COLON_SECRET_PATTERN =
+  /(^[\t ]*|[\x5b{,;][\t ]*)(passphrase|password|secret|token)\b[\t ]*:[\t ]*(\S+?)(?=[;,\s}\]]|$)/gim
 
 /**
  * Regex pattern for JSON-style quoted-key secrets: `"password":"hunter2"`,
@@ -107,6 +111,15 @@ export function sanitizeLogMessage(message: string): string {
   // Quick pre-check for generic secret keyword + value (quoted or not).
   if (/\b(passphrase|password|secret|token)\b\s*[=:]/i.test(sanitized) === true) {
     sanitized = sanitized.replace(SECRET_VALUE_PATTERN, '$1=[REDACTED:KEY]')
+  }
+
+  // A bare colon is only treated as a credential assignment at the strong
+  // structural boundaries encoded above; prose such as "refresh token:
+  // expired" remains unchanged.
+  if (
+    /(?:^|[\x5b{,;])[\t ]*(?:passphrase|password|secret|token)\b[\t ]*:/im.test(sanitized) === true
+  ) {
+    sanitized = sanitized.replace(STRUCTURAL_COLON_SECRET_PATTERN, '$1$2=[REDACTED:KEY]')
   }
 
   // Quick pre-check for JSON-style quoted-key secrets (`"password":"..."`).
