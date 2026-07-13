@@ -479,7 +479,9 @@ export const DatabaseOpenSchema = z.object({
  */
 export const DatabaseCreateSchema = z.object({
   path: FilePathSchema,
-  password: z.string().max(256).optional()
+  password: z.string().max(256).optional(),
+  /** First-run passphrase-setup completion; see DatabaseDomainContract.create. */
+  setupPassphrase: z.string().max(256).optional()
 })
 
 /**
@@ -487,6 +489,31 @@ export const DatabaseCreateSchema = z.object({
  */
 export const DatabaseRekeySchema = z.object({
   newPassword: z.string().max(256)
+})
+
+/**
+ * Schema for the plaintext-to-encrypted migration action. `consent` must be
+ * literally `true` -- migration is never performed silently or by default.
+ */
+export const DatabaseMigrateToEncryptedSchema = z.object({
+  consent: z.literal(true),
+  recoveryPassphrase: z.string().max(256).optional()
+})
+
+/**
+ * Schema for deleting a plaintext backup produced by a prior migration.
+ */
+export const DatabaseDeletePlaintextBackupSchema = z.object({
+  backupPath: FilePathSchema
+})
+
+/**
+ * Schema for setting a recovery passphrase on the current database's managed
+ * key. Non-empty -- an empty recovery passphrase would be a silent no-op
+ * footgun (unlike `DatabaseRekeySchema`, which allows an empty string today).
+ */
+export const DatabaseSetRecoveryPassphraseSchema = z.object({
+  passphrase: z.string().min(1).max(256)
 })
 
 // ============================================================

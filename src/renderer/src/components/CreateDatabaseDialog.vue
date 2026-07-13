@@ -1,20 +1,36 @@
 <template>
   <v-dialog v-model="dialogOpen" max-width="500">
     <v-card>
-      <v-card-title>Create New Database</v-card-title>
+      <v-card-title>{{
+        needsPassphraseSetup ? 'Set a Database Password' : 'Create New Database'
+      }}</v-card-title>
       <v-card-text>
-        <v-text-field
-          v-model="databaseName"
-          label="Database Name"
-          hint="File will be saved as name.sqlite"
-          :error-messages="nameError"
-          @keyup.enter="selectLocation"
-        />
+        <v-alert v-if="needsPassphraseSetup" type="info" variant="tonal" class="mb-4">
+          Secure key storage isn't available on this system, so VarLens can't encrypt this database
+          automatically. Choose a password to protect it instead.
+        </v-alert>
 
-        <v-checkbox v-model="encrypt" label="Encrypt with password" color="primary" class="mt-2" />
+        <template v-if="!needsPassphraseSetup">
+          <v-text-field
+            v-model="databaseName"
+            label="Database Name"
+            hint="File will be saved as name.sqlite"
+            :error-messages="nameError"
+            @keyup.enter="selectLocation"
+          />
+
+          <v-checkbox
+            v-model="encrypt"
+            label="Encrypt with a custom password"
+            hint="Leave unchecked to encrypt automatically with a managed key"
+            persistent-hint
+            color="primary"
+            class="mt-2"
+          />
+        </template>
 
         <v-expand-transition>
-          <div v-if="encrypt">
+          <div v-if="encrypt || needsPassphraseSetup">
             <v-text-field
               v-model="password"
               label="Password"
@@ -38,7 +54,9 @@
       <v-card-actions>
         <v-spacer />
         <v-btn @click="cancel">Cancel</v-btn>
-        <v-btn color="primary" :loading="creating" @click="selectLocation">Create</v-btn>
+        <v-btn color="primary" :loading="creating" @click="submit">
+          {{ needsPassphraseSetup ? 'Set Password' : 'Create' }}
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -63,6 +81,12 @@ const creating = ref(false)
 const nameError = ref('')
 const passwordError = ref('')
 
+// First-run passphrase-setup fallback (safeStorage unavailable on this
+// system): the location was already picked on the first attempt, so this
+// mode re-uses the SAME password fields and re-submits against `pendingPath`.
+const needsPassphraseSetup = ref(false)
+const pendingPath = ref<string | null>(null)
+
 // Emits
 const emit = defineEmits<{
   'database-created': []
@@ -79,11 +103,28 @@ function show(): void {
   creating.value = false
   nameError.value = ''
   passwordError.value = ''
+  needsPassphraseSetup.value = false
+  pendingPath.value = null
   dialogOpen.value = true
 }
 
 function hide(): void {
   dialogOpen.value = false
+}
+
+function validatePasswordFields(): boolean {
+  passwordError.value = ''
+
+  if (password.value.length === 0) {
+    passwordError.value = 'Password is required'
+    return false
+  }
+  if (password.value !== confirmPassword.value) {
+    passwordError.value = 'Passwords do not match'
+    return false
+  }
+
+  return true
 }
 
 function validate(): boolean {
@@ -95,18 +136,19 @@ function validate(): boolean {
     return false
   }
 
-  if (encrypt.value) {
-    if (password.value.length === 0) {
-      passwordError.value = 'Password is required'
-      return false
-    }
-    if (password.value !== confirmPassword.value) {
-      passwordError.value = 'Passwords do not match'
-      return false
-    }
+  if (encrypt.value && !validatePasswordFields()) {
+    return false
   }
 
   return true
+}
+
+async function submit(): Promise<void> {
+  if (needsPassphraseSetup.value) {
+    await submitPassphraseSetup()
+  } else {
+    await selectLocation()
+  }
 }
 
 async function selectLocation(): Promise<void> {
@@ -132,6 +174,30 @@ async function selectLocation(): Promise<void> {
       path,
       encrypt.value ? password.value : undefined
     )
+
+    if (result.success) {
+      hide()
+      emit('database-created')
+    } else if (result.needsPassphraseSetup === true) {
+      pendingPath.value = path
+      needsPassphraseSetup.value = true
+      password.value = ''
+      confirmPassword.value = ''
+    } else {
+      passwordError.value = result.error ?? 'Failed to create database'
+    }
+  } finally {
+    creating.value = false
+  }
+}
+
+async function submitPassphraseSetup(): Promise<void> {
+  if (pendingPath.value === null || !validatePasswordFields()) return
+
+  creating.value = true
+
+  try {
+    const result = await databaseStore.createDatabase(pendingPath.value, undefined, password.value)
 
     if (result.success) {
       hide()

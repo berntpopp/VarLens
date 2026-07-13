@@ -184,14 +184,42 @@
         </template>
       </v-list-item>
 
-      <!-- Change password (only for encrypted databases) -->
+      <!-- Change password / set recovery passphrase (only for encrypted databases) -->
       <template v-if="databaseStore.isEncrypted">
         <v-divider />
-        <v-list-item @click="handleChangePassword">
+        <v-list-item v-if="databaseStore.keyManaged" @click="handleSetRecoveryPassphrase">
+          <template #prepend>
+            <v-icon :icon="mdiKeyPlus" />
+          </template>
+          <v-list-item-title>Set Recovery Passphrase...</v-list-item-title>
+        </v-list-item>
+        <!--
+          "Change Password..." performs a raw `PRAGMA rekey`, which changes
+          the LIVE SQLCipher key directly. For a key-store-managed database
+          (created encrypted-by-default, or migrated to encrypted) that would
+          desynchronize the live key from the key-store's wrapped DEK and can
+          make the database unopenable -- see `rekeyDatabase` in
+          `database-lifecycle-logic.ts`. Managed databases use
+          "Set Recovery Passphrase..." above instead, which safely re-wraps
+          the SAME key. Only offer "Change Password..." for legacy
+          explicit-password databases that have no managed key.
+        -->
+        <v-list-item v-if="!databaseStore.keyManaged" @click="handleChangePassword">
           <template #prepend>
             <v-icon :icon="mdiLockReset" />
           </template>
           <v-list-item-title>Change Password...</v-list-item-title>
+        </v-list-item>
+      </template>
+
+      <!-- Encrypt database (only for a currently open, plaintext SQLite database) -->
+      <template v-if="databaseStore.unencryptedMigratable">
+        <v-divider />
+        <v-list-item @click="handleEncryptDatabase">
+          <template #prepend>
+            <v-icon :icon="mdiLock" />
+          </template>
+          <v-list-item-title>Encrypt Database...</v-list-item-title>
         </v-list-item>
       </template>
     </v-list>
@@ -201,6 +229,16 @@
   <PasswordDialog ref="passwordDialogRef" />
   <CreateDatabaseDialog ref="createDialogRef" @database-created="handleDatabaseCreated" />
   <ChangePasswordDialog ref="changePasswordDialogRef" @password-changed="handlePasswordChanged" />
+  <SetRecoveryPassphraseDialog
+    ref="setRecoveryPassphraseDialogRef"
+    @recovery-passphrase-set="handleRecoveryPassphraseSet"
+  />
+  <EncryptDatabaseDialog
+    ref="encryptDialogRef"
+    @database-migrated="handleDatabaseMigrated"
+    @request-recovery-passphrase="handleRequestRecoveryPassphrase"
+    @error="handleEncryptDatabaseError"
+  />
   <PostgresConnectionDialog
     ref="postgresDialogRef"
     @saved="handlePostgresProfileSaved"
@@ -233,6 +271,8 @@ import { isWebRuntime } from '../utils/runtime-mode'
 import PasswordDialog from './PasswordDialog.vue'
 import CreateDatabaseDialog from './CreateDatabaseDialog.vue'
 import ChangePasswordDialog from './ChangePasswordDialog.vue'
+import SetRecoveryPassphraseDialog from './SetRecoveryPassphraseDialog.vue'
+import EncryptDatabaseDialog from './EncryptDatabaseDialog.vue'
 import PostgresConnectionDialog from './PostgresConnectionDialog.vue'
 import type { RecentDatabase } from '../../../shared/types/api'
 import type { PostgresConnectionProfilePublic } from '../../../shared/types/postgres-profile'
@@ -246,6 +286,7 @@ import {
   mdiDeleteOutline,
   mdiFolderEye,
   mdiFolderOpen,
+  mdiKeyPlus,
   mdiLock,
   mdiLockReset,
   mdiPencil,
@@ -260,6 +301,10 @@ const isWebMode = isWebRuntime()
 const passwordDialogRef = ref<InstanceType<typeof PasswordDialog> | null>(null)
 const createDialogRef = ref<InstanceType<typeof CreateDatabaseDialog> | null>(null)
 const changePasswordDialogRef = ref<InstanceType<typeof ChangePasswordDialog> | null>(null)
+const setRecoveryPassphraseDialogRef = ref<InstanceType<typeof SetRecoveryPassphraseDialog> | null>(
+  null
+)
+const encryptDialogRef = ref<InstanceType<typeof EncryptDatabaseDialog> | null>(null)
 const postgresDialogRef = ref<InstanceType<typeof PostgresConnectionDialog> | null>(null)
 
 // Track pending password authentication
@@ -327,6 +372,43 @@ function handleEditPostgresProfile(profile: PostgresConnectionProfilePublic): vo
 
 function handleChangePassword(): void {
   changePasswordDialogRef.value?.show()
+}
+
+function handleSetRecoveryPassphrase(): void {
+  setRecoveryPassphraseDialogRef.value?.show()
+}
+
+function handleEncryptDatabase(): void {
+  encryptDialogRef.value?.show()
+}
+
+function handleDatabaseMigrated(): void {
+  emit('database-switched')
+}
+
+/**
+ * The "Set Recovery Passphrase Now" affordance inside `EncryptDatabaseDialog`'s
+ * success phase opens this dialog on top of it -- both dialogs are owned
+ * here so `EncryptDatabaseDialog` stays open underneath, preserving its
+ * still-pending plaintext-backup decision.
+ */
+function handleRequestRecoveryPassphrase(): void {
+  setRecoveryPassphraseDialogRef.value?.show()
+}
+
+/**
+ * Setting a recovery passphrase only re-wraps the existing key -- it never
+ * changes the live database connection or its data, so (unlike
+ * `handleDatabaseMigrated`/`handlePasswordChanged`) there is nothing here
+ * that needs a `database-switched` refresh. The dialog itself already
+ * confirms success by closing.
+ */
+function handleRecoveryPassphraseSet(): void {
+  // Intentional no-op -- see doc comment above.
+}
+
+function handleEncryptDatabaseError(message: string): void {
+  emit('error', message)
 }
 
 async function handlePasswordSubmit(

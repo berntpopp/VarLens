@@ -167,4 +167,36 @@ describe('DatabasePicker', () => {
     expect(menuText).not.toContain('Add PostgreSQL...')
     expect(mockApi.database.postgresProfilesList).not.toHaveBeenCalled()
   })
+
+  describe('BLOCKER 1: Change Password vs Set Recovery Passphrase gating', () => {
+    it('hides "Change Password..." for a key-store-managed encrypted database, showing only "Set Recovery Passphrase..."', async () => {
+      const store = useDatabaseStore()
+      store.currentPath = '/tmp/managed.db'
+      store.currentName = 'managed.db'
+      store.isEncrypted = true
+      store.keyManaged = true
+
+      mountPicker()
+      await openPickerMenu()
+
+      const menuText = document.body.textContent ?? ''
+      expect(menuText).toContain('Set Recovery Passphrase...')
+      expect(menuText).not.toContain('Change Password...')
+    })
+
+    it('shows "Change Password..." for a legacy explicit-password encrypted database with no managed key', async () => {
+      const store = useDatabaseStore()
+      store.currentPath = '/tmp/legacy.db'
+      store.currentName = 'legacy.db'
+      store.isEncrypted = true
+      store.keyManaged = false
+
+      mountPicker()
+      await openPickerMenu()
+
+      const menuText = document.body.textContent ?? ''
+      expect(menuText).not.toContain('Set Recovery Passphrase...')
+      expect(menuText).toContain('Change Password...')
+    })
+  })
 })

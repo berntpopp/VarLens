@@ -67,7 +67,8 @@ describe('DatabaseManager', () => {
         expect(manager.getCurrentInfo()).toEqual({
           path: dbPath,
           name: expect.stringContaining('.db'),
-          encrypted: false
+          encrypted: false,
+          unencryptedMigratable: true
         })
       } finally {
         await manager.close()
@@ -309,15 +310,30 @@ describe('DatabaseManager', () => {
       }).toThrow(DatabaseError)
     })
 
-    it('throws DatabaseError for corrupted file', () => {
+    it('treats an unreadable/corrupted file as needing a password -- SQLite cannot distinguish it from a wrong-key encrypted file', () => {
       const badPath = tempDbPath('-bad')
       writeFileSync(badPath, 'not a database')
       try {
-        expect(() => {
-          manager.openDetectEncryption(badPath)
-        }).toThrow(DatabaseError)
+        const result = manager.openDetectEncryption(badPath)
+        expect(result.needsPassword).toBe(true)
       } finally {
         cleanupDb(badPath)
+      }
+    })
+
+    it('detects a genuinely SQLCipher-encrypted database (opened with no key) as needing a password', async () => {
+      const dbPath = tempDbPath('-enc')
+      try {
+        await manager.createDatabase(
+          dbPath,
+          '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd'
+        )
+        await manager.close()
+
+        const result = manager.openDetectEncryption(dbPath)
+        expect(result.needsPassword).toBe(true)
+      } finally {
+        cleanupDb(dbPath)
       }
     })
   })
@@ -389,7 +405,8 @@ describe('DatabaseManager', () => {
         expect(info).toEqual({
           path: dbPath,
           name: expect.any(String),
-          encrypted: false
+          encrypted: false,
+          unencryptedMigratable: true
         })
       } finally {
         await manager.close()

@@ -11,7 +11,6 @@ import { extname, resolve } from 'path'
 import { Pool } from 'pg'
 import { z } from 'zod'
 import { mainLogger } from '../../services/MainLogger'
-import { WrongPasswordError } from '../../database/errors'
 import { convertBigInts } from '../../utils/convertBigInts'
 import {
   buildPostgresPoolConfig,
@@ -28,9 +27,10 @@ import { PostgresConnectionProfileInputSchema } from '../../storage/postgres/pos
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DatabaseManager } from '../../services/DatabaseManager'
 import type { DbPool } from '../../database/DbPool'
+import type { DbKeyStore } from '../../database/db-key-store'
+import { removeRecoverySidecar } from '../../database/recovery-sidecar'
 import type { StorageSession } from '../../storage/session'
 import type { DatabaseOpenResult } from '../../../shared/ipc/domains/database'
-import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import type {
   PostgresConnectionProfileInput,
   PostgresConnectionProfilePublic,
@@ -66,11 +66,6 @@ export interface PostgresProfileOpenDependencies {
   profileStore: Pick<PostgresProfileStoreLike, 'listProfiles' | 'getProfileSecrets'>
   getDbManager: () => Pick<DatabaseManager, 'openPostgresSession' | 'getCurrentInfo'>
   createSession?: (config: PostgresStorageConfig) => Promise<StorageSession> | StorageSession
-}
-
-/** Callbacks for pool init and cohort rebuild during database open/create. */
-export interface DatabaseLifecycleCallbacks {
-  triggerStartupRebuild: (db: DatabaseService) => void
 }
 
 export function createDefaultPostgresPool(config: PostgresStorageConfig): PostgresPoolLike {
@@ -165,131 +160,23 @@ function errorWithCause(message: string, cause: unknown): Error {
 }
 
 // ============================================================
-// Database Lifecycle
+// Database Lifecycle + Info
 // ============================================================
+// Split into database-lifecycle-logic.ts to keep this file under the repo's
+// LLM-sustainable size guideline; re-exported here so this stays the single
+// stable import surface for handlers and tests (same pattern as the
+// `createPostgresStorageSession` re-export above).
 
-/**
- * Open a database: detect encryption, validate password, switch connection.
- */
-export async function openDatabase(
-  params: { path: string; password?: string },
-  getDb: () => DatabaseService,
-  getDbManager: () => DatabaseManager,
-  callbacks: DatabaseLifecycleCallbacks
-): Promise<{
-  success: boolean
-  needsPassword?: boolean
-  error?: string
-  info?: { path: string; name: string; encrypted: boolean }
-}> {
-  const manager = getDbManager()
-  const { path: vPath, password: vPassword } = params
-
-  // First detect if database is encrypted
-  const { needsPassword } = manager.openDetectEncryption(vPath)
-
-  // If encrypted and no password provided, return early
-  if (needsPassword && (vPassword === undefined || vPassword === '')) {
-    return {
-      success: false,
-      needsPassword: true
-    }
-  }
-
-  // Switch to new database with rollback on failure
-  try {
-    await manager.switchDatabase(vPath, vPassword)
-    mainLogger.info(`Switched to database: ${vPath}`, 'database')
-
-    // Trigger async cohort summary rebuild if needed (non-blocking)
-    try {
-      callbacks.triggerStartupRebuild(getDb())
-    } catch (e) {
-      mainLogger.warn(
-        'triggerStartupRebuildIfNeeded failed (best effort -- database open continues): ' +
-          (e instanceof Error ? e.message : String(e)),
-        'database'
-      )
-    }
-
-    const info = manager.getCurrentInfo()
-    return { success: true, info: info! }
-  } catch (error) {
-    if (error instanceof WrongPasswordError) {
-      return { success: false, error: 'WRONG_PASSWORD' }
-    }
-    throw error
-  }
-}
-
-/**
- * Create a new database at the specified path.
- */
-export async function createDatabase(
-  params: { path: string; password?: string },
-  getDbManager: () => DatabaseManager
-): Promise<{ success: boolean; info: { path: string; name: string; encrypted: boolean } }> {
-  const manager = getDbManager()
-  await manager.createDatabase(params.path, params.password)
-
-  const info = manager.getCurrentInfo()
-  return { success: true, info: info! }
-}
-
-/**
- * Change the encryption key for the current database.
- */
-export function rekeyDatabase(
-  newPassword: string,
-  getDbManager: () => DatabaseManager
-): { success: boolean } {
-  const manager = getDbManager()
-  manager.rekey(newPassword)
-  return { success: true }
-}
-
-// ============================================================
-// Database Info
-// ============================================================
-
-export function getDatabaseInfo(
-  getDbManager: () => DatabaseManager
-): { path: string; name: string; encrypted: boolean } | null {
-  const manager = getDbManager()
-  return manager.getCurrentInfo()
-}
-
-export function getDatabaseCapabilities(getDbManager: () => DatabaseManager): StorageCapabilities {
-  return getDbManager().getCurrentSession().capabilities
-}
-
-export async function getPostgresDiagnostics(
-  getDbManager: () => DatabaseManager
-): Promise<PostgresHealthDiagnosticResult> {
-  const session = getDbManager().getCurrentSession()
-  if (session.capabilities.backend !== 'postgres' || session.workspace.kind !== 'postgres') {
-    return {
-      ok: false,
-      schema: '',
-      message: 'PostgreSQL diagnostics are only available for PostgreSQL sessions'
-    }
-  }
-
-  const collectDiagnostics = (
-    session as {
-      collectDiagnostics?: () => Promise<PostgresHealthDiagnosticResult>
-    }
-  ).collectDiagnostics
-  if (collectDiagnostics !== undefined) {
-    return await collectDiagnostics.call(session)
-  }
-
-  return {
-    ok: false,
-    schema: session.workspace.schema,
-    message: 'Current PostgreSQL session does not expose diagnostics'
-  }
-}
+export {
+  openDatabase,
+  createDatabase,
+  rekeyDatabase,
+  setRecoveryPassphrase,
+  getDatabaseInfo,
+  getDatabaseCapabilities,
+  getPostgresDiagnostics
+} from './database-lifecycle-logic'
+export type { DatabaseLifecycleCallbacks, DatabaseCreateParams } from './database-lifecycle-logic'
 
 // ============================================================
 // PostgreSQL Profile Management
@@ -500,7 +387,8 @@ export function removeRecentDatabase(
  */
 export async function deleteDbFile(
   path: string,
-  getDbManager: () => DatabaseManager
+  getDbManager: () => DatabaseManager,
+  keyStore: Pick<DbKeyStore, 'getKeyIdForPath' | 'removeKey'>
 ): Promise<{ success: boolean }> {
   // Canonicalize to resolve any ../ segments (defense-in-depth)
   const canonicalPath = resolve(path)
@@ -522,6 +410,7 @@ export async function deleteDbFile(
   }
 
   const currentPath = manager.getCurrentPath()
+  const keyId = keyStore.getKeyIdForPath(canonicalPath)
 
   // Refuse to delete the currently active database
   if (currentPath === canonicalPath) {
@@ -531,7 +420,7 @@ export async function deleteDbFile(
   }
 
   if (!existsSync(canonicalPath)) {
-    // File already gone -- just remove from recent list
+    removeManagedDatabaseArtifacts(canonicalPath, keyId, keyStore)
     manager.removeRecentDatabase(canonicalPath)
     return { success: true }
   }
@@ -562,7 +451,18 @@ export async function deleteDbFile(
     }
   }
 
+  removeManagedDatabaseArtifacts(canonicalPath, keyId, keyStore)
+
   manager.removeRecentDatabase(canonicalPath)
   mainLogger.info(`Deleted database file: ${canonicalPath}`, 'database')
   return { success: true }
+}
+
+function removeManagedDatabaseArtifacts(
+  dbPath: string,
+  keyId: string | null,
+  keyStore: Pick<DbKeyStore, 'removeKey'>
+): void {
+  if (keyId !== null) keyStore.removeKey(keyId)
+  removeRecoverySidecar(dbPath)
 }
