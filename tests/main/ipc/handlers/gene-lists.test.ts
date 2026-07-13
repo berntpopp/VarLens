@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { resolve } from 'node:path'
 import { isIpcError } from '../../../../src/shared/types/errors'
 
-vi.mock('../../../../src/main/import/vcf/bed-reader', () => ({
-  readBedEntries: vi.fn()
-}))
-
-import { readBedEntries } from '../../../../src/main/import/vcf/bed-reader'
 import { registerGeneListHandlers } from '../../../../src/main/ipc/handlers/gene-lists'
 import {
   __resetAllowlistForTests,
@@ -25,10 +20,13 @@ function makeDeps(ipcMain: { handle: ReturnType<typeof vi.fn> }): {
   getDbPool: ReturnType<typeof vi.fn>
   getDbManager: ReturnType<typeof vi.fn>
 } {
-  const importBedEntries = vi.fn().mockReturnValue({ id: 1, importedCount: 0 })
-  const getDb = vi.fn().mockReturnValue({ geneLists: { importBedEntries } })
+  const execute = vi.fn().mockResolvedValue({ id: 1, importedCount: 0 })
+  const getDb = vi.fn().mockReturnValue({ geneLists: {} })
   const getDbManager = vi.fn().mockReturnValue({
-    getCurrentSession: vi.fn().mockReturnValue({ capabilities: { backend: 'sqlite' } })
+    getCurrentSession: vi.fn().mockReturnValue({
+      capabilities: { backend: 'sqlite' },
+      getWriteExecutor: vi.fn().mockReturnValue({ execute })
+    })
   })
   const getDbPool = vi.fn().mockReturnValue(null)
   return { ipcMain, getDb, getDbManager, getDbPool }
@@ -69,8 +67,9 @@ describe('region-files:importBed IPC handler', () => {
     const result = await invokeHandler(ipcMain, 'region-files:importBed', 1, '/etc/passwd')
 
     expect(isIpcError(result)).toBe(true)
-    expect(readBedEntries).not.toHaveBeenCalled()
-    expect(deps.getDb().geneLists.importBedEntries).not.toHaveBeenCalled()
+    expect(
+      deps.getDbManager().getCurrentSession().getWriteExecutor().execute
+    ).not.toHaveBeenCalled()
   })
 
   it('rejects a path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
@@ -92,29 +91,24 @@ describe('region-files:importBed IPC handler', () => {
     )
 
     expect(isIpcError(result)).toBe(true)
-    expect(readBedEntries).not.toHaveBeenCalled()
-    expect(deps.getDb().geneLists.importBedEntries).not.toHaveBeenCalled()
+    expect(
+      deps.getDbManager().getCurrentSession().getWriteExecutor().execute
+    ).not.toHaveBeenCalled()
   })
 
-  it('accepts a dialog-enrolled BED path and imports its entries', async () => {
+  it('accepts a dialog-enrolled BED path and delegates bounded streaming to storage', async () => {
     const ipcMain = makeIpcMain()
     const deps = makeDeps(ipcMain)
     registerGeneListHandlers(deps as never)
 
     const bedPath = resolve('external', 'regions.bed')
     addAllowedImportPath(bedPath)
-    vi.mocked(readBedEntries).mockReturnValue(
-      (async function* () {
-        yield { chr: 'chr1', start: 100, end: 200, label: 'region1' }
-      })()
-    )
-
     const result = await invokeHandler(ipcMain, 'region-files:importBed', 1, bedPath)
 
     expect(isIpcError(result)).toBe(false)
-    expect(readBedEntries).toHaveBeenCalledWith(bedPath, expect.any(Number))
-    expect(deps.getDb().geneLists.importBedEntries).toHaveBeenCalledWith(1, [
-      { chr: 'chr1', start: 100, end: 200, label: 'region1' }
-    ])
+    expect(deps.getDbManager().getCurrentSession().getWriteExecutor().execute).toHaveBeenCalledWith({
+      type: 'region-files:importBed',
+      params: [1, bedPath, { rejectMalformedRows: false }]
+    })
   })
 })
