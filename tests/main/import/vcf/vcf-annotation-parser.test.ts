@@ -163,6 +163,23 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcripts).toHaveLength(1)
     })
 
+    it('fails closed when a CSQ allele heuristic matches multiple original ALT alleles', () => {
+      const info = new Map([
+        [
+          'CSQ',
+          '-|frameshift_variant|HIGH|GENE1|E1|Transcript|T1|protein_coding||||||||||||||||,-|inframe_deletion|MODERATE|GENE2|E2|Transcript|T2|protein_coding||||||||||||||||'
+        ]
+      ])
+
+      const first = parseAnnotation(info, header, 'C', 'CAT', 1, ['C', 'CA'])
+      const second = parseAnnotation(info, header, 'CA', 'CAT', 2, ['C', 'CA'])
+
+      expect(first.transcripts).toHaveLength(0)
+      expect(second.transcripts).toHaveLength(0)
+      expect(first.geneSymbol).toBeNull()
+      expect(second.geneSymbol).toBeNull()
+    })
+
     it("does not cross-contaminate multi-deletion splits when a block's ALLELE_NUM is declared but empty", () => {
       // REF=CAT, ALT=C,CA — same two-deletion site as above, but block 2 (GENE2)
       // has NO ALLELE_NUM value even though the CSQ header declares the field.

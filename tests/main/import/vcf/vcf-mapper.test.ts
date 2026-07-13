@@ -228,6 +228,35 @@ describe('VcfMapper', () => {
     expect(results[0].ab).toBeCloseTo(7 / 17, 4)
   })
 
+  it('does not derive allele depths from an explicitly non-allelic AD vector', () => {
+    const fixedAdHeader: VcfHeader = {
+      ...header,
+      formatDefs: new Map(header.formatDefs).set('AD', {
+        id: 'AD',
+        number: '2',
+        type: 'Integer',
+        description: 'Caller-specific fixed pair, not REF plus ALTs'
+      })
+    }
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 20005500,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['HG005', ['0/2', '10,7']]])
+    }
+
+    const results = mapVcfRecord(record, fixedAdHeader, 'HG005', DEFAULT_INFO_FIELD_MAPPINGS)
+
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ alt: 'T', ad_ref: null, ad_alt: null, ab: null })
+  })
+
   it('maps ALLELE_NUM annotations and AD through the parsed-header multi-allelic path', () => {
     const parsedHeader = parseVcfHeaderFromLines([
       '##fileformat=VCFv4.2',

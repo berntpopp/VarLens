@@ -251,6 +251,28 @@ describe('vcf-allele-splitter', () => {
     expect(results[1].samples.get('S1')![3]).toBe('10,7')
   })
 
+  it('normalizes single-allelic Number=A AD into a missing-ref ALT pair', () => {
+    const altAdDefs = makeFormatDefs([
+      { id: 'GT', number: '1', type: 'String' },
+      { id: 'AD', number: 'A', type: 'Integer' }
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 304,
+      id: null,
+      ref: 'A',
+      alt: ['G'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['S1', ['0/1', '7']]])
+    }
+
+    const results = splitMultiAllelic(record, infoDefs, altAdDefs)
+    expect(results[0].samples.get('S1')![1]).toBe('.,7')
+  })
+
   it('marks a missing target AD depth as missing instead of retaining another allele depth', () => {
     const record: VcfRawRecord = {
       chrom: 'chr22',

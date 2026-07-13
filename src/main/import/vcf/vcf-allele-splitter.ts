@@ -13,7 +13,8 @@ function normalizeVectorToken(value: string | undefined): string {
 
 /**
  * Split a multi-allelic VcfRawRecord into one record per ALT allele.
- * Single-allelic records pass through unchanged (returned as a one-element array).
+ * Single-allelic records are also normalized so Number=A/R FORMAT vectors
+ * have the same biallelic representation as split multi-allelic records.
  *
  * @param record - Raw VCF record (may have multiple ALT alleles)
  * @param infoDefs - INFO field definitions from VCF header (for Number semantics)
@@ -25,11 +26,6 @@ export function splitMultiAllelic(
   infoDefs: Map<string, InfoFieldDef>,
   formatDefs: Map<string, FormatFieldDef>
 ): VcfRawRecord[] {
-  // Single-allelic: pass through
-  if (record.alt.length <= 1) {
-    return [record]
-  }
-
   const results: VcfRawRecord[] = []
 
   for (let altIdx = 0; altIdx < record.alt.length; altIdx++) {
