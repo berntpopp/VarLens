@@ -191,6 +191,7 @@ import type {
 } from '../../../../shared/types/api'
 import type { VcfPreviewResult } from '../../../../shared/types/vcf'
 import { useApiService } from '../../composables/useApiService'
+import { useVcfImportExecution } from '../../composables/useVcfImportExecution'
 import { useZipImportCleanup } from '../../composables/useZipImportCleanup'
 import { useImportStatusStore } from '../../stores/importStatusStore'
 import { logService } from '../../services/LogService'
@@ -573,123 +574,31 @@ function completeCancelledRun(generation: number): void {
   importStore.importComplete({ ...cancelledResult, details: [] })
 }
 
-async function startVcfImport(): Promise<void> {
-  if (importStore.isActive) {
-    logService.warn('Import already in progress — cannot start another', 'ImportWizard')
-    return
-  }
-
-  const generation = beginImportRun('vcf')
-
-  step.value = 3
-  totalFiles.value = vcfSelectedSamples.value.length
-  currentIndex.value = 0
-  overallPercent.value = 0
-  variantCount.value = 0
-
-  importStore.startImport(vcfSelectedSamples.value.length)
-  importStore.dialogOpen = true
-
-  const results: BatchResult = {
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    cancelled: false,
-    details: []
-  }
-
-  try {
-    for (let i = 0; i < vcfSelectedSamples.value.length; i++) {
-      // Check for cancellation between samples
-      if (cancellationRequestedGeneration === generation) {
-        completeCancelledRun(generation)
-        return
-      }
-      if (isImportTerminal(generation)) break
-
-      const sample = vcfSelectedSamples.value[i]
-      const caseName = vcfCaseNames.value.get(sample) ?? sample
-
-      currentIndex.value = i
-      currentFileName.value = caseName
-      overallPercent.value = Math.round(((i + 1) / vcfSelectedSamples.value.length) * 100)
-
-      try {
-        const result = unwrapIpcResult(
-          await api!.import.start(vcfFilePath.value, caseName, {
-            selectedSample: sample,
-            genomeBuild: vcfGenomeBuild.value ?? undefined
-          })
-        )
-
-        if (cancellationRequestedGeneration === generation) {
-          completeCancelledRun(generation)
-          return
-        }
-        if (isImportTerminal(generation)) break
-
-        results.succeeded++
-        results.details.push({
-          filePath: vcfFilePath.value,
-          fileName: caseName,
-          caseName,
-          status: 'success' as const,
-          variantCount: (result as { variantCount: number }).variantCount
-        })
-      } catch (err) {
-        if (cancellationRequestedGeneration === generation) {
-          completeCancelledRun(generation)
-          return
-        }
-        if (isImportTerminal(generation)) break
-        results.failed++
-        results.details.push({
-          filePath: vcfFilePath.value,
-          fileName: caseName,
-          caseName,
-          status: 'failed' as const,
-          error: formatIpcError(err, 'VCF import failed')
-        })
-      }
-    }
-
-    if (cancellationRequestedGeneration === generation) {
-      completeCancelledRun(generation)
-      return
-    }
-    if (isImportTerminal(generation)) return
-
-    cancelError.value = ''
-    summary.value = results
-    step.value = 4
-    importStore.importComplete({
-      ...results,
-      details: results.details.map((d) => ({ ...d, caseName: d.caseName ?? d.fileName }))
-    })
-
-    if (results.succeeded > 0) {
-      emit('batch-import-complete', { totalImported: results.succeeded })
-    }
-  } catch (err) {
-    if (cancellationRequestedGeneration === generation) {
-      completeCancelledRun(generation)
-      return
-    }
-    if (isImportTerminal(generation)) return
-    const message = formatIpcError(err, 'VCF import failed')
-    logService.error(`VCF import failed: ${message}`, 'ImportWizard')
-    cancelError.value = ''
-    summary.value = {
-      succeeded: 0,
-      failed: vcfSelectedSamples.value.length,
-      skipped: 0,
-      cancelled: false,
-      details: []
-    }
-    step.value = 4
-    importStore.importError(message)
-  }
-}
+const { startVcfImport } = useVcfImportExecution({
+  api: api!,
+  importStore,
+  state: {
+    filePath: vcfFilePath,
+    selectedSamples: vcfSelectedSamples,
+    genomeBuild: vcfGenomeBuild,
+    caseNames: vcfCaseNames,
+    step,
+    totalFiles,
+    currentIndex,
+    overallPercent,
+    variantCount,
+    currentFileName,
+    cancelError,
+    summary
+  },
+  authority: {
+    begin: () => beginImportRun('vcf'),
+    isTerminal: isImportTerminal,
+    isCancellationRequested: (generation) => cancellationRequestedGeneration === generation,
+    completeCancelled: completeCancelledRun
+  },
+  onImported: (totalImported) => emit('batch-import-complete', { totalImported })
+})
 
 async function startImport(): Promise<void> {
   // Prevent starting a new import while one is already running.
