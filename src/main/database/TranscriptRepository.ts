@@ -1,6 +1,6 @@
 import { BaseRepository } from './BaseRepository'
 import {
-  isTranscriptImpact,
+  canonicalizeTranscriptSemantics,
   type TranscriptAnnotation,
   type TranscriptInsertRow
 } from '../../shared/types/transcript'
@@ -97,23 +97,17 @@ export class TranscriptRepository extends BaseRepository {
           .where('transcript_id', '=', transcriptId)
       )!
 
-      const canonicalImpact = isTranscriptImpact(transcript.consequence)
-        ? transcript.consequence
-        : undefined
-      const canonicalFunc =
-        canonicalImpact === undefined
-          ? (transcript.func ?? transcript.consequence)
-          : transcript.func
+      const semantics = canonicalizeTranscriptSemantics(transcript.consequence, transcript.func)
 
       const denormalized = {
         transcript: transcriptId,
         gene_symbol: transcript.gene_symbol,
-        func: canonicalFunc,
+        consequence: semantics.consequence,
+        func: semantics.func,
         cdna: transcript.cdna,
         aa_change: transcript.aa_change,
         hpo_sim_score: transcript.hpo_sim_score,
-        moi: transcript.moi,
-        ...(canonicalImpact === undefined ? {} : { consequence: canonicalImpact })
+        moi: transcript.moi
       }
 
       this.execRun(

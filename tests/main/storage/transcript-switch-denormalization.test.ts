@@ -444,7 +444,7 @@ describe.each(fixtures)('transcript-switch denormalization — $name', ({ setup 
     expect(await h.readVariantDenorm(variantId)).toEqual(denormOfInsert(TRANSCRIPT_C))
   })
 
-  it('never writes a legacy SO term into variants.consequence', async () => {
+  it('clears stale parent impact when the selected legacy transcript has no recoverable impact', async () => {
     const variantId = await h.seedVariantWithTranscripts()
     await h.addLegacyTranscript(variantId)
 
@@ -456,7 +456,7 @@ describe.each(fixtures)('transcript-switch denormalization — $name', ({ setup 
     expect(await h.readVariantDenorm(variantId)).toEqual({
       transcript: LEGACY_TRANSCRIPT.transcript_id,
       gene_symbol: LEGACY_TRANSCRIPT.gene_symbol,
-      consequence: TRANSCRIPT_A.consequence,
+      consequence: null,
       func: LEGACY_TRANSCRIPT.func,
       cdna: LEGACY_TRANSCRIPT.cdna,
       aa_change: LEGACY_TRANSCRIPT.aa_change,

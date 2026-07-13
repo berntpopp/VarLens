@@ -1797,9 +1797,9 @@ export function runMigrations(db: Database.Database): void {
   //     the original per-transcript SO term was discarded at import time and
   //     cannot be recovered from the database alone, so `func` stays NULL.
   //   - A non-enum `consequence` is provably not an IMPACT value. Preserve it
-  //     as the SO term in `func` and clear `consequence`; do not guess an
-  //     unavailable impact. Repository writeback preserves the parent impact
-  //     when the selected transcript has no known impact.
+  //     as the SO term in `func`. For the selected transcript only, recover the
+  //     parent IMPACT when the parent names that same transcript; all other
+  //     unavailable impacts stay NULL.
   if (currentVersion < 32) {
     const vtCols = db.prepare('PRAGMA table_info(variant_transcripts)').all() as {
       name: string
@@ -1808,11 +1808,20 @@ export function runMigrations(db: Database.Database): void {
       db.exec('ALTER TABLE variant_transcripts ADD COLUMN func TEXT')
     }
     db.exec(`
-      UPDATE variant_transcripts
-         SET func = consequence,
-             consequence = NULL
-       WHERE consequence IS NOT NULL
-         AND consequence NOT IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
+      UPDATE variant_transcripts AS vt
+         SET func = vt.consequence,
+             consequence = CASE
+               WHEN vt.is_selected = 1 THEN (
+                 SELECT v.consequence
+                   FROM variants AS v
+                  WHERE v.id = vt.variant_id
+                    AND v.transcript = vt.transcript_id
+                    AND v.consequence IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
+               )
+               ELSE NULL
+             END
+       WHERE vt.consequence IS NOT NULL
+         AND vt.consequence NOT IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
     `)
     db.exec('PRAGMA user_version = 32')
   }

@@ -79,4 +79,26 @@ describe('ObjectFormatMapper transcript output', () => {
       func: 'missense_variant'
     })
   })
+
+  it('repairs swapped legacy consequence and func fields without losing either value', async () => {
+    const [mapped] = await runObjectTransform([
+      {
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'G',
+        consequence: 'missense_variant',
+        func: 'MODERATE',
+        transcript: 'NM_1'
+      }
+    ])
+
+    const variant = mapped as Record<string, unknown>
+    expect(variant.consequence).toBe('MODERATE')
+    expect(variant.func).toBe('missense_variant')
+    expect((variant._transcripts as Record<string, unknown>[])[0]).toMatchObject({
+      consequence: 'MODERATE',
+      func: 'missense_variant'
+    })
+  })
 })

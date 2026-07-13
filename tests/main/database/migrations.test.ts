@@ -1388,6 +1388,8 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
         pos INTEGER NOT NULL,
         ref TEXT NOT NULL,
         alt TEXT NOT NULL,
+        consequence TEXT,
+        transcript TEXT,
         FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
       );
       CREATE TABLE variant_transcripts (
@@ -1417,8 +1419,11 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
       )
       .run('legacy-case', '/legacy.vcf', 100, Date.now()).lastInsertRowid as number
     const variantId = db
-      .prepare(`INSERT INTO variants (case_id, chr, pos, ref, alt) VALUES (?, ?, ?, ?, ?)`)
-      .run(caseId, '1', 100, 'A', 'G').lastInsertRowid as number
+      .prepare(
+        `INSERT INTO variants (case_id, chr, pos, ref, alt, consequence, transcript)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(caseId, '1', 100, 'A', 'G', 'MODERATE', 'NM_LEGACY.1').lastInsertRowid as number
     // Seeded the way the pre-fix VCF import path actually wrote rows: an SO
     // term mislabeled into `consequence`. The migration can identify that it
     // is not an IMPACT value without guessing which impact it should have.
@@ -1462,7 +1467,7 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
       {
         transcript_id: 'NM_LEGACY.1',
         gene_symbol: 'LEGACYGENE',
-        consequence: null,
+        consequence: 'MODERATE',
         func: 'missense_variant'
       }
     ])

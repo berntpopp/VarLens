@@ -91,5 +91,9 @@ describe('Postgres migration definitions', () => {
     expect(transcriptFuncMigration?.name).toBe('variant_transcripts_func')
     expect(transcriptFuncMigration?.sql).toContain('ALTER TABLE "__schema__"."variant_transcripts"')
     expect(transcriptFuncMigration?.sql).toContain('ADD COLUMN IF NOT EXISTS func TEXT')
+    expect(transcriptFuncMigration?.sql).toContain(
+      'vt.is_selected = 1 AND v.transcript = vt.transcript_id'
+    )
+    expect(transcriptFuncMigration?.sql).toContain('FROM "__schema__"."variants" AS v')
   })
 })

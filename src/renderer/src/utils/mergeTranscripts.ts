@@ -3,7 +3,7 @@
  * into a unified list with provenance tracking.
  */
 
-import type { TranscriptAnnotation } from '../../../shared/types/transcript'
+import { isTranscriptImpact, type TranscriptAnnotation } from '../../../shared/types/transcript'
 import type { VepTranscriptConsequence } from '../../../shared/types/vep'
 
 /** Where a transcript row came from */
@@ -81,7 +81,7 @@ export function mergeTranscripts(
       original_id: db.transcript_id,
       gene_symbol: db.gene_symbol,
       consequence: db.consequence,
-      impact: null,
+      impact: isTranscriptImpact(db.consequence) ? db.consequence : null,
       func: db.func,
       consequence_terms: null,
       cdna: db.cdna,

@@ -118,29 +118,32 @@ function parseCsq(
 
   // Build TranscriptInsertRows, deduplicating by transcript_id
   // (same transcript can appear multiple times with different consequences)
-  const transcriptMap = new Map<string, TranscriptInsertRow>()
+  const transcriptMap = new Map<string, CsqTranscript>()
   for (const t of filtered) {
     const tid = t.fields.get('Feature') ?? ''
-    if (!transcriptMap.has(tid)) {
-      const semantics = canonicalizeTranscriptSemantics(
-        t.fields.get('IMPACT') ?? null,
-        t.fields.get('Consequence') ?? null
-      )
-      transcriptMap.set(tid, {
-        transcript_id: tid,
-        gene_symbol: t.fields.get('SYMBOL') ?? null,
-        // Canonical model: consequence = IMPACT level, func = SO term.
-        consequence: semantics.consequence,
-        func: semantics.func,
-        cdna: t.fields.get('HGVSc') ?? null,
-        aa_change: t.fields.get('HGVSp') ?? null,
-        hpo_sim_score: null,
-        moi: null,
-        is_selected: 0
-      })
+    const existing = transcriptMap.get(tid)
+    if (existing === undefined || selectBestTranscript([existing, t]) === 1) {
+      transcriptMap.set(tid, t)
     }
   }
-  const transcripts = Array.from(transcriptMap.values())
+  const transcripts: TranscriptInsertRow[] = Array.from(transcriptMap.values()).map((t) => {
+    const semantics = canonicalizeTranscriptSemantics(
+      t.fields.get('IMPACT') ?? null,
+      t.fields.get('Consequence') ?? null
+    )
+    return {
+      transcript_id: t.fields.get('Feature') ?? '',
+      gene_symbol: t.fields.get('SYMBOL') ?? null,
+      // Canonical model: consequence = IMPACT level, func = SO term.
+      consequence: semantics.consequence,
+      func: semantics.func,
+      cdna: t.fields.get('HGVSc') ?? null,
+      aa_change: t.fields.get('HGVSp') ?? null,
+      hpo_sim_score: null,
+      moi: null,
+      is_selected: 0
+    }
+  })
 
   // Select best transcript
   const bestIdx = selectBestTranscript(filtered)
@@ -235,29 +238,32 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
 
   // Build TranscriptInsertRows, deduplicating by transcript_id
   // (same transcript can appear multiple times with different consequences)
-  const transcriptMap = new Map<string, TranscriptInsertRow>()
+  const transcriptMap = new Map<string, AnnTranscript>()
   for (const t of filtered) {
     const tid = t.parts[ANN_FEATURE_ID] ?? ''
-    if (!transcriptMap.has(tid)) {
-      const semantics = canonicalizeTranscriptSemantics(
-        t.parts[ANN_IMPACT] ?? null,
-        t.parts[ANN_ANNOTATION] ?? null
-      )
-      transcriptMap.set(tid, {
-        transcript_id: tid,
-        gene_symbol: t.parts[ANN_GENE_NAME] ?? null,
-        // Canonical model: consequence = IMPACT level, func = SO term.
-        consequence: semantics.consequence,
-        func: semantics.func,
-        cdna: t.parts[ANN_HGVSC] ?? null,
-        aa_change: t.parts[ANN_HGVSP] ?? null,
-        hpo_sim_score: null,
-        moi: null,
-        is_selected: 0
-      })
+    const existing = transcriptMap.get(tid)
+    if (existing === undefined || selectBestTranscriptAnn([existing, t]) === 1) {
+      transcriptMap.set(tid, t)
     }
   }
-  const transcripts = Array.from(transcriptMap.values())
+  const transcripts: TranscriptInsertRow[] = Array.from(transcriptMap.values()).map((t) => {
+    const semantics = canonicalizeTranscriptSemantics(
+      t.parts[ANN_IMPACT] ?? null,
+      t.parts[ANN_ANNOTATION] ?? null
+    )
+    return {
+      transcript_id: t.parts[ANN_FEATURE_ID] ?? '',
+      gene_symbol: t.parts[ANN_GENE_NAME] ?? null,
+      // Canonical model: consequence = IMPACT level, func = SO term.
+      consequence: semantics.consequence,
+      func: semantics.func,
+      cdna: t.parts[ANN_HGVSC] ?? null,
+      aa_change: t.parts[ANN_HGVSP] ?? null,
+      hpo_sim_score: null,
+      moi: null,
+      is_selected: 0
+    }
+  })
 
   // Select best transcript
   const bestIdx = selectBestTranscriptAnn(filtered)
