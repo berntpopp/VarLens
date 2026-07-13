@@ -7,7 +7,7 @@
  *
  * Also tests cancel behavior and error handling.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { ref, isProxy } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
@@ -34,15 +34,27 @@ interface ImportWizardVm {
   step: number
   cancelError: string
   summary: BatchResult
+  isVcfImport: boolean
+  vcfFilePath: string
+  vcfSelectedSamples: string[]
+  vcfCaseNames: Map<string, string>
+  startVcfImport: () => Promise<void>
+  startImport: () => Promise<void>
   cancelImport: () => Promise<void>
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+function deferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+  reject: (reason?: unknown) => void
+} {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise
+    reject = rejectPromise
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 /**
@@ -72,6 +84,10 @@ function assertStructuredCloneable(value: unknown, path = 'root'): void {
 }
 
 describe('ImportWizard IPC safety', () => {
+  afterEach(() => {
+    window.__VARLENS_WEB__ = false
+  })
+
   describe('Vue reactive Proxy detection', () => {
     it('should detect that ref<string[]>.value is a Proxy', () => {
       const paths = ref(['file1.json', 'file2.json'])
@@ -279,6 +295,87 @@ describe('ImportWizard IPC safety', () => {
       expect(vm.step).toBe(4)
       expect(store.phase).toBe('complete')
       expect(vm.summary).toEqual(realResult)
+      wrapper.unmount()
+    })
+
+    it.each([
+      { label: 'desktop', web: false },
+      { label: 'web', web: true }
+    ])('routes a $label VCF cancellation to the active import executor', async ({ web }) => {
+      const mockApi = createMockApi()
+      window.__VARLENS_WEB__ = web
+      window.api = mockApi
+
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const vm = wrapper.vm as unknown as ImportWizardVm
+      store.startImport(1)
+      vm.isVcfImport = true
+      vm.step = 3
+
+      await vm.cancelImport()
+
+      expect(mockApi.import.cancel).toHaveBeenCalledOnce()
+      expect(mockApi.batchImport.cancel).not.toHaveBeenCalled()
+      expect(store.phase).toBe('cancelled')
+      wrapper.unmount()
+    })
+
+    it('keeps acknowledged VCF cancellation terminal when the active start call settles later', async () => {
+      const mockApi = createMockApi()
+      const pendingStart = deferred<{ variantCount: number }>()
+      mockApi.import.start.mockReturnValue(pendingStart.promise)
+      window.api = mockApi
+
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const vm = wrapper.vm as unknown as ImportWizardVm
+      vm.isVcfImport = true
+      vm.vcfFilePath = '/case.vcf'
+      vm.vcfSelectedSamples = ['S1']
+      vm.vcfCaseNames = new Map([['S1', 'Case 1']])
+
+      const importRun = vm.startVcfImport()
+      await Promise.resolve()
+      expect(store.phase).toBe('importing')
+
+      await vm.cancelImport()
+      expect(store.phase).toBe('cancelled')
+      expect(vm.summary.cancelled).toBe(true)
+
+      pendingStart.resolve({ variantCount: 12 })
+      await importRun
+
+      expect(store.phase).toBe('cancelled')
+      expect(vm.summary.cancelled).toBe(true)
+      expect(vm.step).toBe(4)
+      wrapper.unmount()
+    })
+
+    it('keeps acknowledged batch cancellation terminal when the active start call rejects later', async () => {
+      const mockApi = createMockApi()
+      const pendingStart = deferred<BatchResult>()
+      mockApi.batchImport.start.mockReturnValue(pendingStart.promise)
+      window.api = mockApi
+
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const vm = wrapper.vm as unknown as ImportWizardVm
+
+      const importRun = vm.startImport()
+      await Promise.resolve()
+      expect(store.phase).toBe('importing')
+
+      await vm.cancelImport()
+      pendingStart.reject(new Error('worker stopped after cancellation'))
+      await importRun
+
+      expect(store.phase).toBe('cancelled')
+      expect(vm.summary.cancelled).toBe(true)
+      expect(vm.step).toBe(4)
       wrapper.unmount()
     })
   })

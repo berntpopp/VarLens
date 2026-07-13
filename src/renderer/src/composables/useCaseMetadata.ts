@@ -63,10 +63,24 @@ function triggerCacheUpdate(): void {
 const cohortGroupsCache = ref<CohortGroup[]>([])
 
 const caseMutationQueues = new Map<number, Promise<unknown>>()
+const STALE_MUTATION = Symbol('stale-case-metadata-mutation')
+let cacheGeneration = 0
 
-async function serializeCaseMutation<T>(caseId: number, mutation: () => Promise<T>): Promise<T> {
+function isCurrentGeneration(generation: number): boolean {
+  return generation === cacheGeneration
+}
+
+async function serializeCaseMutation<T>(
+  caseId: number,
+  generation: number,
+  mutation: () => Promise<T>
+): Promise<T | typeof STALE_MUTATION> {
   const previous = caseMutationQueues.get(caseId) ?? Promise.resolve()
-  const result = previous.catch(() => undefined).then(mutation)
+  const result: Promise<T | typeof STALE_MUTATION> = previous
+    .catch(() => undefined)
+    .then<T | typeof STALE_MUTATION>(() =>
+      isCurrentGeneration(generation) ? mutation() : STALE_MUTATION
+    )
   caseMutationQueues.set(caseId, result)
   try {
     return await result
@@ -81,6 +95,7 @@ export function useCaseMetadata() {
   // Load full metadata for a case (metadata + cohorts + HPO terms)
   async function loadMetadata(caseId: number): Promise<void> {
     if (!api) return
+    const generation = cacheGeneration
     // Skip if already cached or loading
     if (metadataCache.value.has(caseId) || loadingStates.value.get(caseId) === true) {
       return
@@ -90,26 +105,33 @@ export function useCaseMetadata() {
     triggerRef(loadingStates)
     try {
       const result = unwrapIpcResult(await api.caseMetadata.getFullMetadata(caseId))
+      if (!isCurrentGeneration(generation)) return
       metadataCache.value.set(caseId, result)
       triggerCacheUpdate()
     } catch (error) {
+      if (!isCurrentGeneration(generation)) return
       logService.error(
         'Failed to load case metadata: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
       )
     } finally {
-      loadingStates.value.set(caseId, false)
-      triggerRef(loadingStates)
+      if (isCurrentGeneration(generation)) {
+        loadingStates.value.set(caseId, false)
+        triggerRef(loadingStates)
+      }
     }
   }
 
   // Load global cohort groups list
   async function loadCohortGroups(): Promise<void> {
     if (!api) return
+    const generation = cacheGeneration
     try {
       const cohorts = unwrapIpcResult(await api.caseMetadata.listCohorts())
+      if (!isCurrentGeneration(generation)) return
       cohortGroupsCache.value = cohorts
     } catch (error) {
+      if (!isCurrentGeneration(generation)) return
       logService.error(
         'Failed to load cohort groups: ' + formatErrorMessage(error, 'Unknown error'),
         'case-metadata'
@@ -130,7 +152,8 @@ export function useCaseMetadata() {
   // Update affected status with optimistic update
   async function updateStatus(caseId: number, status: AffectedStatus): Promise<void> {
     if (!api) return
-    return serializeCaseMutation(caseId, async () => {
+    const generation = cacheGeneration
+    await serializeCaseMutation(caseId, generation, async () => {
       const current = metadataCache.value.get(caseId)
       const previousStatus = current?.metadata?.affected_status ?? null
 
@@ -147,12 +170,14 @@ export function useCaseMetadata() {
         const updated = unwrapIpcResult(
           await api.caseMetadata.upsert(caseId, { affected_status: status })
         )
+        if (!isCurrentGeneration(generation)) return
         const cached = metadataCache.value.get(caseId)
         if (cached) {
           cached.metadata = updated
           triggerCacheUpdate()
         }
       } catch (error) {
+        if (!isCurrentGeneration(generation)) return
         logService.error(
           'Failed to update status: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
@@ -169,7 +194,8 @@ export function useCaseMetadata() {
   // Update sex with optimistic update
   async function updateSex(caseId: number, sex: CaseSex): Promise<void> {
     if (!api) return
-    return serializeCaseMutation(caseId, async () => {
+    const generation = cacheGeneration
+    await serializeCaseMutation(caseId, generation, async () => {
       const current = metadataCache.value.get(caseId)
       const previousSex = current?.metadata?.sex ?? null
 
@@ -184,12 +210,14 @@ export function useCaseMetadata() {
 
       try {
         const updated = unwrapIpcResult(await api.caseMetadata.upsert(caseId, { sex }))
+        if (!isCurrentGeneration(generation)) return
         const cached = metadataCache.value.get(caseId)
         if (cached) {
           cached.metadata = updated
           triggerCacheUpdate()
         }
       } catch (error) {
+        if (!isCurrentGeneration(generation)) return
         logService.error(
           'Failed to update sex: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
@@ -206,7 +234,8 @@ export function useCaseMetadata() {
   // Update age with optimistic update
   async function updateAge(caseId: number, age: number | null): Promise<void> {
     if (!api) return
-    return serializeCaseMutation(caseId, async () => {
+    const generation = cacheGeneration
+    await serializeCaseMutation(caseId, generation, async () => {
       const current = metadataCache.value.get(caseId)
       const previousAge = current?.metadata?.age ?? null
 
@@ -221,12 +250,14 @@ export function useCaseMetadata() {
 
       try {
         const updated = unwrapIpcResult(await api.caseMetadata.upsert(caseId, { age }))
+        if (!isCurrentGeneration(generation)) return
         const cached = metadataCache.value.get(caseId)
         if (cached) {
           cached.metadata = updated
           triggerCacheUpdate()
         }
       } catch (error) {
+        if (!isCurrentGeneration(generation)) return
         logService.error(
           'Failed to update age: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
@@ -243,7 +274,8 @@ export function useCaseMetadata() {
   // Update date of birth with optimistic update
   async function updateDob(caseId: number, dateOfBirth: string | null): Promise<void> {
     if (!api) return
-    return serializeCaseMutation(caseId, async () => {
+    const generation = cacheGeneration
+    await serializeCaseMutation(caseId, generation, async () => {
       const current = metadataCache.value.get(caseId)
       const previousDob = current?.metadata?.date_of_birth ?? null
 
@@ -260,12 +292,14 @@ export function useCaseMetadata() {
         const updated = unwrapIpcResult(
           await api.caseMetadata.upsert(caseId, { date_of_birth: dateOfBirth })
         )
+        if (!isCurrentGeneration(generation)) return
         const cached = metadataCache.value.get(caseId)
         if (cached) {
           cached.metadata = updated
           triggerCacheUpdate()
         }
       } catch (error) {
+        if (!isCurrentGeneration(generation)) return
         logService.error(
           'Failed to update date of birth: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
@@ -282,7 +316,8 @@ export function useCaseMetadata() {
   // Set case cohorts with optimistic update (bulk replace)
   async function setCaseCohorts(caseId: number, cohortIds: number[]): Promise<void> {
     if (!api) return
-    return serializeCaseMutation(caseId, async () => {
+    const generation = cacheGeneration
+    await serializeCaseMutation(caseId, generation, async () => {
       const current = metadataCache.value.get(caseId)
       const previousCohorts = current?.cohorts ?? []
       const newCohorts = cohortGroupsCache.value.filter((c) => cohortIds.includes(c.id))
@@ -293,7 +328,9 @@ export function useCaseMetadata() {
 
       try {
         unwrapIpcResult(await api.caseMetadata.setCohorts(caseId, cohortIds))
+        if (!isCurrentGeneration(generation)) return
       } catch (error) {
+        if (!isCurrentGeneration(generation)) return
         logService.error(
           'Failed to set cohorts: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
@@ -312,10 +349,13 @@ export function useCaseMetadata() {
   // Create new cohort and assign to case
   async function createAndAssignCohort(caseId: number, name: string): Promise<CohortGroup | null> {
     if (!api) return null
-    return serializeCaseMutation(caseId, async () => {
+    const generation = cacheGeneration
+    const result = await serializeCaseMutation(caseId, generation, async () => {
       const newCohort = unwrapIpcResult(await api.caseMetadata.createCohort(name))
+      if (!isCurrentGeneration(generation)) return null
       cohortGroupsCache.value.push(newCohort)
       unwrapIpcResult(await api.caseMetadata.assignCohort(caseId, newCohort.id))
+      if (!isCurrentGeneration(generation)) return null
 
       const current = metadataCache.value.get(caseId)
       if (current) {
@@ -325,11 +365,13 @@ export function useCaseMetadata() {
 
       return newCohort
     })
+    return result === STALE_MUTATION ? null : result
   }
 
   // Get or create cohort by name
   async function getOrCreateCohort(name: string): Promise<CohortGroup | null> {
     if (!api) return null
+    const generation = cacheGeneration
     // Check if exists in cache
     const existing = cohortGroupsCache.value.find((c) => c.name === name)
     if (existing) {
@@ -338,6 +380,7 @@ export function useCaseMetadata() {
 
     // Create new cohort
     const newCohort = unwrapIpcResult(await api.caseMetadata.createCohort(name))
+    if (!isCurrentGeneration(generation)) return null
 
     // Add to cache
     cohortGroupsCache.value.push(newCohort)
@@ -348,7 +391,8 @@ export function useCaseMetadata() {
   // Assign HPO term to case with optimistic update
   async function assignHpoTerm(caseId: number, hpoId: string, hpoLabel: string): Promise<void> {
     if (!api) return
-    return serializeCaseMutation(caseId, async () => {
+    const generation = cacheGeneration
+    await serializeCaseMutation(caseId, generation, async () => {
       const current = metadataCache.value.get(caseId)
       const newTerm: CaseHpoTerm = {
         id: 0,
@@ -367,6 +411,7 @@ export function useCaseMetadata() {
         const created = unwrapIpcResult(
           await api.caseMetadata.assignHpoTerm(caseId, hpoId, hpoLabel)
         )
+        if (!isCurrentGeneration(generation)) return
         if (current) {
           const index = current.hpoTerms.findIndex((t) => t.hpo_id === hpoId)
           if (index !== -1) {
@@ -375,6 +420,7 @@ export function useCaseMetadata() {
           }
         }
       } catch (error) {
+        if (!isCurrentGeneration(generation)) return
         logService.error(
           'Failed to assign HPO term: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
@@ -391,7 +437,8 @@ export function useCaseMetadata() {
   // Remove HPO term from case with optimistic update
   async function removeHpoTerm(caseId: number, hpoId: string): Promise<void> {
     if (!api) return
-    return serializeCaseMutation(caseId, async () => {
+    const generation = cacheGeneration
+    await serializeCaseMutation(caseId, generation, async () => {
       const current = metadataCache.value.get(caseId)
       const previousTerms = current?.hpoTerms ?? []
       if (current) {
@@ -401,7 +448,9 @@ export function useCaseMetadata() {
 
       try {
         unwrapIpcResult(await api.caseMetadata.removeHpoTerm(caseId, hpoId))
+        if (!isCurrentGeneration(generation)) return
       } catch (error) {
+        if (!isCurrentGeneration(generation)) return
         logService.error(
           'Failed to remove HPO term: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
@@ -417,6 +466,8 @@ export function useCaseMetadata() {
 
   // Clear all caches (call on database switch)
   function clearCache(): void {
+    cacheGeneration += 1
+    caseMutationQueues.clear()
     metadataCache.value.clear()
     triggerRef(metadataCache)
     loadingStates.value.clear()

@@ -532,6 +532,8 @@ function onVcfSelectionChanged(options: {
   vcfCaseNames.value = options.caseNames
 }
 
+const isImportTerminal = (): boolean => step.value !== 3 || importStore.phase === 'cancelled'
+
 async function startVcfImport(): Promise<void> {
   if (importStore.isActive) {
     logService.warn('Import already in progress — cannot start another', 'ImportWizard')
@@ -575,6 +577,8 @@ async function startVcfImport(): Promise<void> {
           })
         )
 
+        if (isImportTerminal()) break
+
         results.succeeded++
         results.details.push({
           filePath: vcfFilePath.value,
@@ -584,6 +588,7 @@ async function startVcfImport(): Promise<void> {
           variantCount: (result as { variantCount: number }).variantCount
         })
       } catch (err) {
+        if (isImportTerminal()) break
         results.failed++
         results.details.push({
           filePath: vcfFilePath.value,
@@ -594,6 +599,8 @@ async function startVcfImport(): Promise<void> {
         })
       }
     }
+
+    if (isImportTerminal()) return
 
     cancelError.value = ''
     summary.value = results
@@ -607,6 +614,7 @@ async function startVcfImport(): Promise<void> {
       emit('batch-import-complete', { totalImported: results.succeeded })
     }
   } catch (err) {
+    if (isImportTerminal()) return
     const message = formatIpcError(err, 'VCF import failed')
     logService.error(`VCF import failed: ${message}`, 'ImportWizard')
     cancelError.value = ''
@@ -670,12 +678,12 @@ async function startImport(): Promise<void> {
       }
     }
   } catch (err) {
-    const message = formatIpcError(err, 'Import failed')
-    logService.error(`Import failed: ${message}`, 'ImportWizard')
     // Only overwrite summary if the onComplete callback hasn't already
     // handled it (race: safeEmit fires before resolve, so the event
     // listener may have already set the correct summary + step 4).
     if (step.value === 3) {
+      const message = formatIpcError(err, 'Import failed')
+      logService.error(`Import failed: ${message}`, 'ImportWizard')
       cancelError.value = ''
       summary.value = {
         succeeded: 0,
@@ -685,18 +693,15 @@ async function startImport(): Promise<void> {
         details: []
       }
       step.value = 4
+      importStore.importError(message)
     }
-    importStore.importError(message)
   }
 }
 
 async function cancelImport(): Promise<void> {
   cancelError.value = ''
   try {
-    const result =
-      isWebRuntime() && isVcfImport.value
-        ? await api!.import.cancel()
-        : await api!.batchImport.cancel()
+    const result = isVcfImport.value ? await api!.import.cancel() : await api!.batchImport.cancel()
     unwrapIpcResult(result)
   } catch (error) {
     if (step.value !== 3) return

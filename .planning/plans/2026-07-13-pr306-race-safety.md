@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prevent false cancellation success, stale child-dialog case writes, and out-of-order metadata rollback.
+**Goal:** Prevent false cancellation success, stale child-dialog case writes, out-of-order metadata rollback, and cross-database cache contamination.
 
-**Architecture:** Keep existing IPC contracts and add renderer-side authority boundaries. Cancellation commits only after a successful unwrapped IPC result, dialog events carry case/load authority, and case metadata mutations share a per-case serial queue.
+**Architecture:** Keep existing IPC contracts and add renderer-side authority boundaries. Cancellation commits only after a successful unwrapped IPC result and targets the active format executor, dialog events carry case/load authority, and case metadata mutations share a per-case serial queue scoped to a database generation.
 
 **Tech Stack:** Vue 3, Pinia 3, TypeScript 6, Vitest, Vue Test Utils, Vuetify 4
 
@@ -36,10 +36,9 @@ const cancelError = ref('')
 async function cancelImport(): Promise<void> {
   cancelError.value = ''
   try {
-    const result =
-      isWebRuntime() && isVcfImport.value
-        ? await api!.import.cancel()
-        : await api!.batchImport.cancel()
+    const result = isVcfImport.value
+      ? await api!.import.cancel()
+      : await api!.batchImport.cancel()
     unwrapIpcResult(result)
   } catch (error) {
     cancelError.value = formatIpcError(error, 'Cancellation failed')
@@ -132,6 +131,24 @@ Apply it to scalar updates, cohort assign/replace, and HPO assign/remove so the 
 - [ ] **Step 4: Verify the focused test passes**
 
 Run the same Vitest command and expect all tests in the file to pass.
+
+### Task 3b: Isolate metadata activity across database switches
+
+**Files:**
+- Modify: `tests/renderer/composables/use-case-metadata.test.ts`
+- Modify: `src/renderer/src/composables/useCaseMetadata.ts`
+
+- [ ] **Step 1: Write failing database-generation regressions**
+
+Start deferred metadata and cohort reads, clear the cache, and populate a colliding case/cohort from the new database before resolving the old reads. Queue two same-case mutations before clearing the cache and verify the queued operation never reaches IPC after the switch. Start cohort creation, switch databases after creation begins, and verify assignment is not attempted through the new session.
+
+- [ ] **Step 2: Add a database-generation authority boundary**
+
+Increment a module-level generation in `clearCache()`. Capture it for every read and mutation, check it before cache writes and rollbacks, and check it before a queued mutation invokes IPC. Clear the queue map during the switch so new-database writes do not wait for old work. Multi-step operations must check the generation between IPC calls.
+
+- [ ] **Step 3: Verify the focused tests pass**
+
+Run `npx vitest run tests/renderer/composables/use-case-metadata.test.ts` and expect all tests in the file to pass.
 
 ### Task 4: Repository verification and commit
 

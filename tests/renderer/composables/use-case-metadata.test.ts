@@ -552,4 +552,105 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       expect(result.metadataCache.value.get(caseId)?.hpoTerms).toEqual([secondTerm])
     })
   })
+
+  describe('database-generation isolation', () => {
+    const caseId = 1
+
+    it('does not let an old metadata load overwrite the new database cache', async () => {
+      const oldLoad = deferred<unknown>()
+      const newMetadata = makeFullMetadata()
+      newMetadata.metadata = { ...newMetadata.metadata!, age: 99 }
+      window.api.caseMetadata.getFullMetadata = vi
+        .fn()
+        .mockReturnValueOnce(oldLoad.promise)
+        .mockResolvedValueOnce(newMetadata)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+
+      const oldRequest = result.loadMetadata(caseId)
+      await flushPromises()
+      result.clearCache()
+      const newRequest = result.loadMetadata(caseId)
+      await newRequest
+
+      oldLoad.resolve(makeFullMetadata())
+      await oldRequest
+
+      expect(result.metadataCache.value.get(caseId)?.metadata?.age).toBe(99)
+    })
+
+    it('does not let an old cohort load overwrite the new database cache', async () => {
+      const oldLoad = deferred<unknown>()
+      const newCohort: CohortGroup = { ...fakeCohort, id: 77, name: 'New database cohort' }
+      window.api.caseMetadata.listCohorts = vi
+        .fn()
+        .mockReturnValueOnce(oldLoad.promise)
+        .mockResolvedValueOnce([newCohort])
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+
+      const oldRequest = result.loadCohortGroups()
+      await flushPromises()
+      result.clearCache()
+      await result.loadCohortGroups()
+
+      oldLoad.resolve([fakeCohort])
+      await oldRequest
+
+      expect(result.cohortGroupsCache.value).toEqual([newCohort])
+    })
+
+    it('drops queued old-database mutations before they can call IPC or overwrite a colliding case', async () => {
+      const oldWrite = deferred<unknown>()
+      const oldConfirmed = makeFullMetadata()
+      oldConfirmed.metadata = { ...oldConfirmed.metadata!, age: 20 }
+      window.api.caseMetadata.upsert = vi
+        .fn()
+        .mockReturnValueOnce(oldWrite.promise)
+        .mockResolvedValue({ ...oldConfirmed.metadata!, age: 30 })
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(caseId, makeFullMetadata())
+
+      const inFlight = result.updateAge(caseId, 20)
+      await flushPromises()
+      const queued = result.updateAge(caseId, 30)
+      await flushPromises()
+      expect(window.api.caseMetadata.upsert).toHaveBeenCalledOnce()
+
+      result.clearCache()
+      const newDatabaseMetadata = makeFullMetadata()
+      newDatabaseMetadata.metadata = { ...newDatabaseMetadata.metadata!, age: 99 }
+      result.metadataCache.value.set(caseId, newDatabaseMetadata)
+
+      oldWrite.resolve(oldConfirmed.metadata!)
+      await Promise.all([inFlight, queued])
+      await flushPromises()
+
+      expect(window.api.caseMetadata.upsert).toHaveBeenCalledOnce()
+      expect(result.metadataCache.value.get(caseId)?.metadata?.age).toBe(99)
+    })
+
+    it('does not continue a multi-step old-database mutation after its first IPC settles', async () => {
+      const created = deferred<unknown>()
+      window.api.caseMetadata.createCohort = vi.fn().mockReturnValue(created.promise)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+
+      const mutation = result.createAndAssignCohort(caseId, 'Old database cohort')
+      await flushPromises()
+      expect(window.api.caseMetadata.createCohort).toHaveBeenCalledOnce()
+
+      result.clearCache()
+      created.resolve(fakeCohort)
+
+      await expect(mutation).resolves.toBeNull()
+      expect(window.api.caseMetadata.assignCohort).not.toHaveBeenCalled()
+      expect(result.cohortGroupsCache.value).toEqual([])
+    })
+  })
 })
