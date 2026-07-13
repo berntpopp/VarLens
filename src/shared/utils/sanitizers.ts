@@ -59,13 +59,27 @@ const SECRET_VALUE_PATTERN =
   /\b(passphrase|password|secret|token)\b\s*(?:[=:]\s*(?:'((?:''|\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)")|=\s*(\S+?)(?=[;,\s]|$))/gi
 
 /**
- * Unquoted colon assignments at a strong structural boundary. A credential
- * key must start a line (optionally indented) or follow an object/list
- * delimiter, which catches config-shaped values while preserving ordinary
- * prose where the keyword follows another word.
+ * Assignment-shaped environment/config identifiers whose final segment is
+ * an unambiguous credential name: `DB_PASSWORD=...`, `API_TOKEN=...`, etc.
+ * Requiring both an underscore prefix and `=` keeps ordinary prose out.
+ */
+const SUFFIXED_SECRET_VALUE_PATTERN =
+  /\b((?:[a-z0-9]+_)+(?:passphrase|password|secret|token))\b\s*=\s*(?:'(?:''|\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|\S+?)(?=[;,\s]|$)/gi
+
+/**
+ * A structural passphrase may legitimately contain spaces, so redact its
+ * whole value through the next object delimiter or line end.
+ */
+const STRUCTURAL_COLON_PASSPHRASE_PATTERN =
+  /(^[\t ]*|[\x5b{,:;][\t ]*)(passphrase)\b[\t ]*:[\t ]*[^,;\r\n}\]]+(?=[,;}\]]|$)/gim
+
+/**
+ * Other unquoted colon credentials remain single-token values. This avoids
+ * swallowing unrelated message text (including PHI that later patterns must
+ * independently redact) while still covering config and log-prefix forms.
  */
 const STRUCTURAL_COLON_SECRET_PATTERN =
-  /(^[\t ]*|[\x5b{,;][\t ]*)(passphrase|password|secret|token)\b[\t ]*:[\t ]*(\S+?)(?=[;,\s}\]]|$)/gim
+  /(^[\t ]*|[\x5b{,:;][\t ]*)(password|secret|token)\b[\t ]*:[\t ]*(\S+?)(?=[;,\s}\]]|$)/gim
 
 /**
  * Regex pattern for JSON-style quoted-key secrets: `"password":"hunter2"`,
@@ -108,18 +122,25 @@ export function sanitizeLogMessage(message: string): string {
     sanitized = sanitized.replace(SQLCIPHER_KEY_PATTERN, '$1=[REDACTED:KEY]')
   }
 
-  // Quick pre-check for generic secret keyword + value (quoted or not).
-  if (/\b(passphrase|password|secret|token)\b\s*[=:]/i.test(sanitized) === true) {
-    sanitized = sanitized.replace(SECRET_VALUE_PATTERN, '$1=[REDACTED:KEY]')
+  // Environment/config identifiers such as DB_PASSWORD are assignment-only
+  // signals and can be redacted before the bare-key patterns below.
+  if (/\b(?:[a-z0-9]+_)+(?:passphrase|password|secret|token)\b\s*=/i.test(sanitized) === true) {
+    sanitized = sanitized.replace(SUFFIXED_SECRET_VALUE_PATTERN, '$1=[REDACTED:KEY]')
   }
 
-  // A bare colon is only treated as a credential assignment at the strong
-  // structural boundaries encoded above; prose such as "refresh token:
-  // expired" remains unchanged.
+  // Treat a bare colon as a credential assignment only at the strong
+  // structural boundaries encoded above. Run this before the single-token
+  // generic pattern so multi-word passphrases are removed as one value.
   if (
-    /(?:^|[\x5b{,;])[\t ]*(?:passphrase|password|secret|token)\b[\t ]*:/im.test(sanitized) === true
+    /(?:^|[\x5b{,:;])[\t ]*(?:passphrase|password|secret|token)\b[\t ]*:/im.test(sanitized) === true
   ) {
+    sanitized = sanitized.replace(STRUCTURAL_COLON_PASSPHRASE_PATTERN, '$1$2=[REDACTED:KEY]')
     sanitized = sanitized.replace(STRUCTURAL_COLON_SECRET_PATTERN, '$1$2=[REDACTED:KEY]')
+  }
+
+  // Generic bare secret keyword + quoted or assignment-shaped value.
+  if (/\b(passphrase|password|secret|token)\b\s*[=:]/i.test(sanitized) === true) {
+    sanitized = sanitized.replace(SECRET_VALUE_PATTERN, '$1=[REDACTED:KEY]')
   }
 
   // Quick pre-check for JSON-style quoted-key secrets (`"password":"..."`).

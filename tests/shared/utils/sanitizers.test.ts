@@ -84,6 +84,28 @@ describe('sanitizeLogMessage', () => {
       expect(result).toBe('{ password=[REDACTED:KEY], retry: true }')
     })
 
+    it('redacts a multi-word structural passphrase through the end of the value', () => {
+      const result = sanitizeLogMessage('passphrase: correct horse battery staple')
+      expect(result).toBe('passphrase=[REDACTED:KEY]')
+      expect(result).not.toContain('horse battery staple')
+    })
+
+    it('redacts a colon-form credential after a log-prefix colon', () => {
+      const result = sanitizeLogMessage('Database error: password: hunter2')
+      expect(result).toBe('Database error: password=[REDACTED:KEY]')
+      expect(result).not.toContain('hunter2')
+    })
+
+    it.each([
+      ['DB_PASSWORD=hunter2', 'DB_PASSWORD'],
+      ['PG_PASSPHRASE=correct-horse', 'PG_PASSPHRASE'],
+      ['API_SECRET=abc123', 'API_SECRET'],
+      ['AUTH_TOKEN=ghp_abcdef', 'AUTH_TOKEN']
+    ])('redacts a suffixed credential assignment: %s', (message, identifier) => {
+      const result = sanitizeLogMessage(message)
+      expect(result).toBe(`${identifier}=[REDACTED:KEY]`)
+    })
+
     it('redacts an unquoted password= value', () => {
       const result = sanitizeLogMessage('config password=hunter2;retry=1')
       expect(result).toContain('[REDACTED:KEY]')
