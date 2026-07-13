@@ -191,18 +191,27 @@ describe('vcf-annotation-parser', () => {
       expect(resultAllele2.geneSymbol).toBeNull()
     })
 
-    it('still matches a block by exact sequence when ALLELE_NUM is declared but empty and Allele is concrete', () => {
-      // Unlike the lossy "-" deletion notation, a concrete Allele sequence (e.g.
-      // an insertion's inserted bases) is unambiguous on its own — it should
-      // still match its own ALT via the exact-sequence/insertion heuristic even
-      // without ALLELE_NUM to help disambiguate.
+    it('does not use allele heuristics when ALLELE_NUM is declared but empty', () => {
+      // Once the header declares ALLELE_NUM, it is the authoritative mapping.
+      // Falling back for just one malformed block can cross-attach an inserted-
+      // bases suffix to another ALT at a mixed multi-allelic site.
       const fields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'ALLELE_NUM']
       const alleleNumHeader = makeHeader({ annotationType: 'csq', csqFields: fields })
       const info = new Map([['CSQ', 'TT|frameshift_variant|HIGH|GENE3|T3|']])
 
       const result = parseAnnotation(info, alleleNumHeader, 'ATT', 'A', 1)
-      expect(result.transcripts).toHaveLength(1)
-      expect(result.geneSymbol).toBe('GENE3')
+      expect(result.transcripts).toHaveLength(0)
+      expect(result.geneSymbol).toBeNull()
+    })
+
+    it('rejects a partially numeric ALLELE_NUM instead of accepting parseInt prefix data', () => {
+      const fields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'ALLELE_NUM']
+      const alleleNumHeader = makeHeader({ annotationType: 'csq', csqFields: fields })
+      const info = new Map([['CSQ', 'G|missense_variant|MODERATE|GENE4|T4|1junk']])
+
+      const result = parseAnnotation(info, alleleNumHeader, 'G', 'A', 1)
+      expect(result.transcripts).toHaveLength(0)
+      expect(result.geneSymbol).toBeNull()
     })
   })
 

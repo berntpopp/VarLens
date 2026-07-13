@@ -115,4 +115,12 @@ describe('vcf-genotype-parser', () => {
     expect(gt.adAlt).toBe(24)
     expect(gt.ab).toBeCloseTo(0.5, 4)
   })
+
+  it('does not reuse ALT 1 depth when the requested ALT depth is missing', () => {
+    const gt = parseGenotype(['0/2', '90', '13', '10,3'], FORMAT, 2)
+
+    expect(gt.adRef).toBe(10)
+    expect(gt.adAlt).toBeNull()
+    expect(gt.ab).toBeNull()
+  })
 })

@@ -112,6 +112,32 @@ describe('vcf-allele-splitter', () => {
     expect(r2.info.get('AC')).toBe('10') // Number=A: select index 1
   })
 
+  it('marks missing Number=A/R INFO values instead of copying another allele', () => {
+    const defs = makeInfoDefs([
+      { id: 'AF', number: 'A', type: 'Float' },
+      { id: 'MLEAC', number: 'R', type: 'Integer' }
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 201,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 95,
+      filter: 'PASS',
+      info: new Map([
+        ['AF', '0.1'],
+        ['MLEAC', '20,4']
+      ]),
+      format: ['GT'],
+      samples: new Map([['S1', ['0/2']]])
+    }
+
+    const results = splitMultiAllelic(record, defs, formatDefs)
+    expect(results[1].info.get('AF')).toBe('.')
+    expect(results[1].info.get('MLEAC')).toBe('20,.')
+  })
+
   it('remaps GT for multi-allelic splits', () => {
     const record: VcfRawRecord = {
       chrom: 'chr22',
@@ -196,6 +222,47 @@ describe('vcf-allele-splitter', () => {
     // Split for ALT=T (altIdx=1): AD should be ref,alt2 = 10,7 — NOT 10,3
     // (the bug reused ALT#1's depth for every subsequent split allele).
     expect(results[1].samples.get('S1')![3]).toBe('10,7')
+  })
+
+  it('marks a missing target AD depth as missing instead of retaining another allele depth', () => {
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 301,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['S1', ['0/2', '10,3']]])
+    }
+
+    const results = splitMultiAllelic(record, infoDefs, formatDefs)
+    expect(results[1].samples.get('S1')![1]).toBe('10,.')
+  })
+
+  it('normalizes Number=A AD to a biallelic missing-ref shape', () => {
+    const numberAFormats = makeFormatDefs([
+      { id: 'GT', number: '1', type: 'String' },
+      { id: 'AD', number: 'A', type: 'Integer' }
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 302,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['S1', ['0/2', '3,7']]])
+    }
+
+    const results = splitMultiAllelic(record, infoDefs, numberAFormats)
+    expect(results[0].samples.get('S1')![1]).toBe('.,3')
+    expect(results[1].samples.get('S1')![1]).toBe('.,7')
   })
 
   it('handles triallelic with three ALT alleles', () => {

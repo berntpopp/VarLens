@@ -70,11 +70,7 @@ function splitInfoFields(
       case 'A': {
         // Per-ALT allele — select value at altIdx
         const parts = value.split(',')
-        if (altIdx < parts.length) {
-          result.set(key, parts[altIdx])
-        } else {
-          result.set(key, value)
-        }
+        result.set(key, parts[altIdx] ?? '.')
         break
       }
 
@@ -84,7 +80,7 @@ function splitInfoFields(
         if (parts.length > altIdx + 1) {
           result.set(key, `${parts[0]},${parts[altIdx + 1]}`)
         } else {
-          result.set(key, value)
+          result.set(key, `${parts[0] ?? '.'},.`)
         }
         break
       }
@@ -146,13 +142,17 @@ function splitSampleFields(
         const parts = values[fIdx].split(',')
         if (parts.length > altIdx + 1) {
           newValues[fIdx] = `${parts[0]},${parts[altIdx + 1]}`
+        } else {
+          newValues[fIdx] = `${parts[0] ?? '.'},.`
         }
       } else if (number === 'A') {
         // Per-ALT — select value at altIdx
         const parts = values[fIdx].split(',')
-        if (altIdx < parts.length) {
-          newValues[fIdx] = parts[altIdx]
-        }
+        const selected = parts[altIdx] ?? '.'
+        // Genotype parsing consumes AD as a biallelic REF,ALT pair. A
+        // non-standard Number=A AD has no reference depth, so retain the ALT
+        // depth explicitly while marking REF missing.
+        newValues[fIdx] = field === 'AD' ? `.,${selected}` : selected
       }
       // Number=1, 0, ., G: keep as-is
     }
