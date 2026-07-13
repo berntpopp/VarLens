@@ -227,4 +227,60 @@ describe('recovery sidecar portability (openDatabase end-to-end)', () => {
     expect(keyStore.getKeyIdForPath(sourcePath)).toBe(sourceKeyId)
     expect(keyStore.getKeyIdForPath(targetPath)).toBeNull()
   })
+
+  it('tries a verified sidecar candidate when a stale path registry wrap accepts the same passphrase', async () => {
+    const dir = makeTmpDir('varlens-recovery-stale-registry-')
+    const registryPath = join(dir, 'keys.json')
+    const stalePath = join(dir, 'restored.db')
+    const replacementPath = join(dir, 'replacement.db')
+    const keyStore = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+    const staleManager = makeManager(dir, 'stale-settings')
+    const replacementManager = makeManager(dir, 'replacement-settings')
+
+    await createDatabase({ path: stalePath }, () => staleManager, keyStore)
+    const staleKeyId = keyStore.getKeyIdForPath(stalePath)
+    expect(staleKeyId).not.toBeNull()
+    if (staleKeyId === null) throw new Error('expected stale managed key')
+    expect(keyStore.setPassphrase(staleKeyId, PASSPHRASE)).toMatchObject({ ok: true })
+    await staleManager.close()
+
+    await createDatabase({ path: replacementPath }, () => replacementManager, keyStore)
+    const replacementKeyId = keyStore.getKeyIdForPath(replacementPath)
+    expect(replacementKeyId).not.toBeNull()
+    if (replacementKeyId === null) throw new Error('expected replacement managed key')
+    const replacementResolved = keyStore.resolveKeyForPath(replacementPath)
+    expect(replacementResolved.ok).toBe(true)
+    expect(keyStore.setPassphrase(replacementKeyId, PASSPHRASE)).toMatchObject({ ok: true })
+    replacementManager
+      .getCurrent()
+      .database.exec('CREATE TABLE restored_marker (label TEXT NOT NULL)')
+    replacementManager
+      .getCurrent()
+      .database.prepare('INSERT INTO restored_marker (label) VALUES (?)')
+      .run('replacement-data')
+    await replacementManager.close()
+
+    // Simulate restoring/copying a different managed database and its valid
+    // recovery sidecar over a path whose old registry entry still exists.
+    // Reusing the same passphrase is deliberately realistic: the stale
+    // registry wrap authenticates successfully, but yields the wrong DEK.
+    copyFileSync(replacementPath, stalePath)
+    copyFileSync(recoverySidecarPathFor(replacementPath), recoverySidecarPathFor(stalePath))
+
+    const opened = await openDatabase(
+      { path: stalePath, password: PASSPHRASE },
+      () => staleManager.getCurrent(),
+      () => staleManager,
+      noopCallbacks,
+      keyStore
+    )
+
+    expect(opened.success).toBe(true)
+    expect(
+      staleManager.getCurrent().database.prepare('SELECT label FROM restored_marker').pluck().all()
+    ).toEqual(['replacement-data'])
+    expect(keyStore.getKeyIdForPath(stalePath)).toBe(replacementKeyId)
+    expect(keyStore.resolveKeyForPath(stalePath)).toEqual(replacementResolved)
+    expect(keyStore.resolveKeyForPath(replacementPath)).toEqual({ ok: false, reason: 'not-found' })
+  })
 })

@@ -487,7 +487,9 @@ export class DbKeyStore {
       raw = readFileSync(this.registryPath, 'utf-8')
     } catch (e) {
       mainLogger.warn(`Failed to read key registry file: ${errorMessage(e)}`, 'DbKeyStore')
-      const error = new Error('The database key registry could not be read; no key changes were made')
+      const error = new Error(
+        'The database key registry could not be read; no key changes were made'
+      )
       ;(error as Error & { cause?: unknown }).cause = e
       throw error
     }
