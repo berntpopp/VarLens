@@ -570,7 +570,7 @@ function completeCancelledRun(generation: number): void {
   }
   summary.value = cancelledResult
   step.value = 4
-  importStore.importComplete(cancelledResult)
+  importStore.importComplete({ ...cancelledResult, details: [] })
 }
 
 async function startVcfImport(): Promise<void> {
