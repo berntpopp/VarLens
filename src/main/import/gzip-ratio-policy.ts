@@ -22,11 +22,12 @@ export class GzipRatioPolicy {
   private firstLine = true
   private vcf = false
   private sampleCount = 0
+  private inspectionComplete = false
 
   constructor(private readonly baseRatio: number) {}
 
   observe(chunk: Buffer): void {
-    if (this.sampleCount > 0) return
+    if (this.inspectionComplete) return
 
     for (const byte of chunk) {
       if (this.atLineStart) {
@@ -43,10 +44,13 @@ export class GzipRatioPolicy {
       if (this.firstLine) {
         this.vcf = this.linePrefix.startsWith('##fileformat=VCFv')
         this.firstLine = false
+        this.inspectionComplete = !this.vcf
       } else if (this.vcf && this.linePrefix.startsWith('#CHROM\t')) {
         // Nine fixed/FORMAT columns produce eight tabs before sample columns.
         this.sampleCount = Math.max(0, this.lineTabs - 8)
+        this.inspectionComplete = true
       }
+      if (this.inspectionComplete) return
       this.atLineStart = true
     }
   }
