@@ -438,7 +438,7 @@ describe('web dispatcher adapters: auth and import', () => {
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
       const result = (await overrides['batch-import:start'].handle(
-        [[upload.ref], 'skip'],
+        [[upload.ref], 'skip', undefined, 'web-run-1'],
         request as never,
         reply as never,
         deps
@@ -471,6 +471,7 @@ describe('web dispatcher adapters: auth and import', () => {
         ]
       })
       expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:progress', {
+        runId: 'web-run-1',
         currentIndex: 0,
         totalFiles: 1,
         currentFileName: 'Case B.json',
@@ -483,7 +484,10 @@ describe('web dispatcher adapters: auth and import', () => {
       expect(deps.events.publish).toHaveBeenCalledWith(7, 'cohort:summaryRebuilt', {
         is_stale: false
       })
-      expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:complete', result)
+      expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:complete', {
+        ...result,
+        runId: 'web-run-1'
+      })
 
       const newBatchJobs = jobRunner
         .list({ kind: 'import_batch' })
@@ -537,7 +541,7 @@ describe('web dispatcher adapters: auth and import', () => {
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
       const result = (await overrides['batch-import:start'].handle(
-        [[upload.ref], 'overwrite'],
+        [[upload.ref], 'overwrite', undefined, 'web-error-run'],
         request as never,
         reply as never,
         deps
@@ -557,7 +561,10 @@ describe('web dispatcher adapters: auth and import', () => {
         }
       ])
       expect(result.details[0]?.error).not.toBe('[object Object]')
-      expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:complete', result)
+      expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:complete', {
+        ...result,
+        runId: 'web-error-run'
+      })
     } finally {
       if (prevNodeEnv === undefined) delete process.env.NODE_ENV
       else process.env.NODE_ENV = prevNodeEnv
@@ -600,7 +607,7 @@ describe('web dispatcher adapters: auth and import', () => {
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
       const result = (await overrides['batch-import:start'].handle(
-        [[firstUpload.ref, secondUpload.ref], 'skip'],
+        [[firstUpload.ref, secondUpload.ref], 'skip', undefined, 'web-dupe-run'],
         request as never,
         reply as never,
         deps
@@ -666,7 +673,7 @@ describe('web dispatcher adapters: auth and import', () => {
     const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
     const result = await overrides['batch-import:start'].handle(
-      [['web-upload:missing/Case B.json'], 'skip'],
+      [['web-upload:missing/Case B.json'], 'skip', undefined, 'web-missing-run'],
       request as never,
       reply as never,
       deps
@@ -677,6 +684,23 @@ describe('web dispatcher adapters: auth and import', () => {
       error: 'upload-not-found',
       message: 'Uploaded file is no longer available'
     })
+    expect(importSingleFile).not.toHaveBeenCalled()
+  })
+
+  test('batch-import.start rejects a missing run id before starting work', async () => {
+    const { deps, importSingleFile, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+    const result = await overrides['batch-import:start'].handle(
+      [[], 'skip'],
+      request as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(result).toEqual({ error: 'invalid-run-id', message: 'runId is invalid' })
     expect(importSingleFile).not.toHaveBeenCalled()
   })
 

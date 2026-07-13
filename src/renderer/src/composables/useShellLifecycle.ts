@@ -1,7 +1,7 @@
 import { onMounted, onUnmounted, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { SelectedCaseInput } from './useAppState'
-import type { WindowAPI } from '../../../shared/types/api'
+import type { BatchResult, WindowAPI } from '../../../shared/types/api'
 import type { useImportStatusStore } from '../stores/importStatusStore'
 import type AppDialogHostType from '../components/AppDialogHost.vue'
 import { useVariantColumnMeta } from './useVariantColumnMeta'
@@ -69,9 +69,17 @@ export function useShellLifecycle({
     if (!api) return null
 
     return api.batchImport.onComplete((result) => {
+      if (!importStore.isCurrentBatchRun(result.runId)) return
+      const batchResult: BatchResult = {
+        succeeded: result.succeeded,
+        failed: result.failed,
+        skipped: result.skipped,
+        cancelled: result.cancelled,
+        details: result.details
+      }
       importStore.importComplete({
-        ...result,
-        details: result.details.map((d) => ({
+        ...batchResult,
+        details: batchResult.details.map((d) => ({
           ...d,
           caseName: d.caseName ?? d.fileName,
           status: d.status === 'success' ? 'success' : d.status === 'failed' ? 'failed' : 'skipped'

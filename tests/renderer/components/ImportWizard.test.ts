@@ -19,7 +19,7 @@ import ImportSourceSelector from '../../../src/renderer/src/components/import/Im
 import BatchReviewPhase from '../../../src/renderer/src/components/batch-import/BatchReviewPhase.vue'
 import { useImportStatusStore } from '../../../src/renderer/src/stores/importStatusStore'
 import { createMockApi, type MockApi } from '../../utils/mock-api'
-import type { BatchResult } from '../../../src/shared/types/api'
+import type { BatchCompleteEvent, BatchResult } from '../../../src/shared/types/api'
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: {
@@ -37,6 +37,8 @@ interface ImportWizardVm {
   cancelError: string
   summary: BatchResult
   isVcfImport: boolean
+  isZipImport: boolean
+  zipExtractionId: string
   vcfFilePath: string
   vcfSelectedSamples: string[]
   vcfCaseNames: Map<string, string>
@@ -58,6 +60,12 @@ function deferred<T>(): {
     reject = rejectPromise
   })
   return { promise, resolve, reject }
+}
+
+function startedBatchRunId(mockApi: MockApi, callIndex = 0): string {
+  const runId = mockApi.batchImport.start.mock.calls[callIndex]?.[3]
+  if (typeof runId !== 'string') throw new Error('expected batch start runId')
+  return runId
 }
 
 /**
@@ -201,7 +209,7 @@ describe('ImportWizard IPC safety', () => {
         userMessage: 'Could not cancel the import'
       }
       const pendingStart = deferred<BatchResult>()
-      let completeImport: ((result: BatchResult) => void) | undefined
+      let completeImport: ((result: BatchCompleteEvent) => void) | undefined
       mockApi.batchImport.start.mockReturnValue(pendingStart.promise)
       mockApi.batchImport.cancel.mockResolvedValue(cancelError)
       mockApi.batchImport.onComplete.mockImplementation((callback) => {
@@ -231,7 +239,7 @@ describe('ImportWizard IPC safety', () => {
         details: []
       }
       expect(completeImport).toBeDefined()
-      completeImport!(realResult)
+      completeImport!({ ...realResult, runId: startedBatchRunId(mockApi) })
       pendingStart.resolve(realResult)
       await importRun
 
@@ -246,7 +254,7 @@ describe('ImportWizard IPC safety', () => {
       const mockApi = createMockApi()
       const pendingCancel = deferred<undefined>()
       const pendingStart = deferred<BatchResult>()
-      let completeImport: ((result: BatchResult) => void) | undefined
+      let completeImport: ((result: BatchCompleteEvent) => void) | undefined
       mockApi.batchImport.cancel.mockReturnValue(pendingCancel.promise)
       mockApi.batchImport.start.mockReturnValue(pendingStart.promise)
       mockApi.batchImport.onComplete.mockImplementation((callback) => {
@@ -280,7 +288,7 @@ describe('ImportWizard IPC safety', () => {
         cancelled: true,
         details: []
       }
-      completeImport!(cancelledResult)
+      completeImport!({ ...cancelledResult, runId: startedBatchRunId(mockApi) })
       pendingStart.resolve(cancelledResult)
       await importRun
 
@@ -294,7 +302,7 @@ describe('ImportWizard IPC safety', () => {
       const mockApi = createMockApi()
       const pendingCancel = deferred<undefined>()
       const pendingStart = deferred<BatchResult>()
-      let completeImport: ((result: BatchResult) => void) | undefined
+      let completeImport: ((result: BatchCompleteEvent) => void) | undefined
       mockApi.batchImport.cancel.mockReturnValue(pendingCancel.promise)
       mockApi.batchImport.start.mockReturnValue(pendingStart.promise)
       mockApi.batchImport.onComplete.mockImplementation((callback) => {
@@ -318,7 +326,7 @@ describe('ImportWizard IPC safety', () => {
         cancelled: false,
         details: []
       }
-      completeImport!(realResult)
+      completeImport!({ ...realResult, runId: startedBatchRunId(mockApi) })
       pendingCancel.resolve(undefined)
       await cancellation
       pendingStart.resolve(realResult)
@@ -450,7 +458,7 @@ describe('ImportWizard IPC safety', () => {
     it('blocks a same-kind batch restart until the cancelled batch event settles', async () => {
       const mockApi = createMockApi()
       const oldBatchStart = deferred<BatchResult>()
-      let completeBatch: ((result: BatchResult) => void) | undefined
+      let completeBatch: ((result: BatchCompleteEvent) => void) | undefined
       mockApi.batchImport.start.mockReturnValue(oldBatchStart.promise)
       mockApi.batchImport.onComplete.mockImplementation((callback) => {
         completeBatch = callback
@@ -481,13 +489,84 @@ describe('ImportWizard IPC safety', () => {
         cancelled: true,
         details: []
       }
-      completeBatch!(oldResult)
+      completeBatch!({ ...oldResult, runId: startedBatchRunId(mockApi) })
       oldBatchStart.resolve(oldResult)
       await oldRun
 
       expect(store.phase).toBe('cancelled')
       expect(vm.step).toBe(4)
       expect(vm.summary.details).toEqual([])
+      wrapper.unmount()
+    })
+
+    it('ignores a stale completion event after a newer batch run starts', async () => {
+      const mockApi = createMockApi()
+      const oldResult: BatchResult = {
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+        cancelled: false,
+        details: []
+      }
+      const newResult: BatchResult = {
+        succeeded: 2,
+        failed: 0,
+        skipped: 0,
+        cancelled: false,
+        details: []
+      }
+      const newBatchStart = deferred<BatchResult>()
+      let completeBatch: ((result: BatchCompleteEvent) => void) | undefined
+      mockApi.batchImport.start
+        .mockResolvedValueOnce(oldResult)
+        .mockReturnValueOnce(newBatchStart.promise)
+      mockApi.batchImport.onComplete.mockImplementation((callback) => {
+        completeBatch = callback as typeof completeBatch
+        return vi.fn()
+      })
+      const randomUuid = vi
+        .spyOn(globalThis.crypto, 'randomUUID')
+        .mockReturnValueOnce('11111111-1111-4111-8111-111111111111')
+        .mockReturnValueOnce('22222222-2222-4222-8222-222222222222')
+      window.api = mockApi
+
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const vm = wrapper.vm as unknown as ImportWizardVm
+
+      vm.isZipImport = true
+      vm.zipExtractionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+      await vm.startImport()
+      await flushPromises()
+      expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledWith(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+      )
+      store.reset()
+      vm.show()
+      vm.isZipImport = true
+      vm.zipExtractionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      const currentRun = vm.startImport()
+      await Promise.resolve()
+      mockApi.batchImport.cleanupZipTemp.mockClear()
+
+      completeBatch!({ ...oldResult, runId: '11111111-1111-4111-8111-111111111111' })
+      await flushPromises()
+
+      expect(vm.step).toBe(3)
+      expect(store.phase).toBe('importing')
+      expect(vm.summary).not.toEqual(oldResult)
+      expect(mockApi.batchImport.cleanupZipTemp).not.toHaveBeenCalled()
+
+      newBatchStart.resolve(newResult)
+      await currentRun
+      await flushPromises()
+      expect(vm.summary).toEqual(newResult)
+      expect(mockApi.batchImport.cleanupZipTemp).toHaveBeenCalledWith(
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      )
+
+      randomUuid.mockRestore()
       wrapper.unmount()
     })
   })

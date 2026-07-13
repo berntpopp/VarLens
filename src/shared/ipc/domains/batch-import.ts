@@ -11,7 +11,8 @@ export interface BatchImportDomainContract {
   start: (
     filePaths: string[],
     duplicateStrategy: DuplicateChoice,
-    stripText?: string
+    stripText: string | undefined,
+    runId: string
   ) => Promise<IpcResult<BatchResult>>
   cancel: () => Promise<IpcResult<void>>
   selectZip: () => Promise<IpcResult<{ filePath: string; isEncrypted: boolean } | null>>

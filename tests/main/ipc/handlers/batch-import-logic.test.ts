@@ -192,6 +192,13 @@ describe('startBatchImport — Sprint A D3 (iii) / Gate 12', () => {
     expect(conflict.failed).toBe(1)
     expect(conflict.details[0].error).toBe('A batch import is already in progress')
 
+    // A rejected second enqueue must not clear the first run's cancellation
+    // owner. The shared runner callback must still cancel that first worker.
+    const [running] = jobRunner.list({ kind: 'import_batch', status: 'running' })
+    expect(running).toBeDefined()
+    await jobRunner.cancel(running!.id)
+    expect(FakeImportWorkerClient.instances[0].cancel).toHaveBeenCalledTimes(1)
+
     // Free the slot.
     FakeImportWorkerClient.instances[0].emit(COMPLETE_MSG)
     await first

@@ -78,7 +78,9 @@ describe('batch-import preload domain behavior', () => {
       duplicateCount: 0
     })
 
-    await expect(api.start(['/path/to/file1.json'], 'skip', undefined)).resolves.toMatchObject({
+    await expect(
+      api.start(['/path/to/file1.json'], 'skip', undefined, 'desktop-run-1')
+    ).resolves.toMatchObject({
       succeeded: 1,
       failed: 0
     })
@@ -116,7 +118,8 @@ describe('batch-import preload domain behavior', () => {
       'batch-import:start',
       ['/path/to/file1.json'],
       'skip',
-      undefined
+      undefined,
+      'desktop-run-1'
     )
     expect(invoke).toHaveBeenNthCalledWith(5, 'batch-import:cancel')
     expect(invoke).toHaveBeenNthCalledWith(6, 'batch-import:selectZip')

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
-import type { BatchResult } from '../../../src/shared/types/api'
+import type { BatchCompleteEvent } from '../../../src/shared/types/api'
 import { useShellLifecycle } from '../../../src/renderer/src/composables/useShellLifecycle'
 
 describe('useShellLifecycle', () => {
@@ -56,15 +56,20 @@ describe('useShellLifecycle', () => {
       }),
       dialogHostRef: ref(null),
       importStore: {
-        importComplete
+        importComplete,
+        isCurrentBatchRun: vi.fn().mockReturnValue(true)
       } as never
     })
 
     const cleanup = vi.fn()
-    onComplete.mockImplementation((callback: (result: BatchResult) => void) => {
+    onComplete.mockImplementation((callback: (result: BatchCompleteEvent) => void) => {
       callback({
-        totalImported: 1,
-        details: [{ fileName: 'case-a', status: 'success' }]
+        runId: 'run-1',
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+        cancelled: false,
+        details: [{ filePath: '/case-a.json', fileName: 'case-a', status: 'success' }]
       })
       return cleanup
     })
@@ -72,11 +77,61 @@ describe('useShellLifecycle', () => {
     const registeredCleanup = lifecycle.setupBatchImportCompletionListener()
 
     expect(importComplete).toHaveBeenCalledWith({
-      totalImported: 1,
-      details: [{ fileName: 'case-a', caseName: 'case-a', status: 'success' }]
+      succeeded: 1,
+      failed: 0,
+      skipped: 0,
+      cancelled: false,
+      details: [
+        {
+          filePath: '/case-a.json',
+          fileName: 'case-a',
+          caseName: 'case-a',
+          status: 'success'
+        }
+      ]
     })
     expect(incrementDataGeneration).toHaveBeenCalledTimes(1)
     expect(refreshCases).toHaveBeenCalledTimes(1)
     expect(registeredCleanup).toBe(cleanup)
+  })
+
+  it('ignores completion events that do not own the current batch run', () => {
+    const onComplete = vi.fn()
+    const incrementDataGeneration = vi.fn()
+    const refreshCases = vi.fn()
+    const importComplete = vi.fn()
+    const isCurrentBatchRun = vi.fn().mockReturnValue(false)
+
+    const lifecycle = useShellLifecycle({
+      api: { batchImport: { onComplete } } as never,
+      currentDatabasePath: ref(null),
+      currentDatabaseName: ref('VarLens'),
+      incrementDataGeneration,
+      resetForDatabaseSwitch: vi.fn(),
+      clearMetadataCache: vi.fn(),
+      selectCase: vi.fn(),
+      caseListRef: ref({ refreshCases, selectCase: vi.fn() }),
+      dialogHostRef: ref(null),
+      importStore: { importComplete, isCurrentBatchRun } as never
+    })
+
+    onComplete.mockImplementation((callback) => {
+      callback({
+        runId: 'stale-run',
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+        cancelled: false,
+        details: []
+      })
+      return vi.fn()
+    })
+
+    lifecycle.setupBatchImportCompletionListener()
+
+    expect(isCurrentBatchRun).toHaveBeenCalledWith('stale-run')
+    expect(importComplete).not.toHaveBeenCalled()
+    expect(incrementDataGeneration).not.toHaveBeenCalled()
+    expect(refreshCases).not.toHaveBeenCalled()
   })
 })

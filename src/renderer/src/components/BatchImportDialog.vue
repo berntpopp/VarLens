@@ -83,7 +83,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type {
-  BatchProgress,
+  BatchProgressEvent,
   BatchResult,
   DuplicateChoice,
   DuplicateCheckItem
@@ -142,6 +142,7 @@ const summary = ref<BatchResult>({
 
 // Cleanup function for IPC listener
 let cleanupProgress: (() => void) | null = null
+let activeBatchRunId: string | null = null
 
 /**
  * Derive case name from file name (mirrors backend logic for live preview)
@@ -290,13 +291,15 @@ const extractAndShowReview = async (zipFilePath: string, password?: string): Pro
  * User confirmed in review phase, start import
  */
 const confirmAndStartImport = async (): Promise<void> => {
+  const runId = globalThis.crypto.randomUUID()
+  activeBatchRunId = runId
   phase.value = 'importing'
-  importStore.startImport(selectedFilePaths.value.length)
+  importStore.startImport(selectedFilePaths.value.length, runId)
   importStore.dialogOpen = true
   const filePaths = [...selectedFilePaths.value]
   const strategy = duplicateCount.value > 0 ? duplicateStrategy.value : 'skip'
   const strip = stripText.value || undefined
-  await startImport(filePaths, strategy, strip)
+  await startImport(filePaths, strategy, strip, runId)
 }
 
 /**
@@ -305,12 +308,15 @@ const confirmAndStartImport = async (): Promise<void> => {
 const startImport = async (
   filePaths: string[],
   strategy: DuplicateChoice,
-  strip?: string
+  strip: string | undefined,
+  runId: string
 ): Promise<void> => {
   totalFiles.value = filePaths.length
 
   try {
-    const result = unwrapIpcResult(await api!.batchImport.start(filePaths, strategy, strip))
+    const result = unwrapIpcResult(await api!.batchImport.start(filePaths, strategy, strip, runId))
+    if (activeBatchRunId !== runId) return
+    activeBatchRunId = null
 
     summary.value = result
     phase.value = 'summary'
@@ -322,6 +328,8 @@ const startImport = async (
       details: []
     })
   } catch (error) {
+    if (activeBatchRunId !== runId) return
+    activeBatchRunId = null
     summary.value = {
       succeeded: 0,
       failed: 1,
@@ -452,7 +460,8 @@ const resetState = (): void => {
 
 // Setup IPC listeners
 onMounted(() => {
-  cleanupProgress = api!.batchImport.onProgress((progress: BatchProgress) => {
+  cleanupProgress = api!.batchImport.onProgress((progress: BatchProgressEvent) => {
+    if (progress.runId !== activeBatchRunId) return
     currentIndex.value = progress.currentIndex
     totalFiles.value = progress.totalFiles
     currentFileName.value = progress.currentFileName

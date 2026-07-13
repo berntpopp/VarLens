@@ -302,7 +302,7 @@ export interface BatchProgress {
   currentIndex: number // 0-based index of current file
   totalFiles: number // Total files in batch
   currentFileName: string // Name of file being processed
-  fileProgress?: ProgressUpdate // Per-file variant progress (reuse existing type)
+  fileProgress?: Omit<ProgressUpdate, 'phase'> & { phase: string }
   overallPercent: number // 0-100 overall percentage
 }
 
@@ -312,6 +312,14 @@ export interface BatchResult {
   skipped: number
   cancelled: boolean
   details: BatchFileDetail[]
+}
+
+export interface BatchProgressEvent extends BatchProgress {
+  runId: string
+}
+
+export interface BatchCompleteEvent extends BatchResult {
+  runId: string
 }
 
 export type DuplicateChoice = 'skip' | 'overwrite'
@@ -338,11 +346,12 @@ export interface BatchImportAPI {
   start: (
     filePaths: string[],
     duplicateStrategy: DuplicateChoice,
-    stripText?: string
+    stripText: string | undefined,
+    runId: string
   ) => Promise<IpcResult<BatchResult>>
   cancel: () => Promise<IpcResult<void>>
-  onProgress: (callback: (progress: BatchProgress) => void) => () => void
-  onComplete: (callback: (result: BatchResult) => void) => () => void
+  onProgress: (callback: (progress: BatchProgressEvent) => void) => () => void
+  onComplete: (callback: (result: BatchCompleteEvent) => void) => () => void
   selectZip: () => Promise<IpcResult<{ filePath: string; isEncrypted: boolean } | null>>
   testZipPassword: (zipPath: string, password: string) => Promise<IpcResult<{ success: boolean }>>
   extractZip: (

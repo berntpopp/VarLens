@@ -39,11 +39,12 @@ function throwUnallowedBatchPath(channel: string, filePath: string, label = 'fil
 // ZIP extractor for isEncrypted check (stays in handler — used with dialog)
 const zipExtractor = new ZipExtractor()
 
-/** Shared callbacks that wire logic-layer events to renderer via safeEmit. */
-const batchImportCallbacks: BatchImportCallbacks = {
-  onProgress: (data) => safeEmit('batch-import:progress', data),
-  onComplete: (data) => safeEmit('batch-import:complete', data),
-  onCohortStale: (data) => safeEmit('cohort:summaryRebuilt', data)
+function createBatchImportCallbacks(runId: string): BatchImportCallbacks {
+  return {
+    onProgress: (data) => safeEmit('batch-import:progress', { ...data, runId }),
+    onComplete: (data) => safeEmit('batch-import:complete', { ...data, runId }),
+    onCohortStale: (data) => safeEmit('cohort:summaryRebuilt', data)
+  }
 }
 
 export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependencies): void {
@@ -154,19 +155,27 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
    */
   ipcMain.handle(
     'batch-import:start',
-    async (_event, filePaths: unknown, duplicateStrategy: unknown, stripText?: unknown) => {
+    async (
+      _event,
+      filePaths: unknown,
+      duplicateStrategy: unknown,
+      stripText: unknown,
+      runId: unknown
+    ) => {
       return wrapHandler(async () => {
         const parsed = BatchImportStartParamsSchema.safeParse([
           filePaths,
           duplicateStrategy,
-          stripText
+          stripText,
+          runId
         ])
         if (!parsed.success) {
           throw new InvalidParametersError(
             `Invalid batch-import:start params: ${parsed.error.message}`
           )
         }
-        const [validatedFilePaths, validatedStrategy, validatedStripText] = parsed.data
+        const [validatedFilePaths, validatedStrategy, validatedStripText, validatedRunId] =
+          parsed.data
         validatedFilePaths.forEach((filePath, index) => {
           if (!isStrictlyEnrolledPath(filePath)) {
             throwUnallowedBatchPath('batch-import:start', filePath, `filePaths[${index}]`)
@@ -177,7 +186,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
           validatedFilePaths,
           validatedStrategy,
           validatedStripText,
-          batchImportCallbacks
+          createBatchImportCallbacks(validatedRunId)
         )
       })
     }

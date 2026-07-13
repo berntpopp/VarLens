@@ -15,13 +15,13 @@ import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { API_CONFIG } from '../../../shared/config'
 import type { FileImportRequest } from '../../../shared/types/import-worker'
 import type { DatabaseService } from '../../database/DatabaseService'
-import type { DuplicateChoice } from '../../../shared/types/api'
+import type { BatchProgress, DuplicateChoice } from '../../../shared/types/api'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 
 /** Callbacks for emitting events to the renderer during batch import. */
 export interface BatchImportCallbacks {
-  onProgress?: (data: unknown) => void
-  onComplete?: (data: unknown) => void
+  onProgress?: (data: BatchProgress) => void
+  onComplete?: (data: BatchImportResult) => void
   onCohortStale?: (data: { is_stale: boolean }) => void
 }
 
@@ -128,13 +128,18 @@ export async function startBatchImport(
       'import_batch',
       { files },
       async (ctx, p) => {
-        ctx.registerCancel(() => workerClient?.cancel())
-        return await runBatchWorker(db, p.files, callbacks)
+        const client = new ImportWorkerClient()
+        workerClient = client
+        ctx.registerCancel(() => client.cancel())
+        try {
+          return await runBatchWorker(db, p.files, callbacks, client)
+        } finally {
+          if (workerClient === client) workerClient = null
+        }
       }
     )
     return await handle.result
   } catch (error) {
-    workerClient = null
     mainLogger.error(`batch-import:start error: ${error}`, 'import')
     return {
       succeeded: 0,
@@ -164,18 +169,17 @@ function formatBatchImportError(error: unknown): string {
 function runBatchWorker(
   db: DatabaseService,
   files: FileImportRequest[],
-  callbacks: BatchImportCallbacks
+  callbacks: BatchImportCallbacks,
+  client: ImportWorkerClient
 ): Promise<BatchImportResult> {
-  workerClient = new ImportWorkerClient()
-
   return new Promise((resolve, reject) => {
-    workerClient!.start({
+    client.start({
       files,
       dbPath: db.getPath(),
       encryptionKey: db.getEncryptionKey(),
       throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
       onProgress: (msg) => {
-        callbacks.onProgress?.({
+        const progress: BatchProgress = {
           currentIndex: msg.fileIndex,
           totalFiles: msg.totalFiles,
           currentFileName: msg.fileName,
@@ -186,14 +190,13 @@ function runBatchWorker(
             elapsed: 0,
             skipped: msg.skipped
           }
-        })
+        }
+        callbacks.onProgress?.(progress)
       },
       onFileComplete: () => {
         // File complete -- progress already sent via onProgress
       },
       onComplete: (msg) => {
-        workerClient = null
-
         // Update internal variant frequency counts for successful imports
         try {
           for (const detail of msg.results.details) {
@@ -243,7 +246,6 @@ function runBatchWorker(
       onError: (msg) => {
         if (msg.fileIndex === -1) {
           // Fatal error
-          workerClient = null
           reject(new Error(msg.error))
         }
       }

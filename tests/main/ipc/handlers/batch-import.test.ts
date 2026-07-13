@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { join, parse } from 'node:path'
 import { ErrorCode, isIpcError } from '../../../../src/shared/types/errors'
 
-const { cleanupZipTemp } = vi.hoisted(() => ({ cleanupZipTemp: vi.fn() }))
+const { cleanupZipTemp, safeEmit } = vi.hoisted(() => ({
+  cleanupZipTemp: vi.fn(),
+  safeEmit: vi.fn()
+}))
 
 vi.mock('electron', () => ({
   dialog: {
@@ -41,6 +44,8 @@ vi.mock('../../../../src/main/ipc/utils/settings-io', () => ({
   loadSettings: vi.fn().mockResolvedValue({}),
   saveSettings: vi.fn().mockResolvedValue(undefined)
 }))
+
+vi.mock('../../../../src/main/ipc/utils/safeEmit', () => ({ safeEmit }))
 
 import { dialog } from 'electron'
 import { readdir } from 'fs/promises'
@@ -155,6 +160,24 @@ describe('batch-import IPC handlers', () => {
   })
 
   describe('batch-import:start', () => {
+    it('returns INVALID_PARAMETERS when runId is missing', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+      const filePath = join(EXTERNAL_ROOT, 'case1.json')
+      addAllowedImportPath(filePath)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'batch-import:start',
+        [filePath],
+        'overwrite',
+        undefined
+      )
+
+      expectInvalidParametersResult(result)
+      expect(startBatchImport).not.toHaveBeenCalled()
+    })
+
     it('returns INVALID_PARAMETERS for malformed duplicateStrategy', async () => {
       const ipcMain = makeIpcMain()
       registerBatchImportHandlers(makeDeps(ipcMain) as never)
@@ -165,7 +188,9 @@ describe('batch-import IPC handlers', () => {
         ipcMain,
         'batch-import:start',
         [filePath],
-        'not-a-real-strategy'
+        'not-a-real-strategy',
+        undefined,
+        'run-1'
       )
 
       expectInvalidParametersResult(result)
@@ -180,7 +205,9 @@ describe('batch-import IPC handlers', () => {
         ipcMain,
         'batch-import:start',
         ['/etc/passwd'],
-        'overwrite'
+        'overwrite',
+        undefined,
+        'run-1'
       )
 
       expectInvalidParametersResult(result)
@@ -193,10 +220,39 @@ describe('batch-import IPC handlers', () => {
       const filePath = join(EXTERNAL_ROOT, 'case1.json')
       addAllowedImportPath(filePath)
 
-      const result = await invokeHandler(ipcMain, 'batch-import:start', [filePath], 'overwrite')
+      const result = await invokeHandler(
+        ipcMain,
+        'batch-import:start',
+        [filePath],
+        'overwrite',
+        undefined,
+        'run-1'
+      )
 
       expect(isIpcError(result)).toBe(false)
       expect(startBatchImport).toHaveBeenCalled()
+      const callbacks = vi.mocked(startBatchImport).mock.calls[0]?.[4]
+      callbacks?.onProgress?.({
+        currentIndex: 0,
+        totalFiles: 1,
+        currentFileName: 'case1.json',
+        overallPercent: 50
+      })
+      callbacks?.onComplete?.({
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+        cancelled: false,
+        details: []
+      })
+      expect(safeEmit).toHaveBeenCalledWith(
+        'batch-import:progress',
+        expect.objectContaining({ runId: 'run-1' })
+      )
+      expect(safeEmit).toHaveBeenCalledWith(
+        'batch-import:complete',
+        expect.objectContaining({ runId: 'run-1' })
+      )
     })
 
     it('rejects a path under the automatic temp root that was never dialog-enrolled (F-path)', async () => {
@@ -207,7 +263,9 @@ describe('batch-import IPC handlers', () => {
         ipcMain,
         'batch-import:start',
         ['/tmp/not-dialog-enrolled.json'],
-        'overwrite'
+        'overwrite',
+        undefined,
+        'run-1'
       )
 
       expectInvalidParametersResult(result)

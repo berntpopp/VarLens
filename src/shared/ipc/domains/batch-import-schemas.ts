@@ -21,6 +21,7 @@ const nonBlankString = (maxLength: number) =>
 const NonBlankFilePathSchema = nonBlankString(4096)
 const StripTextSchema = z.string().max(255).optional()
 const ZipPasswordSchema = z.string().max(1024)
+export const BatchImportRunIdSchema = nonBlankString(128)
 
 /** Keep in sync with `DuplicateChoice` in src/shared/types/api.ts. */
 const DuplicateChoiceSchema: z.ZodType<DuplicateChoice> = z.enum(['skip', 'overwrite'])
@@ -33,7 +34,8 @@ export const BatchImportCheckDuplicatesParamsSchema = z.tuple([
 export const BatchImportStartParamsSchema = z.tuple([
   z.array(NonBlankFilePathSchema).max(5000),
   DuplicateChoiceSchema,
-  StripTextSchema
+  StripTextSchema,
+  BatchImportRunIdSchema
 ])
 
 export const BatchImportTestZipPasswordParamsSchema = z.tuple([

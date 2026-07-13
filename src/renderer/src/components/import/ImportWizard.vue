@@ -186,7 +186,8 @@ import type {
   DuplicateChoice,
   DuplicateCheckItem,
   BatchResult,
-  BatchProgress,
+  BatchProgressEvent,
+  BatchCompleteEvent,
   ProgressUpdate
 } from '../../../../shared/types/api'
 import type { VcfPreviewResult } from '../../../../shared/types/vcf'
@@ -329,7 +330,9 @@ let cleanupImportProgress: (() => void) | null = null
 let cleanupComplete: (() => void) | null = null
 let importRunGeneration = 0
 let activeBatchRunGeneration: number | null = null
+let activeBatchRunId: string | null = null
 let cancellationRequestedGeneration: number | null = null
+const batchRunExtractionIds = new Map<string, string>()
 
 function resetUploadState(): void {
   uploadFileName.value = ''
@@ -384,7 +387,6 @@ function formatIpcError(error: unknown, fallback: string): string {
 }
 
 const {
-  cleanupZipTemp,
   cleanupZipExtraction,
   abandonZipImport: abandonZipImportState,
   handleBack,
@@ -411,6 +413,15 @@ const {
     zipUnlocking
   }
 })
+
+async function cleanupBatchRunExtraction(runId: string, context: string): Promise<void> {
+  const extractionId = batchRunExtractionIds.get(runId)
+  if (extractionId === undefined) return
+  const cleaned = await cleanupZipExtraction(extractionId, context)
+  if (!cleaned) return
+  batchRunExtractionIds.delete(runId)
+  if (zipExtractionId.value === extractionId) zipExtractionId.value = ''
+}
 
 let sourceFlowGeneration = 0
 
@@ -549,6 +560,7 @@ function onVcfSelectionChanged(options: {
 function beginImportRun(kind: 'vcf' | 'batch'): number {
   importRunGeneration += 1
   activeBatchRunGeneration = kind === 'batch' ? importRunGeneration : null
+  activeBatchRunId = null
   cancellationRequestedGeneration = null
   return importRunGeneration
 }
@@ -561,6 +573,7 @@ function completeCancelledRun(generation: number): void {
   if (isImportTerminal(generation)) return
   importRunGeneration += 1
   activeBatchRunGeneration = null
+  activeBatchRunId = null
   cancellationRequestedGeneration = null
   const cancelledResult: BatchResult = {
     succeeded: 0,
@@ -609,6 +622,11 @@ async function startImport(): Promise<void> {
   }
 
   const generation = beginImportRun('batch')
+  const runId = globalThis.crypto.randomUUID()
+  activeBatchRunId = runId
+  if (isZipImport.value && zipExtractionId.value !== '') {
+    batchRunExtractionIds.set(runId, zipExtractionId.value)
+  }
 
   step.value = 3
   totalFiles.value = fileCount.value
@@ -616,7 +634,7 @@ async function startImport(): Promise<void> {
   overallPercent.value = 0
   variantCount.value = 0
 
-  importStore.startImport(fileCount.value)
+  importStore.startImport(fileCount.value, runId)
   importStore.dialogOpen = true
 
   try {
@@ -626,13 +644,19 @@ async function startImport(): Promise<void> {
       await api!.batchImport.start(
         [...selectedFilePaths.value],
         duplicateStrategy.value,
-        stripText.value || undefined
+        stripText.value || undefined,
+        runId
       )
     )
 
     // Result also arrives via onComplete callback; guard against double-processing
-    if (!isImportTerminal(generation) && activeBatchRunGeneration === generation) {
+    if (
+      !isImportTerminal(generation) &&
+      activeBatchRunGeneration === generation &&
+      activeBatchRunId === runId
+    ) {
       activeBatchRunGeneration = null
+      activeBatchRunId = null
       cancellationRequestedGeneration = null
       cancelError.value = ''
       summary.value = result
@@ -643,9 +667,7 @@ async function startImport(): Promise<void> {
         details: result.details.map((d) => ({ ...d, caseName: d.caseName ?? d.fileName }))
       })
 
-      if (isZipImport.value) {
-        void cleanupZipTemp('import completion')
-      }
+      void cleanupBatchRunExtraction(runId, 'import completion')
 
       if (result.succeeded > 0) {
         emit('batch-import-complete', { totalImported: result.succeeded })
@@ -656,13 +678,16 @@ async function startImport(): Promise<void> {
     // Only overwrite summary if the onComplete callback hasn't already
     // handled it (race: safeEmit fires before resolve, so the event
     // listener may have already set the correct summary + step 4).
-    if (!isImportTerminal(generation) && activeBatchRunGeneration === generation) {
+    if (
+      !isImportTerminal(generation) &&
+      activeBatchRunGeneration === generation &&
+      activeBatchRunId === runId
+    ) {
       activeBatchRunGeneration = null
+      activeBatchRunId = null
       if (cancellationRequestedGeneration === generation) {
         completeCancelledRun(generation)
-        if (isZipImport.value) {
-          await cleanupZipTemp('cancelled import termination')
-        }
+        await cleanupBatchRunExtraction(runId, 'cancelled import termination')
         return
       }
       cancellationRequestedGeneration = null
@@ -678,9 +703,7 @@ async function startImport(): Promise<void> {
       step.value = 4
       importStore.importError(message)
     }
-    if (isZipImport.value) {
-      await cleanupZipTemp('import start failure')
-    }
+    await cleanupBatchRunExtraction(runId, 'import start failure')
   }
 }
 
@@ -812,7 +835,8 @@ onMounted(() => {
       })
     }
 
-    cleanupProgress = api.batchImport.onProgress((progress: BatchProgress) => {
+    cleanupProgress = api.batchImport.onProgress((progress: BatchProgressEvent) => {
+      if (progress.runId !== activeBatchRunId) return
       const generation = activeBatchRunGeneration
       if (generation === null || isImportTerminal(generation)) return
       currentIndex.value = progress.currentIndex
@@ -834,27 +858,28 @@ onMounted(() => {
       }
     })
 
-    cleanupComplete = api.batchImport.onComplete((result: BatchResult) => {
+    cleanupComplete = api.batchImport.onComplete((result: BatchCompleteEvent) => {
+      if (result.runId !== activeBatchRunId) return
       const generation = activeBatchRunGeneration
       // Guard: startImport() await may have already handled this
       if (generation !== null && !isImportTerminal(generation)) {
+        const { runId, ...batchResult } = result
         activeBatchRunGeneration = null
+        activeBatchRunId = null
         cancellationRequestedGeneration = null
         cancelError.value = ''
-        summary.value = result
+        summary.value = batchResult
         step.value = 4
 
         importStore.importComplete({
-          ...result,
-          details: result.details.map((d) => ({
+          ...batchResult,
+          details: batchResult.details.map((d) => ({
             ...d,
             caseName: d.caseName ?? d.fileName
           }))
         })
 
-        if (isZipImport.value) {
-          void cleanupZipTemp('import completion event')
-        }
+        void cleanupBatchRunExtraction(runId, 'import completion event')
       }
     })
   }
