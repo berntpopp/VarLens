@@ -4,12 +4,14 @@
  * - The archive itself cannot be opened/parsed (corrupt file, bad format,
  *   truncated data) — an infrastructure fault. This must throw, not be
  *   reported as "wrong password".
- * - The first entry IS encrypted and the given password fails to decrypt
- *   it — the legitimate "wrong password" domain outcome. This must still
- *   return `false`, not throw.
- * - The first entry is NOT encrypted but still fails to read/decode/CRC
- *   check (a corrupt, unencrypted archive) — this is an infrastructure
- *   fault too and must throw, not be reported as "wrong password".
+ * - An encrypted entry rejects the given password — the legitimate "wrong
+ *   password" domain outcome. Validation must continue through later entries
+ *   before returning `false`, so ordering cannot hide corruption.
+ * - A non-password read/decode/CRC failure is an infrastructure fault and
+ *   must throw, whether its entry is encrypted or not.
+ * - A readable archive without encrypted entries returns `false`; success
+ *   requires at least one encrypted entry and a password accepted by all of
+ *   them.
  *
  * Before the first fix, the unopenable-archive and corrupt-entry-data
  * classes were both caught by a single try/catch and collapsed into
@@ -17,16 +19,21 @@
  * password (finding C8 / Codex F-05). A follow-up review found the second
  * fix still collapsed a corrupt UNENCRYPTED entry into the same `false`
  * "wrong password" shape as a genuinely encrypted entry with the wrong
- * password — this file now covers both classes explicitly by checking the
- * entry's encryption flag before deciding.
+ * password. A later review found password rejection also returned early and
+ * could hide corruption in subsequent entries. This file locks all outcomes.
  */
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import AdmZip from 'adm-zip'
-import { mkdtempSync, readFileSync, writeFileSync } from 'fs'
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomBytes } from 'crypto'
 import { ZipExtractor } from '../../../src/main/import/ZipExtractor'
+import { mainLogger } from '../../../src/main/services/MainLogger'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), 'varlens-zipextractor-test-'))
@@ -68,6 +75,33 @@ function writeZipWithCorruptEntryData(path: string): void {
 
 function writeGarbageFile(path: string): void {
   writeFileSync(path, Buffer.from('this is not a zip file, just plain bytes'))
+}
+
+function makeStubArchive(
+  entries: Array<{
+    entryName: string
+    encrypted: boolean
+    declaredSize: number
+    getData: (password: string) => Buffer
+  }>
+): { zipPath: string; openArchive: () => AdmZip } {
+  const dir = makeTempDir()
+  const zipPath = join(dir, 'stub-source.zip')
+  writeValidZip(zipPath)
+  const zipEntries = entries.map(
+    ({ entryName, encrypted, declaredSize, getData }) =>
+      ({
+        entryName,
+        isDirectory: false,
+        header: { encrypted, size: declaredSize },
+        getData
+      }) as unknown as AdmZip.IZipEntry
+  )
+
+  return {
+    zipPath,
+    openArchive: () => ({ getEntries: () => zipEntries }) as unknown as AdmZip
+  }
 }
 
 // ── Minimal traditional PKZIP (ZipCrypto) encryption ──────────────────────
@@ -343,13 +377,187 @@ describe('ZipExtractor.testPassword', () => {
     expect(extractor.testPassword(encryptedPath, 'wrong-password')).toBe(false)
   })
 
-  it('preserves the legitimate outcome: a valid, readable archive does not throw', () => {
+  it('continues after a wrong-password result and throws when a later entry is corrupt', () => {
+    const wrongPasswordRead = vi.fn(() => {
+      throw new Error('Wrong Password')
+    })
+    const corruptRead = vi.fn(() => {
+      throw new Error('CRC mismatch')
+    })
+    const { zipPath, openArchive } = makeStubArchive([
+      {
+        entryName: 'first.json',
+        encrypted: true,
+        declaredSize: 2,
+        getData: wrongPasswordRead
+      },
+      {
+        entryName: 'second.json',
+        encrypted: true,
+        declaredSize: 2,
+        getData: corruptRead
+      }
+    ])
+
+    const extractor = new ZipExtractor(undefined, openArchive)
+
+    expect(() => extractor.testPassword(zipPath, 'wrong')).toThrow(/corrupt/i)
+    expect(wrongPasswordRead).toHaveBeenCalledOnce()
+    expect(corruptRead).toHaveBeenCalledOnce()
+  })
+
+  it('checks later encrypted entries before returning the aggregated wrong-password result', () => {
+    const wrongPasswordRead = vi.fn(() => {
+      throw new Error('Wrong Password')
+    })
+    const successfulRead = vi.fn(() => Buffer.from('{}'))
+    const { zipPath, openArchive } = makeStubArchive([
+      {
+        entryName: 'first.json',
+        encrypted: true,
+        declaredSize: 2,
+        getData: wrongPasswordRead
+      },
+      {
+        entryName: 'second.json',
+        encrypted: true,
+        declaredSize: 2,
+        getData: successfulRead
+      }
+    ])
+
+    const extractor = new ZipExtractor(undefined, openArchive)
+
+    expect(extractor.testPassword(zipPath, 'wrong')).toBe(false)
+    expect(wrongPasswordRead).toHaveBeenCalledOnce()
+    expect(successfulRead).toHaveBeenCalledOnce()
+  })
+
+  it('returns false when no encrypted entry exists', () => {
     const dir = makeTempDir()
     const validPath = join(dir, 'valid.zip')
     writeValidZip(validPath)
 
     const extractor = new ZipExtractor()
 
-    expect(() => extractor.testPassword(validPath, 'irrelevant')).not.toThrow()
+    expect(extractor.testPassword(validPath, 'irrelevant')).toBe(false)
+  })
+
+  it('rejects a declared entry size above the password-validation limit before decoding', () => {
+    const getData = vi.fn(() => Buffer.alloc(5))
+    const { zipPath, openArchive } = makeStubArchive([
+      { entryName: 'large.json', encrypted: true, declaredSize: 5, getData }
+    ])
+
+    const extractor = new ZipExtractor(
+      {
+        maxEntryUncompressedBytes: 4,
+        maxTotalUncompressedBytes: 10
+      },
+      openArchive
+    )
+
+    expect(() => extractor.testPassword(zipPath, 'secret')).toThrow(/limit/i)
+    expect(getData).not.toHaveBeenCalled()
+  })
+
+  it('rejects actual decoded data above the declared per-entry limit', () => {
+    const getData = vi.fn(() => Buffer.alloc(5))
+    const { zipPath, openArchive } = makeStubArchive([
+      { entryName: 'lying-header.json', encrypted: true, declaredSize: 1, getData }
+    ])
+
+    const extractor = new ZipExtractor(
+      {
+        maxEntryUncompressedBytes: 4,
+        maxTotalUncompressedBytes: 10
+      },
+      openArchive
+    )
+
+    expect(() => extractor.testPassword(zipPath, 'secret')).toThrow(/limit/i)
+    expect(getData).toHaveBeenCalledOnce()
+  })
+
+  it('rejects entries whose cumulative declared size exceeds the validation limit', () => {
+    const firstRead = vi.fn(() => Buffer.alloc(4))
+    const secondRead = vi.fn(() => Buffer.alloc(4))
+    const { zipPath, openArchive } = makeStubArchive([
+      { entryName: 'first.json', encrypted: true, declaredSize: 4, getData: firstRead },
+      { entryName: 'second.json', encrypted: true, declaredSize: 4, getData: secondRead }
+    ])
+
+    const extractor = new ZipExtractor(
+      {
+        maxEntryUncompressedBytes: 5,
+        maxTotalUncompressedBytes: 6
+      },
+      openArchive
+    )
+
+    expect(() => extractor.testPassword(zipPath, 'secret')).toThrow(/limit/i)
+    expect(firstRead).toHaveBeenCalledOnce()
+    expect(secondRead).not.toHaveBeenCalled()
+  })
+
+  it('does not expose the supplied password through corruption errors or logs', () => {
+    const password = 'sentinel-password-never-log'
+    const getData = vi.fn(() => {
+      throw new Error(`CRC mismatch while using ${password}`)
+    })
+    const { zipPath, openArchive } = makeStubArchive([
+      { entryName: 'corrupt.json', encrypted: true, declaredSize: 2, getData }
+    ])
+    const errorSpy = vi.spyOn(mainLogger, 'error').mockImplementation(() => undefined)
+    const extractor = new ZipExtractor(undefined, openArchive)
+
+    let thrown: unknown
+    try {
+      extractor.testPassword(zipPath, password)
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(Error)
+    expect(String(thrown)).not.toContain(password)
+    expect(String((thrown as Error).cause)).not.toContain(password)
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(password)
+  })
+})
+
+describe('ZipExtractor.extract', () => {
+  it('rejects case-insensitive flattened basename collisions before writing any output', async () => {
+    const dir = makeTempDir()
+    const zipPath = join(dir, 'duplicate-basename.zip')
+    const targetDir = makeTempDir()
+    const zip = new AdmZip()
+    zip.addFile('case-a/sample.json', Buffer.from('{"case":"a"}'))
+    zip.addFile('case-b/SAMPLE.JSON', Buffer.from('{"case":"b"}'))
+    zip.writeZip(zipPath)
+
+    const extractor = new ZipExtractor()
+    const result = await extractor.extract(zipPath, targetDir)
+
+    expect(result.extractedFiles).toEqual([])
+    expect(result.errors.join(' ')).toMatch(/duplicate.*basename/i)
+    expect(readdirSync(targetDir)).toEqual([])
+  })
+
+  it('redacts the supplied password from per-entry extraction errors', async () => {
+    const password = 'sentinel-extraction-password'
+    const getData = vi.fn(() => {
+      throw new Error(`decryption failed for ${password}`)
+    })
+    const { zipPath, openArchive } = makeStubArchive([
+      { entryName: 'secret.json', encrypted: true, declaredSize: 2, getData }
+    ])
+    const targetDir = makeTempDir()
+    const extractor = new ZipExtractor(undefined, openArchive)
+
+    const result = await extractor.extract(zipPath, targetDir, password)
+
+    expect(result.errors).toHaveLength(1)
+    expect(JSON.stringify(result)).not.toContain(password)
+    expect(readdirSync(targetDir)).toEqual([])
   })
 })

@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest'
 import AdmZip from 'adm-zip'
-import { mkdtempSync, writeFileSync } from 'fs'
+import { mkdtempSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import * as logic from '../../../src/main/ipc/handlers/batch-import-logic'
@@ -70,7 +70,7 @@ describe('testZipPassword', () => {
     expect(() => logic.testZipPassword(garbagePath, 'anypassword')).toThrow()
   })
 
-  it('preserves the legitimate outcome: a real password check on a valid archive returns a structured result', () => {
+  it('returns false when a readable archive has no encrypted entries', () => {
     const dir = makeTempDir()
     const validPath = join(dir, 'valid.zip')
     const zip = new AdmZip()
@@ -79,7 +79,7 @@ describe('testZipPassword', () => {
 
     const result = logic.testZipPassword(validPath, 'irrelevant')
 
-    expect(result).toEqual({ success: true })
+    expect(result).toEqual({ success: false })
   })
 })
 
@@ -119,6 +119,27 @@ describe('extractZip', () => {
     zip.writeZip(partialPath)
 
     await expect(logic.extractZip(partialPath)).rejects.toThrow(/candidate entry/)
+  })
+
+  it('removes its temporary directory after rejecting a partial extraction', async () => {
+    logic.cleanupZipTemp()
+    const before = readdirSync(tmpdir())
+      .filter((name) => name.startsWith('varlens-zip-'))
+      .sort()
+    const dir = makeTempDir()
+    const partialPath = join(dir, 'partial-cleanup.zip')
+    const zip = new AdmZip()
+    zip.addFile('good.json', Buffer.from('{}'))
+    zip.addFile('placeholder.json', Buffer.from('{}'))
+    zip.getEntries()[1].entryName = '../evil.json'
+    zip.writeZip(partialPath)
+
+    await expect(logic.extractZip(partialPath)).rejects.toThrow(/candidate entry/)
+
+    const after = readdirSync(tmpdir())
+      .filter((name) => name.startsWith('varlens-zip-'))
+      .sort()
+    expect(after).toEqual(before)
   })
 
   it('preserves the legitimate outcome: an archive with no importable files resolves to an empty result', async () => {
