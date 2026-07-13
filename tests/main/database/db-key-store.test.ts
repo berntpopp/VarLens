@@ -473,14 +473,12 @@ describe('DbKeyStore', () => {
       expect(existsSync(recoverySidecarPathFor(dbPath))).toBe(false)
     })
 
-    it('enrollRecoveredKey: refuses a path that is already keyed, without mutating the registry', () => {
+    it('enrollRecoveredKey: displaces a stale path mapping while preserving its wrapped key', () => {
       const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
       const dbPath = join(tmpDir, 'case.db')
       const original = store.createManagedKey(dbPath)
       expect(original.ok).toBe(true)
       if (!original.ok) throw new Error('expected ok result')
-
-      const before = readFileSync(registryPath, 'utf-8')
 
       const result = store.enrollRecoveredKey(dbPath, 'a'.repeat(64), {
         saltB64: 'salt',
@@ -488,12 +486,12 @@ describe('DbKeyStore', () => {
         ctB64: 'ct',
         tagB64: 'tag'
       })
-      expect(result.ok).toBe(false)
-      if (result.ok) throw new Error('expected failure result')
-      expect(result.reason).toBe('path-already-keyed')
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error('expected success result')
 
-      const after = readFileSync(registryPath, 'utf-8')
-      expect(after).toBe(before)
+      expect(store.getKeyIdForPath(dbPath)).toBe(result.keyId)
+      expect(store.resolveKeyForPath(dbPath)).toEqual({ ok: true, dek: 'a'.repeat(64) })
+      expect(store.findManagedKeyIdForDek(original.dek)).toBe(original.keyId)
     })
 
     it('findManagedKeyIdForDek: returns the matching keyId when a local safeWrap-bearing entry decrypts to that DEK', () => {

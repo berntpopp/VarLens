@@ -26,5 +26,4 @@ export type ResolveKeyWithPassphraseFromSidecarResult =
 export type SetPassphraseResult =
   { ok: true; sidecarWritten: boolean } | { ok: false; reason: 'not-found' | 'cannot-resolve-dek' }
 
-export type EnrollRecoveredKeyResult =
-  { ok: true; keyId: string } | { ok: false; reason: 'path-already-keyed' }
+export type EnrollRecoveredKeyResult = { ok: true; keyId: string }
