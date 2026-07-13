@@ -7,7 +7,7 @@
  * import `buildApp` without running the renderer build green.
  */
 import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 
 import type { FastifyInstance } from 'fastify'
 import fastifyStatic from '@fastify/static'
@@ -15,6 +15,9 @@ import fastifyStatic from '@fastify/static'
 // At runtime the bundle lives at `/app/out/web/server.cjs`, so __dirname is
 // `/app/out/web/` and the renderer build lands beside it at `./public/`.
 const DEFAULT_PUBLIC_DIR = resolve(__dirname, 'public')
+
+export const WEB_APP_CSP_HEADER =
+  "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' data: https://alphafold.ebi.ac.uk https://www.ebi.ac.uk https://files.rcsb.org https://models.rcsb.org https://data.rcsb.org https://rest.ensembl.org https://gnomad.broadinstitute.org https://www.proteins.uniprot.org https://rest.uniprot.org https://www.interpro.ebi.ac.uk blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 
 export function getPublicDir(): string {
   const env = process.env.VARLENS_WEB_PUBLIC_DIR
@@ -43,7 +46,12 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
     prefix: '/',
     // We register a manual SPA fallback below; let it handle all 404s
     // for non-asset routes.
-    wildcard: false
+    wildcard: false,
+    setHeaders: (res, pathName) => {
+      if (basename(pathName) === 'index.html') {
+        res.setHeader('Content-Security-Policy', WEB_APP_CSP_HEADER)
+      }
+    }
   })
 
   app.setNotFoundHandler(async (request, reply) => {
@@ -60,6 +68,6 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
       reply.code(404)
       return { error: 'not found' }
     }
-    return reply.sendFile('index.html')
+    return reply.header('Content-Security-Policy', WEB_APP_CSP_HEADER).sendFile('index.html')
   })
 }

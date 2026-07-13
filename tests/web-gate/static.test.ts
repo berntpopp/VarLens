@@ -1,10 +1,20 @@
 import { afterEach, describe, expect, test } from 'vitest'
 import fastify from 'fastify'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { registerStatic } from '../../src/web/server/static'
+import { registerStatic, WEB_APP_CSP_HEADER } from '../../src/web/server/static'
+
+function extractWebMetaCsp(): string {
+  const html = readFileSync(resolve(__dirname, '../../src/web/index.html'), 'utf-8')
+  const match = html.match(/<meta\s+[^>]*http-equiv="Content-Security-Policy"[^>]*>/i)
+  if (match === null) throw new Error('No web CSP meta tag found')
+  const content = match[0].match(/content="([^"]*)"/i)
+  if (content === null) throw new Error('Web CSP meta tag has no content attribute')
+  return content[1]
+}
 
 describe('web static serving', () => {
   const previousPublicDir = process.env.VARLENS_WEB_PUBLIC_DIR
@@ -27,11 +37,16 @@ describe('web static serving', () => {
 
       expect(response.statusCode, response.body).toBe(200)
       expect(response.headers['content-type']).toMatch(/text\/html/)
+      expect(response.headers['content-security-policy']).toContain("frame-ancestors 'none'")
       expect(response.body).toContain('VarLens web')
     } finally {
       await app.close()
       await rm(publicDir, { recursive: true, force: true })
     }
+  })
+
+  test('static CSP header matches web meta CSP plus frame-ancestors', () => {
+    expect(WEB_APP_CSP_HEADER).toBe(`${extractWebMetaCsp()}; frame-ancestors 'none'`)
   })
 
   test('returns 404 for missing asset-like paths instead of the SPA shell', async () => {
@@ -50,6 +65,27 @@ describe('web static serving', () => {
       expect(assetResponse.body).not.toContain('VarLens web')
       expect(faviconResponse.statusCode, faviconResponse.body).toBe(404)
       expect(faviconResponse.body).not.toContain('VarLens web')
+    } finally {
+      await app.close()
+      await rm(publicDir, { recursive: true, force: true })
+    }
+  })
+
+  test('serves direct index.html requests with the authoritative CSP header', async () => {
+    const publicDir = await mkdtemp(join(tmpdir(), 'varlens-web-public-'))
+    process.env.VARLENS_WEB_PUBLIC_DIR = publicDir
+    await writeFile(join(publicDir, 'index.html'), '<html><body>VarLens web</body></html>')
+
+    const app = fastify()
+    try {
+      await registerStatic(app)
+
+      const response = await app.inject({ method: 'GET', url: '/index.html' })
+
+      expect(response.statusCode, response.body).toBe(200)
+      expect(response.headers['content-type']).toMatch(/text\/html/)
+      expect(response.headers['content-security-policy']).toContain("frame-ancestors 'none'")
+      expect(response.body).toContain('VarLens web')
     } finally {
       await app.close()
       await rm(publicDir, { recursive: true, force: true })

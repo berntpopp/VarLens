@@ -1,4 +1,4 @@
-import { app, dialog, shell, nativeImage, BrowserWindow, ipcMain } from 'electron'
+import { app, dialog, shell, nativeImage, BrowserWindow, ipcMain, session } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -11,6 +11,8 @@ import { APP_CONFIG } from '../shared/config'
 import { isUrlSafeForExternal } from './utils/url-validation'
 import { markMilestone } from './services/MainPerfTrace'
 import { isMainWindowNavigationAllowed } from './window-navigation-policy'
+import { buildContentSecurityPolicy } from './security/csp-header'
+import { installWebContentsSecurityGuards } from './security/web-contents-guard'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -223,12 +225,41 @@ if (gotTheLock !== true) {
       optimizer.watchWindowShortcuts(window)
     })
 
-    // Suppress the "Insecure Content-Security-Policy" dev warning. This fires
-    // because 'unsafe-eval' is required by Mol*/pdbe-molstar for WebGL shader
-    // compilation. The warning does not appear in packaged builds.
+    // Suppress the "Insecure Content-Security-Policy" dev warning. It fires
+    // because the meta CSP grants 'unsafe-eval', which the bundled
+    // pdbe-molstar -> Mol* MP4 export -> h264-mp4-encoder Emscripten chain
+    // requires during viewer initialization (see src/renderer/index.html and
+    // the PR-G G0 spike). The warning does not appear in packaged builds.
     if (is.dev) {
       process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
     }
+
+    // Authoritative session-level CSP response header, mirroring the meta CSP
+    // in src/renderer/index.html plus frame-ancestors 'none' (a directive meta
+    // tags cannot express — it blocks the app document from being framed).
+    // Applied only to the top-level document; sub-resource responses pass
+    // through untouched. See src/main/security/csp-header.ts.
+    const cspPolicy = buildContentSecurityPolicy()
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      if (details.resourceType !== 'mainFrame') {
+        callback({ responseHeaders: details.responseHeaders })
+        return
+      }
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [cspPolicy]
+        }
+      })
+    })
+
+    // Global defense-in-depth for every webContents: apply the same navigation
+    // policy as the main window and harden <webview> guest preferences. The
+    // policy is injected so its implementation remains owned by
+    // window-navigation-policy.ts (and can be tightened independently).
+    installWebContentsSecurityGuards((url) =>
+      isMainWindowNavigationAllowed(url, process.env['ELECTRON_RENDERER_URL'])
+    )
 
     // Create window after security handlers are registered
     createWindow()
