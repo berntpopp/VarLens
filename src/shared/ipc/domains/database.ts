@@ -81,6 +81,8 @@ export interface MigrateToEncryptedResult {
   backupPath?: string
   /** Whether a recovery passphrase is now set on the migrated key. */
   recoveryPassphraseSet?: boolean
+  /** Whether the optional portable recovery sidecar was durably written. */
+  sidecarWritten?: boolean
   info?: DatabaseInfo
 }
 

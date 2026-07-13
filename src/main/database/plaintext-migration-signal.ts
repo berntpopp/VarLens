@@ -54,22 +54,19 @@ function quoteIdentifier(name: string): string {
  *     pre-existing `COUNT(*)` pass this augments -- just a heavier per-row
  *     constant (hashing instead of counting).
  */
-function computeTableContentHash(db: DatabaseType, tableName: string, columns: string[]): string {
+function computeTableContentHash(
+  db: DatabaseType,
+  tableName: string,
+  columns: string[],
+  withoutRowid: boolean
+): string {
   const quotedTable = quoteIdentifier(tableName)
   const columnList = columns.map((c) => `"${quoteIdentifier(c)}"`).join(', ')
 
-  let rows: Array<Record<string, unknown>>
-  try {
-    rows = db.prepare(`SELECT ${columnList} FROM "${quotedTable}" ORDER BY rowid`).all() as Array<
-      Record<string, unknown>
-    >
-  } catch {
-    // WITHOUT ROWID tables have no rowid -- fall back to ordering by every
-    // column so row order is still deterministic.
-    rows = db
-      .prepare(`SELECT ${columnList} FROM "${quotedTable}" ORDER BY ${columnList}`)
-      .all() as Array<Record<string, unknown>>
-  }
+  const orderBy = withoutRowid ? columnList : 'rowid'
+  const rows = db
+    .prepare(`SELECT ${columnList} FROM "${quotedTable}" ORDER BY ${orderBy}`)
+    .iterate() as Iterable<Record<string, unknown>>
 
   const hash = createHash('sha256')
   for (const row of rows) {
@@ -96,12 +93,14 @@ function hashOneValue(hash: ReturnType<typeof createHash>, value: unknown): void
 /** Compute a `ContentSignal` for every user table on an already-open connection. */
 export function computeContentSignal(db: DatabaseType): ContentSignal {
   const tables = db
-    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
-    .all() as Array<{ name: string }>
+    .prepare(
+      `SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`
+    )
+    .all() as Array<{ name: string; sql: string | null }>
 
   const tableRowCounts: Record<string, number> = {}
   const tableContentHashes: Record<string, string> = {}
-  for (const { name } of tables) {
+  for (const { name, sql } of tables) {
     const row = db.prepare(`SELECT COUNT(*) as c FROM "${quoteIdentifier(name)}"`).get() as {
       c: number
     }
@@ -110,7 +109,12 @@ export function computeContentSignal(db: DatabaseType): ContentSignal {
     const columns = (
       db.prepare(`PRAGMA table_info("${quoteIdentifier(name)}")`).all() as Array<{ name: string }>
     ).map((c) => c.name)
-    tableContentHashes[name] = computeTableContentHash(db, name, columns)
+    tableContentHashes[name] = computeTableContentHash(
+      db,
+      name,
+      columns,
+      /\bWITHOUT\s+ROWID\b/i.test(sql ?? '')
+    )
   }
 
   const userVersion = db.pragma('user_version', { simple: true }) as number

@@ -14,11 +14,13 @@ import { DatabaseError, WrongPasswordError } from '../../database/errors'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DatabaseManager } from '../../services/DatabaseManager'
 import type {
+  DbKeyStore,
   DbKeyStoreLike,
   DbKeyStoreWithPassphraseLike,
   DbKeyStoreWithRecoveryLike,
   PassphraseWrap
 } from '../../database/db-key-store'
+import { existsSync } from 'fs'
 import {
   readRecoverySidecar,
   recoverySidecarExists,
@@ -31,6 +33,18 @@ import type {
 } from '../../../shared/ipc/domains/database'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import type { PostgresHealthDiagnosticResult } from '../../../shared/types/postgres-profile'
+
+type DbKeyStoreProvisioningLike = DbKeyStoreLike &
+  Partial<
+    Pick<
+      DbKeyStore,
+      | 'createPendingManagedKey'
+      | 'wrapNewPendingDekWithPassphrase'
+      | 'getKeyStateForPath'
+      | 'getKeyIdForPath'
+      | 'activateKey'
+    >
+  >
 
 /** Callbacks for pool init and cohort rebuild during database open/create. */
 export interface DatabaseLifecycleCallbacks {
@@ -194,6 +208,8 @@ export async function openDatabase(
 
   // First detect if database is encrypted
   const { needsPassword } = manager.openDetectEncryption(vPath)
+  const pendingKeyId =
+    keyStore.getKeyStateForPath(vPath) === 'pending' ? keyStore.getKeyIdForPath(vPath) : null
 
   let effectiveKey = vPassword
   let pendingSidecarRecovery: ResolvedPasswordAttempt['pendingSidecarRecovery']
@@ -216,6 +232,17 @@ export async function openDatabase(
   try {
     await manager.switchDatabase(vPath, effectiveKey)
     mainLogger.info(`Switched to database: ${vPath}`, 'database')
+
+    if (pendingKeyId !== null) {
+      if (needsPassword) {
+        keyStore.activateKey(pendingKeyId)
+      } else {
+        // Plaintext detection plus a successful open proves the pending
+        // migration never swapped. Remove only now, after verification.
+        keyStore.removeKey(pendingKeyId)
+        removeRecoverySidecarBestEffort(vPath)
+      }
+    }
 
     if (pendingSidecarRecovery !== undefined) {
       enrollOrRepointSidecarRecovery(
@@ -280,7 +307,7 @@ function removeRecoverySidecarBestEffort(dbPath: string): void {
 export async function createDatabase(
   params: DatabaseCreateParams,
   getDbManager: () => DatabaseManager,
-  keyStore: DbKeyStoreLike
+  keyStore: DbKeyStoreProvisioningLike
 ): Promise<DatabaseOpenResult> {
   const manager = getDbManager()
 
@@ -291,7 +318,10 @@ export async function createDatabase(
   }
 
   if (params.setupPassphrase !== undefined && params.setupPassphrase !== '') {
-    const wrapped = keyStore.wrapNewDekWithPassphrase(params.path, params.setupPassphrase)
+    reconcileMissingPendingProvision(params.path, keyStore)
+    const wrapped =
+      keyStore.wrapNewPendingDekWithPassphrase?.(params.path, params.setupPassphrase) ??
+      keyStore.wrapNewDekWithPassphrase(params.path, params.setupPassphrase)
     if (!wrapped.ok) {
       return { success: false, error: PATH_ALREADY_KEYED_ERROR }
     }
@@ -301,6 +331,7 @@ export async function createDatabase(
     }
     try {
       await manager.createDatabase(params.path, wrapped.dek)
+      keyStore.activateKey?.(wrapped.keyId)
     } catch (error) {
       // The registry entry was written before the DB file exists. If creation
       // fails (disk full, permission error, path collision), roll it back so
@@ -314,10 +345,13 @@ export async function createDatabase(
     return { success: true, info: info! }
   }
 
-  const managed = keyStore.createManagedKey(params.path)
+  reconcileMissingPendingProvision(params.path, keyStore)
+  const managed =
+    keyStore.createPendingManagedKey?.(params.path) ?? keyStore.createManagedKey(params.path)
   if (managed.ok) {
     try {
       await manager.createDatabase(params.path, managed.dek)
+      keyStore.activateKey?.(managed.keyId)
     } catch (error) {
       // Same rollback as the passphrase path above: don't leave a stale
       // key-store entry when the DB file was never actually created.
@@ -334,6 +368,17 @@ export async function createDatabase(
 
   // path-already-keyed: never silently fall back to an unencrypted DB.
   return { success: false, error: PATH_ALREADY_KEYED_ERROR }
+}
+
+function reconcileMissingPendingProvision(
+  dbPath: string,
+  keyStore: DbKeyStoreProvisioningLike
+): void {
+  if (existsSync(dbPath) || keyStore.getKeyStateForPath?.(dbPath) !== 'pending') return
+  const keyId = keyStore.getKeyIdForPath?.(dbPath)
+  if (keyId === undefined || keyId === null) return
+  keyStore.removeKey(keyId)
+  removeRecoverySidecarBestEffort(dbPath)
 }
 
 /**

@@ -69,18 +69,8 @@
 
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
-import {
-  existsSync,
-  copyFileSync,
-  renameSync,
-  unlinkSync,
-  statSync,
-  openSync,
-  closeSync,
-  fsyncSync
-} from 'fs'
+import { existsSync, copyFileSync, renameSync, unlinkSync, statSync } from 'fs'
 import { randomUUID } from 'crypto'
-import { dirname } from 'path'
 import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
 import { isNotADatabaseError } from './sqlite-error'
 import type { DbKeyStoreLike } from './db-key-store'
@@ -89,6 +79,7 @@ import {
   signalsMatch,
   type ContentSignal
 } from './plaintext-migration-signal'
+import { fsyncContainingDirectory, fsyncFile } from './fs-durability'
 
 export type { ContentSignal }
 
@@ -284,38 +275,6 @@ function copySidecarsIfPresent(fromPath: string, toPath: string): void {
  * rename that makes it `path` -- a failure here is treated as a real,
  * proceed-blocking error (see the step-6 call site), not best-effort.
  */
-function fsyncFile(filePath: string): void {
-  const fd = openSync(filePath, 'r')
-  try {
-    fsyncSync(fd)
-  } finally {
-    closeSync(fd)
-  }
-}
-
-/**
- * Best-effort fsync of the directory containing `filePath`, so the
- * just-renamed directory entry is itself durable, not only the file's
- * contents. Some platforms (notably Windows) cannot open/fsync a directory
- * handle at all -- that failure (and any other failure here) is expected and
- * intentionally swallowed: by the time this runs, `renameSync` has already
- * succeeded, so failing the whole migration over this extra durability nicety
- * would trigger an unnecessary backup-restore for a non-data-loss condition.
- */
-function fsyncContainingDirectory(filePath: string): void {
-  try {
-    const fd = openSync(dirname(filePath), 'r')
-    try {
-      fsyncSync(fd)
-    } finally {
-      closeSync(fd)
-    }
-  } catch {
-    // Expected on platforms that don't support directory fsync; best-effort
-    // everywhere else. The rename itself already completed either way.
-  }
-}
-
 /**
  * Migrate a plaintext SQLite database at `path` to encrypted-at-rest with
  * `dek`, following the algorithm documented at the top of this file. Throws
@@ -402,6 +361,8 @@ export function migratePlaintextToEncrypted(
   try {
     copyFileSync(path, backupPath)
     copySidecarsIfPresent(path, backupPath)
+    fsyncFile(backupPath)
+    fsyncContainingDirectory(backupPath)
     afterBackupCopy(backupPath)
     const stat = statSync(backupPath)
     if (stat.size === 0) {
@@ -467,6 +428,8 @@ function rollbackAfterSwap(
   try {
     copyFileSync(backupPath, path)
     copySidecarsIfPresent(backupPath, path)
+    fsyncFile(path)
+    fsyncContainingDirectory(path)
   } catch (restoreError) {
     keyStore.removeKey(keyId)
     throw new PlaintextMigrationError(

@@ -41,92 +41,33 @@ import { mainLogger } from '../services/MainLogger'
 import { writeRecoverySidecar } from './recovery-sidecar'
 import { fsyncContainingDirectory, fsyncFile } from './fs-durability'
 import { unwrapPassphrase, wrapPassphrase, type PassphraseWrap } from './db-key-passphrase'
+import type {
+  CreateManagedKeyResult,
+  EnrollRecoveredKeyResult,
+  ResolveKeyResult,
+  ResolveKeyWithPassphraseFromSidecarResult,
+  ResolveKeyWithPassphraseResult,
+  SafeStorageLike,
+  SetPassphraseResult,
+  WrapNewDekWithPassphraseResult
+} from './db-key-store-types'
+import {
+  emptyKeyRegistry,
+  isValidKeyRegistryShape,
+  type KeyEntry,
+  type KeyRegistry
+} from './db-key-registry'
 
 export type { PassphraseWrap } from './db-key-passphrase'
+export type * from './db-key-store-types'
 
 /** Default registry filename, intended to live under Electron's `userData` dir. */
 export const DEFAULT_DB_KEY_REGISTRY_FILENAME = 'varlens-db-keys.json'
-
-/**
- * The subset of Electron's `safeStorage` API this store depends on.
- * Injected so the store can be unit-tested without Electron.
- */
-export interface SafeStorageLike {
-  isEncryptionAvailable(): boolean
-  getSelectedStorageBackend?(): string
-  encryptString(plainText: string): Buffer
-  decryptString(encrypted: Buffer): string
-}
-
-/** One registry entry: where the DB lives and how its DEK is wrapped. */
-interface KeyEntry {
-  path: string
-  /** base64 of `safeStorage.encryptString(dekHex)`. Present when a keyring wrap exists. */
-  safeWrap?: string
-  /** Present when a passphrase wrap exists. */
-  passWrap?: PassphraseWrap
-}
-
-/**
- * On-disk registry shape. Values are typed as possibly-`undefined` because
- * plain `Record<K, V>` indexing does not reflect that a lookup by an
- * arbitrary key can miss — this project does not enable
- * `noUncheckedIndexedAccess`, so the optionality is spelled out explicitly.
- */
-interface Registry {
-  keys: Record<string, KeyEntry | undefined>
-  pathIndex: Record<string, string | undefined>
-}
-
-export type CreateManagedKeyResult =
-  | { ok: true; keyId: string; dek: string }
-  | { ok: false; reason: 'safe-storage-unavailable' | 'path-already-keyed' }
-
-export type WrapNewDekWithPassphraseResult =
-  | { ok: true; keyId: string; dek: string; sidecarWritten: boolean }
-  | { ok: false; reason: 'path-already-keyed' }
-
-export type ResolveKeyResult =
-  { ok: true; dek: string } | { ok: false; reason: 'not-found' | 'needs-passphrase' }
-
-export type ResolveKeyWithPassphraseResult =
-  { ok: true; dek: string } | { ok: false; reason: 'not-found' | 'wrong-passphrase' }
-
-/**
- * Result of resolving a DEK from a `PassphraseWrap` read directly from a
- * recovery sidecar (no registry lookup involved). Never `'not-found'` --
- * the caller already knows the sidecar exists before calling this.
- */
-export type ResolveKeyWithPassphraseFromSidecarResult =
-  { ok: true; dek: string } | { ok: false; reason: 'wrong-passphrase' }
-
-export type SetPassphraseResult =
-  { ok: true; sidecarWritten: boolean } | { ok: false; reason: 'not-found' | 'cannot-resolve-dek' }
-
-export type EnrollRecoveredKeyResult =
-  { ok: true; keyId: string } | { ok: false; reason: 'path-already-keyed' }
 
 const DEK_BYTE_LENGTH = 32
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
-}
-
-function emptyRegistry(): Registry {
-  return { keys: {}, pathIndex: {} }
-}
-
-function isValidRegistryShape(value: unknown): value is Registry {
-  if (value === null || typeof value !== 'object') return false
-  const v = value as { keys?: unknown; pathIndex?: unknown }
-  return (
-    typeof v.keys === 'object' &&
-    v.keys !== null &&
-    !Array.isArray(v.keys) &&
-    typeof v.pathIndex === 'object' &&
-    v.pathIndex !== null &&
-    !Array.isArray(v.pathIndex)
-  )
 }
 
 /**
@@ -166,6 +107,18 @@ export class DbKeyStore {
    * actually encrypted with, making the database unopenable.
    */
   createManagedKey(dbPath: string): CreateManagedKeyResult {
+    return this.createManagedKeyWithState(dbPath, 'active')
+  }
+
+  /** Mint a managed key that is not authoritative until a verified encrypted open activates it. */
+  createPendingManagedKey(dbPath: string): CreateManagedKeyResult {
+    return this.createManagedKeyWithState(dbPath, 'pending')
+  }
+
+  private createManagedKeyWithState(
+    dbPath: string,
+    state: 'pending' | 'active'
+  ): CreateManagedKeyResult {
     const registry = this.load()
     if (registry.pathIndex[dbPath] !== undefined) {
       return { ok: false, reason: 'path-already-keyed' }
@@ -188,7 +141,7 @@ export class DbKeyStore {
     }
 
     const keyId = randomUUID()
-    registry.keys[keyId] = { path: dbPath, safeWrap }
+    registry.keys[keyId] = { path: dbPath, safeWrap, state }
     registry.pathIndex[dbPath] = keyId
     this.save(registry)
 
@@ -204,6 +157,22 @@ export class DbKeyStore {
    * actually encrypted with, making the database unopenable.
    */
   wrapNewDekWithPassphrase(dbPath: string, passphrase: string): WrapNewDekWithPassphraseResult {
+    return this.wrapNewDekWithPassphraseAndState(dbPath, passphrase, 'active')
+  }
+
+  /** Passphrase-only counterpart to `createPendingManagedKey`. */
+  wrapNewPendingDekWithPassphrase(
+    dbPath: string,
+    passphrase: string
+  ): WrapNewDekWithPassphraseResult {
+    return this.wrapNewDekWithPassphraseAndState(dbPath, passphrase, 'pending')
+  }
+
+  private wrapNewDekWithPassphraseAndState(
+    dbPath: string,
+    passphrase: string,
+    state: 'pending' | 'active'
+  ): WrapNewDekWithPassphraseResult {
     const registry = this.load()
     if (registry.pathIndex[dbPath] !== undefined) {
       return { ok: false, reason: 'path-already-keyed' }
@@ -213,7 +182,7 @@ export class DbKeyStore {
     const keyId = randomUUID()
     const passWrap = wrapPassphrase(dek, passphrase)
 
-    registry.keys[keyId] = { path: dbPath, passWrap }
+    registry.keys[keyId] = { path: dbPath, passWrap, state }
     registry.pathIndex[dbPath] = keyId
     this.save(registry)
 
@@ -335,6 +304,24 @@ export class DbKeyStore {
   getKeyIdForPath(dbPath: string): string | null {
     const registry = this.load()
     return registry.pathIndex[dbPath] ?? null
+  }
+
+  /** Pending is explicit; legacy entries without a state are active. */
+  getKeyStateForPath(dbPath: string): 'pending' | 'active' | null {
+    const registry = this.load()
+    const keyId = registry.pathIndex[dbPath]
+    const entry = keyId === undefined ? undefined : registry.keys[keyId]
+    if (entry === undefined) return null
+    return entry.state ?? 'active'
+  }
+
+  /** Mark a pending key authoritative after SQLite has accepted its DEK. */
+  activateKey(keyId: string): void {
+    const registry = this.load()
+    const entry = registry.keys[keyId]
+    if (entry === undefined || entry.state !== 'pending') return
+    entry.state = 'active'
+    this.save(registry)
   }
 
   /**
@@ -490,9 +477,9 @@ export class DbKeyStore {
    * preserved as `<registryPath>.bak` and a warning is logged, so keys are
    * not silently lost even though this read returns an empty registry.
    */
-  private load(): Registry {
+  private load(): KeyRegistry {
     if (!existsSync(this.registryPath)) {
-      return emptyRegistry()
+      return emptyKeyRegistry()
     }
 
     let raw: string
@@ -500,12 +487,12 @@ export class DbKeyStore {
       raw = readFileSync(this.registryPath, 'utf-8')
     } catch (e) {
       mainLogger.warn(`Failed to read key registry file: ${errorMessage(e)}`, 'DbKeyStore')
-      return emptyRegistry()
+      return emptyKeyRegistry()
     }
 
     try {
       const parsed: unknown = JSON.parse(raw)
-      if (!isValidRegistryShape(parsed)) {
+      if (!isValidKeyRegistryShape(parsed)) {
         throw new Error('unexpected key registry shape')
       }
       return parsed
@@ -515,7 +502,7 @@ export class DbKeyStore {
         `Key registry file was corrupt or invalid; treating as empty and preserving a backup at ${this.registryPath}.bak: ${errorMessage(e)}`,
         'DbKeyStore'
       )
-      return emptyRegistry()
+      return emptyKeyRegistry()
     }
   }
 
@@ -531,7 +518,7 @@ export class DbKeyStore {
   }
 
   /** Write registry to disk (mkdir -p + write-temp + fsync + rename + best-effort dir fsync). */
-  private save(registry: Registry): void {
+  private save(registry: KeyRegistry): void {
     const dir = dirname(this.registryPath)
     mkdirSync(dir, { recursive: true })
     const json = JSON.stringify(registry, null, 2)
@@ -570,7 +557,16 @@ export type DbKeyStoreLike = Pick<
  * need to implement methods they never call.
  */
 export type DbKeyStoreWithPassphraseLike = DbKeyStoreLike &
-  Pick<DbKeyStore, 'setPassphrase' | 'setPassphraseForVerifiedDek' | 'getKeyIdForPath'>
+  Pick<
+    DbKeyStore,
+    | 'setPassphrase'
+    | 'setPassphraseForVerifiedDek'
+    | 'getKeyIdForPath'
+    | 'getKeyStateForPath'
+    | 'activateKey'
+    | 'createPendingManagedKey'
+    | 'wrapNewPendingDekWithPassphrase'
+  >
 
 /**
  * Consumed by `openDatabase`'s recovery-sidecar flow: transparent resolve,
@@ -591,4 +587,6 @@ export type DbKeyStoreWithRecoveryLike = Pick<
   | 'updatePath'
   | 'removeKey'
   | 'getKeyIdForPath'
+  | 'getKeyStateForPath'
+  | 'activateKey'
 >

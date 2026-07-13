@@ -30,6 +30,7 @@ import type {
 } from '../../../shared/ipc/domains/database'
 import type { DatabaseLifecycleCallbacks } from './database-lifecycle-logic'
 import { removeRecoverySidecar } from '../../database/recovery-sidecar'
+import { fsyncContainingDirectory } from '../../database/fs-durability'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -74,26 +75,15 @@ export async function migrateCurrentToEncrypted(
       ? options.recoveryPassphrase
       : undefined
 
-  // `createManagedKey`/`wrapNewDekWithPassphrase` mint AND PERSIST the
-  // key-store entry immediately, before the database file has been touched
-  // at all -- so every branch below that can fail without ever reaching
-  // `migratePlaintextToEncrypted` (the `manager.close()` catch just below)
-  // rolls the entry back via `keyStore.removeKey`, mirroring the same
-  // pattern `migratePlaintextToEncrypted` itself now applies to EVERY one of
-  // its own failure paths -- including its earliest ones (source missing /
-  // already encrypted / WAL checkpoint failure) -- so no stale entry can
-  // survive a failed/aborted migration this process can catch. A genuine
-  // hard crash (SIGKILL, power loss) between this mint and a completed swap
-  // is the one scenario no in-process rollback can observe; a retry at the
-  // same path would then see `path-already-keyed` even though the database
-  // is still plaintext on disk -- a known, low-probability residual risk
-  // (see the I2b hardening review, finding 4) that would need a
-  // registry-side reconciliation step to close entirely.
-  const managed = keyStore.createManagedKey(currentPath)
+  // Migration keys are persisted as pending. In-process failures remove
+  // them; a hard crash is reconciled on the next verified open: plaintext
+  // removes the abandoned entry, encrypted activates it.
+  const managed = keyStore.createPendingManagedKey(currentPath)
   let dek: string
   let keyId: string
   let recoveryPassphraseSet = false
   let passphraseOnly = false
+  let sidecarWritten: boolean | undefined
 
   if (managed.ok) {
     dek = managed.dek
@@ -106,7 +96,7 @@ export async function migrateCurrentToEncrypted(
   } else if (recoveryPassphrase !== undefined) {
     // safeStorage unavailable: fall back to a passphrase-only wrap. This is
     // the ONLY case where a passphrase is required rather than optional.
-    const wrapped = keyStore.wrapNewDekWithPassphrase(currentPath, recoveryPassphrase)
+    const wrapped = keyStore.wrapNewPendingDekWithPassphrase(currentPath, recoveryPassphrase)
     if (!wrapped.ok) {
       throw new DatabaseError(
         'This database path already has a registered encryption key -- it may already be ' +
@@ -123,6 +113,7 @@ export async function migrateCurrentToEncrypted(
       )
     }
     recoveryPassphraseSet = true
+    sidecarWritten = true
     passphraseOnly = true
   } else {
     // No keyring AND no passphrase: refuse outright. Never half-migrate.
@@ -150,6 +141,7 @@ export async function migrateCurrentToEncrypted(
     if (managed.ok && recoveryPassphrase !== undefined) {
       const setResult = keyStore.setPassphrase(keyId, recoveryPassphrase)
       recoveryPassphraseSet = setResult.ok
+      sidecarWritten = setResult.ok ? setResult.sidecarWritten : false
       if (!setResult.ok) {
         mainLogger.warn(
           'Migration succeeded but setting the recovery passphrase failed; the managed key ' +
@@ -160,6 +152,7 @@ export async function migrateCurrentToEncrypted(
     }
 
     await manager.open(currentPath, dek)
+    keyStore.activateKey(keyId)
     try {
       callbacks.triggerStartupRebuild(manager.getCurrent())
     } catch (e) {
@@ -178,6 +171,7 @@ export async function migrateCurrentToEncrypted(
       success: true,
       backupPath: migration.backupPath,
       recoveryPassphraseSet,
+      sidecarWritten,
       info: { ...info, keyManaged: true }
     }
   } catch (error) {
@@ -185,6 +179,15 @@ export async function migrateCurrentToEncrypted(
     // working plaintext database on every one of its own failure paths (see
     // its module docs). Reopen it here so the app is NEVER left without a
     // working database, regardless of which step failed.
+    if (migrationCompleted) {
+      throw new DatabaseError(
+        'The encrypted migration completed and was verified, but VarLens could not reopen the ' +
+          'new session. The encryption key remains recoverable; restart VarLens and reopen the ' +
+          'database. Keep the plaintext backup until the encrypted database opens successfully.',
+        error instanceof Error ? error : undefined
+      )
+    }
+
     try {
       await manager.open(currentPath)
     } catch (reopenError) {
@@ -263,21 +266,16 @@ export async function deletePlaintextBackup(
     return { success: true }
   }
 
-  await unlink(resolvedBackup)
-
+  // Remove plaintext-bearing sidecars first. If one fails, keep the main
+  // backup and fail the action rather than claiming all plaintext is gone.
   for (const suffix of ['-wal', '-shm']) {
     const sidecarPath = `${resolvedBackup}${suffix}`
     if (existsSync(sidecarPath)) {
-      try {
-        await unlink(sidecarPath)
-      } catch (e) {
-        mainLogger.warn(
-          `Failed to delete backup sidecar ${sidecarPath}: ${errorMessage(e)}`,
-          'database'
-        )
-      }
+      await unlink(sidecarPath)
     }
   }
+  await unlink(resolvedBackup)
+  fsyncContainingDirectory(resolvedBackup)
 
   mainLogger.info(`Deleted plaintext backup: ${resolvedBackup}`, 'database')
   return { success: true }

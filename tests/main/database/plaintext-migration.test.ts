@@ -13,7 +13,7 @@
  *     no data loss.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   mkdirSync,
   mkdtempSync,
@@ -527,6 +527,7 @@ describe('migrateCurrentToEncrypted (consent + orchestration)', () => {
 
     expect(result.success).toBe(true)
     expect(result.recoveryPassphraseSet).toBe(true)
+    expect(result.sidecarWritten).toBe(true)
     expect(result.info?.encrypted).toBe(true)
     expect(result.info?.keyManaged).toBe(true)
     expect(existsSync(result.backupPath!)).toBe(true)
@@ -550,9 +551,56 @@ describe('migrateCurrentToEncrypted (consent + orchestration)', () => {
 
     // Post-migration cleanup: the plaintext backup can be deleted through the
     // gated IPC-facing action, but only because it matches the CURRENT db path.
+    writeFileSync(`${result.backupPath!}-wal`, 'plaintext wal bytes')
+    writeFileSync(`${result.backupPath!}-shm`, 'plaintext shm bytes')
     const deleteResult = await deletePlaintextBackup(result.backupPath!, () => manager)
     expect(deleteResult.success).toBe(true)
     expect(existsSync(result.backupPath!)).toBe(false)
+    expect(existsSync(`${result.backupPath!}-wal`)).toBe(false)
+    expect(existsSync(`${result.backupPath!}-shm`)).toBe(false)
+  })
+
+  it('reports optional recovery sidecar failure without claiming portable recovery', async () => {
+    const keyStore = new DbKeyStore({
+      registryPath: join(tmpDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(true)
+    })
+    mkdirSync(recoverySidecarPathFor(dbPath))
+
+    const result = await migrateCurrentToEncrypted(
+      { consent: true, recoveryPassphrase: 'local recovery only' },
+      () => manager,
+      keyStore,
+      noopCallbacks
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.recoveryPassphraseSet).toBe(true)
+    expect(result.sidecarWritten).toBe(false)
+    expect(result.info?.encrypted).toBe(true)
+  })
+
+  it('keeps a verified encrypted migration recoverable when the app session reopen fails', async () => {
+    const keyStore = new DbKeyStore({
+      registryPath: join(tmpDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(true)
+    })
+    const openSpy = manager.open.bind(manager)
+    manager.open = vi.fn(async (path: string, password?: string) => {
+      if (password !== undefined) throw new Error('session initialization failed')
+      return await openSpy(path, password)
+    }) as never
+
+    await expect(
+      migrateCurrentToEncrypted({ consent: true }, () => manager, keyStore, noopCallbacks)
+    ).rejects.toThrow(/encrypted migration completed/i)
+
+    expect(keyStore.getKeyStateForPath(dbPath)).toBe('pending')
+    const resolved = keyStore.resolveKeyForPath(dbPath)
+    expect(resolved.ok).toBe(true)
+    if (!resolved.ok) throw new Error('expected recoverable key')
+    expect(readMarkerLabels(dbPath, resolved.dek)).toEqual(['needs-migration'])
+    expect(manager.open).toHaveBeenCalledTimes(1)
   })
 
   it('deletePlaintextBackup refuses to delete a file that is not a plaintext backup of the currently open database', async () => {

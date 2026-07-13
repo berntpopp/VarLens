@@ -79,6 +79,40 @@ describe('DbKeyStore', () => {
     expect(resolved.dek).toBe(created.dek)
   })
 
+  it('keeps migration keys pending until explicitly activated, with legacy/new normal keys active', () => {
+    const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+    const dbPath = join(tmpDir, 'migrating.db')
+
+    const pending = store.createPendingManagedKey(dbPath)
+    expect(pending.ok).toBe(true)
+    if (!pending.ok) throw new Error('expected ok result')
+
+    expect(store.getKeyStateForPath(dbPath)).toBe('pending')
+    expect(store.resolveKeyForPath(dbPath)).toMatchObject({ ok: true, dek: pending.dek })
+
+    store.activateKey(pending.keyId)
+    expect(store.getKeyStateForPath(dbPath)).toBe('active')
+
+    const raw = JSON.parse(readFileSync(registryPath, 'utf-8'))
+    expect(raw.keys[pending.keyId].state).toBe('active')
+  })
+
+  it('creates passphrase-only migration keys as pending without changing their recovery semantics', () => {
+    const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(false) })
+    const dbPath = join(tmpDir, 'migrating-passphrase.db')
+
+    const pending = store.wrapNewPendingDekWithPassphrase(dbPath, 'portable secret')
+    expect(pending.ok).toBe(true)
+    if (!pending.ok) throw new Error('expected ok result')
+
+    expect(pending.sidecarWritten).toBe(true)
+    expect(store.getKeyStateForPath(dbPath)).toBe('pending')
+    expect(store.resolveKeyWithPassphrase(dbPath, 'portable secret')).toMatchObject({
+      ok: true,
+      dek: pending.dek
+    })
+  })
+
   it('3. createManagedKey reports safe-storage-unavailable (typed result, not a throw) when safeStorage is unavailable', () => {
     const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(false) })
     const dbPath = join(tmpDir, 'case.db')

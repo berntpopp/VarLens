@@ -9,8 +9,8 @@ key.
 
 **Protects against — offline file theft.** If someone obtains only your database
 file (`.db`), they cannot open it or read any case, variant, or phenotype data
-without the encryption key. The file is encrypted with AES using
-[SQLCipher](https://www.zetetic.net/sqlcipher/)-compatible page encryption.
+without the encryption key. The database pages are protected by SQLite3 Multiple
+Ciphers using its default `sqleet` cipher (ChaCha20-Poly1305).
 
 **Does _not_ protect against** a running, unlocked VarLens on your machine, malware
 running as your user account, or anyone who has both the database file **and** your

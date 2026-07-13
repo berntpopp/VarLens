@@ -93,6 +93,22 @@
             </v-btn>
           </v-alert>
 
+          <v-alert
+            v-else-if="recoverySidecarWritten === false"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-4"
+          >
+            <p class="mb-2">
+              The recovery passphrase was saved locally, but the portable recovery file could not be
+              written. Do not move this database or remove this system's key storage yet.
+            </p>
+            <v-btn variant="tonal" color="warning" size="small" @click="requestRecoveryPassphrase">
+              Retry Portable Recovery Setup
+            </v-btn>
+          </v-alert>
+
           <p class="mb-2">A plaintext backup of the original, unencrypted database was kept at:</p>
           <p class="text-body-small mb-4" style="word-break: break-all">{{ backupPath }}</p>
           <p>
@@ -137,6 +153,7 @@ const submitting = ref(false)
 const deletingBackup = ref(false)
 const backupPath = ref('')
 const recoveryPassphraseSet = ref(false)
+const recoverySidecarWritten = ref<boolean | undefined>()
 
 // Emits
 const emit = defineEmits<{
@@ -167,6 +184,7 @@ function show(options: { keyringAvailable?: boolean } = {}): void {
   deletingBackup.value = false
   backupPath.value = ''
   recoveryPassphraseSet.value = false
+  recoverySidecarWritten.value = undefined
   dialogOpen.value = true
 }
 
@@ -211,6 +229,7 @@ async function submit(): Promise<void> {
     if (result.success) {
       backupPath.value = result.backupPath ?? ''
       recoveryPassphraseSet.value = result.recoveryPassphraseSet ?? false
+      recoverySidecarWritten.value = result.sidecarWritten
       phase.value = 'success'
     } else {
       submitError.value = result.error ?? 'Failed to encrypt database'

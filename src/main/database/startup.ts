@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { Pool } from 'pg'
 
-import type { DbKeyStoreLike } from './db-key-store'
+import type { DbKeyStore, DbKeyStoreLike } from './db-key-store'
 import type { DatabaseManager } from '../services/DatabaseManager'
 import { mainLogger } from '../services/MainLogger'
 import {
@@ -13,6 +13,15 @@ import {
 import { PostgresStorageSession } from '../storage/postgres/PostgresStorageSession'
 import { PostgresMigrationRunner } from '../storage/postgres/migrations/PostgresMigrationRunner'
 import type { StorageSession } from '../storage/session'
+import { removeRecoverySidecar } from './recovery-sidecar'
+
+type StartupKeyStore = DbKeyStoreLike &
+  Partial<
+    Pick<
+      DbKeyStore,
+      'getKeyStateForPath' | 'getKeyIdForPath' | 'activateKey' | 'createPendingManagedKey'
+    >
+  >
 
 interface OpenConfiguredDatabaseOptions {
   env?: NodeJS.ProcessEnv
@@ -30,12 +39,12 @@ interface OpenConfiguredDatabaseOptions {
    * import) so it can be unit-tested without mocking `electron`. The real
    * app wires the actual singleton in from `database/index.ts`.
    */
-  keyStore?: DbKeyStoreLike
+  keyStore?: StartupKeyStore
   /** Injectable for tests; defaults to `fs.existsSync`. */
   fileExists?: (path: string) => boolean
 }
 
-function createUnavailableKeyStore(): DbKeyStoreLike {
+function createUnavailableKeyStore(): StartupKeyStore {
   return {
     createManagedKey: () => ({ ok: false, reason: 'safe-storage-unavailable' }),
     wrapNewDekWithPassphrase: () => ({ ok: false, reason: 'path-already-keyed' }),
@@ -116,12 +125,46 @@ export async function openConfiguredDatabase(
 async function openDefaultSqliteDatabase(
   manager: DatabaseManager,
   userDataPath: string,
-  keyStore: DbKeyStoreLike,
+  keyStore: StartupKeyStore,
   fileExists: (path: string) => boolean
 ): Promise<void> {
   const defaultDbPath = join(userDataPath, 'varlens.db')
 
   if (fileExists(defaultDbPath)) {
+    const pendingKeyId =
+      keyStore.getKeyStateForPath?.(defaultDbPath) === 'pending'
+        ? (keyStore.getKeyIdForPath?.(defaultDbPath) ?? null)
+        : null
+    if (pendingKeyId !== null) {
+      const { needsPassword } = manager.openDetectEncryption(defaultDbPath)
+      if (!needsPassword) {
+        await manager.open(defaultDbPath)
+        keyStore.removeKey(pendingKeyId)
+        try {
+          removeRecoverySidecar(defaultDbPath)
+        } catch (error) {
+          mainLogger.warn(
+            `Failed to remove abandoned migration recovery sidecar: ${error instanceof Error ? error.message : String(error)}`,
+            'database-startup'
+          )
+        }
+        return
+      }
+
+      const pendingResolved = keyStore.resolveKeyForPath(defaultDbPath)
+      if (pendingResolved.ok) {
+        await manager.open(defaultDbPath, pendingResolved.dek)
+        keyStore.activateKey?.(pendingKeyId)
+      } else {
+        mainLogger.warn(
+          'An encrypted migration is pending and requires its recovery passphrase. Starting ' +
+            'without an active database so the user can reopen it interactively.',
+          'database-startup'
+        )
+      }
+      return
+    }
+
     const resolved = keyStore.resolveKeyForPath(defaultDbPath)
     if (resolved.ok) {
       await manager.open(defaultDbPath, resolved.dek)
@@ -131,10 +174,27 @@ async function openDefaultSqliteDatabase(
     return
   }
 
-  const managed = keyStore.createManagedKey(defaultDbPath)
+  if (keyStore.getKeyStateForPath?.(defaultDbPath) === 'pending') {
+    const abandonedKeyId = keyStore.getKeyIdForPath?.(defaultDbPath)
+    if (abandonedKeyId !== undefined && abandonedKeyId !== null) {
+      keyStore.removeKey(abandonedKeyId)
+      try {
+        removeRecoverySidecar(defaultDbPath)
+      } catch (error) {
+        mainLogger.warn(
+          `Failed to remove abandoned database-creation sidecar: ${error instanceof Error ? error.message : String(error)}`,
+          'database-startup'
+        )
+      }
+    }
+  }
+
+  const managed =
+    keyStore.createPendingManagedKey?.(defaultDbPath) ?? keyStore.createManagedKey(defaultDbPath)
   if (managed.ok) {
     try {
       await manager.createDatabase(defaultDbPath, managed.dek)
+      keyStore.activateKey?.(managed.keyId)
     } catch (error) {
       // The registry entry was written before the DB file exists. If
       // creation fails, roll it back so the path isn't permanently burned --

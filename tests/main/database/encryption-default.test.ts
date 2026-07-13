@@ -61,6 +61,7 @@ describe('encrypt-by-default for NEW databases', () => {
 
     const result = await createDatabase({ path: dbPath }, () => manager, keyStore)
     expect(result.success).toBe(true)
+    expect(keyStore.getKeyStateForPath(dbPath)).toBe('active')
 
     manager.getCurrent().database.exec('CREATE TABLE marker (id INTEGER)')
     manager.getCurrent().database.prepare('INSERT INTO marker (id) VALUES (1)').run()
@@ -83,6 +84,21 @@ describe('encrypt-by-default for NEW databases', () => {
     const row = rawWithKey.prepare('SELECT id FROM marker').get() as { id: number }
     expect(row.id).toBe(1)
     rawWithKey.close()
+  })
+
+  it('reconciles a crash-abandoned pending create when no database file exists', async () => {
+    const keyStore = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+    const dbPath = join(tmpDir, 'crash-retry.db')
+    const abandoned = keyStore.createPendingManagedKey(dbPath)
+    expect(abandoned.ok).toBe(true)
+    if (!abandoned.ok) throw new Error('expected pending key')
+
+    const result = await createDatabase({ path: dbPath }, () => manager, keyStore)
+
+    expect(result.success).toBe(true)
+    expect(keyStore.getKeyStateForPath(dbPath)).toBe('active')
+    expect(keyStore.getKeyIdForPath(dbPath)).not.toBe(abandoned.keyId)
+    expect(keyStore.resolveKeyForPath(dbPath).ok).toBe(true)
   })
 
   it('managed round-trip: create, close, and reopen transparently via the key-store -- data intact', async () => {
@@ -139,6 +155,7 @@ describe('encrypt-by-default for NEW databases', () => {
       keyStore
     )
     expect(withPassphrase.success).toBe(true)
+    expect(keyStore.getKeyStateForPath(dbPath)).toBe('active')
     await manager.close()
 
     // Still encrypted at rest.

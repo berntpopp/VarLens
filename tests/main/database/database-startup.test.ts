@@ -5,6 +5,64 @@ import type { PostgresStorageConfig } from '../../../src/main/storage/config'
 import { POSTGRES_CAPABILITIES } from '../../../src/main/storage/postgres/PostgresStorageSession'
 
 describe('openConfiguredDatabase', () => {
+  it('reconciles an abandoned pending migration after verified plaintext detection', async () => {
+    const manager = {
+      open: vi.fn().mockResolvedValue(undefined),
+      openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: false }),
+      openPostgresSession: vi.fn()
+    }
+    const keyStore = {
+      createManagedKey: vi.fn(),
+      wrapNewDekWithPassphrase: vi.fn(),
+      resolveKeyForPath: vi.fn(),
+      resolveKeyWithPassphrase: vi.fn(),
+      removeKey: vi.fn(),
+      getKeyStateForPath: vi.fn().mockReturnValue('pending'),
+      getKeyIdForPath: vi.fn().mockReturnValue('pending-key'),
+      activateKey: vi.fn()
+    }
+    const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
+
+    await openConfiguredDatabase(manager as never, {
+      env: {},
+      userDataPath: '/tmp/varlens-user-data',
+      fileExists: () => true,
+      keyStore
+    })
+
+    expect(manager.open).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db')
+    expect(keyStore.removeKey).toHaveBeenCalledWith('pending-key')
+    expect(keyStore.activateKey).not.toHaveBeenCalled()
+  })
+
+  it('activates a pending migration after the encrypted default accepts its managed DEK', async () => {
+    const manager = {
+      open: vi.fn().mockResolvedValue(undefined),
+      openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+      openPostgresSession: vi.fn()
+    }
+    const keyStore = {
+      createManagedKey: vi.fn(),
+      wrapNewDekWithPassphrase: vi.fn(),
+      resolveKeyForPath: vi.fn().mockReturnValue({ ok: true, dek: 'pending-dek' }),
+      resolveKeyWithPassphrase: vi.fn(),
+      removeKey: vi.fn(),
+      getKeyStateForPath: vi.fn().mockReturnValue('pending'),
+      getKeyIdForPath: vi.fn().mockReturnValue('pending-key'),
+      activateKey: vi.fn()
+    }
+    const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
+
+    await openConfiguredDatabase(manager as never, {
+      env: {},
+      userDataPath: '/tmp/varlens-user-data',
+      fileExists: () => true,
+      keyStore
+    })
+
+    expect(manager.open).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db', 'pending-dek')
+    expect(keyStore.activateKey).toHaveBeenCalledWith('pending-key')
+  })
   it('does not load postgres migration definitions for the default sqlite database', async () => {
     vi.resetModules()
     vi.doMock('../../../src/main/storage/postgres/migrations/definitions', () => {
@@ -59,10 +117,14 @@ describe('openConfiguredDatabase', () => {
     }
     const keyStore = {
       createManagedKey: vi.fn().mockReturnValue({ ok: true, keyId: 'k1', dek: 'the-dek' }),
+      createPendingManagedKey: vi
+        .fn()
+        .mockReturnValue({ ok: true, keyId: 'pending-k1', dek: 'the-dek' }),
       wrapNewDekWithPassphrase: vi.fn(),
       resolveKeyForPath: vi.fn(),
       resolveKeyWithPassphrase: vi.fn(),
-      removeKey: vi.fn()
+      removeKey: vi.fn(),
+      activateKey: vi.fn()
     }
 
     const { openConfiguredDatabase } = await import('../../../src/main/database/startup')
@@ -74,11 +136,15 @@ describe('openConfiguredDatabase', () => {
       keyStore
     })
 
-    expect(keyStore.createManagedKey).toHaveBeenCalledWith('/tmp/varlens-user-data/varlens.db')
+    expect(keyStore.createPendingManagedKey).toHaveBeenCalledWith(
+      '/tmp/varlens-user-data/varlens.db'
+    )
+    expect(keyStore.createManagedKey).not.toHaveBeenCalled()
     expect(manager.createDatabase).toHaveBeenCalledWith(
       '/tmp/varlens-user-data/varlens.db',
       'the-dek'
     )
+    expect(keyStore.activateKey).toHaveBeenCalledWith('pending-k1')
     expect(manager.open).not.toHaveBeenCalled()
   })
 

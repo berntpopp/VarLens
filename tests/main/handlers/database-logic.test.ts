@@ -288,11 +288,72 @@ const unusedKeyStore = {
   enrollRecoveredKey: vi.fn(),
   updatePath: vi.fn(),
   removeKey: vi.fn(),
+  activateKey: vi.fn(),
+  getKeyStateForPath: vi.fn().mockReturnValue(null),
   setPassphraseForVerifiedDek: vi.fn(),
   getKeyIdForPath: vi.fn().mockReturnValue(null)
 }
 
 describe('database lifecycle logic', () => {
+  it('removes an abandoned pending migration key only after plaintext detection succeeds', async () => {
+    const manager = {
+      openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: false }),
+      switchDatabase: vi.fn().mockResolvedValue(undefined),
+      getCurrentInfo: vi.fn().mockReturnValue({
+        path: '/tmp/pending.db',
+        name: 'pending.db',
+        encrypted: false
+      })
+    }
+    const keyStore = {
+      ...unusedKeyStore,
+      getKeyStateForPath: vi.fn().mockReturnValue('pending'),
+      getKeyIdForPath: vi.fn().mockReturnValue('pending-key'),
+      removeKey: vi.fn()
+    }
+
+    await logic.openDatabase(
+      { path: '/tmp/pending.db' },
+      () => ({}) as never,
+      () => manager as never,
+      { triggerStartupRebuild: vi.fn() },
+      keyStore
+    )
+
+    expect(manager.switchDatabase).toHaveBeenCalledWith('/tmp/pending.db', undefined)
+    expect(keyStore.removeKey).toHaveBeenCalledWith('pending-key')
+    expect(keyStore.activateKey).not.toHaveBeenCalled()
+  })
+
+  it('activates a pending migration key only after the encrypted database accepts it', async () => {
+    const manager = {
+      openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+      switchDatabase: vi.fn().mockResolvedValue(undefined),
+      getCurrentInfo: vi.fn().mockReturnValue({
+        path: '/tmp/pending.db',
+        name: 'pending.db',
+        encrypted: true
+      })
+    }
+    const keyStore = {
+      ...unusedKeyStore,
+      resolveKeyForPath: vi.fn().mockReturnValue({ ok: true, dek: 'verified-dek' }),
+      getKeyStateForPath: vi.fn().mockReturnValue('pending'),
+      getKeyIdForPath: vi.fn().mockReturnValue('pending-key'),
+      activateKey: vi.fn()
+    }
+
+    await logic.openDatabase(
+      { path: '/tmp/pending.db' },
+      () => ({}) as never,
+      () => manager as never,
+      { triggerStartupRebuild: vi.fn() },
+      keyStore
+    )
+
+    expect(manager.switchDatabase).toHaveBeenCalledWith('/tmp/pending.db', 'verified-dek')
+    expect(keyStore.activateKey).toHaveBeenCalledWith('pending-key')
+  })
   it('does not require handler-level pool initialization after opening a database', async () => {
     const initDbPool = vi.fn()
     const triggerStartupRebuild = vi.fn()
