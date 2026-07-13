@@ -45,3 +45,5 @@ export const BatchImportExtractZipParamsSchema = z.tuple([
   NonBlankFilePathSchema,
   ZipPasswordSchema.optional()
 ])
+
+export const BatchImportCleanupZipParamsSchema = z.tuple([nonBlankString(128)])

@@ -52,7 +52,8 @@ describe('batch-import preload domain behavior', () => {
       })
       .mockResolvedValueOnce({
         files: ['/extracted/file1.json', '/extracted/file2.json'],
-        errors: []
+        errors: [],
+        extractionId: 'extraction-1'
       })
       .mockResolvedValueOnce(undefined)
 
@@ -98,7 +99,7 @@ describe('batch-import preload domain behavior', () => {
       errors: []
     })
 
-    await expect(api.cleanupZipTemp()).resolves.toBeUndefined()
+    await expect(api.cleanupZipTemp('extraction-1')).resolves.toBeUndefined()
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'batch-import:selectFiles')
     expect(invoke).toHaveBeenNthCalledWith(2, 'batch-import:selectFolder')
@@ -129,7 +130,7 @@ describe('batch-import preload domain behavior', () => {
       '/path/to/archive.zip',
       undefined
     )
-    expect(invoke).toHaveBeenNthCalledWith(9, 'batch-import:cleanupZipTemp')
+    expect(invoke).toHaveBeenNthCalledWith(9, 'batch-import:cleanupZipTemp', 'extraction-1')
   })
 
   it('preload index preserves batch-import transport results when exposing window.api', async () => {
@@ -187,7 +188,7 @@ describe('batch-import preload domain behavior', () => {
         cancel: () => Promise<unknown>
         selectZip: () => Promise<unknown>
         testZipPassword: (zipPath: string, password: string) => Promise<unknown>
-        cleanupZipTemp: () => Promise<unknown>
+        cleanupZipTemp: (extractionId: string) => Promise<unknown>
       }
     }
 
@@ -206,7 +207,7 @@ describe('batch-import preload domain behavior', () => {
       code: ErrorCode.WRONG_PASSWORD,
       message: 'Password test failed'
     })
-    await expect(api.batchImport.cleanupZipTemp()).resolves.toBeUndefined()
+    await expect(api.batchImport.cleanupZipTemp('extraction-2')).resolves.toBeUndefined()
 
     expect(invoke).toHaveBeenCalledWith('batch-import:selectFiles')
     expect(invoke).toHaveBeenCalledWith('batch-import:selectFolder')
@@ -214,6 +215,6 @@ describe('batch-import preload domain behavior', () => {
     expect(invoke).toHaveBeenCalledWith('batch-import:cancel')
     expect(invoke).toHaveBeenCalledWith('batch-import:selectZip')
     expect(invoke).toHaveBeenCalledWith('batch-import:testZipPassword', '/archive.zip', 'pwd')
-    expect(invoke).toHaveBeenCalledWith('batch-import:cleanupZipTemp')
+    expect(invoke).toHaveBeenCalledWith('batch-import:cleanupZipTemp', 'extraction-2')
   })
 })

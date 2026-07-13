@@ -31,7 +31,7 @@ vi.mock('../../../../src/main/ipc/handlers/batch-import-logic', () => ({
   }),
   cancelBatchImport: vi.fn(),
   testZipPassword: vi.fn().mockReturnValue({ success: true }),
-  extractZip: vi.fn().mockResolvedValue({ files: [], errors: [] }),
+  extractZip: vi.fn().mockResolvedValue({ files: [], errors: [], extractionId: 'extraction-1' }),
   cleanupZipTemp: vi.fn()
 }))
 
@@ -305,6 +305,29 @@ describe('batch-import IPC handlers', () => {
 
       expectInvalidParametersResult(result)
       expect(extractZip).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('batch-import:cleanupZipTemp', () => {
+    it('rejects a missing extraction ownership ID', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(ipcMain, 'batch-import:cleanupZipTemp')
+
+      expectInvalidParametersResult(result)
+    })
+
+    it('cleans only the addressed extraction ownership ID', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(ipcMain, 'batch-import:cleanupZipTemp', 'extraction-1')
+
+      expect(isIpcError(result)).toBe(false)
+      const { cleanupZipTemp } =
+        await import('../../../../src/main/ipc/handlers/batch-import-logic')
+      expect(cleanupZipTemp).toHaveBeenCalledWith('extraction-1')
     })
   })
 

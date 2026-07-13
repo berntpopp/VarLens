@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -148,9 +148,16 @@ function clearPathConsumerMocks(): void {
   vi.mocked(getVcfMultiPreview).mockClear()
 }
 
+const TRUSTED_DROP_ENROLLMENT_TOKEN = 'trusted-drop-token-0123456789abcdef'
+
 describe('import IPC handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getVcfMultiPreview).mockResolvedValue({
+      files: [],
+      siblingBedFiles: [],
+      suggestedCaseName: 'Case A'
+    })
     __resetAllowlistForTests()
   })
 
@@ -391,6 +398,171 @@ describe('import IPC handlers', () => {
 
       expect(isIpcError(result)).toBe(false)
       expect(startMultiFileImport).toHaveBeenCalledOnce()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('enrolls a sibling BED discovered by trusted multi-VCF preview', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'varlens-sibling-bed-authority-'))
+    try {
+      const filePath = join(root, 'variants.vcf')
+      const bedFile = join(root, 'regions.bed')
+      writeFileSync(filePath, '##fileformat=VCFv4.2\n')
+      writeFileSync(bedFile, 'chr1\t0\t10\n')
+      addAllowedImportPath(filePath)
+      vi.mocked(getVcfMultiPreview).mockResolvedValueOnce({
+        files: [],
+        siblingBedFiles: [bedFile],
+        suggestedCaseName: 'variants',
+        commonSamples: [],
+        detectedGenomeBuild: null
+      })
+      const ipcMain = makeIpcMain()
+      registerImportHandlers(makeDeps(ipcMain) as never)
+
+      const preview = await invokeHandler(ipcMain, 'import:vcfMultiPreview', [filePath])
+      expect(isIpcError(preview)).toBe(false)
+      expect(isStrictlyEnrolledPath(bedFile)).toBe(true)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'import:startMultiFile',
+        'Case A',
+        [{ filePath, variantType: 'SNV', caller: null, annotationFormat: null }],
+        undefined,
+        { bedFile }
+      )
+
+      expect(isIpcError(result)).toBe(false)
+      expect(startMultiFileImport).toHaveBeenCalledOnce()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not enroll a BED preview result outside the selected VCF directories', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'varlens-sibling-bed-authority-'))
+    try {
+      const selectedDir = join(root, 'selected')
+      const externalDir = join(root, 'external')
+      const filePath = join(selectedDir, 'variants.vcf')
+      const bedFile = join(externalDir, 'regions.bed')
+      mkdirSync(selectedDir)
+      mkdirSync(externalDir)
+      writeFileSync(filePath, '##fileformat=VCFv4.2\n')
+      writeFileSync(bedFile, 'chr1\t0\t10\n')
+      addAllowedImportPath(filePath)
+      vi.mocked(getVcfMultiPreview).mockResolvedValueOnce({
+        files: [],
+        siblingBedFiles: [bedFile],
+        suggestedCaseName: 'variants',
+        commonSamples: [],
+        detectedGenomeBuild: null
+      })
+      const ipcMain = makeIpcMain()
+      registerImportHandlers(makeDeps(ipcMain) as never)
+
+      await invokeHandler(ipcMain, 'import:vcfMultiPreview', [filePath])
+
+      expect(isStrictlyEnrolledPath(bedFile)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not enroll a sibling BED result that no longer names a regular file', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'varlens-sibling-bed-authority-'))
+    try {
+      const filePath = join(root, 'variants.vcf')
+      const missingBed = join(root, 'removed-regions.bed')
+      writeFileSync(filePath, '##fileformat=VCFv4.2\n')
+      addAllowedImportPath(filePath)
+      vi.mocked(getVcfMultiPreview).mockResolvedValueOnce({
+        files: [],
+        siblingBedFiles: [missingBed],
+        suggestedCaseName: 'variants',
+        commonSamples: [],
+        detectedGenomeBuild: null
+      })
+      const ipcMain = makeIpcMain()
+      registerImportHandlers(makeDeps(ipcMain) as never)
+
+      await invokeHandler(ipcMain, 'import:vcfMultiPreview', [filePath])
+
+      expect(isStrictlyEnrolledPath(missingBed)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects dropped file path enrollment without a trusted preload token', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'varlens-drop-authority-'))
+    try {
+      const filePath = join(root, 'variants.vcf')
+      writeFileSync(filePath, '##fileformat=VCFv4.2\n')
+      const ipcMain = makeIpcMain()
+      registerImportHandlers(makeDeps(ipcMain) as never)
+
+      const enrolled = await invokeHandler(ipcMain, 'import:enrollDroppedFiles', [filePath])
+
+      expectInvalidParametersResult(enrolled)
+      expect(isStrictlyEnrolledPath(filePath)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('enrolls normalized VCF paths supplied by the trusted drop-provenance preload flow', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'varlens-drop-authority-'))
+    try {
+      const filePath = join(root, 'variants.vcf')
+      writeFileSync(filePath, '##fileformat=VCFv4.2\n')
+      const ipcMain = makeIpcMain()
+      registerImportHandlers(makeDeps(ipcMain) as never)
+
+      const registered = await invokeHandler(
+        ipcMain,
+        'import:registerDroppedFileEnrollmentToken',
+        TRUSTED_DROP_ENROLLMENT_TOKEN
+      )
+      expect(isIpcError(registered)).toBe(false)
+
+      const enrolled = await invokeHandler(ipcMain, 'import:enrollDroppedFiles', {
+        token: TRUSTED_DROP_ENROLLMENT_TOKEN,
+        filePaths: [filePath]
+      })
+
+      expect(enrolled).toEqual([filePath])
+      expect(isStrictlyEnrolledPath(filePath)).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not enroll unsupported, missing, relative, or non-normalized dropped paths', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'varlens-drop-authority-'))
+    try {
+      const unsupported = join(root, 'notes.txt')
+      const missing = join(root, 'missing.vcf')
+      const nonNormalized = `${root}/nested/../missing.vcf`
+      writeFileSync(unsupported, 'not a VCF')
+      const ipcMain = makeIpcMain()
+      registerImportHandlers(makeDeps(ipcMain) as never)
+      await invokeHandler(
+        ipcMain,
+        'import:registerDroppedFileEnrollmentToken',
+        TRUSTED_DROP_ENROLLMENT_TOKEN
+      )
+
+      const enrolled = await invokeHandler(ipcMain, 'import:enrollDroppedFiles', {
+        token: TRUSTED_DROP_ENROLLMENT_TOKEN,
+        filePaths: [unsupported, missing, 'relative.vcf', nonNormalized]
+      })
+
+      expect(enrolled).toEqual([])
+      expect(isStrictlyEnrolledPath(unsupported)).toBe(false)
+      expect(isStrictlyEnrolledPath(missing)).toBe(false)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

@@ -6,6 +6,7 @@
  * without mocking Electron internals.
  */
 import { basename } from 'path'
+import { randomUUID } from 'node:crypto'
 import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import { checkDuplicates } from '../../import/batch-utils'
@@ -29,9 +30,15 @@ let workerClient: ImportWorkerClient | null = null
 
 // ZIP extraction utilities
 const zipExtractor = new ZipExtractor()
-let zipTempManager: TempDirectoryManager | null = null
-let zipEnrolledPaths: string[] = []
-let revokeZipEnrollment: ((filePath: string) => void) | undefined
+
+interface ActiveZipExtraction {
+  manager: TempDirectoryManager
+  enrolledPaths: string[]
+  revokeEnrollment?: (filePath: string) => void
+}
+
+const zipExtractions = new Map<string, ActiveZipExtraction>()
+const MAX_ACTIVE_ZIP_EXTRACTIONS = 4
 
 /**
  * Check which files have duplicate case names in the database.
@@ -272,15 +279,16 @@ export async function extractZip(
   password?: string,
   onExtractedFile?: (filePath: string) => void,
   onRemoveExtractedFile?: (filePath: string) => void
-): Promise<{ files: string[]; errors: string[] }> {
+): Promise<{ files: string[]; errors: string[]; extractionId: string }> {
+  const manager = new TempDirectoryManager()
+  const extractionId = randomUUID()
   try {
-    revokeExtractedPaths()
-    if (zipTempManager !== null) {
-      zipTempManager.cleanup()
+    if (zipExtractions.size >= MAX_ACTIVE_ZIP_EXTRACTIONS) {
+      throw new Error('Too many active ZIP extractions; clean up an existing extraction first')
     }
-
-    zipTempManager = new TempDirectoryManager()
-    const targetDir = zipTempManager.create()
+    const targetDir = manager.create()
+    const extraction: ActiveZipExtraction = { manager, enrolledPaths: [] }
+    zipExtractions.set(extractionId, extraction)
 
     const result = await zipExtractor.extract(zipPath, targetDir, password)
 
@@ -288,26 +296,39 @@ export async function extractZip(
       for (const extractedFile of result.extractedFiles) {
         onExtractedFile(extractedFile)
       }
-      zipEnrolledPaths = [...result.extractedFiles]
-      revokeZipEnrollment = onRemoveExtractedFile
+      extraction.enrolledPaths = [...result.extractedFiles]
+      extraction.revokeEnrollment = onRemoveExtractedFile
     }
 
     return JSON.parse(
       JSON.stringify({
         files: result.extractedFiles,
-        errors: result.errors
+        errors: result.errors,
+        extractionId
       })
     )
   } catch (error) {
     mainLogger.error(`batch-import:extractZip error: ${error}`, 'import')
-    if (zipTempManager !== null) {
-      zipTempManager.cleanup()
-      zipTempManager = null
+    const extraction = zipExtractions.get(extractionId)
+    if (extraction !== undefined) {
+      revokeExtractedPaths(extraction)
+      try {
+        extraction.manager.cleanup()
+        zipExtractions.delete(extractionId)
+      } catch (cleanupError) {
+        mainLogger.error(`batch-import:cleanupZipTemp error: ${cleanupError}`, 'import')
+      }
+    } else {
+      try {
+        manager.cleanup()
+      } catch (cleanupError) {
+        mainLogger.error(`batch-import:cleanupZipTemp error: ${cleanupError}`, 'import')
+      }
     }
-    revokeExtractedPaths()
     return {
       files: [],
-      errors: [error instanceof Error ? error.message : 'Extraction failed']
+      errors: [error instanceof Error ? error.message : 'Extraction failed'],
+      extractionId
     }
   }
 }
@@ -315,20 +336,21 @@ export async function extractZip(
 /**
  * Clean up temporary ZIP extraction directory.
  */
-export function cleanupZipTemp(): void {
-  revokeExtractedPaths()
-  if (zipTempManager !== null) {
-    zipTempManager.cleanup()
-    zipTempManager = null
-  }
+export function cleanupZipTemp(extractionId: string): void {
+  const extraction = zipExtractions.get(extractionId)
+  if (extraction === undefined) return
+
+  revokeExtractedPaths(extraction)
+  extraction.manager.cleanup()
+  zipExtractions.delete(extractionId)
 }
 
-function revokeExtractedPaths(): void {
-  if (revokeZipEnrollment !== undefined) {
-    for (const filePath of zipEnrolledPaths) {
-      revokeZipEnrollment(filePath)
+function revokeExtractedPaths(extraction: ActiveZipExtraction): void {
+  if (extraction.revokeEnrollment !== undefined) {
+    for (const filePath of extraction.enrolledPaths) {
+      extraction.revokeEnrollment(filePath)
     }
   }
-  zipEnrolledPaths = []
-  revokeZipEnrollment = undefined
+  extraction.enrolledPaths = []
+  extraction.revokeEnrollment = undefined
 }

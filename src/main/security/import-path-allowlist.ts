@@ -13,6 +13,9 @@ import { PathAuthorityStore } from './path-authority-store'
  * defence-in-depth.
  */
 const dialogAllowedPaths = new PathAuthorityStore()
+const trustedImportPathEnrollmentTokens = new Set<string>()
+const MAX_TRUSTED_IMPORT_PATH_ENROLLMENT_TOKENS = 16
+const TRUSTED_IMPORT_PATH_ENROLLMENT_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,128}$/
 
 export function addAllowedImportPath(absolutePath: string): void {
   if (!isAbsolute(absolutePath) || resolve(absolutePath) !== absolutePath) return
@@ -21,6 +24,22 @@ export function addAllowedImportPath(absolutePath: string): void {
 
 export function removeAllowedImportPath(absolutePath: string): void {
   dialogAllowedPaths.remove(absolutePath)
+}
+
+export function registerTrustedImportPathEnrollmentToken(token: string): void {
+  if (!TRUSTED_IMPORT_PATH_ENROLLMENT_TOKEN_PATTERN.test(token)) return
+  if (
+    trustedImportPathEnrollmentTokens.size >= MAX_TRUSTED_IMPORT_PATH_ENROLLMENT_TOKENS &&
+    !trustedImportPathEnrollmentTokens.has(token)
+  ) {
+    const oldest = trustedImportPathEnrollmentTokens.values().next().value as string | undefined
+    if (oldest !== undefined) trustedImportPathEnrollmentTokens.delete(oldest)
+  }
+  trustedImportPathEnrollmentTokens.add(token)
+}
+
+export function isTrustedImportPathEnrollmentToken(token: string): boolean {
+  return trustedImportPathEnrollmentTokens.has(token)
 }
 
 /**
@@ -41,4 +60,5 @@ export function isStrictlyEnrolledPath(candidate: string): boolean {
 /** Test-only reset helper. Do not call from production code. */
 export function __resetAllowlistForTests(): void {
   dialogAllowedPaths.clear()
+  trustedImportPathEnrollmentTokens.clear()
 }

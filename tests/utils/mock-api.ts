@@ -154,7 +154,35 @@ export function createMockApi(): MockApi {
 
     import: {
       selectFile: vi.fn().mockResolvedValue(null),
+      selectFiles: vi.fn().mockResolvedValue([]),
+      selectBedFile: vi.fn().mockResolvedValue(null),
+      enrollDroppedFiles: vi.fn().mockResolvedValue([]),
       start: vi.fn().mockResolvedValue({ success: true }),
+      startMultiFile: vi.fn().mockResolvedValue({
+        caseId: 1,
+        totalVariants: 0,
+        totalSkipped: 0,
+        files: [],
+        elapsed: 0
+      }),
+      vcfPreview: vi.fn().mockResolvedValue({
+        fileformat: 'VCFv4.2',
+        samples: [],
+        variantCountEstimate: 0,
+        annotationType: 'none',
+        detectedGenomeBuild: null,
+        infoFields: [],
+        callerName: null,
+        callerVersion: null,
+        defaultVariantType: 'snv',
+        filePath: '/tmp/mock.vcf',
+        fileSize: 0
+      }),
+      vcfMultiPreview: vi.fn().mockResolvedValue({
+        files: [],
+        siblingBedFiles: [],
+        suggestedCaseName: 'Mock case'
+      }),
       onProgress: vi.fn(() => vi.fn()), // Returns cleanup function
       cancel: vi.fn().mockResolvedValue(undefined)
     },
@@ -166,13 +194,13 @@ export function createMockApi(): MockApi {
 
     export: {
       variants: vi.fn().mockResolvedValue({ success: true }),
-      cohort: vi.fn().mockResolvedValue({ success: true })
+      cohort: vi.fn().mockResolvedValue({ success: true }),
+      revealInFolder: vi.fn().mockResolvedValue({ success: false })
     },
 
     shell: {
       openExternal: vi.fn().mockResolvedValue(undefined),
-      updateDomains: vi.fn().mockResolvedValue(undefined),
-      showItemInFolder: vi.fn().mockResolvedValue(undefined)
+      updateDomains: vi.fn().mockResolvedValue(undefined)
     },
 
     database: {
@@ -207,7 +235,9 @@ export function createMockApi(): MockApi {
       cancel: vi.fn().mockResolvedValue(undefined),
       selectZip: vi.fn().mockResolvedValue(null),
       testZipPassword: vi.fn().mockResolvedValue({ valid: true }),
-      extractZip: vi.fn().mockResolvedValue([]),
+      extractZip: vi
+        .fn()
+        .mockResolvedValue({ files: [], errors: [], extractionId: 'mock-extraction' }),
       cleanupZipTemp: vi.fn().mockResolvedValue(undefined),
       onProgress: vi.fn(() => vi.fn()), // Returns cleanup function
       onComplete: vi.fn(() => vi.fn()) // Returns cleanup function

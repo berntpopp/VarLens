@@ -191,6 +191,7 @@ import type {
 } from '../../../../shared/types/api'
 import type { VcfPreviewResult } from '../../../../shared/types/vcf'
 import { useApiService } from '../../composables/useApiService'
+import { useZipExtractionLifecycle } from '../../composables/useZipExtractionLifecycle'
 import { useImportStatusStore } from '../../stores/importStatusStore'
 import { logService } from '../../services/LogService'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
@@ -215,10 +216,9 @@ import {
 } from '@mdi/js'
 
 type ImportMode = ImportSourceMode
-
 const { api } = useApiService()
 const importStore = useImportStatusStore()
-
+const zipExtraction = useZipExtractionLifecycle((id) => api!.batchImport.cleanupZipTemp(id))
 const WEB_UPLOAD_EVENT = 'varlens:web-upload'
 const WEB_UPLOAD_CANCEL_EVENT = 'varlens:web-upload-cancel'
 
@@ -377,19 +377,13 @@ function formatIpcError(error: unknown, fallback: string): string {
 }
 
 function cleanupZipTempInBackground(context: string): void {
-  void api!.batchImport
-    .cleanupZipTemp()
-    .then((cleanupResult) => {
-      unwrapIpcResult(cleanupResult)
-    })
-    .catch((error) => {
-      logService.warn(
-        `ZIP temp cleanup failed after ${context}: ${formatIpcError(error, 'cleanup failed')}`,
-        'ImportWizard'
-      )
-    })
+  void zipExtraction.cleanup().catch((error) => {
+    logService.warn(
+      `ZIP temp cleanup failed after ${context}: ${formatIpcError(error, 'cleanup failed')}`,
+      'ImportWizard'
+    )
+  })
 }
-
 // Re-check duplicates when strip text changes
 watch(stripText, () => {
   if (recheckTimeout !== null) clearTimeout(recheckTimeout)
@@ -474,10 +468,14 @@ async function selectSource(mode: ImportMode): Promise<void> {
 }
 
 async function extractAndAdvance(path: string): Promise<void> {
-  const { files } = unwrapIpcResult(
+  const { files, extractionId } = unwrapIpcResult(
     await api!.batchImport.extractZip(path, zipPassword.value || undefined)
   )
-  if (files.length === 0) return
+  zipExtraction.track(extractionId)
+  if (files.length === 0) {
+    cleanupZipTempInBackground('empty extraction')
+    return
+  }
 
   selectedFilePaths.value = files
   zipPasswordNeeded.value = false
@@ -736,6 +734,7 @@ function handleClose(): void {
     continueInBackground()
     return
   }
+  if (isZipImport.value) cleanupZipTempInBackground('dialog close')
   dialog.value = false
   // Reset import store when closing from summary/error step
   if (step.value === 4 || importStore.phase === 'error') {
@@ -744,6 +743,7 @@ function handleClose(): void {
 }
 
 function resetState(): void {
+  cleanupZipTempInBackground('state reset')
   step.value = 1
   selectedMode.value = null
   selectedFilePaths.value = []

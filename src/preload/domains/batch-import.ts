@@ -15,6 +15,7 @@ export function createBatchImportApi(): BatchImportDomainContract {
       ipcRenderer.invoke('batch-import:testZipPassword', zipPath, password),
     extractZip: (zipPath, password) =>
       ipcRenderer.invoke('batch-import:extractZip', zipPath, password),
-    cleanupZipTemp: () => ipcRenderer.invoke('batch-import:cleanupZipTemp')
+    cleanupZipTemp: (extractionId) =>
+      ipcRenderer.invoke('batch-import:cleanupZipTemp', extractionId)
   }
 }

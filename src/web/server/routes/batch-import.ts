@@ -218,8 +218,13 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
     },
 
     'batch-import:cleanupZipTemp': {
-      handle() {
-        cleanupZipTemp()
+      handle(args, _request, reply) {
+        const [extractionId] = args
+        if (typeof extractionId !== 'string' || extractionId.length === 0) {
+          reply.code(400)
+          return { error: 'invalid-extraction-id' }
+        }
+        cleanupZipTemp(extractionId)
       }
     }
   }
@@ -240,25 +245,29 @@ async function extractWebUploadZip(
   zipRef: string,
   userId: number | undefined,
   password: string | undefined
-): Promise<{ files: string[]; errors: string[] } | null> {
+): Promise<{ files: string[]; errors: string[]; extractionId: string } | null> {
   const upload = resolveUploadedFile(zipRef, userId)
   if (upload === null || userId === undefined) return null
 
   const result = await extractZip(upload.storedPath, password)
-  const stagedFiles = []
-  for (const filePath of result.files) {
-    stagedFiles.push(
-      await stageExistingFileUpload({
-        userId,
-        originalName: basename(filePath),
-        sourcePath: filePath
-      })
-    )
-  }
-  cleanupZipTemp()
-  return {
-    files: stagedFiles.map((file) => file.ref),
-    errors: result.errors
+  try {
+    const stagedFiles = []
+    for (const filePath of result.files) {
+      stagedFiles.push(
+        await stageExistingFileUpload({
+          userId,
+          originalName: basename(filePath),
+          sourcePath: filePath
+        })
+      )
+    }
+    return {
+      files: stagedFiles.map((file) => file.ref),
+      errors: result.errors,
+      extractionId: result.extractionId
+    }
+  } finally {
+    cleanupZipTemp(result.extractionId)
   }
 }
 

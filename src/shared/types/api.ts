@@ -245,6 +245,7 @@ export interface ImportAPI {
   selectFile: () => Promise<string | null>
   selectFiles: () => Promise<string[]>
   selectBedFile: () => Promise<string | null>
+  enrollDroppedFiles: (files: readonly File[]) => Promise<IpcResult<string[]>>
   start: (
     filePath: string,
     caseName: string,
@@ -287,7 +288,6 @@ export interface ShellOpenExternalResult {
 
 export interface ShellAPI {
   openExternal: (url: string) => Promise<ShellOpenExternalResult>
-  showItemInFolder: (filePath: string) => Promise<void>
   updateDomains: (domains: string[]) => Promise<void>
 }
 
@@ -305,6 +305,7 @@ export interface ExportAPI {
     caseName: string
   ) => Promise<IpcResult<ExportResult>>
   cohort: (params: CohortSearchParams) => Promise<IpcResult<ExportResult>>
+  revealInFolder: (filePath: string) => Promise<IpcResult<{ success: boolean }>>
 }
 
 export type DatabaseAPI = DatabaseDomainContract
@@ -371,8 +372,8 @@ export interface BatchImportAPI {
   extractZip: (
     zipPath: string,
     password?: string
-  ) => Promise<IpcResult<{ files: string[]; errors: string[] }>>
-  cleanupZipTemp: () => Promise<IpcResult<void>>
+  ) => Promise<IpcResult<{ files: string[]; errors: string[]; extractionId: string }>>
+  cleanupZipTemp: (extractionId: string) => Promise<IpcResult<void>>
 }
 
 export interface CohortAPI {

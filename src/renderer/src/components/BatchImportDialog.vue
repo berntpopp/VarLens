@@ -89,7 +89,9 @@ import type {
   DuplicateCheckItem
 } from '../../../shared/types/api'
 import { useApiService } from '../composables/useApiService'
+import { useZipExtractionLifecycle } from '../composables/useZipExtractionLifecycle'
 import { useImportStatusStore } from '../stores/importStatusStore'
+import { logService } from '../services/LogService'
 import BatchReviewPhase from './batch-import/BatchReviewPhase.vue'
 import BatchProgressPhase from './batch-import/BatchProgressPhase.vue'
 import BatchSummaryPhase from './batch-import/BatchSummaryPhase.vue'
@@ -101,6 +103,7 @@ type Phase = 'idle' | 'review' | 'importing' | 'summary' | 'zip-password'
 
 const { api } = useApiService()
 const importStore = useImportStatusStore()
+const zipExtraction = useZipExtractionLifecycle((id) => api!.batchImport.cleanupZipTemp(id))
 
 const dialog = ref(false)
 const phase = ref<Phase>('idle')
@@ -176,7 +179,7 @@ let recheckTimeout: ReturnType<typeof setTimeout> | null = null
 watch(dialog, (newVal, oldVal) => {
   if (oldVal === true && newVal === false && phase.value === 'summary') {
     if (isZipImport.value === true) {
-      api!.batchImport.cleanupZipTemp()
+      void cleanupActiveZipExtraction()
     }
     if (summary.value.succeeded > 0) {
       emit('batch-import-complete', { totalImported: summary.value.succeeded })
@@ -247,13 +250,14 @@ const show = async (mode: 'files' | 'folder' | 'zip'): Promise<void> => {
 const extractAndShowReview = async (zipFilePath: string, password?: string): Promise<void> => {
   try {
     const result = unwrapIpcResult(await api!.batchImport.extractZip(zipFilePath, password))
+    zipExtraction.track(result.extractionId)
 
     if (result.files.length === 0) {
       zipErrorMessage.value = 'No importable files found in archive.'
       if (result.errors.length > 0) {
         zipErrorMessage.value += ' Errors: ' + result.errors.join('; ')
       }
-      unwrapIpcResult(await api!.batchImport.cleanupZipTemp())
+      await cleanupActiveZipExtraction()
       return
     }
 
@@ -271,7 +275,7 @@ const extractAndShowReview = async (zipFilePath: string, password?: string): Pro
         : isIpcError(error)
           ? (error.userMessage ?? error.message)
           : 'Failed to extract archive'
-    unwrapIpcResult(await api!.batchImport.cleanupZipTemp())
+    await cleanupActiveZipExtraction()
   }
 }
 
@@ -338,6 +342,20 @@ const startImport = async (
           ? (error.userMessage ?? error.message)
           : 'Unknown error'
     )
+  } finally {
+    if (isZipImport.value) {
+      try {
+        await cleanupActiveZipExtraction()
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : isIpcError(error)
+              ? (error.userMessage ?? error.message)
+              : 'Unknown cleanup error'
+        logService.warn(`ZIP extraction cleanup failed: ${message}`, 'BatchImportDialog')
+      }
+    }
   }
 }
 
@@ -373,7 +391,7 @@ const handleZipUnlock = async (): Promise<void> => {
  * Cancel ZIP flow and clean up temp directory
  */
 const handleZipCancel = async (): Promise<void> => {
-  unwrapIpcResult(await api!.batchImport.cleanupZipTemp())
+  await cleanupActiveZipExtraction()
   dialog.value = false
 }
 
@@ -402,7 +420,7 @@ const continueInBackground = (): void => {
  */
 const closeDialog = async (): Promise<void> => {
   if (isZipImport.value === true) {
-    unwrapIpcResult(await api!.batchImport.cleanupZipTemp())
+    await cleanupActiveZipExtraction()
   }
   dialog.value = false
 }
@@ -411,6 +429,7 @@ const closeDialog = async (): Promise<void> => {
  * Reset all state for a fresh import
  */
 const resetState = (): void => {
+  void cleanupActiveZipExtraction()
   phase.value = 'idle'
   selectedFilePaths.value = []
   duplicateCheckFiles.value = []
@@ -430,6 +449,10 @@ const resetState = (): void => {
   showZipPassword.value = false
   zipErrorMessage.value = ''
   testingPassword.value = false
+}
+
+async function cleanupActiveZipExtraction(): Promise<void> {
+  await zipExtraction.cleanup()
 }
 
 // Setup IPC listeners

@@ -10,8 +10,12 @@ interface TestApi {
     onProgress: (callback: (progress: unknown) => void) => () => void
     selectFile: () => Promise<string | null>
     selectBedFile: () => Promise<string | null>
+    enrollDroppedFiles: (files: readonly File[]) => Promise<string[]>
     cancel: () => Promise<void>
     start: (...args: unknown[]) => Promise<unknown>
+  }
+  export: {
+    revealInFolder: (filePath: string) => Promise<{ success: boolean }>
   }
   batchImport: {
     onProgress: (callback: (progress: unknown) => void) => () => void
@@ -508,6 +512,31 @@ describe('web client api', () => {
 
     expect(input.accept).toBe('.bed,.bed.gz,.gz')
     expect(input.multiple).toBe(false)
+  })
+
+  test('import.enrollDroppedFiles uploads the exact dropped Files and returns user-scoped refs', async () => {
+    const first = new File(['##fileformat=VCFv4.2\n'], 'case-a.vcf')
+    const second = new File(['compressed'], 'case-b.vcf.gz')
+    resetMockXhr()
+    vi.stubGlobal('XMLHttpRequest', MockXMLHttpRequest)
+
+    const api = createApi() as unknown as TestApi
+    await expect(api.import.enrollDroppedFiles([first, second])).resolves.toEqual([
+      'web-upload:upload-case-a.vcf/case-a.vcf',
+      'web-upload:upload-case-b.vcf.gz/case-b.vcf.gz'
+    ])
+
+    expect(MockXMLHttpRequest.instances).toHaveLength(2)
+  })
+
+  test('export.revealInFolder is an explicit unsupported web capability', async () => {
+    const fetchMock = mockFetch({ ok: true, status: 200, statusText: 'OK', body: '{}' })
+    const api = createApi() as unknown as TestApi
+
+    await expect(api.export.revealInFolder('/server/export.xlsx')).resolves.toEqual({
+      success: false
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   test('batchImport.selectFolder enables directory picking and uploads all selected files', async () => {

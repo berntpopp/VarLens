@@ -593,7 +593,7 @@ const exportToExcel = async () => {
       filePath,
       action: {
         text: 'Open folder',
-        callback: () => api?.shell.showItemInFolder(filePath)
+        callback: () => api?.export.revealInFolder(filePath)
       }
     })
   }
