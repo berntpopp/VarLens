@@ -69,8 +69,9 @@ export const DEFAULT_MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024 * 1024 // 256 Gi
  * Generic gzip expansion baseline after the safety floor.
  * The shipped VCF gzip corpus tops out at 25.87x (ordinary single/trio and
  * annotated fixtures are 7.83x-16.29x), so 100x keeps almost 4x headroom
- * for ordinary input. Joint-called VCFs receive a bounded sample-aware
- * allowance from GzipRatioPolicy; other formats retain this ceiling.
+ * for ordinary input. Structurally validated VCFs rely on the independent
+ * absolute byte/line/header/record budgets because valid joint-called VCFs
+ * can have arbitrarily high repetition; other formats retain this ceiling.
  */
 export const MAX_GZIP_COMPRESSION_RATIO = DEFAULT_MAX_GZIP_COMPRESSION_RATIO
 

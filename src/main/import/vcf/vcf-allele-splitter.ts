@@ -64,6 +64,39 @@ export function splitMultiAllelic(
 }
 
 /**
+ * Build one biallelic view for one selected sample. Import mapping uses this
+ * instead of materializing every ALT × every sample clone up front.
+ */
+export function splitAlleleForSample(
+  record: VcfRawRecord,
+  infoDefs: Map<string, InfoFieldDef>,
+  formatDefs: Map<string, FormatFieldDef>,
+  altIdx: number,
+  sampleName: string
+): VcfRawRecord {
+  if (!Number.isSafeInteger(altIdx) || altIdx < 0 || altIdx >= record.alt.length) {
+    throw new RangeError(`ALT index ${altIdx} is outside the VCF record`)
+  }
+  const sampleValues = record.samples.get(sampleName)
+  const samples = new Map<string, string[]>()
+  if (sampleValues !== undefined) {
+    samples.set(sampleName, splitOneSampleFields(record.format, sampleValues, formatDefs, altIdx))
+  }
+  return {
+    chrom: record.chrom,
+    pos: record.pos,
+    id: record.id,
+    ref: record.ref,
+    alt: [record.alt[altIdx]],
+    qual: record.qual,
+    filter: record.filter,
+    info: splitInfoFields(record.info, infoDefs, altIdx),
+    format: record.format,
+    samples
+  }
+}
+
+/**
  * Split INFO fields according to their Number attribute.
  */
 function splitInfoFields(
@@ -128,56 +161,49 @@ function splitSampleFields(
   altIdx: number
 ): Map<string, string[]> {
   const result = new Map<string, string[]>()
-  const originalAltAllele = altIdx + 1 // 1-based allele number in GT
 
   for (const [sampleName, values] of record.samples) {
-    const newValues = [...values]
-
-    for (let fIdx = 0; fIdx < record.format.length; fIdx++) {
-      const field = record.format[fIdx]
-      if (fIdx >= values.length) break
-
-      if (field === 'GT') {
-        newValues[fIdx] = remapGenotype(values[fIdx], originalAltAllele)
-        continue
-      }
-
-      const def = formatDefs.get(field)
-      const number = def?.number ?? (field === 'AD' ? 'R' : '.')
-
-      // AD (allele depths) is conventionally Number=R (one value per allele,
-      // REF included). Some VCFs omit the ##FORMAT=<ID=AD,...> header line
-      // entirely, which otherwise falls through to "keep as-is" below and
-      // leaves the full multi-allele AD unreduced. Downstream genotype
-      // parsing assumes an already-split, biallelic AD (it reads index 1 for
-      // "this" ALT's depth), so default AD to Number=R when its def is
-      // missing. Explicit header declarations remain authoritative.
-
-      if (number === 'R') {
-        // Per-allele (REF + ALTs) — keep REF + current ALT
-        const parts = splitAlleleValues(values[fIdx])
-        if (parts.length > altIdx + 1) {
-          newValues[fIdx] =
-            `${normalizeVectorToken(parts[0])},${normalizeVectorToken(parts[altIdx + 1])}`
-        } else {
-          newValues[fIdx] = `${normalizeVectorToken(parts[0])},.`
-        }
-      } else if (number === 'A') {
-        // Per-ALT — select value at altIdx
-        const parts = splitAlleleValues(values[fIdx])
-        const selected = normalizeVectorToken(parts[altIdx])
-        // Genotype parsing consumes AD as a biallelic REF,ALT pair. A
-        // non-standard Number=A AD has no reference depth, so retain the ALT
-        // depth explicitly while marking REF missing.
-        newValues[fIdx] = field === 'AD' ? `.,${selected}` : selected
-      }
-      // Number=1, 0, ., G: keep as-is
-    }
-
-    result.set(sampleName, newValues)
+    result.set(sampleName, splitOneSampleFields(record.format, values, formatDefs, altIdx))
   }
 
   return result
+}
+
+function splitOneSampleFields(
+  format: string[],
+  values: string[],
+  formatDefs: Map<string, FormatFieldDef>,
+  altIdx: number
+): string[] {
+  const newValues = [...values]
+  const originalAltAllele = altIdx + 1
+
+  for (let fIdx = 0; fIdx < format.length; fIdx++) {
+    const field = format[fIdx]
+    if (fIdx >= values.length) break
+
+    if (field === 'GT') {
+      newValues[fIdx] = remapGenotype(values[fIdx], originalAltAllele)
+      continue
+    }
+
+    const number = formatDefs.get(field)?.number ?? (field === 'AD' ? 'R' : '.')
+    if (number === 'R') {
+      const parts = splitAlleleValues(values[fIdx])
+      if (parts.length > altIdx + 1) {
+        newValues[fIdx] =
+          `${normalizeVectorToken(parts[0])},${normalizeVectorToken(parts[altIdx + 1])}`
+      } else {
+        newValues[fIdx] = `${normalizeVectorToken(parts[0])},.`
+      }
+    } else if (number === 'A') {
+      const parts = splitAlleleValues(values[fIdx])
+      const selected = normalizeVectorToken(parts[altIdx])
+      newValues[fIdx] = field === 'AD' ? `.,${selected}` : selected
+    }
+  }
+
+  return newValues
 }
 
 /**

@@ -56,6 +56,31 @@ describe('isGzipped', () => {
 })
 
 describe('detectFormat with plain JSON', () => {
+  it('rejects an adversarial number of top-level keys within a fixed detection budget', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'varlens-format-budget-'))
+    const filePath = join(tmpDir, 'many-keys.json')
+    const entries = Array.from({ length: 20_000 }, (_, index) => `"k${index}":null`).join(',')
+    writeFileSync(filePath, `{"metadata":null,${entries}}`)
+
+    try {
+      await expect(detectFormat(filePath)).rejects.toThrow(/format detection.*top-level keys/i)
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects an oversized top-level key before stream-json packs it', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'varlens-format-key-budget-'))
+    const filePath = join(tmpDir, 'giant-key.json')
+    writeFileSync(filePath, `{"metadata":null,"${'k'.repeat(2 * 1024 * 1024)}":null}`)
+
+    try {
+      await expect(detectFormat(filePath)).rejects.toThrow(/format detection.*key/i)
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('should detect simple format from plain JSON', async () => {
     const result = await detectFormat(join(FIXTURES_DIR, 'simple-format.json'))
     expect(result.format).toBe('simple')

@@ -8,16 +8,33 @@
 import type { VcfRawRecord } from './types'
 import {
   MAX_VCF_ALT_ALLELES,
-  MAX_VCF_COLUMNS,
+  MAX_VCF_COMPATIBILITY_SAMPLES,
+  MAX_VCF_FORMAT_CHARS,
   MAX_VCF_FORMAT_FIELDS,
   MAX_VCF_INFO_CHARS,
   MAX_VCF_INFO_FIELDS,
   MAX_VCF_SAMPLE_FIELD_CHARS,
-  MAX_VCF_TOTAL_SAMPLE_VALUES,
   splitBounded
 } from './vcf-resource-limits'
 
 const QUAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
+
+export interface VcfSelectedSampleColumn {
+  name: string
+  index: number
+}
+
+export function resolveVcfSelectedSampleColumn(
+  sampleNames: string[],
+  requestedSample?: string
+): VcfSelectedSampleColumn | null {
+  const name =
+    requestedSample !== undefined && requestedSample !== '' ? requestedSample : sampleNames[0]
+  if (name === undefined || name === '') return null
+  const index = sampleNames.indexOf(name)
+  if (index < 0) throw new Error(`Selected VCF sample "${name}" is not present in the header`)
+  return { name, index }
+}
 
 /**
  * Parse a single VCF data line into a raw record.
@@ -33,11 +50,34 @@ const QUAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
 export function parseVcfLine(
   line: string,
   sampleNames: string[],
-  onSkip?: (reason: string) => void
+  onSkip?: (reason: string) => void,
+  selectedSample?: VcfSelectedSampleColumn
 ): VcfRawRecord | null {
-  const cols = splitBounded(line, '\t', MAX_VCF_COLUMNS)
-  if (cols === null) {
-    onSkip?.(`too many VCF columns (maximum ${MAX_VCF_COLUMNS})`)
+  if (selectedSample === undefined && sampleNames.length > MAX_VCF_COMPATIBILITY_SAMPLES) {
+    onSkip?.(
+      `all-samples compatibility parsing exceeds ${MAX_VCF_COMPATIBILITY_SAMPLES} samples; select one sample`
+    )
+    return null
+  }
+  if (
+    selectedSample !== undefined &&
+    (!Number.isSafeInteger(selectedSample.index) ||
+      selectedSample.index < 0 ||
+      sampleNames[selectedSample.index] !== selectedSample.name)
+  ) {
+    onSkip?.(`selected VCF sample "${selectedSample.name}" is not present in the header`)
+    return null
+  }
+  const selectedSampleIndex = selectedSample?.index ?? -1
+  const {
+    fixedColumns: cols,
+    selectedColumn,
+    remainingColumns
+  } = scanVcfColumns(line, selectedSampleIndex)
+  if (remainingColumns === null) {
+    onSkip?.(
+      `all-samples compatibility parsing exceeds ${MAX_VCF_COMPATIBILITY_SAMPLES} sample columns`
+    )
     return null
   }
 
@@ -118,6 +158,10 @@ export function parseVcfLine(
   const samples = new Map<string, string[]>()
 
   if (cols.length > 8 && cols[8] !== undefined && cols[8] !== '') {
+    if (cols[8].length > MAX_VCF_FORMAT_CHARS) {
+      onSkip?.(`FORMAT field exceeds ${MAX_VCF_FORMAT_CHARS} characters`)
+      return null
+    }
     const parsedFormat = splitBounded(cols[8], ':', MAX_VCF_FORMAT_FIELDS)
     if (parsedFormat === null) {
       onSkip?.(`too many FORMAT fields (maximum ${MAX_VCF_FORMAT_FIELDS})`)
@@ -125,9 +169,12 @@ export function parseVcfLine(
     }
     format = parsedFormat
 
-    let totalSampleValues = 0
-    for (let i = 0; i < sampleNames.length; i++) {
-      const sampleCol = cols[9 + i]
+    const samplesToParse: Array<{ name: string; value: string | undefined }> =
+      selectedSample !== undefined
+        ? [{ name: selectedSample.name, value: selectedColumn }]
+        : sampleNames.map((name, index) => ({ name, value: remainingColumns[index] }))
+
+    for (const { name, value: sampleCol } of samplesToParse) {
       if (sampleCol !== undefined) {
         if (sampleCol.length > MAX_VCF_SAMPLE_FIELD_CHARS) {
           onSkip?.(`sample field exceeds ${MAX_VCF_SAMPLE_FIELD_CHARS} characters`)
@@ -138,12 +185,10 @@ export function parseVcfLine(
           onSkip?.(`too many sample FORMAT values (maximum ${MAX_VCF_FORMAT_FIELDS})`)
           return null
         }
-        totalSampleValues += values.length
-        if (totalSampleValues > MAX_VCF_TOTAL_SAMPLE_VALUES) {
-          onSkip?.(`too many sample FORMAT values (maximum ${MAX_VCF_TOTAL_SAMPLE_VALUES})`)
-          return null
-        }
-        samples.set(sampleNames[i], values)
+        samples.set(name, values)
+      } else if (selectedSample !== undefined) {
+        onSkip?.(`VCF row is missing selected sample column "${selectedSample.name}"`)
+        return null
       }
     }
   }
@@ -159,5 +204,63 @@ export function parseVcfLine(
     info,
     format,
     samples
+  }
+}
+
+/**
+ * Read the nine fixed/FORMAT fields plus at most one selected sample column.
+ * Production importers always provide a selected sample, so cohort-width does
+ * not create a cohort-width array or sample map. The compatibility path that
+ * omits a selected sample retains all remaining columns for small direct users.
+ */
+function scanVcfColumns(
+  line: string,
+  selectedSampleIndex: number
+): {
+  fixedColumns: string[]
+  selectedColumn: string | undefined
+  remainingColumns: string[] | null
+} {
+  const fixedColumns: string[] = []
+  let cursor = 0
+
+  while (fixedColumns.length < 9 && cursor <= line.length) {
+    const delimiter = line.indexOf('\t', cursor)
+    if (delimiter === -1) {
+      fixedColumns.push(line.slice(cursor))
+      cursor = line.length + 1
+      break
+    }
+    fixedColumns.push(line.slice(cursor, delimiter))
+    cursor = delimiter + 1
+  }
+
+  if (selectedSampleIndex >= 0) {
+    let sampleIndex = 0
+    while (cursor <= line.length) {
+      const delimiter = line.indexOf('\t', cursor)
+      const end = delimiter === -1 ? line.length : delimiter
+      if (sampleIndex === selectedSampleIndex) {
+        return {
+          fixedColumns,
+          selectedColumn: line.slice(cursor, end),
+          remainingColumns: []
+        }
+      }
+      if (delimiter === -1) break
+      cursor = delimiter + 1
+      sampleIndex += 1
+    }
+    return { fixedColumns, selectedColumn: undefined, remainingColumns: [] }
+  }
+
+  const remainingColumns =
+    cursor <= line.length
+      ? splitBounded(line.slice(cursor), '\t', MAX_VCF_COMPATIBILITY_SAMPLES)
+      : []
+  return {
+    fixedColumns,
+    selectedColumn: undefined,
+    remainingColumns
   }
 }

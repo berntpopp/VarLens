@@ -8,6 +8,7 @@ import {
 } from '../../../../src/main/import/vcf/bed-filter'
 import {
   BedEntryLimitExceededError,
+  InvalidBedRowError,
   parseBedEntry,
   readBedEntries
 } from '../../../../src/main/import/vcf/bed-reader'
@@ -86,6 +87,28 @@ describe('BedFilter', () => {
         label: 'label'
       })
       expect(performance.now() - startedAt).toBeLessThan(20)
+    })
+
+    it('bounds strict malformed-row diagnostics independently of the line cap', async () => {
+      const tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-error-'))
+      const filePath = path.join(tmpDir, 'malformed.bed')
+      writeFileSync(filePath, `not-a-bed-row-${'x'.repeat(1024 * 1024)}\n`)
+
+      try {
+        const consume = async (): Promise<void> => {
+          for await (const entry of readBedEntries(filePath, 2 * 1024 * 1024, {
+            rejectMalformedRows: true
+          })) {
+            void entry
+          }
+        }
+        const error = await consume().catch((caught: unknown) => caught)
+
+        expect(error).toBeInstanceOf(InvalidBedRowError)
+        expect((error as Error).message.length).toBeLessThan(512)
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true })
+      }
     })
   })
 

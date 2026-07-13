@@ -12,7 +12,7 @@ import type { VcfHeader, InfoFieldDef, FormatFieldDef, ContigDef, AnnotationType
 import { VcfHeaderBudget, type VcfHeaderLimitOptions } from './vcf-header-limits'
 import {
   MAX_VCF_ANNOTATION_FIELDS,
-  MAX_VCF_COLUMNS,
+  MAX_VCF_HEADER_SAMPLES,
   MAX_VCF_STRUCTURED_HEADER_CHARS,
   MAX_VCF_STRUCTURED_HEADER_FIELDS,
   splitBounded,
@@ -23,6 +23,35 @@ import {
 export interface VcfHeaderParseResult {
   header: VcfHeader
   firstDataLine: string | null
+}
+
+/**
+ * Scan the #CHROM row without splitting a potentially tab-dense line into an
+ * unbounded temporary array. The header byte budget bounds string storage;
+ * this independent token budget bounds per-sample JS allocation overhead.
+ */
+function parseHeaderSamples(line: string): string[] {
+  const samples: string[] = []
+  let columnIndex = 0
+  let cursor = 0
+
+  while (cursor <= line.length) {
+    const delimiter = line.indexOf('\t', cursor)
+    const end = delimiter === -1 ? line.length : delimiter
+    if (columnIndex >= 9) {
+      if (samples.length >= MAX_VCF_HEADER_SAMPLES) {
+        throw new VcfResourceLimitError(
+          `#CHROM header has more than ${MAX_VCF_HEADER_SAMPLES} samples`
+        )
+      }
+      samples.push(line.slice(cursor, end).trim())
+    }
+    columnIndex += 1
+    if (delimiter === -1) break
+    cursor = delimiter + 1
+  }
+
+  return samples
 }
 
 /**
@@ -182,15 +211,7 @@ export function parseVcfHeaderFromLines(lines: string[]): VcfHeader {
       }
     } else if (line.startsWith('#CHROM')) {
       // #CHROM line — extract sample names from columns 10+
-      const cols = splitBounded(line, '\t', MAX_VCF_COLUMNS)
-      if (cols === null) {
-        throw new VcfResourceLimitError(`#CHROM header has more than ${MAX_VCF_COLUMNS} columns`)
-      }
-      if (cols.length > 9) {
-        for (let i = 9; i < cols.length; i++) {
-          samples.push(cols[i].trim())
-        }
-      }
+      samples.push(...parseHeaderSamples(line))
     }
   }
 

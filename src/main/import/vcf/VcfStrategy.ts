@@ -12,7 +12,11 @@ import type { ImportOptions, ImportResult } from '../types'
 import type { ImportStrategy, FormatInfo, StrategyContext } from '../strategies/ImportStrategy'
 import type { VcfImportOptions, VcfMappedVariant, VcfHeader } from './types'
 import { parseVcfHeaderFromLines } from './vcf-header-parser'
-import { parseVcfLine } from './vcf-line-parser'
+import {
+  parseVcfLine,
+  resolveVcfSelectedSampleColumn,
+  type VcfSelectedSampleColumn
+} from './vcf-line-parser'
 import { mapVcfRecord } from './VcfMapper'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from './info-field-registry'
 import { detectCaller } from './caller-detector'
@@ -49,6 +53,7 @@ export class VcfStrategy implements ImportStrategy {
     const headerBudget = new VcfHeaderBudget()
     let header: VcfHeader | null = null
     let activeSample = ''
+    let activeSampleColumn: VcfSelectedSampleColumn | null = null
     let totalInserted = 0
     let totalSkipped = 0
     const errors: string[] = []
@@ -76,8 +81,11 @@ export class VcfStrategy implements ImportStrategy {
         // Parse header once, on the first data line
         if (header === null) {
           header = parseVcfHeaderFromLines(headerLines)
-          const selectedSample = vcfOptions?.selectedSamples?.[0]
-          activeSample = selectedSample ?? (header.samples.length > 0 ? header.samples[0] : '')
+          activeSampleColumn = resolveVcfSelectedSampleColumn(
+            header.samples,
+            vcfOptions?.selectedSamples?.[0]
+          )
+          activeSample = activeSampleColumn?.name ?? ''
 
           if (activeSample === '') {
             errors.push('No sample found in VCF file')
@@ -90,11 +98,16 @@ export class VcfStrategy implements ImportStrategy {
 
         // Parse the data line
         try {
-          const record = parseVcfLine(line, header.samples, (reason) => {
-            if (errors.length < 10) {
-              errors.push(`Line skipped at ${line.substring(0, 50)}: ${reason}`)
-            }
-          })
+          const record = parseVcfLine(
+            line,
+            header.samples,
+            (reason) => {
+              if (errors.length < 10) {
+                errors.push(`Line skipped at ${line.substring(0, 50)}: ${reason}`)
+              }
+            },
+            activeSampleColumn ?? undefined
+          )
           if (record === null) {
             totalSkipped++
             continue

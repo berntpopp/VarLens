@@ -73,6 +73,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0014',
     name: 'variant_transcripts_func',
     fileName: '0014_variant_transcripts_func.sql'
+  },
+  {
+    version: '0015',
+    name: 'import_visibility',
+    fileName: '0015_import_visibility.sql'
   }
 ]
 

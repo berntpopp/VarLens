@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { parseAnnotation } from '../../../../src/main/import/vcf/vcf-annotation-parser'
+import {
+  parseAnnotation,
+  parseAnnotationsForAlleles
+} from '../../../../src/main/import/vcf/vcf-annotation-parser'
 import type { VcfHeader } from '../../../../src/main/import/vcf/types'
 import {
   MAX_VCF_ANNOTATION_FIELDS,
@@ -129,6 +132,22 @@ describe('vcf-annotation-parser', () => {
 
       expect(result.transcripts).toHaveLength(1)
       expect(result.geneSymbol).toBe('COMT')
+    })
+
+    it('parses a multi-allelic annotation payload once into allele-indexed results', () => {
+      const info = new Map([
+        [
+          'CSQ',
+          'G|missense_variant|MODERATE|GENE1|E1|Transcript|T1|protein_coding||||||||||||||||,T|stop_gained|HIGH|GENE2|E2|Transcript|T2|protein_coding||||||||||||||||'
+        ]
+      ])
+
+      const [gResult, tResult] = parseAnnotationsForAlleles(info, header, ['G', 'T'], 'A')
+
+      expect(gResult.transcript).toBe('T1')
+      expect(tResult.transcript).toBe('T2')
+      expect(gResult.transcripts).toHaveLength(1)
+      expect(tResult.transcripts).toHaveLength(1)
     })
 
     it('handles empty CSQ value', () => {
@@ -473,6 +492,19 @@ describe('vcf-annotation-parser', () => {
       const manyFields = Array.from({ length: MAX_VCF_ANNOTATION_FIELDS + 1 }, () => 'G').join('|')
       expect(() =>
         parseAnnotation(new Map([['ANN', manyFields]]), makeHeader({ annotationType: 'ann' }), 'G')
+      ).toThrow(VcfResourceLimitError)
+    })
+
+    it('rejects annotation-to-allele match amplification before building output graphs', () => {
+      const csqHeader = makeHeader({
+        annotationType: 'csq',
+        csqFields: ['Allele', 'Feature']
+      })
+      const annotations = Array.from({ length: 2_000 }, (_, index) => `-|T${index}`).join(',')
+      const deletionAlts = Array.from({ length: 1_000 }, () => 'A')
+
+      expect(() =>
+        parseAnnotationsForAlleles(new Map([['CSQ', annotations]]), csqHeader, deletionAlts, 'AA')
       ).toThrow(VcfResourceLimitError)
     })
   })

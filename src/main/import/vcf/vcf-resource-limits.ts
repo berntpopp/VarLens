@@ -1,11 +1,14 @@
 /** Practical allocation/fan-out budgets applied before VCF token arrays or maps are built. */
-export const MAX_VCF_COLUMNS = 10_010
 export const MAX_VCF_ALT_ALLELES = 1_000
 export const MAX_VCF_INFO_CHARS = 1024 * 1024
 export const MAX_VCF_INFO_FIELDS = 4_096
 export const MAX_VCF_FORMAT_FIELDS = 256
-export const MAX_VCF_TOTAL_SAMPLE_VALUES = 100_000
+export const MAX_VCF_FORMAT_CHARS = 64 * 1024
 export const MAX_VCF_SAMPLE_FIELD_CHARS = 64 * 1024
+/** Bounds JS token/map overhead while allowing cohorts well beyond the former 10k cap. */
+export const MAX_VCF_HEADER_SAMPLES = 100_000
+/** Legacy direct callers may request all samples; production resolves exactly one sample. */
+export const MAX_VCF_COMPATIBILITY_SAMPLES = MAX_VCF_HEADER_SAMPLES
 export const MAX_VCF_ANNOTATION_CHARS = 1024 * 1024
 export const MAX_VCF_ANNOTATIONS = 2_048
 export const MAX_VCF_ANNOTATION_FIELDS = 256

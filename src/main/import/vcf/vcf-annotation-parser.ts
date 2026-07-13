@@ -26,6 +26,7 @@ const IMPACT_ORDER: Record<string, number> = {
   LOW: 2,
   MODIFIER: 1
 }
+const MAX_VCF_TOTAL_ANNOTATION_MATCHES = 100_000
 
 /**
  * Parse annotations from VCF INFO fields.
@@ -39,7 +40,7 @@ const IMPACT_ORDER: Record<string, number> = {
  *   (matches VEP CSQ's ALLELE_NUM). Required to disambiguate multi-allelic
  *   deletion sites, where VEP emits "-" for every deletion ALT.
  * @param originalAltAlleles - All ALT alleles before splitting. Used to reject
- *   lossy CSQ allele heuristics that match more than one ALT.
+ *   lossy annotation allele heuristics that match more than one ALT.
  * @returns Annotation result with selected transcript and all transcripts
  */
 export function parseAnnotation(
@@ -50,15 +51,57 @@ export function parseAnnotation(
   alleleIndex?: number,
   originalAltAlleles: string[] = [altAllele]
 ): AnnotationResult {
+  if (
+    header.annotationType === 'csq' &&
+    header.csqFields !== null &&
+    header.csqFields.includes('ALLELE_NUM') &&
+    alleleIndex === undefined
+  ) {
+    return emptyResult()
+  }
+  const originalAltIndexes = alleleIndex === undefined ? undefined : [alleleIndex - 1]
+  return (
+    parseAnnotationsForAlleles(
+      info,
+      header,
+      [altAllele],
+      ref ?? '',
+      originalAltIndexes,
+      originalAltAlleles
+    )[0] ?? emptyResult()
+  )
+}
+
+/**
+ * Parse one annotation payload once and partition its transcripts across all
+ * requested ALT alleles. This keeps allocation proportional to the annotation
+ * payload plus matched transcripts instead of reparsing/rebuilding it for
+ * every ALT.
+ */
+export function parseAnnotationsForAlleles(
+  info: Map<string, string>,
+  header: VcfHeader,
+  altAlleles: string[],
+  ref = '',
+  originalAltIndexes: number[] = altAlleles.map((_, index) => index),
+  originalAltAlleles: string[] = altAlleles
+): AnnotationResult[] {
   if (header.annotationType === 'csq' && header.csqFields !== null) {
-    return parseCsq(info, header.csqFields, altAllele, ref ?? '', alleleIndex, originalAltAlleles)
+    return parseCsqForAlleles(
+      info,
+      header.csqFields,
+      altAlleles,
+      ref,
+      originalAltIndexes,
+      originalAltAlleles
+    )
   }
 
   if (header.annotationType === 'ann') {
-    return parseAnn(info, altAllele, originalAltAlleles)
+    return parseAnnForAlleles(info, altAlleles, originalAltAlleles)
   }
 
-  return emptyResult()
+  return altAlleles.map(() => emptyResult())
 }
 
 // ── CSQ (VEP) Parser ─────────────────────────────────────────
@@ -68,21 +111,20 @@ interface CsqTranscript {
   allele: string
 }
 
-function parseCsq(
+function parseCsqForAlleles(
   info: Map<string, string>,
   csqFieldNames: string[],
-  altAllele: string,
+  altAlleles: string[],
   ref: string,
-  alleleIndex: number | undefined,
+  originalAltIndexes: number[],
   originalAltAlleles: string[]
-): AnnotationResult {
+): AnnotationResult[] {
   const csqRaw = info.get('CSQ')
-  if (csqRaw == null || csqRaw === '') return emptyResult()
+  if (csqRaw == null || csqRaw === '') return altAlleles.map(() => emptyResult())
   if (csqRaw.length > MAX_VCF_ANNOTATION_CHARS) {
     throw new VcfResourceLimitError(`CSQ annotation exceeds ${MAX_VCF_ANNOTATION_CHARS} characters`)
   }
 
-  // Split annotations by comma, then each by pipe
   const annotations = splitBounded(csqRaw, ',', MAX_VCF_ANNOTATIONS)
   if (annotations === null) {
     throw new VcfResourceLimitError(`CSQ has more than ${MAX_VCF_ANNOTATIONS} annotations`)
@@ -107,43 +149,51 @@ function parseCsq(
     const fields = new Map<string, string>()
 
     for (let i = 0; i < csqFieldNames.length && i < parts.length; i++) {
-      if (parts[i] !== '') {
-        fields.set(csqFieldNames[i], parts[i])
-      }
+      if (parts[i] !== '') fields.set(csqFieldNames[i], parts[i])
     }
 
-    const allele = fields.get('Allele') ?? ''
-    parsed.push({ fields, allele })
+    parsed.push({ fields, allele: fields.get('Allele') ?? '' })
   }
 
-  // Filter by allele. VEP's Allele field is "-" for every deletion ALT at a site,
-  // so at a multi-deletion multi-allelic site the Allele/length heuristic alone
-  // cannot tell two deletions apart. When the CSQ config declares ALLELE_NUM
-  // (the 1-based index of the ALT this block annotates), prefer it — it is the
-  // only reliable discriminator for that case. Fall back to Allele-string
-  // heuristics only when ALLELE_NUM is absent from the header entirely. Once
-  // declared, a block with a missing or malformed value is unsafe to attach:
-  // partial fallback can cross-match another ALT at a mixed multi-allelic site.
-  const hasAlleleNumField = csqFieldNames.includes('ALLELE_NUM')
-  const filtered = parsed.filter((t) => {
-    if (hasAlleleNumField) {
-      if (alleleIndex === undefined) return false
-      const alleleNumStr = t.fields.get('ALLELE_NUM')
-      if (alleleNumStr === undefined || !/^[1-9]\d*$/.test(alleleNumStr)) return false
-      const parsedAlleleNum = Number(alleleNumStr)
-      return Number.isSafeInteger(parsedAlleleNum) && parsedAlleleNum === alleleIndex
-    }
-    if (!matchesAllele(t.allele, altAllele, ref)) return false
-    const matchingAltCount = originalAltAlleles.filter((candidate) =>
-      matchesAllele(t.allele, candidate, ref)
-    ).length
-    return matchingAltCount === 1
-  })
+  const grouped = altAlleles.map(() => [] as CsqTranscript[])
+  let totalMatches = 0
 
+  if (csqFieldNames.includes('ALLELE_NUM')) {
+    const targetByAlleleNum = new Map<number, number>()
+    for (let targetIndex = 0; targetIndex < originalAltIndexes.length; targetIndex += 1) {
+      targetByAlleleNum.set(originalAltIndexes[targetIndex] + 1, targetIndex)
+    }
+
+    for (const transcript of parsed) {
+      const alleleNumStr = transcript.fields.get('ALLELE_NUM')
+      if (alleleNumStr === undefined || !/^[1-9]\d*$/.test(alleleNumStr)) continue
+      const alleleNum = Number(alleleNumStr)
+      if (!Number.isSafeInteger(alleleNum)) continue
+      const targetIndex = targetByAlleleNum.get(alleleNum)
+      if (targetIndex === undefined) continue
+      totalMatches = pushBounded(grouped, targetIndex, transcript, totalMatches, 'CSQ')
+    }
+  } else {
+    assertCsqPotentialMatchBudget(parsed, altAlleles, ref)
+    const targetIndexes = buildCsqAlleleTargetIndex(
+      altAlleles,
+      originalAltIndexes,
+      originalAltAlleles,
+      ref
+    )
+    for (const transcript of parsed) {
+      for (const targetIndex of targetIndexes.get(transcript.allele) ?? []) {
+        totalMatches = pushBounded(grouped, targetIndex, transcript, totalMatches, 'CSQ')
+      }
+    }
+  }
+
+  return grouped.map(buildCsqResult)
+}
+
+function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
   if (filtered.length === 0) return emptyResult()
 
-  // Build TranscriptInsertRows, deduplicating by transcript_id
-  // (same transcript can appear multiple times with different consequences)
   const transcriptMap = new Map<string, CsqTranscript>()
   for (const t of filtered) {
     const tid = t.fields.get('Feature') ?? ''
@@ -171,13 +221,10 @@ function parseCsq(
     }
   })
 
-  // Select best transcript
   const bestIdx = selectBestTranscript(filtered)
   const bestTid = bestIdx >= 0 ? (filtered[bestIdx].fields.get('Feature') ?? '') : ''
   const bestTranscriptRow = transcripts.find((t) => t.transcript_id === bestTid)
-  if (bestTranscriptRow) {
-    bestTranscriptRow.is_selected = 1
-  }
+  if (bestTranscriptRow) bestTranscriptRow.is_selected = 1
 
   const best = bestIdx >= 0 ? filtered[bestIdx] : null
   const bestSemantics = canonicalizeTranscriptSemantics(
@@ -185,7 +232,6 @@ function parseCsq(
     best?.fields.get('Consequence') ?? null
   )
 
-  // Parse numeric fields from the best transcript
   const gnomadAfStr = best?.fields.get('gnomADe_AF') ?? best?.fields.get('gnomADg_AF') ?? null
   const caddStr = best?.fields.get('CADD_PHRED') ?? null
   const clinvarStr = best?.fields.get('ClinVar_CLNSIG') ?? null
@@ -206,36 +252,27 @@ function parseCsq(
 
 // ── ANN (SnpEff) Parser ──────────────────────────────────────
 
-// Fixed ANN field indices (SnpEff standard 16-field format)
 const ANN_ALLELE = 0
 const ANN_ANNOTATION = 1
 const ANN_IMPACT = 2
 const ANN_GENE_NAME = 3
-// const ANN_GENE_ID = 4
-// const ANN_FEATURE_TYPE = 5
 const ANN_FEATURE_ID = 6
 const ANN_BIOTYPE = 7
-// const ANN_RANK = 8
 const ANN_HGVSC = 9
 const ANN_HGVSP = 10
-// const ANN_CDNA_POS = 11
-// const ANN_CDS_POS = 12
-// const ANN_AA_POS = 13
-// const ANN_DISTANCE = 14
-// const ANN_ERRORS = 15
 
 interface AnnTranscript {
   parts: string[]
   allele: string
 }
 
-function parseAnn(
+function parseAnnForAlleles(
   info: Map<string, string>,
-  altAllele: string,
+  altAlleles: string[],
   originalAltAlleles: string[]
-): AnnotationResult {
+): AnnotationResult[] {
   const annRaw = info.get('ANN')
-  if (annRaw == null || annRaw === '') return emptyResult()
+  if (annRaw == null || annRaw === '') return altAlleles.map(() => emptyResult())
   if (annRaw.length > MAX_VCF_ANNOTATION_CHARS) {
     throw new VcfResourceLimitError(`ANN annotation exceeds ${MAX_VCF_ANNOTATION_CHARS} characters`)
   }
@@ -261,34 +298,26 @@ function parseAnn(
         `ANN has more than ${MAX_VCF_TOTAL_ANNOTATION_VALUES} total values`
       )
     }
-    const allele = parts[ANN_ALLELE] ?? ''
-    parsed.push({ parts, allele })
+    parsed.push({ parts, allele: parts[ANN_ALLELE] ?? '' })
   }
 
-  // Ordinary SnpEff ANN field 0 values are the literal raw VCF ALT string.
-  // The ANN standard also defines compound values whose leading component is
-  // the annotated ALT: cancer comparisons use ALT-REFERENCE (e.g. G-C), and
-  // compound annotations use ALT-chr:pos_REF>ALT. Match that leading component
-  // exactly against one original ALT; never apply VEP's deletion/insertion
-  // heuristics here:
-  //   - the "-" deletion shortcut (allowDeletionDash) — SnpEff never emits "-",
-  //     so a literal "-" block must not cross-match a shorter ALT.
-  //   - the insertion-suffix heuristic (allowInsertionSuffix), i.e.
-  //     `annAllele === altAllele.substring(1)` — this exists only to match VEP's
-  //     "inserted bases only" notation. Left enabled for ANN, it lets a block
-  //     for one split ALT cross-attach to an unrelated, longer split ALT that
-  //     happens to share a suffix (e.g. REF=A ALT=AT,T: the T block's allele
-  //     "T" equals "AT".substring(1), wrongly attaching it to the AT split).
-  const filtered = parsed.filter((t) => {
-    const leadingAlt = t.allele.split('-', 1)[0]
-    if (leadingAlt !== altAllele) return false
-    return originalAltAlleles.filter((candidate) => candidate === leadingAlt).length === 1
-  })
+  const grouped = altAlleles.map(() => [] as AnnTranscript[])
+  const targetIndexes = buildAnnAlleleTargetIndex(altAlleles, originalAltAlleles)
+  let totalMatches = 0
 
+  for (const transcript of parsed) {
+    const leadingAlt = transcript.allele.split('-', 1)[0]
+    for (const targetIndex of targetIndexes.get(leadingAlt) ?? []) {
+      totalMatches = pushBounded(grouped, targetIndex, transcript, totalMatches, 'ANN')
+    }
+  }
+
+  return grouped.map(buildAnnResult)
+}
+
+function buildAnnResult(filtered: AnnTranscript[]): AnnotationResult {
   if (filtered.length === 0) return emptyResult()
 
-  // Build TranscriptInsertRows, deduplicating by transcript_id
-  // (same transcript can appear multiple times with different consequences)
   const transcriptMap = new Map<string, AnnTranscript>()
   for (const t of filtered) {
     const tid = t.parts[ANN_FEATURE_ID] ?? ''
@@ -316,13 +345,10 @@ function parseAnn(
     }
   })
 
-  // Select best transcript
   const bestIdx = selectBestTranscriptAnn(filtered)
   const bestTid = bestIdx >= 0 ? (filtered[bestIdx].parts[ANN_FEATURE_ID] ?? '') : ''
   const bestTranscriptRow = transcripts.find((t) => t.transcript_id === bestTid)
-  if (bestTranscriptRow) {
-    bestTranscriptRow.is_selected = 1
-  }
+  if (bestTranscriptRow) bestTranscriptRow.is_selected = 1
 
   const best = bestIdx >= 0 ? filtered[bestIdx] : null
   const bestSemantics = canonicalizeTranscriptSemantics(
@@ -337,52 +363,110 @@ function parseAnn(
     transcript: best?.parts[ANN_FEATURE_ID] ?? null,
     cdna: best?.parts[ANN_HGVSC] ?? null,
     aaChange: best?.parts[ANN_HGVSP] ?? null,
-    gnomadAf: null, // ANN doesn't include gnomAD — handled by INFO field registry
-    cadd: null, // ANN doesn't include CADD — handled by INFO field registry
-    clinvar: null, // ANN doesn't include ClinVar — handled by INFO field registry
+    gnomadAf: null,
+    cadd: null,
+    clinvar: null,
     transcripts
   }
 }
 
 // ── Shared helpers ───────────────────────────────────────────
 
-/**
- * Check if an annotation allele matches the target ALT allele.
- * VEP CSQ uses the VCF ALT bases for SNVs, "-" for deletions, inserted bases for insertions.
- * SnpEff ANN uses the full raw ALT allele string exactly as written in the VCF ALT
- * column (real sequence, never "-", never an inserted-bases-only suffix).
- *
- * @param allowDeletionDash - Whether the VEP "-" deletion shortcut may fire. VEP's
- *   Allele field is lossy ("-" for every deletion ALT at a multi-allelic site), so
- *   this is only a safe heuristic for VEP CSQ, and only as a fallback when
- *   ALLELE_NUM disambiguation isn't available. SnpEff ANN callers must pass
- *   `false` — ANN's allele field is always a concrete sequence, so a literal "-"
- *   there is never a real allele and must not cross-match a shorter ALT.
- * @param allowInsertionSuffix - Whether the VEP "inserted bases only" heuristic
- *   (`annAllele === altAllele.substring(1)`) may fire. VEP's Allele field for an
- *   insertion is the inserted bases only (ALT minus the shared first base), so
- *   this is a safe heuristic only for VEP CSQ. SnpEff ANN callers must pass
- *   `false` — ANN's allele field is always the full raw ALT string, so this
- *   substring heuristic is not just unnecessary but actively wrong: at a mixed
- *   multi-allelic site (e.g. REF=A ALT=AT,T) it makes the shorter split's ANN
- *   block ("T") falsely match the longer split's ALT ("AT"), since
- *   "AT".substring(1) === "T".
- */
-function matchesAllele(
-  annAllele: string,
-  altAllele: string,
-  ref: string,
-  allowDeletionDash: boolean = true,
-  allowInsertionSuffix: boolean = true
-): boolean {
-  if (annAllele === altAllele) return true
-  // VEP deletion notation: "-" only matches when ALT is actually shorter than REF
-  if (allowDeletionDash && annAllele === '-' && altAllele.length < ref.length) return true
-  // VEP insertion: the annotation Allele is the inserted bases (ALT minus first base)
-  if (allowInsertionSuffix && altAllele.length > 1 && annAllele === altAllele.substring(1)) {
-    return true
+function pushBounded<T>(
+  grouped: T[][],
+  targetIndex: number,
+  transcript: T,
+  totalMatches: number,
+  annotationType: 'CSQ' | 'ANN'
+): number {
+  const nextTotal = totalMatches + 1
+  if (nextTotal > MAX_VCF_TOTAL_ANNOTATION_MATCHES) {
+    throw new VcfResourceLimitError(
+      `${annotationType} annotation matches exceed ${MAX_VCF_TOTAL_ANNOTATION_MATCHES}`
+    )
   }
-  return false
+  grouped[targetIndex].push(transcript)
+  return nextTotal
+}
+
+function buildCsqAlleleTargetIndex(
+  altAlleles: string[],
+  originalAltIndexes: number[],
+  originalAltAlleles: string[],
+  ref: string
+): Map<string, number[]> {
+  const spellingCounts = new Map<string, number>()
+  for (const originalAlt of originalAltAlleles) {
+    for (const spelling of csqAlleleSpellings(originalAlt, ref)) {
+      spellingCounts.set(spelling, (spellingCounts.get(spelling) ?? 0) + 1)
+    }
+  }
+
+  const targets = new Map<string, number[]>()
+  for (let targetIndex = 0; targetIndex < altAlleles.length; targetIndex += 1) {
+    const originalAlt = originalAltAlleles[originalAltIndexes[targetIndex]]
+    if (originalAlt === undefined) continue
+    for (const spelling of csqAlleleSpellings(originalAlt, ref)) {
+      if (spellingCounts.get(spelling) === 1) addTarget(targets, spelling, targetIndex)
+    }
+  }
+  return targets
+}
+
+function assertCsqPotentialMatchBudget(
+  transcripts: CsqTranscript[],
+  altAlleles: string[],
+  ref: string
+): void {
+  const potentialTargets = new Map<string, number>()
+  for (const alt of altAlleles) {
+    for (const spelling of csqAlleleSpellings(alt, ref)) {
+      potentialTargets.set(spelling, (potentialTargets.get(spelling) ?? 0) + 1)
+    }
+  }
+
+  let totalMatches = 0
+  for (const transcript of transcripts) {
+    totalMatches += potentialTargets.get(transcript.allele) ?? 0
+    if (totalMatches > MAX_VCF_TOTAL_ANNOTATION_MATCHES) {
+      throw new VcfResourceLimitError(
+        `CSQ annotation matches exceed ${MAX_VCF_TOTAL_ANNOTATION_MATCHES}`
+      )
+    }
+  }
+}
+
+function csqAlleleSpellings(altAllele: string, ref: string): Set<string> {
+  const spellings = new Set<string>([altAllele])
+  if (altAllele.length < ref.length) spellings.add('-')
+  if (altAllele.length > 1) spellings.add(altAllele.substring(1))
+  return spellings
+}
+
+function buildAnnAlleleTargetIndex(
+  altAlleles: string[],
+  originalAltAlleles: string[]
+): Map<string, number[]> {
+  const exactCounts = new Map<string, number>()
+  for (const originalAlt of originalAltAlleles) {
+    exactCounts.set(originalAlt, (exactCounts.get(originalAlt) ?? 0) + 1)
+  }
+
+  const targets = new Map<string, number[]>()
+  for (let targetIndex = 0; targetIndex < altAlleles.length; targetIndex += 1) {
+    const alt = altAlleles[targetIndex]
+    if (exactCounts.get(alt) === 1) addTarget(targets, alt, targetIndex)
+  }
+  return targets
+}
+
+function addTarget(targets: Map<string, number[]>, allele: string, targetIndex: number): void {
+  const existing = targets.get(allele)
+  if (existing === undefined) {
+    targets.set(allele, [targetIndex])
+    return
+  }
+  if (existing[existing.length - 1] !== targetIndex) existing.push(targetIndex)
 }
 
 /**
@@ -399,19 +483,15 @@ function selectBestTranscript(transcripts: CsqTranscript[]): number {
     const t = transcripts[i]
     let score = 0
 
-    // MANE_SELECT presence: highest priority
     const mane = t.fields.get('MANE_SELECT')
     if (mane != null && mane !== '') score += 1000
 
-    // CANONICAL=YES
     const canonical = t.fields.get('CANONICAL')
     if (canonical === 'YES') score += 100
 
-    // Impact severity
     const impact = t.fields.get('IMPACT') ?? 'MODIFIER'
     score += (IMPACT_ORDER[impact] ?? 0) * 10
 
-    // protein_coding biotype preference
     const biotype = t.fields.get('BIOTYPE')
     if (biotype === 'protein_coding') score += 5
 

@@ -47,9 +47,12 @@ describe('import-logic-append.ts DoS guards', () => {
   let tmpDir: string
   let svc: DatabaseService
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'varlens-import-append-dos-'))
-    svc = new DatabaseService(':memory:')
+    svc = new DatabaseService(join(tmpDir, 'varlens.db'))
+    // Let DatabaseService's asynchronous startup cache cleanup release its
+    // connection before the append path acquires BEGIN IMMEDIATE.
+    await new Promise<void>((resolve) => setImmediate(resolve))
   })
 
   afterEach(() => {
@@ -143,6 +146,48 @@ describe('import-logic-append.ts DoS guards', () => {
 
       expect(result.variantCount).toBe(1)
       expect(result.errors).toEqual([])
+    })
+
+    it('uses an isolated connection and rolls back promptly when cancelled', async () => {
+      const filePath = join(tmpDir, 'cancel.vcf')
+      const rows = Array.from(
+        { length: 5_001 },
+        (_, index) => `chr1\t${index + 1}\t.\tA\tG\t99\tPASS\t.\tGT\t0/1`
+      )
+      writeFileSync(
+        filePath,
+        [
+          '##fileformat=VCFv4.2',
+          '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005',
+          ...rows
+        ].join('\n') + '\n'
+      )
+      const caseId = svc.cases.createCase('test-append-cancel', filePath, 1000)
+      svc.variants.beginBulkInsert()
+      const controller = new AbortController()
+      let mainConnectionWasInTransaction = true
+
+      await expect(
+        importAdditionalFileToCase(
+          caseId,
+          filePath,
+          { selectedSample: 'HG005' },
+          () => svc,
+          {
+            onProgress: () => {
+              mainConnectionWasInTransaction = svc.database.inTransaction
+              controller.abort()
+            }
+          },
+          undefined,
+          controller.signal
+        )
+      ).rejects.toThrow(/cancelled/i)
+
+      expect(mainConnectionWasInTransaction).toBe(false)
+      svc.variants.recalculateCaseVariantCount(caseId)
+      expect(svc.cases.getCase(caseId)?.variant_count).toBe(0)
     })
   })
 

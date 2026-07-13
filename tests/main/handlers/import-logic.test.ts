@@ -203,6 +203,46 @@ describe('import-logic VCF + multi-file routing', () => {
     expect(result.totalVariants).toBe(20)
   })
 
+  it('keeps PostgreSQL multi-file cancellation reachable for the full operation', async () => {
+    const cancel = vi.fn()
+    let resolveImport!: (result: unknown) => void
+    const importMultiFile = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveImport = resolve
+        })
+    )
+    const executor = { importSingleFile: vi.fn(), importMultiFile, cancel }
+    const session = {
+      capabilities: { backend: 'postgres' },
+      getImportExecutor: () => executor
+    }
+
+    const pending = startMultiFileImport(
+      'Multi case',
+      [{ filePath: '/abs/a.vcf', variantType: 'snv-indel', caller: null, annotationFormat: null }],
+      undefined,
+      () => session as never,
+      (() => ({})) as never,
+      {}
+    )
+    await expect(
+      startImport('/abs/second.vcf', 'Second', undefined, () => session as never, {})
+    ).rejects.toThrow(/already in progress/i)
+    cancelImport()
+
+    expect(cancel).toHaveBeenCalledOnce()
+    resolveImport({
+      caseId: 0,
+      variantCount: 0,
+      files: [],
+      skipped: 0,
+      errors: ['Import cancelled by user'],
+      elapsed: 1
+    })
+    await pending
+  })
+
   it('translates ImportFiltersPayload (bedFile) to StorageImportFileFilters (bedFilePath) on PG path', async () => {
     const importMultiFile = vi.fn(async () => ({
       caseId: 7,
