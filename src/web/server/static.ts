@@ -47,9 +47,11 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
     // We register a manual SPA fallback below; let it handle all 404s
     // for non-asset routes.
     wildcard: false,
-    setHeaders: (res, pathName) => {
+    // @fastify/static v10 hands `setHeaders` a FastifyReply, not a raw
+    // ServerResponse — use `reply.header()`, not `res.setHeader()`.
+    setHeaders: (reply, pathName) => {
       if (basename(pathName) === 'index.html') {
-        res.setHeader('Content-Security-Policy', WEB_APP_CSP_HEADER)
+        reply.header('Content-Security-Policy', WEB_APP_CSP_HEADER)
       }
     }
   })
