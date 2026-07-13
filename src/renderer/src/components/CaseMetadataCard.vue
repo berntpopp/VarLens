@@ -94,6 +94,10 @@ import StatusSelector from './StatusSelector.vue'
 import CohortCombobox from './CohortCombobox.vue'
 import HpoTermSelector from './HpoTermSelector.vue'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
+import { useAppState } from '../composables/useAppState'
+import { formatErrorMessage } from '../../../shared/errors/format-error-message'
+import { logService } from '../services/LogService'
+import { APP_CONFIG } from '../../../shared/config/app.config'
 import type { AffectedStatus, CaseSex, CohortGroup } from '../../../shared/types/api'
 import { mdiGenderMaleFemale } from '@mdi/js'
 
@@ -120,6 +124,8 @@ const {
   removeHpoTerm,
   cohortGroupsCache
 } = useCaseMetadata()
+
+const { showSnack } = useAppState()
 
 const sexOptions = [
   { label: 'Unknown', value: 'unknown' },
@@ -151,44 +157,61 @@ watch(
 )
 
 // Handlers
+async function runMutation(
+  label: string,
+  mutation: () => Promise<unknown>,
+  emitChange = false
+): Promise<void> {
+  try {
+    await mutation()
+    if (emitChange) emit('changed')
+  } catch (error) {
+    const message = formatErrorMessage(error, `Failed to ${label}.`)
+    logService.error(`Failed to ${label}: ${message}`, 'CaseMetadataCard')
+    showSnack(message, 'error', { timeout: APP_CONFIG.SNACKBAR_ERROR_MS })
+  }
+}
+
 async function handleStatusChange(status: AffectedStatus) {
-  await updateStatus(props.caseId, status)
+  await runMutation('update status', () => updateStatus(props.caseId, status))
 }
 
 async function handleSexChange(sex: CaseSex) {
-  await updateSex(props.caseId, sex)
+  await runMutation('update sex', () => updateSex(props.caseId, sex))
 }
 
 async function handleAgeChange(val: string | number | null) {
   const age =
     typeof val === 'number' ? val : typeof val === 'string' && val !== '' ? parseFloat(val) : null
   const validAge = age !== null && !isNaN(age) ? age : null
-  await updateAge(props.caseId, validAge)
+  await runMutation('update age', () => updateAge(props.caseId, validAge))
 }
 
 async function handleDobChange(val: string | null) {
-  await updateDob(props.caseId, typeof val === 'string' && val !== '' ? val : null)
+  await runMutation('update date of birth', () =>
+    updateDob(props.caseId, typeof val === 'string' && val !== '' ? val : null)
+  )
 }
 
 async function handleCohortsChange(cohorts: CohortGroup[]) {
   const cohortIds = cohorts.map((c) => c.id)
-  await setCaseCohorts(props.caseId, cohortIds)
-  emit('changed')
+  await runMutation('set cohorts', () => setCaseCohorts(props.caseId, cohortIds), true)
 }
 
 async function handleCreateCohort(name: string) {
-  await createAndAssignCohort(props.caseId, name)
-  emit('changed')
+  await runMutation('create cohort', () => createAndAssignCohort(props.caseId, name), true)
 }
 
 async function handleAddHpoTerm(term: { hpoId: string; hpoLabel: string }) {
-  await assignHpoTerm(props.caseId, term.hpoId, term.hpoLabel)
-  emit('changed')
+  await runMutation(
+    'assign HPO term',
+    () => assignHpoTerm(props.caseId, term.hpoId, term.hpoLabel),
+    true
+  )
 }
 
 async function handleRemoveHpoTerm(hpoId: string) {
-  await removeHpoTerm(props.caseId, hpoId)
-  emit('changed')
+  await runMutation('remove HPO term', () => removeHpoTerm(props.caseId, hpoId), true)
 }
 
 onMounted(async () => {

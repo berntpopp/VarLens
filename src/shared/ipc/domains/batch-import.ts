@@ -2,8 +2,8 @@ import type { BatchResult, DuplicateCheckResult, DuplicateChoice } from '../../t
 import type { IpcResult } from '../../types/errors'
 
 export interface BatchImportDomainContract {
-  selectFiles: () => Promise<string[]>
-  selectFolder: () => Promise<string[]>
+  selectFiles: () => Promise<IpcResult<string[]>>
+  selectFolder: () => Promise<IpcResult<string[]>>
   checkDuplicates: (
     filePaths: string[],
     stripText?: string

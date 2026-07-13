@@ -118,6 +118,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
+import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import type { VcfPreviewResult } from '../../../../shared/types/vcf'
 
 const props = defineProps<{
@@ -202,8 +203,7 @@ onMounted(async () => {
     loading.value = true
     error.value = null
 
-    const result = await api!.import.vcfPreview(props.filePath)
-    preview.value = result as VcfPreviewResult
+    preview.value = unwrapIpcResult(await api!.import.vcfPreview(props.filePath))
 
     // Default: select all samples
     selectedSamples.value = [...preview.value.samples]
@@ -219,7 +219,12 @@ onMounted(async () => {
     emit('preview-loaded', preview.value)
     emitSelection()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
+    error.value =
+      err instanceof Error
+        ? err.message
+        : isIpcError(err)
+          ? (err.userMessage ?? err.message)
+          : String(err)
     logService.error(`VCF preview failed: ${error.value}`, 'VcfPreviewStep')
   } finally {
     loading.value = false

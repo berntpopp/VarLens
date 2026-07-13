@@ -240,6 +240,7 @@ import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useAutoUpdate } from '../composables/useAutoUpdate'
 import { useApiService } from '../composables/useApiService'
 import { APP_CONFIG } from '../../../shared/config/app.config'
+import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
 import {
   mdiAlertCircle,
@@ -308,12 +309,17 @@ onMounted(async () => {
 
   if (api) {
     try {
-      const versionInfo = await api.system.getVersion()
+      const versionInfo = unwrapIpcResult(await api.system.getVersion())
       appVersion.value = versionInfo.app
       electronVersion.value = versionInfo.electron
     } catch (error) {
       logService.error(
-        'Failed to fetch version info: ' + (error instanceof Error ? error.message : String(error)),
+        'Failed to fetch version info: ' +
+          (error instanceof Error
+            ? error.message
+            : isIpcError(error)
+              ? (error.userMessage ?? error.message)
+              : String(error)),
         'app'
       )
     }

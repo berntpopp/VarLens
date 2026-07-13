@@ -177,7 +177,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, shallowRef, markRaw } from 'vue'
 import type { CaseWithCohorts, CaseSex, AffectedStatus } from '../../../shared/types/api'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { formatErrorMessage } from '../../../shared/errors/format-error-message'
+import { unwrapIpcResult } from '../../../shared/types/errors'
 import { useContextMenu } from '../composables/useContextMenu'
 import { logService } from '../services/LogService'
 
@@ -266,14 +267,14 @@ const availableHpoTerms = ref<Array<{ hpo_id: string; label: string }>>([])
 async function loadHpoTerms(): Promise<void> {
   if (!api) return
   try {
-    const terms = await api.caseMetadata.distinctHpoTerms()
+    const terms = unwrapIpcResult(await api.caseMetadata.distinctHpoTerms())
     availableHpoTerms.value = terms.map((t) => ({
       hpo_id: t.hpo_id,
       label: `${t.hpo_label} (${t.hpo_id})`
     }))
   } catch (e) {
     logService.warn(
-      'Failed to load HPO terms: ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to load HPO terms: ' + formatErrorMessage(e, 'Unknown error'),
       'case-list'
     )
     availableHpoTerms.value = []
@@ -329,8 +330,7 @@ const onLoad = async ({
     done(result.data.length < PAGE_SIZE ? 'empty' : 'ok')
   } catch (e) {
     logService.error(
-      'Failed to load cases page: ' +
-        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
+      'Failed to load cases page: ' + formatErrorMessage(e, 'Unknown error'),
       'case-list'
     )
     done('error')

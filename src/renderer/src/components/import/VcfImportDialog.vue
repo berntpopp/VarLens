@@ -242,6 +242,7 @@ import type {
 } from '../../../../shared/types/api'
 import type { VcfMultiPreviewResult } from '../../../../shared/types/import'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
+import { formatErrorMessage } from '../../../../shared/errors/format-error-message'
 import { useApiService } from '../../composables/useApiService'
 import { useAppState } from '../../composables/useAppState'
 import { useImportStatusStore } from '../../stores/importStatusStore'
@@ -511,7 +512,7 @@ function resetToSelect(): void {
 async function browseFiles(): Promise<void> {
   if (api === undefined) return
   try {
-    const paths = await api.import.selectFiles()
+    const paths = unwrapIpcResult(await api.import.selectFiles())
     if (paths.length === 0) return
     await loadPreview(paths)
   } catch (err) {
@@ -672,18 +673,17 @@ async function startImport(): Promise<void> {
       variantCount: serverResult.totalVariants
     })
   } catch (err) {
-    logService.error(
-      `Multi-file VCF import failed: ${err instanceof Error ? err.message : String(err)}`,
-      'VcfImportDialog'
-    )
+    // Preserve SerializableError user messages instead of stringifying the object.
+    const message = formatErrorMessage(err, String(err))
+    logService.error(`Multi-file VCF import failed: ${message}`, 'VcfImportDialog')
     // Mark current file as errored
     if (currentFile.value !== null) {
       markFileStatus(currentFile.value, {
         status: 'error',
-        error: err instanceof Error ? err.message : String(err)
+        error: message
       })
     }
-    errorMessage.value = err instanceof Error ? err.message : String(err)
+    errorMessage.value = message
     // Clear the background pill — the import stopped.
     importStore.reset()
     // Return to review so the user can retry or adjust
@@ -801,7 +801,7 @@ function fileName(filePath: string): string {
 }
 
 function handleError(context: string, err: unknown): void {
-  const message = err instanceof Error ? err.message : String(err)
+  const message = formatErrorMessage(err, String(err))
   errorMessage.value = `${context}: ${message}`
   logService.error(`${context}: ${message}`, 'VcfImportDialog')
 }

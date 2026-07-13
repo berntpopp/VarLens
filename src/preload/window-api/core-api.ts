@@ -83,7 +83,7 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       vcfMultiPreview: (filePaths) => importDomain.vcfMultiPreview(filePaths),
       onProgress: (callback) => subscribeToIpcEvent('import:progress', callback),
       cancel: () => importDomain.cancel()
-    } as WindowAPI['import'],
+    },
 
     system: {
       getVersion: () => ipcRenderer.invoke('system:version'),
