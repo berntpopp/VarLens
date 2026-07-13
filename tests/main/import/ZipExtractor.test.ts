@@ -25,7 +25,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import AdmZip from 'adm-zip'
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { basename, dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { randomBytes } from 'crypto'
 import { ZipExtractor } from '../../../src/main/import/ZipExtractor'
@@ -155,7 +155,10 @@ function zipCryptoDecryptByte(keys: Uint32Array): number {
  */
 function zipCryptoEncrypt(data: Buffer, crc: number, password: string): Buffer {
   const { keys, update } = makeZipCryptoKeys(password)
-  const header = Buffer.from(randomBytes(12))
+  // Deterministic salt bytes keep the wrong-password regression stable. With
+  // random bytes, ZipCrypto's one-byte verifier has a 1/256 chance of accepting
+  // the wrong password and failing later as CRC corruption instead.
+  const header = Buffer.alloc(12)
   header[11] = (crc >>> 24) & 0xff
 
   const out = Buffer.alloc(12 + data.length)
@@ -526,6 +529,125 @@ describe('ZipExtractor.testPassword', () => {
 })
 
 describe('ZipExtractor.extract', () => {
+  it('rejects a declared entry size above the extraction limit before decoding', async () => {
+    const getData = vi.fn(() => Buffer.alloc(5))
+    const { zipPath, openArchive } = makeStubArchive([
+      { entryName: 'large.json', encrypted: false, declaredSize: 5, getData }
+    ])
+    const targetDir = makeTempDir()
+    const extractor = new ZipExtractor(
+      { maxEntryUncompressedBytes: 4, maxTotalUncompressedBytes: 10 },
+      openArchive
+    )
+
+    const result = await extractor.extract(zipPath, targetDir)
+
+    expect(result.errors.join(' ')).toMatch(/limit/i)
+    expect(result.extractedFiles).toEqual([])
+    expect(getData).not.toHaveBeenCalled()
+    expect(readdirSync(targetDir)).toEqual([])
+  })
+
+  it('rejects decoded entry data above the extraction limit before writing', async () => {
+    const getData = vi.fn(() => Buffer.alloc(5))
+    const { zipPath, openArchive } = makeStubArchive([
+      { entryName: 'lying-header.json', encrypted: false, declaredSize: 1, getData }
+    ])
+    const targetDir = makeTempDir()
+    const extractor = new ZipExtractor(
+      { maxEntryUncompressedBytes: 4, maxTotalUncompressedBytes: 10 },
+      openArchive
+    )
+
+    const result = await extractor.extract(zipPath, targetDir)
+
+    expect(result.errors.join(' ')).toMatch(/limit/i)
+    expect(result.extractedFiles).toEqual([])
+    expect(getData).toHaveBeenCalledOnce()
+    expect(readdirSync(targetDir)).toEqual([])
+  })
+
+  it('rejects a cumulative declared extraction size before decoding any entry', async () => {
+    const firstRead = vi.fn(() => Buffer.alloc(4))
+    const secondRead = vi.fn(() => Buffer.alloc(4))
+    const { zipPath, openArchive } = makeStubArchive([
+      { entryName: 'first.json', encrypted: false, declaredSize: 4, getData: firstRead },
+      { entryName: 'second.json', encrypted: false, declaredSize: 4, getData: secondRead }
+    ])
+    const targetDir = makeTempDir()
+    const extractor = new ZipExtractor(
+      { maxEntryUncompressedBytes: 5, maxTotalUncompressedBytes: 6 },
+      openArchive
+    )
+
+    const result = await extractor.extract(zipPath, targetDir)
+
+    expect(result.errors.join(' ')).toMatch(/total limit/i)
+    expect(result.extractedFiles).toEqual([])
+    expect(firstRead).not.toHaveBeenCalled()
+    expect(secondRead).not.toHaveBeenCalled()
+    expect(readdirSync(targetDir)).toEqual([])
+  })
+
+  it('rejects cumulative decoded extraction data before writing the overflowing entry', async () => {
+    const thirdRead = vi.fn(() => Buffer.alloc(1, 3))
+    const { zipPath, openArchive } = makeStubArchive([
+      {
+        entryName: 'first.json',
+        encrypted: false,
+        declaredSize: 1,
+        getData: () => Buffer.alloc(4, 1)
+      },
+      {
+        entryName: 'second.json',
+        encrypted: false,
+        declaredSize: 1,
+        getData: () => Buffer.alloc(4, 2)
+      },
+      {
+        entryName: 'third.json',
+        encrypted: false,
+        declaredSize: 1,
+        getData: thirdRead
+      }
+    ])
+    const targetDir = makeTempDir()
+    const extractor = new ZipExtractor(
+      { maxEntryUncompressedBytes: 5, maxTotalUncompressedBytes: 6 },
+      openArchive
+    )
+
+    const result = await extractor.extract(zipPath, targetDir)
+
+    expect(result.errors.join(' ')).toMatch(/total limit/i)
+    expect(result.extractedFiles).toHaveLength(1)
+    expect(basename(result.extractedFiles[0])).toBe('first.json')
+    expect(thirdRead).not.toHaveBeenCalled()
+  })
+
+  it('isolates Unicode caseless-equivalent basenames without changing their basenames', async () => {
+    const dir = makeTempDir()
+    const zipPath = join(dir, 'unicode-basename.zip')
+    const targetDir = makeTempDir()
+    const zip = new AdmZip()
+    zip.addFile('case-a/FUSS.json', Buffer.from('{"case":"ascii"}'))
+    zip.addFile('case-b/Fu\u00df.JSON', Buffer.from('{"case":"unicode"}'))
+    zip.writeZip(zipPath)
+
+    const result = await new ZipExtractor().extract(zipPath, targetDir)
+
+    expect(result.errors).toEqual([])
+    expect(result.extractedFiles.map((path) => basename(path))).toEqual([
+      'FUSS.json',
+      'Fu\u00df.JSON'
+    ])
+    expect(new Set(result.extractedFiles.map((path) => dirname(path))).size).toBe(2)
+    expect(result.extractedFiles.map((path) => readFileSync(path, 'utf8'))).toEqual([
+      '{"case":"ascii"}',
+      '{"case":"unicode"}'
+    ])
+  })
+
   it('rejects case-insensitive flattened basename collisions before writing any output', async () => {
     const dir = makeTempDir()
     const zipPath = join(dir, 'duplicate-basename.zip')

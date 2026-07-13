@@ -1,6 +1,6 @@
 import AdmZip from 'adm-zip'
-import { writeFile } from 'node:fs/promises'
-import { resolve, relative, basename, sep } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { resolve, relative, basename, dirname, sep } from 'node:path'
 import { mainLogger } from '../services/MainLogger'
 
 export interface ZipExtractionResult {
@@ -23,6 +23,8 @@ const DEFAULT_ZIP_PASSWORD_VALIDATION_LIMITS: ZipPasswordValidationLimits = {
 
 type ZipArchive = Pick<AdmZip, 'getEntries'>
 type OpenZipArchive = (zipPath: string) => ZipArchive
+
+class ZipResourceLimitError extends Error {}
 
 interface ZipExtractionCandidate {
   entry: AdmZip.IZipEntry
@@ -85,6 +87,7 @@ export class ZipExtractor {
     const candidates = this.preflightExtraction(entries, targetDir, result.errors)
     if (result.errors.length > 0) return result
 
+    let actualTotalBytes = 0
     for (const { entry, entryName, extractedPath } of candidates) {
       try {
         // Use getData(password) for decryption — extractEntryTo() and extractAllTo()
@@ -94,6 +97,11 @@ export class ZipExtractor {
         const data =
           password !== undefined && password !== '' ? getDataFn.getData(password) : entry.getData()
 
+        this.assertEntrySizeWithinLimit(entryName, data.length, 'extraction')
+        actualTotalBytes += data.length
+        this.assertTotalSizeWithinLimit(actualTotalBytes, 'extraction')
+
+        await mkdir(dirname(extractedPath))
         await writeFile(extractedPath, data)
         result.extractedFiles.push(resolve(extractedPath))
       } catch (error) {
@@ -101,6 +109,7 @@ export class ZipExtractor {
         result.errors.push(
           `Failed to extract ${entryName}: ${this.redactSecret(errorMsg, password ?? '')}`
         )
+        if (error instanceof ZipResourceLimitError) break
       }
     }
 
@@ -149,9 +158,9 @@ export class ZipExtractor {
       if (isEntryEncrypted) encryptedEntryCount++
 
       const declaredSize = header['size']
-      this.assertEntrySizeWithinLimit(entry.entryName, declaredSize)
+      this.assertEntrySizeWithinLimit(entry.entryName, declaredSize, 'password validation')
       declaredTotalBytes += declaredSize
-      this.assertTotalSizeWithinLimit(declaredTotalBytes)
+      this.assertTotalSizeWithinLimit(declaredTotalBytes, 'password validation')
 
       let data: Buffer
       try {
@@ -171,29 +180,36 @@ export class ZipExtractor {
         this.throwCorruptEntry(entry.entryName, message, password)
       }
 
-      this.assertEntrySizeWithinLimit(entry.entryName, data.length)
+      this.assertEntrySizeWithinLimit(entry.entryName, data.length, 'password validation')
       actualTotalBytes += data.length
-      this.assertTotalSizeWithinLimit(actualTotalBytes)
+      this.assertTotalSizeWithinLimit(actualTotalBytes, 'password validation')
     }
 
     return encryptedEntryCount > 0 && !passwordRejected
   }
 
-  private assertEntrySizeWithinLimit(entryName: string, size: unknown): asserts size is number {
+  private assertEntrySizeWithinLimit(
+    entryName: string,
+    size: unknown,
+    operation: 'password validation' | 'extraction'
+  ): asserts size is number {
     if (!Number.isSafeInteger(size) || (size as number) < 0) {
       throw new Error(`Invalid uncompressed size for ZIP archive entry ${entryName}`)
     }
     if ((size as number) > this.passwordValidationLimits.maxEntryUncompressedBytes) {
-      throw new Error(
-        `ZIP password validation limit exceeded for entry ${entryName}: maximum ${this.passwordValidationLimits.maxEntryUncompressedBytes} bytes`
+      throw new ZipResourceLimitError(
+        `ZIP ${operation} limit exceeded for entry ${entryName}: maximum ${this.passwordValidationLimits.maxEntryUncompressedBytes} bytes`
       )
     }
   }
 
-  private assertTotalSizeWithinLimit(size: number): void {
+  private assertTotalSizeWithinLimit(
+    size: number,
+    operation: 'password validation' | 'extraction'
+  ): void {
     if (size > this.passwordValidationLimits.maxTotalUncompressedBytes) {
-      throw new Error(
-        `ZIP password validation total limit exceeded: maximum ${this.passwordValidationLimits.maxTotalUncompressedBytes} bytes`
+      throw new ZipResourceLimitError(
+        `ZIP ${operation} total limit exceeded: maximum ${this.passwordValidationLimits.maxTotalUncompressedBytes} bytes`
       )
     }
   }
@@ -218,6 +234,7 @@ export class ZipExtractor {
     const candidates: ZipExtractionCandidate[] = []
     const flattenedNames = new Map<string, string>()
     const normalizedTarget = resolve(targetDir)
+    let declaredTotalBytes = 0
 
     for (const entry of entries) {
       if (entry.isDirectory || !this.isImportableEntry(entry.entryName)) continue
@@ -229,7 +246,19 @@ export class ZipExtractor {
       }
 
       const fileName = basename(entryName)
-      const extractedPath = resolve(targetDir, fileName)
+      try {
+        const header = entry.header as unknown as Record<string, unknown>
+        const declaredSize = header['size']
+        this.assertEntrySizeWithinLimit(entryName, declaredSize, 'extraction')
+        declaredTotalBytes += declaredSize
+        this.assertTotalSizeWithinLimit(declaredTotalBytes, 'extraction')
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error))
+        continue
+      }
+
+      const childDirectory = `entry-${String(candidates.length + 1).padStart(6, '0')}`
+      const extractedPath = resolve(targetDir, childDirectory, fileName)
       if (!extractedPath.startsWith(normalizedTarget + sep)) {
         errors.push(`Rejected path traversal attempt: ${entryName}`)
         continue
