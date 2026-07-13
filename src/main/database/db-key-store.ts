@@ -348,8 +348,10 @@ export class DbKeyStore {
   /**
    * Enroll a DEK recovered from a portable sidecar as a brand-new registry
    * entry for `dbPath`, so future opens on THIS machine are transparent.
-   * Guards `dbPath` being already keyed exactly like `createManagedKey`/
-   * `wrapNewDekWithPassphrase` do, to avoid orphaning an existing key.
+   * The caller must first prove SQLite accepts `dek`. That verification makes
+   * a pre-existing mapping at this path stale: the new entry replaces only
+   * `pathIndex[dbPath]`, while the displaced wrapped key remains in `keys` so
+   * a moved copy of the old database is still recoverable by DEK lookup.
    * Best-effort ALSO adds a safeStorage wrap when available (non-fatal on
    * failure — the passphrase wrap being enrolled is enough on its own).
    * Does NOT re-write the sidecar: `passWrap` came FROM the sidecar, so it
@@ -361,9 +363,6 @@ export class DbKeyStore {
     passWrap: PassphraseWrap
   ): EnrollRecoveredKeyResult {
     const registry = this.load()
-    if (registry.pathIndex[dbPath] !== undefined) {
-      return { ok: false, reason: 'path-already-keyed' }
-    }
 
     const keyId = randomUUID()
     const entry: KeyEntry = { path: dbPath, passWrap }

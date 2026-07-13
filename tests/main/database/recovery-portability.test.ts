@@ -229,28 +229,37 @@ describe('recovery sidecar portability (openDatabase end-to-end)', () => {
   })
 
   it('tries a verified sidecar candidate when a stale path registry wrap accepts the same passphrase', async () => {
-    const dir = makeTmpDir('varlens-recovery-stale-registry-')
-    const registryPath = join(dir, 'keys.json')
-    const stalePath = join(dir, 'restored.db')
-    const replacementPath = join(dir, 'replacement.db')
-    const keyStore = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
-    const staleManager = makeManager(dir, 'stale-settings')
-    const replacementManager = makeManager(dir, 'replacement-settings')
+    const destinationDir = makeTmpDir('varlens-recovery-stale-registry-')
+    const sourceDir = makeTmpDir('varlens-recovery-source-machine-')
+    const stalePath = join(destinationDir, 'restored.db')
+    const replacementPath = join(sourceDir, 'replacement.db')
+    const destinationKeyStore = new DbKeyStore({
+      registryPath: join(destinationDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(true)
+    })
+    const sourceKeyStore = new DbKeyStore({
+      registryPath: join(sourceDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(true)
+    })
+    const staleManager = makeManager(destinationDir, 'stale-settings')
+    const replacementManager = makeManager(sourceDir, 'replacement-settings')
 
-    await createDatabase({ path: stalePath }, () => staleManager, keyStore)
-    const staleKeyId = keyStore.getKeyIdForPath(stalePath)
+    await createDatabase({ path: stalePath }, () => staleManager, destinationKeyStore)
+    const staleKeyId = destinationKeyStore.getKeyIdForPath(stalePath)
     expect(staleKeyId).not.toBeNull()
     if (staleKeyId === null) throw new Error('expected stale managed key')
-    expect(keyStore.setPassphrase(staleKeyId, PASSPHRASE)).toMatchObject({ ok: true })
+    const staleResolved = destinationKeyStore.resolveKeyForPath(stalePath)
+    expect(staleResolved.ok).toBe(true)
+    expect(destinationKeyStore.setPassphrase(staleKeyId, PASSPHRASE)).toMatchObject({ ok: true })
     await staleManager.close()
 
-    await createDatabase({ path: replacementPath }, () => replacementManager, keyStore)
-    const replacementKeyId = keyStore.getKeyIdForPath(replacementPath)
+    await createDatabase({ path: replacementPath }, () => replacementManager, sourceKeyStore)
+    const replacementKeyId = sourceKeyStore.getKeyIdForPath(replacementPath)
     expect(replacementKeyId).not.toBeNull()
     if (replacementKeyId === null) throw new Error('expected replacement managed key')
-    const replacementResolved = keyStore.resolveKeyForPath(replacementPath)
+    const replacementResolved = sourceKeyStore.resolveKeyForPath(replacementPath)
     expect(replacementResolved.ok).toBe(true)
-    expect(keyStore.setPassphrase(replacementKeyId, PASSPHRASE)).toMatchObject({ ok: true })
+    expect(sourceKeyStore.setPassphrase(replacementKeyId, PASSPHRASE)).toMatchObject({ ok: true })
     replacementManager
       .getCurrent()
       .database.exec('CREATE TABLE restored_marker (label TEXT NOT NULL)')
@@ -272,25 +281,27 @@ describe('recovery sidecar portability (openDatabase end-to-end)', () => {
       () => staleManager.getCurrent(),
       () => staleManager,
       noopCallbacks,
-      keyStore
+      destinationKeyStore
     )
     expect(detected).toEqual({ success: false, needsPassword: true })
-    expect(keyStore.getKeyIdForPath(stalePath)).toBe(staleKeyId)
+    expect(destinationKeyStore.getKeyIdForPath(stalePath)).toBe(staleKeyId)
 
     const opened = await openDatabase(
       { path: stalePath, password: PASSPHRASE },
       () => staleManager.getCurrent(),
       () => staleManager,
       noopCallbacks,
-      keyStore
+      destinationKeyStore
     )
 
     expect(opened.success).toBe(true)
     expect(
       staleManager.getCurrent().database.prepare('SELECT label FROM restored_marker').pluck().all()
     ).toEqual(['replacement-data'])
-    expect(keyStore.getKeyIdForPath(stalePath)).toBe(replacementKeyId)
-    expect(keyStore.resolveKeyForPath(stalePath)).toEqual(replacementResolved)
-    expect(keyStore.resolveKeyForPath(replacementPath)).toEqual({ ok: false, reason: 'not-found' })
+    expect(destinationKeyStore.getKeyIdForPath(stalePath)).not.toBe(staleKeyId)
+    expect(destinationKeyStore.resolveKeyForPath(stalePath)).toEqual(replacementResolved)
+    if (staleResolved.ok) {
+      expect(destinationKeyStore.findManagedKeyIdForDek(staleResolved.dek)).toBe(staleKeyId)
+    }
   })
 })

@@ -96,10 +96,10 @@ export interface DatabaseCreateParams {
  * the SAME DEK (the "same-machine move" case -- the `.db` file, plus its
  * sidecar, moved to a new path on a machine that already has a keyring entry
  * for that exact DEK under the old, now-stale path) rather than minting a
- * redundant, orphaned key. Otherwise enroll a brand-new entry from the
- * sidecar's wrap so a genuinely new/wiped machine also becomes transparent
- * next time. Never fails the open itself -- a failure to enroll here is
- * logged and the caller proceeds with the already-recovered `dek`.
+ * redundant key. Otherwise enroll a brand-new entry from the sidecar's wrap
+ * so a genuinely new/wiped machine also becomes transparent next time. A
+ * stale mapping already occupying the restored path is displaced only after
+ * SQLite verification; its wrapped key remains preserved as an orphan.
  */
 function enrollOrRepointSidecarRecovery(
   vPath: string,
@@ -113,18 +113,7 @@ function enrollOrRepointSidecarRecovery(
     return
   }
 
-  const enrolled = keyStore.enrollRecoveredKey(vPath, dek, passWrap)
-  if (!enrolled.ok) {
-    // Defensive only: step 1 (resolveKeyWithPassphrase) already failed to
-    // resolve this exact path, so `path-already-keyed` here would mean
-    // someone else enrolled it concurrently. Not fatal to this open.
-    mainLogger.warn(
-      `Recovered a database via its portable recovery sidecar, but enrolling a local key ` +
-        `entry failed (${enrolled.reason}); this open proceeds, but future opens on this ` +
-        `machine may prompt for the passphrase again.`,
-      'database'
-    )
-  }
+  keyStore.enrollRecoveredKey(vPath, dek, passWrap)
 }
 
 /**
