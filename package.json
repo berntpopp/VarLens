@@ -1,6 +1,6 @@
 {
   "name": "varlens",
-  "version": "0.69.7",
+  "version": "0.70.0",
   "description": "Genetic variant analysis tool for external collaborators",
   "main": "./out/main/index.js",
   "homepage": "https://github.com/berntpopp/VarLens",
