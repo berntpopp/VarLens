@@ -123,4 +123,20 @@ describe('vcf-genotype-parser', () => {
     expect(gt.adAlt).toBeNull()
     expect(gt.ab).toBeNull()
   })
+
+  it('rejects malformed AD tokens instead of accepting numeric prefixes', () => {
+    const gt = parseGenotype(['0/1', '90', '13', '10junk,7junk'], FORMAT)
+
+    expect(gt.adRef).toBeNull()
+    expect(gt.adAlt).toBeNull()
+    expect(gt.ab).toBeNull()
+  })
+
+  it('does not interpret an explicit non-A/R AD vector as REF and ALT depths', () => {
+    const gt = parseGenotype(['0/1', '90', '17', '10,7'], FORMAT, 1, '2')
+
+    expect(gt.adRef).toBeNull()
+    expect(gt.adAlt).toBeNull()
+    expect(gt.ab).toBeNull()
+  })
 })

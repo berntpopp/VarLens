@@ -30,6 +30,8 @@ const IMPACT_ORDER: Record<string, number> = {
  * @param alleleIndex - 1-based index of altAllele among the original ALT list
  *   (matches VEP CSQ's ALLELE_NUM). Required to disambiguate multi-allelic
  *   deletion sites, where VEP emits "-" for every deletion ALT.
+ * @param originalAltAlleles - All ALT alleles before splitting. Used to reject
+ *   lossy CSQ allele heuristics that match more than one ALT.
  * @returns Annotation result with selected transcript and all transcripts
  */
 export function parseAnnotation(
@@ -37,10 +39,11 @@ export function parseAnnotation(
   header: VcfHeader,
   altAllele: string,
   ref?: string,
-  alleleIndex?: number
+  alleleIndex?: number,
+  originalAltAlleles: string[] = [altAllele]
 ): AnnotationResult {
   if (header.annotationType === 'csq' && header.csqFields !== null) {
-    return parseCsq(info, header.csqFields, altAllele, ref ?? '', alleleIndex)
+    return parseCsq(info, header.csqFields, altAllele, ref ?? '', alleleIndex, originalAltAlleles)
   }
 
   if (header.annotationType === 'ann') {
@@ -62,7 +65,8 @@ function parseCsq(
   csqFieldNames: string[],
   altAllele: string,
   ref: string,
-  alleleIndex?: number
+  alleleIndex: number | undefined,
+  originalAltAlleles: string[]
 ): AnnotationResult {
   const csqRaw = info.get('CSQ')
   if (csqRaw == null || csqRaw === '') return emptyResult()
@@ -103,7 +107,11 @@ function parseCsq(
       const parsedAlleleNum = Number(alleleNumStr)
       return Number.isSafeInteger(parsedAlleleNum) && parsedAlleleNum === alleleIndex
     }
-    return matchesAllele(t.allele, altAllele, ref)
+    if (!matchesAllele(t.allele, altAllele, ref)) return false
+    const matchingAltCount = originalAltAlleles.filter((candidate) =>
+      matchesAllele(t.allele, candidate, ref)
+    ).length
+    return matchingAltCount === 1
   })
 
   if (filtered.length === 0) return emptyResult()
