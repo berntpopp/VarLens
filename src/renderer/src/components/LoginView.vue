@@ -29,6 +29,9 @@ async function handleLogin(): Promise<void> {
       if (result.mustChangePassword === true) {
         mustChangePassword.value = true
       }
+    } else if (result.error !== undefined) {
+      // A backend fault (not invalid credentials) — surface the real message.
+      error.value = result.error
     } else if (result.locked === true) {
       error.value = 'Account is temporarily locked. Please try again later.'
     } else {

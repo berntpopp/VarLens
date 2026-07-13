@@ -78,6 +78,71 @@ describe('SqliteImportExecutor', () => {
     })
   })
 
+  it('returns the worker skip count and bounded reasons for malformed VCF rows', async () => {
+    const start = vi.fn()
+    const worker = {
+      get isRunning() {
+        return false
+      },
+      start,
+      cancel: vi.fn()
+    }
+    const executor = new SqliteImportExecutor({
+      getDatabaseService: () =>
+        ({
+          getPath: () => '/tmp/test.varlens',
+          getEncryptionKey: () => undefined,
+          variants: { updateFrequencies: vi.fn() }
+        }) as never,
+      createWorkerClient: () => worker as never
+    })
+
+    const promise = executor.importSingleFile({
+      filePath: '/tmp/input.vcf',
+      caseName: 'Imported',
+      throttleMs: 100
+    })
+    const callbacks = start.mock.calls[0][0]
+    callbacks.onFileComplete({
+      type: 'file-complete',
+      fileIndex: 0,
+      result: {
+        caseId: 7,
+        caseName: 'Imported',
+        variantCount: 3,
+        skipped: 2,
+        skipReasons: ['invalid POS "x"', 'invalid POS "-1"'],
+        elapsed: 5
+      }
+    })
+    callbacks.onComplete({
+      type: 'complete',
+      results: {
+        succeeded: 1,
+        failed: 0,
+        skipped: 0,
+        cancelled: false,
+        details: [
+          {
+            filePath: '/tmp/input.vcf',
+            fileName: 'input.vcf',
+            caseName: 'Imported',
+            status: 'success',
+            variantCount: 3
+          }
+        ]
+      }
+    })
+
+    await expect(promise).resolves.toStrictEqual({
+      caseId: 7,
+      variantCount: 3,
+      skipped: 2,
+      errors: ['invalid POS "x"', 'invalid POS "-1"'],
+      elapsed: 5
+    })
+  })
+
   it('resolves with cancellation result shape when the worker reports cancelled', async () => {
     const start = vi.fn()
     const worker = {
@@ -481,6 +546,29 @@ describe('SqliteImportExecutor.importMultiFile', () => {
     })
     // No bedFilter instance when bedFilePath is null
     expect((capturedFilters as { bedFilter?: unknown }).bedFilter).toBeUndefined()
+  })
+
+  it('fails closed when an explicitly requested BED filter cannot be loaded', async () => {
+    const delegate = vi.fn(async (): Promise<MultiFileImportResult> => makeFakeResult())
+    const executor = new SqliteImportExecutor({
+      getDatabaseService: () =>
+        ({
+          getPath: () => '/tmp/test.varlens',
+          getEncryptionKey: () => undefined
+        }) as never,
+      multiFileImportDelegate: delegate
+    })
+
+    await expect(
+      executor.importMultiFile({
+        caseName: 'Filtered',
+        files: [
+          { filePath: '/tmp/a.vcf', variantType: 'snv', caller: null, annotationFormat: null }
+        ],
+        filters: { bedFilePath: '/tmp/varlens-missing-filter.bed' }
+      })
+    ).rejects.toThrow(/ENOENT|no such file/i)
+    expect(delegate).not.toHaveBeenCalled()
   })
 
   it('passes undefined filters when no filters param is provided', async () => {

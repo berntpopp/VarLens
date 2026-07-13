@@ -115,4 +115,28 @@ describe('vcf-genotype-parser', () => {
     expect(gt.adAlt).toBe(24)
     expect(gt.ab).toBeCloseTo(0.5, 4)
   })
+
+  it('does not reuse ALT 1 depth when the requested ALT depth is missing', () => {
+    const gt = parseGenotype(['0/2', '90', '13', '10,3'], FORMAT, 2)
+
+    expect(gt.adRef).toBe(10)
+    expect(gt.adAlt).toBeNull()
+    expect(gt.ab).toBeNull()
+  })
+
+  it('rejects malformed AD tokens instead of accepting numeric prefixes', () => {
+    const gt = parseGenotype(['0/1', '90', '13', '10junk,7junk'], FORMAT)
+
+    expect(gt.adRef).toBeNull()
+    expect(gt.adAlt).toBeNull()
+    expect(gt.ab).toBeNull()
+  })
+
+  it('does not interpret an explicit non-A/R AD vector as REF and ALT depths', () => {
+    const gt = parseGenotype(['0/1', '90', '17', '10,7'], FORMAT, 1, '2')
+
+    expect(gt.adRef).toBeNull()
+    expect(gt.adAlt).toBeNull()
+    expect(gt.ab).toBeNull()
+  })
 })

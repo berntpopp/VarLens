@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { parseVcfLine } from '../../../../src/main/import/vcf/vcf-line-parser'
+import {
+  MAX_VCF_ALT_ALLELES,
+  MAX_VCF_COMPATIBILITY_SAMPLES,
+  MAX_VCF_INFO_FIELDS
+} from '../../../../src/main/import/vcf/vcf-resource-limits'
 
 const SAMPLE_NAMES = ['HG005', 'HG006', 'HG007']
 
@@ -104,5 +109,167 @@ describe('vcf-line-parser', () => {
 
     expect(record.ref).toBe('G')
     expect(record.alt).toEqual(['GACC'])
+  })
+
+  describe('invalid POS', () => {
+    it('rejects a non-numeric POS instead of producing a NaN row', () => {
+      const line = 'chr1\tNOTNUM\t.\tA\tG\t.\t.\t.'
+      const record = parseVcfLine(line, [])
+
+      expect(record).toBeNull()
+    })
+
+    it('rejects POS = "0"', () => {
+      const line = 'chr1\t0\t.\tA\tG\t.\t.\t.'
+      const record = parseVcfLine(line, [])
+
+      expect(record).toBeNull()
+    })
+
+    it('rejects POS = "-5"', () => {
+      const line = 'chr1\t-5\t.\tA\tG\t.\t.\t.'
+      const record = parseVcfLine(line, [])
+
+      expect(record).toBeNull()
+    })
+
+    it('rejects a fractional POS ("1.5")', () => {
+      const line = 'chr1\t1.5\t.\tA\tG\t.\t.\t.'
+      const record = parseVcfLine(line, [])
+
+      expect(record).toBeNull()
+    })
+
+    it('rejects a positive integer above Number.MAX_SAFE_INTEGER', () => {
+      const rawPos = String(Number.MAX_SAFE_INTEGER + 1)
+      const reasons: string[] = []
+      const record = parseVcfLine(`chr1\t${rawPos}\t.\tA\tG\t.\t.\t.`, [], (reason) =>
+        reasons.push(reason)
+      )
+
+      expect(record).toBeNull()
+      expect(reasons[0]).toMatch(/safe integer/i)
+    })
+
+    it('invokes the onSkip callback with a reason when POS is invalid', () => {
+      const line = 'chr1\tNOTNUM\t.\tA\tG\t.\t.\t.'
+      const reasons: string[] = []
+      const record = parseVcfLine(line, [], (reason) => reasons.push(reason))
+
+      expect(record).toBeNull()
+      expect(reasons).toHaveLength(1)
+      expect(reasons[0]).toMatch(/pos/i)
+    })
+
+    it('does not invoke onSkip for a valid line', () => {
+      const line = 'chr22\t100\trs1\tA\tG\t99\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const onSkip = vi.fn()
+      const record = parseVcfLine(line, SAMPLE_NAMES, onSkip)
+
+      expect(record).not.toBeNull()
+      expect(onSkip).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('malformed QUAL', () => {
+    it('rejects a malformed non-dot QUAL with a reason', () => {
+      const line = 'chr22\t100\t.\tA\tG\tabc\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const reasons: string[] = []
+      const record = parseVcfLine(line, SAMPLE_NAMES, (reason) => reasons.push(reason))
+
+      expect(record).toBeNull()
+      expect(reasons).toHaveLength(1)
+      expect(reasons[0]).toMatch(/qual/i)
+    })
+
+    it('does not accept numeric prefixes with trailing garbage', () => {
+      const line = 'chr22\t100\t.\tA\tG\t99abc\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).toBeNull()
+    })
+
+    it('does not accept non-finite QUAL values', () => {
+      const line = 'chr22\t100\t.\tA\tG\t1e309\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).toBeNull()
+    })
+
+    it('still accepts finite exponent notation', () => {
+      const line = 'chr22\t100\t.\tA\tG\t1.5e2\tPASS\t.\tGT\t0/1\t0/0\t0/0'
+      const record = parseVcfLine(line, SAMPLE_NAMES)
+
+      expect(record).not.toBeNull()
+      expect(record!.qual).toBe(150)
+    })
+
+    it('still accepts dot QUAL as an unreasoned missing value', () => {
+      const onSkip = vi.fn()
+      const record = parseVcfLine(
+        'chr22\t100\t.\tA\tG\t.\tPASS\t.\tGT\t0/1\t0/0\t0/0',
+        SAMPLE_NAMES,
+        onSkip
+      )
+
+      expect(record?.qual).toBeNull()
+      expect(onSkip).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('allocation budgets', () => {
+    it('reports truncated rows through onSkip', () => {
+      const onSkip = vi.fn()
+
+      expect(parseVcfLine('chr1\t1\t.\tA', [], onSkip)).toBeNull()
+      expect(onSkip).toHaveBeenCalledWith(expect.stringMatching(/truncated/i))
+    })
+
+    it('parses only the selected sample from a cohort with more than 10,000 samples', () => {
+      const sampleNames = Array.from({ length: 10_050 }, (_, index) => `S${index}`)
+      const selectedSample = sampleNames.at(-1)!
+      const onSkip = vi.fn()
+      const format = 'GT:DP'
+      const selectedValues = '0/1:42'
+      const sampleColumns = Array.from({ length: sampleNames.length }, (_, index) =>
+        index === sampleNames.length - 1 ? selectedValues : '0'
+      ).join('\t')
+      const line = `chr1\t1\t.\tA\tG\t.\tPASS\t.\t${format}\t${sampleColumns}`
+
+      const record = parseVcfLine(line, sampleNames, onSkip, {
+        name: selectedSample,
+        index: sampleNames.length - 1
+      })
+
+      expect(record).not.toBeNull()
+      expect(record?.samples.size).toBe(1)
+      expect(record?.samples.get(selectedSample)).toEqual(['0/1', '42'])
+      expect(record?.samples.has(sampleNames[0])).toBe(false)
+      expect(onSkip).not.toHaveBeenCalled()
+    })
+
+    it('bounds the legacy all-samples compatibility path', () => {
+      const sampleNames = Array.from(
+        { length: MAX_VCF_COMPATIBILITY_SAMPLES + 1 },
+        (_, index) => `S${index}`
+      )
+      const line = `chr1\t1\t.\tA\tG\t.\tPASS\t.\tGT${'\t0'.repeat(sampleNames.length)}`
+      const reasons: string[] = []
+
+      expect(parseVcfLine(line, sampleNames, (reason) => reasons.push(reason))).toBeNull()
+      expect(reasons).toEqual([expect.stringMatching(/all-samples compatibility/i)])
+    })
+
+    it('rejects excessive ALT and INFO fanout without materializing every value', () => {
+      const altSkip = vi.fn()
+      const alt = Array.from({ length: MAX_VCF_ALT_ALLELES + 1 }, () => 'A').join(',')
+      expect(parseVcfLine(`chr1\t1\t.\tC\t${alt}\t.\tPASS\t.`, [], altSkip)).toBeNull()
+      expect(altSkip).toHaveBeenCalledWith(expect.stringMatching(/too many ALT/i))
+
+      const infoSkip = vi.fn()
+      const info = Array.from({ length: MAX_VCF_INFO_FIELDS + 1 }, (_, i) => `K${i}=1`).join(';')
+      expect(parseVcfLine(`chr1\t1\t.\tC\tA\t.\tPASS\t${info}`, [], infoSkip)).toBeNull()
+      expect(infoSkip).toHaveBeenCalledWith(expect.stringMatching(/too many INFO/i))
+    })
   })
 })

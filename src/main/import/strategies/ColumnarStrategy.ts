@@ -1,3 +1,4 @@
+import { compose } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
@@ -9,6 +10,7 @@ import type { ImportOptions, ImportResult, DataDictionaries } from '../types'
 import type { ImportStrategy, FormatInfo, StrategyContext } from './ImportStrategy'
 import { importRegistry } from './StrategyRegistry'
 import { createDecompressedStream } from '../stream-utils'
+import { createJsonRecordBudget } from '../json-resource-budget'
 
 /** Result of parsing the header: dictionaries + dynamic column positions */
 interface HeaderInfo {
@@ -74,6 +76,7 @@ export class ColumnarStrategy implements ImportStrategy {
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: dataPath }),
+        createJsonRecordBudget(),
         streamArray.asStream(),
         fieldMapper,
         batchAccumulator
@@ -116,13 +119,15 @@ export class ColumnarStrategy implements ImportStrategy {
       const fieldsToExtract = new Set(['Gene', 'Transcript', 'HpoSimScore', 'MoI'])
       let resolved = false
 
-      const stream = createDecompressedStream(filePath)
-        .pipe(parser.asStream())
-        .pipe(pick.asStream({ filter: headerPath }))
-        .pipe(streamArray.asStream())
+      const stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: headerPath }),
+        createJsonRecordBudget(),
+        streamArray.asStream()
+      )
 
       const cleanup = (): void => {
-        stream.removeAllListeners()
         stream.destroy()
       }
 

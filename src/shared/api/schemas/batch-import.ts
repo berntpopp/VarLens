@@ -8,7 +8,7 @@ export const BatchImportInvokeBodySchemas = {
     args: z.tuple([z.string().min(1), z.string()])
   }),
   cleanupZipTemp: z.object({
-    args: z.tuple([])
+    args: z.tuple([z.string().uuid()])
   })
 } as const
 

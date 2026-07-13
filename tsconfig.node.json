@@ -1,6 +1,23 @@
 {
   "compilerOptions": {
     "target": "ES2020",
+    // Explicit `lib` = the default ES2020 target's implied set (es2020, dom,
+    // webworker.importscripts, scripthost, dom.iterable, dom.asynciterable —
+    // see `lib.es2020.full.d.ts`) plus `ES2022.Error`. That one addition is
+    // purely additive (adds `Error`'s `cause` option/property typings, which
+    // Node 24 already supports at runtime); it does not change emitted JS
+    // syntax and does not remove anything the default target-implied set had.
+    // Needed so `new Error(msg, { cause })` type-checks, which ESLint 10's
+    // `preserve-caught-error` rule requires when re-throwing from a catch.
+    "lib": [
+      "ES2020",
+      "DOM",
+      "WebWorker.ImportScripts",
+      "ScriptHost",
+      "DOM.Iterable",
+      "DOM.AsyncIterable",
+      "ES2022.Error"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,

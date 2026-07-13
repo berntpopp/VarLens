@@ -278,7 +278,7 @@ describe('PostgresVcfImportRepository.writeVcfFile', () => {
       str: []
     })
 
-    const variantsCopy = bulkCopyCalls.find((c) => c.sql.includes('"variants"'))
+    const variantsCopy = bulkCopyCalls.find((c) => c.sql.includes('"variants_all"'))
     expect(variantsCopy).toBeDefined()
     expect(variantsCopy!.columnNames).toEqual(VARIANT_COPY_COLUMNS as unknown as string[])
     // First two columns are id, case_id.

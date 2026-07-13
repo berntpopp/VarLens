@@ -1,6 +1,7 @@
 import { Transform, TransformCallback } from 'node:stream'
 import type { Variant } from '../../database/types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
+import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcript'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -108,6 +109,10 @@ export class ObjectFormatMapper extends Transform {
         }
       }
 
+      const semantics = canonicalizeTranscriptSemantics(
+        normalizeString(variant.consequence),
+        normalizeString(variant.func)
+      )
       const mapped: MappedVariant = {
         chr: normalizeString(variant.chr) ?? '',
         pos: normalizeNumber(variant.pos) ?? 0,
@@ -115,12 +120,12 @@ export class ObjectFormatMapper extends Transform {
         alt: normalizeString(variant.alt) ?? '',
         gene_symbol: normalizeString(variant.gene_symbol),
         omim_mim_number: normalizeString(variant.omim_mim_number),
-        consequence: normalizeString(variant.consequence),
+        consequence: semantics.consequence,
         gnomad_af: normalizeNumber(variant.gnomad_af),
         cadd: normalizeNumber(variant.cadd),
         clinvar: normalizeString(variant.clinvar),
         gt_num: normalizeString(variant.gt_num),
-        func: normalizeString(variant.func),
+        func: semantics.func,
         qual: normalizeNumber(variant.qual),
         hpo_sim_score: normalizeNumber(variant.hpo_sim_score),
         transcript: normalizeString(variant.transcript),
@@ -144,6 +149,7 @@ export class ObjectFormatMapper extends Transform {
             transcript_id: mapped.transcript,
             gene_symbol: mapped.gene_symbol,
             consequence: mapped.consequence,
+            func: mapped.func,
             cdna: mapped.cdna,
             aa_change: mapped.aa_change,
             hpo_sim_score: mapped.hpo_sim_score,

@@ -13,7 +13,7 @@ const ANNOTATION_INFO_IDS = new Set(['CSQ', 'ANN'])
 /** Default registry covering common annotation pipelines */
 export const DEFAULT_INFO_FIELD_MAPPINGS: InfoFieldMapping[] = [
   {
-    infoIds: ['gnomADe_AF', 'gnomADg_AF', 'gnomAD_AF', 'AF'],
+    infoIds: ['gnomADe_AF', 'gnomADg_AF', 'gnomAD_AF'],
     column: 'gnomad_af',
     type: 'float',
     csqField: 'gnomADe_AF',

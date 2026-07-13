@@ -299,7 +299,7 @@ const handleShowImportProgress = (): void => {
 }
 
 const handleCancelImport = async (): Promise<void> => {
-  await api?.import.cancel()
+  if (api != null) unwrapIpcResult(await api.import.cancel())
   if (api?.batchImport != null) {
     unwrapIpcResult(await api.batchImport.cancel())
   }

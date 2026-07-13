@@ -2,8 +2,8 @@ import type { BatchResult, DuplicateCheckResult, DuplicateChoice } from '../../t
 import type { IpcResult } from '../../types/errors'
 
 export interface BatchImportDomainContract {
-  selectFiles: () => Promise<string[]>
-  selectFolder: () => Promise<string[]>
+  selectFiles: () => Promise<IpcResult<string[]>>
+  selectFolder: () => Promise<IpcResult<string[]>>
   checkDuplicates: (
     filePaths: string[],
     stripText?: string
@@ -11,7 +11,8 @@ export interface BatchImportDomainContract {
   start: (
     filePaths: string[],
     duplicateStrategy: DuplicateChoice,
-    stripText?: string
+    stripText: string | undefined,
+    runId: string
   ) => Promise<IpcResult<BatchResult>>
   cancel: () => Promise<IpcResult<void>>
   selectZip: () => Promise<IpcResult<{ filePath: string; isEncrypted: boolean } | null>>
@@ -19,6 +20,6 @@ export interface BatchImportDomainContract {
   extractZip: (
     zipPath: string,
     password?: string
-  ) => Promise<IpcResult<{ files: string[]; errors: string[] }>>
-  cleanupZipTemp: () => Promise<IpcResult<void>>
+  ) => Promise<IpcResult<{ files: string[]; errors: string[]; extractionId: string }>>
+  cleanupZipTemp: (extractionId: string) => Promise<IpcResult<void>>
 }

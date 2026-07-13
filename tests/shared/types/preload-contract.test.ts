@@ -10,16 +10,14 @@
  * that would pull in Electron dependencies.
  */
 
-import { describe, it, expect, expectTypeOf, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { ErrorCode } from '../../../src/shared/types/errors'
-import type { WindowAPI, Case, BatchAnnotationKey } from '../../../src/shared/types/api'
-import type { IpcResult } from '../../../src/shared/types/errors'
+import type { WindowAPI, BatchAnnotationKey } from '../../../src/shared/types/api'
 import type { ImportResult } from '../../../src/shared/types/import'
 import { DEBUG_CHANNELS } from '../../../src/shared/ipc/domains/debug'
 import { JOBS_CHANNELS } from '../../../src/shared/ipc/domains/jobs'
-import type { Job } from '../../../src/shared/types/jobs'
 
 const ROOT = resolve(__dirname, '..', '..', '..')
 
@@ -28,7 +26,10 @@ const DOMAIN_CONTRACT_PATHS: Record<string, string> = {
   DatabaseDomainContract: 'src/shared/ipc/domains/database.ts',
   FilterPresetsDomainContract: 'src/shared/ipc/domains/filter-presets.ts',
   DebugApi: 'src/shared/ipc/domains/debug.ts',
-  JobsApi: 'src/shared/ipc/domains/jobs.ts'
+  JobsApi: 'src/shared/ipc/domains/jobs.ts',
+  CaseMetadataDomainContract: 'src/shared/ipc/domains/case-metadata.ts',
+  ImportDomainContract: 'src/shared/ipc/domains/import.ts',
+  AuthDomainContract: 'src/shared/ipc/domains/auth.ts'
 }
 
 /**
@@ -211,6 +212,17 @@ function extractSubInterfaceKeys(interfaceName: string): string[] {
     return [...new Set([...keys, ...inheritedKeys])].sort()
   }
 
+  const directExtendsMatch = content
+    .slice(startIdx)
+    .match(new RegExp(`export interface ${interfaceName}\\s+extends\\s+(\\w+)`))
+  if (directExtendsMatch) {
+    const domainPath = DOMAIN_CONTRACT_PATHS[directExtendsMatch[1]]
+    if (!domainPath) return keys.sort()
+
+    const inheritedKeys = extractInterfaceKeysFromFile(domainPath, directExtendsMatch[1])
+    return [...new Set([...keys, ...inheritedKeys])].sort()
+  }
+
   return keys.sort()
 }
 
@@ -282,6 +294,7 @@ describe('Preload contract alignment', () => {
     'utf-8'
   )
   const coreApiSource = readFileSync(resolve(ROOT, 'src/preload/window-api/core-api.ts'), 'utf-8')
+  const appApiSource = readFileSync(resolve(ROOT, 'src/preload/window-api/app-api.ts'), 'utf-8')
   const casesDomainSource = readFileSync(resolve(ROOT, 'src/preload/domains/cases.ts'), 'utf-8')
   const databaseDomainSource = readFileSync(
     resolve(ROOT, 'src/preload/domains/database.ts'),
@@ -298,6 +311,11 @@ describe('Preload contract alignment', () => {
 
   it('preload const api has expected keys', () => {
     expect(preloadKeys.length).toBeGreaterThan(10)
+  })
+
+  it('import and auth preload objects are checked without contract-bypassing casts', () => {
+    expect(coreApiSource).not.toContain("as WindowAPI['import']")
+    expect(appApiSource).not.toContain("as WindowAPI['auth']")
   })
 
   it('preload imports the cases domain factory', () => {
@@ -362,6 +380,12 @@ describe('Preload contract alignment', () => {
     expect(databaseDomainSource).toContain(
       "showInFolder: (path) => ipcRenderer.invoke('database:showInFolder', path)"
     )
+    expect(databaseDomainSource).toContain(
+      "migrateToEncrypted: (options) => ipcRenderer.invoke('database:migrateToEncrypted', options)"
+    )
+    expect(databaseDomainSource).toContain("'database:deletePlaintextBackup'")
+    expect(databaseDomainSource).toContain('setRecoveryPassphrase:')
+    expect(databaseDomainSource).toContain("'database:setRecoveryPassphrase'")
     expect(preloadSource).not.toContain('unwrapIpcResult(await databaseDomain.open')
   })
 
@@ -428,13 +452,12 @@ describe('Preload contract alignment', () => {
     expect(mockApiKeys).toEqual(windowApiKeys)
   })
 
-  it('exposes IpcResult for scoped wrapHandler-backed methods', () => {
-    type CasesListReturn = Awaited<ReturnType<WindowAPI['cases']['list']>>
-    type CohortRunAssociationReturn = Awaited<ReturnType<WindowAPI['cohort']['runAssociation']>>
+  // The compile-time half of this check (CasesListReturn/CohortRunAssociationReturn
+  // must equal IpcResult<...>) lives in preload-contract.test-d.ts — see that
+  // file's docblock for why `expectTypeOf(...).toEqualTypeOf(...)` is a
+  // runtime no-op and must run under a real typechecker to mean anything.
+  it('exposes IpcResult for scoped wrapHandler-backed methods (source strings)', () => {
     const apiSource = readFileSync(resolve(ROOT, 'src/shared/types/api.ts'), 'utf-8')
-
-    expectTypeOf<CasesListReturn>().toEqualTypeOf<IpcResult<Case[]>>()
-    expectTypeOf<CohortRunAssociationReturn>().toEqualTypeOf<IpcResult<unknown>>()
 
     expect(apiSource).toContain('export type CasesAPI = CasesDomainContract')
     expect(apiSource).toContain('getSummary: () => Promise<IpcResult<CohortSummary>>')
@@ -579,11 +602,9 @@ describe('debug domain — Sprint A PR-2 Gate 10c', () => {
     expect(source).toContain('debug: createDebugApi()')
   })
 
-  it('compile-time check: WindowAPI debug methods return IpcResult', () => {
-    expectTypeOf<Awaited<ReturnType<WindowAPI['debug']['queryCountersReset']>>>().toEqualTypeOf<
-      IpcResult<{ enabled: boolean }>
-    >()
-  })
+  // Compile-time check moved to preload-contract.test-d.ts — see that
+  // file's docblock for why an `expectTypeOf` assertion left in a plain
+  // `.test.ts` file never actually runs under a typechecker.
 })
 
 describe('jobs domain — Sprint A PR-4 Gate 11', () => {
@@ -616,23 +637,13 @@ describe('jobs domain — Sprint A PR-4 Gate 11', () => {
     expect(source).toContain('registerJobsHandlers()')
   })
 
-  it('compile-time check: WindowAPI jobs methods return IpcResult', () => {
-    expectTypeOf<Awaited<ReturnType<WindowAPI['jobs']['list']>>>().toEqualTypeOf<IpcResult<Job[]>>()
-    expectTypeOf<Awaited<ReturnType<WindowAPI['jobs']['get']>>>().toEqualTypeOf<
-      IpcResult<Job | null>
-    >()
-    expectTypeOf<Awaited<ReturnType<WindowAPI['jobs']['progress']>>>().toEqualTypeOf<
-      IpcResult<Job['progress']>
-    >()
-  })
+  // Compile-time checks (jobs list/get/progress return IpcResult; the
+  // import:start contract is unchanged) moved to preload-contract.test-d.ts.
 
-  it('existing import contract is unchanged by the jobs domain', () => {
-    // Byte-identity guard: the import domain's start signature and the
-    // import:progress event channel must be untouched by PR-4.
-    expectTypeOf<Awaited<ReturnType<WindowAPI['import']['start']>>>().toEqualTypeOf<
-      IpcResult<ImportResult>
-    >()
-
+  it('existing import contract is unchanged by the jobs domain (source string)', () => {
+    // Byte-identity guard: the import:progress event channel must be
+    // untouched by PR-4. The type-level half of this guard (the
+    // import:start return-type shape) lives in preload-contract.test-d.ts.
     const coreApiSource = readFileSync(resolve(ROOT, 'src/preload/window-api/core-api.ts'), 'utf-8')
     expect(coreApiSource).toContain("subscribeToIpcEvent('import:progress', callback)")
   })
@@ -678,11 +689,8 @@ describe('cohort domain — Sprint A PR-3 Gate 10b', () => {
     expect(withWarnings.warnings?.staleSummary).toBe(true)
   })
 
-  it('getSummaryStatus contract shape is unchanged ({ is_stale, last_rebuilt_at:number })', () => {
-    expectTypeOf<Awaited<ReturnType<WindowAPI['cohort']['getSummaryStatus']>>>().toEqualTypeOf<
-      IpcResult<{ is_stale: boolean; last_rebuilt_at: number }>
-    >()
-  })
+  // 'getSummaryStatus contract shape is unchanged' compile-time check moved
+  // to preload-contract.test-d.ts.
 
   it('ImportResult shape unchanged — no warnings field (Pass-4 HIGH #3)', () => {
     const result: ImportResult = {
@@ -752,4 +760,34 @@ describe('debug preload domain behavior', () => {
     expect(invoke).toHaveBeenNthCalledWith(1, 'debug:queryCounters:get')
     expect(invoke).toHaveBeenNthCalledWith(2, 'debug:queryCounters:reset')
   })
+})
+
+describe('case-metadata domain — Task A4 IpcResult laundering guard', () => {
+  const apiSource = readFileSync(resolve(ROOT, 'src/shared/types/api.ts'), 'utf-8')
+  const appApiSource = readFileSync(resolve(ROOT, 'src/preload/window-api/app-api.ts'), 'utf-8')
+
+  it('WindowAPI caseMetadata is aliased to the honest domain contract, not a laundered interface', () => {
+    // A prior `CaseMetadataAPI` interface declared plain `Promise<T>` returns
+    // (e.g. `upsert`, `getDataInfo`, `createCohort`) instead of
+    // `Promise<IpcResult<T>>`, even though `wrapHandler` always resolves an
+    // `IpcResult<T>` at runtime. That let a raw, un-unwrapped assignment
+    // (the C1 bug class) pass `tsc` silently. Locking the alias here means a
+    // future edit can't reintroduce a hand-written, laundered interface.
+    expect(apiSource).toContain('export type CaseMetadataAPI = CaseMetadataDomainContract')
+  })
+
+  it('preload no longer launders caseMetadata through an `as WindowAPI[...]` cast', () => {
+    expect(appApiSource).not.toContain("as WindowAPI['caseMetadata']")
+  })
+
+  // The two compile-time checks that used to live here (WindowAPI
+  // caseMetadata methods return IpcResult — the C1 regression guard — and
+  // WindowAPI geneLists methods return IpcResult) moved to
+  // preload-contract.test-d.ts, which actually runs under a typechecker.
+  // See PR-A Item 3: `expectTypeOf(...).toEqualTypeOf(...)` is a runtime
+  // no-op (`expect-type`'s implementation is literally `() => true`), so
+  // leaving these assertions in a plain `.test.ts` file — never covered by
+  // `make typecheck` (tests/ is outside tsconfig.node.json/tsconfig.renderer.json)
+  // nor by `vitest run` (no typecheck mode) — made them inert: reverting
+  // `CaseMetadataAPI` to a naked `Promise<T>` would not fail any command.
 })

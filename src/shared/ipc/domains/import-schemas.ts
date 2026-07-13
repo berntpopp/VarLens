@@ -17,6 +17,11 @@ const nonBlankString = (maxLength: number) =>
 
 const NonBlankFilePathSchema = nonBlankString(4096)
 const NonBlankImportStringSchema = nonBlankString(255)
+const DroppedFileEnrollmentTokenSchema = z
+  .string()
+  .min(32)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/)
 
 export const ImportVcfOptionsSchema = z
   .object({
@@ -63,4 +68,17 @@ export const ImportVcfPreviewParamsSchema = z.tuple([NonBlankFilePathSchema])
 
 export const ImportVcfMultiPreviewParamsSchema = z.tuple([
   z.array(NonBlankFilePathSchema).min(1).max(1000)
+])
+
+export const ImportRegisterDroppedFileEnrollmentTokenParamsSchema = z.tuple([
+  DroppedFileEnrollmentTokenSchema
+])
+
+export const ImportEnrollDroppedFilesParamsSchema = z.tuple([
+  z
+    .object({
+      token: DroppedFileEnrollmentTokenSchema,
+      filePaths: z.array(NonBlankFilePathSchema).max(1000)
+    })
+    .strict()
 ])

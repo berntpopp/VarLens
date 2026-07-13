@@ -2,22 +2,34 @@ import { DatabaseService } from '../../database/DatabaseService'
 import { DbPool } from '../../database/DbPool'
 import { WrongPasswordError } from '../../database/errors'
 import { resolveGeneRefDbPath } from '../../database/geneReferenceLoader'
+import { isNotADatabaseError } from '../../database/sqlite-error'
 import { getWorkerThreads } from '../../ipc/dbPoolManager'
 import { SqliteStorageSession } from './SqliteStorageSession'
 
-export function createSqliteStorageSession(dbPath: string, key?: string): SqliteStorageSession {
-  const databaseService = new DatabaseService(dbPath, key)
+const hasKey = (key?: string): key is string => key !== undefined && key.length > 0
 
-  if (key !== undefined && key.length > 0) {
+export function createSqliteStorageSession(dbPath: string, key?: string): SqliteStorageSession {
+  // A wrong/missing key against an actually-encrypted file fails INSIDE the
+  // DatabaseService constructor (the `journal_mode` pragma is what triggers
+  // SQLite's read validation) -- so this must wrap the constructor call
+  // itself, not just a query issued after it succeeds.
+  let databaseService: DatabaseService
+  try {
+    databaseService = new DatabaseService(dbPath, key)
+  } catch (error) {
+    if (hasKey(key) && isNotADatabaseError(error)) {
+      throw new WrongPasswordError()
+    }
+    throw error
+  }
+
+  if (hasKey(key)) {
     try {
       databaseService.database.prepare('SELECT count(*) FROM sqlite_master').get()
     } catch (error) {
       databaseService.close()
 
-      if (
-        error instanceof Error &&
-        error.message.includes('file is encrypted or is not a database')
-      ) {
+      if (isNotADatabaseError(error)) {
         throw new WrongPasswordError()
       }
 

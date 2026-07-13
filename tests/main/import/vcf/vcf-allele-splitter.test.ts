@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { splitMultiAllelic } from '../../../../src/main/import/vcf/vcf-allele-splitter'
+import {
+  splitAlleleForSample,
+  splitMultiAllelic
+} from '../../../../src/main/import/vcf/vcf-allele-splitter'
 import type {
   VcfRawRecord,
   InfoFieldDef,
@@ -112,6 +115,83 @@ describe('vcf-allele-splitter', () => {
     expect(r2.info.get('AC')).toBe('10') // Number=A: select index 1
   })
 
+  it('marks missing Number=A/R INFO values instead of copying another allele', () => {
+    const defs = makeInfoDefs([
+      { id: 'AF', number: 'A', type: 'Float' },
+      { id: 'MLEAC', number: 'R', type: 'Integer' }
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 201,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 95,
+      filter: 'PASS',
+      info: new Map([
+        ['AF', '0.1'],
+        ['MLEAC', '20,4']
+      ]),
+      format: ['GT'],
+      samples: new Map([['S1', ['0/2']]])
+    }
+
+    const results = splitMultiAllelic(record, defs, formatDefs)
+    expect(results[1].info.get('AF')).toBe('.')
+    expect(results[1].info.get('MLEAC')).toBe('20,.')
+  })
+
+  it('normalizes empty Number=A/R INFO tokens to missing values', () => {
+    const defs = makeInfoDefs([
+      { id: 'AF', number: 'A', type: 'Float' },
+      { id: 'MLEAC', number: 'R', type: 'Integer' }
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 202,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 95,
+      filter: 'PASS',
+      info: new Map([
+        ['AF', '0.1,'],
+        ['MLEAC', ',4']
+      ]),
+      format: ['GT'],
+      samples: new Map([['S1', ['0/2']]])
+    }
+
+    const results = splitMultiAllelic(record, defs, formatDefs)
+    expect(results[0].info.get('MLEAC')).toBe('.,4')
+    expect(results[1].info.get('AF')).toBe('.')
+    expect(results[1].info.get('MLEAC')).toBe('.,.')
+  })
+
+  it('builds one ALT view containing only the selected sample', () => {
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 200,
+      id: 'rs1',
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 95,
+      filter: 'PASS',
+      info: new Map([['AF', '0.1,0.2']]),
+      format: ['GT', 'AD'],
+      samples: new Map([
+        ['SELECTED', ['0/2', '24,0,24']],
+        ['UNSELECTED', ['0/1', '20,20,0']]
+      ])
+    }
+
+    const split = splitAlleleForSample(record, infoDefs, formatDefs, 1, 'SELECTED')
+
+    expect(split.alt).toEqual(['T'])
+    expect(split.info.get('AF')).toBe('0.2')
+    expect(split.samples).toEqual(new Map([['SELECTED', ['0/1', '24,24']]]))
+  })
+
   it('remaps GT for multi-allelic splits', () => {
     const record: VcfRawRecord = {
       chrom: 'chr22',
@@ -164,6 +244,150 @@ describe('vcf-allele-splitter', () => {
 
     // Split for ALT=T: AD should be ref,alt2 = 25,5
     expect(results[1].samples.get('S1')![3]).toBe('25,5')
+  })
+
+  it('defaults AD to Number=R when the header def is missing (no ##FORMAT AD line)', () => {
+    // Simulates a VCF whose header omits ##FORMAT=<ID=AD,Number=R,...> for AD.
+    const formatDefsNoAD = makeFormatDefs([
+      { id: 'GT', number: '1', type: 'String' },
+      { id: 'GQ', number: '1', type: 'Integer' },
+      { id: 'DP', number: '1', type: 'Integer' }
+      // No AD entry at all — formatDefs.get('AD') will be undefined
+    ])
+
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 300,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'GQ', 'DP', 'AD'],
+      samples: new Map([['S1', ['0/2', '90', '48', '10,3,7']]])
+    }
+
+    const results = splitMultiAllelic(record, infoDefs, formatDefsNoAD)
+
+    // Split for ALT=G (altIdx=0): AD should be ref,alt1 = 10,3
+    expect(results[0].samples.get('S1')![3]).toBe('10,3')
+
+    // Split for ALT=T (altIdx=1): AD should be ref,alt2 = 10,7 — NOT 10,3
+    // (the bug reused ALT#1's depth for every subsequent split allele).
+    expect(results[1].samples.get('S1')![3]).toBe('10,7')
+  })
+
+  it('normalizes single-allelic Number=A AD into a missing-ref ALT pair', () => {
+    const altAdDefs = makeFormatDefs([
+      { id: 'GT', number: '1', type: 'String' },
+      { id: 'AD', number: 'A', type: 'Integer' }
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 304,
+      id: null,
+      ref: 'A',
+      alt: ['G'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['S1', ['0/1', '7']]])
+    }
+
+    const results = splitMultiAllelic(record, infoDefs, altAdDefs)
+    expect(results[0].samples.get('S1')![1]).toBe('.,7')
+  })
+
+  it('marks a missing target AD depth as missing instead of retaining another allele depth', () => {
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 301,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['S1', ['0/2', '10,3']]])
+    }
+
+    const results = splitMultiAllelic(record, infoDefs, formatDefs)
+    expect(results[1].samples.get('S1')![1]).toBe('10,.')
+  })
+
+  it('normalizes Number=A AD to a biallelic missing-ref shape', () => {
+    const numberAFormats = makeFormatDefs([
+      { id: 'GT', number: '1', type: 'String' },
+      { id: 'AD', number: 'A', type: 'Integer' }
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 302,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['S1', ['0/2', '3,7']]])
+    }
+
+    const results = splitMultiAllelic(record, infoDefs, numberAFormats)
+    expect(results[0].samples.get('S1')![1]).toBe('.,3')
+    expect(results[1].samples.get('S1')![1]).toBe('.,7')
+  })
+
+  it('respects an explicit non-allelic AD Number declaration', () => {
+    const fixedPairFormats = makeFormatDefs([
+      { id: 'GT', number: '1', type: 'String' },
+      { id: 'AD', number: '2', type: 'Integer' }
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 303,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['S1', ['0/2', '10,7']]])
+    }
+
+    const results = splitMultiAllelic(record, infoDefs, fixedPairFormats)
+    expect(results[0].samples.get('S1')![1]).toBe('10,7')
+    expect(results[1].samples.get('S1')![1]).toBe('10,7')
+  })
+
+  it('normalizes empty AD tokens for Number=R and Number=A', () => {
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 304,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['S1', ['0/2', '10,']]])
+    }
+
+    const numberRResults = splitMultiAllelic(record, infoDefs, formatDefs)
+    expect(numberRResults[0].samples.get('S1')![1]).toBe('10,.')
+    expect(numberRResults[1].samples.get('S1')![1]).toBe('10,.')
+
+    const numberAFormats = makeFormatDefs([
+      { id: 'GT', number: '1', type: 'String' },
+      { id: 'AD', number: 'A', type: 'Integer' }
+    ])
+    const numberAResults = splitMultiAllelic(record, infoDefs, numberAFormats)
+    expect(numberAResults[1].samples.get('S1')![1]).toBe('.,.')
   })
 
   it('handles triallelic with three ALT alleles', () => {

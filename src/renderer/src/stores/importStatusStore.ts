@@ -28,6 +28,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
   const errorMessage = ref('')
   const uploadLoadedBytes = ref(0)
   const uploadTotalBytes = ref<number | null>(null)
+  const activeBatchRunId = ref<string | null>(null)
 
   const isActive = computed(
     () => phase.value === 'uploading' || phase.value === 'importing' || phase.value === 'finalizing'
@@ -37,7 +38,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     totalFiles.value > 0 ? `${currentFileIndex.value + 1}/${totalFiles.value}` : ''
   )
 
-  function startImport(files: number): void {
+  function startImport(files: number, batchRunId?: string): void {
     phase.value = 'importing'
     totalFiles.value = files
     currentFileIndex.value = 0
@@ -49,6 +50,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     errorMessage.value = ''
     uploadLoadedBytes.value = 0
     uploadTotalBytes.value = null
+    activeBatchRunId.value = batchRunId ?? null
   }
 
   function startUpload(files: number): void {
@@ -65,6 +67,15 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     errorMessage.value = ''
     uploadLoadedBytes.value = 0
     uploadTotalBytes.value = null
+    activeBatchRunId.value = null
+  }
+
+  function isCurrentBatchRun(runId: string): boolean {
+    return activeBatchRunId.value === runId
+  }
+
+  function clearBatchRun(runId: string): void {
+    if (activeBatchRunId.value === runId) activeBatchRunId.value = null
   }
 
   function updateUploadProgress(data: {
@@ -143,6 +154,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     errorMessage.value = ''
     uploadLoadedBytes.value = 0
     uploadTotalBytes.value = null
+    activeBatchRunId.value = null
   }
 
   return {
@@ -160,11 +172,14 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     errorMessage,
     uploadLoadedBytes,
     uploadTotalBytes,
+    activeBatchRunId,
     isActive,
     fileProgress,
     startUpload,
     updateUploadProgress,
     startImport,
+    isCurrentBatchRun,
+    clearBatchRun,
     updateProgress,
     fileComplete,
     importComplete,

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
@@ -137,6 +137,50 @@ describe('db-worker-dispatch', () => {
       params: [{ limit: 25, offset: 0 }]
     })
     expect(result).toBeDefined()
+  })
+
+  // ── Panel-interval failure propagation (clinical-safety) ───
+  //
+  // A panel-interval computation failure must make the whole task throw
+  // rather than silently continuing with an unfiltered query — a caught
+  // exception here must never be indistinguishable from "no panel active".
+
+  it('variants:query throws when panel interval computation fails (does not fall back to unfiltered)', () => {
+    const deps = makeDeps()
+    const fakeGeneRefDb = {
+      getCoordinatesForGenes: () => new Map()
+    } as unknown as import('../../../src/main/database/GeneReferenceDb').GeneReferenceDb
+    deps.geneRefDb = fakeGeneRefDb
+    vi.spyOn(deps.repos.panels, 'computeIntervals').mockImplementation(() => {
+      throw new Error('Simulated panel interval computation failure')
+    })
+
+    const filter = { case_id: 0, active_panel_ids: [1] }
+    expect(() =>
+      dispatchTask(deps, {
+        type: 'variants:query',
+        params: [filter, 0, 25, [], false, false]
+      })
+    ).toThrow('Simulated panel interval computation failure')
+  })
+
+  it('cohort:variants throws when panel interval computation fails (does not fall back to unfiltered)', () => {
+    const deps = makeDeps()
+    const fakeGeneRefDb = {
+      getCoordinatesForGenes: () => new Map()
+    } as unknown as import('../../../src/main/database/GeneReferenceDb').GeneReferenceDb
+    deps.geneRefDb = fakeGeneRefDb
+    vi.spyOn(deps.repos.panels, 'computeIntervals').mockImplementation(() => {
+      throw new Error('Simulated panel interval computation failure')
+    })
+
+    const cohortParams = { limit: 25, offset: 0, active_panel_ids: [1] }
+    expect(() =>
+      dispatchTask(deps, {
+        type: 'cohort:variants',
+        params: [cohortParams]
+      })
+    ).toThrow('Simulated panel interval computation failure')
   })
 
   it('cohort:carriers returns empty array for fresh DB', () => {
@@ -352,17 +396,24 @@ describe('resolvePanelIntervalsInPlace', () => {
     expect(filter.genome_build).toBeUndefined()
   })
 
-  it('removes IPC-only fields when geneRefDb is null', () => {
+  it('throws when a panel is active but geneRefDb is null instead of silently dropping the filter', () => {
+    // A non-empty active_panel_ids with a null geneRefDb means the panel
+    // cannot be resolved -- this must surface as an error, not silently
+    // clear the panel fields and let the query run unfiltered (clinical-
+    // safety hazard: a dropped filter must not look identical to "panel
+    // matched everything").
     const filter: PanelAwareFilter = {
       active_panel_ids: [1, 2],
       panel_padding_bp: 3000,
       genome_build: 'GRCh37'
     }
     const repos = createRepositories(db)
-    resolvePanelIntervalsInPlace(filter, repos, null, db)
-    expect(filter.active_panel_ids).toBeUndefined()
-    expect(filter.panel_padding_bp).toBeUndefined()
-    expect(filter.genome_build).toBeUndefined()
+    expect(() => resolvePanelIntervalsInPlace(filter, repos, null, db)).toThrow(
+      /gene reference database is unavailable/i
+    )
+    // The filter must NOT have been silently downgraded to "no panel
+    // restriction" before the throw.
+    expect(filter.active_panel_ids).toEqual([1, 2])
     expect(filter.panel_intervals).toBeUndefined()
   })
 
@@ -376,5 +427,32 @@ describe('resolvePanelIntervalsInPlace', () => {
     expect(filter.active_panel_ids).toBeUndefined()
     expect(filter.panel_padding_bp).toBeUndefined()
     expect(filter.genome_build).toBeUndefined()
+  })
+
+  it('propagates the error when panel interval computation fails instead of dropping the filter silently', () => {
+    const filter: PanelAwareFilter = {
+      active_panel_ids: [1, 2],
+      panel_padding_bp: 5000,
+      genome_build: 'GRCh38',
+      case_id: 1
+    }
+    const repos = createRepositories(db)
+    vi.spyOn(repos.panels, 'computeIntervals').mockImplementation(() => {
+      throw new Error('Simulated panel interval computation failure')
+    })
+    // geneRefDb must be non-null so the function actually attempts the
+    // computation instead of short-circuiting via the "unavailable" no-op path.
+    const fakeGeneRefDb = {
+      getCoordinatesForGenes: () => new Map()
+    } as unknown as import('../../../src/main/database/GeneReferenceDb').GeneReferenceDb
+
+    expect(() => resolvePanelIntervalsInPlace(filter, repos, fakeGeneRefDb, db, 1)).toThrow(
+      'Simulated panel interval computation failure'
+    )
+    // The filter must NOT have been silently downgraded to "no panel restriction":
+    // active_panel_ids should still be present since the fields are only cleaned
+    // up after a successful (or intentionally skipped) computation.
+    expect(filter.active_panel_ids).toEqual([1, 2])
+    expect(filter.panel_intervals).toBeUndefined()
   })
 })

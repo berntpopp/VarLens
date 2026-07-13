@@ -5,10 +5,8 @@
  * worker_threads imports. This module is testable in isolation.
  */
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
-import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
-import { createGunzip } from 'node:zlib'
-import type { Readable } from 'node:stream'
+import { compose, type Readable } from 'node:stream'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
@@ -18,13 +16,20 @@ import type { FormatInfo } from '../import/strategies/ImportStrategy'
 import { createFieldMapper } from '../import/transforms/FieldMapper'
 import { createObjectFormatMapper } from '../import/transforms/ObjectFormatMapper'
 import { resolveColumnIndices } from '../import/config/fieldMapping'
-import { createDecompressedStream, isGzipped } from '../import/stream-utils'
+import { createDecompressedStream, createCappedLineStream } from '../import/stream-utils'
+import { createJsonRecordBudget } from '../import/json-resource-budget'
 import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
-import { parseVcfLine } from '../import/vcf/vcf-line-parser'
+import {
+  parseVcfLine,
+  resolveVcfSelectedSampleColumn,
+  type VcfSelectedSampleColumn
+} from '../import/vcf/vcf-line-parser'
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
 import { detectCaller } from '../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
 import type { VcfHeader } from '../import/vcf/types'
+import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
+import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
 
 import { DROP_FTS_TRIGGERS } from './worker-db'
 export { DROP_FTS_TRIGGERS }
@@ -87,8 +92,8 @@ export function prepareStatements(db: DatabaseType) {
 
   const insertTranscriptStmt = db.prepare(`
     INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol,
-      consequence, cdna, aa_change, hpo_sim_score, moi, is_selected)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      consequence, func, cdna, aa_change, hpo_sim_score, moi, is_selected)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const insertCaseStmt = db.prepare(`
@@ -161,6 +166,7 @@ export function prepareStatements(db: DatabaseType) {
             t.transcript_id,
             t.gene_symbol,
             t.consequence,
+            t.func,
             t.cdna,
             t.aa_change,
             t.hpo_sim_score,
@@ -329,7 +335,8 @@ export async function streamInsertVcf(
   stmts: ReturnType<typeof prepareStatements>,
   isCancelled: () => boolean,
   vcfSelectedSamples: string[] | undefined,
-  onProgress: (count: number) => void
+  onProgress: (count: number) => void,
+  onSkip?: (reason: string) => void
 ): Promise<number> {
   if (vcfSelectedSamples && vcfSelectedSamples.length > 1) {
     throw new Error(
@@ -340,13 +347,20 @@ export async function streamInsertVcf(
   // Suppress unused-variable warning — formatInfo kept for API consistency
   void formatInfo
 
-  const raw = createReadStream(filePath)
-  const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
+  // Shared capped reader guards against a giant single line and a
+  // decompression bomb -- see stream-utils.ts for the cap rationale.
+  const { stream } = createCappedLineStream(filePath)
+  // Keep error ownership through destroy(); compose emits ABORT_ERR when a
+  // header-budget failure settles before the file naturally ends.
+  stream.on('error', () => undefined)
   const rl = createInterface({ input: stream, crlfDelay: Infinity })
+  rl.on('error', () => undefined)
 
   const headerLines: string[] = []
+  const headerBudget = new VcfHeaderBudget()
   let header: VcfHeader | null = null
   let activeSample = ''
+  let activeSampleColumn: VcfSelectedSampleColumn | null = null
   let callerName: string | null = null
 
   let batch: Array<Record<string, unknown>> = []
@@ -361,6 +375,7 @@ export async function streamInsertVcf(
 
       // Collect header lines
       if (line.startsWith('#')) {
+        headerBudget.add(line)
         headerLines.push(line)
         continue
       }
@@ -368,8 +383,8 @@ export async function streamInsertVcf(
       // Parse header once, on the first data line
       if (header === null) {
         header = parseVcfHeaderFromLines(headerLines)
-        const selectedSample = vcfSelectedSamples?.[0]
-        activeSample = selectedSample ?? (header.samples.length > 0 ? header.samples[0] : '')
+        activeSampleColumn = resolveVcfSelectedSampleColumn(header.samples, vcfSelectedSamples?.[0])
+        activeSample = activeSampleColumn?.name ?? ''
 
         if (activeSample === '') {
           break
@@ -382,7 +397,7 @@ export async function streamInsertVcf(
 
       // Parse the data line
       try {
-        const record = parseVcfLine(line, header.samples)
+        const record = parseVcfLine(line, header.samples, onSkip, activeSampleColumn ?? undefined)
         if (record === null) continue // Skip truncated/corrupt lines
         const mapped = mapVcfRecord(
           record,
@@ -403,6 +418,7 @@ export async function streamInsertVcf(
           }
         }
       } catch (e) {
+        if (e instanceof VcfResourceLimitError) throw e
         console.warn(
           '[import-pipeline] Skipping unparseable VCF line:',
           e instanceof Error ? e.message : String(e)
@@ -417,7 +433,7 @@ export async function streamInsertVcf(
       onProgress(totalInserted)
     }
     // Ensure stream resources are released
-    raw.destroy()
+    stream.destroy()
   }
 
   return totalInserted
@@ -436,21 +452,27 @@ export async function createMapperPipeline(
 ): Promise<Readable> {
   switch (formatInfo.format) {
     case 'simple': {
-      const stream = createDecompressedStream(filePath)
-        .pipe(parser.asStream())
-        .pipe(pick.asStream({ filter: 'variants' }))
-        .pipe(streamArray.asStream())
-        .pipe(createObjectFormatMapper())
+      const stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: 'variants' }),
+        createJsonRecordBudget(),
+        streamArray.asStream(),
+        createObjectFormatMapper()
+      )
       return stream
     }
 
     case 'object': {
       const samplePath = `samples.${formatInfo.caseKey}.variants`
-      const stream = createDecompressedStream(filePath)
-        .pipe(parser.asStream())
-        .pipe(pick.asStream({ filter: samplePath }))
-        .pipe(streamArray.asStream())
-        .pipe(createObjectFormatMapper())
+      const stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: samplePath }),
+        createJsonRecordBudget(),
+        streamArray.asStream(),
+        createObjectFormatMapper()
+      )
       return stream
     }
 
@@ -462,11 +484,14 @@ export async function createMapperPipeline(
       const { dictionaries, columnIndices } = await parseHeader(filePath, headerPath)
       const fieldMapper = createFieldMapper(dictionaries, columnIndices)
 
-      const stream = createDecompressedStream(filePath)
-        .pipe(parser.asStream())
-        .pipe(pick.asStream({ filter: dataPath }))
-        .pipe(streamArray.asStream())
-        .pipe(fieldMapper)
+      const stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: dataPath }),
+        createJsonRecordBudget(),
+        streamArray.asStream(),
+        fieldMapper
+      )
       return stream
     }
   }
@@ -497,13 +522,15 @@ export async function parseHeader(
     const fieldsToExtract = new Set(['Gene', 'Transcript', 'HpoSimScore', 'MoI'])
     let resolved = false
 
-    const stream = createDecompressedStream(filePath)
-      .pipe(parser.asStream())
-      .pipe(pick.asStream({ filter: headerPath }))
-      .pipe(streamArray.asStream())
+    const stream = compose(
+      createDecompressedStream(filePath),
+      parser.asStream(),
+      pick.asStream({ filter: headerPath }),
+      createJsonRecordBudget(),
+      streamArray.asStream()
+    )
 
     const cleanup = (): void => {
-      stream.removeAllListeners()
       stream.destroy()
     }
 

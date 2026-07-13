@@ -1,5 +1,9 @@
 import { BaseRepository } from './BaseRepository'
-import type { TranscriptAnnotation, TranscriptInsertRow } from '../../shared/types/transcript'
+import {
+  canonicalizeTranscriptSemantics,
+  type TranscriptAnnotation,
+  type TranscriptInsertRow
+} from '../../shared/types/transcript'
 
 export class TranscriptRepository extends BaseRepository {
   getVariantTranscripts(variantId: number): TranscriptAnnotation[] {
@@ -9,6 +13,7 @@ export class TranscriptRepository extends BaseRepository {
       transcript_id: string
       gene_symbol: string | null
       consequence: string | null
+      func: string | null
       cdna: string | null
       aa_change: string | null
       hpo_sim_score: number | null
@@ -25,6 +30,7 @@ export class TranscriptRepository extends BaseRepository {
           'transcript_id',
           'gene_symbol',
           'consequence',
+          'func',
           'cdna',
           'aa_change',
           'hpo_sim_score',
@@ -70,6 +76,7 @@ export class TranscriptRepository extends BaseRepository {
       const transcript = this.execFirst<{
         gene_symbol: string | null
         consequence: string | null
+        func: string | null
         cdna: string | null
         aa_change: string | null
         hpo_sim_score: number | null
@@ -77,24 +84,34 @@ export class TranscriptRepository extends BaseRepository {
       }>(
         this.kysely
           .selectFrom('variant_transcripts')
-          .select(['gene_symbol', 'consequence', 'cdna', 'aa_change', 'hpo_sim_score', 'moi'])
+          .select([
+            'gene_symbol',
+            'consequence',
+            'func',
+            'cdna',
+            'aa_change',
+            'hpo_sim_score',
+            'moi'
+          ])
           .where('variant_id', '=', variantId)
           .where('transcript_id', '=', transcriptId)
       )!
 
+      const semantics = canonicalizeTranscriptSemantics(transcript.consequence, transcript.func)
+
+      const denormalized = {
+        transcript: transcriptId,
+        gene_symbol: transcript.gene_symbol,
+        consequence: semantics.consequence,
+        func: semantics.func,
+        cdna: transcript.cdna,
+        aa_change: transcript.aa_change,
+        hpo_sim_score: transcript.hpo_sim_score,
+        moi: transcript.moi
+      }
+
       this.execRun(
-        this.kysely
-          .updateTable('variants')
-          .set({
-            transcript: transcriptId,
-            gene_symbol: transcript.gene_symbol,
-            consequence: transcript.consequence,
-            cdna: transcript.cdna,
-            aa_change: transcript.aa_change,
-            hpo_sim_score: transcript.hpo_sim_score,
-            moi: transcript.moi
-          })
-          .where('id', '=', variantId)
+        this.kysely.updateTable('variants').set(denormalized).where('id', '=', variantId)
       )
     })
   }
@@ -109,6 +126,7 @@ export class TranscriptRepository extends BaseRepository {
             transcript_id: transcript.transcript_id,
             gene_symbol: transcript.gene_symbol,
             consequence: transcript.consequence,
+            func: transcript.func,
             cdna: transcript.cdna,
             aa_change: transcript.aa_change,
             hpo_sim_score: transcript.hpo_sim_score,

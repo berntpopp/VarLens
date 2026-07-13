@@ -65,7 +65,9 @@ test('Import fixture files via batch API and verify cases appear', async () => {
             }>
             start: (
               paths: string[],
-              strategy: string
+              strategy: string,
+              stripText: string | undefined,
+              runId: string
             ) => Promise<{
               succeeded: number
               failed: number
@@ -90,7 +92,12 @@ test('Import fixture files via batch API and verify cases appear', async () => {
     console.log('checkDuplicates:', JSON.stringify(check))
 
     // Start import (overwrite to handle re-runs)
-    const importResult = await api.batchImport.start(filePaths, 'overwrite')
+    const importResult = await api.batchImport.start(
+      filePaths,
+      'overwrite',
+      undefined,
+      crypto.randomUUID()
+    )
     console.log('import result:', JSON.stringify(importResult))
 
     // Get case list
@@ -141,7 +148,9 @@ test('Import real immunology case files', async () => {
             }>
             start: (
               paths: string[],
-              strategy: string
+              strategy: string,
+              stripText: string | undefined,
+              runId: string
             ) => Promise<{
               succeeded: number
               failed: number
@@ -161,7 +170,12 @@ test('Import real immunology case files', async () => {
     ).api
 
     const check = await api.batchImport.checkDuplicates(filePaths)
-    const importResult = await api.batchImport.start(filePaths, 'overwrite')
+    const importResult = await api.batchImport.start(
+      filePaths,
+      'overwrite',
+      undefined,
+      crypto.randomUUID()
+    )
     return { check, importResult }
   }, jsonGzFiles)
 

@@ -154,12 +154,36 @@ describe('databaseStore.fetchInfo', () => {
     store.currentPath = '/tmp/old.db'
     store.currentName = 'old.db'
     store.isEncrypted = true
+    store.keyManaged = true
 
     await store.fetchInfo()
 
     expect(store.currentPath).toBeNull()
     expect(store.currentName).toBe('')
     expect(store.isEncrypted).toBe(false)
+    expect(store.keyManaged).toBe(false)
+  })
+
+  it('BLOCKER 1: applyInfo picks up keyManaged from database:info (defaulting to false when absent)', async () => {
+    const store = useDatabaseStore()
+    const infoMock = window.api.database.info as ReturnType<typeof vi.fn>
+
+    infoMock.mockResolvedValueOnce({
+      path: '/tmp/managed.db',
+      name: 'managed.db',
+      encrypted: true,
+      keyManaged: true
+    })
+    await store.fetchInfo()
+    expect(store.keyManaged).toBe(true)
+
+    infoMock.mockResolvedValueOnce({
+      path: '/tmp/legacy.db',
+      name: 'legacy.db',
+      encrypted: true
+    })
+    await store.fetchInfo()
+    expect(store.keyManaged).toBe(false)
   })
 
   it('loads postgres profiles through the database API', async () => {

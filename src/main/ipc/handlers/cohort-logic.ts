@@ -218,6 +218,8 @@ export async function queryCohortVariants(
     } else {
       // Fallback (no pool): compute panel intervals on the main thread
       const dbRef = getDb()
+      // Throws if the computation itself fails — never treat that as "no
+      // panel configured" (see panelIntervalHelper.ts for the contract).
       const intervals = computePanelIntervals(
         dbRef,
         {
@@ -227,9 +229,7 @@ export async function queryCohortVariants(
         undefined, // cohort mode: no specific case, sample any variant
         'cohort'
       )
-      if (intervals) {
-        cohortParams.panel_intervals = intervals
-      }
+      cohortParams.panel_intervals = intervals
       // Clean up IPC-only fields that shouldn't reach the service
       delete cohortParams.active_panel_ids
       delete cohortParams.panel_padding_bp

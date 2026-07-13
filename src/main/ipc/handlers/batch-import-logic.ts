@@ -6,6 +6,7 @@
  * without mocking Electron internals.
  */
 import { basename } from 'path'
+import { randomUUID } from 'node:crypto'
 import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import { checkDuplicates } from '../../import/batch-utils'
@@ -14,13 +15,13 @@ import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { API_CONFIG } from '../../../shared/config'
 import type { FileImportRequest } from '../../../shared/types/import-worker'
 import type { DatabaseService } from '../../database/DatabaseService'
-import type { DuplicateChoice } from '../../../shared/types/api'
+import type { BatchProgress, DuplicateChoice } from '../../../shared/types/api'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 
 /** Callbacks for emitting events to the renderer during batch import. */
 export interface BatchImportCallbacks {
-  onProgress?: (data: unknown) => void
-  onComplete?: (data: unknown) => void
+  onProgress?: (data: BatchProgress) => void
+  onComplete?: (data: BatchImportResult) => void
   onCohortStale?: (data: { is_stale: boolean }) => void
 }
 
@@ -29,7 +30,14 @@ let workerClient: ImportWorkerClient | null = null
 
 // ZIP extraction utilities
 const zipExtractor = new ZipExtractor()
-let zipTempManager: TempDirectoryManager | null = null
+interface ActiveZipExtraction {
+  manager: TempDirectoryManager
+  enrolledPaths: string[]
+  revokeEnrollment?: (filePath: string) => void
+}
+const zipExtractions = new Map<string, ActiveZipExtraction>()
+const orphanedZipExtractions = new Set<string>()
+const MAX_ACTIVE_ZIP_EXTRACTIONS = 4
 
 /**
  * Check which files have duplicate case names in the database.
@@ -56,8 +64,11 @@ export function checkDuplicateFiles(
       duplicateCount: result.duplicateCount
     }
   } catch (error) {
+    // A DB/lookup failure here is not the same as "no duplicates found" — let
+    // it propagate so wrapHandler structures it and the caller sees an error
+    // instead of a falsely-empty duplicate check.
     mainLogger.error(`checkDuplicates error: ${error}`, 'import')
-    return { files: [], duplicateCount: 0 }
+    throw error
   }
 }
 
@@ -117,13 +128,18 @@ export async function startBatchImport(
       'import_batch',
       { files },
       async (ctx, p) => {
-        ctx.registerCancel(() => workerClient?.cancel())
-        return await runBatchWorker(db, p.files, callbacks)
+        const client = new ImportWorkerClient()
+        workerClient = client
+        ctx.registerCancel(() => client.cancel())
+        try {
+          return await runBatchWorker(db, p.files, callbacks, client)
+        } finally {
+          if (workerClient === client) workerClient = null
+        }
       }
     )
     return await handle.result
   } catch (error) {
-    workerClient = null
     mainLogger.error(`batch-import:start error: ${error}`, 'import')
     return {
       succeeded: 0,
@@ -153,18 +169,17 @@ function formatBatchImportError(error: unknown): string {
 function runBatchWorker(
   db: DatabaseService,
   files: FileImportRequest[],
-  callbacks: BatchImportCallbacks
+  callbacks: BatchImportCallbacks,
+  client: ImportWorkerClient
 ): Promise<BatchImportResult> {
-  workerClient = new ImportWorkerClient()
-
   return new Promise((resolve, reject) => {
-    workerClient!.start({
+    client.start({
       files,
       dbPath: db.getPath(),
       encryptionKey: db.getEncryptionKey(),
       throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
       onProgress: (msg) => {
-        callbacks.onProgress?.({
+        const progress: BatchProgress = {
           currentIndex: msg.fileIndex,
           totalFiles: msg.totalFiles,
           currentFileName: msg.fileName,
@@ -175,14 +190,13 @@ function runBatchWorker(
             elapsed: 0,
             skipped: msg.skipped
           }
-        })
+        }
+        callbacks.onProgress?.(progress)
       },
       onFileComplete: () => {
         // File complete -- progress already sent via onProgress
       },
       onComplete: (msg) => {
-        workerClient = null
-
         // Update internal variant frequency counts for successful imports
         try {
           for (const detail of msg.results.details) {
@@ -232,7 +246,6 @@ function runBatchWorker(
       onError: (msg) => {
         if (msg.fileIndex === -1) {
           // Fatal error
-          workerClient = null
           reject(new Error(msg.error))
         }
       }
@@ -251,6 +264,11 @@ export function cancelBatchImport(): void {
 
 /**
  * Test a ZIP file password.
+ *
+ * `ZipExtractor.testPassword` already distinguishes a genuine wrong-password
+ * outcome (returns `false`) from an unopenable/corrupt archive (throws). Do
+ * not re-collapse that distinction here: a corrupt archive must propagate as
+ * an error, not be reported as "incorrect password".
  */
 export function testZipPassword(zipPath: string, password: string): { success: boolean } {
   try {
@@ -258,7 +276,7 @@ export function testZipPassword(zipPath: string, password: string): { success: b
     return { success }
   } catch (error) {
     mainLogger.error(`batch-import:testZipPassword error: ${error}`, 'import')
-    return { success: false }
+    throw error
   }
 }
 
@@ -267,43 +285,101 @@ export function testZipPassword(zipPath: string, password: string): { success: b
  */
 export async function extractZip(
   zipPath: string,
-  password?: string
-): Promise<{ files: string[]; errors: string[] }> {
+  password?: string,
+  onExtractedFile?: (filePath: string) => void,
+  onRemoveExtractedFile?: (filePath: string) => void
+): Promise<{ files: string[]; errors: string[]; extractionId: string }> {
+  const manager = new TempDirectoryManager()
+  const extractionId = randomUUID()
   try {
-    if (zipTempManager !== null) {
-      zipTempManager.cleanup()
+    retryOrphanedZipCleanups()
+    if (zipExtractions.size >= MAX_ACTIVE_ZIP_EXTRACTIONS) {
+      throw new Error('Too many active ZIP extractions; clean up an existing extraction first')
     }
-
-    zipTempManager = new TempDirectoryManager()
-    const targetDir = zipTempManager.create()
+    const targetDir = manager.create()
+    const extraction: ActiveZipExtraction = { manager, enrolledPaths: [] }
+    zipExtractions.set(extractionId, extraction)
 
     const result = await zipExtractor.extract(zipPath, targetDir, password)
+
+    // Partial extraction is not a safe success state: the renderer cannot
+    // know whether a missing case is optional, corrupt, or failed to write.
+    // Fail the whole archive on any candidate error; the catch below removes
+    // the temporary directory so already-written files cannot be imported.
+    if (result.errors.length > 0) {
+      throw new Error(
+        `ZIP extraction failed for ${result.errors.length} candidate ` +
+          `entr${result.errors.length === 1 ? 'y' : 'ies'}: ${result.errors.join('; ')}`
+      )
+    }
+
+    if (onExtractedFile !== undefined) {
+      extraction.revokeEnrollment = onRemoveExtractedFile
+      for (const extractedFile of result.extractedFiles) {
+        extraction.enrolledPaths.push(extractedFile)
+        onExtractedFile(extractedFile)
+      }
+    }
 
     return JSON.parse(
       JSON.stringify({
         files: result.extractedFiles,
-        errors: result.errors
+        errors: result.errors,
+        extractionId
       })
     )
   } catch (error) {
+    // A genuinely empty/all-benign extraction is reported by ZipExtractor.extract
+    // as a normal resolved result ({ extractedFiles: [], errors: [] }) — it
+    // never reaches this catch. Anything that lands here (unreadable/corrupt
+    // archive, fs failure, or the all-entries-failed case thrown above) is an
+    // infrastructure fault and must not be reshaped into a fake-success
+    // zero-file result.
     mainLogger.error(`batch-import:extractZip error: ${error}`, 'import')
-    if (zipTempManager !== null) {
-      zipTempManager.cleanup()
-      zipTempManager = null
+    try {
+      cleanupZipTemp(extractionId)
+    } catch (cleanupError) {
+      orphanedZipExtractions.add(extractionId)
+      const cleanupMessage = formatErrorMessage(cleanupError, 'cleanup failed')
+      throw new Error(
+        `${formatErrorMessage(error, 'ZIP extraction failed')}; temporary-file cleanup also failed: ${cleanupMessage}`,
+        { cause: cleanupError }
+      )
     }
-    return {
-      files: [],
-      errors: [error instanceof Error ? error.message : 'Extraction failed']
-    }
+    throw error
   }
 }
 
 /**
  * Clean up temporary ZIP extraction directory.
  */
-export function cleanupZipTemp(): void {
-  if (zipTempManager !== null) {
-    zipTempManager.cleanup()
-    zipTempManager = null
+export function cleanupZipTemp(extractionId: string): void {
+  const extraction = zipExtractions.get(extractionId)
+  if (extraction === undefined) return
+
+  revokeExtractedPaths(extraction)
+  try {
+    extraction.manager.cleanup()
+  } catch (error) {
+    orphanedZipExtractions.add(extractionId)
+    throw error
   }
+  zipExtractions.delete(extractionId)
+  orphanedZipExtractions.delete(extractionId)
+}
+
+function retryOrphanedZipCleanups(): void {
+  for (const extractionId of [...orphanedZipExtractions]) {
+    cleanupZipTemp(extractionId)
+  }
+}
+
+function revokeExtractedPaths(extraction: ActiveZipExtraction): void {
+  if (extraction.revokeEnrollment !== undefined) {
+    for (const filePath of extraction.enrolledPaths) {
+      extraction.revokeEnrollment(filePath)
+    }
+  }
+  extraction.enrolledPaths = []
+  extraction.revokeEnrollment = undefined
 }

@@ -85,14 +85,8 @@ const ACMG_RANK_SQL = (col: string) => `CASE ${col}
   WHEN 'Benign' THEN 1
   ELSE 0 END`
 
-/**
- * Deduped per-coordinate aggregate for a single case_id ($1). Mirrors the
- * SQLite INCREMENTAL_ADD_SQL / INCREMENTAL_REMOVE_SQL deduped sub-selects in
- * src/shared/sql/cohort-summary-rebuild.ts:134-184 — duplicate per-case rows
- * collapse to one carrier (Pass-2 #4). Emits carrier/het/hom deltas so both
- * the add and remove paths can reuse the same shape.
- */
-export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string) => `
+/** Deduped per-coordinate aggregate for one case, shared by add/remove. */
+export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvisional = false) => `
   WITH deduped AS (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
            MAX(v.end_pos) AS end_pos,
@@ -107,8 +101,8 @@ export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string) => `
            MAX(v.transcript) AS transcript,
            MAX(v.omim_mim_number) AS omim_mim_number,
            MAX(v.gt_num) AS gt_num
-    FROM ${tbl('variants')} v
-    JOIN ${tbl('cases')} c ON c.id = v.case_id
+    FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
+    JOIN ${tbl(includeProvisional ? 'cases_all' : 'cases')} c ON c.id = v.case_id
     WHERE v.case_id = $1
     GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build
   ),
@@ -275,14 +269,16 @@ export class PostgresCohortSummaryRepository {
   async recomputeCohortFrequency({
     schema,
     client,
-    affectedBuilds
-  }: ScopedClient & { affectedBuilds?: string[] }): Promise<void> {
+    affectedBuilds,
+    includeProvisional = false
+  }: ScopedClient & { affectedBuilds?: string[]; includeProvisional?: boolean }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
+    const casesTable = tbl(includeProvisional ? 'cases_all' : 'cases')
     if (affectedBuilds && affectedBuilds.length > 0) {
       await client.query(
         `UPDATE ${tbl('cohort_variant_summary')} cvs
          SET cohort_frequency = cvs.carrier_count::float / NULLIF(c.total, 0)
-         FROM (SELECT genome_build, COUNT(*) AS total FROM ${tbl('cases')} GROUP BY genome_build) c
+         FROM (SELECT genome_build, COUNT(*) AS total FROM ${casesTable} GROUP BY genome_build) c
          WHERE cvs.genome_build = c.genome_build
            AND cvs.genome_build = ANY($1::text[])`,
         [affectedBuilds]
@@ -291,7 +287,7 @@ export class PostgresCohortSummaryRepository {
       await client.query(
         `UPDATE ${tbl('cohort_variant_summary')} cvs
          SET cohort_frequency = cvs.carrier_count::float / NULLIF(c.total, 0)
-         FROM (SELECT genome_build, COUNT(*) AS total FROM ${tbl('cases')} GROUP BY genome_build) c
+         FROM (SELECT genome_build, COUNT(*) AS total FROM ${casesTable} GROUP BY genome_build) c
          WHERE cvs.genome_build = c.genome_build`
       )
     }
@@ -308,8 +304,13 @@ export class PostgresCohortSummaryRepository {
     schema,
     client,
     caseId,
-    genomeBuild
-  }: ScopedClient & { caseId: number; genomeBuild?: string }): Promise<void> {
+    genomeBuild,
+    includeProvisional = false
+  }: ScopedClient & {
+    caseId: number
+    genomeBuild?: string
+    includeProvisional?: boolean
+  }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
     await client.query(
@@ -320,7 +321,7 @@ export class PostgresCohortSummaryRepository {
          gnomad_af, cadd, transcript, omim_mim_number,
          carrier_count, het_count, hom_count, variant_key,
          has_star, has_comment, acmg_best, cohort_frequency)
-      ${SCOPED_DEDUPED_AGG_SQL(tbl)}
+      ${SCOPED_DEDUPED_AGG_SQL(tbl, includeProvisional)}
       SELECT
         pc.chr, pc.pos, pc.end_pos, pc.ref, pc.alt, pc.variant_type, pc.genome_build,
         pc.gene_symbol, pc.cdna, pc.aa_change, pc.consequence, pc.func, pc.clinvar,
@@ -397,7 +398,8 @@ export class PostgresCohortSummaryRepository {
     await this.recomputeCohortFrequency({
       schema,
       client,
-      affectedBuilds: genomeBuild !== undefined ? [genomeBuild] : undefined
+      affectedBuilds: genomeBuild !== undefined ? [genomeBuild] : undefined,
+      includeProvisional
     })
 
     // C1 lifecycle: incremental maintenance records its time but never touches
@@ -467,9 +469,11 @@ export class PostgresCohortSummaryRepository {
   async refreshColumnMetas({
     schema,
     client,
-    caseId
-  }: ScopedClient & { caseId: number }): Promise<void> {
+    caseId,
+    includeProvisional = false
+  }: ScopedClient & { caseId: number; includeProvisional?: boolean }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
+    const variantsTable = tbl(includeProvisional ? 'variants_all' : 'variants')
 
     await client.query(`DELETE FROM ${tbl('cohort_column_meta')} WHERE case_id = $1`, [caseId])
 
@@ -484,7 +488,7 @@ export class PostgresCohortSummaryRepository {
       }
     }
     const aggRes = await client.query(
-      `SELECT ${aggSelect.join(', ')} FROM ${tbl('variants')} WHERE case_id = $1`,
+      `SELECT ${aggSelect.join(', ')} FROM ${variantsTable} WHERE case_id = $1`,
       [caseId]
     )
     const aggRow = (aggRes.rows[0] ?? {}) as Record<string, string | number | null>
@@ -500,7 +504,7 @@ export class PostgresCohortSummaryRepository {
       const unionParts = lowCardinality.map(
         (col) =>
           `SELECT '${col}' AS col_key, CAST("${col}" AS TEXT) AS val
-             FROM ${tbl('variants')}
+             FROM ${variantsTable}
              WHERE case_id = $1 AND "${col}" IS NOT NULL
              GROUP BY "${col}"`
       )

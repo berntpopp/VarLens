@@ -9,9 +9,14 @@ import type {
   PanelWithCount
 } from '../../../shared/types/panels'
 import { quoteIdentifier } from './identifiers'
+import { MAX_BED_FILTER_DECOMPRESSED_BYTES } from '../../import/vcf/bed-filter'
+import { readBedEntries, type BedEntry, type BedReaderOptions } from '../../import/vcf/bed-reader'
+import { resolveMaxDecompressedBytes } from '../../import/stream-utils'
 
 type Queryable = Pick<Pool, 'query' | 'connect'>
 type Row = Record<string, unknown>
+
+export const REGION_FILE_INSERT_CHUNK_SIZE = 10_000
 
 const integerFields = new Set([
   'id',
@@ -354,40 +359,37 @@ export class PostgresPanelsRepository {
     await this.pool.query(`DELETE FROM ${this.table('region_files')} WHERE id = $1`, [id])
   }
 
-  async importBedEntries(
+  async importBedFile(
     fileId: number,
-    entries: Array<{ chr: string; start: number; end: number; label?: string }>
+    filePath: string,
+    options: BedReaderOptions = {}
   ): Promise<RegionFile> {
     return this.withTransaction(async (client) => {
+      const locked = await client.query<Row>(
+        `SELECT id FROM ${this.table('region_files')} WHERE id = $1 FOR UPDATE`,
+        [fileId]
+      )
+      if (locked.rows.length === 0) throw new Error(`Region file ${fileId} not found`)
+
       await client.query(
         `DELETE FROM ${this.table('region_file_entries')} WHERE region_file_id = $1`,
         [fileId]
       )
 
-      const totalBases = entries.reduce((sum, entry) => sum + (entry.end - entry.start), 0)
-      if (entries.length > 0) {
-        await client.query(
-          `
-            INSERT INTO ${this.table('region_file_entries')} (
-              region_file_id,
-              chr,
-              start_pos,
-              end_pos,
-              label
-            )
-            SELECT $1, chr, start_pos, end_pos, label
-            FROM UNNEST($2::text[], $3::bigint[], $4::bigint[], $5::text[])
-              AS entry(chr, start_pos, end_pos, label)
-          `,
-          [
-            fileId,
-            entries.map((entry) => entry.chr),
-            entries.map((entry) => entry.start),
-            entries.map((entry) => entry.end),
-            entries.map((entry) => entry.label ?? null)
-          ]
-        )
+      const maxBytes = Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
+      let chunk: BedEntry[] = []
+      let regionCount = 0
+      let totalBases = 0
+      for await (const entry of readBedEntries(filePath, maxBytes, options)) {
+        chunk.push(entry)
+        regionCount += 1
+        totalBases = addSafeBaseCount(totalBases, entry.end - entry.start)
+        if (chunk.length >= REGION_FILE_INSERT_CHUNK_SIZE) {
+          await this.insertRegionChunk(client, fileId, chunk)
+          chunk = []
+        }
       }
+      if (chunk.length > 0) await this.insertRegionChunk(client, fileId, chunk)
 
       await client.query(
         `
@@ -395,7 +397,7 @@ export class PostgresPanelsRepository {
           SET region_count = $1, total_bases = $2, updated_at = $3
           WHERE id = $4
         `,
-        [entries.length, totalBases, Date.now(), fileId]
+        [regionCount, totalBases, Date.now(), fileId]
       )
 
       const result = await client.query<Row>(
@@ -404,6 +406,34 @@ export class PostgresPanelsRepository {
       )
       return firstNormalized<RegionFile>(result) as RegionFile
     })
+  }
+
+  private async insertRegionChunk(
+    client: Pick<PoolClient, 'query'>,
+    fileId: number,
+    chunk: BedEntry[]
+  ): Promise<void> {
+    await client.query(
+      `
+        INSERT INTO ${this.table('region_file_entries')} (
+          region_file_id,
+          chr,
+          start_pos,
+          end_pos,
+          label
+        )
+        SELECT $1, chr, start_pos, end_pos, label
+        FROM UNNEST($2::text[], $3::bigint[], $4::bigint[], $5::text[])
+          AS entry(chr, start_pos, end_pos, label)
+      `,
+      [
+        fileId,
+        chunk.map((entry) => entry.chr),
+        chunk.map((entry) => entry.start),
+        chunk.map((entry) => entry.end),
+        chunk.map((entry) => entry.label ?? null)
+      ]
+    )
   }
 
   private async insertPanel(
@@ -489,4 +519,12 @@ export class PostgresPanelsRepository {
   private table(name: string): string {
     return `${quoteIdentifier(this.schema)}.${quoteIdentifier(name)}`
   }
+}
+
+function addSafeBaseCount(total: number, increment: number): number {
+  const next = total + increment
+  if (!Number.isSafeInteger(next)) {
+    throw new RangeError('BED total base count exceeds the safe integer range')
+  }
+  return next
 }

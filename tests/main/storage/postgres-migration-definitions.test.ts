@@ -4,7 +4,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(13)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(15)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -18,7 +18,9 @@ describe('Postgres migration definitions', () => {
       '0010',
       '0011',
       '0012',
-      '0013'
+      '0013',
+      '0014',
+      '0015'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -33,7 +35,9 @@ describe('Postgres migration definitions', () => {
       'cohort_summary',
       'projects_registry',
       'extend_audit_contract',
-      'central_audit_schema'
+      'central_audit_schema',
+      'variant_transcripts_func',
+      'import_visibility'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {
@@ -82,5 +86,18 @@ describe('Postgres migration definitions', () => {
     expect(centralAuditMigration?.sql).toContain('BEFORE TRUNCATE ON varlens_audit."audit_log"')
     expect(centralAuditMigration?.sql).toContain(`to_regclass('"__schema__"."audit_log"')`)
     expect(centralAuditMigration?.sql).toContain('DROP TABLE "__schema__"."audit_log"')
+
+    const transcriptFuncMigration = POSTGRES_MIGRATIONS.find(
+      (migration) => migration.version === '0014'
+    )
+    expect(transcriptFuncMigration?.name).toBe('variant_transcripts_func')
+    expect(transcriptFuncMigration?.sql).toContain('ALTER TABLE "__schema__"."variant_transcripts"')
+    expect(transcriptFuncMigration?.sql).toContain('ADD COLUMN IF NOT EXISTS func TEXT')
+    expect(transcriptFuncMigration?.sql).toContain('SET func = v.func')
+    expect(transcriptFuncMigration?.sql).toContain('v.func IS NOT NULL')
+    expect(transcriptFuncMigration?.sql).toContain(
+      'vt.is_selected = 1 AND v.transcript = vt.transcript_id'
+    )
+    expect(transcriptFuncMigration?.sql).toContain('FROM "__schema__"."variants" AS v')
   })
 })

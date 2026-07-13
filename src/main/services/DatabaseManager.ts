@@ -7,6 +7,7 @@
 
 import { DatabaseService } from '../database/DatabaseService'
 import { DatabaseError, WrongPasswordError } from '../database/errors'
+import { isNotADatabaseError } from '../database/sqlite-error'
 import { RecentDatabasesService, type RecentDatabase } from './RecentDatabasesService'
 import { mainLogger } from './MainLogger'
 import { createSqliteStorageSession } from '../storage/sqlite/createSqliteStorageSession'
@@ -92,10 +93,7 @@ export class DatabaseManager {
         }
       }
 
-      if (
-        error instanceof Error &&
-        error.message.includes('file is encrypted or is not a database')
-      ) {
+      if (isNotADatabaseError(error)) {
         return { needsPassword: true }
       }
 
@@ -274,7 +272,12 @@ export class DatabaseManager {
    *
    * @returns Database info object, or null if no database is open
    */
-  getCurrentInfo(): { path: string; name: string; encrypted: boolean } | null {
+  getCurrentInfo(): {
+    path: string
+    name: string
+    encrypted: boolean
+    unencryptedMigratable: boolean
+  } | null {
     if (this.currentSession === null) {
       return null
     }
@@ -283,14 +286,16 @@ export class DatabaseManager {
       return {
         path: this.currentSession.workspace.connectionUrlRedacted,
         name: `PostgreSQL: ${this.currentSession.workspace.connectionLabel}`,
-        encrypted: false
+        encrypted: false,
+        unencryptedMigratable: false
       }
     }
 
     return {
       path: this.currentSession.workspace.path,
       name: this.currentSession.workspace.name,
-      encrypted: this.currentSession.workspace.encrypted
+      encrypted: this.currentSession.workspace.encrypted,
+      unencryptedMigratable: !this.currentSession.workspace.encrypted
     }
   }
 

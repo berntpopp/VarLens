@@ -70,6 +70,7 @@ export const TRANSCRIPT_INSERT_COLUMNS = [
   'transcript_id',
   'gene_symbol',
   'consequence',
+  'func',
   'cdna',
   'aa_change',
   'hpo_sim_score',
@@ -88,6 +89,9 @@ export interface FileImportRequest {
   /** VCF-specific: genome build override */
   vcfGenomeBuild?: string
 }
+
+/** Maximum number of representative skip reasons retained per imported file. */
+export const MAX_IMPORT_SKIP_REASONS = 10
 
 /** Worker -> Main messages */
 export type WorkerMessage =
@@ -109,6 +113,8 @@ export type WorkerMessage =
         caseName: string
         variantCount: number
         skipped: number
+        /** Representative reasons, capped at MAX_IMPORT_SKIP_REASONS. */
+        skipReasons: string[]
         elapsed: number
       }
     }

@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.70.0] — 2026-07-13
+
+Security, data-correctness, and failure-handling release consolidating PRs #306–#314.
+
+### Added
+
+- New SQLite databases are encrypted by default with managed per-database keys,
+  crash-recoverable provisioning, optional recovery-passphrase sidecars, and a
+  consented, reversible migration flow for existing plaintext databases.
+- Transcript records now store IMPACT in `consequence` and the Sequence Ontology term
+  in `func` consistently across JSON, VEP, SnpEff, SQLite, PostgreSQL, and the UI.
+
+### Security
+
+- Import readers now enforce decompressed-byte, line-length, gzip-expansion, BED-entry,
+  ZIP archive, ZIP entry-count, and decoded-size limits while retaining streamed WGS
+  support. Malformed VCF coordinates and quality values are rejected with counted reasons.
+- File and navigation authority is restricted to explicit selections or derived extraction
+  paths. Resolved symlink targets are pinned, one-shot capabilities are revoked after use,
+  and the boundary covers renderer navigation, redirects, external URLs, database selection,
+  BED files, and ZIP extraction.
+- Session-level CSP is locked to the renderer policy, denies framing, and covers global
+  windows, redirects, and webviews without breaking the Mol* viewer.
+- Structured logging redacts additional credential forms; SQL directions, association
+  filters, and PostgreSQL health checks now use allowlists or bound parameters.
+- Encryption key-registry mutation fails closed on damaged registries, preserves displaced
+  recovery keys, and avoids overwriting recoverable key material.
+
+### Fixed
+
+- Renderer IPC consumers consistently unwrap `IpcResult`, surface structured failures,
+  serialize metadata mutations, isolate database-switch generations, and prevent stale
+  import promises/events from overwriting a later run.
+- ZIP imports no longer turn extraction failures into apparent success. Each extraction has
+  independent cleanup authority, bounded concurrency, retryable plaintext cleanup, and
+  lifecycle cleanup on failure, cancellation, back, close, and stale completion.
+- VEP/SnpEff multi-allelic matching now fails closed on ambiguity, supports standard compound
+  ANN alleles, respects declared allele vectors, and maps genotype AD using header semantics.
+- Transcript selection preserves canonical impact/SO semantics and repairs provable legacy
+  values equivalently in SQLite and PostgreSQL migrations.
+- Panel interval failures, import failures, dialog failures, and other formerly discarded
+  errors now reach the user instead of silently degrading behavior.
+
+### Changed
+
+- PostgreSQL BED persistence is chunked transactionally, and web BED imports use the shared
+  bounded streaming reader instead of materializing the full input text.
+
+## [0.69.7] — 2026-07-06
+
+Dependency maintenance release.
+
+### Changed
+
+- Bumped fastify to 5.10.0, fastify-type-provider-zod to 7.0.0, Kysely to 0.29.3,
+  Plotly.js basic to 3.7.0, and Vitest/coverage to 4.1.10.
+
+## [0.69.6] — 2026-07-05
+
+GitHub Actions maintenance release.
+
+### Changed
+
+- Updated pinned paths-filter, Docker build/login, and CodeQL upload actions while retaining
+  immutable full-SHA references.
+
 ## [0.69.5] — 2026-07-03
 
 Dependency maintenance release.

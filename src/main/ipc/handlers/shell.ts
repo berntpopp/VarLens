@@ -7,18 +7,14 @@ import { setUserDomains, isUrlSafeForExternal } from '../../utils/url-validation
 
 /**
  * Shell IPC handlers
- * Channels: shell:openExternal, shell:showItemInFolder, shell:updateUserDomains
+ * Channels: shell:openExternal, shell:updateUserDomains
  *
  * Opens external URLs in the system browser with security validation.
  * Only HTTPS URLs on whitelisted domains are allowed.
- * Shows files in system file manager for export feedback.
  */
 
 /** Schema for URL string */
 const UrlSchema = z.string().min(1).max(2048)
-
-/** Schema for file path string */
-const FilePathSchema = z.string().min(1).max(1024)
 
 /** Schema for user domains array */
 const UserDomainsSchema = z.array(z.string().min(1).max(253)).max(100)
@@ -53,27 +49,6 @@ export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
       }
 
       await shell.openExternal(validated.data)
-      return { success: true }
-    })
-  })
-
-  /**
-   * Show file in system file manager
-   * Used for export feedback ("Open folder" action)
-   */
-  ipcMain.handle('shell:showItemInFolder', async (_event, filePath: unknown) => {
-    return wrapHandler(async () => {
-      // ANTI-07: Runtime validation at IPC boundary
-      const validated = FilePathSchema.safeParse(filePath)
-      if (!validated.success) {
-        mainLogger.error(
-          `Invalid shell:showItemInFolder params: ${validated.error.message}`,
-          'shell'
-        )
-        throw new Error('Invalid parameters')
-      }
-
-      shell.showItemInFolder(validated.data)
       return { success: true }
     })
   })

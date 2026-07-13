@@ -194,6 +194,29 @@ describe('PostgresCohortRepository', () => {
     expect(dataParams).toEqual(['1', 200, 100, 'GRCh37', 10, 0])
   })
 
+  it('propagates the error instead of silently running unfiltered when panel interval resolution fails', async () => {
+    // Clinical-safety guarantee: a panel IS active (active_panel_ids is
+    // non-empty) but the interval computation itself throws. The cohort
+    // query must reject (surface the failure) rather than silently fall
+    // back to an unfiltered result set — see PostgresCohortRepository's
+    // resolvePanelParams for the contract this mirrors from panelIntervalHelper.ts.
+    const query = vi.fn().mockResolvedValueOnce({ rows: [{ chr: '1' }] })
+    const resolveIntervals = vi
+      .fn()
+      .mockRejectedValue(new Error('Simulated panel interval computation failure'))
+    const repository = new PostgresCohortRepository({ query } as never, 'public', resolveIntervals)
+
+    await expect(
+      repository.queryVariants({
+        active_panel_ids: [3, 4],
+        panel_padding_bp: 7500,
+        genome_build: 'GRCh37',
+        limit: 10,
+        offset: 0
+      })
+    ).rejects.toThrow('Simulated panel interval computation failure')
+  })
+
   it('resolves active panels from PostgreSQL panel genes through gene reference coordinates', async () => {
     geneReferenceMocks.getCoordinatesForGenes.mockReturnValue(
       new Map([

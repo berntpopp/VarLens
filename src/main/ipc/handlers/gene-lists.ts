@@ -1,6 +1,6 @@
 import { wrapHandler } from '../errorHandler'
+import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
-import { readFile } from 'node:fs/promises'
 import {
   GeneListIdSchema,
   GeneListCreateSchema,
@@ -9,6 +9,7 @@ import {
   BedImportSchema
 } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
+import { isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
 
 /**
  * Gene Lists and Region Files IPC handlers
@@ -215,42 +216,17 @@ export function registerGeneListHandlers({
         throw new Error('Invalid BED import parameters')
       }
 
-      const content = await readFile(validated.data.filePath, 'utf-8')
-      const entries: Array<{ chr: string; start: number; end: number; label?: string }> = []
-
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim()
-        if (
-          trimmed === '' ||
-          trimmed.startsWith('#') ||
-          trimmed.startsWith('browser') ||
-          trimmed.startsWith('track')
-        ) {
-          continue
-        }
-        const parts = trimmed.split('\t')
-        if (parts.length >= 3) {
-          const start = parseInt(parts[1], 10)
-          const end = parseInt(parts[2], 10)
-          if (!isNaN(start) && !isNaN(end)) {
-            entries.push({
-              chr: parts[0],
-              start,
-              end,
-              label: parts.length >= 4 ? parts[3] : undefined
-            })
-          }
-        }
+      if (!isStrictlyEnrolledPath(validated.data.filePath)) {
+        throw new InvalidParametersError(
+          `region-files:importBed: filePath is not in the allowed import paths: ${validated.data.filePath}`,
+          'The selected file is not in an allowed location.'
+        )
       }
-
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'region-files:importBed',
-          params: [validated.data.fileId, entries]
-        })
-      }
-      return getDb().geneLists.importBedEntries(validated.data.fileId, entries)
+      return await session.getWriteExecutor().execute({
+        type: 'region-files:importBed',
+        params: [validated.data.fileId, validated.data.filePath, { rejectMalformedRows: false }]
+      })
     })
   })
 }

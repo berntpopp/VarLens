@@ -14,6 +14,7 @@ function makeDbRow(overrides: Partial<TranscriptAnnotation> = {}): TranscriptAnn
     transcript_id: 'ENST00000357654',
     gene_symbol: 'BRCA1',
     consequence: 'MODERATE',
+    func: 'missense_variant',
     cdna: 'c.123A>G',
     aa_change: 'p.Arg41Gly',
     hpo_sim_score: null,
@@ -117,6 +118,65 @@ describe('mergeTranscripts', () => {
     expect(result[0]._vepRow).toBe(vep[0])
   })
 
+  describe('func (SO term) propagation', () => {
+    it('surfaces the DB row func (SO term) for a DB-only ("imported") row', () => {
+      const db = [makeDbRow({ consequence: 'MODERATE', func: 'missense_variant' })]
+      const result = mergeTranscripts(db, [])
+
+      expect(result[0].consequence).toBe('MODERATE')
+      expect(result[0].func).toBe('missense_variant')
+    })
+
+    it('does not lose information: func stays null (not dropped) when the DB row has none', () => {
+      const db = [makeDbRow({ func: null })]
+      const result = mergeTranscripts(db, [])
+
+      expect(result[0].func).toBeNull()
+    })
+
+    it('joins VEP consequence_terms into func for a VEP-only row', () => {
+      const vep = [makeVepRow({ consequence_terms: ['missense_variant', 'splice_region_variant'] })]
+      const result = mergeTranscripts([], vep)
+
+      expect(result[0].func).toBe('missense_variant, splice_region_variant')
+    })
+
+    it('sets func to null for a VEP-only row with no consequence_terms', () => {
+      const vep = [makeVepRow({ consequence_terms: [] })]
+      const result = mergeTranscripts([], vep)
+
+      expect(result[0].func).toBeNull()
+    })
+
+    it('overwrites DB func with fresh VEP consequence_terms on merge ("both")', () => {
+      const db = [makeDbRow({ transcript_id: 'ENST00000357654', func: 'missense_variant' })]
+      const vep = [
+        makeVepRow({
+          transcript_id: 'ENST00000357654.9',
+          consequence_terms: ['missense_variant', 'NMD_transcript_variant']
+        })
+      ]
+      const result = mergeTranscripts(db, vep)
+
+      expect(result[0].source).toBe('both')
+      expect(result[0].func).toBe('missense_variant, NMD_transcript_variant')
+    })
+
+    it('preserves DB func on merge when VEP provides no consequence_terms', () => {
+      const db = [makeDbRow({ transcript_id: 'ENST00000357654', func: 'missense_variant' })]
+      const vep = [
+        makeVepRow({
+          transcript_id: 'ENST00000357654.9',
+          consequence_terms: []
+        })
+      ]
+      const result = mergeTranscripts(db, vep)
+
+      expect(result[0].source).toBe('both')
+      expect(result[0].func).toBe('missense_variant')
+    })
+  })
+
   it('matches version-stripped IDs (ENST00000357654.9 ≈ ENST00000357654)', () => {
     const db = [makeDbRow({ transcript_id: 'ENST00000357654' })]
     const vep = [makeVepRow({ transcript_id: 'ENST00000357654.9' })]
@@ -189,6 +249,18 @@ describe('mergeTranscripts', () => {
       const result = mergeTranscripts([], vep)
 
       expect(result.map((r) => r.impact)).toEqual(['HIGH', 'MODERATE', 'LOW', 'MODIFIER'])
+    })
+
+    it('sorts DB-only rows by their canonical consequence impact', () => {
+      const db = [
+        makeDbRow({ id: 1, transcript_id: 'A_MODERATE', consequence: 'MODERATE' }),
+        makeDbRow({ id: 2, transcript_id: 'Z_HIGH', consequence: 'HIGH' })
+      ]
+
+      const result = mergeTranscripts(db, [])
+
+      expect(result.map((row) => row.transcript_id)).toEqual(['Z_HIGH', 'A_MODERATE'])
+      expect(result.map((row) => row.impact)).toEqual(['HIGH', 'MODERATE'])
     })
 
     it('sorts alphabetically by transcript_id as tiebreaker', () => {

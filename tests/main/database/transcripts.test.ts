@@ -12,12 +12,12 @@ function makeVariant(overrides: Partial<VariantInsert> = {}): VariantInsert {
     alt: 'G',
     gene_symbol: 'BRCA1',
     omim_mim_number: null,
-    consequence: 'missense_variant',
+    consequence: 'MODERATE',
     gnomad_af: 0.001,
     cadd: 28,
     clinvar: null,
     gt_num: '0/1',
-    func: null,
+    func: 'missense_variant',
     qual: 30,
     hpo_sim_score: null,
     transcript: 'NM_007294.4',
@@ -44,13 +44,14 @@ describe('DatabaseService transcript methods', () => {
 
     // Insert multiple transcript rows for testing
     const insertTx = db.database.prepare(`
-      INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, cdna, aa_change, hpo_sim_score, moi, is_selected)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change, hpo_sim_score, moi, is_selected)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     insertTx.run(
       variantId,
       'NM_007294.4',
       'BRCA1',
+      'MODERATE',
       'missense_variant',
       'c.123A>G',
       'p.His41Arg',
@@ -62,6 +63,7 @@ describe('DatabaseService transcript methods', () => {
       variantId,
       'NM_007299.4',
       'BRCA1',
+      'LOW',
       'synonymous_variant',
       'c.456C>T',
       null,
@@ -73,6 +75,7 @@ describe('DatabaseService transcript methods', () => {
       variantId,
       'NR_027676.2',
       'BRCA1',
+      'MODIFIER',
       'non_coding_transcript_variant',
       null,
       null,
@@ -127,7 +130,8 @@ describe('DatabaseService transcript methods', () => {
       const variants = db.variants.getVariants({ case_id: caseId }, 10)
       const v = variants.data[0]
       expect(v.transcript).toBe('NM_007299.4')
-      expect(v.consequence).toBe('synonymous_variant')
+      expect(v.consequence).toBe('LOW')
+      expect(v.func).toBe('synonymous_variant')
       expect(v.cdna).toBe('c.456C>T')
       expect(v.aa_change).toBeNull()
     })

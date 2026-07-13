@@ -239,6 +239,7 @@ export const mockApi: WindowAPI = {
     selectFile: async () => '/mock/selected/file.json',
     selectFiles: async () => ['/mock/selected/file.vcf.gz'],
     selectBedFile: async () => '/mock/regions.bed',
+    enrollDroppedFiles: async (files) => files.map((file) => `/mock/uploads/${file.name}`),
     start: async () => ({
       caseId: cases.length + 1,
       variantCount: 1000,
@@ -274,7 +275,6 @@ export const mockApi: WindowAPI = {
     onProgress: () => () => {},
     cancel: async () => {}
   },
-
   system: {
     getVersion: async () => ({ app: '0.6.0-mock', electron: 'browser-mode' }),
     getUserDataPath: async () => '/mock/user/data',
@@ -283,18 +283,16 @@ export const mockApi: WindowAPI = {
     getWorkerThreads: async () => 0,
     getLogFilePath: async () => '/mock/logs/main.log'
   },
-
   export: {
     variants: async () => ({ success: true, filePath: '/mock/export.xlsx' }),
-    cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' })
+    cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' }),
+    revealInFolder: async () => ({ success: false })
   },
-
   shell: {
     openExternal: async (url) => {
       window.open(url, '_blank')
       return { success: true }
     },
-    showItemInFolder: async () => {},
     updateDomains: async () => {}
   },
 
@@ -310,6 +308,9 @@ export const mockApi: WindowAPI = {
       info: { path: '/mock/new-database.db', name: 'New Mock Database', encrypted: false }
     }),
     rekey: async () => ({ success: true }),
+    migrateToEncrypted: async () => ({ success: true }),
+    deletePlaintextBackup: async () => ({ success: true }),
+    setRecoveryPassphrase: async () => ({ success: true, recoveryPassphraseSet: true }),
     info: async () => ({ path: '/mock/database.db', name: 'Mock Database', encrypted: false }),
     capabilities: async () => MOCK_SQLITE_CAPABILITIES,
     postgresDiagnostics: async () => ({ ok: false, schema: '' }),
@@ -353,7 +354,6 @@ export const mockApi: WindowAPI = {
     deleteFile: async () => ({ success: true }),
     showInFolder: async () => ({ success: true })
   },
-
   batchImport: {
     selectFiles: async () => [],
     selectFolder: async () => [],
@@ -364,8 +364,8 @@ export const mockApi: WindowAPI = {
     onComplete: () => () => {},
     selectZip: async () => null,
     testZipPassword: async () => ({ success: false }),
-    extractZip: async () => ({ files: [], errors: [] }),
-    cleanupZipTemp: async () => {}
+    extractZip: async () => ({ files: [], errors: [], extractionId: 'mock-extraction-id' }),
+    cleanupZipTemp: async (_extractionId: string) => {}
   },
 
   cohort: {

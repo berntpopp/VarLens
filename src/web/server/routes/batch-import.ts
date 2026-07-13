@@ -10,6 +10,7 @@ import {
 } from '../../../main/ipc/handlers/batch-import-logic'
 import { extractCaseName } from '../../../main/import/batch-utils'
 import { ImportServerPathArgSchema } from '../../../shared/api/schemas/import'
+import { BatchImportRunIdSchema } from '../../../shared/ipc/domains/batch-import-schemas'
 import type { BatchResult, DuplicateChoice } from '../../../shared/types/api'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import {
@@ -33,6 +34,7 @@ interface WebBatchImportJobParams {
   files: ResolvedBatchFile[]
   duplicateStrategy: DuplicateChoice
   stripText: string | undefined
+  runId: string
 }
 
 type BatchFileResolution =
@@ -100,7 +102,7 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
 
     'batch-import:start': {
       async handle(args, request, reply, { session, events }) {
-        const [filePaths, duplicateStrategy, stripText] = args
+        const [filePaths, duplicateStrategy, stripText, runId] = args
         if (!Array.isArray(filePaths)) {
           reply.code(400)
           return { error: 'invalid-files', message: 'filePaths must be an array' }
@@ -108,6 +110,11 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
         if (duplicateStrategy !== 'skip' && duplicateStrategy !== 'overwrite') {
           reply.code(400)
           return { error: 'invalid-duplicate-strategy', message: 'duplicateStrategy is invalid' }
+        }
+        const parsedRunId = BatchImportRunIdSchema.safeParse(runId)
+        if (!parsedRunId.success) {
+          reply.code(400)
+          return { error: 'invalid-run-id', message: 'runId is invalid' }
         }
 
         const resolution = resolveBatchFiles(filePaths, request.session.user?.id)
@@ -121,7 +128,8 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
           {
             files: resolution.files,
             duplicateStrategy,
-            stripText: typeof stripText === 'string' ? stripText : undefined
+            stripText: typeof stripText === 'string' ? stripText : undefined,
+            runId: parsedRunId.data
           },
           async (ctx, params) => {
             ctx.registerCancel(cancelImport)
@@ -129,6 +137,7 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
               params.files,
               params.duplicateStrategy,
               params.stripText,
+              params.runId,
               request.session.user?.id,
               session,
               events,
@@ -218,8 +227,13 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
     },
 
     'batch-import:cleanupZipTemp': {
-      handle() {
-        cleanupZipTemp()
+      handle(args, _request, reply) {
+        const [extractionId] = args
+        if (typeof extractionId !== 'string' || extractionId.length === 0) {
+          reply.code(400)
+          return { error: 'invalid-extraction-id', message: 'extractionId is required' }
+        }
+        cleanupZipTemp(extractionId)
       }
     }
   }
@@ -240,25 +254,29 @@ async function extractWebUploadZip(
   zipRef: string,
   userId: number | undefined,
   password: string | undefined
-): Promise<{ files: string[]; errors: string[] } | null> {
+): Promise<{ files: string[]; errors: string[]; extractionId: string } | null> {
   const upload = resolveUploadedFile(zipRef, userId)
   if (upload === null || userId === undefined) return null
 
   const result = await extractZip(upload.storedPath, password)
-  const stagedFiles = []
-  for (const filePath of result.files) {
-    stagedFiles.push(
-      await stageExistingFileUpload({
-        userId,
-        originalName: basename(filePath),
-        sourcePath: filePath
-      })
-    )
-  }
-  cleanupZipTemp()
-  return {
-    files: stagedFiles.map((file) => file.ref),
-    errors: result.errors
+  try {
+    const stagedFiles = []
+    for (const filePath of result.files) {
+      stagedFiles.push(
+        await stageExistingFileUpload({
+          userId,
+          originalName: basename(filePath),
+          sourcePath: filePath
+        })
+      )
+    }
+    return {
+      files: stagedFiles.map((file) => file.ref),
+      errors: result.errors,
+      extractionId: result.extractionId
+    }
+  } finally {
+    cleanupZipTemp(result.extractionId)
   }
 }
 
@@ -309,6 +327,7 @@ async function startWebBatchImport(
   files: ResolvedBatchFile[],
   duplicateStrategy: DuplicateChoice,
   stripText: string | undefined,
+  runId: string,
   userId: number | undefined,
   session: Parameters<OverrideHandler['handle']>[3]['session'],
   events: Parameters<OverrideHandler['handle']>[3]['events'],
@@ -361,6 +380,7 @@ async function startWebBatchImport(
         onProgress: (progress) => {
           if (userId === undefined) return
           events.publish(userId, WEB_EVENT_BATCH_IMPORT_PROGRESS, {
+            runId,
             currentIndex: index,
             totalFiles: files.length,
             currentFileName: file.fileName,
@@ -398,7 +418,7 @@ async function startWebBatchImport(
 
   if (userId !== undefined) {
     events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
-    events.publish(userId, WEB_EVENT_BATCH_IMPORT_COMPLETE, result)
+    events.publish(userId, WEB_EVENT_BATCH_IMPORT_COMPLETE, { ...result, runId })
   }
 
   return result

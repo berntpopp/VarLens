@@ -16,7 +16,7 @@ import { mainLogger } from '../../services/MainLogger'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { ImportFilters } from '../../import/vcf/import-filters'
-import type { StorageImportExecutor, StorageImportFileFilters } from '../../storage/import-executor'
+import type { StorageImportFileFilters } from '../../storage/import-executor'
 import type { StorageSession } from '../../storage/session'
 
 /**
@@ -83,8 +83,28 @@ export interface VcfImportOptions {
   genomeBuild?: string
 }
 
-// Keep a reference to the active storage import executor for cancellation.
-let activeImportExecutor: StorageImportExecutor | null = null
+interface ActiveImportOperation {
+  cancel: () => void
+}
+
+// Keep the full operation (not only a worker client) reachable for cancellation.
+let activeImportOperation: ActiveImportOperation | null = null
+
+async function withActiveImportOperation<T>(
+  cancel: () => void,
+  operation: () => Promise<T>
+): Promise<T> {
+  if (activeImportOperation !== null) {
+    throw new Error('An import operation is already in progress')
+  }
+  const current = { cancel }
+  activeImportOperation = current
+  try {
+    return await operation()
+  } finally {
+    if (activeImportOperation === current) activeImportOperation = null
+  }
+}
 
 /**
  * Start a single-file import through the active storage session's executor.
@@ -101,29 +121,25 @@ export async function startImport(
 ): Promise<ImportResult> {
   const session = getSession()
   const executor = session.getImportExecutor()
-  activeImportExecutor = executor
-  try {
-    return await executor.importSingleFile({
-      filePath,
-      caseName,
-      vcfOptions,
-      throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
-      onProgress: callbacks.onProgress
-    })
-  } finally {
-    if (activeImportExecutor === executor) {
-      activeImportExecutor = null
+  return withActiveImportOperation(
+    () => executor.cancel(),
+    async () => {
+      return executor.importSingleFile({
+        filePath,
+        caseName,
+        vcfOptions,
+        throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
+        onProgress: callbacks.onProgress
+      })
     }
-  }
+  )
 }
 
 /**
  * Cancel the active import operation.
  */
 export function cancelImport(): void {
-  if (activeImportExecutor !== null) {
-    activeImportExecutor.cancel()
-  }
+  activeImportOperation?.cancel()
 }
 
 /**
@@ -190,9 +206,11 @@ async function startMultiFileImportSqlite(
   getSession: () => StorageSession,
   getDb: () => DatabaseService,
   callbacks: ImportCallbacks,
-  importFilters?: ImportFilters
+  importFilters?: ImportFilters,
+  signal?: AbortSignal
 ): Promise<MultiFileImportResult> {
   const startTime = Date.now()
+  const isCancelled = (): boolean => signal?.aborted === true
 
   if (files.length === 0) {
     throw new Error('No files provided for import')
@@ -228,13 +246,14 @@ async function startMultiFileImportSqlite(
 
   // Import first file — creates the case
   const firstFile = files[0]
-  const firstResult = await startImport(
-    firstFile.filePath,
+  const firstCallbacks = wrapCallbacksForFile(firstFile, 0)
+  const firstResult = await getSession().getImportExecutor().importSingleFile({
+    filePath: firstFile.filePath,
     caseName,
     vcfOptions,
-    getSession,
-    wrapCallbacksForFile(firstFile, 0)
-  )
+    throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
+    onProgress: firstCallbacks.onProgress
+  })
 
   if (firstResult.caseId === 0) {
     throw new Error(
@@ -299,6 +318,7 @@ async function startMultiFileImportSqlite(
   try {
     // Append remaining files into the same case
     for (let i = 1; i < files.length; i++) {
+      if (isCancelled()) break
       const spec = files[i]
       try {
         // ── Genome build lock enforcement ───────────────────────────
@@ -322,7 +342,8 @@ async function startMultiFileImportSqlite(
           vcfOptions,
           getDb,
           wrapCallbacksForFile(spec, i),
-          importFilters
+          importFilters,
+          signal
         )
 
         db.cases.insertImportFile({
@@ -352,6 +373,7 @@ async function startMultiFileImportSqlite(
           variantCount: 0,
           error: message
         })
+        if (isCancelled()) break
       }
     }
   } finally {
@@ -461,36 +483,47 @@ export async function startMultiFileImport(
   filtersPayload?: ImportFiltersPayload
 ): Promise<MultiFileImportResult> {
   const session = getSession()
+  const executor = session.getImportExecutor()
+  const controller = new AbortController()
 
-  if (session.capabilities.backend === 'postgres') {
-    const executor = session.getImportExecutor()
-    const storageFilters =
-      filtersPayload !== undefined ? translateFiltersPayloadToStorage(filtersPayload) : undefined
-    const result = await executor.importMultiFile({
-      caseName,
-      files,
-      vcfOptions,
-      filters: storageFilters,
-      onProgress: callbacks.onProgress
-    })
-    return {
-      caseId: result.caseId,
-      totalVariants: result.variantCount,
-      totalSkipped: result.skipped,
-      files: result.files,
-      elapsed: result.elapsed
+  return withActiveImportOperation(
+    () => {
+      controller.abort()
+      executor.cancel()
+    },
+    async () => {
+      if (session.capabilities.backend === 'postgres') {
+        const storageFilters =
+          filtersPayload !== undefined
+            ? translateFiltersPayloadToStorage(filtersPayload)
+            : undefined
+        const result = await executor.importMultiFile({
+          caseName,
+          files,
+          vcfOptions,
+          filters: storageFilters,
+          onProgress: callbacks.onProgress
+        })
+        return {
+          caseId: result.caseId,
+          totalVariants: result.variantCount,
+          totalSkipped: result.skipped,
+          files: result.files,
+          elapsed: result.elapsed
+        }
+      }
+
+      return startMultiFileImportSqlite(
+        caseName,
+        files,
+        vcfOptions,
+        getSession,
+        getDb,
+        callbacks,
+        importFilters,
+        controller.signal
+      )
     }
-  }
-
-  // SQLite — existing append pipeline
-  return startMultiFileImportSqlite(
-    caseName,
-    files,
-    vcfOptions,
-    getSession,
-    getDb,
-    callbacks,
-    importFilters
   )
 }
 

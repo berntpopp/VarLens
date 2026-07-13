@@ -170,6 +170,33 @@ export default defineConfig({
           testTimeout: 30 * 60_000,
           hookTimeout: 5 * 60_000
         }
+      },
+      {
+        // PR-A Item 3: enforces the compile-time-only IpcResult locks in
+        // tests/shared/types/preload-contract.test-d.ts under a real
+        // typechecker. `expectTypeOf(...).toEqualTypeOf(...)` is a runtime
+        // no-op (see that file's docblock) — without this project, those
+        // assertions never fail anything. `typecheck.only` means this
+        // project runs NO runtime tests (so it doesn't duplicate/slow down
+        // `make test`); it is invoked explicitly via
+        // `npm run typecheck:contracts` (wired into `npm run typecheck`,
+        // i.e. `make typecheck`). The narrow `tsconfig.typecheck-tests.json`
+        // keeps the checked file set to just the *.test-d.ts files plus
+        // src/shared/**, so this can't cascade into unrelated pre-existing
+        // type errors across src/main, src/renderer, or the rest of tests/.
+        extends: true,
+        test: {
+          name: 'contract-typecheck',
+          environment: 'node',
+          include: [],
+          typecheck: {
+            enabled: true,
+            only: true,
+            checker: 'tsc',
+            tsconfig: 'tsconfig.typecheck-tests.json',
+            include: ['tests/shared/types/**/*.test-d.ts']
+          }
+        }
       }
     ],
 

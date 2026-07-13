@@ -9,6 +9,7 @@ import { DatabaseManager } from '../services/DatabaseManager'
 import { RecentDatabasesService } from '../services/RecentDatabasesService'
 import { app } from 'electron'
 import { join } from 'path'
+import { getDbKeyStore } from './db-key-store-instance'
 import { openConfiguredDatabase } from './startup'
 
 // Singleton instance of DatabaseManager
@@ -31,7 +32,8 @@ export async function initDatabaseManager(): Promise<DatabaseManager> {
 
     await openConfiguredDatabase(databaseManager, {
       env: process.env,
-      userDataPath: app.getPath('userData')
+      userDataPath: app.getPath('userData'),
+      keyStore: getDbKeyStore()
     })
   }
   return databaseManager

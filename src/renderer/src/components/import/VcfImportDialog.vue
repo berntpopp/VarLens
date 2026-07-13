@@ -242,6 +242,7 @@ import type {
 } from '../../../../shared/types/api'
 import type { VcfMultiPreviewResult } from '../../../../shared/types/import'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
+import { formatErrorMessage } from '../../../../shared/errors/format-error-message'
 import { useApiService } from '../../composables/useApiService'
 import { useAppState } from '../../composables/useAppState'
 import { useImportStatusStore } from '../../stores/importStatusStore'
@@ -511,7 +512,7 @@ function resetToSelect(): void {
 async function browseFiles(): Promise<void> {
   if (api === undefined) return
   try {
-    const paths = await api.import.selectFiles()
+    const paths = unwrapIpcResult(await api.import.selectFiles())
     if (paths.length === 0) return
     await loadPreview(paths)
   } catch (err) {
@@ -521,7 +522,7 @@ async function browseFiles(): Promise<void> {
 
 async function handleDrop(event: DragEvent): Promise<void> {
   isDragging.value = false
-  if (event.dataTransfer === null) return
+  if (api === undefined || event.dataTransfer === null) return
   const files = Array.from(event.dataTransfer.files)
   if (files.length === 0) return
 
@@ -536,18 +537,18 @@ async function handleDrop(event: DragEvent): Promise<void> {
     return
   }
 
-  // Electron exposes full paths on dropped File objects
-  const paths = vcfFiles
-    .map((f) => (f as unknown as { path?: string }).path ?? '')
-    .filter((p) => p !== '')
-
-  if (paths.length === 0) {
-    errorMessage.value =
-      'Could not resolve file paths from dropped files. Use the Browse button instead.'
-    return
+  try {
+    // Preload resolves genuine Electron-backed Files; main enrolls their paths.
+    const paths = unwrapIpcResult(await api.import.enrollDroppedFiles(vcfFiles))
+    if (paths.length === 0) {
+      errorMessage.value =
+        'Could not resolve file paths from dropped files. Use the Browse button instead.'
+      return
+    }
+    await loadPreview(paths)
+  } catch (err) {
+    handleError('File drop failed', err)
   }
-
-  await loadPreview(paths)
 }
 
 async function loadPreview(filePaths: string[]): Promise<void> {
@@ -672,18 +673,17 @@ async function startImport(): Promise<void> {
       variantCount: serverResult.totalVariants
     })
   } catch (err) {
-    logService.error(
-      `Multi-file VCF import failed: ${err instanceof Error ? err.message : String(err)}`,
-      'VcfImportDialog'
-    )
+    // Preserve SerializableError user messages instead of stringifying the object.
+    const message = formatErrorMessage(err, String(err))
+    logService.error(`Multi-file VCF import failed: ${message}`, 'VcfImportDialog')
     // Mark current file as errored
     if (currentFile.value !== null) {
       markFileStatus(currentFile.value, {
         status: 'error',
-        error: err instanceof Error ? err.message : String(err)
+        error: message
       })
     }
-    errorMessage.value = err instanceof Error ? err.message : String(err)
+    errorMessage.value = message
     // Clear the background pill — the import stopped.
     importStore.reset()
     // Return to review so the user can retry or adjust
@@ -801,7 +801,7 @@ function fileName(filePath: string): string {
 }
 
 function handleError(context: string, err: unknown): void {
-  const message = err instanceof Error ? err.message : String(err)
+  const message = formatErrorMessage(err, String(err))
   errorMessage.value = `${context}: ${message}`
   logService.error(`${context}: ${message}`, 'VcfImportDialog')
 }

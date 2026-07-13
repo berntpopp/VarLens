@@ -88,6 +88,24 @@ describe('VCF import worker integration', () => {
     // Check that at least one is_selected = 1
     const selectedCount = transcripts.filter((t) => t.is_selected === 1).length
     expect(selectedCount).toBeGreaterThan(0)
+
+    // Canonical model (D1 / issue C4 / Codex F-02): every transcript row's
+    // `consequence` must be an IMPACT level (or null), never the raw SO term,
+    // and `func` (when populated) must be the SO term the VEP CSQ annotation
+    // carried — exercised end-to-end through the real VcfStrategy import path
+    // (not a unit-level parser call), so a missed column-list update or a
+    // reverted field swap fails loudly here.
+    const IMPACT_LEVELS = new Set(['HIGH', 'MODERATE', 'LOW', 'MODIFIER'])
+    for (const t of transcripts) {
+      if (t.consequence !== null) {
+        expect(IMPACT_LEVELS.has(t.consequence as string)).toBe(true)
+      }
+    }
+    const withFunc = transcripts.filter((t) => t.func !== null)
+    expect(withFunc.length).toBeGreaterThan(0)
+    for (const t of withFunc) {
+      expect(IMPACT_LEVELS.has(t.func as string)).toBe(false)
+    }
   })
 
   it('handles cancellation via AbortSignal', async () => {

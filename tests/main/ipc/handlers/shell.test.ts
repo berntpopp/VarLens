@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ErrorCode, isIpcError } from '../../../../src/shared/types/errors'
 
 vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn(() => '/nonexistent-electron-app-path')
+  },
   shell: {
     openExternal: vi.fn(),
     showItemInFolder: vi.fn()
@@ -60,5 +63,12 @@ describe('shell IPC handlers', () => {
       expect(result.code).toBe(ErrorCode.UNKNOWN)
     }
     expect(setUserDomains).not.toHaveBeenCalled()
+  })
+
+  it('does not expose a generic file-reveal channel', () => {
+    const ipcMain = makeIpcMain()
+    registerShellHandlers({ ipcMain } as never)
+
+    expect(ipcMain.handle).not.toHaveBeenCalledWith('shell:showItemInFolder', expect.any(Function))
   })
 })

@@ -382,7 +382,7 @@ describe('PostgresJsonImportRepository.writeJsonImport', () => {
     }
   })
 
-  it('search_document is populated by trigger (not in INSERT column list)', async () => {
+  it('search_document is populated by generated column (not in INSERT column list)', async () => {
     const client = makeClient([
       { rows: [] }, // dup
       { rows: [{ id: '4' }] }, // case insert

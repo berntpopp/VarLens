@@ -125,6 +125,39 @@ describe('LoginView', () => {
 
       expect(wrapper.text()).toContain('temporarily locked')
     })
+
+    it('surfaces the real backend error instead of "Invalid username or password" on a backend fault', async () => {
+      // wrapHandler resolves an IpcResult even on failure — a DB-down or
+      // similarly genuine backend fault comes back shaped like a
+      // SerializableError, not the { success: false } business-logic result
+      // an ordinary wrong-password attempt produces. authStore.login()
+      // distinguishes the two and returns a `.error` message for the former.
+      ;(
+        mockApi as Record<string, Record<string, ReturnType<typeof vi.fn>>>
+      ).auth.login.mockResolvedValue({
+        code: 'DB_ERROR',
+        message: 'boom',
+        userMessage: 'Service unavailable'
+      })
+
+      const wrapper = mountLoginView()
+
+      const inputs = wrapper.findAll('input')
+      await inputs[0].setValue('testuser')
+      await inputs[1].setValue('password123')
+
+      const form = wrapper.find('form')
+      await form.trigger('submit.prevent')
+
+      await wrapper.vm.$nextTick()
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.text()).toContain('Service unavailable')
+      expect(wrapper.text()).not.toContain('Invalid username or password')
+    })
   })
 
   describe('Password Change Flow', () => {

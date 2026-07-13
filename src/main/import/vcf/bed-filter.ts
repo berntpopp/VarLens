@@ -1,6 +1,8 @@
-import { readFileSync } from 'fs'
 import { isAbsolute, resolve } from 'path'
-import { gunzipSync } from 'zlib'
+import { resolveMaxDecompressedBytes } from '../stream-utils'
+import { readBedEntries } from './bed-reader'
+
+export const MAX_BED_FILTER_DECOMPRESSED_BYTES = 256 * 1024 * 1024 // 256 MiB
 
 interface Interval {
   start: number // 1-based inclusive
@@ -26,7 +28,7 @@ export class BedFilter {
   }
 
   /** Load intervals from a .bed or .bed.gz file with optional padding */
-  static fromFile(filePath: string, padding: number): BedFilter {
+  static async fromFile(filePath: string, padding: number): Promise<BedFilter> {
     // QW-7 worker-safe defensive check. The full allow-list check happens
     // at the IPC boundary in main; this file is also loaded by worker threads.
     if (!isAbsolute(filePath)) {
@@ -37,26 +39,11 @@ export class BedFilter {
       throw new Error(`BedFilter.fromFile: path must not contain '..' segments: ${filePath}`)
     }
 
-    const raw = filePath.endsWith('.gz')
-      ? gunzipSync(readFileSync(filePath)).toString('utf-8')
-      : readFileSync(filePath, 'utf-8')
-
     const intervals = new Map<string, Interval[]>()
+    const maxBytes = Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
 
-    for (const line of raw.split('\n')) {
-      const trimmed = line.trim()
-      if (
-        !trimmed ||
-        trimmed.startsWith('#') ||
-        trimmed.startsWith('track') ||
-        trimmed.startsWith('browser')
-      ) {
-        continue
-      }
-      const parts = trimmed.split('\t')
-      if (parts.length < 3) continue
-
-      const chr = parts[0]
+    for await (const entry of readBedEntries(filePath, maxBytes)) {
+      const chr = entry.chr
       // BED is 0-based half-open -> convert to 1-based inclusive, then apply padding.
       // Reject malformed rows where columns 2 or 3 don't parse as integers
       // (`Number.isInteger` catches both NaN and fractional values) and skip
@@ -64,10 +51,8 @@ export class BedFilter {
       // a zero-length interval which, after converting to 1-based inclusive
       // via `startRaw + 1`, would produce `start > end` — breaking the
       // binary-search overlap checks silently.
-      const startRaw = parseInt(parts[1], 10)
-      const endRaw = parseInt(parts[2], 10)
-      if (!Number.isInteger(startRaw) || !Number.isInteger(endRaw)) continue
-      if (endRaw <= startRaw) continue
+      const startRaw = entry.start
+      const endRaw = entry.end
 
       const start = Math.max(1, startRaw + 1 - padding)
       const end = endRaw + padding

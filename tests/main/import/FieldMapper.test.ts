@@ -371,6 +371,42 @@ describe('FieldMapper', () => {
       expect(transcripts[1].consequence).toBe('MODERATE')
     })
 
+    it('extracts the per-transcript func (SO term) from the FUNC column', async () => {
+      const row = createTestRow({
+        1: 0,
+        28: ['1', '2'], // Transcript IDs
+        20: ['missense_variant', 'synonymous_variant'] // FUNC (SO term), per-transcript
+      })
+
+      const results = await runTransform([row])
+      const variant = results[0] as Record<string, unknown>
+      const transcripts = variant._transcripts as Record<string, unknown>[]
+
+      // func = SO term (raw, no dictionary), matching the same per-transcript
+      // index as consequence/cdna/aa_change — NOT the IMPACT dictionary value.
+      expect(transcripts[0].func).toBe('missense_variant')
+      expect(transcripts[1].func).toBe('synonymous_variant')
+    })
+
+    it('rejects unknown IMPACT codes for the parent and transcript rows', async () => {
+      const row = createTestRow({
+        21: ['99'],
+        20: ['missense_variant'],
+        28: ['1']
+      })
+
+      const results = await runTransform([row])
+      const variant = results[0] as Record<string, unknown>
+      const transcripts = variant._transcripts as Record<string, unknown>[]
+
+      expect(variant.consequence).toBeNull()
+      expect(variant.func).toBe('missense_variant')
+      expect(transcripts[0]).toMatchObject({
+        consequence: null,
+        func: 'missense_variant'
+      })
+    })
+
     it('should emit single transcript for non-array columns', async () => {
       const row = createTestRow({
         1: 0,

@@ -7,7 +7,6 @@
     transition="dialog-bottom-transition"
   >
     <v-card>
-      <!-- Header with step indicator -->
       <v-card-title class="d-flex align-center">
         <v-icon :icon="mdiDatabaseImport" class="mr-2" />
         Import Data
@@ -17,7 +16,6 @@
         </v-btn>
       </v-card-title>
 
-      <!-- Step indicator -->
       <div v-if="step > 1" class="d-flex align-center px-4 pb-2 ga-1">
         <template v-for="(s, i) in stepLabels" :key="i">
           <v-chip
@@ -34,19 +32,17 @@
 
       <v-divider />
 
-      <!-- Error display -->
       <v-alert
-        v-if="importStore.phase === 'error' && importStore.errorMessage"
+        v-if="cancelError || (importStore.phase === 'error' && importStore.errorMessage)"
         type="error"
         variant="tonal"
         closable
         class="mx-4 mt-3"
-        @click:close="importStore.reset()"
+        @click:close="cancelError ? (cancelError = '') : importStore.reset()"
       >
-        {{ importStore.errorMessage }}
+        {{ cancelError || importStore.errorMessage }}
       </v-alert>
 
-      <!-- Step 1: Source Selection -->
       <v-card-text v-if="step === 1" class="pa-4">
         <ImportSourceSelector
           :sources="allSources"
@@ -61,7 +57,6 @@
           @cancel="cancelUploadSelection"
         />
 
-        <!-- ZIP password (inline, shown when needed) -->
         <v-expand-transition>
           <div v-if="zipPasswordNeeded" class="mt-4">
             <v-divider class="mb-3" />
@@ -93,7 +88,6 @@
         </v-expand-transition>
       </v-card-text>
 
-      <!-- Step 2 (VCF only): VCF Preview -->
       <v-card-text v-else-if="isVcfImport && step === 2">
         <VcfPreviewStep
           :file-path="vcfFilePath"
@@ -102,7 +96,6 @@
         />
       </v-card-text>
 
-      <!-- Step 2 (non-VCF): Review -->
       <v-card-text v-else-if="step === 2">
         <BatchReviewPhase
           v-model:strip-text="stripText"
@@ -114,7 +107,6 @@
         />
       </v-card-text>
 
-      <!-- Step 3: Progress -->
       <v-card-text v-else-if="step === 3">
         <BatchProgressPhase
           :current-file-name="currentFileName"
@@ -125,23 +117,20 @@
         />
       </v-card-text>
 
-      <!-- Step 4: Summary -->
       <v-card-text v-else-if="step === 4">
         <BatchSummaryPhase :summary="summary" />
       </v-card-text>
 
       <v-divider />
 
-      <!-- Actions -->
       <v-card-actions>
-        <v-btn v-if="step === 2" variant="text" size="small" @click="step = 1">Back</v-btn>
+        <v-btn v-if="step === 2" variant="text" size="small" @click="handleBack">Back</v-btn>
         <v-spacer />
         <v-btn v-if="step === 3" variant="text" size="small" @click="continueInBackground">
           Continue in Background
         </v-btn>
         <v-btn v-if="step === 3" variant="text" size="small" @click="cancelImport">Cancel</v-btn>
 
-        <!-- VCF import button -->
         <v-btn
           v-if="isVcfImport && step === 2"
           color="primary"
@@ -157,7 +146,6 @@
           }}
         </v-btn>
 
-        <!-- Non-VCF import button -->
         <v-btn
           v-if="!isVcfImport && step === 2"
           color="primary"
@@ -186,11 +174,14 @@ import type {
   DuplicateChoice,
   DuplicateCheckItem,
   BatchResult,
-  BatchProgress,
+  BatchProgressEvent,
+  BatchCompleteEvent,
   ProgressUpdate
 } from '../../../../shared/types/api'
 import type { VcfPreviewResult } from '../../../../shared/types/vcf'
 import { useApiService } from '../../composables/useApiService'
+import { useVcfImportExecution } from '../../composables/useVcfImportExecution'
+import { useZipImportCleanup } from '../../composables/useZipImportCleanup'
 import { useImportStatusStore } from '../../stores/importStatusStore'
 import { logService } from '../../services/LogService'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
@@ -215,10 +206,8 @@ import {
 } from '@mdi/js'
 
 type ImportMode = ImportSourceMode
-
 const { api } = useApiService()
 const importStore = useImportStatusStore()
-
 const WEB_UPLOAD_EVENT = 'varlens:web-upload'
 const WEB_UPLOAD_CANCEL_EVENT = 'varlens:web-upload-cancel'
 
@@ -240,8 +229,8 @@ const emit = defineEmits<{
 
 const dialog = ref(false)
 const step = ref(1)
+const cancelError = ref('')
 
-// VCF import state
 const isVcfImport = ref(false)
 const vcfFilePath = ref('')
 const vcfSelectedSamples = ref<string[]>([])
@@ -277,25 +266,24 @@ const allSources: ImportSourceOption[] = [
   { mode: 'zip' as ImportMode, icon: mdiZipBox, title: 'ZIP Archive', subtitle: 'Extract & import' }
 ]
 
-// File selection state
 const selectedMode = ref<ImportMode | null>(null)
 const selectedFilePaths = ref<string[]>([])
 const isZipImport = ref(false)
 const zipPath = ref('')
+const zipExtractionId = ref('')
 const sourceSelectionPending = ref(false)
+const cancellationPending = ref(false)
 const uploadFileName = ref('')
 const uploadFileIndex = ref(1)
 const uploadTotalFiles = ref(0)
 const uploadPercent = ref<number | null>(null)
 
-// ZIP password state
 const zipPasswordNeeded = ref(false)
 const zipPassword = ref('')
 const showZipPassword = ref(false)
 const zipError = ref('')
 const zipUnlocking = ref(false)
 
-// Review state
 const reviewFiles = ref<DuplicateCheckItem[]>([])
 const duplicateCount = ref(0)
 const fileCount = computed(() => reviewFiles.value.length)
@@ -303,14 +291,12 @@ const duplicateStrategy = ref<DuplicateChoice>('skip')
 const stripText = ref('')
 const hasEmptyCaseNames = computed(() => reviewFiles.value.some((f) => f.caseName.trim() === ''))
 
-// Progress state
 const currentIndex = ref(0)
 const totalFiles = ref(0)
 const currentFileName = ref('')
 const overallPercent = ref(0)
 const variantCount = ref(0)
 
-// Summary state
 const summary = ref<BatchResult>({
   succeeded: 0,
   failed: 0,
@@ -322,7 +308,11 @@ const summary = ref<BatchResult>({
 let cleanupProgress: (() => void) | null = null
 let cleanupImportProgress: (() => void) | null = null
 let cleanupComplete: (() => void) | null = null
-let recheckTimeout: ReturnType<typeof setTimeout> | null = null
+let importRunGeneration = 0
+let activeBatchRunGeneration: number | null = null
+let activeBatchRunId: string | null = null
+let cancellationRequestedGeneration: number | null = null
+const batchRunExtractionIds = new Map<string, string>()
 
 function resetUploadState(): void {
   uploadFileName.value = ''
@@ -376,86 +366,92 @@ function formatIpcError(error: unknown, fallback: string): string {
   return formatErrorMessage(error, fallback)
 }
 
-function cleanupZipTempInBackground(context: string): void {
-  void api!.batchImport
-    .cleanupZipTemp()
-    .then((cleanupResult) => {
-      unwrapIpcResult(cleanupResult)
-    })
-    .catch((error) => {
-      logService.warn(
-        `ZIP temp cleanup failed after ${context}: ${formatIpcError(error, 'cleanup failed')}`,
-        'ImportWizard'
-      )
-    })
+const {
+  cleanupZipExtraction,
+  abandonZipImport: abandonZipImportState,
+  handleBack,
+  checkDuplicatesAndAdvance,
+  scheduleDuplicateRecheck,
+  cancelDuplicateRecheck
+} = useZipImportCleanup({
+  cleanupRequest: (extractionId) => api!.batchImport.cleanupZipTemp(extractionId),
+  checkDuplicatesRequest: (filePaths, strip) => api!.batchImport.checkDuplicates(filePaths, strip),
+  importStore,
+  state: {
+    step,
+    selectedFilePaths,
+    reviewFiles,
+    duplicateCount,
+    stripText,
+    isZipImport,
+    zipPath,
+    zipExtractionId,
+    zipPasswordNeeded,
+    zipPassword,
+    zipError,
+    showZipPassword,
+    zipUnlocking
+  }
+})
+
+async function cleanupBatchRunExtraction(runId: string, context: string): Promise<void> {
+  const extractionId = batchRunExtractionIds.get(runId)
+  if (extractionId === undefined) return
+  const cleaned = await cleanupZipExtraction(extractionId, context)
+  if (!cleaned) return
+  batchRunExtractionIds.delete(runId)
+  if (zipExtractionId.value === extractionId) zipExtractionId.value = ''
 }
 
-// Re-check duplicates when strip text changes
-watch(stripText, () => {
-  if (recheckTimeout !== null) clearTimeout(recheckTimeout)
-  recheckTimeout = setTimeout(async () => {
-    if (selectedFilePaths.value.length === 0) return
-    const result = unwrapIpcResult(
-      await api!.batchImport.checkDuplicates(
-        [...selectedFilePaths.value],
-        stripText.value || undefined
-      )
-    )
-    reviewFiles.value = result.files
-    duplicateCount.value = result.duplicateCount
-  }, 300)
-})
+let sourceFlowGeneration = 0
+
+function abandonZipImport(context: string): void {
+  sourceFlowGeneration += 1
+  abandonZipImportState(context)
+}
+watch(stripText, scheduleDuplicateRecheck)
 
 async function selectSource(mode: ImportMode): Promise<void> {
   if (sourceSelectionPending.value) return
+  const generation = sourceFlowGeneration
   selectedMode.value = mode
   sourceSelectionPending.value = true
   resetUploadState()
-
   try {
     if (mode === 'zip') {
       const result = unwrapIpcResult(await api!.batchImport.selectZip())
+      if (generation !== sourceFlowGeneration) return
       if (result === null) return
-
       zipPath.value = result.filePath
       isZipImport.value = true
-
       if (result.isEncrypted) {
         zipPasswordNeeded.value = true
         return
       }
-
-      await extractAndAdvance(result.filePath)
+      await extractAndAdvance(result.filePath, generation)
       return
     }
-
     let filePaths: string[]
-
     if (mode === 'single') {
-      const path = await api!.import.selectFile()
+      const path = unwrapIpcResult(await api!.import.selectFile())
       if (path === null) return
       filePaths = [path]
     } else if (mode === 'files') {
-      filePaths = await api!.batchImport.selectFiles()
+      filePaths = unwrapIpcResult(await api!.batchImport.selectFiles())
     } else {
-      filePaths = await api!.batchImport.selectFolder()
+      filePaths = unwrapIpcResult(await api!.batchImport.selectFolder())
     }
-
     if (filePaths.length === 0) return
-
     selectedFilePaths.value = filePaths
-
-    // Detect VCF file: single file with .vcf or .vcf.gz extension
     if (filePaths.length === 1) {
       const fp = filePaths[0].toLowerCase()
       if (fp.endsWith('.vcf') || fp.endsWith('.vcf.gz')) {
         isVcfImport.value = true
         vcfFilePath.value = filePaths[0]
-        step.value = 2 // Go to VCF Preview step
+        step.value = 2
         return
       }
     }
-
     await checkDuplicatesAndAdvance(filePaths)
   } catch (err) {
     if (err instanceof Error && err.message === 'Upload cancelled') {
@@ -473,51 +469,57 @@ async function selectSource(mode: ImportMode): Promise<void> {
   }
 }
 
-async function extractAndAdvance(path: string): Promise<void> {
-  const { files } = unwrapIpcResult(
+async function extractAndAdvance(
+  path: string,
+  generation: number = sourceFlowGeneration
+): Promise<void> {
+  const { files, extractionId } = unwrapIpcResult(
     await api!.batchImport.extractZip(path, zipPassword.value || undefined)
   )
-  if (files.length === 0) return
+  if (generation !== sourceFlowGeneration || !dialog.value) {
+    await cleanupZipExtraction(extractionId, 'stale ZIP extraction completion')
+    return
+  }
+  zipExtractionId.value = extractionId
+  if (files.length === 0) {
+    abandonZipImport('empty ZIP extraction')
+    throw new Error('No importable files found in archive')
+  }
 
   selectedFilePaths.value = files
   zipPasswordNeeded.value = false
   await checkDuplicatesAndAdvance(files)
 }
 
-async function checkDuplicatesAndAdvance(filePaths: string[]): Promise<void> {
-  const result = unwrapIpcResult(
-    await api!.batchImport.checkDuplicates(filePaths, stripText.value || undefined)
-  )
-
-  reviewFiles.value = result.files
-  duplicateCount.value = result.duplicateCount
-  step.value = 2
-}
-
 async function unlockZip(): Promise<void> {
+  const generation = sourceFlowGeneration
   zipUnlocking.value = true
   zipError.value = ''
-  const { success } = unwrapIpcResult(
-    await api!.batchImport.testZipPassword(zipPath.value, zipPassword.value)
-  )
-  zipUnlocking.value = false
+  try {
+    const { success } = unwrapIpcResult(
+      await api!.batchImport.testZipPassword(zipPath.value, zipPassword.value)
+    )
 
-  if (!success) {
-    zipError.value = 'Incorrect password'
-    return
+    if (!success) {
+      zipError.value = 'Incorrect password'
+      return
+    }
+
+    await extractAndAdvance(zipPath.value, generation)
+  } catch (err) {
+    const message = formatErrorMessage(err, 'Could not unlock ZIP archive')
+    zipError.value = message
+    logService.error(`ZIP unlock failed: ${message}`, 'ImportWizard')
+  } finally {
+    zipUnlocking.value = false
   }
-
-  await extractAndAdvance(zipPath.value)
 }
 
 function cancelZip(): void {
-  zipPasswordNeeded.value = false
-  zipPassword.value = ''
-  zipError.value = ''
+  abandonZipImport('password prompt cancellation')
 }
 
 function onVcfPreviewLoaded(_preview: VcfPreviewResult): void {
-  // Preview data is stored in the child component; we just note it loaded
   logService.info('VCF preview loaded successfully', 'ImportWizard')
 }
 
@@ -531,100 +533,73 @@ function onVcfSelectionChanged(options: {
   vcfCaseNames.value = options.caseNames
 }
 
-async function startVcfImport(): Promise<void> {
-  if (importStore.isActive) {
-    logService.warn('Import already in progress — cannot start another', 'ImportWizard')
-    return
-  }
+function beginImportRun(kind: 'vcf' | 'batch'): number {
+  importRunGeneration += 1
+  activeBatchRunGeneration = kind === 'batch' ? importRunGeneration : null
+  activeBatchRunId = null
+  cancellationRequestedGeneration = null
+  return importRunGeneration
+}
 
-  step.value = 3
-  totalFiles.value = vcfSelectedSamples.value.length
-  currentIndex.value = 0
-  overallPercent.value = 0
-  variantCount.value = 0
+function isImportTerminal(generation: number): boolean {
+  return generation !== importRunGeneration || step.value !== 3 || importStore.phase === 'cancelled'
+}
 
-  importStore.startImport(vcfSelectedSamples.value.length)
-  importStore.dialogOpen = true
-
-  const results: BatchResult = {
+function completeCancelledRun(generation: number): void {
+  if (isImportTerminal(generation)) return
+  importRunGeneration += 1
+  activeBatchRunGeneration = null
+  activeBatchRunId = null
+  cancellationRequestedGeneration = null
+  const cancelledResult: BatchResult = {
     succeeded: 0,
     failed: 0,
     skipped: 0,
-    cancelled: false,
+    cancelled: true,
     details: []
   }
-
-  try {
-    for (let i = 0; i < vcfSelectedSamples.value.length; i++) {
-      // Check for cancellation between samples
-      if (importStore.phase === 'cancelled') break
-
-      const sample = vcfSelectedSamples.value[i]
-      const caseName = vcfCaseNames.value.get(sample) ?? sample
-
-      currentIndex.value = i
-      currentFileName.value = caseName
-      overallPercent.value = Math.round(((i + 1) / vcfSelectedSamples.value.length) * 100)
-
-      try {
-        const result = unwrapIpcResult(
-          await api!.import.start(vcfFilePath.value, caseName, {
-            selectedSample: sample,
-            genomeBuild: vcfGenomeBuild.value ?? undefined
-          })
-        )
-
-        results.succeeded++
-        results.details.push({
-          filePath: vcfFilePath.value,
-          fileName: caseName,
-          caseName,
-          status: 'success' as const,
-          variantCount: (result as { variantCount: number }).variantCount
-        })
-      } catch (err) {
-        results.failed++
-        results.details.push({
-          filePath: vcfFilePath.value,
-          fileName: caseName,
-          caseName,
-          status: 'failed' as const,
-          error: formatIpcError(err, 'VCF import failed')
-        })
-      }
-    }
-
-    summary.value = results
-    step.value = 4
-    importStore.importComplete({
-      ...results,
-      details: results.details.map((d) => ({ ...d, caseName: d.caseName ?? d.fileName }))
-    })
-
-    if (results.succeeded > 0) {
-      emit('batch-import-complete', { totalImported: results.succeeded })
-    }
-  } catch (err) {
-    const message = formatIpcError(err, 'VCF import failed')
-    logService.error(`VCF import failed: ${message}`, 'ImportWizard')
-    summary.value = {
-      succeeded: 0,
-      failed: vcfSelectedSamples.value.length,
-      skipped: 0,
-      cancelled: false,
-      details: []
-    }
-    step.value = 4
-    importStore.importError(message)
-  }
+  summary.value = cancelledResult
+  step.value = 4
+  importStore.importComplete({ ...cancelledResult, details: [] })
 }
 
+const { startVcfImport } = useVcfImportExecution({
+  api: api!,
+  importStore,
+  state: {
+    filePath: vcfFilePath,
+    selectedSamples: vcfSelectedSamples,
+    genomeBuild: vcfGenomeBuild,
+    caseNames: vcfCaseNames,
+    step,
+    totalFiles,
+    currentIndex,
+    overallPercent,
+    variantCount,
+    currentFileName,
+    cancelError,
+    summary
+  },
+  authority: {
+    begin: () => beginImportRun('vcf'),
+    isTerminal: isImportTerminal,
+    isCancellationRequested: (generation) => cancellationRequestedGeneration === generation,
+    completeCancelled: completeCancelledRun
+  },
+  onImported: (totalImported) => emit('batch-import-complete', { totalImported })
+})
+
 async function startImport(): Promise<void> {
-  // Prevent starting a new import while one is already running.
-  // This avoids resetting the store state and losing progress on the active import.
   if (importStore.isActive) {
     logService.warn('Import already in progress — cannot start another', 'ImportWizard')
     return
+  }
+
+  const generation = beginImportRun('batch')
+  const runId = globalThis.crypto.randomUUID()
+  activeBatchRunId = runId
+  if (isZipImport.value && zipExtractionId.value !== '') {
+    batchRunExtractionIds.set(runId, zipExtractionId.value)
   }
 
   step.value = 3
@@ -633,22 +608,28 @@ async function startImport(): Promise<void> {
   overallPercent.value = 0
   variantCount.value = 0
 
-  importStore.startImport(fileCount.value)
+  importStore.startImport(fileCount.value, runId)
   importStore.dialogOpen = true
 
   try {
-    // Spread reactive arrays to plain arrays — Vue Proxies cannot be
-    // structured-cloned by Electron's IPC serialization.
     const result = unwrapIpcResult(
       await api!.batchImport.start(
         [...selectedFilePaths.value],
         duplicateStrategy.value,
-        stripText.value || undefined
+        stripText.value || undefined,
+        runId
       )
     )
 
-    // Result also arrives via onComplete callback; guard against double-processing
-    if (step.value === 3) {
+    if (
+      !isImportTerminal(generation) &&
+      activeBatchRunGeneration === generation &&
+      activeBatchRunId === runId
+    ) {
+      activeBatchRunGeneration = null
+      activeBatchRunId = null
+      cancellationRequestedGeneration = null
+      cancelError.value = ''
       summary.value = result
       step.value = 4
 
@@ -657,9 +638,7 @@ async function startImport(): Promise<void> {
         details: result.details.map((d) => ({ ...d, caseName: d.caseName ?? d.fileName }))
       })
 
-      if (isZipImport.value) {
-        cleanupZipTempInBackground('import completion')
-      }
+      void cleanupBatchRunExtraction(runId, 'import completion')
 
       if (result.succeeded > 0) {
         emit('batch-import-complete', { totalImported: result.succeeded })
@@ -667,11 +646,21 @@ async function startImport(): Promise<void> {
     }
   } catch (err) {
     const message = formatIpcError(err, 'Import failed')
-    logService.error(`Import failed: ${message}`, 'ImportWizard')
-    // Only overwrite summary if the onComplete callback hasn't already
-    // handled it (race: safeEmit fires before resolve, so the event
-    // listener may have already set the correct summary + step 4).
-    if (step.value === 3) {
+    if (
+      !isImportTerminal(generation) &&
+      activeBatchRunGeneration === generation &&
+      activeBatchRunId === runId
+    ) {
+      activeBatchRunGeneration = null
+      activeBatchRunId = null
+      if (cancellationRequestedGeneration === generation) {
+        completeCancelledRun(generation)
+        await cleanupBatchRunExtraction(runId, 'cancelled import termination')
+        return
+      }
+      cancellationRequestedGeneration = null
+      logService.error(`Import failed: ${message}`, 'ImportWizard')
+      cancelError.value = ''
       summary.value = {
         succeeded: 0,
         failed: fileCount.value,
@@ -680,50 +669,30 @@ async function startImport(): Promise<void> {
         details: []
       }
       step.value = 4
+      importStore.importError(message)
     }
-    importStore.importError(message)
+    await cleanupBatchRunExtraction(runId, 'import start failure')
   }
 }
 
-function cancelImport(): void {
-  if (isWebRuntime() && isVcfImport.value) {
-    void api!.import.cancel().catch((error) => {
-      logService.warn(
-        `VCF import cancel failed: ${formatIpcError(error, 'cancel failed')}`,
-        'ImportWizard'
-      )
-    })
-  } else {
-    void api!.batchImport
-      .cancel()
-      .then((result) => {
-        unwrapIpcResult(result)
-      })
-      .catch((error) => {
-        logService.warn(
-          `Batch import cancel failed: ${formatIpcError(error, 'cancel failed')}`,
-          'ImportWizard'
-        )
-      })
+async function cancelImport(): Promise<void> {
+  const generation = importRunGeneration
+  cancelError.value = ''
+  if (cancellationPending.value) return
+  cancellationPending.value = true
+  try {
+    const result = isVcfImport.value ? await api!.import.cancel() : await api!.batchImport.cancel()
+    unwrapIpcResult(result)
+  } catch (error) {
+    if (isImportTerminal(generation)) return
+    cancelError.value = formatIpcError(error, 'Cancellation failed')
+    logService.warn(`Import cancel failed: ${cancelError.value}`, 'ImportWizard')
+    return
+  } finally {
+    cancellationPending.value = false
   }
-  // Transition to summary step showing cancellation, and reset import store.
-  // The onComplete callback may also fire with cancelled=true, but we handle
-  // it here immediately so the user sees feedback right away.
-  summary.value = {
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    cancelled: true,
-    details: []
-  }
-  step.value = 4
-  importStore.importComplete({
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    cancelled: true,
-    details: []
-  })
+  if (isImportTerminal(generation)) return
+  cancellationRequestedGeneration = generation
 }
 
 function continueInBackground(): void {
@@ -736,8 +705,8 @@ function handleClose(): void {
     continueInBackground()
     return
   }
+  abandonZipImport('dialog close')
   dialog.value = false
-  // Reset import store when closing from summary/error step
   if (step.value === 4 || importStore.phase === 'error') {
     importStore.reset()
   }
@@ -745,6 +714,7 @@ function handleClose(): void {
 
 function resetState(): void {
   step.value = 1
+  cancelError.value = ''
   selectedMode.value = null
   selectedFilePaths.value = []
   isVcfImport.value = false
@@ -754,6 +724,7 @@ function resetState(): void {
   vcfCaseNames.value = new Map()
   isZipImport.value = false
   zipPath.value = ''
+  zipExtractionId.value = ''
   sourceSelectionPending.value = false
   resetUploadState()
   zipPasswordNeeded.value = false
@@ -761,6 +732,7 @@ function resetState(): void {
   zipError.value = ''
   showZipPassword.value = false
   zipUnlocking.value = false
+  cancellationPending.value = false
   reviewFiles.value = []
   duplicateCount.value = 0
   duplicateStrategy.value = 'skip'
@@ -774,14 +746,20 @@ function resetState(): void {
 }
 
 const show = (): void => {
+  if (importStore.isActive) {
+    importStore.dialogOpen = true
+    dialog.value = true
+    return
+  }
+  abandonZipImport('next wizard open')
   resetState()
   dialog.value = true
 }
 
-// Reset import store when dialog is closed by any means (outside click, Esc, etc.)
-// handleClose() covers explicit close, but the dialog can also close via v-model
-// when persistent=false (step !== 3).
 watch(dialog, (open) => {
+  if (!open && step.value !== 3) {
+    abandonZipImport('dialog dismissal')
+  }
   if (!open && (step.value === 4 || importStore.phase === 'error')) {
     importStore.reset()
   }
@@ -801,7 +779,7 @@ onMounted(() => {
   if (api) {
     if (isWebRuntime()) {
       cleanupImportProgress = api.import.onProgress((progress: ProgressUpdate) => {
-        if (!isVcfImport.value || !importStore.isActive) return
+        if (!isVcfImport.value || !importStore.isActive || activeBatchRunGeneration !== null) return
         variantCount.value = progress.count
         const sampleCount = Math.max(vcfSelectedSamples.value.length, 1)
         overallPercent.value = Math.max(
@@ -820,7 +798,10 @@ onMounted(() => {
       })
     }
 
-    cleanupProgress = api.batchImport.onProgress((progress: BatchProgress) => {
+    cleanupProgress = api.batchImport.onProgress((progress: BatchProgressEvent) => {
+      if (progress.runId !== activeBatchRunId) return
+      const generation = activeBatchRunGeneration
+      if (generation === null || isImportTerminal(generation)) return
       currentIndex.value = progress.currentIndex
       totalFiles.value = progress.totalFiles
       currentFileName.value = progress.currentFileName
@@ -840,23 +821,27 @@ onMounted(() => {
       }
     })
 
-    cleanupComplete = api.batchImport.onComplete((result: BatchResult) => {
-      // Guard: startImport() await may have already handled this
-      if (step.value === 3) {
-        summary.value = result
+    cleanupComplete = api.batchImport.onComplete((result: BatchCompleteEvent) => {
+      if (result.runId !== activeBatchRunId) return
+      const generation = activeBatchRunGeneration
+      if (generation !== null && !isImportTerminal(generation)) {
+        const { runId, ...batchResult } = result
+        activeBatchRunGeneration = null
+        activeBatchRunId = null
+        cancellationRequestedGeneration = null
+        cancelError.value = ''
+        summary.value = batchResult
         step.value = 4
 
         importStore.importComplete({
-          ...result,
-          details: result.details.map((d) => ({
+          ...batchResult,
+          details: batchResult.details.map((d) => ({
             ...d,
             caseName: d.caseName ?? d.fileName
           }))
         })
 
-        if (isZipImport.value) {
-          cleanupZipTempInBackground('dialog close')
-        }
+        void cleanupBatchRunExtraction(runId, 'import completion event')
       }
     })
   }
@@ -869,7 +854,8 @@ onUnmounted(() => {
   cleanupProgress?.()
   cleanupImportProgress?.()
   cleanupComplete?.()
-  if (recheckTimeout !== null) clearTimeout(recheckTimeout)
+  cancelDuplicateRecheck()
+  if (step.value !== 3) abandonZipImport('component unmount')
 })
 
 defineExpose({ show, reopen })

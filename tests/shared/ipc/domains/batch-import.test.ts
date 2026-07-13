@@ -52,7 +52,8 @@ describe('batch-import preload domain behavior', () => {
       })
       .mockResolvedValueOnce({
         files: ['/extracted/file1.json', '/extracted/file2.json'],
-        errors: []
+        errors: [],
+        extractionId: '11111111-1111-4111-8111-111111111111'
       })
       .mockResolvedValueOnce(undefined)
 
@@ -77,7 +78,9 @@ describe('batch-import preload domain behavior', () => {
       duplicateCount: 0
     })
 
-    await expect(api.start(['/path/to/file1.json'], 'skip', undefined)).resolves.toMatchObject({
+    await expect(
+      api.start(['/path/to/file1.json'], 'skip', undefined, 'desktop-run-1')
+    ).resolves.toMatchObject({
       succeeded: 1,
       failed: 0
     })
@@ -98,7 +101,9 @@ describe('batch-import preload domain behavior', () => {
       errors: []
     })
 
-    await expect(api.cleanupZipTemp()).resolves.toBeUndefined()
+    await expect(
+      api.cleanupZipTemp('11111111-1111-4111-8111-111111111111')
+    ).resolves.toBeUndefined()
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'batch-import:selectFiles')
     expect(invoke).toHaveBeenNthCalledWith(2, 'batch-import:selectFolder')
@@ -113,7 +118,8 @@ describe('batch-import preload domain behavior', () => {
       'batch-import:start',
       ['/path/to/file1.json'],
       'skip',
-      undefined
+      undefined,
+      'desktop-run-1'
     )
     expect(invoke).toHaveBeenNthCalledWith(5, 'batch-import:cancel')
     expect(invoke).toHaveBeenNthCalledWith(6, 'batch-import:selectZip')
@@ -129,7 +135,11 @@ describe('batch-import preload domain behavior', () => {
       '/path/to/archive.zip',
       undefined
     )
-    expect(invoke).toHaveBeenNthCalledWith(9, 'batch-import:cleanupZipTemp')
+    expect(invoke).toHaveBeenNthCalledWith(
+      9,
+      'batch-import:cleanupZipTemp',
+      '11111111-1111-4111-8111-111111111111'
+    )
   })
 
   it('preload index preserves batch-import transport results when exposing window.api', async () => {
@@ -187,7 +197,7 @@ describe('batch-import preload domain behavior', () => {
         cancel: () => Promise<unknown>
         selectZip: () => Promise<unknown>
         testZipPassword: (zipPath: string, password: string) => Promise<unknown>
-        cleanupZipTemp: () => Promise<unknown>
+        cleanupZipTemp: (extractionId: string) => Promise<unknown>
       }
     }
 
@@ -206,7 +216,9 @@ describe('batch-import preload domain behavior', () => {
       code: ErrorCode.WRONG_PASSWORD,
       message: 'Password test failed'
     })
-    await expect(api.batchImport.cleanupZipTemp()).resolves.toBeUndefined()
+    await expect(
+      api.batchImport.cleanupZipTemp('11111111-1111-4111-8111-111111111111')
+    ).resolves.toBeUndefined()
 
     expect(invoke).toHaveBeenCalledWith('batch-import:selectFiles')
     expect(invoke).toHaveBeenCalledWith('batch-import:selectFolder')
@@ -214,6 +226,9 @@ describe('batch-import preload domain behavior', () => {
     expect(invoke).toHaveBeenCalledWith('batch-import:cancel')
     expect(invoke).toHaveBeenCalledWith('batch-import:selectZip')
     expect(invoke).toHaveBeenCalledWith('batch-import:testZipPassword', '/archive.zip', 'pwd')
-    expect(invoke).toHaveBeenCalledWith('batch-import:cleanupZipTemp')
+    expect(invoke).toHaveBeenCalledWith(
+      'batch-import:cleanupZipTemp',
+      '11111111-1111-4111-8111-111111111111'
+    )
   })
 })

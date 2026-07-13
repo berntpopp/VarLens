@@ -8,7 +8,7 @@
  * meant ONE test suite covers both paths.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import {
   passesPreMappingFilters,
   passesPostMappingFilters,
@@ -76,12 +76,12 @@ function mapped(overrides: Partial<VcfMappedVariant> = {}): VcfMappedVariant {
   }
 }
 
-function buildBed(intervals: Array<[string, number, number]>): BedFilter {
+async function buildBed(intervals: Array<[string, number, number]>): Promise<BedFilter> {
   const content = intervals.map(([chr, s, e]) => `${chr}\t${s}\t${e}`).join('\n')
   const tmp = `/tmp/varlens-test-${Date.now()}-${Math.random().toString(36).slice(2)}.bed`
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('node:fs').writeFileSync(tmp, content)
-  const bed = BedFilter.fromFile(tmp, 0)
+  const bed = await BedFilter.fromFile(tmp, 0)
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('node:fs').unlinkSync(tmp)
   return bed
@@ -159,8 +159,11 @@ describe('passesPreMappingFilters', () => {
   })
 
   describe('bedFilter — point queries (SNV / indel)', () => {
-    const bed = buildBed([['chr1', 999, 2000]]) // 1-based inclusive [1000, 2000]
-    const withBed: ImportFilters = { ...DEFAULT_IMPORT_FILTERS, bedFilter: bed }
+    let withBed: ImportFilters
+    beforeAll(async () => {
+      const bed = await buildBed([['chr1', 999, 2000]])
+      withBed = { ...DEFAULT_IMPORT_FILTERS, bedFilter: bed }
+    })
 
     it('keeps SNV inside the BED interval', () => {
       expect(passesPreMappingFilters(rawRecord({ chrom: 'chr1', pos: 1500 }), withBed)).toBe(true)
@@ -185,11 +188,14 @@ describe('passesPreMappingFilters', () => {
 
   describe('bedFilter — range queries (SV / CNV / STR)', () => {
     // BED: chr1:[1000-2000]  AND  chr22:[5_000_000-6_000_000]
-    const bed = buildBed([
-      ['chr1', 999, 2000],
-      ['chr22', 4_999_999, 6_000_000]
-    ])
-    const withBed: ImportFilters = { ...DEFAULT_IMPORT_FILTERS, bedFilter: bed }
+    let withBed: ImportFilters
+    beforeAll(async () => {
+      const bed = await buildBed([
+        ['chr1', 999, 2000],
+        ['chr22', 4_999_999, 6_000_000]
+      ])
+      withBed = { ...DEFAULT_IMPORT_FILTERS, bedFilter: bed }
+    })
 
     it('keeps SV that overlaps a BED interval (DEL spanning interval)', () => {
       const del = rawRecord({
@@ -306,13 +312,16 @@ describe('passesPreMappingFilters', () => {
   })
 
   describe('combined filters — all three must pass', () => {
-    const bed = buildBed([['chr1', 999, 2000]])
-    const strict: ImportFilters = {
-      ...DEFAULT_IMPORT_FILTERS,
-      passOnly: true,
-      minQual: 30,
-      bedFilter: bed
-    }
+    let strict: ImportFilters
+    beforeAll(async () => {
+      const bed = await buildBed([['chr1', 999, 2000]])
+      strict = {
+        ...DEFAULT_IMPORT_FILTERS,
+        passOnly: true,
+        minQual: 30,
+        bedFilter: bed
+      }
+    })
 
     it('passes when everything is satisfied', () => {
       expect(

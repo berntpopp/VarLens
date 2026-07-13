@@ -6,10 +6,31 @@
  */
 
 import type { VcfRawRecord, InfoFieldDef, FormatFieldDef } from './types'
+import {
+  MAX_VCF_ALT_ALLELES,
+  splitBounded,
+  splitGenotypeAlleles,
+  VcfResourceLimitError
+} from './vcf-resource-limits'
+
+function splitAlleleValues(value: string): string[] {
+  const parts = splitBounded(value, ',', MAX_VCF_ALT_ALLELES + 1)
+  if (parts === null) {
+    throw new VcfResourceLimitError(
+      `Allele-valued field has more than ${MAX_VCF_ALT_ALLELES + 1} values`
+    )
+  }
+  return parts
+}
+
+function normalizeVectorToken(value: string | undefined): string {
+  return value === undefined || value === '' ? '.' : value
+}
 
 /**
  * Split a multi-allelic VcfRawRecord into one record per ALT allele.
- * Single-allelic records pass through unchanged (returned as a one-element array).
+ * Single-allelic records are also normalized so Number=A/R FORMAT vectors
+ * have the same biallelic representation as split multi-allelic records.
  *
  * @param record - Raw VCF record (may have multiple ALT alleles)
  * @param infoDefs - INFO field definitions from VCF header (for Number semantics)
@@ -21,11 +42,6 @@ export function splitMultiAllelic(
   infoDefs: Map<string, InfoFieldDef>,
   formatDefs: Map<string, FormatFieldDef>
 ): VcfRawRecord[] {
-  // Single-allelic: pass through
-  if (record.alt.length <= 1) {
-    return [record]
-  }
-
   const results: VcfRawRecord[] = []
 
   for (let altIdx = 0; altIdx < record.alt.length; altIdx++) {
@@ -45,6 +61,39 @@ export function splitMultiAllelic(
   }
 
   return results
+}
+
+/**
+ * Build one biallelic view for one selected sample. Import mapping uses this
+ * instead of materializing every ALT × every sample clone up front.
+ */
+export function splitAlleleForSample(
+  record: VcfRawRecord,
+  infoDefs: Map<string, InfoFieldDef>,
+  formatDefs: Map<string, FormatFieldDef>,
+  altIdx: number,
+  sampleName: string
+): VcfRawRecord {
+  if (!Number.isSafeInteger(altIdx) || altIdx < 0 || altIdx >= record.alt.length) {
+    throw new RangeError(`ALT index ${altIdx} is outside the VCF record`)
+  }
+  const sampleValues = record.samples.get(sampleName)
+  const samples = new Map<string, string[]>()
+  if (sampleValues !== undefined) {
+    samples.set(sampleName, splitOneSampleFields(record.format, sampleValues, formatDefs, altIdx))
+  }
+  return {
+    chrom: record.chrom,
+    pos: record.pos,
+    id: record.id,
+    ref: record.ref,
+    alt: [record.alt[altIdx]],
+    qual: record.qual,
+    filter: record.filter,
+    info: splitInfoFields(record.info, infoDefs, altIdx),
+    format: record.format,
+    samples
+  }
 }
 
 /**
@@ -69,22 +118,21 @@ function splitInfoFields(
 
       case 'A': {
         // Per-ALT allele — select value at altIdx
-        const parts = value.split(',')
-        if (altIdx < parts.length) {
-          result.set(key, parts[altIdx])
-        } else {
-          result.set(key, value)
-        }
+        const parts = splitAlleleValues(value)
+        result.set(key, normalizeVectorToken(parts[altIdx]))
         break
       }
 
       case 'R': {
         // Per-allele (REF + ALTs) — keep REF (index 0) + current ALT
-        const parts = value.split(',')
+        const parts = splitAlleleValues(value)
         if (parts.length > altIdx + 1) {
-          result.set(key, `${parts[0]},${parts[altIdx + 1]}`)
+          result.set(
+            key,
+            `${normalizeVectorToken(parts[0])},${normalizeVectorToken(parts[altIdx + 1])}`
+          )
         } else {
-          result.set(key, value)
+          result.set(key, `${normalizeVectorToken(parts[0])},.`)
         }
         break
       }
@@ -113,43 +161,49 @@ function splitSampleFields(
   altIdx: number
 ): Map<string, string[]> {
   const result = new Map<string, string[]>()
-  const originalAltAllele = altIdx + 1 // 1-based allele number in GT
 
   for (const [sampleName, values] of record.samples) {
-    const newValues = [...values]
-
-    for (let fIdx = 0; fIdx < record.format.length; fIdx++) {
-      const field = record.format[fIdx]
-      if (fIdx >= values.length) break
-
-      if (field === 'GT') {
-        newValues[fIdx] = remapGenotype(values[fIdx], originalAltAllele)
-        continue
-      }
-
-      const def = formatDefs.get(field)
-      const number = def?.number ?? '.'
-
-      if (number === 'R') {
-        // Per-allele (REF + ALTs) — keep REF + current ALT
-        const parts = values[fIdx].split(',')
-        if (parts.length > altIdx + 1) {
-          newValues[fIdx] = `${parts[0]},${parts[altIdx + 1]}`
-        }
-      } else if (number === 'A') {
-        // Per-ALT — select value at altIdx
-        const parts = values[fIdx].split(',')
-        if (altIdx < parts.length) {
-          newValues[fIdx] = parts[altIdx]
-        }
-      }
-      // Number=1, 0, ., G: keep as-is
-    }
-
-    result.set(sampleName, newValues)
+    result.set(sampleName, splitOneSampleFields(record.format, values, formatDefs, altIdx))
   }
 
   return result
+}
+
+function splitOneSampleFields(
+  format: string[],
+  values: string[],
+  formatDefs: Map<string, FormatFieldDef>,
+  altIdx: number
+): string[] {
+  const newValues = [...values]
+  const originalAltAllele = altIdx + 1
+
+  for (let fIdx = 0; fIdx < format.length; fIdx++) {
+    const field = format[fIdx]
+    if (fIdx >= values.length) break
+
+    if (field === 'GT') {
+      newValues[fIdx] = remapGenotype(values[fIdx], originalAltAllele)
+      continue
+    }
+
+    const number = formatDefs.get(field)?.number ?? (field === 'AD' ? 'R' : '.')
+    if (number === 'R') {
+      const parts = splitAlleleValues(values[fIdx])
+      if (parts.length > altIdx + 1) {
+        newValues[fIdx] =
+          `${normalizeVectorToken(parts[0])},${normalizeVectorToken(parts[altIdx + 1])}`
+      } else {
+        newValues[fIdx] = `${normalizeVectorToken(parts[0])},.`
+      }
+    } else if (number === 'A') {
+      const parts = splitAlleleValues(values[fIdx])
+      const selected = normalizeVectorToken(parts[altIdx])
+      newValues[fIdx] = field === 'AD' ? `.,${selected}` : selected
+    }
+  }
+
+  return newValues
 }
 
 /**
@@ -165,7 +219,8 @@ function splitSampleFields(
 function remapGenotype(gt: string, originalAltAllele: number): string {
   // Determine separator
   const separator = gt.includes('|') ? '|' : '/'
-  const alleles = gt.split(/[/|]/)
+  const alleles = splitGenotypeAlleles(gt)
+  if (alleles === null) throw new VcfResourceLimitError('Genotype ploidy exceeds 64 alleles')
 
   const remapped = alleles.map((a) => {
     if (a === '.') return '.'

@@ -3,9 +3,17 @@
  *
  * Issue #207: switching the selected transcript must update the denormalized
  * transcript columns on the parent `variants` row (transcript, gene_symbol,
- * consequence, cdna, aa_change, hpo_sim_score, moi), not just flip
+ * consequence, func, cdna, aa_change, hpo_sim_score, moi), not just flip
  * `variant_transcripts.is_selected`. The Postgres backend originally missed the
  * parent-row update; PR #214 fixed it inside `PostgresTranscriptsRepository`.
+ *
+ * Follow-up (D1/D2): `variant_transcripts.consequence` is the IMPACT level
+ * (HIGH/MODERATE/LOW/MODIFIER) and `variant_transcripts.func` is the Sequence
+ * Ontology term (missense_variant, stop_gained, ...) — same convention as
+ * `variants.consequence` / `variants.func`. The denorm writeback originally
+ * copied `consequence` but not `func`, so `variants.func` went stale on a
+ * transcript switch. `func` must now be copied too, without crossing the two
+ * columns.
  *
  * Existing coverage stops short of a real engine:
  *   - postgres-transcripts-repository.test.ts mocks the `pg` client and only
@@ -49,11 +57,12 @@ const PG_URL =
   process.env.VARLENS_PG_URL ??
   'postgres://varlens:varlens_dev_password@127.0.0.1:55432/varlens_dev'
 
-/** The seven denormalized transcript columns mirrored onto `variants`. */
+/** The eight denormalized transcript columns mirrored onto `variants`. */
 interface DenormFields {
   transcript: string | null
   gene_symbol: string | null
   consequence: string | null
+  func: string | null
   cdna: string | null
   aa_change: string | null
   hpo_sim_score: number | null
@@ -64,7 +73,10 @@ interface DenormFields {
 interface TranscriptFixture {
   transcript_id: string
   gene_symbol: string
+  /** IMPACT level (HIGH/MODERATE/LOW/MODIFIER) — must land in variants.consequence. */
   consequence: string
+  /** Sequence Ontology term — must land in variants.func, never in variants.consequence. */
+  func: string
   cdna: string
   aa_change: string | null
   hpo_sim_score: number
@@ -75,7 +87,8 @@ interface TranscriptFixture {
 const TRANSCRIPT_A: TranscriptFixture = {
   transcript_id: 'NM_AAA.1',
   gene_symbol: 'GENEA',
-  consequence: 'missense_variant',
+  consequence: 'MODERATE',
+  func: 'missense_variant',
   cdna: 'c.1A>G',
   aa_change: 'p.Met1Val',
   hpo_sim_score: 0.1,
@@ -85,7 +98,8 @@ const TRANSCRIPT_A: TranscriptFixture = {
 const TRANSCRIPT_B: TranscriptFixture = {
   transcript_id: 'NM_BBB.2',
   gene_symbol: 'GENEB',
-  consequence: 'stop_gained',
+  consequence: 'HIGH',
+  func: 'stop_gained',
   cdna: 'c.2C>T',
   aa_change: 'p.Gln2Ter',
   hpo_sim_score: 0.9,
@@ -96,7 +110,8 @@ const TRANSCRIPT_B: TranscriptFixture = {
 const TRANSCRIPT_C: TranscriptInsertRow = {
   transcript_id: 'ENST_CCC.1',
   gene_symbol: 'GENEC',
-  consequence: 'splice_acceptor_variant',
+  consequence: 'HIGH',
+  func: 'splice_acceptor_variant',
   cdna: 'c.3-1G>A',
   aa_change: null,
   hpo_sim_score: 0.55,
@@ -104,11 +119,23 @@ const TRANSCRIPT_C: TranscriptInsertRow = {
   is_selected: 1
 }
 
+const LEGACY_TRANSCRIPT: TranscriptFixture = {
+  transcript_id: 'NM_LEGACY.1',
+  gene_symbol: 'LEGACY',
+  consequence: 'stop_gained',
+  func: 'stop_gained',
+  cdna: 'c.4C>T',
+  aa_change: 'p.Gln2Ter',
+  hpo_sim_score: 0.4,
+  moi: 'AD'
+}
+
 function denormOf(t: TranscriptFixture): DenormFields {
   return {
     transcript: t.transcript_id,
     gene_symbol: t.gene_symbol,
     consequence: t.consequence,
+    func: t.func,
     cdna: t.cdna,
     aa_change: t.aa_change,
     hpo_sim_score: t.hpo_sim_score,
@@ -121,6 +148,7 @@ function denormOfInsert(t: TranscriptInsertRow): DenormFields {
     transcript: t.transcript_id,
     gene_symbol: t.gene_symbol,
     consequence: t.consequence,
+    func: t.func,
     cdna: t.cdna,
     aa_change: t.aa_change,
     hpo_sim_score: t.hpo_sim_score,
@@ -132,6 +160,8 @@ interface BackendHarness {
   session: StorageSession
   /** Insert a fresh case + variant (carrying A's values) + transcripts A (selected) and B. */
   seedVariantWithTranscripts: () => Promise<number>
+  /** Add a pre-migration row whose SO term is still stored in consequence. */
+  addLegacyTranscript: (variantId: number) => Promise<void>
   readVariantDenorm: (variantId: number) => Promise<DenormFields>
   cleanup: () => Promise<void>
 }
@@ -155,7 +185,7 @@ function variantSeed(): Omit<Variant, 'id' | 'case_id'> {
     cadd: 28,
     clinvar: null,
     gt_num: '0/1',
-    func: null,
+    func: TRANSCRIPT_A.func,
     qual: 30,
     hpo_sim_score: TRANSCRIPT_A.hpo_sim_score,
     transcript: TRANSCRIPT_A.transcript_id,
@@ -174,9 +204,9 @@ async function setupSqlite(): Promise<BackendHarness> {
   let seedCounter = 0
   const insertTranscript = db.database.prepare(
     `INSERT INTO variant_transcripts
-       (variant_id, transcript_id, gene_symbol, consequence, cdna, aa_change,
+       (variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change,
         hpo_sim_score, moi, is_selected)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
 
   return {
@@ -195,6 +225,7 @@ async function setupSqlite(): Promise<BackendHarness> {
           t.transcript_id,
           t.gene_symbol,
           t.consequence,
+          t.func,
           t.cdna,
           t.aa_change,
           t.hpo_sim_score,
@@ -204,10 +235,24 @@ async function setupSqlite(): Promise<BackendHarness> {
       }
       return variantId
     },
+    addLegacyTranscript: async (variantId: number) => {
+      insertTranscript.run(
+        variantId,
+        LEGACY_TRANSCRIPT.transcript_id,
+        LEGACY_TRANSCRIPT.gene_symbol,
+        LEGACY_TRANSCRIPT.consequence,
+        null,
+        LEGACY_TRANSCRIPT.cdna,
+        LEGACY_TRANSCRIPT.aa_change,
+        LEGACY_TRANSCRIPT.hpo_sim_score,
+        LEGACY_TRANSCRIPT.moi,
+        0
+      )
+    },
     readVariantDenorm: async (variantId: number) => {
       const row = db.database
         .prepare(
-          `SELECT transcript, gene_symbol, consequence, cdna, aa_change, hpo_sim_score, moi
+          `SELECT transcript, gene_symbol, consequence, func, cdna, aa_change, hpo_sim_score, moi
              FROM variants WHERE id = ?`
         )
         .get(variantId) as DenormFields
@@ -263,9 +308,9 @@ async function setupPostgres(): Promise<BackendHarness> {
       const seed = variantSeed()
       const variantRes = await client.query(
         `INSERT INTO "${schema}".variants
-           (case_id, chr, pos, ref, alt, gene_symbol, consequence,
+           (case_id, chr, pos, ref, alt, gene_symbol, consequence, func,
             hpo_sim_score, transcript, cdna, aa_change, moi)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
         [
           caseId,
           seed.chr,
@@ -274,6 +319,7 @@ async function setupPostgres(): Promise<BackendHarness> {
           seed.alt,
           seed.gene_symbol,
           seed.consequence,
+          seed.func,
           seed.hpo_sim_score,
           seed.transcript,
           seed.cdna,
@@ -289,14 +335,15 @@ async function setupPostgres(): Promise<BackendHarness> {
       ] as const) {
         await client.query(
           `INSERT INTO "${schema}".variant_transcripts
-             (variant_id, transcript_id, gene_symbol, consequence, cdna, aa_change,
+             (variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change,
               hpo_sim_score, moi, is_selected)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             variantId,
             t.transcript_id,
             t.gene_symbol,
             t.consequence,
+            t.func,
             t.cdna,
             t.aa_change,
             t.hpo_sim_score,
@@ -307,9 +354,29 @@ async function setupPostgres(): Promise<BackendHarness> {
       }
       return variantId
     },
+    addLegacyTranscript: async (variantId: number) => {
+      await client.query(
+        `INSERT INTO "${schema}".variant_transcripts
+           (variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change,
+            hpo_sim_score, moi, is_selected)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          variantId,
+          LEGACY_TRANSCRIPT.transcript_id,
+          LEGACY_TRANSCRIPT.gene_symbol,
+          LEGACY_TRANSCRIPT.consequence,
+          null,
+          LEGACY_TRANSCRIPT.cdna,
+          LEGACY_TRANSCRIPT.aa_change,
+          LEGACY_TRANSCRIPT.hpo_sim_score,
+          LEGACY_TRANSCRIPT.moi,
+          0
+        ]
+      )
+    },
     readVariantDenorm: async (variantId: number) => {
       const res = await client.query(
-        `SELECT transcript, gene_symbol, consequence, cdna, aa_change, hpo_sim_score, moi
+        `SELECT transcript, gene_symbol, consequence, func, cdna, aa_change, hpo_sim_score, moi
            FROM "${schema}".variants WHERE id = $1`,
         [variantId]
       )
@@ -318,6 +385,7 @@ async function setupPostgres(): Promise<BackendHarness> {
         transcript: r.transcript,
         gene_symbol: r.gene_symbol,
         consequence: r.consequence,
+        func: r.func,
         cdna: r.cdna,
         aa_change: r.aa_change,
         hpo_sim_score: r.hpo_sim_score === null ? null : Number(r.hpo_sim_score),
@@ -374,6 +442,27 @@ describe.each(fixtures)('transcript-switch denormalization — $name', ({ setup 
     })
 
     expect(await h.readVariantDenorm(variantId)).toEqual(denormOfInsert(TRANSCRIPT_C))
+  })
+
+  it('clears stale parent impact when the selected legacy transcript has no recoverable impact', async () => {
+    const variantId = await h.seedVariantWithTranscripts()
+    await h.addLegacyTranscript(variantId)
+
+    await h.session.getWriteExecutor().execute({
+      type: 'transcripts:switch',
+      params: [variantId, LEGACY_TRANSCRIPT.transcript_id]
+    })
+
+    expect(await h.readVariantDenorm(variantId)).toEqual({
+      transcript: LEGACY_TRANSCRIPT.transcript_id,
+      gene_symbol: LEGACY_TRANSCRIPT.gene_symbol,
+      consequence: null,
+      func: LEGACY_TRANSCRIPT.func,
+      cdna: LEGACY_TRANSCRIPT.cdna,
+      aa_change: LEGACY_TRANSCRIPT.aa_change,
+      hpo_sim_score: LEGACY_TRANSCRIPT.hpo_sim_score,
+      moi: LEGACY_TRANSCRIPT.moi
+    })
   })
 })
 

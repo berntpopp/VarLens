@@ -6,20 +6,24 @@
  * annotations and genotypes, then inserts via the existing bulk insert pipeline.
  */
 
-import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
-import { createGunzip } from 'node:zlib'
-import { isGzipped } from '../stream-utils'
+import { createCappedLineStream } from '../stream-utils'
 import type { ImportOptions, ImportResult } from '../types'
 import type { ImportStrategy, FormatInfo, StrategyContext } from '../strategies/ImportStrategy'
 import type { VcfImportOptions, VcfMappedVariant, VcfHeader } from './types'
 import { parseVcfHeaderFromLines } from './vcf-header-parser'
-import { parseVcfLine } from './vcf-line-parser'
+import {
+  parseVcfLine,
+  resolveVcfSelectedSampleColumn,
+  type VcfSelectedSampleColumn
+} from './vcf-line-parser'
 import { mapVcfRecord } from './VcfMapper'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from './info-field-registry'
 import { detectCaller } from './caller-detector'
 import type { ImportFilters } from './import-filters'
 import { passesPreMappingFilters, passesPostMappingFilters } from './import-filters'
+import { VcfHeaderBudget } from './vcf-header-limits'
+import { VcfResourceLimitError } from './vcf-resource-limits'
 export class VcfStrategy implements ImportStrategy {
   readonly formatId = 'vcf' as const
 
@@ -37,14 +41,19 @@ export class VcfStrategy implements ImportStrategy {
     const { db, caseId, startTime } = context
     const batchSize = options.batchSize ?? 5000
 
-    // Read file line by line
-    const raw = createReadStream(filePath)
-    const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
+    // Read file line by line. Shared capped reader guards against a giant
+    // single line and a decompression bomb -- see stream-utils.ts for the
+    // cap rationale.
+    const { stream } = createCappedLineStream(filePath)
+    stream.on('error', () => undefined)
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
+    rl.on('error', () => undefined)
 
     const headerLines: string[] = []
+    const headerBudget = new VcfHeaderBudget()
     let header: VcfHeader | null = null
     let activeSample = ''
+    let activeSampleColumn: VcfSelectedSampleColumn | null = null
     let totalInserted = 0
     let totalSkipped = 0
     const errors: string[] = []
@@ -64,6 +73,7 @@ export class VcfStrategy implements ImportStrategy {
 
         // Collect header lines
         if (line.startsWith('#')) {
+          headerBudget.add(line)
           headerLines.push(line)
           continue
         }
@@ -71,8 +81,11 @@ export class VcfStrategy implements ImportStrategy {
         // Parse header once, on the first data line
         if (header === null) {
           header = parseVcfHeaderFromLines(headerLines)
-          const selectedSample = vcfOptions?.selectedSamples?.[0]
-          activeSample = selectedSample ?? (header.samples.length > 0 ? header.samples[0] : '')
+          activeSampleColumn = resolveVcfSelectedSampleColumn(
+            header.samples,
+            vcfOptions?.selectedSamples?.[0]
+          )
+          activeSample = activeSampleColumn?.name ?? ''
 
           if (activeSample === '') {
             errors.push('No sample found in VCF file')
@@ -85,7 +98,16 @@ export class VcfStrategy implements ImportStrategy {
 
         // Parse the data line
         try {
-          const record = parseVcfLine(line, header.samples)
+          const record = parseVcfLine(
+            line,
+            header.samples,
+            (reason) => {
+              if (errors.length < 10) {
+                errors.push(`Line skipped at ${line.substring(0, 50)}: ${reason}`)
+              }
+            },
+            activeSampleColumn ?? undefined
+          )
           if (record === null) {
             totalSkipped++
             continue
@@ -137,6 +159,7 @@ export class VcfStrategy implements ImportStrategy {
             }
           }
         } catch (lineError) {
+          if (lineError instanceof VcfResourceLimitError) throw lineError
           totalSkipped++
           if (errors.length < 10) {
             errors.push(
@@ -152,6 +175,7 @@ export class VcfStrategy implements ImportStrategy {
         totalInserted += batch.length
       }
     } finally {
+      stream.destroy()
       // Always restore FTS triggers and update case
       db.variants.finishBulkInsert(caseId, totalInserted)
     }

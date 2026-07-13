@@ -1,10 +1,16 @@
-import { dialog, BrowserWindow } from 'electron'
+import { dialog, BrowserWindow, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
+import {
+  addAllowedExportRevealPath,
+  isAllowedExportRevealPath
+} from '../../security/export-path-allowlist'
+import { FilePathSchema } from '../../../shared/types/ipc-schemas'
+import { InvalidParametersError } from '../errors'
 import {
   CohortSearchParamsSchema,
   VariantExportParamsSchema
@@ -38,6 +44,25 @@ export function registerExportHandlers({
   getDb,
   getDbManager
 }: HandlerDependencies): void {
+  ipcMain.handle('export:revealInFolder', async (_event, filePath: unknown) => {
+    return wrapHandler(async () => {
+      const validated = FilePathSchema.safeParse(filePath)
+      if (!validated.success) {
+        throw new InvalidParametersError(
+          `Invalid export:revealInFolder params: ${validated.error.message}`
+        )
+      }
+      if (!isAllowedExportRevealPath(validated.data)) {
+        throw new InvalidParametersError(
+          `export:revealInFolder: path has no successful export authority: ${validated.data}`,
+          'The exported file is no longer available to reveal.'
+        )
+      }
+      shell.showItemInFolder(validated.data)
+      return { success: true }
+    })
+  })
+
   ipcMain.handle(
     'export:variants',
     async (
@@ -119,14 +144,16 @@ export function registerExportHandlers({
               }
             ]
           })) as AsyncIterable<Record<string, unknown>>
-          return await exportPostgresVariants(rows, outputFilePath, exportCallbacks)
+          const result = await exportPostgresVariants(rows, outputFilePath, exportCallbacks)
+          if (result.success) addAllowedExportRevealPath(outputFilePath)
+          return result
         }
 
         if (preparation === null) {
           throw new Error('SQLite export preparation was not created')
         }
 
-        return exportVariants(
+        const result = await exportVariants(
           getDb,
           preparation.compiled,
           validated.data.filters,
@@ -134,6 +161,8 @@ export function registerExportHandlers({
           outputFilePath,
           exportCallbacks
         )
+        if (result.success) addAllowedExportRevealPath(outputFilePath)
+        return result
       }) as Promise<{ success: boolean; filePath?: string; error?: string }>
     }
   )
@@ -205,10 +234,14 @@ export function registerExportHandlers({
             type: 'export:cohort',
             params: [validated.data]
           })) as AsyncIterable<Record<string, unknown>>
-          return await exportPostgresCohort(rows, outputFilePath, exportCallbacks)
+          const result = await exportPostgresCohort(rows, outputFilePath, exportCallbacks)
+          if (result.success) addAllowedExportRevealPath(outputFilePath)
+          return result
         }
 
-        return exportCohort(getDb, validated.data, outputFilePath)
+        const result = await exportCohort(getDb, validated.data, outputFilePath)
+        if (result.success) addAllowedExportRevealPath(outputFilePath)
+        return result
       }) as Promise<{ success: boolean; filePath?: string; error?: string }>
     }
   )

@@ -164,6 +164,7 @@
 import { computed, ref } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
+import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import {
   mdiClose,
   mdiFileDocumentOutline,
@@ -225,13 +226,19 @@ async function browseBed(): Promise<void> {
   if (api === undefined) return
   browsing.value = true
   try {
-    const path = await api.import.selectBedFile()
+    const path = unwrapIpcResult(await api.import.selectBedFile())
     if (path !== null && path !== '') {
       update('bedPath', path)
     }
   } catch (err) {
     logService.error(
-      `BED file selection failed: ${err instanceof Error ? err.message : String(err)}`,
+      `BED file selection failed: ${
+        err instanceof Error
+          ? err.message
+          : isIpcError(err)
+            ? (err.userMessage ?? err.message)
+            : String(err)
+      }`,
       'ImportFilterOptions'
     )
   } finally {

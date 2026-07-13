@@ -268,7 +268,7 @@
         {
           "domain": "batch-import",
           "method": "cleanupZipTemp",
-          "args": []
+          "args": ["$batchImport.zip.extractionId"]
         }
       ],
       "assertion": "normalized-result-hash"

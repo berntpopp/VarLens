@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { mapVcfRecord } from '../../../../src/main/import/vcf/VcfMapper'
+import { parseVcfHeaderFromLines } from '../../../../src/main/import/vcf/vcf-header-parser'
 import type { VcfRawRecord, VcfHeader } from '../../../../src/main/import/vcf/types'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../../../../src/main/import/vcf/info-field-registry'
+import { VcfResourceLimitError } from '../../../../src/main/import/vcf/vcf-resource-limits'
 
 function makeHeader(): VcfHeader {
   return {
@@ -189,6 +191,117 @@ describe('VcfMapper', () => {
     expect(resultsHG006[0].alt).toBe('T')
   })
 
+  it('assigns each split ALT its own AD depth when the AD header lacks Number=R', () => {
+    const headerNoAdDef: VcfHeader = {
+      ...header,
+      formatDefs: new Map([
+        ['GT', { id: 'GT', number: '1', type: 'String' as const, description: 'Genotype' }],
+        [
+          'GQ',
+          { id: 'GQ', number: '1', type: 'Integer' as const, description: 'Genotype Quality' }
+        ],
+        ['DP', { id: 'DP', number: '1', type: 'Integer' as const, description: 'Read Depth' }]
+        // No AD def — the VCF omits ##FORMAT=<ID=AD,Number=R,...>
+      ])
+    }
+
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 20005000,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'GQ', 'DP', 'AD'],
+      samples: new Map([['HG005', ['0/2', '90', '48', '10,3,7']]])
+    }
+
+    // HG005 carries genotype 0/2 -> only the second ALT (T, altIdx=1) is relevant
+    const results = mapVcfRecord(record, headerNoAdDef, 'HG005', DEFAULT_INFO_FIELD_MAPPINGS)
+
+    expect(results).toHaveLength(1)
+    expect(results[0].alt).toBe('T')
+    expect(results[0].ad_ref).toBe(10)
+    // Must be ALT#2's own depth (7), not ALT#1's depth (3) reused via a hardcoded index.
+    expect(results[0].ad_alt).toBe(7)
+    expect(results[0].ab).toBeCloseTo(7 / 17, 4)
+  })
+
+  it('does not derive allele depths from an explicitly non-allelic AD vector', () => {
+    const fixedAdHeader: VcfHeader = {
+      ...header,
+      formatDefs: new Map(header.formatDefs).set('AD', {
+        id: 'AD',
+        number: '2',
+        type: 'Integer',
+        description: 'Caller-specific fixed pair, not REF plus ALTs'
+      })
+    }
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 20005500,
+      id: null,
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'AD'],
+      samples: new Map([['HG005', ['0/2', '10,7']]])
+    }
+
+    const results = mapVcfRecord(record, fixedAdHeader, 'HG005', DEFAULT_INFO_FIELD_MAPPINGS)
+
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ alt: 'T', ad_ref: null, ad_alt: null, ab: null })
+  })
+
+  it('maps ALLELE_NUM annotations and AD through the parsed-header multi-allelic path', () => {
+    const parsedHeader = parseVcfHeaderFromLines([
+      '##fileformat=VCFv4.2',
+      '##INFO=<ID=CSQ,Number=.,Type=String,Description="VEP Format: Allele|Consequence|IMPACT|SYMBOL|Feature|ALLELE_NUM">',
+      '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+      '##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">',
+      '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005'
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 20006000,
+      id: null,
+      ref: 'CAT',
+      alt: ['C', 'CA'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map([
+        ['CSQ', '-|frameshift_variant|HIGH|GENE1|T1|1,-|inframe_deletion|MODERATE|GENE2|T2|2']
+      ]),
+      format: ['GT', 'AD'],
+      samples: new Map([['HG005', ['1/2', '5,7,11']]])
+    }
+
+    const results = mapVcfRecord(record, parsedHeader, 'HG005', DEFAULT_INFO_FIELD_MAPPINGS)
+
+    expect(results).toHaveLength(2)
+    expect(results[0]).toMatchObject({
+      alt: 'C',
+      gene_symbol: 'GENE1',
+      func: 'frameshift_variant',
+      gt_num: '1/.',
+      ad_ref: 5,
+      ad_alt: 7
+    })
+    expect(results[1]).toMatchObject({
+      alt: 'CA',
+      gene_symbol: 'GENE2',
+      func: 'inframe_deletion',
+      gt_num: './1',
+      ad_ref: 5,
+      ad_alt: 11
+    })
+  })
+
   it('maps ANN-annotated variant with standalone INFO fields', () => {
     const annHeader: VcfHeader = {
       ...header,
@@ -256,6 +369,34 @@ describe('VcfMapper', () => {
     expect(v.chr).toBe('chr22')
     expect(v.gt_num).toBe('0/1')
     expect(v.gene_symbol).toBeNull()
-    expect(v.gnomad_af).toBeCloseTo(0.1, 4) // mapped from AF via registry
+    // Plain AF is the caller's sample allele frequency, not a gnomAD population
+    // frequency — it must not be mapped to gnomad_af, but it must still be
+    // preserved in info_json rather than silently dropped.
+    expect(v.gnomad_af).toBeNull()
+    expect(v.info_json).not.toBeNull()
+    expect(JSON.parse(v.info_json!)['AF']).toBe('0.1')
+  })
+
+  it('rejects structural ALT fanout before expanded INFO output can exhaust memory', () => {
+    const alt = Array.from({ length: 1_000 }, (_, index) => `<DEL:${index}>`)
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 100,
+      id: null,
+      ref: 'A',
+      alt,
+      qual: 50,
+      filter: 'PASS',
+      info: new Map([
+        ['SVTYPE', 'DEL'],
+        ['ADVERSARIAL_PAYLOAD', 'x'.repeat(100_000)]
+      ]),
+      format: ['GT'],
+      samples: new Map([['HG005', ['./.']]])
+    }
+
+    expect(() => mapVcfRecord(record, { ...header, annotationType: 'none' }, 'HG005', [])).toThrow(
+      VcfResourceLimitError
+    )
   })
 })

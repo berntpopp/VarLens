@@ -393,7 +393,7 @@ describe('web dispatcher adapters: auth and import', () => {
         request as never,
         reply as never,
         deps
-      )) as { files: string[]; errors: string[] }
+      )) as { files: string[]; errors: string[]; extractionId: string }
 
       expect(reply.code).not.toHaveBeenCalledWith(403)
       expect(result.errors).toEqual([])
@@ -438,7 +438,7 @@ describe('web dispatcher adapters: auth and import', () => {
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
       const result = (await overrides['batch-import:start'].handle(
-        [[upload.ref], 'skip'],
+        [[upload.ref], 'skip', undefined, 'web-run-1'],
         request as never,
         reply as never,
         deps
@@ -471,6 +471,7 @@ describe('web dispatcher adapters: auth and import', () => {
         ]
       })
       expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:progress', {
+        runId: 'web-run-1',
         currentIndex: 0,
         totalFiles: 1,
         currentFileName: 'Case B.json',
@@ -483,7 +484,10 @@ describe('web dispatcher adapters: auth and import', () => {
       expect(deps.events.publish).toHaveBeenCalledWith(7, 'cohort:summaryRebuilt', {
         is_stale: false
       })
-      expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:complete', result)
+      expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:complete', {
+        ...result,
+        runId: 'web-run-1'
+      })
 
       const newBatchJobs = jobRunner
         .list({ kind: 'import_batch' })
@@ -537,7 +541,7 @@ describe('web dispatcher adapters: auth and import', () => {
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
       const result = (await overrides['batch-import:start'].handle(
-        [[upload.ref], 'overwrite'],
+        [[upload.ref], 'overwrite', undefined, 'web-error-run'],
         request as never,
         reply as never,
         deps
@@ -557,7 +561,10 @@ describe('web dispatcher adapters: auth and import', () => {
         }
       ])
       expect(result.details[0]?.error).not.toBe('[object Object]')
-      expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:complete', result)
+      expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:complete', {
+        ...result,
+        runId: 'web-error-run'
+      })
     } finally {
       if (prevNodeEnv === undefined) delete process.env.NODE_ENV
       else process.env.NODE_ENV = prevNodeEnv
@@ -600,7 +607,7 @@ describe('web dispatcher adapters: auth and import', () => {
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
       const result = (await overrides['batch-import:start'].handle(
-        [[firstUpload.ref, secondUpload.ref], 'skip'],
+        [[firstUpload.ref, secondUpload.ref], 'skip', undefined, 'web-dupe-run'],
         request as never,
         reply as never,
         deps
@@ -666,7 +673,7 @@ describe('web dispatcher adapters: auth and import', () => {
     const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
     const result = await overrides['batch-import:start'].handle(
-      [['web-upload:missing/Case B.json'], 'skip'],
+      [['web-upload:missing/Case B.json'], 'skip', undefined, 'web-missing-run'],
       request as never,
       reply as never,
       deps
@@ -677,6 +684,23 @@ describe('web dispatcher adapters: auth and import', () => {
       error: 'upload-not-found',
       message: 'Uploaded file is no longer available'
     })
+    expect(importSingleFile).not.toHaveBeenCalled()
+  })
+
+  test('batch-import.start rejects a missing run id before starting work', async () => {
+    const { deps, importSingleFile, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+    const result = await overrides['batch-import:start'].handle(
+      [[], 'skip'],
+      request as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(result).toEqual({ error: 'invalid-run-id', message: 'runId is invalid' })
     expect(importSingleFile).not.toHaveBeenCalled()
   })
 
@@ -827,6 +851,103 @@ describe('web dispatcher adapters: auth and import', () => {
             minQual: 30,
             minGq: null
           })
+        })
+      )
+    } finally {
+      if (prevNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = prevNodeEnv
+      if (prevRecoveryDir === undefined) delete process.env.VARLENS_RECOVERY_KEY_DIR
+      else process.env.VARLENS_RECOVERY_KEY_DIR = prevRecoveryDir
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  test('import.startMultiFile rejects a raw absolute BED filter server path', async () => {
+    const prevNodeEnv = process.env.NODE_ENV
+    const prevRecoveryDir = process.env.VARLENS_RECOVERY_KEY_DIR
+    const tempDir = await mkdtemp(join(tmpdir(), 'varlens-web-bed-authority-'))
+    process.env.NODE_ENV = 'production'
+    process.env.VARLENS_RECOVERY_KEY_DIR = tempDir
+    try {
+      const sourcePath = join(tempDir, 'input.vcf')
+      await writeFile(sourcePath, '##fileformat=VCFv4.2\n')
+      const upload = await stageExistingFileUpload({
+        userId: 7,
+        originalName: 'input.vcf',
+        sourcePath
+      })
+      const { deps, importMultiFile, reply } = makeDeps()
+      const { overrides } = buildDispatcher(deps)
+      const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+      const result = await overrides['import:startMultiFile'].handle(
+        [
+          'Case A',
+          [{ filePath: upload.ref, variantType: 'snv', caller: null, annotationFormat: null }],
+          { genomeBuild: 'hg38' },
+          { bedFile: '/etc/passwd', bedPadding: 10 }
+        ],
+        request as never,
+        reply as never,
+        deps
+      )
+
+      expect(reply.code).toHaveBeenCalledWith(403)
+      expect(result).toEqual({
+        error: 'server-path-import-disabled',
+        message: 'Server-path import is disabled in web mode. Use browser upload refs instead.'
+      })
+      expect(importMultiFile).not.toHaveBeenCalled()
+    } finally {
+      if (prevNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = prevNodeEnv
+      if (prevRecoveryDir === undefined) delete process.env.VARLENS_RECOVERY_KEY_DIR
+      else process.env.VARLENS_RECOVERY_KEY_DIR = prevRecoveryDir
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  test('import.startMultiFile resolves a user-scoped BED filter upload ref', async () => {
+    const prevNodeEnv = process.env.NODE_ENV
+    const prevRecoveryDir = process.env.VARLENS_RECOVERY_KEY_DIR
+    const tempDir = await mkdtemp(join(tmpdir(), 'varlens-web-bed-upload-'))
+    process.env.NODE_ENV = 'production'
+    process.env.VARLENS_RECOVERY_KEY_DIR = tempDir
+    try {
+      const vcfPath = join(tempDir, 'input.vcf')
+      const bedPath = join(tempDir, 'filter.bed')
+      await writeFile(vcfPath, '##fileformat=VCFv4.2\n')
+      await writeFile(bedPath, 'chr1\t0\t10\n')
+      const vcfUpload = await stageExistingFileUpload({
+        userId: 7,
+        originalName: 'input.vcf',
+        sourcePath: vcfPath
+      })
+      const bedUpload = await stageExistingFileUpload({
+        userId: 7,
+        originalName: 'filter.bed',
+        sourcePath: bedPath
+      })
+      const { deps, importMultiFile, reply } = makeDeps()
+      const { overrides } = buildDispatcher(deps)
+      const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+      await overrides['import:startMultiFile'].handle(
+        [
+          'Case A',
+          [{ filePath: vcfUpload.ref, variantType: 'snv', caller: null, annotationFormat: null }],
+          { genomeBuild: 'hg38' },
+          { bedFile: bedUpload.ref, bedPadding: 10 }
+        ],
+        request as never,
+        reply as never,
+        deps
+      )
+
+      expect(reply.code).not.toHaveBeenCalled()
+      expect(importMultiFile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ bedFilePath: bedUpload.storedPath, bedPadding: 10 })
         })
       )
     } finally {

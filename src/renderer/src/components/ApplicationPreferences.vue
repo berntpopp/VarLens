@@ -90,6 +90,7 @@ import { ref, computed, onMounted } from 'vue'
 import { mdiClose, mdiTune } from '@mdi/js'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useApiService } from '../composables/useApiService'
+import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
 
 const settings = useSettingsStore()
@@ -109,11 +110,12 @@ const defaultCaseTabOptions = [
 onMounted(async () => {
   try {
     if (api?.system?.getCpuCount) {
-      cpuCount.value = await api.system.getCpuCount()
+      cpuCount.value = unwrapIpcResult(await api.system.getCpuCount())
     }
   } catch (e) {
     logService.warn(
-      'Failed to get CPU count from main process: ' + (e instanceof Error ? e.message : String(e)),
+      'Failed to get CPU count from main process: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
       'settings'
     )
   }
@@ -124,9 +126,23 @@ const workerThreadsValue = computed({
   set: (val: number) => {
     settings.workerThreads = val
     // Sync to main process DbPool — takes effect on next database open
-    api?.system?.setWorkerThreads(val)
+    void syncWorkerThreads(val)
   }
 })
+
+async function syncWorkerThreads(value: number): Promise<void> {
+  try {
+    if (api?.system?.setWorkerThreads) {
+      unwrapIpcResult(await api.system.setWorkerThreads(value))
+    }
+  } catch (e) {
+    logService.warn(
+      'Failed to set worker thread count in main process: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
+      'settings'
+    )
+  }
+}
 
 const show = (): void => {
   isOpen.value = true

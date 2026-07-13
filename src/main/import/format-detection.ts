@@ -1,53 +1,55 @@
-import { createReadStream } from 'node:fs'
-import { createGunzip } from 'node:zlib'
 import { createInterface } from 'node:readline'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
-import type { Readable } from 'node:stream'
+import { createJsonRecordBudget } from './json-resource-budget'
+import { compose, type Readable } from 'node:stream'
 import type { FileFormat, FormatInfo } from './strategies/ImportStrategy'
-import { createDecompressedStream, isGzipped } from './stream-utils'
+import { createCappedLineStream, createDecompressedStream } from './stream-utils'
+
+const MAX_FORMAT_DETECTION_TOP_LEVEL_KEYS = 4_096
+const MAX_FORMAT_DETECTION_TOP_LEVEL_KEY_BYTES = 1024 * 1024
+const MAX_FORMAT_DETECTION_KEY_BYTES = 16 * 1024
+const MAX_FORMAT_DETECTION_TOKENS = 250_000
+const MAX_FORMAT_DETECTION_DEPTH = 64
+
+interface JsonToken {
+  name?: string
+  value?: unknown
+}
+
+export class FormatDetectionLimitError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'FormatDetectionLimitError'
+  }
+}
 
 /**
  * Check if a file is a VCF file by reading the first line.
  * VCF files start with "##fileformat=VCFv4"
  */
 async function isVcfFile(filePath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const raw = createReadStream(filePath, { start: 0, end: 1024 })
-    const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
-
+  return new Promise((resolve, reject) => {
+    const { stream } = createCappedLineStream(filePath)
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
-    let resolved = false
+    let settled = false
+
+    const settle = (result: boolean, error?: Error): void => {
+      if (settled) return
+      settled = true
+      rl.close()
+      stream.destroy()
+      if (error !== undefined) reject(error)
+      else resolve(result)
+    }
 
     rl.on('line', (line: string) => {
-      if (!resolved) {
-        resolved = true
-        rl.close()
-        resolve(line.startsWith('##fileformat=VCFv'))
-      }
+      settle(line.startsWith('##fileformat=VCFv'))
     })
-
-    rl.on('close', () => {
-      if (!resolved) {
-        resolved = true
-        resolve(false)
-      }
-    })
-
-    rl.on('error', () => {
-      if (!resolved) {
-        resolved = true
-        resolve(false)
-      }
-    })
-
-    stream.on('error', () => {
-      if (!resolved) {
-        resolved = true
-        resolve(false)
-      }
-    })
+    rl.on('close', () => settle(false))
+    rl.on('error', (error) => settle(false, error))
+    stream.on('error', (error) => settle(false, error))
   })
 }
 
@@ -78,14 +80,25 @@ export async function detectFormat(filePath: string): Promise<FormatInfo> {
     }
   }
   return new Promise((resolve, reject) => {
-    const stream = createDecompressedStream(filePath).pipe(parser.asStream())
+    const stream = compose(
+      createDecompressedStream(filePath),
+      parser.asStream({ packKeys: false, packStrings: false, packNumbers: false })
+    )
 
-    const topLevelKeys: string[] = []
+    let firstTopLevelKey = ''
+    let topLevelKeyCount = 0
+    let topLevelKeyBytes = 0
+    let hasVariants = false
+    let hasMetadata = false
+    let hasSamples = false
+    let hasData = false
+    let hasHeader = false
     let depth = 0
     let resolved = false
+    let tokenCount = 0
+    const keyReader = new BoundedJsonKeyReader()
 
     const cleanup = (): void => {
-      stream.removeAllListeners()
       stream.destroy()
     }
 
@@ -105,12 +118,61 @@ export async function detectFormat(filePath: string): Promise<FormatInfo> {
 
     let pendingDataKey = false
 
-    stream.on('data', (data: { name?: string; value?: unknown }) => {
+    const processTopLevelKey = (key: string): void => {
+      topLevelKeyCount += 1
+      topLevelKeyBytes += Buffer.byteLength(key, 'utf8')
+      if (
+        topLevelKeyCount > MAX_FORMAT_DETECTION_TOP_LEVEL_KEYS ||
+        topLevelKeyBytes > MAX_FORMAT_DETECTION_TOP_LEVEL_KEY_BYTES
+      ) {
+        throw new FormatDetectionLimitError(
+          'JSON format detection exceeded its top-level keys budget'
+        )
+      }
+      if (topLevelKeyCount === 1) firstTopLevelKey = key
+      hasVariants ||= key === 'variants'
+      hasMetadata ||= key === 'metadata'
+      hasSamples ||= key === 'samples'
+      hasData ||= key === 'data'
+      hasHeader ||= key === 'header'
+
+      if (hasVariants) {
+        resolveFormat('simple', 'variants')
+        return
+      }
+      if (hasMetadata && hasSamples) {
+        resolved = true
+        cleanup()
+        extractFirstSampleId(filePath)
+          .then((sampleId) => resolve({ format: 'object', caseKey: sampleId }))
+          .catch(reject)
+        return
+      }
+      if (hasData && hasHeader) {
+        resolved = true
+        cleanup()
+        resolve({ format: 'columnar', caseKey: '', wrapped: false })
+        return
+      }
+      if (firstTopLevelKey === 'data' && topLevelKeyCount === 1) pendingDataKey = true
+    }
+
+    stream.on('data', (data: JsonToken) => {
       if (resolved) return
+
+      tokenCount += 1
+      if (tokenCount > MAX_FORMAT_DETECTION_TOKENS) {
+        rejectFormat(new FormatDetectionLimitError('JSON format detection token budget exceeded'))
+        return
+      }
 
       // Track depth
       if (data.name === 'startObject' || data.name === 'startArray') {
         depth++
+        if (depth > MAX_FORMAT_DETECTION_DEPTH) {
+          rejectFormat(new FormatDetectionLimitError('JSON format detection depth budget exceeded'))
+          return
+        }
       } else if (data.name === 'endObject' || data.name === 'endArray') {
         depth--
       }
@@ -129,64 +191,35 @@ export async function detectFormat(filePath: string): Promise<FormatInfo> {
         // startObject means wrapped columnar — fall through to normal detection
       }
 
-      // Collect top-level keys
-      if (data.name === 'keyValue' && depth === 1) {
-        topLevelKeys.push(String(data.value))
-
-        // Check for simple format
-        if (topLevelKeys.includes('variants')) {
-          resolveFormat('simple', 'variants')
-          return
-        }
-
-        // Check for object format markers
-        if (topLevelKeys.includes('metadata') && topLevelKeys.includes('samples')) {
-          resolved = true
-          cleanup()
-          extractFirstSampleId(filePath)
-            .then((sampleId) => {
-              resolve({ format: 'object', caseKey: sampleId })
-            })
-            .catch(reject)
-          return
-        }
-
-        // Check for unwrapped columnar: data + header both seen at top level
-        if (topLevelKeys.includes('data') && topLevelKeys.includes('header')) {
-          resolved = true
-          cleanup()
-          resolve({ format: 'columnar', caseKey: '', wrapped: false })
-          return
-        }
-
-        // If 'data' is the first key, defer resolution until we see the value type
-        if (topLevelKeys[0] === 'data' && topLevelKeys.length === 1) {
-          pendingDataKey = true
-        }
+      try {
+        const key = keyReader.consume(data, depth)
+        if (key !== null && key.depth === 1) processTopLevelKey(key.value)
+      } catch (error) {
+        rejectFormat(error as Error)
       }
     })
 
     stream.on('end', () => {
       if (resolved) return
 
-      if (topLevelKeys.length === 0) {
+      if (topLevelKeyCount === 0) {
         rejectFormat(new Error('Could not detect file format: no top-level keys found'))
         return
       }
 
-      if (topLevelKeys.includes('variants')) {
+      if (hasVariants) {
         resolveFormat('simple', 'variants')
-      } else if (topLevelKeys.includes('metadata') || topLevelKeys.includes('samples')) {
+      } else if (hasMetadata || hasSamples) {
         resolved = true
         extractFirstSampleId(filePath)
           .then((sampleId) => {
             resolve({ format: 'object', caseKey: sampleId })
           })
           .catch(reject)
-      } else if (topLevelKeys.includes('data') && topLevelKeys.includes('header')) {
+      } else if (hasData && hasHeader) {
         resolve({ format: 'columnar', caseKey: '', wrapped: false })
       } else {
-        resolveFormat('columnar', topLevelKeys[0])
+        resolveFormat('columnar', firstTopLevelKey)
       }
     })
 
@@ -199,36 +232,58 @@ export async function detectFormat(filePath: string): Promise<FormatInfo> {
  */
 export async function extractFirstSampleId(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const stream = createDecompressedStream(filePath).pipe(parser.asStream())
+    const stream = compose(
+      createDecompressedStream(filePath),
+      parser.asStream({ packKeys: false, packStrings: false, packNumbers: false })
+    )
 
     let inSamples = false
     let sampleId: string | null = null
     let depth = 0
     let resolved = false
+    let tokenCount = 0
+    const keyReader = new BoundedJsonKeyReader()
 
     const cleanup = (): void => {
-      stream.removeAllListeners()
       stream.destroy()
     }
 
-    stream.on('data', (data: { name?: string; value?: unknown }) => {
+    stream.on('data', (data: JsonToken) => {
       if (resolved) return
+
+      tokenCount += 1
+      if (tokenCount > MAX_FORMAT_DETECTION_TOKENS) {
+        resolved = true
+        cleanup()
+        reject(new FormatDetectionLimitError('JSON sample detection token budget exceeded'))
+        return
+      }
 
       if (data.name === 'startObject' || data.name === 'startArray') {
         depth++
+        if (depth > MAX_FORMAT_DETECTION_DEPTH) {
+          resolved = true
+          cleanup()
+          reject(new FormatDetectionLimitError('JSON sample detection depth budget exceeded'))
+          return
+        }
       } else if (data.name === 'endObject' || data.name === 'endArray') {
         depth--
       }
 
-      if (data.name === 'keyValue' && depth === 1 && data.value === 'samples') {
-        inSamples = true
-      }
-
-      if (inSamples && data.name === 'keyValue' && depth === 2 && sampleId === null) {
-        sampleId = String(data.value)
+      try {
+        const key = keyReader.consume(data, depth)
+        if (key?.depth === 1 && key.value === 'samples') inSamples = true
+        else if (inSamples && key?.depth === 2 && sampleId === null) {
+          sampleId = key.value
+          resolved = true
+          cleanup()
+          resolve(sampleId)
+        }
+      } catch (error) {
         resolved = true
         cleanup()
-        resolve(sampleId)
+        reject(error)
       }
     })
 
@@ -252,6 +307,41 @@ export async function extractFirstSampleId(filePath: string): Promise<string> {
   })
 }
 
+class BoundedJsonKeyReader {
+  private active = false
+  private depth = 0
+  private bytes = 0
+  private chunks: string[] = []
+
+  consume(token: JsonToken, currentDepth: number): { value: string; depth: number } | null {
+    if (token.name === 'startKey') {
+      this.active = true
+      this.depth = currentDepth
+      this.bytes = 0
+      this.chunks = []
+      return null
+    }
+    if (this.active && token.name === 'stringChunk') {
+      const chunk = String(token.value ?? '')
+      this.bytes += Buffer.byteLength(chunk, 'utf8')
+      if (this.bytes > MAX_FORMAT_DETECTION_KEY_BYTES) {
+        throw new FormatDetectionLimitError(
+          `JSON format detection key exceeds ${MAX_FORMAT_DETECTION_KEY_BYTES} bytes`
+        )
+      }
+      this.chunks.push(chunk)
+      return null
+    }
+    if (this.active && token.name === 'endKey') {
+      const result = { value: this.chunks.join(''), depth: this.depth }
+      this.active = false
+      this.chunks = []
+      return result
+    }
+    return null
+  }
+}
+
 /**
  * Detect file format and create a data stream positioned at the variant/data items.
  *
@@ -269,35 +359,41 @@ export async function createDataPipeline(filePath: string): Promise<{
   stream: Readable
 }> {
   const formatInfo = await detectFormat(filePath)
-  const decompressed = createDecompressedStream(filePath)
-  const jsonParser = parser.asStream()
-
   let stream: Readable
 
   switch (formatInfo.format) {
     case 'simple':
-      stream = decompressed
-        .pipe(jsonParser)
-        .pipe(pick.asStream({ filter: 'variants' }))
-        .pipe(streamArray.asStream())
+      stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: 'variants' }),
+        createJsonRecordBudget(),
+        streamArray.asStream()
+      )
       break
 
     case 'object': {
       const samplePath = `samples.${formatInfo.caseKey}.variants`
-      stream = decompressed
-        .pipe(jsonParser)
-        .pipe(pick.asStream({ filter: samplePath }))
-        .pipe(streamArray.asStream())
+      stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: samplePath }),
+        createJsonRecordBudget(),
+        streamArray.asStream()
+      )
       break
     }
 
     case 'columnar': {
       const wrapped = formatInfo.wrapped !== false
       const dataPath = wrapped ? `${formatInfo.caseKey}.data` : 'data'
-      stream = decompressed
-        .pipe(jsonParser)
-        .pipe(pick.asStream({ filter: dataPath }))
-        .pipe(streamArray.asStream())
+      stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: dataPath }),
+        createJsonRecordBudget(),
+        streamArray.asStream()
+      )
       break
     }
 

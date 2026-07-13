@@ -1,6 +1,10 @@
 import type { Pool, PoolClient } from 'pg'
 
-import type { TranscriptAnnotation, TranscriptInsertRow } from '../../../shared/types/transcript'
+import {
+  canonicalizeTranscriptSemantics,
+  type TranscriptAnnotation,
+  type TranscriptInsertRow
+} from '../../../shared/types/transcript'
 import { quoteIdentifier } from './identifiers'
 
 type QueryablePool = Pick<Pool, 'query'> & Partial<Pick<Pool, 'connect'>>
@@ -29,7 +33,7 @@ function toNullableBoolean(value: unknown): boolean | null {
 }
 
 const transcriptColumns = `
-  id, variant_id, transcript_id, gene_symbol, consequence, cdna, aa_change,
+  id, variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change,
   hpo_sim_score, moi, is_selected, is_mane_select, is_canonical
 `
 
@@ -86,9 +90,9 @@ export class PostgresTranscriptsRepository {
       await client.query('BEGIN')
       await client.query(
         `INSERT INTO ${this.schemaName}.variant_transcripts
-           (variant_id, transcript_id, gene_symbol, consequence, cdna, aa_change,
+           (variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change,
             hpo_sim_score, moi, is_selected, is_mane_select, is_canonical)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NULL, NULL)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, NULL, NULL)
          ON CONFLICT (variant_id, transcript_id)
          DO NOTHING`,
         [
@@ -96,6 +100,7 @@ export class PostgresTranscriptsRepository {
           transcript.transcript_id,
           transcript.gene_symbol,
           transcript.consequence,
+          transcript.func,
           transcript.cdna,
           transcript.aa_change,
           transcript.hpo_sim_score,
@@ -142,21 +147,28 @@ export class PostgresTranscriptsRepository {
     variantId: number,
     transcript: Record<string, unknown>
   ): Promise<void> {
+    const semantics = canonicalizeTranscriptSemantics(
+      (transcript.consequence as string | null | undefined) ?? null,
+      (transcript.func as string | null | undefined) ?? null
+    )
+
     await client.query(
       `UPDATE ${this.schemaName}.variants
           SET transcript = $2,
               gene_symbol = $3,
               consequence = $4,
-              cdna = $5,
-              aa_change = $6,
-              hpo_sim_score = $7,
-              moi = $8
+              func = $5,
+              cdna = $6,
+              aa_change = $7,
+              hpo_sim_score = $8,
+              moi = $9
         WHERE id = $1`,
       [
         variantId,
         transcript.transcript_id,
         transcript.gene_symbol,
-        transcript.consequence,
+        semantics.consequence,
+        semantics.func,
         transcript.cdna,
         transcript.aa_change,
         transcript.hpo_sim_score,
@@ -179,6 +191,7 @@ export class PostgresTranscriptsRepository {
       transcript_id: row.transcript_id as string,
       gene_symbol: (row.gene_symbol as string | null) ?? null,
       consequence: (row.consequence as string | null) ?? null,
+      func: (row.func as string | null) ?? null,
       cdna: (row.cdna as string | null) ?? null,
       aa_change: (row.aa_change as string | null) ?? null,
       hpo_sim_score: (row.hpo_sim_score as number | null) ?? null,

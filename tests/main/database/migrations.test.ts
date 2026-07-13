@@ -131,7 +131,7 @@ describe('Schema Migrations', () => {
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(31)
+      expect(versionResult.user_version).toBe(32)
 
       service.close()
 
@@ -141,7 +141,7 @@ describe('Schema Migrations', () => {
       const versionAfterReopen = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionAfterReopen.user_version).toBe(31)
+      expect(versionAfterReopen.user_version).toBe(32)
 
       service.close()
     })
@@ -468,7 +468,7 @@ describe('Schema Migrations', () => {
       let versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(31)
+      expect(versionResult.user_version).toBe(32)
 
       service.close()
 
@@ -488,7 +488,7 @@ describe('Schema Migrations', () => {
       versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(31)
+      expect(versionResult.user_version).toBe(32)
 
       service.close()
     })
@@ -522,7 +522,7 @@ describe('Schema Migrations', () => {
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(31)
+      expect(versionResult.user_version).toBe(32)
 
       service.close()
     })
@@ -760,7 +760,7 @@ describe('Schema Migrations', () => {
       const version = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(version.user_version).toBe(31)
+      expect(version.user_version).toBe(32)
 
       service.close()
     })
@@ -801,7 +801,7 @@ describe('Schema Migrations', () => {
 
       // Verify user_version = latest (v15 + v16 + v17 + v18 + … + v28 + v29 all run)
       const version = db.pragma('user_version', { simple: true }) as number
-      expect(version).toBe(31)
+      expect(version).toBe(32)
 
       service.close()
     })
@@ -1257,9 +1257,9 @@ describe('migration v27 — filter_presets.kind + shortlist seeds', () => {
     expect(idx).toBeTruthy()
   })
 
-  it('PRAGMA user_version = 31 after migration', () => {
+  it('PRAGMA user_version = 32 after migration', () => {
     const v = db.pragma('user_version', { simple: true })
-    expect(v).toBe(31)
+    expect(v).toBe(32)
   })
 })
 
@@ -1314,7 +1314,7 @@ describe('migration v31 — projects registry (D5)', () => {
     }
     expect(row).toEqual({ id: 1, name: 'default', schema_name: 'main' })
 
-    expect(db.pragma('user_version', { simple: true })).toBe(31)
+    expect(db.pragma('user_version', { simple: true })).toBe(32)
   })
 
   it('SQLite v31: re-running migrations is idempotent (single default row)', () => {
@@ -1325,6 +1325,178 @@ describe('migration v31 — projects registry (D5)', () => {
 
     const count = db.prepare(`SELECT COUNT(*) AS c FROM projects`).get() as { c: number }
     expect(count.c).toBe(1)
-    expect(db.pragma('user_version', { simple: true })).toBe(31)
+    expect(db.pragma('user_version', { simple: true })).toBe(32)
+  })
+})
+
+describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO model)', () => {
+  let db: Database.Database
+
+  afterEach(() => {
+    db.close()
+  })
+
+  it('adds a nullable func column to variant_transcripts', () => {
+    db = new Database(':memory:')
+    initializeSchema(db)
+    runMigrations(db)
+
+    const columns = db.prepare(`PRAGMA table_info(variant_transcripts)`).all() as Array<{
+      name: string
+      notnull: number
+    }>
+    const funcCol = columns.find((c) => c.name === 'func')
+    expect(funcCol).toBeDefined()
+    expect(funcCol!.notnull).toBe(0)
+
+    expect(db.pragma('user_version', { simple: true })).toBe(32)
+  })
+
+  it('is idempotent — re-running migrations does not throw or duplicate the column', () => {
+    db = new Database(':memory:')
+    initializeSchema(db)
+    runMigrations(db)
+    expect(() => runMigrations(db)).not.toThrow()
+
+    const columns = db.prepare(`PRAGMA table_info(variant_transcripts)`).all() as Array<{
+      name: string
+    }>
+    expect(columns.filter((c) => c.name === 'func')).toHaveLength(1)
+    expect(db.pragma('user_version', { simple: true })).toBe(32)
+  })
+
+  it('canonicalizes legacy SO terms without guessing an unavailable impact', () => {
+    // Hand-build the pre-v32 `variant_transcripts` shape (no `func` column) —
+    // deliberately bypassing initializeSchema(), which already bakes `func`
+    // into the CREATE TABLE for brand-new databases — so this test genuinely
+    // exercises the v32 ALTER TABLE branch against a legacy table, the way a
+    // real upgrade from an installed pre-D1 database would.
+    db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE cases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        file_path TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        variant_count INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE variants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER NOT NULL,
+        chr TEXT NOT NULL,
+        pos INTEGER NOT NULL,
+        ref TEXT NOT NULL,
+        alt TEXT NOT NULL,
+        consequence TEXT,
+        func TEXT,
+        transcript TEXT,
+        FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+      );
+      CREATE TABLE variant_transcripts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        variant_id INTEGER NOT NULL,
+        transcript_id TEXT NOT NULL,
+        gene_symbol TEXT,
+        consequence TEXT,
+        cdna TEXT,
+        aa_change TEXT,
+        hpo_sim_score REAL,
+        moi TEXT,
+        is_selected INTEGER NOT NULL DEFAULT 0,
+        is_mane_select INTEGER,
+        is_canonical INTEGER,
+        FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE,
+        UNIQUE(variant_id, transcript_id)
+      );
+    `)
+    // Every earlier migration (v1-v31) is a no-op once user_version is
+    // already at 31, so this jumps straight to the v32 block under test.
+    db.exec('PRAGMA user_version = 31')
+
+    const caseId = db
+      .prepare(
+        `INSERT INTO cases (name, file_path, file_size, variant_count, created_at) VALUES (?, ?, ?, 0, ?)`
+      )
+      .run('legacy-case', '/legacy.vcf', 100, Date.now()).lastInsertRowid as number
+    const variantId = db
+      .prepare(
+        `INSERT INTO variants (case_id, chr, pos, ref, alt, consequence, transcript)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(caseId, '1', 100, 'A', 'G', 'MODERATE', 'NM_LEGACY.1').lastInsertRowid as number
+    // Seeded the way the pre-fix VCF import path actually wrote rows: an SO
+    // term mislabeled into `consequence`. The migration can identify that it
+    // is not an IMPACT value without guessing which impact it should have.
+    db.prepare(
+      `INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, is_selected)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(variantId, 'NM_LEGACY.1', 'LEGACYGENE', 'missense_variant', 1)
+
+    db.prepare(
+      `INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, is_selected)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(variantId, 'NM_IMPACT.1', 'LEGACYGENE', 'HIGH', 0)
+
+    const jsonVariantId = db
+      .prepare(
+        `INSERT INTO variants (case_id, chr, pos, ref, alt, consequence, func, transcript)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(caseId, '1', 101, 'C', 'T', 'LOW', 'synonymous_variant', 'NM_JSON.1')
+      .lastInsertRowid as number
+    // Pre-v32 JSON rows retained the selected parent transcript's SO term on
+    // variants.func even though variant_transcripts had nowhere to store it.
+    db.prepare(
+      `INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, is_selected)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(jsonVariantId, 'NM_JSON.1', 'JSONGENE', 'LOW', 1)
+
+    runMigrations(db)
+
+    const columns = db.prepare(`PRAGMA table_info(variant_transcripts)`).all() as Array<{
+      name: string
+    }>
+    expect(columns.some((c) => c.name === 'func')).toBe(true)
+
+    const rows = db
+      .prepare(
+        `SELECT transcript_id, gene_symbol, consequence, func
+           FROM variant_transcripts
+          WHERE variant_id = ?
+          ORDER BY transcript_id`
+      )
+      .all(variantId) as Array<{
+      transcript_id: string
+      gene_symbol: string
+      consequence: string | null
+      func: string | null
+    }>
+    expect(rows).toEqual([
+      {
+        transcript_id: 'NM_IMPACT.1',
+        gene_symbol: 'LEGACYGENE',
+        consequence: 'HIGH',
+        func: null
+      },
+      {
+        transcript_id: 'NM_LEGACY.1',
+        gene_symbol: 'LEGACYGENE',
+        consequence: 'MODERATE',
+        func: 'missense_variant'
+      }
+    ])
+
+    expect(
+      db
+        .prepare(
+          `SELECT consequence, func
+             FROM variant_transcripts
+            WHERE variant_id = ? AND transcript_id = ?`
+        )
+        .get(jsonVariantId, 'NM_JSON.1')
+    ).toEqual({ consequence: 'LOW', func: 'synonymous_variant' })
+
+    expect(db.pragma('user_version', { simple: true })).toBe(32)
   })
 })

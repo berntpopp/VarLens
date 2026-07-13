@@ -281,3 +281,71 @@ describe('cohort-summary-only field gating', () => {
     expect(result.params).toEqual([])
   })
 })
+
+describe('bare column_filters key allowlist for variants-table scopes (S7 info fix)', () => {
+  // `case` (shortlist) and `cohort-burden` (association) scopes query the
+  // `variants` table directly and pass column_filters straight into
+  // buildBaseWhere without any pre-remap step (unlike cohort.ts, which
+  // remaps + validates keys against its own SORTABLE_COLUMNS before ever
+  // calling buildBaseWhere). IDENTIFIER_RE alone only blocks SQL
+  // metacharacters — it does not stop a syntactically valid but unintended
+  // column name from being referenced. Bare keys for these two scopes must
+  // additionally be gated through the same allowlist VariantFilterBuilder
+  // uses for its own column_filters path (BASE_SORTABLE_COLUMNS).
+
+  it('rejects an unknown-but-identifier-safe bare column key for cohort-burden scope', () => {
+    const result = buildBaseWhere(
+      { column_filters: { not_a_real_column: { operator: '=', value: 1 } } },
+      { baseAlias: 'v', scope: 'cohort-burden' }
+    )
+    expect(result.sql).not.toContain('not_a_real_column')
+    // cohort-burden always emits its gene_symbol invariants regardless of
+    // column_filters — assert only that the unknown filter contributed
+    // nothing beyond those.
+    expect(result.sql).toBe(`v.gene_symbol IS NOT NULL AND v.gene_symbol != ''`)
+    expect(result.params).toEqual([])
+  })
+
+  it('rejects an unknown-but-identifier-safe bare column key for case scope', () => {
+    const result = buildBaseWhere(
+      { column_filters: { not_a_real_column: { operator: '=', value: 1 } } },
+      { baseAlias: 'v', scope: 'case' }
+    )
+    expect(result.sql).not.toContain('not_a_real_column')
+    expect(result.sql).toBe('')
+    expect(result.params).toEqual([])
+  })
+
+  it('still accepts a known bare column key for cohort-burden scope', () => {
+    const result = buildBaseWhere(
+      { column_filters: { gnomad_af: { operator: '<=', value: 0.01 } } },
+      { baseAlias: 'v', scope: 'cohort-burden' }
+    )
+    expect(result.sql).toContain('v.gnomad_af <= ?')
+    expect(result.params).toEqual([0.01])
+  })
+
+  it('still accepts a known bare column key for case scope', () => {
+    const result = buildBaseWhere(
+      { column_filters: { cadd: { operator: '>=', value: 20, includeEmpty: false } } },
+      { baseAlias: 'v', scope: 'case' }
+    )
+    expect(result.sql).toContain('v.cadd >= ?')
+    expect(result.params).toEqual([20])
+  })
+
+  it('does not restrict cohort-listing scope bare keys via the variants-table allowlist', () => {
+    // cohort.ts already remaps + validates column_filters keys against its
+    // own SORTABLE_COLUMNS (cohort_variant_summary columns, including
+    // cohort-only fields absent from the variants table) before calling
+    // buildBaseWhere. Re-gating here with the variants-table allowlist would
+    // incorrectly reject legitimate cohort-only fields like carrier_count —
+    // a cohort-parity regression.
+    const result = buildBaseWhere(
+      { column_filters: { carrier_count: { operator: '>=', value: 2 } } },
+      { baseAlias: 'cvs', scope: 'cohort-listing' }
+    )
+    expect(result.sql).toContain('cvs.carrier_count >= ?')
+    expect(result.params).toEqual([2])
+  })
+})

@@ -43,6 +43,10 @@ import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
  * - 26: v0.55.0 FTS5 virtual tables for variant_sv + variant_str (multi-variant filter/sort/search)
  * - 27: filter_presets.kind discriminator + built-in shortlist preset seeds (unified Shortlist tab)
  * - 28: idx_variants_case_type for case_id-first cohort scans
+ * - 29: covering index on variants(chr, pos, ref, alt)
+ * - 30: end_pos on cohort_variant_summary for SV/CNV interval-overlap
+ * - 31: projects registry
+ * - 32: variant_transcripts.func — canonical transcript impact/SO model (D1)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1773,5 +1777,71 @@ export function runMigrations(db: Database.Database): void {
         VALUES (1, 'default', 'main');
     `)
     db.exec('PRAGMA user_version = 31')
+  }
+
+  // ── Migration v32: canonical transcript impact/SO model (D1) ──
+  //
+  // variant_transcripts.consequence is conflated: JSON import writes the
+  // IMPACT level there (correct per the variants.consequence/variants.func
+  // convention), but VCF import (VEP CSQ / SnpEff ANN) writes the raw
+  // Sequence Ontology term instead — corrupting impact/rarity filters once
+  // the transcript-switch denormalization copies it onto variants.consequence.
+  //
+  // Fix: add a `func` column mirroring variants.func, and fix every import
+  // path (this migration + application code) so variant_transcripts.consequence
+  // = IMPACT and variant_transcripts.func = SO term on every path, matching
+  // the variants table's existing convention.
+  //
+  // Backfill without guessing an impact:
+  //   - JSON-imported rows already have the correct IMPACT in `consequence`.
+  //     Recover `func` for the selected row when the parent still names that
+  //     transcript and retains its SO term; other unavailable terms stay NULL.
+  //   - A non-enum `consequence` is provably not an IMPACT value. Preserve it
+  //     as the SO term in `func`. For the selected transcript only, recover the
+  //     parent IMPACT when the parent names that same transcript; all other
+  //     unavailable impacts stay NULL.
+  if (currentVersion < 32) {
+    const vtCols = db.prepare('PRAGMA table_info(variant_transcripts)').all() as {
+      name: string
+    }[]
+    if (!vtCols.some((c) => c.name === 'func')) {
+      db.exec('ALTER TABLE variant_transcripts ADD COLUMN func TEXT')
+    }
+    db.exec(`
+      UPDATE variant_transcripts AS vt
+         SET func = (
+           SELECT v.func
+             FROM variants AS v
+            WHERE v.id = vt.variant_id
+              AND v.transcript = vt.transcript_id
+              AND v.func IS NOT NULL
+         )
+       WHERE vt.func IS NULL
+         AND vt.is_selected = 1
+         AND vt.consequence IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
+         AND EXISTS (
+           SELECT 1
+             FROM variants AS v
+            WHERE v.id = vt.variant_id
+              AND v.transcript = vt.transcript_id
+              AND v.func IS NOT NULL
+         );
+
+      UPDATE variant_transcripts AS vt
+         SET func = vt.consequence,
+             consequence = CASE
+               WHEN vt.is_selected = 1 THEN (
+                 SELECT v.consequence
+                   FROM variants AS v
+                  WHERE v.id = vt.variant_id
+                    AND v.transcript = vt.transcript_id
+                    AND v.consequence IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
+               )
+               ELSE NULL
+             END
+       WHERE vt.consequence IS NOT NULL
+         AND vt.consequence NOT IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
+    `)
+    db.exec('PRAGMA user_version = 32')
   }
 }

@@ -8,7 +8,8 @@ export const transcriptsScenario: IpcScenario = {
       {
         transcript_id: 'ENST_PARITY_000001',
         gene_symbol: 'COMT',
-        consequence: 'stop_gained',
+        consequence: 'HIGH',
+        func: 'stop_gained',
         cdna: 'c.493G>A',
         aa_change: 'p.Glu165Ter',
         hpo_sim_score: 0.87,

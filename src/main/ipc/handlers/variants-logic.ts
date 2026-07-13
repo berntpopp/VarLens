@@ -102,6 +102,8 @@ export function buildVariantFilter(
       const caseData = dbRef.cases.getCase(fullFilter.case_id)
       const genomeBuild = caseData?.genome_build ?? 'GRCh38'
 
+      // Throws if the computation itself fails — never treat that as "no
+      // panel configured" (see panelIntervalHelper.ts for the contract).
       const intervals = computePanelIntervals(
         dbRef,
         {
@@ -112,9 +114,7 @@ export function buildVariantFilter(
         fullFilter.case_id,
         'variants'
       )
-      if (intervals) {
-        fullFilter.panel_intervals = intervals
-      }
+      fullFilter.panel_intervals = intervals
 
       // Clean up IPC-only fields that shouldn't reach the repository
       delete fullFilter.active_panel_ids

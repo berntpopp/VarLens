@@ -1,4 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import {
+  __resetAllowlistForTests,
+  addAllowedImportPath,
+  isStrictlyEnrolledPath
+} from '../../../src/main/security/import-path-allowlist'
+import {
+  __resetExportPathAllowlistForTests,
+  isAllowedExportRevealPath
+} from '../../../src/main/security/export-path-allowlist'
 
 const mocks = vi.hoisted(() => ({
   showSaveDialog: vi.fn(),
@@ -6,7 +15,8 @@ const mocks = vi.hoisted(() => ({
   exportPostgresCohort: vi.fn(),
   prepareVariantExport: vi.fn(),
   exportVariants: vi.fn(),
-  exportCohort: vi.fn()
+  exportCohort: vi.fn(),
+  showItemInFolder: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -15,7 +25,8 @@ vi.mock('electron', () => ({
   },
   dialog: {
     showSaveDialog: mocks.showSaveDialog
-  }
+  },
+  shell: { showItemInFolder: mocks.showItemInFolder }
 }))
 
 vi.mock('../../../src/main/ipc/handlers/export-logic', () => ({
@@ -27,6 +38,77 @@ vi.mock('../../../src/main/ipc/handlers/export-logic', () => ({
 }))
 
 describe('postgres export IPC routing', () => {
+  beforeEach(() => {
+    __resetAllowlistForTests()
+    __resetExportPathAllowlistForTests()
+  })
+
+  it('enrolls the export:variants save-dialog result only for export-scoped reveal', async () => {
+    const outputPath = '/some/custom/mount/case1_variants.csv'
+    const execute = vi.fn().mockResolvedValue(
+      (async function* () {
+        yield { id: 1 }
+      })()
+    )
+    const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    mocks.showSaveDialog.mockResolvedValue({ canceled: false, filePath: outputPath })
+    mocks.exportPostgresVariants.mockResolvedValue({ success: true, filePath: outputPath })
+
+    const { registerExportHandlers } = await import('../../../src/main/ipc/handlers/export')
+    registerExportHandlers({
+      ipcMain: ipcMain as never,
+      getDb: (() => {
+        throw new Error('getDb should not be called for postgres export:variants')
+      }) as never,
+      getDbManager: (() => ({
+        getCurrentSession: () => ({
+          capabilities: { backend: 'postgres' },
+          getReadExecutor: () => ({ execute })
+        })
+      })) as never,
+      getDbPool: (() => null) as never
+    })
+
+    expect(isStrictlyEnrolledPath(outputPath)).toBe(false)
+    const handler = handlers.get('export:variants')
+    await handler!(undefined, 5, { gene_symbol: 'BRCA1' }, 'Postgres Case')
+    expect(isStrictlyEnrolledPath(outputPath)).toBe(false)
+    expect(isAllowedExportRevealPath(outputPath)).toBe(true)
+
+    const revealHandler = handlers.get('export:revealInFolder')
+    const revealResult = await revealHandler!(undefined, outputPath)
+    expect(revealResult).toEqual({ success: true })
+    expect(mocks.showItemInFolder).toHaveBeenCalledWith(outputPath)
+  })
+
+  it('does not let import path authority reveal a file through the export capability', async () => {
+    const importPath = '/some/custom/mount/imported.vcf'
+    addAllowedImportPath(importPath)
+    const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const { registerExportHandlers } = await import('../../../src/main/ipc/handlers/export')
+    registerExportHandlers({
+      ipcMain: ipcMain as never,
+      getDb: vi.fn() as never,
+      getDbManager: vi.fn() as never
+    })
+
+    const result = await handlers.get('export:revealInFolder')!(undefined, importPath)
+
+    expect(result).toMatchObject({ code: 'INVALID_PARAMETERS' })
+    expect(mocks.showItemInFolder).not.toHaveBeenCalled()
+  })
+
   it('streams postgres variant exports through the active storage read executor', async () => {
     const rows = (async function* () {
       yield { id: 1 }

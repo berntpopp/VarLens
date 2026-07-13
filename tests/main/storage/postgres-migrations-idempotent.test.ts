@@ -121,9 +121,40 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
        VALUES ('star', 'variant_annotation', '1:100:A:G', '{"starred":1}', 'legacy-user')`
     )
 
+    const throughCentral = POSTGRES_MIGRATIONS.filter((m) => m.version < '0014')
+    const centralResult = await new PostgresMigrationRunner(pool, schema, throughCentral).migrate()
+    expect(centralResult.applied).toContain('0013')
+
+    const caseResult = await probeClient.query<{ id: string }>(
+      `INSERT INTO "${schema}".cases
+        (name, file_path, file_size, variant_count, created_at)
+       VALUES ('legacy-json-case', '/legacy.json', 100, 1, 0)
+       RETURNING id`
+    )
+    const variantResult = await probeClient.query<{ id: string }>(
+      `INSERT INTO "${schema}".variants
+        (case_id, chr, pos, ref, alt, consequence, func, transcript)
+       VALUES ($1, '1', 101, 'C', 'T', 'LOW', 'synonymous_variant', 'NM_JSON.1')
+       RETURNING id`,
+      [caseResult.rows[0].id]
+    )
+    await probeClient.query(
+      `INSERT INTO "${schema}".variant_transcripts
+        (variant_id, transcript_id, consequence, is_selected)
+       VALUES ($1, 'NM_JSON.1', 'LOW', 1)`,
+      [variantResult.rows[0].id]
+    )
+
     const result = await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
-    expect(result.applied.length).toBeGreaterThan(0)
-    expect(result.applied).toContain('0013')
+    expect(result.applied).toEqual(['0014'])
+
+    const migratedTranscript = await probeClient.query<{ consequence: string; func: string }>(
+      `SELECT consequence, func
+         FROM "${schema}".variant_transcripts
+        WHERE variant_id = $1`,
+      [variantResult.rows[0].id]
+    )
+    expect(migratedTranscript.rows).toEqual([{ consequence: 'LOW', func: 'synonymous_variant' }])
 
     const snapshot = await captureSchema(probeClient, schema)
     expect(snapshot.tables.length).toBeGreaterThan(0)

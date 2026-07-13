@@ -31,7 +31,8 @@ describe('ObjectFormatMapper transcript output', () => {
         ref: 'A',
         alt: 'G',
         gene_symbol: 'BRCA1',
-        consequence: 'missense_variant',
+        consequence: 'MODERATE',
+        func: 'missense_variant',
         transcript: 'NM_007294.4',
         cdna: 'c.123A>G',
         aa_change: 'p.His41Arg',
@@ -45,6 +46,10 @@ describe('ObjectFormatMapper transcript output', () => {
     expect(transcripts[0].transcript_id).toBe('NM_007294.4')
     expect(transcripts[0].is_selected).toBe(1)
     expect(transcripts[0].gene_symbol).toBe('BRCA1')
+    // Canonical model (D1): consequence = IMPACT, func = SO term, both
+    // passed through from the top-level mapped variant onto the transcript row.
+    expect(transcripts[0].consequence).toBe('MODERATE')
+    expect(transcripts[0].func).toBe('missense_variant')
   })
 
   it('should NOT emit _transcripts when transcript is null', async () => {
@@ -52,5 +57,48 @@ describe('ObjectFormatMapper transcript output', () => {
 
     const v = results[0] as Record<string, unknown>
     expect(v._transcripts).toBeUndefined()
+  })
+
+  it('keeps non-IMPACT legacy consequence text out of consequence', async () => {
+    const [mapped] = await runObjectTransform([
+      {
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'G',
+        consequence: 'missense_variant',
+        transcript: 'NM_1'
+      }
+    ])
+
+    const variant = mapped as Record<string, unknown>
+    expect(variant.consequence).toBeNull()
+    expect(variant.func).toBe('missense_variant')
+    expect((variant._transcripts as Record<string, unknown>[])[0]).toMatchObject({
+      consequence: null,
+      func: 'missense_variant'
+    })
+  })
+
+  it('repairs swapped legacy consequence and func fields without losing either value', async () => {
+    const [mapped] = await runObjectTransform([
+      {
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'G',
+        consequence: 'missense_variant',
+        func: 'MODERATE',
+        transcript: 'NM_1'
+      }
+    ])
+
+    const variant = mapped as Record<string, unknown>
+    expect(variant.consequence).toBe('MODERATE')
+    expect(variant.func).toBe('missense_variant')
+    expect((variant._transcripts as Record<string, unknown>[])[0]).toMatchObject({
+      consequence: 'MODERATE',
+      func: 'missense_variant'
+    })
   })
 })

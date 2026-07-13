@@ -56,7 +56,7 @@ import type {
   GeneListWithCount,
   RegionFile
 } from './database'
-import type { ProgressUpdate, ImportResult, VcfPreviewResult } from './import'
+import type { ProgressUpdate, ImportResult } from './import'
 import type { IpcResult } from './errors'
 import type {
   CohortVariant,
@@ -106,6 +106,9 @@ import type { CasesDomainContract } from '../ipc/domains/cases'
 import type { DatabaseDomainContract } from '../ipc/domains/database'
 import type { DebugApi } from '../ipc/domains/debug'
 import type { JobsApi } from '../ipc/domains/jobs'
+import type { CaseMetadataDomainContract } from '../ipc/domains/case-metadata'
+import type { ImportDomainContract } from '../ipc/domains/import'
+import type { AuthDomainContract } from '../ipc/domains/auth'
 export type { DatabaseInfo, DatabaseOpenResult, RecentDatabase } from '../ipc/domains/database'
 
 // Re-export for convenience
@@ -241,43 +244,17 @@ export interface MultiFileImportResult {
   elapsed: number
 }
 
-export interface ImportAPI {
-  selectFile: () => Promise<string | null>
-  selectFiles: () => Promise<string[]>
-  selectBedFile: () => Promise<string | null>
-  start: (
-    filePath: string,
-    caseName: string,
-    vcfOptions?: { selectedSample?: string; genomeBuild?: string }
-  ) => Promise<IpcResult<ImportResult>>
-  startMultiFile: (
-    caseName: string,
-    files: MultiFileImportSpec[],
-    vcfOptions?: { selectedSample?: string; genomeBuild?: string },
-    filters?: {
-      bedFile?: string | null
-      bedPadding?: number
-      passOnly?: boolean
-      minQual?: number | null
-      minGq?: number | null
-      minDp?: number | null
-    }
-  ) => Promise<IpcResult<MultiFileImportResult>>
-  vcfPreview: (filePath: string) => Promise<VcfPreviewResult>
-  vcfMultiPreview: (
-    filePaths: string[]
-  ) => Promise<IpcResult<import('./import').VcfMultiPreviewResult>>
+export interface ImportAPI extends ImportDomainContract {
   onProgress: (callback: (progress: ProgressUpdate) => void) => () => void
-  cancel: () => Promise<void>
 }
 
 export interface SystemAPI {
-  getVersion: () => Promise<{ app: string; electron: string }>
-  getUserDataPath: () => Promise<string>
-  getCpuCount: () => Promise<number>
-  setWorkerThreads: (count: number) => Promise<void>
-  getWorkerThreads: () => Promise<number>
-  getLogFilePath: () => Promise<string>
+  getVersion: () => Promise<IpcResult<{ app: string; electron: string }>>
+  getUserDataPath: () => Promise<IpcResult<string>>
+  getCpuCount: () => Promise<IpcResult<number>>
+  setWorkerThreads: (count: number) => Promise<IpcResult<void>>
+  getWorkerThreads: () => Promise<IpcResult<number>>
+  getLogFilePath: () => Promise<IpcResult<string>>
 }
 
 export interface ShellOpenExternalResult {
@@ -287,7 +264,6 @@ export interface ShellOpenExternalResult {
 
 export interface ShellAPI {
   openExternal: (url: string) => Promise<ShellOpenExternalResult>
-  showItemInFolder: (filePath: string) => Promise<void>
   updateDomains: (domains: string[]) => Promise<void>
 }
 
@@ -305,6 +281,7 @@ export interface ExportAPI {
     caseName: string
   ) => Promise<IpcResult<ExportResult>>
   cohort: (params: CohortSearchParams) => Promise<IpcResult<ExportResult>>
+  revealInFolder: (filePath: string) => Promise<IpcResult<{ success: boolean }>>
 }
 
 export type DatabaseAPI = DatabaseDomainContract
@@ -325,7 +302,7 @@ export interface BatchProgress {
   currentIndex: number // 0-based index of current file
   totalFiles: number // Total files in batch
   currentFileName: string // Name of file being processed
-  fileProgress?: ProgressUpdate // Per-file variant progress (reuse existing type)
+  fileProgress?: Omit<ProgressUpdate, 'phase'> & { phase: string }
   overallPercent: number // 0-100 overall percentage
 }
 
@@ -335,6 +312,14 @@ export interface BatchResult {
   skipped: number
   cancelled: boolean
   details: BatchFileDetail[]
+}
+
+export interface BatchProgressEvent extends BatchProgress {
+  runId: string
+}
+
+export interface BatchCompleteEvent extends BatchResult {
+  runId: string
 }
 
 export type DuplicateChoice = 'skip' | 'overwrite'
@@ -352,8 +337,8 @@ export interface DuplicateCheckResult {
 }
 
 export interface BatchImportAPI {
-  selectFiles: () => Promise<string[]>
-  selectFolder: () => Promise<string[]>
+  selectFiles: () => Promise<IpcResult<string[]>>
+  selectFolder: () => Promise<IpcResult<string[]>>
   checkDuplicates: (
     filePaths: string[],
     stripText?: string
@@ -361,18 +346,19 @@ export interface BatchImportAPI {
   start: (
     filePaths: string[],
     duplicateStrategy: DuplicateChoice,
-    stripText?: string
+    stripText: string | undefined,
+    runId: string
   ) => Promise<IpcResult<BatchResult>>
   cancel: () => Promise<IpcResult<void>>
-  onProgress: (callback: (progress: BatchProgress) => void) => () => void
-  onComplete: (callback: (result: BatchResult) => void) => () => void
+  onProgress: (callback: (progress: BatchProgressEvent) => void) => () => void
+  onComplete: (callback: (result: BatchCompleteEvent) => void) => () => void
   selectZip: () => Promise<IpcResult<{ filePath: string; isEncrypted: boolean } | null>>
   testZipPassword: (zipPath: string, password: string) => Promise<IpcResult<{ success: boolean }>>
   extractZip: (
     zipPath: string,
     password?: string
-  ) => Promise<IpcResult<{ files: string[]; errors: string[] }>>
-  cleanupZipTemp: () => Promise<IpcResult<void>>
+  ) => Promise<IpcResult<{ files: string[]; errors: string[]; extractionId: string }>>
+  cleanupZipTemp: (extractionId: string) => Promise<IpcResult<void>>
 }
 
 export interface CohortAPI {
@@ -553,44 +539,21 @@ export interface FullCaseMetadata {
   externalIds: CaseExternalId[]
 }
 
-export interface CaseMetadataAPI {
-  get: (caseId: number) => Promise<IpcResult<CaseMetadata | null>>
-  upsert: (caseId: number, updates: CaseMetadataUpdates) => Promise<CaseMetadata>
-  getFullMetadata: (caseId: number) => Promise<IpcResult<FullCaseMetadata>>
-
-  // Cohort groups
-  listCohorts: () => Promise<IpcResult<CohortGroup[]>>
-  createCohort: (name: string, description?: string | null) => Promise<CohortGroup>
-  updateCohort: (
-    cohortId: number,
-    updates: { name?: string; description?: string | null }
-  ) => Promise<CohortGroup>
-  deleteCohort: (cohortId: number) => Promise<void>
-  getCohortByName: (name: string) => Promise<CohortGroup | null>
-
-  // Case-cohort links
-  getCaseCohorts: (caseId: number) => Promise<CohortGroup[]>
-  assignCohort: (caseId: number, cohortId: number) => Promise<void>
-  removeCohort: (caseId: number, cohortId: number) => Promise<void>
-  setCohorts: (caseId: number, cohortIds: number[]) => Promise<void>
-
-  // HPO terms
-  getHpoTerms: (caseId: number) => Promise<CaseHpoTerm[]>
-  assignHpoTerm: (caseId: number, hpoId: string, hpoLabel: string) => Promise<CaseHpoTerm>
-  removeHpoTerm: (caseId: number, hpoId: string) => Promise<void>
-
-  // Data info (import provenance, platform, pre-filtering)
-  getDataInfo: (caseId: number) => Promise<CaseDataInfo | null>
-  upsertDataInfo: (caseId: number, updates: CaseDataInfoUpdates) => Promise<CaseDataInfo>
-
-  // External IDs
-  listExternalIds: (caseId: number) => Promise<CaseExternalId[]>
-  upsertExternalId: (caseId: number, idType: string, idValue: string) => Promise<CaseExternalId>
-  deleteExternalId: (caseId: number, idType: string) => Promise<void>
-  distinctHpoTerms: () => Promise<Array<{ hpo_id: string; hpo_label: string }>>
-  distinctPlatforms: () => Promise<string[]>
-  distinctExternalIdTypes: () => Promise<string[]>
-}
+/**
+ * Aliased directly to the honest shared domain contract (Task A4).
+ *
+ * A prior version of this interface declared plain `Promise<T>` return types
+ * for most methods (e.g. `upsert`, `getDataInfo`, `createCohort`) instead of
+ * `Promise<IpcResult<T>>`, even though the runtime value returned by
+ * `wrapHandler` is always an `IpcResult<T>` (it never rejects). That mismatch
+ * let `tsc` accept a raw, un-unwrapped assignment as if it were the resolved
+ * data — silently storing a `SerializableError` as application state on a
+ * backend failure. Aliasing to `CaseMetadataDomainContract` (already honest,
+ * see `src/shared/ipc/domains/case-metadata.ts`) makes a missing
+ * `unwrapIpcResult(...)`/`isIpcError(...)` call a compile-time error instead.
+ * See `tests/shared/types/preload-contract.test.ts` for the regression lock.
+ */
+export type CaseMetadataAPI = CaseMetadataDomainContract
 
 export interface CaseCommentsAPI {
   list: (caseId: number) => Promise<IpcResult<CaseComment[]>>
@@ -871,42 +834,7 @@ export interface PresetsAPI {
   reorder: (items: { id: number; sortOrder: number }[]) => Promise<IpcResult<void>>
 }
 
-export interface AuthAPI {
-  login: (
-    username: string,
-    password: string
-  ) => Promise<{
-    success: boolean
-    user?: { id: number; username: string; role: string }
-    mustChangePassword?: boolean
-    locked?: boolean
-  }>
-  logout: () => Promise<void>
-  currentUser: () => Promise<IpcResult<{ id: number; username: string; role: string } | null>>
-  isAccountsEnabled: () => Promise<IpcResult<boolean>>
-  createUser: (
-    username: string,
-    displayName: string,
-    tempPassword: string
-  ) => Promise<IpcResult<void>>
-  listUsers: () => Promise<
-    IpcResult<
-      Array<{
-        id: number
-        username: string
-        display_name: string | null
-        role: string
-        is_active: number
-        must_change_password: number
-        failed_login_count: number
-        created_at: string
-      }>
-    >
-  >
-  deactivateUser: (username: string) => Promise<IpcResult<void>>
-  resetPassword: (username: string, newPassword: string) => Promise<IpcResult<void>>
-  changePassword: (oldPassword: string, newPassword: string) => Promise<IpcResult<void>>
-}
+export type AuthAPI = AuthDomainContract
 
 /**
  * Broadcast payload for the `variants:annotationChanged` event.

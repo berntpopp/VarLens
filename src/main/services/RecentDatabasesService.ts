@@ -8,6 +8,7 @@
 import { readFileSync, writeFileSync } from 'fs'
 import { basename } from 'path'
 import { DATABASE_CONFIG } from '../../shared/config'
+import { sanitizeLogMessage } from '../../shared/utils/sanitizers'
 import { mainLogger } from './MainLogger'
 
 /**
@@ -148,9 +149,16 @@ export class RecentDatabasesService {
           'database'
         )
       } catch (logError) {
+        // Documented console.* exception (see AGENTS.md): mainLogger.warn
+        // itself threw above, so this is the last line of defense. Calling
+        // mainLogger again here could repeat the same failure (or recurse
+        // through MainLogger's own error path), so this stays a raw,
+        // best-effort console fallback. Use the shared pure sanitizer here;
+        // it has no logger dependency and therefore cannot recurse.
+        const fallbackMessage = logError instanceof Error ? logError.message : String(logError)
         console.warn(
           '[RecentDatabasesService] Failed to save recent databases and logging unavailable:',
-          logError instanceof Error ? logError.message : String(logError)
+          sanitizeLogMessage(fallbackMessage)
         )
       }
     }

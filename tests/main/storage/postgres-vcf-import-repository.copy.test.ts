@@ -50,7 +50,7 @@ describe('PostgresVcfImportRepository COPY column-list regression guards', () =>
     expect(VARIANT_COPY_COLUMNS as readonly string[]).not.toContain('coord_hash')
   })
 
-  it('VARIANT_COPY_COLUMNS excludes search_document (deferred to bulk UPDATE)', () => {
+  it('VARIANT_COPY_COLUMNS excludes search_document (generated column)', () => {
     expect(VARIANT_COPY_COLUMNS as readonly string[]).not.toContain('search_document')
   })
 

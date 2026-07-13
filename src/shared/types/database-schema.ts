@@ -13,6 +13,9 @@ export interface CasesTable {
   file_path: string
   file_size: number
   variant_count: number
+  import_status: Generated<'ready' | 'importing'>
+  import_variant_watermark: Generated<number>
+  import_is_new: Generated<boolean>
   created_at: number
   genome_build: string
   source_format: string | null
@@ -64,6 +67,7 @@ export interface VariantTranscriptsTable {
   transcript_id: string
   gene_symbol: string | null
   consequence: string | null
+  func: string | null
   cdna: string | null
   aa_change: string | null
   hpo_sim_score: number | null

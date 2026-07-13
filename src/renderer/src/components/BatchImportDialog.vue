@@ -83,13 +83,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type {
-  BatchProgress,
+  BatchProgressEvent,
   BatchResult,
   DuplicateChoice,
   DuplicateCheckItem
 } from '../../../shared/types/api'
 import { useApiService } from '../composables/useApiService'
+import { useZipExtractionLifecycle } from '../composables/useZipExtractionLifecycle'
 import { useImportStatusStore } from '../stores/importStatusStore'
+import { logService } from '../services/LogService'
 import BatchReviewPhase from './batch-import/BatchReviewPhase.vue'
 import BatchProgressPhase from './batch-import/BatchProgressPhase.vue'
 import BatchSummaryPhase from './batch-import/BatchSummaryPhase.vue'
@@ -101,6 +103,7 @@ type Phase = 'idle' | 'review' | 'importing' | 'summary' | 'zip-password'
 
 const { api } = useApiService()
 const importStore = useImportStatusStore()
+const zipExtraction = useZipExtractionLifecycle((id) => api!.batchImport.cleanupZipTemp(id))
 
 const dialog = ref(false)
 const phase = ref<Phase>('idle')
@@ -141,6 +144,7 @@ const summary = ref<BatchResult>({
 
 // Cleanup function for IPC listener
 let cleanupProgress: (() => void) | null = null
+let activeBatchRunId: string | null = null
 
 /**
  * Derive case name from file name (mirrors backend logic for live preview)
@@ -176,7 +180,7 @@ let recheckTimeout: ReturnType<typeof setTimeout> | null = null
 watch(dialog, (newVal, oldVal) => {
   if (oldVal === true && newVal === false && phase.value === 'summary') {
     if (isZipImport.value === true) {
-      api!.batchImport.cleanupZipTemp()
+      void cleanupActiveZipExtraction()
     }
     if (summary.value.succeeded > 0) {
       emit('batch-import-complete', { totalImported: summary.value.succeeded })
@@ -224,9 +228,9 @@ const show = async (mode: 'files' | 'folder' | 'zip'): Promise<void> => {
   let filePaths: string[]
 
   if (mode === 'files') {
-    filePaths = await api!.batchImport.selectFiles()
+    filePaths = unwrapIpcResult(await api!.batchImport.selectFiles())
   } else {
-    filePaths = await api!.batchImport.selectFolder()
+    filePaths = unwrapIpcResult(await api!.batchImport.selectFolder())
   }
 
   if (filePaths.length === 0) return
@@ -247,13 +251,14 @@ const show = async (mode: 'files' | 'folder' | 'zip'): Promise<void> => {
 const extractAndShowReview = async (zipFilePath: string, password?: string): Promise<void> => {
   try {
     const result = unwrapIpcResult(await api!.batchImport.extractZip(zipFilePath, password))
+    zipExtraction.track(result.extractionId)
 
     if (result.files.length === 0) {
       zipErrorMessage.value = 'No importable files found in archive.'
       if (result.errors.length > 0) {
         zipErrorMessage.value += ' Errors: ' + result.errors.join('; ')
       }
-      unwrapIpcResult(await api!.batchImport.cleanupZipTemp())
+      await cleanupActiveZipExtraction()
       return
     }
 
@@ -271,7 +276,7 @@ const extractAndShowReview = async (zipFilePath: string, password?: string): Pro
         : isIpcError(error)
           ? (error.userMessage ?? error.message)
           : 'Failed to extract archive'
-    unwrapIpcResult(await api!.batchImport.cleanupZipTemp())
+    await cleanupActiveZipExtraction()
   }
 }
 
@@ -279,13 +284,16 @@ const extractAndShowReview = async (zipFilePath: string, password?: string): Pro
  * User confirmed in review phase, start import
  */
 const confirmAndStartImport = async (): Promise<void> => {
+  if (importStore.isActive) return
+  const runId = globalThis.crypto.randomUUID()
+  activeBatchRunId = runId
   phase.value = 'importing'
-  importStore.startImport(selectedFilePaths.value.length)
+  importStore.startImport(selectedFilePaths.value.length, runId)
   importStore.dialogOpen = true
   const filePaths = [...selectedFilePaths.value]
   const strategy = duplicateCount.value > 0 ? duplicateStrategy.value : 'skip'
   const strip = stripText.value || undefined
-  await startImport(filePaths, strategy, strip)
+  await startImport(filePaths, strategy, strip, runId)
 }
 
 /**
@@ -294,12 +302,15 @@ const confirmAndStartImport = async (): Promise<void> => {
 const startImport = async (
   filePaths: string[],
   strategy: DuplicateChoice,
-  strip?: string
+  strip: string | undefined,
+  runId: string
 ): Promise<void> => {
   totalFiles.value = filePaths.length
 
   try {
-    const result = unwrapIpcResult(await api!.batchImport.start(filePaths, strategy, strip))
+    const result = unwrapIpcResult(await api!.batchImport.start(filePaths, strategy, strip, runId))
+    if (activeBatchRunId !== runId) return
+    activeBatchRunId = null
 
     summary.value = result
     phase.value = 'summary'
@@ -311,6 +322,8 @@ const startImport = async (
       details: []
     })
   } catch (error) {
+    if (activeBatchRunId !== runId) return
+    activeBatchRunId = null
     summary.value = {
       succeeded: 0,
       failed: 1,
@@ -338,6 +351,20 @@ const startImport = async (
           ? (error.userMessage ?? error.message)
           : 'Unknown error'
     )
+  } finally {
+    if (isZipImport.value) {
+      try {
+        await cleanupActiveZipExtraction()
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : isIpcError(error)
+              ? (error.userMessage ?? error.message)
+              : 'Unknown cleanup error'
+        logService.warn(`ZIP extraction cleanup failed: ${message}`, 'BatchImportDialog')
+      }
+    }
   }
 }
 
@@ -373,7 +400,7 @@ const handleZipUnlock = async (): Promise<void> => {
  * Cancel ZIP flow and clean up temp directory
  */
 const handleZipCancel = async (): Promise<void> => {
-  unwrapIpcResult(await api!.batchImport.cleanupZipTemp())
+  await cleanupActiveZipExtraction()
   dialog.value = false
 }
 
@@ -402,7 +429,7 @@ const continueInBackground = (): void => {
  */
 const closeDialog = async (): Promise<void> => {
   if (isZipImport.value === true) {
-    unwrapIpcResult(await api!.batchImport.cleanupZipTemp())
+    await cleanupActiveZipExtraction()
   }
   dialog.value = false
 }
@@ -411,6 +438,7 @@ const closeDialog = async (): Promise<void> => {
  * Reset all state for a fresh import
  */
 const resetState = (): void => {
+  void cleanupActiveZipExtraction()
   phase.value = 'idle'
   selectedFilePaths.value = []
   duplicateCheckFiles.value = []
@@ -432,9 +460,14 @@ const resetState = (): void => {
   testingPassword.value = false
 }
 
+async function cleanupActiveZipExtraction(): Promise<void> {
+  await zipExtraction.cleanup()
+}
+
 // Setup IPC listeners
 onMounted(() => {
-  cleanupProgress = api!.batchImport.onProgress((progress: BatchProgress) => {
+  cleanupProgress = api!.batchImport.onProgress((progress: BatchProgressEvent) => {
+    if (progress.runId !== activeBatchRunId) return
     currentIndex.value = progress.currentIndex
     totalFiles.value = progress.totalFiles
     currentFileName.value = progress.currentFileName

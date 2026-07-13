@@ -21,6 +21,7 @@ import {
   streamInsertJson,
   streamInsertVcf
 } from './import-pipeline'
+import { ImportSkipTracker } from './import-skip-tracker'
 
 if (!parentPort) throw new Error('Must be run as worker thread')
 
@@ -134,7 +135,7 @@ port.on('message', async (msg: MainMessage) => {
 
           const startTime = Date.now()
           let variantCount = 0
-          const fileSkipped = 0
+          const skipTracker = new ImportSkipTracker()
 
           try {
             // Emit parsing phase progress
@@ -162,7 +163,7 @@ port.on('message', async (msg: MainMessage) => {
                   overallPercent: Math.round(((fileIndex + 0.5) / totalFiles) * 100),
                   phase: 'inserting',
                   variantCount: count,
-                  skipped: fileSkipped
+                  skipped: skipTracker.count
                 }
                 port.postMessage(progressMsg)
               }
@@ -179,7 +180,12 @@ port.on('message', async (msg: MainMessage) => {
                   stmts,
                   () => cancelled,
                   file.vcfSelectedSamples,
-                  onProgress
+                  onProgress,
+                  (reason) => {
+                    if (skipTracker.record(reason)) {
+                      console.warn(`[import-worker] VCF line skipped in ${fileName}:`, reason)
+                    }
+                  }
                 )
               } else {
                 variantCount = await streamInsertJson(
@@ -225,7 +231,8 @@ port.on('message', async (msg: MainMessage) => {
                 caseId,
                 caseName: file.caseName,
                 variantCount,
-                skipped: fileSkipped,
+                skipped: skipTracker.count,
+                skipReasons: skipTracker.reasons,
                 elapsed
               }
             }

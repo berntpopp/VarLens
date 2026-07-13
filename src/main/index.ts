@@ -1,5 +1,6 @@
-import { app, dialog, shell, nativeImage, BrowserWindow, ipcMain } from 'electron'
+import { app, dialog, shell, nativeImage, BrowserWindow, ipcMain, session } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { registerIpcHandlers, destroyDbPool } from './ipc'
@@ -10,6 +11,8 @@ import { APP_CONFIG } from '../shared/config'
 import { isUrlSafeForExternal } from './utils/url-validation'
 import { markMilestone } from './services/MainPerfTrace'
 import { isMainWindowNavigationAllowed } from './window-navigation-policy'
+import { createContentSecurityPolicyHeaderHandler } from './security/csp-header'
+import { installWebContentsSecurityGuards } from './security/web-contents-guard'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -81,6 +84,9 @@ function createWindow(): void {
     }
   })
   const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+  // Same path passed to `mainWindow.loadFile(...)` below — kept as a single
+  // source of truth so the navigation policy always matches what's loaded.
+  const appDocUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
 
   mainWindow.on('ready-to-show', () => {
     if (hideE2eWindow) {
@@ -96,14 +102,16 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isUrlSafeForExternal(url)) {
+    // Renderer-added domains (`shell:updateUserDomains`) must never reach
+    // this sink — only the built-in allowlist may open a new window/tab.
+    if (isUrlSafeForExternal(url, { includeUserDomains: false })) {
       setImmediate(() => shell.openExternal(url))
     }
     return { action: 'deny' }
   })
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowed = isMainWindowNavigationAllowed(url, rendererUrl)
+    const allowed = isMainWindowNavigationAllowed(url, rendererUrl, appDocUrl)
     if (!allowed) {
       mainLogger.warn(`Blocked in-page navigation to disallowed URL: ${url}`, 'main-window')
       event.preventDefault()
@@ -217,12 +225,45 @@ if (gotTheLock !== true) {
       optimizer.watchWindowShortcuts(window)
     })
 
-    // Suppress the "Insecure Content-Security-Policy" dev warning. This fires
-    // because 'unsafe-eval' is required by Mol*/pdbe-molstar for WebGL shader
-    // compilation. The warning does not appear in packaged builds.
+    // Suppress the "Insecure Content-Security-Policy" dev warning. It fires
+    // because the meta CSP grants 'unsafe-eval', which the bundled
+    // pdbe-molstar -> Mol* MP4 export -> h264-mp4-encoder Emscripten chain
+    // requires during viewer initialization (see src/renderer/index.html and
+    // the PR-G G0 spike). The warning does not appear in packaged builds.
     if (is.dev) {
       process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
     }
+
+    // Authoritative session-level CSP response header, mirroring the meta CSP
+    // in src/renderer/index.html plus frame-ancestors 'none' (a directive meta
+    // tags cannot express — it blocks the app document from being framed).
+    // Applied to the app document as either a main frame or a subframe:
+    // frame-ancestors is enforced on the framed document's response, which
+    // Electron classifies as `subFrame`. Other documents and subresources
+    // pass through untouched. See src/main/security/csp-header.ts.
+    const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+    const appDocUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
+    const isAppDocumentUrl = (url: string): boolean => {
+      try {
+        if (rendererUrl !== undefined && rendererUrl !== '') {
+          return new URL(url).origin === new URL(rendererUrl).origin
+        }
+        return new URL(url).href === appDocUrl
+      } catch {
+        return false
+      }
+    }
+    session.defaultSession.webRequest.onHeadersReceived(
+      createContentSecurityPolicyHeaderHandler(isAppDocumentUrl)
+    )
+
+    // Global defense-in-depth for every webContents: apply the same navigation
+    // policy as the main window and harden <webview> guest preferences. The
+    // policy is injected so its implementation remains owned by
+    // window-navigation-policy.ts (and can be tightened independently).
+    installWebContentsSecurityGuards((url) =>
+      isMainWindowNavigationAllowed(url, process.env['ELECTRON_RENDERER_URL'], appDocUrl)
+    )
 
     // Create window after security handlers are registered
     createWindow()

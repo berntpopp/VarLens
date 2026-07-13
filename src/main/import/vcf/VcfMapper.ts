@@ -6,12 +6,16 @@
  */
 
 import type { VcfRawRecord, VcfHeader, VcfMappedVariant, InfoFieldMapping } from './types'
-import { splitMultiAllelic } from './vcf-allele-splitter'
-import { parseAnnotation } from './vcf-annotation-parser'
+import { splitAlleleForSample } from './vcf-allele-splitter'
+import { parseAnnotationsForAlleles } from './vcf-annotation-parser'
 import { parseGenotype } from './vcf-genotype-parser'
 import { applyInfoFieldRegistry } from './info-field-registry'
 import { detectVariantType } from './variant-type-detector'
 import { extractSvFields, extractCnvFields, extractStrFields } from './extension-parsers'
+import { splitGenotypeAlleles, VcfResourceLimitError } from './vcf-resource-limits'
+
+const MAX_VCF_EXPANDED_RECORD_BYTES = 64 * 1024 * 1024
+const MAX_VCF_ALLELE_EXPANSION_WORK = 1_000_000
 
 /** Parse integer from string, returning null for missing/invalid values */
 function parseIntOrNull(val: string | undefined): number | null {
@@ -41,45 +45,54 @@ export function mapVcfRecord(
   registry: InfoFieldMapping[],
   callerName: string | null = null
 ): VcfMappedVariant[] {
-  // Step 1: Split multi-allelic into biallelic records
-  const splitRecords = splitMultiAllelic(record, header.infoDefs, header.formatDefs)
-
   const results: VcfMappedVariant[] = []
+  const selectedValues = record.samples.get(sampleName)
+  if (selectedValues === undefined) return results
 
-  for (let altIdx = 0; altIdx < splitRecords.length; altIdx++) {
-    const rec = splitRecords[altIdx]
+  const gtIdx = record.format.indexOf('GT')
+  const rawGt = gtIdx >= 0 && gtIdx < selectedValues.length ? selectedValues[gtIdx] : '.'
+  const carriedAlleles = carriedAltAlleles(rawGt)
+  const targetAltIndexes: number[] = []
 
-    // Step 2: Extract genotype for the selected sample
-    const sampleValues = rec.samples.get(sampleName)
-    if (!sampleValues) continue
-
-    const gtIdx = rec.format.indexOf('GT')
-    const gtFieldValue = gtIdx >= 0 && gtIdx < sampleValues.length ? sampleValues[gtIdx] : '.'
-
-    // Skip if sample does not carry the ALT allele (ref-hom, no-call, or other ALT)
-    // Exception: structural variants (SV/CNV/STR) use caller-specific fields like
-    // CN, VAF, SUPPORT instead of diploid genotypes, so we must NOT filter them by
-    // GT. Structural callers signal their variants in three ways:
-    //   1. Symbolic ALT (<DEL>, <CNV>, <STRn>, ...) — Spectre CNV, Straglr STR
-    //   2. Breakend notation ([/]) — Manta BND records
-    //   3. SVTYPE INFO field — Sniffles2 INS uses sequence ALTs but sets SVTYPE=INS
-    // All three cases must bypass the genotype-skip filter; otherwise Spectre's
-    // `GT=./.` and Sniffles' `GT=./.` on sequence-ALT INSes silently drop the
-    // variant even though the caller reported a finding.
-    const rawAlt = rec.alt[0]
+  for (let altIdx = 0; altIdx < record.alt.length; altIdx++) {
+    const rawAlt = record.alt[altIdx]
     const isStructural =
       rawAlt.startsWith('<') ||
       rawAlt.includes('[') ||
       rawAlt.includes(']') ||
-      rec.info.has('SVTYPE')
-    if (!isStructural && shouldSkipGenotype(gtFieldValue)) continue
+      record.info.has('SVTYPE')
+    if (isStructural || carriedAlleles.has(altIdx + 1)) targetAltIndexes.push(altIdx)
+  }
+
+  assertBoundedExpandedRecord(record, targetAltIndexes.length)
+  assertBoundedAlleleExpansionWork(record, header, targetAltIndexes.length)
+  const annotationByTarget = parseAnnotationsForAlleles(
+    record.info,
+    header,
+    targetAltIndexes.map((index) => record.alt[index]),
+    record.ref,
+    targetAltIndexes,
+    record.alt
+  )
+
+  for (let targetIndex = 0; targetIndex < targetAltIndexes.length; targetIndex++) {
+    const altIdx = targetAltIndexes[targetIndex]
+    // Build only the one selected sample/ALT view that will be mapped.
+    const rec = splitAlleleForSample(record, header.infoDefs, header.formatDefs, altIdx, sampleName)
+    const sampleValues = rec.samples.get(sampleName)
+    if (sampleValues === undefined) continue
 
     // Parse full genotype data (with altAlleleIndex=1 since already split)
-    const genotype = parseGenotype(sampleValues, rec.format, 1)
+    const genotype = parseGenotype(
+      sampleValues,
+      rec.format,
+      1,
+      header.formatDefs.get('AD')?.number ?? 'R'
+    )
 
-    // Step 3: Parse annotation (CSQ or ANN)
+    // Step 3: Select the pre-grouped annotation result for this ALT.
     const altAllele = rec.alt[0]
-    const annotation = parseAnnotation(rec.info, header, altAllele, rec.ref)
+    const annotation = annotationByTarget[targetIndex]
 
     // Step 4: Apply INFO field registry
     const infoResult = applyInfoFieldRegistry(rec.info, registry, annotation)
@@ -150,6 +163,46 @@ export function mapVcfRecord(
   return results
 }
 
+function assertBoundedExpandedRecord(record: VcfRawRecord, mappedAltCount: number): void {
+  if (mappedAltCount <= 1) return
+  let retainedInfoBytes = 0
+  for (const [key, value] of record.info) {
+    if (key === 'CSQ' || key === 'ANN') continue
+    retainedInfoBytes += Buffer.byteLength(key, 'utf8') + Buffer.byteLength(value, 'utf8')
+  }
+  const expandedBytes = retainedInfoBytes * mappedAltCount
+  if (!Number.isSafeInteger(expandedBytes) || expandedBytes > MAX_VCF_EXPANDED_RECORD_BYTES) {
+    throw new VcfResourceLimitError(
+      `VCF record expanded output exceeds ${MAX_VCF_EXPANDED_RECORD_BYTES} bytes`
+    )
+  }
+}
+
+function assertBoundedAlleleExpansionWork(
+  record: VcfRawRecord,
+  header: VcfHeader,
+  mappedAltCount: number
+): void {
+  if (mappedAltCount <= 1) return
+  let alleleValuedFields = 0
+  for (const key of record.info.keys()) {
+    const number = header.infoDefs.get(key)?.number
+    if (number === 'A' || number === 'R') alleleValuedFields += 1
+  }
+  for (const key of record.format) {
+    const number = header.formatDefs.get(key)?.number
+    if (number === 'A' || number === 'R') alleleValuedFields += 1
+  }
+  const work =
+    mappedAltCount *
+    (record.info.size + record.format.length + alleleValuedFields * record.alt.length)
+  if (!Number.isSafeInteger(work) || work > MAX_VCF_ALLELE_EXPANSION_WORK) {
+    throw new VcfResourceLimitError(
+      `VCF record allele expansion exceeds work budget ${MAX_VCF_ALLELE_EXPANSION_WORK}`
+    )
+  }
+}
+
 /**
  * Check if a GT field value indicates the sample does NOT carry the ALT allele.
  *
@@ -159,14 +212,15 @@ export function mapVcfRecord(
  * - The GT is ref-homozygous (all alleles are "0")
  * - The GT does not contain "1" at all (sample doesn't carry this specific ALT)
  */
-function shouldSkipGenotype(gt: string): boolean {
-  // No-call shorthand
-  if (gt === '.' || gt === './.' || gt === '.|.') return true
-
-  // Split on / or |
-  const alleles = gt.split(/[/|]/)
-
-  // Skip if no allele is "1" (the ALT allele after remapping)
-  // This covers ref-hom (0/0), no-call (./.), and partial no-call (0/.)
-  return !alleles.includes('1')
+function carriedAltAlleles(gt: string): Set<number> {
+  const result = new Set<number>()
+  if (gt === '.' || gt === './.' || gt === '.|.') return result
+  const alleles = splitGenotypeAlleles(gt)
+  if (alleles === null) throw new VcfResourceLimitError('Genotype ploidy exceeds 64 alleles')
+  for (const allele of alleles) {
+    if (!/^\d+$/.test(allele)) continue
+    const value = Number(allele)
+    if (Number.isSafeInteger(value) && value > 0) result.add(value)
+  }
+  return result
 }

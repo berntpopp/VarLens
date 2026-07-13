@@ -10,19 +10,29 @@ import { app, dialog, safeStorage, shell } from 'electron'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import { wrapHandler } from '../errorHandler'
+import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import { mainLogger } from '../../services/MainLogger'
+import {
+  addAllowedDatabasePath,
+  isAllowedDatabasePath
+} from '../../security/database-path-allowlist'
 import {
   DatabaseOpenSchema,
   DatabaseCreateSchema,
   DatabaseRekeySchema,
+  DatabaseMigrateToEncryptedSchema,
+  DatabaseDeletePlaintextBackupSchema,
+  DatabaseSetRecoveryPassphraseSchema,
   FilePathSchema
 } from '../../../shared/types/ipc-schemas'
+import { getDbKeyStore as getDefaultDbKeyStore } from '../../database/db-key-store-instance'
 import { triggerStartupRebuildIfNeeded } from './cohort'
 import {
   openDatabase,
   createDatabase,
   rekeyDatabase,
+  setRecoveryPassphrase,
   getDatabaseInfo,
   getDatabaseCapabilities,
   getPostgresDiagnostics,
@@ -40,6 +50,7 @@ import {
   PostgresProfileIdSchema
 } from './database-logic'
 import type { DatabaseLifecycleCallbacks } from './database-logic'
+import { migrateCurrentToEncrypted, deletePlaintextBackup } from './database-migration-logic'
 import { PostgresProfileStore, type SecretStore } from '../../storage/postgres/PostgresProfileStore'
 import {
   PostgresConnectionProfileInputSchema,
@@ -199,12 +210,37 @@ function createInsecureLocalPostgresSecretStore(userDataPath: string): SecretSto
   )
 }
 
+/**
+ * DB path-authority gate for `database:open` / `database:create` /
+ * `database:showInFolder` / `database:removeRecent`.
+ *
+ * A path is allowed only if it was picked via a dialog this session
+ * (`database:selectFile` / `database:selectSaveLocation`, which enroll into
+ * a database-scoped session allowlist), already
+ * appears in the recent databases list, or is the currently active
+ * database. This mirrors the `deleteDbFile` precedent (recent-list +
+ * active-DB checks) while still allowing `create`/`open` to work with a
+ * freshly dialog-selected path that isn't in the recent list yet.
+ *
+ * Uses the database-scoped enrollment check so import-file authority cannot
+ * authorize a database operation. An arbitrary renderer-supplied string with
+ * no dialog/recent/active provenance is rejected even if it happens to live
+ * under the user's home directory or the OS temp dir.
+ */
+function throwUnallowedDatabasePath(channel: string, path: string): never {
+  throw new InvalidParametersError(
+    `${channel}: path is not in the database path authority set: ${path}`,
+    'The selected database file is not in an allowed location.'
+  )
+}
+
 export function registerDatabaseHandlers({
   ipcMain,
   getDb,
   getDbManager,
   getDbPool,
   getPostgresProfileStore = getDefaultPostgresProfileStore,
+  getDbKeyStore = getDefaultDbKeyStore,
   createPostgresPool = createDefaultPostgresPool,
   createPostgresSession = createPostgresStorageSession,
   collectPostgresDiagnostics
@@ -226,7 +262,9 @@ export function registerDatabaseHandlers({
       return null
     }
 
-    return result.filePaths[0]
+    const filePath = result.filePaths[0]
+    addAllowedDatabasePath(filePath)
+    return filePath
   })
 
   /**
@@ -255,6 +293,7 @@ export function registerDatabaseHandlers({
       return null
     }
 
+    addAllowedDatabasePath(result.filePath)
     return result.filePath
   })
 
@@ -268,23 +307,32 @@ export function registerDatabaseHandlers({
         mainLogger.error(`Invalid database:open params: ${validated.error.message}`, 'database')
         throw new Error('Invalid database open parameters')
       }
-      return openDatabase(validated.data, getDb, getDbManager, lifecycleCallbacks)
+      if (!isAllowedDatabasePath(validated.data.path, getDbManager)) {
+        throwUnallowedDatabasePath('database:open', validated.data.path)
+      }
+      return openDatabase(validated.data, getDb, getDbManager, lifecycleCallbacks, getDbKeyStore())
     })
   })
 
   /**
    * Create a new database at the specified path
    */
-  ipcMain.handle('database:create', async (_event, path: unknown, password?: unknown) => {
-    return wrapHandler(async () => {
-      const validated = DatabaseCreateSchema.safeParse({ path, password })
-      if (!validated.success) {
-        mainLogger.error(`Invalid database:create params: ${validated.error.message}`, 'database')
-        throw new Error('Invalid database create parameters')
-      }
-      return createDatabase(validated.data, getDbManager)
-    })
-  })
+  ipcMain.handle(
+    'database:create',
+    async (_event, path: unknown, password?: unknown, setupPassphrase?: unknown) => {
+      return wrapHandler(async () => {
+        const validated = DatabaseCreateSchema.safeParse({ path, password, setupPassphrase })
+        if (!validated.success) {
+          mainLogger.error(`Invalid database:create params: ${validated.error.message}`, 'database')
+          throw new Error('Invalid database create parameters')
+        }
+        if (!isAllowedDatabasePath(validated.data.path, getDbManager)) {
+          throwUnallowedDatabasePath('database:create', validated.data.path)
+        }
+        return createDatabase(validated.data, getDbManager, getDbKeyStore())
+      })
+    }
+  )
 
   /**
    * Change the encryption key for the current database
@@ -296,7 +344,66 @@ export function registerDatabaseHandlers({
         mainLogger.error(`Invalid database:rekey params: ${validated.error.message}`, 'database')
         throw new Error('Invalid encryption key')
       }
-      return rekeyDatabase(validated.data.newPassword, getDbManager)
+      return rekeyDatabase(validated.data.newPassword, getDbManager, getDbKeyStore())
+    })
+  })
+
+  /**
+   * Set (or replace) a recovery passphrase on the currently open database's
+   * managed key. Non-destructive -- see `setRecoveryPassphrase` in
+   * `database-lifecycle-logic.ts` for the full contract.
+   */
+  ipcMain.handle('database:setRecoveryPassphrase', async (_event, passphrase: unknown) => {
+    return wrapHandler(async () => {
+      const validated = DatabaseSetRecoveryPassphraseSchema.safeParse({ passphrase })
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid database:setRecoveryPassphrase params: ${validated.error.message}`,
+          'database'
+        )
+        throw new Error('Invalid recovery passphrase')
+      }
+      return setRecoveryPassphrase(validated.data.passphrase, getDbManager, getDbKeyStore())
+    })
+  })
+
+  /**
+   * Migrate the currently-open, plaintext SQLite database to encrypted-at-rest.
+   * Requires explicit consent; see `database-migration-logic.ts`.
+   */
+  ipcMain.handle('database:migrateToEncrypted', async (_event, options: unknown) => {
+    return wrapHandler(async () => {
+      const validated = DatabaseMigrateToEncryptedSchema.safeParse(options)
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid database:migrateToEncrypted params: ${validated.error.message}`,
+          'database'
+        )
+        throw new Error('Invalid migration parameters')
+      }
+      return migrateCurrentToEncrypted(
+        validated.data,
+        getDbManager,
+        getDbKeyStore(),
+        lifecycleCallbacks
+      )
+    })
+  })
+
+  /**
+   * Delete a plaintext backup produced by a prior migration.
+   */
+  ipcMain.handle('database:deletePlaintextBackup', async (_event, backupPath: unknown) => {
+    return wrapHandler(async () => {
+      const validated = DatabaseDeletePlaintextBackupSchema.safeParse({ backupPath })
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid database:deletePlaintextBackup params: ${validated.error.message}`,
+          'database'
+        )
+        throw new Error('Invalid backup path')
+      }
+      return deletePlaintextBackup(validated.data.backupPath, getDbManager)
     })
   })
 
@@ -305,7 +412,7 @@ export function registerDatabaseHandlers({
    */
   ipcMain.handle('database:info', async () => {
     return wrapHandler(async () => {
-      return getDatabaseInfo(getDbManager)
+      return getDatabaseInfo(getDbManager, getDbKeyStore())
     })
   })
 
@@ -441,6 +548,9 @@ export function registerDatabaseHandlers({
         )
         throw new Error('Invalid file path')
       }
+      if (!isAllowedDatabasePath(validated.data, getDbManager)) {
+        throwUnallowedDatabasePath('database:removeRecent', validated.data)
+      }
       return removeRecentDatabase(validated.data, getDbManager)
     })
   })
@@ -455,7 +565,7 @@ export function registerDatabaseHandlers({
         mainLogger.error(`Invalid database:deleteFile path: ${validated.error.message}`, 'database')
         throw new Error('Invalid file path')
       }
-      return deleteDbFile(validated.data, getDbManager)
+      return deleteDbFile(validated.data, getDbManager, getDbKeyStore())
     })
   })
 
@@ -467,6 +577,9 @@ export function registerDatabaseHandlers({
       const validated = FilePathSchema.safeParse(path)
       if (!validated.success) {
         throw new Error('Invalid file path')
+      }
+      if (!isAllowedDatabasePath(validated.data, getDbManager)) {
+        throwUnallowedDatabasePath('database:showInFolder', validated.data)
       }
       shell.showItemInFolder(validated.data)
       return { success: true }
