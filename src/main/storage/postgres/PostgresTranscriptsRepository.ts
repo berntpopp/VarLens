@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg'
 
 import {
-  isTranscriptImpact,
+  canonicalizeTranscriptSemantics,
   type TranscriptAnnotation,
   type TranscriptInsertRow
 } from '../../../shared/types/transcript'
@@ -147,19 +147,16 @@ export class PostgresTranscriptsRepository {
     variantId: number,
     transcript: Record<string, unknown>
   ): Promise<void> {
-    const canonicalImpact = isTranscriptImpact(transcript.consequence)
-      ? transcript.consequence
-      : null
-    const canonicalFunc =
-      canonicalImpact === null
-        ? (transcript.func ?? transcript.consequence ?? null)
-        : (transcript.func ?? null)
+    const semantics = canonicalizeTranscriptSemantics(
+      (transcript.consequence as string | null | undefined) ?? null,
+      (transcript.func as string | null | undefined) ?? null
+    )
 
     await client.query(
       `UPDATE ${this.schemaName}.variants
           SET transcript = $2,
               gene_symbol = $3,
-              consequence = COALESCE($4, consequence),
+              consequence = $4,
               func = $5,
               cdna = $6,
               aa_change = $7,
@@ -170,8 +167,8 @@ export class PostgresTranscriptsRepository {
         variantId,
         transcript.transcript_id,
         transcript.gene_symbol,
-        canonicalImpact,
-        canonicalFunc,
+        semantics.consequence,
+        semantics.func,
         transcript.cdna,
         transcript.aa_change,
         transcript.hpo_sim_score,

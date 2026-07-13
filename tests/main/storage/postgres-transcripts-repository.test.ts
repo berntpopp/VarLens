@@ -134,6 +134,43 @@ describe('PostgresTranscriptsRepository', () => {
     expect(release).toHaveBeenCalledOnce()
   })
 
+  it('clears the parent impact when the selected transcript impact is unavailable', async () => {
+    const release = vi.fn()
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            transcript_id: 'NM_LEGACY.1',
+            gene_symbol: 'LEGACY',
+            consequence: null,
+            func: 'stop_gained',
+            cdna: null,
+            aa_change: null,
+            hpo_sim_score: null,
+            moi: null
+          }
+        ]
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+    const pool = { connect: vi.fn(async () => ({ query, release })) }
+    const repository = new PostgresTranscriptsRepository(pool as never, 'case_schema')
+
+    await repository.switchSelectedTranscript(9, 'NM_LEGACY.1')
+
+    const updateSql = query.mock.calls[3][0] as string
+    expect(updateSql).toContain('consequence = $4')
+    expect(updateSql).not.toContain('COALESCE($4, consequence)')
+    expect(query).toHaveBeenNthCalledWith(
+      4,
+      expect.stringContaining('UPDATE "case_schema".variants'),
+      [9, 'NM_LEGACY.1', 'LEGACY', null, 'stop_gained', null, null, null, null]
+    )
+  })
+
   it('inserts missing transcripts without overwriting existing rows and then switches selection', async () => {
     const transcript = {
       transcript_id: 'NM_000059.4',

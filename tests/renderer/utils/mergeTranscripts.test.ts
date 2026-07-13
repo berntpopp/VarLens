@@ -251,6 +251,18 @@ describe('mergeTranscripts', () => {
       expect(result.map((r) => r.impact)).toEqual(['HIGH', 'MODERATE', 'LOW', 'MODIFIER'])
     })
 
+    it('sorts DB-only rows by their canonical consequence impact', () => {
+      const db = [
+        makeDbRow({ id: 1, transcript_id: 'A_MODERATE', consequence: 'MODERATE' }),
+        makeDbRow({ id: 2, transcript_id: 'Z_HIGH', consequence: 'HIGH' })
+      ]
+
+      const result = mergeTranscripts(db, [])
+
+      expect(result.map((row) => row.transcript_id)).toEqual(['Z_HIGH', 'A_MODERATE'])
+      expect(result.map((row) => row.impact)).toEqual(['HIGH', 'MODERATE'])
+    })
+
     it('sorts alphabetically by transcript_id as tiebreaker', () => {
       const vep = [
         makeVepRow({ transcript_id: 'ENST00000333333.1', impact: 'MODERATE' }),

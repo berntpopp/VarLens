@@ -14,8 +14,19 @@ export function canonicalizeTranscriptSemantics(
   consequence: string | null,
   func: string | null
 ): { consequence: (typeof TRANSCRIPT_IMPACT_VALUES)[number] | null; func: string | null } {
-  if (isTranscriptImpact(consequence)) return { consequence, func }
-  return { consequence: null, func: func ?? consequence }
+  const canonicalImpact = isTranscriptImpact(consequence)
+    ? consequence
+    : isTranscriptImpact(func)
+      ? func
+      : null
+  const canonicalFunc =
+    func !== null && !isTranscriptImpact(func)
+      ? func
+      : consequence !== null && !isTranscriptImpact(consequence)
+        ? consequence
+        : null
+
+  return { consequence: canonicalImpact, func: canonicalFunc }
 }
 
 /**

@@ -147,6 +147,27 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcript).toBe('T2')
       expect(result.impact).toBe('HIGH')
     })
+
+    it('retains the highest-impact CSQ block when one transcript appears more than once', () => {
+      const info = new Map([
+        [
+          'CSQ',
+          'G|upstream_gene_variant|MODIFIER|GENE1|E1|Transcript|T1|protein_coding||||||||||||||||,G|stop_gained|HIGH|GENE1|E1|Transcript|T1|protein_coding||||||||||||||||'
+        ]
+      ])
+
+      const result = parseAnnotation(info, header, 'G')
+
+      expect(result).toMatchObject({ impact: 'HIGH', consequence: 'stop_gained', transcript: 'T1' })
+      expect(result.transcripts).toEqual([
+        expect.objectContaining({
+          transcript_id: 'T1',
+          consequence: 'HIGH',
+          func: 'stop_gained',
+          is_selected: 1
+        })
+      ])
+    })
   })
 
   describe('ANN parsing', () => {
@@ -202,6 +223,28 @@ describe('vcf-annotation-parser', () => {
 
       expect(result.consequence).toBe('frameshift_variant&splice_region_variant')
       expect(result.impact).toBe('HIGH')
+    })
+
+    it('retains the highest-impact ANN block when one transcript appears more than once', () => {
+      const info = new Map([
+        [
+          'ANN',
+          'G|upstream_gene_variant|MODIFIER|GENE1|E1|transcript|T1|protein_coding||||||||,' +
+            'G|stop_gained|HIGH|GENE1|E1|transcript|T1|protein_coding||||||||'
+        ]
+      ])
+
+      const result = parseAnnotation(info, header, 'G')
+
+      expect(result).toMatchObject({ impact: 'HIGH', consequence: 'stop_gained', transcript: 'T1' })
+      expect(result.transcripts).toEqual([
+        expect.objectContaining({
+          transcript_id: 'T1',
+          consequence: 'HIGH',
+          func: 'stop_gained',
+          is_selected: 1
+        })
+      ])
     })
   })
 

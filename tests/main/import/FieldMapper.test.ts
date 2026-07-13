@@ -388,6 +388,25 @@ describe('FieldMapper', () => {
       expect(transcripts[1].func).toBe('synonymous_variant')
     })
 
+    it('rejects unknown IMPACT codes for the parent and transcript rows', async () => {
+      const row = createTestRow({
+        21: ['99'],
+        20: ['missense_variant'],
+        28: ['1']
+      })
+
+      const results = await runTransform([row])
+      const variant = results[0] as Record<string, unknown>
+      const transcripts = variant._transcripts as Record<string, unknown>[]
+
+      expect(variant.consequence).toBeNull()
+      expect(variant.func).toBe('missense_variant')
+      expect(transcripts[0]).toMatchObject({
+        consequence: null,
+        func: 'missense_variant'
+      })
+    })
+
     it('should emit single transcript for non-array columns', async () => {
       const row = createTestRow({
         1: 0,

@@ -9,6 +9,7 @@ import {
 } from '../config/fieldMapping'
 import type { RawVariantRow } from '../types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
+import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcript'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -40,6 +41,11 @@ export class FieldMapper extends Transform {
     try {
       const row = chunk.value
       const selectedTranscript = (row[this.cols.SELECTED_TRANSCRIPT] as number) ?? 0
+      const semantics = canonicalizeTranscriptSemantics(
+        this.extractValue(row, this.cols.IMPACT, selectedTranscript, true, IMPACT_DICTIONARY) as
+          string | null,
+        this.extractValue(row, this.cols.FUNC, selectedTranscript, false) as string | null
+      )
 
       const mapped: MappedVariant = {
         chr: this.extractValue(row, this.cols.CHR, selectedTranscript, false) as string,
@@ -60,13 +66,7 @@ export class FieldMapper extends Transform {
           false,
           undefined
         ) as string | null,
-        consequence: this.extractValue(
-          row,
-          this.cols.IMPACT,
-          selectedTranscript,
-          true,
-          IMPACT_DICTIONARY
-        ) as string | null,
+        consequence: semantics.consequence,
         gnomad_af: this.extractValue(row, this.cols.GNOMAD_AF, selectedTranscript, false) as
           number | null,
         cadd: this.extractValue(row, this.cols.CADD, selectedTranscript, false) as number | null,
@@ -74,7 +74,7 @@ export class FieldMapper extends Transform {
           string | null,
         gt_num: this.extractValue(row, this.cols.GT_NUM, selectedTranscript, false) as
           string | null,
-        func: this.extractValue(row, this.cols.FUNC, selectedTranscript, false) as string | null,
+        func: semantics.func,
         qual: this.extractValue(row, this.cols.QUAL, selectedTranscript, false) as number | null,
         hpo_sim_score: this.extractNumericFromDict(
           row,
@@ -248,13 +248,16 @@ export class FieldMapper extends Transform {
       if (transcriptId === null || seen.has(transcriptId)) continue
       seen.add(transcriptId)
 
+      const semantics = canonicalizeTranscriptSemantics(
+        this.extractValue(row, this.cols.IMPACT, i, true, IMPACT_DICTIONARY) as string | null,
+        this.extractValue(row, this.cols.FUNC, i, false) as string | null
+      )
       transcripts.push({
         transcript_id: transcriptId,
         gene_symbol: this.extractValue(row, this.cols.GENE, i, true, this.dictionaries.gene) as
           string | null,
-        consequence: this.extractValue(row, this.cols.IMPACT, i, true, IMPACT_DICTIONARY) as
-          string | null,
-        func: this.extractValue(row, this.cols.FUNC, i, false) as string | null,
+        consequence: semantics.consequence,
+        func: semantics.func,
         cdna: this.extractValue(row, this.cols.CDNA, i, false) as string | null,
         aa_change: this.extractValue(row, this.cols.AA_CHANGE, i, false) as string | null,
         hpo_sim_score: this.extractNumericFromDict(

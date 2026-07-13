@@ -14,7 +14,8 @@
 --     the original per-transcript SO term was discarded at import time and
 --     is not recoverable from the database alone, so `func` stays NULL.
 --   - A non-enum `consequence` is provably not an IMPACT. Preserve it as the
---     SO term in `func` and clear `consequence`; do not invent an impact.
+--     SO term in `func`. Recover the parent IMPACT only for the selected row
+--     when the parent names that same transcript; otherwise leave it NULL.
 --
 -- "__schema__" is the migration-runner template placeholder (see
 -- 0001_create_cases.sql). IF NOT EXISTS makes the ALTER itself replay-safe;
@@ -24,8 +25,15 @@
 ALTER TABLE "__schema__"."variant_transcripts"
   ADD COLUMN IF NOT EXISTS func TEXT;
 
-UPDATE "__schema__"."variant_transcripts"
-   SET func = consequence,
-       consequence = NULL
- WHERE consequence IS NOT NULL
-   AND consequence NOT IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER');
+UPDATE "__schema__"."variant_transcripts" AS vt
+   SET func = vt.consequence,
+       consequence = CASE
+         WHEN vt.is_selected = 1 AND v.transcript = vt.transcript_id
+           AND v.consequence IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
+         THEN v.consequence
+         ELSE NULL
+       END
+  FROM "__schema__"."variants" AS v
+ WHERE v.id = vt.variant_id
+   AND vt.consequence IS NOT NULL
+   AND vt.consequence NOT IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER');
