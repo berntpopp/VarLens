@@ -322,19 +322,37 @@ describe('DbKeyStore', () => {
     expect(resolved.ok).toBe(false)
   })
 
-  it('tolerates a corrupt registry file: logs, treats as empty, and preserves a .bak backup', () => {
+  it('fails closed on a corrupt registry and never overwrites the only key material', () => {
     writeFileSync(registryPath, '{ this is not valid json', 'utf-8')
     const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
 
-    const resolved = store.resolveKeyForPath(join(tmpDir, 'anything.db'))
-    expect(resolved.ok).toBe(false)
+    expect(() => store.resolveKeyForPath(join(tmpDir, 'anything.db'))).toThrow(
+      'key registry is corrupt or invalid'
+    )
 
     const backup = readFileSync(`${registryPath}.bak`, 'utf-8')
     expect(backup).toBe('{ this is not valid json')
 
-    // The store must still be usable after encountering a corrupt file.
-    const created = store.createManagedKey(join(tmpDir, 'case.db'))
-    expect(created.ok).toBe(true)
+    expect(() => store.createManagedKey(join(tmpDir, 'case.db'))).toThrow(
+      'key registry is corrupt or invalid'
+    )
+    expect(readFileSync(registryPath, 'utf-8')).toBe('{ this is not valid json')
+  })
+
+  it('fails closed when registry indexes and key entries are structurally inconsistent', () => {
+    const dbPath = join(tmpDir, 'case.db')
+    const malformed = JSON.stringify({
+      keys: { keyA: { path: dbPath, safeWrap: 'wrapped-key' } },
+      pathIndex: { [dbPath]: 'missing-key' }
+    })
+    writeFileSync(registryPath, malformed, 'utf-8')
+    const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+
+    expect(() => store.createManagedKey(join(tmpDir, 'other.db'))).toThrow(
+      'key registry is corrupt or invalid'
+    )
+    expect(readFileSync(registryPath, 'utf-8')).toBe(malformed)
+    expect(readFileSync(`${registryPath}.bak`, 'utf-8')).toBe(malformed)
   })
 
   describe('recovery sidecar portability', () => {
