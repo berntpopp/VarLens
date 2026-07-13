@@ -90,17 +90,89 @@ describe('sanitizeLogMessage', () => {
       expect(result).not.toContain('horse battery staple')
     })
 
+    it.each([
+      ['password: correct horse battery', ['correct', 'horse', 'battery']],
+      ['secret: alpha beta gamma', ['alpha', 'beta', 'gamma']],
+      ['token: one two three', ['one', 'two', 'three']]
+    ])('redacts a multi-word structural credential value: %s', (message, leakedWords) => {
+      const result = sanitizeLogMessage(message)
+      expect(result).toBe(`${message.split(':')[0]}=[REDACTED:KEY]`)
+      for (const word of leakedWords) expect(result).not.toContain(word)
+    })
+
     it('redacts a colon-form credential after a log-prefix colon', () => {
       const result = sanitizeLogMessage('Database error: password: hunter2')
       expect(result).toBe('Database error: password=[REDACTED:KEY]')
       expect(result).not.toContain('hunter2')
     })
 
+    it('keeps PHI redaction markers from text consumed with a structural credential', () => {
+      const result = sanitizeLogMessage('password: hunter2 for PATIENT-12345 at chr1:12345')
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).toContain('[REDACTED:ID]')
+      expect(result).toContain('[REDACTED:COORD]')
+      expect(result).not.toContain('hunter2')
+      expect(result).not.toContain('PATIENT-12345')
+      expect(result).not.toContain('chr1:12345')
+    })
+
+    it.each([
+      ['Error: DB_PASSWORD: hunter2', 'DB_PASSWORD', ['hunter2']],
+      [
+        'Config: PG_PASSPHRASE: correct horse battery',
+        'PG_PASSPHRASE',
+        ['correct', 'horse', 'battery']
+      ],
+      ['Auth: API_TOKEN: alpha beta gamma', 'API_TOKEN', ['alpha', 'beta', 'gamma']],
+      ['Client: CLIENT_SECRET: value with spaces', 'CLIENT_SECRET', ['value', 'spaces']]
+    ])(
+      'redacts a structural suffixed credential identifier: %s',
+      (message, identifier, leakedWords) => {
+        const result = sanitizeLogMessage(message)
+        expect(result).toContain(`${identifier}=[REDACTED:KEY]`)
+        for (const word of leakedWords) expect(result).not.toContain(word)
+      }
+    )
+
+    it.each([
+      [
+        'password: "correct horse, battery; staple" tail',
+        ['correct', 'horse', 'battery', 'staple']
+      ],
+      ["secret: 'alpha, beta; gamma' tail", ['alpha', 'beta', 'gamma']],
+      ['token: "abc\\"def, ghi; jkl" tail', ['abc', 'def', 'ghi', 'jkl']],
+      ["passphrase: 'abc''def, ghi; jkl' tail", ['abc', 'def', 'ghi', 'jkl']]
+    ])('redacts quoted structural credential values atomically: %s', (message, leakedWords) => {
+      const result = sanitizeLogMessage(message)
+      expect(result).toContain('[REDACTED:KEY]')
+      expect(result).toContain(' tail')
+      for (const word of leakedWords) expect(result).not.toContain(word)
+    })
+
+    it.each([
+      ['password="abc "" def, ghi; jkl"; tail', ['abc', 'def', 'ghi', 'jkl']],
+      ['DB_PASSWORD="abc "" def, ghi; jkl"; tail', ['abc', 'def', 'ghi', 'jkl']]
+    ])(
+      'redacts double-quoted assignment values with doubled quotes: %s',
+      (message, leakedWords) => {
+        const result = sanitizeLogMessage(message)
+        expect(result).toContain('[REDACTED:KEY]')
+        expect(result).toContain('tail')
+        for (const word of leakedWords) expect(result).not.toContain(word)
+      }
+    )
+
     it('redacts structural credentials after a long whitespace prefix in linear work', () => {
       const result = sanitizeLogMessage(`${'\t'.repeat(100_000)}password: hunter2`)
 
       expect(result.endsWith('password=[REDACTED:KEY]')).toBe(true)
       expect(result).not.toContain('hunter2')
+    })
+
+    it('does not redact a long whitespace-only log message', () => {
+      const message = ' \t'.repeat(100_000)
+
+      expect(sanitizeLogMessage(message)).toBe(message)
     })
 
     it.each([
