@@ -9,6 +9,7 @@ import { createInterface } from 'node:readline'
 import { createCappedLineStream } from '../stream-utils'
 import { detectGenomeBuildFromVcfHeaders } from '../../services/GenomeBuildDetector'
 import type { VcfHeader, InfoFieldDef, FormatFieldDef, ContigDef, AnnotationType } from './types'
+import { VcfHeaderBudget, type VcfHeaderLimitOptions } from './vcf-header-limits'
 
 /** Parse result includes the header and optionally the first data line */
 export interface VcfHeaderParseResult {
@@ -193,7 +194,10 @@ export function parseVcfHeaderFromLines(lines: string[]): VcfHeader {
  * Reads lines until the first non-# line, then returns the header
  * and the first data line (so the caller doesn't miss it).
  */
-export async function parseVcfHeader(filePath: string): Promise<VcfHeaderParseResult> {
+export async function parseVcfHeader(
+  filePath: string,
+  options: VcfHeaderLimitOptions = {}
+): Promise<VcfHeaderParseResult> {
   return new Promise((resolve, reject) => {
     // Shared capped reader guards against a giant single line and a
     // decompression bomb -- see stream-utils.ts for the cap rationale.
@@ -202,44 +206,47 @@ export async function parseVcfHeader(filePath: string): Promise<VcfHeaderParseRe
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
 
     const headerLines: string[] = []
+    const headerBudget = new VcfHeaderBudget(options)
     let firstDataLine: string | null = null
-    let resolved = false
+    let settled = false
 
-    rl.on('line', (line: string) => {
-      if (line.startsWith('#')) {
-        headerLines.push(line)
-      } else {
-        // First non-header line
-        firstDataLine = line
-        resolved = true
-        rl.close()
-      }
-    })
+    const cleanup = (): void => {
+      rl.close()
+      stream.destroy()
+    }
 
-    rl.on('close', () => {
-      if (!resolved) {
-        resolved = true
+    const settle = (error?: unknown): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (error !== undefined) {
+        reject(error)
+        return
       }
       try {
-        const header = parseVcfHeaderFromLines(headerLines)
-        resolve({ header, firstDataLine })
-      } catch (error) {
-        reject(error)
+        resolve({ header: parseVcfHeaderFromLines(headerLines), firstDataLine })
+      } catch (parseError) {
+        reject(parseError)
+      }
+    }
+
+    rl.on('line', (line: string) => {
+      if (settled) return
+      if (line.startsWith('#')) {
+        try {
+          headerBudget.add(line)
+          headerLines.push(line)
+        } catch (error) {
+          settle(error)
+        }
+      } else {
+        firstDataLine = line
+        settle()
       }
     })
 
-    rl.on('error', (error) => {
-      if (!resolved) {
-        resolved = true
-        reject(error)
-      }
-    })
-
-    stream.on('error', (error) => {
-      if (!resolved) {
-        resolved = true
-        reject(error)
-      }
-    })
+    rl.on('close', () => settle())
+    rl.on('error', settle)
+    stream.on('error', settle)
   })
 }

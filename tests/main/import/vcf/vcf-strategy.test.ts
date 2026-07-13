@@ -9,7 +9,6 @@ import { DatabaseService } from '../../../../src/main/database/DatabaseService'
 import { VcfStrategy } from '../../../../src/main/import/vcf/VcfStrategy'
 import { detectFormat } from '../../../../src/main/import/format-detection'
 import {
-  MAX_LINE_BYTES,
   LineTooLongError,
   DecompressedSizeExceededError
 } from '../../../../src/main/import/stream-utils'
@@ -17,6 +16,8 @@ import type { ImportOptions } from '../../../../src/main/import/types'
 import type { StrategyContext } from '../../../../src/main/import/strategies/ImportStrategy'
 
 const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
+const LINE_CAP_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
+const TEST_LINE_CAP = 1024
 
 const SYNTHETIC_VCF = resolve(__dirname, '../../../test-data/vcf/synthetic-unit-test.vcf')
 const SINGLE_SAMPLE_VCF = resolve(__dirname, '../../../test-data/vcf/single-sample.vcf.gz')
@@ -246,14 +247,16 @@ describe('VcfStrategy', () => {
   describe('DoS guards', () => {
     afterEach(() => {
       delete process.env[DECOMPRESSED_CAP_ENV_VAR]
+      delete process.env[LINE_CAP_ENV_VAR]
     })
 
-    it('rejects a VCF containing a line over MAX_LINE_BYTES with LineTooLongError', async () => {
+    it('rejects a VCF containing a line over the production call-path cap', async () => {
+      process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
       const tmpDir = mkdtempSync(join(tmpdir(), 'varlens-vcf-strategy-dos-'))
       const filePath = join(tmpDir, 'giant-line.vcf')
 
       try {
-        const giantLine = 'A'.repeat(MAX_LINE_BYTES + 1)
+        const giantLine = 'A'.repeat(TEST_LINE_CAP + 1)
         writeFileSync(
           filePath,
           [

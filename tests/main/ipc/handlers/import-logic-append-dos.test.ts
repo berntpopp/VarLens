@@ -26,12 +26,13 @@ import {
   detectGenomeBuildFromFile
 } from '../../../../src/main/ipc/handlers/import-logic-append'
 import {
-  MAX_LINE_BYTES,
   LineTooLongError,
   DecompressedSizeExceededError
 } from '../../../../src/main/import/stream-utils'
 
 const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
+const LINE_CAP_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
+const TEST_LINE_CAP = 1024
 
 const GIANT_LINE_VCF = (giantLine: string): string =>
   [
@@ -55,12 +56,14 @@ describe('import-logic-append.ts DoS guards', () => {
     svc.close()
     rmSync(tmpDir, { recursive: true, force: true })
     delete process.env[DECOMPRESSED_CAP_ENV_VAR]
+    delete process.env[LINE_CAP_ENV_VAR]
   })
 
   describe('importAdditionalFileToCase', () => {
     it('rejects a giant line with LineTooLongError -- not a silent per-line skip', async () => {
+      process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
       const filePath = join(tmpDir, 'giant-line.vcf')
-      writeFileSync(filePath, GIANT_LINE_VCF('A'.repeat(MAX_LINE_BYTES + 1)))
+      writeFileSync(filePath, GIANT_LINE_VCF('A'.repeat(TEST_LINE_CAP + 1)))
 
       const caseId = svc.cases.createCase('test-append-giant-line', filePath, 1000)
       svc.variants.beginBulkInsert()
@@ -122,11 +125,12 @@ describe('import-logic-append.ts DoS guards', () => {
 
   describe('detectGenomeBuildFromFile', () => {
     it('rejects a giant header-adjacent line with LineTooLongError', async () => {
+      process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
       const filePath = join(tmpDir, 'giant-header.vcf')
       // The oversized line sits among header lines (before #CHROM), so the
       // preflight header reader -- which only reads up to the first data
       // line -- still encounters it.
-      const giantHeaderLine = '##' + 'A'.repeat(MAX_LINE_BYTES + 1)
+      const giantHeaderLine = '##' + 'A'.repeat(TEST_LINE_CAP + 1)
       writeFileSync(
         filePath,
         [

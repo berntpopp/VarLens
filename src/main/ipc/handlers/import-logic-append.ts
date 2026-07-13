@@ -31,6 +31,7 @@ import { DEFAULT_INFO_FIELD_MAPPINGS } from '../../import/vcf/info-field-registr
 import type { VcfHeader, VcfMappedVariant } from '../../import/vcf/types'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import { passesPreMappingFilters, passesPostMappingFilters } from '../../import/vcf/import-filters'
+import { VcfHeaderBudget } from '../../import/vcf/vcf-header-limits'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { ImportCallbacks, ImportResult, VcfImportOptions } from './import-logic'
 
@@ -60,9 +61,12 @@ export async function importAdditionalFileToCase(
   // Shared capped reader guards against a giant single line and a
   // decompression bomb -- see stream-utils.ts for the cap rationale.
   const { stream } = createCappedLineStream(filePath)
+  stream.on('error', () => undefined)
   const rl = createInterface({ input: stream, crlfDelay: Infinity })
+  rl.on('error', () => undefined)
 
   const headerLines: string[] = []
+  const headerBudget = new VcfHeaderBudget()
   let header: VcfHeader | null = null
   let activeSample = ''
   let callerName: string | null = null
@@ -76,6 +80,7 @@ export async function importAdditionalFileToCase(
     for await (const line of rl) {
       // Collect header lines
       if (line.startsWith('#')) {
+        headerBudget.add(line)
         headerLines.push(line)
         continue
       }

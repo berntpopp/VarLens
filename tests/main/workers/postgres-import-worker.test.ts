@@ -493,6 +493,48 @@ describe('postgres-import-worker runImport', () => {
     expect(filters.bedFilter).toBeUndefined()
   })
 
+  it('fails closed when an explicitly requested BED filter cannot be loaded', async () => {
+    const client = {
+      connect: vi.fn(async () => undefined),
+      query: vi.fn(async () => ({ rows: [] })),
+      end: vi.fn(async () => undefined)
+    }
+    const createVcfMappedStream = vi.fn(async () => Readable.from([]) as never)
+    const messages: Array<{ type: string; message?: string }> = []
+
+    await runImport(
+      {
+        createClient: () => client as never,
+        detectFormat: async () => ({ format: 'vcf', caseKey: '' }) as never,
+        createVcfMappedStream,
+        createMapperPipeline: async () => Readable.from([]),
+        statFile: () => ({ size: 0 })
+      },
+      {
+        type: 'start',
+        client: { connectionString: 'postgres://x' },
+        schema: 'public',
+        mode: 'multi-file',
+        caseName: 'F',
+        files: [
+          {
+            filePath: '/tmp/a.vcf.gz',
+            variantType: 'snv-indel',
+            annotationFormat: null,
+            caller: null
+          }
+        ],
+        filters: { bedFilePath: '/tmp/varlens-missing-pg-filter.bed' }
+      },
+      (message) => messages.push(message)
+    )
+
+    expect(createVcfMappedStream).not.toHaveBeenCalled()
+    expect(messages).toContainEqual(
+      expect.objectContaining({ type: 'error', message: expect.stringMatching(/ENOENT/i) })
+    )
+  })
+
   it('applies multi-file filters only to append files when a base file creates the case', async () => {
     const client = {
       connect: vi.fn(async () => undefined),

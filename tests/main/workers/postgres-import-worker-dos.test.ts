@@ -19,15 +19,16 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { streamMappedVcfRows } from '../../../src/main/workers/postgres-import-worker'
+import { streamMappedVcfRows } from '../../../src/main/workers/postgres-vcf-stream'
 import {
-  MAX_LINE_BYTES,
   LineTooLongError,
   DecompressedSizeExceededError
 } from '../../../src/main/import/stream-utils'
 import type { VcfMappedVariant } from '../../../src/main/import/vcf/types'
 
 const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
+const LINE_CAP_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
+const TEST_LINE_CAP = 1024
 
 /** Drain an async generator into an array, surfacing any thrown error. */
 async function drain(
@@ -46,12 +47,14 @@ describe('streamMappedVcfRows DoS guards (postgres-import-worker.ts, live PG wor
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true })
     delete process.env[DECOMPRESSED_CAP_ENV_VAR]
+    delete process.env[LINE_CAP_ENV_VAR]
   })
 
-  it('rejects a VCF containing a line over MAX_LINE_BYTES with LineTooLongError -- not a silent skip', async () => {
+  it('rejects a VCF line over the production call-path cap -- not a silent skip', async () => {
+    process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
     tmpDir = mkdtempSync(join(tmpdir(), 'varlens-pg-worker-dos-'))
     const filePath = join(tmpDir, 'giant-line.vcf')
-    const giantLine = 'A'.repeat(MAX_LINE_BYTES + 1)
+    const giantLine = 'A'.repeat(TEST_LINE_CAP + 1)
     writeFileSync(
       filePath,
       [

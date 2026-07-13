@@ -18,7 +18,6 @@ import { gzipSync } from 'node:zlib'
 import { createInterface } from 'node:readline'
 import {
   createCappedLineStream,
-  readCappedFileSync,
   LineTooLongError,
   DecompressedSizeExceededError
 } from '../../../src/main/import/stream-utils'
@@ -107,36 +106,5 @@ describe('createCappedLineStream', () => {
 
     const lines = await collectLines(filePath)
     expect(lines).toEqual(['##fileformat=VCFv4.2', 'chr1\t100'])
-  })
-})
-
-describe('readCappedFileSync', () => {
-  it('rejects an oversized plain file with DecompressedSizeExceededError', () => {
-    const filePath = join(tmpDir, 'big-plain.bed')
-    writeFileSync(filePath, 'chr1\t1\t2\n'.repeat(1000)) // ~9000 bytes
-
-    expect(() => readCappedFileSync(filePath, 100)).toThrow(DecompressedSizeExceededError)
-  })
-
-  it('rejects a gzip bomb via zlib maxOutputLength with DecompressedSizeExceededError', () => {
-    const filePath = join(tmpDir, 'bomb.bed.gz')
-    const inflated = 'chr1\t1\t2\n'.repeat(200_000) // highly compressible, large decompressed
-    writeFileSync(filePath, gzipSync(Buffer.from(inflated)))
-
-    expect(() => readCappedFileSync(filePath, 1000)).toThrow(DecompressedSizeExceededError)
-  })
-
-  it('reads a legitimate small plain file without false rejection', () => {
-    const filePath = join(tmpDir, 'legit.bed')
-    writeFileSync(filePath, 'chr1\t100\t200\n')
-
-    expect(readCappedFileSync(filePath)).toBe('chr1\t100\t200\n')
-  })
-
-  it('reads a legitimate small gzipped file without false rejection', () => {
-    const filePath = join(tmpDir, 'legit.bed.gz')
-    writeFileSync(filePath, gzipSync(Buffer.from('chr1\t100\t200\n')))
-
-    expect(readCappedFileSync(filePath)).toBe('chr1\t100\t200\n')
   })
 })

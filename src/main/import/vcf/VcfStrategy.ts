@@ -18,6 +18,7 @@ import { DEFAULT_INFO_FIELD_MAPPINGS } from './info-field-registry'
 import { detectCaller } from './caller-detector'
 import type { ImportFilters } from './import-filters'
 import { passesPreMappingFilters, passesPostMappingFilters } from './import-filters'
+import { VcfHeaderBudget } from './vcf-header-limits'
 export class VcfStrategy implements ImportStrategy {
   readonly formatId = 'vcf' as const
 
@@ -39,9 +40,12 @@ export class VcfStrategy implements ImportStrategy {
     // single line and a decompression bomb -- see stream-utils.ts for the
     // cap rationale.
     const { stream } = createCappedLineStream(filePath)
+    stream.on('error', () => undefined)
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
+    rl.on('error', () => undefined)
 
     const headerLines: string[] = []
+    const headerBudget = new VcfHeaderBudget()
     let header: VcfHeader | null = null
     let activeSample = ''
     let totalInserted = 0
@@ -63,6 +67,7 @@ export class VcfStrategy implements ImportStrategy {
 
         // Collect header lines
         if (line.startsWith('#')) {
+          headerBudget.add(line)
           headerLines.push(line)
           continue
         }
@@ -155,6 +160,7 @@ export class VcfStrategy implements ImportStrategy {
         totalInserted += batch.length
       }
     } finally {
+      stream.destroy()
       // Always restore FTS triggers and update case
       db.variants.finishBulkInsert(caseId, totalInserted)
     }

@@ -1,53 +1,36 @@
-import { createReadStream } from 'node:fs'
-import { createGunzip } from 'node:zlib'
 import { createInterface } from 'node:readline'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
-import type { Readable } from 'node:stream'
+import { compose, type Readable } from 'node:stream'
 import type { FileFormat, FormatInfo } from './strategies/ImportStrategy'
-import { createDecompressedStream, isGzipped } from './stream-utils'
+import { createCappedLineStream, createDecompressedStream } from './stream-utils'
 
 /**
  * Check if a file is a VCF file by reading the first line.
  * VCF files start with "##fileformat=VCFv4"
  */
 async function isVcfFile(filePath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const raw = createReadStream(filePath, { start: 0, end: 1024 })
-    const stream = isGzipped(filePath) ? raw.pipe(createGunzip()) : raw
-
+  return new Promise((resolve, reject) => {
+    const { stream } = createCappedLineStream(filePath)
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
-    let resolved = false
+    let settled = false
+
+    const settle = (result: boolean, error?: Error): void => {
+      if (settled) return
+      settled = true
+      rl.close()
+      stream.destroy()
+      if (error !== undefined) reject(error)
+      else resolve(result)
+    }
 
     rl.on('line', (line: string) => {
-      if (!resolved) {
-        resolved = true
-        rl.close()
-        resolve(line.startsWith('##fileformat=VCFv'))
-      }
+      settle(line.startsWith('##fileformat=VCFv'))
     })
-
-    rl.on('close', () => {
-      if (!resolved) {
-        resolved = true
-        resolve(false)
-      }
-    })
-
-    rl.on('error', () => {
-      if (!resolved) {
-        resolved = true
-        resolve(false)
-      }
-    })
-
-    stream.on('error', () => {
-      if (!resolved) {
-        resolved = true
-        resolve(false)
-      }
-    })
+    rl.on('close', () => settle(false))
+    rl.on('error', (error) => settle(false, error))
+    stream.on('error', (error) => settle(false, error))
   })
 }
 
@@ -78,14 +61,13 @@ export async function detectFormat(filePath: string): Promise<FormatInfo> {
     }
   }
   return new Promise((resolve, reject) => {
-    const stream = createDecompressedStream(filePath).pipe(parser.asStream())
+    const stream = compose(createDecompressedStream(filePath), parser.asStream())
 
     const topLevelKeys: string[] = []
     let depth = 0
     let resolved = false
 
     const cleanup = (): void => {
-      stream.removeAllListeners()
       stream.destroy()
     }
 
@@ -199,7 +181,7 @@ export async function detectFormat(filePath: string): Promise<FormatInfo> {
  */
 export async function extractFirstSampleId(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const stream = createDecompressedStream(filePath).pipe(parser.asStream())
+    const stream = compose(createDecompressedStream(filePath), parser.asStream())
 
     let inSamples = false
     let sampleId: string | null = null
@@ -207,7 +189,6 @@ export async function extractFirstSampleId(filePath: string): Promise<string> {
     let resolved = false
 
     const cleanup = (): void => {
-      stream.removeAllListeners()
       stream.destroy()
     }
 
@@ -269,35 +250,38 @@ export async function createDataPipeline(filePath: string): Promise<{
   stream: Readable
 }> {
   const formatInfo = await detectFormat(filePath)
-  const decompressed = createDecompressedStream(filePath)
-  const jsonParser = parser.asStream()
-
   let stream: Readable
 
   switch (formatInfo.format) {
     case 'simple':
-      stream = decompressed
-        .pipe(jsonParser)
-        .pipe(pick.asStream({ filter: 'variants' }))
-        .pipe(streamArray.asStream())
+      stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: 'variants' }),
+        streamArray.asStream()
+      )
       break
 
     case 'object': {
       const samplePath = `samples.${formatInfo.caseKey}.variants`
-      stream = decompressed
-        .pipe(jsonParser)
-        .pipe(pick.asStream({ filter: samplePath }))
-        .pipe(streamArray.asStream())
+      stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: samplePath }),
+        streamArray.asStream()
+      )
       break
     }
 
     case 'columnar': {
       const wrapped = formatInfo.wrapped !== false
       const dataPath = wrapped ? `${formatInfo.caseKey}.data` : 'data'
-      stream = decompressed
-        .pipe(jsonParser)
-        .pipe(pick.asStream({ filter: dataPath }))
-        .pipe(streamArray.asStream())
+      stream = compose(
+        createDecompressedStream(filePath),
+        parser.asStream(),
+        pick.asStream({ filter: dataPath }),
+        streamArray.asStream()
+      )
       break
     }
 

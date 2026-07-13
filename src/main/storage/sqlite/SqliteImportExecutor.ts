@@ -136,6 +136,8 @@ export class SqliteImportExecutor implements StorageImportExecutor {
     return new Promise<StorageImportSingleFileResult>((resolve, reject) => {
       let capturedCaseId = 0
       let capturedElapsed = 0
+      let capturedSkipped = 0
+      let capturedSkipReasons: string[] = []
 
       try {
         worker.start({
@@ -166,6 +168,8 @@ export class SqliteImportExecutor implements StorageImportExecutor {
           onFileComplete: (msg) => {
             capturedCaseId = msg.result.caseId
             capturedElapsed = msg.result.elapsed
+            capturedSkipped = msg.result.skipped ?? 0
+            capturedSkipReasons = msg.result.skipReasons ?? []
           },
           onComplete: (msg) => {
             this.workerClient = null
@@ -202,8 +206,8 @@ export class SqliteImportExecutor implements StorageImportExecutor {
               resolve({
                 caseId: capturedCaseId,
                 variantCount: detail.variantCount ?? 0,
-                skipped: 0,
-                errors: [],
+                skipped: capturedSkipped,
+                errors: capturedSkipReasons,
                 elapsed: capturedElapsed
               })
             } else {
@@ -254,7 +258,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
     params: StorageImportMultiFileParams
   ): Promise<StorageImportMultiFileResult> {
     const startedAt = Date.now()
-    const filters = this.translateFilters(params.filters)
+    const filters = await this.translateFilters(params.filters)
 
     // NOTE: params.onFileComplete is intentionally NOT plumbed through here.
     // The existing startMultiFileImport / ImportCallbacks shape in
@@ -304,7 +308,9 @@ export class SqliteImportExecutor implements StorageImportExecutor {
    * contains no active constraints, mirroring the behaviour of
    * `buildImportFiltersFromIpc` in `import.ts`.
    */
-  private translateFilters(filters?: StorageImportFileFilters): ImportFilters | undefined {
+  private async translateFilters(
+    filters?: StorageImportFileFilters
+  ): Promise<ImportFilters | undefined> {
     if (filters === undefined) return undefined
 
     const hasAny =
@@ -324,16 +330,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       filters.bedFilePath !== null &&
       filters.bedFilePath !== ''
     ) {
-      try {
-        bedFilter = BedFilter.fromFile(filters.bedFilePath, filters.bedPadding ?? 0)
-      } catch (e) {
-        mainLogger.warn(
-          `Failed to load BED filter from ${filters.bedFilePath}: ${
-            e instanceof Error ? e.message : String(e)
-          }`,
-          'SqliteImportExecutor'
-        )
-      }
+      bedFilter = await BedFilter.fromFile(filters.bedFilePath, filters.bedPadding ?? 0)
     }
 
     return {

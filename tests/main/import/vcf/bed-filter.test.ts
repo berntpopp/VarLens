@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeAll } from 'vitest'
 import { mkdtempSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { gzipSync } from 'node:zlib'
@@ -14,27 +14,33 @@ const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
 
 describe('BedFilter', () => {
   describe('fromFile worker-safe defensive check', () => {
-    it('rejects relative paths', () => {
-      expect(() => BedFilter.fromFile('relative/foo.bed', 0)).toThrow(/must be an absolute path/i)
+    it('rejects relative paths', async () => {
+      await expect(BedFilter.fromFile('relative/foo.bed', 0)).rejects.toThrow(
+        /must be an absolute path/i
+      )
     })
 
-    it('rejects paths containing .. after resolve', () => {
-      expect(() => BedFilter.fromFile('/tmp/../etc/shadow', 0)).toThrow(/must not contain '\.\.'/i)
+    it('rejects paths containing .. after resolve', async () => {
+      await expect(BedFilter.fromFile('/tmp/../etc/shadow', 0)).rejects.toThrow(
+        /must not contain '\.\.'/i
+      )
     })
 
-    it('passes the defensive check for an absolute path that does not exist (fails on read, not on guard)', () => {
-      expect(() => BedFilter.fromFile('/tmp/does-not-exist.bed', 0)).toThrow(/ENOENT|no such file/i)
+    it('passes the defensive check for an absolute path that does not exist (fails on read, not on guard)', async () => {
+      await expect(BedFilter.fromFile('/tmp/does-not-exist.bed', 0)).rejects.toThrow(
+        /ENOENT|no such file/i
+      )
     })
   })
 
   describe('loadFromFile', () => {
-    it('loads intervals from a BED file', () => {
-      const filter = BedFilter.fromFile(BED_PATH, 0)
+    it('loads intervals from a BED file', async () => {
+      const filter = await BedFilter.fromFile(BED_PATH, 0)
       expect(filter.intervalCount()).toBe(4)
     })
 
-    it('applies padding to intervals', () => {
-      const filter = BedFilter.fromFile(BED_PATH, 100)
+    it('applies padding to intervals', async () => {
+      const filter = await BedFilter.fromFile(BED_PATH, 100)
       // chr1:999000-1010000 with +/-100 -> chr1:998901-1010100 (1-based inclusive)
       expect(filter.contains('chr1', 998950)).toBe(true)
       expect(filter.contains('chr1', 998850)).toBe(false)
@@ -42,7 +48,10 @@ describe('BedFilter', () => {
   })
 
   describe('contains (point query)', () => {
-    const filter = BedFilter.fromFile(BED_PATH, 0)
+    let filter: BedFilter
+    beforeAll(async () => {
+      filter = await BedFilter.fromFile(BED_PATH, 0)
+    })
 
     it('returns true for position inside interval', () => {
       expect(filter.contains('chr1', 1000000)).toBe(true)
@@ -68,7 +77,10 @@ describe('BedFilter', () => {
   })
 
   describe('containsRange (interval overlap query for SV/CNV)', () => {
-    const filter = BedFilter.fromFile(BED_PATH, 0)
+    let filter: BedFilter
+    beforeAll(async () => {
+      filter = await BedFilter.fromFile(BED_PATH, 0)
+    })
 
     it('returns true when range overlaps a BED region', () => {
       // Range chr1:990000-1005000 overlaps BED chr1:999001-1010000
@@ -100,25 +112,25 @@ describe('BedFilter', () => {
       if (tmpDir) rmSync(tmpDir, { recursive: true, force: true })
     })
 
-    it('rejects a plain BED file whose size exceeds the configured total-byte cap', () => {
+    it('rejects a plain BED file whose size exceeds the configured total-byte cap', async () => {
       process.env[DECOMPRESSED_CAP_ENV_VAR] = '1000'
       tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-dos-'))
       const filePath = path.join(tmpDir, 'giant.bed')
       writeFileSync(filePath, 'chr1\t1\t2\n'.repeat(1000)) // ~9000 bytes > 1000-byte cap
 
-      expect(() => BedFilter.fromFile(filePath, 0)).toThrow(DecompressedSizeExceededError)
+      await expect(BedFilter.fromFile(filePath, 0)).rejects.toThrow(DecompressedSizeExceededError)
     })
 
-    it('uses a BED-specific cap instead of the import-wide 256 GiB default', () => {
+    it('uses a BED-specific cap instead of the import-wide 256 GiB default', async () => {
       tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-specific-cap-'))
       const filePath = path.join(tmpDir, 'oversized.bed')
       writeFileSync(filePath, '')
       truncateSync(filePath, MAX_BED_FILTER_DECOMPRESSED_BYTES + 1)
 
-      expect(() => BedFilter.fromFile(filePath, 0)).toThrow(DecompressedSizeExceededError)
+      await expect(BedFilter.fromFile(filePath, 0)).rejects.toThrow(DecompressedSizeExceededError)
     })
 
-    it('rejects a gzip decompression bomb once decompressed bytes exceed the configured cap', () => {
+    it('rejects a gzip decompression bomb once decompressed bytes exceed the configured cap', async () => {
       process.env[DECOMPRESSED_CAP_ENV_VAR] = '1000'
       tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-bomb-'))
       const filePath = path.join(tmpDir, 'bomb.bed.gz')
@@ -127,13 +139,13 @@ describe('BedFilter', () => {
       const inflated = 'chr1\t1\t2\n'.repeat(200_000)
       writeFileSync(filePath, gzipSync(Buffer.from(inflated)))
 
-      expect(() => BedFilter.fromFile(filePath, 0)).toThrow(DecompressedSizeExceededError)
+      await expect(BedFilter.fromFile(filePath, 0)).rejects.toThrow(DecompressedSizeExceededError)
     })
 
-    it('still loads a legitimate BED file under the default cap', () => {
+    it('still loads a legitimate BED file under the default cap', async () => {
       // No env override -- exercises the real default (256 GiB) cap, proving
       // no false rejection of a normal-sized file.
-      const filter = BedFilter.fromFile(BED_PATH, 0)
+      const filter = await BedFilter.fromFile(BED_PATH, 0)
       expect(filter.intervalCount()).toBe(4)
     })
   })

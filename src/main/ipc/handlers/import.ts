@@ -25,7 +25,6 @@ import type { ImportCallbacks, MultiFileImportSpec } from './import-logic'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { StorageSession } from '../../storage/session'
 import { BedFilter } from '../../import/vcf/bed-filter'
-import { mainLogger } from '../../services/MainLogger'
 
 /**
  * Serializable filter payload sent from the renderer over IPC.
@@ -42,9 +41,9 @@ type ImportFiltersIpcPayload = z.infer<typeof ImportFiltersIpcPayloadSchema>
  * when the payload has no meaningful filter content (so the append path can
  * skip the entire filter code path cheaply).
  */
-function buildImportFiltersFromIpc(
+async function buildImportFiltersFromIpc(
   payload: ImportFiltersIpcPayload | undefined
-): ImportFilters | undefined {
+): Promise<ImportFilters | undefined> {
   if (payload === undefined) return undefined
 
   const hasAny =
@@ -57,16 +56,7 @@ function buildImportFiltersFromIpc(
 
   let bedFilter: BedFilter | undefined
   if (payload.bedFile !== undefined && payload.bedFile !== null && payload.bedFile !== '') {
-    try {
-      bedFilter = BedFilter.fromFile(payload.bedFile, payload.bedPadding ?? 0)
-    } catch (e) {
-      mainLogger.warn(
-        `Failed to load BED filter from ${payload.bedFile}: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-        'import'
-      )
-    }
+    bedFilter = await BedFilter.fromFile(payload.bedFile, payload.bedPadding ?? 0)
   }
 
   return {
@@ -203,7 +193,7 @@ export function registerImportHandlers({
         // Build the SQLite-path ImportFilters (loads BedFilter into memory).
         // The PG path receives filtersPayload directly so it can extract the
         // BED file path without going through the BedFilter constructor.
-        const importFilters = buildImportFiltersFromIpc(validatedFiltersPayload)
+        const importFilters = await buildImportFiltersFromIpc(validatedFiltersPayload)
         return startMultiFileImport(
           validatedCaseName,
           validatedFiles,

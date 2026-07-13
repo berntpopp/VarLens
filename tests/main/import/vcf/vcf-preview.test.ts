@@ -5,13 +5,14 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { getVcfPreview } from '../../../../src/main/import/vcf/vcf-preview'
 import {
-  MAX_LINE_BYTES,
   LineTooLongError,
   DecompressedSizeExceededError
 } from '../../../../src/main/import/stream-utils'
 
 const SYNTHETIC_VCF = resolve(__dirname, '../../../test-data/vcf/synthetic-unit-test.vcf')
 const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
+const LINE_CAP_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
+const TEST_LINE_CAP = 1024
 
 describe('vcf-preview', () => {
   it('returns preview result for synthetic VCF', async () => {
@@ -62,12 +63,14 @@ describe('vcf-preview', () => {
 
     afterEach(() => {
       delete process.env[DECOMPRESSED_CAP_ENV_VAR]
+      delete process.env[LINE_CAP_ENV_VAR]
       rmSync(tmpDir, { recursive: true, force: true })
     })
 
-    it('rejects a file containing a line over MAX_LINE_BYTES with LineTooLongError', async () => {
+    it('rejects a file containing a line over the production call-path cap', async () => {
+      process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
       const filePath = join(tmpDir, 'giant-line.vcf')
-      const giantLine = 'A'.repeat(MAX_LINE_BYTES + 1)
+      const giantLine = 'A'.repeat(TEST_LINE_CAP + 1)
       writeFileSync(filePath, `##fileformat=VCFv4.2\n${giantLine}\nchr1\t100\n`)
 
       await expect(getVcfPreview(filePath)).rejects.toThrow(LineTooLongError)

@@ -1,5 +1,5 @@
-import { createReadStream, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs'
-import { createGunzip, gunzipSync } from 'node:zlib'
+import { createReadStream, openSync, readSync, closeSync } from 'node:fs'
+import { createGunzip } from 'node:zlib'
 import { compose, Transform } from 'node:stream'
 import type { Readable, TransformCallback } from 'node:stream'
 
@@ -18,18 +18,6 @@ export function isGzipped(filePath: string): boolean {
   } finally {
     closeSync(fd)
   }
-}
-
-/**
- * Create a readable stream that auto-detects gzip compression.
- * Returns a stream of decompressed (or raw) data ready for JSON parsing.
- */
-export function createDecompressedStream(filePath: string): Readable {
-  const raw = createReadStream(filePath)
-  if (isGzipped(filePath)) {
-    return raw.pipe(createGunzip())
-  }
-  return raw
 }
 
 // -----------------------------------------------------------------------------
@@ -78,6 +66,7 @@ export const DEFAULT_MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024 * 1024 // 256 Gi
 
 /** Environment variable that overrides DEFAULT_MAX_DECOMPRESSED_BYTES, in bytes. */
 const MAX_DECOMPRESSED_BYTES_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
+const TEST_MAX_LINE_BYTES_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
 
 /**
  * Resolve the effective total decompressed-byte cap: an explicit override
@@ -93,6 +82,17 @@ export function resolveMaxDecompressedBytes(override?: number): number {
     if (Number.isFinite(parsed) && parsed > 0) return parsed
   }
   return DEFAULT_MAX_DECOMPRESSED_BYTES
+}
+
+function resolveMaxLineBytes(override?: number): number {
+  if (override !== undefined) return override
+  // Keep the security ceiling immutable in production while allowing live
+  // call-path tests to trip it with tiny fixtures instead of 64 MiB strings.
+  if (process.env.NODE_ENV === 'test') {
+    const parsed = Number(process.env[TEST_MAX_LINE_BYTES_ENV_VAR])
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return MAX_LINE_BYTES
 }
 
 /** Thrown when a single line exceeds MAX_LINE_BYTES. */
@@ -134,6 +134,39 @@ class ByteCapTransform extends Transform {
     }
     callback(null, chunk)
   }
+}
+
+function composeCappedDecompressedStream(
+  raw: Readable,
+  gzipped: boolean,
+  maxDecompressedBytes: number,
+  downstream?: Transform
+): Readable {
+  const byteCap = new ByteCapTransform(maxDecompressedBytes)
+  if (downstream !== undefined) {
+    return gzipped
+      ? compose(raw, createGunzip(), byteCap, downstream)
+      : compose(raw, byteCap, downstream)
+  }
+  return gzipped ? compose(raw, createGunzip(), byteCap) : compose(raw, byteCap)
+}
+
+/**
+ * Create a gzip-aware stream with the shared total decompressed-byte guard.
+ * JSON parsers use this directly; line-oriented readers add their independent
+ * per-line guard downstream.
+ */
+export function createDecompressedStream(
+  filePath: string,
+  maxDecompressedBytes?: number
+): Readable {
+  const gzipped = isGzipped(filePath)
+  const raw = createReadStream(filePath)
+  return composeCappedDecompressedStream(
+    raw,
+    gzipped,
+    resolveMaxDecompressedBytes(maxDecompressedBytes)
+  )
 }
 
 /**
@@ -208,58 +241,13 @@ export function createCappedLineStream(
   filePath: string,
   options: CappedLineStreamOptions = {}
 ): CappedLineSource {
-  const maxLineBytes = options.maxLineBytes ?? MAX_LINE_BYTES
+  const maxLineBytes = resolveMaxLineBytes(options.maxLineBytes)
   const maxDecompressedBytes = resolveMaxDecompressedBytes(options.maxDecompressedBytes)
 
-  const raw = createReadStream(filePath)
   const gzipped = isGzipped(filePath)
-  const byteCap = new ByteCapTransform(maxDecompressedBytes)
+  const raw = createReadStream(filePath)
   const lineCap = new LineLengthCapTransform(maxLineBytes)
-
-  const stream = gzipped
-    ? compose(raw, createGunzip(), byteCap, lineCap)
-    : compose(raw, byteCap, lineCap)
+  const stream = composeCappedDecompressedStream(raw, gzipped, maxDecompressedBytes, lineCap)
 
   return { stream, rawBytesRead: () => raw.bytesRead }
-}
-
-/**
- * Synchronously read an entire file (gzip-aware), bounded by
- * `maxDecompressedBytes`. Used by consumers whose algorithm needs the whole
- * file in memory at once (currently: `BedFilter`, whose interval-merging
- * pass is not naturally streaming). Never allocates a decompressed buffer
- * larger than the cap: gzip inputs are bounded via zlib's own
- * `maxOutputLength`, and plain-text inputs are size-checked via `stat`
- * before ever being read.
- */
-export function readCappedFileSync(filePath: string, maxDecompressedBytes?: number): string {
-  const maxBytes = resolveMaxDecompressedBytes(maxDecompressedBytes)
-  const gzipped = isGzipped(filePath)
-
-  if (!gzipped) {
-    const { size } = statSync(filePath)
-    if (size > maxBytes) {
-      throw new DecompressedSizeExceededError(maxBytes)
-    }
-    return readFileSync(filePath, 'utf-8')
-  }
-
-  // Cheap pre-check: a compressed file already larger on disk than the cap
-  // has no realistic path to a legitimate, sub-cap decompressed result --
-  // reject before reading it fully into memory.
-  const { size: compressedSize } = statSync(filePath)
-  if (compressedSize > maxBytes) {
-    throw new DecompressedSizeExceededError(maxBytes)
-  }
-
-  const compressed = readFileSync(filePath)
-  try {
-    return gunzipSync(compressed, { maxOutputLength: maxBytes }).toString('utf-8')
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException)?.code
-    if (code === 'ERR_BUFFER_TOO_LARGE') {
-      throw new DecompressedSizeExceededError(maxBytes)
-    }
-    throw error
-  }
 }

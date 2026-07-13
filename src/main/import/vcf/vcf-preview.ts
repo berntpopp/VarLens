@@ -12,6 +12,7 @@ import { getFieldColumnMapping, DEFAULT_INFO_FIELD_MAPPINGS } from './info-field
 import { detectCaller } from './caller-detector'
 import type { VcfPreviewResult } from './types'
 import type { VcfMultiPreviewResult } from '../../../shared/types/import'
+import { VcfHeaderBudget } from './vcf-header-limits'
 
 /** Maximum number of data lines to count before estimating via file size */
 const MAX_COUNTED_LINES = 100_000
@@ -33,6 +34,7 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
 
     const headerLines: string[] = []
+    const headerBudget = new VcfHeaderBudget()
     let dataLineCount = 0
     let bytesReadAtCap = 0
     let capped = false
@@ -40,7 +42,17 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
 
     rl.on('line', (line: string) => {
       if (line.startsWith('#')) {
-        headerLines.push(line)
+        try {
+          headerBudget.add(line)
+          headerLines.push(line)
+        } catch (error) {
+          if (!resolved) {
+            resolved = true
+            rl.close()
+            stream.destroy()
+            reject(error)
+          }
+        }
       } else {
         dataLineCount++
         if (dataLineCount >= MAX_COUNTED_LINES) {
@@ -55,6 +67,7 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
     rl.on('close', () => {
       if (resolved) return
       resolved = true
+      stream.destroy()
 
       try {
         const header = parseVcfHeaderFromLines(headerLines)

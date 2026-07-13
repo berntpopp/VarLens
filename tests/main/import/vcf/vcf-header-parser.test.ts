@@ -7,14 +7,16 @@ import {
   parseVcfHeader,
   parseVcfHeaderFromLines
 } from '../../../../src/main/import/vcf/vcf-header-parser'
+import { VcfHeaderLimitExceededError } from '../../../../src/main/import/vcf/vcf-header-limits'
 import {
-  MAX_LINE_BYTES,
   LineTooLongError,
   DecompressedSizeExceededError
 } from '../../../../src/main/import/stream-utils'
 
 const SYNTHETIC_VCF = resolve(__dirname, '../../../test-data/vcf/synthetic-unit-test.vcf')
 const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
+const LINE_CAP_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
+const TEST_LINE_CAP = 1024
 
 describe('vcf-header-parser', () => {
   describe('parseVcfHeaderFromLines', () => {
@@ -144,12 +146,14 @@ describe('vcf-header-parser', () => {
 
     afterEach(() => {
       delete process.env[DECOMPRESSED_CAP_ENV_VAR]
+      delete process.env[LINE_CAP_ENV_VAR]
       rmSync(tmpDir, { recursive: true, force: true })
     })
 
-    it('rejects a file containing a line over MAX_LINE_BYTES with LineTooLongError', async () => {
+    it('rejects a file containing a line over the production call-path cap', async () => {
+      process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
       const filePath = join(tmpDir, 'giant-line.vcf')
-      const giantLine = 'A'.repeat(MAX_LINE_BYTES + 1)
+      const giantLine = 'A'.repeat(TEST_LINE_CAP + 1)
       writeFileSync(filePath, `##fileformat=VCFv4.2\n${giantLine}\n#CHROM\tPOS\n`)
 
       await expect(parseVcfHeader(filePath)).rejects.toThrow(LineTooLongError)
@@ -162,6 +166,24 @@ describe('vcf-header-parser', () => {
       writeFileSync(filePath, gzipSync(Buffer.from(inflated)))
 
       await expect(parseVcfHeader(filePath)).rejects.toThrow(DecompressedSizeExceededError)
+    })
+
+    it('rejects a header that exceeds its independent byte budget', async () => {
+      const filePath = join(tmpDir, 'wide-header.vcf')
+      writeFileSync(filePath, `##fileformat=VCFv4.2\n##source=${'x'.repeat(200)}\n#CHROM\tPOS\n`)
+
+      await expect(parseVcfHeader(filePath, { maxHeaderBytes: 100 })).rejects.toThrow(
+        VcfHeaderLimitExceededError
+      )
+    })
+
+    it('rejects a header that exceeds its independent line budget', async () => {
+      const filePath = join(tmpDir, 'many-header-lines.vcf')
+      writeFileSync(filePath, `##fileformat=VCFv4.2\n##source=a\n##source=b\n#CHROM\tPOS\n`)
+
+      await expect(parseVcfHeader(filePath, { maxHeaderLines: 3 })).rejects.toThrow(
+        VcfHeaderLimitExceededError
+      )
     })
   })
 })
