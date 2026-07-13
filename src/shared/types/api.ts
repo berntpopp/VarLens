@@ -371,8 +371,8 @@ export interface BatchImportAPI {
   extractZip: (
     zipPath: string,
     password?: string
-  ) => Promise<IpcResult<{ files: string[]; errors: string[] }>>
-  cleanupZipTemp: () => Promise<IpcResult<void>>
+  ) => Promise<IpcResult<{ files: string[]; errors: string[]; extractionId: string }>>
+  cleanupZipTemp: (extractionId: string) => Promise<IpcResult<void>>
 }
 
 export interface CohortAPI {

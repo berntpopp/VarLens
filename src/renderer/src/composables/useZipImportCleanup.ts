@@ -14,6 +14,7 @@ interface ZipImportCleanupState {
   stripText: Ref<string>
   isZipImport: Ref<boolean>
   zipPath: Ref<string>
+  zipExtractionId: Ref<string>
   zipPasswordNeeded: Ref<boolean>
   zipPassword: Ref<string>
   zipError: Ref<string>
@@ -22,7 +23,7 @@ interface ZipImportCleanupState {
 }
 
 interface ZipImportCleanupOptions {
-  cleanupRequest: () => Promise<IpcResult<void>>
+  cleanupRequest: (extractionId: string) => Promise<IpcResult<void>>
   checkDuplicatesRequest: (
     filePaths: string[],
     stripText?: string
@@ -38,6 +39,7 @@ export function useZipImportCleanup({
   state
 }: ZipImportCleanupOptions): {
   cleanupZipTemp: (context: string) => Promise<void>
+  cleanupZipExtraction: (extractionId: string, context: string) => Promise<boolean>
   abandonZipImport: (context: string) => void
   handleDuplicateCheckFailure: (error: unknown) => Promise<void>
   handleBack: () => void
@@ -46,20 +48,45 @@ export function useZipImportCleanup({
   cancelDuplicateRecheck: () => void
 } {
   let recheckTimeout: ReturnType<typeof setTimeout> | null = null
+  let duplicateRequestGeneration = 0
+  const pendingCleanupIds = new Set<string>()
 
-  async function cleanupZipTemp(context: string): Promise<void> {
+  async function cleanupZipExtraction(extractionId: string, context: string): Promise<boolean> {
     try {
-      unwrapIpcResult(await cleanupRequest())
+      unwrapIpcResult(await cleanupRequest(extractionId))
+      pendingCleanupIds.delete(extractionId)
+      return true
     } catch (error) {
+      pendingCleanupIds.add(extractionId)
       const message = formatErrorMessage(error, 'ZIP temp cleanup failed')
       logService.warn(`ZIP temp cleanup failed after ${context}: ${message}`, 'ImportWizard')
       importStore.importError(message)
+      return false
+    }
+  }
+
+  async function cleanupZipTemp(context: string): Promise<void> {
+    const extractionId = state.zipExtractionId.value
+    const pendingBeforeAttempt = [...pendingCleanupIds].filter((id) => id !== extractionId)
+    if (extractionId !== '') {
+      const cleaned = await cleanupZipExtraction(extractionId, context)
+      if (cleaned && state.zipExtractionId.value === extractionId) {
+        state.zipExtractionId.value = ''
+      }
+    }
+    await retryPendingZipCleanups(pendingBeforeAttempt, context)
+  }
+
+  async function retryPendingZipCleanups(ids: string[], context: string): Promise<void> {
+    for (const extractionId of ids) {
+      await cleanupZipExtraction(extractionId, `${context} retry`)
     }
   }
 
   function clearZipSelectionState(): void {
     state.isZipImport.value = false
     state.zipPath.value = ''
+    state.zipExtractionId.value = ''
     state.zipPasswordNeeded.value = false
     state.zipPassword.value = ''
     state.zipError.value = ''
@@ -74,17 +101,33 @@ export function useZipImportCleanup({
   }
 
   function abandonZipImport(context: string): void {
-    if (!state.isZipImport.value) return
+    const extractionId = state.zipExtractionId.value
+    const pendingBeforeAttempt = [...pendingCleanupIds].filter((id) => id !== extractionId)
+    if (!state.isZipImport.value) {
+      void retryPendingZipCleanups(pendingBeforeAttempt, context)
+      return
+    }
+    invalidateDuplicateRequests()
     clearZipSelectionState()
     invalidateReviewState()
-    void cleanupZipTemp(context)
+    void (async () => {
+      if (extractionId !== '') await cleanupZipExtraction(extractionId, context)
+      await retryPendingZipCleanups(pendingBeforeAttempt, context)
+    })()
   }
 
   async function handleDuplicateCheckFailure(error: unknown): Promise<void> {
+    const extractionId = state.zipExtractionId.value
     const message = formatErrorMessage(error, 'Could not check duplicate cases')
     invalidateReviewState()
     state.step.value = 1
-    await cleanupZipTemp('duplicate check failure')
+    if (extractionId !== '') {
+      await cleanupZipExtraction(extractionId, 'duplicate check failure')
+    }
+    await retryPendingZipCleanups(
+      [...pendingCleanupIds].filter((id) => id !== extractionId),
+      'duplicate check failure'
+    )
     clearZipSelectionState()
     logService.error(`Duplicate check failed: ${message}`, 'ImportWizard')
     importStore.importError(message)
@@ -100,14 +143,17 @@ export function useZipImportCleanup({
   }
 
   async function checkDuplicatesAndAdvance(filePaths: string[]): Promise<void> {
+    const generation = beginDuplicateRequest()
     try {
       const result = unwrapIpcResult(
         await checkDuplicatesRequest(filePaths, state.stripText.value || undefined)
       )
+      if (generation !== duplicateRequestGeneration) return
       state.reviewFiles.value = result.files
       state.duplicateCount.value = result.duplicateCount
       state.step.value = 2
     } catch (error) {
+      if (generation !== duplicateRequestGeneration) return
       await handleDuplicateCheckFailure(error)
       throw error
     }
@@ -115,19 +161,19 @@ export function useZipImportCleanup({
 
   function scheduleDuplicateRecheck(): void {
     cancelDuplicateRecheck()
+    const generation = duplicateRequestGeneration
+    const filePaths = [...state.selectedFilePaths.value]
+    const stripText = state.stripText.value || undefined
     recheckTimeout = setTimeout(() => {
       void (async () => {
-        if (state.selectedFilePaths.value.length === 0) return
+        if (filePaths.length === 0) return
         try {
-          const result = unwrapIpcResult(
-            await checkDuplicatesRequest(
-              [...state.selectedFilePaths.value],
-              state.stripText.value || undefined
-            )
-          )
+          const result = unwrapIpcResult(await checkDuplicatesRequest(filePaths, stripText))
+          if (generation !== duplicateRequestGeneration) return
           state.reviewFiles.value = result.files
           state.duplicateCount.value = result.duplicateCount
         } catch (error) {
+          if (generation !== duplicateRequestGeneration) return
           await handleDuplicateCheckFailure(error)
         }
       })()
@@ -137,10 +183,21 @@ export function useZipImportCleanup({
   function cancelDuplicateRecheck(): void {
     if (recheckTimeout !== null) clearTimeout(recheckTimeout)
     recheckTimeout = null
+    invalidateDuplicateRequests()
+  }
+
+  function beginDuplicateRequest(): number {
+    invalidateDuplicateRequests()
+    return duplicateRequestGeneration
+  }
+
+  function invalidateDuplicateRequests(): void {
+    duplicateRequestGeneration += 1
   }
 
   return {
     cleanupZipTemp,
+    cleanupZipExtraction,
     abandonZipImport,
     handleDuplicateCheckFailure,
     handleBack,

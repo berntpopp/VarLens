@@ -1,4 +1,5 @@
 import AdmZip from 'adm-zip'
+import { statSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, relative, basename, dirname, sep } from 'node:path'
 import { mainLogger } from '../services/MainLogger'
@@ -9,16 +10,27 @@ export interface ZipExtractionResult {
   totalEntries: number
 }
 
-export interface ZipPasswordValidationLimits {
+export interface ZipResourceLimits {
+  maxArchiveBytes: number
+  maxEntries: number
   maxEntryUncompressedBytes: number
   maxTotalUncompressedBytes: number
 }
 
-const DEFAULT_ZIP_PASSWORD_VALIDATION_LIMITS: ZipPasswordValidationLimits = {
-  // Validation materializes entries synchronously on Electron's main thread,
-  // so these are intentionally tighter than the streaming import caps.
-  maxEntryUncompressedBytes: 512 * 1024 * 1024,
-  maxTotalUncompressedBytes: 2 * 1024 * 1024 * 1024
+/** @deprecated Use ZipResourceLimits for archive-wide bounds as well. */
+export type ZipPasswordValidationLimits = Pick<
+  ZipResourceLimits,
+  'maxEntryUncompressedBytes' | 'maxTotalUncompressedBytes'
+>
+
+const DEFAULT_ZIP_RESOURCE_LIMITS: ZipResourceLimits = {
+  // adm-zip reads/parses archives and decodes entries synchronously on the
+  // Electron main thread. ZIP is a batch convenience path; larger clinical
+  // inputs should use the directly streamed JSON/VCF import paths.
+  maxArchiveBytes: 256 * 1024 * 1024,
+  maxEntries: 10_000,
+  maxEntryUncompressedBytes: 128 * 1024 * 1024,
+  maxTotalUncompressedBytes: 512 * 1024 * 1024
 }
 
 type ZipArchive = Pick<AdmZip, 'getEntries'>
@@ -33,10 +45,15 @@ interface ZipExtractionCandidate {
 }
 
 export class ZipExtractor {
+  private readonly resourceLimits: ZipResourceLimits
+
   constructor(
-    private readonly passwordValidationLimits = DEFAULT_ZIP_PASSWORD_VALIDATION_LIMITS,
-    private readonly openArchive: OpenZipArchive = (zipPath) => new AdmZip(zipPath)
-  ) {}
+    resourceLimits: Partial<ZipResourceLimits> = {},
+    private readonly openArchive: OpenZipArchive = (zipPath) => new AdmZip(zipPath),
+    private readonly archiveSize: (zipPath: string) => number = (zipPath) => statSync(zipPath).size
+  ) {
+    this.resourceLimits = { ...DEFAULT_ZIP_RESOURCE_LIMITS, ...resourceLimits }
+  }
 
   /**
    * Check if a ZIP file is password-protected.
@@ -45,8 +62,10 @@ export class ZipExtractor {
    */
   isEncrypted(zipPath: string): boolean {
     try {
+      this.assertArchiveSizeWithinLimit(zipPath)
       const zip = this.openArchive(zipPath)
       const entries = zip.getEntries()
+      this.assertEntryCountWithinLimit(entries.length)
       return entries.some((entry) => {
         const header = entry.header as unknown as Record<string, unknown>
         return header['encrypted'] === true || header['encripted'] === true
@@ -76,8 +95,10 @@ export class ZipExtractor {
     targetDir: string,
     password?: string
   ): Promise<ZipExtractionResult> {
+    this.assertArchiveSizeWithinLimit(zipPath)
     const zip = this.openArchive(zipPath)
     const entries = zip.getEntries()
+    this.assertEntryCountWithinLimit(entries.length)
     const result: ZipExtractionResult = {
       extractedFiles: [],
       errors: [],
@@ -138,8 +159,10 @@ export class ZipExtractor {
   testPassword(zipPath: string, password: string): boolean {
     let entries: AdmZip.IZipEntry[]
     try {
+      this.assertArchiveSizeWithinLimit(zipPath)
       const zip = this.openArchive(zipPath)
       entries = zip.getEntries()
+      this.assertEntryCountWithinLimit(entries.length)
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       mainLogger.error(`Failed to open ZIP archive for password test: ${message}`, 'ZipExtractor')
@@ -196,9 +219,9 @@ export class ZipExtractor {
     if (!Number.isSafeInteger(size) || (size as number) < 0) {
       throw new Error(`Invalid uncompressed size for ZIP archive entry ${entryName}`)
     }
-    if ((size as number) > this.passwordValidationLimits.maxEntryUncompressedBytes) {
+    if ((size as number) > this.resourceLimits.maxEntryUncompressedBytes) {
       throw new ZipResourceLimitError(
-        `ZIP ${operation} limit exceeded for entry ${entryName}: maximum ${this.passwordValidationLimits.maxEntryUncompressedBytes} bytes`
+        `ZIP ${operation} limit exceeded for entry ${entryName}: maximum ${this.resourceLimits.maxEntryUncompressedBytes} bytes`
       )
     }
   }
@@ -207,9 +230,32 @@ export class ZipExtractor {
     size: number,
     operation: 'password validation' | 'extraction'
   ): void {
-    if (size > this.passwordValidationLimits.maxTotalUncompressedBytes) {
+    if (size > this.resourceLimits.maxTotalUncompressedBytes) {
       throw new ZipResourceLimitError(
-        `ZIP ${operation} total limit exceeded: maximum ${this.passwordValidationLimits.maxTotalUncompressedBytes} bytes`
+        `ZIP ${operation} total limit exceeded: maximum ${this.resourceLimits.maxTotalUncompressedBytes} bytes`
+      )
+    }
+  }
+
+  private assertArchiveSizeWithinLimit(zipPath: string): void {
+    const size = this.archiveSize(zipPath)
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw new ZipResourceLimitError(`Invalid ZIP archive size for ${zipPath}`)
+    }
+    if (size > this.resourceLimits.maxArchiveBytes) {
+      throw new ZipResourceLimitError(
+        `ZIP archive size limit exceeded: maximum ${this.resourceLimits.maxArchiveBytes} bytes`
+      )
+    }
+  }
+
+  private assertEntryCountWithinLimit(count: number): void {
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new ZipResourceLimitError('Invalid ZIP archive entry count')
+    }
+    if (count > this.resourceLimits.maxEntries) {
+      throw new ZipResourceLimitError(
+        `ZIP archive entry count limit exceeded: maximum ${this.resourceLimits.maxEntries} entries`
       )
     }
   }

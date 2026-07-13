@@ -207,7 +207,11 @@ export function createMockApi(): MockApi {
       cancel: vi.fn().mockResolvedValue(undefined),
       selectZip: vi.fn().mockResolvedValue(null),
       testZipPassword: vi.fn().mockResolvedValue({ valid: true }),
-      extractZip: vi.fn().mockResolvedValue([]),
+      extractZip: vi.fn().mockResolvedValue({
+        files: [],
+        errors: [],
+        extractionId: 'mock-extraction-id'
+      }),
       cleanupZipTemp: vi.fn().mockResolvedValue(undefined),
       onProgress: vi.fn(() => vi.fn()), // Returns cleanup function
       onComplete: vi.fn(() => vi.fn()) // Returns cleanup function

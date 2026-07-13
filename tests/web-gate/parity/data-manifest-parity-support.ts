@@ -283,7 +283,7 @@ async function runZipImport(
   fixture: ManifestFixture
 ): Promise<ScenarioSnapshot> {
   const target = fixture.varlensTarget!
-  const extracted = await call<{ files: string[]; errors: string[] }>(
+  const extracted = await call<{ files: string[]; errors: string[]; extractionId: string }>(
     'batch-import',
     'extractZip',
     [repoPath(target.artifact!)]
@@ -305,7 +305,7 @@ async function runZipImport(
       variants.push(...normalizeRows(queryAll))
     }
   } finally {
-    await call<void>('batch-import', 'cleanupZipTemp', [])
+    await call<void>('batch-import', 'cleanupZipTemp', [extracted.extractionId])
   }
 
   variants.sort((a, b) => variantIdentity(a).localeCompare(variantIdentity(b)))
