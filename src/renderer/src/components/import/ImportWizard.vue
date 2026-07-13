@@ -325,6 +325,7 @@ let cleanupImportProgress: (() => void) | null = null
 let cleanupComplete: (() => void) | null = null
 let importRunGeneration = 0
 let activeBatchRunGeneration: number | null = null
+let cancellationRequestedGeneration: number | null = null
 let recheckTimeout: ReturnType<typeof setTimeout> | null = null
 
 function resetUploadState(): void {
@@ -537,11 +538,29 @@ function onVcfSelectionChanged(options: {
 function beginImportRun(kind: 'vcf' | 'batch'): number {
   importRunGeneration += 1
   activeBatchRunGeneration = kind === 'batch' ? importRunGeneration : null
+  cancellationRequestedGeneration = null
   return importRunGeneration
 }
 
 function isImportTerminal(generation: number): boolean {
   return generation !== importRunGeneration || step.value !== 3 || importStore.phase === 'cancelled'
+}
+
+function completeCancelledRun(generation: number): void {
+  if (isImportTerminal(generation)) return
+  importRunGeneration += 1
+  activeBatchRunGeneration = null
+  cancellationRequestedGeneration = null
+  const cancelledResult: BatchResult = {
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    cancelled: true,
+    details: []
+  }
+  summary.value = cancelledResult
+  step.value = 4
+  importStore.importComplete(cancelledResult)
 }
 
 async function startVcfImport(): Promise<void> {
@@ -572,6 +591,10 @@ async function startVcfImport(): Promise<void> {
   try {
     for (let i = 0; i < vcfSelectedSamples.value.length; i++) {
       // Check for cancellation between samples
+      if (cancellationRequestedGeneration === generation) {
+        completeCancelledRun(generation)
+        return
+      }
       if (isImportTerminal(generation)) break
 
       const sample = vcfSelectedSamples.value[i]
@@ -589,6 +612,10 @@ async function startVcfImport(): Promise<void> {
           })
         )
 
+        if (cancellationRequestedGeneration === generation) {
+          completeCancelledRun(generation)
+          return
+        }
         if (isImportTerminal(generation)) break
 
         results.succeeded++
@@ -600,6 +627,10 @@ async function startVcfImport(): Promise<void> {
           variantCount: (result as { variantCount: number }).variantCount
         })
       } catch (err) {
+        if (cancellationRequestedGeneration === generation) {
+          completeCancelledRun(generation)
+          return
+        }
         if (isImportTerminal(generation)) break
         results.failed++
         results.details.push({
@@ -612,6 +643,10 @@ async function startVcfImport(): Promise<void> {
       }
     }
 
+    if (cancellationRequestedGeneration === generation) {
+      completeCancelledRun(generation)
+      return
+    }
     if (isImportTerminal(generation)) return
 
     cancelError.value = ''
@@ -626,6 +661,10 @@ async function startVcfImport(): Promise<void> {
       emit('batch-import-complete', { totalImported: results.succeeded })
     }
   } catch (err) {
+    if (cancellationRequestedGeneration === generation) {
+      completeCancelledRun(generation)
+      return
+    }
     if (isImportTerminal(generation)) return
     const message = formatIpcError(err, 'VCF import failed')
     logService.error(`VCF import failed: ${message}`, 'ImportWizard')
@@ -675,6 +714,7 @@ async function startImport(): Promise<void> {
     // Result also arrives via onComplete callback; guard against double-processing
     if (!isImportTerminal(generation) && activeBatchRunGeneration === generation) {
       activeBatchRunGeneration = null
+      cancellationRequestedGeneration = null
       cancelError.value = ''
       summary.value = result
       step.value = 4
@@ -698,6 +738,11 @@ async function startImport(): Promise<void> {
     // listener may have already set the correct summary + step 4).
     if (!isImportTerminal(generation) && activeBatchRunGeneration === generation) {
       activeBatchRunGeneration = null
+      if (cancellationRequestedGeneration === generation) {
+        completeCancelledRun(generation)
+        return
+      }
+      cancellationRequestedGeneration = null
       const message = formatIpcError(err, 'Import failed')
       logService.error(`Import failed: ${message}`, 'ImportWizard')
       cancelError.value = ''
@@ -727,20 +772,7 @@ async function cancelImport(): Promise<void> {
     return
   }
   if (isImportTerminal(generation)) return
-
-  importRunGeneration += 1
-  activeBatchRunGeneration = null
-
-  const cancelledResult: BatchResult = {
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    cancelled: true,
-    details: []
-  }
-  summary.value = cancelledResult
-  step.value = 4
-  importStore.importComplete({ ...cancelledResult, details: [] })
+  cancellationRequestedGeneration = generation
 }
 
 function continueInBackground(): void {
@@ -792,6 +824,11 @@ function resetState(): void {
 }
 
 const show = (): void => {
+  if (importStore.isActive) {
+    importStore.dialogOpen = true
+    dialog.value = true
+    return
+  }
   resetState()
   dialog.value = true
 }
@@ -865,6 +902,7 @@ onMounted(() => {
       // Guard: startImport() await may have already handled this
       if (generation !== null && !isImportTerminal(generation)) {
         activeBatchRunGeneration = null
+        cancellationRequestedGeneration = null
         cancelError.value = ''
         summary.value = result
         step.value = 4
