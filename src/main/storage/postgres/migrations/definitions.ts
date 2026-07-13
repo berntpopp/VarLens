@@ -68,6 +68,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0013',
     name: 'central_audit_schema',
     fileName: '0013_central_audit_schema.sql'
+  },
+  {
+    version: '0014',
+    name: 'import_visibility',
+    fileName: '0014_import_visibility.sql'
   }
 ]
 

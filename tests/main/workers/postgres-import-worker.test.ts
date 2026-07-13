@@ -38,7 +38,87 @@ vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', ()
 import { runImport } from '../../../src/main/workers/postgres-import-worker'
 import type { PostgresImportWorkerStartMessage } from '../../../src/shared/types/postgres-import-worker'
 
+const acquiredImportLock = { rows: [{ locked: true }] }
+
 describe('postgres-import-worker runImport', () => {
+  it('refuses a second workspace import while another session owns the advisory lock', async () => {
+    const messages: unknown[] = []
+    const detectFormat = vi.fn()
+    const client = {
+      connect: vi.fn(async () => undefined),
+      query: vi.fn(async (sql: string | { text: string }) => {
+        const text = typeof sql === 'string' ? sql : sql.text
+        if (text.includes('pg_try_advisory_lock')) return { rows: [{ locked: false }] }
+        return { rows: [] }
+      }),
+      end: vi.fn(async () => undefined)
+    }
+
+    await runImport(
+      {
+        createClient: () => client as never,
+        detectFormat,
+        createVcfMappedStream: async () => Readable.from([]) as never,
+        createMapperPipeline: async () => Readable.from([]),
+        statFile: () => ({ size: 0 })
+      },
+      {
+        type: 'start',
+        client: { connectionString: 'postgres://x' },
+        schema: 'public',
+        mode: 'single-file',
+        caseName: 'locked',
+        filePath: '/tmp/a.vcf'
+      },
+      (message) => messages.push(message)
+    )
+
+    expect(detectFormat).not.toHaveBeenCalled()
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: 'error',
+        message: expect.stringMatching(/already in progress/)
+      })
+    )
+  })
+
+  it('fails closed when PostgreSQL does not confirm advisory-lock ownership', async () => {
+    const messages: unknown[] = []
+    const detectFormat = vi.fn()
+    const client = {
+      connect: vi.fn(async () => undefined),
+      query: vi.fn(async () => ({ rows: [] })),
+      end: vi.fn(async () => undefined)
+    }
+
+    await runImport(
+      {
+        createClient: () => client as never,
+        detectFormat,
+        createVcfMappedStream: async () => Readable.from([]) as never,
+        createMapperPipeline: async () => Readable.from([]),
+        statFile: () => ({ size: 0 })
+      },
+      {
+        type: 'start',
+        client: { connectionString: 'postgres://x' },
+        schema: 'public',
+        mode: 'single-file',
+        caseName: 'unconfirmed-lock',
+        filePath: '/tmp/a.vcf'
+      },
+      (message) => messages.push(message)
+    )
+
+    expect(detectFormat).not.toHaveBeenCalled()
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: 'error',
+        message: expect.stringMatching(/already in progress/)
+      })
+    )
+  })
+
   it('drives VCF parsing and writes through PostgresVcfImportRepository', async () => {
     const queries: string[] = []
     const client = {
@@ -46,10 +126,10 @@ describe('postgres-import-worker runImport', () => {
       query: vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
         const text = typeof sql === 'string' ? sql : sql.text
         queries.push(text)
+        if (text.includes('pg_try_advisory_lock')) return acquiredImportLock
         if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') return { rows: [] }
-        if (text.startsWith('SELECT id FROM') && text.includes('"cases"')) return { rows: [] }
-        if (text.startsWith('INSERT INTO') && text.includes('"cases"'))
-          return { rows: [{ id: 13 }] }
+        if (text.startsWith('SELECT id FROM') && text.includes('"cases')) return { rows: [] }
+        if (text.startsWith('INSERT INTO') && text.includes('"cases')) return { rows: [{ id: 13 }] }
         // Phase 16+: ID reservation via pg_get_serial_sequence + generate_series.
         if (text.includes('pg_get_serial_sequence') && text.includes('generate_series')) {
           const n = (params?.[1] as number) ?? 0
@@ -60,6 +140,7 @@ describe('postgres-import-worker runImport', () => {
             }))
           }
         }
+        if (text.includes('pg_get_serial_sequence')) return { rows: [{ id: 13 }] }
         return { rows: [] }
       }),
       end: vi.fn(async () => undefined)
@@ -106,7 +187,7 @@ describe('postgres-import-worker runImport', () => {
       {
         createClient: () => client as never,
         detectFormat: async () => ({ format: 'vcf', caseKey: '' }) as never,
-        createVcfMappedStream: async () => Readable.from([fakeVariant]) as never,
+        createVcfMappedStream: async () => Readable.from([fakeVariant, fakeVariant]) as never,
         createMapperPipeline: async () => Readable.from([]),
         statFile: () => ({ size: 0 })
       },
@@ -118,7 +199,8 @@ describe('postgres-import-worker runImport', () => {
         caseName: 'VCF case',
         filePath: '/tmp/a.vcf.gz',
         format: 'vcf',
-        vcfOptions: { selectedSample: 'NA12878', genomeBuild: 'GRCh38' }
+        vcfOptions: { selectedSample: 'NA12878', genomeBuild: 'GRCh38' },
+        batchSize: 1
       },
       (m) => messages.push(m)
     )
@@ -127,19 +209,28 @@ describe('postgres-import-worker runImport', () => {
     // (and friends) before any BEGIN. The transaction lifecycle is still
     // present, just no longer the very first query.
     expect(queries).toContain('BEGIN')
-    expect(queries.at(-1)).toBe('COMMIT')
+    expect(queries).toContain('COMMIT')
     // VCF imports now write via COPY FROM STDIN (mocked at the runBulkCopy
     // boundary in this test's deps), but the post-loop bookkeeping
     // (variant_frequency rebuild + variant_count update) is unchanged.
     expect(queries.find((q) => q.includes('"variant_frequency"'))).toBeDefined()
     expect(queries.find((q) => q.startsWith('UPDATE') && q.includes('variant_count'))).toBeDefined()
+    const reserveIndexes = queries.flatMap((query, index) =>
+      query.includes('generate_series') ? [index] : []
+    )
+    const caseInsertIndex = queries.findIndex(
+      (query) => query.startsWith('INSERT INTO') && query.includes('"cases')
+    )
+    expect(reserveIndexes).toHaveLength(2)
+    expect(queries.slice(reserveIndexes[0], reserveIndexes[1])).toContain('COMMIT')
+    expect(caseInsertIndex).toBeLessThan(reserveIndexes[0])
 
     const complete = messages.find(
       (m): m is { type: 'complete'; result: { variantCount: number } } =>
         (m as { type: string }).type === 'complete'
     )
     expect(complete).toBeDefined()
-    expect(complete?.result.variantCount).toBe(1)
+    expect(complete?.result.variantCount).toBe(2)
   })
 
   it('rolls back a single-file VCF when the stream fails after a flushed batch', async () => {
@@ -149,10 +240,10 @@ describe('postgres-import-worker runImport', () => {
       query: vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
         const text = typeof sql === 'string' ? sql : sql.text
         queries.push(text)
+        if (text.includes('pg_try_advisory_lock')) return acquiredImportLock
         if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') return { rows: [] }
-        if (text.startsWith('SELECT id FROM') && text.includes('"cases"')) return { rows: [] }
-        if (text.startsWith('INSERT INTO') && text.includes('"cases"'))
-          return { rows: [{ id: 13 }] }
+        if (text.startsWith('SELECT id FROM') && text.includes('"cases')) return { rows: [] }
+        if (text.startsWith('INSERT INTO') && text.includes('"cases')) return { rows: [{ id: 13 }] }
         if (text.includes('pg_get_serial_sequence') && text.includes('generate_series')) {
           const n = (params?.[1] as number) ?? 0
           return {
@@ -162,6 +253,7 @@ describe('postgres-import-worker runImport', () => {
             }))
           }
         }
+        if (text.includes('pg_get_serial_sequence')) return { rows: [{ id: 13 }] }
         return { rows: [] }
       }),
       end: vi.fn(async () => undefined)
@@ -229,9 +321,11 @@ describe('postgres-import-worker runImport', () => {
       (m) => messages.push(m)
     )
 
-    expect(queries).toContain('ROLLBACK')
-    expect(queries).not.toContain('COMMIT')
-    expect(queries).not.toContain('DELETE FROM "public"."cases" WHERE id = $1')
+    expect(queries).toContain('COMMIT')
+    expect(queries.some((query) => query.includes('DELETE FROM "public"."variants_all"'))).toBe(
+      true
+    )
+    expect(queries.some((query) => query.includes('DELETE FROM "public"."cases_all"'))).toBe(true)
     const error = messages.find((m): m is { type: 'error'; message: string } => {
       return (m as { type: string }).type === 'error'
     })
@@ -245,18 +339,19 @@ describe('postgres-import-worker runImport', () => {
       query: vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
         const text = typeof sql === 'string' ? sql : sql.text
         queries.push(text)
+        if (text.includes('pg_try_advisory_lock')) return acquiredImportLock
         if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') return { rows: [] }
         // For the duplicate check (fileIndex 0) return empty; for the case-lookup
         // (fileIndex >= 1) return the case that file 1 created.
-        if (text.startsWith('SELECT id FROM') && text.includes('"cases"')) {
+        if (text.startsWith('SELECT id FROM') && text.includes('"cases')) {
           // File 1 duplicate check fires before INSERT — return empty.
           // File 2 case lookup fires after file 1 committed — return the case.
           const alreadyInserted = queries.filter(
-            (q) => q.startsWith('INSERT INTO') && q.includes('"cases"')
+            (q) => q.startsWith('INSERT INTO') && q.includes('"cases')
           ).length
           return alreadyInserted > 0 ? { rows: [{ id: 21 }] } : { rows: [] }
         }
-        if (text.startsWith('INSERT INTO') && text.includes('"cases"')) {
+        if (text.startsWith('INSERT INTO') && text.includes('"cases')) {
           return { rows: [{ id: 21 }] }
         }
         if (text.includes('pg_get_serial_sequence') && text.includes('generate_series')) {
@@ -349,15 +444,16 @@ describe('postgres-import-worker runImport', () => {
       (m) => messages.push(m)
     )
 
-    // Each file owns one transaction; successful files commit and a failed
-    // file rolls back before the final bookkeeping transaction.
+    // Each production batch commits independently; failed current-file rows
+    // are deleted in bounded cleanup transactions before bookkeeping.
     const beginCount = queries.filter((q) => q === 'BEGIN').length
-    expect(beginCount).toBe(3)
-    expect(queries.includes('ROLLBACK')).toBe(true)
+    // Two production batches, bounded failed-file cleanup, and one atomic
+    // bookkeeping/publication transaction.
+    expect(beginCount).toBe(5)
+    expect(queries.some((query) => query.includes('DELETE FROM "public"."variants_all"'))).toBe(
+      true
+    )
     expect(queries.includes('COMMIT')).toBe(true)
-    const beginIndexes = queries.flatMap((query, index) => (query === 'BEGIN' ? [index] : []))
-    const rollbackIndex = queries.indexOf('ROLLBACK', beginIndexes[1])
-    expect(queries.slice(beginIndexes[1] + 1, rollbackIndex)).not.toContain('COMMIT')
 
     const complete = messages.find(
       (m): m is { type: 'complete'; result: { files: Array<{ error?: string }> } } =>
@@ -376,6 +472,7 @@ describe('postgres-import-worker runImport', () => {
       query: vi.fn(async (sql: string | { text: string }) => {
         const text = typeof sql === 'string' ? sql : sql.text
         queries.push(text)
+        if (text.includes('pg_try_advisory_lock')) return acquiredImportLock
         if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] }
         if (typeof sql === 'string' && sql.startsWith('SELECT id FROM')) return { rows: [] }
         if (typeof sql === 'string' && sql.includes('"cases"') && sql.startsWith('INSERT')) {
@@ -418,7 +515,8 @@ describe('postgres-import-worker runImport', () => {
     expect(queries.some((q) => q.startsWith('SELECT id FROM'))).toBe(true)
     expect(queries.some((q) => q.includes('"cases"') && q.startsWith('INSERT'))).toBe(true)
     expect(queries.some((q) => q.includes('"variant_frequency"'))).toBe(true)
-    expect(queries.at(-1)).toBe('COMMIT')
+    expect(queries).toContain('COMMIT')
+    expect(queries.at(-1)).toContain('pg_advisory_unlock')
 
     const complete = messages.find(
       (m): m is { type: 'complete' } => (m as { type: string }).type === 'complete'
@@ -433,6 +531,7 @@ describe('postgres-import-worker runImport', () => {
       query: vi.fn(async (sql: string | { text: string }) => {
         const text = typeof sql === 'string' ? sql : sql.text
         queries.push(text)
+        if (text.includes('pg_try_advisory_lock')) return acquiredImportLock
         if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') return { rows: [] }
         if (text.startsWith('SELECT id FROM')) return { rows: [] }
         if (text.startsWith('INSERT INTO') && text.includes('"cases"')) {
@@ -481,10 +580,10 @@ describe('postgres-import-worker runImport', () => {
       query: vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
         const text = typeof sql === 'string' ? sql : sql.text
         queries.push(text)
+        if (text.includes('pg_try_advisory_lock')) return acquiredImportLock
         if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') return { rows: [] }
-        if (text.startsWith('SELECT id FROM') && text.includes('"cases"')) return { rows: [] }
-        if (text.startsWith('INSERT INTO') && text.includes('"cases"'))
-          return { rows: [{ id: 11 }] }
+        if (text.startsWith('SELECT id FROM') && text.includes('"cases')) return { rows: [] }
+        if (text.startsWith('INSERT INTO') && text.includes('"cases')) return { rows: [{ id: 11 }] }
         if (text.includes('"variants"') && text.includes('jsonb_to_recordset')) {
           const payload = JSON.parse(String((params as unknown[])[0])) as unknown[]
           return { rows: payload.map((_, i) => ({ id: 6000 + i })) }
@@ -547,7 +646,10 @@ describe('postgres-import-worker runImport', () => {
   it('fails closed when an explicitly requested BED filter cannot be loaded', async () => {
     const client = {
       connect: vi.fn(async () => undefined),
-      query: vi.fn(async () => ({ rows: [] })),
+      query: vi.fn(async (sql: string | { text: string }) => {
+        const text = typeof sql === 'string' ? sql : sql.text
+        return text.includes('pg_try_advisory_lock') ? acquiredImportLock : { rows: [] }
+      }),
       end: vi.fn(async () => undefined)
     }
     const createVcfMappedStream = vi.fn(async () => Readable.from([]) as never)
@@ -591,7 +693,11 @@ describe('postgres-import-worker runImport', () => {
       connect: vi.fn(async () => undefined),
       query: vi.fn(async (sql: string | { text: string }) => {
         const text = typeof sql === 'string' ? sql : sql.text
+        if (text.includes('pg_try_advisory_lock')) return acquiredImportLock
         if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') return { rows: [] }
+        if (text.startsWith('INSERT INTO') && text.includes('"cases_all"')) {
+          return { rows: [{ id: 11 }] }
+        }
         return { rows: [] }
       }),
       end: vi.fn(async () => undefined)
@@ -701,9 +807,10 @@ describe('postgres-import-worker — C3 import wiring', () => {
     query: vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
       const text = typeof sql === 'string' ? sql : sql.text
       queries.push(text)
+      if (text.includes('pg_try_advisory_lock')) return acquiredImportLock
       if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') return { rows: [] }
-      if (text.startsWith('SELECT id FROM') && text.includes('"cases"')) return { rows: [] }
-      if (text.startsWith('INSERT INTO') && text.includes('"cases"')) return { rows: [{ id: 13 }] }
+      if (text.startsWith('SELECT id FROM') && text.includes('"cases')) return { rows: [] }
+      if (text.startsWith('INSERT INTO') && text.includes('"cases')) return { rows: [{ id: 13 }] }
       if (text.includes('pg_get_serial_sequence') && text.includes('generate_series')) {
         const n = (params?.[1] as number) ?? 0
         return {
@@ -771,9 +878,73 @@ describe('postgres-import-worker — C3 import wiring', () => {
     )
     expect(bookkeepingIdx).toBeGreaterThanOrEqual(0)
     expect(savepointIdx).toBeGreaterThan(bookkeepingIdx)
-    expect(queries.at(-1)).toBe('COMMIT')
+    expect(queries.lastIndexOf('COMMIT')).toBeGreaterThan(savepointIdx)
 
     expect(markStaleSpy).not.toHaveBeenCalled()
+  })
+
+  it('keeps the provisional case hidden and publishes derived bookkeeping atomically', async () => {
+    const queries: string[] = []
+    const client = makeClient(queries)
+    const messages: unknown[] = []
+    await runVcfSingleFile(client, messages)
+
+    const countIndex = queries.findIndex(
+      (query) => query.startsWith('UPDATE') && query.includes('variant_count')
+    )
+    const frequencyIndex = queries.findIndex((query) => query.includes('"variant_frequency"'))
+    const readyIndex = queries.findIndex(
+      (query) => query.startsWith('UPDATE') && query.includes("import_status = 'ready'")
+    )
+
+    expect(queries[countIndex]).toContain('"cases_all"')
+    expect(queries[frequencyIndex]).toContain('"variants_all"')
+    expect(readyIndex).toBeGreaterThan(frequencyIndex)
+
+    const publicationBeginIndex = queries.findLastIndex(
+      (query, index) => index < countIndex && query === 'BEGIN'
+    )
+    const publicationCommitIndex = queries.findIndex(
+      (query, index) => index > readyIndex && query === 'COMMIT'
+    )
+
+    expect(publicationBeginIndex).toBeGreaterThanOrEqual(0)
+    expect(queries.slice(frequencyIndex, readyIndex)).not.toContain('COMMIT')
+    expect(publicationCommitIndex).toBeGreaterThan(readyIndex)
+
+    const publicationQueries = queries.slice(publicationBeginIndex, publicationCommitIndex + 1)
+    expect(publicationQueries.some((query) => query.includes('"variant_frequency"'))).toBe(true)
+    expect(publicationQueries).toContain('SAVEPOINT cohort_summary')
+  })
+
+  it('never deletes work when the atomic publication commit outcome is uncertain', async () => {
+    const queries: string[] = []
+    const base = makeClient(queries)
+    let commitCount = 0
+    const originalQuery = base.query
+    base.query = vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
+      const text = typeof sql === 'string' ? sql : sql.text
+      if (text === 'COMMIT') {
+        commitCount += 1
+        if (commitCount === 2) {
+          queries.push(text)
+          throw new Error('connection lost while publishing')
+        }
+      }
+      return originalQuery(sql, params)
+    })
+    const messages: unknown[] = []
+
+    await runVcfSingleFile(base, messages)
+
+    expect(queries.some((query) => query.includes("import_status = 'ready'"))).toBe(true)
+    expect(queries.some((query) => query.includes('DELETE FROM "public"."variants_all"'))).toBe(
+      false
+    )
+    expect(queries.some((query) => query.includes('DELETE FROM "public"."cases_all"'))).toBe(false)
+    expect(messages).toContainEqual(
+      expect.objectContaining({ type: 'error', message: 'connection lost while publishing' })
+    )
   })
 
   it('preserves variant_count + rebuildVariantFrequencyForCase on summary failure', async () => {
@@ -794,8 +965,8 @@ describe('postgres-import-worker — C3 import wiring', () => {
     expect(queries).not.toContain('RELEASE SAVEPOINT cohort_summary')
     expect(queries).toContain('COMMIT')
 
-    // markStale runs in a separate tiny transaction (BEGIN/COMMIT after the
-    // outer COMMIT) so the bookkeeping commit survives regardless.
+    // markStale stays inside the same publication transaction so readers see
+    // either the old snapshot or the ready case plus its stale marker.
     expect(markStaleSpy).toHaveBeenCalledTimes(1)
     expect(markStaleSpy).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'post_import_summary_failed_case_13' })

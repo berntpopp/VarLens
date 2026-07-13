@@ -75,6 +75,17 @@ export interface PostgresVcfImportFileResult {
   variantCount: number
 }
 
+export interface PostgresProvisionalImport {
+  caseId: number
+  watermark: number
+  isNew: boolean
+}
+
+interface ProvisionalCleanupOptions {
+  restoreReady?: boolean
+  preserveNewCase?: boolean
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -90,6 +101,26 @@ function pickColumns<T extends string>(
   return out
 }
 
+async function inTransaction<T>(
+  client: Pick<PoolClient, 'query'>,
+  operation: () => Promise<T>
+): Promise<T> {
+  await client.query('BEGIN')
+  try {
+    const result = await operation()
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK')
+    } catch {
+      // Preserve the operation/commit failure. Closing the import connection
+      // releases its advisory lease; the next owner resumes idempotently.
+    }
+    throw error
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Repository
 // ---------------------------------------------------------------------------
@@ -99,6 +130,146 @@ export class PostgresVcfImportRepository {
 
   constructor(schema: string) {
     this.schemaName = quoteIdentifier(schema)
+  }
+
+  async beginProvisionalImport(
+    client: Pick<PoolClient, 'query'>,
+    request: Pick<
+      PostgresVcfImportRequestBase,
+      'caseName' | 'filePath' | 'fileSize' | 'genomeBuild'
+    >,
+    existingCaseId?: number
+  ): Promise<PostgresProvisionalImport> {
+    if (existingCaseId === undefined) {
+      await this.assertCaseNameAvailable(client, request.caseName)
+      const result = await client.query(
+        `INSERT INTO ${this.schemaName}."cases_all"
+         (name, file_path, file_size, variant_count, created_at, genome_build,
+          import_status, import_variant_watermark, import_is_new)
+         VALUES ($1, $2, $3, 0, $4, $5, 'importing', 0, TRUE)
+         RETURNING id`,
+        [request.caseName, request.filePath, request.fileSize, Date.now(), request.genomeBuild]
+      )
+      return {
+        caseId: toNumericId((result.rows[0] as { id: unknown } | undefined)?.id),
+        watermark: 0,
+        isNew: true
+      }
+    }
+
+    const watermarkResult = await client.query(
+      `SELECT COALESCE(MAX(id), 0)::bigint AS watermark
+       FROM ${this.schemaName}."variants_all" WHERE case_id = $1`,
+      [existingCaseId]
+    )
+    const watermark = toNumericId(
+      (watermarkResult.rows[0] as { watermark: unknown } | undefined)?.watermark ?? 0
+    )
+    await client.query(
+      `UPDATE ${this.schemaName}."cases_all"
+       SET import_status = 'importing', import_variant_watermark = $2, import_is_new = FALSE
+       WHERE id = $1`,
+      [existingCaseId, watermark]
+    )
+    return { caseId: existingCaseId, watermark, isNew: false }
+  }
+
+  async captureVariantWatermark(
+    client: Pick<PoolClient, 'query'>,
+    caseId: number
+  ): Promise<number> {
+    const result = await client.query(
+      `SELECT COALESCE(MAX(id), 0)::bigint AS watermark
+       FROM ${this.schemaName}."variants_all" WHERE case_id = $1`,
+      [caseId]
+    )
+    return toNumericId((result.rows[0] as { watermark?: unknown } | undefined)?.watermark ?? 0)
+  }
+
+  async finishProvisionalImport(
+    client: Pick<PoolClient, 'query'>,
+    caseId: number,
+    fileName: string,
+    importFileType: string
+  ): Promise<void> {
+    const now = Date.now()
+    await client.query(
+      `INSERT INTO ${this.schemaName}."case_data_info"
+         (case_id, import_file_name, import_file_type, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $4)
+       ON CONFLICT (case_id) DO UPDATE SET import_file_name = EXCLUDED.import_file_name,
+         import_file_type = EXCLUDED.import_file_type, updated_at = EXCLUDED.updated_at`,
+      [caseId, fileName, importFileType, now]
+    )
+    await client.query(
+      `UPDATE ${this.schemaName}."cases_all" SET import_status = 'ready',
+       import_variant_watermark = 0, import_is_new = FALSE
+       WHERE id = $1 AND import_status = 'importing'`,
+      [caseId]
+    )
+  }
+
+  async cleanupProvisionalImport(
+    client: Pick<PoolClient, 'query'>,
+    provisional: PostgresProvisionalImport,
+    options: ProvisionalCleanupOptions = {}
+  ): Promise<void> {
+    while (true) {
+      const deleted = await inTransaction(client, () =>
+        client.query(
+          `WITH doomed AS (
+             SELECT id FROM ${this.schemaName}."variants_all"
+             WHERE case_id = $1 AND id > $2 ORDER BY id LIMIT 10000
+           ) DELETE FROM ${this.schemaName}."variants_all" v USING doomed d
+             WHERE v.id = d.id RETURNING v.id`,
+          [provisional.caseId, provisional.watermark]
+        )
+      )
+      if (deleted.rows.length === 0) break
+    }
+    await inTransaction(client, async () => {
+      if (provisional.isNew && options.preserveNewCase !== true) {
+        await client.query({
+          text: `DELETE FROM ${this.schemaName}."cases_all" WHERE id = $1`,
+          values: [provisional.caseId]
+        })
+      } else if (options.restoreReady !== false) {
+        await client.query(
+          `UPDATE ${this.schemaName}."cases_all" SET import_status = 'ready',
+           import_variant_watermark = 0, import_is_new = FALSE WHERE id = $1`,
+          [provisional.caseId]
+        )
+      }
+    })
+  }
+
+  async recoverInterruptedImports(client: Pick<PoolClient, 'query'>): Promise<void> {
+    const result = await client.query(
+      `SELECT id, import_variant_watermark, import_is_new
+       FROM ${this.schemaName}."cases_all"
+       WHERE import_status = 'importing' ORDER BY id`
+    )
+    for (const row of result.rows as Array<Record<string, unknown>>) {
+      const caseId = toNumericId(row.id)
+      await this.cleanupProvisionalImport(client, {
+        caseId,
+        watermark: toNumericId(row.import_variant_watermark),
+        isNew: row.import_is_new === true
+      })
+    }
+  }
+
+  async assertCaseNameAvailable(
+    client: Pick<PoolClient, 'query'>,
+    caseName: string
+  ): Promise<void> {
+    const duplicate = await client.query(
+      `SELECT id FROM ${this.schemaName}."cases_all" WHERE name = $1`,
+      [caseName]
+    )
+    if ((duplicate.rows as unknown[]).length > 0) {
+      throw new UniqueConstraintError('case', caseName)
+    }
   }
 
   /**
@@ -210,7 +381,7 @@ export class PostgresVcfImportRepository {
     // quoted via `quoteIdentifier`, so we just append the (always-safe,
     // always-lowercase) "variants" table name. This survives schemas that
     // need quoting (hyphens, mixed case, reserved words, etc.).
-    const variantsRelation = `${this.schemaName}."variants"`
+    const variantsRelation = `${this.schemaName}."variants_all"`
     const idResult = await profilePhase('reserve-ids', () =>
       client.query(
         `SELECT g.ord                                              AS ordinal,
@@ -242,7 +413,7 @@ export class PostgresVcfImportRepository {
       runBulkCopy({
         client,
         sql:
-          `COPY ${this.schemaName}."variants" ` +
+          `COPY ${this.schemaName}."variants_all" ` +
           `(${(VARIANT_COPY_COLUMNS as readonly string[])
             .map((c) => quoteIdentifier(c))
             .join(', ')}) ` +

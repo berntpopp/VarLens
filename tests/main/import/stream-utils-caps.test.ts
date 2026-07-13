@@ -76,6 +76,31 @@ function collectLines(
   })
 }
 
+/** Count a large capped stream without retaining every decompressed line. */
+function countLines(filePath: string): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    const { stream } = createCappedLineStream(filePath)
+    const rl = createInterface({ input: stream, crlfDelay: Infinity })
+    let count = 0
+    let settled = false
+    rl.on('line', () => {
+      count += 1
+    })
+    rl.on('close', () => {
+      if (settled) return
+      settled = true
+      resolve(count)
+    })
+    const rejectOnce = (error: Error): void => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
+    rl.on('error', rejectOnce)
+    stream.on('error', rejectOnce)
+  })
+}
+
 async function writeHighSampleVcfGzip(
   filePath: string
 ): Promise<{ decompressedBytes: number; expectedLines: number }> {
@@ -241,7 +266,7 @@ describe('createCappedLineStream', () => {
     expect(decompressedBytes).toBeGreaterThan(MIN_GZIP_RATIO_CHECK_BYTES)
     expect(decompressedBytes / statSync(filePath).size).toBeGreaterThan(MAX_GZIP_COMPRESSION_RATIO)
 
-    await expect(collectLines(filePath)).resolves.toHaveLength(expectedLines)
+    await expect(countLines(filePath)).resolves.toBe(expectedLines)
   })
 
   it('reads a legitimate small file without false rejection (default caps)', async () => {
@@ -276,7 +301,7 @@ describe('GzipRatioPolicy', () => {
 
   it('stops inspecting a minified non-VCF prefix within a fixed byte budget', () => {
     const policy = new GzipRatioPolicy(MAX_GZIP_COMPRESSION_RATIO)
-    const minifiedJson = Buffer.alloc(64 * 1024 * 1024, 0x61)
+    const minifiedJson = Buffer.alloc(MAX_GZIP_FORMAT_INSPECTION_BYTES * 256, 0x61)
     minifiedJson.write('{"variants":[')
     const startedAt = performance.now()
 
