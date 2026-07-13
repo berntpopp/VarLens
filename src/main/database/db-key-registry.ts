@@ -25,7 +25,6 @@ export function isValidKeyRegistryShape(value: unknown): value is KeyRegistry {
 
   for (const [keyId, entry] of Object.entries(registry.keys)) {
     if (keyId === '' || !isValidKeyEntry(entry)) return false
-    if (registry.pathIndex[entry.path] !== keyId) return false
   }
 
   for (const [dbPath, keyId] of Object.entries(registry.pathIndex)) {
