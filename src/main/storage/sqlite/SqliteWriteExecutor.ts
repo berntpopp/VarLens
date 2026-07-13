@@ -18,9 +18,20 @@ function serializeAuditValue(value: unknown): string | null {
 }
 
 export class SqliteWriteExecutor implements StorageWriteExecutor {
+  private writeTail: Promise<void> = Promise.resolve()
+
   constructor(private readonly databaseService: DatabaseService) {}
 
-  async execute(task: StorageWriteTask): Promise<unknown> {
+  execute(task: StorageWriteTask): Promise<unknown> {
+    const result = this.writeTail.then(() => this.executeTask(task))
+    this.writeTail = result.then(
+      () => undefined,
+      () => undefined
+    )
+    return result
+  }
+
+  private async executeTask(task: StorageWriteTask): Promise<unknown> {
     switch (task.type) {
       case 'cases:delete':
         this.databaseService.cases.deleteCase(task.params[0])
@@ -252,7 +263,7 @@ export class SqliteWriteExecutor implements StorageWriteExecutor {
         return undefined
 
       case 'region-files:importBed':
-        return this.databaseService.geneLists.importBedEntries(...task.params)
+        return await this.databaseService.geneLists.importBedFile(...task.params)
 
       case 'presets:create':
         return this.databaseService.filterPresets.createPreset(task.params[0])
