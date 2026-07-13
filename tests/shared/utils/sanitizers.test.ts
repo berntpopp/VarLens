@@ -96,6 +96,13 @@ describe('sanitizeLogMessage', () => {
       expect(result).not.toContain('hunter2')
     })
 
+    it('redacts structural credentials after a long whitespace prefix in linear work', () => {
+      const result = sanitizeLogMessage(`${'\t'.repeat(100_000)}password: hunter2`)
+
+      expect(result.endsWith('password=[REDACTED:KEY]')).toBe(true)
+      expect(result).not.toContain('hunter2')
+    })
+
     it.each([
       ['DB_PASSWORD=hunter2', 'DB_PASSWORD'],
       ['PG_PASSPHRASE=correct-horse', 'PG_PASSPHRASE'],
