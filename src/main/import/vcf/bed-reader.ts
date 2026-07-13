@@ -28,7 +28,8 @@ export class BedEntryLimitExceededError extends Error {
 
 export class InvalidBedRowError extends Error {
   constructor(line: string) {
-    super(`Invalid BED row: ${line}`)
+    const preview = line.length > 256 ? `${line.slice(0, 256)}…` : line
+    super(`Invalid BED row (${line.length} characters): ${preview}`)
     this.name = 'InvalidBedRowError'
   }
 }

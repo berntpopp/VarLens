@@ -1,14 +1,6 @@
 /** Default gzip expansion ratio for JSON, BED, and small-sample VCF input. */
 export const DEFAULT_MAX_GZIP_COMPRESSION_RATIO = 100
 
-/**
- * Hard upper bound for sample-aware VCF expansion. Large joint-called VCFs
- * contain thousands of repeated genotype columns and legitimately compress
- * far beyond the generic 100x ceiling. A 1000x ceiling accepts those files
- * while still requiring one compressed byte per 1000 output bytes before the
- * independent absolute decompressed-byte cap is reached.
- */
-export const MAX_VCF_GZIP_COMPRESSION_RATIO = 1000
 export const MAX_GZIP_FORMAT_INSPECTION_BYTES = 4096
 
 /**
@@ -22,7 +14,6 @@ export class GzipRatioPolicy {
   private lineTabs = 0
   private firstLine = true
   private vcf = false
-  private sampleCount = 0
   private vcfHeaderTabs: number | null = null
   private vcfDataShapeValidated = false
   private inspectionComplete = false
@@ -82,7 +73,11 @@ export class GzipRatioPolicy {
 
   maxRatio(): number {
     if (!this.vcf || !this.vcfDataShapeValidated) return this.baseRatio
-    return Math.min(MAX_VCF_GZIP_COMPRESSION_RATIO, this.baseRatio + this.sampleCount)
+    // Compression ratio cannot distinguish a valid, highly repetitive cohort
+    // VCF from a bomb. Once the magic/header/first-row shape is established,
+    // the independent absolute decompressed-byte, line, header, record and
+    // expansion-work budgets own resource control without false rejection.
+    return Number.POSITIVE_INFINITY
   }
 
   private observeVcfHeaderLine(): void {
@@ -94,7 +89,6 @@ export class GzipRatioPolicy {
       return
     }
     this.vcfHeaderTabs = this.lineTabs
-    this.sampleCount = Math.max(0, this.lineTabs - 8)
   }
 
   private observeVcfDataLine(): void {

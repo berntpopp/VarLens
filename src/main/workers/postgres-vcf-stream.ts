@@ -11,7 +11,11 @@ import {
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
 import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
-import { parseVcfLine } from '../import/vcf/vcf-line-parser'
+import {
+  parseVcfLine,
+  resolveVcfSelectedSampleColumn,
+  type VcfSelectedSampleColumn
+} from '../import/vcf/vcf-line-parser'
 import type { VcfHeader, VcfMappedVariant } from '../import/vcf/types'
 import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
 
@@ -39,6 +43,7 @@ export async function* streamMappedVcfRows(
   const headerBudget = new VcfHeaderBudget()
   let header: VcfHeader | null = null
   let activeSample = ''
+  let activeSampleColumn: VcfSelectedSampleColumn | null = null
   let callerName: string | null = null
 
   try {
@@ -52,14 +57,15 @@ export async function* streamMappedVcfRows(
 
       if (header === null) {
         header = parseVcfHeaderFromLines(headerLines)
-        activeSample = selectedSample !== '' ? selectedSample : (header.samples[0] ?? '')
+        activeSampleColumn = resolveVcfSelectedSampleColumn(header.samples, selectedSample)
+        activeSample = activeSampleColumn?.name ?? ''
         if (activeSample === '') break
         const callerInfo = detectCaller(headerLines)
         callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
       }
 
       try {
-        const record = parseVcfLine(line, header.samples, onSkip)
+        const record = parseVcfLine(line, header.samples, onSkip, activeSampleColumn ?? undefined)
         if (record === null || !passesPreMappingFilters(record, filters)) continue
         const mapped = mapVcfRecord(
           record,

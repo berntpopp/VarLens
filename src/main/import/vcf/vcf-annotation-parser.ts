@@ -23,6 +23,7 @@ const IMPACT_ORDER: Record<string, number> = {
   LOW: 2,
   MODIFIER: 1
 }
+const MAX_VCF_TOTAL_ANNOTATION_MATCHES = 100_000
 
 /**
  * Parse annotations from VCF INFO fields.
@@ -40,15 +41,29 @@ export function parseAnnotation(
   altAllele: string,
   ref?: string
 ): AnnotationResult {
+  return parseAnnotationsForAlleles(info, header, [altAllele], ref)[0] ?? emptyResult()
+}
+
+/**
+ * Parse one annotation payload once and partition its transcripts across all
+ * ALT alleles. This keeps allocation proportional to the annotation payload
+ * plus matched transcripts instead of reparsing/rebuilding it for every ALT.
+ */
+export function parseAnnotationsForAlleles(
+  info: Map<string, string>,
+  header: VcfHeader,
+  altAlleles: string[],
+  ref = ''
+): AnnotationResult[] {
   if (header.annotationType === 'csq' && header.csqFields !== null) {
-    return parseCsq(info, header.csqFields, altAllele, ref ?? '')
+    return parseCsqForAlleles(info, header.csqFields, altAlleles, ref)
   }
 
   if (header.annotationType === 'ann') {
-    return parseAnn(info, altAllele, ref ?? '')
+    return parseAnnForAlleles(info, altAlleles, ref)
   }
 
-  return emptyResult()
+  return altAlleles.map(() => emptyResult())
 }
 
 // ── CSQ (VEP) Parser ─────────────────────────────────────────
@@ -58,14 +73,14 @@ interface CsqTranscript {
   allele: string
 }
 
-function parseCsq(
+function parseCsqForAlleles(
   info: Map<string, string>,
   csqFieldNames: string[],
-  altAllele: string,
+  altAlleles: string[],
   ref: string
-): AnnotationResult {
+): AnnotationResult[] {
   const csqRaw = info.get('CSQ')
-  if (csqRaw == null || csqRaw === '') return emptyResult()
+  if (csqRaw == null || csqRaw === '') return altAlleles.map(() => emptyResult())
   if (csqRaw.length > MAX_VCF_ANNOTATION_CHARS) {
     throw new VcfResourceLimitError(`CSQ annotation exceeds ${MAX_VCF_ANNOTATION_CHARS} characters`)
   }
@@ -104,9 +119,26 @@ function parseCsq(
     parsed.push({ fields, allele })
   }
 
-  // Filter by allele: VEP uses the ALT base for SNVs, "-" for deletions, inserted seq for insertions
-  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref))
+  // VEP uses the ALT base for SNVs, "-" for deletions, and inserted sequence
+  // for insertions. Partition the already-parsed transcript objects once.
+  const grouped = altAlleles.map(() => [] as CsqTranscript[])
+  const targetIndexes = buildAlleleTargetIndex(altAlleles, ref)
+  let totalMatches = 0
+  for (const transcript of parsed) {
+    for (const index of targetIndexes.get(transcript.allele) ?? []) {
+      totalMatches += 1
+      if (totalMatches > MAX_VCF_TOTAL_ANNOTATION_MATCHES) {
+        throw new VcfResourceLimitError(
+          `CSQ annotation matches exceed ${MAX_VCF_TOTAL_ANNOTATION_MATCHES}`
+        )
+      }
+      grouped[index].push(transcript)
+    }
+  }
+  return grouped.map(buildCsqResult)
+}
 
+function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
   if (filtered.length === 0) return emptyResult()
 
   // Build TranscriptInsertRows, deduplicating by transcript_id
@@ -183,9 +215,13 @@ interface AnnTranscript {
   allele: string
 }
 
-function parseAnn(info: Map<string, string>, altAllele: string, ref: string): AnnotationResult {
+function parseAnnForAlleles(
+  info: Map<string, string>,
+  altAlleles: string[],
+  ref: string
+): AnnotationResult[] {
   const annRaw = info.get('ANN')
-  if (annRaw == null || annRaw === '') return emptyResult()
+  if (annRaw == null || annRaw === '') return altAlleles.map(() => emptyResult())
   if (annRaw.length > MAX_VCF_ANNOTATION_CHARS) {
     throw new VcfResourceLimitError(`ANN annotation exceeds ${MAX_VCF_ANNOTATION_CHARS} characters`)
   }
@@ -215,9 +251,24 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
     parsed.push({ parts, allele })
   }
 
-  // Filter by allele
-  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref))
+  const grouped = altAlleles.map(() => [] as AnnTranscript[])
+  const targetIndexes = buildAlleleTargetIndex(altAlleles, ref)
+  let totalMatches = 0
+  for (const transcript of parsed) {
+    for (const index of targetIndexes.get(transcript.allele) ?? []) {
+      totalMatches += 1
+      if (totalMatches > MAX_VCF_TOTAL_ANNOTATION_MATCHES) {
+        throw new VcfResourceLimitError(
+          `ANN annotation matches exceed ${MAX_VCF_TOTAL_ANNOTATION_MATCHES}`
+        )
+      }
+      grouped[index].push(transcript)
+    }
+  }
+  return grouped.map(buildAnnResult)
+}
 
+function buildAnnResult(filtered: AnnTranscript[]): AnnotationResult {
   if (filtered.length === 0) return emptyResult()
 
   // Build TranscriptInsertRows, deduplicating by transcript_id
@@ -266,18 +317,22 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
 
 // ── Shared helpers ───────────────────────────────────────────
 
-/**
- * Check if an annotation allele matches the target ALT allele.
- * VEP CSQ uses the VCF ALT bases for SNVs, "-" for deletions, inserted bases for insertions.
- * SnpEff ANN uses the full ALT allele string.
- */
-function matchesAllele(annAllele: string, altAllele: string, ref: string): boolean {
-  if (annAllele === altAllele) return true
-  // VEP deletion notation: "-" only matches when ALT is actually shorter than REF
-  if (annAllele === '-' && altAllele.length < ref.length) return true
-  // VEP insertion: the annotation Allele is the inserted bases (ALT minus first base)
-  if (altAllele.length > 1 && annAllele === altAllele.substring(1)) return true
-  return false
+/** Build every accepted annotation spelling once for O(ALT + annotation) grouping. */
+function buildAlleleTargetIndex(altAlleles: string[], ref: string): Map<string, number[]> {
+  const targets = new Map<string, number[]>()
+  const add = (allele: string, index: number): void => {
+    const existing = targets.get(allele)
+    if (existing === undefined) targets.set(allele, [index])
+    else if (existing[existing.length - 1] !== index) existing.push(index)
+  }
+
+  for (let index = 0; index < altAlleles.length; index += 1) {
+    const alt = altAlleles[index]
+    add(alt, index)
+    if (alt.length < ref.length) add('-', index)
+    if (alt.length > 1) add(alt.substring(1), index)
+  }
+  return targets
 }
 
 /**

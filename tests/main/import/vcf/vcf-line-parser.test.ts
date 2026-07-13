@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { parseVcfLine } from '../../../../src/main/import/vcf/vcf-line-parser'
 import {
   MAX_VCF_ALT_ALLELES,
-  MAX_VCF_COLUMNS,
+  MAX_VCF_COMPATIBILITY_SAMPLES,
   MAX_VCF_INFO_FIELDS
 } from '../../../../src/main/import/vcf/vcf-resource-limits'
 
@@ -225,12 +225,39 @@ describe('vcf-line-parser', () => {
       expect(onSkip).toHaveBeenCalledWith(expect.stringMatching(/truncated/i))
     })
 
-    it('rejects column fanout beyond the supported sample budget', () => {
+    it('parses only the selected sample from a cohort with more than 10,000 samples', () => {
+      const sampleNames = Array.from({ length: 10_050 }, (_, index) => `S${index}`)
+      const selectedSample = sampleNames.at(-1)!
       const onSkip = vi.fn()
-      const line = `chr1\t1\t.\tA\tG\t.\tPASS\t.${'\t0/1'.repeat(MAX_VCF_COLUMNS)}`
+      const format = 'GT:DP'
+      const selectedValues = '0/1:42'
+      const sampleColumns = Array.from({ length: sampleNames.length }, (_, index) =>
+        index === sampleNames.length - 1 ? selectedValues : '0'
+      ).join('\t')
+      const line = `chr1\t1\t.\tA\tG\t.\tPASS\t.\t${format}\t${sampleColumns}`
 
-      expect(parseVcfLine(line, [], onSkip)).toBeNull()
-      expect(onSkip).toHaveBeenCalledWith(expect.stringMatching(/too many VCF columns/i))
+      const record = parseVcfLine(line, sampleNames, onSkip, {
+        name: selectedSample,
+        index: sampleNames.length - 1
+      })
+
+      expect(record).not.toBeNull()
+      expect(record?.samples.size).toBe(1)
+      expect(record?.samples.get(selectedSample)).toEqual(['0/1', '42'])
+      expect(record?.samples.has(sampleNames[0])).toBe(false)
+      expect(onSkip).not.toHaveBeenCalled()
+    })
+
+    it('bounds the legacy all-samples compatibility path', () => {
+      const sampleNames = Array.from(
+        { length: MAX_VCF_COMPATIBILITY_SAMPLES + 1 },
+        (_, index) => `S${index}`
+      )
+      const line = `chr1\t1\t.\tA\tG\t.\tPASS\t.\tGT${'\t0'.repeat(sampleNames.length)}`
+      const reasons: string[] = []
+
+      expect(parseVcfLine(line, sampleNames, (reason) => reasons.push(reason))).toBeNull()
+      expect(reasons).toEqual([expect.stringMatching(/all-samples compatibility/i)])
     })
 
     it('rejects excessive ALT and INFO fanout without materializing every value', () => {

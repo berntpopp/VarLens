@@ -10,7 +10,7 @@ import {
 import { VcfHeaderLimitExceededError } from '../../../../src/main/import/vcf/vcf-header-limits'
 import {
   MAX_VCF_ANNOTATION_FIELDS,
-  MAX_VCF_COLUMNS,
+  MAX_VCF_HEADER_SAMPLES,
   MAX_VCF_STRUCTURED_HEADER_FIELDS,
   VcfResourceLimitError
 } from '../../../../src/main/import/vcf/vcf-resource-limits'
@@ -128,8 +128,18 @@ describe('vcf-header-parser', () => {
       expect(header.annotationType).toBe('none')
     })
 
+    it('accepts cohorts larger than the former 10,000-sample column cap', () => {
+      const sampleNames = Array.from({ length: 10_050 }, (_, index) => `S${index}`)
+      const header = parseVcfHeaderFromLines([
+        `#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t${sampleNames.join('\t')}`
+      ])
+
+      expect(header.samples).toHaveLength(sampleNames.length)
+      expect(header.samples.at(-1)).toBe('S10049')
+    })
+
     it('rejects excessive #CHROM, structured-header, and CSQ field fanout', () => {
-      const wideChrom = `#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO${'\tS'.repeat(MAX_VCF_COLUMNS)}`
+      const wideChrom = `#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT${'\tS'.repeat(MAX_VCF_HEADER_SAMPLES + 1)}`
       expect(() => parseVcfHeaderFromLines([wideChrom])).toThrow(VcfResourceLimitError)
 
       const structuredFields = Array.from(

@@ -19,7 +19,11 @@ import { resolveColumnIndices } from '../import/config/fieldMapping'
 import { createDecompressedStream, createCappedLineStream } from '../import/stream-utils'
 import { createJsonRecordBudget } from '../import/json-resource-budget'
 import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
-import { parseVcfLine } from '../import/vcf/vcf-line-parser'
+import {
+  parseVcfLine,
+  resolveVcfSelectedSampleColumn,
+  type VcfSelectedSampleColumn
+} from '../import/vcf/vcf-line-parser'
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
 import { detectCaller } from '../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
@@ -355,6 +359,7 @@ export async function streamInsertVcf(
   const headerBudget = new VcfHeaderBudget()
   let header: VcfHeader | null = null
   let activeSample = ''
+  let activeSampleColumn: VcfSelectedSampleColumn | null = null
   let callerName: string | null = null
 
   let batch: Array<Record<string, unknown>> = []
@@ -377,8 +382,8 @@ export async function streamInsertVcf(
       // Parse header once, on the first data line
       if (header === null) {
         header = parseVcfHeaderFromLines(headerLines)
-        const selectedSample = vcfSelectedSamples?.[0]
-        activeSample = selectedSample ?? (header.samples.length > 0 ? header.samples[0] : '')
+        activeSampleColumn = resolveVcfSelectedSampleColumn(header.samples, vcfSelectedSamples?.[0])
+        activeSample = activeSampleColumn?.name ?? ''
 
         if (activeSample === '') {
           break
@@ -391,7 +396,7 @@ export async function streamInsertVcf(
 
       // Parse the data line
       try {
-        const record = parseVcfLine(line, header.samples, onSkip)
+        const record = parseVcfLine(line, header.samples, onSkip, activeSampleColumn ?? undefined)
         if (record === null) continue // Skip truncated/corrupt lines
         const mapped = mapVcfRecord(
           record,

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mapVcfRecord } from '../../../../src/main/import/vcf/VcfMapper'
 import type { VcfRawRecord, VcfHeader } from '../../../../src/main/import/vcf/types'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../../../../src/main/import/vcf/info-field-registry'
+import { VcfResourceLimitError } from '../../../../src/main/import/vcf/vcf-resource-limits'
 
 function makeHeader(): VcfHeader {
   return {
@@ -257,5 +258,28 @@ describe('VcfMapper', () => {
     expect(v.gt_num).toBe('0/1')
     expect(v.gene_symbol).toBeNull()
     expect(v.gnomad_af).toBeCloseTo(0.1, 4) // mapped from AF via registry
+  })
+
+  it('rejects structural ALT fanout before expanded INFO output can exhaust memory', () => {
+    const alt = Array.from({ length: 1_000 }, (_, index) => `<DEL:${index}>`)
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 100,
+      id: null,
+      ref: 'A',
+      alt,
+      qual: 50,
+      filter: 'PASS',
+      info: new Map([
+        ['SVTYPE', 'DEL'],
+        ['ADVERSARIAL_PAYLOAD', 'x'.repeat(100_000)]
+      ]),
+      format: ['GT'],
+      samples: new Map([['HG005', ['./.']]])
+    }
+
+    expect(() => mapVcfRecord(record, { ...header, annotationType: 'none' }, 'HG005', [])).toThrow(
+      VcfResourceLimitError
+    )
   })
 })

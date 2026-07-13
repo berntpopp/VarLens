@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { splitMultiAllelic } from '../../../../src/main/import/vcf/vcf-allele-splitter'
+import {
+  splitAlleleForSample,
+  splitMultiAllelic
+} from '../../../../src/main/import/vcf/vcf-allele-splitter'
 import type {
   VcfRawRecord,
   InfoFieldDef,
@@ -110,6 +113,30 @@ describe('vcf-allele-splitter', () => {
     expect(r2.alt).toEqual(['T'])
     expect(r2.info.get('AF')).toBe('0.2') // Number=A: select index 1
     expect(r2.info.get('AC')).toBe('10') // Number=A: select index 1
+  })
+
+  it('builds one ALT view containing only the selected sample', () => {
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 200,
+      id: 'rs1',
+      ref: 'A',
+      alt: ['G', 'T'],
+      qual: 95,
+      filter: 'PASS',
+      info: new Map([['AF', '0.1,0.2']]),
+      format: ['GT', 'AD'],
+      samples: new Map([
+        ['SELECTED', ['0/2', '24,0,24']],
+        ['UNSELECTED', ['0/1', '20,20,0']]
+      ])
+    }
+
+    const split = splitAlleleForSample(record, infoDefs, formatDefs, 1, 'SELECTED')
+
+    expect(split.alt).toEqual(['T'])
+    expect(split.info.get('AF')).toBe('0.2')
+    expect(split.samples).toEqual(new Map([['SELECTED', ['0/1', '24,24']]]))
   })
 
   it('remaps GT for multi-allelic splits', () => {
