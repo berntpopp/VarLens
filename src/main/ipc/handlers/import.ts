@@ -33,7 +33,6 @@ import type { ImportCallbacks, MultiFileImportSpec } from './import-logic'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { StorageSession } from '../../storage/session'
 import { BedFilter } from '../../import/vcf/bed-filter'
-import { mainLogger } from '../../services/MainLogger'
 import type { VcfMultiPreviewResult } from '../../../shared/types/import'
 
 /**
