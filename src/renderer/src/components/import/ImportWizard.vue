@@ -326,6 +326,9 @@ const summary = ref<BatchResult>({
 let cleanupProgress: (() => void) | null = null
 let cleanupImportProgress: (() => void) | null = null
 let cleanupComplete: (() => void) | null = null
+let importRunGeneration = 0
+let activeBatchRunGeneration: number | null = null
+let cancellationRequestedGeneration: number | null = null
 
 function resetUploadState(): void {
   uploadFileName.value = ''
@@ -542,13 +545,41 @@ function onVcfSelectionChanged(options: {
   vcfCaseNames.value = options.caseNames
 }
 
-const isImportTerminal = (): boolean => step.value !== 3 || importStore.phase === 'cancelled'
+function beginImportRun(kind: 'vcf' | 'batch'): number {
+  importRunGeneration += 1
+  activeBatchRunGeneration = kind === 'batch' ? importRunGeneration : null
+  cancellationRequestedGeneration = null
+  return importRunGeneration
+}
+
+function isImportTerminal(generation: number): boolean {
+  return generation !== importRunGeneration || step.value !== 3 || importStore.phase === 'cancelled'
+}
+
+function completeCancelledRun(generation: number): void {
+  if (isImportTerminal(generation)) return
+  importRunGeneration += 1
+  activeBatchRunGeneration = null
+  cancellationRequestedGeneration = null
+  const cancelledResult: BatchResult = {
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    cancelled: true,
+    details: []
+  }
+  summary.value = cancelledResult
+  step.value = 4
+  importStore.importComplete(cancelledResult)
+}
 
 async function startVcfImport(): Promise<void> {
   if (importStore.isActive) {
     logService.warn('Import already in progress — cannot start another', 'ImportWizard')
     return
   }
+
+  const generation = beginImportRun('vcf')
 
   step.value = 3
   totalFiles.value = vcfSelectedSamples.value.length
@@ -570,7 +601,11 @@ async function startVcfImport(): Promise<void> {
   try {
     for (let i = 0; i < vcfSelectedSamples.value.length; i++) {
       // Check for cancellation between samples
-      if (importStore.phase === 'cancelled') break
+      if (cancellationRequestedGeneration === generation) {
+        completeCancelledRun(generation)
+        return
+      }
+      if (isImportTerminal(generation)) break
 
       const sample = vcfSelectedSamples.value[i]
       const caseName = vcfCaseNames.value.get(sample) ?? sample
@@ -587,7 +622,11 @@ async function startVcfImport(): Promise<void> {
           })
         )
 
-        if (isImportTerminal()) break
+        if (cancellationRequestedGeneration === generation) {
+          completeCancelledRun(generation)
+          return
+        }
+        if (isImportTerminal(generation)) break
 
         results.succeeded++
         results.details.push({
@@ -598,7 +637,11 @@ async function startVcfImport(): Promise<void> {
           variantCount: (result as { variantCount: number }).variantCount
         })
       } catch (err) {
-        if (isImportTerminal()) break
+        if (cancellationRequestedGeneration === generation) {
+          completeCancelledRun(generation)
+          return
+        }
+        if (isImportTerminal(generation)) break
         results.failed++
         results.details.push({
           filePath: vcfFilePath.value,
@@ -610,7 +653,11 @@ async function startVcfImport(): Promise<void> {
       }
     }
 
-    if (isImportTerminal()) return
+    if (cancellationRequestedGeneration === generation) {
+      completeCancelledRun(generation)
+      return
+    }
+    if (isImportTerminal(generation)) return
 
     cancelError.value = ''
     summary.value = results
@@ -624,7 +671,11 @@ async function startVcfImport(): Promise<void> {
       emit('batch-import-complete', { totalImported: results.succeeded })
     }
   } catch (err) {
-    if (isImportTerminal()) return
+    if (cancellationRequestedGeneration === generation) {
+      completeCancelledRun(generation)
+      return
+    }
+    if (isImportTerminal(generation)) return
     const message = formatIpcError(err, 'VCF import failed')
     logService.error(`VCF import failed: ${message}`, 'ImportWizard')
     cancelError.value = ''
@@ -648,6 +699,8 @@ async function startImport(): Promise<void> {
     return
   }
 
+  const generation = beginImportRun('batch')
+
   step.value = 3
   totalFiles.value = fileCount.value
   currentIndex.value = 0
@@ -669,7 +722,9 @@ async function startImport(): Promise<void> {
     )
 
     // Result also arrives via onComplete callback; guard against double-processing
-    if (step.value === 3) {
+    if (!isImportTerminal(generation) && activeBatchRunGeneration === generation) {
+      activeBatchRunGeneration = null
+      cancellationRequestedGeneration = null
       cancelError.value = ''
       summary.value = result
       step.value = 4
@@ -692,7 +747,16 @@ async function startImport(): Promise<void> {
     // Only overwrite summary if the onComplete callback hasn't already
     // handled it (race: safeEmit fires before resolve, so the event
     // listener may have already set the correct summary + step 4).
-    if (step.value === 3) {
+    if (!isImportTerminal(generation) && activeBatchRunGeneration === generation) {
+      activeBatchRunGeneration = null
+      if (cancellationRequestedGeneration === generation) {
+        completeCancelledRun(generation)
+        if (isZipImport.value) {
+          await cleanupZipTemp('cancelled import termination')
+        }
+        return
+      }
+      cancellationRequestedGeneration = null
       logService.error(`Import failed: ${message}`, 'ImportWizard')
       cancelError.value = ''
       summary.value = {
@@ -712,6 +776,7 @@ async function startImport(): Promise<void> {
 }
 
 async function cancelImport(): Promise<void> {
+  const generation = importRunGeneration
   cancelError.value = ''
   if (cancellationPending.value) return
   cancellationPending.value = true
@@ -720,12 +785,15 @@ async function cancelImport(): Promise<void> {
     unwrapIpcResult(result)
     // Terminal result handlers own the summary and extraction cleanup.
   } catch (error) {
-    if (step.value !== 3) return
+    if (isImportTerminal(generation)) return
     cancelError.value = formatIpcError(error, 'Cancellation failed')
     logService.warn(`Import cancel failed: ${cancelError.value}`, 'ImportWizard')
+    return
   } finally {
     cancellationPending.value = false
   }
+  if (isImportTerminal(generation)) return
+  cancellationRequestedGeneration = generation
 }
 
 function continueInBackground(): void {
@@ -780,6 +848,11 @@ function resetState(): void {
 }
 
 const show = (): void => {
+  if (importStore.isActive) {
+    importStore.dialogOpen = true
+    dialog.value = true
+    return
+  }
   abandonZipImport('next wizard open')
   resetState()
   dialog.value = true
@@ -811,7 +884,7 @@ onMounted(() => {
   if (api) {
     if (isWebRuntime()) {
       cleanupImportProgress = api.import.onProgress((progress: ProgressUpdate) => {
-        if (!isVcfImport.value || !importStore.isActive) return
+        if (!isVcfImport.value || !importStore.isActive || activeBatchRunGeneration !== null) return
         variantCount.value = progress.count
         const sampleCount = Math.max(vcfSelectedSamples.value.length, 1)
         overallPercent.value = Math.max(
@@ -831,6 +904,8 @@ onMounted(() => {
     }
 
     cleanupProgress = api.batchImport.onProgress((progress: BatchProgress) => {
+      const generation = activeBatchRunGeneration
+      if (generation === null || isImportTerminal(generation)) return
       currentIndex.value = progress.currentIndex
       totalFiles.value = progress.totalFiles
       currentFileName.value = progress.currentFileName
@@ -851,8 +926,11 @@ onMounted(() => {
     })
 
     cleanupComplete = api.batchImport.onComplete((result: BatchResult) => {
+      const generation = activeBatchRunGeneration
       // Guard: startImport() await may have already handled this
-      if (step.value === 3) {
+      if (generation !== null && !isImportTerminal(generation)) {
+        activeBatchRunGeneration = null
+        cancellationRequestedGeneration = null
         cancelError.value = ''
         summary.value = result
         step.value = 4

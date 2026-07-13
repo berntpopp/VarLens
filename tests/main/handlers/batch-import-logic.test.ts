@@ -7,7 +7,7 @@
  * ("no duplicates", "wrong password", "empty extraction").
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import AdmZip from 'adm-zip'
 import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
@@ -165,9 +165,11 @@ describe('extractZip', () => {
     const second = new AdmZip()
     second.addFile('second.json', Buffer.from('{}'))
     second.writeZip(secondPath)
+    const enroll = vi.fn()
+    const revoke = vi.fn()
 
-    const firstResult = await logic.extractZip(firstPath)
-    const secondResult = await logic.extractZip(secondPath)
+    const firstResult = await logic.extractZip(firstPath, undefined, enroll, revoke)
+    const secondResult = await logic.extractZip(secondPath, undefined, enroll, revoke)
     const firstExtractedPath = firstResult.files[0]
     const secondExtractedPath = secondResult.files[0]
 
@@ -177,9 +179,12 @@ describe('extractZip', () => {
     logic.cleanupZipTemp(firstResult.extractionId)
     expect(existsSync(firstExtractedPath)).toBe(false)
     expect(existsSync(secondExtractedPath)).toBe(true)
+    expect(revoke).toHaveBeenCalledWith(firstExtractedPath)
+    expect(revoke).not.toHaveBeenCalledWith(secondExtractedPath)
 
     logic.cleanupZipTemp(secondResult.extractionId)
     expect(existsSync(secondExtractedPath)).toBe(false)
+    expect(revoke).toHaveBeenCalledWith(secondExtractedPath)
   })
 
   it('bounds active extraction directories when callers omit cleanup', async () => {

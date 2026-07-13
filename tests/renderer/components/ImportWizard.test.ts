@@ -43,6 +43,7 @@ interface ImportWizardVm {
   startVcfImport: () => Promise<void>
   startImport: () => Promise<void>
   cancelImport: () => Promise<void>
+  show: () => void
 }
 
 function deferred<T>(): {
@@ -199,7 +200,9 @@ describe('ImportWizard IPC safety', () => {
         message: 'worker did not acknowledge cancellation',
         userMessage: 'Could not cancel the import'
       }
+      const pendingStart = deferred<BatchResult>()
       let completeImport: ((result: BatchResult) => void) | undefined
+      mockApi.batchImport.start.mockReturnValue(pendingStart.promise)
       mockApi.batchImport.cancel.mockResolvedValue(cancelError)
       mockApi.batchImport.onComplete.mockImplementation((callback) => {
         completeImport = callback
@@ -211,8 +214,8 @@ describe('ImportWizard IPC safety', () => {
       const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
       const store = useImportStatusStore(pinia)
       const vm = wrapper.vm as unknown as ImportWizardVm
-      store.startImport(1)
-      vm.step = 3
+      const importRun = vm.startImport()
+      await Promise.resolve()
 
       await vm.cancelImport()
 
@@ -229,6 +232,8 @@ describe('ImportWizard IPC safety', () => {
       }
       expect(completeImport).toBeDefined()
       completeImport!(realResult)
+      pendingStart.resolve(realResult)
+      await importRun
 
       expect(vm.step).toBe(4)
       expect(store.phase).toBe('complete')
@@ -237,38 +242,13 @@ describe('ImportWizard IPC safety', () => {
       wrapper.unmount()
     })
 
-    it('commits cancelled state only after cancellation is acknowledged', async () => {
+    it('keeps the run active after cancellation acknowledgement until its terminal result', async () => {
       const mockApi = createMockApi()
       const pendingCancel = deferred<undefined>()
-      mockApi.batchImport.cancel.mockReturnValue(pendingCancel.promise)
-      window.api = mockApi
-
-      const pinia = createPinia()
-      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
-      const store = useImportStatusStore(pinia)
-      const vm = wrapper.vm as unknown as ImportWizardVm
-      store.startImport(1)
-      vm.step = 3
-
-      const cancellation = vm.cancelImport()
-
-      expect(vm.step).toBe(3)
-      expect(store.phase).toBe('importing')
-
-      pendingCancel.resolve(undefined)
-      await cancellation
-
-      expect(vm.step).toBe(4)
-      expect(store.phase).toBe('cancelled')
-      expect(vm.summary.cancelled).toBe(true)
-      wrapper.unmount()
-    })
-
-    it('does not overwrite a real completion with a late cancel acknowledgement', async () => {
-      const mockApi = createMockApi()
-      const pendingCancel = deferred<undefined>()
+      const pendingStart = deferred<BatchResult>()
       let completeImport: ((result: BatchResult) => void) | undefined
       mockApi.batchImport.cancel.mockReturnValue(pendingCancel.promise)
+      mockApi.batchImport.start.mockReturnValue(pendingStart.promise)
       mockApi.batchImport.onComplete.mockImplementation((callback) => {
         completeImport = callback
         return vi.fn()
@@ -279,8 +259,56 @@ describe('ImportWizard IPC safety', () => {
       const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
       const store = useImportStatusStore(pinia)
       const vm = wrapper.vm as unknown as ImportWizardVm
-      store.startImport(1)
-      vm.step = 3
+      const importRun = vm.startImport()
+      await Promise.resolve()
+
+      const cancellation = vm.cancelImport()
+
+      expect(vm.step).toBe(3)
+      expect(store.phase).toBe('importing')
+
+      pendingCancel.resolve(undefined)
+      await cancellation
+
+      expect(vm.step).toBe(3)
+      expect(store.phase).toBe('importing')
+
+      const cancelledResult: BatchResult = {
+        succeeded: 0,
+        failed: 0,
+        skipped: 0,
+        cancelled: true,
+        details: []
+      }
+      completeImport!(cancelledResult)
+      pendingStart.resolve(cancelledResult)
+      await importRun
+
+      expect(vm.step).toBe(4)
+      expect(store.phase).toBe('cancelled')
+      expect(vm.summary.cancelled).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('does not overwrite a real completion with a late cancel acknowledgement', async () => {
+      const mockApi = createMockApi()
+      const pendingCancel = deferred<undefined>()
+      const pendingStart = deferred<BatchResult>()
+      let completeImport: ((result: BatchResult) => void) | undefined
+      mockApi.batchImport.cancel.mockReturnValue(pendingCancel.promise)
+      mockApi.batchImport.start.mockReturnValue(pendingStart.promise)
+      mockApi.batchImport.onComplete.mockImplementation((callback) => {
+        completeImport = callback
+        return vi.fn()
+      })
+      window.api = mockApi
+
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const vm = wrapper.vm as unknown as ImportWizardVm
+      const importRun = vm.startImport()
+      await Promise.resolve()
 
       const cancellation = vm.cancelImport()
       const realResult: BatchResult = {
@@ -293,6 +321,8 @@ describe('ImportWizard IPC safety', () => {
       completeImport!(realResult)
       pendingCancel.resolve(undefined)
       await cancellation
+      pendingStart.resolve(realResult)
+      await importRun
 
       expect(vm.step).toBe(4)
       expect(store.phase).toBe('complete')
@@ -320,7 +350,7 @@ describe('ImportWizard IPC safety', () => {
 
       expect(mockApi.import.cancel).toHaveBeenCalledOnce()
       expect(mockApi.batchImport.cancel).not.toHaveBeenCalled()
-      expect(store.phase).toBe('cancelled')
+      expect(store.phase).toBe('importing')
       wrapper.unmount()
     })
 
@@ -344,8 +374,8 @@ describe('ImportWizard IPC safety', () => {
       expect(store.phase).toBe('importing')
 
       await vm.cancelImport()
-      expect(store.phase).toBe('cancelled')
-      expect(vm.summary.cancelled).toBe(true)
+      expect(store.phase).toBe('importing')
+      expect(vm.step).toBe(3)
 
       pendingStart.resolve({ variantCount: 12 })
       await importRun
@@ -378,6 +408,86 @@ describe('ImportWizard IPC safety', () => {
       expect(store.phase).toBe('cancelled')
       expect(vm.summary.cancelled).toBe(true)
       expect(vm.step).toBe(4)
+      wrapper.unmount()
+    })
+
+    it('does not reset or start a new VCF run until the cancelled run settles', async () => {
+      const mockApi = createMockApi()
+      const oldStart = deferred<{ variantCount: number }>()
+      mockApi.import.start.mockReturnValue(oldStart.promise)
+      window.api = mockApi
+
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const vm = wrapper.vm as unknown as ImportWizardVm
+      vm.isVcfImport = true
+      vm.vcfFilePath = '/old.vcf'
+      vm.vcfSelectedSamples = ['OLD']
+      vm.vcfCaseNames = new Map([['OLD', 'Old case']])
+
+      const oldRun = vm.startVcfImport()
+      await Promise.resolve()
+      await vm.cancelImport()
+
+      vm.show()
+      const blockedRun = vm.startVcfImport()
+      await blockedRun
+
+      expect(mockApi.import.start).toHaveBeenCalledOnce()
+      expect(store.phase).toBe('importing')
+      expect(vm.step).toBe(3)
+
+      oldStart.resolve({ variantCount: 99 })
+      await oldRun
+
+      expect(store.phase).toBe('cancelled')
+      expect(vm.step).toBe(4)
+      expect(vm.summary.details).toEqual([])
+      wrapper.unmount()
+    })
+
+    it('blocks a same-kind batch restart until the cancelled batch event settles', async () => {
+      const mockApi = createMockApi()
+      const oldBatchStart = deferred<BatchResult>()
+      let completeBatch: ((result: BatchResult) => void) | undefined
+      mockApi.batchImport.start.mockReturnValue(oldBatchStart.promise)
+      mockApi.batchImport.onComplete.mockImplementation((callback) => {
+        completeBatch = callback
+        return vi.fn()
+      })
+      window.api = mockApi
+
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const vm = wrapper.vm as unknown as ImportWizardVm
+
+      const oldRun = vm.startImport()
+      await Promise.resolve()
+      await vm.cancelImport()
+
+      vm.show()
+      await vm.startImport()
+
+      expect(mockApi.batchImport.start).toHaveBeenCalledOnce()
+      expect(store.phase).toBe('importing')
+      expect(vm.step).toBe(3)
+
+      const oldResult: BatchResult = {
+        succeeded: 0,
+        failed: 0,
+        skipped: 0,
+        cancelled: true,
+        details: []
+      }
+      completeBatch!(oldResult)
+      oldBatchStart.resolve(oldResult)
+      await oldRun
+
+      expect(store.phase).toBe('cancelled')
+      expect(vm.step).toBe(4)
+      expect(vm.summary.details).toEqual([])
       wrapper.unmount()
     })
   })
