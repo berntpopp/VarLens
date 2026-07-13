@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mapVcfRecord } from '../../../../src/main/import/vcf/VcfMapper'
+import { parseVcfHeaderFromLines } from '../../../../src/main/import/vcf/vcf-header-parser'
 import type { VcfRawRecord, VcfHeader } from '../../../../src/main/import/vcf/types'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../../../../src/main/import/vcf/info-field-registry'
 
@@ -225,6 +226,50 @@ describe('VcfMapper', () => {
     // Must be ALT#2's own depth (7), not ALT#1's depth (3) reused via a hardcoded index.
     expect(results[0].ad_alt).toBe(7)
     expect(results[0].ab).toBeCloseTo(7 / 17, 4)
+  })
+
+  it('maps ALLELE_NUM annotations and AD through the parsed-header multi-allelic path', () => {
+    const parsedHeader = parseVcfHeaderFromLines([
+      '##fileformat=VCFv4.2',
+      '##INFO=<ID=CSQ,Number=.,Type=String,Description="VEP Format: Allele|Consequence|IMPACT|SYMBOL|Feature|ALLELE_NUM">',
+      '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+      '##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">',
+      '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005'
+    ])
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 20006000,
+      id: null,
+      ref: 'CAT',
+      alt: ['C', 'CA'],
+      qual: 90,
+      filter: 'PASS',
+      info: new Map([
+        ['CSQ', '-|frameshift_variant|HIGH|GENE1|T1|1,-|inframe_deletion|MODERATE|GENE2|T2|2']
+      ]),
+      format: ['GT', 'AD'],
+      samples: new Map([['HG005', ['1/2', '5,7,11']]])
+    }
+
+    const results = mapVcfRecord(record, parsedHeader, 'HG005', DEFAULT_INFO_FIELD_MAPPINGS)
+
+    expect(results).toHaveLength(2)
+    expect(results[0]).toMatchObject({
+      alt: 'C',
+      gene_symbol: 'GENE1',
+      func: 'frameshift_variant',
+      gt_num: '1/.',
+      ad_ref: 5,
+      ad_alt: 7
+    })
+    expect(results[1]).toMatchObject({
+      alt: 'CA',
+      gene_symbol: 'GENE2',
+      func: 'inframe_deletion',
+      gt_num: './1',
+      ad_ref: 5,
+      ad_alt: 11
+    })
   })
 
   it('maps ANN-annotated variant with standalone INFO fields', () => {

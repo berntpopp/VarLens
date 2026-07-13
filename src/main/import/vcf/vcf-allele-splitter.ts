@@ -7,6 +7,10 @@
 
 import type { VcfRawRecord, InfoFieldDef, FormatFieldDef } from './types'
 
+function normalizeVectorToken(value: string | undefined): string {
+  return value === undefined || value === '' ? '.' : value
+}
+
 /**
  * Split a multi-allelic VcfRawRecord into one record per ALT allele.
  * Single-allelic records pass through unchanged (returned as a one-element array).
@@ -70,7 +74,7 @@ function splitInfoFields(
       case 'A': {
         // Per-ALT allele — select value at altIdx
         const parts = value.split(',')
-        result.set(key, parts[altIdx] ?? '.')
+        result.set(key, normalizeVectorToken(parts[altIdx]))
         break
       }
 
@@ -78,9 +82,12 @@ function splitInfoFields(
         // Per-allele (REF + ALTs) — keep REF (index 0) + current ALT
         const parts = value.split(',')
         if (parts.length > altIdx + 1) {
-          result.set(key, `${parts[0]},${parts[altIdx + 1]}`)
+          result.set(
+            key,
+            `${normalizeVectorToken(parts[0])},${normalizeVectorToken(parts[altIdx + 1])}`
+          )
         } else {
-          result.set(key, `${parts[0] ?? '.'},.`)
+          result.set(key, `${normalizeVectorToken(parts[0])},.`)
         }
         break
       }
@@ -124,7 +131,7 @@ function splitSampleFields(
       }
 
       const def = formatDefs.get(field)
-      let number = def?.number ?? '.'
+      const number = def?.number ?? (field === 'AD' ? 'R' : '.')
 
       // AD (allele depths) is conventionally Number=R (one value per allele,
       // REF included). Some VCFs omit the ##FORMAT=<ID=AD,...> header line
@@ -132,23 +139,21 @@ function splitSampleFields(
       // leaves the full multi-allele AD unreduced. Downstream genotype
       // parsing assumes an already-split, biallelic AD (it reads index 1 for
       // "this" ALT's depth), so default AD to Number=R when its def is
-      // missing or its declared Number isn't already R/A.
-      if (field === 'AD' && number !== 'R' && number !== 'A') {
-        number = 'R'
-      }
+      // missing. Explicit header declarations remain authoritative.
 
       if (number === 'R') {
         // Per-allele (REF + ALTs) — keep REF + current ALT
         const parts = values[fIdx].split(',')
         if (parts.length > altIdx + 1) {
-          newValues[fIdx] = `${parts[0]},${parts[altIdx + 1]}`
+          newValues[fIdx] =
+            `${normalizeVectorToken(parts[0])},${normalizeVectorToken(parts[altIdx + 1])}`
         } else {
-          newValues[fIdx] = `${parts[0] ?? '.'},.`
+          newValues[fIdx] = `${normalizeVectorToken(parts[0])},.`
         }
       } else if (number === 'A') {
         // Per-ALT — select value at altIdx
         const parts = values[fIdx].split(',')
-        const selected = parts[altIdx] ?? '.'
+        const selected = normalizeVectorToken(parts[altIdx])
         // Genotype parsing consumes AD as a biallelic REF,ALT pair. A
         // non-standard Number=A AD has no reference depth, so retain the ALT
         // depth explicitly while marking REF missing.

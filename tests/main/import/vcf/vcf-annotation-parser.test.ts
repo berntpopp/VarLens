@@ -204,12 +204,25 @@ describe('vcf-annotation-parser', () => {
       expect(result.geneSymbol).toBeNull()
     })
 
-    it('rejects a partially numeric ALLELE_NUM instead of accepting parseInt prefix data', () => {
+    it.each(['', '0', '-1', '01', '+1', ' 1', '1 ', '1junk', '9007199254740992'])(
+      'rejects malformed ALLELE_NUM %j',
+      (alleleNum) => {
+        const fields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'ALLELE_NUM']
+        const alleleNumHeader = makeHeader({ annotationType: 'csq', csqFields: fields })
+        const info = new Map([['CSQ', `G|missense_variant|MODERATE|GENE4|T4|${alleleNum}`]])
+
+        const result = parseAnnotation(info, alleleNumHeader, 'G', 'A', 1)
+        expect(result.transcripts).toHaveLength(0)
+        expect(result.geneSymbol).toBeNull()
+      }
+    )
+
+    it('rejects ALLELE_NUM annotations when the caller omits the allele index', () => {
       const fields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'ALLELE_NUM']
       const alleleNumHeader = makeHeader({ annotationType: 'csq', csqFields: fields })
-      const info = new Map([['CSQ', 'G|missense_variant|MODERATE|GENE4|T4|1junk']])
+      const info = new Map([['CSQ', 'G|missense_variant|MODERATE|GENE4|T4|1']])
 
-      const result = parseAnnotation(info, alleleNumHeader, 'G', 'A', 1)
+      const result = parseAnnotation(info, alleleNumHeader, 'G', 'A')
       expect(result.transcripts).toHaveLength(0)
       expect(result.geneSymbol).toBeNull()
     })
