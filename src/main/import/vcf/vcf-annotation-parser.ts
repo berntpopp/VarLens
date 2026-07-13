@@ -47,7 +47,7 @@ export function parseAnnotation(
   }
 
   if (header.annotationType === 'ann') {
-    return parseAnn(info, altAllele, ref ?? '')
+    return parseAnn(info, altAllele, originalAltAlleles)
   }
 
   return emptyResult()
@@ -203,7 +203,11 @@ interface AnnTranscript {
   allele: string
 }
 
-function parseAnn(info: Map<string, string>, altAllele: string, ref: string): AnnotationResult {
+function parseAnn(
+  info: Map<string, string>,
+  altAllele: string,
+  originalAltAlleles: string[]
+): AnnotationResult {
   const annRaw = info.get('ANN')
   if (annRaw == null || annRaw === '') return emptyResult()
 
@@ -217,13 +221,12 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
     parsed.push({ parts, allele })
   }
 
-  // Filter by allele. Unlike VEP CSQ, SnpEff's ANN field 0 is always the literal
-  // raw VCF ALT string — confirmed against real SnpEff output in
-  // tests/test-data/vcf/edge-cases.snpeff.vcf.gz and single-sample.snpeff.vcf.gz,
-  // e.g. REF=C ALT=CT,CTT emits ANN=CT|...,CTT|... and REF=T ALT=TTATC emits
-  // ANN=TTATC|..., never a VEP-style "inserted bases only" suffix. So ANN alleles
-  // disambiguate by exact sequence match only. Both VEP heuristics in
-  // matchesAllele must be disabled here:
+  // Ordinary SnpEff ANN field 0 values are the literal raw VCF ALT string.
+  // The ANN standard also defines compound values whose leading component is
+  // the annotated ALT: cancer comparisons use ALT-REFERENCE (e.g. G-C), and
+  // compound annotations use ALT-chr:pos_REF>ALT. Match that leading component
+  // exactly against one original ALT; never apply VEP's deletion/insertion
+  // heuristics here:
   //   - the "-" deletion shortcut (allowDeletionDash) — SnpEff never emits "-",
   //     so a literal "-" block must not cross-match a shorter ALT.
   //   - the insertion-suffix heuristic (allowInsertionSuffix), i.e.
@@ -232,7 +235,11 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
   //     for one split ALT cross-attach to an unrelated, longer split ALT that
   //     happens to share a suffix (e.g. REF=A ALT=AT,T: the T block's allele
   //     "T" equals "AT".substring(1), wrongly attaching it to the AT split).
-  const filtered = parsed.filter((t) => matchesAllele(t.allele, altAllele, ref, false, false))
+  const filtered = parsed.filter((t) => {
+    const leadingAlt = t.allele.split('-', 1)[0]
+    if (leadingAlt !== altAllele) return false
+    return originalAltAlleles.filter((candidate) => candidate === leadingAlt).length === 1
+  })
 
   if (filtered.length === 0) return emptyResult()
 
