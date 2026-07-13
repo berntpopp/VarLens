@@ -14,6 +14,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import type { PassphraseWrap } from '../../../src/main/database/db-key-store'
 import {
+  MAX_RECOVERY_SIDECAR_BYTES,
   readRecoverySidecar,
   recoverySidecarExists,
   recoverySidecarPathFor,
@@ -21,10 +22,10 @@ import {
 } from '../../../src/main/database/recovery-sidecar'
 
 const passWrap: PassphraseWrap = {
-  saltB64: 'c2FsdA==',
-  ivB64: 'aXY=',
-  ctB64: 'Y3Q=',
-  tagB64: 'dGFn'
+  saltB64: Buffer.alloc(16, 1).toString('base64'),
+  ivB64: Buffer.alloc(12, 2).toString('base64'),
+  ctB64: Buffer.from('a'.repeat(64), 'utf8').toString('base64'),
+  tagB64: Buffer.alloc(16, 3).toString('base64')
 }
 
 describe('recovery-sidecar', () => {
@@ -58,6 +59,35 @@ describe('recovery-sidecar', () => {
     writeFileSync(sidecarPath, 'not json', 'utf-8')
 
     expect(() => readRecoverySidecar(dbPath)).not.toThrow()
+    expect(readRecoverySidecar(dbPath)).toBeNull()
+  })
+
+  it('rejects a sidecar larger than the bounded recovery format', () => {
+    writeFileSync(recoverySidecarPathFor(dbPath), 'x'.repeat(MAX_RECOVERY_SIDECAR_BYTES + 1))
+
+    expect(readRecoverySidecar(dbPath)).toBeNull()
+  })
+
+  it.each([
+    ['saltB64', Buffer.alloc(15).toString('base64')],
+    ['ivB64', Buffer.alloc(13).toString('base64')],
+    ['ctB64', Buffer.alloc(63).toString('base64')],
+    ['tagB64', Buffer.alloc(15).toString('base64')],
+    ['saltB64', 'not canonical base64']
+  ] as const)('rejects an invalid decoded %s field', (field, value) => {
+    const invalid = { ...passWrap, [field]: value }
+    writeFileSync(
+      recoverySidecarPathFor(dbPath),
+      JSON.stringify({ version: 1, passWrap: invalid }),
+      'utf-8'
+    )
+
+    expect(readRecoverySidecar(dbPath)).toBeNull()
+  })
+
+  it('rejects unsupported sidecar versions', () => {
+    writeFileSync(recoverySidecarPathFor(dbPath), JSON.stringify({ version: 2, passWrap }), 'utf-8')
+
     expect(readRecoverySidecar(dbPath)).toBeNull()
   })
 

@@ -105,9 +105,13 @@ async function submit(): Promise<void> {
   submitting.value = true
   try {
     const result = await databaseStore.setRecoveryPassphrase(passphrase.value)
-    if (result.success) {
+    if (result.success && result.sidecarWritten !== false) {
       hide()
       emit('recovery-passphrase-set')
+    } else if (result.success) {
+      submitError.value =
+        'The passphrase was updated locally, but writing the portable recovery file failed. ' +
+        'Check the database directory permissions and try again.'
     } else {
       submitError.value = result.error ?? 'Failed to set recovery passphrase'
     }

@@ -29,6 +29,7 @@ import type {
   MigrateToEncryptedResult
 } from '../../../shared/ipc/domains/database'
 import type { DatabaseLifecycleCallbacks } from './database-lifecycle-logic'
+import { removeRecoverySidecar } from '../../database/recovery-sidecar'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -92,6 +93,7 @@ export async function migrateCurrentToEncrypted(
   let dek: string
   let keyId: string
   let recoveryPassphraseSet = false
+  let passphraseOnly = false
 
   if (managed.ok) {
     dek = managed.dek
@@ -113,7 +115,15 @@ export async function migrateCurrentToEncrypted(
     }
     dek = wrapped.dek
     keyId = wrapped.keyId
+    if (!wrapped.sidecarWritten) {
+      keyStore.removeKey(keyId)
+      throw new DatabaseError(
+        'The required recovery sidecar could not be written. The database was not migrated; ' +
+          'check the database directory permissions and try again.'
+      )
+    }
     recoveryPassphraseSet = true
+    passphraseOnly = true
   } else {
     // No keyring AND no passphrase: refuse outright. Never half-migrate.
     throw new DatabaseError(
@@ -128,11 +138,14 @@ export async function migrateCurrentToEncrypted(
     // We minted a key-store entry above but never touched the database file
     // -- roll the entry back so a retry at the same path isn't burned.
     keyStore.removeKey(keyId)
+    if (passphraseOnly) removeRecoverySidecarBestEffort(currentPath)
     throw error
   }
 
+  let migrationCompleted = false
   try {
     const migration = migratePlaintextToEncrypted({ path: currentPath, dek, keyId, keyStore })
+    migrationCompleted = true
 
     if (managed.ok && recoveryPassphrase !== undefined) {
       const setResult = keyStore.setPassphrase(keyId, recoveryPassphrase)
@@ -165,7 +178,7 @@ export async function migrateCurrentToEncrypted(
       success: true,
       backupPath: migration.backupPath,
       recoveryPassphraseSet,
-      info
+      info: { ...info, keyManaged: true }
     }
   } catch (error) {
     // `migratePlaintextToEncrypted` already restored/left `currentPath` as a
@@ -181,12 +194,27 @@ export async function migrateCurrentToEncrypted(
       )
     }
 
+    if (passphraseOnly && !migrationCompleted) {
+      removeRecoverySidecarBestEffort(currentPath)
+    }
+
     if (error instanceof PlaintextMigrationError || error instanceof DatabaseError) {
       throw error
     }
     throw new DatabaseError(
       `Failed to migrate database to encrypted-at-rest: ${errorMessage(error)}`,
       error instanceof Error ? error : undefined
+    )
+  }
+}
+
+function removeRecoverySidecarBestEffort(dbPath: string): void {
+  try {
+    removeRecoverySidecar(dbPath)
+  } catch (error) {
+    mainLogger.warn(
+      `Failed to remove a recovery sidecar while rolling back migration: ${errorMessage(error)}`,
+      'plaintext-migration'
     )
   }
 }

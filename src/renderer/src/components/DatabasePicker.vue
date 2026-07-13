@@ -187,7 +187,7 @@
       <!-- Change password / set recovery passphrase (only for encrypted databases) -->
       <template v-if="databaseStore.isEncrypted">
         <v-divider />
-        <v-list-item @click="handleSetRecoveryPassphrase">
+        <v-list-item v-if="databaseStore.keyManaged" @click="handleSetRecoveryPassphrase">
           <template #prepend>
             <v-icon :icon="mdiKeyPlus" />
           </template>

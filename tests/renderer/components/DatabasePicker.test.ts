@@ -195,7 +195,7 @@ describe('DatabasePicker', () => {
       await openPickerMenu()
 
       const menuText = document.body.textContent ?? ''
-      expect(menuText).toContain('Set Recovery Passphrase...')
+      expect(menuText).not.toContain('Set Recovery Passphrase...')
       expect(menuText).toContain('Change Password...')
     })
   })

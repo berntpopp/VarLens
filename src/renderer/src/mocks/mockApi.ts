@@ -274,7 +274,6 @@ export const mockApi: WindowAPI = {
     onProgress: () => () => {},
     cancel: async () => {}
   },
-
   system: {
     getVersion: async () => ({ app: '0.6.0-mock', electron: 'browser-mode' }),
     getUserDataPath: async () => '/mock/user/data',
@@ -283,12 +282,10 @@ export const mockApi: WindowAPI = {
     getWorkerThreads: async () => 0,
     getLogFilePath: async () => '/mock/logs/main.log'
   },
-
   export: {
     variants: async () => ({ success: true, filePath: '/mock/export.xlsx' }),
     cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' })
   },
-
   shell: {
     openExternal: async (url) => {
       window.open(url, '_blank')
@@ -310,6 +307,9 @@ export const mockApi: WindowAPI = {
       info: { path: '/mock/new-database.db', name: 'New Mock Database', encrypted: false }
     }),
     rekey: async () => ({ success: true }),
+    migrateToEncrypted: async () => ({ success: true }),
+    deletePlaintextBackup: async () => ({ success: true }),
+    setRecoveryPassphrase: async () => ({ success: true, recoveryPassphraseSet: true }),
     info: async () => ({ path: '/mock/database.db', name: 'Mock Database', encrypted: false }),
     capabilities: async () => MOCK_SQLITE_CAPABILITIES,
     postgresDiagnostics: async () => ({ ok: false, schema: '' }),

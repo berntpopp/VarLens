@@ -35,11 +35,14 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID, scryptSync } from 'crypto'
+import { randomBytes, randomUUID } from 'crypto'
 import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
 import { mainLogger } from '../services/MainLogger'
 import { writeRecoverySidecar } from './recovery-sidecar'
 import { fsyncContainingDirectory, fsyncFile } from './fs-durability'
+import { unwrapPassphrase, wrapPassphrase, type PassphraseWrap } from './db-key-passphrase'
+
+export type { PassphraseWrap } from './db-key-passphrase'
 
 /** Default registry filename, intended to live under Electron's `userData` dir. */
 export const DEFAULT_DB_KEY_REGISTRY_FILENAME = 'varlens-db-keys.json'
@@ -50,16 +53,9 @@ export const DEFAULT_DB_KEY_REGISTRY_FILENAME = 'varlens-db-keys.json'
  */
 export interface SafeStorageLike {
   isEncryptionAvailable(): boolean
+  getSelectedStorageBackend?(): string
   encryptString(plainText: string): Buffer
   decryptString(encrypted: Buffer): string
-}
-
-/** AES-256-GCM passphrase wrap of a DEK. All fields are base64-encoded. */
-export interface PassphraseWrap {
-  saltB64: string
-  ivB64: string
-  ctB64: string
-  tagB64: string
 }
 
 /** One registry entry: where the DB lives and how its DEK is wrapped. */
@@ -110,11 +106,6 @@ export type SetPassphraseResult =
 export type EnrollRecoveredKeyResult =
   { ok: true; keyId: string } | { ok: false; reason: 'path-already-keyed' }
 
-/** scrypt cost parameters. N=16384, r=8, p=1 derives ~16 MiB, under Node's default 32 MiB maxmem. */
-const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1 } as const
-const SCRYPT_KEY_LENGTH = 32
-const GCM_IV_LENGTH = 12
-const PASSPHRASE_SALT_LENGTH = 16
 const DEK_BYTE_LENGTH = 32
 
 function errorMessage(e: unknown): string {
@@ -149,40 +140,6 @@ function generateDek(): string {
   return dek
 }
 
-function wrapPassphrase(dek: string, passphrase: string): PassphraseWrap {
-  const salt = randomBytes(PASSPHRASE_SALT_LENGTH)
-  const iv = randomBytes(GCM_IV_LENGTH)
-  const derivedKey = scryptSync(passphrase, salt, SCRYPT_KEY_LENGTH, SCRYPT_PARAMS)
-  const cipher = createCipheriv('aes-256-gcm', derivedKey, iv)
-  const ct = Buffer.concat([cipher.update(dek, 'utf8'), cipher.final()])
-  const tag = cipher.getAuthTag()
-  return {
-    saltB64: salt.toString('base64'),
-    ivB64: iv.toString('base64'),
-    ctB64: ct.toString('base64'),
-    tagB64: tag.toString('base64')
-  }
-}
-
-/** Returns the unwrapped DEK, or null on a wrong passphrase (GCM auth failure) or malformed wrap. */
-function unwrapPassphrase(wrap: PassphraseWrap, passphrase: string): string | null {
-  try {
-    const salt = Buffer.from(wrap.saltB64, 'base64')
-    const iv = Buffer.from(wrap.ivB64, 'base64')
-    const ct = Buffer.from(wrap.ctB64, 'base64')
-    const tag = Buffer.from(wrap.tagB64, 'base64')
-    const derivedKey = scryptSync(passphrase, salt, SCRYPT_KEY_LENGTH, SCRYPT_PARAMS)
-    const decipher = createDecipheriv('aes-256-gcm', derivedKey, iv)
-    decipher.setAuthTag(tag)
-    const pt = Buffer.concat([decipher.update(ct), decipher.final()])
-    return pt.toString('utf8')
-  } catch {
-    // GCM auth failure (wrong passphrase) or malformed wrap material.
-    // Never surface crypto internals — the caller only needs "it failed".
-    return null
-  }
-}
-
 /**
  * Envelope-encryption key-lifecycle store for SQLCipher DEKs.
  *
@@ -214,7 +171,7 @@ export class DbKeyStore {
       return { ok: false, reason: 'path-already-keyed' }
     }
 
-    if (!this.safeStorage.isEncryptionAvailable()) {
+    if (!this.isSecureStorageAvailable()) {
       return { ok: false, reason: 'safe-storage-unavailable' }
     }
 
@@ -348,6 +305,27 @@ export class DbKeyStore {
     return { ok: true, sidecarWritten }
   }
 
+  /** Replace a passphrase wrap using the caller's already-verified session DEK. */
+  setPassphraseForVerifiedDek(
+    keyId: string,
+    verifiedDek: string,
+    passphrase: string
+  ): SetPassphraseResult {
+    const registry = this.load()
+    const entry = registry.keys[keyId]
+    if (!entry) {
+      return { ok: false, reason: 'not-found' }
+    }
+    if (!/^[0-9a-f]{64}$/.test(verifiedDek)) {
+      return { ok: false, reason: 'cannot-resolve-dek' }
+    }
+
+    entry.passWrap = wrapPassphrase(verifiedDek, passphrase)
+    this.save(registry)
+    const sidecarWritten = this.tryWriteRecoverySidecar(entry.path, entry.passWrap)
+    return { ok: true, sidecarWritten }
+  }
+
   /**
    * Direct `pathIndex` lookup, with no attempt to resolve/unwrap the DEK.
    * Consumed by the (separately implemented) `setRecoveryPassphrase` IPC
@@ -403,7 +381,7 @@ export class DbKeyStore {
     const keyId = randomUUID()
     const entry: KeyEntry = { path: dbPath, passWrap }
 
-    if (this.safeStorage.isEncryptionAvailable()) {
+    if (this.isSecureStorageAvailable()) {
       try {
         entry.safeWrap = this.safeStorage.encryptString(dek).toString('base64')
       } catch (e) {
@@ -478,7 +456,7 @@ export class DbKeyStore {
 
   /** Attempt to unwrap `entry.safeWrap` via the injected safeStorage; null on any failure. */
   private tryUnwrapWithSafeStorage(entry: KeyEntry): string | null {
-    if (entry.safeWrap === undefined || !this.safeStorage.isEncryptionAvailable()) {
+    if (entry.safeWrap === undefined || !this.isSecureStorageAvailable()) {
       return null
     }
     try {
@@ -487,6 +465,22 @@ export class DbKeyStore {
     } catch (e) {
       mainLogger.warn(`safeStorage.decryptString failed: ${errorMessage(e)}`, 'DbKeyStore')
       return null
+    }
+  }
+
+  /** Electron's Linux `basic_text` backend is obfuscation, not secure storage. */
+  private isSecureStorageAvailable(): boolean {
+    try {
+      return (
+        this.safeStorage.isEncryptionAvailable() &&
+        this.safeStorage.getSelectedStorageBackend?.() !== 'basic_text'
+      )
+    } catch (e) {
+      mainLogger.warn(
+        `Failed to determine secure storage availability: ${errorMessage(e)}`,
+        'DbKeyStore'
+      )
+      return false
     }
   }
 
@@ -576,7 +570,7 @@ export type DbKeyStoreLike = Pick<
  * need to implement methods they never call.
  */
 export type DbKeyStoreWithPassphraseLike = DbKeyStoreLike &
-  Pick<DbKeyStore, 'setPassphrase' | 'getKeyIdForPath'>
+  Pick<DbKeyStore, 'setPassphrase' | 'setPassphraseForVerifiedDek' | 'getKeyIdForPath'>
 
 /**
  * Consumed by `openDatabase`'s recovery-sidecar flow: transparent resolve,

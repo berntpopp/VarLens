@@ -3,13 +3,20 @@
  */
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { resolve, join } from 'path'
 import * as logic from '../../../src/main/ipc/handlers/database-logic'
-import { writeRecoverySidecar } from '../../../src/main/database/recovery-sidecar'
+import {
+  recoverySidecarPathFor,
+  writeRecoverySidecar
+} from '../../../src/main/database/recovery-sidecar'
 import { DatabaseError, WrongPasswordError } from '../../../src/main/database/errors'
-import type { PassphraseWrap } from '../../../src/main/database/db-key-store'
+import {
+  DbKeyStore,
+  type PassphraseWrap,
+  type SafeStorageLike
+} from '../../../src/main/database/db-key-store'
 import type {
   PostgresConnectionProfileInput,
   PostgresConnectionProfilePublic
@@ -281,6 +288,7 @@ const unusedKeyStore = {
   enrollRecoveredKey: vi.fn(),
   updatePath: vi.fn(),
   removeKey: vi.fn(),
+  setPassphraseForVerifiedDek: vi.fn(),
   getKeyIdForPath: vi.fn().mockReturnValue(null)
 }
 
@@ -373,10 +381,10 @@ describe('database lifecycle logic', () => {
     let tmpDir: string
     let dbPath: string
     const dummyPassWrap: PassphraseWrap = {
-      saltB64: 'salt',
-      ivB64: 'iv',
-      ctB64: 'ct',
-      tagB64: 'tag'
+      saltB64: Buffer.alloc(16, 1).toString('base64'),
+      ivB64: Buffer.alloc(12, 2).toString('base64'),
+      ctB64: Buffer.from('a'.repeat(64)).toString('base64'),
+      tagB64: Buffer.alloc(16, 3).toString('base64')
     }
 
     beforeEach(() => {
@@ -484,6 +492,38 @@ describe('database lifecycle logic', () => {
       expect(keyStore.updatePath).toHaveBeenCalledWith('existing-key-id', dbPath)
       expect(keyStore.enrollRecoveredKey).not.toHaveBeenCalled()
       expect(manager.switchDatabase).toHaveBeenCalledWith(dbPath, 'recovered-dek')
+    })
+
+    it('does not repoint or enroll a sidecar-recovered key until the database accepts the DEK', async () => {
+      writeRecoverySidecar(dbPath, dummyPassWrap)
+      const manager = {
+        openDetectEncryption: vi.fn().mockReturnValue({ needsPassword: true }),
+        switchDatabase: vi.fn().mockRejectedValue(new WrongPasswordError())
+      }
+      const keyStore = {
+        ...unusedKeyStore,
+        resolveKeyWithPassphrase: vi.fn().mockReturnValue({ ok: false, reason: 'not-found' }),
+        resolveKeyWithPassphraseFromSidecar: vi
+          .fn()
+          .mockReturnValue({ ok: true, dek: 'unverified-dek' }),
+        findManagedKeyIdForDek: vi.fn().mockReturnValue('existing-key-id'),
+        updatePath: vi.fn(),
+        enrollRecoveredKey: vi.fn()
+      }
+
+      await expect(
+        logic.openDatabase(
+          { path: dbPath, password: 'passphrase-for-a-mismatched-sidecar' },
+          () => ({}) as never,
+          () => manager as never,
+          { triggerStartupRebuild: vi.fn() },
+          keyStore
+        )
+      ).resolves.toEqual({ success: false, error: 'WRONG_PASSWORD' })
+
+      expect(keyStore.findManagedKeyIdForDek).not.toHaveBeenCalled()
+      expect(keyStore.updatePath).not.toHaveBeenCalled()
+      expect(keyStore.enrollRecoveredKey).not.toHaveBeenCalled()
     })
 
     it('genuinely new machine: a sidecar-recovered DEK with no matching local entry is enrolled fresh via enrollRecoveredKey', async () => {
@@ -746,7 +786,7 @@ describe('database lifecycle logic', () => {
       ...unusedKeyStore,
       wrapNewDekWithPassphrase: vi
         .fn()
-        .mockReturnValue({ ok: true, keyId: 'k1', dek: 'wrapped-dek' })
+        .mockReturnValue({ ok: true, keyId: 'k1', dek: 'wrapped-dek', sidecarWritten: true })
     }
 
     await expect(
@@ -762,6 +802,30 @@ describe('database lifecycle logic', () => {
       'my passphrase'
     )
     expect(manager.createDatabase).toHaveBeenCalledWith('/tmp/varlens.db', 'wrapped-dek')
+  })
+
+  it('fails passphrase-only creation closed when the portable recovery sidecar was not written', async () => {
+    const manager = { createDatabase: vi.fn(), getCurrentInfo: vi.fn() }
+    const keyStore = {
+      ...unusedKeyStore,
+      wrapNewDekWithPassphrase: vi.fn().mockReturnValue({
+        ok: true,
+        keyId: 'k1',
+        dek: 'wrapped-dek',
+        sidecarWritten: false
+      }),
+      removeKey: vi.fn()
+    }
+
+    const result = await logic.createDatabase(
+      { path: '/tmp/varlens.db', setupPassphrase: 'my passphrase' },
+      () => manager as never,
+      keyStore
+    )
+
+    expect(result).toMatchObject({ success: false, error: expect.stringMatching(/recovery/i) })
+    expect(keyStore.removeKey).toHaveBeenCalledWith('k1')
+    expect(manager.createDatabase).not.toHaveBeenCalled()
   })
 
   it('rolls back the managed key-store entry when createDatabase throws after minting it', async () => {
@@ -791,7 +855,7 @@ describe('database lifecycle logic', () => {
       ...unusedKeyStore,
       wrapNewDekWithPassphrase: vi
         .fn()
-        .mockReturnValue({ ok: true, keyId: 'k1', dek: 'wrapped-dek' }),
+        .mockReturnValue({ ok: true, keyId: 'k1', dek: 'wrapped-dek', sidecarWritten: true }),
       removeKey: vi.fn()
     }
 
@@ -858,7 +922,7 @@ describe('database lifecycle logic', () => {
   describe('setRecoveryPassphrase', () => {
     it('throws a typed DatabaseError when no database is currently open', () => {
       const manager = { getCurrentPath: vi.fn().mockReturnValue(null) }
-      const keyStore = { setPassphrase: vi.fn(), getKeyIdForPath: vi.fn() }
+      const keyStore = { setPassphraseForVerifiedDek: vi.fn(), getKeyIdForPath: vi.fn() }
 
       expect(() =>
         logic.setRecoveryPassphrase('my recovery passphrase', () => manager as never, keyStore)
@@ -868,13 +932,13 @@ describe('database lifecycle logic', () => {
       ).toThrow('No database is currently open.')
 
       expect(keyStore.getKeyIdForPath).not.toHaveBeenCalled()
-      expect(keyStore.setPassphrase).not.toHaveBeenCalled()
+      expect(keyStore.setPassphraseForVerifiedDek).not.toHaveBeenCalled()
     })
 
     it('throws a distinct typed DatabaseError when the open database has no managed key', () => {
       const manager = { getCurrentPath: vi.fn().mockReturnValue('/tmp/explicit-password.db') }
       const keyStore = {
-        setPassphrase: vi.fn(),
+        setPassphraseForVerifiedDek: vi.fn(),
         getKeyIdForPath: vi.fn().mockReturnValue(null)
       }
 
@@ -888,32 +952,42 @@ describe('database lifecycle logic', () => {
       expect(thrown).toBeInstanceOf(DatabaseError)
       expect((thrown as Error).message).not.toBe('No database is currently open.')
       expect((thrown as Error).message).toMatch(/no managed encryption key/i)
-      expect(keyStore.setPassphrase).not.toHaveBeenCalled()
+      expect(keyStore.setPassphraseForVerifiedDek).not.toHaveBeenCalled()
     })
 
     it('throws a typed DatabaseError when the key-store cannot resolve the DEK to wrap', () => {
-      const manager = { getCurrentPath: vi.fn().mockReturnValue('/tmp/varlens.db') }
+      const manager = {
+        getCurrentPath: vi.fn().mockReturnValue('/tmp/varlens.db'),
+        getCurrent: vi.fn().mockReturnValue({ getEncryptionKey: () => 'a'.repeat(64) })
+      }
       const keyStore = {
         getKeyIdForPath: vi.fn().mockReturnValue('key-1'),
-        setPassphrase: vi.fn().mockReturnValue({ ok: false, reason: 'cannot-resolve-dek' })
+        setPassphraseForVerifiedDek: vi
+          .fn()
+          .mockReturnValue({ ok: false, reason: 'cannot-resolve-dek' })
       }
 
       expect(() =>
         logic.setRecoveryPassphrase('my recovery passphrase', () => manager as never, keyStore)
       ).toThrow(DatabaseError)
-      expect(keyStore.setPassphrase).toHaveBeenCalledWith('key-1', 'my recovery passphrase')
+      expect(keyStore.setPassphraseForVerifiedDek).toHaveBeenCalledWith(
+        'key-1',
+        'a'.repeat(64),
+        'my recovery passphrase'
+      )
     })
 
     it('succeeds non-destructively: calls only keyStore.setPassphrase, never a rekey/database-write path', () => {
       const manager = {
         getCurrentPath: vi.fn().mockReturnValue('/tmp/varlens.db'),
+        getCurrent: vi.fn().mockReturnValue({ getEncryptionKey: () => 'a'.repeat(64) }),
         rekey: vi.fn(),
         createDatabase: vi.fn(),
         switchDatabase: vi.fn()
       }
       const keyStore = {
         getKeyIdForPath: vi.fn().mockReturnValue('key-1'),
-        setPassphrase: vi.fn().mockReturnValue({ ok: true, sidecarWritten: true })
+        setPassphraseForVerifiedDek: vi.fn().mockReturnValue({ ok: true, sidecarWritten: true })
       }
 
       const result = logic.setRecoveryPassphrase(
@@ -928,17 +1002,24 @@ describe('database lifecycle logic', () => {
         sidecarWritten: true
       })
       expect(keyStore.getKeyIdForPath).toHaveBeenCalledWith('/tmp/varlens.db')
-      expect(keyStore.setPassphrase).toHaveBeenCalledWith('key-1', 'my recovery passphrase')
+      expect(keyStore.setPassphraseForVerifiedDek).toHaveBeenCalledWith(
+        'key-1',
+        'a'.repeat(64),
+        'my recovery passphrase'
+      )
       expect(manager.rekey).not.toHaveBeenCalled()
       expect(manager.createDatabase).not.toHaveBeenCalled()
       expect(manager.switchDatabase).not.toHaveBeenCalled()
     })
 
     it('still reports success when the passphrase wrap succeeds but the sidecar write fails', () => {
-      const manager = { getCurrentPath: vi.fn().mockReturnValue('/tmp/varlens.db') }
+      const manager = {
+        getCurrentPath: vi.fn().mockReturnValue('/tmp/varlens.db'),
+        getCurrent: vi.fn().mockReturnValue({ getEncryptionKey: () => 'a'.repeat(64) })
+      }
       const keyStore = {
         getKeyIdForPath: vi.fn().mockReturnValue('key-1'),
-        setPassphrase: vi.fn().mockReturnValue({ ok: true, sidecarWritten: false })
+        setPassphraseForVerifiedDek: vi.fn().mockReturnValue({ ok: true, sidecarWritten: false })
       }
 
       const result = logic.setRecoveryPassphrase(
@@ -953,6 +1034,41 @@ describe('database lifecycle logic', () => {
         sidecarWritten: false
       })
     })
+  })
+})
+
+describe('managed database deletion', () => {
+  it('removes the registry entry and recovery sidecar, permitting the path to be recreated', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'varlens-delete-managed-'))
+    const dbPath = join(tmpDir, 'case.db')
+    const safeStorage: SafeStorageLike = {
+      isEncryptionAvailable: () => true,
+      encryptString: (value) => Buffer.from(`SS:${value}`),
+      decryptString: (value) => value.toString().replace(/^SS:/, '')
+    }
+    const keyStore = new DbKeyStore({ registryPath: join(tmpDir, 'keys.json'), safeStorage })
+
+    try {
+      writeFileSync(dbPath, 'database bytes')
+      const created = keyStore.createManagedKey(dbPath)
+      expect(created.ok).toBe(true)
+      if (!created.ok) throw new Error('expected managed key')
+      expect(keyStore.setPassphrase(created.keyId, 'recovery').ok).toBe(true)
+
+      const manager = {
+        getRecentDatabases: () => [{ path: dbPath }],
+        getCurrentPath: () => null,
+        removeRecentDatabase: vi.fn()
+      }
+      await logic.deleteDbFile(dbPath, () => manager as never, keyStore)
+
+      expect(existsSync(dbPath)).toBe(false)
+      expect(existsSync(recoverySidecarPathFor(dbPath))).toBe(false)
+      expect(keyStore.getKeyIdForPath(dbPath)).toBeNull()
+      expect(keyStore.createManagedKey(dbPath).ok).toBe(true)
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 })
 

@@ -186,4 +186,45 @@ describe('recovery sidecar portability (openDatabase end-to-end)', () => {
     expect(managerB.getCurrentInfo()).toBeNull()
     expect(keyStoreB.getKeyIdForPath(newPath)).toBeNull()
   })
+
+  it('a valid but mismatched copied sidecar cannot mutate the registry before SQLite rejects its DEK', async () => {
+    const dir = makeTmpDir('varlens-recovery-mismatch-')
+    const sourcePath = join(dir, 'source.db')
+    const targetPath = join(dir, 'target.db')
+    const registryPath = join(dir, 'keys.json')
+    const keyStore = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
+    const sourceManager = makeManager(dir, 'source-settings')
+    const targetManager = makeManager(dir, 'target-settings')
+
+    await createDatabase({ path: sourcePath }, () => sourceManager, keyStore)
+    const sourceKeyId = keyStore.getKeyIdForPath(sourcePath)
+    expect(sourceKeyId).not.toBeNull()
+    if (sourceKeyId === null) throw new Error('expected source key')
+    expect(keyStore.setPassphrase(sourceKeyId, PASSPHRASE)).toMatchObject({ ok: true })
+    await sourceManager.close()
+
+    await createDatabase(
+      { path: targetPath, password: 'target-raw-sqlcipher-key' },
+      () => targetManager,
+      keyStore
+    )
+    targetManager.getCurrent().database.exec('CREATE TABLE target_marker (id INTEGER PRIMARY KEY)')
+    await targetManager.close()
+
+    copyFileSync(recoverySidecarPathFor(sourcePath), recoverySidecarPathFor(targetPath))
+    const registryBefore = readFileSync(registryPath)
+
+    const opened = await openDatabase(
+      { path: targetPath, password: PASSPHRASE },
+      () => targetManager.getCurrent(),
+      () => targetManager,
+      noopCallbacks,
+      keyStore
+    )
+
+    expect(opened).toEqual({ success: false, error: 'WRONG_PASSWORD' })
+    expect(readFileSync(registryPath)).toEqual(registryBefore)
+    expect(keyStore.getKeyIdForPath(sourcePath)).toBe(sourceKeyId)
+    expect(keyStore.getKeyIdForPath(targetPath)).toBeNull()
+  })
 })

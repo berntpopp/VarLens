@@ -14,7 +14,15 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync, truncateSync } from 'fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  readdirSync,
+  writeFileSync,
+  truncateSync
+} from 'fs'
 import { tmpdir } from 'os'
 import { join, basename, dirname } from 'path'
 import Database from 'better-sqlite3-multiple-ciphers'
@@ -32,6 +40,7 @@ import {
 } from '../../../src/main/ipc/handlers/database-migration-logic'
 import type { DatabaseLifecycleCallbacks } from '../../../src/main/ipc/handlers/database-lifecycle-logic'
 import { DatabaseError } from '../../../src/main/database/errors'
+import { recoverySidecarPathFor } from '../../../src/main/database/recovery-sidecar'
 
 /** Reversible fake "encryption" so round-trips work in tests (same fake used across the I1/I2a suites). */
 function fakeSafeStorage(available = true): SafeStorageLike {
@@ -480,6 +489,29 @@ describe('migrateCurrentToEncrypted (consent + orchestration)', () => {
     expect(rows).toEqual([{ label: 'needs-migration' }])
   })
 
+  it('no-keyring migration fails closed when the required recovery sidecar cannot be written', async () => {
+    const keyStore = new DbKeyStore({
+      registryPath: join(tmpDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(false)
+    })
+    mkdirSync(recoverySidecarPathFor(dbPath))
+
+    await expect(
+      migrateCurrentToEncrypted(
+        { consent: true, recoveryPassphrase: 'required portable recovery' },
+        () => manager,
+        keyStore,
+        noopCallbacks
+      )
+    ).rejects.toThrow(/recovery sidecar/i)
+
+    expect(manager.getCurrentInfo()?.encrypted).toBe(false)
+    expect(keyStore.getKeyIdForPath(dbPath)).toBeNull()
+    expect(manager.getCurrent().database.prepare('SELECT label FROM marker').pluck().all()).toEqual(
+      ['needs-migration']
+    )
+  })
+
   it('managed-key migration with a recovery passphrase sets durable recovery, and the app session stays usable', async () => {
     const keyStore = new DbKeyStore({
       registryPath: join(tmpDir, 'keys.json'),
@@ -496,6 +528,7 @@ describe('migrateCurrentToEncrypted (consent + orchestration)', () => {
     expect(result.success).toBe(true)
     expect(result.recoveryPassphraseSet).toBe(true)
     expect(result.info?.encrypted).toBe(true)
+    expect(result.info?.keyManaged).toBe(true)
     expect(existsSync(result.backupPath!)).toBe(true)
 
     // The app's live session is now the encrypted DB, with the original data intact.

@@ -19,7 +19,11 @@ import type {
   DbKeyStoreWithRecoveryLike,
   PassphraseWrap
 } from '../../database/db-key-store'
-import { readRecoverySidecar, recoverySidecarExists } from '../../database/recovery-sidecar'
+import {
+  readRecoverySidecar,
+  recoverySidecarExists,
+  removeRecoverySidecar
+} from '../../database/recovery-sidecar'
 import type {
   DatabaseInfo,
   DatabaseOpenResult,
@@ -113,9 +117,9 @@ function enrollOrRepointSidecarRecovery(
  * Resolve a supplied password/passphrase attempt against, in order: the
  * key-store's own passphrase wrap for this exact path (unchanged today's
  * behavior), then a portable recovery sidecar next to the database file
- * (self-healing the registry on success -- see
- * `enrollOrRepointSidecarRecovery`), then the legacy fallback of treating the
- * supplied value as a raw SQLCipher key.
+ * (returning a pending self-heal that `openDatabase` applies only after
+ * SQLite accepts the DEK), then the legacy fallback of treating the supplied
+ * value as a raw SQLCipher key.
  *
  * A sidecar unwrap failure (wrong passphrase against a genuine sidecar, OR a
  * STALE sidecar left behind by a legacy `rekeyDatabase` call that changed
@@ -126,14 +130,19 @@ function enrollOrRepointSidecarRecovery(
  * `WrongPasswordError`, which is what ultimately surfaces `WRONG_PASSWORD`
  * to the caller -- this function itself never fails closed.
  */
+interface ResolvedPasswordAttempt {
+  effectiveKey: string
+  pendingSidecarRecovery?: { dek: string; passWrap: PassphraseWrap }
+}
+
 function resolvePasswordAttempt(
   vPath: string,
   vPassword: string,
   keyStore: DbKeyStoreWithRecoveryLike
-): string {
+): ResolvedPasswordAttempt {
   const viaRegistry = keyStore.resolveKeyWithPassphrase(vPath, vPassword)
   if (viaRegistry.ok) {
-    return viaRegistry.dek
+    return { effectiveKey: viaRegistry.dek }
   }
 
   if (recoverySidecarExists(vPath)) {
@@ -141,8 +150,10 @@ function resolvePasswordAttempt(
     if (sidecar !== null) {
       const viaSidecar = keyStore.resolveKeyWithPassphraseFromSidecar(sidecar.passWrap, vPassword)
       if (viaSidecar.ok) {
-        enrollOrRepointSidecarRecovery(vPath, viaSidecar.dek, sidecar.passWrap, keyStore)
-        return viaSidecar.dek
+        return {
+          effectiveKey: viaSidecar.dek,
+          pendingSidecarRecovery: { dek: viaSidecar.dek, passWrap: sidecar.passWrap }
+        }
       }
       // Sidecar unwrap failed -- fall through to the raw-key fallback below
       // rather than failing closed. See the doc comment above.
@@ -153,7 +164,7 @@ function resolvePasswordAttempt(
   // legacy fallback -- treat the supplied value as a raw SQLCipher key,
   // unchanged. A wrong value here surfaces as WRONG_PASSWORD from the actual
   // `switchDatabase` attempt, not from this function.
-  return vPassword
+  return { effectiveKey: vPassword }
 }
 
 /**
@@ -185,6 +196,7 @@ export async function openDatabase(
   const { needsPassword } = manager.openDetectEncryption(vPath)
 
   let effectiveKey = vPassword
+  let pendingSidecarRecovery: ResolvedPasswordAttempt['pendingSidecarRecovery']
 
   if (needsPassword) {
     if (vPassword === undefined || vPassword === '') {
@@ -194,7 +206,9 @@ export async function openDatabase(
       }
       effectiveKey = resolved.dek
     } else {
-      effectiveKey = resolvePasswordAttempt(vPath, vPassword, keyStore)
+      const resolved = resolvePasswordAttempt(vPath, vPassword, keyStore)
+      effectiveKey = resolved.effectiveKey
+      pendingSidecarRecovery = resolved.pendingSidecarRecovery
     }
   }
 
@@ -202,6 +216,15 @@ export async function openDatabase(
   try {
     await manager.switchDatabase(vPath, effectiveKey)
     mainLogger.info(`Switched to database: ${vPath}`, 'database')
+
+    if (pendingSidecarRecovery !== undefined) {
+      enrollOrRepointSidecarRecovery(
+        vPath,
+        pendingSidecarRecovery.dek,
+        pendingSidecarRecovery.passWrap,
+        keyStore
+      )
+    }
 
     // Trigger async cohort summary rebuild if needed (non-blocking)
     try {
@@ -227,6 +250,19 @@ export async function openDatabase(
 /** Generic "don't silently create an unencrypted DB" failure for a key-store conflict. */
 const PATH_ALREADY_KEYED_ERROR =
   'This database path already has a registered encryption key. Choose a different location.'
+const RECOVERY_SIDECAR_REQUIRED_ERROR =
+  'The portable recovery file could not be written. No database was created; check the destination permissions and try again.'
+
+function removeRecoverySidecarBestEffort(dbPath: string): void {
+  try {
+    removeRecoverySidecar(dbPath)
+  } catch (error) {
+    mainLogger.warn(
+      `Failed to remove a recovery sidecar while rolling back database creation: ${error instanceof Error ? error.message : String(error)}`,
+      'database'
+    )
+  }
+}
 
 /**
  * Create a new database at the specified path.
@@ -259,6 +295,10 @@ export async function createDatabase(
     if (!wrapped.ok) {
       return { success: false, error: PATH_ALREADY_KEYED_ERROR }
     }
+    if (!wrapped.sidecarWritten) {
+      keyStore.removeKey(wrapped.keyId)
+      return { success: false, error: RECOVERY_SIDECAR_REQUIRED_ERROR }
+    }
     try {
       await manager.createDatabase(params.path, wrapped.dek)
     } catch (error) {
@@ -267,6 +307,7 @@ export async function createDatabase(
       // the path isn't permanently burned -- a retry must be able to mint a
       // fresh key for the same path instead of hitting `path-already-keyed`.
       keyStore.removeKey(wrapped.keyId)
+      removeRecoverySidecarBestEffort(params.path)
       throw error
     }
     const info = withKeyManaged(manager.getCurrentInfo(), true)
@@ -335,7 +376,7 @@ export function rekeyDatabase(
 /**
  * Set (or replace) a recovery passphrase on the CURRENTLY OPEN database's
  * managed key. Non-destructive: envelope-wraps the SAME DEK via
- * `keyStore.setPassphrase` -- unlike `rekeyDatabase` (a `PRAGMA rekey` that
+ * `keyStore.setPassphraseForVerifiedDek` -- unlike `rekeyDatabase` (a `PRAGMA rekey` that
  * changes the live SQLCipher key), this never touches the database file or
  * its actual encryption key. Also writes the escrow recovery sidecar next to
  * the database (see `db-key-store.ts`'s `setPassphrase`).
@@ -350,7 +391,7 @@ export function rekeyDatabase(
 export function setRecoveryPassphrase(
   passphrase: string,
   getDbManager: () => DatabaseManager,
-  keyStore: Pick<DbKeyStoreWithPassphraseLike, 'setPassphrase' | 'getKeyIdForPath'>
+  keyStore: Pick<DbKeyStoreWithPassphraseLike, 'setPassphraseForVerifiedDek' | 'getKeyIdForPath'>
 ): SetRecoveryPassphraseResult {
   const manager = getDbManager()
   const currentPath = manager.getCurrentPath()
@@ -366,13 +407,19 @@ export function setRecoveryPassphrase(
     )
   }
 
-  const result = keyStore.setPassphrase(keyId, passphrase)
+  const verifiedDek = manager.getCurrent().getEncryptionKey()
+  if (verifiedDek === undefined || verifiedDek === '') {
+    throw new DatabaseError(
+      'The current database session does not have a verified managed encryption key.'
+    )
+  }
+
+  const result = keyStore.setPassphraseForVerifiedDek(keyId, verifiedDek, passphrase)
   if (!result.ok) {
     if (result.reason === 'cannot-resolve-dek') {
       throw new DatabaseError(
-        'Could not unlock the managed encryption key on this machine right now, so a recovery ' +
-          "passphrase could not be set. Check that this system's secure key storage " +
-          '(keyring) is available and try again.'
+        'The verified encryption key from the current database session was not valid, so a ' +
+          'recovery passphrase could not be set.'
       )
     }
     throw new DatabaseError('The managed encryption key for this database could not be found.')

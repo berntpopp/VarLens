@@ -204,4 +204,57 @@ describe('setRecoveryPassphrase (real DB, non-destructive DEK proof)', () => {
       /no managed encryption key/i
     )
   })
+
+  it('rotates a passphrase-only key using the verified DEK from the current open session', async () => {
+    await manager.close()
+    rmSync(tmpDir, { recursive: true, force: true })
+
+    tmpDir = mkdtempSync(join(tmpdir(), 'varlens-set-recovery-passphrase-only-'))
+    dbPath = join(tmpDir, 'case.db')
+    manager = new DatabaseManager(new RecentDatabasesService(join(tmpDir, 'settings.json')))
+    keyStore = new DbKeyStore({
+      registryPath: join(tmpDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(false)
+    })
+
+    const created = await createDatabase(
+      { path: dbPath, setupPassphrase: 'old recovery passphrase' },
+      () => manager,
+      keyStore
+    )
+    expect(created.success).toBe(true)
+
+    const result = setRecoveryPassphrase('new recovery passphrase', () => manager, keyStore)
+    expect(result).toEqual({ success: true, recoveryPassphraseSet: true, sidecarWritten: true })
+
+    await manager.close()
+    const freshStore = new DbKeyStore({
+      registryPath: join(tmpDir, 'fresh-keys.json'),
+      safeStorage: fakeSafeStorage(false)
+    })
+    const reopened = makeManager('settings-reopened')
+    await expect(
+      openDatabase(
+        { path: dbPath, password: 'new recovery passphrase' },
+        () => reopened.getCurrent(),
+        () => reopened,
+        noopCallbacks,
+        freshStore
+      )
+    ).resolves.toMatchObject({ success: true })
+
+    const oldPassphraseManager = makeManager('settings-old')
+    await expect(
+      openDatabase(
+        { path: dbPath, password: 'old recovery passphrase' },
+        () => oldPassphraseManager.getCurrent(),
+        () => oldPassphraseManager,
+        noopCallbacks,
+        new DbKeyStore({
+          registryPath: join(tmpDir, 'old-keys.json'),
+          safeStorage: fakeSafeStorage(false)
+        })
+      )
+    ).resolves.toEqual({ success: false, error: 'WRONG_PASSWORD' })
+  })
 })

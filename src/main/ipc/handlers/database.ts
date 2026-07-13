@@ -524,7 +524,7 @@ export function registerDatabaseHandlers({
         mainLogger.error(`Invalid database:deleteFile path: ${validated.error.message}`, 'database')
         throw new Error('Invalid file path')
       }
-      return deleteDbFile(validated.data, getDbManager)
+      return deleteDbFile(validated.data, getDbManager, getDbKeyStore())
     })
   })
 

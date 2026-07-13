@@ -23,13 +23,30 @@
  * the `PassphraseWrap` fields plus a small version tag.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync
+} from 'fs'
 import { dirname } from 'path'
-import type { PassphraseWrap } from './db-key-store'
+import type { PassphraseWrap } from './db-key-passphrase'
 import { fsyncContainingDirectory, fsyncFile } from './fs-durability'
 
 /** Sidecar filename suffix, appended directly to the database's absolute path. */
 export const RECOVERY_SIDECAR_SUFFIX = '.varlens-recovery.json'
+export const MAX_RECOVERY_SIDECAR_BYTES = 64 * 1024
+
+const PASSPHRASE_WRAP_FIELD_BYTES = {
+  saltB64: 16,
+  ivB64: 12,
+  ctB64: 64,
+  tagB64: 16
+} as const
 
 /** On-disk shape of a recovery sidecar. Never carries the DEK or a safeStorage wrap. */
 export interface RecoverySidecar {
@@ -46,15 +63,42 @@ export function recoverySidecarExists(dbPath: string): boolean {
   return existsSync(recoverySidecarPathFor(dbPath))
 }
 
+function isCanonicalBase64OfLength(value: unknown, expectedBytes: number): value is string {
+  if (typeof value !== 'string') return false
+  try {
+    const decoded = Buffer.from(value, 'base64')
+    return decoded.length === expectedBytes && decoded.toString('base64') === value
+  } catch {
+    return false
+  }
+}
+
 function isValidPassphraseWrapShape(value: unknown): value is PassphraseWrap {
   if (value === null || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   return (
-    typeof v.saltB64 === 'string' &&
-    typeof v.ivB64 === 'string' &&
-    typeof v.ctB64 === 'string' &&
-    typeof v.tagB64 === 'string'
+    isCanonicalBase64OfLength(v.saltB64, PASSPHRASE_WRAP_FIELD_BYTES.saltB64) &&
+    isCanonicalBase64OfLength(v.ivB64, PASSPHRASE_WRAP_FIELD_BYTES.ivB64) &&
+    isCanonicalBase64OfLength(v.ctB64, PASSPHRASE_WRAP_FIELD_BYTES.ctB64) &&
+    isCanonicalBase64OfLength(v.tagB64, PASSPHRASE_WRAP_FIELD_BYTES.tagB64)
   )
+}
+
+function readBoundedSidecar(sidecarPath: string): string | null {
+  const fd = openSync(sidecarPath, 'r')
+  try {
+    const buffer = Buffer.alloc(MAX_RECOVERY_SIDECAR_BYTES + 1)
+    let bytesRead = 0
+    while (bytesRead < buffer.length) {
+      const count = readSync(fd, buffer, bytesRead, buffer.length - bytesRead, null)
+      if (count === 0) break
+      bytesRead += count
+    }
+    if (bytesRead > MAX_RECOVERY_SIDECAR_BYTES) return null
+    return buffer.subarray(0, bytesRead).toString('utf8')
+  } finally {
+    closeSync(fd)
+  }
 }
 
 /**
@@ -82,6 +126,14 @@ export function writeRecoverySidecar(dbPath: string, passWrap: PassphraseWrap): 
   fsyncContainingDirectory(sidecarPath)
 }
 
+/** Remove a recovery sidecar and durably publish the directory entry change. */
+export function removeRecoverySidecar(dbPath: string): void {
+  const sidecarPath = recoverySidecarPathFor(dbPath)
+  if (!existsSync(sidecarPath)) return
+  unlinkSync(sidecarPath)
+  fsyncContainingDirectory(sidecarPath)
+}
+
 /**
  * Tolerant read: a missing file returns `null`; corrupt/malformed JSON or a
  * wrong shape also returns `null` -- this NEVER throws, since a sidecar is
@@ -94,11 +146,12 @@ export function readRecoverySidecar(dbPath: string): RecoverySidecar | null {
   }
 
   try {
-    const raw = readFileSync(sidecarPath, 'utf-8')
+    const raw = readBoundedSidecar(sidecarPath)
+    if (raw === null) return null
     const parsed: unknown = JSON.parse(raw)
     if (parsed === null || typeof parsed !== 'object') return null
     const v = parsed as { version?: unknown; passWrap?: unknown }
-    if (typeof v.version !== 'number' || !isValidPassphraseWrapShape(v.passWrap)) {
+    if (v.version !== 1 || !isValidPassphraseWrapShape(v.passWrap)) {
       return null
     }
     return { version: v.version, passWrap: v.passWrap }

@@ -27,6 +27,8 @@ import { PostgresConnectionProfileInputSchema } from '../../storage/postgres/pos
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DatabaseManager } from '../../services/DatabaseManager'
 import type { DbPool } from '../../database/DbPool'
+import type { DbKeyStore } from '../../database/db-key-store'
+import { removeRecoverySidecar } from '../../database/recovery-sidecar'
 import type { StorageSession } from '../../storage/session'
 import type { DatabaseOpenResult } from '../../../shared/ipc/domains/database'
 import type {
@@ -385,7 +387,8 @@ export function removeRecentDatabase(
  */
 export async function deleteDbFile(
   path: string,
-  getDbManager: () => DatabaseManager
+  getDbManager: () => DatabaseManager,
+  keyStore: Pick<DbKeyStore, 'getKeyIdForPath' | 'removeKey'>
 ): Promise<{ success: boolean }> {
   // Canonicalize to resolve any ../ segments (defense-in-depth)
   const canonicalPath = resolve(path)
@@ -407,6 +410,7 @@ export async function deleteDbFile(
   }
 
   const currentPath = manager.getCurrentPath()
+  const keyId = keyStore.getKeyIdForPath(canonicalPath)
 
   // Refuse to delete the currently active database
   if (currentPath === canonicalPath) {
@@ -416,7 +420,7 @@ export async function deleteDbFile(
   }
 
   if (!existsSync(canonicalPath)) {
-    // File already gone -- just remove from recent list
+    removeManagedDatabaseArtifacts(canonicalPath, keyId, keyStore)
     manager.removeRecentDatabase(canonicalPath)
     return { success: true }
   }
@@ -447,7 +451,18 @@ export async function deleteDbFile(
     }
   }
 
+  removeManagedDatabaseArtifacts(canonicalPath, keyId, keyStore)
+
   manager.removeRecentDatabase(canonicalPath)
   mainLogger.info(`Deleted database file: ${canonicalPath}`, 'database')
   return { success: true }
+}
+
+function removeManagedDatabaseArtifacts(
+  dbPath: string,
+  keyId: string | null,
+  keyStore: Pick<DbKeyStore, 'removeKey'>
+): void {
+  if (keyId !== null) keyStore.removeKey(keyId)
+  removeRecoverySidecar(dbPath)
 }

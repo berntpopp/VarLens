@@ -90,6 +90,25 @@ describe('DbKeyStore', () => {
     expect(result.reason).toBe('safe-storage-unavailable')
   })
 
+  it('treats Electron basic_text as unavailable and never stores a managed safeWrap', () => {
+    const encryptString = vi.fn((s: string) => Buffer.from(`SS:${s}`))
+    const store = new DbKeyStore({
+      registryPath,
+      safeStorage: {
+        isEncryptionAvailable: () => true,
+        getSelectedStorageBackend: () => 'basic_text',
+        encryptString,
+        decryptString: (b: Buffer) => b.toString().replace(/^SS:/, '')
+      }
+    })
+
+    const result = store.createManagedKey(join(tmpDir, 'basic-text.db'))
+
+    expect(result).toEqual({ ok: false, reason: 'safe-storage-unavailable' })
+    expect(encryptString).not.toHaveBeenCalled()
+    expect(existsSync(registryPath)).toBe(false)
+  })
+
   it('4a. setPassphrase + resolveKeyWithPassphrase returns the SAME DEK', () => {
     const store = new DbKeyStore({ registryPath, safeStorage: fakeSafeStorage(true) })
     const dbPath = join(tmpDir, 'case.db')
