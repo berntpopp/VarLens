@@ -122,7 +122,6 @@ export class VariantRepository extends BaseRepository {
           )
 
           const variantId = result.lastInsertRowid as number
-
           if (v._transcripts !== undefined && v._transcripts.length > 0) {
             for (const t of v._transcripts) {
               this.execRun(

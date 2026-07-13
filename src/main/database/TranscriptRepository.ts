@@ -1,5 +1,9 @@
 import { BaseRepository } from './BaseRepository'
-import type { TranscriptAnnotation, TranscriptInsertRow } from '../../shared/types/transcript'
+import {
+  isTranscriptImpact,
+  type TranscriptAnnotation,
+  type TranscriptInsertRow
+} from '../../shared/types/transcript'
 
 export class TranscriptRepository extends BaseRepository {
   getVariantTranscripts(variantId: number): TranscriptAnnotation[] {
@@ -93,20 +97,27 @@ export class TranscriptRepository extends BaseRepository {
           .where('transcript_id', '=', transcriptId)
       )!
 
+      const canonicalImpact = isTranscriptImpact(transcript.consequence)
+        ? transcript.consequence
+        : undefined
+      const canonicalFunc =
+        canonicalImpact === undefined
+          ? (transcript.func ?? transcript.consequence)
+          : transcript.func
+
+      const denormalized = {
+        transcript: transcriptId,
+        gene_symbol: transcript.gene_symbol,
+        func: canonicalFunc,
+        cdna: transcript.cdna,
+        aa_change: transcript.aa_change,
+        hpo_sim_score: transcript.hpo_sim_score,
+        moi: transcript.moi,
+        ...(canonicalImpact === undefined ? {} : { consequence: canonicalImpact })
+      }
+
       this.execRun(
-        this.kysely
-          .updateTable('variants')
-          .set({
-            transcript: transcriptId,
-            gene_symbol: transcript.gene_symbol,
-            consequence: transcript.consequence,
-            func: transcript.func,
-            cdna: transcript.cdna,
-            aa_change: transcript.aa_change,
-            hpo_sim_score: transcript.hpo_sim_score,
-            moi: transcript.moi
-          })
-          .where('id', '=', variantId)
+        this.kysely.updateTable('variants').set(denormalized).where('id', '=', variantId)
       )
     })
   }

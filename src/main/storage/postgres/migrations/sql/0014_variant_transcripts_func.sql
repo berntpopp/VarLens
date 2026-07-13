@@ -9,16 +9,12 @@
 -- variants table's existing consequence/func convention. Application code
 -- now writes consequence = IMPACT, func = SO term on every import path.
 --
--- Additive only — no data mutation. Legacy rows are NOT rewritten:
+-- Backfill without guessing an impact:
 --   - JSON-imported rows already have the correct IMPACT in `consequence`;
 --     the original per-transcript SO term was discarded at import time and
 --     is not recoverable from the database alone, so `func` stays NULL.
---   - VCF-imported rows keep their historically mislabeled `consequence`
---     (actually an SO term, not an IMPACT level). Inferring the correct
---     IMPACT from a bare SO term would require a static VEP/SnpEff
---     severity-ranking table as a guess, which is out of scope. `func`
---     stays NULL for these rows too. A full re-import of the affected case
---     corrects both columns going forward.
+--   - A non-enum `consequence` is provably not an IMPACT. Preserve it as the
+--     SO term in `func` and clear `consequence`; do not invent an impact.
 --
 -- "__schema__" is the migration-runner template placeholder (see
 -- 0001_create_cases.sql). IF NOT EXISTS makes the ALTER itself replay-safe;
@@ -27,3 +23,9 @@
 
 ALTER TABLE "__schema__"."variant_transcripts"
   ADD COLUMN IF NOT EXISTS func TEXT;
+
+UPDATE "__schema__"."variant_transcripts"
+   SET func = consequence,
+       consequence = NULL
+ WHERE consequence IS NOT NULL
+   AND consequence NOT IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER');

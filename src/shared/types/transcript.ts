@@ -1,3 +1,14 @@
+export const TRANSCRIPT_IMPACT_VALUES = ['HIGH', 'MODERATE', 'LOW', 'MODIFIER'] as const
+
+export function isTranscriptImpact(
+  value: unknown
+): value is (typeof TRANSCRIPT_IMPACT_VALUES)[number] {
+  return (
+    typeof value === 'string' &&
+    TRANSCRIPT_IMPACT_VALUES.includes(value as (typeof TRANSCRIPT_IMPACT_VALUES)[number])
+  )
+}
+
 /**
  * TranscriptAnnotation — full row from variant_transcripts table.
  * Returned by getVariantTranscripts() to the renderer.

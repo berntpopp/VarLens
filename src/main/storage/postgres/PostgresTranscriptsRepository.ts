@@ -1,6 +1,10 @@
 import type { Pool, PoolClient } from 'pg'
 
-import type { TranscriptAnnotation, TranscriptInsertRow } from '../../../shared/types/transcript'
+import {
+  isTranscriptImpact,
+  type TranscriptAnnotation,
+  type TranscriptInsertRow
+} from '../../../shared/types/transcript'
 import { quoteIdentifier } from './identifiers'
 
 type QueryablePool = Pick<Pool, 'query'> & Partial<Pick<Pool, 'connect'>>
@@ -143,11 +147,19 @@ export class PostgresTranscriptsRepository {
     variantId: number,
     transcript: Record<string, unknown>
   ): Promise<void> {
+    const canonicalImpact = isTranscriptImpact(transcript.consequence)
+      ? transcript.consequence
+      : null
+    const canonicalFunc =
+      canonicalImpact === null
+        ? (transcript.func ?? transcript.consequence ?? null)
+        : (transcript.func ?? null)
+
     await client.query(
       `UPDATE ${this.schemaName}.variants
           SET transcript = $2,
               gene_symbol = $3,
-              consequence = $4,
+              consequence = COALESCE($4, consequence),
               func = $5,
               cdna = $6,
               aa_change = $7,
@@ -158,8 +170,8 @@ export class PostgresTranscriptsRepository {
         variantId,
         transcript.transcript_id,
         transcript.gene_symbol,
-        transcript.consequence,
-        transcript.func,
+        canonicalImpact,
+        canonicalFunc,
         transcript.cdna,
         transcript.aa_change,
         transcript.hpo_sim_score,

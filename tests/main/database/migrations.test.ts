@@ -1365,7 +1365,7 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
     expect(db.pragma('user_version', { simple: true })).toBe(32)
   })
 
-  it('additive backfill: existing rows survive the ALTER with func defaulting to NULL', () => {
+  it('canonicalizes legacy SO terms without guessing an unavailable impact', () => {
     // Hand-build the pre-v32 `variant_transcripts` shape (no `func` column) —
     // deliberately bypassing initializeSchema(), which already bakes `func`
     // into the CREATE TABLE for brand-new databases — so this test genuinely
@@ -1420,12 +1420,17 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
       .prepare(`INSERT INTO variants (case_id, chr, pos, ref, alt) VALUES (?, ?, ?, ?, ?)`)
       .run(caseId, '1', 100, 'A', 'G').lastInsertRowid as number
     // Seeded the way the pre-fix VCF import path actually wrote rows: an SO
-    // term mislabeled into `consequence` (the bug this task fixes going
-    // forward). The migration must NOT rewrite or corrupt this legacy value.
+    // term mislabeled into `consequence`. The migration can identify that it
+    // is not an IMPACT value without guessing which impact it should have.
     db.prepare(
       `INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, is_selected)
        VALUES (?, ?, ?, ?, ?)`
     ).run(variantId, 'NM_LEGACY.1', 'LEGACYGENE', 'missense_variant', 1)
+
+    db.prepare(
+      `INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, is_selected)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(variantId, 'NM_IMPACT.1', 'LEGACYGENE', 'HIGH', 0)
 
     runMigrations(db)
 
@@ -1434,24 +1439,33 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
     }>
     expect(columns.some((c) => c.name === 'func')).toBe(true)
 
-    const row = db
+    const rows = db
       .prepare(
-        `SELECT transcript_id, gene_symbol, consequence, func FROM variant_transcripts WHERE variant_id = ?`
+        `SELECT transcript_id, gene_symbol, consequence, func
+           FROM variant_transcripts
+          WHERE variant_id = ?
+          ORDER BY transcript_id`
       )
-      .get(variantId) as {
+      .all(variantId) as Array<{
       transcript_id: string
       gene_symbol: string
       consequence: string | null
       func: string | null
-    }
-    // Legacy row survives untouched: consequence keeps its historically
-    // mislabeled value (an SO term, not IMPACT) and func is NULL because it
-    // cannot be safely derived from the DB alone (documented in the v32
-    // migration comment) — leaving it null is acceptable, corrupting is not.
-    expect(row.transcript_id).toBe('NM_LEGACY.1')
-    expect(row.gene_symbol).toBe('LEGACYGENE')
-    expect(row.consequence).toBe('missense_variant')
-    expect(row.func).toBeNull()
+    }>
+    expect(rows).toEqual([
+      {
+        transcript_id: 'NM_IMPACT.1',
+        gene_symbol: 'LEGACYGENE',
+        consequence: 'HIGH',
+        func: null
+      },
+      {
+        transcript_id: 'NM_LEGACY.1',
+        gene_symbol: 'LEGACYGENE',
+        consequence: null,
+        func: 'missense_variant'
+      }
+    ])
 
     expect(db.pragma('user_version', { simple: true })).toBe(32)
   })

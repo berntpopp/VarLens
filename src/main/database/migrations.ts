@@ -1792,17 +1792,14 @@ export function runMigrations(db: Database.Database): void {
   // = IMPACT and variant_transcripts.func = SO term on every path, matching
   // the variants table's existing convention.
   //
-  // Backfill: additive only, no data mutation. Legacy rows are NOT rewritten:
+  // Backfill without guessing an impact:
   //   - JSON-imported rows already have the correct IMPACT in `consequence`;
   //     the original per-transcript SO term was discarded at import time and
   //     cannot be recovered from the database alone, so `func` stays NULL.
-  //   - VCF-imported rows keep their historically mislabeled `consequence`
-  //     (which actually holds an SO term, not an IMPACT level). Inferring the
-  //     correct IMPACT from a bare SO term would require embedding a static
-  //     VEP/SnpEff severity-ranking table as a guess — explicitly out of
-  //     scope ("do NOT guess an impact you can't derive"). `func` stays NULL
-  //     for these rows too. A full re-import of the affected case corrects
-  //     both columns going forward.
+  //   - A non-enum `consequence` is provably not an IMPACT value. Preserve it
+  //     as the SO term in `func` and clear `consequence`; do not guess an
+  //     unavailable impact. Repository writeback preserves the parent impact
+  //     when the selected transcript has no known impact.
   if (currentVersion < 32) {
     const vtCols = db.prepare('PRAGMA table_info(variant_transcripts)').all() as {
       name: string
@@ -1810,6 +1807,13 @@ export function runMigrations(db: Database.Database): void {
     if (!vtCols.some((c) => c.name === 'func')) {
       db.exec('ALTER TABLE variant_transcripts ADD COLUMN func TEXT')
     }
+    db.exec(`
+      UPDATE variant_transcripts
+         SET func = consequence,
+             consequence = NULL
+       WHERE consequence IS NOT NULL
+         AND consequence NOT IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
+    `)
     db.exec('PRAGMA user_version = 32')
   }
 }
