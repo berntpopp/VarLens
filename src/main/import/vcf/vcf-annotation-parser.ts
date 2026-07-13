@@ -6,7 +6,10 @@
  */
 
 import type { VcfHeader, AnnotationResult } from './types'
-import type { TranscriptInsertRow } from '../../../shared/types/transcript'
+import {
+  canonicalizeTranscriptSemantics,
+  type TranscriptInsertRow
+} from '../../../shared/types/transcript'
 
 /** Impact severity order for transcript selection */
 const IMPACT_ORDER: Record<string, number> = {
@@ -111,12 +114,16 @@ function parseCsq(
   for (const t of filtered) {
     const tid = t.fields.get('Feature') ?? ''
     if (!transcriptMap.has(tid)) {
+      const semantics = canonicalizeTranscriptSemantics(
+        t.fields.get('IMPACT') ?? null,
+        t.fields.get('Consequence') ?? null
+      )
       transcriptMap.set(tid, {
         transcript_id: tid,
         gene_symbol: t.fields.get('SYMBOL') ?? null,
         // Canonical model: consequence = IMPACT level, func = SO term.
-        consequence: t.fields.get('IMPACT') ?? null,
-        func: t.fields.get('Consequence') ?? null,
+        consequence: semantics.consequence,
+        func: semantics.func,
         cdna: t.fields.get('HGVSc') ?? null,
         aa_change: t.fields.get('HGVSp') ?? null,
         hpo_sim_score: null,
@@ -136,6 +143,10 @@ function parseCsq(
   }
 
   const best = bestIdx >= 0 ? filtered[bestIdx] : null
+  const bestSemantics = canonicalizeTranscriptSemantics(
+    best?.fields.get('IMPACT') ?? null,
+    best?.fields.get('Consequence') ?? null
+  )
 
   // Parse numeric fields from the best transcript
   const gnomadAfStr = best?.fields.get('gnomADe_AF') ?? best?.fields.get('gnomADg_AF') ?? null
@@ -145,7 +156,7 @@ function parseCsq(
   return {
     geneSymbol: best?.fields.get('SYMBOL') ?? null,
     consequence: best?.fields.get('Consequence') ?? null,
-    impact: best?.fields.get('IMPACT') ?? null,
+    impact: bestSemantics.consequence,
     transcript: best?.fields.get('Feature') ?? null,
     cdna: best?.fields.get('HGVSc') ?? null,
     aaChange: best?.fields.get('HGVSp') ?? null,
@@ -220,12 +231,16 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
   for (const t of filtered) {
     const tid = t.parts[ANN_FEATURE_ID] ?? ''
     if (!transcriptMap.has(tid)) {
+      const semantics = canonicalizeTranscriptSemantics(
+        t.parts[ANN_IMPACT] ?? null,
+        t.parts[ANN_ANNOTATION] ?? null
+      )
       transcriptMap.set(tid, {
         transcript_id: tid,
         gene_symbol: t.parts[ANN_GENE_NAME] ?? null,
         // Canonical model: consequence = IMPACT level, func = SO term.
-        consequence: t.parts[ANN_IMPACT] ?? null,
-        func: t.parts[ANN_ANNOTATION] ?? null,
+        consequence: semantics.consequence,
+        func: semantics.func,
         cdna: t.parts[ANN_HGVSC] ?? null,
         aa_change: t.parts[ANN_HGVSP] ?? null,
         hpo_sim_score: null,
@@ -245,11 +260,15 @@ function parseAnn(info: Map<string, string>, altAllele: string, ref: string): An
   }
 
   const best = bestIdx >= 0 ? filtered[bestIdx] : null
+  const bestSemantics = canonicalizeTranscriptSemantics(
+    best?.parts[ANN_IMPACT] ?? null,
+    best?.parts[ANN_ANNOTATION] ?? null
+  )
 
   return {
     geneSymbol: best?.parts[ANN_GENE_NAME] ?? null,
     consequence: best?.parts[ANN_ANNOTATION] ?? null,
-    impact: best?.parts[ANN_IMPACT] ?? null,
+    impact: bestSemantics.consequence,
     transcript: best?.parts[ANN_FEATURE_ID] ?? null,
     cdna: best?.parts[ANN_HGVSC] ?? null,
     aaChange: best?.parts[ANN_HGVSP] ?? null,
