@@ -24,11 +24,9 @@ export class ZipExtractor {
         return header['encrypted'] === true || header['encripted'] === true
       })
     } catch (e) {
-      mainLogger.warn(
-        'Failed to check ZIP encryption: ' + (e instanceof Error ? e.message : String(e)),
-        'ZipExtractor'
-      )
-      return false
+      const message = e instanceof Error ? e.message : String(e)
+      mainLogger.error(`Failed to inspect ZIP archive encryption: ${message}`, 'ZipExtractor')
+      throw new Error(`Failed to inspect ZIP archive: ${message}`, { cause: e })
     }
   }
 
@@ -104,16 +102,16 @@ export class ZipExtractor {
 
   /**
    * Test if a ZIP archive can be opened with the given password.
-   * Attempts to read the first entry as a verification check.
+   * Attempts to read every file entry as a verification check.
    *
    * Distinguishes three outcomes deliberately:
    * - The archive itself cannot be opened/parsed (corrupt file, wrong format,
    *   unreadable path) — this is an infrastructure fault, not a password
    *   problem, so it throws rather than being reported as "wrong password".
-   * - The first entry IS encrypted and decoding it with the given password
+   * - An encrypted entry rejects the supplied password explicitly
    *   fails — this is the legitimate "wrong password" outcome and is
    *   reported as `false`.
-   * - The first entry is NOT encrypted but decoding/CRC-checking it still
+   * - Any entry decodes far enough to report CRC/decompression failure
    *   fails — the archive is corrupt, not password-protected, so this must
    *   throw too. Otherwise a corrupt-but-unencrypted entry is indistinguishable
    *   from a genuine wrong-password result.
@@ -129,38 +127,30 @@ export class ZipExtractor {
       throw new Error(`Failed to open ZIP archive: ${message}`, { cause: e })
     }
 
-    if (entries.length === 0) return true
-    const firstFile = entries.find((e) => !e.isDirectory)
-    if (firstFile === undefined) return true
+    for (const entry of entries) {
+      if (entry.isDirectory) continue
+      const header = entry.header as unknown as Record<string, unknown>
+      const isEntryEncrypted = header['encrypted'] === true || header['encripted'] === true
 
-    const header = firstFile.header as unknown as Record<string, unknown>
-    const isEntryEncrypted = header['encrypted'] === true || header['encripted'] === true
+      try {
+        // adm-zip runtime accepts password arg but @types/adm-zip doesn't declare it
+        const getDataWithPassword = entry as unknown as {
+          getData: (pass: string) => Buffer
+        }
+        getDataWithPassword.getData(password)
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        if (isEntryEncrypted && /wrong password/i.test(message)) {
+          mainLogger.warn(`ZIP password rejected for ${entry.entryName}`, 'ZipExtractor')
+          return false
+        }
 
-    try {
-      // adm-zip runtime accepts password arg but @types/adm-zip doesn't declare it
-      const getDataWithPassword = firstFile as unknown as {
-        getData: (pass: string) => Buffer
+        mainLogger.error(`ZIP archive entry is corrupt: ${entry.entryName}`, 'ZipExtractor')
+        throw new Error(`Corrupt ZIP archive entry ${entry.entryName}: ${message}`, { cause: e })
       }
-      getDataWithPassword.getData(password)
-      return true
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-
-      if (!isEntryEncrypted) {
-        // A non-encrypted entry that fails to read/decode/CRC-check is a
-        // corrupt archive, not a wrong password — must not be reported as
-        // `false`, which would be indistinguishable from a genuine
-        // wrong-password result.
-        mainLogger.error(
-          `ZIP entry is corrupt (unencrypted entry failed to read): ${message}`,
-          'ZipExtractor'
-        )
-        throw new Error(`Corrupt ZIP archive entry: ${message}`, { cause: e })
-      }
-
-      mainLogger.warn('ZIP password test failed: ' + message, 'ZipExtractor')
-      return false
     }
+
+    return true
   }
 
   /**

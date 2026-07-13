@@ -641,11 +641,6 @@ export class PostgresCohortRepository {
       return withoutActivePanelFields(params)
     }
 
-    // A panel IS active here (panelIds is non-empty), so a thrown error means
-    // the interval computation itself failed. It must propagate rather than
-    // silently degrade to an unfiltered cohort query — a dropped panel filter
-    // must not look identical to "panel matched everything" (clinical-safety
-    // hazard; see panelIntervalHelper.ts for the equivalent SQLite contract).
     try {
       const intervals = await this.panelIntervalResolver(
         panelIds,
@@ -662,12 +657,11 @@ export class PostgresCohortRepository {
         panel_intervals: intervals
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
       mainLogger.error(
-        `Failed to resolve PostgreSQL cohort panel intervals for active gene panel(s): ${message}`,
+        `Failed to resolve PostgreSQL cohort panel intervals for active gene panel(s): ${error instanceof Error ? error.message : String(error)}`,
         'cohort'
       )
-      throw error instanceof Error ? error : new Error(message)
+      throw error
     }
   }
 

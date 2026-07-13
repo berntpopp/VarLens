@@ -22,7 +22,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import AdmZip from 'adm-zip'
-import { mkdtempSync, writeFileSync } from 'fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomBytes } from 'crypto'
@@ -150,35 +150,37 @@ function writeEncryptedZip(
   path: string,
   entryName: string,
   plaintext: string,
-  password: string
+  password: string,
+  plainFirst = false
 ): void {
   const zip = new AdmZip()
+  if (plainFirst) {
+    zip.addFile('plain.json', Buffer.from('{"plain":true}'))
+  }
   zip.addFile(entryName, Buffer.from(plaintext))
-  const entry = zip.getEntries()[0]
-  entry.header.method = 0 // STORED — avoids deflate so the plaintext is byte-identical
+  for (const entry of zip.getEntries()) {
+    entry.header.method = 0 // STORED — plaintext is byte-identical before encryption
+  }
 
   const buf = zip.toBuffer()
+  const local = findLocalEntry(buf, entryName)
+  const compressedSize = local.compressedSize
+  const crc = buf.readUInt32LE(local.headerOffset + 14)
 
-  const fnameLen = buf.readUInt16LE(26)
-  const extraLen = buf.readUInt16LE(28)
-  const localDataOffset = 30 + fnameLen + extraLen
-  const compressedSize = buf.readUInt32LE(18)
-  const crc = buf.readUInt32LE(14)
-
-  const plainData = buf.subarray(localDataOffset, localDataOffset + compressedSize)
+  const plainData = buf.subarray(local.dataOffset, local.dataOffset + compressedSize)
   const encrypted = zipCryptoEncrypt(Buffer.from(plainData), crc, password)
   const delta = encrypted.length - plainData.length
 
-  // Local header + filename + extra, with FLG_ENC (bit 0) set and the
-  // compressed-size field updated to the encrypted (12 bytes longer) length.
-  const partA = Buffer.from(buf.subarray(0, localDataOffset))
-  partA.writeUInt16LE(partA.readUInt16LE(6) | 0x1, 6)
-  partA.writeUInt32LE(encrypted.length, 18)
+  const partA = Buffer.from(buf.subarray(0, local.dataOffset))
+  partA.writeUInt16LE(partA.readUInt16LE(local.headerOffset + 6) | 0x1, local.headerOffset + 6)
+  partA.writeUInt32LE(encrypted.length, local.headerOffset + 18)
 
   // Everything after the local file data: central directory + EOCD.
-  const partC = Buffer.from(buf.subarray(localDataOffset + compressedSize))
-  partC.writeUInt16LE(partC.readUInt16LE(8) | 0x1, 8) // CENFLG |= FLG_ENC
-  partC.writeUInt32LE(encrypted.length, 20) // CENSIZ
+  const originalDataEnd = local.dataOffset + compressedSize
+  const partC = Buffer.from(buf.subarray(originalDataEnd))
+  const centralOffset = findCentralEntry(buf, entryName) - originalDataEnd
+  partC.writeUInt16LE(partC.readUInt16LE(centralOffset + 8) | 0x1, centralOffset + 8)
+  partC.writeUInt32LE(encrypted.length, centralOffset + 20)
 
   const eocdSig = 0x06054b50
   let eocdOffset = -1
@@ -197,7 +199,66 @@ function writeEncryptedZip(
   writeFileSync(path, Buffer.concat([partA, encrypted, partC]))
 }
 
+interface LocalZipEntry {
+  headerOffset: number
+  dataOffset: number
+  compressedSize: number
+}
+
+function findLocalEntry(buf: Buffer, entryName: string): LocalZipEntry {
+  let offset = 0
+  while (offset + 30 <= buf.length && buf.readUInt32LE(offset) === 0x04034b50) {
+    const compressedSize = buf.readUInt32LE(offset + 18)
+    const nameLength = buf.readUInt16LE(offset + 26)
+    const extraLength = buf.readUInt16LE(offset + 28)
+    const name = buf.subarray(offset + 30, offset + 30 + nameLength).toString('utf8')
+    const dataOffset = offset + 30 + nameLength + extraLength
+    if (name === entryName) return { headerOffset: offset, dataOffset, compressedSize }
+    offset = dataOffset + compressedSize
+  }
+  throw new Error(`Test fixture builder could not find local entry ${entryName}`)
+}
+
+function findCentralEntry(buf: Buffer, entryName: string): number {
+  const eocdOffset = findSignatureFromEnd(buf, 0x06054b50)
+  let offset = buf.readUInt32LE(eocdOffset + 16)
+  while (offset + 46 <= eocdOffset && buf.readUInt32LE(offset) === 0x02014b50) {
+    const nameLength = buf.readUInt16LE(offset + 28)
+    const extraLength = buf.readUInt16LE(offset + 30)
+    const commentLength = buf.readUInt16LE(offset + 32)
+    const name = buf.subarray(offset + 46, offset + 46 + nameLength).toString('utf8')
+    if (name === entryName) return offset
+    offset += 46 + nameLength + extraLength + commentLength
+  }
+  throw new Error(`Test fixture builder could not find central entry ${entryName}`)
+}
+
+function findSignatureFromEnd(buf: Buffer, signature: number): number {
+  for (let offset = buf.length - 4; offset >= 0; offset--) {
+    if (buf.readUInt32LE(offset) === signature) return offset
+  }
+  throw new Error(`Test fixture builder could not find ZIP signature ${signature.toString(16)}`)
+}
+
+function corruptEncryptedPayload(path: string, entryName: string): void {
+  const buf = readFileSync(path)
+  const local = findLocalEntry(buf, entryName)
+  const corrupted = Buffer.from(buf)
+  const payloadOffset = local.dataOffset + 12 + Math.floor((local.compressedSize - 12) / 2)
+  corrupted[payloadOffset] ^= 0xff
+  writeFileSync(path, corrupted)
+}
+
 describe('ZipExtractor.testPassword', () => {
+  it('does not classify an unreadable archive as unencrypted', () => {
+    const dir = makeTempDir()
+    const garbagePath = join(dir, 'garbage-encryption-check.zip')
+    writeGarbageFile(garbagePath)
+
+    const extractor = new ZipExtractor()
+    expect(() => extractor.isEncrypted(garbagePath)).toThrow(/ZIP archive/i)
+  })
+
   it('throws when the archive itself cannot be opened (corrupt/not a zip)', () => {
     const dir = makeTempDir()
     const garbagePath = join(dir, 'garbage.zip')
@@ -250,6 +311,36 @@ describe('ZipExtractor.testPassword', () => {
     const extractor = new ZipExtractor()
 
     expect(extractor.testPassword(encryptedPath, 'correct-password')).toBe(true)
+  })
+
+  it('throws for corrupt encrypted data even when the password is correct', () => {
+    const dir = makeTempDir()
+    const encryptedPath = join(dir, 'encrypted-corrupt.zip')
+    writeEncryptedZip(
+      encryptedPath,
+      'case.json',
+      JSON.stringify({ hello: 'world' }),
+      'correct-password'
+    )
+    corruptEncryptedPayload(encryptedPath, 'case.json')
+
+    const extractor = new ZipExtractor()
+    expect(() => extractor.testPassword(encryptedPath, 'correct-password')).toThrow(/corrupt/i)
+  })
+
+  it('checks every encrypted entry when an unencrypted file appears first', () => {
+    const dir = makeTempDir()
+    const encryptedPath = join(dir, 'mixed.zip')
+    writeEncryptedZip(
+      encryptedPath,
+      'secret.json',
+      JSON.stringify({ secret: true }),
+      'correct-password',
+      true
+    )
+
+    const extractor = new ZipExtractor()
+    expect(extractor.testPassword(encryptedPath, 'wrong-password')).toBe(false)
   })
 
   it('preserves the legitimate outcome: a valid, readable archive does not throw', () => {

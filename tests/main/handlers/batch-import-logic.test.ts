@@ -106,7 +106,19 @@ describe('extractZip', () => {
     entry.entryName = '../evil.json'
     zip.writeZip(traversalPath)
 
-    await expect(logic.extractZip(traversalPath)).rejects.toThrow(/all 1 candidate entry/)
+    await expect(logic.extractZip(traversalPath)).rejects.toThrow(/1 candidate entry/)
+  })
+
+  it('fails the archive when any candidate entry fails instead of silently importing a partial set', async () => {
+    const dir = makeTempDir()
+    const partialPath = join(dir, 'partial.zip')
+    const zip = new AdmZip()
+    zip.addFile('good.json', Buffer.from('{}'))
+    zip.addFile('placeholder.json', Buffer.from('{}'))
+    zip.getEntries()[1].entryName = '../evil.json'
+    zip.writeZip(partialPath)
+
+    await expect(logic.extractZip(partialPath)).rejects.toThrow(/candidate entry/)
   })
 
   it('preserves the legitimate outcome: an archive with no importable files resolves to an empty result', async () => {

@@ -225,4 +225,24 @@ describe('ImportWizard ZIP password unlock', () => {
     expect(document.body.textContent).not.toContain('[object Object]')
     expect(document.body.querySelector('.v-progress-circular')).toBeNull()
   })
+
+  it('surfaces an archive with no importable files instead of silently doing nothing', async () => {
+    mockApi.batchImport.selectZip = vi.fn().mockResolvedValue({
+      filePath: '/tmp/empty.zip',
+      isEncrypted: false
+    })
+    mockApi.batchImport.extractZip = vi.fn().mockResolvedValue({ files: [], errors: [] })
+
+    const wrapper = mount(ImportWizard, {
+      global: { plugins: [vuetify] },
+      attachTo: document.body
+    })
+    wrapper.vm.show()
+    await flushPromises()
+
+    wrapper.findComponent(ImportSourceSelector).vm.$emit('select', 'zip')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('No importable files found in archive')
+  })
 })

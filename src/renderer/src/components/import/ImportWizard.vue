@@ -411,26 +411,20 @@ async function selectSource(mode: ImportMode): Promise<void> {
   selectedMode.value = mode
   sourceSelectionPending.value = true
   resetUploadState()
-
   try {
     if (mode === 'zip') {
       const result = unwrapIpcResult(await api!.batchImport.selectZip())
       if (result === null) return
-
       zipPath.value = result.filePath
       isZipImport.value = true
-
       if (result.isEncrypted) {
         zipPasswordNeeded.value = true
         return
       }
-
       await extractAndAdvance(result.filePath)
       return
     }
-
     let filePaths: string[]
-
     if (mode === 'single') {
       const path = await api!.import.selectFile()
       if (path === null) return
@@ -440,11 +434,8 @@ async function selectSource(mode: ImportMode): Promise<void> {
     } else {
       filePaths = unwrapIpcResult(await api!.batchImport.selectFolder())
     }
-
     if (filePaths.length === 0) return
-
     selectedFilePaths.value = filePaths
-
     // Detect VCF file: single file with .vcf or .vcf.gz extension
     if (filePaths.length === 1) {
       const fp = filePaths[0].toLowerCase()
@@ -455,7 +446,6 @@ async function selectSource(mode: ImportMode): Promise<void> {
         return
       }
     }
-
     await checkDuplicatesAndAdvance(filePaths)
   } catch (err) {
     if (err instanceof Error && err.message === 'Upload cancelled') {
@@ -477,7 +467,9 @@ async function extractAndAdvance(path: string): Promise<void> {
   const { files } = unwrapIpcResult(
     await api!.batchImport.extractZip(path, zipPassword.value || undefined)
   )
-  if (files.length === 0) return
+  if (files.length === 0) {
+    throw new Error('No importable files found in archive')
+  }
 
   selectedFilePaths.value = files
   zipPasswordNeeded.value = false

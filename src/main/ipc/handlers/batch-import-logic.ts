@@ -287,16 +287,13 @@ export async function extractZip(
 
     const result = await zipExtractor.extract(zipPath, targetDir, password)
 
-    // An archive where every candidate entry failed to extract (0 files
-    // extracted, but 1+ per-entry errors) is a genuine extraction failure,
-    // not a legitimate empty result — the renderer only inspects `files`
-    // (see ImportWizard.vue's extractAndAdvance), so returning this shape
-    // as a success would be a silent no-op. A genuinely empty/benign
-    // archive (0 files, 0 errors — nothing importable present) and a
-    // partial success (some files, some errors) both remain unchanged.
-    if (result.errors.length > 0 && result.extractedFiles.length === 0) {
+    // Partial extraction is not a safe success state: the renderer cannot
+    // know whether a missing case is optional, corrupt, or failed to write.
+    // Fail the whole archive on any candidate error; the catch below removes
+    // the temporary directory so already-written files cannot be imported.
+    if (result.errors.length > 0) {
       throw new Error(
-        `ZIP extraction failed for all ${result.errors.length} candidate ` +
+        `ZIP extraction failed for ${result.errors.length} candidate ` +
           `entr${result.errors.length === 1 ? 'y' : 'ies'}: ${result.errors.join('; ')}`
       )
     }
