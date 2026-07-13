@@ -1,6 +1,8 @@
 import { realpathSync } from 'fs'
 import { app } from 'electron'
 import { isAbsolute, relative, resolve, sep } from 'path'
+import { homedir, tmpdir } from 'node:os'
+import { PathAuthorityStore } from './path-authority-store'
 
 /**
  * In-memory session allow-list of paths the user explicitly picked via an
@@ -12,16 +14,22 @@ import { isAbsolute, relative, resolve, sep } from 'path'
  * validated. BedFilter.fromFile keeps a worker-safe defensive check as
  * defence-in-depth.
  */
-const dialogAllowedPaths = new Set<string>()
+const dialogAllowedPaths = new PathAuthorityStore()
 
 export function addAllowedImportPath(absolutePath: string): void {
-  const resolved = resolve(absolutePath)
-  dialogAllowedPaths.add(resolved)
+  dialogAllowedPaths.add(absolutePath)
+}
 
-  const realPath = tryRealpath(resolved)
-  if (realPath !== null) {
-    dialogAllowedPaths.add(realPath)
-  }
+export function removeAllowedImportPath(absolutePath: string): void {
+  dialogAllowedPaths.remove(absolutePath)
+}
+
+/** Require explicit session enrollment; automatic trusted roots do not count. */
+export function isStrictlyEnrolledPath(candidate: string): boolean {
+  if (!isAbsolute(candidate)) return false
+  const abs = resolve(candidate)
+  if (abs !== candidate) return false
+  return dialogAllowedPaths.isAuthorized(abs)
 }
 
 export function isAllowedImportPath(candidate: string): boolean {
@@ -32,11 +40,8 @@ export function isAllowedImportPath(candidate: string): boolean {
 
   const realCandidate = tryRealpath(abs)
 
-  if (
-    dialogAllowedPaths.has(abs) ||
-    (realCandidate !== null && dialogAllowedPaths.has(realCandidate))
-  ) {
-    return true
+  if (dialogAllowedPaths.hasEnrollment(abs)) {
+    return dialogAllowedPaths.isAuthorized(abs)
   }
 
   const roots: string[] = []
@@ -49,7 +54,7 @@ export function isAllowedImportPath(candidate: string): boolean {
     if (process.env.HOME !== undefined && process.env.HOME !== '') {
       roots.push(process.env.HOME)
     }
-    roots.push('/tmp')
+    roots.push(homedir(), tmpdir())
   }
 
   return roots.some((root) => isUnderAutomaticRoot(abs, realCandidate, root))

@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { parseAnnotation } from '../../../../src/main/import/vcf/vcf-annotation-parser'
 import type { VcfHeader } from '../../../../src/main/import/vcf/types'
+import {
+  MAX_VCF_ANNOTATION_FIELDS,
+  MAX_VCF_ANNOTATIONS,
+  VcfResourceLimitError
+} from '../../../../src/main/import/vcf/vcf-resource-limits'
 
 function makeHeader(overrides: Partial<VcfHeader> = {}): VcfHeader {
   return {
@@ -189,6 +194,21 @@ describe('vcf-annotation-parser', () => {
       expect(result.geneSymbol).toBeNull()
       expect(result.consequence).toBeNull()
       expect(result.transcripts).toHaveLength(0)
+    })
+  })
+
+  describe('allocation budgets', () => {
+    it('rejects excessive annotation and per-annotation field fanout', () => {
+      const csqHeader = makeHeader({ annotationType: 'csq', csqFields: ['Allele'] })
+      const manyAnnotations = Array.from({ length: MAX_VCF_ANNOTATIONS + 1 }, () => 'G').join(',')
+      expect(() => parseAnnotation(new Map([['CSQ', manyAnnotations]]), csqHeader, 'G')).toThrow(
+        VcfResourceLimitError
+      )
+
+      const manyFields = Array.from({ length: MAX_VCF_ANNOTATION_FIELDS + 1 }, () => 'G').join('|')
+      expect(() =>
+        parseAnnotation(new Map([['ANN', manyFields]]), makeHeader({ annotationType: 'ann' }), 'G')
+      ).toThrow(VcfResourceLimitError)
     })
   })
 })

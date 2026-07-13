@@ -17,6 +17,7 @@ import { createFieldMapper } from '../import/transforms/FieldMapper'
 import { createObjectFormatMapper } from '../import/transforms/ObjectFormatMapper'
 import { resolveColumnIndices } from '../import/config/fieldMapping'
 import { createDecompressedStream, createCappedLineStream } from '../import/stream-utils'
+import { createJsonRecordBudget } from '../import/json-resource-budget'
 import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
 import { parseVcfLine } from '../import/vcf/vcf-line-parser'
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
@@ -24,6 +25,7 @@ import { detectCaller } from '../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
 import type { VcfHeader } from '../import/vcf/types'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
+import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
 
 import { DROP_FTS_TRIGGERS } from './worker-db'
 export { DROP_FTS_TRIGGERS }
@@ -410,6 +412,7 @@ export async function streamInsertVcf(
           }
         }
       } catch (e) {
+        if (e instanceof VcfResourceLimitError) throw e
         console.warn(
           '[import-pipeline] Skipping unparseable VCF line:',
           e instanceof Error ? e.message : String(e)
@@ -447,6 +450,7 @@ export async function createMapperPipeline(
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: 'variants' }),
+        createJsonRecordBudget(),
         streamArray.asStream(),
         createObjectFormatMapper()
       )
@@ -459,6 +463,7 @@ export async function createMapperPipeline(
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: samplePath }),
+        createJsonRecordBudget(),
         streamArray.asStream(),
         createObjectFormatMapper()
       )
@@ -477,6 +482,7 @@ export async function createMapperPipeline(
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: dataPath }),
+        createJsonRecordBudget(),
         streamArray.asStream(),
         fieldMapper
       )
@@ -514,6 +520,7 @@ export async function parseHeader(
       createDecompressedStream(filePath),
       parser.asStream(),
       pick.asStream({ filter: headerPath }),
+      createJsonRecordBudget(),
       streamArray.asStream()
     )
 

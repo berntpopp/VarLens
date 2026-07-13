@@ -142,7 +142,7 @@ describe('postgres-import-worker runImport', () => {
     expect(complete?.result.variantCount).toBe(1)
   })
 
-  it('deletes a partially committed single-file VCF case when the stream fails after a batch commit', async () => {
+  it('rolls back a single-file VCF when the stream fails after a flushed batch', async () => {
     const queries: string[] = []
     const client = {
       connect: vi.fn(async () => undefined),
@@ -204,7 +204,7 @@ describe('postgres-import-worker runImport', () => {
 
     async function* rows(): AsyncGenerator<typeof fakeVariant, void, void> {
       yield fakeVariant
-      throw new Error('stream failed after committed batch')
+      throw new Error('stream failed after flushed batch')
     }
 
     await runImport(
@@ -230,18 +230,16 @@ describe('postgres-import-worker runImport', () => {
     )
 
     expect(queries).toContain('ROLLBACK')
-    expect(queries).toContain('DELETE FROM "public"."cases" WHERE id = $1')
+    expect(queries).not.toContain('COMMIT')
+    expect(queries).not.toContain('DELETE FROM "public"."cases" WHERE id = $1')
     const error = messages.find((m): m is { type: 'error'; message: string } => {
       return (m as { type: string }).type === 'error'
     })
-    expect(error?.message).toMatch(/stream failed after committed batch/)
+    expect(error?.message).toMatch(/stream failed after flushed batch/)
   })
 
   it('runs one transaction per file in multi-file mode and surfaces per-file errors', async () => {
     const queries: string[] = []
-    // Track how many times a variant batch insert has been attempted so we can
-    // inject a failure on the second file's insert (file 1 succeeds, file 2 fails).
-    let variantInsertCount = 0
     const client = {
       connect: vi.fn(async () => undefined),
       query: vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
@@ -261,12 +259,7 @@ describe('postgres-import-worker runImport', () => {
         if (text.startsWith('INSERT INTO') && text.includes('"cases"')) {
           return { rows: [{ id: 21 }] }
         }
-        // Phase 16+: per-batch ID reservation. We hijack this call site to
-        // inject the file-2 failure (was previously injected on the
-        // jsonb_to_recordset INSERT, which is no longer used).
         if (text.includes('pg_get_serial_sequence') && text.includes('generate_series')) {
-          variantInsertCount += 1
-          if (variantInsertCount === 2) throw new Error('inject failure on file 2 variant insert')
           const n = (params?.[1] as number) ?? 0
           return {
             rows: Array.from({ length: n }, (_, i) => ({
@@ -315,11 +308,18 @@ describe('postgres-import-worker runImport', () => {
       caller: null
     }
     const messages: unknown[] = []
+    async function* failingSecondFile(): AsyncGenerator<typeof fakeRow, void, void> {
+      yield fakeRow
+      throw new Error('late failure in file 2')
+    }
     await runImport(
       {
         createClient: () => client as never,
         detectFormat: async () => ({ format: 'vcf', caseKey: '' }) as never,
-        createVcfMappedStream: async () => Readable.from([fakeRow]) as never,
+        createVcfMappedStream: async (filePath) =>
+          filePath.endsWith('/b.vcf.gz')
+            ? (failingSecondFile() as never)
+            : (Readable.from([fakeRow]) as never),
         createMapperPipeline: async () => Readable.from([]),
         statFile: () => ({ size: 0 })
       },
@@ -343,18 +343,21 @@ describe('postgres-import-worker runImport', () => {
             annotationFormat: null,
             caller: null
           }
-        ]
+        ],
+        batchSize: 1
       },
       (m) => messages.push(m)
     )
 
-    // Phase 16.1: outer BEGIN/ROLLBACK is gone (no bracket transactions).
-    // Expected BEGINs: file-1 BEGIN + per-batch COMMIT/BEGIN cycle inside
-    // flushBatch + file-2 BEGIN + post-loop bookkeeping BEGIN = 4.
+    // Each file owns one transaction; successful files commit and a failed
+    // file rolls back before the final bookkeeping transaction.
     const beginCount = queries.filter((q) => q === 'BEGIN').length
-    expect(beginCount).toBe(4)
+    expect(beginCount).toBe(3)
     expect(queries.includes('ROLLBACK')).toBe(true)
     expect(queries.includes('COMMIT')).toBe(true)
+    const beginIndexes = queries.flatMap((query, index) => (query === 'BEGIN' ? [index] : []))
+    const rollbackIndex = queries.indexOf('ROLLBACK', beginIndexes[1])
+    expect(queries.slice(beginIndexes[1] + 1, rollbackIndex)).not.toContain('COMMIT')
 
     const complete = messages.find(
       (m): m is { type: 'complete'; result: { files: Array<{ error?: string }> } } =>
@@ -363,7 +366,7 @@ describe('postgres-import-worker runImport', () => {
     expect(complete).toBeDefined()
     const result = complete!.result
     expect(result.files[0].error).toBeUndefined()
-    expect(result.files[1].error).toMatch(/inject failure on file 2/)
+    expect(result.files[1].error).toMatch(/late failure in file 2/)
   })
 
   it('opens client, runs BEGIN/COMMIT for single-file JSON, posts complete', async () => {
@@ -421,6 +424,54 @@ describe('postgres-import-worker runImport', () => {
       (m): m is { type: 'complete' } => (m as { type: string }).type === 'complete'
     )
     expect(complete).toBeDefined()
+  })
+
+  it('rolls back a single-file JSON import when the stream fails after a flushed batch', async () => {
+    const queries: string[] = []
+    const client = {
+      connect: vi.fn(async () => undefined),
+      query: vi.fn(async (sql: string | { text: string }) => {
+        const text = typeof sql === 'string' ? sql : sql.text
+        queries.push(text)
+        if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') return { rows: [] }
+        if (text.startsWith('SELECT id FROM')) return { rows: [] }
+        if (text.startsWith('INSERT INTO') && text.includes('"cases"')) {
+          return { rows: [{ id: 11 }] }
+        }
+        return { rows: [] }
+      }),
+      end: vi.fn(async () => undefined)
+    }
+    const messages: unknown[] = []
+    async function* rows(): AsyncGenerator<Record<string, unknown>, void, void> {
+      yield { chr: '1', pos: 1, ref: 'A', alt: 'T' }
+      throw new Error('late JSON stream failure')
+    }
+
+    await runImport(
+      {
+        createClient: () => client as never,
+        detectFormat: async () => ({ format: 'simple', caseKey: '' }) as never,
+        createMapperPipeline: async () => Readable.from(rows()),
+        createVcfMappedStream: async () => Readable.from([]) as never,
+        statFile: () => ({ size: 100 })
+      },
+      {
+        type: 'start',
+        client: { connectionString: 'postgres://x' },
+        schema: 'public',
+        mode: 'single-file',
+        caseName: 'JSON case',
+        filePath: '/tmp/a.json',
+        format: 'json',
+        batchSize: 1
+      },
+      (message) => messages.push(message)
+    )
+
+    expect(queries).toContain('ROLLBACK')
+    expect(queries).not.toContain('COMMIT')
+    expect(messages).toContainEqual({ type: 'error', message: 'late JSON stream failure' })
   })
 
   it('loads BedFilter and applies pre/post-mapping filters in multi-file mode', async () => {

@@ -9,6 +9,7 @@ export const DEFAULT_MAX_GZIP_COMPRESSION_RATIO = 100
  * independent absolute decompressed-byte cap is reached.
  */
 export const MAX_VCF_GZIP_COMPRESSION_RATIO = 1000
+export const MAX_GZIP_FORMAT_INSPECTION_BYTES = 4096
 
 /**
  * Incrementally identifies a VCF and counts samples from its #CHROM header.
@@ -22,7 +23,13 @@ export class GzipRatioPolicy {
   private firstLine = true
   private vcf = false
   private sampleCount = 0
+  private vcfHeaderTabs: number | null = null
+  private vcfDataShapeValidated = false
   private inspectionComplete = false
+  private firstLineBytes = 0
+  private fixedFieldMask = 0
+  private posDigitsOnly = true
+  private posHasNonZeroDigit = false
 
   constructor(private readonly baseRatio: number) {}
 
@@ -34,21 +41,39 @@ export class GzipRatioPolicy {
         this.atLineStart = false
         this.linePrefix = ''
         this.lineTabs = 0
+        this.fixedFieldMask = 0
+        this.posDigitsOnly = true
+        this.posHasNonZeroDigit = false
+      }
+      if (this.firstLine) {
+        this.firstLineBytes += 1
+        if (this.firstLineBytes > MAX_GZIP_FORMAT_INSPECTION_BYTES) {
+          this.inspectionComplete = true
+          return
+        }
       }
       if (this.linePrefix.length < 24 && byte !== 0x0a && byte !== 0x0d) {
         this.linePrefix += String.fromCharCode(byte)
       }
-      if (byte === 0x09) this.lineTabs += 1
+      if (byte === 0x09) {
+        this.lineTabs += 1
+      } else if (byte !== 0x0a && byte !== 0x0d) {
+        if (this.lineTabs < 8) this.fixedFieldMask |= 1 << this.lineTabs
+        if (this.lineTabs === 1) {
+          this.posDigitsOnly &&= byte >= 0x30 && byte <= 0x39
+          this.posHasNonZeroDigit ||= byte >= 0x31 && byte <= 0x39
+        }
+      }
       if (byte !== 0x0a) continue
 
       if (this.firstLine) {
         this.vcf = this.linePrefix.startsWith('##fileformat=VCFv')
         this.firstLine = false
         this.inspectionComplete = !this.vcf
-      } else if (this.vcf && this.linePrefix.startsWith('#CHROM\t')) {
-        // Nine fixed/FORMAT columns produce eight tabs before sample columns.
-        this.sampleCount = Math.max(0, this.lineTabs - 8)
-        this.inspectionComplete = true
+      } else if (this.vcfHeaderTabs === null) {
+        this.observeVcfHeaderLine()
+      } else {
+        this.observeVcfDataLine()
       }
       if (this.inspectionComplete) return
       this.atLineStart = true
@@ -56,7 +81,39 @@ export class GzipRatioPolicy {
   }
 
   maxRatio(): number {
-    if (!this.vcf) return this.baseRatio
+    if (!this.vcf || !this.vcfDataShapeValidated) return this.baseRatio
     return Math.min(MAX_VCF_GZIP_COMPRESSION_RATIO, this.baseRatio + this.sampleCount)
+  }
+
+  private observeVcfHeaderLine(): void {
+    if (!this.linePrefix.startsWith('#CHROM\t')) return
+    // Eight mandatory site columns produce seven tabs. FORMAT is the ninth
+    // column, so each tab beyond eight represents one declared sample.
+    if (this.lineTabs < 7) {
+      this.revokeVcfAllowance()
+      return
+    }
+    this.vcfHeaderTabs = this.lineTabs
+    this.sampleCount = Math.max(0, this.lineTabs - 8)
+  }
+
+  private observeVcfDataLine(): void {
+    if (
+      this.linePrefix === '' ||
+      this.linePrefix.startsWith('#') ||
+      this.lineTabs !== this.vcfHeaderTabs ||
+      (this.fixedFieldMask & 0b0001_1011) !== 0b0001_1011 ||
+      !this.posDigitsOnly ||
+      !this.posHasNonZeroDigit
+    ) {
+      this.revokeVcfAllowance()
+      return
+    }
+    this.vcfDataShapeValidated = true
+  }
+
+  private revokeVcfAllowance(): void {
+    this.vcfDataShapeValidated = false
+    this.inspectionComplete = true
   }
 }

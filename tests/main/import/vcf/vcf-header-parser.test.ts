@@ -9,6 +9,12 @@ import {
 } from '../../../../src/main/import/vcf/vcf-header-parser'
 import { VcfHeaderLimitExceededError } from '../../../../src/main/import/vcf/vcf-header-limits'
 import {
+  MAX_VCF_ANNOTATION_FIELDS,
+  MAX_VCF_COLUMNS,
+  MAX_VCF_STRUCTURED_HEADER_FIELDS,
+  VcfResourceLimitError
+} from '../../../../src/main/import/vcf/vcf-resource-limits'
+import {
   LineTooLongError,
   DecompressedSizeExceededError
 } from '../../../../src/main/import/stream-utils'
@@ -120,6 +126,29 @@ describe('vcf-header-parser', () => {
       const header = parseVcfHeaderFromLines(sitesOnly)
       expect(header.samples).toEqual([])
       expect(header.annotationType).toBe('none')
+    })
+
+    it('rejects excessive #CHROM, structured-header, and CSQ field fanout', () => {
+      const wideChrom = `#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO${'\tS'.repeat(MAX_VCF_COLUMNS)}`
+      expect(() => parseVcfHeaderFromLines([wideChrom])).toThrow(VcfResourceLimitError)
+
+      const structuredFields = Array.from(
+        { length: MAX_VCF_STRUCTURED_HEADER_FIELDS + 1 },
+        (_, index) => `K${index}=v`
+      ).join(',')
+      expect(() => parseVcfHeaderFromLines([`##INFO=<${structuredFields}>`])).toThrow(
+        VcfResourceLimitError
+      )
+
+      const csqFields = Array.from(
+        { length: MAX_VCF_ANNOTATION_FIELDS + 1 },
+        (_, index) => `F${index}`
+      ).join('|')
+      expect(() =>
+        parseVcfHeaderFromLines([
+          `##INFO=<ID=CSQ,Number=.,Type=String,Description="Format: ${csqFields}">`
+        ])
+      ).toThrow(VcfResourceLimitError)
     })
   })
 

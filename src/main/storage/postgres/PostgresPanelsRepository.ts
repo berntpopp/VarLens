@@ -365,6 +365,12 @@ export class PostgresPanelsRepository {
     options: BedReaderOptions = {}
   ): Promise<RegionFile> {
     return this.withTransaction(async (client) => {
+      const locked = await client.query<Row>(
+        `SELECT id FROM ${this.table('region_files')} WHERE id = $1 FOR UPDATE`,
+        [fileId]
+      )
+      if (locked.rows.length === 0) throw new Error(`Region file ${fileId} not found`)
+
       await client.query(
         `DELETE FROM ${this.table('region_file_entries')} WHERE region_file_id = $1`,
         [fileId]

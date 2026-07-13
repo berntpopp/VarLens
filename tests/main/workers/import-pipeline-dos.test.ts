@@ -30,6 +30,12 @@ import {
 } from '../../../src/main/import/stream-utils'
 import type { FormatInfo } from '../../../src/main/import/strategies/ImportStrategy'
 import { VcfHeaderLimitExceededError } from '../../../src/main/import/vcf/vcf-header-limits'
+import {
+  JsonRecordLimitError,
+  MAX_JSON_RECORD_BYTES,
+  MAX_JSON_RECORD_CONTAINER_ENTRIES,
+  MAX_JSON_RECORD_DEPTH
+} from '../../../src/main/import/json-resource-budget'
 
 const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
 const LINE_CAP_ENV_VAR = 'VARLENS_TEST_IMPORT_MAX_LINE_BYTES'
@@ -266,4 +272,77 @@ describe('streamInsertVcf DoS guards (import-pipeline.ts, live SQLite worker pat
       ).rejects.toThrow(DecompressedSizeExceededError)
     }
   )
+
+  it.each([
+    { name: 'plain', gzip: false },
+    { name: 'gzip', gzip: true }
+  ])('rejects one oversized JSON record before materialization ($name)', async ({ name, gzip }) => {
+    const filePath = join(tmpDir, `oversized-record-${name}.json${gzip ? '.gz' : ''}`)
+    const json = JSON.stringify({
+      variants: [
+        {
+          chr: '1',
+          pos: 1,
+          ref: 'A',
+          alt: 'T',
+          payload: 'x'.repeat(MAX_JSON_RECORD_BYTES + 1)
+        }
+      ]
+    })
+    writeFileSync(filePath, gzip ? gzipSync(Buffer.from(json)) : json)
+
+    const caseId = svc.cases.createCase(`test-oversized-${name}`, filePath, json.length)
+    const stmts = prepareStatements(svc.database)
+
+    await expect(
+      streamInsertJson(
+        filePath,
+        { format: 'simple', caseKey: 'variants' },
+        caseId,
+        5000,
+        stmts,
+        () => false,
+        () => {}
+      )
+    ).rejects.toThrow(JsonRecordLimitError)
+  })
+
+  it.each([
+    {
+      name: 'container entries',
+      makePayload: () => Array.from({ length: MAX_JSON_RECORD_CONTAINER_ENTRIES + 1 }, () => null)
+    },
+    {
+      name: 'nesting depth',
+      makePayload: () => {
+        const root: Record<string, unknown> = {}
+        let cursor = root
+        for (let index = 0; index < MAX_JSON_RECORD_DEPTH; index += 1) {
+          const child: Record<string, unknown> = {}
+          cursor.child = child
+          cursor = child
+        }
+        return root
+      }
+    }
+  ])('rejects a JSON record exceeding its $name budget', async ({ name, makePayload }) => {
+    const filePath = join(tmpDir, `oversized-${name.replace(' ', '-')}.json`)
+    const json = JSON.stringify({
+      variants: [{ chr: '1', pos: 1, ref: 'A', alt: 'T', payload: makePayload() }]
+    })
+    writeFileSync(filePath, json)
+    const caseId = svc.cases.createCase(`test-${name}`, filePath, json.length)
+
+    await expect(
+      streamInsertJson(
+        filePath,
+        { format: 'simple', caseKey: 'variants' },
+        caseId,
+        5000,
+        prepareStatements(svc.database),
+        () => false,
+        () => {}
+      )
+    ).rejects.toThrow(JsonRecordLimitError)
+  })
 })

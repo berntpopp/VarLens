@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { parseVcfLine } from '../../../../src/main/import/vcf/vcf-line-parser'
+import {
+  MAX_VCF_ALT_ALLELES,
+  MAX_VCF_COLUMNS,
+  MAX_VCF_INFO_FIELDS
+} from '../../../../src/main/import/vcf/vcf-resource-limits'
 
 const SAMPLE_NAMES = ['HG005', 'HG006', 'HG007']
 
@@ -209,6 +214,35 @@ describe('vcf-line-parser', () => {
 
       expect(record?.qual).toBeNull()
       expect(onSkip).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('allocation budgets', () => {
+    it('reports truncated rows through onSkip', () => {
+      const onSkip = vi.fn()
+
+      expect(parseVcfLine('chr1\t1\t.\tA', [], onSkip)).toBeNull()
+      expect(onSkip).toHaveBeenCalledWith(expect.stringMatching(/truncated/i))
+    })
+
+    it('rejects column fanout beyond the supported sample budget', () => {
+      const onSkip = vi.fn()
+      const line = `chr1\t1\t.\tA\tG\t.\tPASS\t.${'\t0/1'.repeat(MAX_VCF_COLUMNS)}`
+
+      expect(parseVcfLine(line, [], onSkip)).toBeNull()
+      expect(onSkip).toHaveBeenCalledWith(expect.stringMatching(/too many VCF columns/i))
+    })
+
+    it('rejects excessive ALT and INFO fanout without materializing every value', () => {
+      const altSkip = vi.fn()
+      const alt = Array.from({ length: MAX_VCF_ALT_ALLELES + 1 }, () => 'A').join(',')
+      expect(parseVcfLine(`chr1\t1\t.\tC\t${alt}\t.\tPASS\t.`, [], altSkip)).toBeNull()
+      expect(altSkip).toHaveBeenCalledWith(expect.stringMatching(/too many ALT/i))
+
+      const infoSkip = vi.fn()
+      const info = Array.from({ length: MAX_VCF_INFO_FIELDS + 1 }, (_, i) => `K${i}=1`).join(';')
+      expect(parseVcfLine(`chr1\t1\t.\tC\tA\t.\tPASS\t${info}`, [], infoSkip)).toBeNull()
+      expect(infoSkip).toHaveBeenCalledWith(expect.stringMatching(/too many INFO/i))
     })
   })
 })

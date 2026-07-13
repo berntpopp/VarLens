@@ -13,6 +13,7 @@ import {
 } from '../../../../src/main/import/vcf/bed-reader'
 import { DecompressedSizeExceededError } from '../../../../src/main/import/stream-utils'
 import path from 'path'
+import { performance } from 'node:perf_hooks'
 
 const BED_PATH = path.join(__dirname, '../../../test-data/vcf/test-regions.bed')
 const DECOMPRESSED_CAP_ENV_VAR = 'VARLENS_IMPORT_MAX_DECOMPRESSED_BYTES'
@@ -72,6 +73,19 @@ describe('BedFilter', () => {
       expect(
         parseBedEntry(`chr1\t${Number.MAX_SAFE_INTEGER + 1}\t${Number.MAX_SAFE_INTEGER + 2}`)
       ).toBeNull()
+    })
+
+    it('parses only the first four fields of a token-dense BED line', () => {
+      const denseRemainder = ' ignored'.repeat(1_000_000)
+      const startedAt = performance.now()
+
+      expect(parseBedEntry(`chr1 0 10 label${denseRemainder}`)).toEqual({
+        chr: 'chr1',
+        start: 0,
+        end: 10,
+        label: 'label'
+      })
+      expect(performance.now() - startedAt).toBeLessThan(20)
     })
   })
 

@@ -73,6 +73,29 @@ describe('import-logic-append.ts DoS guards', () => {
       ).rejects.toThrow(LineTooLongError)
     })
 
+    it('rolls back earlier batches when a late line exceeds the cap', async () => {
+      process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
+      const filePath = join(tmpDir, 'late-giant-line.vcf')
+      const validRows = Array.from(
+        { length: 10_000 },
+        (_, index) => `chr1\t${index + 1}\t.\tA\tG\t99\tPASS\t.\tGT\t0/1`
+      )
+      writeFileSync(
+        filePath,
+        GIANT_LINE_VCF(validRows.concat('A'.repeat(TEST_LINE_CAP + 1)).join('\n'))
+      )
+
+      const caseId = svc.cases.createCase('test-append-late-giant-line', filePath, 1000)
+      svc.variants.beginBulkInsert()
+
+      await expect(
+        importAdditionalFileToCase(caseId, filePath, { selectedSample: 'HG005' }, () => svc, {})
+      ).rejects.toThrow(LineTooLongError)
+
+      svc.variants.recalculateCaseVariantCount(caseId)
+      expect(svc.cases.getCase(caseId)?.variant_count).toBe(0)
+    })
+
     it('rejects a decompression bomb once decompressed bytes exceed the configured cap', async () => {
       process.env[DECOMPRESSED_CAP_ENV_VAR] = '1000'
       const filePath = join(tmpDir, 'bomb.vcf.gz')

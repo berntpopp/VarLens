@@ -7,6 +7,14 @@
 
 import type { VcfHeader, AnnotationResult } from './types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
+import {
+  MAX_VCF_ANNOTATION_CHARS,
+  MAX_VCF_ANNOTATION_FIELDS,
+  MAX_VCF_ANNOTATIONS,
+  MAX_VCF_TOTAL_ANNOTATION_VALUES,
+  splitBounded,
+  VcfResourceLimitError
+} from './vcf-resource-limits'
 
 /** Impact severity order for transcript selection */
 const IMPACT_ORDER: Record<string, number> = {
@@ -58,14 +66,32 @@ function parseCsq(
 ): AnnotationResult {
   const csqRaw = info.get('CSQ')
   if (csqRaw == null || csqRaw === '') return emptyResult()
+  if (csqRaw.length > MAX_VCF_ANNOTATION_CHARS) {
+    throw new VcfResourceLimitError(`CSQ annotation exceeds ${MAX_VCF_ANNOTATION_CHARS} characters`)
+  }
 
   // Split annotations by comma, then each by pipe
-  const annotations = csqRaw.split(',')
+  const annotations = splitBounded(csqRaw, ',', MAX_VCF_ANNOTATIONS)
+  if (annotations === null) {
+    throw new VcfResourceLimitError(`CSQ has more than ${MAX_VCF_ANNOTATIONS} annotations`)
+  }
   const parsed: CsqTranscript[] = []
+  let totalValues = 0
 
   for (const ann of annotations) {
     if (ann === '') continue
-    const parts = ann.split('|')
+    const parts = splitBounded(ann, '|', MAX_VCF_ANNOTATION_FIELDS)
+    if (parts === null) {
+      throw new VcfResourceLimitError(
+        `CSQ annotation has more than ${MAX_VCF_ANNOTATION_FIELDS} fields`
+      )
+    }
+    totalValues += parts.length
+    if (totalValues > MAX_VCF_TOTAL_ANNOTATION_VALUES) {
+      throw new VcfResourceLimitError(
+        `CSQ has more than ${MAX_VCF_TOTAL_ANNOTATION_VALUES} total values`
+      )
+    }
     const fields = new Map<string, string>()
 
     for (let i = 0; i < csqFieldNames.length && i < parts.length; i++) {
@@ -160,13 +186,31 @@ interface AnnTranscript {
 function parseAnn(info: Map<string, string>, altAllele: string, ref: string): AnnotationResult {
   const annRaw = info.get('ANN')
   if (annRaw == null || annRaw === '') return emptyResult()
+  if (annRaw.length > MAX_VCF_ANNOTATION_CHARS) {
+    throw new VcfResourceLimitError(`ANN annotation exceeds ${MAX_VCF_ANNOTATION_CHARS} characters`)
+  }
 
-  const annotations = annRaw.split(',')
+  const annotations = splitBounded(annRaw, ',', MAX_VCF_ANNOTATIONS)
+  if (annotations === null) {
+    throw new VcfResourceLimitError(`ANN has more than ${MAX_VCF_ANNOTATIONS} annotations`)
+  }
   const parsed: AnnTranscript[] = []
+  let totalValues = 0
 
   for (const ann of annotations) {
     if (ann === '') continue
-    const parts = ann.split('|')
+    const parts = splitBounded(ann, '|', MAX_VCF_ANNOTATION_FIELDS)
+    if (parts === null) {
+      throw new VcfResourceLimitError(
+        `ANN annotation has more than ${MAX_VCF_ANNOTATION_FIELDS} fields`
+      )
+    }
+    totalValues += parts.length
+    if (totalValues > MAX_VCF_TOTAL_ANNOTATION_VALUES) {
+      throw new VcfResourceLimitError(
+        `ANN has more than ${MAX_VCF_TOTAL_ANNOTATION_VALUES} total values`
+      )
+    }
     const allele = parts[ANN_ALLELE] ?? ''
     parsed.push({ parts, allele })
   }

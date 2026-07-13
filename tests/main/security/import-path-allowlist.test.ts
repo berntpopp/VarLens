@@ -1,10 +1,11 @@
-import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   addAllowedImportPath,
   isAllowedImportPath,
+  isStrictlyEnrolledPath,
   __resetAllowlistForTests
 } from '../../../src/main/security/import-path-allowlist'
 
@@ -46,19 +47,42 @@ describe('import-path-allowlist', () => {
     }
   })
 
-  symlinkIt('accepts a dialog-registered symlink and its resolved target', () => {
+  symlinkIt('rejects a dialog-registered symlink after its target changes', () => {
     const root = mkdtempSync(join(tmpdir(), 'varlens-allowlist-'))
     try {
-      const linkPath = join(root, 'passwd-link.vcf')
-      symlinkSync('/etc/passwd', linkPath)
-      const targetPath = realpathSync.native(linkPath)
+      const targetA = join(root, 'a.vcf')
+      const targetB = join(root, 'b.vcf')
+      const linkPath = join(root, 'selected.vcf')
+      writeFileSync(targetA, 'A')
+      writeFileSync(targetB, 'B')
+      symlinkSync(targetA, linkPath)
 
       addAllowedImportPath(linkPath)
-
       expect(isAllowedImportPath(linkPath)).toBe(true)
-      expect(isAllowedImportPath(targetPath)).toBe(true)
+
+      rmSync(linkPath)
+      symlinkSync(targetB, linkPath)
+      expect(isAllowedImportPath(linkPath)).toBe(false)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  describe('isStrictlyEnrolledPath', () => {
+    it('rejects an automatic-root path that was never dialog-enrolled', () => {
+      expect(isAllowedImportPath('/tmp/inside-tmp.bed')).toBe(true)
+      expect(isStrictlyEnrolledPath('/tmp/inside-tmp.bed')).toBe(false)
+    })
+
+    it('accepts an explicitly enrolled normalized absolute path', () => {
+      const filePath = '/tmp/dialog-selected.bed'
+      addAllowedImportPath(filePath)
+      expect(isStrictlyEnrolledPath(filePath)).toBe(true)
+    })
+
+    it('rejects relative and non-normalized paths', () => {
+      expect(isStrictlyEnrolledPath('relative.bed')).toBe(false)
+      expect(isStrictlyEnrolledPath('/tmp/../etc/shadow')).toBe(false)
+    })
   })
 })

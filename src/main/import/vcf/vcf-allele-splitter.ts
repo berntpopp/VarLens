@@ -6,6 +6,22 @@
  */
 
 import type { VcfRawRecord, InfoFieldDef, FormatFieldDef } from './types'
+import {
+  MAX_VCF_ALT_ALLELES,
+  splitBounded,
+  splitGenotypeAlleles,
+  VcfResourceLimitError
+} from './vcf-resource-limits'
+
+function splitAlleleValues(value: string): string[] {
+  const parts = splitBounded(value, ',', MAX_VCF_ALT_ALLELES + 1)
+  if (parts === null) {
+    throw new VcfResourceLimitError(
+      `Allele-valued field has more than ${MAX_VCF_ALT_ALLELES + 1} values`
+    )
+  }
+  return parts
+}
 
 /**
  * Split a multi-allelic VcfRawRecord into one record per ALT allele.
@@ -69,7 +85,7 @@ function splitInfoFields(
 
       case 'A': {
         // Per-ALT allele — select value at altIdx
-        const parts = value.split(',')
+        const parts = splitAlleleValues(value)
         if (altIdx < parts.length) {
           result.set(key, parts[altIdx])
         } else {
@@ -80,7 +96,7 @@ function splitInfoFields(
 
       case 'R': {
         // Per-allele (REF + ALTs) — keep REF (index 0) + current ALT
-        const parts = value.split(',')
+        const parts = splitAlleleValues(value)
         if (parts.length > altIdx + 1) {
           result.set(key, `${parts[0]},${parts[altIdx + 1]}`)
         } else {
@@ -132,13 +148,13 @@ function splitSampleFields(
 
       if (number === 'R') {
         // Per-allele (REF + ALTs) — keep REF + current ALT
-        const parts = values[fIdx].split(',')
+        const parts = splitAlleleValues(values[fIdx])
         if (parts.length > altIdx + 1) {
           newValues[fIdx] = `${parts[0]},${parts[altIdx + 1]}`
         }
       } else if (number === 'A') {
         // Per-ALT — select value at altIdx
-        const parts = values[fIdx].split(',')
+        const parts = splitAlleleValues(values[fIdx])
         if (altIdx < parts.length) {
           newValues[fIdx] = parts[altIdx]
         }
@@ -165,7 +181,8 @@ function splitSampleFields(
 function remapGenotype(gt: string, originalAltAllele: number): string {
   // Determine separator
   const separator = gt.includes('|') ? '|' : '/'
-  const alleles = gt.split(/[/|]/)
+  const alleles = splitGenotypeAlleles(gt)
+  if (alleles === null) throw new VcfResourceLimitError('Genotype ploidy exceeds 64 alleles')
 
   const remapped = alleles.map((a) => {
     if (a === '.') return '.'

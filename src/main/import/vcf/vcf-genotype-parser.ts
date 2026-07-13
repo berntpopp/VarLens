@@ -6,6 +6,7 @@
  */
 
 import type { GenotypeData } from './types'
+import { MAX_VCF_ALT_ALLELES, splitBounded, VcfResourceLimitError } from './vcf-resource-limits'
 
 /**
  * Parse genotype data from sample values using FORMAT field order.
@@ -46,7 +47,10 @@ export function parseGenotype(
   if (adIdx !== undefined && adIdx < sampleValues.length) {
     const adStr = sampleValues[adIdx]
     if (adStr !== '.' && adStr !== '') {
-      const adParts = adStr.split(',')
+      const adParts = splitBounded(adStr, ',', MAX_VCF_ALT_ALLELES + 1)
+      if (adParts === null) {
+        throw new VcfResourceLimitError(`AD has more than ${MAX_VCF_ALT_ALLELES + 1} allele depths`)
+      }
       if (adParts.length >= 2) {
         const refVal = parseInt(adParts[0], 10)
         const altVal = parseInt(adParts[altAlleleIndex] || adParts[1], 10)

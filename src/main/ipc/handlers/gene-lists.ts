@@ -1,4 +1,5 @@
 import { wrapHandler } from '../errorHandler'
+import { InvalidParametersError } from '../errors'
 import type { HandlerDependencies } from '../types'
 import {
   GeneListIdSchema,
@@ -8,6 +9,7 @@ import {
   BedImportSchema
 } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
+import { isStrictlyEnrolledPath } from '../../security/import-path-allowlist'
 
 /**
  * Gene Lists and Region Files IPC handlers
@@ -212,6 +214,13 @@ export function registerGeneListHandlers({
           'gene-lists'
         )
         throw new Error('Invalid BED import parameters')
+      }
+
+      if (!isStrictlyEnrolledPath(validated.data.filePath)) {
+        throw new InvalidParametersError(
+          `region-files:importBed: filePath was not selected through a trusted dialog: ${validated.data.filePath}`,
+          'The selected file is not in an allowed location.'
+        )
       }
 
       const session = getDbManager().getCurrentSession()

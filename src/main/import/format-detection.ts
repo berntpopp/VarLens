@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline'
 import { parser } from 'stream-json'
 import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
+import { createJsonRecordBudget } from './json-resource-budget'
 import { compose, type Readable } from 'node:stream'
 import type { FileFormat, FormatInfo } from './strategies/ImportStrategy'
 import { createCappedLineStream, createDecompressedStream } from './stream-utils'
@@ -258,6 +259,7 @@ export async function createDataPipeline(filePath: string): Promise<{
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: 'variants' }),
+        createJsonRecordBudget(),
         streamArray.asStream()
       )
       break
@@ -268,6 +270,7 @@ export async function createDataPipeline(filePath: string): Promise<{
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: samplePath }),
+        createJsonRecordBudget(),
         streamArray.asStream()
       )
       break
@@ -280,6 +283,7 @@ export async function createDataPipeline(filePath: string): Promise<{
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: dataPath }),
+        createJsonRecordBudget(),
         streamArray.asStream()
       )
       break
