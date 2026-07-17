@@ -120,6 +120,12 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
         (action_type, entity_type, entity_key, new_value, user_name)
        VALUES ('star', 'variant_annotation', '1:100:A:G', '{"starred":1}', 'legacy-user')`
     )
+    await probeClient.query(
+      `INSERT INTO "${schema}".users
+        (username, display_name, password_hash, role, must_change_password)
+       VALUES ('legacy-platform-subject', 'Legacy platform user',
+         'platform-identity-disabled-local-password', 'user', FALSE)`
+    )
 
     const throughCentral = POSTGRES_MIGRATIONS.filter((m) => m.version < '0014')
     const centralResult = await new PostgresMigrationRunner(pool, schema, throughCentral).migrate()
@@ -146,7 +152,7 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
     )
 
     const result = await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
-    expect(result.applied).toEqual(['0014', '0015'])
+    expect(result.applied).toEqual(['0014', '0015', '0016'])
 
     const migratedTranscript = await probeClient.query<{ consequence: string; func: string }>(
       `SELECT consequence, func
@@ -210,6 +216,21 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
     expectColType('created_at', 'timestamptz', 'NO', true)
     expectColType('created_by', 'int8', 'YES', false)
     expectColType('updated_at', 'timestamptz', 'YES', false)
+    expectColType('auth_source', 'text', 'NO', true)
+
+    await expect(
+      probeClient.query(
+        `SELECT auth_source FROM "${schema}".users WHERE username = 'legacy-platform-subject'`
+      )
+    ).resolves.toMatchObject({ rows: [{ auth_source: 'platform' }] })
+    await expect(
+      probeClient.query(
+        `INSERT INTO "${schema}".users
+          (username, display_name, password_hash, role, auth_source)
+         VALUES ('second-platform-subject', 'Second platform user',
+           'platform-identity-disabled-local-password', 'user', 'platform')`
+      )
+    ).rejects.toThrow()
 
     // Role CHECK must enumerate exactly admin + user, the same enum as SQLite
     // migrations.ts v12. The shared constants module is the cross-backend
