@@ -4,7 +4,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(15)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(16)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -20,7 +20,8 @@ describe('Postgres migration definitions', () => {
       '0012',
       '0013',
       '0014',
-      '0015'
+      '0015',
+      '0016'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -37,7 +38,8 @@ describe('Postgres migration definitions', () => {
       'extend_audit_contract',
       'central_audit_schema',
       'variant_transcripts_func',
-      'import_visibility'
+      'import_visibility',
+      'platform_identity'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {
@@ -99,5 +101,12 @@ describe('Postgres migration definitions', () => {
       'vt.is_selected = 1 AND v.transcript = vt.transcript_id'
     )
     expect(transcriptFuncMigration?.sql).toContain('FROM "__schema__"."variants" AS v')
+
+    const platformIdentityMigration = POSTGRES_MIGRATIONS.find(
+      (migration) => migration.version === '0016'
+    )
+    expect(platformIdentityMigration?.name).toBe('platform_identity')
+    expect(platformIdentityMigration?.sql).toContain('auth_source')
+    expect(platformIdentityMigration?.sql).toContain('users_single_platform_identity')
   })
 })

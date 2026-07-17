@@ -550,6 +550,18 @@ describe('PostgresWebAuthService — getUser / listUsers / isAccountsEnabled', (
     expect(await svc.getUser('ghost')).toBeUndefined()
   })
 
+  it('getPlatformUser only resolves an explicitly provisioned platform identity', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [pgUserRow({ username: 'oidc-subject' })], rowCount: 1 })
+
+    await expect(svc.getPlatformUser('oidc-subject')).resolves.toEqual(
+      expect.objectContaining({ username: 'oidc-subject' })
+    )
+    expect(pool.queries[0].text).toContain("auth_source = 'platform'")
+    expect(pool.queries[0].values).toEqual(['oidc-subject'])
+  })
+
   it('listUsers strips password_hash from every row', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
