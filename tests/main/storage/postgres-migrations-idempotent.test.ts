@@ -146,7 +146,7 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
     )
 
     const result = await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
-    expect(result.applied).toEqual(['0014'])
+    expect(result.applied).toEqual(['0014', '0015'])
 
     const migratedTranscript = await probeClient.query<{ consequence: string; func: string }>(
       `SELECT consequence, func

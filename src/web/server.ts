@@ -20,9 +20,10 @@
  *   - production runs `node out/web/server.cjs` via main()
  */
 
+import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'path'
 
-import Fastify, { type FastifyInstance } from 'fastify'
+import Fastify, { LogController, type FastifyInstance } from 'fastify'
 
 import { getPostgresStorageConfig } from '../main/storage/config'
 import { createPostgresStorageSession } from '../main/storage/postgres/createPostgresStorageSession'
@@ -93,11 +94,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   }
 
   const app = Fastify({
+    genReqId: () => randomUUID(),
+    logController: new LogController({ requestIdLogLabel: 'request_id' }),
     logger: {
       level: process.env.VARLENS_LOG_LEVEL ?? 'info'
     }
   })
   const metrics = options.metrics ?? createAppMetricsFromEnv()
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('x-request-id', request.id)
+  })
   registerRequestMetrics(app, metrics)
   await registerWebRateLimit(app)
 
@@ -132,7 +138,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const dispatcherDeps = {
     session: session as StorageSession,
     authService,
-    events
+    events,
+    metrics
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
   registerImportUploadRoutes(app, dispatcherDeps)
