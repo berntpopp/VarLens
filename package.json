@@ -200,7 +200,7 @@
     "pg": "^8.22.0",
     "pg-copy-streams": "^7.0.0",
     "pg-query-stream": "^4.16.0",
-    "pinia": "^3.0.4",
+    "pinia": "^4.0.2",
     "piscina": "^5.2.0",
     "plotly.js-basic-dist-min": "^3.7.0",
     "stream-json": "^3.5.0",
