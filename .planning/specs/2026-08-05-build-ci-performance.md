@@ -275,8 +275,18 @@ largest day-to-day developer-experience win in the whole spec, and it is invisib
 3. **Fail-loud ABI assertion.** A script that loads the module and asserts the binary's ABI matches
    the expected target, run after any cache restore or copy. This replaces `-f` as the correctness
    mechanism and is what makes removing `-f` safe.
-4. **Pass `--jobs`** to parallelize the unavoidable first compile (currently single-threaded at 98%
-   CPU on 32 cores).
+4. **Pass `--jobs`** to bound the compile explicitly (it currently runs single-threaded at 98% CPU on
+   32 cores).
+
+   **Correction, measured 2026-08-05 during implementation: `--jobs` does not speed this up, and the
+   "cold compile ≤ 20 s" target is withdrawn.** The build emits only **3 object files**, one of them
+   from a **368,327-line `sqlite3.c` amalgamation**, so wall time is floored by the longest single
+   translation unit and no amount of job parallelism helps. Measured with `--jobs 8`: 34.7 s versus a
+   33.6 s baseline — i.e. unchanged. Keep the flag anyway: node-gyp otherwise defaults to serial
+   `make`, so passing an explicit bounded value documents the intent and guarantees the June 2026
+   unbounded-parallelism problem cannot recur here. Do not go looking for a cold-compile win via
+   parallelism; the win is the cache, which makes the compile happen **once per ABI** instead of
+   every time.
 
 Open question for implementation: the timing agent observed that the Electron-built binary also
 loaded successfully under Node 24 (sqlcipher test 18/18 pass) and that `rebuild:node` is a 0.5 s
@@ -480,7 +490,7 @@ baseline + comparison artifacts under `.planning/artifacts/perf/<topic>/`, gitig
 | Local `make ci-full` (warm) | 264 s | **≤ 115 s** |
 | **`make dev` startup overhead** | **33.6 s** | **≤ 2 s** |
 | `rebuild:electron`, second invocation same ABI | 33.6 s | **≤ 2 s** |
-| `rebuild:electron`, cold compile | 33.6 s | ≤ 20 s (via `--jobs`) |
+| `rebuild:electron`, cold compile | 33.6 s | **~34 s — target withdrawn, see below** |
 | Electron-ABI compiles per `build.yml` run | 8 | **≤ 3** |
 | Electron-ABI compiles per push to `main` (all workflows) | 10 | **≤ 4** |
 | `build.yml` critical path | 807 s | **≤ 330 s** (Phases 1–5) |
