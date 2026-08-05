@@ -5,10 +5,11 @@
 // Deliberately does NOT pass `-f` to @electron/rebuild. `-f` disables both the
 // "already built" skip (rebuild.js:131) and the module-state cache
 // (rebuild.js:56-59, which warns "force take precedence and the cache will not
-// be used"). Correctness comes from assert-native-abi.mjs and the on-disk ABI
-// verification below instead.
+// be used"). Correctness comes from detectBinaryAbi() instead: every restore
+// and every compile is verified against the binary that is actually on disk,
+// never trusted from a manifest or from @electron/rebuild's own bookkeeping.
 import { spawnSync } from 'node:child_process'
-import { existsSync, rmSync } from 'node:fs'
+import { rmSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -18,6 +19,7 @@ import {
   MODULE_NAME,
   abiFor,
   detectBinaryAbi,
+  purge,
   restore,
   store
 } from './native-abi.mjs'
@@ -28,61 +30,119 @@ if (target !== 'node' && target !== 'electron') {
   process.exit(2)
 }
 
+const expectedAbi = abiFor(target)
+
+// Every caller below needs the same two outcomes: a known ABI (possibly the
+// wrong one) or "could not tell". "Could not tell" must never be treated as
+// a mismatch — on a platform/toolchain where detection itself doesn't work,
+// treating that as failure would break `npm ci` for an otherwise-correct
+// binary (see the undetermined branches below).
+function detectOrUndetermined(binaryPath) {
+  try {
+    return { abi: detectBinaryAbi(binaryPath), undetermined: false }
+  } catch (error) {
+    return { abi: null, undetermined: true, error }
+  }
+}
+
 if (restore(target)) {
-  process.stdout.write(`native: restored ${target} ABI ${abiFor(target)} from .cache/native\n`)
-  process.exit(0)
+  const detected = detectOrUndetermined(MODULE_BINARY)
+  if (detected.undetermined) {
+    process.stdout.write(
+      `native: restored ${target} ABI ${expectedAbi} from .cache/native (could not verify: ` +
+        `${detected.error.message}; trusting the cache entry)\n`
+    )
+    process.exit(0)
+  }
+  if (detected.abi === expectedAbi) {
+    process.stdout.write(`native: restored ${target} ABI ${expectedAbi} from .cache/native\n`)
+    process.exit(0)
+  }
+  // restore() already confirmed the cached binary matches its own manifest
+  // and sha256 — that only proves internal self-consistency, which is
+  // exactly what a poisoned entry also has. Self-heal rather than fail: a
+  // poisoned entry would otherwise wedge every future run on this machine
+  // permanently, since restore() would keep "succeeding" forever.
+  process.stderr.write(
+    `native: cache entry for ${target} ABI ${expectedAbi} is poisoned (on-disk binary is ` +
+      `actually ABI ${detected.abi}). Purging it and recompiling.\n`
+  )
+  purge(target)
 }
 
 // node-gyp compiles single-threaded by default; the measured Electron rebuild
 // ran at 98% CPU on a 32-core host. Cap the fan-out so this stays bounded —
-// the June 2026 incident was caused by unbounded parallelism.
-const jobs = process.env.VARLENS_NATIVE_JOBS || String(Math.min(8, availableParallelism()))
-
-if (target === 'electron') {
-  // @electron/rebuild's own "already built" skip (rebuild.js:131) trusts a
-  // `.forge-meta` file it wrote on a *previous* @electron/rebuild run — it
-  // has no way to know that our `rebuild:node` path (plain `npm rebuild`)
-  // may since have overwritten the binary with the Node ABI without
-  // touching that file. Reaching this line already means our own restore()
-  // found no fresh cache entry, so a real compile is required regardless of
-  // what that stale bookkeeping claims. Clear it so @electron/rebuild can't
-  // silently no-op; the ABI check after the compile is the actual guardrail
-  // either way, but a real compile is cheaper to reason about than relying
-  // on that check to fire.
-  const forgeMeta = join(dirname(MODULE_BINARY), '.forge-meta')
-  if (existsSync(forgeMeta)) rmSync(forgeMeta)
+// the June 2026 incident was caused by unbounded parallelism. The override is
+// validated and clamped to 1-8: on Windows it lands on a shell command line
+// (`shell: true` below), so anything that isn't a bare integer is ignored in
+// favor of the computed default rather than passed through.
+function clampedJobOverride(raw, fallback) {
+  if (!raw || !/^\d+$/.test(raw.trim())) return fallback
+  return Math.min(8, Math.max(1, Number.parseInt(raw.trim(), 10)))
 }
-
-const command =
-  target === 'electron'
-    ? ['npx', ['@electron/rebuild', '-w', MODULE_NAME, '--jobs', jobs]]
-    : ['npm', ['rebuild', MODULE_NAME]]
-
-process.stdout.write(
-  `native: compiling ${target} ABI ${abiFor(target)} (jobs=${jobs}) — no cache entry\n`
+const jobs = String(
+  clampedJobOverride(process.env.VARLENS_NATIVE_JOBS, Math.min(8, availableParallelism()))
 )
 
-const result = spawnSync(command[0], command[1], {
-  stdio: 'inherit',
-  shell: process.platform === 'win32'
-})
+function compile() {
+  return target === 'electron'
+    ? spawnSync('npx', ['@electron/rebuild', '-w', MODULE_NAME, '--jobs', jobs], {
+        stdio: 'inherit',
+        shell: process.platform === 'win32'
+      })
+    : spawnSync('npm', ['rebuild', MODULE_NAME], {
+        stdio: 'inherit',
+        shell: process.platform === 'win32'
+      })
+}
+
+process.stdout.write(
+  `native: compiling ${target} ABI ${expectedAbi} (jobs=${jobs}) — no cache entry\n`
+)
+
+let result = compile()
 if (result.status !== 0) process.exit(result.status ?? 1)
 
-// Verify the binary that just came out of the compile step is really the
-// target ABI before trusting it. `@electron/rebuild` (without `-f`) may
-// decide the module is already built and skip the compile entirely; if that
-// happens while the tree is on the *other* ABI, storing this binary would
-// poison the cache — the manifest would describe the wrong artifact, and
-// later manifest-only checks (including assert-native-abi.mjs) would pass
-// against a binary that is actually wrong. Detecting the ABI independently
-// of the manifest closes that hole.
-const expectedAbi = abiFor(target)
-const detectedAbi = detectBinaryAbi(MODULE_BINARY)
-if (detectedAbi !== expectedAbi) {
+let detected = detectOrUndetermined(MODULE_BINARY)
+
+// @electron/rebuild's own "already built" skip (module-rebuilder.js's
+// `alreadyBuiltByRebuild`/`metaPath` — an undocumented internal of
+// @electron/rebuild@4.2.0, may move in a future version) is keyed on a
+// `.forge-meta` file it wrote on a *previous* @electron/rebuild run. That
+// file is invisible to the `node` target's plain `npm rebuild` path, which
+// overwrites the binary with the Node ABI without touching it — so a stale
+// `.forge-meta` left over from an earlier electron build can make
+// @electron/rebuild believe electron ABI X is already built when the binary
+// on disk is actually the Node ABI, and it silently no-ops the compile.
+//
+// Retry exactly once after clearing it, rather than clearing it
+// unconditionally up front: the common case (the metadata IS accurate, e.g.
+// right after a fresh `npm ci`) should still take @electron/rebuild's own
+// fast, correct skip path instead of always paying for a real compile.
+if (target === 'electron' && !detected.undetermined && detected.abi !== expectedAbi) {
   process.stderr.write(
-    `native: FAIL — expected ${target} ABI ${expectedAbi} on disk after rebuild, ` +
-      `but detected ABI ${detectedAbi}. The rebuild step likely skipped compiling ` +
-      `(module already "built" for the other ABI). Refusing to cache this binary.\n`
+    `native: compile produced ABI ${detected.abi}, expected ${expectedAbi} — @electron/rebuild ` +
+      'likely skipped via a stale .forge-meta. Clearing it and retrying once.\n'
+  )
+  rmSync(join(dirname(MODULE_BINARY), '.forge-meta'), { force: true })
+  result = compile()
+  if (result.status !== 0) process.exit(result.status ?? 1)
+  detected = detectOrUndetermined(MODULE_BINARY)
+}
+
+if (detected.undetermined) {
+  process.stderr.write(
+    `native: could not verify the ${target} ABI ${expectedAbi} binary after compiling ` +
+      `(${detected.error.message}). Caching is disabled for this run — continuing without an ` +
+      'ABI-verified cache entry.\n'
+  )
+  process.exit(0)
+}
+
+if (detected.abi !== expectedAbi) {
+  process.stderr.write(
+    `native: FAIL — expected ${target} ABI ${expectedAbi} on disk after rebuild, but detected ` +
+      `ABI ${detected.abi}. Refusing to cache this binary.\n`
   )
   process.exit(1)
 }

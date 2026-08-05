@@ -3,7 +3,6 @@
 // Replaces `@electron/rebuild -f` as the wrong-ABI safeguard.
 // Usage: node scripts/native/assert-native-abi.mjs <node|electron>
 import { existsSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import process from 'node:process'
 
 import {
@@ -44,30 +43,31 @@ if (sha256(MODULE_BINARY) !== manifest.sha256) {
   )
 }
 
-// For the node target we can go further and prove it actually loads here.
-// (An electron-ABI binary cannot be loaded by this process, by definition.)
-if (target === 'node') {
-  try {
-    createRequire(import.meta.url)(MODULE_BINARY)
-  } catch (error) {
-    fail(`binary matched the manifest but failed to load: ${error.message}`)
-  }
+// The sha256 comparison above only proves the binary matches its own cache
+// manifest — which is exactly what a poisoned cache entry also shows (see
+// rebuild-native.mjs). Independently detect the ABI of the file on disk so
+// this cannot pass on a manifest describing the wrong artifact. Unlike a
+// bare `require()`, detectBinaryAbi() probes in a disposable child process,
+// so a truncated/corrupt binary fails this assertion cleanly instead of
+// crashing it with an uncatchable signal.
+//
+// Detection failing outright ("could not determine") is not the same as a
+// definite mismatch, but this script's whole job is to be certain — unlike
+// rebuild-native.mjs, which degrades gracefully so a platform where
+// detection doesn't work can't break `npm ci`, an assertion that can't
+// verify anything must fail loudly rather than pass by default.
+let detectedAbi
+try {
+  detectedAbi = detectBinaryAbi(MODULE_BINARY)
+} catch (error) {
+  fail(`could not determine the on-disk binary's real ABI: ${error.message}`)
 }
 
-// For the electron target, the sha256 comparison above only proves the binary
-// matches its own manifest — which is exactly what a poisoned cache entry
-// would also show (see rebuild-native.mjs). Independently detect the ABI of
-// the file on disk so this cannot pass on a manifest describing the wrong
-// artifact.
-if (target === 'electron') {
-  const detectedAbi = detectBinaryAbi(MODULE_BINARY)
-  if (detectedAbi !== abiFor('electron')) {
-    fail(
-      `installed binary reports ABI ${detectedAbi} on independent detection, ` +
-        `but the manifest claims ABI ${manifest.abi}. The cache is poisoned — ` +
-        `re-run \`npm run rebuild:electron\`.`
-    )
-  }
+if (detectedAbi !== abiFor(target)) {
+  fail(
+    `installed binary reports ABI ${detectedAbi} on independent detection, but the manifest ` +
+      `claims ABI ${manifest.abi}. The cache is poisoned — re-run \`npm run rebuild:${target}\`.`
+  )
 }
 
 process.stdout.write(`assert-native-abi: OK ${target} ABI ${manifest.abi}\n`)

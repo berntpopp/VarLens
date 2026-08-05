@@ -6,9 +6,9 @@
 // on every install, dev start and CI job because `-f` defeats the tool's own
 // skip logic. We cache the compiled artifact ourselves, keyed by ABI, and
 // verify it rather than forcing a rebuild.
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
@@ -42,29 +42,49 @@ export function abiFor(target) {
   throw new Error(`unknown target: ${target} (expected 'node' or 'electron')`)
 }
 
+// Extracted so it can be unit-tested directly against real Node error text,
+// independent of dlopen/subprocess plumbing. Node's own "compiled against a
+// different Node.js version" message embeds two numbers: the ABI the binary
+// was actually compiled for, and (later in the message) the ABI *this*
+// runtime requires. Only the first is the answer we want — this regex must
+// not just "match something"; it must anchor on the literal marker so an
+// unrelated error full of digits (e.g. a stack trace) returns no match
+// rather than a wrong one.
+export function parseAbiFromLoadError(message) {
+  const match = /NODE_MODULE_VERSION (\d+)/.exec(message)
+  return match ? match[1] : null
+}
+
 // Independently detects the real ABI of a compiled .node file, without
-// trusting any cache manifest. This closes the hole where `store()` would
-// otherwise record "whatever is on disk" under the wrong target: if
-// `@electron/rebuild` silently skips a compile while the tree is actually on
-// the Node ABI, a manifest-only check would pass because the wrong binary
-// matches its own wrong manifest.
-//
-// Loading a .node file under this Node process either succeeds (it is this
-// process's ABI) or throws an error whose message embeds the file's real
-// ABI, e.g. "NODE_MODULE_VERSION 148. This version of Node.js requires
-// NODE_MODULE_VERSION 137." The first number in that message is the ABI the
-// binary was actually built for.
+// trusting any cache manifest and without ever taking down the calling
+// process. This closes two holes:
+//   - a manifest-only check would pass a binary that matches its own wrong
+//     manifest (a poisoned cache entry never gets an independent check);
+//   - a truncated `.node` file (an interrupted copy, or ENOSPC mid-write)
+//     can carry a perfectly valid header while still being too short to
+//     dlopen safely. The dynamic loader then SIGBUSes on a page past the
+//     file's real end — a signal, which is not a catchable JS exception.
+// Loading the file in a disposable child process sidesteps that entirely:
+// if the child dies from a signal, spawnSync reports it as an ordinary
+// (non-throwing) `result.signal`, and this process is untouched.
 export function detectBinaryAbi(binaryPath) {
-  try {
-    createRequire(import.meta.url)(binaryPath)
-    return process.versions.modules
-  } catch (error) {
-    const match = /NODE_MODULE_VERSION (\d+)/.exec(error.message)
-    if (match) return match[1]
-    throw new Error(`detectBinaryAbi: could not determine ABI of ${binaryPath}: ${error.message}`, {
-      cause: error
-    })
-  }
+  const probe = spawnSync(process.execPath, ['-e', 'require(process.env.VARLENS_PROBE_BINARY)'], {
+    env: { ...process.env, VARLENS_PROBE_BINARY: binaryPath },
+    stdio: ['ignore', 'ignore', 'pipe']
+  })
+  if (probe.status === 0) return process.versions.modules
+
+  const stderr = probe.stderr ? probe.stderr.toString() : ''
+  const abi = parseAbiFromLoadError(stderr)
+  if (abi) return abi
+
+  const reason = probe.signal
+    ? `child process was killed by ${probe.signal} while loading the binary ` +
+      '(it is likely truncated or corrupt)'
+    : (stderr.split('\n').find((line) => /^[A-Za-z]*Error:/.test(line.trim())) ?? '').trim() ||
+      probe.error?.message ||
+      'unknown load failure'
+  throw new Error(`detectBinaryAbi: could not determine ABI of ${binaryPath}: ${reason}`)
 }
 
 export function cacheDir(target) {
@@ -138,4 +158,12 @@ export function restore(target) {
   mkdirSync(dirname(MODULE_BINARY), { recursive: true })
   copyFileSync(cachedBinary(target), MODULE_BINARY)
   return true
+}
+
+// Removes a cached artifact entirely (binary + manifest) so a poisoned entry
+// cannot be restored again. `{ force: true }` makes this a no-op rather than
+// a throw when there is nothing to remove (missing dir) or a concurrent
+// process already cleaned it up.
+export function purge(target) {
+  rmSync(cacheDir(target), { recursive: true, force: true })
 }
