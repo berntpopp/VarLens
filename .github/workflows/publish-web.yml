@@ -67,7 +67,7 @@ jobs:
       VARLENS_RECOVERY_KEY_DIR: /tmp/varlens-web-ci-secrets
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # actions/checkout@v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
 
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
@@ -113,7 +113,7 @@ jobs:
       SCAN_TAG: ghcr.io/${{ github.repository_owner }}/varlens-web:ci-scan-${{ github.sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # actions/checkout@v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
 
       - name: Resolve source and image metadata
         id: source
@@ -140,7 +140,7 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # docker/setup-buildx-action@v4.2.0
 
       - name: Login to GHCR
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # docker/login-action@v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # docker/login-action@v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -192,7 +192,7 @@ jobs:
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # github/codeql-action/upload-sarif@v4.37.1
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # github/codeql-action/upload-sarif@v4.37.3
         with:
           sarif_file: trivy-results.sarif
           category: trivy-web-image
