@@ -167,3 +167,22 @@ export function restore(target) {
 export function purge(target) {
   rmSync(cacheDir(target), { recursive: true, force: true })
 }
+
+// Pure decision for the restore path only: given what detectBinaryAbi found
+// for a binary that was just restored from cache, should the caller trust it
+// or treat the cache entry as unusable? `detected` is the
+// `{ abi, undetermined }` shape a caller gets from wrapping detectBinaryAbi
+// in a try/catch (see rebuild-native.mjs's detectOrUndetermined).
+//
+// Both "detected a different ABI" and "could not determine at all" resolve
+// to the same answer here — deliberately, unlike the compile path. A
+// restored entry that can't be verified is exactly as unusable as one that's
+// verified wrong: a truncated binary with a self-consistent manifest (the
+// finding this predicate exists to fix) would otherwise be trusted forever,
+// silently wedging the tree while every run reports success. On the restore
+// path a recompile is always one step away, so there is no reason to ever
+// trust an entry this function can't positively confirm.
+export function restoreDecision(detected, expectedAbi) {
+  if (!detected.undetermined && detected.abi === expectedAbi) return 'restore'
+  return 'purge-and-compile'
+}

@@ -21,6 +21,7 @@ import {
   detectBinaryAbi,
   purge,
   restore,
+  restoreDecision,
   store
 } from './native-abi.mjs'
 
@@ -47,25 +48,26 @@ function detectOrUndetermined(binaryPath) {
 
 if (restore(target)) {
   const detected = detectOrUndetermined(MODULE_BINARY)
-  if (detected.undetermined) {
-    process.stdout.write(
-      `native: restored ${target} ABI ${expectedAbi} from .cache/native (could not verify: ` +
-        `${detected.error.message}; trusting the cache entry)\n`
-    )
-    process.exit(0)
-  }
-  if (detected.abi === expectedAbi) {
+  if (restoreDecision(detected, expectedAbi) === 'restore') {
     process.stdout.write(`native: restored ${target} ABI ${expectedAbi} from .cache/native\n`)
     process.exit(0)
   }
   // restore() already confirmed the cached binary matches its own manifest
   // and sha256 — that only proves internal self-consistency, which is
-  // exactly what a poisoned entry also has. Self-heal rather than fail: a
-  // poisoned entry would otherwise wedge every future run on this machine
-  // permanently, since restore() would keep "succeeding" forever.
+  // exactly what both a poisoned entry (wrong ABI, self-consistent manifest)
+  // and a corrupt one (truncated binary, self-consistent manifest) also
+  // have. Self-heal rather than trust: a recompile is always one step away
+  // here, so purging and falling through costs one compile. Trusting either
+  // one would instead wedge node_modules with a broken binary while
+  // `npm ci` and every future run keeps reporting success — this is
+  // deliberately asymmetric with the compile path below, where "could not
+  // determine" must NOT purge or fail (see item H).
+  const reason = detected.undetermined
+    ? `could not verify it (${detected.error.message})`
+    : `it is actually ABI ${detected.abi}`
   process.stderr.write(
-    `native: cache entry for ${target} ABI ${expectedAbi} is poisoned (on-disk binary is ` +
-      `actually ABI ${detected.abi}). Purging it and recompiling.\n`
+    `native: cache entry for ${target} ABI ${expectedAbi} is unusable — ${reason}. Purging it ` +
+      'and recompiling.\n'
   )
   purge(target)
 }

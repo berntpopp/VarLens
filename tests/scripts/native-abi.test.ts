@@ -15,7 +15,8 @@ import {
   lockfileHash,
   manifestIsFresh,
   moduleVersion,
-  parseAbiFromLoadError
+  parseAbiFromLoadError,
+  restoreDecision
 } from '../../scripts/native/native-abi.mjs'
 
 const ROOT = resolve(__dirname, '..', '..')
@@ -132,5 +133,25 @@ describe('native ABI helpers', () => {
     writeFileSync(truncated, wholeBinary.subarray(0, Math.floor(wholeBinary.length * 0.6)))
 
     expect(() => detectBinaryAbi(truncated)).toThrow(/could not determine ABI/)
+  })
+
+  describe('restoreDecision', () => {
+    test('trusts the cache entry only when the detected ABI exactly matches', () => {
+      expect(restoreDecision({ abi: '148', undetermined: false }, '148')).toBe('restore')
+    })
+
+    test('purges and recompiles on a definite ABI mismatch (poisoned entry)', () => {
+      expect(restoreDecision({ abi: '137', undetermined: false }, '148')).toBe('purge-and-compile')
+    })
+
+    test('purges and recompiles when the ABI could not be determined at all (corrupt entry)', () => {
+      // This is the finding this predicate exists to fix: on the restore
+      // path, "could not tell" must not be trusted the way it is on the
+      // compile path (see rebuild-native.mjs) — a truncated binary with a
+      // self-consistent manifest would otherwise be restored forever while
+      // every run reports success.
+      const undetermined = { abi: null, undetermined: true, error: new Error('boom') }
+      expect(restoreDecision(undetermined, '148')).toBe('purge-and-compile')
+    })
   })
 })
