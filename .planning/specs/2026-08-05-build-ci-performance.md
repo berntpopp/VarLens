@@ -190,6 +190,34 @@ checking config with neither `incremental` nor `tsBuildInfoFile`.
 
 ---
 
+### 3.5 npm 12 will silently produce no native binary
+
+**This is the highest-severity item in this document, and it is latent rather than current.**
+
+npm 12 defaults `allowScripts` **off**, and its changelog explicitly covers native node-gyp builds.
+Under npm 12, `npm ci` would run no `postinstall`, produce **no native binary at all**, and — per the
+changelog — "skip silently with a warning; the install still succeeds". A green install followed by a
+runtime `NODE_MODULE_VERSION`/missing-binding failure is the worst possible failure shape.
+
+`package.json:11` currently pins `"npm": ">=11.11.0 <12"`, so this is not live today. It becomes live
+the moment that ceiling is raised — plausibly via a routine Dependabot or toolchain bump.
+
+**Mitigation:** adopt `npm approve-scripts` with `strict-allow-scripts=true` before any npm 12 move,
+and assert the ceiling in the guardrail test so raising it forces a deliberate decision. Note this
+interacts directly with Phase 2: once CI installs use `--ignore-scripts`, the native binary comes from
+the cache plus an explicit rebuild step, which makes the pipeline *more* robust to this change, not
+less — but only if the ABI assertion (Phase 1.3) is in place to catch a missing binary loudly.
+
+### 3.6 The prebuild gap is a fork lag, and may close on its own
+
+`better-sqlite3-multiple-ciphers` publishes Electron prebuilds only up to **ABI 146**, while
+**upstream `better-sqlite3` v12.12.0 already ships `electron-v148`**. The gap is the fork trailing
+upstream, not an upstream limitation.
+
+Two consequences: file an issue with the fork asking for ABI 148 prebuilds, and treat the Phase 1
+cache as the durable fix regardless — a future fork release publishing 148 would make the first
+compile disappear too, but the cache is what makes the repeat cost zero either way.
+
 ## 4. Non-goals / things deliberately left alone
 
 Measurement showed these are **already correct**. Changing them would be a regression.
@@ -317,6 +345,14 @@ Preserves the target-for-target mirror property that `AGENTS.md` requires.
    directory.
 9. **Cache `~/.cache/electron-builder`** — re-downloads `nsis-resources-3.4.1.7z` (~82 s, inside the
    critical-path Windows step), plus `nsis`, `appimage`, `fpm`, `dmgbuild` bundles.
+   **Do not use `ELECTRON_CACHE`** — it is *not* honoured by Electron 43; the variable that works is
+   `electron_config_cache`. Use `DEBUG=electron-builder` to get real per-step timers before and after,
+   since electron-builder's docs state no magnitude for any option.
+   Two packaging corrections worth recording: `compression: 'store'` will **not** help NSIS unless
+   paired with `nsis.differentialPackage: false`, which disables auto-update — so don't. And if a
+   target must be dropped on PR builds, **dropping `zip` beats dropping `portable`**, because
+   `portable` reuses the NSIS payload archive and is nearly free once NSIS has run.
+   For runner-cost reasoning: Windows is billed **1.67×**, not 2×.
 10. **Cache Playwright browsers**, and add `cache-from`/`cache-to: type=gha` to the web-gate
     `docker build` (which `publish-web.yml` already does).
 11. **Factor the repeated workflow preamble into a composite action.** 9+ jobs inline the same
@@ -363,27 +399,50 @@ Preserves the target-for-target mirror property that `AGENTS.md` requires.
 9. **`playwright.config.ts:8`**: `trace: 'retain-on-failure'` records traces for all 64 e2e specs and
    discards them on pass, while `retries: 0` (L11) means `'on-first-retry'` could never fire. Pick one
    coherent setting.
-10. **Add an `.npmrc`** with `fund=false`, `audit=false`, `prefer-offline=true` — absent today, and
-    `npm ci` is the largest single CI line item at 477 s per run.
-11. **Refresh the stale docblock at `vitest.config.ts:7-36`**, whose file counts are ~3× low (says
-    121+11 and 61; actual 315 and 98). The `maxWorkers` tuning at L56-67 was calibrated against those
-    wrong numbers, so re-derive it — this is a correctness-of-tuning issue, not cosmetics.
+10. **`.npmrc`: measure before adopting.** An `.npmrc` is absent today, and `npm ci` is the largest
+    single CI line item (477 s/run) — but `npm ci --prefer-offline --no-audit` is **not** an
+    npm-recommended CI incantation despite its ubiquity in blog posts, and no official source states
+    a magnitude. Treat this as a hypothesis to measure with the Phase-1 harness, not a known win.
+    Most of that 477 s is the `postinstall` compile, which Phase 2 removes anyway.
+11. **Repair `vitest.config.ts`.** Three separate problems in one file:
+    - `minWorkers: 1` **was removed in Vitest 4** and is dead config against the installed 4.1.10.
+    - The docblock at L7-36 has file counts ~3× low (says 121+11 and 61; actual 315 and 98), and the
+      `maxWorkers` tuning at L56-67 was calibrated against those wrong numbers — re-derive it.
+    - **`vitest.config.ts` is in no tsconfig**, which is why the dead option was invisible. Bringing
+      it under a checking config (alongside §3.2's `src/web/**` gap) is what prevents a recurrence.
+    **Never shard coverage** if sharding is ever considered: vitest#8616 causes under-reporting, which
+    against this repo's hard thresholds would either fail spuriously or, worse, pass while
+    under-measuring. Sharding plain `vitest run` is fine; coverage is not.
+    Also note `tests/setup.ts` runs ~193× and is inherited by four node-only projects — a cheap place
+    to look before adding anything to it.
 12. **Run `checks` and `package` in parallel** — drop `package`'s `needs: checks`. Justified because
     the repo is public and billable minutes are zero (§2.4), so the only thing the gate saves is
     free runner time while costing ~5 min of wall clock on every run.
 
 ### Phase 6 — TypeScript 7 (higher risk)
 
-Use `typescript-native-bridge` (TNB), a drop-in `typescript` replacement running the checker on
-tsgo. Shipped in vue-language-tools v3.3.9; upstream measured vue-tsc **12.8 s → 4.7 s (~2.7×)**.
-The maintainer's stated ceiling is "~2-3× is about the limit" — TS 7's headline 10× does **not**
-carry over, because SFC parsing, virtual code and source maps stay in JS.
+TypeScript 7 (Go-native) went GA 2026-07-08. Two independent routes, and the **dual-install route is
+the one to take**:
+
+1. **`typecheck:node` on tsgo via a dual install** (Microsoft's own documented alias pattern).
+   Measured on this repo: **3.21 s → 0.44 s (7.3×) with 384 MB *less* peak RSS, identical
+   diagnostics.** This is the highest-confidence item in Phase 6 because it was measured here, not
+   quoted from a blog.
+2. **`typecheck:renderer` stays on TS 6 / vue-tsc.** TS 7 ships **no programmatic API**, so vue-tsc,
+   typescript-eslint and ts-morph all still require TS 6. A future `typescript-native-bridge` (TNB,
+   shipped in vue-language-tools v3.3.9) measured vue-tsc 12.8 s → 4.7 s (~2.7×) upstream, but the
+   maintainer's stated ceiling is "~2-3× is about the limit" — SFC parsing, virtual code and source
+   maps stay in JS. Treat TNB as a later, separate evaluation.
+
+The dual install means TS 6 and TS 7 coexist: tsgo checks the node project, everything else keeps the
+TS 6 programmatic API it depends on. That contains the blast radius to one npm script.
 
 Hard constraint: **must not ship together with `assumeChangesOnlyAffectDirectDependencies`.**
-Phase 4 item 1 is a prerequisite.
+Phase 4 item 1 is a prerequisite — an unsound incremental check would invalidate any comparison of
+diagnostics between the two compilers.
 
-Expected absolute saving is small (typecheck is 5.2 s warm). Included at explicit user request with
-that trade-off understood.
+Related, already correct: `skipLibCheck: true` is set in all checking configs and measured
+**2.7× wall / 1.8× memory** here (9.08 s → 3.41 s). Do not remove it.
 
 ### Phase 7 — Vite 8 + electron-vite 6 (highest risk)
 
@@ -477,6 +536,8 @@ Ordering constraints that are not negotiable:
 | `electron-vite@6` is beta | Phase 7 is last and independently revertable; do not begin until Phases 1–5 are measured and merged |
 | Dedupe breaks the "mirror target-for-target" property | Job targets stay independently runnable; guarded composition, not deletion |
 | Re-introducing parallelism near the quality gates re-triggers the June OOM | Explicitly out of scope (§4); guardrail clamps kept and extended |
+| **npm 12 silently ships an app with no native binary** (§3.5) | Keep the `<12` ceiling; adopt `npm approve-scripts` + `strict-allow-scripts=true` before raising it; assert the ceiling in the guardrail test; rely on the Phase 1.3 ABI assertion to fail loud rather than at runtime |
+| A fork release adding ABI 148 makes part of this work look redundant (§3.6) | It does not — the cache is what makes the *repeat* cost zero. A prebuild would only remove the first compile. |
 
 ---
 

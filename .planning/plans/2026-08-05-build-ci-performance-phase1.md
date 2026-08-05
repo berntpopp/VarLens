@@ -1197,4 +1197,14 @@ Open PR 2 with the comparison table in the description.
 
 **Type consistency:** `target` is `'node' | 'electron'` everywhere. `abiFor` returns a **string** in both branches (`process.versions.modules` is a string; the electron branch wraps `getAbi` in `String()`), and `manifestIsFresh` compares it to `manifest.abi` — consistently string on both sides. `store()` returns the manifest, which Task 7 Step 1 reads as `manifest.abi` / `manifest.sha256`. `restore()` returns boolean. Baseline JSON keys (`label`, `gitSha`, `stages[].wallSeconds`, `stages[].peakRssMb`, `stages[].exitCode`) are written by Task 2 and read by Task 3's `compareBaselines`.
 
-**Known risk carried forward:** the timing agent observed that `rebuild:node` is a 0.5 s no-op and reported that an Electron-built binary appeared to load under Node. Task 7 Step 6 is the deciding experiment — the electron assertion **must fail** while the tree is on the Node ABI. If it passes, the sha256 discrimination is broken and Task 7 must not be merged. This plan does not depend on the anomaly being real either way.
+**Resolved anomaly — read before writing any ABI check.** During measurement it was reported that `rebuild:node` is a 0.5 s "no-op" and that an Electron-built binary appeared to load under Node. Both were investigated and **both are false**:
+
+- `require('better-sqlite3-multiple-ciphers')` succeeds on a wrong-ABI tree because `lib/database.js:48` loads the addon **lazily**, inside a function: `addon = DEFAULT_ADDON || (DEFAULT_ADDON = require('bindings')('better_sqlite3.node'))`. Importing the package therefore proves nothing. Constructing a database is what surfaces the real error: `NODE_MODULE_VERSION 148` (Electron 43) against Node's 137.
+- `rebuild:node` is a genuine binary swap, not a no-op. It is fast because `prebuild-install` pulls a **Node-ABI prebuild** from the local `~/.npm/_prebuilds` cache instead of compiling. Only the Electron ABI lacks a published prebuild, which is the entire asymmetry this plan exploits.
+
+Two consequences that are load-bearing for Task 6:
+
+1. **A liveness check must `dlopen` the `.node` file directly** — `createRequire(...)(MODULE_BINARY)`, as written — and must never use `require('better-sqlite3-multiple-ciphers')`, which is a false positive.
+2. The dual-rebuild gotcha documented in `AGENTS.md` is **real**. Do not "simplify" the two-ABI handling away.
+
+Task 7 Step 6 remains the deciding experiment for the cache itself: the electron assertion **must fail** while the tree is on the Node ABI. If it passes, the sha256 discrimination is broken and Task 7 must not be merged.
