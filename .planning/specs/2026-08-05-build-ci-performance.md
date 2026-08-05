@@ -314,6 +314,25 @@ in-repo, this generalises it.
 `checks` and `web-ci` must never build for the Electron ABI at all: install with `--ignore-scripts`
 and run only `rebuild:node`.
 
+**Phase 2 also closes a known residual from Phase 1 — do not drop this.** Phase 1 left one path that
+exits 0 with a bad binary on disk: if `MODULE_BINARY` becomes *unverifiable* (the realistic trigger is
+a `restore()` copy interrupted mid-write) **and** a valid `.forge-meta` is present, `@electron/rebuild`
+silently no-ops the self-healing recompile, and the run lands in the deliberately sanctioned
+"could not verify, continuing" branch. That branch exists on purpose — it stops a Windows `dlopen`
+quirk from breaking `npm ci` — so the fix is not to remove it.
+
+Wiring `node scripts/native/assert-native-abi.mjs <node|electron>` into CI as a required step closes
+it outright, because that script fails loud (exit 1) on *undetermined* by design, where
+`rebuild-native.mjs` deliberately does not. **The assertion step in the YAML above is therefore not
+optional polish — it is the closure for this residual.** Note the hazard is narrow: `restore()`'s
+sha256 check already rejects a cache entry whose binary and manifest disagree, and no natural
+interruption produces a self-consistent corrupt pair.
+
+While in these files, correct two stale comments left over from Phase 1 that still describe
+`assert-native-abi.mjs` as the *enforcing* safeguard rather than an on-demand check:
+`tests/scripts/build-pipeline-guardrails.test.ts:16-17` and `scripts/native/assert-native-abi.mjs:3`.
+`AGENTS.md` was already corrected.
+
 The existing cache key deliberately has **no `restore-keys` fallback** ("a partial match would leave
 a wrong-ABI `.node` on disk and silently corrupt the build"). That reasoning is correct and must
 survive. Making the cache load-bearing raises the stakes on the key, which is exactly why the
