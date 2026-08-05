@@ -66,6 +66,7 @@ describe('native ABI helpers', () => {
 
   test('a manifest is fresh when every identifying field matches the live values', () => {
     const fresh = {
+      target: 'electron',
       abi: abiFor('electron'),
       platform: process.platform,
       arch: process.arch,
@@ -75,8 +76,28 @@ describe('native ABI helpers', () => {
     expect(manifestIsFresh('electron', fresh)).toBe(true)
   })
 
+  test('a manifest is stale when built for a different target than requested, even if the ABI matches', () => {
+    // Guards a real (if currently unrealized) hazard: cacheDir() keys only on
+    // platform-arch-abi, not target. If a future Node and Electron release
+    // ever share one NODE_MODULE_VERSION, the two targets would collide in a
+    // single cache dir, and without this check a manifest built for 'node'
+    // could pass as fresh for 'electron' whenever their ABIs happened to
+    // coincide — restoring the wrong target's binary while reporting success.
+    const fresh = {
+      target: 'electron',
+      abi: abiFor('electron'),
+      platform: process.platform,
+      arch: process.arch,
+      moduleVersion: moduleVersion(),
+      lockfileHash: lockfileHash()
+    }
+    expect(manifestIsFresh('electron', fresh)).toBe(true)
+    expect(manifestIsFresh('electron', { ...fresh, target: 'node' })).toBe(false)
+  })
+
   test('a manifest is stale when anything identifying the artifact differs', () => {
     const fresh = {
+      target: 'electron',
       abi: abiFor('electron'),
       platform: process.platform,
       arch: process.arch,

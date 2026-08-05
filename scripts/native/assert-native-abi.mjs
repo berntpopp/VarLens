@@ -32,7 +32,7 @@ const manifest = readManifest(target)
 if (!manifestIsFresh(target, manifest)) {
   fail(
     `no fresh cache manifest for ABI ${abiFor(target)}. ` +
-      `Run \`npm run rebuild:${target === 'node' ? 'node' : 'electron'}\` first.`
+      `Run \`npm run rebuild:${target}\` first.`
   )
 }
 

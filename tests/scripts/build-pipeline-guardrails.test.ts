@@ -29,7 +29,7 @@ describe('native rebuild stays cacheable', () => {
   test.each(['postinstall', 'rebuild:electron', 'rebuild:node'])(
     '`%s` does not force a native rebuild',
     (name) => {
-      expect(scripts[name]).not.toMatch(/(^|\s)-[a-z]*f[a-z]*(\s|$)/)
+      expect(scripts[name]).not.toMatch(/(^|\s)-[a-z]*f[a-z]*(\s|$)/i)
       expect(scripts[name]).not.toContain('--force')
       expect(scripts[name]).not.toContain('--force-abi')
     }
@@ -46,6 +46,24 @@ describe('native rebuild stays cacheable', () => {
     expect(scripts.postinstall).toMatch(/rebuild-native\.mjs electron$/)
     expect(scripts['rebuild:electron']).toMatch(/rebuild-native\.mjs electron$/)
     expect(scripts['rebuild:node']).toMatch(/rebuild-native\.mjs node$/)
+  })
+
+  // The package.json scripts above can never contain `-f` themselves — they
+  // only invoke this file, which is where the actual `@electron/rebuild`
+  // call (and thus the actual hazard) lives. Guarding only the npm scripts
+  // watches a place `-f` structurally cannot return to; this guards the
+  // place it can.
+  //
+  // The flag cluster is passed as a JS array element (e.g. `'-f'` or `'-fw'`),
+  // not a whitespace-separated shell token, so the boundary class from the
+  // npm-script check above must also treat a quote, comma, or paren as a
+  // valid flag boundary — otherwise `'-f', '-w'` would slip past a
+  // whitespace-only boundary undetected.
+  test('the live @electron/rebuild invocation in rebuild-native.mjs never forces a rebuild', () => {
+    const source = readFileSync(resolve(ROOT, 'scripts', 'native', 'rebuild-native.mjs'), 'utf8')
+    expect(source).not.toMatch(/(^|[\s"'(,])-[a-z]*f[a-z]*([\s"'),]|$)/i)
+    expect(source).not.toContain('--force')
+    expect(source).not.toContain('--force-abi')
   })
 })
 

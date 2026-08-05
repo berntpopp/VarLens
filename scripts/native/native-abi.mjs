@@ -87,13 +87,15 @@ export function detectBinaryAbi(binaryPath) {
   throw new Error(`detectBinaryAbi: could not determine ABI of ${binaryPath}: ${reason}`)
 }
 
+// The cache root, exported so callers that need to blow away the whole
+// cache (e.g. the perf harness measuring a genuinely cold compile) do not
+// have to restate this path themselves — a second hardcoded copy is exactly
+// the kind of drift that would let `.cache/native` move here without the
+// harness noticing, silently turning its "cold" stage into a warm one.
+export const NATIVE_CACHE_ROOT = join(REPO_ROOT, '.cache', 'native')
+
 export function cacheDir(target) {
-  return join(
-    REPO_ROOT,
-    '.cache',
-    'native',
-    `${process.platform}-${process.arch}-${abiFor(target)}`
-  )
+  return join(NATIVE_CACHE_ROOT, `${process.platform}-${process.arch}-${abiFor(target)}`)
 }
 
 export const cachedBinary = (target) => join(cacheDir(target), 'better_sqlite3.node')
@@ -134,6 +136,15 @@ export function readManifest(target) {
 export function manifestIsFresh(target, manifest) {
   if (!manifest) return false
   return (
+    // Redundant with the ABI/platform/arch checks below today, since node
+    // and electron never share a NODE_MODULE_VERSION on any platform this
+    // repo supports right now. Kept explicit anyway: if a future Node and
+    // Electron release ever do converge on one ABI number, the two targets
+    // would otherwise collide in a single cache dir (cacheDir() keys only on
+    // platform-arch-abi) and a manifest built for one target could pass as
+    // fresh for the other — restoring, say, a Node build under the Electron
+    // target. `buildManifest` already writes `target`; this just reads it.
+    manifest.target === target &&
     manifest.abi === abiFor(target) &&
     manifest.platform === process.platform &&
     manifest.arch === process.arch &&

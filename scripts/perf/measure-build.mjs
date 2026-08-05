@@ -6,6 +6,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join, resolve } from 'node:path'
 import process from 'node:process'
 
+import { NATIVE_CACHE_ROOT } from '../native/native-abi.mjs'
+
 export const REPO_ROOT = resolve(import.meta.dirname, '..', '..')
 export const OUT_DIR = join(REPO_ROOT, '.planning', 'artifacts', 'perf', 'build')
 
@@ -28,7 +30,11 @@ export const STAGES = [
   {
     id: 'rebuild-electron-cold',
     cmd: 'npm run rebuild:electron',
-    before: () => rm('.cache', 'native')
+    // Imported from native-abi.mjs rather than restated as '.cache/native'
+    // here: if the cache root ever moves, this stage must fail to clear it
+    // (and thus visibly fail to be cold) rather than silently measuring a
+    // warm run and reporting a fabricated improvement.
+    before: () => rmSync(NATIVE_CACHE_ROOT, { force: true, recursive: true })
   },
   { id: 'rebuild-electron-warm', cmd: 'npm run rebuild:electron' },
   { id: 'rebuild-node', cmd: 'npm run rebuild:node' }
@@ -36,11 +42,27 @@ export const STAGES = [
 
 const round2 = (n) => Math.round(n * 100) / 100
 
+// `/usr/bin/time` existing is not proof it is GNU time: macOS ships a BSD
+// `time` at that same path, which rejects `-v`/`-o` outright. Without this
+// probe every stage would spawn `/usr/bin/time` successfully, fail on the
+// unrecognized flags with a non-zero exit, and the harness would report
+// every single stage as `failed` rather than degrading to the no-RSS path.
+// `--version` is cheap and GNU time answers with "GNU time" on stdout; BSD
+// time has no `--version` flag and exits non-zero instead.
+export function isGnuTime(bin) {
+  if (!existsSync(bin)) return false
+  const r = spawnSync(bin, ['--version'], { encoding: 'utf8' })
+  return r.status === 0 && /GNU time/i.test(r.stdout ?? '')
+}
+
+const GNU_TIME_BIN = '/usr/bin/time'
+const HAS_GNU_TIME = isGnuTime(GNU_TIME_BIN)
+
 function capture(cmd, timeFile) {
   // GNU time gives peak RSS, which the spec requires because the June 2026
   // incident was a memory failure, not a slowness failure.
-  if (existsSync('/usr/bin/time')) {
-    const r = spawnSync('/usr/bin/time', ['-v', '-o', timeFile, 'sh', '-c', cmd], {
+  if (HAS_GNU_TIME) {
+    const r = spawnSync(GNU_TIME_BIN, ['-v', '-o', timeFile, 'sh', '-c', cmd], {
       cwd: REPO_ROOT,
       stdio: 'inherit'
     })

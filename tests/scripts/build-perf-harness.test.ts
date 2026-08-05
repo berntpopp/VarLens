@@ -65,6 +65,18 @@ describe('build perf comparison', () => {
     expect(c.totalAfter).toBe(12.6)
   })
 
+  test('classifies a stage present only in the after run as new, not missing', () => {
+    const withNewStage = {
+      label: 'after',
+      stages: [...after.stages, { id: 'lint-cold', wallSeconds: 3.2, peakRssMb: 210, exitCode: 0 }]
+    }
+    const row = compareBaselines(before, withNewStage).rows.find((r) => r.id === 'lint-cold')
+    expect(row.classification).toBe('new')
+    expect(row.beforeSeconds).toBeNull()
+    expect(row.afterSeconds).toBe(3.2)
+    expect(row.afterPeakRssMb).toBe(210)
+  })
+
   test('flags a regression', () => {
     const worse = {
       label: 'after',
