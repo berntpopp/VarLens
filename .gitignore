@@ -59,6 +59,9 @@ temp/
 !.planning/artifacts/perf/wgs-import/
 .planning/artifacts/perf/wgs-import/*
 !.planning/artifacts/perf/wgs-import/.gitkeep
+!.planning/artifacts/perf/build/
+.planning/artifacts/perf/build/*
+!.planning/artifacts/perf/build/.gitkeep
 # Exception: the postgres-blocker doc is the one perf artifact we commit
 # because it documents a phase-blocking failure + its resolution.
 !.planning/artifacts/perf/wgs-import/2026-04-25-postgres-blocker.md
