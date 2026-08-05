@@ -31,9 +31,15 @@ export function compareBaselines(before, after) {
     }
     const deltaSeconds = round2(a.wallSeconds - b.wallSeconds)
     const deltaPercent = b.wallSeconds === 0 ? null : round2((deltaSeconds / b.wallSeconds) * 100)
-    let classification = 'unchanged'
-    if (Math.abs(deltaSeconds) > NOISE_FLOOR_SECONDS) {
+    // Failure outranks any timing comparison: a stage that crashed fast must
+    // never read as an "improvement" just because it exited before doing work.
+    let classification
+    if (b.exitCode !== 0 || a.exitCode !== 0) {
+      classification = 'failed'
+    } else if (Math.abs(deltaSeconds) > NOISE_FLOOR_SECONDS) {
       classification = deltaSeconds < 0 ? 'improved' : 'regressed'
+    } else {
+      classification = 'unchanged'
     }
     return {
       id: b.id,
@@ -43,7 +49,9 @@ export function compareBaselines(before, after) {
       deltaPercent,
       classification,
       beforePeakRssMb: b.peakRssMb,
-      afterPeakRssMb: a.peakRssMb
+      afterPeakRssMb: a.peakRssMb,
+      beforeExitCode: b.exitCode,
+      afterExitCode: a.exitCode
     }
   })
 
@@ -84,9 +92,13 @@ export function formatReport(comparison, meta) {
         `${cell(r.deltaPercent, '%')} | ${cell(r.beforePeakRssMb)} → ${cell(r.afterPeakRssMb)} | ${r.classification} |`
     )
   }
+  const failures = comparison.rows.filter((r) => r.classification === 'failed')
   const regressions = comparison.rows.filter((r) => r.classification === 'regressed')
   lines.push(
     '',
+    failures.length === 0
+      ? 'No stage failed.'
+      : `**Failures:** ${failures.map((r) => r.id).join(', ')}`,
     regressions.length === 0
       ? 'No stage regressed beyond the noise floor.'
       : `**Regressions:** ${regressions.map((r) => r.id).join(', ')}`

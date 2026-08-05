@@ -81,4 +81,27 @@ describe('build perf comparison', () => {
     expect(md).toContain('before')
     expect(md).toContain('after')
   })
+
+  test('classifies a failed stage as failed, never improved, even with a much shorter wall time', () => {
+    const crashed = {
+      label: 'after',
+      stages: [{ id: 'build', wallSeconds: 0.05, peakRssMb: 40, exitCode: 1 }]
+    }
+    const row = compareBaselines(before, crashed).rows.find((r) => r.id === 'build')
+    expect(row.classification).toBe('failed')
+    expect(row.classification).not.toBe('improved')
+  })
+
+  test('formatReport surfaces a failed stage in the verdict and the summary', () => {
+    const crashed = {
+      label: 'after',
+      stages: [{ id: 'build', wallSeconds: 0.05, peakRssMb: 40, exitCode: 1 }]
+    }
+    const md = formatReport(compareBaselines(before, crashed), {
+      before: 'before',
+      after: 'crashed'
+    })
+    expect(md).toContain('failed')
+    expect(md).toContain('Failures')
+  })
 })
