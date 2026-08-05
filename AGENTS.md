@@ -232,9 +232,23 @@ Current baseline (read the script for the authoritative list):
 - `OnlyLoadAppFromAsar: true` — refuses to launch the main app from any location other than `app.asar`.
 - `LoadBrowserProcessSpecificV8Snapshot: false` — current default preserved.
 - `GrantFileProtocolExtraPrivileges: true` — current default preserved; tightening this fuse is a separate, deliberate decision.
+- `WasmTrapHandlers: true` — current default preserved. Selects hardware trap handlers for WebAssembly bounds checks; a performance choice, not a security boundary.
 - `resetAdHocDarwinSignature: true` — re-ad-hoc-signs the macOS binary after fuse flipping so local ad-hoc builds remain launchable.
 
-`@electron/fuses` 2.x exposes `WasmTrapHandlers`, but Electron 40's fuse wire and electron-builder's bundled fuse implementation cannot configure it yet. Do not add it to the baseline until the packaged Electron binary supports that fuse.
+`WasmTrapHandlers` became configurable in **Electron 43**, whose fuse wire grew from 8 entries to 9. Under Electron 40 the fuse existed in `@electron/fuses` 2.x but could not be set, so the baseline deliberately omitted it; on Electron 43 `strictlyRequireAllFuses` fails the build until it is declared:
+
+```
+⨯ strictlyRequireAllFuses: The fuse wire in the Electron binary has 9 fuses
+  but you only provided a config for 8 fuses
+```
+
+This is the guardrail working as intended. When a future Electron major grows the wire again, read the pristine binary's shipped defaults before choosing a value rather than guessing:
+
+```bash
+node -e 'require("@electron/fuses").getCurrentFuseWire("./node_modules/electron/dist/electron").then(console.log)'
+```
+
+Values read back as ASCII bytes — `48` is `'0'` (disabled), `49` is `'1'` (enabled).
 
 The baseline lives only in `scripts/configure-fuses.mjs`. Do not reintroduce `build.electronFuses` in `package.json`; the hook owns the flip and `doAddElectronFuses` short-circuits when the declarative block is absent.
 

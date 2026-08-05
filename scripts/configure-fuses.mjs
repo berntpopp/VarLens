@@ -22,7 +22,15 @@ export const FUSE_BASELINE = {
   [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
   [FuseV1Options.OnlyLoadAppFromAsar]: true,
   [FuseV1Options.LoadBrowserProcessSpecificV8Snapshot]: false,
-  [FuseV1Options.GrantFileProtocolExtraPrivileges]: true
+  [FuseV1Options.GrantFileProtocolExtraPrivileges]: true,
+  // Electron 43 is the first release whose fuse wire exposes this fuse (the
+  // wire grew from 8 to 9 entries), so `strictlyRequireAllFuses` now demands
+  // an explicit value. Electron ships it enabled; the pristine 43.3.0 binary
+  // reads back `1`. Kept at the shipped default: it selects hardware trap
+  // handlers for WebAssembly bounds checks, which is a performance choice
+  // rather than a security boundary, and disabling it would slow WASM without
+  // hardening anything.
+  [FuseV1Options.WasmTrapHandlers]: true
 }
 
 export default async function configureFuses(context) {
