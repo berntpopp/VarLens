@@ -60,7 +60,7 @@ help: ## Show this help message
 # Development
 #---------------------------------------------------------------------------
 
-rebuild: ## Rebuild native modules for Electron (fixes native module version mismatch)
+rebuild: ## Restore/build native modules for Electron from the ABI cache (fixes native module version mismatch)
 	npm run rebuild:electron
 
 rebuild-node: ## Rebuild native modules for Node.js (needed before running tests)

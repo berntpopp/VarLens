@@ -5,6 +5,7 @@
 **Goal:** Build a committed build-performance measurement harness, then stop the native module recompiling on every install, dev-server start and CI job — the single change worth 63.6% of local `make ci-full`.
 
 **Architecture:** A repo-owned, ABI-keyed binary cache under `.cache/native/<platform>-<arch>-<abi>/`, holding the compiled `.node` plus a manifest that fingerprints the artifact (ABI, module version, lockfile hash, sha256). `@electron/rebuild`'s `-f` flag is removed — it is what defeats the tool's own skip logic — and replaced by a fail-loud ABI assertion, which is strictly safer than forcing a recompile. The unavoidable first compile is parallelised via `--jobs`.
+**Superseded — see spec §5 Phase 1.4:** `--jobs` does not speed up the cold compile. The build emits only 3 object files, one of them a 368,327-line `sqlite3.c` amalgamation, so wall time is floored by that single translation unit and no amount of job parallelism helps. `--jobs` is retained anyway, as an explicit bound (node-gyp otherwise defaults to serial `make`), not as a speed lever.
 
 **Tech Stack:** Node 24.15.0 ESM scripts (`node:fs`, `node:crypto`, `node:child_process`), `node-abi` (already present transitively), Vitest 4 (`main` project), GNU `/usr/bin/time -v`, Make.
 
@@ -952,6 +953,7 @@ The `-f` flag is gone from both call sites. Do not add it back.
 
 Run: `rm -rf .cache/native && time npm run rebuild:electron`
 Expected: `native: compiling electron ABI 148 (jobs=8) — no cache entry`, then `native: cached electron ABI 148 (sha …)`. **Should be faster than the 33.6 s baseline** because `--jobs` now parallelises the compile.
+**Superseded — see spec §5 Phase 1.4:** measured, this does not hold. The compile emits only 3 object files (one a 368,327-line `sqlite3.c` amalgamation), so `--jobs` cannot parallelise the bottleneck translation unit. Expect roughly the same ~33-35 s as the uncached baseline on this one-time-per-ABI compile; the win is that it happens once per ABI instead of on every install/dev-start/CI job.
 
 - [ ] **Step 4: Warm run — verify it restores instead of compiling**
 
@@ -1127,6 +1129,8 @@ From spec §6:
 | `rebuild-electron-cold` | 33.6 s | ≤ 20 s (via `--jobs`) | must pass |
 | `make ci` stages (lint/format/typecheck/test) | see §2.1 | no regression | must pass |
 | ESLint peak RSS | 3.4 GB | no regression | must pass |
+
+**Superseded — see spec §5 Phase 1.4:** the `rebuild-electron-cold` target above is disproven and withdrawn. The build emits only 3 object files (one a 368,327-line `sqlite3.c` amalgamation), so `--jobs` cannot parallelise the bottleneck translation unit — the cold compile stays at ~34 s regardless of `--jobs`. The spec's own targets table (§6) already reflects this: `rebuild:electron, cold compile` is listed as `~34 s — target withdrawn`. `--jobs` is kept only as an explicit bound on node-gyp's fan-out, not as a speed lever.
 
 If `rebuild-electron-cold` did not improve, check whether `--jobs` reached node-gyp: run
 `npx @electron/rebuild -w better-sqlite3-multiple-ciphers --jobs 8` directly and watch CPU%

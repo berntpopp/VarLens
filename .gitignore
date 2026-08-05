@@ -62,6 +62,9 @@ temp/
 !.planning/artifacts/perf/build/
 .planning/artifacts/perf/build/*
 !.planning/artifacts/perf/build/.gitkeep
+# Summaries (baseline reports, before/after comparisons) are meant to be
+# committed — only the raw JSON run data is local-only noise.
+!.planning/artifacts/perf/build/*.md
 # Exception: the postgres-blocker doc is the one perf artifact we commit
 # because it documents a phase-blocking failure + its resolution.
 !.planning/artifacts/perf/wgs-import/2026-04-25-postgres-blocker.md

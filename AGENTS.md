@@ -77,8 +77,12 @@ costs ~20-35 s (measured: 34.56 s cold on this host); subsequent switches are a 
 (measured: 0.09 s warm, down from a 33.33 s uncached baseline — see
 `.planning/artifacts/perf/build/compare-pre-phase1-to-post-phase1.md`). `@electron/rebuild` is
 deliberately **not** passed `-f`, because `-f` disables both its skip logic and its cache.
-Correctness is enforced by `node scripts/native/assert-native-abi.mjs <node|electron>`, which
-fails loud on a wrong-ABI binary.
+Correctness is enforced automatically by the ABI verification built into
+`scripts/native/rebuild-native.mjs` itself — every restore and every compile is checked against
+the binary that actually ends up on disk, never trusted from a manifest. `node
+scripts/native/assert-native-abi.mjs <node|electron>` is a separate, on-demand check of whatever
+binary is currently installed; nothing invokes it automatically today — wiring it into CI is
+Phase 2.
 
 Upstream publishes no prebuild for Electron 43's ABI 148 (published range 121-146), which is why
 this compile exists at all. **When bumping Electron, check whether the new ABI has a published
@@ -169,6 +173,12 @@ This matches the desktop-default, web-opt-in model. A desktop-only contributor n
 
   **Current state (Phase 16/16.1/16.2, 2026-04-26):** PG VCF imports use `COPY FROM STDIN` via `pg-copy-streams`, with `search_document` populated by STORED generated columns on `variants`/`variant_sv`/`variant_str` (no FTS triggers, no per-batch bulk UPDATE). The dev container ships tuned postgresql.conf flags via `docker-compose.postgres.yml` (`max_wal_size=8GB`, `shared_buffers=2GB`, `wal_level=minimal`, etc.). Latest GIAB HG002 v4.2.1 numbers: **PG 97.28s vs SQLite 52.65s, ratio 1.85×** — comfortably under the ≤2.0× gate. Postgres is not yet strictly faster than SQLite (the residual gap is dominated by the COPY wire protocol vs SQLite's in-process call overhead); pushing under SQLite would require additional levers (binary COPY format, dropping per-batch ID reservation) tracked under future phases. The previous Phase 16 design that wrote `search_document` via a per-batch bulk UPDATE was 38.9% slower than the trigger path it replaced — confirmed via the `VARLENS_PG_IMPORT_PROFILE=1` instrumentation in `src/main/storage/postgres/postgres-import-profile.ts`, kept available for future debugging.
 
+- **Build-perf harness**: `make perf-build` / `make perf-build-compare` (backed by `scripts/perf/measure-build.mjs` + `scripts/perf/compare-build.mjs`) time every `make ci`-class stage — lint, format (cold/warm each), typecheck, test, build, `rebuild:electron` cold/warm, `rebuild:node` — and record peak RSS per stage via GNU `/usr/bin/time -v` (falls back to no-RSS if GNU time isn't available). This is the harness Phase 1 used to prove the native-rebuild cache change; later phases re-run it rather than re-deriving new timing tooling.
+  - Record a labelled baseline: `make perf-build LABEL=<name>` (optionally `ONLY=id,id` to run a subset of stages).
+  - Compare two baselines: `make perf-build-compare BEFORE=<label> AFTER=<label>` — writes a markdown delta table classifying each stage `improved` / `regressed` / `unchanged` / `missing` / `new` / `failed`.
+  - Artifacts land under `.planning/artifacts/perf/build/`: the raw per-run `<label>.json` files and `.time-*` scratch files are gitignored; the `.md` summaries (baselines and comparisons) are the exception and get committed, same precedent as `.planning/artifacts/perf/wgs-import/`.
+  - Peak RSS is recorded deliberately, not just wall time — the June 2026 incident that motivated the memory clamps below (`--concurrency=off`, serialized typecheck, no `$(MAKE) -jN`) was a memory failure, and any change near those gates must show peak RSS did not regress.
+  - `rebuild-native.mjs` clamps node-gyp's job fan-out via `VARLENS_NATIVE_JOBS` (validated, 1-8; falls back to `min(8, availableParallelism())` if unset or non-numeric) — the same June 2026 guardrail applied to the native compile. Measured: it does not speed up the cold compile (see the native-cache paragraph above), so treat it as a bound, not a performance lever.
 - **Preload contract**: `tests/shared/types/preload-contract.test.ts` locks the IPC surface to `IpcResult<T>` return types. If you touch IPC, this test is your first-line guardrail.
 - **Coverage**: `COVERAGE=1 vitest run --coverage`. **Do not lower thresholds to make a failing suite pass** — add tests or fix the code.
 
