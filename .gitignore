@@ -153,3 +153,6 @@ e2e-screenshots/
 !src/renderer/public/icon-192.png
 !src/renderer/public/icon-512.png
 !src/renderer/public/icon-maskable-512.png
+
+# Subagent-driven-development scratch (ledger, briefs, review packages)
+.superpowers/
