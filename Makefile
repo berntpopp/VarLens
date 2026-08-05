@@ -1,4 +1,4 @@
-.PHONY: help rebuild dev dev-postgres web-dev build build-web build-web-server build-web-renderer preview lint lint-check agent-check test test-watch test-coverage web-ci web-gate web-gate-static web-gate-integration web-gate-postgres web-gate-parity web-parity-e2e web-smoke web-test-report web-data-gather web-data-prepare web-data-verify web-ipc-fixtures typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots pg-up pg-down pg-logs pg-psql pg-query-perf pg-seed-dev pg-hosted-smoke pg-reset
+.PHONY: help rebuild dev dev-postgres web-dev build build-web build-web-server build-web-renderer preview lint lint-check agent-check test test-watch test-coverage perf-build perf-build-compare web-ci web-gate web-gate-static web-gate-integration web-gate-postgres web-gate-parity web-parity-e2e web-smoke web-test-report web-data-gather web-data-prepare web-data-verify web-ipc-fixtures typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots pg-up pg-down pg-logs pg-psql pg-query-perf pg-seed-dev pg-hosted-smoke pg-reset
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -184,6 +184,14 @@ test-watch: ## Run tests in watch mode
 
 test-coverage: ## Run tests with coverage report
 	npm run test:coverage
+
+perf-build: ## Measure build pipeline stage timings (LABEL=name, optional ONLY=id,id)
+	node scripts/perf/measure-build.mjs $(or $(LABEL),local) $(if $(ONLY),--only $(ONLY),)
+
+perf-build-compare: ## Compare two build perf baselines (BEFORE=a AFTER=b)
+	@if [ -z "$(BEFORE)" ] || [ -z "$(AFTER)" ]; then \
+		echo "usage: make perf-build-compare BEFORE=<label> AFTER=<label>"; exit 2; fi
+	node scripts/perf/compare-build.mjs $(BEFORE) $(AFTER)
 
 #---------------------------------------------------------------------------
 # Phase 1 web-migration gate (see .planning/web/completed/testing/desktop-to-web-parity.md)
