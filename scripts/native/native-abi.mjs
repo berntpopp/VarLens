@@ -8,6 +8,7 @@
 // verify it rather than forcing a rebuild.
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
@@ -39,6 +40,31 @@ export function abiFor(target) {
   if (target === 'node') return process.versions.modules
   if (target === 'electron') return String(getAbi(electronVersion(), 'electron'))
   throw new Error(`unknown target: ${target} (expected 'node' or 'electron')`)
+}
+
+// Independently detects the real ABI of a compiled .node file, without
+// trusting any cache manifest. This closes the hole where `store()` would
+// otherwise record "whatever is on disk" under the wrong target: if
+// `@electron/rebuild` silently skips a compile while the tree is actually on
+// the Node ABI, a manifest-only check would pass because the wrong binary
+// matches its own wrong manifest.
+//
+// Loading a .node file under this Node process either succeeds (it is this
+// process's ABI) or throws an error whose message embeds the file's real
+// ABI, e.g. "NODE_MODULE_VERSION 148. This version of Node.js requires
+// NODE_MODULE_VERSION 137." The first number in that message is the ABI the
+// binary was actually built for.
+export function detectBinaryAbi(binaryPath) {
+  try {
+    createRequire(import.meta.url)(binaryPath)
+    return process.versions.modules
+  } catch (error) {
+    const match = /NODE_MODULE_VERSION (\d+)/.exec(error.message)
+    if (match) return match[1]
+    throw new Error(`detectBinaryAbi: could not determine ABI of ${binaryPath}: ${error.message}`, {
+      cause: error
+    })
+  }
 }
 
 export function cacheDir(target) {

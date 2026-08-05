@@ -6,7 +6,14 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import process from 'node:process'
 
-import { MODULE_BINARY, abiFor, manifestIsFresh, readManifest, sha256 } from './native-abi.mjs'
+import {
+  MODULE_BINARY,
+  abiFor,
+  detectBinaryAbi,
+  manifestIsFresh,
+  readManifest,
+  sha256
+} from './native-abi.mjs'
 
 const target = process.argv[2]
 
@@ -44,6 +51,22 @@ if (target === 'node') {
     createRequire(import.meta.url)(MODULE_BINARY)
   } catch (error) {
     fail(`binary matched the manifest but failed to load: ${error.message}`)
+  }
+}
+
+// For the electron target, the sha256 comparison above only proves the binary
+// matches its own manifest — which is exactly what a poisoned cache entry
+// would also show (see rebuild-native.mjs). Independently detect the ABI of
+// the file on disk so this cannot pass on a manifest describing the wrong
+// artifact.
+if (target === 'electron') {
+  const detectedAbi = detectBinaryAbi(MODULE_BINARY)
+  if (detectedAbi !== abiFor('electron')) {
+    fail(
+      `installed binary reports ABI ${detectedAbi} on independent detection, ` +
+        `but the manifest claims ABI ${manifest.abi}. The cache is poisoned — ` +
+        `re-run \`npm run rebuild:electron\`.`
+    )
   }
 }
 

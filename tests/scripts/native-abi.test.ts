@@ -5,9 +5,11 @@ import { getAbi } from 'node-abi'
 import { describe, expect, test } from 'vitest'
 
 import {
+  MODULE_BINARY,
   MODULE_NAME,
   abiFor,
   cacheDir,
+  detectBinaryAbi,
   electronVersion,
   lockfileHash,
   manifestIsFresh,
@@ -70,5 +72,16 @@ describe('native ABI helpers', () => {
     expect(manifestIsFresh('electron', { ...fresh, lockfileHash: 'deadbeef' })).toBe(false)
     expect(manifestIsFresh('electron', { ...fresh, abi: '1' })).toBe(false)
     expect(manifestIsFresh('electron', { ...fresh, moduleVersion: '0.0.0' })).toBe(false)
+  })
+
+  test('detectBinaryAbi reports this runtime ABI for the currently-installed binary', () => {
+    // Tests run under the Node ABI (see AGENTS.md's dual-rebuild gotcha), so
+    // the binary that is actually on disk right now must load here and
+    // report process.versions.modules — independent of any cache manifest.
+    expect(detectBinaryAbi(MODULE_BINARY)).toBe(process.versions.modules)
+  })
+
+  test('detectBinaryAbi throws rather than guessing when the file does not exist', () => {
+    expect(() => detectBinaryAbi(resolve(ROOT, 'does', 'not', 'exist.node'))).toThrow()
   })
 })
