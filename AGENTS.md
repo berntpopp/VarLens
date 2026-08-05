@@ -71,6 +71,40 @@ make dist                 # package
 
 Do **not** use `electron-builder install-app-deps` — it has been broken for Electron 20+. `postinstall` uses `@electron/rebuild` directly. `electron-builder`'s `npmRebuild: false` is intentional.
 
+Since 2026-08, `rebuild:node` / `rebuild:electron` restore from an ABI-keyed cache at
+`.cache/native/<platform>-<arch>-<abi>/` instead of recompiling. The first compile per ABI still
+costs ~20-35 s (measured: 34.56 s cold on this host); subsequent switches are a file copy
+(measured: 0.09 s warm, down from a 33.33 s uncached baseline — see
+`.planning/artifacts/perf/build/compare-pre-phase1-to-post-phase1.md`). `@electron/rebuild` is
+deliberately **not** passed `-f`, because `-f` disables both its skip logic and its cache.
+Correctness is enforced by `node scripts/native/assert-native-abi.mjs <node|electron>`, which
+fails loud on a wrong-ABI binary.
+
+Upstream publishes no prebuild for Electron 43's ABI 148 (published range 121-146), which is why
+this compile exists at all. **When bumping Electron, check whether the new ABI has a published
+prebuild** — Electron 42 (ABI 146) had one; 43 does not, and that bump alone moved `build.yml`
+from ~10 min to 14.1 min.
+
+Two things that will bite the next person who touches this:
+
+- **A bare `require('better-sqlite3-multiple-ciphers')` is not a valid ABI check.** The addon
+  loads lazily (`lib/database.js:48`: `addon = DEFAULT_ADDON || (DEFAULT_ADDON = require('bindings')(...))`),
+  so importing the package succeeds even against a wrong-ABI binary. You must construct a
+  `Database` to force the `dlopen`:
+
+  ```bash
+  node -e "const D=require('better-sqlite3-multiple-ciphers'); const d=new D(':memory:'); d.exec('select 1'); console.log('ok')"
+  ```
+
+  A liveness check that needs to run before the module is safely requireable (e.g. inside the
+  rebuild script itself) must `dlopen` the `.node` file directly instead.
+
+- **The `.forge-meta` clear-and-retry logic in `scripts/native/rebuild-native.mjs` keys off an
+  undocumented internal of `@electron/rebuild@4.2.0`** (`module-rebuilder.js`'s `metaPath`,
+  currently `<modulePath>/build/<buildType>/.forge-meta`) that lets `@electron/rebuild` silently
+  skip a rebuild it thinks it already did. This internal may move on a future `@electron/rebuild`
+  bump — re-verify the retry logic still finds the right path when upgrading that dependency.
+
 ## Canonical Commands
 
 The **Makefile is the source of truth**. GitHub Actions workflows mirror it target-for-target. When in doubt, run the `make` target, not the underlying npm script.
