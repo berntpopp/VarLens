@@ -71,7 +71,7 @@
     "@vitejs/plugin-vue": "^6.0.8",
     "@vitest/coverage-v8": "^4.1.10",
     "@vue/test-utils": "^2.4.11",
-    "electron": "^40.10.5",
+    "electron": "^43.3.0",
     "electron-builder": "^26.15.2",
     "electron-vite": "^5.0.0",
     "eslint": "^10.8.0",
@@ -213,7 +213,8 @@
   "overrides": {
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "@xmldom/xmldom": "^0.8.13",
-    "lodash": "^4.18.1"
+    "lodash": "^4.18.1",
+    "@electron/fuses": "^2.1.3"
   },
   "prettier": {
     "semi": false,

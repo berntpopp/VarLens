@@ -3,8 +3,6 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses'
 import { FUSE_BASELINE } from '../../../scripts/configure-fuses.mjs'
 
 describe('FUSE_BASELINE', () => {
-  const unsupportedByElectron40 = new Set<number>([FuseV1Options.WasmTrapHandlers])
-
   it('targets fuse wire version V1', () => {
     expect(FUSE_BASELINE.version).toBe(FuseVersion.V1)
   })
@@ -18,7 +16,6 @@ describe('FUSE_BASELINE', () => {
       (v): v is number => typeof v === 'number'
     )
     for (const fuseKey of numericFuseKeys) {
-      if (unsupportedByElectron40.has(fuseKey)) continue
       expect(
         FUSE_BASELINE,
         `FUSE_BASELINE is missing a declaration for FuseV1Options=${FuseV1Options[fuseKey]} (${fuseKey})`
@@ -26,8 +23,12 @@ describe('FUSE_BASELINE', () => {
     }
   })
 
-  it('does not configure fuses absent from the Electron 40 fuse wire', () => {
-    expect(FUSE_BASELINE).not.toHaveProperty(String(FuseV1Options.WasmTrapHandlers))
+  // Electron 43 was the first release whose fuse wire exposed WasmTrapHandlers,
+  // growing the wire from 8 entries to 9. Under Electron 40 the baseline
+  // deliberately omitted it because the binary could not configure it; that
+  // carve-out is gone, so every fuse above is now required unconditionally.
+  it('declares WasmTrapHandlers at the default Electron ships it with', () => {
+    expect(FUSE_BASELINE[FuseV1Options.WasmTrapHandlers]).toBe(true)
   })
 
   it('enables OnlyLoadAppFromAsar', () => {
