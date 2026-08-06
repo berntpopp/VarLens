@@ -8,9 +8,24 @@ on:
 permissions:
   contents: read
 
+# Deliberately diverges from GitHub's Pages starter template, which sets
+# `cancel-in-progress: false` to let production deployments finish.
+#
+# That is the wrong trade for a docs site rebuilt from `main` on every push.
+# GitHub Pages serialises deployments API-side, so several pushes in quick
+# succession leave every run sitting in `deployment_queued` until
+# `actions/deploy-pages` gives up with "Timeout reached, aborting!". Observed
+# 2026-08-06: three pushes to `main` within ~25 minutes (two PR merges plus a
+# release version bump) produced three queued deploys; two timed out after
+# 10 minutes each having built the whole Electron app and screenshot suite
+# first.
+#
+# Superseding is also semantically right here: the docs site only ever reflects
+# the tip of `main`, so an in-flight deploy of an older commit has no value once
+# a newer one exists. Nothing is lost by cancelling it.
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-screenshots:
