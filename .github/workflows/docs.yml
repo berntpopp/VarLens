@@ -42,7 +42,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install system dependencies
@@ -84,6 +84,23 @@ jobs:
       - name: Build Electron app
         run: npx electron-vite build
 
+      # Cache the downloaded browser binaries. Keyed on the resolved Playwright
+      # version, because browser builds are pinned per Playwright release — a
+      # stale browser against a newer Playwright is exactly the mismatch this
+      # key prevents. The `--with-deps` system packages are NOT cached (they
+      # install into /usr/lib, outside the cache path), so the install step
+      # still runs; on a hit it skips only the browser download.
+      - name: Resolve Playwright version
+        id: pw
+        shell: bash
+        run: echo "ver=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.ver }}
+
       - name: Install Playwright
         run: npx playwright install --with-deps
 
@@ -117,7 +134,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       # Deliberately no native ABI cache and no `assert-native-abi.mjs` check
