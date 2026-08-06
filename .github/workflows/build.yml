@@ -238,6 +238,16 @@ jobs:
             platform: win
           - os: macos-latest
             platform: mac
+    # app-builder-lib's getCacheDirectory() (electronGet.js:34-57) only honours
+    # ELECTRON_BUILDER_CACHE when it is an ABSOLUTE path (`path.parse(env).root`
+    # must be truthy). `${{ github.workspace }}` is absolute on every runner
+    # (Windows, macOS, Linux alike), so pinning it here gives one workspace-
+    # relative cache path instead of a three-way OS conditional over the
+    # default per-OS locations. Set at the job level so both the cache step
+    # below and the `Package Electron app` step (which invokes electron-builder
+    # itself) see the identical value.
+    env:
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
 
     steps:
       - name: Configure git line endings
@@ -301,6 +311,38 @@ jobs:
           path: |
             test-results/
             .planning/artifacts/perf/phase1/baseline/startup-smoke/
+
+      # Content-addressed tool archives (nsis-resources, 7zip, winCodeSign, the
+      # Electron zip itself, …) re-verified by sha256 on use, so — unlike the
+      # native ABI cache above — a partial `restore-keys` match is safe and
+      # still saves a download. Path is `.cache/electron-builder`, workspace-
+      # relative and matching ELECTRON_BUILDER_CACHE above; never bare `.cache`
+      # — `.cache/native` and `.cache/tsbuildinfo` are siblings with different
+      # keys and lifetimes.
+      - name: Restore electron-builder toolset cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+        with:
+          path: .cache/electron-builder
+          key: ebtools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ebtools-${{ runner.os }}-${{ runner.arch }}-
+
+      # electron-builder's extracted-directory cache tier checks file COUNT,
+      # not content (cacheState.js:112-131), so a partial restore would be
+      # served silently. The `<extractDir>.state` files are SIBLINGS of the
+      # extracted directory, not files inside it (cacheState.js:24 —
+      # `${extractDir}.state`), so they must be found and removed explicitly.
+      # Dropping them forces re-extraction back through the sha256-verified
+      # archive path. Cheap; the download is what is actually being cached.
+      - name: Drop electron-builder extraction state so archives are re-verified
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=".cache/electron-builder"
+          [ -d "$DIR" ] || { echo "no electron-builder cache to clean"; exit 0; }
+          find "$DIR" -name '*.state' -type f -delete
+          find "$DIR" -name '*.lock' -type f -delete
+          echo "cleared extraction state under $DIR"
 
       - name: Package Electron app
         run: npx electron-builder --${{ matrix.platform }} --publish never
