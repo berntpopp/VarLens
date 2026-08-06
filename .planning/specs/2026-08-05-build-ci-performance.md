@@ -571,9 +571,33 @@ uploading 1.29 GB per PR is pure cost), the `package` job emits and uploads its 
 5. Expected-filename assertion for this version. A silently empty or partial artifact must fail
    here, not at `gh release upload`.
 
-**Missing or expired artifacts: hard fail, no fallback build path.** The error names the recovery
-(`gh run rerun <build_run_id>`, then re-run the release). Chosen deliberately over auto-fallback: a
-fallback that never executes rots, and its rotting stays invisible until the day it is needed.
+**Missing or expired artifacts: hard fail, no fallback build path.** Chosen deliberately over
+auto-fallback: a fallback that never executes rots, and its rotting stays invisible until the day it
+is needed.
+
+The recovery path needs `build.yml` to gain a **`workflow_dispatch` trigger**. `gh run rerun` is
+only permitted for **30 days** after the initial run, while artifacts are retained for 90 — so for a
+run aged 30-90 days there would otherwise be no supported way to regenerate artifacts for that exact
+SHA, since `build.yml` triggers only on `push` and `pull_request` today (`build.yml:3-7`). With
+`workflow_dispatch`, `gh workflow run build.yml --ref <tag>` checks out the tag's commit and
+regenerates. Consequences:
+
+- The promotion lookup must accept `push` **or** `workflow_dispatch`, not `--event push` alone. The
+  `headSha == $GITHUB_SHA` assertion remains the real guard; the event filter exists only to exclude
+  `pull_request` runs, whose `head_sha` is the PR HEAD.
+- `changes`'s `dorny/paths-filter` has no base ref on a `workflow_dispatch` event. Force
+  `code=true` for that event rather than relying on filter behaviour.
+- Recovery instruction in the failure message: `gh run rerun <build_run_id>` if under 30 days,
+  otherwise `gh workflow run build.yml --ref <tag>`.
+
+**Assert the tag ref still resolves to the commit being promoted.** `create-release` binds its gate
+to `$GITHUB_SHA` (`release.yml:65`) but creates the release by **mutable `tag_name`**
+(`release.yml:106`). If the tag is force-moved between the event and publication, the release
+resolves to the new commit while the assets came from the old one. **This hazard exists today** —
+the current `release.yml` builds from `$GITHUB_SHA` too — so promotion does not introduce it, but it
+is the right moment to close it. Add a `git rev-parse refs/tags/<tag>^{commit} == $GITHUB_SHA`
+assertion in `create-release`, and repeat it in `publish-release` immediately before flipping
+`draft: false`, which is the last moment the mismatch is still correctable.
 
 #### 8.2 Merge-commit dedupe — deferred, recorded, not dropped
 
@@ -611,8 +635,23 @@ compiling (`rebuild-native.mjs:71` `if (restore(target))` → `:75 return 0`, ne
     path: .cache/native          # NOT bare `.cache` — `.cache/tsbuildinfo` is a sibling
     key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
 - run: npm ci                    # postinstall becomes a file copy
-- run: node scripts/native/assert-native-abi.mjs electron
+- run: node scripts/native/assert-native-abi.mjs <target>
 ```
+
+**The assertion target is per-job, not uniformly `electron`.** Asserting the wrong ABI would fail a
+correct job. Each site asserts the ABI it actually loads:
+
+| Site | Loads | Assert |
+|---|---|---|
+| `build.yml` `checks` | Node (runs Vitest after `rebuild:node`) | `node`, **after** `rebuild:node` |
+| `build.yml` `package` ×3 | Electron (packages the app) | `electron` |
+| `build.yml` `web-ci`, `web-ci.yml`, `publish-web.yml` | Node | `node` |
+| `docs.yml:42` leg | Electron (runs `rebuild:electron`, then `electron-vite build`) | `electron` |
+| `docs.yml:87` deploy leg | nothing — `npm ci --ignore-scripts`, no native module | **no cache, no assert** |
+
+That last row is load-bearing: adding the restore-and-assert pattern there would fail, because
+`--ignore-scripts` skips both the dependency's own `install` and the root `postinstall`, so no
+binary is ever placed for the assertion to check.
 
 This **replaces** the `build/Release` cache block rather than adding to it: one cache step instead
 of two, covering both ABIs in one entry and covering `checks`, which has none today.
@@ -637,11 +676,31 @@ Install sites in scope (9 `npm ci` invocations across 5 workflows): `build.yml:1
 `docs.yml:87` already uses `--ignore-scripts`. **`release.yml`'s three sites need no cache — 8.1
 deletes them.**
 
-**Effect on Phase 2.** Not superseded, but its justification shrinks and must be re-derived against
-post-8.3 numbers. With 8.3 in place the residual win from `--ignore-scripts` is the cold-cache case
-plus the `checks`/`web-ci` jobs' unnecessary Electron-ABI *copy* (~0.1 s, not ~98 s). It also
-carries a repo-specific trap worth restating: `--ignore-scripts` skips `electron`'s own
+**Effect on Phase 2 — stated precisely, because a looser wording contradicts it.**
+
+8.3 does **not** deliver Phase 2's rule that "`checks` and `web-ci` must never build for the Electron
+ABI at all" (§Phase 2). On a **cold** cache — first run after any lockfile change, once per OS —
+`checks` still runs an ordinary `npm ci` whose `postinstall` compiles a full Electron-ABI binary it
+never loads, then re-targets Node. 8.3 removes that cost on the **warm** path only, which is the
+common case but not the invariant Phase 2 asserts.
+
+So: Phase 2 is **not superseded, and its rule still stands unmet until it ships.** What changes is
+the size of its remaining prize, which must be re-derived against post-PR-3 numbers rather than the
+pre-8.3 ones. Note also its repo-specific trap: `--ignore-scripts` skips `electron`'s own
 `install.js`, which downloads the Electron binary.
+
+The two phases compose rather than conflict; the end-state ordering once both have shipped is:
+
+```yaml
+- uses: actions/cache@<sha>        # restore .cache/native            (8.3)
+- run: npm ci --ignore-scripts     # no compile at all                (Phase 2)
+- run: npm run rebuild:<target>    # cache-restore, or compile if cold (8.3 + Phase 2)
+- run: node scripts/native/assert-native-abi.mjs <target>
+```
+
+Phase 2's originally specified `--ignore-scripts → restore → conditional rebuild → assert` ordering
+is preserved; 8.3 only moves the cache restore earlier, which is a no-op for Phase 2's semantics and
+is what lets the interim state (before Phase 2 lands) benefit at all.
 
 #### 8.4 electron-builder toolset cache — archive tier only
 
@@ -734,6 +793,36 @@ warnings. Phases 5.3 and 5.5 **move here** rather than being duplicated — see 
 Recorded for whoever next audits warnings: `MODULE_TYPELESS_PACKAGE_JSON` and the npm deprecations
 do **not** appear in `npm run build` — they surface via `eslint` and `npm install` respectively. A
 warning inventory must run all three commands.
+
+### Phase 8 design review — independent adversarial pass
+
+Reviewed 2026-08-06 by Codex CLI (`gpt-5.6-terra`, `model_reasoning_effort = high`), prompted to
+**refute** rather than assess. Four findings, all accepted; no finding was parked.
+
+| # | Finding | Ruling |
+|---|---|---|
+| 1 | A force-moved tag publishes commit A's binaries under a tag that now resolves to commit B. `create-release` gates on `$GITHUB_SHA` (`release.yml:65`) but creates by mutable `tag_name` (`release.yml:106`). | **Accepted, with a correction to its framing.** Real, and now closed by the tag-ref assertion in 8.1. But it is **pre-existing** — today's `release.yml` also builds from `$GITHUB_SHA` while publishing to a mutable tag name — so promotion does not introduce it. Codex rated it Critical on the assumption it was new. |
+| 2 | "Hard fail, `gh run rerun`" has no viable recovery for a run aged 30-90 days: reruns are permitted for 30 days, artifacts retained for 90, and `build.yml` has no `workflow_dispatch`. | **Accepted in full.** The recovery instruction was simply wrong. Fixed by adding `workflow_dispatch` to `build.yml`, widening the promotion lookup to `push` or `workflow_dispatch`, and forcing `code=true` for that event in `changes`. |
+| 3 | Applying 8.3's restore-and-assert to `docs.yml`'s deploy job would fail: it runs `npm ci --ignore-scripts`, so no binary exists for the assertion. | **Accepted in substance, though the literal case was already excluded** — the site list explicitly exempts `docs.yml:87`. It exposed a real error underneath: the assertion target was specified uniformly as `electron` when `checks` and `web-ci` load the **node** ABI. Fixed with the per-job target table in 8.3. |
+| 4 | 8.3 contradicts Phase 2's rule that "`checks` and `web-ci` must never build for the Electron ABI", because a cold cache still compiles one in `postinstall`. Calling Phase 2 "not superseded" does not reconcile it. | **Accepted.** The wording was glib. 8.3 fixes the warm path only; Phase 2's invariant stands unmet until Phase 2 ships. 8.3 now states this explicitly and gives the composed end-state ordering. |
+
+Attacks Codex ran and **could not** break — recorded because a failed refutation is evidence:
+
+- **The native-cache correctness chain.** No wrong-ABI path was found under the proposed required
+  assertion: `manifestIsFresh()` covers target/ABI/platform/arch/moduleVersion/lockfileHash,
+  `restore()` checks sha256, restored binaries are independently ABI-probed, and the compile-path
+  "undetermined" success branch (`rebuild-native.mjs:135`) is caught by the post-`npm ci` assertion.
+  Also confirmed: the dependency's own `install` script result is overwritten by the root
+  `postinstall`, so it does not leave the final Electron binary behind.
+- **The tree-hash claim.** Confirmed against real git data, and sharpened: because installer names
+  embed `${version}` (`package.json:149`, `:158`), reusing PR-head or merge-commit artifacts for the
+  release commit would produce wrongly-named files even if the trees had matched. Deferring 8.2 is
+  justified on that narrower ground too.
+- **Artifact-set equivalence.** The proposed globs match today's Linux/macOS/Windows upload globs
+  exactly, and explicit `--linux`/`--mac`/`--win` matches the current per-platform invocations.
+- **`ESIGNER_ENABLED != 'true'`.** Windows binaries remain unsigned exactly as today — signing and
+  `latest.yml` regeneration are both skipped while upload stays unconditional (`release.yml:303`,
+  `:357`, `:430`). Promotion does not change this behaviour.
 
 ---
 
@@ -850,7 +939,9 @@ Ordering constraints that are not negotiable:
 | **Promotion ships installers built from the wrong commit** (8.1) | `build_run_id` comes from the same gate that verified CI green, so there is one identity, not two. Plus `--event push`, an explicit `headSha == $GITHUB_SHA` assertion, and a `provenance.sha` check on the artifact itself. |
 | **Promotion ships a partial or corrupt artifact set** (8.1) | `download-artifact`'s `digest-mismatch: error` default, `sha256sum -c SHA256SUMS`, and an expected-filename assertion against the 10-asset set. `if-no-files-found: error` on the upload side so an empty artifact fails at creation. |
 | **A signed release ships a `latest.yml` describing the unsigned binaries** (8.5) | Exists today and is unverified. The new post-regeneration assertion recomputes sha512 + size for every referenced file and fails on mismatch. This is the failure mode promotion makes load-bearing, so it is a prerequisite, not a follow-up. |
-| **A tag whose `build.yml` run has expired or skipped `package` cannot be released** (8.1) | Accepted, deliberately. Hard fail naming `gh run rerun <id>` as the recovery, chosen over an auto-fallback build path that would rot unexercised and fail exactly when needed. |
+| **A tag whose `build.yml` run has expired or skipped `package` cannot be released** (8.1) | Accepted, deliberately. Hard fail chosen over an auto-fallback build path that would rot unexercised and fail exactly when needed. Recovery is `gh run rerun <id>` under 30 days, or `gh workflow run build.yml --ref <tag>` beyond it — which is why 8.1 adds `workflow_dispatch` to `build.yml`. |
+| **A force-moved tag publishes the previous commit's binaries** (8.1) | **Pre-existing, not introduced by promotion** — today's `release.yml` builds from `$GITHUB_SHA` while publishing to a mutable `tag_name`. Closed by asserting `refs/tags/<tag>^{commit} == $GITHUB_SHA` in `create-release` and again in `publish-release` immediately before flipping `draft: false`. |
+| **A cold native cache still compiles an Electron-ABI binary in `checks`** (8.3) | Accepted and stated rather than glossed: 8.3 fixes the warm path only. Phase 2's "never build for the Electron ABI" invariant remains unmet until Phase 2 ships. Cost is bounded to once per lockfile change per OS. |
 | **A corrupted electron-builder tool cache is served silently** (8.4) | Real: the extracted-directory tier validates file *count*, not content (`cacheState.js:112-131`). Mitigated by caching only hash-verified tiers and deleting `${extractDir}.state` sidecars after restore, forcing re-extraction through the sha256-checked archive path. |
 | A stale `.cache/native` GitHub cache entry installs a wrong-ABI binary (8.3) | Cannot: `manifestIsFresh` checks moduleVersion + lockfileHash + ABI + platform + arch, `restore()` sha256-checks against the manifest, and `restoreDecision()` re-derives the ABI from the binary on disk — resolving *undetermined* to `purge-and-compile`. Degrades to a recompile, never a wrong binary. Keep no `restore-keys`. |
 
