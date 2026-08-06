@@ -330,8 +330,9 @@ jobs:
       # macOS runners ship `shasum` but not `sha256sum`; Git-for-Windows ships
       # coreutils' `sha256sum` but only has `shasum` if Perl is on PATH;
       # Linux has both. Detect whichever is actually present rather than
-      # betting on one — both emit the identical `<64 hex><two spaces><name>`
-      # format that verify-promoted-artifacts.mjs parses, confirmed locally.
+      # betting on one — both emit the identical `<64 hex> *<name>` binary-mode
+      # format (see the -b rationale below) that verify-promoted-artifacts.mjs
+      # parses, confirmed locally.
       - name: Write provenance and checksums
         if: github.event_name != 'pull_request'
         shell: bash
@@ -363,10 +364,20 @@ jobs:
               platform: process.env.PLATFORM
             }, null, 2) + '\n')
           "
-          # Checksum every publishable asset, in the plain `<hex>  <name>` form
-          # verify-promoted-artifacts.mjs parses. Deliberately excludes
-          # provenance.json and SHA256SUMS itself.
-          SUM=$(command -v shasum >/dev/null 2>&1 && echo "shasum -a 256" || echo "sha256sum")
+          # Checksum every publishable asset with -b (binary mode) on both tool
+          # branches, in the `<hex> *<name>` form verify-promoted-artifacts.mjs
+          # parses. Deliberately excludes provenance.json and SHA256SUMS itself.
+          #
+          # -b matters specifically for `shasum` on Git-for-Windows: it is a
+          # Perl script whose Digest::SHA::addfile only calls binmode() for
+          # 'b'/'0' modes, not the default text mode — without -b a CRLF
+          # translation on that Perl build could silently corrupt every
+          # .exe/.zip digest on the Windows leg. GNU sha256sum's default
+          # (text) mode is already binary-equivalent on POSIX, so -b there is
+          # a no-op in practice; it is applied to both branches anyway so the
+          # two tools always emit the identical asterisk-prefixed form rather
+          # than depending on which branch happened to run.
+          SUM=$(command -v shasum >/dev/null 2>&1 && echo "shasum -a 256 -b" || echo "sha256sum -b")
           : > SHA256SUMS
           for f in *.AppImage *.deb *.dmg *.exe *.zip latest*.yml; do
             [ -e "$f" ] || continue

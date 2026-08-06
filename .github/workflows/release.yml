@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read # gh run list / gh api .../artifacts read another workflow's runs
     outputs:
       release_id: ${{ steps.create.outputs.release_id }}
       version: ${{ steps.version.outputs.version }}
@@ -90,8 +91,27 @@ jobs:
               --json conclusion,databaseId,headSha,event \
               --jq "[.[] | select(.headSha == \"$SHA\") | select(.event == \"push\" or .event == \"workflow_dispatch\")] | .[0] // empty")
             STATUS=$(echo "$RUN" | jq -r '.conclusion // "pending"')
+            # `echo "$RUN" | jq ...` on a genuinely empty $RUN (the `// empty`
+            # case, no matching run found yet) processes zero JSON values and
+            # produces an empty string rather than jq's own "pending"
+            # fallback — normalize it here so the poll log below is accurate.
+            STATUS="${STATUS:-pending}"
             if [ "$STATUS" = "success" ]; then
               RUN_ID=$(echo "$RUN" | jq -r '.databaseId')
+              # A "success" Build run can still be missing installer artifacts
+              # if its package job was skipped (e.g. changes.outputs.code was
+              # false — not reachable for a real release commit since
+              # package.json is in the code filter, but this fails closed
+              # either way). Without this check the failure only surfaces one
+              # job later as an opaque "Unable to find an artifact with the
+              # name installers-<os>" from actions/download-artifact.
+              ARTIFACT_NAMES=$(gh api "repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[].name]')
+              for NAME in installers-ubuntu-latest installers-macos-latest installers-windows-latest; do
+                if ! echo "$ARTIFACT_NAMES" | jq -e --arg n "$NAME" 'index($n) != null' > /dev/null; then
+                  echo "::error::Build run $RUN_ID succeeded but has no '$NAME' artifact — its package job likely didn't run. Refusing to promote a partial artifact set."
+                  exit 1
+                fi
+              done
               echo "build_run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
               echo "Build passed on $SHA in run $RUN_ID — promoting its artifacts"
               exit 0
@@ -333,8 +353,13 @@ jobs:
           foreach ($fileName in $filesToSign) {
             $filePath = Join-Path $workspace "promoted/win" $fileName
             if (-not (Test-Path $filePath)) {
-              Write-Host "::warning::$fileName not found, skipping"
-              continue
+              # A missing file here means signing was requested (this step is
+              # gated on ESIGNER_ENABLED) but the expected artifact isn't on
+              # disk — e.g. a package.json artifactName rename or a path typo.
+              # Warn-and-continue would leave the file unsigned while the run
+              # stays green; that is the exact failure this gate exists to
+              # catch, so it must be fatal, not a warning.
+              throw "$fileName not found at $filePath — cannot sign a file that isn't there"
             }
             Write-Host "Signing $fileName ..."
             java -jar $jarPath sign `
@@ -357,6 +382,22 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "Code signing failed for $fileName after retry" }
             }
             Write-Host "Successfully signed $fileName"
+
+            # CodeSignTool can exit 0 without actually attaching a signature
+            # (e.g. a silently-ignored API response). Assert a signature is
+            # physically present rather than trusting the exit code alone.
+            # `-ne 'NotSigned'` (not `-eq 'Valid'`) deliberately: 'Valid' also
+            # requires full chain validation on this runner, and a
+            # timestamping or intermediate-cert hiccup can return
+            # 'UnknownError' on a binary that is genuinely signed, which would
+            # block a legitimate release. 'NotSigned' is the unambiguous
+            # signal for the actual failure mode this guards against. Log the
+            # real status either way so a degraded-but-signed case is visible.
+            $sig = Get-AuthenticodeSignature $filePath
+            Write-Host "$fileName signature status: $($sig.Status)"
+            if ($sig.Status -eq 'NotSigned') {
+              throw "$fileName has no Authenticode signature after signing — refusing to ship an unsigned installer"
+            }
           }
           Pop-Location
 
