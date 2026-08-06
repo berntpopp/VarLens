@@ -80,9 +80,12 @@ deliberately **not** passed `-f`, because `-f` disables both its skip logic and 
 Correctness is enforced automatically by the ABI verification built into
 `scripts/native/rebuild-native.mjs` itself — every restore and every compile is checked against
 the binary that actually ends up on disk, never trusted from a manifest. `node
-scripts/native/assert-native-abi.mjs <node|electron>` is a separate, on-demand check of whatever
-binary is currently installed; nothing invokes it automatically today — wiring it into CI is
-Phase 2.
+scripts/native/assert-native-abi.mjs <node|electron>` is a separate, required CI step: it runs
+after every install across five jobs in four workflows (`build.yml`'s checks and package jobs,
+`web-ci.yml`, `publish-web.yml`, and `docs.yml`'s screenshot job), each asserting the ABI that job
+actually loads (`node` for test/web jobs, `electron` for packaging and the docs screenshot job).
+It exists alongside `rebuild-native.mjs`'s internal check because it fails loud on "undetermined",
+where `rebuild-native.mjs` deliberately does not.
 
 Upstream publishes no prebuild for Electron 43's ABI 148 (published range 121-146), which is why
 this compile exists at all. **When bumping Electron, check whether the new ABI has a published
@@ -245,7 +248,7 @@ Test data lives at `tests/test-data/vcf/` (GIAB Chinese Trio, chr22:29M–30.5M,
   - Use git worktrees when useful or when the current checkout should stay clean.
   - Only documentation/archive housekeeping may be committed directly to `main` if explicitly requested.
 - **Conventional Commits.** Types used in this repo: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `style`, `chore`, `ci`, `merge`. Optional scope in parentheses: `refactor(ipc): …`, `fix(renderer): …`. Read `git log --oneline -30` before opening a PR if you're unsure of current phrasing.
-- **Release flow.** Versions are tagged `vX.Y.Z`. `.github/workflows/release.yml` **refuses to publish** if `build.yml` has not passed on the exact tagged SHA. Do not tag until CI is green on the commit you're tagging.
+- **Release flow.** Versions are tagged `vX.Y.Z`. `.github/workflows/release.yml` **refuses to publish** if `build.yml` has not passed on the exact tagged SHA. Do not tag until CI is green on the commit you're tagging. Release no longer rebuilds that commit: it downloads `build.yml`'s installers for that exact SHA, verifies provenance, checksums, and expected filenames, applies Windows signing, and publishes.
 - **PRs.** Small, focused, green CI. If a change spans shell + IPC + database, split it unless the atomicity is load-bearing. Reference the `.planning/` plan or review that motivates the change.
 
 ## Workflow Maintenance
