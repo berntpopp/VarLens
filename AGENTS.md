@@ -14,8 +14,8 @@ The target user is a clinical geneticist or researcher working with case-level v
 
 | Layer         | Choice                                                              |
 | ------------- | ------------------------------------------------------------------- |
-| Runtime       | Electron 40 (main + preload + renderer)                             |
-| Renderer      | Vue 3.5 + Vuetify 4 + Pinia 3 + Vue Router                          |
+| Runtime       | Electron 43 (main + preload + renderer)                             |
+| Renderer      | Vue 3.5 + Vuetify 4 + Pinia 4 + Vue Router                          |
 | Build         | electron-vite 5 + Vite 7                                            |
 | Language      | TypeScript 6, strict mode                                           |
 | Database      | `better-sqlite3-multiple-ciphers` (encrypted SQLite, synchronous)   |
@@ -81,10 +81,12 @@ Correctness is enforced automatically by the ABI verification built into
 `scripts/native/rebuild-native.mjs` itself — every restore and every compile is checked against
 the binary that actually ends up on disk, never trusted from a manifest. `node
 scripts/native/assert-native-abi.mjs <node|electron>` is a separate, required CI step: it runs
-after every install at six job call-sites across four workflows — `build.yml` alone has three
-(`checks`, `package`, and its own `web-ci` job, distinct from the standalone `web-ci.yml`
-workflow) — plus one each in `web-ci.yml`, `publish-web.yml`, and `docs.yml`'s screenshot job,
-asserting `node` for test/web jobs and `electron` for packaging and the docs screenshot job.
+after every install that builds the native module, at six job call-sites across four workflows —
+`build.yml` alone has three (`checks`, `package`, and its own `web-ci` job, distinct from the
+standalone `web-ci.yml` workflow) — plus one each in `web-ci.yml`, `publish-web.yml`, and
+`docs.yml`'s screenshot job, asserting `node` for test/web jobs and `electron` for packaging and
+the docs screenshot job (`docs.yml`'s `deploy` job is the deliberate exception — its
+`npm ci --ignore-scripts` skips the native rebuild, so there is no binary to assert against).
 It exists alongside `rebuild-native.mjs`'s internal check because it fails loud on "undetermined",
 where `rebuild-native.mjs` deliberately does not.
 
