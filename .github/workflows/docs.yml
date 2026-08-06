@@ -3,6 +3,34 @@ name: Deploy Docs
 on:
   push:
     branches: [main]
+    # The union of every input that can reach the published bytes: `docs/**`
+    # (the only tree VitePress reads -- docs/.vitepress/config.mts and
+    # docs/.vitepress/theme/** import nothing outside docs/) plus every input
+    # to the screenshot pipeline, which is declared authoritatively in
+    # the screenshot pipeline. scripts/native/** is included because it decides
+    # which native binary the built app loads; a broken rebuild changes what the
+    # app renders, or whether it starts at all.
+    #
+    # Deliberately a workflow-level filter, unlike build.yml:22-27 which uses a
+    # job-level dorny/paths-filter. That comment's hazard -- workflow-level
+    # `paths-ignore` leaving required status checks permanently pending -- does
+    # not apply here: docs.yml has no `pull_request` trigger and is not a
+    # required check. A workflow-level filter costs 0 s on a skip where a
+    # job-level filter still spins up a runner. `workflow_dispatch` below is the
+    # escape hatch if this filter ever wrongly skips a needed run.
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - 'tests/e2e/screenshots.e2e.ts'
+      - 'tests/e2e/test-data/demo-case.json'
+      - 'playwright.config.ts'
+      - 'electron.vite.config.ts'
+      - 'tsconfig*.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - 'scripts/native/**'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -31,6 +59,10 @@ jobs:
   build-screenshots:
     name: Build & Screenshots
     runs-on: ubuntu-latest
+    # Baseline is 237 s. 20 minutes is ~5x headroom -- enough for a cold native
+    # cache (which adds a ~35 s compile) plus a slow runner, without letting a
+    # hung Electron launch burn a full 6-hour default timeout.
+    timeout-minutes: 20
 
     steps:
       - name: Configure git line endings
@@ -118,6 +150,10 @@ jobs:
     name: Deploy to GitHub Pages
     needs: build-screenshots
     runs-on: ubuntu-latest
+    # Baseline is 39 s, but actions/deploy-pages waits on the Pages API with its
+    # own 1200000 ms budget. 25 minutes sits just above that so the action's own
+    # timeout reports the real error rather than being masked by a job kill.
+    timeout-minutes: 25
 
     permissions:
       pages: write
