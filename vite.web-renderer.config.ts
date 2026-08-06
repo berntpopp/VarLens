@@ -81,8 +81,7 @@ export default defineConfig({
       input: resolve(__dirname, 'src/web/index.html'),
       output: {
         manualChunks: {
-          vuetify: ['vuetify'],
-          zod: ['zod']
+          vuetify: ['vuetify']
         }
       }
     }
