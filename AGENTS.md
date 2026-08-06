@@ -81,9 +81,10 @@ Correctness is enforced automatically by the ABI verification built into
 `scripts/native/rebuild-native.mjs` itself — every restore and every compile is checked against
 the binary that actually ends up on disk, never trusted from a manifest. `node
 scripts/native/assert-native-abi.mjs <node|electron>` is a separate, required CI step: it runs
-after every install across five jobs in four workflows (`build.yml`'s checks and package jobs,
-`web-ci.yml`, `publish-web.yml`, and `docs.yml`'s screenshot job), each asserting the ABI that job
-actually loads (`node` for test/web jobs, `electron` for packaging and the docs screenshot job).
+after every install at six job call-sites across four workflows — `build.yml` alone has three
+(`checks`, `package`, and its own `web-ci` job, distinct from the standalone `web-ci.yml`
+workflow) — plus one each in `web-ci.yml`, `publish-web.yml`, and `docs.yml`'s screenshot job,
+asserting `node` for test/web jobs and `electron` for packaging and the docs screenshot job.
 It exists alongside `rebuild-native.mjs`'s internal check because it fails loud on "undetermined",
 where `rebuild-native.mjs` deliberately does not.
 
