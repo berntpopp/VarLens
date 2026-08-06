@@ -175,10 +175,9 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
     ).toBeGreaterThan(0)
     for (const upload of installerUploads) {
       const untilNextStep = upload.split(/\n\s*-\s/)[0]
-      expect(
-        untilNextStep,
-        'installers- upload step must set if-no-files-found: error'
-      ).toContain('if-no-files-found: error')
+      expect(untilNextStep, 'installers- upload step must set if-no-files-found: error').toContain(
+        'if-no-files-found: error'
+      )
     }
   })
 })
