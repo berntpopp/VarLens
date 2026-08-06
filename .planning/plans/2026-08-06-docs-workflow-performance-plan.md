@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **The version rendered in screenshots must always be the current version from config.** Nothing about the version may be hardcoded, stubbed, or frozen. `package.json` is therefore hashed **in full**, version included.
+- **The version rendered in screenshots must always be the current version from config.** Nothing about the version may be hardcoded, stubbed, or frozen. `AppFooter.vue:9` renders it in every screenshot; do not stub `system:version` or freeze it for determinism.
 - Never commit to `main`. All work on branch `perf/docs-workflow-screenshot-cache`; every branch is destined for a PR.
 - GitHub Actions must be pinned to full commit SHAs with a trailing `# owner/repo@vX.Y.Z` comment on the same line.
 - No `console.*` in application code. These scripts are CI tooling, not application code, and `console.log` is their output channel — that is the documented exception pattern already used by `scripts/native/*.mjs`.
@@ -197,35 +197,15 @@ before the closing `})` of the describe — add:
   })
 ```
 
-- [ ] **Step 5: Prove the guard actually fires**
-
-Temporarily break test 02's selector so its conditional cannot match:
-
-```bash
-sed -i "s/const plusBtn = window.locator('.v-toolbar .v-btn:has(.v-icon)').first()/const plusBtn = window.locator('.varlens-no-such-selector').first()/" tests/e2e/screenshots.e2e.ts
-make rebuild && make build
-xvfb-run --auto-servernum npx playwright test tests/e2e/screenshots.e2e.ts 2>&1 | tail -20
-```
-
-Expected: test 22 FAILS naming `import-menu`. Without this change the suite would have passed.
-
-Then revert the break:
-```bash
-git checkout -- tests/e2e/screenshots.e2e.ts   # only if no other edits are uncommitted
-```
-If other edits are uncommitted, revert the selector by hand instead.
-
-- [ ] **Step 6: Run the suite clean**
-
-Run: `xvfb-run --auto-servernum npx playwright test tests/e2e/screenshots.e2e.ts`
-Expected: 24 passed (23 producers + the new assertion).
-
-- [ ] **Step 7: Verify lint, format, typecheck**
+- [ ] **Step 5: Verify lint, format, typecheck**
 
 Run: `make lint-check && make format-check && make typecheck`
-Expected: all pass.
+Expected: all pass. If format-check fails, run `make format` and re-run.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 6: Commit — before the destructive verification below**
+
+Commit now, so that step 7's deliberate break can be reverted with `git checkout --`
+without destroying this task's work.
 
 ```bash
 git add tests/e2e/screenshots.e2e.ts
@@ -236,6 +216,37 @@ matching, the test passes without writing the file and CI publishes the
 stale committed copy -- currently a March 2026 image showing v0.30.0.
 Adds an explicit manifest of the 23 screenshots and asserts it."
 ```
+
+- [ ] **Step 7: Prove the guard actually fires**
+
+The work is committed, so this break is safe to revert.
+
+```bash
+make rebuild && make build
+sed -i "s/const plusBtn = window.locator('.v-toolbar .v-btn:has(.v-icon)').first()/const plusBtn = window.locator('.varlens-no-such-selector').first()/" tests/e2e/screenshots.e2e.ts
+grep -n "varlens-no-such-selector" tests/e2e/screenshots.e2e.ts   # confirm the break landed
+xvfb-run --auto-servernum npx playwright test tests/e2e/screenshots.e2e.ts 2>&1 | tail -25
+```
+
+Expected: test `22 - every documented screenshot was captured` FAILS, naming `import-menu`.
+Before this change the suite would have passed with a stale PNG. **Record the exact failure output
+in your report — this is the evidence the guard works.**
+
+Then revert the deliberate break:
+
+```bash
+git checkout -- tests/e2e/screenshots.e2e.ts
+grep -c "varlens-no-such-selector" tests/e2e/screenshots.e2e.ts   # must print 0
+```
+
+- [ ] **Step 8: Run the suite clean**
+
+Run: `xvfb-run --auto-servernum npx playwright test tests/e2e/screenshots.e2e.ts`
+Expected: 24 passed (23 producers + the new assertion).
+
+If the local Electron/xvfb environment cannot run the suite, say so explicitly in your report
+and mark the task DONE_WITH_CONCERNS — do not claim the guard was verified when it was not.
+Steps 5 and 6 are still required.
 
 ---
 
