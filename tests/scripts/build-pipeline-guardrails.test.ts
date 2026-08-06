@@ -161,8 +161,24 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
 
   test('installer uploads fail loudly rather than producing an empty artifact', () => {
     const yaml = readWorkflow('build.yml')
-    expect(yaml).toContain('installers-')
-    const uploadBlock = yaml.slice(yaml.indexOf('installers-'))
-    expect(uploadBlock).toContain('if-no-files-found: error')
+    // Bounded the same way the native-cache assertion above bounds its
+    // per-key block: split on the marker, then cut each resulting chunk off
+    // at the next step so an unrelated later upload-artifact step (build.yml
+    // already has several, and will gain more) can't satisfy this by
+    // coincidence. `.length` is asserted explicitly rather than relying on
+    // a `for` loop over zero blocks to fail — an empty array would otherwise
+    // pass vacuously, which is exactly the silent defeat this guards against.
+    const installerUploads = yaml.split('installers-').slice(1)
+    expect(
+      installerUploads.length,
+      'build.yml must declare at least one installers- artifact upload'
+    ).toBeGreaterThan(0)
+    for (const upload of installerUploads) {
+      const untilNextStep = upload.split(/\n\s*-\s/)[0]
+      expect(
+        untilNextStep,
+        'installers- upload step must set if-no-files-found: error'
+      ).toContain('if-no-files-found: error')
+    }
   })
 })
