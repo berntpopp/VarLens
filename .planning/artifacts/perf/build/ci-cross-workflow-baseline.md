@@ -71,11 +71,19 @@ rebuild is correctly skipped. Yet `npm ci` still costs:
 |---|---:|
 | `build.yml` `Checks (Ubuntu)` | 121 s |
 | `build.yml` `Package (ubuntu)` | 119 s |
-| `build.yml` `Package (windows)` | 217 s |
-| `build.yml` `Package (macos)` | 140 s |
+| `build.yml` `Package (windows)` | 140 s |
+| `build.yml` `Package (macos)` | 73 s |
+| `build.yml` `Web CI` | 125 s |
 | `release.yml` Linux | 112 s |
 | `release.yml` Windows | 217 s |
 | `release.yml` macOS | 47 s |
+
+> **Correction, 2026-08-06.** An earlier revision of this file listed `build.yml`
+> `Package (windows)` as 217 s and `Package (macos)` as 140 s. Those were wrong: 217 s is
+> `release.yml`'s Windows leg, and the macOS figure was never measured. The values above are
+> re-read from run 31076764351 and are the ones the "after" comparison below uses. The error
+> would have inflated the measured improvement, which is why it is called out rather than
+> quietly amended.
 
 This is the defect spec §2.4 predicted, now confirmed against fresh runs: `postinstall` compiles
 the Electron-ABI binary *before* the cache step can be consulted, and the cache restore then
@@ -111,3 +119,82 @@ plan; no Phase 8 claim should rest on the inferred split until it is measured di
 
 Phase 8.2 (merge-commit dedupe, 944 s) is **deferred**, so the 12 → 9 figure is the honest one;
 12 → 6 was only ever reachable with 8.2 included.
+
+---
+
+## After — measured 2026-08-06
+
+Two `workflow_dispatch` runs of the implemented branch at `c7545773`: **31087288313** (cold caches,
+first run with these keys) and **31089098078** (warm). Both green on all 8 jobs. All three
+`installers-*` artifacts produced: ubuntu 354 MB, windows 543 MB, macos 390 MB.
+
+### `npm ci` — the clean, attributable measurement
+
+This is the one number with no confound: same command, same event, only the cache changed.
+
+| Job | Before | Warm after | Δ |
+|---|---:|---:|---:|
+| `Checks (Ubuntu)` | 121 s | **14 s** | −107 s |
+| `Package (ubuntu)` | 119 s | **14 s** | −105 s |
+| `Package (windows)` | 140 s | **38 s** | −102 s |
+| `Package (macos)` | 73 s | **22 s** | −51 s |
+| `Web CI` | 125 s | **17 s** | −108 s |
+
+Restoring `.cache/native` before `npm ci` does what §Phase 8.3 predicted: `postinstall` restores a
+binary instead of compiling one. `Rebuild native modules` is 0-1 s in every job.
+
+### Job totals — real, but partly confounded
+
+| Job | Before | Warm after | Δ |
+|---|---:|---:|---:|
+| `Checks (Ubuntu)` | 315 s | 187 s | −128 s |
+| `Package (ubuntu)` | 350 s | 272 s | −78 s |
+| `Package (windows)` | 450 s | 372 s | −78 s |
+| `Package (macos)` | 234 s | 219 s | −15 s |
+| `Web CI` | 254 s | 153 s | −101 s |
+| **`build.yml` critical path** | **774 s** | **568 s** | **−206 s (−27%)** |
+
+**Confound, stated rather than buried:** the baseline was a `push` run, which executes
+`test:coverage` (136 s); the after-runs are `workflow_dispatch`, which executes plain `npm run test`
+(107 s). So ~29 s of the `Checks` improvement is the cheaper test mode, not the cache. The
+cache-attributable part of that job is the −107 s `npm ci` line. The `Package` and `Web CI` jobs run
+identical work in both, so their deltas are clean — and the after-runs additionally upload ~1.3 GB
+of installers (3-8 s per job) that the baseline never produced.
+
+### The electron-builder toolset cache did NOT deliver a measurable win
+
+| `Package Electron app` step | Before | Warm after | Δ |
+|---|---:|---:|---:|
+| ubuntu | 164 s | 180 s | **+16 s** |
+| windows | 248 s | 243 s | −5 s |
+| macos | 104 s | 119 s | **+15 s** |
+
+The cache restores in 2-4 s and hits, but packaging did not speed up — two of three legs got
+slightly *slower*, which is most plausibly runner variance rather than a real regression.
+
+**The ~82 s attributed to the `nsis-resources` download in §Phase 8.4 is therefore not
+substantiated, and that figure should be treated as withdrawn** until someone measures it directly
+with `DEBUG=electron-builder`. Phase 8.4 is retained because it is correct and harmless — the
+`.state` purge closes a genuine unhashed-restore hazard — but it must not be cited as a
+performance win. This is a negative result and is recorded as one.
+
+### Targets: hit, missed, and untestable
+
+| Metric | Baseline | Target | Actual | Verdict |
+|---|---:|---:|---:|---|
+| `npm ci` on jobs with a warm native cache | 73-140 s | report actual | **14-38 s** | reported |
+| `build.yml` critical path | 774 s | report actual | **568 s** | reported |
+| Packaging runs per release | 12 | 9 | **9** | met |
+| `release.yml` Windows job | 528 s | ≤ 120 s | **not yet measurable** | untested |
+| `release.yml` runner total | 1065 s | ≤ 250 s | **not yet measurable** | untested |
+| Packaging runner time per release | 3984 s | report actual | **not yet measurable** | untested |
+
+**The three `release.yml` targets cannot be measured before merge.** `release.yml` triggers only on
+a `v*.*.*` tag push, so the promotion path is exercised for the first time on the next real release.
+What *was* verified pre-merge: the artifacts exist and are well-formed, and both verifier scripts
+pass against a genuinely downloaded `installers-ubuntu-latest` (correct 5-file contents, real
+`shasum -b` asterisk format, real `latest-linux.yml` including its `blockMapSize:` line), with
+negative controls failing as designed.
+
+The 528 s → ≤120 s estimate rests on the measured 34 s signing chain plus download; it remains an
+estimate. Re-measure on the first release after merge and update this file.
