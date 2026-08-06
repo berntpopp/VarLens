@@ -226,7 +226,13 @@ rather than repo-wide. Item 4.10 of that spec (cache Playwright browsers,
 `.planning/specs/2026-08-05-build-ci-performance.md:389`) is already implemented in `docs.yml` and
 may be *removed* by Phase 2a — the PR must say so.
 
-## Expected result
+## Expected result — measured
+
+**Run `31120283316` (`perf/docs-workflow-screenshot-cache` @ `5f0886b4`) confirms the spec's own
+best-case row: 2a fully succeeded, 2b succeeded on the warm-cache path, and 2c landed.** Full
+step-by-step data, the honesty caveats, and the per-task confirmation table live in
+`.planning/artifacts/perf/build/docs-yml-before-after.md`; this section summarizes the numbers
+that document produces.
 
 | | Count / 200 | Before | After |
 | --- | --- | --- | --- |
@@ -234,20 +240,46 @@ may be *removed* by Phase 2a — the PR must say so.
 | Must run | 136 | 276 s | see below |
 | **Total** | 200 | **55,200 s** | — |
 
-The per-run miss cost depends entirely on how Phase 2's three experiments land:
+Measured, single run (N=1), warm native-ABI cache:
 
-| Outcome | Miss cost | Total | Reduction |
-| --- | --- | --- | --- |
-| 2a fully succeeds (−37 s), 2b (−9 s), 2c (−4.8 s) | ~225 s | 30,600 s | **44.6%** |
-| 2a falls back to `install-deps` (~−20 s), 2b, 2c | ~242 s | 32,912 s | **40.4%** |
-| 2a fails entirely, 2b + 2c only | ~262 s | 35,632 s | **35.4%** |
-| Nothing but the `paths` filter | 276 s | 37,536 s | **32.0%** |
+- `Build & Screenshots` step sum: **234 s → 172 s, −62 s (−26.5%)**.
+- Estimated wall clock: 172 s (steps) + ~3 s (job overhead) + 39 s (deploy, unmodified) ≈
+  **214 s, vs. 276 s baseline (−22.5%)**.
+- Projected over 200 pushes at this per-run cost: 64 × 0 s + 136 × 214 s = 29,104 s vs. 55,200 s
+  baseline = **47.3% reduction**.
 
-**Every figure above is a projection, and the arithmetic is stated so it can be checked: 37 + 9 +
-4.8 = 50.8 s off a 276 s baseline gives 225.2 s.** An earlier revision claimed ~204 s from the same
-three inputs; that was an arithmetic error caught in review. No figure may be reported as fact until
-confirmed by before/after step timings from a real CI run on this branch. The floor — 32.0% from the
-`paths` filter alone — is the only number not contingent on an experiment.
+This measured ~214 s slightly **beats** the spec's own best-case projected row (2a −37 s, 2b −9 s,
+2c −4.8 s → ~225 s / 44.6%, arithmetic: 37 + 9 + 4.8 = 50.8 s off 276 s). Read that as one sample
+landing close to a projection that was already accurate, not as the change outperforming the plan
+— the extra headroom came from small, noisy steps (`Setup Node.js`, `Checkout code`, `Install
+dependencies`, `Restore native ABI cache`) the projection never claimed credit for, and `Generate
+screenshots`' 131 s → 120 s move is only ~4.8 s attributable to Phase 2c's deterministic sleep
+removal, with the remaining ~6 s being unexplained run-to-run variance (see the artifact for the
+full breakdown).
+
+**Precisely what is measured vs. still projected:**
+
+- **Measured, from one real CI run:** the `Build & Screenshots` step-sum delta (234 s → 172 s), that
+  the job completed successfully with no Playwright browser install present, and that
+  `Install system dependencies` was skipped on a warm native-ABI cache hit.
+- **Estimated, not directly measured on this branch:** the ~214 s wall-clock figure (the deploy
+  job's 39 s is carried over from the baseline run, not re-measured here — see below) and the
+  47.3%-over-200-pushes projection, which assumes the ~214 s per-run cost holds across runs this
+  branch has not exercised.
+
+### Still projected / still unverified
+
+1. **The `paths` filter's skip behaviour.** No run has actually been triggered by a push the filter
+   was meant to skip; the only runs so far were a plain `push` (baseline, pre-filter) and this
+   branch's run, which behaves like `workflow_dispatch` and bypasses `paths` filters entirely. The
+   "64 of 200" figure is git-history analysis, not an observed skip.
+2. **Task 5 / Phase 2b's cold native-cache path.** `Install system dependencies` was skipped
+   because the ABI cache hit on this run. The apt-install branch, gated on
+   `cache-hit != 'true'`, has never actually executed on this branch.
+3. **The Pages deploy.** `Deploy to GitHub Pages` for run `31120283316` is stuck `waiting` — GitHub
+   Pages was in `major_outage` at the same time as GitHub Actions. There is no green end-to-end run
+   of this branch including a successful deploy; the 39 s figure above is the unmodified baseline
+   number, not a re-measurement.
 
 ## Correctness analysis
 
@@ -311,19 +343,29 @@ is nothing to go stale. What remains:
 
 ## Verification plan
 
-1. `make ci` green.
-2. `tests/scripts/build-pipeline-guardrails.test.ts` still passes.
+1. `make ci` green. **Satisfied** — already green prior to this branch's CI run.
+2. `tests/scripts/build-pipeline-guardrails.test.ts` still passes. **Satisfied** — already
+   passing.
 3. A `workflow_dispatch` run of `docs.yml` on this branch with a deliberately **cold native cache** —
    proves Phase 2a did not break Electron launch and that Phase 2b's apt gating is correct when the
-   compile actually runs.
+   compile actually runs. **Open.** Run `31120283316` hit a **warm** native-ABI cache
+   (`Install system dependencies` shows `skipped`); the cold-cache apt-install branch has never
+   executed on this branch.
 4. Inspect the resulting artifact: all 23 PNGs present, none blank or truncated, and the footer
    reads the **current** version from `package.json` — not `v0.30.0`, not a stubbed value.
+   **Satisfied** by run `31120283316`: 23 PNGs present, none blank, footer reads the current
+   `v0.70.5`, and `variant-table.png`'s five highlight boxes were confirmed correctly aligned by
+   eye — closing Known-gap 5's concern for this run.
 5. Deliberately break test 02's selector locally and confirm Phase 2d fails the run rather than
-   silently publishing the stale PNG. Revert.
+   silently publishing the stale PNG. Revert. **Open** — not exercised as part of this run.
 6. Step timings for the before and after runs pulled from the Actions API and recorded under
-   `.planning/artifacts/perf/build/`.
-7. A green end-to-end `docs.yml` run including the Pages deploy.
-8. `make ci-full` green once at the end.
+   `.planning/artifacts/perf/build/`. **Satisfied** — see
+   `.planning/artifacts/perf/build/docs-yml-before-after.md`, comparing baseline run
+   `31109514729` against after run `31120283316`.
+7. A green end-to-end `docs.yml` run including the Pages deploy. **Open.**
+   `Deploy to GitHub Pages` for run `31120283316` is stuck `waiting` — GitHub Pages was in
+   `major_outage` at the same time as GitHub Actions.
+8. `make ci-full` green once at the end. **Open** — not run as part of this task.
 
 ## Adversarial review record
 
