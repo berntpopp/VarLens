@@ -120,26 +120,55 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
     }
   })
 
-  test('keys the native cache on os, arch, electron version and lockfile, with no restore-keys', () => {
-    const yaml = readWorkflow('build.yml')
-    const keys = [...yaml.matchAll(/key:\s*(native-[^\n]*)/g)].map((m) => m[1])
-    expect(keys.length, 'build.yml must declare at least one native cache key').toBeGreaterThan(0)
-    for (const key of keys) {
-      expect(key).toContain('runner.os')
-      expect(key).toContain('runner.arch')
-      expect(key).toContain('electron-ver.outputs.ver')
-      expect(key).toContain("hashFiles('package-lock.json')")
+  test('keys the native cache on os, arch, electron version and lockfile, with no restore-keys, across every workflow that declares one', () => {
+    // Task 7 (build.yml, web-ci.yml, publish-web.yml, docs.yml) and release.yml
+    // (which must have none — it promotes build.yml's artifacts, it never
+    // rebuilds) are all scanned. A per-file "at least one" minimum would be
+    // wrong here because release.yml legitimately has zero; the vacuous-pass
+    // guard below is instead "at least one across the whole set", with
+    // release.yml's zero asserted separately and explicitly further down.
+    const workflowNames = ['build.yml', 'web-ci.yml', 'publish-web.yml', 'docs.yml', 'release.yml']
+    let totalKeys = 0
+
+    for (const name of workflowNames) {
+      const yaml = readWorkflow(name)
+      const keys = [...yaml.matchAll(/key:\s*(native-[^\n]*)/g)].map((m) => m[1])
+      totalKeys += keys.length
+
+      for (const key of keys) {
+        expect(key, `${name}: native- key must pin runner.os`).toContain('runner.os')
+        expect(key, `${name}: native- key must pin runner.arch`).toContain('runner.arch')
+        expect(key, `${name}: native- key must pin the electron version`).toContain(
+          'electron-ver.outputs.ver'
+        )
+        expect(key, `${name}: native- key must pin the lockfile hash`).toContain(
+          "hashFiles('package-lock.json')"
+        )
+      }
+
+      // A partial match would leave a wrong-ABI .node on disk. No fallback,
+      // ever. Scoped to `native-` keys only — the `ebtools-` toolset cache
+      // legitimately uses restore-keys, and must not trip this assertion.
+      const nativeBlocks = yaml.split('key: native-').slice(1)
+      for (const block of nativeBlocks) {
+        const untilNextStep = block.split(/\n\s*-\s/)[0]
+        expect(untilNextStep, `${name}: native cache must not declare restore-keys`).not.toContain(
+          'restore-keys'
+        )
+      }
     }
-    // A partial match would leave a wrong-ABI .node on disk. No fallback, ever.
-    // Scoped to `native-` keys only — a later phase adds an `ebtools-` cache
-    // that legitimately uses restore-keys, and must not trip this assertion.
-    const nativeBlocks = yaml.split('key: native-').slice(1)
-    for (const block of nativeBlocks) {
-      const untilNextStep = block.split(/\n\s*-\s/)[0]
-      expect(untilNextStep, 'native cache must not declare restore-keys').not.toContain(
-        'restore-keys'
-      )
-    }
+
+    expect(
+      totalKeys,
+      'at least one scanned workflow must declare a native- cache key'
+    ).toBeGreaterThan(0)
+
+    // Explicit, not just relying on the loop above passing vacuously on zero
+    // keys: proves release.yml staying rebuild-free (see the "no longer
+    // builds or packages" test below) also stays cache-free, so a future
+    // regression that reintroduces a native rebuild there is caught here too.
+    const releaseKeys = [...readWorkflow('release.yml').matchAll(/key:\s*(native-[^\n]*)/g)]
+    expect(releaseKeys.length, 'release.yml must not declare any native- cache key').toBe(0)
   })
 
   test('release.yml no longer builds or packages the app', () => {
