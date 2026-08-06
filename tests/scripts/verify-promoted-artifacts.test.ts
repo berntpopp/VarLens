@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'fs'
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { createHash } from 'crypto'
@@ -95,10 +95,50 @@ describe('verifyPromotedArtifacts', () => {
   })
 
   it('rejects a SHA256SUMS that omits a file present on disk', () => {
+    // Tightened to a genuine single-file omission (the original body
+    // replaced SHA256SUMS wholesale, omitting all three files at once,
+    // which didn't match what the test name claimed). Drop only the .deb
+    // entry; the AppImage and latest-linux.yml entries stay intact.
     writeValidSet()
-    writeFileSync(join(dir, 'SHA256SUMS'), `${sha256(Buffer.from('x'))}  nope.bin\n`)
+    const debName = `Varlens-${VERSION}.deb`
+    const remaining = readFileSync(join(dir, 'SHA256SUMS'), 'utf8')
+      .trim()
+      .split('\n')
+      .filter((line) => !line.includes(debName))
+    writeFileSync(join(dir, 'SHA256SUMS'), remaining.join('\n') + '\n')
     expect(() =>
       verifyPromotedArtifacts({ dir, platform: 'linux', version: VERSION, sha: SHA })
-    ).toThrow(/not listed in SHA256SUMS|checksum mismatch|missing/i)
+    ).toThrow(/not listed in SHA256SUMS/i)
+  })
+
+  it('rejects a superset: an extra file present on disk and correctly checksummed in SHA256SUMS, but not in the expected artifact set', () => {
+    // Regression for the critical finding: Task 6's upload step re-globs
+    // promoted/<plat>/*.<ext> rather than reading SHA256SUMS, so a planted
+    // file that is present, checksummed, and self-consistent would still
+    // reach a published release unless this is checked as an exact set.
+    writeValidSet()
+    const evilName = `Varlens-${VERSION}-EVIL-backdoor.exe`
+    const evilBody = Buffer.from('evil-payload')
+    writeFileSync(join(dir, evilName), evilBody)
+    const existingSums = readFileSync(join(dir, 'SHA256SUMS'), 'utf8')
+    writeFileSync(join(dir, 'SHA256SUMS'), `${existingSums}${sha256(evilBody)}  ${evilName}\n`)
+    expect(() =>
+      verifyPromotedArtifacts({ dir, platform: 'linux', version: VERSION, sha: SHA })
+    ).toThrow(/unexpected/i)
+  })
+
+  it('rejects a phantom SHA256SUMS entry for a file that was never written to disk', () => {
+    // Covers the checksum-entries check independently of the on-disk check:
+    // no extra file exists here, only an extra checksum line naming one that
+    // was never produced. SHA256SUMS must accurately describe what shipped.
+    writeValidSet()
+    const existingSums = readFileSync(join(dir, 'SHA256SUMS'), 'utf8')
+    writeFileSync(
+      join(dir, 'SHA256SUMS'),
+      `${existingSums}${sha256(Buffer.from('phantom'))}  Varlens-${VERSION}-phantom.exe\n`
+    )
+    expect(() =>
+      verifyPromotedArtifacts({ dir, platform: 'linux', version: VERSION, sha: SHA })
+    ).toThrow(/unexpected entry in SHA256SUMS/i)
   })
 })

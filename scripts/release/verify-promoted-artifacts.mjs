@@ -5,11 +5,15 @@
 // Prefer failing loudly: an ambiguous or incomplete input must throw, never
 // pass by omission.
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 
 import { expectedArtifacts } from './artifact-manifest.mjs'
+
+// The only two files in a promoted-artifact directory that are not
+// themselves shipped artifacts. Anything else on disk is unexpected.
+const NON_ARTIFACT_FILES = new Set(['provenance.json', 'SHA256SUMS'])
 
 function sha256File(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
@@ -60,6 +64,38 @@ function readChecksums(dir) {
   return parseChecksums(readFileSync(sumsPath, 'utf8'))
 }
 
+// Enforces an EXACT set, not a superset check. Both enumerations below are
+// required, not redundant: Task 6's upload step re-globs the promoted
+// directory by extension rather than reading SHA256SUMS, so a planted file
+// that is present on disk but never entered into SHA256SUMS would still ship
+// — checking SHA256SUMS alone cannot see it. Conversely, a phantom entry
+// added to SHA256SUMS for a file that was never written to disk doesn't get
+// uploaded by the glob, but it does mean SHA256SUMS no longer accurately
+// describes what shipped, which is its entire purpose — checking the
+// directory alone cannot see that either.
+
+// Every file physically present (other than the two metadata files) must be
+// one this platform/version is actually expecting.
+function assertNoUnexpectedFilesOnDisk(dir, expectedSet) {
+  for (const name of readdirSync(dir)) {
+    if (NON_ARTIFACT_FILES.has(name)) continue
+    if (!expectedSet.has(name)) {
+      throw new Error(`unexpected file in promoted artifact set: ${name}`)
+    }
+  }
+}
+
+// Every checksum entry must name an expected artifact — an entry for a file
+// this platform/version was never supposed to produce is unexpected even if
+// no such file exists on disk right now.
+function assertNoUnexpectedChecksumEntries(sums, expectedSet) {
+  for (const name of sums.keys()) {
+    if (!expectedSet.has(name)) {
+      throw new Error(`unexpected entry in SHA256SUMS: ${name}`)
+    }
+  }
+}
+
 function assertArtifactMatchesChecksum(dir, name, sums) {
   const path = join(dir, name)
   if (!existsSync(path)) throw new Error(`missing expected artifact: ${name}`)
@@ -76,7 +112,13 @@ export function verifyPromotedArtifacts({ dir, platform, version, sha }) {
   assertProvenanceMatches(provenance, { version, sha })
 
   const sums = readChecksums(dir)
-  for (const name of expectedArtifacts(platform, version)) {
+  const expected = expectedArtifacts(platform, version)
+  const expectedSet = new Set(expected)
+
+  assertNoUnexpectedFilesOnDisk(dir, expectedSet)
+  assertNoUnexpectedChecksumEntries(sums, expectedSet)
+
+  for (const name of expected) {
     assertArtifactMatchesChecksum(dir, name, sums)
   }
 
