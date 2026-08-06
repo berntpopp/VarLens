@@ -147,6 +147,19 @@ jobs:
         with:
           path: docs/.vitepress/dist
 
+      # `timeout` is the action's own budget for waiting on the Pages API to
+      # move a created deployment out of `deployment_queued`; the default is
+      # 600000 ms. On 2026-08-06 four consecutive deploys sat queued for the
+      # full ten minutes and aborted, while the artifact, the workflow and the
+      # Pages configuration were all verified correct — i.e. the stall was on
+      # the Pages side, not ours. Twenty minutes gives a slow-but-working
+      # backend room to finish instead of burning the whole docs build.
+      #
+      # This is resilience, not a root-cause fix. If deploys still time out,
+      # the problem is server-side and belongs in a GitHub support ticket —
+      # do not keep raising this number.
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # actions/deploy-pages@v5.0.0
+        with:
+          timeout: 1200000
