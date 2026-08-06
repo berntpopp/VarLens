@@ -44,7 +44,7 @@ tests pass.
   inspector off, etc. Don't lower a fuse, and **do not reintroduce `build.electronFuses`
   in `package.json`** — the `afterPack` hook owns the flip.
 - **IPC boundary**: the renderer reaches main **only** through the typed `window.api`
-  (lint-enforced — `eslint.config.js` bans renderer→main imports via `no-restricted-imports`).
+  (lint-enforced — `eslint.config.mjs` bans renderer→main imports via `no-restricted-imports`).
   No raw `ipcRenderer`
   in renderer code. In handlers, **Zod-validate untrusted args** (`safeParse`) before use,
   and let `wrapHandler` convert throws to `SerializableError` — don't hand-catch. See
