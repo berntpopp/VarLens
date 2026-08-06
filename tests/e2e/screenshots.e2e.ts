@@ -405,7 +405,6 @@ test.describe('Documentation Screenshots', () => {
     await window.reload()
     await window.waitForSelector('.v-application', { timeout: 30000 })
     await dismissDisclaimer(window)
-    await window.waitForTimeout(1500)
 
     // Look for the case in the sidebar
     const caseItem = window.locator('.v-list-item').filter({ hasText: /DemoCase/ })
@@ -425,7 +424,6 @@ test.describe('Documentation Screenshots', () => {
 
     const rows = window.locator('.v-data-table__tr')
     await expect(rows.first()).toBeVisible({ timeout: 15000 })
-    await window.waitForTimeout(500)
 
     // Add labeled highlights for key UI sections referenced in the docs
     await window.evaluate(() => {
@@ -1057,7 +1055,6 @@ test.describe('Documentation Screenshots', () => {
 
     // Open the variant details panel by clicking a row
     await ensureCaseSelected(window)
-    await window.waitForTimeout(2000)
 
     // Wait for table rows to be fully loaded and clickable
     const firstBodyRow = window.locator('.v-data-table tbody .v-data-table__tr').first()
@@ -1966,11 +1963,9 @@ test.describe('Documentation Screenshots', () => {
     const searchInput = window.locator('.filter-search-input input, .dsl-search-bar input')
     if ((await searchInput.count()) > 0) {
       await searchInput.first().click()
-      await window.waitForTimeout(500)
 
       // Type slowly to trigger autocomplete
       await searchInput.first().fill('')
-      await window.waitForTimeout(300)
       await searchInput.first().pressSequentially('gnomad_af:', { delay: 100 })
       await window.waitForTimeout(1500)
     }
