@@ -17,6 +17,7 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.release_id }}
       version: ${{ steps.version.outputs.version }}
+      build_run_id: ${{ steps.build-gate.outputs.build_run_id }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
@@ -26,6 +27,20 @@ jobs:
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # Closes the force-moved-tag hole: refuses to release if the tag was
+      # moved to point at a different commit after this run started resolving
+      # refs/tags/*. The checkout above already uses fetch-depth: 0.
+      - name: Assert tag ref resolves to the commit being released
+        run: |
+          set -euo pipefail
+          TAG_COMMIT=$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")
+          if [ "$TAG_COMMIT" != "$GITHUB_SHA" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} now resolves to $TAG_COMMIT but this run is for $GITHUB_SHA."
+            echo "::error::The tag was moved after this workflow started. Refusing to publish a mismatched release."
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} resolves to $GITHUB_SHA"
 
       - name: Assert tag matches package.json version
         run: |
@@ -59,33 +74,36 @@ jobs:
       # logic the check finds no "success" conclusion and fails
       # (race condition that broke v0.56.1's first release attempt).
       - name: Verify Build workflow passed on tagged SHA
+        id: build-gate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           SHA="${GITHUB_SHA}"
-          WORKFLOW_NAME="Build"
           MAX_ATTEMPTS=20
           DELAY=30
-          STATUS="pending"
           for i in $(seq 1 $MAX_ATTEMPTS); do
-            STATUS=$(gh run list --workflow="$WORKFLOW_NAME" --commit="$SHA" \
-              --json conclusion --jq '.[0].conclusion // "pending"')
+            # `--commit` with a SHORT sha silently returns []; GITHUB_SHA is always full.
+            # Accept push and workflow_dispatch; exclude pull_request, whose head_sha
+            # is the PR HEAD and whose runs never upload installers.
+            RUN=$(gh run list --workflow="Build" --commit="$SHA" --limit 20 \
+              --json conclusion,databaseId,headSha,event \
+              --jq "[.[] | select(.headSha == \"$SHA\") | select(.event == \"push\" or .event == \"workflow_dispatch\")] | .[0] // empty")
+            STATUS=$(echo "$RUN" | jq -r '.conclusion // "pending"')
             if [ "$STATUS" = "success" ]; then
-              echo "$WORKFLOW_NAME passed on $SHA — proceeding with release"
-              break
+              RUN_ID=$(echo "$RUN" | jq -r '.databaseId')
+              echo "build_run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+              echo "Build passed on $SHA in run $RUN_ID — promoting its artifacts"
+              exit 0
             elif [ "$STATUS" = "failure" ] || [ "$STATUS" = "cancelled" ]; then
-              echo "::error::$WORKFLOW_NAME did not succeed on $SHA (got: $STATUS)"
-              echo "::error::Refusing to release a tag whose CI did not pass."
+              echo "::error::Build did not succeed on $SHA (got: $STATUS). Refusing to release."
               exit 1
-            else
-              echo "$WORKFLOW_NAME status: $STATUS (attempt $i/$MAX_ATTEMPTS, waiting ${DELAY}s...)"
-              sleep $DELAY
             fi
+            echo "Build status: $STATUS (attempt $i/$MAX_ATTEMPTS, waiting ${DELAY}s...)"
+            sleep $DELAY
           done
-          if [ "$STATUS" != "success" ]; then
-            echo "::error::$WORKFLOW_NAME did not complete within $((MAX_ATTEMPTS * DELAY))s on $SHA (last status: $STATUS)"
-            exit 1
-          fi
+          echo "::error::Build did not complete within $((MAX_ATTEMPTS * DELAY))s on $SHA"
+          exit 1
 
       - name: Generate release notes
         run: |
@@ -134,17 +152,14 @@ jobs:
       - name: Run gitleaks
         run: gitleaks git --no-banner --redact --report-format sarif --report-path gitleaks-results.sarif --exit-code 1 .
 
-  release-linux:
-    name: Release (Linux)
+  promote-unix:
+    name: Promote Linux + macOS installers
     needs: [create-release, secrets-scan]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-
+      contents: read
+      actions: read # required to read another workflow run's artifacts
     steps:
-      - name: Configure git line endings
-        run: git config --global core.autocrlf false
-
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
 
@@ -152,123 +167,68 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev build-essential
-
-      - name: Install dependencies
-        run: npm ci
-
-      # lint/typecheck/test are validated by the Build workflow on the tagged SHA
-      # before the tag is pushed. The create-release gate above refuses to
-      # proceed when Build didn't succeed, so re-running those checks
-      # here would be pure duplication.
-
-      # Cache the Electron-ABI native binary. Key must include runner.os,
-      # runner.arch, the exact Electron version spec from package.json, and
-      # the lockfile hash — a partial match would leave a wrong-ABI `.node`
-      # on disk and silently corrupt the build. No restore-keys fallback
-      # for the same reason.
-      - name: Extract Electron version
-        id: electron-ver
-        shell: bash
-        run: echo "ver=$(node -p 'require("./package.json").devDependencies.electron')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache native module for Electron ABI
-        id: native-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+      - name: Download Linux installers from the verified Build run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # actions/download-artifact@v8.0.1
         with:
-          path: node_modules/better-sqlite3-multiple-ciphers/build/Release
-          key: native-electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+          name: installers-ubuntu-latest
+          path: promoted/linux
+          run-id: ${{ needs.create-release.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rebuild native modules for Electron
-        if: steps.native-cache.outputs.cache-hit != 'true'
-        run: npm run rebuild:electron
+      - name: Download macOS installers from the verified Build run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # actions/download-artifact@v8.0.1
+        with:
+          name: installers-macos-latest
+          path: promoted/mac
+          run-id: ${{ needs.create-release.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build
-        run: npx electron-vite build && npx electron-builder --linux --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Verify promoted artifacts
+        run: |
+          set -euo pipefail
+          V="${{ needs.create-release.outputs.version }}"
+          node scripts/release/verify-promoted-artifacts.mjs promoted/linux linux "$V" "$GITHUB_SHA"
+          node scripts/release/verify-promoted-artifacts.mjs promoted/mac   mac   "$V" "$GITHUB_SHA"
+
+      - name: Verify auto-update metadata
+        run: |
+          set -euo pipefail
+          node scripts/release/verify-latest-yml.mjs promoted/linux/latest-linux.yml promoted/linux
+          node scripts/release/verify-latest-yml.mjs promoted/mac/latest-mac.yml     promoted/mac
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
         with:
           name: release-linux
+          compression-level: 0
+          if-no-files-found: error
           path: |
-            release/*.AppImage
-            release/*.deb
-            release/latest-linux.yml
+            promoted/linux/*.AppImage
+            promoted/linux/*.deb
+            promoted/linux/latest-linux.yml
 
-  release-macos:
-    name: Release (macOS)
-    needs: [create-release, secrets-scan]
-    runs-on: macos-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Configure git line endings
-        run: git config --global core.autocrlf false
-
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      # lint/typecheck/test already validated by the Build workflow on the tagged SHA.
-
-      - name: Extract Electron version
-        id: electron-ver
-        shell: bash
-        run: echo "ver=$(node -p 'require("./package.json").devDependencies.electron')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache native module for Electron ABI
-        id: native-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
-        with:
-          path: node_modules/better-sqlite3-multiple-ciphers/build/Release
-          key: native-electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
-
-      - name: Rebuild native modules for Electron
-        if: steps.native-cache.outputs.cache-hit != 'true'
-        run: npm run rebuild:electron
-
-      - name: Build
-        run: npx electron-vite build && npx electron-builder --mac --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      - name: Upload artifacts
+      - name: Upload macOS artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
         with:
           name: release-macos
+          compression-level: 0
+          if-no-files-found: error
           path: |
-            release/*.dmg
-            release/*.zip
-            release/latest-mac.yml
+            promoted/mac/*.dmg
+            promoted/mac/*.zip
+            promoted/mac/latest-mac.yml
 
-  release-windows:
-    name: Release (Windows)
+  sign-windows:
+    name: Sign Windows installer
     needs: [create-release, secrets-scan]
     runs-on: windows-latest
     environment: release
     permissions:
-      contents: write
+      contents: read
+      actions: read # required to read another workflow run's artifacts
 
     steps:
-      - name: Configure git line endings
-        run: git config --global core.autocrlf false
-
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
 
@@ -276,33 +236,25 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
-
-      # lint/typecheck/test already validated by build.yml on the tagged SHA.
-
-      - name: Extract Electron version
-        id: electron-ver
-        shell: bash
-        run: echo "ver=$(node -p 'require("./package.json").devDependencies.electron')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache native module for Electron ABI
-        id: native-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+      - name: Download Windows installers from the verified Build run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # actions/download-artifact@v8.0.1
         with:
-          path: node_modules/better-sqlite3-multiple-ciphers/build/Release
-          key: native-electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+          name: installers-windows-latest
+          path: promoted/win
+          run-id: ${{ needs.create-release.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rebuild native modules for Electron
-        if: steps.native-cache.outputs.cache-hit != 'true'
-        run: npm run rebuild:electron
-
-      - name: Build
-        run: npx electron-vite build && npx electron-builder --win --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+      # Verifies build.yml's unsigned output. Signing happens below and
+      # rewrites the .exe bytes, so this has to run first — checking the
+      # signed bytes against a checksum manifest that describes the
+      # unsigned ones would always fail.
+      - name: Verify promoted artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release/verify-promoted-artifacts.mjs promoted/win win \
+            "${{ needs.create-release.outputs.version }}" "$GITHUB_SHA"
 
       # --- SSL.com eSigner Code Signing (Windows) ---
       # Uses CodeSignTool v1.3.2 jar directly (not the buggy GitHub Action).
@@ -315,7 +267,7 @@ jobs:
         run: |
           $version = "${{ needs.create-release.outputs.version }}"
           $filesToSign = @("Varlens-Setup-${version}.exe", "Varlens-Portable-${version}.exe")
-          $found = ($filesToSign | Where-Object { Test-Path (Join-Path "release" $_) }).Count
+          $found = ($filesToSign | Where-Object { Test-Path (Join-Path "promoted/win" $_) }).Count
           Write-Host "::notice::Code signing: will sign $found of $($filesToSign.Count) files (monthly quota: 20 operations)"
 
       - name: Setup Java for CodeSignTool
@@ -379,7 +331,7 @@ jobs:
           # CodeSignTool reads ./conf/code_sign_tool.properties relative to CWD
           Push-Location $cstDir
           foreach ($fileName in $filesToSign) {
-            $filePath = Join-Path $workspace "release" $fileName
+            $filePath = Join-Path $workspace "promoted/win" $fileName
             if (-not (Test-Path $filePath)) {
               Write-Host "::warning::$fileName not found, skipping"
               continue
@@ -412,8 +364,8 @@ jobs:
         if: vars.ESIGNER_ENABLED == 'true'
         shell: pwsh
         run: |
-          $yml = Get-Content release/latest.yml -Raw
-          foreach ($exe in Get-ChildItem release/*.exe) {
+          $yml = Get-Content promoted/win/latest.yml -Raw
+          foreach ($exe in Get-ChildItem promoted/win/*.exe) {
             $hash = (Get-FileHash $exe.FullName -Algorithm SHA512).Hash.ToLower()
             $b64 = [Convert]::ToBase64String([byte[]] -split ($hash -replace '..', '0x$& '))
             $size = $exe.Length
@@ -425,25 +377,38 @@ jobs:
             $yml = $yml -replace "(?<=path: $([regex]::Escape($name))\s*\n\s*sha512: )\S+", $b64
             $yml = $yml -replace "(?<=path: $([regex]::Escape($name))\s*\n\s*sha512: \S+\s*\n\s*size: )\d+", $size
           }
-          Set-Content release/latest.yml $yml -NoNewline
+          Set-Content promoted/win/latest.yml $yml -NoNewline
+
+      # Runs unconditionally: latest.yml must describe the shipped bytes whether
+      # or not signing ran. This is the check the -replace regexes never had.
+      - name: Verify auto-update metadata matches the shipped binaries
+        shell: bash
+        run: node scripts/release/verify-latest-yml.mjs promoted/win/latest.yml promoted/win
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
         with:
           name: release-windows
+          compression-level: 0
+          if-no-files-found: error
           path: |
-            release/*.exe
-            release/*.zip
-            release/latest.yml
+            promoted/win/*.exe
+            promoted/win/*.zip
+            promoted/win/latest.yml
 
   publish-release:
     name: Publish Release
-    needs: [create-release, release-linux, release-macos, release-windows]
+    needs: [create-release, promote-unix, sign-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # actions/download-artifact@v8.0.1
         with:
@@ -458,6 +423,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: gh release upload "${{ github.ref_name }}" artifacts/* --clobber
+
+      # Last correctable moment: refuse to flip the release public if the tag
+      # moved during the promote/sign jobs above.
+      - name: Re-assert tag ref before publishing
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          TAG_COMMIT=$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")
+          if [ "$TAG_COMMIT" != "$GITHUB_SHA" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} moved to $TAG_COMMIT during the release; assets are from $GITHUB_SHA."
+            exit 1
+          fi
 
       - name: Publish draft release and mark as latest
         run: |
