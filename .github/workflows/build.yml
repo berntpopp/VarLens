@@ -55,7 +55,7 @@ jobs:
               - 'electron.vite.config.ts'
               - 'playwright.config.ts'
               - 'tsconfig*.json'
-              - 'eslint.config.js'
+              - 'eslint.config.mjs'
               - '.prettierignore'
               - '.github/workflows/**'
               - 'vitest.config.ts'
@@ -168,9 +168,9 @@ jobs:
           path: |
             .eslintcache
             .prettiercache
-          key: lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js', '.prettierignore') }}-${{ github.sha }}
+          key: lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', '.prettierignore') }}-${{ github.sha }}
           restore-keys: |
-            lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js', '.prettierignore') }}-
+            lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', '.prettierignore') }}-
             lint-${{ runner.os }}-
 
       # Cache TypeScript --incremental build info. Partial restores are fine

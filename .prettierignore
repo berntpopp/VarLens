@@ -1,4 +1,4 @@
-# Keep the Prettier --check scope aligned with eslint.config.js's ignore list
+# Keep the Prettier --check scope aligned with eslint.config.mjs's ignore list
 # so `npm run lint:check && npm run format:check` covers the same files.
 
 # Dependencies & build output
