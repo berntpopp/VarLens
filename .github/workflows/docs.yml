@@ -8,9 +8,24 @@ on:
 permissions:
   contents: read
 
+# Deliberately diverges from GitHub's Pages starter template, which sets
+# `cancel-in-progress: false` to let production deployments finish.
+#
+# That is the wrong trade for a docs site rebuilt from `main` on every push.
+# GitHub Pages serialises deployments API-side, so several pushes in quick
+# succession leave every run sitting in `deployment_queued` until
+# `actions/deploy-pages` gives up with "Timeout reached, aborting!". Observed
+# 2026-08-06: three pushes to `main` within ~25 minutes (two PR merges plus a
+# release version bump) produced three queued deploys; two timed out after
+# 10 minutes each having built the whole Electron app and screenshot suite
+# first.
+#
+# Superseding is also semantically right here: the docs site only ever reflects
+# the tip of `main`, so an in-flight deploy of an older commit has no value once
+# a newer one exists. Nothing is lost by cancelling it.
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-screenshots:
@@ -27,7 +42,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install system dependencies
@@ -69,6 +84,23 @@ jobs:
       - name: Build Electron app
         run: npx electron-vite build
 
+      # Cache the downloaded browser binaries. Keyed on the resolved Playwright
+      # version, because browser builds are pinned per Playwright release — a
+      # stale browser against a newer Playwright is exactly the mismatch this
+      # key prevents. The `--with-deps` system packages are NOT cached (they
+      # install into /usr/lib, outside the cache path), so the install step
+      # still runs; on a hit it skips only the browser download.
+      - name: Resolve Playwright version
+        id: pw
+        shell: bash
+        run: echo "ver=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.ver }}
+
       - name: Install Playwright
         run: npx playwright install --with-deps
 
@@ -102,7 +134,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       # Deliberately no native ABI cache and no `assert-native-abi.mjs` check
@@ -132,6 +164,19 @@ jobs:
         with:
           path: docs/.vitepress/dist
 
+      # `timeout` is the action's own budget for waiting on the Pages API to
+      # move a created deployment out of `deployment_queued`; the default is
+      # 600000 ms. On 2026-08-06 four consecutive deploys sat queued for the
+      # full ten minutes and aborted, while the artifact, the workflow and the
+      # Pages configuration were all verified correct — i.e. the stall was on
+      # the Pages side, not ours. Twenty minutes gives a slow-but-working
+      # backend room to finish instead of burning the whole docs build.
+      #
+      # This is resilience, not a root-cause fix. If deploys still time out,
+      # the problem is server-side and belongs in a GitHub support ticket —
+      # do not keep raising this number.
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # actions/deploy-pages@v5.0.0
+        with:
+          timeout: 1200000
