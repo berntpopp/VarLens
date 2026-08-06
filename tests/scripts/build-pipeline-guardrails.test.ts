@@ -10,6 +10,9 @@ const scripts = (
   }
 ).scripts
 
+const WORKFLOW_DIR = resolve(ROOT, '.github', 'workflows')
+const readWorkflow = (name: string): string => readFileSync(resolve(WORKFLOW_DIR, name), 'utf8')
+
 describe('native rebuild stays cacheable', () => {
   // `-f` disables @electron/rebuild's own skip logic AND its module-state
   // cache, which is what made the binary recompile on every install, every
@@ -104,5 +107,62 @@ describe('memory clamps from the June 2026 incident stay in place', () => {
     // regardless of what follows it.
     const makefile = readFileSync(resolve(ROOT, 'Makefile'), 'utf8')
     expect(makefile).not.toMatch(/\$\(MAKE\)\s+-j/)
+  })
+})
+
+describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
+  test('never caches the bare .cache root, which would collide with tsbuildinfo', () => {
+    for (const name of ['build.yml', 'web-ci.yml', 'publish-web.yml', 'docs.yml']) {
+      const yaml = readWorkflow(name)
+      expect(yaml, `${name} must not cache the bare .cache root`).not.toMatch(
+        /^\s*path:\s*\.cache\s*$/m
+      )
+    }
+  })
+
+  test('keys the native cache on os, arch, electron version and lockfile, with no restore-keys', () => {
+    const yaml = readWorkflow('build.yml')
+    const keys = [...yaml.matchAll(/key:\s*(native-[^\n]*)/g)].map((m) => m[1])
+    expect(keys.length, 'build.yml must declare at least one native cache key').toBeGreaterThan(0)
+    for (const key of keys) {
+      expect(key).toContain('runner.os')
+      expect(key).toContain('runner.arch')
+      expect(key).toContain('electron-ver.outputs.ver')
+      expect(key).toContain("hashFiles('package-lock.json')")
+    }
+    // A partial match would leave a wrong-ABI .node on disk. No fallback, ever.
+    // Scoped to `native-` keys only — a later phase adds an `ebtools-` cache
+    // that legitimately uses restore-keys, and must not trip this assertion.
+    const nativeBlocks = yaml.split('key: native-').slice(1)
+    for (const block of nativeBlocks) {
+      const untilNextStep = block.split(/\n\s*-\s/)[0]
+      expect(untilNextStep, 'native cache must not declare restore-keys').not.toContain(
+        'restore-keys'
+      )
+    }
+  })
+
+  test('release.yml no longer builds or packages the app', () => {
+    const yaml = readWorkflow('release.yml')
+    expect(yaml, 'release.yml must promote build.yml artifacts, not rebuild').not.toContain(
+      'electron-builder'
+    )
+    expect(yaml).not.toContain('electron-vite build')
+  })
+
+  test('release.yml grants actions:read so it can read another run’s artifacts', () => {
+    expect(readWorkflow('release.yml')).toContain('actions: read')
+  })
+
+  test('build.yml can be re-run against a ref, so expired artifacts are recoverable', () => {
+    // `gh run rerun` is only permitted for 30 days; artifacts are retained for 90.
+    expect(readWorkflow('build.yml')).toContain('workflow_dispatch:')
+  })
+
+  test('installer uploads fail loudly rather than producing an empty artifact', () => {
+    const yaml = readWorkflow('build.yml')
+    expect(yaml).toContain('installers-')
+    const uploadBlock = yaml.slice(yaml.indexOf('installers-'))
+    expect(uploadBlock).toContain('if-no-files-found: error')
   })
 })
