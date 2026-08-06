@@ -112,11 +112,38 @@ describe('memory clamps from the June 2026 incident stay in place', () => {
 
 describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
   test('never caches the bare .cache root, which would collide with tsbuildinfo', () => {
+    // Catches every spelling of "cache the whole .cache root" that YAML
+    // allows: unquoted, single-quoted, double-quoted, with-or-without a
+    // trailing slash — and the block-scalar `path: |` form (build.yml's own
+    // "Restore lint caches" step already uses that style for a multi-path
+    // cache list, so it is the most realistic way a future author would
+    // accidentally cache the whole root instead of a scoped subdirectory).
+    const bareCacheEntry = /^[ \t]*(['"]?)\.cache\/?\1[ \t]*$/m
+
     for (const name of ['build.yml', 'web-ci.yml', 'publish-web.yml', 'docs.yml']) {
       const yaml = readWorkflow(name)
+
+      // Single-line form: `path: .cache`, `path: '.cache'`, `path: ".cache"`,
+      // `path: .cache/`, and quoted-with-slash variants.
       expect(yaml, `${name} must not cache the bare .cache root`).not.toMatch(
-        /^\s*path:\s*\.cache\s*$/m
+        /^[ \t]*path:[ \t]*(['"]?)\.cache\/?\1[ \t]*$/m
       )
+
+      // Block-scalar form: `path: |` (or `>`, with optional chomping
+      // indicator) followed by one or more indented entries, one per line.
+      // A block entry qualifies only while it is indented deeper than the
+      // `path:` key itself — that is how YAML delimits the scalar block, and
+      // it is also what stops this capture at the next mapping key (e.g.
+      // `key:`) which sits back at the `path:` key's own indentation.
+      for (const match of yaml.matchAll(
+        /^([ \t]*)path:[ \t]*[|>][+-]?[ \t]*\n((?:\1[ \t]+\S.*\n?)*)/gm
+      )) {
+        const block = match[2]
+        expect(
+          block,
+          `${name} must not cache the bare .cache root in a block-scalar path list`
+        ).not.toMatch(bareCacheEntry)
+      }
     }
   })
 
