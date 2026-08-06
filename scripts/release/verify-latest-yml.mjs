@@ -77,6 +77,14 @@ export function verifyLatestYml({ ymlPath, dir }) {
     throw new Error(`${ymlPath} lists no files — refusing to treat that as verified`)
   }
 
+  // Deliberately not checked: the top-level `path:`/`sha512:` pair that
+  // mirrors the primary file outside the `files:` array. electron-updater's
+  // Provider.getFileList() (node_modules/electron-updater/out/providers/
+  // Provider.js:104-123) prefers `updateInfo.files` and only falls back to
+  // top-level `path`/`sha512` when `files` is empty or absent — which never
+  // happens for electron-builder output, so that fallback is inert today.
+  // This ruling depends on electron-updater's fallback behaviour and should
+  // be re-checked on its next major bump.
   const checked = []
   for (const entry of entries) {
     assertFileMatchesEntry(dir, entry)
