@@ -82,11 +82,6 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev build-essential
-
       - name: Allow Electron to use unprivileged user namespaces (Ubuntu 24.04)
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
@@ -102,10 +97,22 @@ jobs:
       # sibling with a different key. No restore-keys: a partial match is
       # rejected by manifestIsFresh() anyway, and the absence documents intent.
       - name: Restore native ABI cache
+        id: native-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
           key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+
+      # libsqlite3-dev and build-essential exist only to compile
+      # better-sqlite3-multiple-ciphers. The ABI-keyed native cache restores a
+      # prebuilt binary, so on a hit nothing compiles and these packages are
+      # 9 s of dead weight. On a cold cache the compile is real and they are
+      # load-bearing -- hence the condition rather than deletion.
+      - name: Install system dependencies
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev build-essential
 
       - name: Install dependencies
         run: npm ci
