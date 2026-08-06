@@ -54,8 +54,7 @@ export default defineConfig({
           // Separate large vendor chunks so the main bundle stays small and
           // the renderer can start executing sooner (parallel chunk loading).
           manualChunks: {
-            vuetify: ['vuetify'],
-            zod: ['zod']
+            vuetify: ['vuetify']
           }
         }
       }

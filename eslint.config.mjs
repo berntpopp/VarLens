@@ -81,7 +81,7 @@ export default [
     }
   },
   {
-    files: ['**/*.config.{js,ts}', 'eslint.config.js'],
+    files: ['**/*.config.{js,mjs,ts}'],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',

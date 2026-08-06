@@ -309,7 +309,7 @@ The baseline lives only in `scripts/configure-fuses.mjs`. Do not reintroduce `bu
 - `src/main/storage/postgres/migrations/definitions.ts`, dynamically imported by `src/main/database/startup.ts`. That module reads migration SQL off disk at module scope, so importing it eagerly would do Postgres file I/O for every SQLite user. `tests/main/database/database-startup.test.ts` locks this in with _"does not load postgres migration definitions for the default sqlite database"_ — making the import static fails that test.
 - `src/main/ipc/handlers/import-logic.ts`, dynamically imported by `src/main/storage/sqlite/SqliteImportExecutor.ts`, so a test-injected delegate never drags the real import pipeline in.
 
-Vite still warns because other modules import each one statically; that only means no separate chunk is produced, which was never the goal.
+Vite still warns because other modules import each one statically; that only means no separate chunk is produced, which was never the goal. The complete inventory of all accepted warnings in VarLens, including these two cases, lives in `.planning/docs/ACCEPTED-WARNINGS.md` — consult it before re-investigating any build warning.
 
 ## What NOT to do
 
