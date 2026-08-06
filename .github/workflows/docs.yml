@@ -38,11 +38,33 @@ jobs:
       - name: Allow Electron to use unprivileged user namespaces (Ubuntu 24.04)
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      - name: Extract Electron version
+        id: electron-ver
+        shell: bash
+        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
+      # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
+      # postinstall restores a binary instead of compiling one. `.cache/native`
+      # is a sibling of node_modules and survives `npm ci`.
+      # Path is `.cache/native`, never bare `.cache` — `.cache/tsbuildinfo` is a
+      # sibling with a different key. No restore-keys: a partial match is
+      # rejected by manifestIsFresh() anyway, and the absence documents intent.
+      - name: Restore native ABI cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+        with:
+          path: .cache/native
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci
 
       - name: Rebuild native modules for Electron
         run: npm run rebuild:electron
+
+      # This job builds and drives the packaged Electron app (screenshots.e2e.ts
+      # launches it via Playwright), so assert the ELECTRON ABI, not node.
+      - name: Assert native ABI
+        run: node scripts/native/assert-native-abi.mjs electron
 
       - name: Build Electron app
         run: npx electron-vite build
@@ -83,6 +105,13 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      # Deliberately no native ABI cache and no `assert-native-abi.mjs` check
+      # in this job. `--ignore-scripts` skips both the dependency's own
+      # install script and the root `postinstall`, so no `.node` binary is
+      # placed at all — this job only runs VitePress, which never touches the
+      # native module. An ABI assertion here would fail a perfectly correct
+      # job because there is nothing on disk to verify. Do not "fix" this
+      # inconsistency with the other jobs; it is intentional.
       - name: Install dependencies (skip native rebuild — only VitePress needed)
         run: npm ci --ignore-scripts
 

@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,12 +29,13 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.filter.outputs.code }}
-      web: ${{ steps.filter.outputs.web }}
+      code: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.code }}
+      web: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # dorny/paths-filter@v4.0.2
         id: filter
+        if: github.event_name != 'workflow_dispatch'
         with:
           filters: |
             code:
@@ -131,11 +133,32 @@ jobs:
       - name: Restore git mtimes
         run: git restore-mtime
 
+      - name: Extract Electron version
+        id: electron-ver
+        shell: bash
+        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
+      # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
+      # postinstall restores a binary instead of compiling one. `.cache/native`
+      # is a sibling of node_modules and survives `npm ci`.
+      # Path is `.cache/native`, never bare `.cache` — `.cache/tsbuildinfo` is a
+      # sibling with a different key. No restore-keys: a partial match is
+      # rejected by manifestIsFresh() anyway, and the absence documents intent.
+      - name: Restore native ABI cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+        with:
+          path: .cache/native
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci
 
       - name: Rebuild native modules for Node.js
         run: npm run rebuild:node
+
+      # checks runs Vitest under Node, so assert the NODE ABI, not electron.
+      - name: Assert native ABI
+        run: node scripts/native/assert-native-abi.mjs node
 
       # Cache ESLint + Prettier results across CI runs. Key on lockfile +
       # lint/format config so stale caches auto-invalidate when rules change.
@@ -171,9 +194,16 @@ jobs:
       - name: Run type check
         run: npm run typecheck
 
-      # Coverage only on push-to-main — PRs run plain `vitest run` for speed.
-      - name: Run tests (PR)
-        if: github.event_name == 'pull_request'
+      # Coverage only on push-to-main — PRs and manual `workflow_dispatch`
+      # reruns (e.g. re-generating installers past the 30-day rerun window)
+      # run plain `vitest run` for speed. Gated on "not push" rather than an
+      # explicit pull_request/workflow_dispatch OR so a future event type
+      # defaults to running tests, not silently skipping them: release.yml
+      # selects the newest Build run on a SHA as its "CI passed" gate, so a
+      # test step that silently no-ops on some event would let an untested
+      # run satisfy that gate.
+      - name: Run tests
+        if: github.event_name != 'push'
         run: npm run test
 
       - name: Run tests with coverage (main)
@@ -201,7 +231,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+    # app-builder-lib's getCacheDirectory() (electronGet.js:34-57) only honours
+    # ELECTRON_BUILDER_CACHE when it is an ABSOLUTE path (`path.parse(env).root`
+    # must be truthy). `${{ github.workspace }}` is absolute on every runner
+    # (Windows, macOS, Linux alike), so pinning it here gives one workspace-
+    # relative cache path instead of a three-way OS conditional over the
+    # default per-OS locations. Set at the job level so both the cache step
+    # below and the `Package Electron app` step (which invokes electron-builder
+    # itself) see the identical value.
+    env:
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
 
     steps:
       - name: Configure git line endings
@@ -220,29 +266,35 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsqlite3-dev build-essential
 
-      - name: Install dependencies
-        run: npm ci
-
-      # Cache the Electron-ABI native binary. Key must include runner.os,
-      # runner.arch, the exact Electron version spec from package.json, and
-      # the lockfile hash — a partial match would leave a wrong-ABI `.node`
-      # on disk and silently corrupt the build. No restore-keys fallback
-      # for the same reason.
       - name: Extract Electron version
         id: electron-ver
         shell: bash
         run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
 
-      - name: Cache native module for Electron ABI
-        id: native-cache
+      # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
+      # postinstall restores a binary instead of compiling one. `.cache/native`
+      # is a sibling of node_modules and survives `npm ci`.
+      # Path is `.cache/native`, never bare `.cache` — `.cache/tsbuildinfo` is a
+      # sibling with a different key. No restore-keys: a partial match is
+      # rejected by manifestIsFresh() anyway, and the absence documents intent.
+      - name: Restore native ABI cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
-          path: node_modules/better-sqlite3-multiple-ciphers/build/Release
-          key: native-electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+          path: .cache/native
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
 
+      - name: Install dependencies
+        run: npm ci
+
+      # Unconditional: a warm cache makes this a ~0.1s restore, and a cold
+      # cache self-heals with a real compile. There is no cache-hit guard
+      # to fall out of sync with.
       - name: Rebuild native modules for Electron
-        if: steps.native-cache.outputs.cache-hit != 'true'
         run: npm run rebuild:electron
+
+      - name: Assert native ABI
+        shell: bash
+        run: node scripts/native/assert-native-abi.mjs electron
 
       - name: Build Electron app
         run: npx electron-vite build
@@ -260,8 +312,40 @@ jobs:
             test-results/
             .planning/artifacts/perf/phase1/baseline/startup-smoke/
 
+      # Content-addressed tool archives (nsis-resources, 7zip, winCodeSign, the
+      # Electron zip itself, …) re-verified by sha256 on use, so — unlike the
+      # native ABI cache above — a partial `restore-keys` match is safe and
+      # still saves a download. Path is `.cache/electron-builder`, workspace-
+      # relative and matching ELECTRON_BUILDER_CACHE above; never bare `.cache`
+      # — `.cache/native` and `.cache/tsbuildinfo` are siblings with different
+      # keys and lifetimes.
+      - name: Restore electron-builder toolset cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+        with:
+          path: .cache/electron-builder
+          key: ebtools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ebtools-${{ runner.os }}-${{ runner.arch }}-
+
+      # electron-builder's extracted-directory cache tier checks file COUNT,
+      # not content (cacheState.js:112-131), so a partial restore would be
+      # served silently. The `<extractDir>.state` files are SIBLINGS of the
+      # extracted directory, not files inside it (cacheState.js:24 —
+      # `${extractDir}.state`), so they must be found and removed explicitly.
+      # Dropping them forces re-extraction back through the sha256-verified
+      # archive path. Cheap; the download is what is actually being cached.
+      - name: Drop electron-builder extraction state so archives are re-verified
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=".cache/electron-builder"
+          [ -d "$DIR" ] || { echo "no electron-builder cache to clean"; exit 0; }
+          find "$DIR" -name '*.state' -type f -delete
+          find "$DIR" -name '*.lock' -type f -delete
+          echo "cleared extraction state under $DIR"
+
       - name: Package Electron app
-        run: npx electron-builder --publish never
+        run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
@@ -284,6 +368,85 @@ jobs:
           path: |
             test-results/
             .planning/artifacts/perf/phase1/baseline/packaged-smoke/
+
+      # macOS runners ship `shasum` but not `sha256sum`; Git-for-Windows ships
+      # coreutils' `sha256sum` but only has `shasum` if Perl is on PATH;
+      # Linux has both. Detect whichever is actually present rather than
+      # betting on one — both emit the identical `<64 hex> *<name>` binary-mode
+      # format (see the -b rationale below) that verify-promoted-artifacts.mjs
+      # parses, confirmed locally.
+      - name: Write provenance and checksums
+        if: github.event_name != 'pull_request'
+        shell: bash
+        working-directory: release
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          # Split assignment from `export` — `export V="$(cmd)"` swallows a
+          # failing `cmd`'s exit status (only the bare `V="$(cmd)"` form trips
+          # `set -e`), which would otherwise let a failing `node -p` or
+          # `git rev-parse` write an empty/wrong value into provenance.json
+          # silently. `tree` in particular is never validated downstream, so
+          # a silently-empty value would ship unnoticed.
+          VERSION="$(node -p "require('../package.json').version")"
+          export VERSION
+          TREE_SHA="$(git -C .. rev-parse 'HEAD^{tree}')"
+          export TREE_SHA
+          node -e "
+            const fs = require('fs')
+            fs.writeFileSync('provenance.json', JSON.stringify({
+              sha: process.env.GITHUB_SHA,
+              tree: process.env.TREE_SHA,
+              run_id: process.env.GITHUB_RUN_ID,
+              run_attempt: process.env.GITHUB_RUN_ATTEMPT,
+              version: process.env.VERSION,
+              os: process.env.RUNNER_OS,
+              arch: process.env.RUNNER_ARCH,
+              platform: process.env.PLATFORM
+            }, null, 2) + '\n')
+          "
+          # Checksum every publishable asset with -b (binary mode) on both tool
+          # branches, in the `<hex> *<name>` form verify-promoted-artifacts.mjs
+          # parses. Deliberately excludes provenance.json and SHA256SUMS itself.
+          #
+          # -b matters specifically for `shasum` on Git-for-Windows: it is a
+          # Perl script whose Digest::SHA::addfile only calls binmode() for
+          # 'b'/'0' modes, not the default text mode — without -b a CRLF
+          # translation on that Perl build could silently corrupt every
+          # .exe/.zip digest on the Windows leg. GNU sha256sum's default
+          # (text) mode is already binary-equivalent on POSIX, so -b there is
+          # a no-op in practice; it is applied to both branches anyway so the
+          # two tools always emit the identical asterisk-prefixed form rather
+          # than depending on which branch happened to run.
+          SUM=$(command -v shasum >/dev/null 2>&1 && echo "shasum -a 256 -b" || echo "sha256sum -b")
+          : > SHA256SUMS
+          for f in *.AppImage *.deb *.dmg *.exe *.zip latest*.yml; do
+            [ -e "$f" ] || continue
+            $SUM "$f" >> SHA256SUMS
+          done
+          # An empty SHA256SUMS means the packaging step produced nothing.
+          [ -s SHA256SUMS ] || { echo "::error::no publishable assets found in release/"; exit 1; }
+          cat SHA256SUMS
+
+      - name: Upload installers
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
+        with:
+          name: installers-${{ matrix.os }}
+          # Installers are already compressed; level 6 burns CPU for nothing.
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.dmg
+            release/*.exe
+            release/*.zip
+            release/latest*.yml
+            release/provenance.json
+            release/SHA256SUMS
 
   # ── 4. Web-mode required check for web app surfaces ────────────────
   # The standalone `Web CI` workflow stays for readability, but this
@@ -325,8 +488,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsqlite3-dev build-essential
 
+      - name: Extract Electron version
+        id: electron-ver
+        shell: bash
+        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
+      # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
+      # postinstall restores a binary instead of compiling one. `.cache/native`
+      # is a sibling of node_modules and survives `npm ci`.
+      # Path is `.cache/native`, never bare `.cache` — `.cache/tsbuildinfo` is a
+      # sibling with a different key. No restore-keys: a partial match is
+      # rejected by manifestIsFresh() anyway, and the absence documents intent.
+      - name: Restore native ABI cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+        with:
+          path: .cache/native
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Rebuild native modules for Node.js
+        run: npm run rebuild:node
+
+      # `make web-ci` runs the web gate under Node (no Electron process
+      # involved), so assert the NODE ABI, not electron.
+      - name: Assert native ABI
+        run: node scripts/native/assert-native-abi.mjs node
 
       - name: Run opt-in web gate
         run: make web-ci

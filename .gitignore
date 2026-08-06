@@ -4,7 +4,9 @@ node_modules/
 # Build output
 dist/
 out/
-release/
+# Anchored to repo root: an unanchored `release/` also matched
+# scripts/release/, which holds tracked release-tooling source.
+/release/
 
 # Tool caches
 .eslintcache
