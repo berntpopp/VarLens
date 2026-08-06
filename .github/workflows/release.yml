@@ -105,9 +105,17 @@ jobs:
               # either way). Without this check the failure only surfaces one
               # job later as an opaque "Unable to find an artifact with the
               # name installers-<os>" from actions/download-artifact.
-              ARTIFACT_NAMES=$(gh api "repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[].name]')
+              # `--paginate` is required: the REST endpoint returns 30
+              # artifacts per page by default, and a run can produce more
+              # than that. `--jq` under `--paginate` runs once per page
+              # rather than merging pages first, so `[.artifacts[].name]`
+              # would print one JSON array per page instead of one combined
+              # array — using the flat `.artifacts[].name` form instead
+              # prints one name per line across all pages, which a plain
+              # line-match below can check without needing to merge JSON.
+              ARTIFACT_NAMES=$(gh api --paginate "repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[].name')
               for NAME in installers-ubuntu-latest installers-macos-latest installers-windows-latest; do
-                if ! echo "$ARTIFACT_NAMES" | jq -e --arg n "$NAME" 'index($n) != null' > /dev/null; then
+                if ! grep -qxF "$NAME" <<< "$ARTIFACT_NAMES"; then
                   echo "::error::Build run $RUN_ID succeeded but has no '$NAME' artifact — its package job likely didn't run. Refusing to promote a partial artifact set."
                   exit 1
                 fi
