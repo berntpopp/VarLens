@@ -1,8 +1,12 @@
 # Build & CI Performance
 
-**Date:** 2026-08-05
-**Status:** Draft — awaiting review
-**Scope:** Build/CI pipeline wall clock, local and GitHub Actions. One correctness defect found en route.
+**Date:** 2026-08-05 · Phases 8-9 added 2026-08-06
+**Status:** In progress — PRs 1-2 merged; PRs 3-5 (Phase 8, Phase 9) in flight
+**Scope:** Build/CI pipeline wall clock, local and GitHub Actions. Phases 1-7 address redundancy
+*within* a single `build.yml` run; Phase 8 addresses redundancy *across* workflows, where one
+release packages the same code four times. One correctness defect found en route, plus three more
+found while designing Phase 8 (8.4's unhashed cache tier, 8.5's unverified `latest.yml` rewrite, and
+two build warnings that were never inventoried).
 
 ---
 
@@ -487,6 +491,250 @@ Required rewrites, all documented in the Vite 8 migration guide:
 
 Expected saving is small (build is 11.2 s). Included at explicit user request.
 
+### Phase 8 — Cross-workflow rebuild elimination
+
+Phases 1-7 address redundancy **within** one `build.yml` run. They do not touch the fact that one
+release of VarLens packages the same code **four times across two workflows**.
+
+Baseline artifact: `.planning/artifacts/perf/build/ci-cross-workflow-baseline.md` (measured from the
+Actions API for `v0.70.4`; the local `measure-build.mjs` harness cannot instrument Actions topology).
+
+| Run | ubuntu | windows | macos | subtotal |
+|---|---:|---:|---:|---:|
+| PR head `build.yml` (31075896010, tree `2ba72e24`) | 316 | 423 | 202 | 941 s |
+| merge commit `build.yml` (31076728072, tree `2ba72e24`) | 307 | 418 | 219 | 944 s |
+| release commit `build.yml` (31076764351, tree `9818f592`) | 350 | 450 | 234 | 1034 s |
+| `release.yml` (31078255517, tree `9818f592`) | 344 | 528 | 193 | 1065 s |
+| | | | | **3984 s = 66.4 min** |
+
+Exactly **one** of these four produces artifacts that ship: the release commit's `build.yml` run.
+
+Two corrections to assumptions held at the outset, both verified:
+
+- **Tree-hash keying cannot dedupe the release-commit build.** The PR head and merge commit do share
+  tree `2ba72e24`, but the release commit is `9818f592` — the three-line version bump changes
+  `package.json` and therefore the tree.
+- **`ELECTRON_CACHE` is read nowhere** in the installed dependency tree. It is not "not honoured by
+  Electron 43"; it does not exist as an input. Two distinct caches are routinely conflated — see 8.4.
+
+#### 8.1 Build once, promote
+
+`build.yml`'s `package` job already produces working installers on all three OS and **discards
+them** — it uploads only smoke reports, and `build.yml` contains no `download-artifact` anywhere.
+`release.yml` then rebuilds the identical commit, whose `build.yml` success it explicitly polls for
+before starting. Per-step evidence from `Release (Windows)` (528 s): `npm ci` 217 s + build/package
+224 s = **494 s of rebuild**, against **34 s of signing** that genuinely cannot happen anywhere else.
+
+**`build.yml` changes.** On `push` events only (not PRs — PR validation does not need the bytes, and
+uploading 1.29 GB per PR is pure cost), the `package` job emits and uploads its installers:
+
+- `provenance.json` — `{ sha, tree, run_id, run_attempt, version, os, arch }`.
+- `SHA256SUMS` over every uploaded installer.
+- `upload-artifact` as `installers-${{ matrix.os }}`, with `compression-level: 0` (installers are
+  already compressed; the default level 6 burns CPU on both ends for nothing),
+  `if-no-files-found: error`, `retention-days: 90`.
+- Path globs mirror what `release.yml` uploads today so the published asset set is unchanged. The
+  authoritative set, read from the published `v0.70.4` release, is 10 assets:
+  `Varlens-<v>.AppImage`, `Varlens-<v>.deb`, `latest-linux.yml`, `Varlens-<v>-arm64.dmg`,
+  `Varlens-<v>-arm64.zip`, `latest-mac.yml`, `Varlens-Setup-<v>.exe`, `Varlens-Portable-<v>.exe`,
+  `Varlens-Setup-<v>.zip`, `latest.yml`.
+- Replace the bare `npx electron-builder --publish never` with an explicit `--linux` / `--mac` /
+  `--win`, so the promoted set is defined by configuration rather than inferred from the runner.
+
+**`release.yml` changes.**
+
+- `create-release`'s existing "Verify Build workflow passed on tagged SHA" step gains a
+  `build_run_id` output. **The run we verified green is by construction the run we promote from** —
+  one lookup, one identity, with no second search that could disagree with the gate.
+  Harden that lookup while there: add `--event push` (a `pull_request` run reports the PR HEAD as
+  `head_sha`, so tagging a commit still open in a PR could otherwise select a run that never
+  uploaded installers), and assert the returned run's `headSha == $GITHUB_SHA` rather than trusting
+  the `--commit` filter. Verified quirk: `gh run list --commit=<short-sha>` returns empty while
+  `--commit=<full-sha>` works. The gate passes `$GITHUB_SHA`, always full, so this is latent rather
+  than live — the assertion makes it non-latent.
+- `release-linux` + `release-macos` collapse into one `promote-unix` job on an ubuntu runner.
+- `release-windows` becomes `sign-windows`: download, verify, then the **existing, unchanged**
+  Java / CodeSignTool / regenerate steps.
+- Both re-upload under the existing `release-linux` / `release-macos` / `release-windows` artifact
+  names, so `publish-release` needs no change at all.
+- Both need `permissions: actions: read` for the cross-run download.
+
+**Verification gate — five checks before any promoted artifact is trusted:**
+
+1. `actions/download-artifact@v8.0.1` verifies the recorded upload digest and fails on mismatch
+   (`digest-mismatch` defaults to `error`). Do not weaken it.
+2. `provenance.sha == github.sha`.
+3. `provenance.version == ${GITHUB_REF_NAME#v}` — belt-and-braces against the existing
+   "Assert tag matches package.json version" gate, but checked against the *artifact* rather than
+   the checkout.
+4. `sha256sum -c SHA256SUMS`.
+5. Expected-filename assertion for this version. A silently empty or partial artifact must fail
+   here, not at `gh release upload`.
+
+**Missing or expired artifacts: hard fail, no fallback build path.** The error names the recovery
+(`gh run rerun <build_run_id>`, then re-run the release). Chosen deliberately over auto-fallback: a
+fallback that never executes rots, and its rotting stays invisible until the day it is needed.
+
+#### 8.2 Merge-commit dedupe — deferred, recorded, not dropped
+
+The merge-commit rebuild (944 s) is genuinely redundant — identical tree to the PR-head run that
+just passed. Eliminating it needs a tree-keyed stamp **plus artifact copy-forward**, because a
+skipped `package` job uploads nothing, which would break 8.1's invariant if that commit were ever
+tagged.
+
+Deferred until 8.3 is measured, for two reasons stated plainly: runner time is **not billed** on
+this public repo (§2.4: `duration_ms: 0`), and this is a push nobody waits on — so the 944 s is real
+waste that costs neither money nor wall clock. And 8.3 removes ~100 s from each of these jobs
+anyway. Decide with the post-8.3 number, not this one.
+
+#### 8.3 Cache `.cache/native`, restored *before* `npm ci`
+
+The `actions/cache` block added for the native binary caches
+`node_modules/better-sqlite3-multiple-ciphers/build/Release` **after** `npm ci`, so it can never
+suppress the compile `postinstall` already ran. §2.4 predicted this; the fresh runs confirm it.
+Every packaging job reports `Cache native module: 1-5 s` then `Rebuild native modules: 0 s` — the
+cache **hits** — while `npm ci` still costs 112-217 s.
+
+`Checks (Ubuntu)` is the sharpest case: it has **no native cache block at all**
+(`build.yml:134-138`), so it compiles a full Electron-ABI binary in `postinstall` that it never
+loads, then re-targets the Node ABI in 2 s — directly on the critical path, since `package` has
+`needs: checks`.
+
+`.cache/native` (the ABI-keyed cache from PR #361) is local-only and cached by nothing. It is a
+sibling of `node_modules`, so `npm ci` does not remove it, and `postinstall` consults it **before**
+compiling (`rebuild-native.mjs:71` `if (restore(target))` → `:75 return 0`, never reaching
+`compile()` at `:105`).
+
+```yaml
+- uses: actions/cache@<sha>
+  with:
+    path: .cache/native          # NOT bare `.cache` — `.cache/tsbuildinfo` is a sibling
+    key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+- run: npm ci                    # postinstall becomes a file copy
+- run: node scripts/native/assert-native-abi.mjs electron
+```
+
+This **replaces** the `build/Release` cache block rather than adding to it: one cache step instead
+of two, covering both ABIs in one entry and covering `checks`, which has none today.
+
+Safe to make load-bearing because the cache self-verifies three independent ways:
+`manifestIsFresh()` (`native-abi.mjs:136-154`) requires target, abi, platform, arch, **moduleVersion**
+and **lockfileHash** to match; `restore()` (`:164-172`) recomputes sha256 over the cached binary and
+compares it to the manifest; `restoreDecision()` (`:196-199`) re-derives the ABI from the binary
+actually on disk, and resolves anything other than an exact match — *including "could not
+determine"* — to `purge-and-compile`. A stale or corrupt entry therefore degrades to a recompile,
+never to a wrong binary.
+
+Keep **no `restore-keys`**, matching the existing precedent. They would add nothing here (a
+lockfile-mismatched entry is rejected by `manifestIsFresh` regardless) and their absence documents
+the intent.
+
+Wiring `assert-native-abi.mjs` in as a required step also **closes the residual Phase 2 was carrying**
+— it fails loud (exit 1) on *undetermined*, where `rebuild-native.mjs` deliberately does not.
+
+Install sites in scope (9 `npm ci` invocations across 5 workflows): `build.yml:135` (checks),
+`:224` (package ×3 OS), `:329` (web-ci); `web-ci.yml:66`; `publish-web.yml:84`; `docs.yml:42`.
+`docs.yml:87` already uses `--ignore-scripts`. **`release.yml`'s three sites need no cache — 8.1
+deletes them.**
+
+**Effect on Phase 2.** Not superseded, but its justification shrinks and must be re-derived against
+post-8.3 numbers. With 8.3 in place the residual win from `--ignore-scripts` is the cold-cache case
+plus the `checks`/`web-ci` jobs' unnecessary Electron-ABI *copy* (~0.1 s, not ~98 s). It also
+carries a repo-specific trap worth restating: `--ignore-scripts` skips `electron`'s own
+`install.js`, which downloads the Electron binary.
+
+#### 8.4 electron-builder toolset cache — archive tier only
+
+Corrects Phase 4.9. Verified from installed source (`electron-builder@26.15.3` /
+`app-builder-lib@26.15.3`, `@electron/get@5.0.0`, `electron@43.3.0`):
+
+- **`ELECTRON_CACHE` is read nowhere** in the tree.
+- `electron_config_cache` (lower-case, `electron/install.js:46`) controls the **Electron binary
+  download** cache → `~/.cache/electron` · `%LOCALAPPDATA%\electron\Cache` · `~/Library/Caches/electron`.
+- The nsis / nsis-resources / winCodeSign / fpm / appimage / dmgbuild bundles are a **different
+  cache** under `ELECTRON_BUILDER_CACHE` (`app-builder-lib/out/util/electronGet.js:34-57`) →
+  `~/.cache/electron-builder` · `%LOCALAPPDATA%\electron-builder\Cache` ·
+  `~/Library/Caches/electron-builder`. An override is honoured only if **absolute** (`:38`).
+
+**Correctness hazard, and it changes the design.** electron-builder's *extracted-directory* tier
+short-circuits on a `.state` sidecar plus a file-count check with **no content hashing**
+(`electronGet.js:336-341` → `cacheState.js:112-131`, which verifies only that the directory is
+non-empty and the file count is `>=` expected). A corrupted or partial `actions/cache` restore of an
+already-`complete` extracted tool directory would be **silently served** — the archive-tier sha256
+check (`electronGet.js:292-316`) and `@electron/get`'s `sumchecker` pass both sit inside a branch
+the fast path never enters.
+
+**Therefore cache the hash-verified tiers only.** After restore, delete the `.state` sidecars —
+verified to be **sibling files**, `${extractDir}.state` (`cacheState.js:24`), not files inside the
+directory — so `readCacheStateFile` returns null and extraction is forced back through the
+sha256-checked archive path. Costs seconds of re-extraction; buys the download.
+
+Magnitude is **unverified**: the ~82 s figure for `nsis-resources` is quoted, not measured here.
+Measure with `DEBUG=electron-builder` before and after; electron-builder's docs state no magnitude
+for any option.
+
+#### 8.5 `latest.yml` integrity assertion
+
+`release.yml`'s "Regenerate latest.yml with signed artifact hashes" step rewrites sha512 and size
+through four PowerShell `-replace` regexes, and **nothing verifies the result**. If a filename ever
+stops matching, the regexes silently no-op and the release ships a `latest.yml` whose hashes
+describe the *unsigned* binaries — auto-update then fails at checksum verification for every user.
+
+The risk exists today; 8.1 makes it load-bearing. Add a step after regeneration that re-reads
+`latest.yml`, recomputes sha512 and size for every referenced file, and fails on any mismatch.
+
+### Phase 9 — Warning ledger
+
+Goal: every warning is either fixed or written down as accepted with a reason. No unexplained
+warnings. Phases 5.3 and 5.5 **move here** rather than being duplicated — see §7.
+
+1. **Delete the dead `zod` `manualChunks`** (was 5.5). `electron.vite.config.ts:56-59` and
+   `vite.web-renderer.config.ts:83-86`. Proven dead: zero zod imports under `src/renderer`; the sole
+   grep hit is the substring "benzodiazepine" in `hpo-terms.json`; every renderer→shared edge
+   reaching a zod-importing module is `import type`. The build emits
+   `Generated an empty chunk: "zod"` and a 0.00 kB asset. Keep the `vuetify` entry.
+2. **Rename `eslint.config.js` → `eslint.config.mjs`** (was 5.3). Do **not** add `"type": "module"`
+   to `package.json` — Node suggests it, but this is a mixed CJS/ESM Electron app. ESLint 10.8.0
+   lists `eslint.config.mjs` as a candidate (`eslint/lib/config/config-loader.js:45`). Three
+   functional references move in the same commit: `build.yml:56` (paths-filter), `build.yml:148` and
+   `:150` (`hashFiles` cache-key inputs — a missing file silently drops from the key rather than
+   failing the run). Plus a stale comment at `.prettierignore:1`. Confirm ESLint still resolves the
+   config after the rename.
+3. **npm deprecation triage — outcome: all five accepted, none actionable.**
+
+   | Package | Path | Ruling |
+   |---|---|---|
+   | `rimraf@2.6.3` | electron-builder → app-builder-lib → electron-builder-squirrel-windows → electron-winstaller → temp → rimraf | accepted |
+   | `glob@7.2.3` | electron-builder → app-builder-lib → @electron/asar → glob | accepted |
+   | `inflight@1.0.6` | … → @electron/asar → glob@7 → inflight | accepted |
+   | `boolean@3.2.0` | electron-builder → app-builder-lib → @electron/get@3 → global-agent → boolean | accepted |
+   | `lodash.isequal@4.5.0` | electron-updater → lodash.isequal | accepted |
+
+   Four of five sit inside `app-builder-lib`; overriding them would force majors electron-builder was
+   never tested against, breaking `.asar` packaging or Squirrel generation only at `npm run dist`
+   time, invisible to unit tests. `glob` additionally has two unrelated consumers at different majors
+   (`@fastify/static` → glob@13, `@vue/test-utils` → glob@10), so a top-level override would collide.
+   `lodash.isequal@4.5.0` is **already the latest published version** — the deprecation is permanent
+   ("use `node:util.isDeepStrictEqual`"), so no override exists that could silence it; it needs an
+   upstream change in `electron-updater`. **No `overrides` entries are added.**
+4. **Write the accepted-warnings ledger.** One place, each entry with its reason:
+   - 2× vite "dynamically imported but also statically imported" (`definitions.ts`,
+     `import-logic.ts`) — already reasoned in `AGENTS.md`; both defer *module evaluation*, not
+     chunking, and `tests/main/database/database-startup.test.ts` fails if the first is made static.
+   - 5× `npm audit` low (elliptic, via `pdbe-molstar`) — out of scope; never `npm audit fix --force`.
+   - 2× Rollup `/* #__PURE__ */` annotation from `@vueuse/core` (`dist/index.js` 3362:0, 5780:22) —
+     **not previously inventoried**; upstream annotation placement, nothing here to change.
+   - the 5 npm deprecations above.
+5. **Investigate — `h264-mp4-encoder` externalises `path`, `fs` and `crypto` for the browser** (3
+   warnings). **Also not previously inventoried, and not assumed benign.** A node-only module is
+   reachable from the renderer graph and those builtins become runtime no-ops. Determine whether that
+   import path can execute at runtime. If it can, this is a latent renderer defect, not a warning. If
+   it cannot, accept and record. Ruling deferred to the investigation, not pre-decided.
+
+Recorded for whoever next audits warnings: `MODULE_TYPELESS_PACKAGE_JSON` and the npm deprecations
+do **not** appear in `npm run build` — they surface via `eslint` and `npm install` respectively. A
+warning inventory must run all three commands.
+
 ---
 
 ## 6. Verification
@@ -519,6 +767,25 @@ baseline + comparison artifacts under `.planning/artifacts/perf/<topic>/`, gitig
 | ESLint peak RSS | 3.4 GB | no regression |
 | `typecheck` | 5.2 s warm | **expected to INCREASE** — Phase 4.2 adds `src/web/**` (71 files) and Phase 4.1 drops an unsound flag. Both are correctness wins; do not treat the increase as a regression. |
 
+Phase 8 targets. **These are measured from the GitHub Actions API, not from `compare-build.mjs`** —
+the local harness times local `make ci`-class stages and cannot instrument Actions topology.
+Baseline: `.planning/artifacts/perf/build/ci-cross-workflow-baseline.md`.
+
+| Metric | Baseline | Target |
+|---|---:|---:|
+| `release.yml` Windows job | 528 s | **≤ 120 s** (signing chain alone measures 34 s) |
+| `release.yml` runner total | 1065 s | **≤ 250 s** |
+| Packaging runs per release | 12 | **9** (12 → 6 was only reachable with 8.2, which is deferred) |
+| `npm ci` on jobs with a warm native cache | 112–217 s | report actual |
+| `build.yml` critical path | 774 s | report actual |
+| Packaging runner time per release | 3984 s | report actual |
+
+Two honesty constraints on Phase 8 claims. The compile's share of each `npm ci` above is **inferred**
+from §2.1, not isolated in CI — and the macOS figure (47 s total, against a ~42 s expected compile)
+does not reconcile cleanly. Isolate it before any claim rests on the split. And the ~82 s attributed
+to the `nsis-resources` download in 8.4 is **quoted, not measured**; get a real number from
+`DEBUG=electron-builder` before and after.
+
 Renderer bundle context for Phase 5/7 claims: `out/` is 23 MB, renderer 21 MB, of which the Mol*
 chunk is **9,140,442 B** and `plotly-basic` 1,692,371 B. Both are correctly code-split for runtime,
 but rollup + esbuild reprocess all 9 MB on every build — and today that build happens twice in
@@ -535,25 +802,38 @@ This spec is deliberately larger than one PR. `AGENTS.md` requires splitting wor
 boundaries, and these phases touch native tooling, workflows, tsconfigs, Vite configs and the
 Makefile. Ship as follows, each independently revertable, each with a before/after from §6:
 
-| PR | Contents | Gate |
-|---|---|---|
-| 1 | Verification harness only (`scripts/perf/compare-build.mjs`, `.planning/artifacts/perf/build/`) + committed baseline | `make ci` |
-| 2 | Phase 1 (native ABI cache, drop `-f`, ABI assertion, `--jobs`) | `make ci-full` |
-| 3 | Phase 2 (`--ignore-scripts` + cache ordering across 6 sites) + Phase 4.11 composite action | `make ci-full` + a real CI run |
-| 4 | Phase 3 (local `ci-full` dedupe) + Phase 4.12 guardrail test extension | `make ci-full` |
-| 5 | Phase 4.1–4.4 (typecheck correctness: unsound flag, `src/web/**`, dead references, program narrowing) | `make ci` |
-| 6 | Phase 4.5–4.10 (workflow hygiene: timeouts, `.nvmrc`, de-dupe web gate, caches) | CI run |
-| 7 | Phase 5 (cheap config wins) | `make ci-full` |
-| 8 | Phase 6 (TypeScript 7 / TNB) — **blocked on PR 5** | `make ci-full` |
-| 9 | Phase 7 (Vite 8 + electron-vite 6) — **blocked on PR 7** | `make ci-full` |
+| PR | Contents | Gate | Status |
+|---|---|---|---|
+| 1 | Verification harness only (`scripts/perf/compare-build.mjs`, `.planning/artifacts/perf/build/`) + committed baseline | `make ci` | **merged** |
+| 2 | Phase 1 (native ABI cache, drop `-f`, ABI assertion, `--jobs`) | `make ci-full` | **merged** |
+| 3 | Phase 8.3 + 8.4 (`.cache/native` CI cache restored pre-`npm ci`, `assert-native-abi` as a required step, electron-builder archive-tier cache) | real CI run | |
+| 4 | Phase 8.1 + 8.5 (build once, promote; `latest.yml` integrity assertion) | real CI run + a dry-run promote before it is trusted | |
+| 5 | Phase 9 (warning ledger) — absorbs former Phase 5.3 and 5.5 | `make ci` | |
+| 6 | Phase 2 (`--ignore-scripts` + cache ordering) + Phase 4.11 composite action — **scope re-derived against post-PR-3 numbers** | `make ci-full` + a real CI run | |
+| 7 | Phase 3 (local `ci-full` dedupe) + Phase 4.12 guardrail test extension | `make ci-full` | |
+| 8 | Phase 4.1–4.4 (typecheck correctness: unsound flag, `src/web/**`, dead references, program narrowing) | `make ci` | |
+| 9 | Phase 4.5–4.10 (workflow hygiene: timeouts, `.nvmrc`, de-dupe web gate, caches) | CI run | |
+| 10 | Phase 5 (cheap config wins) — **minus 5.3 and 5.5, which moved to PR 5** | `make ci-full` | |
+| 11 | Phase 6 (TypeScript 7 / TNB) — **blocked on PR 8** | `make ci-full` | |
+| 12 | Phase 7 (Vite 8 + electron-vite 6) — **blocked on PR 10** | `make ci-full` | |
 
 PR 1 must land first. Without a committed baseline, no later PR can substantiate its claim, and this
 spec's entire argument rests on measurement rather than intuition.
 
+Phase 8 was inserted at PRs 3-4 rather than appended, because it is the largest measured item in the
+document (3984 s per release) and because PR 3's native cache captures most of what Phase 2 was
+going to win — so Phase 2 should be re-justified against the post-PR-3 numbers rather than shipped
+on its original rationale. The former PRs 3-9 shift to 6-12 accordingly.
+
 Ordering constraints that are not negotiable:
 - Phase 1's ABI assertion **precedes** Phase 2, which makes the cache load-bearing.
 - Phase 4.1 (drop the unsound flag) **precedes** Phase 6 (TS 7). They must not ship together.
-- Phase 5.5 (delete dead `manualChunks`) **precedes** Phase 7 (which removes that API).
+- Phase 9 item 1 (delete dead `manualChunks`) **precedes** Phase 7 (which removes that API). This
+  constraint used to name Phase 5.5; the item moved, the constraint did not.
+- **Phase 8.3 precedes Phase 8.1.** Not a correctness constraint — 8.1's measurements are simply
+  cleaner once the native-cache noise is out of the `package` jobs.
+- **Phase 8.2 must not ship before 8.1.** A tree-stamp skip that suppresses artifact upload would
+  break the invariant that every main-push SHA has promotable installers.
 
 ## 8. Risks
 
@@ -567,6 +847,12 @@ Ordering constraints that are not negotiable:
 | Re-introducing parallelism near the quality gates re-triggers the June OOM | Explicitly out of scope (§4); guardrail clamps kept and extended |
 | **npm 12 silently ships an app with no native binary** (§3.5) | Keep the `<12` ceiling; adopt `npm approve-scripts` + `strict-allow-scripts=true` before raising it; assert the ceiling in the guardrail test; rely on the Phase 1.3 ABI assertion to fail loud rather than at runtime |
 | A fork release adding ABI 148 makes part of this work look redundant (§3.6) | It does not — the cache is what makes the *repeat* cost zero. A prebuild would only remove the first compile. |
+| **Promotion ships installers built from the wrong commit** (8.1) | `build_run_id` comes from the same gate that verified CI green, so there is one identity, not two. Plus `--event push`, an explicit `headSha == $GITHUB_SHA` assertion, and a `provenance.sha` check on the artifact itself. |
+| **Promotion ships a partial or corrupt artifact set** (8.1) | `download-artifact`'s `digest-mismatch: error` default, `sha256sum -c SHA256SUMS`, and an expected-filename assertion against the 10-asset set. `if-no-files-found: error` on the upload side so an empty artifact fails at creation. |
+| **A signed release ships a `latest.yml` describing the unsigned binaries** (8.5) | Exists today and is unverified. The new post-regeneration assertion recomputes sha512 + size for every referenced file and fails on mismatch. This is the failure mode promotion makes load-bearing, so it is a prerequisite, not a follow-up. |
+| **A tag whose `build.yml` run has expired or skipped `package` cannot be released** (8.1) | Accepted, deliberately. Hard fail naming `gh run rerun <id>` as the recovery, chosen over an auto-fallback build path that would rot unexercised and fail exactly when needed. |
+| **A corrupted electron-builder tool cache is served silently** (8.4) | Real: the extracted-directory tier validates file *count*, not content (`cacheState.js:112-131`). Mitigated by caching only hash-verified tiers and deleting `${extractDir}.state` sidecars after restore, forcing re-extraction through the sha256-checked archive path. |
+| A stale `.cache/native` GitHub cache entry installs a wrong-ABI binary (8.3) | Cannot: `manifestIsFresh` checks moduleVersion + lockfileHash + ABI + platform + arch, `restore()` sha256-checks against the manifest, and `restoreDecision()` re-derives the ABI from the binary on disk — resolving *undetermined* to `purge-and-compile`. Degrades to a recompile, never a wrong binary. Keep no `restore-keys`. |
 
 ---
 
