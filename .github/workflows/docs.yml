@@ -26,6 +26,7 @@ on:
     paths:
       - 'docs/**'
       - 'src/**'
+      - 'resources/**'
       - 'tests/e2e/screenshots.e2e.ts'
       - 'tests/e2e/test-data/demo-case.json'
       - 'playwright.config.ts'
@@ -105,9 +106,17 @@ jobs:
 
       # libsqlite3-dev and build-essential exist only to compile
       # better-sqlite3-multiple-ciphers. The ABI-keyed native cache restores a
-      # prebuilt binary, so on a hit nothing compiles and these packages are
-      # 9 s of dead weight. On a cold cache the compile is real and they are
-      # load-bearing -- hence the condition rather than deletion.
+      # prebuilt binary, so on a hit nothing normally compiles and these
+      # packages are 9 s of dead weight.
+      #
+      # Not airtight, deliberately: scripts/native/rebuild-native.mjs verifies
+      # the restored binary's ABI and, on a mismatch it cannot resolve, purges
+      # the entry and compiles for real -- while `cache-hit` is still 'true'.
+      # On ubuntu-latest that fallback compile still has build-essential from
+      # the runner image, so it succeeds; if it ever did not, this job fails
+      # loudly and publishes nothing. build.yml:289-291 keeps its equivalent
+      # step unconditional for exactly this coupling; docs.yml accepts the
+      # trade because 9 s is 4% of its 237 s baseline.
       - name: Install system dependencies
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: |

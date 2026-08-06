@@ -20,7 +20,7 @@ const VIEWPORT = { width: 1280, height: 800 }
 /**
  * Every screenshot this suite is responsible for producing, in execution order.
  *
- * Test 02 writes its PNG inside a conditional (`:306`); if its selector ever
+ * Test 02 writes its PNG inside a conditional in `test('02 - import menu')`; if its selector ever
  * stops matching, the test passes without writing the file and the stale
  * committed copy gets published instead. The final test in this file asserts
  * this manifest against what was actually written, so that failure is loud.
