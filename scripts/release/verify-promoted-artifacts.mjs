@@ -32,7 +32,14 @@ function parseChecksums(text) {
     if (trimmed.length === 0) continue
     const match = /^([0-9a-f]{64})\s+\*?(.+)$/i.exec(trimmed)
     if (!match) throw new Error(`malformed SHA256SUMS line: ${trimmed}`)
-    map.set(match[2], match[1].toLowerCase())
+    const [, digest, name] = match
+    // A repeated filename makes the manifest ambiguous, even if the
+    // surviving entry (last-one-wins on a plain Map.set) happens to be
+    // correct — SHA256SUMS must unambiguously describe what shipped.
+    if (map.has(name)) {
+      throw new Error(`duplicate SHA256SUMS entry for ${name}`)
+    }
+    map.set(name, digest.toLowerCase())
   }
   return map
 }

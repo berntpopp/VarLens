@@ -127,6 +127,23 @@ describe('verifyPromotedArtifacts', () => {
     ).toThrow(/unexpected/i)
   })
 
+  it('rejects a SHA256SUMS with a duplicate entry for the same filename', () => {
+    // The map-based parser used to overwrite on a repeated filename, so a
+    // manifest listing the same file twice (e.g. a wrong digest followed by
+    // the correct one) silently passed on the surviving entry. Wrong bytes
+    // still couldn't get through, but an ambiguous manifest violated this
+    // script's fail-closed contract. A duplicate must be rejected outright,
+    // regardless of whether either digest is correct.
+    writeValidSet()
+    const appImageName = `Varlens-${VERSION}.AppImage`
+    const existingSums = readFileSync(join(dir, 'SHA256SUMS'), 'utf8')
+    const wrongDigest = '0'.repeat(64)
+    writeFileSync(join(dir, 'SHA256SUMS'), `${wrongDigest}  ${appImageName}\n${existingSums}`)
+    expect(() =>
+      verifyPromotedArtifacts({ dir, platform: 'linux', version: VERSION, sha: SHA })
+    ).toThrow(/duplicate/i)
+  })
+
   it('rejects a phantom SHA256SUMS entry for a file that was never written to disk', () => {
     // Covers the checksum-entries check independently of the on-disk check:
     // no extra file exists here, only an extra checksum line naming one that
