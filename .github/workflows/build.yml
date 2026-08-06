@@ -194,9 +194,16 @@ jobs:
       - name: Run type check
         run: npm run typecheck
 
-      # Coverage only on push-to-main — PRs run plain `vitest run` for speed.
-      - name: Run tests (PR)
-        if: github.event_name == 'pull_request'
+      # Coverage only on push-to-main — PRs and manual `workflow_dispatch`
+      # reruns (e.g. re-generating installers past the 30-day rerun window)
+      # run plain `vitest run` for speed. Gated on "not push" rather than an
+      # explicit pull_request/workflow_dispatch OR so a future event type
+      # defaults to running tests, not silently skipping them: release.yml
+      # selects the newest Build run on a SHA as its "CI passed" gate, so a
+      # test step that silently no-ops on some event would let an untested
+      # run satisfy that gate.
+      - name: Run tests
+        if: github.event_name != 'push'
         run: npm run test
 
       - name: Run tests with coverage (main)
@@ -249,17 +256,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsqlite3-dev build-essential
 
+      - name: Extract Electron version
+        id: electron-ver
+        shell: bash
+        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
       # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
       # postinstall restores a binary instead of compiling one. `.cache/native`
       # is a sibling of node_modules and survives `npm ci`.
       # Path is `.cache/native`, never bare `.cache` — `.cache/tsbuildinfo` is a
       # sibling with a different key. No restore-keys: a partial match is
       # rejected by manifestIsFresh() anyway, and the absence documents intent.
-      - name: Extract Electron version
-        id: electron-ver
-        shell: bash
-        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
-
       - name: Restore native ABI cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
@@ -276,6 +283,7 @@ jobs:
         run: npm run rebuild:electron
 
       - name: Assert native ABI
+        shell: bash
         run: node scripts/native/assert-native-abi.mjs electron
 
       - name: Build Electron app
@@ -319,10 +327,11 @@ jobs:
             test-results/
             .planning/artifacts/perf/phase1/baseline/packaged-smoke/
 
-      # `-printf` is GNU-only, so it is avoided below — macOS runners ship
-      # BSD `find`. `sha256sum` is likewise absent on macOS; use
-      # `shasum -a 256`, which exists on all three runners (Git Bash
-      # provides it on Windows).
+      # macOS runners ship `shasum` but not `sha256sum`; Git-for-Windows ships
+      # coreutils' `sha256sum` but only has `shasum` if Perl is on PATH;
+      # Linux has both. Detect whichever is actually present rather than
+      # betting on one — both emit the identical `<64 hex><two spaces><name>`
+      # format that verify-promoted-artifacts.mjs parses, confirmed locally.
       - name: Write provenance and checksums
         if: github.event_name != 'pull_request'
         shell: bash
@@ -331,8 +340,16 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          export VERSION="$(node -p "require('../package.json').version")"
-          export TREE_SHA="$(git -C .. rev-parse 'HEAD^{tree}')"
+          # Split assignment from `export` — `export V="$(cmd)"` swallows a
+          # failing `cmd`'s exit status (only the bare `V="$(cmd)"` form trips
+          # `set -e`), which would otherwise let a failing `node -p` or
+          # `git rev-parse` write an empty/wrong value into provenance.json
+          # silently. `tree` in particular is never validated downstream, so
+          # a silently-empty value would ship unnoticed.
+          VERSION="$(node -p "require('../package.json').version")"
+          export VERSION
+          TREE_SHA="$(git -C .. rev-parse 'HEAD^{tree}')"
+          export TREE_SHA
           node -e "
             const fs = require('fs')
             fs.writeFileSync('provenance.json', JSON.stringify({
@@ -348,11 +365,12 @@ jobs:
           "
           # Checksum every publishable asset, in the plain `<hex>  <name>` form
           # verify-promoted-artifacts.mjs parses. Deliberately excludes
-          # provenance.json and SHA256SUMS itself. Portable across GNU/BSD find.
+          # provenance.json and SHA256SUMS itself.
+          SUM=$(command -v shasum >/dev/null 2>&1 && echo "shasum -a 256" || echo "sha256sum")
           : > SHA256SUMS
           for f in *.AppImage *.deb *.dmg *.exe *.zip latest*.yml; do
             [ -e "$f" ] || continue
-            shasum -a 256 "$f" >> SHA256SUMS
+            $SUM "$f" >> SHA256SUMS
           done
           # An empty SHA256SUMS means the packaging step produced nothing.
           [ -s SHA256SUMS ] || { echo "::error::no publishable assets found in release/"; exit 1; }
