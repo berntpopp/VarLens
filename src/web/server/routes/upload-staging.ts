@@ -71,7 +71,7 @@ export function replaceWebUploadPathWithRef<T extends { filePath: string }>(
   return ref === undefined ? item : { ...item, filePath: ref }
 }
 
-export function registerImportUploadRoutes(app: FastifyInstance, deps: DispatcherDeps): void {
+export function registerImportUploadRoutes(app: FastifyInstance, deps?: DispatcherDeps): void {
   app.addContentTypeParser('application/octet-stream', (_request, payload, done) => {
     done(null, payload)
   })
@@ -79,6 +79,11 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps: Dispatche
   app.post('/api/import/upload', async (request: UploadRouteBody, reply) => {
     const userId = request.session.user?.id
     if (userId === undefined) {
+      deps?.metrics?.recordOperationEvent({
+        operation: 'upload-stage',
+        result: 'error',
+        failureClass: 'unauthenticated'
+      })
       reply.code(401)
       return {
         code: 'UNAUTHENTICATED',
@@ -89,12 +94,22 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps: Dispatche
 
     const originalName = headerString(request.headers['x-varlens-file-name'])
     if (originalName === undefined || originalName.trim() === '') {
+      deps?.metrics?.recordOperationEvent({
+        operation: 'upload-stage',
+        result: 'error',
+        failureClass: 'missing-file-name'
+      })
       reply.code(400)
       return { error: 'missing-file-name', message: 'X-VarLens-File-Name is required' }
     }
 
     const safeName = sanitizeUploadName(originalName)
     if (!isAllowedUploadName(safeName)) {
+      deps?.metrics?.recordOperationEvent({
+        operation: 'upload-stage',
+        result: 'error',
+        failureClass: 'unsupported-file-type'
+      })
       reply.code(400)
       return {
         error: 'unsupported-file-type',
@@ -104,6 +119,11 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps: Dispatche
 
     const source = toReadable(request.body)
     if (source === null) {
+      deps?.metrics?.recordOperationEvent({
+        operation: 'upload-stage',
+        result: 'error',
+        failureClass: 'missing-body'
+      })
       reply.code(400)
       return { error: 'missing-body', message: 'Upload body is required' }
     }
@@ -117,6 +137,11 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps: Dispatche
       source
     }).catch((error: unknown) => {
       if (error instanceof UploadTooLargeError) {
+        deps?.metrics?.recordOperationEvent({
+          operation: 'upload-stage',
+          result: 'error',
+          failureClass: 'upload-too-large'
+        })
         reply.code(413)
         return {
           error: 'upload-too-large',
@@ -128,10 +153,13 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps: Dispatche
 
     if (!isStagedUpload(upload)) return upload
 
-    await recordApiWriteAudit(deps, {
-      key: 'import:upload',
-      username: request.session.user?.username
-    })
+    if (deps !== undefined) {
+      await recordApiWriteAudit(deps, {
+        key: 'import:upload',
+        username: request.session.user?.username
+      })
+      deps.metrics?.recordOperationEvent({ operation: 'upload-stage', result: 'success' })
+    }
 
     return {
       id: upload.id,
