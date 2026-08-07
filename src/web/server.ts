@@ -106,6 +106,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const app = Fastify({
     genReqId: () => randomUUID(),
+    // Pinned, not inherited. Fastify 5 already defaults this to false, but the
+    // default has changed across majors and `true` resolves to the `request-id`
+    // header — which would let a client choose its own request ID and forge or
+    // collide log correlation. Stating it explicitly means a future Fastify
+    // default flip cannot silently re-enable header trust.
+    requestIdHeader: false,
     logController: new LogController({ requestIdLogLabel: 'request_id' }),
     logger: {
       level: process.env.VARLENS_LOG_LEVEL ?? 'info'
