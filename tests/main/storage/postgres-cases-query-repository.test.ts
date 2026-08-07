@@ -66,6 +66,19 @@ describe('PostgresCasesQueryRepository', () => {
       expect.stringContaining('COUNT(*)::int AS total_count'),
       ['%new%']
     )
+    const rowsSql = String(pool.query.mock.calls[0]?.[0])
+    const groupBySql = rowsSql.slice(rowsSql.indexOf('GROUP BY'), rowsSql.indexOf('ORDER BY'))
+    for (const projectedCaseColumn of [
+      'c.id',
+      'c.name',
+      'c.file_path',
+      'c.file_size',
+      'c.variant_count',
+      'c.created_at',
+      'c.genome_build'
+    ]) {
+      expect(groupBySql).toContain(projectedCaseColumn)
+    }
   })
 
   it('runs the no-filter count through the named (prepared) path', async () => {

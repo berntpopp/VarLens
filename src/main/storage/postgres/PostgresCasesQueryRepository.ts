@@ -74,7 +74,16 @@ export class PostgresCasesQueryRepository {
       LEFT JOIN ${schemaName}."case_cohort_links" ccl ON ccl.case_id = c.id
       LEFT JOIN ${schemaName}."cohort_groups" cg ON cg.id = ccl.cohort_id
       ${whereSql}
-      GROUP BY c.id, cm.affected_status, cm.sex
+      GROUP BY
+        c.id,
+        c.name,
+        c.file_path,
+        c.file_size,
+        c.variant_count,
+        c.created_at,
+        c.genome_build,
+        cm.affected_status,
+        cm.sex
       ORDER BY ${orderColumn} ${orderDirection}
       LIMIT $${values.length + 1}
       OFFSET $${values.length + 2}
