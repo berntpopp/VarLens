@@ -3,6 +3,40 @@ name: Deploy Docs
 on:
   push:
     branches: [main]
+    # The union of every input that can reach the published bytes: `docs/**`
+    # (the only tree VitePress reads -- docs/.vitepress/config.mts and
+    # docs/.vitepress/theme/** import nothing outside docs/) plus every input
+    # to the screenshot pipeline that tests/e2e/screenshots.e2e.ts drives.
+    # scripts/native/** is in the set because it decides which native binary
+    # the built app loads; a broken rebuild changes what the app renders, or
+    # whether it starts at all.
+    #
+    # This list IS the authoritative declaration of that set -- there is no
+    # other file to keep it in sync with. If you add an input the screenshots
+    # depend on, add it here too: a missing entry silently skips a run that
+    # was needed and leaves the published site stale.
+    #
+    # Deliberately a workflow-level filter, unlike build.yml:22-27 which uses a
+    # job-level dorny/paths-filter. That comment's hazard -- workflow-level
+    # `paths-ignore` leaving required status checks permanently pending -- does
+    # not apply here: docs.yml has no `pull_request` trigger and is not a
+    # required check. A workflow-level filter costs 0 s on a skip where a
+    # job-level filter still spins up a runner. `workflow_dispatch` below is the
+    # escape hatch if this filter ever wrongly skips a needed run.
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - 'resources/**'
+      - 'tests/e2e/screenshots.e2e.ts'
+      - 'tests/e2e/test-data/demo-case.json'
+      - 'playwright.config.ts'
+      - 'electron.vite.config.ts'
+      - 'tsconfig*.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - 'scripts/native/**'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -31,6 +65,10 @@ jobs:
   build-screenshots:
     name: Build & Screenshots
     runs-on: ubuntu-latest
+    # Baseline is 237 s. 20 minutes is ~5x headroom -- enough for a cold native
+    # cache (which adds a ~35 s compile) plus a slow runner, without letting a
+    # hung Electron launch burn a full 6-hour default timeout.
+    timeout-minutes: 20
 
     steps:
       - name: Configure git line endings
@@ -44,11 +82,6 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev build-essential
 
       - name: Allow Electron to use unprivileged user namespaces (Ubuntu 24.04)
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -65,10 +98,30 @@ jobs:
       # sibling with a different key. No restore-keys: a partial match is
       # rejected by manifestIsFresh() anyway, and the absence documents intent.
       - name: Restore native ABI cache
+        id: native-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
           key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+
+      # libsqlite3-dev and build-essential exist only to compile
+      # better-sqlite3-multiple-ciphers. The ABI-keyed native cache restores a
+      # prebuilt binary, so on a hit nothing normally compiles and these
+      # packages are 9 s of dead weight.
+      #
+      # Not airtight, deliberately: scripts/native/rebuild-native.mjs verifies
+      # the restored binary's ABI and, on a mismatch it cannot resolve, purges
+      # the entry and compiles for real -- while `cache-hit` is still 'true'.
+      # On ubuntu-latest that fallback compile still has build-essential from
+      # the runner image, so it succeeds; if it ever did not, this job fails
+      # loudly and publishes nothing. build.yml:289-291 keeps its equivalent
+      # step unconditional for exactly this coupling; docs.yml accepts the
+      # trade because 9 s is 4% of its 237 s baseline.
+      - name: Install system dependencies
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev build-essential
 
       - name: Install dependencies
         run: npm ci
@@ -84,26 +137,6 @@ jobs:
       - name: Build Electron app
         run: npx electron-vite build
 
-      # Cache the downloaded browser binaries. Keyed on the resolved Playwright
-      # version, because browser builds are pinned per Playwright release — a
-      # stale browser against a newer Playwright is exactly the mismatch this
-      # key prevents. The `--with-deps` system packages are NOT cached (they
-      # install into /usr/lib, outside the cache path), so the install step
-      # still runs; on a hit it skips only the browser download.
-      - name: Resolve Playwright version
-        id: pw
-        shell: bash
-        run: echo "ver=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Playwright browsers
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.ver }}
-
-      - name: Install Playwright
-        run: npx playwright install --with-deps
-
       - name: Generate screenshots
         run: xvfb-run --auto-servernum npx playwright test tests/e2e/screenshots.e2e.ts
 
@@ -118,6 +151,10 @@ jobs:
     name: Deploy to GitHub Pages
     needs: build-screenshots
     runs-on: ubuntu-latest
+    # Baseline is 39 s, but actions/deploy-pages waits on the Pages API with its
+    # own 1200000 ms budget. 25 minutes sits just above that so the action's own
+    # timeout reports the real error rather than being masked by a job kill.
+    timeout-minutes: 25
 
     permissions:
       pages: write

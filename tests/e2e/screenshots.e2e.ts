@@ -17,6 +17,42 @@ const SCREENSHOT_DIR = path.resolve(__dirname, '../../docs/public/screenshots')
 const DEMO_DATA_PATH = path.resolve(__dirname, 'test-data/demo-case.json')
 const VIEWPORT = { width: 1280, height: 800 }
 
+/**
+ * Every screenshot this suite is responsible for producing, in execution order.
+ *
+ * Test 02 writes its PNG inside a conditional in `test('02 - import menu')`; if its selector ever
+ * stops matching, the test passes without writing the file and the stale
+ * committed copy gets published instead. The final test in this file asserts
+ * this manifest against what was actually written, so that failure is loud.
+ */
+const EXPECTED_SCREENSHOTS = [
+  'empty-state',
+  'import-menu',
+  'case-list',
+  'variant-table',
+  'app-layout',
+  'status-bar',
+  'filters-active',
+  'column-filters',
+  'variant-details',
+  'case-metadata',
+  'acmg-classification',
+  'comment-dialog',
+  'annotations',
+  'cohort-view',
+  'filter-toolbar',
+  'filter-preset-bar',
+  'filter-drawer-sections',
+  'filter-preset-save',
+  'filter-preset-manage',
+  'filter-dsl-autocomplete',
+  'filter-column-numeric',
+  'filter-column-categorical',
+  'filter-empty-state'
+] as const
+
+const capturedScreenshots = new Set<string>()
+
 let app: ElectronApplication
 let window: Page
 let tempGzipPath: string
@@ -37,6 +73,18 @@ function expectSuccessfulIpcResult<T>(result: T): T {
 async function saveScreenshot(page: Page, name: string): Promise<void> {
   const filePath = path.join(SCREENSHOT_DIR, `${name}.png`)
   await page.screenshot({ path: filePath, type: 'png' })
+  capturedScreenshots.add(name)
+}
+
+/** Save a cropped screenshot, recording it the same way as a full-viewport one. */
+async function saveClippedScreenshot(
+  page: Page,
+  name: string,
+  clip: { x: number; y: number; width: number; height: number }
+): Promise<void> {
+  const filePath = path.join(SCREENSHOT_DIR, `${name}.png`)
+  await page.screenshot({ path: filePath, type: 'png', clip })
+  capturedScreenshots.add(name)
 }
 
 /**
@@ -357,7 +405,6 @@ test.describe('Documentation Screenshots', () => {
     await window.reload()
     await window.waitForSelector('.v-application', { timeout: 30000 })
     await dismissDisclaimer(window)
-    await window.waitForTimeout(1500)
 
     // Look for the case in the sidebar
     const caseItem = window.locator('.v-list-item').filter({ hasText: /DemoCase/ })
@@ -377,7 +424,6 @@ test.describe('Documentation Screenshots', () => {
 
     const rows = window.locator('.v-data-table__tr')
     await expect(rows.first()).toBeVisible({ timeout: 15000 })
-    await window.waitForTimeout(500)
 
     // Add labeled highlights for key UI sections referenced in the docs
     await window.evaluate(() => {
@@ -809,16 +855,11 @@ test.describe('Documentation Screenshots', () => {
     })
 
     if (footerRect) {
-      const filePath = path.join(SCREENSHOT_DIR, 'status-bar.png')
-      await window.screenshot({
-        path: filePath,
-        type: 'png',
-        clip: {
-          x: footerRect.x,
-          y: footerRect.y,
-          width: footerRect.width,
-          height: footerRect.height
-        }
+      await saveClippedScreenshot(window, 'status-bar', {
+        x: footerRect.x,
+        y: footerRect.y,
+        width: footerRect.width,
+        height: footerRect.height
       })
     } else {
       await saveScreenshot(window, 'status-bar')
@@ -1014,7 +1055,6 @@ test.describe('Documentation Screenshots', () => {
 
     // Open the variant details panel by clicking a row
     await ensureCaseSelected(window)
-    await window.waitForTimeout(2000)
 
     // Wait for table rows to be fully loaded and clickable
     const firstBodyRow = window.locator('.v-data-table tbody .v-data-table__tr').first()
@@ -1559,16 +1599,11 @@ test.describe('Documentation Screenshots', () => {
     })
 
     if (toolbarRect) {
-      const filePath = path.join(SCREENSHOT_DIR, 'filter-preset-bar.png')
-      await window.screenshot({
-        path: filePath,
-        type: 'png',
-        clip: {
-          x: toolbarRect.x,
-          y: toolbarRect.y,
-          width: toolbarRect.width,
-          height: toolbarRect.height
-        }
+      await saveClippedScreenshot(window, 'filter-preset-bar', {
+        x: toolbarRect.x,
+        y: toolbarRect.y,
+        width: toolbarRect.width,
+        height: toolbarRect.height
       })
     } else {
       await saveScreenshot(window, 'filter-preset-bar')
@@ -1928,11 +1963,9 @@ test.describe('Documentation Screenshots', () => {
     const searchInput = window.locator('.filter-search-input input, .dsl-search-bar input')
     if ((await searchInput.count()) > 0) {
       await searchInput.first().click()
-      await window.waitForTimeout(500)
 
       // Type slowly to trigger autocomplete
       await searchInput.first().fill('')
-      await window.waitForTimeout(300)
       await searchInput.first().pressSequentially('gnomad_af:', { delay: 100 })
       await window.waitForTimeout(1500)
     }
@@ -2262,5 +2295,22 @@ test.describe('Documentation Screenshots', () => {
     // Also clear via keyboard shortcut
     await window.keyboard.press('Escape')
     await window.waitForTimeout(500)
+  })
+
+  // Runs last. Playwright executes tests in declaration order, and this file is
+  // a single serial chain, so by this point every producing test has run.
+  test('22 - every documented screenshot was captured', async () => {
+    const missing = EXPECTED_SCREENSHOTS.filter((name) => !capturedScreenshots.has(name))
+    expect(
+      missing,
+      `These screenshots were never written this run, so the stale committed copies ` +
+        `would have been published: ${missing.join(', ')}`
+    ).toEqual([])
+
+    for (const name of EXPECTED_SCREENSHOTS) {
+      const filePath = path.join(SCREENSHOT_DIR, `${name}.png`)
+      expect(fs.existsSync(filePath), `${name}.png missing from disk`).toBe(true)
+      expect(fs.statSync(filePath).size, `${name}.png is empty`).toBeGreaterThan(0)
+    }
   })
 })
