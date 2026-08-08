@@ -300,7 +300,7 @@ jobs:
 
       - name: Setup Java for CodeSignTool
         if: vars.ESIGNER_ENABLED == 'true'
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # actions/setup-java@v5.6.0
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # actions/setup-java@v5.7.0
         with:
           distribution: corretto
           java-version: '11'
