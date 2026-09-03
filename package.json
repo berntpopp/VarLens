@@ -188,7 +188,7 @@
     "d3": "^7.9.0",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
-    "fastify": "^5.10.0",
+    "fastify": "^5.12.1",
     "fastify-type-provider-zod": "^7.0.0",
     "file-saver": "^2.0.5",
     "jstat": "^1.9.6",
