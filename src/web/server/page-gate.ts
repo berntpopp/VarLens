@@ -47,10 +47,6 @@ const PUBLIC_ROOT_ASSETS = new Set<string>([
   '/icon-maskable-512.png'
 ])
 
-function isPublicPath(path: string): boolean {
-  return ALWAYS_PUBLIC_PATHS.has(path) || PUBLIC_ROOT_ASSETS.has(path)
-}
-
 /**
  * Build the `?next=` value for the post-login redirect. Returns an
  * empty string when the request path isn't a safe relative path; the
@@ -75,10 +71,19 @@ export interface PageGateOptions {
    * `Location` header for the 302. Defaults are resolved by login-route.ts.
    */
   appPathPrefix: string
+  loginPath?: string
+  platformCallbackPath?: string
+  requirePlatformAuth?: boolean
 }
 
 export function registerPageGate(app: FastifyInstance, options: PageGateOptions): void {
   const { appPathPrefix } = options
+  const loginPath = options.loginPath ?? '/login'
+  const publicPaths = new Set(ALWAYS_PUBLIC_PATHS)
+  if (options.platformCallbackPath !== undefined) {
+    publicPaths.add('/auth/platform/start')
+    publicPaths.add(options.platformCallbackPath)
+  }
 
   app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
     // Only intercept GETs. POST/PUT/DELETE traffic is API-only and is
@@ -91,10 +96,7 @@ export function registerPageGate(app: FastifyInstance, options: PageGateOptions)
     // `/api/*` is auth.ts's territory — never short-circuit it here, or
     // the API would start redirecting instead of returning JSON 401s.
     if (path.startsWith('/api/')) return
-    if (isPublicPath(path)) return
-
-    const user = request.session?.user
-    if (user !== undefined) return
+    if (publicPaths.has(path) || PUBLIC_ROOT_ASSETS.has(path)) return
 
     // Build the redirect target, prepending the app prefix because a
     // prefix-stripping proxy forwards `/login` to Fastify while the
@@ -102,8 +104,17 @@ export function registerPageGate(app: FastifyInstance, options: PageGateOptions)
     const next = buildNextParam(fullUrl)
     const location =
       appPathPrefix +
-      '/login' +
+      loginPath +
       (next !== '' ? '?next=' + encodeURIComponent(appPathPrefix + next) : '')
+
+    const user = request.session?.user
+    if (user !== undefined) {
+      if (options.requirePlatformAuth === true && request.session.authMode !== 'platform') {
+        request.session.delete()
+      } else {
+        return
+      }
+    }
 
     reply.header('cache-control', 'no-store')
     reply.code(302)

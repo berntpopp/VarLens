@@ -78,6 +78,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0015',
     name: 'import_visibility',
     fileName: '0015_import_visibility.sql'
+  },
+  {
+    version: '0016',
+    name: 'platform_identity',
+    fileName: '0016_platform_identity.sql'
   }
 ]
 

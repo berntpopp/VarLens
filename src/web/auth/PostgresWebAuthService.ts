@@ -437,6 +437,17 @@ export class PostgresWebAuthService {
     return mapPgRowToUser(sel.rows[0])
   }
 
+  async getPlatformUser(subject: string): Promise<User | undefined> {
+    const sch = this.schemaQuoted
+    const sel = await this.pool.query<Record<string, unknown>>(
+      `SELECT * FROM ${sch}."users"
+       WHERE username = $1 AND auth_source = 'platform'`,
+      [subject]
+    )
+    if ((sel.rowCount ?? 0) === 0) return undefined
+    return mapPgRowToUser(sel.rows[0])
+  }
+
   async listUsers(): Promise<Omit<User, 'password_hash'>[]> {
     const sch = this.schemaQuoted
     const sel = await this.pool.query<Record<string, unknown>>(

@@ -148,7 +148,10 @@ export function renderLoginPage(appPathPrefix: string, redirectTo: string): stri
     .join(escapeForJsString(redirectTo))
 }
 
-export function registerLoginRoute(app: FastifyInstance): void {
+export function registerLoginRoute(
+  app: FastifyInstance,
+  options: { platformAuthEnabled?: boolean } = {}
+): void {
   const appPathPrefix = resolveAppPathPrefix()
   const loginPageRateLimit = buildLoginPageRateLimitConfig()
   const loginPageRateLimiter = app.rateLimit(loginPageRateLimit)
@@ -157,12 +160,22 @@ export function registerLoginRoute(app: FastifyInstance): void {
     request: { query: unknown },
     reply: {
       header: (k: string, v: string) => unknown
+      code: (c: number) => unknown
       type: (t: string) => unknown
       send: (b: string) => unknown
     }
   ): Promise<unknown> => {
     const query = (request.query ?? {}) as Record<string, unknown>
     const redirectTo = sanitizeNextParam(query.next, appPathPrefix)
+    if (options.platformAuthEnabled === true) {
+      reply.header('cache-control', 'no-store')
+      reply.code(302)
+      reply.header(
+        'location',
+        `${appPathPrefix}/auth/platform/start?next=${encodeURIComponent(redirectTo)}`
+      )
+      return reply.send('')
+    }
     const html = renderLoginPage(appPathPrefix, redirectTo)
     reply.header('cache-control', 'no-store')
     reply.header('content-security-policy', LOGIN_PAGE_CSP)
