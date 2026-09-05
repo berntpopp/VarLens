@@ -164,3 +164,8 @@ e2e-screenshots/
 
 # Subagent-driven-development scratch (ledger, briefs, review packages)
 .superpowers/
+
+# Antigravity / Gemini agent artifacts
+.antigravity/
+.antigravitycli/
+.gemini/
