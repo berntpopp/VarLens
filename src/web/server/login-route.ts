@@ -64,6 +64,14 @@ export function resolveAppPathPrefix(): string {
     : withLeading
 }
 
+export function hasControlOrWhitespace(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i)
+    if (code <= 32 || code === 127) return true
+  }
+  return false
+}
+
 /**
  * Validate a candidate post-login redirect target. Anything that is not
  * a relative same-prefix path is rejected to prevent open-redirect
@@ -72,10 +80,24 @@ export function resolveAppPathPrefix(): string {
 export function sanitizeNextParam(next: unknown, appPathPrefix: string): string {
   const defaultTarget = appPathPrefix === '' ? '/' : appPathPrefix + '/'
   if (typeof next !== 'string' || next === '') return defaultTarget
+  // Cap length to prevent cookie ballooning / header bloat
+  if (next.length > 512) return defaultTarget
+  // Reject control characters, tabs, newlines, and whitespace
+  if (hasControlOrWhitespace(next)) return defaultTarget
   // Reject anything containing scheme, authority, backslashes, or
   // protocol-relative prefixes. Must start with a single `/` followed
   // by something other than `/` or `\`.
   if (!/^\/[^/\\]/.test(next)) return defaultTarget
+  if (next.startsWith('//') || next.includes('\\')) return defaultTarget
+  // Validate path parsing against base origin to ensure it is strictly relative
+  try {
+    const parsed = new URL(next, 'http://localhost')
+    if (parsed.origin !== 'http://localhost' || parsed.username !== '' || parsed.password !== '') {
+      return defaultTarget
+    }
+  } catch {
+    return defaultTarget
+  }
   // Must remain inside the configured app prefix so we never bounce
   // the browser to an unrelated route on the same origin.
   if (appPathPrefix !== '' && next !== appPathPrefix && !next.startsWith(appPathPrefix + '/')) {

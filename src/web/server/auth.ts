@@ -36,7 +36,7 @@ import type { FastifyInstance } from 'fastify'
 import secureSession from '@fastify/secure-session'
 
 import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
-import type { PlatformIdentityService } from './platform-identity'
+import { PlatformIdentityRevokedError, type PlatformIdentityService } from './platform-identity'
 import { registerAuthLoginRateLimit } from './rate-limit'
 
 declare module '@fastify/secure-session' {
@@ -258,31 +258,6 @@ export async function registerSessions(
     }
 
     const sessionUser = request.session.user
-    const liveUser = await options.authService.getUser(sessionUser.username)
-    if (
-      liveUser === undefined ||
-      liveUser.id !== sessionUser.id ||
-      liveUser.is_active !== 1 ||
-      liveUser.password_changed_at !== sessionUser.passwordChangedAt
-    ) {
-      request.session.delete()
-      reply.code(401)
-      return reply.send({
-        code: 'UNAUTHENTICATED',
-        message: 'session no longer valid',
-        userMessage: 'Please log in again.'
-      })
-    }
-
-    if (platformMode && request.session.authMode !== 'platform') {
-      request.session.delete()
-      reply.code(401)
-      return reply.send({
-        code: 'UNAUTHENTICATED',
-        message: 'platform login is required',
-        userMessage: 'Please log in again.'
-      })
-    }
 
     if (request.session.authMode === 'platform') {
       if (options.platformIdentity === undefined) {
@@ -300,20 +275,54 @@ export async function registerSessions(
           sessionUser.username
         )
         if (platformUser.id !== sessionUser.id) {
-          throw new Error('platform user id changed')
+          throw new PlatformIdentityRevokedError('platform user id changed')
         }
         request.session.mustChangePassword = false
         request.session.user = platformUser
-      } catch {
-        request.session.delete()
-        reply.code(401)
+      } catch (error) {
+        if (error instanceof PlatformIdentityRevokedError) {
+          request.session.delete()
+          reply.code(401)
+          return reply.send({
+            code: 'UNAUTHENTICATED',
+            message: 'platform session no longer valid',
+            userMessage: 'Please log in again.'
+          })
+        }
+        reply.code(503)
         return reply.send({
-          code: 'UNAUTHENTICATED',
-          message: 'platform session no longer valid',
-          userMessage: 'Please log in again.'
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'platform identity check temporarily unavailable',
+          userMessage: 'Authentication check temporarily unavailable. Please retry.'
         })
       }
       return
+    }
+
+    if (platformMode) {
+      request.session.delete()
+      reply.code(401)
+      return reply.send({
+        code: 'UNAUTHENTICATED',
+        message: 'platform login is required',
+        userMessage: 'Please log in again.'
+      })
+    }
+
+    const liveUser = await options.authService.getUser(sessionUser.username)
+    if (
+      liveUser === undefined ||
+      liveUser.id !== sessionUser.id ||
+      liveUser.is_active !== 1 ||
+      liveUser.password_changed_at !== sessionUser.passwordChangedAt
+    ) {
+      request.session.delete()
+      reply.code(401)
+      return reply.send({
+        code: 'UNAUTHENTICATED',
+        message: 'session no longer valid',
+        userMessage: 'Please log in again.'
+      })
     }
 
     request.session.mustChangePassword = liveUser.must_change_password === 1

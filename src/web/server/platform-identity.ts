@@ -63,10 +63,6 @@ export interface PlatformIdentityAuditInput {
   reason?: string
 }
 
-function encodeBase64Url(buffer: Buffer): string {
-  return buffer.toString('base64url')
-}
-
 function decodeBase64UrlJson(value: string): Record<string, unknown> {
   const decoded = Buffer.from(value, 'base64url').toString('utf8')
   const parsed = JSON.parse(decoded) as unknown
@@ -77,7 +73,7 @@ function decodeBase64UrlJson(value: string): Record<string, unknown> {
 }
 
 function randomUrlSafeString(bytes = 32): string {
-  return encodeBase64Url(randomBytes(bytes))
+  return randomBytes(bytes).toString('base64url')
 }
 
 function buildPkceChallenge(verifier: string): string {
@@ -108,10 +104,10 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Re
 
 function requireStringClaim(payload: Record<string, unknown>, name: string): string {
   const value = payload[name]
-  if (typeof value !== 'string' || value === '') {
+  if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`JWT ${name} claim is required`)
   }
-  return value
+  return value.trim()
 }
 
 function assertTemporalClaims(payload: Record<string, unknown>, nowSeconds: number): void {
@@ -134,6 +130,13 @@ function assertTemporalClaims(payload: Record<string, unknown>, nowSeconds: numb
   }
   if (iat - JWT_CLOCK_SKEW_SECONDS > nowSeconds) {
     throw new Error('JWT iat is in the future')
+  }
+}
+
+export class PlatformIdentityRevokedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PlatformIdentityRevokedError'
   }
 }
 
@@ -165,6 +168,7 @@ export function verifyPlatformJwt(params: {
     (candidate) =>
       candidate.kid === kid &&
       candidate.kty === 'RSA' &&
+      (candidate.use === undefined || candidate.use === 'sig') &&
       (candidate.alg === undefined || candidate.alg === SUPPORTED_JWT_ALG)
   )
   if (jwk === undefined) {
@@ -185,8 +189,14 @@ export function verifyPlatformJwt(params: {
   if (!claimIncludes(payload.aud, params.audience)) {
     throw new Error('JWT audience does not match platform audience')
   }
-  if (Array.isArray(payload.aud) && payload.aud.length > 1 && payload.azp !== params.audience) {
+  if (payload.azp !== undefined && payload.azp !== params.audience) {
     throw new Error('JWT azp does not match platform audience')
+  }
+  if (Array.isArray(payload.aud) && payload.aud.length > 1 && payload.azp === undefined) {
+    throw new Error('JWT azp is required when multiple audiences are present')
+  }
+  if (typeof payload.sub === 'string' && payload.sub.length > 255) {
+    throw new Error('JWT sub claim exceeds 255 characters')
   }
   assertTemporalClaims(payload, params.nowSeconds ?? Math.floor(Date.now() / 1000))
 
@@ -247,31 +257,45 @@ function assertObjectResponse(value: unknown, label: string): Record<string, unk
   return value as Record<string, unknown>
 }
 
-function requestOrigin(request: FastifyRequest): string {
-  const forwardedProto = request.headers['x-forwarded-proto']
-  const proto =
-    typeof forwardedProto === 'string' && forwardedProto !== '' ? forwardedProto : request.protocol
-  const forwardedHost = request.headers['x-forwarded-host']
-  const host =
-    typeof forwardedHost === 'string' && forwardedHost !== '' ? forwardedHost : request.headers.host
-  if (typeof host !== 'string' || host.trim() === '') {
+const SAFE_HOST_REGEX = /^[a-zA-Z0-9.-]+(?::[0-9]{1,5})?$/
+
+function parseFirstHeaderValue(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return parseFirstHeaderValue(value[0])
+  if (typeof value !== 'string') return undefined
+  const first = value.split(',', 1)[0].trim()
+  return first !== '' ? first : undefined
+}
+
+function requestOrigin(request: FastifyRequest, configOrigin?: string): string {
+  if (configOrigin !== undefined && configOrigin !== '') {
+    return configOrigin
+  }
+  const forwardedProto = parseFirstHeaderValue(request.headers['x-forwarded-proto'])
+  const rawProto = forwardedProto ?? request.protocol
+  const proto = rawProto === 'https' || rawProto === 'http' ? rawProto : 'https'
+
+  const forwardedHost = parseFirstHeaderValue(request.headers['x-forwarded-host'])
+  const rawHost = forwardedHost ?? parseFirstHeaderValue(request.headers.host)
+  if (rawHost === undefined || !SAFE_HOST_REGEX.test(rawHost)) {
     throw new Error('Host header is required for OIDC redirect URI construction')
   }
-  return `${proto}://${host}`
+  return `${proto}://${rawHost}`
 }
 
 function callbackRedirectUri(
   request: FastifyRequest,
   appPathPrefix: string,
-  callbackPath: string
+  callbackPath: string,
+  redirectUriBase?: string
 ): string {
-  return `${requestOrigin(request)}${appPathPrefix}${callbackPath}`
+  return `${requestOrigin(request, redirectUriBase)}${appPathPrefix}${callbackPath}`
 }
 
 export class PlatformIdentityService {
   private discoveryCache: Promise<OidcDiscovery> | null = null
   private jwksCache: { expiresAt: number; keys: Jwk[] } | null = null
   private entitlementCache = new Map<string, { expiresAt: number; role: UserRole }>()
+  private entitlementInFlight = new Map<string, Promise<{ role: UserRole }>>()
 
   constructor(readonly config: PlatformIdentityConfig) {}
 
@@ -287,7 +311,9 @@ export class PlatformIdentityService {
     const entitlement = await this.requireActiveEntitlement(subject)
     const liveUser = await authService.getPlatformUser(subject)
     if (liveUser === undefined || liveUser.is_active !== 1) {
-      throw new Error('platform user is not provisioned or active in VarLens')
+      throw new PlatformIdentityRevokedError(
+        'platform user is not provisioned or active in VarLens'
+      )
     }
     return {
       id: liveUser.id,
@@ -312,7 +338,12 @@ export class PlatformIdentityService {
     url.searchParams.set('client_id', this.config.clientId)
     url.searchParams.set(
       'redirect_uri',
-      callbackRedirectUri(params.request, params.appPathPrefix, this.config.callbackPath)
+      callbackRedirectUri(
+        params.request,
+        params.appPathPrefix,
+        this.config.callbackPath,
+        this.config.redirectUriBase
+      )
     )
     url.searchParams.set('scope', 'openid profile email')
     url.searchParams.set('state', state)
@@ -362,7 +393,11 @@ export class PlatformIdentityService {
         discovery
       })
     }
-    return { subject: requireStringClaim(idToken.payload, 'sub') }
+    const subject = requireStringClaim(idToken.payload, 'sub')
+    if (subject.length > 255) {
+      throw new Error('JWT sub claim exceeds maximum length of 255')
+    }
+    return { subject }
   }
 
   private async requireActiveEntitlement(subject: string): Promise<{ role: UserRole }> {
@@ -370,6 +405,18 @@ export class PlatformIdentityService {
     if (cached !== undefined && cached.expiresAt > Date.now()) {
       return { role: cached.role }
     }
+    const inFlight = this.entitlementInFlight.get(subject)
+    if (inFlight !== undefined) {
+      return await inFlight
+    }
+    const promise = this.fetchAndCacheEntitlement(subject).finally(() => {
+      this.entitlementInFlight.delete(subject)
+    })
+    this.entitlementInFlight.set(subject, promise)
+    return await promise
+  }
+
+  private async fetchAndCacheEntitlement(subject: string): Promise<{ role: UserRole }> {
     const url = `${this.config.entitlementsUrl}/${encodeURIComponent(subject)}`
     const headers: Record<string, string> = {
       accept: 'application/json'
@@ -384,6 +431,11 @@ export class PlatformIdentityService {
       throw new Error('platform entitlement check failed', { cause: error })
     }
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        throw new PlatformIdentityRevokedError(
+          `platform entitlement check returned HTTP ${response.status}`
+        )
+      }
       throw new Error(`platform entitlement check returned HTTP ${response.status}`)
     }
     const body = assertObjectResponse((await response.json()) as unknown, 'entitlement')
@@ -392,15 +444,20 @@ export class PlatformIdentityService {
       typeof wrapped === 'object' && wrapped !== null && !Array.isArray(wrapped) ? wrapped : body
     ) as EntitlementResponse
     if (entitlement.active !== true && entitlement.allowed !== true) {
-      throw new Error(`platform entitlement denied: ${entitlement.reason ?? 'not-allowed'}`)
+      throw new PlatformIdentityRevokedError(
+        `platform entitlement denied: ${entitlement.reason ?? 'not-allowed'}`
+      )
     }
-    if (entitlement.status !== 'active') {
-      throw new Error('platform entitlement is not active')
+    if (entitlement.status !== undefined && entitlement.status !== 'active') {
+      throw new PlatformIdentityRevokedError(
+        `platform entitlement is not active: ${entitlement.status}`
+      )
     }
     if (typeof entitlement.role !== 'string' || !isUserRole(entitlement.role)) {
-      throw new Error('platform entitlement role is not valid for VarLens')
+      throw new PlatformIdentityRevokedError('platform entitlement role is not valid for VarLens')
     }
     const result = { role: entitlement.role }
+    this.entitlementCache.delete(subject)
     if (this.entitlementCache.size >= ENTITLEMENT_CACHE_MAX_ENTRIES) {
       const firstKey = this.entitlementCache.keys().next().value
       if (typeof firstKey === 'string') {
@@ -428,7 +485,12 @@ export class PlatformIdentityService {
     body.set('code_verifier', params.codeVerifier)
     body.set(
       'redirect_uri',
-      callbackRedirectUri(params.request, params.appPathPrefix, this.config.callbackPath)
+      callbackRedirectUri(
+        params.request,
+        params.appPathPrefix,
+        this.config.callbackPath,
+        this.config.redirectUriBase
+      )
     )
 
     const response = await fetchWithTimeout(params.discovery.token_endpoint, {

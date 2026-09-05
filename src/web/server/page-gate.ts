@@ -30,6 +30,8 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
+import { hasControlOrWhitespace } from './login-route'
+
 const ALWAYS_PUBLIC_PATHS = new Set<string>(['/healthz', '/login', '/login/'])
 
 /**
@@ -52,16 +54,22 @@ const PUBLIC_ROOT_ASSETS = new Set<string>([
  * empty string when the request path isn't a safe relative path; the
  * login route then falls back to the configured app prefix.
  */
-function buildNextParam(rawUrl: string): string {
+export function buildNextParam(rawUrl: string): string {
   // Drop anything that already smells like an open-redirect attempt.
   // The browser never sends scheme+authority on a same-origin GET, so
-  // a `\` or `//` anywhere in the URL is suspicious.
+  // control characters, whitespace, `\`, or `//` anywhere in the URL is suspicious.
   if (rawUrl === '' || rawUrl[0] !== '/') return ''
-  if (rawUrl.includes('\\')) return ''
-  if (rawUrl.startsWith('//')) return ''
-  // Cap absurdly long URLs — the login route re-validates the prefix
-  // anyway, this is just to keep the redirect Location header sane.
-  if (rawUrl.length > 2048) return ''
+  if (rawUrl.length > 512) return ''
+  if (hasControlOrWhitespace(rawUrl)) return ''
+  if (rawUrl.includes('\\') || rawUrl.startsWith('//')) return ''
+  try {
+    const parsed = new URL(rawUrl, 'http://localhost')
+    if (parsed.origin !== 'http://localhost' || parsed.username !== '' || parsed.password !== '') {
+      return ''
+    }
+  } catch {
+    return ''
+  }
   return rawUrl
 }
 

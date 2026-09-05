@@ -11,6 +11,7 @@ export interface PlatformIdentityConfig {
   entitlementsUrl: string
   entitlementsToken?: string
   verifyAccessToken: boolean
+  redirectUriBase?: string
 }
 
 function hasValue(value: string | undefined): value is string {
@@ -57,7 +58,13 @@ function requirePath(name: string, raw: string): string {
   if (!raw.startsWith('/')) {
     throw new Error(`${name} must start with /`)
   }
-  if (raw.includes('\\') || raw.includes('..') || raw.startsWith('//')) {
+  if (
+    raw.includes('\\') ||
+    raw.includes('..') ||
+    raw.startsWith('//') ||
+    raw.includes('?') ||
+    raw.includes('#')
+  ) {
     throw new Error(`${name} must be a safe absolute path`)
   }
   return raw.length > 1 && raw.endsWith('/') ? raw.slice(0, -1) : raw
@@ -114,6 +121,18 @@ export function readPlatformIdentityConfig(
   if (entitlementsToken !== undefined && entitlementsToken !== '') {
     assertStrongPlatformToken('VARLENS_PLATFORM_ENTITLEMENTS_TOKEN', entitlementsToken)
   }
+  const rawRedirectBase = env.VARLENS_PLATFORM_REDIRECT_URI_BASE?.trim()
+  const rawWebUrl = env.VARLENS_WEB_URL?.trim()
+  const rawRedirectUriBase =
+    rawRedirectBase !== undefined && rawRedirectBase !== ''
+      ? rawRedirectBase
+      : rawWebUrl !== undefined && rawWebUrl !== ''
+        ? rawWebUrl
+        : undefined
+  const redirectUriBase =
+    rawRedirectUriBase !== undefined
+      ? requireHttpsOrLocalHttpUrl('VARLENS_PLATFORM_REDIRECT_URI_BASE', rawRedirectUriBase)
+      : undefined
 
   return {
     mode: 'platform',
@@ -125,6 +144,7 @@ export function readPlatformIdentityConfig(
     requiredAmr,
     entitlementsUrl: entitlementsUrl.replace(/\/$/, ''),
     ...(entitlementsToken !== undefined && entitlementsToken !== '' ? { entitlementsToken } : {}),
+    ...(redirectUriBase !== undefined ? { redirectUriBase } : {}),
     verifyAccessToken: env.VARLENS_PLATFORM_VERIFY_ACCESS_TOKEN === 'true'
   }
 }

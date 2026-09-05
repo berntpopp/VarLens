@@ -28,6 +28,15 @@ export class PostgresPlatformUserStore {
     displayName: string
     role: UserRole
   }): Promise<{ id: number; subject: string; role: UserRole }> {
+    const subject = input.subject.trim()
+    const displayName = input.displayName.trim()
+    if (subject === '' || subject.length > 255) {
+      throw new Error('subject must be non-empty and <= 255 characters')
+    }
+    if (displayName === '' || displayName.length > 255) {
+      throw new Error('displayName must be non-empty and <= 255 characters')
+    }
+
     let result
     try {
       result = await this.pool.query<{ id: string; username: string; role: UserRole }>(
@@ -46,8 +55,8 @@ export class PostgresPlatformUserStore {
            AND platform_target.password_hash = $5
          RETURNING id, username, role`,
         [
-          input.subject,
-          input.displayName,
+          subject,
+          displayName,
           DISABLED_LOCAL_PASSWORD_HASH,
           input.role,
           DISABLED_LOCAL_PASSWORD_HASH

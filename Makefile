@@ -208,7 +208,9 @@ web-gate-integration: ## Run Layer 2 web-only integration tests (skipped until o
 
 web-gate-postgres: build-web ## Run fail-loud Postgres-backed web integration tests (requires VARLENS_PG_URL)
 	@if [ -z "$$VARLENS_PG_URL" ]; then echo "VARLENS_PG_URL is required for web-gate-postgres. This is intentionally opt-in and never part of default desktop CI."; exit 2; fi
+	VARLENS_RECOVERY_KEY_DIR="$${VARLENS_RECOVERY_KEY_DIR:-$(WEB_DEV_RECOVERY_KEY_DIR)}" \
 	npx vitest run --project web-gate tests/web-gate/integration
+	VARLENS_RECOVERY_KEY_DIR="$${VARLENS_RECOVERY_KEY_DIR:-$(WEB_DEV_RECOVERY_KEY_DIR)}" \
 	VARLENS_RUN_POSTGRES_E2E=1 npx vitest run --project main \
 		tests/main/storage/postgres-cases-query-repository.e2e.test.ts \
 		tests/main/storage/postgres-migrations-idempotent.test.ts \

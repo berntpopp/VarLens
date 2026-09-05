@@ -102,6 +102,7 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
     'auth:isAccountsEnabled': {
       public: true,
       async handle(_args, _request, _reply, { authService }) {
+        if (isPlatformIdentityEnabled()) return true
         return await authService.isAccountsEnabled()
       }
     },

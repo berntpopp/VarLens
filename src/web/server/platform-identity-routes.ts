@@ -9,14 +9,42 @@ import {
 } from './platform-identity'
 
 const OIDC_STATE_TTL_MS = 10 * 60 * 1000
-const MAX_PENDING_OIDC_STATES = 5
+const MAX_PENDING_OIDC_STATES = 2
+
+function isSafeOidcState(state: string): boolean {
+  return (
+    typeof state === 'string' &&
+    state.length >= 1 &&
+    state.length <= 128 &&
+    state !== '__proto__' &&
+    state !== 'constructor' &&
+    state !== 'prototype' &&
+    /^[A-Za-z0-9_.-]+$/.test(state)
+  )
+}
 
 interface PendingOidcState {
   nonce: string
   codeVerifier: string
   next: string
   createdAt: number
+  seq?: number
   mfaRetry?: boolean
+}
+
+let stateSequence = 0
+
+function isPendingOidcState(value: unknown): value is PendingOidcState {
+  if (typeof value !== 'object' || value === null) return false
+  const state = value as Record<string, unknown>
+  return (
+    typeof state.nonce === 'string' &&
+    typeof state.codeVerifier === 'string' &&
+    typeof state.next === 'string' &&
+    typeof state.createdAt === 'number' &&
+    Number.isFinite(state.createdAt) &&
+    (state.seq === undefined || typeof state.seq === 'number')
+  )
 }
 
 function redirectWithNoStore(reply: FastifyReply, location: string): FastifyReply {
@@ -101,10 +129,18 @@ function activePendingOidcStates(
   states: Record<string, PendingOidcState> | undefined,
   now: number
 ): Record<string, PendingOidcState> {
-  if (states === undefined) return {}
-  return Object.fromEntries(
-    Object.entries(states).filter(([, pending]) => now - pending.createdAt <= OIDC_STATE_TTL_MS)
-  )
+  if (states === undefined) return Object.create(null)
+  const result: Record<string, PendingOidcState> = Object.create(null)
+  for (const [key, pending] of Object.entries(states)) {
+    if (
+      isSafeOidcState(key) &&
+      isPendingOidcState(pending) &&
+      now - pending.createdAt <= OIDC_STATE_TTL_MS
+    ) {
+      result[key] = pending
+    }
+  }
+  return result
 }
 
 function rememberPendingOidcState(params: {
@@ -112,21 +148,39 @@ function rememberPendingOidcState(params: {
   state: string
   pending: PendingOidcState
 }): void {
+  if (!isSafeOidcState(params.state)) return
+  params.pending.seq = ++stateSequence
   const pendingStates = activePendingOidcStates(params.request.session.platformOidc, Date.now())
   pendingStates[params.state] = params.pending
-  params.request.session.platformOidc = Object.fromEntries(
-    Object.entries(pendingStates)
-      .sort(([, left], [, right]) => right.createdAt - left.createdAt)
-      .slice(0, MAX_PENDING_OIDC_STATES)
-  )
+  const sortedEntries = Object.entries(pendingStates)
+    .sort(
+      ([, left], [, right]) =>
+        right.createdAt - left.createdAt || (right.seq ?? 0) - (left.seq ?? 0)
+    )
+    .slice(0, MAX_PENDING_OIDC_STATES)
+  const bounded: Record<string, PendingOidcState> = Object.create(null)
+  for (const [key, val] of sortedEntries) {
+    bounded[key] = val
+  }
+  params.request.session.platformOidc = bounded
 }
 
 function consumePendingOidcState(
   request: FastifyRequest,
   state: string
 ): PendingOidcState | undefined {
-  const pendingStates = { ...(request.session.platformOidc ?? {}) }
-  const pending = pendingStates[state]
+  if (!isSafeOidcState(state)) return undefined
+  const rawStates = request.session.platformOidc
+  if (rawStates === undefined || !Object.prototype.hasOwnProperty.call(rawStates, state)) {
+    return undefined
+  }
+  const pending = rawStates[state]
+  if (!isPendingOidcState(pending)) return undefined
+
+  const pendingStates = Object.assign(Object.create(null), rawStates) as Record<
+    string,
+    PendingOidcState
+  >
   delete pendingStates[state]
   const activeStates = activePendingOidcStates(pendingStates, Date.now())
   request.session.platformOidc = Object.keys(activeStates).length > 0 ? activeStates : undefined
@@ -213,7 +267,8 @@ export function registerPlatformIdentityRoutes(
       if (pending === undefined) {
         await auditBestEffort({ action: 'auth_login_failure', reason: 'invalid-state' })
         if (request.session.user !== undefined) {
-          return redirectWithNoStore(reply, options.appPathPrefix || '/').send()
+          const defaultTarget = options.appPathPrefix === '' ? '/' : `${options.appPathPrefix}/`
+          return redirectWithNoStore(reply, defaultTarget).send()
         }
         request.session.delete()
         return redirectWithNoStore(
