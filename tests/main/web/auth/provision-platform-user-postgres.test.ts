@@ -109,4 +109,55 @@ describe.skipIf(!RUN)('provision-platform-user built CLI — real PostgreSQL', (
       }
     ])
   }, 60_000)
+
+  test('deactivates an existing active local admin when provisioning a platform admin', async () => {
+    const adminSchema = `platform_admin_${Date.now()}_${randomBytes(4).toString('hex')}`
+    const client = new Client({ connectionString: PG_URL })
+    await client.connect()
+    await client.query(`CREATE SCHEMA "${adminSchema}"`)
+    try {
+      await new PostgresMigrationRunner(pool, adminSchema, POSTGRES_MIGRATIONS).migrate()
+      await client.query(
+        `INSERT INTO "${adminSchema}".users (username, password_hash, role, auth_source, is_active)
+         VALUES ('local-bootstrap-admin', 'hash', 'admin', 'local', TRUE)`
+      )
+
+      const adminCli = await runCli(adminSchema, 'platform-admin-subject', 'admin')
+      expect(adminCli.code).toBe(0)
+      expect(JSON.parse(adminCli.stdout)).toEqual({
+        ok: true,
+        subject: 'platform-admin-subject',
+        role: 'admin'
+      })
+
+      const rows = await client.query<{
+        username: string
+        role: string
+        auth_source: string
+        is_active: boolean
+      }>(
+        `SELECT username, role, auth_source, is_active
+         FROM "${adminSchema}".users
+         WHERE username IN ('local-bootstrap-admin', 'platform-admin-subject')
+         ORDER BY username ASC`
+      )
+      expect(rows.rows).toEqual([
+        {
+          username: 'local-bootstrap-admin',
+          role: 'admin',
+          auth_source: 'local',
+          is_active: false
+        },
+        {
+          username: 'platform-admin-subject',
+          role: 'admin',
+          auth_source: 'platform',
+          is_active: true
+        }
+      ])
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS "${adminSchema}" CASCADE`)
+      await client.end()
+    }
+  }, 60_000)
 })

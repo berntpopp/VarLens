@@ -37,9 +37,22 @@ export class PostgresPlatformUserStore {
       throw new Error('displayName must be non-empty and <= 255 characters')
     }
 
+    const client = typeof this.pool.connect === 'function' ? await this.pool.connect() : this.pool
+    let inTransaction = false
     let result
     try {
-      result = await this.pool.query<{ id: string; username: string; role: UserRole }>(
+      if (typeof client.query === 'function') {
+        await client.query('BEGIN')
+        inTransaction = true
+      }
+      if (input.role === 'admin') {
+        await client.query(
+          `UPDATE ${this.schemaQuoted}."users"
+           SET is_active = FALSE, updated_at = now()
+           WHERE role = 'admin' AND is_active = TRUE AND auth_source != 'platform'`
+        )
+      }
+      result = await client.query<{ id: string; username: string; role: UserRole }>(
         `INSERT INTO ${this.schemaQuoted}."users" AS platform_target
           (username, display_name, password_hash, role, must_change_password, is_active,
            password_changed_at, auth_source)
@@ -62,7 +75,17 @@ export class PostgresPlatformUserStore {
           DISABLED_LOCAL_PASSWORD_HASH
         ]
       )
+      if ((result.rowCount ?? 0) === 0) {
+        throw new Error(`Platform identity cannot overwrite local user: ${input.subject}`)
+      }
+      if (inTransaction) {
+        await client.query('COMMIT')
+        inTransaction = false
+      }
     } catch (error) {
+      if (inTransaction) {
+        await client.query('ROLLBACK').catch(() => {})
+      }
       const postgresError = error as PostgresError
       if (
         postgresError.code === '23505' &&
@@ -73,9 +96,10 @@ export class PostgresPlatformUserStore {
         })
       }
       throw error
-    }
-    if ((result.rowCount ?? 0) === 0) {
-      throw new Error(`Platform identity cannot overwrite local user: ${input.subject}`)
+    } finally {
+      if (typeof (client as { release?: () => void }).release === 'function') {
+        ;(client as { release: () => void }).release()
+      }
     }
     const row = result.rows[0]
     return { id: Number(row.id), subject: row.username, role: row.role }

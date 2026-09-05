@@ -40,10 +40,15 @@ export async function registerOpenApi(app: FastifyInstance): Promise<void> {
       security: [{ sessionCookie: [] }]
     },
     transform: jsonSchemaTransform,
-    transformObject: ({ openapiObject }) => appendDocumentedDispatcherPaths(openapiObject)
+    transformObject: (opts: Record<string, unknown>) =>
+      appendDocumentedDispatcherPaths(
+        (opts.openapiObject ?? opts.swaggerObject ?? opts) as Parameters<
+          typeof appendDocumentedDispatcherPaths
+        >[0]
+      )
   })
 
-  await app.register(swaggerUi, {
+  await app.register(swaggerUi as unknown as Parameters<typeof app.register>[0], {
     routePrefix: '/api/docs',
     staticCSP: true,
     uiConfig: {
@@ -51,7 +56,7 @@ export async function registerOpenApi(app: FastifyInstance): Promise<void> {
       'urls.primaryName': OPENAPI_DOCUMENT_NAME,
       deepLinking: true,
       docExpansion: 'list'
-    },
+    } as unknown as Record<string, unknown>,
     theme: {
       title: 'VarLens Web API Docs'
     }
@@ -67,6 +72,6 @@ export async function registerOpenApi(app: FastifyInstance): Promise<void> {
         }
       }
     },
-    async () => app.swagger()
+    async () => app.swagger() as unknown as Record<string, unknown>
   )
 }

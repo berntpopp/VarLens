@@ -110,10 +110,14 @@ export function registerPageGate(app: FastifyInstance, options: PageGateOptions)
     // prefix-stripping proxy forwards `/login` to Fastify while the
     // browser still sees e.g. `/varlens/login`.
     const next = buildNextParam(fullUrl)
+    const nextPath =
+      next === ''
+        ? ''
+        : appPathPrefix !== '' && (next === appPathPrefix || next.startsWith(appPathPrefix + '/'))
+          ? next
+          : appPathPrefix + next
     const location =
-      appPathPrefix +
-      loginPath +
-      (next !== '' ? '?next=' + encodeURIComponent(appPathPrefix + next) : '')
+      appPathPrefix + loginPath + (nextPath !== '' ? '?next=' + encodeURIComponent(nextPath) : '')
 
     const user = request.session?.user
     if (user !== undefined) {

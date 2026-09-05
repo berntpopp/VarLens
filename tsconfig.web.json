@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./.cache/tsbuildinfo/web.tsbuildinfo",
+    "assumeChangesOnlyAffectDirectDependencies": true
+  },
+  "include": ["src/web/**/*", "src/shared/**/*", "src/main/storage/**/*"],
+  "exclude": ["src/web/bootstrap.ts", "src/web/client/**/*"]
+}

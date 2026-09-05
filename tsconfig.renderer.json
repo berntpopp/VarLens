@@ -11,6 +11,10 @@
     // CI always does a fresh full run on main and PR diffs are small.
     "assumeChangesOnlyAffectDirectDependencies": true
   },
-  "include": ["src/renderer/**/*"],
+  "include": [
+    "src/renderer/**/*",
+    "src/web/bootstrap.ts",
+    "src/web/client/**/*"
+  ],
   "references": []
 }

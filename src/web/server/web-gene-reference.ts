@@ -83,7 +83,7 @@ function createWebGeneReferenceDb(dbPath: string): WebGeneReferenceDbInstance {
         id: row.id,
         display_name: row.display_name,
         aliases: JSON.parse(row.aliases) as string[],
-        source_version: row.source_version
+        source_version: row.source_version ?? ''
       }))
     },
     close() {

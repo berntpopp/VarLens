@@ -9,11 +9,11 @@ interface QueryResponse {
 }
 
 class FakePool {
-  queries: Array<{ text: string; values: unknown[] }> = []
+  queries: Array<{ text: string; values?: unknown[] }> = []
 
   constructor(private readonly response: QueryResponse | Error) {}
 
-  async query(text: string, values: unknown[]): Promise<QueryResponse> {
+  async query(text: string, values?: unknown[]): Promise<QueryResponse> {
     this.queries.push({ text, values })
     if (this.response instanceof Error) throw this.response
     return this.response
@@ -31,16 +31,21 @@ describe('PostgresPlatformUserStore', () => {
     await expect(
       users.upsert({ subject: 'oidc-subject-1', displayName: 'Alice', role: ROLE_USER })
     ).resolves.toEqual({ id: 9, subject: 'oidc-subject-1', role: ROLE_USER })
-    expect(pool.queries[0].values).toEqual([
+
+    const insertQuery = pool.queries.find((q) => q.text.startsWith('INSERT INTO'))
+    expect(insertQuery).toBeDefined()
+    expect(insertQuery?.values).toEqual([
       'oidc-subject-1',
       'Alice',
       'platform-identity-disabled-local-password',
       ROLE_USER,
       'platform-identity-disabled-local-password'
     ])
-    expect(pool.queries[0].text).toContain('"instance_alice"."users"')
-    expect(pool.queries[0].text).toContain("auth_source = 'platform'")
-    expect(pool.queries[0].text).not.toMatch(/private_db|workspace|secret/i)
+    expect(insertQuery?.text).toContain('"instance_alice"."users"')
+    expect(insertQuery?.text).toContain("auth_source = 'platform'")
+    expect(insertQuery?.text).not.toMatch(/private_db|workspace|secret/i)
+    expect(pool.queries[0].text).toBe('BEGIN')
+    expect(pool.queries[pool.queries.length - 1].text).toBe('COMMIT')
   })
 
   it('refuses to overwrite a local-password user', async () => {
@@ -64,7 +69,26 @@ describe('PostgresPlatformUserStore', () => {
     await expect(
       users.upsert({ subject: 'oidc-subject-1', displayName: 'Alice', role: ROLE_ADMIN })
     ).resolves.toMatchObject({ role: ROLE_ADMIN })
-    expect(pool.queries[0].text).toMatch(/ON CONFLICT \(username\)/)
+
+    const insertQuery = pool.queries.find((q) => q.text.startsWith('INSERT INTO'))
+    expect(insertQuery?.text).toMatch(/ON CONFLICT \(username\)/)
+  })
+
+  it('deactivates an existing active local admin when provisioning a platform admin', async () => {
+    const pool = new FakePool({
+      rows: [{ id: '1', username: 'admin-subject', role: ROLE_ADMIN }],
+      rowCount: 1
+    })
+    const users = new PostgresPlatformUserStore(pool as never, 'public')
+
+    await users.upsert({ subject: 'admin-subject', displayName: 'Admin User', role: ROLE_ADMIN })
+
+    const updateQuery = pool.queries.find((q) => q.text.includes('UPDATE'))
+    expect(updateQuery).toBeDefined()
+    expect(updateQuery?.text).toContain('SET is_active = FALSE')
+    expect(updateQuery?.text).toContain(
+      "WHERE role = 'admin' AND is_active = TRUE AND auth_source != 'platform'"
+    )
   })
 
   it('rejects a second platform subject at the database singleton boundary', async () => {

@@ -264,6 +264,33 @@ describe('JWT key use and authorized party (azp) verification', () => {
     ).toThrow(/azp/)
   })
 
+  test('validates azp against authorizedParty when audience differs from client ID', () => {
+    const token = signJwt({
+      ...basePayload('varlens-platform:app:varlens:dev'),
+      azp: 'varlens-dev'
+    })
+    const verified = verifyPlatformJwt({
+      token,
+      issuer: ISSUER,
+      audience: 'varlens-platform:app:varlens:dev',
+      authorizedParty: 'varlens-dev',
+      jwks: [publicJwkSig],
+      nowSeconds: 1_950_000_000
+    })
+    expect(verified.payload.azp).toBe('varlens-dev')
+
+    expect(() =>
+      verifyPlatformJwt({
+        token,
+        issuer: ISSUER,
+        audience: 'varlens-platform:app:varlens:dev',
+        authorizedParty: 'attacker-client',
+        jwks: [publicJwkSig],
+        nowSeconds: 1_950_000_000
+      })
+    ).toThrow(/azp does not match expected client/)
+  })
+
   test('rejects subject claim longer than 255 chars', () => {
     const token = signJwt({ ...basePayload(CLIENT_ID), sub: 'x'.repeat(256) })
     expect(() =>
@@ -370,6 +397,44 @@ describe('entitlement deduplication and status handling', () => {
     const user = await service.resolveSessionUser(authService, 'sub-1')
     expect(user?.role).toBe('admin')
   })
+
+  test('aborts and cleans up when response body stalls', async () => {
+    process.env.VARLENS_OUTBOUND_FETCH_TIMEOUT_MS = '50'
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined
+    const stalledStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller
+        controller.enqueue(new TextEncoder().encode('{"entitlement":'))
+      }
+    })
+
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      init?.signal?.addEventListener('abort', () => {
+        streamController?.error(new DOMException('The operation was aborted', 'AbortError'))
+      })
+      return new Response(stalledStream, { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const service = new PlatformIdentityService({
+      mode: 'platform',
+      issuerUrl: ISSUER,
+      clientId: CLIENT_ID,
+      audience: AUDIENCE,
+      callbackPath: '/auth/platform/callback',
+      requiredAcr: REQUIRED_ACR,
+      requiredAmr: REQUIRED_AMR,
+      entitlementsUrl: 'http://ops.internal/api/identity/entitlements/varlens/dev',
+      verifyAccessToken: false
+    })
+
+    const authService = {
+      getPlatformUser: vi.fn()
+    } as never
+
+    await expect(service.resolveSessionUser(authService, 'sub-stalled')).rejects.toThrow()
+    delete process.env.VARLENS_OUTBOUND_FETCH_TIMEOUT_MS
+  })
 })
 
 describe('session hook: revocation (401) vs transient failure (503)', () => {
@@ -458,6 +523,79 @@ describe('session hook: revocation (401) vs transient failure (503)', () => {
     expect(String(setCookie || '')).not.toContain('Max-Age=0')
     await app.close()
   })
+
+  test('clears user and authMode from session when starting platform login', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.VARLENS_SESSION_SECRET_HEX = '11'.repeat(32)
+
+    const app = fastify()
+    const identity = {
+      config: { callbackPath: '/auth/platform/callback' },
+      createAuthorizationUrl: vi.fn(async () => ({
+        authorizationUrl: 'https://idp.test/auth',
+        state: 'safe-state-1',
+        nonce: 'safe-nonce-1',
+        codeVerifier: 'safe-verifier-1'
+      })),
+      buildStartLocation: vi.fn(() => '/auth/platform/start')
+    } as unknown as PlatformIdentityService
+
+    await registerWebRateLimit(app)
+    await registerSessions(app, {
+      authService: { getUser: vi.fn() } as never,
+      platformIdentity: identity
+    })
+    registerPlatformIdentityRoutes(app, {
+      identity,
+      authService: {} as never,
+      appPathPrefix: ''
+    })
+
+    app.get('/seed', async (request) => {
+      request.session.user = {
+        id: 1,
+        username: 'previous-user',
+        role: 'user',
+        passwordChangedAt: null
+      }
+      request.session.authMode = 'platform'
+      return { ok: true }
+    })
+
+    app.get('/session-check', async (request) => {
+      return {
+        user: request.session.user,
+        authMode: request.session.authMode,
+        hasOidc: request.session.platformOidc !== undefined
+      }
+    })
+
+    const seedRes = await app.inject({ method: 'GET', url: '/seed' })
+    const initialCookie = extractCookie(seedRes)
+
+    // Hit /auth/platform/start with the authenticated cookie
+    const startRes = await app.inject({
+      method: 'GET',
+      url: '/auth/platform/start',
+      headers: { cookie: initialCookie }
+    })
+    expect(startRes.statusCode).toBe(302)
+    const newCookie = extractCookie(startRes)
+
+    // Verify the session cookie has user/authMode cleared and platformOidc set
+    const checkRes = await app.inject({
+      method: 'GET',
+      url: '/session-check',
+      headers: { cookie: newCookie }
+    })
+    expect(checkRes.statusCode).toBe(200)
+    const data = checkRes.json()
+    expect(data.user).toBeUndefined()
+    expect(data.authMode).toBeUndefined()
+    expect(data.hasOidc).toBe(true)
+
+    await app.close()
+  })
 })
 
 describe('PostgresPlatformUserStore validation', () => {
@@ -495,5 +633,84 @@ describe('PostgresPlatformUserStore validation', () => {
         role: 'user'
       })
     ).rejects.toThrow(/<= 255/)
+  })
+})
+
+describe('platform authentication gate and rate limiting edge cases', () => {
+  test('allows custom callbackPath starting with /api/ to bypass preHandler unauthenticated gate', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.VARLENS_SESSION_SECRET_HEX = '11'.repeat(32)
+    const app = fastify()
+    const identity = {
+      config: { callbackPath: '/api/auth/platform/callback' },
+      buildStartLocation: () => '/auth/platform/start',
+      completeCallback: vi.fn(),
+      resolveSessionUser: vi.fn()
+    } as unknown as PlatformIdentityService
+
+    await registerWebRateLimit(app)
+    await registerSessions(app, {
+      authService: { getUser: vi.fn() } as never,
+      platformIdentity: identity
+    })
+    registerPlatformIdentityRoutes(app, {
+      identity,
+      authService: {} as never,
+      appPathPrefix: ''
+    })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/auth/platform/callback'
+    })
+    expect(res.statusCode).toBe(302)
+    expect(res.headers.location).toBe('/auth/platform/start')
+    await app.close()
+  })
+
+  test('rate limits platform start and callback endpoints', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.VARLENS_SESSION_SECRET_HEX = '11'.repeat(32)
+    const originalMax = process.env.VARLENS_PLATFORM_AUTH_RATE_LIMIT_MAX
+    process.env.VARLENS_PLATFORM_AUTH_RATE_LIMIT_MAX = '2'
+    const app = fastify()
+    const identity = {
+      config: { callbackPath: '/auth/platform/callback' },
+      buildStartLocation: () => '/auth/platform/start',
+      completeCallback: vi.fn(),
+      resolveSessionUser: vi.fn(),
+      createAuthorizationUrl: vi.fn().mockResolvedValue({
+        authorizationUrl: 'https://identity.example.test/auth',
+        state: 'st-1',
+        nonce: 'non-1',
+        codeVerifier: 'cv-1'
+      })
+    } as unknown as PlatformIdentityService
+
+    try {
+      await registerWebRateLimit(app)
+      await registerSessions(app, {
+        authService: { getUser: vi.fn() } as never,
+        platformIdentity: identity
+      })
+      registerPlatformIdentityRoutes(app, {
+        identity,
+        authService: {} as never,
+        appPathPrefix: ''
+      })
+
+      const res1 = await app.inject({ method: 'GET', url: '/auth/platform/start' })
+      expect(res1.statusCode).toBe(302)
+
+      const res2 = await app.inject({ method: 'GET', url: '/auth/platform/start' })
+      expect(res2.statusCode).toBe(302)
+
+      const res3 = await app.inject({ method: 'GET', url: '/auth/platform/start' })
+      expect(res3.statusCode).toBe(429)
+    } finally {
+      await app.close()
+      if (originalMax === undefined) delete process.env.VARLENS_PLATFORM_AUTH_RATE_LIMIT_MAX
+      else process.env.VARLENS_PLATFORM_AUTH_RATE_LIMIT_MAX = originalMax
+    }
   })
 })

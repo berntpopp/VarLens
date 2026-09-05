@@ -210,8 +210,7 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
         }
         if (
           resolvedFilters !== undefined &&
-          resolvedFilters.bedFile !== undefined &&
-          resolvedFilters.bedFile !== null &&
+          typeof resolvedFilters.bedFile === 'string' &&
           !isAbsolute(resolvedFilters.bedFile)
         ) {
           reply.code(403)

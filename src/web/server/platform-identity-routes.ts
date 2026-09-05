@@ -7,6 +7,7 @@ import {
   PlatformMfaClaimError,
   type PlatformIdentityAuditInput
 } from './platform-identity'
+import { buildPlatformAuthRateLimitConfig } from './rate-limit'
 
 const OIDC_STATE_TTL_MS = 10 * 60 * 1000
 const MAX_PENDING_OIDC_STATES = 2
@@ -56,11 +57,11 @@ function redirectWithNoStore(reply: FastifyReply, location: string): FastifyRepl
 
 function escapeHtml(value: string): string {
   return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 function platformLoginErrorHtml(retryLocationValue: string): string {
@@ -188,9 +189,9 @@ function consumePendingOidcState(
 }
 
 function clearAuthenticatedSession(request: FastifyRequest): void {
-  delete request.session.user
-  delete request.session.authMode
-  request.session.mustChangePassword = false
+  request.session.set('user', undefined)
+  request.session.set('authMode', undefined)
+  request.session.set('mustChangePassword', false)
 }
 
 function callbackQuery(request: FastifyRequest): { code?: string; state?: string; error?: string } {
@@ -219,32 +220,49 @@ export function registerPlatformIdentityRoutes(
     }
   }
 
-  app.get('/auth/platform/start', { schema: { hide: true } }, async (request, reply) => {
-    const query = (request.query ?? {}) as Record<string, unknown>
-    const next = sanitizeNextParam(query.next, options.appPathPrefix)
-    clearAuthenticatedSession(request)
-    const authorization = await options.identity.createAuthorizationUrl({
-      request,
-      appPathPrefix: options.appPathPrefix,
-      next,
-      forceFreshLogin: true
-    })
-    rememberPendingOidcState({
-      request,
-      state: authorization.state,
-      pending: {
-        nonce: authorization.nonce,
-        codeVerifier: authorization.codeVerifier,
+  const platformAuthRateLimit = buildPlatformAuthRateLimitConfig()
+  const platformAuthRateLimiter =
+    typeof app.rateLimit === 'function' ? app.rateLimit(platformAuthRateLimit) : undefined
+  const onRequest = platformAuthRateLimiter ? [platformAuthRateLimiter] : undefined
+
+  app.get(
+    '/auth/platform/start',
+    {
+      schema: { hide: true },
+      ...(onRequest !== undefined ? { onRequest } : {}),
+      config: { rateLimit: platformAuthRateLimit }
+    },
+    async (request, reply) => {
+      const query = (request.query ?? {}) as Record<string, unknown>
+      const next = sanitizeNextParam(query.next, options.appPathPrefix)
+      clearAuthenticatedSession(request)
+      const authorization = await options.identity.createAuthorizationUrl({
+        request,
+        appPathPrefix: options.appPathPrefix,
         next,
-        createdAt: Date.now()
-      }
-    })
-    return redirectWithNoStore(reply, authorization.authorizationUrl).send()
-  })
+        forceFreshLogin: true
+      })
+      rememberPendingOidcState({
+        request,
+        state: authorization.state,
+        pending: {
+          nonce: authorization.nonce,
+          codeVerifier: authorization.codeVerifier,
+          next,
+          createdAt: Date.now()
+        }
+      })
+      return redirectWithNoStore(reply, authorization.authorizationUrl).send()
+    }
+  )
 
   app.get(
     options.identity.config.callbackPath,
-    { schema: { hide: true } },
+    {
+      schema: { hide: true },
+      ...(onRequest !== undefined ? { onRequest } : {}),
+      config: { rateLimit: platformAuthRateLimit }
+    },
     async (request, reply) => {
       const query = callbackQuery(request)
       if (query.error !== undefined) {

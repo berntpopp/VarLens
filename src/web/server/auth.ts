@@ -246,7 +246,14 @@ export async function registerSessions(
       })
     }
 
-    if (isPublicApiPath(path)) return
+    const isPlatformPublicPath =
+      options.platformIdentity !== undefined &&
+      (path === options.platformIdentity.config.callbackPath ||
+        path === `${options.platformIdentity.config.callbackPath}/` ||
+        path === '/auth/platform/start' ||
+        path === '/auth/platform/start/')
+
+    if (isPublicApiPath(path) || isPlatformPublicPath) return
 
     if (request.session.user === undefined) {
       reply.code(401)

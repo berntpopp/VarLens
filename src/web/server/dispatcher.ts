@@ -321,7 +321,7 @@ export function registerDispatcher(
       }
 
       if (override !== undefined) {
-        const result = await invokeAsIpcResult(reply, () =>
+        const result = await invokeAsIpcResult(reply, async () =>
           override.handle(args, request, reply, deps)
         )
         recordDispatcherOperationMetrics({

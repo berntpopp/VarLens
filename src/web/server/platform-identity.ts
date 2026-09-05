@@ -1,33 +1,41 @@
-import { createHash, createPublicKey, createVerify, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 
 import type { FastifyRequest } from 'fastify'
 
 import type { UserRole } from '../../shared/auth/auth-constants'
 import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
 import type { PlatformIdentityConfig } from './platform-identity-config'
+import {
+  type Jwk,
+  type VerifiedJwt,
+  PlatformMfaClaimError,
+  assertPlatformMfaClaims,
+  buildPkceChallenge,
+  requireStringClaim,
+  verifyPlatformJwt
+} from './platform-jwt'
 
-const JWT_CLOCK_SKEW_SECONDS = 60
+export {
+  type Jwk,
+  type VerifiedJwt,
+  PlatformMfaClaimError,
+  assertPlatformMfaClaims,
+  verifyPlatformJwt
+}
+
 const JWKS_CACHE_TTL_MS = 5 * 60 * 1000
 const ENTITLEMENT_CACHE_TTL_MS = 30 * 1000
 const ENTITLEMENT_CACHE_MAX_ENTRIES = 500
-const OUTBOUND_FETCH_TIMEOUT_MS = 10_000
-const SUPPORTED_JWT_ALG = 'RS256'
+function getOutboundTimeoutMs(): number {
+  const envVal = Number(process.env.VARLENS_OUTBOUND_FETCH_TIMEOUT_MS)
+  return Number.isFinite(envVal) && envVal > 0 ? envVal : 10_000
+}
 
 interface OidcDiscovery {
   issuer: string
   authorization_endpoint: string
   token_endpoint: string
   jwks_uri: string
-}
-
-interface Jwk {
-  kid?: string
-  kty?: string
-  alg?: string
-  use?: string
-  n?: string
-  e?: string
-  [key: string]: unknown
 }
 
 interface TokenResponse {
@@ -44,11 +52,6 @@ interface EntitlementResponse {
   reason?: string
 }
 
-interface VerifiedJwt {
-  header: Record<string, unknown>
-  payload: Record<string, unknown>
-}
-
 export interface PlatformSessionUser {
   id: number
   username: string
@@ -63,73 +66,31 @@ export interface PlatformIdentityAuditInput {
   reason?: string
 }
 
-function decodeBase64UrlJson(value: string): Record<string, unknown> {
-  const decoded = Buffer.from(value, 'base64url').toString('utf8')
-  const parsed = JSON.parse(decoded) as unknown
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error('JWT segment must decode to a JSON object')
-  }
-  return parsed as Record<string, unknown>
-}
-
 function randomUrlSafeString(bytes = 32): string {
   return randomBytes(bytes).toString('base64url')
 }
 
-function buildPkceChallenge(verifier: string): string {
-  return createHash('sha256').update(verifier).digest('base64url')
+interface OutboundFetchResult {
+  status: number
+  ok: boolean
+  json: unknown
 }
 
-function claimIncludes(value: unknown, expected: string): boolean {
-  if (typeof value === 'string') return value === expected
-  if (Array.isArray(value)) return value.includes(expected)
-  return false
-}
-
-function claimStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((part): part is string => typeof part === 'string')
-  if (typeof value === 'string') return [value]
-  return []
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
+async function fetchJsonWithTimeout(
+  url: string,
+  init: RequestInit = {}
+): Promise<OutboundFetchResult> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), OUTBOUND_FETCH_TIMEOUT_MS)
+  const timeout = setTimeout(() => controller.abort(), getOutboundTimeoutMs())
   try {
-    return await fetch(url, { ...init, signal: controller.signal })
+    const response = await fetch(url, { ...init, signal: controller.signal })
+    if (!response.ok) {
+      return { status: response.status, ok: false, json: undefined }
+    }
+    const json = (await response.json()) as unknown
+    return { status: response.status, ok: true, json }
   } finally {
     clearTimeout(timeout)
-  }
-}
-
-function requireStringClaim(payload: Record<string, unknown>, name: string): string {
-  const value = payload[name]
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`JWT ${name} claim is required`)
-  }
-  return value.trim()
-}
-
-function assertTemporalClaims(payload: Record<string, unknown>, nowSeconds: number): void {
-  const exp = payload.exp
-  if (typeof exp !== 'number' || !Number.isFinite(exp)) {
-    throw new Error('JWT exp claim is required')
-  }
-  if (exp + JWT_CLOCK_SKEW_SECONDS < nowSeconds) {
-    throw new Error('JWT is expired')
-  }
-
-  const nbf = payload.nbf
-  if (typeof nbf === 'number' && nbf - JWT_CLOCK_SKEW_SECONDS > nowSeconds) {
-    throw new Error('JWT is not yet valid')
-  }
-
-  const iat = payload.iat
-  if (typeof iat !== 'number' || !Number.isFinite(iat)) {
-    throw new Error('JWT iat claim is required')
-  }
-  if (iat - JWT_CLOCK_SKEW_SECONDS > nowSeconds) {
-    throw new Error('JWT iat is in the future')
   }
 }
 
@@ -137,112 +98,6 @@ export class PlatformIdentityRevokedError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'PlatformIdentityRevokedError'
-  }
-}
-
-export function verifyPlatformJwt(params: {
-  token: string
-  issuer: string
-  audience: string
-  jwks: Jwk[]
-  nowSeconds?: number
-}): VerifiedJwt {
-  const segments = params.token.split('.')
-  if (segments.length !== 3 || segments.some((part) => part === '')) {
-    throw new Error('JWT must have three non-empty segments')
-  }
-
-  const [encodedHeader, encodedPayload, encodedSignature] = segments
-  const header = decodeBase64UrlJson(encodedHeader)
-  const payload = decodeBase64UrlJson(encodedPayload)
-  const alg = header.alg
-  const kid = header.kid
-  if (alg !== SUPPORTED_JWT_ALG) {
-    throw new Error(`JWT alg must be ${SUPPORTED_JWT_ALG}`)
-  }
-  if (typeof kid !== 'string' || kid === '') {
-    throw new Error('JWT kid header is required')
-  }
-
-  const jwk = params.jwks.find(
-    (candidate) =>
-      candidate.kid === kid &&
-      candidate.kty === 'RSA' &&
-      (candidate.use === undefined || candidate.use === 'sig') &&
-      (candidate.alg === undefined || candidate.alg === SUPPORTED_JWT_ALG)
-  )
-  if (jwk === undefined) {
-    throw new Error(`JWKS key not found for kid ${kid}`)
-  }
-
-  const verifier = createVerify('RSA-SHA256')
-  verifier.update(`${encodedHeader}.${encodedPayload}`)
-  verifier.end()
-  const publicKey = createPublicKey({ key: jwk as JsonWebKey, format: 'jwk' })
-  if (!verifier.verify(publicKey, Buffer.from(encodedSignature, 'base64url'))) {
-    throw new Error('JWT signature is invalid')
-  }
-
-  if (payload.iss !== params.issuer) {
-    throw new Error('JWT issuer does not match platform issuer')
-  }
-  if (!claimIncludes(payload.aud, params.audience)) {
-    throw new Error('JWT audience does not match platform audience')
-  }
-  if (payload.azp !== undefined && payload.azp !== params.audience) {
-    throw new Error('JWT azp does not match platform audience')
-  }
-  if (Array.isArray(payload.aud) && payload.aud.length > 1 && payload.azp === undefined) {
-    throw new Error('JWT azp is required when multiple audiences are present')
-  }
-  if (typeof payload.sub === 'string' && payload.sub.length > 255) {
-    throw new Error('JWT sub claim exceeds 255 characters')
-  }
-  assertTemporalClaims(payload, params.nowSeconds ?? Math.floor(Date.now() / 1000))
-
-  return { header, payload }
-}
-
-export class PlatformMfaClaimError extends Error {
-  constructor(
-    message: string,
-    readonly kind: 'nonce' | 'acr' | 'amr',
-    readonly missingAmr?: string
-  ) {
-    super(message)
-    this.name = 'PlatformMfaClaimError'
-  }
-}
-
-export function assertPlatformMfaClaims(params: {
-  payload: Record<string, unknown>
-  requiredAcr: string
-  requiredAmr: string[]
-  expectedNonce: string
-  nowSeconds?: number
-}): void {
-  if (params.payload.nonce !== params.expectedNonce) {
-    throw new PlatformMfaClaimError('OIDC nonce does not match', 'nonce')
-  }
-  if (params.payload.acr !== params.requiredAcr) {
-    throw new PlatformMfaClaimError('required MFA acr is missing', 'acr')
-  }
-  const amr = claimStringArray(params.payload.amr)
-  for (const required of params.requiredAmr) {
-    if (!amr.includes(required)) {
-      throw new PlatformMfaClaimError(`required MFA amr is missing: ${required}`, 'amr', required)
-    }
-  }
-  const nowSeconds = params.nowSeconds ?? Math.floor(Date.now() / 1000)
-  const authTime = params.payload.auth_time
-  if (typeof authTime !== 'number' || !Number.isFinite(authTime)) {
-    throw new PlatformMfaClaimError('OIDC auth_time claim is required', 'acr')
-  }
-  if (
-    authTime - JWT_CLOCK_SKEW_SECONDS > nowSeconds ||
-    nowSeconds - authTime > 10 * 60 + JWT_CLOCK_SKEW_SECONDS
-  ) {
-    throw new PlatformMfaClaimError('OIDC authentication is not fresh', 'acr')
   }
 }
 
@@ -377,6 +232,7 @@ export class PlatformIdentityService {
       token: tokenResponse.id_token,
       issuer: this.config.issuerUrl,
       audience: this.config.clientId,
+      authorizedParty: this.config.clientId,
       discovery
     })
     assertPlatformMfaClaims({
@@ -390,6 +246,7 @@ export class PlatformIdentityService {
         token: tokenResponse.access_token,
         issuer: this.config.issuerUrl,
         audience: this.config.audience,
+        authorizedParty: this.config.clientId,
         discovery
       })
     }
@@ -424,9 +281,9 @@ export class PlatformIdentityService {
     if (this.config.entitlementsToken !== undefined) {
       headers.authorization = `Bearer ${this.config.entitlementsToken}`
     }
-    let response: Response
+    let response: OutboundFetchResult
     try {
-      response = await fetchWithTimeout(url, { headers })
+      response = await fetchJsonWithTimeout(url, { headers })
     } catch (error) {
       throw new Error('platform entitlement check failed', { cause: error })
     }
@@ -438,7 +295,7 @@ export class PlatformIdentityService {
       }
       throw new Error(`platform entitlement check returned HTTP ${response.status}`)
     }
-    const body = assertObjectResponse((await response.json()) as unknown, 'entitlement')
+    const body = assertObjectResponse(response.json, 'entitlement')
     const wrapped = body.entitlement
     const entitlement = (
       typeof wrapped === 'object' && wrapped !== null && !Array.isArray(wrapped) ? wrapped : body
@@ -493,7 +350,7 @@ export class PlatformIdentityService {
       )
     )
 
-    const response = await fetchWithTimeout(params.discovery.token_endpoint, {
+    const response = await fetchJsonWithTimeout(params.discovery.token_endpoint, {
       method: 'POST',
       headers: {
         accept: 'application/json',
@@ -504,7 +361,7 @@ export class PlatformIdentityService {
     if (!response.ok) {
       throw new Error(`OIDC token endpoint returned HTTP ${response.status}`)
     }
-    const json = assertObjectResponse((await response.json()) as unknown, 'OIDC token')
+    const json = assertObjectResponse(response.json, 'OIDC token')
     if (typeof json.id_token !== 'string' || typeof json.access_token !== 'string') {
       throw new Error('OIDC token response must include id_token and access_token')
     }
@@ -525,7 +382,7 @@ export class PlatformIdentityService {
   }
 
   private async fetchDiscovery(): Promise<OidcDiscovery> {
-    const response = await fetchWithTimeout(
+    const response = await fetchJsonWithTimeout(
       `${this.config.issuerUrl}/.well-known/openid-configuration`,
       {
         headers: { accept: 'application/json' }
@@ -534,7 +391,7 @@ export class PlatformIdentityService {
     if (!response.ok) {
       throw new Error(`OIDC discovery returned HTTP ${response.status}`)
     }
-    const json = assertObjectResponse((await response.json()) as unknown, 'OIDC discovery')
+    const json = assertObjectResponse(response.json, 'OIDC discovery')
     if (json.issuer !== this.config.issuerUrl) {
       throw new Error('OIDC discovery issuer does not match configured issuer')
     }
@@ -544,23 +401,23 @@ export class PlatformIdentityService {
       }
     }
     return {
-      issuer: json.issuer,
-      authorization_endpoint: json.authorization_endpoint,
-      token_endpoint: json.token_endpoint,
-      jwks_uri: json.jwks_uri
+      issuer: json.issuer as string,
+      authorization_endpoint: json.authorization_endpoint as string,
+      token_endpoint: json.token_endpoint as string,
+      jwks_uri: json.jwks_uri as string
     }
   }
 
   private async jwks(discovery: OidcDiscovery): Promise<Jwk[]> {
     const now = Date.now()
     if (this.jwksCache !== null && this.jwksCache.expiresAt > now) return this.jwksCache.keys
-    const response = await fetchWithTimeout(discovery.jwks_uri, {
+    const response = await fetchJsonWithTimeout(discovery.jwks_uri, {
       headers: { accept: 'application/json' }
     })
     if (!response.ok) {
       throw new Error(`JWKS endpoint returned HTTP ${response.status}`)
     }
-    const json = assertObjectResponse((await response.json()) as unknown, 'JWKS')
+    const json = assertObjectResponse(response.json, 'JWKS')
     if (!Array.isArray(json.keys)) {
       throw new Error('JWKS keys array is required')
     }
@@ -573,6 +430,7 @@ export class PlatformIdentityService {
     token: string
     issuer: string
     audience: string
+    authorizedParty?: string
     discovery: OidcDiscovery
   }): Promise<VerifiedJwt> {
     const firstKeys = await this.jwks(params.discovery)

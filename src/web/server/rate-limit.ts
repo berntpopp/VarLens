@@ -4,6 +4,7 @@ import rateLimit from '@fastify/rate-limit'
 const RATE_LIMIT_WINDOW_MS = 60_000
 const LOGIN_PAGE_RATE_LIMIT_MAX_ENV = 'VARLENS_LOGIN_PAGE_RATE_LIMIT_MAX'
 const AUTH_LOGIN_RATE_LIMIT_MAX_ENV = 'VARLENS_AUTH_LOGIN_RATE_LIMIT_MAX'
+const PLATFORM_AUTH_RATE_LIMIT_MAX_ENV = 'VARLENS_PLATFORM_AUTH_RATE_LIMIT_MAX'
 
 function positiveIntegerFromEnv(params: {
   env: NodeJS.ProcessEnv
@@ -38,6 +39,23 @@ export function buildLoginPageRateLimitConfig(env: NodeJS.ProcessEnv = process.e
   }
 }
 
+export function buildPlatformAuthRateLimitConfig(env: NodeJS.ProcessEnv = process.env): {
+  max: number
+  timeWindow: number
+  groupId: string
+} {
+  return {
+    max: positiveIntegerFromEnv({
+      env,
+      name: PLATFORM_AUTH_RATE_LIMIT_MAX_ENV,
+      fallback: 60,
+      max: 10_000
+    }),
+    timeWindow: RATE_LIMIT_WINDOW_MS,
+    groupId: 'platform-auth'
+  }
+}
+
 export async function registerWebRateLimit(app: FastifyInstance): Promise<void> {
   await app.register(rateLimit, {
     global: false,
@@ -65,7 +83,7 @@ export function registerAuthLoginRateLimit(
     if (request.method !== 'POST' || path !== '/api/auth/login') return
 
     const result = await checkRateLimit(request)
-    if (result.isExceeded !== true) return
+    if (result.isAllowed || !result.isExceeded) return
 
     reply.code(429)
     reply.header('retry-after', String(Math.max(1, result.ttlInSeconds)))

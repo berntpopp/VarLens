@@ -120,4 +120,24 @@ describe('web page gate', () => {
       await app.close()
     }
   })
+
+  test('does not duplicate appPathPrefix in next param when URL already contains prefix', async () => {
+    const app = fastify()
+    try {
+      registerPageGate(app, { appPathPrefix: '/varlens', loginPath: '/login' })
+      app.setNotFoundHandler(async (_request, reply) => {
+        reply.type('text/html')
+        return '<html><body>SPA shell</body></html>'
+      })
+
+      const response = await app.inject({ method: 'GET', url: '/varlens/cases?filter=active' })
+
+      expect(response.statusCode, response.body).toBe(302)
+      expect(response.headers.location).toBe(
+        '/varlens/login?next=%2Fvarlens%2Fcases%3Ffilter%3Dactive'
+      )
+    } finally {
+      await app.close()
+    }
+  })
 })
