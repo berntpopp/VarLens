@@ -64,6 +64,14 @@ export function resolveAppPathPrefix(): string {
     : withLeading
 }
 
+export function hasControlOrWhitespace(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i)
+    if (code <= 32 || code === 127) return true
+  }
+  return false
+}
+
 /**
  * Validate a candidate post-login redirect target. Anything that is not
  * a relative same-prefix path is rejected to prevent open-redirect
@@ -72,10 +80,24 @@ export function resolveAppPathPrefix(): string {
 export function sanitizeNextParam(next: unknown, appPathPrefix: string): string {
   const defaultTarget = appPathPrefix === '' ? '/' : appPathPrefix + '/'
   if (typeof next !== 'string' || next === '') return defaultTarget
+  // Cap length to prevent cookie ballooning / header bloat
+  if (next.length > 512) return defaultTarget
+  // Reject control characters, tabs, newlines, and whitespace
+  if (hasControlOrWhitespace(next)) return defaultTarget
   // Reject anything containing scheme, authority, backslashes, or
   // protocol-relative prefixes. Must start with a single `/` followed
   // by something other than `/` or `\`.
   if (!/^\/[^/\\]/.test(next)) return defaultTarget
+  if (next.startsWith('//') || next.includes('\\')) return defaultTarget
+  // Validate path parsing against base origin to ensure it is strictly relative
+  try {
+    const parsed = new URL(next, 'http://localhost')
+    if (parsed.origin !== 'http://localhost' || parsed.username !== '' || parsed.password !== '') {
+      return defaultTarget
+    }
+  } catch {
+    return defaultTarget
+  }
   // Must remain inside the configured app prefix so we never bounce
   // the browser to an unrelated route on the same origin.
   if (appPathPrefix !== '' && next !== appPathPrefix && !next.startsWith(appPathPrefix + '/')) {
@@ -148,7 +170,10 @@ export function renderLoginPage(appPathPrefix: string, redirectTo: string): stri
     .join(escapeForJsString(redirectTo))
 }
 
-export function registerLoginRoute(app: FastifyInstance): void {
+export function registerLoginRoute(
+  app: FastifyInstance,
+  options: { platformAuthEnabled?: boolean } = {}
+): void {
   const appPathPrefix = resolveAppPathPrefix()
   const loginPageRateLimit = buildLoginPageRateLimitConfig()
   const loginPageRateLimiter = app.rateLimit(loginPageRateLimit)
@@ -157,12 +182,22 @@ export function registerLoginRoute(app: FastifyInstance): void {
     request: { query: unknown },
     reply: {
       header: (k: string, v: string) => unknown
+      code: (c: number) => unknown
       type: (t: string) => unknown
       send: (b: string) => unknown
     }
   ): Promise<unknown> => {
     const query = (request.query ?? {}) as Record<string, unknown>
     const redirectTo = sanitizeNextParam(query.next, appPathPrefix)
+    if (options.platformAuthEnabled === true) {
+      reply.header('cache-control', 'no-store')
+      reply.code(302)
+      reply.header(
+        'location',
+        `${appPathPrefix}/auth/platform/start?next=${encodeURIComponent(redirectTo)}`
+      )
+      return reply.send('')
+    }
     const html = renderLoginPage(appPathPrefix, redirectTo)
     reply.header('cache-control', 'no-store')
     reply.header('content-security-policy', LOGIN_PAGE_CSP)

@@ -84,7 +84,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         server: resolve(__dirname, 'src/web/server.ts'),
-        'postgres-import-worker': resolve(__dirname, 'src/main/workers/postgres-import-worker.ts')
+        'postgres-import-worker': resolve(__dirname, 'src/main/workers/postgres-import-worker.ts'),
+        'provision-platform-user': resolve(__dirname, 'src/web/provision-platform-user.ts')
       },
       output: {
         entryFileNames: (chunkInfo) => (chunkInfo.name === 'server' ? 'server.cjs' : '[name].cjs'),

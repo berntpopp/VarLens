@@ -30,6 +30,8 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
+import { hasControlOrWhitespace } from './login-route'
+
 const ALWAYS_PUBLIC_PATHS = new Set<string>(['/healthz', '/login', '/login/'])
 
 /**
@@ -47,25 +49,27 @@ const PUBLIC_ROOT_ASSETS = new Set<string>([
   '/icon-maskable-512.png'
 ])
 
-function isPublicPath(path: string): boolean {
-  return ALWAYS_PUBLIC_PATHS.has(path) || PUBLIC_ROOT_ASSETS.has(path)
-}
-
 /**
  * Build the `?next=` value for the post-login redirect. Returns an
  * empty string when the request path isn't a safe relative path; the
  * login route then falls back to the configured app prefix.
  */
-function buildNextParam(rawUrl: string): string {
+export function buildNextParam(rawUrl: string): string {
   // Drop anything that already smells like an open-redirect attempt.
   // The browser never sends scheme+authority on a same-origin GET, so
-  // a `\` or `//` anywhere in the URL is suspicious.
+  // control characters, whitespace, `\`, or `//` anywhere in the URL is suspicious.
   if (rawUrl === '' || rawUrl[0] !== '/') return ''
-  if (rawUrl.includes('\\')) return ''
-  if (rawUrl.startsWith('//')) return ''
-  // Cap absurdly long URLs — the login route re-validates the prefix
-  // anyway, this is just to keep the redirect Location header sane.
-  if (rawUrl.length > 2048) return ''
+  if (rawUrl.length > 512) return ''
+  if (hasControlOrWhitespace(rawUrl)) return ''
+  if (rawUrl.includes('\\') || rawUrl.startsWith('//')) return ''
+  try {
+    const parsed = new URL(rawUrl, 'http://localhost')
+    if (parsed.origin !== 'http://localhost' || parsed.username !== '' || parsed.password !== '') {
+      return ''
+    }
+  } catch {
+    return ''
+  }
   return rawUrl
 }
 
@@ -75,10 +79,19 @@ export interface PageGateOptions {
    * `Location` header for the 302. Defaults are resolved by login-route.ts.
    */
   appPathPrefix: string
+  loginPath?: string
+  platformCallbackPath?: string
+  requirePlatformAuth?: boolean
 }
 
 export function registerPageGate(app: FastifyInstance, options: PageGateOptions): void {
   const { appPathPrefix } = options
+  const loginPath = options.loginPath ?? '/login'
+  const publicPaths = new Set(ALWAYS_PUBLIC_PATHS)
+  if (options.platformCallbackPath !== undefined) {
+    publicPaths.add('/auth/platform/start')
+    publicPaths.add(options.platformCallbackPath)
+  }
 
   app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
     // Only intercept GETs. POST/PUT/DELETE traffic is API-only and is
@@ -91,10 +104,7 @@ export function registerPageGate(app: FastifyInstance, options: PageGateOptions)
     // `/api/*` is auth.ts's territory — never short-circuit it here, or
     // the API would start redirecting instead of returning JSON 401s.
     if (path.startsWith('/api/')) return
-    if (isPublicPath(path)) return
-
-    const user = request.session?.user
-    if (user !== undefined) return
+    if (publicPaths.has(path) || PUBLIC_ROOT_ASSETS.has(path)) return
 
     // Build the redirect target, prepending the app prefix because a
     // prefix-stripping proxy forwards `/login` to Fastify while the
@@ -102,8 +112,17 @@ export function registerPageGate(app: FastifyInstance, options: PageGateOptions)
     const next = buildNextParam(fullUrl)
     const location =
       appPathPrefix +
-      '/login' +
+      loginPath +
       (next !== '' ? '?next=' + encodeURIComponent(appPathPrefix + next) : '')
+
+    const user = request.session?.user
+    if (user !== undefined) {
+      if (options.requirePlatformAuth === true && request.session.authMode !== 'platform') {
+        request.session.delete()
+      } else {
+        return
+      }
+    }
 
     reply.header('cache-control', 'no-store')
     reply.code(302)

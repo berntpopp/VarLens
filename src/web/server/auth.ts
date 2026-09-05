@@ -36,11 +36,23 @@ import type { FastifyInstance } from 'fastify'
 import secureSession from '@fastify/secure-session'
 
 import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
+import { PlatformIdentityRevokedError, type PlatformIdentityService } from './platform-identity'
 import { registerAuthLoginRateLimit } from './rate-limit'
 
 declare module '@fastify/secure-session' {
   interface SessionData {
     user: { id: number; username: string; role: string; passwordChangedAt: string | null }
+    authMode?: 'local' | 'platform'
+    platformOidc?: Record<
+      string,
+      {
+        nonce: string
+        codeVerifier: string
+        next: string
+        createdAt: number
+        mfaRetry?: boolean
+      }
+    >
     /**
      * Sticky bit set on login when the authenticated user has
      * must_change_password=TRUE in the DB; cleared by the
@@ -180,10 +192,11 @@ function loadOrCreateSessionKey(): Buffer {
 
 export async function registerSessions(
   app: FastifyInstance,
-  options: { authService: PostgresWebAuthService }
+  options: { authService: PostgresWebAuthService; platformIdentity?: PlatformIdentityService }
 ): Promise<void> {
   const key = loadOrCreateSessionKey()
   const production = isProductionMode()
+  const platformMode = options.platformIdentity !== undefined
 
   await app.register(secureSession, {
     key,
@@ -191,12 +204,10 @@ export async function registerSessions(
     cookie: {
       path: '/',
       httpOnly: true,
-      // SameSite=Strict for an admin-only single-tenant tool with no
-      // cross-site flows (no SSO redirect, no embeds, no third-party
-      // links coming back into authenticated pages). Lax was a
-      // legacy-from-desktop default that opened a window for
-      // cross-site GET-triggered side effects; Strict closes it.
-      sameSite: 'strict',
+      // Local login has no cross-site flow, so Strict is viable.
+      // Platform OIDC needs Lax so the top-level GET callback from
+      // the IdP carries the transient state/nonce session.
+      sameSite: platformMode ? 'lax' : 'strict',
       // Production: Secure is non-negotiable — `__Host-` prefix
       // *requires* Secure, and we never want a session cookie
       // travelling over HTTP. Dev / test: drop Secure so localhost
@@ -247,6 +258,57 @@ export async function registerSessions(
     }
 
     const sessionUser = request.session.user
+
+    if (request.session.authMode === 'platform') {
+      if (options.platformIdentity === undefined) {
+        request.session.delete()
+        reply.code(401)
+        return reply.send({
+          code: 'UNAUTHENTICATED',
+          message: 'platform identity is not configured',
+          userMessage: 'Please log in again.'
+        })
+      }
+      try {
+        const platformUser = await options.platformIdentity.resolveSessionUser(
+          options.authService,
+          sessionUser.username
+        )
+        if (platformUser.id !== sessionUser.id) {
+          throw new PlatformIdentityRevokedError('platform user id changed')
+        }
+        request.session.mustChangePassword = false
+        request.session.user = platformUser
+      } catch (error) {
+        if (error instanceof PlatformIdentityRevokedError) {
+          request.session.delete()
+          reply.code(401)
+          return reply.send({
+            code: 'UNAUTHENTICATED',
+            message: 'platform session no longer valid',
+            userMessage: 'Please log in again.'
+          })
+        }
+        reply.code(503)
+        return reply.send({
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'platform identity check temporarily unavailable',
+          userMessage: 'Authentication check temporarily unavailable. Please retry.'
+        })
+      }
+      return
+    }
+
+    if (platformMode) {
+      request.session.delete()
+      reply.code(401)
+      return reply.send({
+        code: 'UNAUTHENTICATED',
+        message: 'platform login is required',
+        userMessage: 'Please log in again.'
+      })
+    }
+
     const liveUser = await options.authService.getUser(sessionUser.username)
     if (
       liveUser === undefined ||

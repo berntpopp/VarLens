@@ -23,6 +23,18 @@ describe.skipIf(!isWebBuilt || !hasPostgres)('web request IDs', () => {
       expect(firstId).not.toBe(spoofed)
       expect(firstId).toMatch(UUID_RE)
 
+      // `request-id` is the header Fastify actually honours when
+      // `requestIdHeader` is truthy — `x-request-id` is never consulted, so
+      // spoofing only that one would pass even with header trust switched on.
+      // This case is what pins `requestIdHeader: false` in src/web/server.ts.
+      const viaFastifyHeader = await app.inject({
+        method: 'GET',
+        url: '/healthz',
+        headers: { 'request-id': spoofed }
+      })
+      expect(viaFastifyHeader.headers['x-request-id']).not.toBe(spoofed)
+      expect(viaFastifyHeader.headers['x-request-id']).toMatch(UUID_RE)
+
       const second = await app.inject({ method: 'GET', url: '/healthz' })
       expect(second.headers['x-request-id']).toMatch(UUID_RE)
       expect(second.headers['x-request-id']).not.toBe(firstId)
