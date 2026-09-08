@@ -56,7 +56,9 @@ Cypress.Commands.add('varlensResolveLoginPassword', () => {
   const rotatedPassword = configuredRotatedPassword(password)
 
   if (password === '') {
-    throw new Error('VARLENS_ADMIN_PASSWORD is required for authenticated VarLens checks.')
+    throw new Error(
+      'VARLENS_PASSWORD or VARLENS_ADMIN_PASSWORD is required for authenticated VarLens checks.'
+    )
   }
 
   if (resolvedLoginPassword !== undefined) {

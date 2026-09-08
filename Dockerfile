@@ -83,6 +83,18 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends tini wget ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
+# The runtime starts `node out/web/server.cjs` and never installs anything, so
+# the package manager is dead weight that carries its own vulnerabilities: the
+# npm bundled with this base image ships tar 7.5.11 (CVE-2026-59873), which is
+# the only CRITICAL the image scan reports. Removing it fixes the finding at the
+# source instead of waiting for a base-image bump, and keeps a whole class of
+# npm-bundled findings out of the runtime for good.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm \
+           /usr/local/bin/npx \
+           /usr/local/bin/corepack
+
 # Drop to a non-root user. /data is the persistent volume mount.
 RUN groupadd --system --gid 1001 varlens \
  && useradd --system --uid 1001 --gid varlens --home /app --shell /usr/sbin/nologin varlens \

@@ -5,7 +5,7 @@
  * Desktop SQLite stays untouched in src/main/.
  *
  *   - Fastify app with Pino JSON logging
- *   - `/healthz` (200/503)
+ *   - `/livez` (process-only), `/readyz` (DB readiness), `/healthz` (readiness alias)
  *   - SIGTERM/SIGINT graceful shutdown
  *   - Postgres-backed StorageSession (cases, variants) and
  *     PostgresWebAuthService (auth)
@@ -23,7 +23,7 @@
 import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'path'
 
-import Fastify, { LogController, type FastifyInstance } from 'fastify'
+import Fastify, { LogController, type FastifyInstance, type FastifyReply } from 'fastify'
 
 import { getPostgresStorageConfig } from '../main/storage/config'
 import { createPostgresStorageSession } from '../main/storage/postgres/createPostgresStorageSession'
@@ -40,6 +40,7 @@ import { PlatformIdentityService } from './server/platform-identity'
 import { readPlatformIdentityConfig } from './server/platform-identity-config'
 import { registerPlatformIdentityRoutes } from './server/platform-identity-routes'
 import { registerWebRateLimit } from './server/rate-limit'
+import { serializeRequestForTechnicalLog } from './server/request-logging'
 import { registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
@@ -114,7 +115,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     requestIdHeader: false,
     logController: new LogController({ requestIdLogLabel: 'request_id' }),
     logger: {
-      level: process.env.VARLENS_LOG_LEVEL ?? 'info'
+      level: process.env.VARLENS_LOG_LEVEL ?? 'info',
+      serializers: {
+        req: serializeRequestForTechnicalLog
+      }
     }
   })
   const metrics = options.metrics ?? createAppMetricsFromEnv()
@@ -150,7 +154,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   // unauthenticated GETs to it. Registered before the dispatcher and
   // static handler so the explicit `/login` route wins over the SPA
   // fallback, and so the gate runs before any route handler ships
-  // bytes. `/api/*`, `/healthz`, and `/login*` are passthrough.
+  // bytes. `/api/*`, `/livez`, `/readyz`, `/healthz`, and `/login*`
+  // are passthrough.
   if (platformIdentity !== undefined) {
     registerPlatformIdentityRoutes(app, {
       identity: platformIdentity,
@@ -194,7 +199,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerDispatcher(app, dispatcherDeps, overrides)
   registerEventStream(app, events)
 
-  app.get('/healthz', { schema: { hide: true } }, async (_request, reply) => {
+  // Liveness answers as soon as the event loop does: it must not depend on
+  // Postgres, or a DB outage would get the pod restarted instead of merely
+  // pulled out of the Service. Readiness carries the DB check; `/healthz`
+  // stays as an alias of readiness for existing probes and smoke checks.
+  app.get('/livez', { schema: { hide: true } }, async () => {
+    return { status: 'ok', version: pkg.version }
+  })
+
+  const readinessHandler = async (_request: unknown, reply: FastifyReply) => {
     const open = await isPostgresHealthy(pool)
     metrics.setDatabaseHealthy(open)
     if (!open) {
@@ -202,7 +215,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return { status: 'unhealthy', version: pkg.version, db: { open: false } }
     }
     return { status: 'ok', version: pkg.version, db: { open: true } }
-  })
+  }
+
+  app.get('/readyz', { schema: { hide: true } }, readinessHandler)
+  app.get('/healthz', { schema: { hide: true } }, readinessHandler)
 
   await registerStatic(app)
 

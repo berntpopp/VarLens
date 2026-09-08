@@ -7,7 +7,7 @@
  *   1. Anonymous GET `/` is 302'd to `/login` with a `?next=` that
  *      preserves the originally-requested path under the configured
  *      app prefix.
- *   2. `/healthz` is always public (Caddy + smoke probes rely on it).
+ *   2. `/livez`, `/readyz`, and `/healthz` are always public.
  *   3. `GET /login` always serves the login HTML, both with and
  *      without a session cookie.
  *   4. The page gate honours non-default `APP_PATH_PREFIX` values so
@@ -77,6 +77,16 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('login-wall integration', () => {
     const res = await app.inject({ method: 'GET', url: '/healthz' })
     expect([200, 503]).toContain(res.statusCode)
     expect(res.headers['content-type']).toMatch(/application\/json/)
+  })
+
+  test('GET /livez and /readyz bypass the wall', async () => {
+    const live = await app.inject({ method: 'GET', url: '/livez' })
+    expect(live.statusCode).toBe(200)
+    expect(live.headers['content-type']).toMatch(/application\/json/)
+
+    const ready = await app.inject({ method: 'GET', url: '/readyz' })
+    expect([200, 503]).toContain(ready.statusCode)
+    expect(ready.headers['content-type']).toMatch(/application\/json/)
   })
 
   test('GET /login serves the login HTML with no-store cache header', async () => {

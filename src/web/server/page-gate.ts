@@ -13,6 +13,7 @@
  *                          | session.user present | absent
  *   ──────────────────────────────────────────────────────────────
  *   /api/*                 | passthrough          | auth.ts handles 401
+ *   /livez, /readyz,
  *   /healthz               | passthrough          | passthrough  (health probes)
  *   /login, /login/        | passthrough          | passthrough  (the wall itself)
  *   non-GET                | passthrough          | passthrough  (auth.ts/CSRF surface)
@@ -32,7 +33,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { hasControlOrWhitespace } from './login-route'
 
-const ALWAYS_PUBLIC_PATHS = new Set<string>(['/healthz', '/login', '/login/'])
+const ALWAYS_PUBLIC_PATHS = new Set<string>(['/livez', '/readyz', '/healthz', '/login', '/login/'])
 
 /**
  * Root-level brand/icon assets that must load for an unauthenticated browser
