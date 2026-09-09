@@ -18,17 +18,31 @@ function typeIntoVisibleInput(
     })
 }
 
-let resolvedLoginPassword: string | undefined
+interface LoginCredentials {
+  username: string
+  password: string
+  rotatedPassword?: string
+}
+
+const resolvedLoginPasswords = new Map<string, string>()
 
 function passwordCacheKey(username: string): string {
   return `${Cypress.config('baseUrl') ?? ''}|${username}`
 }
 
-function configuredRotatedPassword(password: string): string {
-  const rotatedPassword = Cypress.env('varlensRotatedPassword') as string | undefined
+function configuredRotatedPassword(credentials: LoginCredentials): string {
+  const rotatedPassword = credentials.rotatedPassword
   return rotatedPassword !== undefined && rotatedPassword !== ''
     ? rotatedPassword
-    : `${password}-rotated-2026`
+    : `${credentials.password}-rotated-2026`
+}
+
+function defaultCredentials(): LoginCredentials {
+  return {
+    username: Cypress.env('varlensUsername') as string,
+    password: Cypress.env('varlensPassword') as string,
+    rotatedPassword: Cypress.env('varlensRotatedPassword') as string | undefined
+  }
 }
 
 function waitForLoginRateLimit(response: Cypress.Response<unknown>): Cypress.Chainable<void> {
@@ -44,16 +58,16 @@ function waitForLoginRateLimit(response: Cypress.Response<unknown>): Cypress.Cha
 }
 
 function cacheResolvedLoginPassword(key: string, password: string): Cypress.Chainable<string> {
-  resolvedLoginPassword = password
+  resolvedLoginPasswords.set(key, password)
   return cy
     .task('varlensSetResolvedLoginPassword', { key, password }, { log: false })
     .then(() => password) as Cypress.Chainable<string>
 }
 
-Cypress.Commands.add('varlensResolveLoginPassword', () => {
-  const username = Cypress.env('varlensUsername') as string
-  const password = Cypress.env('varlensPassword') as string
-  const rotatedPassword = configuredRotatedPassword(password)
+function resolveLoginPassword(credentials: LoginCredentials): Cypress.Chainable<string> {
+  const { username, password } = credentials
+  const rotatedPassword = configuredRotatedPassword(credentials)
+  const cacheKey = passwordCacheKey(username)
 
   if (password === '') {
     throw new Error(
@@ -61,11 +75,10 @@ Cypress.Commands.add('varlensResolveLoginPassword', () => {
     )
   }
 
-  if (resolvedLoginPassword !== undefined) {
-    return cy.wrap(resolvedLoginPassword, { log: false })
+  const inProcessPassword = resolvedLoginPasswords.get(cacheKey)
+  if (inProcessPassword !== undefined) {
+    return cy.wrap(inProcessPassword, { log: false })
   }
-
-  const cacheKey = passwordCacheKey(username)
 
   const assertLoggedIn = (
     response: Cypress.Response<unknown>,
@@ -127,7 +140,7 @@ Cypress.Commands.add('varlensResolveLoginPassword', () => {
     .task('varlensGetResolvedLoginPassword', cacheKey, { log: false })
     .then((cachedPassword) => {
       if (typeof cachedPassword === 'string' && cachedPassword !== '') {
-        resolvedLoginPassword = cachedPassword
+        resolvedLoginPasswords.set(cacheKey, cachedPassword)
         return cachedPassword
       }
 
@@ -137,14 +150,14 @@ Cypress.Commands.add('varlensResolveLoginPassword', () => {
 
       return tryPassword(password)
     }) as Cypress.Chainable<string>
-})
+}
 
-Cypress.Commands.add('varlensLogin', () => {
-  const username = Cypress.env('varlensUsername') as string
+function loginWithCredentials(credentials: LoginCredentials): Cypress.Chainable<void> {
+  const { username } = credentials
 
-  return cy.varlensResolveLoginPassword().then((password) => {
+  return resolveLoginPassword(credentials).then((password) => {
     cy.session(
-      ['varlens', username, password],
+      ['varlens', Cypress.config('baseUrl'), username, password],
       () => {
         cy.varlensApi('auth', 'logout')
         cy.clearCookies()
@@ -158,7 +171,7 @@ Cypress.Commands.add('varlensLogin', () => {
 
         cy.get('body', { timeout: 15000 }).then(($body) => {
           if (/Change your password/i.test($body.text())) {
-            const rotatedPassword = configuredRotatedPassword(password)
+            const rotatedPassword = configuredRotatedPassword({ ...credentials, password })
             typeIntoVisibleInput(0, rotatedPassword, { log: false })
             typeIntoVisibleInput(1, rotatedPassword, { log: false })
             cy.contains('button', /^Change Password$/i, { timeout: 15000 }).click({ force: true })
@@ -172,6 +185,7 @@ Cypress.Commands.add('varlensLogin', () => {
         validate() {
           cy.varlensApi('auth', 'currentUser').then((response) => {
             expect(response.status, 'session validation HTTP status').to.eq(200)
+            expect(response.body, 'session validation user').to.have.property('username', username)
           })
         }
       }
@@ -183,7 +197,22 @@ Cypress.Commands.add('varlensLogin', () => {
       .should('not.contain', '/login')
       .then(() => undefined)
   }) as unknown as Cypress.Chainable<void>
+}
+
+Cypress.Commands.add('varlensResolveLoginPassword', () => {
+  return resolveLoginPassword(defaultCredentials())
 })
+
+Cypress.Commands.add('varlensLogin', () => {
+  return loginWithCredentials(defaultCredentials())
+})
+
+Cypress.Commands.add(
+  'varlensLoginAs',
+  (username: string, password: string, rotatedPassword?: string) => {
+    return loginWithCredentials({ username, password, rotatedPassword })
+  }
+)
 
 export function beforeEachAuthenticatedSmoke(): void {
   beforeEach(function () {
@@ -201,6 +230,7 @@ declare global {
     interface Chainable {
       varlensResolveLoginPassword(): Chainable<string>
       varlensLogin(): Chainable<void>
+      varlensLoginAs(username: string, password: string, rotatedPassword?: string): Chainable<void>
     }
   }
 }
