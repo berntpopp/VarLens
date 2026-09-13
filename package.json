@@ -183,7 +183,7 @@
     "@fastify/swagger-ui": "^6.1.1",
     "@node-rs/argon2": "^2.1.0",
     "@vueuse/core": "^14.4.0",
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "better-sqlite3-multiple-ciphers": "^12.11.1",
     "bottleneck": "^2.19.5",
     "d3": "^7.9.0",
