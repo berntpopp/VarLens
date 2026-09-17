@@ -7,7 +7,7 @@ const HAS_PG = typeof process.env.VARLENS_PG_URL === 'string' && process.env.VAR
 describe.skipIf(!HAS_PG)('web dev API latency route', () => {
   let nodeEnvBeforeLatencyTest: string | undefined
 
-  test.sequential('delays real /api dispatcher calls in development only', async () => {
+  test('delays real /api dispatcher calls in development only', async () => {
     const isolated = await startIsolatedWebSchema('api_latency_route')
     const previousLatency = process.env.VARLENS_WEB_API_LATENCY_MS
     const previousNodeEnv = process.env.NODE_ENV
@@ -42,7 +42,7 @@ describe.skipIf(!HAS_PG)('web dev API latency route', () => {
     }
   })
 
-  test.sequential('restores NODE_ENV after enabling development latency', () => {
+  test('restores NODE_ENV after enabling development latency', () => {
     expect(process.env.NODE_ENV).toBe(nodeEnvBeforeLatencyTest)
   })
 })

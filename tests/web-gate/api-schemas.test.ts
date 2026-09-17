@@ -85,7 +85,7 @@ function requiredOf(schema: JsonObject): string[] {
 
 function nullableSchema(type: string): JsonObject {
   return expect.objectContaining({
-    anyOf: [expect.objectContaining({ type }), expect.objectContaining({ type: 'null' })]
+    type: [type, 'null']
   }) as unknown as JsonObject
 }
 
@@ -332,9 +332,9 @@ describe('shared API schemas', () => {
       expect.objectContaining({
         type: 'object',
         properties: expect.objectContaining({
-          numeric_value: expect.objectContaining({ anyOf: expect.any(Array) }),
-          text_value: expect.objectContaining({ anyOf: expect.any(Array) }),
-          date_value: expect.objectContaining({ anyOf: expect.any(Array) })
+          numeric_value: nullableSchema('number'),
+          text_value: nullableSchema('string'),
+          date_value: nullableSchema('string')
         })
       })
     ])
