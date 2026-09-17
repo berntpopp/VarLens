@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
+import pg from 'pg'
 import { existsSync } from 'fs'
 import { resolve } from 'path'
 
@@ -18,6 +19,35 @@ const isWebBuilt = existsSync(WEB_BUILD_PATH)
 const HAS_PG = typeof process.env.VARLENS_PG_URL === 'string' && process.env.VARLENS_PG_URL !== ''
 
 describe.skipIf(!isWebBuilt || !HAS_PG)('healthz integration', () => {
+  test('DB failure affects readiness but not liveness, and readiness recovers', async () => {
+    const { buildApp } = await import('../../../src/web/server')
+    const app = await buildApp()
+    const query = vi.spyOn(pg.Pool.prototype, 'query')
+    try {
+      query.mockRejectedValue(new Error('simulated PostgreSQL outage'))
+      const live = await app.inject({ method: 'GET', url: '/livez' })
+      expect(live.statusCode).toBe(200)
+      expect(query).not.toHaveBeenCalled()
+
+      for (const url of ['/readyz', '/healthz']) {
+        const response = await app.inject({ method: 'GET', url })
+        expect(response.statusCode).toBe(503)
+        expect(response.json()).toMatchObject({ status: 'unhealthy', db: { open: false } })
+      }
+      expect(query).toHaveBeenCalledTimes(2)
+
+      query.mockRestore()
+      for (const url of ['/readyz', '/healthz']) {
+        const response = await app.inject({ method: 'GET', url })
+        expect(response.statusCode).toBe(200)
+        expect(response.json()).toMatchObject({ status: 'ok', db: { open: true } })
+      }
+    } finally {
+      query.mockRestore()
+      await app.close()
+    }
+  })
+
   test('GET /healthz returns 200 with status payload when Postgres is open', async () => {
     const { buildApp } = await import('../../../src/web/server')
     const app = await buildApp()

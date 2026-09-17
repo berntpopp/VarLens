@@ -1,6 +1,8 @@
 import {
   expectHealthEndpointReady,
+  expectLivezEndpointOk,
   expectPublicLoginApiReachable,
+  expectReadyzEndpointReady,
   expectSwaggerAndOpenApiContractPublic,
   resetAnonymousBrowser
 } from '../support/public-contracts'
@@ -11,6 +13,8 @@ describe('VarLens public health and API contract smoke', () => {
   })
 
   it('serves a healthy web process with database connectivity', () => {
+    expectLivezEndpointOk()
+    expectReadyzEndpointReady()
     expectHealthEndpointReady()
   })
 

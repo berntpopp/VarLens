@@ -2,6 +2,7 @@ import { createServer, type Server } from 'http'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { buildDocumentedDispatcherPathSet } from './routes/openapi-paths'
+import { isProbePath } from './probe-paths'
 import { toTaskDomain } from './task-types'
 
 const DEFAULT_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
@@ -102,7 +103,9 @@ function normalizeMetricsPath(path: string | undefined): string {
 
 export function resolveMetricsRoute(method: string, url: string): string {
   const pathname = pathName(url)
-  if (pathname === '/healthz' || pathname === '/api/openapi.json') return pathname
+  if (isProbePath(pathname) || pathname === '/api/openapi.json') {
+    return pathname
+  }
 
   if (method === 'POST' && /^\/api\/[^/]+\/[^/]+$/.test(pathname)) {
     return documentedApiPaths.has(pathname) ? pathname : 'unknown'

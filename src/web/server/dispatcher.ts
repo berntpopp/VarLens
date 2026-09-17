@@ -78,6 +78,20 @@ import type { AppMetrics, OperationMetricName } from './metrics'
 const PRE_ROTATION_ALLOWED = new Set<string>(['auth:changePassword', 'auth:logout'])
 const DEV_API_LATENCY_ENV = 'VARLENS_WEB_API_LATENCY_MS'
 
+/**
+ * Dispatcher keys that count as one user-visible operation in
+ * `varlens_operation_events_total`. Deliberately an explicit allowlist rather
+ * than an `import:` / `batch-import:` prefix match: progress polls, cancels,
+ * previews and file pickers share those prefixes, so a prefix match turns the
+ * import counter into a request counter with no relation to how many imports
+ * actually ran.
+ */
+export const OPERATION_METRIC_KEYS: Record<string, OperationMetricName> = {
+  'import:start': 'import',
+  'import:startMultiFile': 'import',
+  'batch-import:start': 'batch-import'
+}
+
 function toSerializableWebError(error: unknown): SerializableError {
   if (isIpcError(error)) return error
   if (error instanceof Error) return toSerializableError(error)
@@ -135,9 +149,7 @@ async function applyDevApiLatency(): Promise<void> {
 }
 
 function operationMetricForKey(key: string): OperationMetricName | undefined {
-  if (key.startsWith('batch-import:')) return 'batch-import'
-  if (key.startsWith('import:')) return 'import'
-  return undefined
+  return OPERATION_METRIC_KEYS[key]
 }
 
 function recordDispatcherOperationMetrics(params: {
@@ -156,12 +168,25 @@ function recordDispatcherOperationMetrics(params: {
   })
 }
 
+/**
+ * A non-empty `errors[]` is not considered a failure when some variants were imported:
+ * import results carry per-row warnings there, so a partial import that skipped a few
+ * malformed rows still succeeded as an operation. However, if variantCount is 0 or
+ * missing, a non-empty `errors[]` indicates a total failure.
+ */
 function resultLooksLikeFailure(result: unknown): boolean {
   if (result === null || typeof result !== 'object') return false
   const body = result as Record<string, unknown>
   if (typeof body.error === 'string' && body.error.trim() !== '') return true
-  if (Array.isArray(body.errors) && body.errors.length > 0) return true
-  return typeof body.code === 'string' && body.code.trim() !== ''
+  if (typeof body.code === 'string' && body.code.trim() !== '') return true
+  if (
+    Array.isArray(body.errors) &&
+    body.errors.length > 0 &&
+    (typeof body.variantCount !== 'number' || body.variantCount === 0)
+  ) {
+    return true
+  }
+  return false
 }
 
 function failureClassForResult(result: unknown, statusCode: number): string {

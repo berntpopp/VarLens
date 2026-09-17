@@ -1,6 +1,6 @@
 /**
  * Serves the built browser bundle (`out/web/public/`) and falls back
- * to `index.html` for any non-`/api/*`, non-`/healthz` GET so Vue
+ * to `index.html` for any non-`/api/*`, non-probe GET so Vue
  * Router's history-mode routes resolve.
  *
  * Disabled when the build output isn't present — keeps tests that
@@ -11,6 +11,8 @@ import { basename, resolve } from 'node:path'
 
 import type { FastifyInstance } from 'fastify'
 import fastifyStatic from '@fastify/static'
+
+import { isProbePath } from './probe-paths'
 
 // At runtime the bundle lives at `/app/out/web/server.cjs`, so __dirname is
 // `/app/out/web/` and the renderer build lands beside it at `./public/`.
@@ -62,7 +64,7 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
       reply.code(404)
       return { error: 'not found' }
     }
-    if (url.startsWith('/api/') || url === '/healthz') {
+    if (url.startsWith('/api/') || isProbePath(url)) {
       reply.code(404)
       return { error: 'not found' }
     }

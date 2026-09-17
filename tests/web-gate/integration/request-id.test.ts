@@ -16,7 +16,7 @@ describe.skipIf(!isWebBuilt || !hasPostgres)('web request IDs', () => {
       const spoofed = 'x'.repeat(10_000)
       const first = await app.inject({
         method: 'GET',
-        url: '/healthz',
+        url: '/livez',
         headers: { 'x-request-id': spoofed }
       })
       const firstId = first.headers['x-request-id']
@@ -29,13 +29,13 @@ describe.skipIf(!isWebBuilt || !hasPostgres)('web request IDs', () => {
       // This case is what pins `requestIdHeader: false` in src/web/server.ts.
       const viaFastifyHeader = await app.inject({
         method: 'GET',
-        url: '/healthz',
+        url: '/livez',
         headers: { 'request-id': spoofed }
       })
       expect(viaFastifyHeader.headers['x-request-id']).not.toBe(spoofed)
       expect(viaFastifyHeader.headers['x-request-id']).toMatch(UUID_RE)
 
-      const second = await app.inject({ method: 'GET', url: '/healthz' })
+      const second = await app.inject({ method: 'GET', url: '/livez' })
       expect(second.headers['x-request-id']).toMatch(UUID_RE)
       expect(second.headers['x-request-id']).not.toBe(firstId)
     } finally {
