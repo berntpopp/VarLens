@@ -1,7 +1,13 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="700" persistent scrim>
+  <v-dialog
+    v-model="isOpen"
+    max-width="700"
+    persistent
+    scrim
+    aria-labelledby="disclaimer-dialog-title"
+  >
     <v-card>
-      <v-card-title>{{ config.title }}</v-card-title>
+      <v-card-title id="disclaimer-dialog-title">{{ config.title }}</v-card-title>
       <v-card-text style="max-height: 70vh; overflow-y: auto">
         <p class="mb-4">{{ config.introduction }}</p>
         <div
@@ -17,10 +23,10 @@
           />
           <div>
             <div class="text-body-2 font-weight-bold mb-1">{{ limitation.title }}</div>
-            <div class="text-body-2 text-medium-emphasis">{{ limitation.text }}</div>
+            <div class="text-body-2 text-high-emphasis">{{ limitation.text }}</div>
           </div>
         </div>
-        <p class="mt-4 text-body-small font-italic text-medium-emphasis">{{ config.footer }}</p>
+        <p class="mt-4 text-body-small font-italic text-high-emphasis">{{ config.footer }}</p>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
@@ -89,6 +95,6 @@ defineExpose({ checkAndShow, show })
 <style scoped>
 .limitation-item {
   background: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 4%, transparent);
-  border-left: 3px solid rgb(var(--v-theme-primary));
+  border: 1px solid rgba(var(--v-border-color), 0.12);
 }
 </style>

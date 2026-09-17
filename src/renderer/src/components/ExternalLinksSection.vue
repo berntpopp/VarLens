@@ -25,12 +25,39 @@
           {{ getLinkLabel(link.id) }}
         </span>
       </div>
+
+      <!-- Local IGV Broadcast button -->
+      <div
+        v-if="props.variant.chr && props.variant.pos"
+        class="d-flex flex-column align-center external-link-item"
+      >
+        <v-tooltip location="top">
+          <template #activator="{ props: tooltipProps }">
+            <v-btn
+              v-bind="tooltipProps"
+              icon
+              size="small"
+              variant="tonal"
+              color="primary"
+              :loading="igvLoading"
+              aria-label="Broadcast locus to local IGV"
+              @click="jumpToLocalIgv"
+            >
+              <v-icon :icon="mdiLaptop" />
+            </v-btn>
+          </template>
+          Jump to locus in local IGV (port 60151)
+        </v-tooltip>
+        <span class="text-body-small text-center text-truncate external-link-label">
+          Local IGV
+        </span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useExternalLinksStore } from '../stores/externalLinksStore'
 import { useApiService } from '../composables/useApiService'
 import { resolveUrlTemplate } from '../utils/externalLinks'
@@ -45,6 +72,7 @@ import {
   mdiDna,
   mdiHospitalBox,
   mdiKeyVariant,
+  mdiLaptop,
   mdiMap,
   mdiOpenInNew,
   mdiTelescope,
@@ -146,6 +174,30 @@ async function openLink(linkId: string): Promise<void> {
       'Failed to open external link: ' + (e instanceof Error ? e.message : String(e)),
       'links'
     )
+  }
+}
+
+const igvLoading = ref(false)
+
+async function jumpToLocalIgv(): Promise<void> {
+  const chr = props.variant.chr
+  const pos = props.variant.pos
+  if (!chr || !pos) return
+
+  igvLoading.value = true
+  const locus = `${chr}:${pos}-${pos}`
+  const igvUrl = `http://localhost:60151/goto?locus=${encodeURIComponent(locus)}`
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 1500)
+    await fetch(igvUrl, { mode: 'no-cors', signal: controller.signal })
+    clearTimeout(timer)
+    logService.info(`Broadcast locus ${locus} to local IGV on port 60151`, 'links')
+  } catch {
+    logService.warn('Local IGV port 60151 not responding or listening', 'links')
+  } finally {
+    igvLoading.value = false
   }
 }
 </script>

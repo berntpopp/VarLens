@@ -17,7 +17,7 @@
       :items-per-page-options="itemsPerPageOptions"
       density="compact"
       multi-sort
-      class="elevation-1"
+      class="elevation-1 variant-table--sticky"
       :row-props="getRowProps"
       @update:options="loadVariants"
       @click:row="handleRowClick"
@@ -183,14 +183,12 @@
 
       <!-- cDNA (handle null) -->
       <template #[`item.cdna`]="{ value }">
-        <span v-if="value" class="hgvs-notation">{{ value }}</span>
-        <EmptyPlaceholder v-else />
+        <HgvsCell :value="value" />
       </template>
 
       <!-- AA Change (handle null) -->
       <template #[`item.aa_change`]="{ value }">
-        <span v-if="value" class="hgvs-notation">{{ value }}</span>
-        <EmptyPlaceholder v-else />
+        <HgvsCell :value="value" />
       </template>
 
       <!-- HPO Sim Score (handle null/undefined/non-number) -->
@@ -273,7 +271,7 @@ import type { AnnotationChangeEvent, Variant, VariantFilter } from '../../../sha
 import type { AnnotationScope } from '../../../shared/types/annotations'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
-import { buildActiveFiltersList } from '../utils/filters/activeFilters'
+import { buildColumnFilterChips } from '../utils/filters/activeFilters'
 import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
 import { useAnnotations, annotationCache } from '../composables/useAnnotations'
 import { useVariantRowViewModel } from './variant-table/useVariantRowViewModel'
@@ -292,6 +290,7 @@ import { useVariantColumns } from './variant-table/columns'
 import { useVariantData } from './variant-table/useVariantData'
 import { mdiFilterOff, mdiFilterOffOutline } from '@mdi/js'
 import { useApiService } from '../composables/useApiService'
+import { useAppState } from '../composables/useAppState'
 import { isWebRuntime } from '../utils/runtime-mode'
 import {
   PositionCell,
@@ -303,7 +302,8 @@ import {
   ConsequenceCell,
   ExternalLinkCell,
   AnnotationsCell,
-  EmptyPlaceholder
+  EmptyPlaceholder,
+  HgvsCell
 } from './table-cells'
 
 interface Props {
@@ -343,6 +343,12 @@ const emit = defineEmits<{
 const viewActive = ref(true)
 const tableWorkActive = computed(() => props.interactive && viewActive.value)
 const { api } = useApiService()
+let appState: ReturnType<typeof useAppState> | null = null
+try {
+  appState = useAppState()
+} catch {
+  // Safe fallback when mounted without AppState provider in isolated unit tests
+}
 let cleanupAnnotationChanged: (() => void) | null = null
 
 // Annotations
@@ -469,33 +475,7 @@ function handleAnnotationChanged(): void {
 // Column active filter chips for the toolbar
 const columnActiveFilters = computed<ActiveFilter[]>(() => {
   const colFilters = getColumnFiltersParam()
-  if (!colFilters) return []
-  return buildActiveFiltersList(
-    {
-      searchQuery: '',
-      geneSymbol: '',
-      consequences: [],
-      funcs: [],
-      clinvars: [],
-      maxGnomadAf: null,
-      minCadd: null,
-      maxInternalAf: null,
-      minCarriers: null,
-      starredOnly: false,
-      hasCommentOnly: false,
-      acmgClassifications: [],
-      tagIds: [],
-      annotationScope: 'case',
-      activePanelIds: [],
-      panelPaddingBp: 5000,
-      inheritanceModes: [],
-      analysisGroupId: null,
-      considerPhasing: false,
-      columnFilters: {}
-    },
-    [],
-    colFilters
-  ).filter((f) => f.id.startsWith('col:'))
+  return colFilters ? buildColumnFilterChips(colFilters) : []
 })
 
 // Template refs
@@ -588,6 +568,10 @@ onKeyStroke(
   (e: KeyboardEvent) => {
     if (!props.interactive || !viewActive.value || isInputFocused()) return
     e.preventDefault()
+    if (appState?.panelOpen.value === true) {
+      appState.panelOpen.value = false
+      return
+    }
     clearSelection()
     selectedVariantId.value = null
     emit('deselect')

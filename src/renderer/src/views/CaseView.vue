@@ -8,6 +8,7 @@ import EmptyState from '../components/EmptyState.vue'
 import FilterToolbar from '../components/FilterToolbar.vue'
 import VariantTable from '../components/VariantTable.vue'
 import ShortlistPanel from '../components/shortlist/ShortlistPanel.vue'
+import ProbandContextBanner from '../components/case/ProbandContextBanner.vue'
 import { useAppState } from '../composables/useAppState'
 import type { VariantFilter, Variant } from '../../../shared/types/api'
 import { APP_CONFIG } from '../../../shared/config/app.config'
@@ -31,7 +32,8 @@ const {
   panelOpen,
   selectedPanelVariant,
   showSnack,
-  dataGeneration
+  dataGeneration,
+  openCaseMetadata
 } = useAppState()
 
 const { api } = useApiService()
@@ -382,6 +384,13 @@ defineExpose({
       </v-tab>
     </v-tabs>
 
+    <!-- Persistent Proband & Phenotype Context Banner -->
+    <ProbandContextBanner
+      :case-id="selectedCaseId"
+      :case-name="selectedCaseName"
+      @edit="openCaseMetadata"
+    />
+
     <!--
       Per-type region. `v-show` (not `v-if`) because VariantTable is
       kept alive while the Shortlist tab is active so the user can
@@ -508,12 +517,14 @@ defineExpose({
 .variant-type-tabs :deep(.v-tab.shortlist-tab) {
   font-weight: 600;
   letter-spacing: 0.01em;
-  /* 3px leading accent bar in primary — Material 3 accent-border pattern */
-  border-left: 3px solid rgb(var(--v-theme-primary));
-  padding-left: calc(16px - 3px);
-  /* Right-border separator visually groups the Shortlist tab */
-  border-right: 1px solid rgb(var(--v-theme-outline));
-  margin-right: 4px;
+  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, transparent);
+  border-radius: 6px;
+  margin-right: 6px;
+  border-right: 1px solid rgba(var(--v-theme-outline), 0.3);
+}
+
+.variant-type-tabs :deep(.v-tab.shortlist-tab.v-tab--selected) {
+  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 14%, transparent);
 }
 
 /*

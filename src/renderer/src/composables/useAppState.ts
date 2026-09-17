@@ -75,6 +75,10 @@ export interface AppStateReturn {
     fn: (message: string, type: string, options?: Record<string, unknown>) => void
   ) => void
   showSnack: (message: string, type: string, options?: Record<string, unknown>) => void
+
+  // Case metadata dialog
+  setCaseMetadataHandler: (fn: () => void) => void
+  openCaseMetadata: () => void
 }
 
 /** Injection key for the shared app state. */
@@ -129,6 +133,14 @@ export function createAppState(): AppStateReturn {
     if (showSnackbar !== null) {
       showSnackbar(message, type, options)
     }
+  }
+
+  let _caseMetadataHandler: (() => void) | null = null
+  function setCaseMetadataHandler(fn: () => void): void {
+    _caseMetadataHandler = fn
+  }
+  function openCaseMetadata(): void {
+    _caseMetadataHandler?.()
   }
 
   function clearSelectedCase(): void {
@@ -242,7 +254,11 @@ export function createAppState(): AppStateReturn {
 
     // Snackbar
     setSnackbarHandler,
-    showSnack
+    showSnack,
+
+    // Case metadata dialog
+    setCaseMetadataHandler,
+    openCaseMetadata
   }
 }
 

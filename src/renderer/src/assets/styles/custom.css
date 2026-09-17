@@ -1,6 +1,12 @@
-/* Thin, unobtrusive scrollbars while keeping them visible for accessibility */
+:root {
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+}
+
+/* Thin, unobtrusive scrollbars with stable gutter to prevent layout shift */
 html {
   scrollbar-width: thin; /* Firefox: show a thin scrollbar instead of hiding it */
+  scrollbar-gutter: stable;
 }
 
 html::-webkit-scrollbar {
@@ -66,26 +72,26 @@ html::-webkit-scrollbar-thumb {
 
 /* Monospace font for technical genomic data */
 .variant-data-mono {
-  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
 
 .gene-symbol {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 500;
   font-size: 0.875rem;
 }
 
 .hgvs-notation {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8125rem;
   color: rgb(var(--v-theme-on-surface));
 }
 
 .genomic-coordinate {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
@@ -209,9 +215,13 @@ html::-webkit-scrollbar-thumb {
 }
 
 /* Navigation drawer slide: fast but not instant (retains spatial context) */
-.v-navigation-drawer {
+.v-navigation-drawer:not(.is-resizing) {
   transition-duration: 150ms !important;
   will-change: transform;
+}
+
+.v-navigation-drawer.is-resizing {
+  transition: none !important;
 }
 
 /* CSS containment on table rows for rendering isolation */

@@ -16,8 +16,11 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
+import { computed } from 'vue'
+import { onKeyStroke } from '@vueuse/core'
 import { mdiStar, mdiStarOutline, mdiDotsVertical } from '@mdi/js'
 import RankScoreTooltip from './RankScoreTooltip.vue'
+import { useTableKeyboardNav, isInputFocused } from '../../composables/useTableKeyboardNav'
 import type { ShortlistRow } from '../../../../shared/types/shortlist'
 
 const props = defineProps<{
@@ -134,6 +137,79 @@ function targetTabFor(t: ShortlistRow['variant_type']): 'snv' | 'sv' | 'cnv' | '
 function displayVariantType(t: ShortlistRow['variant_type']): string {
   return (t ?? 'snv').toUpperCase()
 }
+
+// Keyboard navigation and row selection
+const rowsRef = computed(() => props.rows)
+
+const { selectedItem, selectByClick, moveUp, moveDown, clearSelection } = useTableKeyboardNav({
+  items: rowsRef,
+  getItemId: (item: ShortlistRow) => item.id,
+  onSelect: (_item: ShortlistRow) => {}
+})
+
+function getRowProps({ item }: { item: ShortlistRow }) {
+  const isSelected = selectedItem.value?.id === item.id
+  return {
+    class: {
+      'variant-row--selected': isSelected
+    }
+  }
+}
+
+function handleRowClick(item: ShortlistRow) {
+  selectByClick(item)
+  emit('row-click', item)
+}
+
+onKeyStroke(
+  'ArrowDown',
+  (e: KeyboardEvent) => {
+    if (isInputFocused() || props.rows.length === 0) return
+    e.preventDefault()
+    moveDown()
+  },
+  { dedupe: true }
+)
+
+onKeyStroke(
+  'ArrowUp',
+  (e: KeyboardEvent) => {
+    if (isInputFocused() || props.rows.length === 0) return
+    e.preventDefault()
+    moveUp()
+  },
+  { dedupe: true }
+)
+
+onKeyStroke(
+  'Enter',
+  (e: KeyboardEvent) => {
+    if (isInputFocused() || !selectedItem.value) return
+    e.preventDefault()
+    emit('row-click', selectedItem.value)
+  },
+  { dedupe: true }
+)
+
+onKeyStroke(
+  's',
+  (e: KeyboardEvent) => {
+    if (isInputFocused() || !selectedItem.value) return
+    e.preventDefault()
+    emit('toggle-star', selectedItem.value)
+  },
+  { dedupe: true }
+)
+
+onKeyStroke(
+  'Escape',
+  (e: KeyboardEvent) => {
+    if (isInputFocused()) return
+    e.preventDefault()
+    clearSelection()
+  },
+  { dedupe: true }
+)
 </script>
 
 <template>
@@ -145,7 +221,8 @@ function displayVariantType(t: ShortlistRow['variant_type']): string {
     :items-per-page="50"
     :items-per-page-options="[25, 50, 100, 250, 500]"
     class="shortlist-data-table"
-    @click:row="(_: MouseEvent, { item }: { item: ShortlistRow }) => emit('row-click', item)"
+    :row-props="getRowProps"
+    @click:row="(_: MouseEvent, { item }: { item: ShortlistRow }) => handleRowClick(item)"
   >
     <template #[`item.rank_score`]="{ item }">
       <v-tooltip location="right">
@@ -285,5 +362,19 @@ function displayVariantType(t: ShortlistRow['variant_type']): string {
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
+}
+
+.shortlist-data-table :deep(tbody tr) {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.shortlist-data-table :deep(tbody tr.variant-row--selected) {
+  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 12%, transparent) !important;
+  font-weight: 500;
+}
+
+.shortlist-data-table :deep(tbody tr.variant-row--selected:hover) {
+  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 18%, transparent) !important;
 }
 </style>

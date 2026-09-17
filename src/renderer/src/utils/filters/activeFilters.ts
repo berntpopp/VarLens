@@ -144,11 +144,20 @@ export function buildActiveFiltersList(
   }
 
   // Per-column typed filters
+  list.push(...buildColumnFilterChips(columnFilters))
+
+  return list
+}
+
+/**
+ * Build active filter chips for column filters only.
+ */
+export function buildColumnFilterChips(columnFilters: ColumnFiltersParam = {}): ActiveFilter[] {
+  const list: ActiveFilter[] = []
   for (const [key, filter] of Object.entries(columnFilters)) {
     const label = COLUMN_LABELS[key] ?? key
     const displayValue = formatColumnFilterValue(filter.operator, filter.value)
     list.push({ id: `col:${key}`, label, value: displayValue })
   }
-
   return list
 }

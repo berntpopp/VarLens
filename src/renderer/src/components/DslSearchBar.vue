@@ -48,7 +48,11 @@
           </v-list-subheader>
 
           <!-- Suggestion item -->
-          <v-list-item v-else @mousedown.prevent="handleSelect(item.suggestion!)">
+          <v-list-item
+            v-else
+            :active="isHighlighted(item)"
+            @mousedown.prevent="handleSelect(item.suggestion!)"
+          >
             <template #prepend>
               <v-icon v-if="item.suggestion!.icon" size="small" class="mr-2">
                 {{ item.suggestion!.icon }}
@@ -155,6 +159,25 @@ const groupedSuggestions = computed((): GroupedItem[] => {
   return items
 })
 
+const highlightedIndex = ref(-1)
+
+const selectableSuggestions = computed(() =>
+  groupedSuggestions.value.filter((item) => !item.isHeader && item.suggestion != null)
+)
+
+watch(
+  () => props.suggestions,
+  () => {
+    highlightedIndex.value = -1
+  }
+)
+
+function isHighlighted(item: GroupedItem): boolean {
+  if (highlightedIndex.value < 0) return false
+  const active = selectableSuggestions.value[highlightedIndex.value]
+  return active?.suggestion === item.suggestion
+}
+
 function onInput(value: string | null): void {
   const v = value ?? ''
   emit('update:rawInput', v)
@@ -173,9 +196,47 @@ function onEnter(): void {
 // Single keydown handler: two @keydown.<modifier> bindings on one element
 // trip vue-tsc TS1117 against Vuetify 4.1+ types (vuejs/language-tools#6096).
 function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Enter') {
-    onEnter()
+  if (event.key === 'ArrowDown') {
+    if (selectableSuggestions.value.length === 0) return
+    event.preventDefault()
+    if (!showMenu.value) {
+      showMenu.value = true
+    }
+    highlightedIndex.value = (highlightedIndex.value + 1) % selectableSuggestions.value.length
+  } else if (event.key === 'ArrowUp') {
+    if (selectableSuggestions.value.length === 0) return
+    event.preventDefault()
+    if (!showMenu.value) {
+      showMenu.value = true
+    }
+    highlightedIndex.value =
+      (highlightedIndex.value - 1 + selectableSuggestions.value.length) %
+      selectableSuggestions.value.length
+  } else if (event.key === 'Enter') {
+    if (
+      showMenu.value &&
+      highlightedIndex.value >= 0 &&
+      selectableSuggestions.value[highlightedIndex.value]?.suggestion
+    ) {
+      event.preventDefault()
+      handleSelect(selectableSuggestions.value[highlightedIndex.value].suggestion!)
+      highlightedIndex.value = -1
+    } else {
+      onEnter()
+    }
+  } else if (event.key === 'Tab') {
+    if (
+      showMenu.value &&
+      highlightedIndex.value >= 0 &&
+      selectableSuggestions.value[highlightedIndex.value]?.suggestion
+    ) {
+      event.preventDefault()
+      handleSelect(selectableSuggestions.value[highlightedIndex.value].suggestion!)
+      highlightedIndex.value = -1
+    }
   } else if (event.key === 'Escape') {
+    showMenu.value = false
+    highlightedIndex.value = -1
     ;(event.target as HTMLElement | null)?.blur()
   }
 }
@@ -245,6 +306,11 @@ defineExpose({ focus })
 .dsl-suggestion-list {
   max-height: 400px;
   overflow-y: auto;
+}
+
+.dsl-suggestion-list :deep(.v-list-item--active) {
+  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 12%, transparent) !important;
+  font-weight: 500;
 }
 
 /* Hide mode badge at narrow widths to save space */

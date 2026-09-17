@@ -43,48 +43,68 @@
     <div v-if="activeCodes.length > 0" class="mb-3">
       <div class="text-caption font-weight-bold mb-1">Active evidence</div>
       <div class="d-flex flex-wrap ga-1">
-        <v-chip
-          v-for="entry in activeCodes"
-          :key="entry.code"
-          :color="STRENGTH_COLORS[entry.strength]"
-          size="small"
-          label
-          closable
-          @click:close="
-            () => {
-              toggleCode(entry.code)
-              emitChange()
-            }
-          "
-        >
-          {{ entry.code }}
-          <span class="ml-1 text-caption opacity-70"
-            >{{ getStrengthPoints(entry.strength) }}pt</span
+        <template v-for="entry in activeCodes" :key="entry.code">
+          <v-chip
+            :color="STRENGTH_COLORS[entry.strength]"
+            size="small"
+            label
+            closable
+            @click:close="
+              () => {
+                toggleCode(entry.code)
+                emitChange()
+              }
+            "
           >
-          <v-menu location="bottom" :close-on-content-click="true">
-            <template #activator="{ props: menuProps }">
-              <v-icon
-                v-bind="menuProps"
-                size="x-small"
-                class="ml-1 cursor-pointer"
-                :icon="mdiChevronDown"
-                @click.stop
-              />
-            </template>
-            <v-list density="compact" nav>
-              <v-list-item
-                v-for="opt in STRENGTH_OPTIONS"
-                :key="opt.value"
-                :active="entry.strength === opt.value"
-                @click="handleStrengthChange(entry.code, opt.value)"
-              >
-                <v-list-item-title class="text-caption">
-                  {{ opt.label }} ({{ opt.points }} pts)
-                </v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-menu>
-        </v-chip>
+            {{ entry.code }}
+            <span class="ml-1 text-caption opacity-70">
+              {{ getStrengthPoints(entry.strength) }}pt
+            </span>
+            <v-menu location="bottom" :close-on-content-click="true">
+              <template #activator="{ props: menuProps }">
+                <v-icon
+                  v-bind="menuProps"
+                  size="x-small"
+                  class="ml-1 cursor-pointer"
+                  :icon="mdiChevronDown"
+                  @click.stop
+                />
+              </template>
+              <v-list density="compact" nav>
+                <v-list-item
+                  v-for="opt in STRENGTH_OPTIONS"
+                  :key="opt.value"
+                  :active="entry.strength === opt.value"
+                  @click="handleStrengthChange(entry.code, opt.value)"
+                >
+                  <v-list-item-title class="text-caption">
+                    {{ opt.label }} ({{ opt.points }} pts)
+                  </v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-menu>
+          </v-chip>
+          <v-chip
+            v-if="entry.code === 'PM2'"
+            size="x-small"
+            variant="tonal"
+            :color="entry.strength === 'supporting' ? 'info' : 'warning'"
+            class="ml-1 text-caption cursor-pointer"
+            @click="
+              handleStrengthChange(
+                entry.code,
+                entry.strength === 'supporting' ? 'moderate' : 'supporting'
+              )
+            "
+          >
+            ClinGen SVI:
+            {{ entry.strength === 'supporting' ? 'Supporting (1pt)' : 'Moderate (2pt)' }}
+            <v-tooltip activator="parent" location="top">
+              ClinGen SVI 2020 recommends PM2 at Supporting (1pt) for rarity. Click to toggle
+              between Supporting and Moderate.
+            </v-tooltip>
+          </v-chip>
+        </template>
       </div>
     </div>
 
