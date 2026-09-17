@@ -23,7 +23,12 @@
 import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'path'
 
-import Fastify, { LogController, type FastifyInstance, type FastifyReply } from 'fastify'
+import Fastify, {
+  LogController,
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest
+} from 'fastify'
 
 import { getPostgresStorageConfig } from '../main/storage/config'
 import { createPostgresStorageSession } from '../main/storage/postgres/createPostgresStorageSession'
@@ -207,7 +212,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return { status: 'ok', version: pkg.version }
   })
 
-  const readinessHandler = async (_request: unknown, reply: FastifyReply) => {
+  const readinessHandler = async (_request: FastifyRequest, reply: FastifyReply) => {
     const open = await isPostgresHealthy(pool)
     metrics.setDatabaseHealthy(open)
     if (!open) {

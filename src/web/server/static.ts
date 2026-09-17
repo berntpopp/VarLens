@@ -12,6 +12,8 @@ import { basename, resolve } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import fastifyStatic from '@fastify/static'
 
+import { isProbePath } from './probe-paths'
+
 // At runtime the bundle lives at `/app/out/web/server.cjs`, so __dirname is
 // `/app/out/web/` and the renderer build lands beside it at `./public/`.
 const DEFAULT_PUBLIC_DIR = resolve(__dirname, 'public')
@@ -62,7 +64,7 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
       reply.code(404)
       return { error: 'not found' }
     }
-    if (url.startsWith('/api/') || url === '/livez' || url === '/readyz' || url === '/healthz') {
+    if (url.startsWith('/api/') || isProbePath(url)) {
       reply.code(404)
       return { error: 'not found' }
     }

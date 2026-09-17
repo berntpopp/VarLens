@@ -86,7 +86,7 @@ const DEV_API_LATENCY_ENV = 'VARLENS_WEB_API_LATENCY_MS'
  * import counter into a request counter with no relation to how many imports
  * actually ran.
  */
-const OPERATION_METRIC_KEYS: Record<string, OperationMetricName> = {
+export const OPERATION_METRIC_KEYS: Record<string, OperationMetricName> = {
   'import:start': 'import',
   'import:startMultiFile': 'import',
   'batch-import:start': 'batch-import'
@@ -169,15 +169,24 @@ function recordDispatcherOperationMetrics(params: {
 }
 
 /**
- * A non-empty `errors[]` is deliberately not a failure: import results carry
- * per-row warnings there, and a partial import that skipped a few malformed
- * rows still succeeded as an operation.
+ * A non-empty `errors[]` is not considered a failure when some variants were imported:
+ * import results carry per-row warnings there, so a partial import that skipped a few
+ * malformed rows still succeeded as an operation. However, if variantCount is 0 or
+ * missing, a non-empty `errors[]` indicates a total failure.
  */
 function resultLooksLikeFailure(result: unknown): boolean {
   if (result === null || typeof result !== 'object') return false
   const body = result as Record<string, unknown>
   if (typeof body.error === 'string' && body.error.trim() !== '') return true
-  return typeof body.code === 'string' && body.code.trim() !== ''
+  if (typeof body.code === 'string' && body.code.trim() !== '') return true
+  if (
+    Array.isArray(body.errors) &&
+    body.errors.length > 0 &&
+    (typeof body.variantCount !== 'number' || body.variantCount === 0)
+  ) {
+    return true
+  }
+  return false
 }
 
 function failureClassForResult(result: unknown, statusCode: number): string {

@@ -30,6 +30,14 @@ function passwordCacheKey(username: string): string {
   return `${Cypress.config('baseUrl') ?? ''}|${username}`
 }
 
+function passwordFingerprint(password: string): string {
+  let hash = 0
+  for (let i = 0; i < password.length; i++) {
+    hash = (hash * 31 + password.charCodeAt(i)) >>> 0
+  }
+  return hash.toString(16)
+}
+
 function configuredRotatedPassword(credentials: LoginCredentials): string {
   const rotatedPassword = credentials.rotatedPassword
   return rotatedPassword !== undefined && rotatedPassword !== ''
@@ -157,7 +165,7 @@ function loginWithCredentials(credentials: LoginCredentials): Cypress.Chainable<
 
   return resolveLoginPassword(credentials).then((password) => {
     cy.session(
-      ['varlens', Cypress.config('baseUrl'), username, password],
+      ['varlens', Cypress.config('baseUrl'), username, passwordFingerprint(password)],
       () => {
         cy.varlensApi('auth', 'logout')
         cy.clearCookies()

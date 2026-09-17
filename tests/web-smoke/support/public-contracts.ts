@@ -45,6 +45,23 @@ export function expectHealthEndpointReady(): void {
   })
 }
 
+export function expectLivezEndpointOk(): void {
+  cy.request('/livez').then((response) => {
+    expect(response.status).to.eq(200)
+    expect(response.body).to.include({ status: 'ok' })
+    expect(response.body.version).to.be.a('string').and.not.be.empty
+  })
+}
+
+export function expectReadyzEndpointReady(): void {
+  cy.request('/readyz').then((response) => {
+    expect(response.status).to.eq(200)
+    expect(response.body).to.include({ status: 'ok' })
+    expect(response.body.db).to.include({ open: true })
+    expect(response.body.version).to.be.a('string').and.not.be.empty
+  })
+}
+
 export function expectPublicLoginApiReachable(): void {
   cy.varlensApi('auth', 'isAccountsEnabled').then((response) => {
     expect(response.status).to.eq(200)

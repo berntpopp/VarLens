@@ -93,7 +93,10 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
            /usr/local/lib/node_modules/corepack \
            /usr/local/bin/npm \
            /usr/local/bin/npx \
-           /usr/local/bin/corepack
+           /usr/local/bin/corepack \
+           /opt/yarn-* \
+           /usr/local/bin/yarn \
+           /usr/local/bin/yarnpkg
 
 # Drop to a non-root user. /data is the persistent volume mount.
 RUN groupadd --system --gid 1001 varlens \
@@ -123,7 +126,7 @@ VOLUME ["/data"]
 # Self-describing liveness — operators do not have to re-encode the probe.
 # Tied to the pinned internal port (see header).
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD wget --quiet --spider http://127.0.0.1:8080/healthz || exit 1
+    CMD wget --quiet --spider http://127.0.0.1:8080/livez || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "out/web/server.cjs"]

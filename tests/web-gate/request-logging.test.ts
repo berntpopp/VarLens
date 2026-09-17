@@ -4,6 +4,8 @@ import {
   serializeRequestForTechnicalLog
 } from '../../src/web/server/request-logging'
 
+import fastify from 'fastify'
+
 describe('web request technical logging', () => {
   test('redacts OIDC callback query credentials while retaining the route', () => {
     const loggedUrl = redactRequestLogUrl(
@@ -38,5 +40,36 @@ describe('web request technical logging', () => {
 
   test('leaves routes without a query unchanged', () => {
     expect(redactRequestLogUrl('/health/ready')).toBe('/health/ready')
+  })
+
+  test('Fastify req serializer redacts query parameters in logged request events', async () => {
+    const logs: string[] = []
+    const destination = {
+      write(chunk: string) {
+        logs.push(chunk)
+      }
+    }
+    const app = fastify({
+      logger: {
+        level: 'info',
+        stream: destination,
+        serializers: {
+          req: serializeRequestForTechnicalLog
+        }
+      }
+    })
+    app.get('/test-route', async () => ({ status: 'ok' }))
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test-route?secret_token=super-secret-value&case_id=123'
+    })
+    expect(response.statusCode).toBe(200)
+    await app.close()
+
+    const combinedLogs = logs.join('')
+    expect(combinedLogs).toContain('/test-route?<redacted>')
+    expect(combinedLogs).not.toContain('super-secret-value')
+    expect(combinedLogs).not.toContain('secret_token')
   })
 })

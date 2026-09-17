@@ -2,7 +2,11 @@ import { describe, expect, test, vi } from 'vitest'
 import fastify from 'fastify'
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod'
 
-import { buildDispatcher, registerDispatcher } from '../../src/web/server/dispatcher'
+import {
+  buildDispatcher,
+  OPERATION_METRIC_KEYS,
+  registerDispatcher
+} from '../../src/web/server/dispatcher'
 import { makeDeps } from './helpers/dispatcher-adapters'
 import { UniqueConstraintError } from '../../src/main/database/errors'
 import { AppMetrics, registerRequestMetrics } from '../../src/web/server/metrics'
@@ -467,6 +471,46 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     })
     expect(metrics.metricsText()).toContain('operation="import",result="success"')
     await app.close()
+  })
+
+  test('counts imports with 0 variantCount and errors as error operations', async () => {
+    const { deps } = makeDeps()
+    const metrics = new AppMetrics({ app: 'varlens', environment: 'dev' })
+    deps.metrics = metrics
+    const app = fastify()
+    app.setValidatorCompiler(validatorCompiler)
+    app.setSerializerCompiler(serializerCompiler)
+    registerRequestMetrics(app, metrics)
+    registerDispatcher(app, deps, {
+      'import:start': {
+        async handle() {
+          return {
+            caseId: 0,
+            variantCount: 0,
+            skipped: 0,
+            errors: ['Fatal: failed to parse header'],
+            elapsed: 1
+          }
+        }
+      }
+    })
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/import/start',
+      payload: { args: ['web-upload:x/corrupt.vcf', 'Corrupt Case'] }
+    })
+    expect(response.statusCode).toBe(200)
+    expect(metrics.metricsText()).toMatch(/operation="import",result="error"/)
+    await app.close()
+  })
+
+  test('every key in OPERATION_METRIC_KEYS is a valid registered dispatcher key', () => {
+    const { deps } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    for (const key of Object.keys(OPERATION_METRIC_KEYS)) {
+      expect(overrides).toHaveProperty(key)
+    }
   })
 
   test('dispatcher audits successful web writes but does not expose audit append as API route', async () => {
