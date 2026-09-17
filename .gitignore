@@ -122,8 +122,11 @@ docs/.vitepress/cache/
 # Worktrees
 .worktrees/
 # Claude Code agent runtime: skills under .claude/skills/ are tracked and shared;
-# ephemeral agent worktrees are not.
+# ephemeral agent worktrees, projects, and machine-local settings are not.
 .claude/worktrees/
+.claude/settings.local.json
+.claude/projects/
+.claude/scheduled_tasks.lock
 
 # Preventive: common genomic formats
 *.vcf
@@ -169,3 +172,14 @@ e2e-screenshots/
 .antigravity/
 .antigravitycli/
 .gemini/
+
+# Impeccable design skill, agents, hooks, and runtime state
+.impeccable/
+**/.impeccable/
+**/skills/impeccable/
+**/agents/impeccable*
+.github/hooks/impeccable.json
+src/__impeccable_provider_smoke_*.html
+
+
+
