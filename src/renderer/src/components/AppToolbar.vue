@@ -78,11 +78,11 @@
       selected-class="mode-toggle--active"
       class="mode-toggle mr-2"
     >
-      <v-btn value="case" size="small">
+      <v-btn value="case" size="small" aria-label="Case mode">
         <v-icon :start="showModeToggleLabels" size="small" :icon="mdiAccount" />
         <span v-if="showModeToggleLabels">Case</span>
       </v-btn>
-      <v-btn value="cohort" size="small">
+      <v-btn value="cohort" size="small" aria-label="Cohort mode">
         <v-icon :start="showModeToggleLabels" size="small" :icon="mdiAccountGroup" />
         <span v-if="showModeToggleLabels">Cohort</span>
       </v-btn>
@@ -94,7 +94,13 @@
     />
     <v-menu>
       <template #activator="{ props }">
-        <v-btn icon size="small" data-testid="app-settings-menu" v-bind="props">
+        <v-btn
+          icon
+          size="small"
+          data-testid="app-settings-menu"
+          aria-label="Application settings"
+          v-bind="props"
+        >
           <v-icon :icon="mdiCog" />
           <v-tooltip activator="parent" location="bottom">Settings</v-tooltip>
         </v-btn>

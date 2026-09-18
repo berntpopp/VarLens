@@ -22,6 +22,7 @@
           <template #activator="{ props }">
             <span
               v-bind="props"
+              role="status"
               :aria-label="isOnline ? 'Network online' : 'Network offline'"
               data-testid="network-status-indicator"
               class="d-inline-flex ml-1"

@@ -281,6 +281,10 @@ const { handleDatabaseSwitched, handleImportComplete, handleBatchImportComplete 
     importStore
   })
 
+appState.setCaseMetadataHandler(() => {
+  dialogHostRef.value?.showCaseMetadata()
+})
+
 const handleDialogBatchImportComplete = async (): Promise<void> => {
   if (!isWebRuntime()) return
   await handleBatchImportComplete()

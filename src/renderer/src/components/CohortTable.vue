@@ -778,8 +778,8 @@ defineExpose({ refresh })
   padding: 4px 10px;
   margin-bottom: 8px;
   color: rgb(var(--v-theme-info));
-  border-left: 2px solid rgb(var(--v-theme-info));
-  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, rgb(var(--v-theme-info)) 25%, transparent);
+  border-radius: 4px;
   font-size: 12px;
   line-height: 1.4;
   /* Base tint + shimmer highlight band. The middle stop at 0.18 alpha is

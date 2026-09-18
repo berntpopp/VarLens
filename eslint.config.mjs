@@ -25,6 +25,11 @@ export default [
       'tests/web-smoke/**',
       'e2e-*.mjs',
       '.planning/**',
+      '.agent/**',
+      '.claude/**',
+      '.github/skills/**',
+      '.impeccable/**',
+      'coverage/**',
       // Third-party bundles shipped directly to the renderer's public
       // folder — not authored in this repo, never meant to be linted.
       'src/renderer/public/**'

@@ -68,7 +68,16 @@
 
 /* HGVS notation monospace */
 .table-container .hgvs-notation {
-  font-family: 'Courier New', monospace;
+  font-family: var(
+    --font-mono,
+    ui-monospace,
+    SFMono-Regular,
+    'SF Mono',
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace
+  );
   font-size: 0.85em;
 }
 
@@ -83,14 +92,13 @@
   background-color: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 3.5%, transparent);
 }
 
-/* Selected row highlighting - prominent with left accent border */
+/* Selected row highlighting - clean background and font emphasis */
 .table-container .v-data-table tbody tr.variant-row--selected {
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 12%, transparent) !important;
-  border-left: 4px solid rgb(var(--v-theme-primary)) !important;
 }
 
-.table-container .v-data-table tbody tr.variant-row--selected td:first-child {
-  padding-left: calc(16px - 4px);
+.table-container .v-data-table tbody tr.variant-row--selected td {
+  font-weight: 500;
 }
 
 /* Hover state - visible but subtle */
@@ -144,4 +152,68 @@
 .table-container .external-link--clicked {
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 10%, transparent);
   border-radius: 2px;
+}
+
+/* Sticky lead columns for variant tables */
+.table-container .variant-table--sticky th:first-child,
+.table-container .variant-table--sticky td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: rgb(var(--v-theme-surface));
+}
+
+.table-container .variant-table--sticky th:first-child {
+  z-index: 3;
+}
+
+.table-container .variant-table--sticky th:nth-child(2),
+.table-container .variant-table--sticky td:nth-child(2) {
+  position: sticky;
+  left: 100px;
+  z-index: 2;
+  background-color: rgb(var(--v-theme-surface));
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.12);
+  border-right: 1px solid rgba(var(--v-border-color), 0.12);
+}
+
+.table-container .variant-table--sticky th:nth-child(2) {
+  z-index: 3;
+}
+
+/* Maintain background color in sticky cells during hover, zebra, selected states */
+.table-container .variant-table--sticky tbody tr.variant-row--striped td:first-child,
+.table-container .variant-table--sticky tbody tr.variant-row--striped td:nth-child(2) {
+  background-color: color-mix(
+    in srgb,
+    rgb(var(--v-theme-on-surface)) 3.5%,
+    rgb(var(--v-theme-surface))
+  );
+}
+
+.table-container .variant-table--sticky tbody tr:hover td:first-child,
+.table-container .variant-table--sticky tbody tr:hover td:nth-child(2) {
+  background-color: color-mix(
+    in srgb,
+    rgb(var(--v-theme-primary)) 8%,
+    rgb(var(--v-theme-surface))
+  ) !important;
+}
+
+.table-container .variant-table--sticky tbody tr.variant-row--selected td:first-child,
+.table-container .variant-table--sticky tbody tr.variant-row--selected td:nth-child(2) {
+  background-color: color-mix(
+    in srgb,
+    rgb(var(--v-theme-primary)) 12%,
+    rgb(var(--v-theme-surface))
+  ) !important;
+}
+
+.table-container .variant-table--sticky tbody tr.variant-row--selected:hover td:first-child,
+.table-container .variant-table--sticky tbody tr.variant-row--selected:hover td:nth-child(2) {
+  background-color: color-mix(
+    in srgb,
+    rgb(var(--v-theme-primary)) 18%,
+    rgb(var(--v-theme-surface))
+  ) !important;
 }

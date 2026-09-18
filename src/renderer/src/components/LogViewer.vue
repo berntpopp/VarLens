@@ -75,12 +75,7 @@
           @scroll="handleScroll"
         >
           <template #default="{ item }">
-            <div
-              class="log-entry pa-2"
-              :style="{
-                borderLeft: `4px solid ${getLevelColorHex(item.level)}`
-              }"
-            >
+            <div class="log-entry pa-2">
               <!-- First line: level badge + message -->
               <div class="d-flex align-center mb-1">
                 <v-chip
@@ -207,19 +202,6 @@ const bufferLevelCounts = computed(() => {
 
   return counts
 })
-
-// Get color hex for level (Vuetify color to hex)
-function getLevelColorHex(level: LogLevel): string {
-  // Vuetify color map (approximate hex values)
-  const colorMap: Record<string, string> = {
-    grey: '#9E9E9E',
-    blue: '#2196F3',
-    amber: '#FFC107',
-    red: '#F44336',
-    'deep-purple': '#673AB7'
-  }
-  return colorMap[LOG_LEVEL_COLORS[level]] ?? '#9E9E9E'
-}
 
 // Format timestamp
 function formatTimestamp(timestamp: number): string {

@@ -1,12 +1,12 @@
 <template>
   <div>
-    <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-3" />
     <v-data-table
       v-model:items-per-page="itemsPerPage"
       :headers="headers"
       :items="geneBurden"
       :items-per-page-options="[10, 25, 50, 100]"
       :sort-by="[{ key: 'affected_case_count', order: 'desc' }]"
+      :loading="loading"
       density="compact"
       class="elevation-1"
     >

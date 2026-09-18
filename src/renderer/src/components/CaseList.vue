@@ -625,11 +625,11 @@ loadHpoTerms()
 }
 
 :deep(.v-list-item--active) {
-  border-left: 4px solid rgb(var(--v-theme-primary));
-  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, transparent) !important;
+  background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 12%, transparent) !important;
+  border-radius: 6px;
 }
 
-:deep(.v-list-item--active .v-list-item__prepend) {
-  padding-left: calc(16px - 4px);
+:deep(.v-list-item--active .v-list-item-title) {
+  font-weight: 600;
 }
 </style>

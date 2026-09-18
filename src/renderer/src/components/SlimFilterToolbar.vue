@@ -268,9 +268,9 @@ const emit = defineEmits<{
   flex-wrap: wrap;
   gap: 4px;
   padding: 6px 16px;
-  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, transparent);
-  border-left: 3px solid rgb(var(--v-theme-primary));
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 6%, transparent);
   border-top: 1px solid rgba(var(--v-border-color), 0.08);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.08);
 }
 
 .applied-filters-bar .v-chip {
