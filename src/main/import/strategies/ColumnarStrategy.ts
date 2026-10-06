@@ -51,7 +51,8 @@ export class ColumnarStrategy implements ImportStrategy {
 
     // Create pipeline stages
     const batchSize = options.batchSize ?? 5000
-    const fieldMapper = createFieldMapper(dictionaries, columnIndices)
+    const recordBudget = createJsonRecordBudget({ trackRecordBytes: true })
+    const fieldMapper = createFieldMapper(dictionaries, columnIndices, recordBudget.takeRecordBytes)
     const batchAccumulator = createBatchAccumulator({
       caseId,
       batchSize,
@@ -76,7 +77,7 @@ export class ColumnarStrategy implements ImportStrategy {
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: dataPath }),
-        createJsonRecordBudget(),
+        recordBudget,
         streamArray.asStream(),
         fieldMapper,
         batchAccumulator

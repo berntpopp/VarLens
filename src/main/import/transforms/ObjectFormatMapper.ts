@@ -2,6 +2,7 @@ import { Transform, TransformCallback } from 'node:stream'
 import type { Variant } from '../../database/types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcript'
+import { setRecordBytes } from '../bounded-batcher'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -82,7 +83,8 @@ function normalizeNumber(value: unknown): number | null {
  * as opposed to the columnar format with positional tuples.
  */
 export class ObjectFormatMapper extends Transform {
-  constructor() {
+  /** @param takeRecordBytes source size of the next input record, if tracked */
+  constructor(private readonly takeRecordBytes?: () => number) {
     super({ objectMode: true })
   }
 
@@ -92,6 +94,7 @@ export class ObjectFormatMapper extends Transform {
     callback: TransformCallback
   ): void {
     try {
+      const recordBytes = this.takeRecordBytes?.()
       const variant = chunk.value
 
       // Convert moi array to string format (using abbreviations)
@@ -178,6 +181,7 @@ export class ObjectFormatMapper extends Transform {
         return
       }
 
+      if (recordBytes !== undefined) setRecordBytes(mapped, recordBytes)
       this.push(mapped as MappedVariantWithTranscripts)
       callback()
     } catch (error) {
@@ -186,6 +190,6 @@ export class ObjectFormatMapper extends Transform {
   }
 }
 
-export function createObjectFormatMapper(): ObjectFormatMapper {
-  return new ObjectFormatMapper()
+export function createObjectFormatMapper(takeRecordBytes?: () => number): ObjectFormatMapper {
+  return new ObjectFormatMapper(takeRecordBytes)
 }

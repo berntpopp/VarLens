@@ -6,6 +6,7 @@ import { basename } from 'node:path'
 import type { WorkerMessage, MainMessage } from '../../shared/types/import-worker'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { detectFormat } from '../import/format-detection'
+import { resolveBatchSize } from '../import/bounded-batcher'
 import { MARK_STALE_SQL } from '../../shared/sql/cohort-summary-rebuild'
 import { openWorkerDatabase, rebuildFts, rebuildCohortSummary } from './worker-db'
 import {
@@ -44,6 +45,8 @@ export async function runImportSession(
   }
 
   try {
+    // Reject a bad batch size before the database is opened or touched.
+    const batchSize = resolveBatchSize(msg.batchSize, DATABASE_CONFIG.BATCH_INSERT_SIZE)
     db = openWorkerDatabase(msg.dbPath, msg.encryptionKey)
 
     const stmts = prepareStatements(db)
@@ -68,7 +71,6 @@ export async function runImportSession(
     }
 
     const totalFiles = msg.files.length
-    const batchSize = msg.batchSize ?? DATABASE_CONFIG.BATCH_INSERT_SIZE
     const importedInBatch = new Set<string>()
     const results: Array<{
       filePath: string
