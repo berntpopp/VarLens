@@ -8,7 +8,8 @@
  * into a host panel lives in ShortlistPanel.vue (Wave 5).
  *
  * Columns: # / Score / Type / Gene / Variant / Impact / AF / ClinVar /
- * ★ / actions. `rank_score` is non-sortable (ranking is the feature);
+ * ★ / actions / Links (the merged link-out column shared with the case and
+ * cohort tables). `rank_score` is non-sortable (ranking is the feature);
  * `variant_notation` is computed in the renderer from per-type fields so
  * SV / CNV / STR rows get type-appropriate notation. Type chips use
  * explicit palette colors per the CLAUDE.md "no surface-variant" rule.
@@ -22,6 +23,10 @@ import { mdiStar, mdiStarOutline, mdiDotsVertical } from '@mdi/js'
 import RankScoreTooltip from './RankScoreTooltip.vue'
 import { useRowHoverTarget } from './useRowHoverTarget'
 import { CellChip, CellIcon } from '../table-cells/cell-components'
+import { LinkOutsCell } from '../table-cells/simple-cells'
+import { linksColumn } from '../variant-table/columns'
+import { resolveRowLinks, useLinkResolvers } from '../../composables/useLinkResolvers'
+import { useVariantLinks } from '../../composables/useVariantLinks'
 import { useSharedMenu } from '../table-cells/shared-menu'
 import { useResultSetKeys } from '../table-state/useResultSetKeys'
 import {
@@ -43,18 +48,29 @@ const emit = defineEmits<{
   (e: 'toggle-star', row: ShortlistRow): void
 }>()
 
-const headers = [
-  { title: '#', key: 'rank', width: 60, sortable: false },
-  { title: 'Score', key: 'rank_score', width: 90, sortable: false },
-  { title: 'Type', key: 'variant_type', width: 80, sortable: false },
-  { title: 'Gene', key: 'gene_symbol', width: 140 },
-  { title: 'Variant', key: 'variant_notation', width: 280, sortable: false },
-  { title: 'Impact', key: 'consequence', width: 110 },
-  { title: 'AF', key: 'gnomad_af', width: 90 },
-  { title: 'ClinVar', key: 'clinvar', width: 130 },
-  { title: '★', key: 'is_starred', width: 50, sortable: false },
-  { title: '', key: 'actions', width: 80, sortable: false }
+// Widths in rem so headers grow with the text size (no clipping at 200 %)
+const baseHeaders = [
+  { title: '#', key: 'rank', width: '3.75rem', sortable: false },
+  { title: 'Score', key: 'rank_score', width: '5.625rem', sortable: false },
+  { title: 'Type', key: 'variant_type', width: '5rem', sortable: false },
+  { title: 'Gene', key: 'gene_symbol', width: '8.75rem' },
+  { title: 'Variant', key: 'variant_notation', width: '17.5rem', sortable: false },
+  { title: 'Impact', key: 'consequence', width: '6.875rem' },
+  { title: 'AF', key: 'gnomad_af', width: '5.625rem' },
+  { title: 'ClinVar', key: 'clinvar', width: '8.125rem' },
+  { title: '★', key: 'is_starred', width: '3.125rem', sortable: false },
+  { title: '', key: 'actions', width: '5rem', sortable: false }
 ] as const
+
+// Link-outs resolve exactly like the case/cohort tables (shared resolvers)
+const { resolvers: linkResolvers, linkOuts } = useLinkResolvers()
+const { openExternalLink } = useVariantLinks()
+const headers = computed(() => [...baseHeaders, ...linksColumn(linkOuts.value.length)])
+const rowLinks = computed(() => {
+  const byId = new Map<number, Record<string, string | null>>()
+  for (const row of props.rows) byId.set(row.id, resolveRowLinks(row, linkResolvers.value))
+  return byId
+})
 
 interface VariantCell {
   /** Always present — genomic/type-specific primary line. */
@@ -320,6 +336,14 @@ onKeyStroke(
       >
         <CellIcon class="shortlist-row-icon" :icon="mdiDotsVertical" />
       </button>
+    </template>
+
+    <template #[`item._links`]="{ item }">
+      <LinkOutsCell
+        :links="linkOuts"
+        :urls="rowLinks.get(item.id) ?? {}"
+        @click="openExternalLink"
+      />
     </template>
   </v-data-table>
 

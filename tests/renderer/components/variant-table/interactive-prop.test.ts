@@ -117,6 +117,20 @@ vi.mock('../../../../src/renderer/src/composables/useVariantLinks', () => ({
   })
 }))
 
+vi.mock('../../../../src/renderer/src/composables/useAutoPageSize', () => ({
+  useAutoPageSize: () => ({
+    tableItemsPerPage: ref(25),
+    pageSizeOptions: computed(() => [25])
+  })
+}))
+
+vi.mock('../../../../src/renderer/src/composables/useLinkResolvers', () => ({
+  useLinkResolvers: () => ({
+    resolvers: computed(() => ({})),
+    linkOuts: computed(() => [])
+  })
+}))
+
 vi.mock('../../../../src/renderer/src/components/variant-table/useVariantRowViewModel', () => ({
   useVariantRowViewModel: () => ({
     rowViewModels: computed(() => new Map()),

@@ -204,8 +204,8 @@ export class PostgresWebAuthService {
    * Cheap pre-check used by server.ts maybeBootstrapAdmin to avoid
    * paying Argon2's ~600ms hashing cost (and reserving an FS path)
    * on every reboot of an already-bootstrapped instance. The
-   * createFirstUser race-safety still holds — the partial unique
-   * index on `role='admin'` is the source of truth — but skipping
+   * createFirstUser race-safety still holds — insertFirstUser re-checks
+   * for an active admin under a per-schema advisory lock — but skipping
    * the heavy work for the steady-state case keeps restart latency
    * low and avoids the wx-EEXIST trap when the operator hasn't
    * captured/deleted the recovery-key file yet.
@@ -273,7 +273,7 @@ export class PostgresWebAuthService {
     const sch = this.schemaQuoted
     // Race-safety: a per-schema transaction-scoped advisory lock serialises
     // concurrent first-user calls, and the "active admin exists?" check runs
-    // under that lock, so exactly one bootstrap wins. (Migration 0017 dropped
+    // under that lock, so exactly one bootstrap wins. (Migration 0019 dropped
     // the old `users_only_one_active_admin` partial unique index that used to
     // provide this guarantee, because it also made a second admin impossible.)
     // A unique_violation (SQLSTATE 23505, e.g. duplicate username or a
@@ -320,8 +320,9 @@ export class PostgresWebAuthService {
       } catch {
         // ignore rollback failures; original error wins
       }
-      // Translate unique-violation on the partial admin index into a
-      // typed sentinel callers (server.ts maybeBootstrapAdmin) can
+      // Translate a unique-violation (duplicate username, or a schema that
+      // predates migration 0019 and still has the single-admin index) into
+      // a typed sentinel callers (server.ts maybeBootstrapAdmin) can
       // discriminate from generic create failures.
       if (typeof err === 'object' && err !== null && 'code' in err && err.code === '23505') {
         throw new AdminAlreadyExistsError(err)

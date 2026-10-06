@@ -20,9 +20,11 @@ export {
   GeneSymbolCell,
   ConsequenceCell,
   ExternalLinkCell,
+  LinkOutsCell,
   EmptyPlaceholder,
   HgvsCell
 } from './simple-cells'
+export type { LinkOutItem } from './simple-cells'
 export { CellIcon, CellChip } from './cell-components'
 export { default as AnnotationsCell } from './AnnotationsCell.vue'
 export { default as AnnotationsHeader } from './AnnotationsHeader.vue'
