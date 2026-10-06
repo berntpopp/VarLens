@@ -135,7 +135,7 @@ describe('migration v33 — chr-rank indexes', () => {
     try {
       initializeSchema(db)
       runMigrations(db)
-      expect(db.pragma('user_version', { simple: true })).toBe(33)
+      expect(db.pragma('user_version', { simple: true })).toBe(35)
       const names = (
         db.prepare(`SELECT name FROM sqlite_master WHERE type = 'index'`).all() as Array<{
           name: string
@@ -174,7 +174,7 @@ describe('migration v33 — chr-rank indexes', () => {
       db.pragma('user_version = 32')
       runMigrations(db)
       runMigrations(db)
-      expect(db.pragma('user_version', { simple: true })).toBe(33)
+      expect(db.pragma('user_version', { simple: true })).toBe(35)
       const count = db
         .prepare(
           `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'index' AND name LIKE '%chr_rank%'`
