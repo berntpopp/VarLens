@@ -9,13 +9,6 @@
       "reason": "existing script module; must not grow before responsibility split"
     },
     {
-      "path": "src/main/database/VariantFilterBuilder.ts",
-      "lines": 782,
-      "threshold": 600,
-      "category": "source",
-      "reason": "existing large storage/import module; must not grow before responsibility split"
-    },
-    {
       "path": "src/main/database/VariantRepository.ts",
       "lines": 758,
       "threshold": 600,
