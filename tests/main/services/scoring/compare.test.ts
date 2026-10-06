@@ -37,6 +37,19 @@ describe('compareScoredRows()', () => {
     expect(compareScoredRows(pinned, unpinned)).toBeLessThan(0)
   })
 
+  it('chr tie-breaker uses natural chromosome order (1..22, X, Y, MT)', () => {
+    const rows = ['10', 'MT', '2', 'X', '1', 'GL000220.1', '22', 'Y'].map((chr, i) =>
+      scored(i + 1, 0.5, { chr } as Partial<ScoredCandidate>)
+    )
+    const sorted = [...rows].sort((a, b) =>
+      compareScoredRows(a, b, [
+        { key: 'chr', order: 'asc' },
+        { key: 'pos', order: 'asc' }
+      ])
+    )
+    expect(sorted.map((r) => r.chr)).toEqual(['1', '2', '10', '22', 'X', 'Y', 'MT', 'GL000220.1'])
+  })
+
   it('tie-breakers apply after rank_score ties', () => {
     const a = scored(1, 0.5, { cadd: 10 } as Partial<ScoredCandidate>)
     const b = scored(2, 0.5, { cadd: 30 } as Partial<ScoredCandidate>)

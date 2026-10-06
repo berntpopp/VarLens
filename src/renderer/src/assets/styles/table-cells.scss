@@ -35,8 +35,15 @@
 .external-link {
   cursor: pointer;
   color: rgb(var(--v-theme-primary));
+  text-decoration: none;
   transition: background-color 0.2s ease;
   white-space: nowrap;
+
+  &:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: 1px;
+    border-radius: 2px;
+  }
 
   &:hover {
     text-decoration: underline;

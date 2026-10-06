@@ -62,22 +62,22 @@ describe('checkDuplicateFiles', () => {
 })
 
 describe('testZipPassword', () => {
-  it('throws on a corrupt/unreadable archive instead of reporting it as "wrong password"', () => {
+  it('throws on a corrupt/unreadable archive instead of reporting it as "wrong password"', async () => {
     const dir = makeTempDir()
     const garbagePath = join(dir, 'garbage.zip')
     writeFileSync(garbagePath, Buffer.from('not a zip file at all'))
 
-    expect(() => logic.testZipPassword(garbagePath, 'anypassword')).toThrow()
+    await expect(logic.testZipPassword(garbagePath, 'anypassword')).rejects.toThrow()
   })
 
-  it('returns false when a readable archive has no encrypted entries', () => {
+  it('returns false when a readable archive has no encrypted entries', async () => {
     const dir = makeTempDir()
     const validPath = join(dir, 'valid.zip')
     const zip = new AdmZip()
     zip.addFile('case.json', Buffer.from('{}'))
     zip.writeZip(validPath)
 
-    const result = logic.testZipPassword(validPath, 'irrelevant')
+    const result = await logic.testZipPassword(validPath, 'irrelevant')
 
     expect(result).toEqual({ success: false })
   })

@@ -22,6 +22,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
+import { rebuildVariantFrequencyForCase } from '../../../src/main/storage/postgres/PostgresJsonImportRepository'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -93,6 +94,9 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository.deleteCase — Sprint A C
       await client.query('BEGIN')
       await summary.incrementalAdd({ schema, client: client as never, caseId, genomeBuild })
       await summary.refreshColumnMetas({ schema, client: client as never, caseId })
+      // Imports maintain variant_frequency per case; deletion decrements it
+      // symmetrically instead of rebuilding the whole table.
+      await rebuildVariantFrequencyForCase(client, schema, caseId)
       await client.query('COMMIT')
     } finally {
       ;(client as { release: () => void }).release()
@@ -190,7 +194,7 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository.deleteCase — Sprint A C
     expect(Number(after.rows[0].cohort_frequency)).toBeCloseTo(1.0)
   }, 60_000)
 
-  it('rebuilds variant_frequency and drops the deleted case (step 6 + cascade)', async () => {
+  it('decrements variant_frequency and drops the deleted case and its variants', async () => {
     const caseA = await seedCase('vf-a')
     const caseB = await seedCase('vf-b')
     await seedVariant({ caseId: caseA, chr: '1', pos: 100, ref: 'A', alt: 'T', gtNum: '0/1' })
@@ -252,6 +256,158 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository.deleteCase — Sprint A C
 
     const gone = await probe.query(`SELECT 1 FROM "${schema}".cases WHERE id = $1`, [empty])
     expect(gone.rows).toHaveLength(0)
+  }, 60_000)
+})
+
+describe.skipIf(!RUN)('PostgresCaseLifecycleRepository — background deletion phases', () => {
+  let schema: string
+  let pool: Pool
+  let probe: Client
+
+  beforeEach(async () => {
+    schema = `varlens_test_bgdelete_${Date.now()}_${randomBytes(4).toString('hex')}`
+    const provisioner = new Client({ connectionString: PG_URL })
+    await provisioner.connect()
+    await provisioner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`)
+    await provisioner.end()
+    pool = new Pool({ connectionString: PG_URL, max: 3 })
+    probe = new Client({ connectionString: PG_URL })
+    await probe.connect()
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+  }, 60_000)
+
+  afterEach(async () => {
+    if (probe) await probe.end()
+    if (pool) await pool.end()
+    const cleaner = new Client({ connectionString: PG_URL })
+    await cleaner.connect()
+    await cleaner.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+    await cleaner.end()
+  }, 60_000)
+
+  async function seedCaseWithVariants(name: string, count: number): Promise<number> {
+    const res = await probe.query<{ id: number }>(
+      `INSERT INTO "${schema}".cases (name, file_path, file_size, created_at, variant_count)
+         VALUES ($1, '/tmp/x.vcf', 0, 0, $2) RETURNING id`,
+      [name, count]
+    )
+    const caseId = Number(res.rows[0].id)
+    await probe.query(
+      `INSERT INTO "${schema}".variants (case_id, chr, pos, ref, alt, variant_type, gt_num)
+         SELECT $1, '1', g, 'A', 'T', 'snv', '0/1' FROM generate_series(1, $2::int) g`,
+      [caseId, count]
+    )
+    const client = await pool.connect()
+    try {
+      await rebuildVariantFrequencyForCase(client, schema, caseId)
+    } finally {
+      client.release()
+    }
+    return caseId
+  }
+
+  it('hideCase makes the case invisible to readers at once and frees its name', async () => {
+    const caseId = await seedCaseWithVariants('hide-me', 50)
+    const repo = new PostgresCaseLifecycleRepository(pool, schema)
+
+    const hidden = await repo.hideCase(caseId)
+    expect(hidden).toMatchObject({ state: 'hidden', variantCount: 50 })
+
+    const visibleCase = await probe.query(`SELECT 1 FROM "${schema}".cases WHERE id = $1`, [caseId])
+    const visibleVariants = await probe.query(
+      `SELECT 1 FROM "${schema}".variants WHERE case_id = $1`,
+      [caseId]
+    )
+    expect(visibleCase.rows).toHaveLength(0)
+    expect(visibleVariants.rows).toHaveLength(0)
+    // Rows are still physically present until the purge runs.
+    const stored = await probe.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM "${schema}".variants_all WHERE case_id = $1`,
+      [caseId]
+    )
+    expect(Number(stored.rows[0].n)).toBe(50)
+    // variant_frequency already reflects the deletion.
+    const vf = await probe.query(`SELECT 1 FROM "${schema}".variant_frequency`)
+    expect(vf.rows).toHaveLength(0)
+
+    // The UNIQUE name is free for an immediate re-import.
+    await expect(seedCaseWithVariants('hide-me', 1)).resolves.toBeGreaterThan(caseId)
+    expect(await repo.getCaseStatus(caseId)).toBe('deleting')
+    expect(await repo.listPendingDeletions()).toEqual([
+      { caseId, genomeBuild: 'GRCh38', variantCount: 50 }
+    ])
+  }, 60_000)
+
+  it('purges in batches, resumes after an interruption and finalizes', async () => {
+    const caseId = await seedCaseWithVariants('purge-me', 120)
+    const repo = new PostgresCaseLifecycleRepository(pool, schema)
+    const hidden = await repo.hideCase(caseId)
+
+    const controller = new AbortController()
+    let batches = 0
+    await expect(
+      repo.completeHiddenDeletion(caseId, hidden, {
+        batchSize: 25,
+        signal: controller.signal,
+        onProgress: (p) => {
+          if (p.phase === 'purging' && p.done > 0 && ++batches === 2) controller.abort()
+        }
+      })
+    ).rejects.toThrow('interrupted')
+
+    const midway = await probe.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM "${schema}".variants_all WHERE case_id = $1`,
+      [caseId]
+    )
+    expect(Number(midway.rows[0].n)).toBe(70)
+
+    // Resume path: hideCase reports 'resume' and the deletion completes.
+    await repo.deleteCase(caseId, { batchSize: 25 })
+    const gone = await probe.query(`SELECT 1 FROM "${schema}".cases_all WHERE id = $1`, [caseId])
+    const leftovers = await probe.query(
+      `SELECT 1 FROM "${schema}".variants_all WHERE case_id = $1`,
+      [caseId]
+    )
+    expect(gone.rows).toHaveLength(0)
+    expect(leftovers.rows).toHaveLength(0)
+    expect(await repo.listPendingDeletions()).toEqual([])
+  }, 60_000)
+
+  it('purge batches do not block concurrent reads of other cases', async () => {
+    const victim = await seedCaseWithVariants('victim', 400)
+    const bystander = await seedCaseWithVariants('bystander', 10)
+    const repo = new PostgresCaseLifecycleRepository(pool, schema)
+    const hidden = await repo.hideCase(victim)
+
+    // Hold a purge-sized delete transaction open, then read another case
+    // with a short lock_timeout: an ACCESS EXCLUSIVE lock would fail it.
+    const holder = await pool.connect()
+    try {
+      await holder.query('BEGIN')
+      await holder.query(
+        `DELETE FROM "${schema}".variants_all WHERE id IN (
+           SELECT id FROM "${schema}".variants_all WHERE case_id = $1 LIMIT 100)`,
+        [victim]
+      )
+      const reader = new Client({ connectionString: PG_URL })
+      await reader.connect()
+      try {
+        await reader.query("SET lock_timeout = '200ms'")
+        const res = await reader.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM "${schema}".variants v
+             LEFT JOIN "${schema}".variant_frequency vf ON vf.coord_hash = v.coord_hash
+            WHERE v.case_id = $1`,
+          [bystander]
+        )
+        expect(res.rows[0].n).toBe(10)
+      } finally {
+        await reader.end()
+      }
+      await holder.query('ROLLBACK')
+    } finally {
+      holder.release()
+    }
+    await repo.completeHiddenDeletion(victim, hidden, { batchSize: 100 })
   }, 60_000)
 })
 

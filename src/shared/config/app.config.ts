@@ -2,6 +2,9 @@ export const APP_CONFIG = {
   /** Default window dimensions */
   WINDOW_WIDTH: 1440,
   WINDOW_HEIGHT: 900,
+  /** Minimum window size: below this the case view chrome leaves no table rows */
+  WINDOW_MIN_WIDTH: 1024,
+  WINDOW_MIN_HEIGHT: 640,
   /** Max log entries in renderer */
   MAX_LOG_ENTRIES: 1000,
   /** Default debounce delay (ms) */

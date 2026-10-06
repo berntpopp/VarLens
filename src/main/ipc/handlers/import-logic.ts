@@ -15,6 +15,7 @@
 import { mainLogger } from '../../services/MainLogger'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
+import { VariantFrequencyService } from '../../database/VariantFrequencyService'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { StorageImportFileFilters } from '../../storage/import-executor'
 import type { StorageSession } from '../../storage/session'
@@ -308,6 +309,12 @@ async function startMultiFileImportSqlite(
     }
   }
 
+  // The worker counted the case once per coordinate of the first file. Record
+  // the case's last variant id so the end-of-session upkeep can count only
+  // coordinates the appended files add (see updateFrequenciesForAppend).
+  const frequencies = files.length > 1 ? new VariantFrequencyService(db.database) : null
+  const frequencyWatermark = frequencies?.caseVariantWatermark(caseId) ?? 0
+
   // Wrap all main-thread appends in a single bulk-insert session so FTS
   // triggers are only torn down and rebuilt ONCE across all appended files.
   // Without this bracket, the FTS `ai` trigger fires per row and the append
@@ -409,19 +416,12 @@ async function startMultiFileImportSqlite(
     )
   }
 
-  if (files.length > 1) {
-    // The worker already called updateFrequencies for the first file, so we
-    // only need to do it again if we actually appended something. The update
-    // is idempotent-on-insert because it uses ON CONFLICT DO UPDATE, but it
-    // would double-count the first file's variants if called twice — so we
-    // must decrement first and re-update.
-    //
-    // Simpler and robust: decrement the first file's contribution, then run
-    // updateFrequencies once for the full (sum) case. Since updateFrequencies
-    // uses DISTINCT, it deduplicates across appends.
+  if (frequencies !== null) {
+    // Incremental, not "decrement the merged case then re-add": the merged
+    // case holds coordinates the worker never counted, and decrementing those
+    // would steal a count from other cases that carry them.
     try {
-      db.variants.decrementFrequencies(caseId)
-      db.variants.updateFrequencies(caseId)
+      frequencies.updateFrequenciesForAppend(caseId, frequencyWatermark)
     } catch (e) {
       mainLogger.warn(
         `Failed to refresh variant frequencies after multi-file import: ${

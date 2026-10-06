@@ -60,6 +60,13 @@ export function useVariantData(options: UseVariantDataOptions) {
   // Flag: request unfiltered count to be piggybacked on the next page load
   let needsUnfilteredCount = true
 
+  // Keyset paging (web/Postgres; shared/types/variant-paging.ts): remember the
+  // cursor that resumes after each fetched page, keyed by the next page's
+  // offset + filter/sort/page-size scope, so next-page loads and prefetches
+  // seek instead of scanning OFFSET rows. Desktop ignores the cursor.
+  const pageCursors = new Map<string, string>()
+  const MAX_PAGE_CURSORS = 64
+
   // Shared offset pagination
   const {
     page,
@@ -74,6 +81,7 @@ export function useVariantData(options: UseVariantDataOptions) {
     resetSort,
     resetState
   } = useOffsetPagination<Variant>({
+    urlSortRoute: 'case',
     fetchPage: async ({ offset, limit, sortBy: sortItems, skipCount }) => {
       if (!api) {
         logService.warn('API not available - running outside Electron', 'variants')
@@ -96,6 +104,7 @@ export function useVariantData(options: UseVariantDataOptions) {
           : {})
       })
       const shouldFetchUnfiltered = needsUnfilteredCount
+      const cursorScope = `${caseId.value}|${limit}|${JSON.stringify(sortItems)}|${JSON.stringify(plainFilters)}`
       const result = unwrapIpcResult(
         await api.variants.query(
           caseId.value,
@@ -104,9 +113,14 @@ export function useVariantData(options: UseVariantDataOptions) {
           limit,
           sortItems,
           skipCount,
-          shouldFetchUnfiltered
+          shouldFetchUnfiltered,
+          pageCursors.get(`${cursorScope}@${offset}`) ?? ''
         )
       )
+      if (result.next_cursor !== undefined) {
+        if (pageCursors.size >= MAX_PAGE_CURSORS) pageCursors.clear()
+        pageCursors.set(`${cursorScope}@${offset + limit}`, result.next_cursor)
+      }
 
       if (shouldFetchUnfiltered && result.unfiltered_count !== undefined) {
         unfilteredCount.value = result.unfiltered_count

@@ -29,6 +29,10 @@ test('startup smoke launches the app shell with isolated Electron state', async 
     expect(snapshot.main.milestones['app-ready']).toBeGreaterThanOrEqual(0)
     expect(snapshot.main.milestones['window-created']).toBeGreaterThanOrEqual(0)
     expect(snapshot.main.milestones['renderer-interactive']).toBeGreaterThanOrEqual(0)
+    // Window first, database second (audit 05, M-6).
+    expect(snapshot.main.milestones['database-ready']).toBeGreaterThanOrEqual(
+      snapshot.main.milestones['window-created']
+    )
 
     await launched.window.screenshot({
       path: `${startupArtifactDir}/app-shell.png`

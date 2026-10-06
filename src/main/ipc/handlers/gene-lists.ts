@@ -52,13 +52,10 @@ export function registerGeneListHandlers({
       }
 
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'gene-lists:create',
-          params: [validated.data.name, validated.data.description]
-        })
-      }
-      return getDb().geneLists.createGeneList(validated.data.name, validated.data.description)
+      return await session.getWriteExecutor().execute({
+        type: 'gene-lists:create',
+        params: [validated.data.name, validated.data.description]
+      })
     })
   })
 
@@ -72,13 +69,9 @@ export function registerGeneListHandlers({
       }
 
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session
-          .getWriteExecutor()
-          .execute({ type: 'gene-lists:delete', params: [validated.data] })
-        return undefined
-      }
-      getDb().geneLists.deleteGeneList(validated.data)
+      await session
+        .getWriteExecutor()
+        .execute({ type: 'gene-lists:delete', params: [validated.data] })
       return undefined
     })
   })
@@ -132,9 +125,11 @@ export function registerGeneListHandlers({
           .getReadExecutor()
           .execute({ type: 'gene-lists:getGenes', params: [validated.data.listId] })
       }
-      const db = getDb()
-      db.geneLists.setGeneListGenes(validated.data.listId, validated.data.genes)
-      return db.geneLists.getGeneListGenes(validated.data.listId)
+      await session.getWriteExecutor().execute({
+        type: 'gene-lists:setGenes',
+        params: [validated.data.listId, validated.data.genes]
+      })
+      return getDb().geneLists.getGeneListGenes(validated.data.listId)
     })
   })
 
@@ -170,16 +165,10 @@ export function registerGeneListHandlers({
       }
 
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'region-files:create',
-          params: [validated.data.name, validated.data.description ?? null]
-        })
-      }
-      return getDb().geneLists.createRegionFile(
-        validated.data.name,
-        validated.data.description ?? null
-      )
+      return await session.getWriteExecutor().execute({
+        type: 'region-files:create',
+        params: [validated.data.name, validated.data.description ?? null]
+      })
     })
   })
 
@@ -193,13 +182,9 @@ export function registerGeneListHandlers({
       }
 
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session
-          .getWriteExecutor()
-          .execute({ type: 'region-files:delete', params: [validated.data] })
-        return undefined
-      }
-      getDb().geneLists.deleteRegionFile(validated.data)
+      await session
+        .getWriteExecutor()
+        .execute({ type: 'region-files:delete', params: [validated.data] })
       return undefined
     })
   })

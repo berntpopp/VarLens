@@ -34,7 +34,7 @@
     <v-tabs-window
       v-model="activeTab"
       class="flex-grow-1 cohort-tabs-window"
-      style="min-height: 0; overflow: hidden"
+      style="overflow: hidden"
       transition="none"
       reverse-transition="none"
     >
@@ -62,6 +62,8 @@ import { CohortDataKey, useCohortData } from '../composables/useCohortData'
 import { useAppState } from '../composables/useAppState'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import { logService } from '../services/LogService'
+import { useUrlParam } from '../composables/useUrlState'
+import { useFilterUrlParam } from '../composables/useViewUrlBindings'
 
 // Create and provide filter state for child components (CohortTable, CohortFilterBar)
 const filtersInstance = createFilters()
@@ -74,6 +76,21 @@ const cohortDataInstance = useCohortData()
 provide(CohortDataKey, cohortDataInstance)
 const { genomeBuild, selectedVariantType, availableBuilds, loadAvailableBuilds } =
   cohortDataInstance
+
+// URL state (cohort parity with the case view): filters `f`, variant type
+// `type`; search `q` and sort `sort` are bound by CohortFilterBar / CohortTable.
+useFilterUrlParam('cohort', filtersInstance.filters, filtersInstance.selectedImpactPresets)
+useUrlParam({
+  route: 'cohort',
+  key: 'type',
+  priority: 1,
+  history: 'replace',
+  read: () => (selectedVariantType.value === 'snv' ? undefined : selectedVariantType.value),
+  apply: (value) => {
+    const type = value === 'sv' || value === 'cnv' || value === 'str' ? value : 'snv'
+    selectedVariantType.value = type
+  }
+})
 
 const variantTypeOptions = [
   { value: 'snv', label: 'SNV/Indel' },
@@ -172,11 +189,31 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
+/* Same viewport-fill + short-viewport scroll contract as CaseView's
+   .case-content: the tab window keeps a rem minimum (filter bar + ~5 rows)
+   and this container scrolls when zoom or a short window cannot fit it. */
 .cohort-content {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 48px - 32px);
-  overflow: hidden;
+  height: calc(100dvh - 48px - var(--v-layout-bottom, 32px));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Filter bar (~8rem, ~16rem once the preset chips wrap on phones) + a 20rem table */
+.cohort-tabs-window {
+  min-height: 28rem;
+}
+
+@media (max-width: 599.98px) {
+  .cohort-tabs-window {
+    min-height: 36rem;
+  }
+}
+
+.cohort-header,
+.cohort-tabs {
+  flex-shrink: 0;
 }
 
 .cohort-tabs :deep(.v-tab--selected) {

@@ -2,6 +2,7 @@ import type { Variant, VariantFilter, PaginatedResult, SortItem } from '../../ty
 import type { IpcResult } from '../../types/errors'
 import type { FilterOptions } from '../../types/api'
 import type { ColumnFilterMeta } from '../../types/column-filters'
+import type { VariantPageResult } from '../../types/variant-paging'
 
 export interface VariantsDomainContract {
   query: (
@@ -11,8 +12,12 @@ export interface VariantsDomainContract {
     limit?: number,
     sortBy?: SortItem[],
     skipCount?: boolean,
-    includeUnfilteredCount?: boolean
-  ) => Promise<IpcResult<PaginatedResult<Variant> & { unfiltered_count?: number }>>
+    includeUnfilteredCount?: boolean,
+    /** Keyset opt-in: previous page's next_cursor, or '' (web/Postgres only; variant-paging.ts). */
+    cursor?: string
+  ) => Promise<
+    IpcResult<PaginatedResult<Variant> & { unfiltered_count?: number } & VariantPageResult>
+  >
   getFilterOptions: (caseId: number) => Promise<IpcResult<FilterOptions>>
   search: (caseId: number, query: string, limit?: number) => Promise<IpcResult<Variant[]>>
   geneSymbols: (caseId: number, query: string, limit?: number) => Promise<IpcResult<string[]>>

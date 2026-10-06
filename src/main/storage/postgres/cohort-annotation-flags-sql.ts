@@ -157,9 +157,23 @@ export function annotationFlagsPerCaseSql(schemaName: string): string {
  * (and its cascade-deleted annotations) is removed.
  */
 export function annotationFlagsOnCaseDeleteSql(schemaName: string): string {
+  // Scoped to coordinates where the deleted case carried a per-case
+  // annotation: no other summary row's flags can change, and recomputing the
+  // whole table (the previous behaviour) wrote every row of
+  // cohort_variant_summary inside the delete transaction (blocking audit W-1).
   return `
+    WITH touched AS (
+      SELECT DISTINCT v.chr, v.pos, v.ref, v.alt, v.variant_type
+      FROM ${schemaName}."case_variant_annotations" cva
+      JOIN ${schemaName}."variants_all" v ON v.id = cva.variant_id
+      WHERE cva.case_id = $1
+    )
     UPDATE ${schemaName}."cohort_variant_summary" cvs
     SET ${flagRecomputeSql(schemaName, ' AND v.case_id <> $1')}
+    FROM touched t
+    WHERE cvs.chr = t.chr AND cvs.pos = t.pos
+      AND cvs.ref = t.ref AND cvs.alt = t.alt
+      AND cvs.variant_type = t.variant_type
   `
 }
 
@@ -230,7 +244,7 @@ export async function applyAnnotationFlagsOnCaseDelete(
 ): Promise<void> {
   const schemaName = quoteIdentifier(args.schema)
   await runNamed(client as Pool, {
-    name: 'cohort_summary:annotation_flags_on_case_delete:v1',
+    name: 'cohort_summary:annotation_flags_on_case_delete:v2',
     text: annotationFlagsOnCaseDeleteSql(schemaName),
     values: [args.deletedCaseId],
     schema: args.schema

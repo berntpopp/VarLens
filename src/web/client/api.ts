@@ -14,6 +14,8 @@
  *   - `perf.isEnabled` / `perf.reportInteractive`. Synchronous
  *     boolean / fire-and-forget; stubbed locally.
  *   - `shell.openExternal`. Browser equivalent is a validated `window.open`.
+ *   - `export.variants` / `export.cohort`. Streamed browser download
+ *     instead of a save dialog (see export-download.ts).
  *
  * Everything else is RPC. The server dispatcher is what enforces which
  * methods actually exist; the Proxy is permissive on purpose.
@@ -22,6 +24,7 @@ import type { WindowAPI } from '../../shared/types/api'
 import type { UpdateStatus } from '../../shared/types/api'
 import { isIpcError } from '../../shared/types/errors'
 import { ALLOWED_DOMAINS } from '../../shared/config/allowed-domains'
+import { buildExportApi } from './export-download'
 
 declare const __APP_VERSION__: string
 
@@ -385,21 +388,6 @@ const SHELL_API = {
   updateDomains: (_domains: string[]) => Promise.resolve(undefined)
 }
 
-function buildExportApi(): unknown {
-  const rpc = buildDomainProxy('export') as Record<string, unknown>
-  return new Proxy(
-    {},
-    {
-      get(_target, prop: string | symbol) {
-        if (prop === 'revealInFolder') {
-          return () => Promise.resolve({ success: false })
-        }
-        return typeof prop === 'string' ? rpc[prop] : undefined
-      }
-    }
-  )
-}
-
 const SYSTEM_API = {
   getVersion: () => Promise.resolve({ app: __APP_VERSION__, electron: 'web' }),
   getUserDataPath: () => Promise.resolve('web'),
@@ -543,12 +531,29 @@ function buildCohortApi(): unknown {
   )
 }
 
+function buildJobsApi(): unknown {
+  const rpc = buildDomainProxy('jobs') as Record<string, unknown>
+  return new Proxy(
+    {},
+    {
+      get(_target, prop: string | symbol) {
+        // `jobs:changed` is a push event (desktop IPC event / web SSE), never an RPC.
+        if (prop === 'onChanged') {
+          return (callback: (job: unknown) => void) => subscribeWebEvent('jobs:changed', callback)
+        }
+        return typeof prop === 'string' ? rpc[prop] : undefined
+      }
+    }
+  )
+}
+
 const DOMAIN_OVERRIDES: Record<string, unknown> = {
   batchImport: buildBatchImportApi(),
   'batch-import': buildBatchImportApi(),
   cohort: buildCohortApi(),
-  export: buildExportApi(),
+  export: buildExportApi(buildDomainProxy('export') as Record<string, unknown>),
   import: buildImportApi(),
+  jobs: buildJobsApi(),
   perf: PERF_API,
   shell: SHELL_API,
   system: SYSTEM_API,

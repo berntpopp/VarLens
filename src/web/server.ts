@@ -35,6 +35,7 @@ import { createPostgresStorageSession } from '../main/storage/postgres/createPos
 import type { PostgresStorageSession } from '../main/storage/postgres/PostgresStorageSession'
 import type { StorageSession } from '../main/storage/session'
 import { AdminAlreadyExistsError, PostgresWebAuthService } from './auth/PostgresWebAuthService'
+import { resolveAuthUserCacheTtlMs } from './auth/user-lookup-cache'
 import { recordAuthAudit } from './server/audit'
 import { buildDispatcher, registerDispatcher } from './server/dispatcher'
 import { registerSessions } from './server/auth'
@@ -46,11 +47,13 @@ import { readPlatformIdentityConfig } from './server/platform-identity-config'
 import { registerPlatformIdentityRoutes } from './server/platform-identity-routes'
 import { registerWebRateLimit } from './server/rate-limit'
 import { serializeRequestForTechnicalLog } from './server/request-logging'
+import { registerExportDownloadRoutes } from './server/routes/export-download'
 import { registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
 import { registerResponseCompression } from './server/compression'
 import { registerRobotsTxt } from './server/robots'
+import { createWebRuntimeServices } from './server/runtime-services'
 import {
   type AppMetrics,
   createAppMetricsFromEnv,
@@ -146,7 +149,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const pool = session.getPool()
   const authService = new PostgresWebAuthService({
     pool,
-    schema: pgConfig.schema
+    schema: pgConfig.schema,
+    userCacheTtlMs: resolveAuthUserCacheTtlMs(process.env)
   })
 
   if (options.admin !== undefined) {
@@ -159,6 +163,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   })
   await registerOpenApi(app)
   const events = new WebEventHub()
+  const runtime = createWebRuntimeServices({
+    pool,
+    schema: pgConfig.schema,
+    events,
+    logger: app.log
+  })
 
   // Login wall: the `/login` page itself + the preHandler that redirects
   // unauthenticated GETs to it. Registered before the dispatcher and
@@ -203,10 +213,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     session: session as StorageSession,
     authService,
     events,
-    metrics
+    metrics,
+    auditBuffer: runtime.auditBuffer,
+    jobs: runtime.jobs
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
   registerImportUploadRoutes(app, dispatcherDeps)
+  registerExportDownloadRoutes(app, dispatcherDeps)
   registerDispatcher(app, dispatcherDeps, overrides)
   registerEventStream(app, events)
 
@@ -233,7 +246,18 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   await registerStatic(app)
 
+  // Resume case deletions a previous process left half-done (the cases are
+  // already hidden from readers; only the purge remains).
+  runtime.resumeInterruptedWork()
+
   app.addHook('onClose', async () => {
+    // Drain buffered audit rows and stop job runners while the pool is
+    // still open; only then close the storage session.
+    try {
+      await runtime.close()
+    } catch (err) {
+      app.log.error({ err }, 'error closing web runtime services')
+    }
     try {
       await session.close()
     } catch {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { effectScope, nextTick, ref, watch } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises } from '@vue/test-utils'
@@ -58,7 +58,13 @@ describe('useShellNavigation sidebar collapse timing', () => {
     expect(sidebarAtRender).toBe(false)
     expect(sidebarOpen.value).toBe(false)
     expect(router.currentRoute.value.path).toBe('/cohort')
-    expect(transitioning.value).toBe(false)
+    // Layout transitions stay disabled until the collapsed layout has been
+    // rendered once; re-enabling them in the same frame animated v-main.
+    expect(transitioning.value).toBe(true)
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    )
+    await vi.waitFor(() => expect(transitioning.value).toBe(false))
     scope.stop()
   })
 })

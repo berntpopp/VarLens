@@ -11,64 +11,33 @@
       data-tooltip-location="top"
       @click.stop="emit('star-toggle')"
     >
-      <v-icon
+      <CellIcon
         :icon="displayStarred ? mdiStar : mdiStarOutline"
         :color="displayStarred ? 'star' : 'muted'"
         size="x-small"
       />
     </button>
 
-    <!-- ACMG classification (menu with quick-classify + evidence editor) -->
-    <v-menu :close-on-content-click="true">
-      <template #activator="{ props: menuProps }">
-        <button
-          v-bind="menuProps"
-          type="button"
-          class="annotation-btn"
-          :class="{ 'has-global': showGlobalIndicators && displayGlobalAcmg }"
-          :aria-label="labels.acmg"
-          :data-tooltip="labels.acmg"
-          data-tooltip-location="top"
-        >
-          <v-chip v-if="displayAcmg" :color="ACMG_COLORS[displayAcmg]" size="x-small" label>
-            {{ ACMG_ABBREV[displayAcmg] }}
-          </v-chip>
-          <v-icon v-else :icon="mdiClipboardCheckOutline" size="x-small" color="muted" />
-        </button>
-      </template>
-      <v-card class="pa-2" min-width="200">
-        <div class="d-flex flex-wrap ga-1 mb-2">
-          <v-chip
-            v-for="cls in ACMG_CLASSIFICATIONS"
-            :key="cls"
-            :color="displayAcmg === cls ? ACMG_COLORS[cls] : undefined"
-            :variant="displayAcmg === cls ? 'flat' : 'outlined'"
-            size="small"
-            label
-            class="cursor-pointer"
-            @click="emit('acmg-select', cls)"
-          >
-            {{ ACMG_ABBREV[cls] }}
-          </v-chip>
-        </div>
-        <v-divider class="mb-1" />
-        <v-list density="compact" class="pa-0">
-          <v-list-item class="px-1" @click="emit('acmg-evidence-click')">
-            <template #prepend>
-              <v-icon size="small" class="mr-1" :icon="mdiClipboardCheckOutline" />
-            </template>
-            <v-list-item-title class="text-caption font-weight-medium">
-              Evidence editor...
-            </v-list-item-title>
-          </v-list-item>
-          <v-list-item v-if="displayAcmg" class="px-1" @click="emit('acmg-select', null)">
-            <v-list-item-title class="text-caption text-medium-emphasis">
-              Clear classification
-            </v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-card>
-    </v-menu>
+    <!-- ACMG classification: opens the table's shared quick-classify menu -->
+    <button
+      ref="acmgButtonRef"
+      type="button"
+      class="annotation-btn"
+      :class="{ 'has-global': showGlobalIndicators && displayGlobalAcmg }"
+      :aria-label="labels.acmg"
+      aria-haspopup="menu"
+      :aria-expanded="menu.isOpenFor(acmgButtonRef)"
+      :data-tooltip="labels.acmg"
+      data-tooltip-location="top"
+      @click.stop="openAcmgMenu"
+    >
+      <CellChip v-if="displayAcmg" :color="ACMG_COLORS[displayAcmg]" size="x-small" label>
+        {{ ACMG_ABBREV[displayAcmg] }}
+      </CellChip>
+      <CellIcon v-else :icon="mdiClipboardCheckOutline" size="x-small" color="muted" />
+    </button>
+    <!-- Standalone use (no table provided a shared menu): own menu instance -->
+    <AcmgQuickMenu v-if="localMenu" :state="localMenu" />
 
     <!-- Comment -->
     <button
@@ -80,7 +49,7 @@
       data-tooltip-location="top"
       @click.stop="emit('comment-click')"
     >
-      <v-icon
+      <CellIcon
         :icon="commentFilled ? mdiCommentText : mdiCommentTextOutline"
         :color="commentFilled ? 'primary' : 'muted'"
         size="x-small"
@@ -90,10 +59,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import type { AnnotationScope } from '../../../../shared/types/annotations'
-import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../../composables/useAnnotations'
+import { ACMG_COLORS, ACMG_ABBREV } from '../../composables/useAnnotations'
+import { CellChip, CellIcon } from './cell-components'
+import AcmgQuickMenu from './AcmgQuickMenu.vue'
+import { createAcmgQuickMenuState, injectAcmgQuickMenu } from './acmg-quick-menu'
 import {
   mdiClipboardCheckOutline,
   mdiCommentText,
@@ -170,6 +142,22 @@ const commentFilled = computed(() =>
     ? displayHasComment.value || displayHasGlobalComment.value
     : displayHasComment.value
 )
+
+// Quick-classify menu: the table's shared instance, or a private one when the
+// cell is rendered outside a table (keeps the cell usable on its own).
+const sharedMenu = injectAcmgQuickMenu()
+const localMenu = sharedMenu ? null : createAcmgQuickMenuState()
+const menu = sharedMenu ?? localMenu!
+const acmgButtonRef = ref<HTMLButtonElement | null>(null)
+
+function openAcmgMenu(): void {
+  if (!acmgButtonRef.value) return
+  menu.toggle(acmgButtonRef.value, {
+    current: displayAcmg.value ?? null,
+    select: (classification) => emit('acmg-select', classification),
+    openEvidence: () => emit('acmg-evidence-click')
+  })
+}
 
 // One string per action: aria-label and delegated tooltip (no per-cell v-tooltip)
 const labels = computed(() => {

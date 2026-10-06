@@ -1,7 +1,11 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { withSetup } from '../../utils/test-helpers'
-import { useTableKeyboardNav } from '@renderer/composables/useTableKeyboardNav'
+import {
+  isInputFocused,
+  isTextEntryFocused,
+  useTableKeyboardNav
+} from '@renderer/composables/useTableKeyboardNav'
 
 describe('useTableKeyboardNav', () => {
   let app: { unmount: () => void }
@@ -334,6 +338,19 @@ describe('useTableKeyboardNav', () => {
 
       expect(result.isInputFocused()).toBe(true)
       document.body.removeChild(div)
+    })
+
+    it('treats a focused link as owning row keys but not as text entry', () => {
+      const link = document.createElement('a')
+      link.href = 'https://example.org'
+      document.body.appendChild(link)
+      link.focus()
+
+      // Row shortcuts (Enter opens the panel) must yield to the link...
+      expect(isInputFocused()).toBe(true)
+      // ...while global app shortcuts (Alt+Shift+*, '/', '?') keep working.
+      expect(isTextEntryFocused()).toBe(false)
+      document.body.removeChild(link)
     })
   })
 })

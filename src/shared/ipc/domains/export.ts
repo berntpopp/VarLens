@@ -16,4 +16,10 @@ export interface ExportDomainContract {
   ) => Promise<IpcResult<ExportResult>>
   cohort: (params: CohortSearchParams) => Promise<IpcResult<ExportResult>>
   revealInFolder: (filePath: string) => Promise<IpcResult<{ success: boolean }>>
+  /**
+   * `export:cancel` — stop the running variant/cohort export (the worker is
+   * terminated; the pending `variants`/`cohort` call resolves with
+   * `{ success: false, error: 'Export cancelled' }`).
+   */
+  cancel: () => Promise<IpcResult<{ cancelled: boolean }>>
 }

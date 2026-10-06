@@ -171,7 +171,7 @@ function getStrengthPoints(strength: EvidenceStrength): number {
 }
 
 .strength-label {
-  font-size: 11px !important;
+  font-size: 0.6875rem !important;
   line-height: 1.3;
 }
 
@@ -188,7 +188,7 @@ function getStrengthPoints(strength: EvidenceStrength): number {
 .criteria-btn {
   min-width: 0 !important;
   padding: 2px 8px !important;
-  font-size: 12px !important;
+  font-size: 0.75rem !important;
   letter-spacing: 0 !important;
   height: 28px !important;
 }

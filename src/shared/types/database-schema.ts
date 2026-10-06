@@ -13,7 +13,7 @@ export interface CasesTable {
   file_path: string
   file_size: number
   variant_count: number
-  import_status: Generated<'ready' | 'importing'>
+  import_status: Generated<'ready' | 'importing' | 'deleting'>
   import_variant_watermark: Generated<number>
   import_is_new: Generated<boolean>
   created_at: number

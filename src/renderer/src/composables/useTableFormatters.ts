@@ -20,10 +20,14 @@ export interface UseTableFormattersReturn {
   formatScore: (value: number | null, decimals?: number) => string
 }
 
+// Constructing an Intl.NumberFormat is far more expensive than formatting with
+// one, and position cells call this once per rendered row.
+const POSITION_FORMAT = new Intl.NumberFormat('en-US')
+
 export function useTableFormatters(): UseTableFormattersReturn {
   /** Format genomic position with thousand separators */
   const formatPosition = (pos: number): string => {
-    return new Intl.NumberFormat('en-US').format(pos)
+    return POSITION_FORMAT.format(pos)
   }
 
   /** Format allele frequency in scientific notation when small */

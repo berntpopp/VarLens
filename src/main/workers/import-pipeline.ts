@@ -34,29 +34,7 @@ import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
 import { DROP_FTS_TRIGGERS } from './worker-db'
 export { DROP_FTS_TRIGGERS }
 
-export const DROP_INDEXES = `
-  DROP INDEX IF EXISTS idx_variants_gene;
-  DROP INDEX IF EXISTS idx_variants_pos;
-  DROP INDEX IF EXISTS idx_variants_filters;
-  DROP INDEX IF EXISTS idx_variants_chr_pos_ref_alt;
-  DROP INDEX IF EXISTS idx_vt_selected;
-  DROP INDEX IF EXISTS idx_vt_transcript;
-  DROP INDEX IF EXISTS idx_variants_filter_covering;
-  DROP INDEX IF EXISTS idx_variants_case_coords;
-  DROP INDEX IF EXISTS idx_variants_gene_notnull;
-`
-
-export const RECREATE_INDEXES = `
-  CREATE INDEX IF NOT EXISTS idx_variants_gene ON variants(gene_symbol);
-  CREATE INDEX IF NOT EXISTS idx_variants_pos ON variants(chr, pos);
-  CREATE INDEX IF NOT EXISTS idx_variants_filters ON variants(gnomad_af, cadd);
-  CREATE INDEX IF NOT EXISTS idx_variants_chr_pos_ref_alt ON variants(chr, pos, ref, alt);
-  CREATE INDEX IF NOT EXISTS idx_vt_selected ON variant_transcripts(variant_id, is_selected);
-  CREATE INDEX IF NOT EXISTS idx_vt_transcript ON variant_transcripts(transcript_id);
-  CREATE INDEX IF NOT EXISTS idx_variants_filter_covering ON variants(case_id, consequence, func, clinvar);
-  CREATE INDEX IF NOT EXISTS idx_variants_case_coords ON variants(case_id, chr, pos, ref, alt);
-  CREATE INDEX IF NOT EXISTS idx_variants_gene_notnull ON variants(gene_symbol) WHERE gene_symbol IS NOT NULL;
-`
+export { DROP_INDEXES, RECREATE_INDEXES } from './import-index-sql'
 
 export function prepareStatements(db: DatabaseType) {
   const insertVariantStmt = db.prepare(`
@@ -109,8 +87,13 @@ export function prepareStatements(db: DatabaseType) {
   let insertDataInfoStmt: { run: (...args: unknown[]) => void } | null = null
   try {
     insertDataInfoStmt = db.prepare<unknown[]>(`
-      INSERT OR REPLACE INTO case_data_info (case_id, import_file_name, import_file_type)
-      VALUES (?, ?, ?)
+      INSERT INTO case_data_info
+        (case_id, import_file_name, import_file_type, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(case_id) DO UPDATE SET
+        import_file_name = excluded.import_file_name,
+        import_file_type = excluded.import_file_type,
+        updated_at = excluded.updated_at
     `)
   } catch (e) {
     console.warn(
@@ -260,7 +243,8 @@ export function prepareStatements(db: DatabaseType) {
     insertDataInfo: {
       run: (caseId: number, fileName: string, format: string) => {
         if (insertDataInfoStmt) {
-          insertDataInfoStmt.run(caseId, fileName, format)
+          const now = Date.now()
+          insertDataInfoStmt.run(caseId, fileName, format, now, now)
         }
       }
     },

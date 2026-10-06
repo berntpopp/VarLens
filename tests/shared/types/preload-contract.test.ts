@@ -489,6 +489,7 @@ describe('cases preload domain behavior', () => {
       .mockResolvedValueOnce(3)
       .mockResolvedValueOnce(2)
       .mockResolvedValueOnce([{ build: 'GRCh38', caseCount: 4 }])
+      .mockResolvedValueOnce({ jobId: 'J1' })
 
     vi.doMock('electron', () => ({
       ipcRenderer: { invoke }
@@ -507,6 +508,7 @@ describe('cases preload domain behavior', () => {
     await expect(api.deleteAll()).resolves.toBe(3)
     await expect(api.deleteBatch([1, 2])).resolves.toBe(2)
     await expect(api.availableBuilds()).resolves.toEqual([{ build: 'GRCh38', caseCount: 4 }])
+    await expect(api.startDelete({ mode: 'ids', ids: [5] })).resolves.toEqual({ jobId: 'J1' })
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'cases:list')
     expect(invoke).toHaveBeenNthCalledWith(2, 'cases:query', { limit: 50, offset: 0 })
@@ -514,6 +516,7 @@ describe('cases preload domain behavior', () => {
     expect(invoke).toHaveBeenNthCalledWith(4, 'cases:deleteAll')
     expect(invoke).toHaveBeenNthCalledWith(5, 'cases:deleteBatch', [1, 2])
     expect(invoke).toHaveBeenNthCalledWith(6, 'cases:availableBuilds')
+    expect(invoke).toHaveBeenNthCalledWith(7, 'cases:startDelete', { mode: 'ids', ids: [5] })
   })
 
   it('preload index preserves cases transport results when exposing window.api', async () => {
@@ -612,6 +615,8 @@ describe('jobs domain — Sprint A PR-4 Gate 11', () => {
     expect(JOBS_CHANNELS.list).toBe('jobs:list')
     expect(JOBS_CHANNELS.get).toBe('jobs:get')
     expect(JOBS_CHANNELS.progress).toBe('jobs:progress')
+    expect(JOBS_CHANNELS.cancel).toBe('jobs:cancel')
+    expect(JOBS_CHANNELS.changed).toBe('jobs:changed')
   })
 
   it('WindowAPI carries a jobs top-level key wired to the JobsApi contract', () => {
@@ -619,7 +624,7 @@ describe('jobs domain — Sprint A PR-4 Gate 11', () => {
     expect(apiKeys).toContain('jobs')
 
     const jobsMethods = extractSubInterfaceKeys('JobsAPI')
-    expect(jobsMethods).toEqual(['get', 'list', 'progress'])
+    expect(jobsMethods).toEqual(['cancel', 'get', 'list', 'onChanged', 'progress'])
   })
 
   it('create-window-api assembles the jobs domain', () => {

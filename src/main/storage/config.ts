@@ -28,7 +28,15 @@ const DEFAULT_PG_STATEMENT_TIMEOUT_MS = 30000
 const DEFAULT_PG_QUERY_TIMEOUT_MS = 30000
 const DEFAULT_PG_LOCK_TIMEOUT_MS = 5000
 const DEFAULT_PG_IDLE_IN_TX_TIMEOUT_MS = 10000
-const DEFAULT_PG_POOL_MAX = 4
+/**
+ * Default pg.Pool size (`VARLENS_PG_POOL_MAX`). Raised from 4 after the
+ * 2026-10 blocking audit (05-blocking-analysis.md, W-5): with 4 connections a
+ * handful of concurrent aggregates or a long delete starved every other web
+ * user at the pool, not the event loop. Size it against the server's
+ * `max_connections` divided by the number of replicas (plus headroom for the
+ * import worker, which opens its own client).
+ */
+export const DEFAULT_PG_POOL_MAX = 10
 
 const URL_SSL_PARAMS = ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']
 const NON_NEGATIVE_INTEGER_PATTERN = /^\d+$/

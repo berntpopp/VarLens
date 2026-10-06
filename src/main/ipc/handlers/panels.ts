@@ -26,20 +26,11 @@ import { writeFile } from 'fs/promises'
 import {
   listPanels,
   getPanelWithGenes,
-  createPanel,
-  updatePanel,
-  deletePanel,
-  duplicatePanel,
-  setGenes,
   getGenes,
-  activatePanel,
-  deactivatePanel,
   getActivePanelsForCase,
   validateSymbols,
   autocomplete,
   searchPanelApp,
-  importPanelApp,
-  generateStringDb,
   generateBedContent
 } from './panels-logic'
 import type { PanelCacheCallbacks } from './panels-logic'
@@ -91,14 +82,11 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         throw new Error('Invalid panel parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        const result = await session
-          .getWriteExecutor()
-          .execute({ type: 'panels:create', params: [validated.data] })
-        cacheCallbacks.clearPanelIntervalCache()
-        return result
-      }
-      return createPanel(validated.data, getDb, cacheCallbacks)
+      const result = await session
+        .getWriteExecutor()
+        .execute({ type: 'panels:create', params: [validated.data] })
+      cacheCallbacks.clearPanelIntervalCache()
+      return result
     })
   })
 
@@ -110,22 +98,19 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         throw new Error('Invalid panel update parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        const result = await session.getWriteExecutor().execute({
-          type: 'panels:update',
-          params: [
-            validated.data.id,
-            {
-              name: validated.data.name,
-              description: validated.data.description,
-              version: validated.data.version
-            }
-          ]
-        })
-        cacheCallbacks.clearPanelIntervalCache()
-        return result
-      }
-      return updatePanel(validated.data, getDb, cacheCallbacks)
+      const result = await session.getWriteExecutor().execute({
+        type: 'panels:update',
+        params: [
+          validated.data.id,
+          {
+            name: validated.data.name,
+            description: validated.data.description,
+            version: validated.data.version
+          }
+        ]
+      })
+      cacheCallbacks.clearPanelIntervalCache()
+      return result
     })
   })
 
@@ -137,14 +122,9 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         throw new Error('Invalid panel ID')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session
-          .getWriteExecutor()
-          .execute({ type: 'panels:delete', params: [validated.data] })
-        cacheCallbacks.clearPanelIntervalCache()
-        return undefined
-      }
-      return deletePanel(validated.data, getDb, cacheCallbacks)
+      await session.getWriteExecutor().execute({ type: 'panels:delete', params: [validated.data] })
+      cacheCallbacks.clearPanelIntervalCache()
+      return { success: true }
     })
   })
 
@@ -156,13 +136,10 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         throw new Error('Invalid panel duplicate parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'panels:duplicate',
-          params: [validated.data.id, validated.data.newName]
-        })
-      }
-      return duplicatePanel(validated.data.id, validated.data.newName, getDb)
+      return await session.getWriteExecutor().execute({
+        type: 'panels:duplicate',
+        params: [validated.data.id, validated.data.newName]
+      })
     })
   })
 
@@ -178,15 +155,12 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         throw new Error('Invalid panel genes parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session.getWriteExecutor().execute({
-          type: 'panels:setGenes',
-          params: [validated.data.panelId, validated.data.genes]
-        })
-        cacheCallbacks.clearPanelIntervalCache()
-        return undefined
-      }
-      return setGenes(validated.data.panelId, validated.data.genes, getDb, cacheCallbacks)
+      await session.getWriteExecutor().execute({
+        type: 'panels:setGenes',
+        params: [validated.data.panelId, validated.data.genes]
+      })
+      cacheCallbacks.clearPanelIntervalCache()
+      return { success: true }
     })
   })
 
@@ -219,18 +193,11 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         throw new Error('Invalid panel activation parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'panels:activate',
-          params: [validated.data.caseId, validated.data.panelId, validated.data.paddingBp]
-        })
-      }
-      return activatePanel(
-        validated.data.caseId,
-        validated.data.panelId,
-        validated.data.paddingBp,
-        getDb
-      )
+      await session.getWriteExecutor().execute({
+        type: 'panels:activate',
+        params: [validated.data.caseId, validated.data.panelId, validated.data.paddingBp]
+      })
+      return { success: true }
     })
   })
 
@@ -242,13 +209,11 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         throw new Error('Invalid panel deactivation parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'panels:deactivate',
-          params: [validated.data.caseId, validated.data.panelId]
-        })
-      }
-      return deactivatePanel(validated.data.caseId, validated.data.panelId, getDb)
+      await session.getWriteExecutor().execute({
+        type: 'panels:deactivate',
+        params: [validated.data.caseId, validated.data.panelId]
+      })
+      return { success: true }
     })
   })
 
@@ -335,10 +300,7 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
       const client = new PanelAppClient()
       const geneRef = getGeneReferenceDb()
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return importPanelAppForSession(session, validated.data, geneRef, client, cacheCallbacks)
-      }
-      return importPanelApp(validated.data, getDb, geneRef, client, cacheCallbacks)
+      return importPanelAppForSession(session, validated.data, geneRef, client, cacheCallbacks)
     })
   })
 
@@ -355,10 +317,7 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
       const client = new StringDbClient()
       const geneRef = getGeneReferenceDb()
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return generateStringDbForSession(session, validated.data, geneRef, client, cacheCallbacks)
-      }
-      return generateStringDb(validated.data, getDb, geneRef, client, cacheCallbacks)
+      return generateStringDbForSession(session, validated.data, geneRef, client, cacheCallbacks)
     })
   })
 

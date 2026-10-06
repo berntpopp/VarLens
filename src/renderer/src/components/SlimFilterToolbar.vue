@@ -74,7 +74,7 @@
             <v-icon start size="small" :icon="mdiTableColumn" />
             Columns
             <v-tooltip activator="parent" location="bottom"
-              >Toggle columns ({{ mod }}+Shift+C)</v-tooltip
+              >Toggle columns ({{ alt }}+Shift+C)</v-tooltip
             >
           </v-btn>
 
@@ -219,6 +219,7 @@ const isMac =
   typeof navigator.platform === 'string' &&
   navigator.platform.toUpperCase().indexOf('MAC') >= 0
 const mod = isMac ? 'Cmd' : 'Ctrl'
+const alt = isMac ? 'Option' : 'Alt'
 
 const emit = defineEmits<{
   'clear-all': []

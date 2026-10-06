@@ -13,6 +13,21 @@
       <v-card-text>
         <!-- Display Section -->
         <div class="text-subtitle-2 text-medium-emphasis mb-2">Display</div>
+        <div id="theme-preference-label" class="text-body-medium mb-1">Theme</div>
+        <v-btn-toggle
+          v-model="settings.themePreference"
+          mandatory
+          divided
+          variant="outlined"
+          density="compact"
+          aria-labelledby="theme-preference-label"
+          class="mb-4"
+          data-testid="theme-preference-toggle"
+        >
+          <v-btn v-for="opt in THEME_PREFERENCE_OPTIONS" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </v-btn>
+        </v-btn-toggle>
         <v-text-field
           v-model="settings.userName"
           label="Display Name"
@@ -46,26 +61,30 @@
 
         <!-- Performance Section -->
         <div class="text-subtitle-2 text-medium-emphasis mb-2">Performance</div>
-        <v-slider
-          v-model="workerThreadsValue"
-          :min="0"
-          :max="cpuCount"
-          :step="1"
-          label="Worker Threads"
-          thumb-label
-        >
-          <template #thumb-label="{ modelValue }">
-            {{ modelValue === 0 ? 'Auto' : modelValue }}
-          </template>
-        </v-slider>
-        <div class="text-caption text-medium-emphasis mb-4">
-          {{
-            workerThreadsValue === 0
-              ? `Auto: ${cpuCount - 1} threads`
-              : `${workerThreadsValue} threads`
-          }}
-          &middot; Takes effect on next database open
-        </div>
+        <!-- Worker threads size the desktop import/query pool; the web server
+             manages its own workers, so the control is meaningless there. -->
+        <template v-if="!isWebMode">
+          <v-slider
+            v-model="workerThreadsValue"
+            :min="0"
+            :max="cpuCount"
+            :step="1"
+            label="Worker Threads"
+            thumb-label
+          >
+            <template #thumb-label="{ modelValue }">
+              {{ modelValue === 0 ? 'Auto' : modelValue }}
+            </template>
+          </v-slider>
+          <div class="text-caption text-medium-emphasis mb-4">
+            {{
+              workerThreadsValue === 0
+                ? `Auto: ${cpuCount - 1} threads`
+                : `${workerThreadsValue} threads`
+            }}
+            &middot; Takes effect on next database open
+          </div>
+        </template>
         <v-switch
           v-model="settings.prefetchEnabled"
           label="Pre-fetch next page"
@@ -92,11 +111,14 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useApiService } from '../composables/useApiService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
+import { isWebRuntime } from '../utils/runtime-mode'
+import { THEME_PREFERENCE_OPTIONS } from '../utils/theme-preference'
 
 const settings = useSettingsStore()
 const { api } = useApiService()
 
 const isOpen = ref(false)
+const isWebMode = isWebRuntime()
 const cpuCount = ref(navigator.hardwareConcurrency || 4)
 
 // Options for the "Default active tab" preference. Label wording matches
@@ -108,6 +130,7 @@ const defaultCaseTabOptions = [
 
 // Get CPU count from main process via typed API
 onMounted(async () => {
+  if (isWebMode) return
   try {
     if (api?.system?.getCpuCount) {
       cpuCount.value = unwrapIpcResult(await api.system.getCpuCount())

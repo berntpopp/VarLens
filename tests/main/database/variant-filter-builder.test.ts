@@ -15,6 +15,7 @@ import { runMigrations } from '../../../src/main/database/migrations'
 import { createKysely } from '../../../src/main/database/kysely'
 import { VariantFilterBuilder } from '../../../src/main/database/VariantFilterBuilder'
 import type { VariantFilter } from '../../../src/main/database/types'
+import { chrRankSql, compareChromosomes } from '../../../src/shared/sql/chromosome-order'
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -188,17 +189,22 @@ describe('VariantFilterBuilder', () => {
   })
 
   describe('applySort', () => {
-    it('applies default sort (chr ASC, pos ASC, id ASC) when no sortBy', () => {
+    it('applies the natural genomic default sort (chr rank, chr, pos, id) when no sortBy', () => {
       const query = builder.build({ case_id: caseId })
       const sorted = builder.applySort(query)
       const compiled = sorted.compile()
-      expect(compiled.sql).toMatch(/order by chr ASC, pos ASC NULLS LAST, id ASC/)
+      expect(compiled.sql).toContain(
+        `order by ${chrRankSql('variants.chr')} ASC, variants.chr ASC, variants.pos ASC, id ASC`
+      )
       const results = db.prepare(compiled.sql).all(...compiled.parameters) as {
         chr: string
         pos: number
       }[]
-      const keys = results.map((r) => `${r.chr}\u0000${String(r.pos).padStart(12, '0')}`)
-      expect(keys).toEqual([...keys].sort())
+      const keys = results.map((r) => `${r.chr}:${r.pos}`)
+      const expected = [...results]
+        .sort((a, b) => compareChromosomes(a.chr, b.chr) || a.pos - b.pos)
+        .map((r) => `${r.chr}:${r.pos}`)
+      expect(keys).toEqual(expected)
     })
 
     it('applies custom sort direction', () => {

@@ -24,7 +24,9 @@ export default defineConfig({
             __dirname,
             'src/main/workers/rebuild-summary-worker.ts'
           ),
-          'db-worker': resolve(__dirname, 'src/main/workers/db-worker.ts')
+          'db-worker': resolve(__dirname, 'src/main/workers/db-worker.ts'),
+          'write-worker': resolve(__dirname, 'src/main/workers/write-worker.ts'),
+          'zip-worker': resolve(__dirname, 'src/main/import/zip-worker.ts')
         }
       }
     }

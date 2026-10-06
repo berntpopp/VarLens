@@ -1,5 +1,15 @@
-import { PanelIdSchema, PanelUpdateSchema } from '../../../shared/types/ipc-schemas'
-import { getPanelWithGenes } from '../../../main/ipc/handlers/panels-logic'
+import {
+  AutocompleteSchema,
+  PanelIdSchema,
+  PanelUpdateSchema,
+  ValidateSymbolsSchema
+} from '../../../shared/types/ipc-schemas'
+import {
+  autocomplete,
+  getPanelWithGenes,
+  validateSymbols
+} from '../../../main/ipc/handlers/panels-logic'
+import { getWebGeneReferenceService } from '../web-gene-reference'
 import type { OverrideHandler } from './types'
 
 export function buildPanelOverrides(): Record<string, OverrideHandler> {
@@ -13,6 +23,39 @@ export function buildPanelOverrides(): Record<string, OverrideHandler> {
           return { error: 'invalid-panel-id' }
         }
         return await getPanelWithGenes(validated.data, () => session)
+      }
+    },
+
+    // Symbol validation / autocomplete read the bundled gene reference DB
+    // (same GeneReferenceDb service as desktop). Args mirror the renderer
+    // contract: validateSymbols(symbols[]), autocomplete(query, limit?).
+    'panels:validateSymbols': {
+      handle(args, _request, reply) {
+        const validated = ValidateSymbolsSchema.safeParse({ symbols: args[0] })
+        if (!validated.success) {
+          reply.code(400)
+          return { error: 'invalid-symbols', message: 'symbols must be an array of strings' }
+        }
+        return validateSymbols(validated.data.symbols, getWebGeneReferenceService())
+      }
+    },
+
+    'panels:autocomplete': {
+      handle(args, _request, reply) {
+        // JSON turns an omitted `limit` into null; treat it as absent so the default applies.
+        const validated = AutocompleteSchema.safeParse({
+          query: args[0],
+          limit: args[1] ?? undefined
+        })
+        if (!validated.success) {
+          reply.code(400)
+          return { error: 'invalid-autocomplete', message: 'query must be 1-100 characters' }
+        }
+        return autocomplete(
+          validated.data.query,
+          validated.data.limit,
+          getWebGeneReferenceService()
+        )
       }
     },
 

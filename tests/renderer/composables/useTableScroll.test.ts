@@ -146,13 +146,38 @@ describe('useTableScroll', () => {
 
       Object.defineProperty(tableWrapper, 'scrollWidth', { value: 1234 })
 
+      // Browsers deliver an initial notification for every observed element;
+      // the setup mock does not, so emulate it.
+      vi.spyOn(global.ResizeObserver.prototype, 'observe').mockImplementation(function (this: {
+        callback: ResizeObserverCallback
+      }) {
+        this.callback([], this as unknown as ResizeObserver)
+      })
+
       result.topScrollbarRef.value = topScrollbar
       result.topScrollbarInnerRef.value = topScrollbarInner
 
       result.initScrollSync(tableWrapper)
 
-      // Check that inner width was set to table scrollWidth
+      // Inner width follows the table scrollWidth via the observer
       expect(topScrollbarInner.style.width).toBe('1234px')
+    })
+
+    it('does not read scrollWidth synchronously (no forced layout during mount)', () => {
+      const [result, appInstance] = withSetup(() => useTableScroll())
+      app = appInstance
+
+      const topScrollbarInner = document.createElement('div')
+      const tableWrapper = document.createElement('div')
+      const scrollWidth = vi.fn(() => 1000)
+      Object.defineProperty(tableWrapper, 'scrollWidth', { get: scrollWidth })
+
+      result.topScrollbarRef.value = document.createElement('div')
+      result.topScrollbarInnerRef.value = topScrollbarInner
+      result.initScrollSync(tableWrapper)
+
+      expect(scrollWidth).not.toHaveBeenCalled()
+      expect(topScrollbarInner.style.width).toBe('')
     })
   })
 
@@ -366,6 +391,8 @@ describe('useTableScroll', () => {
       result.topScrollbarInnerRef.value = topScrollbarInner
 
       result.initScrollSync(tableWrapper)
+      // Initial sync is the observer's first notification (see the width test)
+      result.updateScrollbarWidth()
 
       expect(topScrollbarInner.style.width).toBe('1000px')
 

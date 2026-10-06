@@ -5,6 +5,7 @@ import { svHeaders } from './sv-columns'
 import { cnvHeaders } from './cnv-columns'
 import { strHeaders } from './str-columns'
 import { withFixedWidth } from './column-widths'
+import { useAutoHiddenColumns } from '../../composables/useResponsiveLayout'
 
 export interface ColumnDef {
   title: string
@@ -78,6 +79,10 @@ export const baseHeaders: ColumnDef[] = [
  * @param prefs - Column preferences from useColumnPreferences
  * @param variantType - Optional reactive variant type; swaps base column set when
  *   set to 'sv', 'cnv', or 'str'. Defaults to SNV/Indel columns.
+ *
+ * Columns without an explicit visibility preference follow the responsive
+ * default from `useAutoHiddenColumns` (lowest-priority columns hidden on
+ * narrower viewports).
  */
 export function useVariantColumns(
   prefs: ReturnType<typeof useColumnPreferences>['prefs'],
@@ -119,9 +124,11 @@ export function useVariantColumns(
     return base
   })
 
+  const { isVisible } = useAutoHiddenColumns(() => headers.value.map((h) => h.key), prefs)
+
   /** Only columns visible per user preferences, with shared fixed widths (no jitter). */
   const visibleHeaders = computed(() =>
-    orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false).map(withFixedWidth)
+    orderedColumns.value.filter((h) => isVisible(h.key)).map(withFixedWidth)
   )
 
   /** Filterable columns: sortable data columns (exclude annotations, actions, link columns). */
