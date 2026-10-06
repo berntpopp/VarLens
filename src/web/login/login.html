@@ -4,6 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
+    <meta
+      name="description"
+      content="Sign in to VarLens, a genetic variant analysis and clinical interpretation workspace."
+    />
+    <!-- Light only, matching the app (src/renderer/src/plugins/vuetify.ts ships
+         no theme switch). A dark login on dark-OS browsers would flash
+         dark -> light on sign-in. -->
+    <meta name="color-scheme" content="light" />
     <title>VarLens — Sign in</title>
     <link rel="icon" href="__APP_PATH_PREFIX__/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="__APP_PATH_PREFIX__/favicon.svg" />
@@ -31,28 +39,6 @@
         --radius: 8px;
         --focus-ring: 0 0 0 3px rgba(30, 58, 95, 0.18);
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --primary: #7baed4;
-          --primary-hover: #98c2e0;
-          --secondary: #90a4ae;
-          --surface: #1a1d22;
-          --surface-variant: #252a32;
-          --background: #12141a;
-          --on-surface: #eceef2;
-          --on-surface-muted: #a2abb6;
-          --on-primary: #0a0e14;
-          --error: #ef9a9a;
-          --error-bg: #2a1e1e;
-          --info: #64b5f6;
-          --info-bg: #19222c;
-          --border: #2c323b;
-          --border-strong: #3a424d;
-          --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.5);
-          --focus-ring: 0 0 0 3px rgba(123, 174, 212, 0.25);
-        }
-      }
-
       * {
         box-sizing: border-box;
       }
@@ -70,6 +56,7 @@
         background: var(--background);
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        color-scheme: light;
       }
 
       .page {
@@ -245,6 +232,7 @@
             alt=""
             width="60"
             height="60"
+            fetchpriority="high"
           />
           <h1 id="title">VarLens</h1>
         </div>
