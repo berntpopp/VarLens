@@ -382,7 +382,7 @@ describe('resolvePanelIntervalsInPlace', () => {
     db.close()
   })
 
-  it('removes IPC-only fields when no panel IDs', () => {
+  it('removes the panel request fields but keeps genome_build when no panel IDs', () => {
     const filter: PanelAwareFilter = {
       active_panel_ids: [],
       panel_padding_bp: 5000,
@@ -393,7 +393,9 @@ describe('resolvePanelIntervalsInPlace', () => {
     resolvePanelIntervalsInPlace(filter, repos, null, db)
     expect(filter.active_panel_ids).toBeUndefined()
     expect(filter.panel_padding_bp).toBeUndefined()
-    expect(filter.genome_build).toBeUndefined()
+    // `genome_build` is not a panel field: on a cohort query it is the build
+    // restriction itself, so "no panel" must never remove it.
+    expect(filter.genome_build).toBe('GRCh38')
   })
 
   it('throws when a panel is active but geneRefDb is null instead of silently dropping the filter', () => {
@@ -417,16 +419,16 @@ describe('resolvePanelIntervalsInPlace', () => {
     expect(filter.panel_intervals).toBeUndefined()
   })
 
-  it('removes IPC-only fields when active_panel_ids is undefined', () => {
+  it('keeps the cohort genome_build restriction when active_panel_ids is undefined', () => {
     const filter: PanelAwareFilter = {
       panel_padding_bp: 5000,
-      genome_build: 'GRCh38'
+      genome_build: 'GRCh37'
     }
     const repos = createRepositories(db)
     resolvePanelIntervalsInPlace(filter, repos, null, db)
     expect(filter.active_panel_ids).toBeUndefined()
     expect(filter.panel_padding_bp).toBeUndefined()
-    expect(filter.genome_build).toBeUndefined()
+    expect(filter.genome_build).toBe('GRCh37')
   })
 
   it('propagates the error when panel interval computation fails instead of dropping the filter silently', () => {

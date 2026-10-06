@@ -38,11 +38,14 @@ export interface PanelAwareFilter {
  * is not blocked by the computation.
  *
  * Mutates `filter` in place: sets `panel_intervals` and removes
- * `active_panel_ids` / `panel_padding_bp` / `genome_build` so the
- * repository does not see IPC-only fields.
+ * `active_panel_ids` / `panel_padding_bp` so the repository does not see
+ * IPC-only fields. `genome_build` is removed only after a single-case
+ * resolution (where it is a lookup hint); it is kept for cohort queries and
+ * whenever there is no panel to resolve.
  *
- * No-op only when NO panel is actually configured (`active_panel_ids` is
- * absent or empty) — that is the sole legitimate "nothing to resolve" case.
+ * Nothing is resolved only when NO panel is actually configured
+ * (`active_panel_ids` is absent or empty) — that is the sole legitimate
+ * "nothing to resolve" case.
  *
  * @param filter    Query filter object (variants or cohort)
  * @param repos     Repository collection (for variant chr-prefix detection)
@@ -69,9 +72,11 @@ export function resolvePanelIntervalsInPlace(
 ): void {
   const panelIds = filter.active_panel_ids
   if (panelIds === undefined || panelIds.length === 0) {
+    // Only the panel request fields go. `genome_build` is not one of them: on
+    // a cohort query it is the build restriction, and "no panel" must never
+    // widen the result to every build.
     delete filter.active_panel_ids
     delete filter.panel_padding_bp
-    delete filter.genome_build
     return
   }
 
