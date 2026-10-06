@@ -135,7 +135,9 @@ watch(
       const percent = jobPercent(job)
       if (first && isActiveJob(job)) announcement.value = `${labelOf(job)} started.`
       else if (!isActiveJob(job)) announcement.value = `${labelOf(job)}: ${describeJob(job)}.`
-      else if (percent !== null) announcement.value = `${labelOf(job)} ${percent}% done.`
+      else if (percent !== null && percent > 0) {
+        announcement.value = `${labelOf(job)} ${percent}% done.`
+      }
     }
   },
   { deep: true }
