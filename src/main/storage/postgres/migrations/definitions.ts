@@ -98,6 +98,16 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0019',
     name: 'multi_admin',
     fileName: '0019_multi_admin.sql'
+  },
+  {
+    version: '0020',
+    name: 'user_roles',
+    fileName: '0020_user_roles.sql'
+  },
+  {
+    version: '0021',
+    name: 'cohort_keyset_index',
+    fileName: '0021_cohort_keyset_index.sql'
   }
 ]
 

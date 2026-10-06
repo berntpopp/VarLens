@@ -15,12 +15,14 @@ import {
   SetRoleArgsSchema,
   UsernameArgsSchema
 } from '../../../shared/api/schemas/auth'
+import { DEFAULT_USER_ROLE, USER_ROLES } from '../../../shared/auth/auth-constants'
 import { PasswordPolicyError } from '../../auth/PostgresWebAuthService'
 import { UserAdminError } from '../../auth/postgres-user-admin'
+import type { PasswordResetAck } from '../../../shared/ipc/domains/auth'
 import { recordAuthAudit, recordUserAdminAudit } from '../audit'
 import { isPlatformIdentityEnabled } from '../platform-identity-config'
 import { requireAdmin } from './guards'
-import type { OverrideHandler } from './types'
+import type { DispatcherDeps, OverrideHandler } from './types'
 
 interface AdminFailure {
   success: false
@@ -44,6 +46,17 @@ function platformMutationDenied(reply: FastifyReply): AdminFailure {
 
 const PG_UNIQUE_VIOLATION = '23505'
 
+/**
+ * Same status and body whether or not the account exists, so the endpoint
+ * cannot be used to enumerate usernames. Nothing is reported as done: the
+ * client is told the request was accepted, and the audit row (not the
+ * response) records whether a password was actually reset.
+ */
+function passwordResetAccepted(reply: FastifyReply): PasswordResetAck {
+  reply.code(202)
+  return { accepted: true }
+}
+
 /** Maps known domain errors to 4xx; anything else rethrows (500). */
 function mapAdminError(reply: FastifyReply, err: unknown): AdminFailure {
   if (err instanceof PasswordPolicyError) return fail(reply, 422, err.code, err.message)
@@ -55,12 +68,23 @@ function mapAdminError(reply: FastifyReply, err: unknown): AdminFailure {
     return fail(reply, 409, 'username-taken', 'A user with this username already exists.')
   }
   if (err instanceof Error && err.message === 'Cannot deactivate an admin user') {
-    return fail(reply, 400, 'cannot-deactivate-admin', 'Change the role to user before disabling.')
+    return fail(
+      reply,
+      400,
+      'cannot-deactivate-admin',
+      'Change the role to analyst or viewer before disabling.'
+    )
   }
   if (err instanceof Error && err.message.startsWith('User not found')) {
     return fail(reply, 404, 'user-not-found', err.message)
   }
   throw err
+}
+
+/** End the user's SSE streams now instead of at their next heartbeat revalidation. */
+async function closeEventStreamsOf(deps: DispatcherDeps, username: string): Promise<void> {
+  const user = await deps.authService.getUser(username)
+  if (user !== undefined) deps.events.closeUser(user.id)
 }
 
 export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
@@ -87,13 +111,25 @@ export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
             'Username, name and password are required.'
           )
         }
-        const [username, displayName, tempPassword] = parsed.data
+        const [username, displayName, tempPassword, requestedRole] = parsed.data
+        const role = requestedRole ?? DEFAULT_USER_ROLE
         try {
-          await deps.authService.createUser(username, displayName, tempPassword, admin.username)
+          await deps.authService.createUser(
+            username,
+            displayName,
+            tempPassword,
+            admin.username,
+            role
+          )
         } catch (err) {
           return mapAdminError(reply, err)
         }
-        await recordUserAdminAudit(deps, { method: 'createUser', username, actor: admin.username })
+        await recordUserAdminAudit(deps, {
+          method: 'createUser',
+          username,
+          actor: admin.username,
+          role
+        })
         return undefined
       }
     },
@@ -104,7 +140,8 @@ export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
         const admin = requireAdmin(request, reply)
         if (admin === undefined) return { error: 'admin-required' }
         const parsed = SetRoleArgsSchema.safeParse(args)
-        if (!parsed.success) return fail(reply, 400, 'invalid-role', 'Role must be admin or user.')
+        if (!parsed.success)
+          return fail(reply, 400, 'invalid-role', `Role must be one of ${USER_ROLES.join(', ')}.`)
         const [username, role] = parsed.data
         if (username === admin.username) {
           return fail(reply, 400, 'cannot-change-own-role', 'You cannot change your own role.')
@@ -140,6 +177,7 @@ export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
         } catch (err) {
           return mapAdminError(reply, err)
         }
+        await closeEventStreamsOf(deps, username)
         await recordAuthAudit(deps, {
           action_type: 'auth_user_deactivate',
           username,
@@ -190,18 +228,25 @@ export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
             'Use "Change password" for your own account.'
           )
         }
+        let reset = true
         try {
           await deps.authService.resetPassword(username, newPassword)
         } catch (err) {
-          return mapAdminError(reply, err)
+          if (!(err instanceof UserAdminError && err.code === 'user-not-found')) {
+            return mapAdminError(reply, err)
+          }
+          reset = false
         }
+        if (reset) await closeEventStreamsOf(deps, username)
+        // The trail records what really happened; the response does not.
         await recordAuthAudit(deps, {
           action_type: 'auth_password_reset',
           username,
           actor: admin.username,
-          success: true
+          success: reset,
+          ...(reset ? {} : { reason: 'user-not-found' })
         })
-        return undefined
+        return passwordResetAccepted(reply)
       }
     }
   }

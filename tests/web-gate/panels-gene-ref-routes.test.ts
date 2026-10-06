@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test, vi } from 'vitest'
 
+import { buildGeneListOverrides } from '../../src/web/server/routes/gene-lists'
 import { buildPanelOverrides } from '../../src/web/server/routes/panels'
 import { buildGeneRefOverrides } from '../../src/web/server/routes/gene-ref'
 import { closeWebGeneReferenceDb } from '../../src/web/server/web-gene-reference'
@@ -61,5 +62,19 @@ describe('web gene panel routes', () => {
       deps
     )
     expect(reply.code).toHaveBeenCalledWith(400)
+  })
+
+  test('gene-lists:setGenes rejects symbols the gene reference does not know', async () => {
+    const { deps, reply, writeExecute } = makeDeps()
+    reply.code = vi.fn()
+    const result = await buildGeneListOverrides()['gene-lists:setGenes'].handle(
+      [3, ['BRCA1', 'NOTAGENE1']],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(result).toMatchObject({ error: 'unknown-gene-symbols', unknown: ['NOTAGENE1'] })
+    expect(writeExecute).not.toHaveBeenCalled()
   })
 })

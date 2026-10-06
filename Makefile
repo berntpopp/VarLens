@@ -1,4 +1,4 @@
-.PHONY: help rebuild dev dev-postgres web-dev build build-web build-web-server build-web-renderer preview lint lint-check agent-check test test-watch test-coverage perf-build perf-build-compare web-ci ui-gates ui-gates-build ui-gates-axe ui-gates-lighthouse perf-interaction-gates web-gate web-gate-static web-gate-integration web-gate-postgres web-gate-parity web-parity-e2e web-smoke web-test-report web-data-gather web-data-prepare web-data-verify web-ipc-fixtures typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots pg-up pg-down pg-logs pg-psql pg-query-perf pg-seed-dev pg-hosted-smoke pg-reset
+.PHONY: quick preflight preflight-full workflows hooks-install tools-setup web-gate-postgres-tests help rebuild dev dev-postgres web-dev build build-web build-web-server build-web-renderer preview lint lint-check agent-check test test-watch test-coverage perf-build perf-build-compare web-ci web-gate web-gate-static web-gate-integration web-gate-postgres web-gate-parity web-parity-e2e web-smoke web-test-report web-data-gather web-data-prepare web-data-verify web-ipc-fixtures typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots pg-up pg-down pg-logs pg-psql pg-query-perf pg-seed-dev pg-hosted-smoke pg-reset ui-gates ui-gates-build ui-gates-axe ui-gates-lighthouse perf-interaction-gates simulate
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -12,6 +12,7 @@ WEB_DEV_RECOVERY_KEY_DIR ?= /tmp/varlens-web-dev
 WEB_DEV_API_LATENCY_MS ?= 75
 WEB_DEV_ADMIN_USERNAME ?= admin
 WEB_DEV_ENV_FILE ?= .env.web.local
+PREFLIGHT_ARGS ?=
 WEB_SMOKE_SPEC ?=
 
 define ensure_ci_node
@@ -72,6 +73,10 @@ else
 dev: rebuild ## Start development server (set VARLENS_WEB=1 for web mode)
 	npm run dev
 endif
+
+simulate: ## Run synthetic variant simulator (e.g. make simulate ARGS="--samples 5 --preset panel")
+	npx tsx scripts/simulate-variants.ts $(ARGS)
+
 
 web-dev: ## Start local Postgres-backed web mode at http://localhost:$(WEB_DEV_PORT)/
 	@if [ ! -f .env.postgres.local ]; then echo "Missing .env.postgres.local. Copy .env.postgres.example first."; exit 1; fi
@@ -176,8 +181,13 @@ typecheck: ## Run TypeScript type checking
 # Testing
 #---------------------------------------------------------------------------
 
-test: ## Run tests once (set VARLENS_WEB=1 to include web-gate project)
-	npm run test $(VITEST_EXTRA_ARGS)
+test: ## Run tests once (VARLENS_WEB=1 adds explicit web checks; requires PostgreSQL)
+	npm run test
+ifeq ($(VARLENS_WEB),1)
+	$(MAKE) build-web
+	$(MAKE) web-gate-static
+	$(MAKE) web-gate-integration
+endif
 
 test-watch: ## Run tests in watch mode
 	npm run test:watch
@@ -198,23 +208,23 @@ perf-build-compare: ## Compare two build perf baselines (BEFORE=a AFTER=b)
 #---------------------------------------------------------------------------
 
 web-gate-static: web-ipc-fixtures ## Run Layer 1 static gate tests (assumes Node ABI — run `make rebuild-node` first if needed)
-	npx vitest run --project web-gate
+	npx vitest run --project web-gate --exclude 'tests/web-gate/integration/**'
 
 web-ipc-fixtures: ## Validate IPC parity fixture manifest and referenced fixture data
 	npm run test:ipc-parity-fixtures
 
-web-gate-integration: ## Run Layer 2 web-only integration tests (skipped until out/web/ exists)
+web-gate-integration: ## Run web integration once; requires built bundles and PostgreSQL
+	@if [ ! -f out/web/server.cjs ] || [ ! -f out/web/public/index.html ]; then echo "out/web/server.cjs and out/web/public/index.html are required; run make build-web first."; exit 2; fi
+	@if [ -z "$$VARLENS_PG_URL" ]; then echo "VARLENS_PG_URL is required for web-gate-postgres and web-gate-integration."; exit 2; fi
 	npx vitest run --project web-gate tests/web-gate/integration
 
-web-gate-postgres: build-web ## Run fail-loud Postgres-backed web integration tests (requires VARLENS_PG_URL)
-	@if [ -z "$$VARLENS_PG_URL" ]; then echo "VARLENS_PG_URL is required for web-gate-postgres. This is intentionally opt-in and never part of default desktop CI."; exit 2; fi
-	VARLENS_RECOVERY_KEY_DIR="$${VARLENS_RECOVERY_KEY_DIR:-$(WEB_DEV_RECOVERY_KEY_DIR)}" \
-	npx vitest run --project web-gate tests/web-gate/integration
-	VARLENS_RECOVERY_KEY_DIR="$${VARLENS_RECOVERY_KEY_DIR:-$(WEB_DEV_RECOVERY_KEY_DIR)}" \
-	VARLENS_RUN_POSTGRES_E2E=1 npx vitest run --project main \
-		tests/main/storage/postgres-cases-query-repository.e2e.test.ts \
-		tests/main/storage/postgres-migrations-idempotent.test.ts \
-		tests/main/web/auth/provision-platform-user-postgres.test.ts
+web-gate-postgres-tests: ## Run every PostgreSQL-gated main test against explicit VARLENS_PG_URL
+	node scripts/ci/run.mjs --postgres-tests
+
+web-gate-postgres: ## Build once and run the PostgreSQL web and storage gates
+	$(MAKE) build-web
+	$(MAKE) web-gate-integration
+	$(MAKE) web-gate-postgres-tests
 
 web-gate-parity: web-data-verify ## Run Layer 3 parity scenarios (opt-in; boots Electron, switches native ABI)
 	@echo "=== web-gate-parity (opt-in; switches native module to Electron ABI) ==="
@@ -243,7 +253,12 @@ web-smoke: tests/web-smoke/node_modules/.bin/cypress ## Run browser smoke agains
 web-gate: web-gate-static ## Run the Phase 1 gate fast tests (parity is opt-in via web-gate-parity)
 	@echo "Static web gate done. Run 'make web-gate-parity' to validate the desktop↔web parity path (opt-in)."
 
-web-ci: rebuild-node build-web web-gate-static web-gate-postgres ## Opt-in web readiness gate; requires VARLENS_PG_URL
+web-ci: ## Opt-in web readiness gate; requires VARLENS_PG_URL
+	$(MAKE) rebuild-node
+	$(MAKE) build-web
+	$(MAKE) web-gate-static
+	$(MAKE) web-gate-integration
+	$(MAKE) web-gate-postgres-tests
 
 #---------------------------------------------------------------------------
 # UI quality gates (audit 2026-10-06 §9): axe + Lighthouse against out/web.
@@ -299,90 +314,45 @@ ci: ## Run all CI checks (lint, format, typecheck, rebuild, test). Set VARLENS_W
 	$(MAKE) rebuild-node
 	$(MAKE) test
 
-ci-checks: ## Run the GitHub Actions "Checks (Ubuntu)" job under Node $(CI_NODE_VERSION)
-	@echo "=== Checks (Ubuntu) using Node $(CI_NODE_VERSION) ==="
-	$(ensure_ci_node)
-	@echo ""
-	@echo "Step 1/6: Installing dependencies..."
-	npm ci
-	@echo ""
-	@echo "Step 2/6: Rebuilding native modules for Node.js..."
-	npm run rebuild:node
-	@echo ""
-	@echo "Step 3/6: Running linter..."
-	npm run lint:check
-	@echo ""
-	@echo "Step 4/6: Running Prettier format check..."
-	npm run format:check
-	@echo ""
-	@echo "Step 5/6: Running type check..."
-	npm run typecheck
-	@echo ""
-	@echo "Step 6/6: Running tests..."
-	npm run test
-	@echo ""
-	@echo "=== Checks (Ubuntu) PASSED ==="
+quick: ## Optional edit feedback; insufficient for push readiness
+	npm run lint:quick
+	$(MAKE) format-check
 
-ci-startup-smoke: ## Run the GitHub Actions "Startup Smoke (Linux)" job under Node $(CI_NODE_VERSION)
-	@echo "=== Startup Smoke (Linux) using Node $(CI_NODE_VERSION) ==="
-	$(ensure_ci_node)
-	@echo ""
-	@echo "Step 1/4: Installing dependencies..."
-	npm ci
-	@echo ""
-	@echo "Step 2/4: Rebuilding native modules for Electron..."
-	npm run rebuild:electron
-	@echo ""
-	@echo "Step 3/4: Building Electron app..."
-	npm run build
-	@echo ""
-	@echo "Step 4/4: Running startup smoke..."
-	npx playwright test tests/e2e/startup-smoke.e2e.ts --workers=1
-	@echo ""
-	@echo "=== Startup Smoke (Linux) PASSED ==="
+preflight: ## Run all applicable local gates against fresh origin/main; requires a clean commit
+	node scripts/ci/run.mjs $(PREFLIGHT_ARGS)
 
-ci-package-linux: ## Run the Linux package validation job under Node $(CI_NODE_VERSION)
-	@echo "=== Package (ubuntu-latest) using Node $(CI_NODE_VERSION) ==="
+preflight-full: ## Run every locally supported gate (PREFLIGHT_ARGS=--clean-install forces npm ci)
+	node scripts/ci/run.mjs --full $(PREFLIGHT_ARGS)
+
+workflows: ## Validate Actions syntax, external shell scripts, action SHA pins and gate policy
+	node scripts/ci/run.mjs --workflows
+
+tools-setup: ## Install checksum-verified actionlint, ShellCheck, Gitleaks and Trivy
+	node scripts/ci/tools.mjs setup
+
+hooks-install: ## Install pre-push enforcement for this worktree without replacing other hooks
+	node scripts/ci/hooks.mjs install
+
+ci-checks: ci ## Compatibility: complete desktop quality/test gate without another install
+
+ci-startup-smoke: ## Build once and run desktop startup smoke (dependencies already installed)
 	$(ensure_ci_node)
-	@echo ""
-	@echo "Step 1/5: Installing dependencies..."
-	npm ci
-	@echo ""
-	@echo "Step 2/5: Rebuilding native modules for Electron..."
-	npm run rebuild:electron
-	@echo ""
-	@echo "Step 3/5: Building Electron app..."
-	npx electron-vite build
-	@echo ""
-	@echo "Step 4/5: Running startup smoke..."
+	$(MAKE) rebuild
+	$(MAKE) build
 	$(XVFB_RUN)npx playwright test tests/e2e/startup-smoke.e2e.ts --workers=1
-	@echo ""
-	@echo "Step 5/5: Packaging Linux artifacts..."
-	CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --publish never
-	@echo ""
-	@echo "=== Package (ubuntu-latest) PASSED ==="
 
-ci-packaged-smoke-linux: ## Run the packaged-binary smoke on Linux (requires a built Linux artifact in release/)
-	@echo "=== Packaged Smoke (Linux) using Node $(CI_NODE_VERSION) ==="
+ci-package-linux: ci-startup-smoke ## Validate and package local Linux artifacts without publishing
+	CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --linux --publish never
+
+ci-packaged-smoke-linux: ## Run packaged Linux smoke (requires release/linux-unpacked/varlens)
 	$(ensure_ci_node)
-	@echo ""
-	@echo "Step 1/1: Running packaged smoke against release/linux-unpacked/varlens..."
 	$(XVFB_RUN)npx playwright test tests/e2e/packaged-smoke.e2e.ts --workers=1
-	@echo ""
-	@echo "=== Packaged Smoke (Linux) PASSED ==="
 
-ci-full: ci-actions ## Run the local GitHub Actions parity pipeline
+ci-full: preflight-full ## Compatibility alias for complete local preflight
 
-ci-actions: ## Run the required local GitHub Actions parity pipeline under Node $(CI_NODE_VERSION)
-	@echo "=== GitHub Actions parity pipeline using Node $(CI_NODE_VERSION) ==="
-	$(MAKE) ci-checks
-	$(MAKE) ci-startup-smoke
-	$(MAKE) ci-package-linux
-	$(MAKE) ci-packaged-smoke-linux
-	@echo ""
-	@echo "=== GitHub Actions parity pipeline PASSED ==="
+ci-actions: preflight-full ## Compatibility alias for complete local preflight
 
-ci-build: ci-actions ## Run the local GitHub Actions parity pipeline
+ci-build: preflight-full ## Compatibility alias for complete local preflight
 
 all: ci build ## Run CI checks and build
 

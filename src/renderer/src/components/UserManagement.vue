@@ -4,15 +4,13 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserAdmin, type ManagedUser, type UserRole } from '../composables/useUserAdmin'
 import { mdiAccountCheck, mdiAccountOff, mdiLockReset, mdiPlus } from '@mdi/js'
 import IconButton from './common/IconButton.vue'
+import { DEFAULT_USER_ROLE } from '../../../shared/auth/auth-constants'
+import { ROLE_OPTIONS } from '../utils/role-labels'
 
 const authStore = useAuthStore()
 const { users, busy, error, success, loadUsers, createUser, setRole, resetPassword, setActive } =
   useUserAdmin()
 
-const ROLE_OPTIONS = [
-  { value: 'user', title: 'User' },
-  { value: 'admin', title: 'Admin' }
-]
 /** Server policy (web): temporary and reset passwords need 12+ characters. */
 const PASSWORD_HINT = 'At least 12 characters. The user must change it at first sign-in.'
 
@@ -20,6 +18,7 @@ const showCreateDialog = ref(false)
 const newUsername = ref('')
 const newDisplayName = ref('')
 const newTempPassword = ref('')
+const newRole = ref<UserRole>(DEFAULT_USER_ROLE)
 
 const showResetDialog = ref(false)
 const selectedUser = ref('')
@@ -33,12 +32,18 @@ function isSelf(user: ManagedUser): boolean {
 
 async function handleCreateUser(): Promise<void> {
   if (!newUsername.value || !newTempPassword.value) return
-  const ok = await createUser(newUsername.value, newDisplayName.value, newTempPassword.value)
+  const ok = await createUser(
+    newUsername.value,
+    newDisplayName.value,
+    newTempPassword.value,
+    newRole.value
+  )
   if (ok) {
     showCreateDialog.value = false
     newUsername.value = ''
     newDisplayName.value = ''
     newTempPassword.value = ''
+    newRole.value = DEFAULT_USER_ROLE
   }
 }
 
@@ -177,9 +182,16 @@ onMounted(loadUsers)
               persistent-hint
               class="mb-4"
             />
-            <div class="text-body-small text-medium-emphasis mb-3">
-              New accounts start with the User role; change it in the list afterwards.
-            </div>
+            <v-select
+              v-model="newRole"
+              :items="ROLE_OPTIONS"
+              label="Role"
+              item-props
+              hint="Viewers are read-only. You can change the role later."
+              persistent-hint
+              class="mb-4"
+              data-testid="create-user-role"
+            />
             <v-btn
               type="submit"
               color="primary"

@@ -35,11 +35,6 @@ export function buildCohortOpenApiPaths(): Record<string, OpenApiPathItem> {
       body: CohortInvokeBodySchemas.empty,
       response: CohortSummaryStatusSchema
     }),
-    '/api/cohort/rebuildSummary': unsupportedDispatcherMethodOperation({
-      tag: 'cohort',
-      summary: 'Rebuild cohort summary',
-      body: CohortInvokeBodySchemas.unsupported
-    }),
     '/api/cohort/runAssociation': unsupportedDispatcherMethodOperation({
       tag: 'cohort',
       summary: 'Run cohort association analysis',

@@ -34,8 +34,7 @@
     // tsc without vue-tsc — this is the officially supported `tsc --noEmit
     // --incremental` mode documented at typescriptlang.org/tsconfig/incremental.
     "incremental": true,
-    "tsBuildInfoFile": "./.cache/tsbuildinfo/node.tsbuildinfo",
-    "assumeChangesOnlyAffectDirectDependencies": true
+    "tsBuildInfoFile": "./.cache/tsbuildinfo/node.tsbuildinfo"
   },
   "include": [
     "electron.vite.config.ts",

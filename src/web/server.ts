@@ -38,8 +38,11 @@ import { AdminAlreadyExistsError, PostgresWebAuthService } from './auth/Postgres
 import { resolveAuthUserCacheTtlMs } from './auth/user-lookup-cache'
 import { recordAuthAudit } from './server/audit'
 import { buildDispatcher, registerDispatcher } from './server/dispatcher'
+import { assertParityAtStartup } from './server/method-resolution'
 import { registerSessions } from './server/auth'
 import { registerEventStream, WebEventHub } from './server/events'
+import { revalidateStreamSession } from './server/event-stream-session'
+import { SessionRevocations } from './server/session-revocation'
 import { registerLoginRoute, resolveAppPathPrefix } from './server/login-route'
 import { registerPageGate } from './server/page-gate'
 import { PlatformIdentityService } from './server/platform-identity'
@@ -54,6 +57,9 @@ import { registerStatic } from './server/static'
 import { registerResponseCompression } from './server/compression'
 import { registerRobotsTxt } from './server/robots'
 import { createWebRuntimeServices } from './server/runtime-services'
+import { createWebReferenceServices } from './server/reference-services/create'
+import { WebAssociationRuns } from './server/association/web-association-runs'
+import { PostgresAssociationDataBuilder } from '../main/storage/postgres/PostgresAssociationDataBuilder'
 import {
   type AppMetrics,
   createAppMetricsFromEnv,
@@ -157,8 +163,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await maybeBootstrapAdmin(authService, options.admin, app.log)
   }
 
+  const revocations = new SessionRevocations()
   await registerSessions(app, {
     authService,
+    revocations,
     ...(platformIdentity !== undefined ? { platformIdentity } : {})
   })
   await registerOpenApi(app)
@@ -215,13 +223,31 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     events,
     metrics,
     auditBuffer: runtime.auditBuffer,
-    jobs: runtime.jobs
+    jobs: runtime.jobs,
+    sessions: revocations,
+    referenceServices: createWebReferenceServices({
+      pool,
+      schema: pgConfig.schema,
+      session: session as StorageSession
+    }),
+    association: new WebAssociationRuns({
+      builder: new PostgresAssociationDataBuilder(pool, pgConfig.schema),
+      events
+    })
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
+  // Parity manifest startup assertion (spec §4.2): production refuses to boot
+  // when a shared method is unserved or a desktop-only method is served.
+  assertParityAtStartup(overrides, {
+    production: process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test',
+    warn: (message) => app.log.warn(message)
+  })
   registerImportUploadRoutes(app, dispatcherDeps)
   registerExportDownloadRoutes(app, dispatcherDeps)
   registerDispatcher(app, dispatcherDeps, overrides)
-  registerEventStream(app, events)
+  registerEventStream(app, events, {
+    revalidate: (request) => revalidateStreamSession(request, authService, revocations)
+  })
 
   // Liveness answers as soon as the event loop does: it must not depend on
   // Postgres, or a DB outage would get the pod restarted instead of merely
@@ -253,6 +279,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.addHook('onClose', async () => {
     // Drain buffered audit rows and stop job runners while the pool is
     // still open; only then close the storage session.
+    dispatcherDeps.association.cancelAll()
+    dispatcherDeps.referenceServices.close()
     try {
       await runtime.close()
     } catch (err) {

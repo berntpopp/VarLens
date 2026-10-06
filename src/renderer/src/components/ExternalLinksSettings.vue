@@ -265,7 +265,7 @@ const columnOptions = [
   { title: 'Chromosome', value: 'chr' },
   { title: 'ClinVar', value: 'clinvar' },
   { title: 'Gene Symbol', value: 'gene_symbol' },
-  { title: 'Virtual Column', value: 'virtual' }
+  { title: 'Links column', value: 'virtual' }
 ]
 
 // Required field options
@@ -316,7 +316,7 @@ const getColumnLabel = (column: LinkColumn): string => {
     clinvar: 'ClinVar',
     gene_symbol: 'Gene',
     omim_mim_number: 'OMIM',
-    virtual: 'Column'
+    virtual: 'Links'
   }
   return labels[column]
 }

@@ -123,7 +123,8 @@ describe.skipIf(!HAS_PG)('web session revalidation', () => {
         username,
         'stale-reset-new-temporary-2026'
       )
-      expect(resetRes.statusCode, resetRes.body).toBe(200)
+      // 202 { accepted: true } for any username (no enumeration).
+      expect(resetRes.statusCode, resetRes.body).toBe(202)
 
       const staleRes = await apiWithCookie(driver, cookie, 'cases', 'list')
       expect(staleRes.statusCode, staleRes.body).toBe(401)

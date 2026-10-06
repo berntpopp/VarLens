@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { WEB_UPLOAD_CANCEL_EVENT, WEB_UPLOAD_EVENT, createApi } from '../../src/web/client/api'
+import { setCapabilityDocument } from '../../src/web/client/call-policy'
+import { computeCapabilityDocument } from '../../src/shared/ipc/capability-document'
 
 interface TestApi {
   cases: {
@@ -443,8 +445,14 @@ describe('web client api', () => {
       body: JSON.stringify({ caseId: 1 })
     })
 
+    // import.start is an analyst write: the client holds it back until the
+    // capability document grants the role.
+    setCapabilityDocument(
+      computeCapabilityDocument({ runtime: 'web', role: 'analyst', storage: null })
+    )
     const api = createApi() as unknown as TestApi
     await expect(api.import.start('/tmp/input.vcf', 'Case A')).resolves.toEqual({ caseId: 1 })
+    setCapabilityDocument(null)
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/import/start',
@@ -529,12 +537,12 @@ describe('web client api', () => {
     expect(MockXMLHttpRequest.instances).toHaveLength(2)
   })
 
-  test('export.revealInFolder is an explicit unsupported web capability', async () => {
+  test('export.revealInFolder is desktop-only and refused locally', async () => {
     const fetchMock = mockFetch({ ok: true, status: 200, statusText: 'OK', body: '{}' })
     const api = createApi() as unknown as TestApi
 
-    await expect(api.export.revealInFolder('/server/export.xlsx')).resolves.toEqual({
-      success: false
+    await expect(api.export.revealInFolder('/server/export.xlsx')).resolves.toMatchObject({
+      code: 'UNSUPPORTED_RUNTIME'
     })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -555,22 +563,23 @@ describe('web client api', () => {
     expect(MockXMLHttpRequest.instances).toHaveLength(2)
   })
 
-  test('batchImport.selectZip returns the upload ref plus encrypted-state probe result', async () => {
+  test.each([
+    { isEncrypted: false, label: 'a plain ZIP is not reported as password-protected (P-08)' },
+    { isEncrypted: true, label: 'an encrypted ZIP is reported as password-protected' }
+  ])('batchImport.selectZip: $label', async ({ isEncrypted }) => {
     const zip = new File(['PK'], 'batch.zip')
     stubUploadPicker([zip])
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      expect(url).toBe('/api/batch-import/testZipPassword')
-      expect(init?.body).toBe(
-        JSON.stringify({ args: ['web-upload:upload-batch.zip/batch.zip', ''] })
-      )
-      return mockJsonResponse({ success: false })
+      expect(url).toBe('/api/batch-import/inspectZip')
+      expect(init?.body).toBe(JSON.stringify({ args: ['web-upload:upload-batch.zip/batch.zip'] }))
+      return mockJsonResponse({ isEncrypted })
     })
     vi.stubGlobal('fetch', fetchMock)
 
     const api = createApi() as unknown as TestApi
     await expect(api.batchImport.selectZip()).resolves.toEqual({
       filePath: 'web-upload:upload-batch.zip/batch.zip',
-      isEncrypted: true
+      isEncrypted
     })
   })
 

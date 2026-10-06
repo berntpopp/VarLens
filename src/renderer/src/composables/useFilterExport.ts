@@ -4,6 +4,7 @@ import { buildFilterFromState, type FilterState, type ExportResult } from './fil
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
+import type { ExportFormat } from '../../../shared/ipc/domains/export'
 
 async function getVariantExportBlockReason(): Promise<string | null> {
   return getCurrentUnsupportedReason('export.variants')
@@ -20,7 +21,11 @@ export function useFilterExport(
 ) {
   const { api } = useApiService()
 
-  const exportToExcel = async (caseId: number, caseName: string): Promise<ExportResult | null> => {
+  const exportToExcel = async (
+    caseId: number,
+    caseName: string,
+    format?: ExportFormat
+  ): Promise<ExportResult | null> => {
     if (!api) {
       logService.warn('API not available - running outside Electron', 'export')
       return null
@@ -40,7 +45,8 @@ export function useFilterExport(
         await api.export.variants(
           caseId,
           exportFilters,
-          caseName !== '' ? caseName : `case_${caseId}`
+          caseName !== '' ? caseName : `case_${caseId}`,
+          format === undefined ? undefined : { format }
         )
       )
 

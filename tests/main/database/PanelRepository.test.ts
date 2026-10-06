@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
-import { runMigrations } from '../../../src/main/database/migrations'
+import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { createKysely } from '../../../src/main/database/kysely'
 import { PanelRepository } from '../../../src/main/database/PanelRepository'
 
@@ -54,7 +54,7 @@ describe('PanelRepository', () => {
 
     it('sets user_version to latest', () => {
       const version = db.pragma('user_version', { simple: true })
-      expect(version).toBe(35)
+      expect(version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
     })
   })
 

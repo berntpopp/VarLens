@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Restores the target-ABI binary from .cache/native, or compiles once and caches it.
-// Usage: node scripts/native/rebuild-native.mjs <node|electron>
+// Usage: node scripts/native/rebuild-native.mjs <node|electron|install>
 //
 // Deliberately does NOT pass `-f` to @electron/rebuild. `-f` disables both the
 // "already built" skip (rebuild.js:131) and the module-state cache
@@ -47,6 +47,18 @@ export function detectOrUndetermined(binaryPath) {
 export function clampedJobOverride(raw, fallback) {
   if (!raw || !/^\d+$/.test(raw.trim())) return fallback
   return Math.min(8, Math.max(1, Number.parseInt(raw.trim(), 10)))
+}
+
+// Only installation consults the environment; an explicit ABI switch must
+// remain reliable even in a shell configured for web development.
+export function resolveNativeTarget(argument, environment = process.env) {
+  if (argument === 'node' || argument === 'electron') return argument
+  if (argument !== 'install') throw new Error('usage: rebuild-native.mjs <node|electron|install>')
+  const runtime = environment.VARLENS_NATIVE_RUNTIME ?? 'electron'
+  if (runtime !== 'node' && runtime !== 'electron') {
+    throw new Error('VARLENS_NATIVE_RUNTIME must be node or electron')
+  }
+  return runtime
 }
 
 function compile(target, jobs) {
@@ -170,9 +182,11 @@ export function rebuildNative(target) {
 }
 
 function main() {
-  const target = process.argv[2]
-  if (target !== 'node' && target !== 'electron') {
-    process.stderr.write('usage: rebuild-native.mjs <node|electron>\n')
+  let target
+  try {
+    target = resolveNativeTarget(process.argv[2])
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`)
     process.exit(2)
   }
   process.exit(rebuildNative(target))

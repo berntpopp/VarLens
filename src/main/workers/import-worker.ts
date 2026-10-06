@@ -22,6 +22,7 @@ import {
   streamInsertVcf
 } from './import-pipeline'
 import { ImportSkipTracker } from './import-skip-tracker'
+import { classifyWorkerError } from '../storage/import-worker-errors'
 import { VariantFrequencyService } from '../database/VariantFrequencyService'
 
 export interface ImportWorkerPort {
@@ -76,6 +77,8 @@ export async function runImportSession(
       status: 'success' | 'failed' | 'skipped'
       variantCount?: number
       error?: string
+      errorCode?: string
+      userMessage?: string
     }> = []
     let succeeded = 0
     let failed = 0
@@ -266,12 +269,14 @@ export async function runImportSession(
         const errorMsg = error instanceof Error ? error.message : String(error)
         const errorStack = error instanceof Error ? error.stack : undefined
 
+        const { code: errorCode, userMessage } = classifyWorkerError(error)
         results.push({
           filePath: file.filePath,
           fileName,
           caseName: file.caseName,
           status: 'failed',
-          error: errorMsg
+          error: errorMsg,
+          ...(errorCode !== undefined ? { errorCode, userMessage } : {})
         })
         failed++
 

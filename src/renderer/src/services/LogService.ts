@@ -5,6 +5,7 @@
 
 import { saveAs } from 'file-saver'
 import { useLogStore } from '../stores/logStore'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { sanitizeLogMessage } from '../utils/sanitizers'
 import type { LogLevel } from '../types/log'
 import type { LogMessage } from '../../../shared/types/log'
@@ -36,7 +37,9 @@ export class LogService {
       return
     }
 
-    // Subscribe to main process logs via IPC
+    // Main-process logs stream over IPC on desktop only; the web server's logs
+    // go to the operator pipeline (capability `mainProcessLogs`).
+    if (!useCapabilityStore().canUse('mainProcessLogs')) return
 
     this.cleanup = window.api.logs.onMessage((logMessage: LogMessage) => {
       this.log(logMessage.level, logMessage.message, logMessage.source)

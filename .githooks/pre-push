@@ -1,0 +1,10 @@
+#!/bin/sh
+# VarLens worktree pre-push gate. Git's original stdin and remote args are retained.
+set -eu
+root=$(git rev-parse --show-toplevel)
+if [ ! -f "$root/scripts/ci/hooks.mjs" ]; then
+  echo "VarLens pre-push runner is missing in this worktree. Update this branch or integrate the gate runner before pushing." >&2
+  exit 1
+fi
+cd "$root"
+exec node scripts/ci/hooks.mjs pre-push "$@"

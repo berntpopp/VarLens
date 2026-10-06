@@ -70,22 +70,29 @@ describe('web upload boundary', () => {
   })
 
   test('browser upload mechanics are isolated to the web client adapter', () => {
-    const webClient = readRepoFile('src/web/client/api.ts')
+    const uploads = readRepoFile('src/web/client/uploads.ts')
+    const localApi = readRepoFile('src/web/client/local-api.ts')
 
-    expect(webClient).toContain("document.createElement('input')")
-    expect(webClient).toContain('uploadImportFile(file: File)')
-    expect(webClient).toContain("httpInvoke('batch-import', 'testZipPassword'")
+    expect(uploads).toContain("document.createElement('input')")
+    expect(uploads).toContain('uploadImportFile(file: File)')
+    // Plain ZIPs must not look password-protected (P-08): probe with inspectZip.
+    expect(localApi).toContain("httpInvoke('batch-import', 'inspectZip'")
+    expect(localApi).not.toContain("httpInvoke('batch-import', 'testZipPassword'")
   })
 
-  test('web batch import resolves upload refs at the server edge and uses JobRunner/import seams', () => {
+  test('web batch import resolves upload refs at the server edge and uses the shared batch logic', () => {
     const uploadStaging = readRepoFile('src/web/server/routes/upload-staging.ts')
     const batchImport = readRepoFile('src/web/server/routes/batch-import.ts')
+    const shared = readRepoFile('src/main/ipc/handlers/batch-import-session.ts')
 
     expect(uploadStaging).toContain("const UPLOAD_REF_PREFIX = 'web-upload:'")
     expect(batchImport).toContain('resolveWebUploadRef')
-    expect(batchImport).toContain('jobRunner.enqueue<WebBatchImportJobParams, BatchResult>')
-    expect(batchImport).toContain("'import_batch'")
-    expect(batchImport).toContain('startImport(file.storedPath')
+    // ADR 0002: no web re-implementation of the batch loop or duplicate check.
+    expect(batchImport).toContain('startSessionBatchImport(')
+    expect(batchImport).toContain('checkSessionDuplicates(')
+    expect(batchImport).not.toContain('startImport(')
+    expect(shared).toContain("'import_batch'")
+    expect(shared).toContain('startImport(file.storedPath')
     expect(batchImport).not.toMatch(/\bVcfStrategy\b|\bVcfMapper\b|\bimportJsonFile\b/)
   })
 
@@ -99,9 +106,11 @@ describe('web upload boundary', () => {
 
     const app = Fastify()
     app.addHook('preHandler', async (request) => {
-      const requestWithSession = request as unknown as { session: { user: { id: number } } }
+      const requestWithSession = request as unknown as {
+        session: { user: { id: number; username: string; role: string } }
+      }
       requestWithSession.session = {
-        user: { id: 1 }
+        user: { id: 1, username: 'analyst', role: 'analyst' }
       }
     })
     registerImportUploadRoutes(app, { metrics } as never)

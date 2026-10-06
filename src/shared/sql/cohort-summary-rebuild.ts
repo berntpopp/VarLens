@@ -5,8 +5,15 @@
  * and rebuild-summary-worker. Single source of truth to avoid SQL drift.
  */
 
-export const REBUILD_VARIANT_SUMMARY_SQL = `
-  DELETE FROM cohort_variant_summary;
+/**
+ * INSERT-SELECT that (re)computes cohort_variant_summary rows from `variants`.
+ * `variantFilter` is appended after the `JOIN cases` of the per-case dedupe
+ * step (e.g. a `WHERE (v.chr, v.pos, v.ref, v.alt) IN (...)` restriction);
+ * the empty string recomputes every coordinate. One template for the full
+ * rebuild and the per-coordinate incremental path keeps the two in lockstep.
+ */
+export function variantSummaryInsertSql(variantFilter = ''): string {
+  return `
   INSERT INTO cohort_variant_summary (
     chr, pos, ref, alt, end_pos, gene_symbol, cdna, aa_change,
     consequence, func, clinvar, gnomad_af, cadd,
@@ -39,7 +46,7 @@ export const REBUILD_VARIANT_SUMMARY_SQL = `
         MAX(v.gt_num) AS gt_num,
         MAX(v.end_pos) AS end_pos
       FROM variants v
-      JOIN cases c ON c.id = v.case_id
+      JOIN cases c ON c.id = v.case_id${variantFilter}
       GROUP BY v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build
     )
     SELECT chr, pos, ref, alt, variant_type, genome_build,
@@ -58,6 +65,11 @@ export const REBUILD_VARIANT_SUMMARY_SQL = `
   LEFT JOIN variant_annotations va
     ON va.chr = d.chr AND va.pos = d.pos AND va.ref = d.ref AND va.alt = d.alt;
 `
+}
+
+export const REBUILD_VARIANT_SUMMARY_SQL = `
+  DELETE FROM cohort_variant_summary;
+${variantSummaryInsertSql()}`
 
 export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = `
   UPDATE cohort_variant_summary SET
@@ -98,8 +110,12 @@ export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = `
     AND cohort_variant_summary.alt = pca.alt;
 `
 
-export const REBUILD_GENE_BURDEN_SQL = `
-  DELETE FROM gene_burden_summary;
+/**
+ * INSERT-SELECT for gene_burden_summary. `geneFilter` is appended to the
+ * WHERE clause (e.g. `AND v.gene_symbol IN (...)`); empty recomputes every gene.
+ */
+export function geneBurdenInsertSql(geneFilter = ''): string {
+  return `
   INSERT INTO gene_burden_summary (
     gene_symbol, variant_count, unique_variant_count,
     affected_case_count, updated_at, genome_build
@@ -113,9 +129,14 @@ export const REBUILD_GENE_BURDEN_SQL = `
     c.genome_build
   FROM variants v
   JOIN cases c ON c.id = v.case_id
-  WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol != ''
+  WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol != ''${geneFilter}
   GROUP BY v.gene_symbol, c.genome_build;
 `
+}
+
+export const REBUILD_GENE_BURDEN_SQL = `
+  DELETE FROM gene_burden_summary;
+${geneBurdenInsertSql()}`
 
 export const UPDATE_META_SQL = `
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)

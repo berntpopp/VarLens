@@ -11,13 +11,17 @@
  * Plan: .planning/plans/2026-04-11-unified-shortlist-plan.md (Task 1.D)
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import ShortlistTable from '../../../../src/renderer/src/components/shortlist/ShortlistTable.vue'
+import { createPinia, setActivePinia } from 'pinia'
 import type { ShortlistRow } from '../../../../src/shared/types/shortlist'
+
+// ShortlistTable resolves its Links column through the external-links store
+beforeEach(() => setActivePinia(createPinia()))
 
 const vuetify = createVuetify({ components, directives })
 
@@ -70,6 +74,17 @@ describe('ShortlistTable', () => {
     expect(text).toContain('1') // rank
     expect(text).toContain('BRCA1') // gene
     expect(text).toContain('0.95') // score formatted
+  })
+
+  it('renders the merged Links column as keyboard-reachable anchors (case/cohort parity)', () => {
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [row()] },
+      global: { plugins: [vuetify] }
+    })
+    expect(wrapper.findAll('th').some((th) => th.text() === 'Links')).toBe(true)
+    const varsome = wrapper.find('a[aria-label="Open in VarSome (opens in a new tab)"]')
+    expect(varsome.exists()).toBe(true)
+    expect(varsome.attributes('href')).toContain('varsome.com')
   })
 
   it('emits row-click when a row is clicked', async () => {

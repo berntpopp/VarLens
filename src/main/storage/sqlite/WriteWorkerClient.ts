@@ -7,6 +7,7 @@ import type {
   WriteWorkerResponse
 } from '../../workers/write-worker-protocol'
 import type { StorageWriteTask } from '../write-executor'
+import type { AuthWriteOp } from '../../services/auth/auth-writes'
 
 interface Pending {
   resolve: (value: unknown) => void
@@ -29,11 +30,19 @@ export class WriteWorkerClient {
   ) {}
 
   run(task: StorageWriteTask): Promise<unknown> {
+    return this.post((id) => ({ id, task }))
+  }
+
+  runAuth(auth: AuthWriteOp): Promise<unknown> {
+    return this.post((id) => ({ id, auth }))
+  }
+
+  private post(build: (id: number) => WriteWorkerRequest): Promise<unknown> {
     const worker = this.ensureWorker()
     const id = this.nextId++
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject })
-      worker.postMessage({ id, task } satisfies WriteWorkerRequest)
+      worker.postMessage(build(id))
     })
   }
 

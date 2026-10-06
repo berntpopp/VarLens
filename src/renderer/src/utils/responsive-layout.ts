@@ -44,8 +44,9 @@ export function getMaxAutoVisibleColumns(viewportWidth: number): number {
 /**
  * Column priority for auto-hide (lower = more important, kept first). Shared by
  * the case and cohort tables; cohort-only keys sit next to their case-table
- * equivalents. Unknown keys (link-out and extension columns) get the lowest
- * priority, so they are the first to be auto-hidden.
+ * equivalents. The merged Links column ranks after every data column, and
+ * unknown keys (extension columns) get the lowest priority, so link-outs and
+ * extensions are the first to be auto-hidden.
  */
 export const COLUMN_PRIORITY: Readonly<Record<string, number>> = {
   gene_symbol: 1,
@@ -70,7 +71,8 @@ export const COLUMN_PRIORITY: Readonly<Record<string, number>> = {
   omim_mim_number: 16,
   hpo_sim_score: 17,
   qual: 18,
-  moi: 19
+  moi: 19,
+  _links: 20
 }
 
 /** Structural columns that never count against the budget and are never auto-hidden. */

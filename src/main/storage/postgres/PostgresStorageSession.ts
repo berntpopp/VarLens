@@ -59,8 +59,10 @@ export const POSTGRES_CAPABILITIES: StorageCapabilities = {
     list: true,
     query: true,
     deleteOne: true,
-    deleteMany: false,
-    deleteAll: false,
+    // Desktop routes these to cases-delete-postgres.ts, web to the
+    // PostgresCaseDeleteJobs job (deleteAll is admin-only in web).
+    deleteMany: true,
+    deleteAll: true,
     overview: true
   },
   imports: {

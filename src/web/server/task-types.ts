@@ -29,15 +29,8 @@ export const READ_TASK_TYPES = [
   'variants:geneSymbols',
   'variants:search',
   'variants:query',
-  'variants:filterOptions',
   'variants:shortlist',
   'variants:columnMeta',
-  'cohort:query',
-  'cohort:summary',
-  'cohort:columnMeta',
-  'cohort:carriers',
-  'cohort:geneBurden',
-  'database:overview',
   'export:variants',
   'export:cohort',
   'tags:list',
@@ -61,6 +54,12 @@ export const READ_TASK_TYPES = [
   'analysis-groups:list',
   'analysis-groups:get',
   'analysis-groups:getForCase',
+  // Alias autoroutes (variants:filterOptions, cohort:query/summary/columnMeta/
+  // carriers/geneBurden, database:overview) were removed (spec P-18): they ran
+  // executor tasks with raw arguments, skipping the zod validation that the
+  // preload-named overrides (variants:getFilterOptions, cohort:getVariants, …)
+  // apply. tests/shared/ipc/parity-manifest.test.ts fails on any served key
+  // that has no manifest entry.
   // audit:getByEntity / audit:query are NOT autorouted: they are
   // admin-gated overrides in routes/audit-log.ts.
   'transcripts:list'
@@ -147,6 +146,7 @@ export const DOMAIN_CAMEL_TO_KEBAB: Record<string, string> = {
   regionFiles: 'region-files',
   analysisGroups: 'analysis-groups',
   batchImport: 'batch-import',
+  referenceServices: 'reference-services',
   audit: 'audit'
 }
 

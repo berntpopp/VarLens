@@ -57,7 +57,9 @@ export function buildAuthOpenApiPaths(): Record<string, OpenApiPathItem> {
       body: AuthInvokeBodySchemas.setRole
     }),
     '/api/auth/resetPassword': authOperation({
-      summary: 'Reset a user password',
+      summary:
+        'Reset a user password (admin only). Answers 202 { accepted: true } whether or not ' +
+        'the account exists, so the endpoint cannot enumerate usernames',
       body: AuthInvokeBodySchemas.resetPassword
     }),
     '/api/auth/changePassword': authOperation({

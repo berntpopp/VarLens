@@ -1,7 +1,6 @@
 import {
   DatabaseInfoSchema,
   DatabaseInvokeBodySchemas,
-  DatabaseRecentListSchema,
   DatabaseUnknownResponseSchema
 } from '../../../../shared/api/schemas/database'
 import { dispatcherMethodOperation, type OpenApiPathItem } from '../openapi-utils'
@@ -31,12 +30,6 @@ export function buildDatabaseOpenApiPaths(): Record<string, OpenApiPathItem> {
       summary: 'Return database overview',
       body: DatabaseInvokeBodySchemas.empty,
       response: DatabaseUnknownResponseSchema
-    }),
-    '/api/database/recentList': dispatcherMethodOperation({
-      tag: 'database',
-      summary: 'Return an empty recent database list in web mode',
-      body: DatabaseInvokeBodySchemas.empty,
-      response: DatabaseRecentListSchema
     })
   }
 }

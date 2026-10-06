@@ -84,11 +84,13 @@
          Verified by the PR-G G0 real-GPU differential and guarded by
          tests/e2e/csp-molstar-eval.e2e.ts. 'wasm-unsafe-eval' + blob: cover Mol*'s
          WASM and worker/blob data handling. External connect-src entries enable the
-         AlphaFold, PDB, gnomAD, UniProt, InterPro structure/annotation APIs.
+         AlphaFold, PDB, gnomAD, UniProt, InterPro structure/annotation APIs;
+         localhost:60151 is the local IGV batch port ("Local IGV" link). The web
+         server's CSP header drops it unless VARLENS_WEB_ALLOW_LOCAL_IGV=1.
          Keep this policy IDENTICAL to src/web/index.html (Codex F-08). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' data: https://alphafold.ebi.ac.uk https://www.ebi.ac.uk https://files.rcsb.org https://models.rcsb.org https://data.rcsb.org https://rest.ensembl.org https://gnomad.broadinstitute.org https://www.proteins.uniprot.org https://rest.uniprot.org https://www.interpro.ebi.ac.uk blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' data: https://alphafold.ebi.ac.uk https://www.ebi.ac.uk https://files.rcsb.org https://models.rcsb.org https://data.rcsb.org https://rest.ensembl.org https://gnomad.broadinstitute.org https://www.proteins.uniprot.org https://rest.uniprot.org https://www.interpro.ebi.ac.uk http://localhost:60151 http://127.0.0.1:60151 blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
   </head>
 

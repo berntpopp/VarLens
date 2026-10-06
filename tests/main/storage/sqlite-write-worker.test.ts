@@ -76,7 +76,7 @@ describe('SQLite write worker (single writer thread)', () => {
       )
 
     expect(failure).toBeInstanceOf(UniqueConstraintError)
-    expect(toSerializableError(failure).code).toBe(ErrorCode.UNIQUE_CONSTRAINT)
+    expect(toSerializableError(failure).code).toBe(ErrorCode.CONFLICT)
   })
 
   it('keeps working after the writer is closed (lazy respawn)', async () => {

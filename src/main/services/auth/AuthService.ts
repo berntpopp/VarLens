@@ -16,19 +16,33 @@ import {
   LOCKOUT_DURATION_MINUTES,
   MAX_FAILED_ATTEMPTS,
   ROLE_ADMIN,
-  ROLE_USER,
+  DEFAULT_USER_ROLE,
   type UserRole
 } from '../../../shared/auth/auth-constants'
 import type { AuthResult, User } from '../../../shared/auth/types'
+import { applyAuthWrite, type AuthWriteOp, type AuthWriteResult } from './auth-writes'
+
+/** Executes an auth write; the desktop session routes it to the writer thread. */
+export type AuthWriter = (op: AuthWriteOp) => Promise<AuthWriteResult>
 
 export class AuthService {
   private readonly passwordProvider: PasswordProvider
+  private writer: AuthWriter
 
   constructor(
     private db: DatabaseType,
     passwordProvider: PasswordProvider = defaultPasswordProvider
   ) {
     this.passwordProvider = passwordProvider
+    this.writer = async (op) => applyAuthWrite(this.db, op)
+  }
+
+  /**
+   * Route every auth write through `writer` (the SQLite session points it at
+   * the single writer thread). Reads keep using this connection.
+   */
+  setWriter(writer: AuthWriter): void {
+    this.writer = writer
   }
 
   async createFirstUser(
@@ -47,31 +61,16 @@ export class AuthService {
     const recoveryKey = nanoid(32)
     const recoveryKeyHash = await this.passwordProvider.hashPassword(recoveryKey)
 
-    const createUser = this.db.transaction(() => {
-      // Store recovery key hash
-      this.db
-        .prepare('INSERT INTO database_settings (key, value) VALUES (?, ?)')
-        .run('recovery_key_hash', recoveryKeyHash)
-
-      // Enable accounts
-      this.db
-        .prepare(
-          "INSERT OR REPLACE INTO database_settings (key, value) VALUES ('accounts_enabled', 'true')"
-        )
-        .run()
-
-      return this.db
-        .prepare(
-          `INSERT INTO users (username, display_name, password_hash, role, password_changed_at)
-           VALUES (?, ?, ?, ?, datetime('now'))`
-        )
-        .run(username, displayName, passwordHash, ROLE_ADMIN)
-    })
-
-    const result = createUser()
+    const result = (await this.writer({
+      op: 'createFirstUser',
+      username,
+      displayName,
+      passwordHash,
+      recoveryKeyHash
+    })) as { id: number }
 
     return {
-      id: Number(result.lastInsertRowid),
+      id: result.id,
       username,
       role: ROLE_ADMIN,
       recoveryKey
@@ -98,23 +97,16 @@ export class AuthService {
 
     if (!valid) {
       const newCount = user.failed_login_count + 1
-      if (newCount >= MAX_FAILED_ATTEMPTS) {
-        const lockUntil = new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString()
-        this.db
-          .prepare('UPDATE users SET failed_login_count = ?, locked_until = ? WHERE id = ?')
-          .run(newCount, lockUntil, user.id)
-      } else {
-        this.db
-          .prepare('UPDATE users SET failed_login_count = ? WHERE id = ?')
-          .run(newCount, user.id)
-      }
+      const lockedUntil =
+        newCount >= MAX_FAILED_ATTEMPTS
+          ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString()
+          : null
+      await this.writer({ op: 'recordFailedLogin', userId: user.id, count: newCount, lockedUntil })
       return { success: false, user: null }
     }
 
     // Reset failed count on success
-    this.db
-      .prepare('UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = ?')
-      .run(user.id)
+    await this.writer({ op: 'clearFailedLogins', userId: user.id })
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password_hash: _hash, ...safeUser } = user
@@ -129,22 +121,23 @@ export class AuthService {
     username: string,
     displayName: string,
     tempPassword: string,
-    createdByUsername: string
+    createdByUsername: string,
+    role: UserRole = DEFAULT_USER_ROLE
   ): Promise<{ id: number; username: string; role: UserRole; must_change_password: number }> {
-    const creator = this.getUser(createdByUsername)
     const passwordHash = await this.passwordProvider.hashPassword(tempPassword)
-
-    const result = this.db
-      .prepare(
-        `INSERT INTO users (username, display_name, password_hash, role, must_change_password, created_by, password_changed_at)
-         VALUES (?, ?, ?, ?, 1, ?, datetime('now'))`
-      )
-      .run(username, displayName, passwordHash, ROLE_USER, creator?.id ?? null)
+    const result = (await this.writer({
+      op: 'createUser',
+      username,
+      displayName,
+      passwordHash,
+      role,
+      creatorUsername: createdByUsername
+    })) as { id: number }
 
     return {
-      id: Number(result.lastInsertRowid),
+      id: result.id,
       username,
-      role: ROLE_USER,
+      role,
       must_change_password: 1
     }
   }
@@ -161,52 +154,27 @@ export class AuthService {
   }
 
   async deactivateUser(username: string): Promise<void> {
-    const result = this.db
-      .prepare("UPDATE users SET is_active = 0, updated_at = datetime('now') WHERE username = ?")
-      .run(username)
-    if (result.changes === 0) {
-      throw new Error(`User not found: ${username}`)
+    const result = (await this.writer({ op: 'setActive', username, active: false })) as {
+      changes: number
     }
+    if (result.changes === 0) throw new Error(`User not found: ${username}`)
   }
 
   async reactivateUser(username: string): Promise<void> {
-    const result = this.db
-      .prepare(
-        `UPDATE users SET is_active = 1, failed_login_count = 0, locked_until = NULL,
-         updated_at = datetime('now') WHERE username = ?`
-      )
-      .run(username)
+    const result = (await this.writer({ op: 'setActive', username, active: true })) as {
+      changes: number
+    }
     if (result.changes === 0) throw new Error(`User not found: ${username}`)
   }
 
   /** Change a user's role; never demotes the last active admin. */
-  setRole(username: string, role: UserRole): void {
-    const user = this.getUser(username)
-    if (!user) throw new Error(`User not found: ${username}`)
-    if (user.role === role) return
-    if (user.role === ROLE_ADMIN) {
-      const others = this.db
-        .prepare(
-          'SELECT COUNT(*) AS c FROM users WHERE role = ? AND is_active = 1 AND username <> ?'
-        )
-        .get(ROLE_ADMIN, username) as { c: number }
-      if (others.c === 0) throw new Error('Cannot demote the last active admin')
-    }
-    this.db
-      .prepare("UPDATE users SET role = ?, updated_at = datetime('now') WHERE username = ?")
-      .run(role, username)
+  async setRole(username: string, role: UserRole): Promise<void> {
+    await this.writer({ op: 'setRole', username, role })
   }
 
   async resetPassword(username: string, newPassword: string): Promise<void> {
     const passwordHash = await this.passwordProvider.hashPassword(newPassword)
-    this.db
-      .prepare(
-        `UPDATE users SET password_hash = ?, must_change_password = 1,
-         failed_login_count = 0, locked_until = NULL,
-         password_changed_at = datetime('now'), updated_at = datetime('now')
-         WHERE username = ?`
-      )
-      .run(passwordHash, username)
+    await this.writer({ op: 'resetPassword', username, passwordHash })
   }
 
   async changePassword(
@@ -223,13 +191,7 @@ export class AuthService {
     if (!valid) return false
 
     const passwordHash = await this.passwordProvider.hashPassword(newPassword)
-    this.db
-      .prepare(
-        `UPDATE users SET password_hash = ?, must_change_password = 0,
-         password_changed_at = datetime('now'), updated_at = datetime('now')
-         WHERE username = ?`
-      )
-      .run(passwordHash, username)
+    await this.writer({ op: 'changePassword', username, passwordHash })
 
     return true
   }

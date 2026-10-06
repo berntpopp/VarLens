@@ -1,5 +1,6 @@
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { VariantFrequencyService } from '../database/VariantFrequencyService'
+import type { CaseSummaryRemoval } from '../database/cohort-summary-case-removal'
 
 /**
  * Delete operations extracted from delete-worker for testability.
@@ -17,6 +18,11 @@ export interface IncrementalDeleteOptions {
   isCancelled: () => boolean
   /** Called after each case with (deletedSoFar, total). */
   onProgress: (current: number, total: number) => void
+  /**
+   * Incremental cohort-summary upkeep, applied inside each case's delete
+   * transaction. Null/absent leaves the summary to the caller (full rebuild).
+   */
+  summary?: CaseSummaryRemoval | null
 }
 
 export interface IncrementalDeleteResult {
@@ -38,7 +44,8 @@ export function listAllCaseIds(db: DatabaseType): number[] {
  * consistent inside the same transaction as the delete. Yields to the worker
  * event loop between cases so a `cancel` message can be observed, which makes
  * the job cancellable at case granularity (every committed case is complete:
- * its variants, annotations and frequency contribution are gone together).
+ * its variants, annotations, FTS rows (row triggers), frequency contribution
+ * and — with `options.summary` — cohort-summary contribution are gone together).
  */
 export async function deleteCasesIncrementally(
   db: DatabaseType,
@@ -47,9 +54,13 @@ export async function deleteCasesIncrementally(
 ): Promise<IncrementalDeleteResult> {
   const frequencies = new VariantFrequencyService(db)
   const deleteCase = db.prepare('DELETE FROM cases WHERE id = ?')
+  const summary = options.summary ?? null
   const deleteOne = db.transaction((caseId: number): number => {
     if (!options.deletingAll) frequencies.decrementFrequencies(caseId, false)
-    return deleteCase.run(caseId).changes
+    summary?.beforeDelete(caseId)
+    const changes = deleteCase.run(caseId).changes
+    if (changes > 0) summary?.afterDelete()
+    return changes
   })
 
   let deleted = 0

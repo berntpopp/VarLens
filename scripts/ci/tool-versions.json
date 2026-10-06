@@ -1,0 +1,102 @@
+{
+  "actionlint": {
+    "version": "1.7.12",
+    "assets": {
+      "linux-x64": {
+        "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz",
+        "sha256": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+        "executable": "actionlint"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_arm64.tar.gz",
+        "sha256": "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6",
+        "executable": "actionlint"
+      },
+      "darwin-x64": {
+        "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_amd64.tar.gz",
+        "sha256": "5b44c3bc2255115c9b69e30efc0fecdf498fdb63c5d58e17084fd5f16324c644",
+        "executable": "actionlint"
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_arm64.tar.gz",
+        "sha256": "aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f",
+        "executable": "actionlint"
+      }
+    }
+  },
+  "shellcheck": {
+    "version": "0.11.0",
+    "assets": {
+      "linux-x64": {
+        "url": "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz",
+        "sha256": "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198",
+        "executable": "shellcheck-v0.11.0/shellcheck"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.aarch64.tar.xz",
+        "sha256": "12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588",
+        "executable": "shellcheck-v0.11.0/shellcheck"
+      },
+      "darwin-x64": {
+        "url": "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.x86_64.tar.xz",
+        "sha256": "3c89db4edcab7cf1c27bff178882e0f6f27f7afdf54e859fa041fca10febe4c6",
+        "executable": "shellcheck-v0.11.0/shellcheck"
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.aarch64.tar.xz",
+        "sha256": "56affdd8de5527894dca6dc3d7e0a99a873b0f004d7aabc30ae407d3f48b0a79",
+        "executable": "shellcheck-v0.11.0/shellcheck"
+      }
+    }
+  },
+  "gitleaks": {
+    "version": "8.30.1",
+    "assets": {
+      "linux-x64": {
+        "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz",
+        "sha256": "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+        "executable": "gitleaks"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_arm64.tar.gz",
+        "sha256": "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080",
+        "executable": "gitleaks"
+      },
+      "darwin-x64": {
+        "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_x64.tar.gz",
+        "sha256": "dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709",
+        "executable": "gitleaks"
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_arm64.tar.gz",
+        "sha256": "b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5",
+        "executable": "gitleaks"
+      }
+    }
+  },
+  "trivy": {
+    "version": "0.70.0",
+    "assets": {
+      "linux-x64": {
+        "url": "https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-64bit.tar.gz",
+        "sha256": "8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9",
+        "executable": "trivy"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-ARM64.tar.gz",
+        "sha256": "2f6bb988b553a1bbac6bdd1ce890f5e412439564e17522b88a4541b4f364fc8d",
+        "executable": "trivy"
+      },
+      "darwin-x64": {
+        "url": "https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_macOS-64bit.tar.gz",
+        "sha256": "52d531452b19e7593da29366007d02a810e1e0080d02f9cf6a1afb46c35aaa93",
+        "executable": "trivy"
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_macOS-ARM64.tar.gz",
+        "sha256": "68e543c51dcc96e1c344053a4fde9660cf602c25565d9f09dc17dd41e13b838a",
+        "executable": "trivy"
+      }
+    }
+  }
+}

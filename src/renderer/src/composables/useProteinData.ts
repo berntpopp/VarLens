@@ -13,11 +13,13 @@ import type {
   GeneStructure
 } from '../../../shared/types/protein'
 import { useApiService } from './useApiService'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 
 export function useProteinData(geneSymbol: Ref<string | null>) {
-  const { api } = useApiService()
+  // protein.* / gnomad.* are gated on the proteinViewer capability (parity manifest).
+  const api = useCapabilityStore().canUse('proteinViewer') ? useApiService().api : undefined
 
   const loading = ref(false)
   const error = ref<string | null>(null)

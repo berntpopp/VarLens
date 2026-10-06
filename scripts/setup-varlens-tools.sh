@@ -223,11 +223,8 @@ setup_snpeff_db() {
     return
   fi
 
-  # Activate conda env to get snpEff
-  local snpeff_cmd=""
-  if conda run -n "$CONDA_ENV_NAME" which snpEff &>/dev/null; then
-    snpeff_cmd="conda run -n $CONDA_ENV_NAME snpEff"
-  else
+  # Confirm snpEff is available before querying or downloading its database.
+  if ! conda run -n "$CONDA_ENV_NAME" which snpEff &>/dev/null; then
     log_error "snpEff not found in conda environment '$CONDA_ENV_NAME'"
     STATUS[snpeff_db]="MISSING"
     return

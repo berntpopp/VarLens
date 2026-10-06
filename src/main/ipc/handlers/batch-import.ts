@@ -1,8 +1,7 @@
 import { dialog } from 'electron'
-import { dirname, join } from 'path'
+import { basename, dirname, join } from 'path'
 import { readdir } from 'fs/promises'
 import type { HandlerDependencies } from '../types'
-import { isZipEncryptedOffThread } from '../../import/zip-worker-client'
 import { mainLogger } from '../../services/MainLogger'
 import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
@@ -26,8 +25,14 @@ import {
   cancelBatchImport,
   testZipPassword,
   extractZip,
-  cleanupZipTemp
+  cleanupZipTemp,
+  inspectZip
 } from './batch-import-logic'
+import {
+  cancelActiveSessionBatch,
+  checkSessionDuplicates,
+  startSessionBatchImport
+} from './batch-import-session'
 import type { BatchImportCallbacks } from './batch-import-logic'
 
 function throwUnallowedBatchPath(channel: string, filePath: string, label = 'filePath'): never {
@@ -45,7 +50,11 @@ function createBatchImportCallbacks(runId: string): BatchImportCallbacks {
   }
 }
 
-export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependencies): void {
+export function registerBatchImportHandlers({
+  ipcMain,
+  getDb,
+  getDbManager
+}: HandlerDependencies): void {
   ipcMain.handle('batch-import:selectFiles', async () => {
     return wrapHandler(async () => {
       const settings = await loadSettings()
@@ -143,6 +152,14 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
             throwUnallowedBatchPath('batch-import:checkDuplicates', filePath, `filePaths[${index}]`)
           }
         })
+        const session = getDbManager().getCurrentSession()
+        if (session.capabilities.backend === 'postgres') {
+          return checkSessionDuplicates(
+            session,
+            validatedFilePaths.map((filePath) => ({ filePath, fileName: basename(filePath) })),
+            validatedStripText
+          )
+        }
         return checkDuplicateFiles(getDb, validatedFilePaths, validatedStripText)
       })
     }
@@ -179,6 +196,23 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
             throwUnallowedBatchPath('batch-import:start', filePath, `filePaths[${index}]`)
           }
         })
+        const session = getDbManager().getCurrentSession()
+        if (session.capabilities.backend === 'postgres') {
+          // The SQLite import worker cannot write to Postgres: use the shared
+          // session batch (same logic as web mode).
+          return startSessionBatchImport({
+            files: validatedFilePaths.map((filePath) => ({
+              inputPath: filePath,
+              storedPath: filePath,
+              fileName: basename(filePath)
+            })),
+            duplicateStrategy: validatedStrategy,
+            stripText: validatedStripText,
+            runId: validatedRunId,
+            session,
+            callbacks: createBatchImportCallbacks(validatedRunId)
+          })
+        }
         return startBatchImport(
           getDb,
           validatedFilePaths,
@@ -193,6 +227,8 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
   ipcMain.handle('batch-import:cancel', async () => {
     return wrapHandler(async () => {
       cancelBatchImport()
+      // Desktop-on-Postgres batches run as a session job (see batch-import:start).
+      cancelActiveSessionBatch()
     })
   })
 
@@ -223,7 +259,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
         await saveSettings({ ...settings, lastImportDirectory: dirname(filePath) })
         addAllowedImportPath(filePath)
 
-        const isEncrypted = await isZipEncryptedOffThread(filePath)
+        const { isEncrypted } = await inspectZip(filePath)
         return { filePath, isEncrypted }
       } catch (error) {
         mainLogger.error(`batch-import:selectZip error: ${error}`, 'import')

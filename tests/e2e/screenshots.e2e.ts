@@ -2,7 +2,7 @@
  * Automated screenshot generation for VarLens documentation.
  *
  * Launches the compiled Electron app, imports the demo dataset,
- * navigates through key views, and saves screenshots to docs/public/screenshots/.
+ * navigates through key views, and saves screenshots outside tracked documentation.
  *
  * Run: npx playwright test tests/e2e/screenshots.e2e.ts
  * Prereqs: npm run rebuild:electron && npx electron-vite build
@@ -13,7 +13,9 @@ import * as fs from 'fs'
 import * as zlib from 'zlib'
 import * as os from 'os'
 
-const SCREENSHOT_DIR = path.resolve(__dirname, '../../docs/public/screenshots')
+const SCREENSHOT_DIR = path.resolve(
+  process.env.VARLENS_SCREENSHOT_DIR ?? path.resolve(__dirname, '../../.cache/docs-screenshots/capture')
+)
 const DEMO_DATA_PATH = path.resolve(__dirname, 'test-data/demo-case.json')
 const VIEWPORT = { width: 1280, height: 800 }
 

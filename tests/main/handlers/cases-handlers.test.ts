@@ -339,6 +339,55 @@ describe('cases IPC handlers', () => {
   })
 
   it.each([
+    { channel: 'cases:deleteBatch', args: [undefined, [3, 4]], expected: [3, 4] },
+    { channel: 'cases:deleteAll', args: [undefined], expected: [11, 12] },
+    {
+      channel: 'cases:startDelete',
+      args: [undefined, { mode: 'ids', ids: [5] }],
+      expected: [5]
+    }
+  ])(
+    'routes postgres $channel through the session write executor, never SQLite (PR-W9b)',
+    async ({ channel, args, expected }) => {
+      const execute = vi.fn().mockResolvedValue(undefined)
+      const currentSession = {
+        capabilities: {
+          backend: 'postgres',
+          cases: { deleteOne: true, deleteMany: true, deleteAll: true }
+        },
+        listCases: vi.fn(async () => [{ id: 11 }, { id: 12 }]),
+        getWriteExecutor: () => ({ execute })
+      }
+      const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+      const ipcMain = {
+        handle: vi.fn((name: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+          handlers.set(name, handler)
+        })
+      }
+      const { registerCaseHandlers } = await import('../../../src/main/ipc/handlers/cases')
+      registerCaseHandlers({
+        ipcMain: ipcMain as never,
+        getDb: (() => {
+          throw new Error('getDb must not be called for a postgres workspace')
+        }) as never,
+        getDbManager: (() => ({ getCurrentSession: () => currentSession })) as never,
+        getDbPool: (() => null) as never
+      })
+
+      const result = await handlers.get(channel)!(...args)
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(expected.length))
+      expect(execute.mock.calls.map(([task]) => task.params[0])).toEqual(expected)
+      if (channel === 'cases:startDelete') {
+        expect(result).toMatchObject({ jobId: expect.any(String) })
+      } else {
+        expect(result).toBe(expected.length)
+      }
+      // Let the job settle so the shared delete lock is released.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+  )
+
+  it.each([
     {
       channel: 'cases:delete',
       args: [undefined, 1],

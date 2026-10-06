@@ -23,6 +23,12 @@ export interface JobsApi {
   onChanged: (callback: (job: Job) => void) => () => void
 }
 
+/**
+ * Window event the web client dispatches when the server could not replay
+ * missed push events (SSE `events:resync`); job views re-poll on it.
+ */
+export const EVENTS_RESYNC_DOM_EVENT = 'varlens:events-resync'
+
 export const JOBS_CHANNELS = {
   list: 'jobs:list',
   get: 'jobs:get',

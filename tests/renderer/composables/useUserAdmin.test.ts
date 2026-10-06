@@ -20,7 +20,12 @@ describe('useUserAdmin', () => {
     const ok = await admin.createUser('carol', '', 'temporary-password-1')
     expect(ok).toBe(true)
     // Display name falls back to the username (server requires a non-empty value).
-    expect(api.auth.createUser).toHaveBeenCalledWith('carol', 'carol', 'temporary-password-1')
+    expect(api.auth.createUser).toHaveBeenCalledWith(
+      'carol',
+      'carol',
+      'temporary-password-1',
+      'viewer'
+    )
     expect(admin.success.value).toMatch(/carol created/)
     expect(admin.users.value).toHaveLength(2)
   })
@@ -42,7 +47,7 @@ describe('useUserAdmin', () => {
       userMessage: 'Cannot demote the last active admin'
     })
     const admin = useUserAdmin()
-    const ok = await admin.setRole('admin', 'user')
+    const ok = await admin.setRole('admin', 'analyst')
     expect(ok).toBe(false)
     expect(admin.error.value).toBe('Cannot demote the last active admin')
     expect(admin.busy.value).toBe(false)

@@ -195,7 +195,7 @@ defineExpose({ refresh })
 .cohort-content {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 48px - var(--v-layout-bottom, 32px));
+  height: calc(100dvh - var(--app-bar-height, 48px) - var(--v-layout-bottom, 32px));
   overflow-x: hidden;
   overflow-y: auto;
 }

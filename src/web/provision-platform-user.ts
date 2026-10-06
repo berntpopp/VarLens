@@ -1,6 +1,11 @@
 import { getPostgresStorageConfig } from '../main/storage/config'
 import { createPostgresStorageSession } from '../main/storage/postgres/createPostgresStorageSession'
-import { ROLE_ADMIN, ROLE_USER, type UserRole } from '../shared/auth/auth-constants'
+import {
+  DEFAULT_USER_ROLE,
+  USER_ROLES,
+  normalizeUserRole,
+  type UserRole
+} from '../shared/auth/auth-constants'
 import { PostgresPlatformUserStore } from './auth/PostgresPlatformUserStore'
 
 interface Options {
@@ -37,7 +42,7 @@ export function parseOptions(args: string[]): Options {
   assertKnownArgs(args)
   const subject = readArg(args, '--subject')?.trim()
   const displayName = readArg(args, '--display-name')?.trim()
-  const role = readArg(args, '--role')?.trim() ?? ROLE_USER
+  const rawRole = readArg(args, '--role')?.trim() ?? DEFAULT_USER_ROLE
 
   if (subject === undefined || subject === '') {
     throw new Error('--subject is required')
@@ -45,8 +50,10 @@ export function parseOptions(args: string[]): Options {
   if (displayName === undefined || displayName === '') {
     throw new Error('--display-name is required')
   }
-  if (role !== ROLE_USER && role !== ROLE_ADMIN) {
-    throw new Error('--role must be either user or admin')
+  // `user` is accepted as the legacy name of `analyst`.
+  const role = normalizeUserRole(rawRole)
+  if (role === undefined) {
+    throw new Error(`--role must be one of ${USER_ROLES.join(', ')}`)
   }
 
   return { subject, displayName, role }

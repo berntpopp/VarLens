@@ -8,6 +8,8 @@
 
 import type { WindowAPI, CommentCategory } from '../../../shared/types/api'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
+import { mockReferenceServicesApi } from './referenceServicesMock'
+import { computeCapabilityDocument } from '../../../shared/ipc/capability-document'
 import { mockCases } from './fixtures/cases'
 import { mockVariants, mockFilterOptions } from './fixtures/variants'
 
@@ -18,7 +20,7 @@ const variants = [...mockVariants]
 const removeCases = (match: (id: number) => boolean): number =>
   cases.length - (cases = cases.filter((c) => !match(c.id))).length
 
-const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
+export const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
   backend: 'sqlite',
   workspace: {
     localFileLifecycle: true,
@@ -80,11 +82,7 @@ const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
     geneBurden: true,
     columnMeta: true
   },
-  export: {
-    variants: true,
-    cohort: true,
-    streaming: true
-  }
+  export: { variants: true, cohort: true, streaming: true }
 }
 
 export const mockApi: WindowAPI = {
@@ -278,13 +276,20 @@ export const mockApi: WindowAPI = {
     getCpuCount: async () => 4,
     setWorkerThreads: async () => {},
     getWorkerThreads: async () => 0,
-    getLogFilePath: async () => '/mock/logs/main.log'
+    getLogFilePath: async () => '/mock/logs/main.log',
+    getCapabilities: async () =>
+      computeCapabilityDocument({
+        runtime: 'desktop',
+        role: 'admin',
+        storage: MOCK_SQLITE_CAPABILITIES
+      })
   },
   export: {
     variants: async () => ({ success: true, filePath: '/mock/export.xlsx' }),
     cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' }),
     revealInFolder: async () => ({ success: false }),
-    cancel: async () => ({ cancelled: false })
+    cancel: async () => ({ cancelled: false }),
+    onProgress: () => () => {}
   },
   shell: {
     openExternal: async (url) => {
@@ -1223,5 +1228,6 @@ export const mockApi: WindowAPI = {
     progress: async () => null,
     cancel: async () => ({ requested: false }),
     onChanged: () => () => {}
-  }
+  },
+  referenceServices: mockReferenceServicesApi
 }

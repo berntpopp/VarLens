@@ -9,8 +9,16 @@ describe('provision-platform-user CLI', () => {
     ).toEqual({
       subject: 'oidc-subject-1',
       displayName: 'Alice Example',
-      role: 'user'
+      role: 'viewer'
     })
+
+    // `user` is the legacy name of `analyst`.
+    expect(parseOptions(['--subject', 's', '--display-name', 'S', '--role', 'user'])).toMatchObject(
+      { role: 'analyst' }
+    )
+    expect(() => parseOptions(['--subject', 's', '--display-name', 'S', '--role', 'root'])).toThrow(
+      /--role must be one of viewer, analyst, admin/
+    )
 
     expect(
       parseOptions([

@@ -25,6 +25,7 @@ import {
   cohortOrderByClause,
   genomicVariantOrderTerms
 } from '../../../src/shared/sql/chromosome-order'
+import { cohortKeysetOrderByClause } from '../../../src/shared/sql/cohort-keyset'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -201,12 +202,13 @@ describe.skipIf(!RUN)('natural chromosome order — PostgreSQL', () => {
   })
 
   it('cohort indexes serve the default and chr-sorted summary orders', async () => {
+    // Default order is the keyset order since 0020 (idx_cvs_carrier_keyset).
     const byCarrier = await planFor(
       `SELECT cvs.chr FROM "${schema}"."cohort_variant_summary" cvs
-         ${cohortOrderByClause('carrier_count', 'cvs.carrier_count', 'desc', 'cvs', 'postgres')} LIMIT 50`,
+         ${cohortKeysetOrderByClause('cvs', 'postgres')} LIMIT 50`,
       []
     )
-    expect(byCarrier).toContain('idx_cvs_carrier_chr_rank')
+    expect(byCarrier).toContain('idx_cvs_carrier_keyset')
     expect(byCarrier).not.toMatch(/\bSort\b/)
 
     const byChr = await planFor(

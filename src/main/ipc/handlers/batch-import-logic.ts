@@ -11,7 +11,11 @@ import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import { checkDuplicates } from '../../import/batch-utils'
 import { TempDirectoryManager } from '../../import'
-import { extractZipOffThread, testZipPasswordOffThread } from '../../import/zip-worker-client'
+import {
+  extractZipOffThread,
+  isZipEncryptedOffThread,
+  testZipPasswordOffThread
+} from '../../import/zip-worker-client'
 import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { API_CONFIG } from '../../../shared/config'
 import type { FileImportRequest } from '../../../shared/types/import-worker'
@@ -251,6 +255,18 @@ export function cancelBatchImport(): void {
   if (workerClient !== null) {
     workerClient.cancel()
   }
+}
+
+/**
+ * Inspect a ZIP archive picked for import: is any entry encrypted?
+ *
+ * Shared by desktop `batch-import:selectZip` and the web upload flow. Do not
+ * derive this from `testZipPassword(path, '')`: that returns
+ * `success: false` for an archive with no encrypted entry at all, which made
+ * the web client report every plain ZIP as password-protected (P-08).
+ */
+export async function inspectZip(zipPath: string): Promise<{ isEncrypted: boolean }> {
+  return { isEncrypted: await isZipEncryptedOffThread(zipPath) }
 }
 
 /**

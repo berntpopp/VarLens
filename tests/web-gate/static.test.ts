@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { registerStatic, WEB_APP_CSP_HEADER } from '../../src/web/server/static'
+import { registerStatic, WEB_APP_CSP_HEADER, webAppCspHeader } from '../../src/web/server/static'
 
 function extractWebMetaCsp(): string {
   const html = readFileSync(resolve(__dirname, '../../src/web/index.html'), 'utf-8')
@@ -47,6 +47,13 @@ describe('web static serving', () => {
 
   test('static CSP header matches web meta CSP plus frame-ancestors', () => {
     expect(WEB_APP_CSP_HEADER).toBe(`${extractWebMetaCsp()}; frame-ancestors 'none'`)
+  })
+
+  test('local IGV origins are only sent when the operator opts in', () => {
+    const igv = 'http://localhost:60151 http://127.0.0.1:60151'
+    expect(WEB_APP_CSP_HEADER).toContain(igv)
+    expect(webAppCspHeader({})).not.toContain('60151')
+    expect(webAppCspHeader({ VARLENS_WEB_ALLOW_LOCAL_IGV: '1' })).toBe(WEB_APP_CSP_HEADER)
   })
 
   test('returns 404 for missing asset-like paths instead of the SPA shell', async () => {

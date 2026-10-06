@@ -10,6 +10,7 @@
           <span class="text-body-medium text-muted mr-2" style="min-width: 60px">Status</span>
           <StatusSelector
             :model-value="currentStatus"
+            aria-label="Affected status"
             style="max-width: 180px"
             @update:model-value="handleStatusChange"
           />
@@ -21,6 +22,7 @@
           <v-select
             :model-value="currentSex"
             :items="sexOptions"
+            aria-label="Sex"
             item-title="label"
             item-value="value"
             density="compact"
@@ -43,12 +45,14 @@
             hide-details
             style="max-width: 120px"
             placeholder="Years"
+            aria-label="Age in years"
             @update:model-value="handleAgeChange"
           />
           <span class="text-body-medium text-muted mx-2">DOB</span>
           <v-text-field
             :model-value="currentDob"
             type="date"
+            aria-label="Date of birth"
             density="compact"
             variant="outlined"
             hide-details

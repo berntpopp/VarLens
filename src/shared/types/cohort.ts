@@ -122,6 +122,13 @@ export interface CohortPaginatedResult {
    * runs, so the renderer can surface a "refreshing" hint.
    */
   warnings?: { staleSummary?: boolean }
+  /**
+   * Keyset paging (default `carrier_count DESC` sort only): pass as `cursor`
+   * when requesting the page that directly follows this one. Present when the
+   * page was full. `paging: 'keyset'` marks a page served by a cursor seek.
+   */
+  next_cursor?: string
+  paging?: 'keyset'
 }
 
 /**
@@ -176,4 +183,9 @@ export interface CohortSearchParams {
   variant_type?: string
   /** Whether the total count needs to be recomputed (false = use cached count) */
   _count_needed?: boolean
+  /**
+   * Opaque keyset cursor from the previous page's `next_cursor`. Stale or
+   * unsupported cursors are ignored (OFFSET fallback), so passing one is safe.
+   */
+  cursor?: string
 }

@@ -18,8 +18,8 @@ import { SAME_ORIGIN_HEADERS, startWebDriver } from '../helpers/web-driver'
  *   2. Admin performs a write (tags:create) and a read (tags:list).
  *   3. A failed login attempt is recorded without a username.
  *   4. Admin reads the trail over HTTP — allowed, and itself audited.
- *   5. A non-admin user (inserted directly; auth:createUser is 501 in this
- *      single-tenant release) logs in and gets 403 on audit:query.
+ *   5. A non-admin analyst (inserted directly, bypassing user management)
+ *      logs in and gets 403 on audit:query.
  *
  * Gated on the web build + Postgres availability.
  */
@@ -118,7 +118,7 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('audit trail end-to-end', () => {
       await pool.query(
         `INSERT INTO "${driver.schema}".users
           (username, display_name, password_hash, role, is_active, must_change_password, password_changed_at)
-         VALUES ('analyst', 'Analyst', $1, 'user', TRUE, FALSE, now())`,
+         VALUES ('analyst', 'Analyst', $1, 'analyst', TRUE, FALSE, now())`,
         [analystHash]
       )
 
@@ -140,7 +140,9 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('audit trail end-to-end', () => {
         headers: { ...SAME_ORIGIN_HEADERS, cookie: analystCookie }
       })) as unknown as InjectResult
       expect(blocked.statusCode).toBe(403)
-      expect(blocked.json()).toMatchObject({ details: { error: 'admin-required' } })
+      expect(blocked.json()).toMatchObject({
+        details: { error: 'role-required', requiredRole: 'admin' }
+      })
 
       // The blocked attempt must not have produced an api_read row. Wait past
       // one audit-buffer flush interval so a buffered row would have landed.
