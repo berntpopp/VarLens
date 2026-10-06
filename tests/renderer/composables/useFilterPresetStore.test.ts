@@ -107,4 +107,17 @@ describe('useFilterPresetStore', () => {
     expect(merged.maxGnomadAf).toBe(0.01)
     expect(merged.consequences).toEqual(['HIGH'])
   })
+
+  it('keeps active presets separate for the case and cohort views (P0-3 isolation)', () => {
+    const caseStore = useFilterPresetStore('case')
+    const cohortStore = useFilterPresetStore('cohort')
+
+    caseStore.togglePreset(7)
+
+    expect(caseStore.isPresetActive(7)).toBe(true)
+    expect(cohortStore.isPresetActive(7)).toBe(false)
+    expect(cohortStore.activePresetIds.value.size).toBe(0)
+    // The preset list itself stays shared.
+    expect(cohortStore.presets).toBe(caseStore.presets)
+  })
 })

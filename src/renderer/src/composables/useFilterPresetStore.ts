@@ -11,9 +11,14 @@
  * `ShortlistPanel` (via `useShortlistQuery`) needs to see the same loaded
  * list, not a fresh empty one. Tests that need isolation call
  * `__resetFilterPresetStoreForTest()` in `beforeEach`.
+ *
+ * **Per-view active set:** only the preset *list* is shared. Which presets
+ * are toggled on is kept per scope ('case' vs 'cohort'); a single shared set
+ * leaked the case view's active preset chip into the cohort view (and the
+ * reverse), so cohort and case filter state were not isolated (P0-3).
  */
 
-import { ref, computed } from 'vue'
+import { ref, computed, type Ref } from 'vue'
 import type {
   FilterPreset,
   FilterPresetCreate,
@@ -29,8 +34,13 @@ import { unwrapIpcResult } from '../../../shared/types/errors'
 // `FilterToolbar` would each instantiate disconnected stores and the shortlist
 // preset picker would render empty even after the toolbar finished loading.
 
+export type PresetScope = 'case' | 'cohort'
+
 const presets = ref<FilterPreset[]>([])
-const activePresetIds = ref<Set<number>>(new Set())
+const activeByScope: Record<PresetScope, Ref<Set<number>>> = {
+  case: ref(new Set<number>()),
+  cohort: ref(new Set<number>())
+}
 const loading = ref(false)
 const visiblePresets = computed(() => presets.value.filter((p) => p.isVisible))
 
@@ -40,12 +50,14 @@ const visiblePresets = computed(() => presets.value.filter((p) => p.isVisible))
  */
 export function __resetFilterPresetStoreForTest(): void {
   presets.value = []
-  activePresetIds.value = new Set()
+  activeByScope.case.value = new Set()
+  activeByScope.cohort.value = new Set()
   loading.value = false
 }
 
-export function useFilterPresetStore() {
+export function useFilterPresetStore(scope: PresetScope = 'case') {
   const { api } = useApiService()
+  const activePresetIds = activeByScope[scope]
 
   async function loadPresets(): Promise<void> {
     if (!api) return

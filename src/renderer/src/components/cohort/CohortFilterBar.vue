@@ -233,7 +233,7 @@ const {
   savePreset,
   updatePreset: updatePresetStore,
   deletePreset: deletePresetStore
-} = useFilterPresetStore()
+} = useFilterPresetStore('cohort')
 
 // Dialog state
 const showSavePresetDialog = ref(false)
