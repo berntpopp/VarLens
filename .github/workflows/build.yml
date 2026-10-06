@@ -540,6 +540,12 @@ jobs:
       - name: Build web bundle for UI gates
         run: make ui-gates-build
 
+      # Lighthouse launches its own Chrome (without Playwright's --no-sandbox);
+      # Ubuntu 24.04 runners restrict unprivileged user namespaces via AppArmor,
+      # so Chrome's sandbox fails with "No usable sandbox!". Same fix as docs.yml.
+      - name: Allow Chrome to use unprivileged user namespaces (Ubuntu 24.04)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Run UI quality gates (axe + Lighthouse)
         run: make ui-gates
 
