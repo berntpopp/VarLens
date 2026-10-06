@@ -145,15 +145,38 @@ export function prepareStatements(db: DatabaseType) {
   const insertBatch = db.transaction((caseId: number, variants: Array<Record<string, unknown>>) => {
     for (const v of variants) {
       const result = insertVariantStmt.run(
-        caseId, v.chr, v.pos, v.ref, v.alt,
-        v.gene_symbol ?? null, v.omim_mim_number ?? null, v.consequence ?? null,
-        v.gnomad_af ?? null, v.cadd ?? null, v.clinvar ?? null, v.gt_num ?? null,
-        v.func ?? null, v.qual ?? null, v.hpo_sim_score ?? null, v.transcript ?? null,
-        v.cdna ?? null, v.aa_change ?? null, v.moi ?? null, v.gq ?? null,
-        v.dp ?? null, v.ad_ref ?? null, v.ad_alt ?? null, v.ab ?? null,
-        v.filter ?? null, v.info_json ?? null, v.source_format ?? null,
-        v.variant_type ?? 'snv', v.end_pos ?? null, v.sv_type ?? null,
-        v.sv_length ?? null, v.caller ?? null
+        caseId,
+        v.chr,
+        v.pos,
+        v.ref,
+        v.alt,
+        v.gene_symbol ?? null,
+        v.omim_mim_number ?? null,
+        v.consequence ?? null,
+        v.gnomad_af ?? null,
+        v.cadd ?? null,
+        v.clinvar ?? null,
+        v.gt_num ?? null,
+        v.func ?? null,
+        v.qual ?? null,
+        v.hpo_sim_score ?? null,
+        v.transcript ?? null,
+        v.cdna ?? null,
+        v.aa_change ?? null,
+        v.moi ?? null,
+        v.gq ?? null,
+        v.dp ?? null,
+        v.ad_ref ?? null,
+        v.ad_alt ?? null,
+        v.ab ?? null,
+        v.filter ?? null,
+        v.info_json ?? null,
+        v.source_format ?? null,
+        v.variant_type ?? 'snv',
+        v.end_pos ?? null,
+        v.sv_type ?? null,
+        v.sv_length ?? null,
+        v.caller ?? null
       )
 
       const variantId = result.lastInsertRowid
@@ -162,8 +185,15 @@ export function prepareStatements(db: DatabaseType) {
       if (transcripts && transcripts.length > 0) {
         for (const t of transcripts) {
           insertTranscriptStmt.run(
-            variantId, t.transcript_id, t.gene_symbol, t.consequence,
-            t.func, t.cdna, t.aa_change, t.hpo_sim_score, t.moi,
+            variantId,
+            t.transcript_id,
+            t.gene_symbol,
+            t.consequence,
+            t.func,
+            t.cdna,
+            t.aa_change,
+            t.hpo_sim_score,
+            t.moi,
             t.is_selected === true || t.is_selected === 1 ? 1 : 0
           )
         }
@@ -173,23 +203,57 @@ export function prepareStatements(db: DatabaseType) {
       if (v._sv !== undefined) {
         const s = v._sv as Record<string, unknown>
         insertSvStmt.run(
-          variantId, s.sv_is_precise, s.cipos_left, s.cipos_right, s.ciend_left, s.ciend_right,
-          s.support, s.coverage, s.strand, s.stdev_len, s.stdev_pos, s.vaf,
-          s.dr, s.dv, s.pe_support, s.sr_support, s.event_id, s.mate_id
+          variantId,
+          s.sv_is_precise,
+          s.cipos_left,
+          s.cipos_right,
+          s.ciend_left,
+          s.ciend_right,
+          s.support,
+          s.coverage,
+          s.strand,
+          s.stdev_len,
+          s.stdev_pos,
+          s.vaf,
+          s.dr,
+          s.dv,
+          s.pe_support,
+          s.sr_support,
+          s.event_id,
+          s.mate_id
         )
       } else if (v._cnv !== undefined) {
         const c = v._cnv as Record<string, unknown>
         insertCnvStmt.run(
-          variantId, c.copy_number, c.copy_number_quality,
-          c.homozygosity_ref, c.homozygosity_alt, c.sm, c.bin_count
+          variantId,
+          c.copy_number,
+          c.copy_number_quality,
+          c.homozygosity_ref,
+          c.homozygosity_alt,
+          c.sm,
+          c.bin_count
         )
       } else if (v._str !== undefined) {
         const t = v._str as Record<string, unknown>
         insertStrStmt.run(
-          variantId, t.repeat_id, t.variant_catalog_id, t.repeat_unit, t.display_repeat_unit,
-          t.ref_copies, t.alt_copies, t.repeat_length, t.str_status, t.normal_max,
-          t.pathologic_min, t.disease, t.inheritance_mode, t.source_display,
-          t.rank_score, t.locus_coverage, t.support_type, t.confidence_interval
+          variantId,
+          t.repeat_id,
+          t.variant_catalog_id,
+          t.repeat_unit,
+          t.display_repeat_unit,
+          t.ref_copies,
+          t.alt_copies,
+          t.repeat_length,
+          t.str_status,
+          t.normal_max,
+          t.pathologic_min,
+          t.disease,
+          t.inheritance_mode,
+          t.source_display,
+          t.rank_score,
+          t.locus_coverage,
+          t.support_type,
+          t.confidence_interval
         )
       }
     }

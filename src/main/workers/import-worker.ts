@@ -153,188 +153,188 @@ export async function runImportSession(
             0
           )
 
-            const formatInfo = await detectFormat(file.filePath)
+          const formatInfo = await detectFormat(file.filePath)
 
-            const onProgress = (count: number): void => {
-              const now = Date.now()
-              if (now - lastProgressTime >= msg.throttleMs) {
-                lastProgressTime = now
-                const progressMsg: WorkerMessage = {
-                  type: 'progress',
-                  fileIndex,
-                  totalFiles,
-                  fileName,
-                  overallPercent: Math.round(((fileIndex + 0.5) / totalFiles) * 100),
-                  phase: 'inserting',
-                  variantCount: count,
-                  skipped: skipTracker.count
-                }
-                port.postMessage(progressMsg)
+          const onProgress = (count: number): void => {
+            const now = Date.now()
+            if (now - lastProgressTime >= msg.throttleMs) {
+              lastProgressTime = now
+              const progressMsg: WorkerMessage = {
+                type: 'progress',
+                fileIndex,
+                totalFiles,
+                fileName,
+                overallPercent: Math.round(((fileIndex + 0.5) / totalFiles) * 100),
+                phase: 'inserting',
+                variantCount: count,
+                skipped: skipTracker.count
               }
+              port.postMessage(progressMsg)
             }
+          }
 
-            stmts.beginBulkInsert()
-            try {
-              if (formatInfo.format === 'vcf') {
-                variantCount = await streamInsertVcf(
-                  file.filePath,
-                  formatInfo,
-                  caseId,
-                  batchSize,
-                  stmts,
-                  () => cancelled,
-                  file.vcfSelectedSamples,
-                  onProgress,
-                  (reason) => {
-                    if (skipTracker.record(reason)) {
-                      console.warn(`[import-worker] VCF line skipped in ${fileName}:`, reason)
-                    }
+          stmts.beginBulkInsert()
+          try {
+            if (formatInfo.format === 'vcf') {
+              variantCount = await streamInsertVcf(
+                file.filePath,
+                formatInfo,
+                caseId,
+                batchSize,
+                stmts,
+                () => cancelled,
+                file.vcfSelectedSamples,
+                onProgress,
+                (reason) => {
+                  if (skipTracker.record(reason)) {
+                    console.warn(`[import-worker] VCF line skipped in ${fileName}:`, reason)
                   }
-                )
-              } else {
-                variantCount = await streamInsertJson(
-                  file.filePath,
-                  formatInfo,
-                  caseId,
-                  batchSize,
-                  stmts,
-                  () => cancelled,
-                  onProgress
-                )
-              }
-            } finally {
-              stmts.finishBulkInsert(caseId, variantCount)
-            }
-
-            // Insert data_info provenance
-            try {
-              stmts.insertDataInfo.run(caseId, fileName, formatInfo.format)
-            } catch (e) {
-              console.warn(
-                '[import-worker] Failed to insert data_info provenance:',
-                e instanceof Error ? e.message : String(e)
+                }
+              )
+            } else {
+              variantCount = await streamInsertJson(
+                file.filePath,
+                formatInfo,
+                caseId,
+                batchSize,
+                stmts,
+                () => cancelled,
+                onProgress
               )
             }
-
-            const elapsed = Date.now() - startTime
-
-            results.push({
-              filePath: file.filePath,
-              fileName,
-              caseName: file.caseName,
-              status: 'success',
-              variantCount
-            })
-            succeeded++
-            importedInBatch.add(file.caseName)
-
-            const fileCompleteMsg: WorkerMessage = {
-              type: 'file-complete',
-              fileIndex,
-              result: {
-                caseId,
-                caseName: file.caseName,
-                variantCount,
-                skipped: skipTracker.count,
-                skipReasons: skipTracker.reasons,
-                elapsed
-              }
-            }
-            port.postMessage(fileCompleteMsg)
-          } catch (importError) {
-            stmts.deleteCase.run(caseId)
-            throw importError
+          } finally {
+            stmts.finishBulkInsert(caseId, variantCount)
           }
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error)
-          const errorStack = error instanceof Error ? error.stack : undefined
+
+          // Insert data_info provenance
+          try {
+            stmts.insertDataInfo.run(caseId, fileName, formatInfo.format)
+          } catch (e) {
+            console.warn(
+              '[import-worker] Failed to insert data_info provenance:',
+              e instanceof Error ? e.message : String(e)
+            )
+          }
+
+          const elapsed = Date.now() - startTime
 
           results.push({
             filePath: file.filePath,
             fileName,
             caseName: file.caseName,
-            status: 'failed',
-            error: errorMsg
+            status: 'success',
+            variantCount
           })
-          failed++
+          succeeded++
+          importedInBatch.add(file.caseName)
 
-          const workerErrorMsg: WorkerMessage = {
-            type: 'error',
+          const fileCompleteMsg: WorkerMessage = {
+            type: 'file-complete',
             fileIndex,
-            error: errorMsg,
-            phase: 'import',
-            stack: errorStack
+            result: {
+              caseId,
+              caseName: file.caseName,
+              variantCount,
+              skipped: skipTracker.count,
+              skipReasons: skipTracker.reasons,
+              elapsed
+            }
           }
-          port.postMessage(workerErrorMsg)
+          port.postMessage(fileCompleteMsg)
+        } catch (importError) {
+          stmts.deleteCase.run(caseId)
+          throw importError
         }
-      }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        const errorStack = error instanceof Error ? error.stack : undefined
 
-      // FTS rebuild + ANALYZE + optimize
-      sendProgress(port, totalFiles, totalFiles, '', 99, 'finalizing', 0, 0)
-      rebuildFts(db)
-      ftsFinalizationState.ftsRebuilt = true
-      rebuildCohortSummary(db)
+        results.push({
+          filePath: file.filePath,
+          fileName,
+          caseName: file.caseName,
+          status: 'failed',
+          error: errorMsg
+        })
+        failed++
 
-      const completeMsg: WorkerMessage = {
-        type: 'complete',
-        results: { succeeded, failed, skipped, cancelled: isCancelled(), details: results }
+        const workerErrorMsg: WorkerMessage = {
+          type: 'error',
+          fileIndex,
+          error: errorMsg,
+          phase: 'import',
+          stack: errorStack
+        }
+        port.postMessage(workerErrorMsg)
       }
-      terminalMessage = completeMsg
-    } catch (fatalError) {
-      // Index/trigger recreation is handled unconditionally in the finally block below
-
-      terminalMessage = {
-        type: 'error',
-        fileIndex: -1,
-        error: fatalError instanceof Error ? fatalError.message : String(fatalError),
-        phase: 'fatal',
-        stack: fatalError instanceof Error ? fatalError.stack : undefined
-      }
-    } finally {
-      postTerminalMessageAfterCleanup(
-        terminalMessage,
-        () => {
-          if (db) {
-            finalizeInterruptedImportFts(db, ftsFinalizationState)
-            try {
-              db.exec(RECREATE_INDEXES)
-            } catch (e) {
-              console.warn(
-                '[import-worker] Failed to recreate indexes (will be recreated on next app start):',
-                e instanceof Error ? e.message : String(e)
-              )
-            }
-            try {
-              db.pragma('wal_checkpoint(TRUNCATE)')
-            } catch (e) {
-              console.warn(
-                '[import-worker] Failed to truncate WAL checkpoint:',
-                e instanceof Error ? e.message : String(e)
-              )
-            }
-            try {
-              db.pragma('synchronous = NORMAL')
-              db.pragma('wal_autocheckpoint = 1000')
-              db.pragma('foreign_keys = ON')
-            } catch (e) {
-              console.warn(
-                '[import-worker] Failed to restore pragmas after import:',
-                e instanceof Error ? e.message : String(e)
-              )
-            }
-            try {
-              db.close()
-            } catch (e) {
-              console.warn(
-                '[import-worker] Failed to close database:',
-                e instanceof Error ? e.message : String(e)
-              )
-            }
-          }
-        },
-        (message) => port.postMessage(message)
-      )
     }
+
+    // FTS rebuild + ANALYZE + optimize
+    sendProgress(port, totalFiles, totalFiles, '', 99, 'finalizing', 0, 0)
+    rebuildFts(db)
+    ftsFinalizationState.ftsRebuilt = true
+    rebuildCohortSummary(db)
+
+    const completeMsg: WorkerMessage = {
+      type: 'complete',
+      results: { succeeded, failed, skipped, cancelled: isCancelled(), details: results }
+    }
+    terminalMessage = completeMsg
+  } catch (fatalError) {
+    // Index/trigger recreation is handled unconditionally in the finally block below
+
+    terminalMessage = {
+      type: 'error',
+      fileIndex: -1,
+      error: fatalError instanceof Error ? fatalError.message : String(fatalError),
+      phase: 'fatal',
+      stack: fatalError instanceof Error ? fatalError.stack : undefined
+    }
+  } finally {
+    postTerminalMessageAfterCleanup(
+      terminalMessage,
+      () => {
+        if (db) {
+          finalizeInterruptedImportFts(db, ftsFinalizationState)
+          try {
+            db.exec(RECREATE_INDEXES)
+          } catch (e) {
+            console.warn(
+              '[import-worker] Failed to recreate indexes (will be recreated on next app start):',
+              e instanceof Error ? e.message : String(e)
+            )
+          }
+          try {
+            db.pragma('wal_checkpoint(TRUNCATE)')
+          } catch (e) {
+            console.warn(
+              '[import-worker] Failed to truncate WAL checkpoint:',
+              e instanceof Error ? e.message : String(e)
+            )
+          }
+          try {
+            db.pragma('synchronous = NORMAL')
+            db.pragma('wal_autocheckpoint = 1000')
+            db.pragma('foreign_keys = ON')
+          } catch (e) {
+            console.warn(
+              '[import-worker] Failed to restore pragmas after import:',
+              e instanceof Error ? e.message : String(e)
+            )
+          }
+          try {
+            db.close()
+          } catch (e) {
+            console.warn(
+              '[import-worker] Failed to close database:',
+              e instanceof Error ? e.message : String(e)
+            )
+          }
+        }
+      },
+      (message) => port.postMessage(message)
+    )
+  }
 }
 
 if (parentPort) {

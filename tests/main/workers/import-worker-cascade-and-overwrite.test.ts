@@ -91,9 +91,7 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
           pos: 200,
           ref: 'C',
           alt: 'G',
-          _transcripts: [
-            { transcript_id: 'NM_002.1', gene_symbol: 'GENE2', is_selected: 1 }
-          ]
+          _transcripts: [{ transcript_id: 'NM_002.1', gene_symbol: 'GENE2', is_selected: 1 }]
         }
       ])
 
@@ -104,9 +102,7 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
           pos: 500,
           ref: 'G',
           alt: 'A',
-          _transcripts: [
-            { transcript_id: 'NM_003.1', gene_symbol: 'GENE3', is_selected: 1 }
-          ]
+          _transcripts: [{ transcript_id: 'NM_003.1', gene_symbol: 'GENE3', is_selected: 1 }]
         }
       ])
 
@@ -116,29 +112,49 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
 
       // Insert case_variant_annotations if table exists
       try {
-        const v1 = workerDb.prepare('SELECT id FROM variants WHERE case_id = ?').all(case1Id) as { id: number }[]
+        const v1 = workerDb.prepare('SELECT id FROM variants WHERE case_id = ?').all(case1Id) as {
+          id: number
+        }[]
         for (const row of v1) {
-          workerDb.prepare(`
+          workerDb
+            .prepare(
+              `
             INSERT INTO case_variant_annotations (case_id, variant_id, created_at, updated_at)
             VALUES (?, ?, ?, ?)
-          `).run(case1Id, row.id, Date.now(), Date.now())
+          `
+            )
+            .run(case1Id, row.id, Date.now(), Date.now())
         }
       } catch {
         // table might not exist in all test contexts
       }
 
       // Assert records exist before delete
-      const case1CountBefore = workerDb.prepare('SELECT COUNT(*) as c FROM cases WHERE id = ?').get(case1Id) as { c: number }
-      const var1CountBefore = workerDb.prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?').get(case1Id) as { c: number }
-      const tx1CountBefore = workerDb.prepare(`
+      const case1CountBefore = workerDb
+        .prepare('SELECT COUNT(*) as c FROM cases WHERE id = ?')
+        .get(case1Id) as { c: number }
+      const var1CountBefore = workerDb
+        .prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?')
+        .get(case1Id) as { c: number }
+      const tx1CountBefore = workerDb
+        .prepare(
+          `
         SELECT COUNT(*) as c FROM variant_transcripts
         WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)
-      `).get(case1Id) as { c: number }
-      const sv1CountBefore = workerDb.prepare(`
+      `
+        )
+        .get(case1Id) as { c: number }
+      const sv1CountBefore = workerDb
+        .prepare(
+          `
         SELECT COUNT(*) as c FROM variant_sv
         WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)
-      `).get(case1Id) as { c: number }
-      const dataInfo1Before = workerDb.prepare('SELECT COUNT(*) as c FROM case_data_info WHERE case_id = ?').get(case1Id) as { c: number }
+      `
+        )
+        .get(case1Id) as { c: number }
+      const dataInfo1Before = workerDb
+        .prepare('SELECT COUNT(*) as c FROM case_data_info WHERE case_id = ?')
+        .get(case1Id) as { c: number }
 
       expect(case1CountBefore.c).toBe(1)
       expect(var1CountBefore.c).toBe(2)
@@ -150,17 +166,31 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
       stmts.deleteCase.run(case1Id)
 
       // Assert case 1 and all child records are deleted
-      const case1CountAfter = workerDb.prepare('SELECT COUNT(*) as c FROM cases WHERE id = ?').get(case1Id) as { c: number }
-      const var1CountAfter = workerDb.prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?').get(case1Id) as { c: number }
-      const tx1CountAfter = workerDb.prepare(`
+      const case1CountAfter = workerDb
+        .prepare('SELECT COUNT(*) as c FROM cases WHERE id = ?')
+        .get(case1Id) as { c: number }
+      const var1CountAfter = workerDb
+        .prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?')
+        .get(case1Id) as { c: number }
+      const tx1CountAfter = workerDb
+        .prepare(
+          `
         SELECT COUNT(*) as c FROM variant_transcripts
         WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)
-      `).get(case1Id) as { c: number }
-      const sv1CountAfter = workerDb.prepare(`
+      `
+        )
+        .get(case1Id) as { c: number }
+      const sv1CountAfter = workerDb
+        .prepare(
+          `
         SELECT COUNT(*) as c FROM variant_sv
         WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)
-      `).get(case1Id) as { c: number }
-      const dataInfo1After = workerDb.prepare('SELECT COUNT(*) as c FROM case_data_info WHERE case_id = ?').get(case1Id) as { c: number }
+      `
+        )
+        .get(case1Id) as { c: number }
+      const dataInfo1After = workerDb
+        .prepare('SELECT COUNT(*) as c FROM case_data_info WHERE case_id = ?')
+        .get(case1Id) as { c: number }
 
       expect(case1CountAfter.c).toBe(0)
       expect(var1CountAfter.c).toBe(0)
@@ -169,13 +199,23 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
       expect(dataInfo1After.c).toBe(0)
 
       // Assert case 2 and its children remain intact
-      const case2CountAfter = workerDb.prepare('SELECT COUNT(*) as c FROM cases WHERE id = ?').get(case2Id) as { c: number }
-      const var2CountAfter = workerDb.prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?').get(case2Id) as { c: number }
-      const tx2CountAfter = workerDb.prepare(`
+      const case2CountAfter = workerDb
+        .prepare('SELECT COUNT(*) as c FROM cases WHERE id = ?')
+        .get(case2Id) as { c: number }
+      const var2CountAfter = workerDb
+        .prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?')
+        .get(case2Id) as { c: number }
+      const tx2CountAfter = workerDb
+        .prepare(
+          `
         SELECT COUNT(*) as c FROM variant_transcripts
         WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)
-      `).get(case2Id) as { c: number }
-      const dataInfo2After = workerDb.prepare('SELECT COUNT(*) as c FROM case_data_info WHERE case_id = ?').get(case2Id) as { c: number }
+      `
+        )
+        .get(case2Id) as { c: number }
+      const dataInfo2After = workerDb
+        .prepare('SELECT COUNT(*) as c FROM case_data_info WHERE case_id = ?')
+        .get(case2Id) as { c: number }
 
       expect(case2CountAfter.c).toBe(1)
       expect(var2CountAfter.c).toBe(1)
@@ -191,7 +231,13 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
       // 1. Pre-populate a case in the database
       const workerDb = openWorkerDatabase(dbPath)
       const stmts = prepareStatements(workerDb)
-      const existingCase = stmts.insertCase.run('existing-sample', '/path/to/old.json', 1024, Date.now(), 'GRCh38')
+      const existingCase = stmts.insertCase.run(
+        'existing-sample',
+        '/path/to/old.json',
+        1024,
+        Date.now(),
+        'GRCh38'
+      )
       const caseId = Number(existingCase.lastInsertRowid)
 
       stmts.insertBatch(caseId, [
@@ -230,11 +276,15 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
 
       // 3. Verify the existing case and variants were NOT deleted
       const verifyDb = openWorkerDatabase(dbPath)
-      const caseRow = verifyDb.prepare('SELECT id, name FROM cases WHERE name = ?').get('existing-sample') as { id: number; name: string } | undefined
+      const caseRow = verifyDb
+        .prepare('SELECT id, name FROM cases WHERE name = ?')
+        .get('existing-sample') as { id: number; name: string } | undefined
       expect(caseRow).toBeDefined()
       expect(caseRow?.id).toBe(caseId)
 
-      const variantCount = verifyDb.prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?').get(caseId) as { c: number }
+      const variantCount = verifyDb
+        .prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?')
+        .get(caseId) as { c: number }
       expect(variantCount.c).toBe(1)
       verifyDb.close()
 
@@ -251,7 +301,13 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
       // 1. Pre-populate an existing case
       const workerDb = openWorkerDatabase(dbPath)
       const stmts = prepareStatements(workerDb)
-      const existingCase = stmts.insertCase.run('existing-sample', '/path/to/old.json', 1024, Date.now(), 'GRCh38')
+      const existingCase = stmts.insertCase.run(
+        'existing-sample',
+        '/path/to/old.json',
+        1024,
+        Date.now(),
+        'GRCh38'
+      )
       const caseId = Number(existingCase.lastInsertRowid)
 
       stmts.insertBatch(caseId, [
@@ -307,17 +363,23 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
 
         // 3. Verify the old case was replaced with the new one
         const verifyDb = openWorkerDatabase(dbPath)
-        const cases = verifyDb.prepare('SELECT id, name FROM cases WHERE name = ?').all('existing-sample') as { id: number; name: string }[]
+        const cases = verifyDb
+          .prepare('SELECT id, name FROM cases WHERE name = ?')
+          .all('existing-sample') as { id: number; name: string }[]
         expect(cases.length).toBe(1)
         const newCaseId = cases[0].id
 
-        const variants = verifyDb.prepare('SELECT chr, pos, gene_symbol FROM variants WHERE case_id = ?').all(newCaseId) as { chr: string; pos: number; gene_symbol: string }[]
+        const variants = verifyDb
+          .prepare('SELECT chr, pos, gene_symbol FROM variants WHERE case_id = ?')
+          .all(newCaseId) as { chr: string; pos: number; gene_symbol: string }[]
         expect(variants.length).toBe(1)
         expect(variants[0].chr).toBe('chr2')
         expect(variants[0].gene_symbol).toBe('NEW_GENE')
 
         // Ensure old variant row is gone
-        const oldVariants = verifyDb.prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?').get(caseId) as { c: number }
+        const oldVariants = verifyDb
+          .prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?')
+          .get(caseId) as { c: number }
         if (caseId !== newCaseId) {
           expect(oldVariants.c).toBe(0)
         }
