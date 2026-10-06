@@ -133,12 +133,26 @@ function propCallsUnsupported(prop: import('ts-morph').Node): boolean {
  *   'unsupported'   — calls unsupportedWebCapability() (web-disabled method), no real work
  *   'inline'        — anything else (multi-call, type-mismatch, inline event logic, etc.)
  */
+// Loading the tsconfig.node.json program is the expensive part (seconds per
+// route file under load); build it once and memoize verdicts per file so the
+// two per-key gates below do not each re-parse every route module.
+let sharedProject: Project | undefined
+const verdictCache = new Map<string, Record<string, KeyVerdict>>()
+
 function analyzeOverrideKeys(routePath: string): Record<string, KeyVerdict> {
-  const project = new Project({
+  const cached = verdictCache.get(routePath)
+  if (cached !== undefined) return cached
+  const verdicts = analyzeOverrideKeysUncached(routePath)
+  verdictCache.set(routePath, verdicts)
+  return verdicts
+}
+
+function analyzeOverrideKeysUncached(routePath: string): Record<string, KeyVerdict> {
+  sharedProject ??= new Project({
     tsConfigFilePath: resolve(process.cwd(), 'tsconfig.node.json'),
     skipAddingFilesFromTsConfig: false
   })
-  const sf = project.addSourceFileAtPath(resolve(process.cwd(), routePath))
+  const sf = sharedProject.addSourceFileAtPath(resolve(process.cwd(), routePath))
   const logicNames = collectLogicImportNames(sf)
   const verdicts: Record<string, KeyVerdict> = {}
 
