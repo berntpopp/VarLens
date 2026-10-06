@@ -42,22 +42,46 @@ export const GATE_MANIFEST = [
     lane: 'web',
     command: 'npm',
     args: ['run', 'build:web'],
+    env: { VARLENS_WEB_BASE: '/' },
     outputs: ['out/web'],
     clean: ['out/web']
   },
   { id: 'web-static', side: 'both', lane: 'web', command: 'make', args: ['web-gate-static'] },
   {
     id: 'postgres-tests',
+    environment: 'postgres',
     side: 'both',
     lane: 'web',
     command: 'make',
     args: ['web-gate-integration']
   },
-  { id: 'postgres-storage', side: 'both', lane: 'web', action: 'postgres-storage' },
+  {
+    id: 'postgres-storage',
+    side: 'both',
+    lane: 'web',
+    action: 'postgres-storage',
+    environment: 'postgres'
+  },
+  {
+    id: 'browser-runtime',
+    side: 'both',
+    lane: 'web',
+    command: 'npx',
+    args: ['--no-install', 'playwright', 'install', 'chromium']
+  },
+  {
+    id: 'ui-gates',
+    side: 'both',
+    lane: 'web',
+    command: 'npx',
+    args: ['--no-install', 'playwright', 'test', '-c', 'playwright.ui-gates.config.ts'],
+    environment: 'postgres'
+  },
   { id: 'docker', side: 'both', lane: 'docker', action: 'docker', live: true },
   { id: 'release-contracts', side: 'both', lane: 'code', action: 'release-contracts' },
   { id: 'electron', side: 'both', lane: 'electron', action: 'electron' },
   { id: 'startup', side: 'both', lane: 'electron', action: 'startup' },
+  { id: 'interactions', side: 'both', lane: 'linux-package', action: 'interactions' },
   {
     id: 'package',
     side: 'both',
@@ -112,4 +136,10 @@ export async function executeStages(stages, executor, { signal, onResult = () =>
     }
   }
   return results
+}
+
+export function stageEnvironment(stage, base, postgres) {
+  if (stage.environment === 'postgres' && !postgres?.VARLENS_PG_URL)
+    throw new Error(`Disposable PostgreSQL is required for ${stage.id}`)
+  return { ...base, ...(stage.environment === 'postgres' ? postgres : {}), ...stage.env }
 }

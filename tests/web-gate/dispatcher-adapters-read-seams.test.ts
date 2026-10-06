@@ -176,8 +176,12 @@ describe('web dispatcher adapters: read seams', () => {
     expect(result).toEqual([])
   })
 
-  test('database.capabilities overlays browser-only unsupported features', async () => {
+  test('database.capabilities reports export as supported (served as browser downloads)', async () => {
     const { deps, reply } = makeDeps()
+    ;(deps.session as { capabilities: unknown }).capabilities = {
+      backend: 'postgres',
+      export: { variants: true, cohort: true, streaming: true }
+    }
     const { overrides } = buildDispatcher(deps)
 
     const result = await overrides['database:capabilities'].handle(
@@ -190,7 +194,7 @@ describe('web dispatcher adapters: read seams', () => {
     expect(reply.code).not.toHaveBeenCalled()
     expect(result).toMatchObject({
       backend: 'postgres',
-      export: { variants: false, cohort: false, streaming: false }
+      export: { variants: true, cohort: true, streaming: true }
     })
   })
 

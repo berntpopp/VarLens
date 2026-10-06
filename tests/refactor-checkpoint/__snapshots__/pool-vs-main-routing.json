@@ -146,6 +146,11 @@
       "file": "src/main/storage/sqlite/SqliteReadExecutor.ts",
       "callerFunction": "execute",
       "type": "tags:list"
+    },
+    {
+      "file": "src/main/ipc/handlers/export-logic.ts",
+      "callerFunction": "prepareVariantExport",
+      "type": "variants:exportCount"
     }
   ]
 }

@@ -36,6 +36,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts \
  && npm rebuild better-sqlite3-multiple-ciphers @node-rs/argon2
 
+COPY resources/gene_reference.db ./resources/gene_reference.db
 COPY src/ ./src/
 COPY scripts/web/ ./scripts/web/
 COPY vite.web.config.ts vite.web-renderer.config.ts tsconfig*.json ./
@@ -123,6 +124,10 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder \
     /app/src/main/storage/postgres/migrations/sql \
     ./postgres-migrations
+# Read-only HGNC gene reference (gene panels: symbol validation/autocomplete,
+# panel interval resolution for case/cohort panel filters). The web server
+# looks for <cwd>/resources/gene_reference.db (override: VARLENS_GENE_REF_DB_PATH).
+COPY --from=builder /app/resources/gene_reference.db ./resources/gene_reference.db
 
 USER varlens
 

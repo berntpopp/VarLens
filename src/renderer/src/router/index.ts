@@ -1,9 +1,13 @@
-import { createRouter, createMemoryHistory } from 'vue-router'
+import { createRouter, createMemoryHistory, createWebHistory } from 'vue-router'
+import { isWebRuntime } from '../utils/runtime-mode'
 
 /**
  * Vue Router for VarLens.
  *
- * Uses memory history (no URL bar in Electron) with two main routes:
+ * Web mode uses HTML5 history under the app base path, so the URL carries
+ * view state (`?case=&tab=&f=&q=&sort=`, see composables/useUrlState.ts):
+ * reload restores the view and back/forward works. Electron has no URL bar
+ * and loads from file://, so it keeps memory history. Two main routes:
  * - /case — single case analysis (default)
  * - /cohort — multi-case cohort analysis
  *
@@ -16,11 +20,12 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 const loadCohortView = () => import('../views/CohortView.vue')
 
 const router = createRouter({
-  history: createMemoryHistory(),
+  history: isWebRuntime() ? createWebHistory(import.meta.env.BASE_URL) : createMemoryHistory(),
   routes: [
     {
       path: '/',
-      redirect: '/case'
+      // Keep the query: a shared `/?case=12&tab=snv` link must survive the redirect
+      redirect: (to) => ({ path: '/case', query: to.query })
     },
     {
       path: '/case',

@@ -129,10 +129,10 @@
     },
     {
       "path": "src/renderer/src/mocks/mockApi.ts",
-      "lines": 1225,
+      "lines": 1227,
       "threshold": 600,
       "category": "source",
-      "reason": "existing large renderer mock surface; must not grow before responsibility split. Each new top-level WindowAPI domain requires a matching renderer mock entry, which unavoidably grows this central mock surface: PR-2 added the `debug` block (mirroring `perf`), and PR-4 added the `jobs` block (list/get/progress). Neither can be split out without diverging from the WindowAPI contract the mock must satisfy."
+      "reason": "existing large renderer mock surface; must not grow before responsibility split. Each new top-level WindowAPI domain requires a matching renderer mock entry, which unavoidably grows this central mock surface: PR-2 added the `debug` block (mirroring `perf`), and PR-4 added the `jobs` block (list/get/progress), and the web-mode-completeness branch added auth.reactivateUser + auth.setRole (admin user management contract). Neither can be split out without diverging from the WindowAPI contract the mock must satisfy."
     },
     {
       "path": "src/shared/types/api.ts",

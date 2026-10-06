@@ -14,6 +14,9 @@ import { mockVariants, mockFilterOptions } from './fixtures/variants'
 // Mutable state for interactive development
 let cases = [...mockCases]
 const variants = [...mockVariants]
+// Drop matching mock cases; returns how many were removed.
+const removeCases = (match: (id: number) => boolean): number =>
+  cases.length - (cases = cases.filter((c) => !match(c.id))).length
 
 const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
   backend: 'sqlite',
@@ -107,18 +110,12 @@ export const mockApi: WindowAPI = {
         total_count
       }
     },
-    delete: async (id: number) => {
-      cases = cases.filter((c) => c.id !== id)
-    },
-    deleteAll: async () => {
-      const count = cases.length
-      cases = []
-      return count
-    },
-    deleteBatch: async (ids: number[]) => {
-      const before = cases.length
-      cases = cases.filter((c) => !ids.includes(c.id))
-      return before - cases.length
+    delete: async (id: number) => void removeCases((caseId) => caseId === id),
+    deleteAll: async () => removeCases(() => true),
+    deleteBatch: async (ids: number[]) => removeCases((id) => ids.includes(id)),
+    startDelete: async (target) => {
+      removeCases((id) => target.mode === 'all' || target.ids.includes(id))
+      return { jobId: 'mock-delete-job' }
     },
     availableBuilds: async () => [{ build: 'GRCh38', caseCount: cases.length }]
   },
@@ -286,7 +283,8 @@ export const mockApi: WindowAPI = {
   export: {
     variants: async () => ({ success: true, filePath: '/mock/export.xlsx' }),
     cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' }),
-    revealInFolder: async () => ({ success: false })
+    revealInFolder: async () => ({ success: false }),
+    cancel: async () => ({ cancelled: false })
   },
   shell: {
     openExternal: async (url) => {
@@ -1094,6 +1092,8 @@ export const mockApi: WindowAPI = {
     createUser: async () => {},
     listUsers: async () => [],
     deactivateUser: async () => {},
+    reactivateUser: async () => {},
+    setRole: async () => {},
     resetPassword: async () => {},
     changePassword: async () => {}
   },
@@ -1220,6 +1220,8 @@ export const mockApi: WindowAPI = {
   jobs: {
     list: async () => [],
     get: async () => null,
-    progress: async () => null
+    progress: async () => null,
+    cancel: async () => ({ requested: false }),
+    onChanged: () => () => {}
   }
 }

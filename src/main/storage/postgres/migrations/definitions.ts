@@ -83,6 +83,21 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0016',
     name: 'platform_identity',
     fileName: '0016_platform_identity.sql'
+  },
+  {
+    version: '0017',
+    name: 'chr_rank_indexes',
+    fileName: '0017_chr_rank_indexes.sql'
+  },
+  {
+    version: '0018',
+    name: 'case_deleting_status',
+    fileName: '0018_case_deleting_status.sql'
+  },
+  {
+    version: '0019',
+    name: 'multi_admin',
+    fileName: '0019_multi_admin.sql'
   }
 ]
 

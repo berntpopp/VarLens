@@ -206,3 +206,60 @@ describe('runNamedDynamic — Sprint A B1 (Pass-8 #3)', () => {
     }
   })
 })
+
+describe('effective statement names fit PostgreSQL identifiers (NAMEDATALEN 64)', () => {
+  // PostgreSQL silently truncates prepared-statement names to 63 bytes, so
+  // two names that only differ past byte 63 collide on the server
+  // ("prepared statement ... already exists").
+  const schemaA = `${'tenant_workspace_'.repeat(3)}aaaaaaaaa`
+  const schemaB = `${'tenant_workspace_'.repeat(3)}bbbbbbbbb`
+  const longName = 'cohort_summary:annotation_flags_on_case_delete:v1'
+
+  async function effectiveName(
+    kind: 'static' | 'dynamic',
+    name: string,
+    schema: string,
+    text = 'SELECT 1'
+  ): Promise<string> {
+    const queryMock = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 })
+    const pool = { query: queryMock } as unknown as Pool
+    if (kind === 'static') await runNamed(pool, { name, text, values: [], schema })
+    else await runNamedDynamic(pool, { baseName: name, text, values: [], schema })
+    return queryMock.mock.calls[0][0].name as string
+  }
+
+  it('uses 60-char schema names', () => {
+    expect(schemaA).toHaveLength(60)
+    expect(schemaB).toHaveLength(60)
+  })
+
+  it.each(['static', 'dynamic'] as const)(
+    '%s: keeps every effective name within 63 bytes',
+    async (kind) => {
+      const n = await effectiveName(kind, longName, schemaA)
+      expect(Buffer.byteLength(n)).toBeLessThanOrEqual(63)
+    }
+  )
+
+  it.each(['static', 'dynamic'] as const)(
+    '%s: distinct schemas never share a name, even when the readable part is truncated',
+    async (kind) => {
+      const a = await effectiveName(kind, longName, schemaA)
+      const b = await effectiveName(kind, longName, schemaB)
+      expect(a.slice(0, 63)).not.toBe(b.slice(0, 63))
+    }
+  )
+
+  it('dynamic: distinct SQL text keeps distinct names under truncation', async () => {
+    const base = 'cohort:queryVariants:summary_page_with_annotation_flags'
+    const a = await effectiveName('dynamic', base, schemaA, 'SELECT 1')
+    const b = await effectiveName('dynamic', base, schemaA, 'SELECT 2')
+    expect(a.slice(0, 63)).not.toBe(b.slice(0, 63))
+  })
+
+  it('is deterministic for the same logical name and schema', async () => {
+    expect(await effectiveName('static', longName, schemaA)).toBe(
+      await effectiveName('static', longName, schemaA)
+    )
+  })
+})

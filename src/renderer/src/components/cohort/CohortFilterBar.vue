@@ -468,6 +468,7 @@ const {
   handleDslClear,
   applySuggestion
 } = useDslFilterIntegration({
+  urlRoute: 'cohort',
   presetNames: () => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')),
   searchQueryRef: searchTerm,
   emitFilters: emitFilterChange,

@@ -30,8 +30,17 @@ describe('getPostgresStorageConfig', () => {
       queryTimeoutMs: 30000,
       lockTimeoutMs: 5000,
       idleInTransactionSessionTimeoutMs: 10000,
-      poolMax: 4
+      poolMax: 10
     })
+  })
+
+  it('honours VARLENS_PG_POOL_MAX overrides', () => {
+    expect(
+      getPostgresStorageConfig({
+        VARLENS_PG_URL: 'postgres://varlens:secret@127.0.0.1:55432/varlens_dev',
+        VARLENS_PG_POOL_MAX: '20'
+      })?.poolMax
+    ).toBe(20)
   })
 
   it('rejects an invalid ssl mode', () => {
@@ -140,7 +149,7 @@ describe('buildPostgresPoolConfig', () => {
       query_timeout: 30000,
       lock_timeout: 5000,
       idle_in_transaction_session_timeout: 10000,
-      max: 4
+      max: 10
     })
   })
 

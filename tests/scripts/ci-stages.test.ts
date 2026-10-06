@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error Repository CLI modules are tested directly.
-import { selectStages, executeStages, GATE_MANIFEST } from '../../scripts/ci/stages.mjs'
+import {
+  selectStages,
+  executeStages,
+  stageEnvironment,
+  GATE_MANIFEST
+} from '../../scripts/ci/stages.mjs'
 // @ts-expect-error Repository CLI modules are tested directly.
 import { classifyChanges } from '../../scripts/ci/changes.mjs'
 describe('preflight composition', () => {
@@ -63,4 +68,21 @@ describe('preflight composition', () => {
       selectStages(selection, { screenshotsMissing: true }).map((s: { id: string }) => s.id)
     ).toContain('electron')
   })
+})
+
+it('scopes disposable PostgreSQL credentials to database and web UI checks', () => {
+  const base = { PATH: '/bin', CI: '1' }
+  const postgres = { VARLENS_PG_URL: 'postgres://fixture', VARLENS_RECOVERY_KEY_DIR: '/fixture' }
+  const stages = selectStages(classifyChanges(['unknown']), { platform: 'linux' })
+  for (const stage of stages) {
+    const env = stageEnvironment(stage, base, postgres)
+    if (['postgres-tests', 'postgres-storage', 'ui-gates'].includes(stage.id))
+      expect(env.VARLENS_PG_URL).toBe(postgres.VARLENS_PG_URL)
+    else expect(env).not.toHaveProperty('VARLENS_PG_URL')
+  }
+  expect(base).toEqual({ PATH: '/bin', CI: '1' })
+  const ids = stages.map((stage: { id: string }) => stage.id)
+  expect(ids.indexOf('ui-gates')).toBeGreaterThan(ids.indexOf('web-build'))
+  expect(ids.indexOf('ui-gates')).toBeLessThan(ids.indexOf('electron'))
+  expect(ids.indexOf('interactions')).toBeGreaterThan(ids.indexOf('electron'))
 })

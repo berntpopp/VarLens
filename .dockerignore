@@ -13,3 +13,5 @@
 !scripts/
 !scripts/web/
 !scripts/web/**
+!resources/
+!resources/gene_reference.db

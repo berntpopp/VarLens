@@ -12,7 +12,7 @@
           <v-list density="compact">
             <v-list-item>
               <v-list-item-title>VarLens v{{ appVersion }}</v-list-item-title>
-              <v-list-item-subtitle>Electron v{{ electronVersion }}</v-list-item-subtitle>
+              <v-list-item-subtitle>{{ runtimeLabel }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
         </v-menu>
@@ -248,6 +248,7 @@ import { useApiService } from '../composables/useApiService'
 import { APP_CONFIG } from '../../../shared/config/app.config'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
+import { isWebRuntime } from '../utils/runtime-mode'
 import {
   mdiAlertCircle,
   mdiArrowUpCircle,
@@ -290,6 +291,10 @@ const { api } = useApiService()
 // Version state
 const appVersion = ref('...')
 const electronVersion = ref('')
+// The web server reports `electron: 'web'`; never show "Electron vweb".
+const runtimeLabel = computed(() =>
+  isWebRuntime() ? 'Web edition' : `Electron v${electronVersion.value}`
+)
 
 // Network status
 const isOnline = ref(navigator.onLine)

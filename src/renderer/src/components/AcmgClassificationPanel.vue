@@ -122,11 +122,37 @@
       class="text-caption"
       @blur="emitChange"
     />
+
+    <!-- Confirm step: evidence edits stay a draft until applied -->
+    <div
+      v-if="pending !== null"
+      class="acmg-apply-bar d-flex align-center flex-wrap ga-2 mt-3 pa-2"
+      role="region"
+      aria-label="Unsaved ACMG changes"
+      data-testid="acmg-apply-bar"
+    >
+      <span class="text-body-small flex-grow-1">
+        <strong>Unsaved:</strong> {{ pendingSummary }}
+      </span>
+      <v-btn size="small" variant="text" data-testid="acmg-discard" @click="discardPending">
+        Discard
+      </v-btn>
+      <v-btn
+        size="small"
+        color="primary"
+        variant="flat"
+        data-testid="acmg-apply"
+        @click="applyPending"
+      >
+        Apply classification
+      </v-btn>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { evidenceFingerprint, summarizeAcmgDraft } from '../utils/acmg/acmg-undo'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import type { AcmgCode, EvidenceStrength, AcmgEvidenceCode } from '../utils/acmg/types'
 import {
@@ -281,11 +307,45 @@ function handleOverride(classification: AcmgClassification | null): void {
   emitChange()
 }
 
-function emitChange(): void {
-  emit('change', {
+/**
+ * Confirm step: criterion clicks, strength changes, overrides and notes build
+ * a draft; nothing is written (and no classification changes in the table)
+ * until "Apply classification". Applying is then undoable via the snackbar.
+ */
+const pending = ref<{ classification: AcmgClassification | null; evidenceJson: string } | null>(
+  null
+)
+
+/** Serialized saved state; a draft equal to it is not pending. */
+let baselineJson = ''
+
+const pendingSummary = computed(() =>
+  summarizeAcmgDraft({
     classification: effectiveClassification.value,
-    evidenceJson: serialize()
+    netPoints: classificationResult.value.netPoints,
+    codes: activeCodes.value.map((c) => c.code)
   })
+)
+
+function emitChange(): void {
+  const evidenceJson = serialize()
+  pending.value =
+    evidenceFingerprint(evidenceJson) === baselineJson
+      ? null
+      : { classification: effectiveClassification.value, evidenceJson }
+}
+
+function applyPending(): void {
+  if (pending.value === null) return
+  emit('change', pending.value)
+  baselineJson = evidenceFingerprint(pending.value.evidenceJson)
+  pending.value = null
+}
+
+function discardPending(): void {
+  pending.value = null
+  loadState(props.evidenceJson)
+  baselineJson = evidenceFingerprint(serialize())
 }
 
 // Load state when evidence JSON or variant identity changes.
@@ -293,13 +353,25 @@ function emitChange(): void {
 // that both have null evidence (where evidenceJson alone wouldn't trigger).
 watch(
   () => [props.evidenceJson, props.variantData] as const,
-  () => loadState(props.evidenceJson),
+  () => {
+    pending.value = null
+    loadState(props.evidenceJson)
+    baselineJson = evidenceFingerprint(serialize())
+  },
   { immediate: true }
 )
+
+defineExpose({ applyPending, discardPending, pending })
 </script>
 
 <style scoped>
 .acmg-classification-panel {
-  font-size: 13px;
+  font-size: 0.8125rem;
+}
+
+.acmg-apply-bar {
+  border: 1px solid rgb(var(--v-theme-primary));
+  border-radius: 4px;
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, rgb(var(--v-theme-surface)));
 }
 </style>

@@ -9,11 +9,7 @@ import {
   AuthSuccessSchema,
   AuthUserSchema
 } from '../../../../shared/api/schemas/auth'
-import {
-  authOperation,
-  unsupportedDispatcherMethodOperation,
-  type OpenApiPathItem
-} from '../openapi-utils'
+import { authOperation, type OpenApiPathItem } from '../openapi-utils'
 
 export function buildAuthOpenApiPaths(): Record<string, OpenApiPathItem> {
   return {
@@ -39,9 +35,8 @@ export function buildAuthOpenApiPaths(): Record<string, OpenApiPathItem> {
       response: AuthBooleanSchema,
       public: true
     }),
-    '/api/auth/createUser': unsupportedDispatcherMethodOperation({
-      tag: 'auth',
-      summary: 'Disabled for this single-tenant release',
+    '/api/auth/createUser': authOperation({
+      summary: 'Create a user account (admin only; temporary password, forced rotation)',
       body: AuthInvokeBodySchemas.createUser
     }),
     '/api/auth/listUsers': authOperation({
@@ -52,6 +47,14 @@ export function buildAuthOpenApiPaths(): Record<string, OpenApiPathItem> {
     '/api/auth/deactivateUser': authOperation({
       summary: 'Deactivate a user account',
       body: AuthInvokeBodySchemas.deactivateUser
+    }),
+    '/api/auth/reactivateUser': authOperation({
+      summary: 'Re-activate a disabled user account (admin only)',
+      body: AuthInvokeBodySchemas.reactivateUser
+    }),
+    '/api/auth/setRole': authOperation({
+      summary: 'Change a user role (admin only; never demotes the last admin)',
+      body: AuthInvokeBodySchemas.setRole
     }),
     '/api/auth/resetPassword': authOperation({
       summary: 'Reset a user password',

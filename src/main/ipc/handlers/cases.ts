@@ -12,12 +12,18 @@ import {
   deleteBatchCases,
   getAvailableBuilds,
   acquireDeleteLock,
-  releaseDeleteLock
+  releaseDeleteLock,
+  startSqliteCaseDeleteJob
 } from './cases-logic'
 import type { DeleteCallbacks } from './cases-logic'
 
 // Schema for batch delete IDs array
 const CaseIdArraySchema = z.array(z.number().int().positive()).min(1)
+
+const CaseDeleteTargetSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('ids'), ids: CaseIdArraySchema.max(10_000) }).strict(),
+  z.object({ mode: z.literal('all') }).strict()
+])
 
 /** Shared callbacks that wire logic-layer events to renderer via safeEmit. */
 const deleteCallbacks: DeleteCallbacks = {
@@ -110,6 +116,29 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbManager }: HandlerDe
     return wrapHandler(() => {
       assertCaseDeleteSupported('cases:deleteAll', getDbManager)
       return deleteAllCases(getDb, deleteCallbacks)
+    })
+  })
+
+  ipcMain.handle('cases:startDelete', async (_event, target: unknown) => {
+    return wrapHandler(async () => {
+      const validated = CaseDeleteTargetSchema.safeParse(target)
+      if (!validated.success) {
+        mainLogger.error(`Invalid cases:startDelete params: ${validated.error.message}`, 'cases')
+        throw new Error('Invalid parameters')
+      }
+      const session = getDbManager().getCurrentSession()
+      if (session.capabilities.backend !== 'sqlite') {
+        // The web/Postgres delete job is served by the web dispatcher.
+        throw new Error('cases:startDelete is only available for SQLite databases on desktop')
+      }
+      assertCaseDeleteSupported(
+        validated.data.mode === 'all' ? 'cases:deleteAll' : 'cases:deleteBatch',
+        getDbManager
+      )
+      const handle = startSqliteCaseDeleteJob(validated.data, getDb, deleteCallbacks)
+      // Fire-and-forget: the outcome is reported via `jobs:changed`.
+      handle.result.catch(() => undefined)
+      return { jobId: handle.id }
     })
   })
 

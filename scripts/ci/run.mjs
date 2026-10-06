@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { gateEnvironment, git, runCommand } from './process.mjs'
 import { fullSelection, resolveChanges } from './changes.mjs'
-import { selectStages, executeStages } from './stages.mjs'
+import { selectStages, executeStages, stageEnvironment } from './stages.mjs'
 import { acquireLock } from './lock.mjs'
 import { ensureDependencies, installedFingerprint } from './dependencies.mjs'
 import {
@@ -97,8 +97,8 @@ function assertArtifacts(cwd) {
     if (name.endsWith('.yml')) verifyLatestYml({ ymlPath: join(dir, name), dir })
   }
 }
-async function playwright(spec, context, extraEnv = {}) {
-  const args = ['--no-install', 'playwright', 'test', spec, '--workers=1']
+async function playwright(spec, context, extraEnv = {}, extraArgs = []) {
+  const args = ['--no-install', 'playwright', 'test', spec, '--workers=1', ...extraArgs]
   const options = {
     ...context.options,
     env: {
@@ -116,7 +116,8 @@ async function playwright(spec, context, extraEnv = {}) {
   return runCommand('npx', args, options)
 }
 async function executeGate(stage, context) {
-  const { cwd, env, options } = context
+  const { cwd, options } = context
+  const env = stageEnvironment(stage, context.env, context.postgres?.env)
   process.stdout.write(`\n[preflight] ${stage.id}\n`)
   for (const output of stage.clean ?? [])
     rmSync(join(cwd, output), { recursive: true, force: true })
@@ -148,7 +149,6 @@ async function executeGate(stage, context) {
       return
     case 'postgres':
       context.postgres = await startPostgres({ ...options, env })
-      Object.assign(env, context.postgres.env)
       return
     case 'postgres-storage':
       return runPostgresTests({ ...options, cwd, env })
@@ -174,6 +174,11 @@ async function executeGate(stage, context) {
       return
     case 'startup':
       return playwright('tests/e2e/startup-smoke.e2e.ts', context)
+    case 'interactions':
+      return playwright('tests/e2e/renderer-perf-phase1.e2e.ts', context, {}, [
+        '--grep',
+        'interaction quality'
+      ])
     case 'artifacts':
       return assertArtifacts(cwd)
     case 'packaged-smoke':

@@ -13,7 +13,7 @@
       v-model:sort-by="sortBy"
       :headers="visibleHeaders"
       :items="renderRows"
-      item-value="id"
+      :item-value="rowKey"
       :items-length="totalCount"
       :loading="firstLoad"
       :items-per-page-options="itemsPerPageOptions"
@@ -138,6 +138,7 @@
           v-if="value && buildOmimEntryUrl(value)"
           :url="buildOmimEntryUrl(value)!"
           :label="value"
+          :aria-label="`OMIM ${value} (opens in a new tab)`"
           @click="openExternalLink"
         />
         <EmptyPlaceholder v-else />
@@ -156,14 +157,14 @@
 
       <!-- Func (handle null) with human-readable formatting -->
       <template #[`item.func`]="{ value }">
-        <v-tooltip v-if="value" location="top">
-          <template #activator="{ props: tooltipProps }">
-            <span v-bind="tooltipProps" class="consequence-cell">
-              {{ formatConsequence(value) }}
-            </span>
-          </template>
-          <span class="text-body-small">{{ value }}</span>
-        </v-tooltip>
+        <span
+          v-if="value"
+          class="consequence-cell"
+          :data-tooltip="value"
+          data-tooltip-location="top"
+        >
+          {{ formatConsequence(value) }}
+        </span>
         <EmptyPlaceholder v-else />
       </template>
 
@@ -177,14 +178,13 @@
 
       <!-- Transcript (handle null, truncate long IDs) -->
       <template #[`item.transcript`]="{ value }">
-        <v-tooltip v-if="value" location="top">
-          <template #activator="{ props: tipProps }">
-            <span v-bind="tipProps" class="variant-data-mono transcript-truncated">{{
-              value
-            }}</span>
-          </template>
-          {{ value }}
-        </v-tooltip>
+        <span
+          v-if="value"
+          class="variant-data-mono transcript-truncated"
+          :data-tooltip="value"
+          data-tooltip-location="top"
+          >{{ value }}</span
+        >
         <EmptyPlaceholder v-else />
       </template>
 
@@ -222,6 +222,7 @@
           v-if="item.render.links[`_link_${link.id}`]"
           :url="item.render.links[`_link_${link.id}`]!"
           label="View"
+          :aria-label="`View in ${link.name} (opens in a new tab)`"
           @click="openExternalLink"
         />
         <span v-else class="text-muted">--</span>
@@ -252,6 +253,7 @@
       </template>
     </v-data-table-server>
 
+    <AcmgQuickMenu :state="acmgQuickMenu" />
     <AnnotationDialogs
       ref="annotationDialogsRef"
       :case-id="caseId"
@@ -281,6 +283,7 @@ import type { ActiveFilter } from '../../../shared/types/filters'
 import { buildColumnFilterChips } from '../utils/filters/activeFilters'
 import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
 import { useAnnotations, annotationCache } from '../composables/useAnnotations'
+import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { useVariantRowViewModel } from './variant-table/useVariantRowViewModel'
 import { useVariantRenderRows } from './variant-table/useVariantRenderRows'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
@@ -289,7 +292,7 @@ import { resolveUrlTemplate } from '../utils/externalLinks'
 import { formatConsequence } from '../utils/formatters'
 import { getAdaptiveRowScrollBehavior } from '../utils/adaptiveRowScroll'
 import { useTableScroll } from '../composables/useTableScroll'
-import { useTableKeyboardNav } from '../composables/useTableKeyboardNav'
+import { useTableKeyboardNav, hasCommandModifier } from '../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
 import VariantColumnHeader from './variant-table/VariantColumnHeader.vue'
 import AnnotationDialogs from './AnnotationDialogs.vue'
@@ -316,6 +319,9 @@ import {
   EmptyPlaceholder,
   HgvsCell
 } from './table-cells'
+import AcmgQuickMenu from './table-cells/AcmgQuickMenu.vue'
+import { provideAcmgQuickMenu } from './table-cells/acmg-quick-menu'
+import { useResultSetKeys } from './table-state/useResultSetKeys'
 
 interface Props {
   caseId: number
@@ -352,6 +358,8 @@ const emit = defineEmits<{
 }>()
 
 const viewActive = ref(true)
+// One shared ACMG quick-classify menu for all rows (not a v-menu per row)
+const acmgQuickMenu = provideAcmgQuickMenu()
 const tableWorkActive = computed(() => props.interactive && viewActive.value)
 const { api } = useApiService()
 let appState: ReturnType<typeof useAppState> | null = null
@@ -366,18 +374,18 @@ let cleanupAnnotationChanged: (() => void) | null = null
 const {
   getAcmgEvidence,
   toggleStar,
-  setAcmgClassification,
-  setAcmgClassificationWithEvidence,
   getGlobalComment,
   getPerCaseComment,
   upsertGlobalComment,
   upsertPerCaseComment,
   getAnnotations,
   toggleGlobalStar,
-  setGlobalAcmgClassification,
-  setGlobalAcmgClassificationWithEvidence,
   getGlobalAcmgEvidence
 } = useAnnotations()
+// ACMG writes go through the undo-snackbar wrappers (same signatures)
+const acmg = useAcmgUndo()
+const { setAcmgClassification, setAcmgClassificationWithEvidence } = acmg
+const { setGlobalAcmgClassification, setGlobalAcmgClassificationWithEvidence } = acmg
 
 // Bundle annotation actions for dialog subcomponent
 const annotationActions = {
@@ -477,6 +485,7 @@ const linkConfig = computed<
 // Precomputed row view models: annotation + link state per variant key
 const { rowViewModels } = useVariantRowViewModel(variants, annotationCache, linkConfig)
 const { renderRows } = useVariantRenderRows(variants, rowViewModels)
+const { rowKey } = useResultSetKeys(() => renderRows.value, 'id') // fresh <tr>s per result set
 
 const hasAnnotationBackedFilters = computed(
   () =>
@@ -597,39 +606,26 @@ onKeyStroke(
   { dedupe: true }
 )
 
-// Action shortcuts on selected row
-onKeyStroke(
-  's',
-  (e: KeyboardEvent) => {
-    if (!props.interactive || !viewActive.value || isInputFocused()) return
-    if (selectedItem.value === null) return
-    e.preventDefault()
-    annotationDialogsRef.value?.handleStarToggle(selectedItem.value)
-  },
-  { dedupe: true }
-)
-
-onKeyStroke(
-  'c',
-  (e: KeyboardEvent) => {
-    if (!props.interactive || !viewActive.value || isInputFocused()) return
-    if (selectedItem.value === null) return
-    e.preventDefault()
-    annotationDialogsRef.value?.openCommentDialog(selectedItem.value)
-  },
-  { dedupe: true }
-)
-
-onKeyStroke(
-  'a',
-  (e: KeyboardEvent) => {
-    if (!props.interactive || !viewActive.value || isInputFocused()) return
-    if (selectedItem.value === null) return
-    e.preventDefault()
-    annotationDialogsRef.value?.openAcmgEvidenceDialog(selectedItem.value)
-  },
-  { dedupe: true }
-)
+// Action shortcuts on selected row (bare letters only: Ctrl/Cmd/Alt+key
+// belongs to the browser, see hasCommandModifier)
+const rowActionKeys: Record<string, (item: NonNullable<typeof selectedItem.value>) => void> = {
+  s: (item) => annotationDialogsRef.value?.handleStarToggle(item),
+  c: (item) => annotationDialogsRef.value?.openCommentDialog(item),
+  a: (item) => annotationDialogsRef.value?.openAcmgEvidenceDialog(item)
+}
+for (const [key, action] of Object.entries(rowActionKeys)) {
+  onKeyStroke(
+    key,
+    (e: KeyboardEvent) => {
+      if (hasCommandModifier(e) || !props.interactive || !viewActive.value || isInputFocused())
+        return
+      if (selectedItem.value === null) return
+      e.preventDefault()
+      action(selectedItem.value)
+    },
+    { dedupe: true }
+  )
+}
 
 // Scroll selected row into view
 watch(selectedIndex, async (newIndex) => {

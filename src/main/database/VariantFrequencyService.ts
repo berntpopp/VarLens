@@ -28,10 +28,52 @@ export class VariantFrequencyService {
   }
 
   /**
-   * Decrement variant_frequency counts for all variants in a case.
-   * Called before case deletion. Removes rows where count reaches 0.
+   * Highest variant id currently stored for a case (0 when it has none).
+   * Take this before appending more files to an existing case and pass it to
+   * {@link updateFrequenciesForAppend} afterwards.
    */
-  decrementFrequencies(caseId: number): void {
+  caseVariantWatermark(caseId: number): number {
+    const row = this.db
+      .prepare('SELECT COALESCE(MAX(id), 0) AS watermark FROM variants WHERE case_id = ?')
+      .get(caseId) as { watermark: number }
+    return row.watermark
+  }
+
+  /**
+   * Count a case once for every coordinate it gained after `watermark`.
+   *
+   * The case already contributes exactly 1 to every coordinate it held at
+   * the watermark (its earlier rows were counted by {@link updateFrequencies}),
+   * so only coordinates that appear solely in rows inserted after the
+   * watermark are incremented. Coordinates are compared with `IS` so NULL
+   * alleles behave like the GROUP BY in {@link recomputeAllFrequencies}.
+   */
+  updateFrequenciesForAppend(caseId: number, watermark: number): void {
+    this.db
+      .prepare(
+        `
+      INSERT INTO variant_frequency (chr, pos, ref, alt, case_count)
+      SELECT DISTINCT n.chr, n.pos, n.ref, n.alt, 1
+      FROM variants n
+      WHERE n.case_id = ? AND n.id > ?
+        AND NOT EXISTS (
+          SELECT 1 FROM variants o
+          WHERE o.case_id = n.case_id AND o.id <= ?
+            AND o.chr IS n.chr AND o.pos IS n.pos AND o.ref IS n.ref AND o.alt IS n.alt
+        )
+      ON CONFLICT(chr, pos, ref, alt)
+      DO UPDATE SET case_count = case_count + 1
+    `
+      )
+      .run(caseId, watermark, watermark)
+  }
+
+  /**
+   * Decrement variant_frequency counts for all variants in a case.
+   * Called before case deletion. Removes rows where count reaches 0 unless
+   * `prune` is false — batch callers decrement many cases and prune once.
+   */
+  decrementFrequencies(caseId: number, prune = true): void {
     this.db
       .prepare(
         `
@@ -43,7 +85,17 @@ export class VariantFrequencyService {
     `
       )
       .run(caseId)
+    if (prune) this.pruneZeroCounts()
+  }
+
+  /** Remove frequency rows whose case count dropped to zero. */
+  pruneZeroCounts(): void {
     this.db.exec('DELETE FROM variant_frequency WHERE case_count <= 0')
+  }
+
+  /** Clear every frequency row (used when every case was deleted). */
+  clearAll(): void {
+    this.db.exec('DELETE FROM variant_frequency')
   }
 
   /**

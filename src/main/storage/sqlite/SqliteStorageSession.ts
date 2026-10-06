@@ -91,7 +91,7 @@ export class SqliteStorageSession implements StorageSession {
   private readonly databaseService: DatabaseService
   private readonly dbPool: DbPool | null
   private readonly readExecutor: StorageReadExecutor
-  private readonly writeExecutor: StorageWriteExecutor
+  private readonly writeExecutor: SqliteWriteExecutor
   private readonly importExecutor: StorageImportExecutor
 
   constructor(options: SqliteStorageSessionOptions) {
@@ -157,9 +157,14 @@ export class SqliteStorageSession implements StorageSession {
 
   rekey(newPassword: string): void {
     this.databaseService.rekey(newPassword)
+    // The writer thread holds a connection keyed with the old password; stop
+    // it so the next write reopens with the new key.
+    void this.writeExecutor.close()
   }
 
   async close(): Promise<void> {
+    await this.writeExecutor.close()
+
     if (this.dbPool !== null) {
       await this.dbPool.destroy()
     }

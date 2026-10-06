@@ -48,6 +48,7 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       delete: (id) => casesDomain.delete(id),
       deleteAll: () => casesDomain.deleteAll(),
       deleteBatch: (ids) => casesDomain.deleteBatch(ids),
+      startDelete: (target) => casesDomain.startDelete(target),
       availableBuilds: () => casesDomain.availableBuilds()
     },
 
@@ -98,7 +99,8 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
     export: {
       variants: (caseId, filters, caseName) => exportDomain.variants(caseId, filters, caseName),
       cohort: (params) => exportDomain.cohort(params),
-      revealInFolder: (filePath) => exportDomain.revealInFolder(filePath)
+      revealInFolder: (filePath) => exportDomain.revealInFolder(filePath),
+      cancel: () => exportDomain.cancel()
     },
 
     shell: {
@@ -110,8 +112,12 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       selectFile: () => databaseDomain.selectFile(),
       selectSaveLocation: (defaultName) => databaseDomain.selectSaveLocation(defaultName),
       open: (path, password) => databaseDomain.open(path, password),
-      create: (path, password) => databaseDomain.create(path, password),
+      create: (path, password, setupPassphrase) =>
+        databaseDomain.create(path, password, setupPassphrase),
       rekey: (newPassword) => databaseDomain.rekey(newPassword),
+      migrateToEncrypted: (options) => databaseDomain.migrateToEncrypted(options),
+      deletePlaintextBackup: (backupPath) => databaseDomain.deletePlaintextBackup(backupPath),
+      setRecoveryPassphrase: (passphrase) => databaseDomain.setRecoveryPassphrase(passphrase),
       info: () => databaseDomain.info(),
       capabilities: () => databaseDomain.capabilities(),
       postgresDiagnostics: () => databaseDomain.postgresDiagnostics(),
@@ -125,7 +131,7 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       removeRecent: (path) => databaseDomain.removeRecent(path),
       deleteFile: (path) => databaseDomain.deleteFile(path),
       showInFolder: (path) => databaseDomain.showInFolder(path)
-    } as WindowAPI['database'],
+    } satisfies WindowAPI['database'],
 
     batchImport: {
       selectFiles: () => batchImportDomain.selectFiles(),

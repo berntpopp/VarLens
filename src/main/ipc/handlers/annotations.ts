@@ -14,10 +14,8 @@ import type { AnnotationChangeEvent } from '../../../shared/types/api'
 import {
   getGlobalAnnotation,
   upsertGlobalAnnotationViaSession,
-  deleteGlobalAnnotation,
   getPerCaseAnnotation,
   upsertPerCaseAnnotationWithEvent,
-  deletePerCaseAnnotation,
   getAnnotationsForVariant,
   batchGetAnnotations
 } from './annotations-logic'
@@ -131,13 +129,9 @@ export function registerAnnotationHandlers({
         }
 
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          await session
-            .getWriteExecutor()
-            .execute({ type: 'annotations:deleteGlobal', params: [validated.data] })
-          return undefined
-        }
-        deleteGlobalAnnotation(validated.data, getDb)
+        await session
+          .getWriteExecutor()
+          .execute({ type: 'annotations:deleteGlobal', params: [validated.data] })
         return undefined
       })
     }
@@ -228,14 +222,10 @@ export function registerAnnotationHandlers({
         }
 
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          await session.getWriteExecutor().execute({
-            type: 'annotations:deletePerCase',
-            params: [validated.data.caseId, validated.data.variantId]
-          })
-          return undefined
-        }
-        deletePerCaseAnnotation(validated.data.caseId, validated.data.variantId, getDb)
+        await session.getWriteExecutor().execute({
+          type: 'annotations:deletePerCase',
+          params: [validated.data.caseId, validated.data.variantId]
+        })
         return undefined
       })
     }

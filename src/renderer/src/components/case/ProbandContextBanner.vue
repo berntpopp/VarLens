@@ -4,7 +4,7 @@
     <span class="text-caption font-weight-bold text-high-emphasis text-truncate">
       {{ caseName }}
     </span>
-    <span v-if="probandDetails" class="text-caption text-medium-emphasis">
+    <span v-if="probandDetails" class="text-caption text-medium-emphasis text-no-wrap">
       ({{ probandDetails }})
     </span>
     <v-divider vertical class="mx-1 my-1" />
@@ -34,7 +34,10 @@
           <div v-for="t in overflowHpoTerms" :key="t.hpo_id">{{ t.hpo_id }}: {{ t.hpo_label }}</div>
         </div>
       </v-tooltip>
-      <span v-if="displayedHpoTerms.length === 0" class="text-caption text-muted font-italic">
+      <span
+        v-if="displayedHpoTerms.length === 0"
+        class="text-caption text-muted font-italic text-truncate"
+      >
         No clinical phenotypes recorded
       </span>
     </div>
@@ -132,5 +135,8 @@ const overflowHpoCount = computed(() => Math.max(0, observedHpoTerms.value.lengt
   background-color: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 3%, transparent);
   border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
   flex-shrink: 0;
+  /* One line at every width: a banner that wraps for some cases changes
+     height on case switch and shifts the table below it. */
+  flex-wrap: nowrap;
 }
 </style>

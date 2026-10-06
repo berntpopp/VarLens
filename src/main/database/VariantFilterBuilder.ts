@@ -3,6 +3,7 @@ import { sql, type Kysely, type SelectQueryBuilder } from 'kysely'
 import type { VarlensDatabase } from '../../shared/types/database-schema'
 import type { Variant, VariantFilter, SortItem } from './types'
 import { mainLogger } from '../services/MainLogger'
+import { buildVariantOrderTerms, type ResolvedVariantSort } from '../../shared/sql/chromosome-order'
 import type { VariantSearchService } from './VariantSearchService'
 import {
   buildExtensionJoinClauses,
@@ -707,34 +708,21 @@ export class VariantFilterBuilder {
    * the emitted ORDER BY will reference an unknown alias.
    */
   applySort(query: VariantQueryBuilder, sortBy?: SortItem[]): VariantQueryBuilder {
-    if (!sortBy || sortBy.length === 0) {
-      // Genomic default (chr, pos) — Postgres + cohort parity; idx_variants_case_coords
-      return query.orderBy(sql`chr ASC, pos ASC NULLS LAST`).orderBy(sql`id ASC`)
-    }
-
-    let sorted = query
-    let hasIdSort = false
-
-    for (const sort of sortBy) {
+    const resolvedSorts: ResolvedVariantSort[] = []
+    for (const sort of sortBy ?? []) {
       const resolved = resolveSortColumn(sort.key)
       if (resolved === null) {
         mainLogger.warn(`Invalid sort column rejected: ${sort.key}`, 'VariantFilterBuilder')
         continue
       }
-      const dir = sort.order === 'desc' ? 'DESC' : 'ASC'
-      const nulls = 'NULLS LAST'
-      // `resolved.sql` is `variants.<base_col>` or `<alias>.<ext_col>` — both
-      // come from internally controlled sources (BASE_SORTABLE_COLUMNS /
-      // VARIANT_EXTENSION_REGISTRY), so `sql.raw` is safe here.
-      sorted = sorted.orderBy(sql`${sql.raw(resolved.sql)} ${sql.raw(dir)} ${sql.raw(nulls)}`)
-      if (sort.key === 'id') hasIdSort = true
+      resolvedSorts.push({ key: sort.key, column: resolved.sql, order: sort.order })
     }
-
-    if (!hasIdSort) {
-      sorted = sorted.orderBy(sql`id ASC`)
-    }
-
-    return sorted
+    // Natural chromosome order (1..22, X, Y, MT) via the shared chr-rank
+    // expression; the default (chr, pos) order is served by
+    // idx_variants_case_chr_rank. Columns come from BASE_SORTABLE_COLUMNS /
+    // VARIANT_EXTENSION_REGISTRY (internally controlled), so sql.raw is safe.
+    const terms = [...buildVariantOrderTerms(resolvedSorts, 'variants'), 'id ASC']
+    return query.orderBy(sql.raw(terms.join(', ')))
   }
 
   // ── Panel interval temp table ────────────────────────────────

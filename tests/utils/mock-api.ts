@@ -142,7 +142,8 @@ export function createMockApi(): MockApi {
       list: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue(undefined),
       deleteAll: vi.fn().mockResolvedValue(0),
-      deleteBatch: vi.fn().mockResolvedValue(0)
+      deleteBatch: vi.fn().mockResolvedValue(0),
+      startDelete: vi.fn().mockResolvedValue({ jobId: 'job-1' })
     },
 
     variants: {
@@ -195,7 +196,8 @@ export function createMockApi(): MockApi {
     export: {
       variants: vi.fn().mockResolvedValue({ success: true }),
       cohort: vi.fn().mockResolvedValue({ success: true }),
-      revealInFolder: vi.fn().mockResolvedValue({ success: false })
+      revealInFolder: vi.fn().mockResolvedValue({ success: false }),
+      cancel: vi.fn().mockResolvedValue({ cancelled: false })
     },
 
     shell: {
@@ -435,6 +437,8 @@ export function createMockApi(): MockApi {
       createUser: vi.fn().mockResolvedValue(undefined),
       listUsers: vi.fn().mockResolvedValue([]),
       deactivateUser: vi.fn().mockResolvedValue(undefined),
+      reactivateUser: vi.fn().mockResolvedValue(undefined),
+      setRole: vi.fn().mockResolvedValue(undefined),
       resetPassword: vi.fn().mockResolvedValue(undefined),
       changePassword: vi.fn().mockResolvedValue(undefined)
     },
@@ -472,7 +476,9 @@ export function createMockApi(): MockApi {
     jobs: {
       list: vi.fn().mockResolvedValue({ data: [] }),
       get: vi.fn().mockResolvedValue({ data: null }),
-      progress: vi.fn().mockResolvedValue({ data: null })
+      progress: vi.fn().mockResolvedValue({ data: null }),
+      cancel: vi.fn().mockResolvedValue({ data: { requested: false } }),
+      onChanged: vi.fn().mockReturnValue(() => {})
     }
   }
 

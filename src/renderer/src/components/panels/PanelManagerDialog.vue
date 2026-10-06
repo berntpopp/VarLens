@@ -42,6 +42,7 @@
           New Panel
         </v-btn>
         <v-btn
+          v-if="webOnlyNote === null"
           color="primary"
           variant="outlined"
           density="comfortable"
@@ -53,6 +54,7 @@
           Import PanelApp
         </v-btn>
         <v-btn
+          v-if="webOnlyNote === null"
           color="primary"
           variant="outlined"
           density="comfortable"
@@ -64,6 +66,13 @@
           StringDB Generate
         </v-btn>
       </v-toolbar>
+      <div
+        v-if="webOnlyNote !== null"
+        class="text-body-small text-medium-emphasis px-4 py-2"
+        data-testid="panels-web-note"
+      >
+        {{ webOnlyNote }}
+      </div>
 
       <v-card-text class="pa-0">
         <v-table hover density="compact">
@@ -126,6 +135,7 @@
                     <v-tooltip activator="parent" location="top">Copy</v-tooltip>
                   </v-btn>
                   <v-btn
+                    v-if="webOnlyNote === null"
                     aria-label="Export"
                     size="small"
                     variant="text"
@@ -165,6 +175,7 @@
           {{ formatDate(geneRefInfo.builtAt * 1000) }}
         </span>
         <v-btn
+          v-if="webOnlyNote === null"
           size="x-small"
           variant="text"
           color="primary"
@@ -249,6 +260,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { logService } from '../../services/LogService'
+import { isRuntimeFeatureAvailable } from '../../utils/runtime-features'
 import PanelEditorDialog from './PanelEditorDialog.vue'
 import PanelAppImportDialog from './PanelAppImportDialog.vue'
 import StringDbGenerateDialog from './StringDbGenerateDialog.vue'
@@ -291,6 +303,12 @@ const panelAppImportOpen = ref(false)
 const stringDbGenerateOpen = ref(false)
 const geneRefInfo = ref<GeneRefInfo | null>(null)
 const geneRefUpdating = ref(false)
+// PanelApp / StringDB / BED export / gene-reference update have no web
+// routes (outbound APIs, desktop file paths): hide them with one note.
+const webOnlyNote = isRuntimeFeatureAvailable('panelAppImport')
+  ? null
+  : 'PanelApp import, StringDB generation, BED export and gene-reference updates are ' +
+    'available in the desktop app only for now.'
 const errorSnackbar = ref(false)
 const errorSnackbarText = ref('')
 const exportAssemblyDialogOpen = ref(false)

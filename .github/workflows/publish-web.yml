@@ -162,7 +162,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up bounded Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # docker/setup-buildx-action@v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # docker/setup-buildx-action@v4.4.1
         with:
           driver: docker-container
           driver-opts: |
@@ -190,7 +190,7 @@ jobs:
             type=sha,format=short
 
       - name: Build image for security gate
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # docker/build-push-action@v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # docker/build-push-action@v7.4.0
         with:
           context: .
           platforms: linux/amd64
@@ -235,7 +235,7 @@ jobs:
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # github/codeql-action/upload-sarif@v4.38.0
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # github/codeql-action/upload-sarif@v4.38.2
         with:
           sarif_file: trivy-results.sarif
           category: trivy-web-image
