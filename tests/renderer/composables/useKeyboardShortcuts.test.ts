@@ -152,12 +152,14 @@ describe('useKeyboardShortcuts', () => {
       },
       {
         name: 'onImport',
-        code: 'KeyI',
-        upper: 'I',
-        macKey: 'ˆ',
+        code: 'KeyO',
+        upper: 'O',
+        macKey: 'Ø',
         old: [
           { key: 'i', code: 'KeyI', ctrlKey: true },
-          { key: 'i', code: 'KeyI', metaKey: true }
+          { key: 'i', code: 'KeyI', metaKey: true },
+          // Alt+Shift+I is Chrome's "Report an issue" form; leave it to the browser.
+          { key: 'I', code: 'KeyI', altKey: true, shiftKey: true }
         ]
       }
     ]

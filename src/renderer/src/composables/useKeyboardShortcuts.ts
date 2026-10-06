@@ -15,7 +15,10 @@ interface KeyboardShortcutCallbacks {
   onHelp?: () => void
   /** Ctrl/Cmd+Shift+X: Clear all filters */
   onClearAllFilters?: () => void
-  /** Alt+Shift+I (Option+Shift+I on macOS): Import variant data */
+  /**
+   * Alt+Shift+O (Option+Shift+O on macOS): Import variant data. Not Alt+Shift+I,
+   * which opens Chrome's "Report an issue" form on Windows/Linux.
+   */
   onImport?: () => void
 }
 
@@ -48,7 +51,7 @@ export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks): void
   onAltShift('KeyQ', callbacks.onFaq)
   onAltShift('KeyL', callbacks.onLogViewer)
   onAltShift('KeyC', callbacks.onToggleColumnsDrawer)
-  onAltShift('KeyI', callbacks.onImport)
+  onAltShift('KeyO', callbacks.onImport)
 
   onKeyStroke('F', (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey) {

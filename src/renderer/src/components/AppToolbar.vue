@@ -220,7 +220,7 @@ const {
 const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const isWebMode = isWebRuntime()
-const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+I' : 'Alt+Shift+I'
+const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+O' : 'Alt+Shift+O'
 
 // Preload metadata when a case is selected so status/sex icons display immediately
 watch(

@@ -36,7 +36,7 @@ VarLens supports keyboard shortcuts for navigating variant tables, performing ac
 | Shortcut (Windows/Linux) | Shortcut (macOS) | Action |
 |--------------------------|------------------|--------|
 | `?` | `?` | Show keyboard shortcuts help |
-| `Alt+Shift+I` | `Option+Shift+I` | Import data |
+| `Alt+Shift+O` | `Option+Shift+O` | Import data |
 | `Alt+Shift+L` | `Option+Shift+L` | Toggle log viewer |
 | `Alt+Shift+D` | `Option+Shift+D` | Show disclaimer |
 | `Alt+Shift+Q` | `Option+Shift+Q` | Show FAQ |
