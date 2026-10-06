@@ -39,6 +39,12 @@ and a small explicit gate manifest are shared with Actions. Do not create a
 general interpreter for GitHub workflow YAML. A contract check verifies the
 workflows invoke the expected gates and declare their required environments.
 
+Validation tools need explicit version pins, verified downloads, and a local
+cache outside product dependencies. Setup must provide actionlint, ShellCheck,
+Gitleaks, and Trivy consistently with the hosted policy. Tool absence is a setup
+failure, not permission to omit its selected check. Actionlint covers inline
+workflow shell; separately selected external scripts need their own shell check.
+
 `make preflight` reports selected lanes and reasons before running them. It
 fetches/resolves the configured comparison base and records its commit. Failure
 to resolve the base selects full validation; an unavailable required remote
@@ -216,6 +222,13 @@ selection and corrupt cache; formatter config/plugin changes; unknown/deleted/
 renamed paths; stale or wrong-ref receipts; failed stages; source changes during
 execution; cancellation; missing Docker/PostgreSQL; contaminated package inputs;
 and compressor corruption. Keep tests at these externally visible boundaries.
+
+Existing tests in `tests/scripts/build-pipeline-guardrails.test.ts` and
+`tests/web-gate/web-ci-target.test.ts` hard-code parts of today's Make composition
+and Electron-only postinstall. Replace those particular assertions with behavior
+tests for runtime selection, single execution of composed stages, and failure
+propagation. Preserve their security, cache-integrity, and memory invariants;
+do not merely remove assertions that reject the new wiring.
 
 Run `make ci` and the complete applicable local preflight, including clean setup
 and packaging for changes here. Validate workflows statically and use recorded
