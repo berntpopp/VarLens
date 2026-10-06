@@ -73,6 +73,22 @@ describe('capture artifacts are bound to their actual inputs', () => {
     }
   })
 
+  test('docs preparation preserves manually maintained images outside the capture suite', () => {
+    const input = fixture()
+    const manualImage = Buffer.from('89504e470d0a1a0a01020304', 'hex')
+    writeFileSync(join(input.root, 'docs/public/screenshots/manual-panel.png'), manualImage)
+    recordScreenshots(input)
+    const destination = prepareDocs(input)
+    expect(readFileSync(join(destination, 'public/screenshots/manual-panel.png'))).toEqual(
+      manualImage
+    )
+    expect(readFileSync(join(destination, 'public/screenshots/app.png'))).toEqual(
+      readFileSync(join(input.directory, 'app.png'))
+    )
+    rmSync(join(input.directory, 'app.png'))
+    expect(() => prepareDocs(input)).toThrow(/verified screenshot/)
+  })
+
   test('docs preparation leaves tracked screenshots untouched', () => {
     const input = fixture()
     mkdirSync(join(input.root, 'docs/.vitepress/cache'), { recursive: true })

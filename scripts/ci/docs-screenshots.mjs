@@ -137,7 +137,8 @@ export function prepareDocs({
     }
   })
   const screenshots = join(target, 'public/screenshots')
-  rmSync(screenshots, { recursive: true, force: true })
+  // Keep manually maintained images outside the capture suite. Every suite-owned
+  // image is required by verifyScreenshots above and replaced from that capture.
   mkdirSync(screenshots, { recursive: true })
   for (const name of expectedScreenshots(root))
     cpSync(join(directory, name), join(screenshots, name))
