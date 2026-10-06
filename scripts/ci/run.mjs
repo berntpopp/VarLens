@@ -28,7 +28,7 @@ import {
   snapshotSource,
   writeReceipt
 } from './receipt.mjs'
-import { outgoingHistory } from './hooks.mjs'
+import { outgoingHistory } from './git-history.mjs'
 import { runTool, toolFingerprint } from './tools.mjs'
 import { startPostgres, buildAndSmokeContainer, scanContainer } from './containers.mjs'
 import {

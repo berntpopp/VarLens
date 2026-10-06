@@ -2,6 +2,7 @@ import { copyFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSy
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { git } from './process.mjs'
+export { outgoingHistory } from './git-history.mjs'
 
 export function parsePushUpdates(input) {
   return input
@@ -19,11 +20,6 @@ export function parsePushUpdates(input) {
       const [localRef, localSha, remoteRef, remoteSha] = fields
       return { localRef, localSha, remoteRef, remoteSha, deleted: /^0+$/.test(localSha) }
     })
-}
-export function outgoingHistory(commit, remote) {
-  if (!/^[a-f0-9]{40,64}$/.test(commit) || !/^[a-zA-Z0-9_.-]+$/.test(remote))
-    throw new Error('Invalid outgoing history identity')
-  return `${commit} --not --remotes=${remote}`
 }
 export async function validatePushTargets(updates, { head, peel }) {
   const targets = []

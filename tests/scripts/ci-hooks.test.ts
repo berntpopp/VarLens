@@ -4,6 +4,45 @@ import { parsePushUpdates, outgoingHistory, validatePushTargets } from '../../sc
 const a = 'a'.repeat(40)
 const b = 'b'.repeat(40)
 const zero = '0'.repeat(40)
+it('the real hook entry point reaches preflight and rejects a dirty checkout', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join, resolve } = await import('node:path')
+  const { execFileSync, spawnSync } = await import('node:child_process')
+  const cwd = mkdtempSync(join(tmpdir(), 'varlens-hook-entry-'))
+  const git = (...args: string[]): string =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+  try {
+    git('init', '-q')
+    git(
+      '-c',
+      'user.name=Test',
+      '-c',
+      'user.email=test@example.invalid',
+      'commit',
+      '--allow-empty',
+      '-qm',
+      'fixture'
+    )
+    writeFileSync(join(cwd, '.nvmrc'), process.versions.node)
+    const head = git('rev-parse', 'HEAD')
+    const result = spawnSync(
+      process.execPath,
+      [resolve('scripts/ci/hooks.mjs'), 'pre-push', 'origin'],
+      {
+        cwd,
+        input: `refs/heads/feature ${head} refs/heads/feature ${zero}\n`,
+        encoding: 'utf8',
+        timeout: 10_000
+      }
+    )
+    expect(result.status).toBe(1)
+    expect(result.stderr).toMatch(/clean|dirty|uncommitted/i)
+    expect(result.stderr).not.toContain('unsettled top-level await')
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
+})
 describe('pre-push ref validation', () => {
   it('retains every new-branch/tag/deletion update from original stdin', () => {
     const updates = parsePushUpdates(
