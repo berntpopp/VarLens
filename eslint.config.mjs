@@ -139,5 +139,41 @@ export default [
         }
       ]
     }
+  },
+  // Ban Electron in shared handler logic and handlers-core modules
+  {
+    files: [
+      'src/main/ipc/handlers/*-logic.ts',
+      'src/main/handlers-core/**/*.ts',
+      'src/main/platform/platform-port.ts'
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'electron',
+              message:
+                'Shared handler logic must not import electron. Keep handlers transport-neutral.'
+            }
+          ],
+          patterns: [
+            {
+              group: ['electron/*', '@electron/*'],
+              message:
+                'Shared handler logic must not import electron subpaths. Keep handlers transport-neutral.'
+            }
+          ]
+        }
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression[source.value=/^(@electron\\/|electron(\\/|$))/]',
+          message: 'Dynamic electron imports are forbidden in transport-neutral handler logic.'
+        }
+      ]
+    }
   }
 ]
