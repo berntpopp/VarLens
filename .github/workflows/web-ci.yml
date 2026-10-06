@@ -15,6 +15,9 @@ on:
       - 'src/shared/**'
       - 'tests/web-gate/**'
       - 'tests/web-smoke/**'
+      - 'tests/ui-gates/**'
+      - 'scripts/ui-gates/**'
+      - 'playwright.ui-gates.config.ts'
       - 'vite.web*.config.ts'
       - '.github/workflows/build.yml'
       - '.github/workflows/*web*.yml'
@@ -92,6 +95,23 @@ jobs:
 
       - name: Run opt-in web gate
         run: make web-ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build web bundle for UI gates
+        run: make ui-gates-build
+
+      - name: Run UI quality gates (axe + Lighthouse)
+        run: make ui-gates
+
+      - name: Upload UI gate reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
+        with:
+          name: ui-gates
+          path: test-results/ui-gates/
+          if-no-files-found: ignore
 
       - name: Docker runtime image smoke
         if: github.event_name == 'pull_request'
