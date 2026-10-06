@@ -22,7 +22,7 @@
  * authenticated for everything except the few public overrides
  * marked `public: true`.
  */
-import type { FastifyInstance, FastifyReply } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 import type { StorageReadTask } from '../../main/storage/read-executor'
@@ -35,6 +35,7 @@ import {
   toSerializableWebError
 } from './dispatcher-errors'
 import { isReadTaskType, isWriteTaskType, toTaskDomain } from './task-types'
+import { runAsJobActor, type JobActor } from './jobs/job-actor'
 import { buildAnalysisGroupOverrides } from './routes/analysis-groups'
 import { buildAnnotationOverrides } from './routes/annotations'
 import { buildAuditLogOverrides } from './routes/audit-log'
@@ -121,6 +122,13 @@ async function invokeAsIpcResult(
     else reply.log.info({ code: serialized.code }, 'web dispatcher: handler rejected request')
     return serialized
   }
+}
+
+function jobActorOf(request: FastifyRequest): JobActor | undefined {
+  const user = request.session?.user
+  return user === undefined
+    ? undefined
+    : { userId: user.id, username: user.username, role: user.role }
 }
 
 export function resolveDevApiLatencyMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -311,110 +319,112 @@ export function registerDispatcher(
         }
       }
     },
-    async (request, reply) => {
-      applyJsonResponseHeaders(reply)
-      await applyDevApiLatency()
+    async (request, reply) =>
+      // Jobs enqueued while serving this call record the caller as owner.
+      runAsJobActor(jobActorOf(request), async () => {
+        applyJsonResponseHeaders(reply)
+        await applyDevApiLatency()
 
-      const { domain, method } = request.params
-      const args = (request.body?.args ?? []) as unknown[]
+        const { domain, method } = request.params
+        const args = (request.body?.args ?? []) as unknown[]
 
-      const taskDomain = toTaskDomain(domain)
-      const key = `${taskDomain}:${method}`
-      const override = overrides[key]
+        const taskDomain = toTaskDomain(domain)
+        const key = `${taskDomain}:${method}`
+        const override = overrides[key]
 
-      // Pre-rotation gate. A session that still carries
-      // must_change_password gets exactly two methods reachable —
-      // changePassword (the way out) and logout (the escape hatch).
-      // Everything else, including reads, is 403'd. This closes the
-      // bootstrap-credential exposure window completely: there is no
-      // moment in which a user with the bootstrap password can call
-      // any application endpoint.
-      if (
-        request.session?.user !== undefined &&
-        request.session.mustChangePassword === true &&
-        !PRE_ROTATION_ALLOWED.has(key)
-      ) {
-        reply.code(403)
+        // Pre-rotation gate. A session that still carries
+        // must_change_password gets exactly two methods reachable —
+        // changePassword (the way out) and logout (the escape hatch).
+        // Everything else, including reads, is 403'd. This closes the
+        // bootstrap-credential exposure window completely: there is no
+        // moment in which a user with the bootstrap password can call
+        // any application endpoint.
+        if (
+          request.session?.user !== undefined &&
+          request.session.mustChangePassword === true &&
+          !PRE_ROTATION_ALLOWED.has(key)
+        ) {
+          reply.code(403)
+          return {
+            code: ErrorCode.UNKNOWN,
+            message: 'password-rotation-required',
+            userMessage:
+              'Your password must be changed before any other action. ' +
+              'Call auth:changePassword first.'
+          } satisfies SerializableError
+        }
+
+        if (override !== undefined) {
+          const result = await invokeAsIpcResult(reply, async () =>
+            override.handle(args, request, reply, deps)
+          )
+          recordDispatcherOperationMetrics({
+            metrics: deps.metrics,
+            key,
+            statusCode: reply.statusCode,
+            result
+          })
+          if (reply.statusCode < 400 && (isWriteTaskType(key) || shouldAuditOverrideWrite(key))) {
+            const auditResult = await invokeAsIpcResult(reply, () =>
+              recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
+            )
+            if (reply.statusCode >= 400) return auditResult
+          } else if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
+            const auditResult = await invokeAsIpcResult(reply, () =>
+              recordApiReadAudit(deps, { key, username: request.session?.user?.username })
+            )
+            if (reply.statusCode >= 400) return auditResult
+          }
+          return result
+        }
+
+        if (isReadTaskType(key)) {
+          const task = { type: key, params: args } as StorageReadTask
+          const result = await invokeAsIpcResult(reply, () =>
+            deps.session.getReadExecutor().execute(task)
+          )
+          recordDispatcherOperationMetrics({
+            metrics: deps.metrics,
+            key,
+            statusCode: reply.statusCode,
+            result
+          })
+          if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
+            const auditResult = await invokeAsIpcResult(reply, () =>
+              recordApiReadAudit(deps, { key, username: request.session?.user?.username })
+            )
+            if (reply.statusCode >= 400) return auditResult
+          }
+          return result
+        }
+
+        if (isWriteTaskType(key)) {
+          const task = { type: key, params: args } as StorageWriteTask
+          const result = await invokeAsIpcResult(reply, () =>
+            deps.session.getWriteExecutor().execute(task)
+          )
+          recordDispatcherOperationMetrics({
+            metrics: deps.metrics,
+            key,
+            statusCode: reply.statusCode,
+            result
+          })
+          if (reply.statusCode < 400) {
+            const auditResult = await invokeAsIpcResult(reply, () =>
+              recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
+            )
+            if (reply.statusCode >= 400) return auditResult
+          }
+          return result
+        }
+
+        reply.code(404)
         return {
-          code: ErrorCode.UNKNOWN,
-          message: 'password-rotation-required',
-          userMessage:
-            'Your password must be changed before any other action. ' +
-            'Call auth:changePassword first.'
+          code: ErrorCode.NOT_FOUND,
+          message: 'unknown method',
+          userMessage: 'Unknown API method.',
+          details: { domain: safeIdentifier(domain), method: safeIdentifier(method) }
         } satisfies SerializableError
-      }
-
-      if (override !== undefined) {
-        const result = await invokeAsIpcResult(reply, async () =>
-          override.handle(args, request, reply, deps)
-        )
-        recordDispatcherOperationMetrics({
-          metrics: deps.metrics,
-          key,
-          statusCode: reply.statusCode,
-          result
-        })
-        if (reply.statusCode < 400 && (isWriteTaskType(key) || shouldAuditOverrideWrite(key))) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        } else if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiReadAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        }
-        return result
-      }
-
-      if (isReadTaskType(key)) {
-        const task = { type: key, params: args } as StorageReadTask
-        const result = await invokeAsIpcResult(reply, () =>
-          deps.session.getReadExecutor().execute(task)
-        )
-        recordDispatcherOperationMetrics({
-          metrics: deps.metrics,
-          key,
-          statusCode: reply.statusCode,
-          result
-        })
-        if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiReadAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        }
-        return result
-      }
-
-      if (isWriteTaskType(key)) {
-        const task = { type: key, params: args } as StorageWriteTask
-        const result = await invokeAsIpcResult(reply, () =>
-          deps.session.getWriteExecutor().execute(task)
-        )
-        recordDispatcherOperationMetrics({
-          metrics: deps.metrics,
-          key,
-          statusCode: reply.statusCode,
-          result
-        })
-        if (reply.statusCode < 400) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        }
-        return result
-      }
-
-      reply.code(404)
-      return {
-        code: ErrorCode.NOT_FOUND,
-        message: 'unknown method',
-        userMessage: 'Unknown API method.',
-        details: { domain: safeIdentifier(domain), method: safeIdentifier(method) }
-      } satisfies SerializableError
-    }
+      })
   )
 }

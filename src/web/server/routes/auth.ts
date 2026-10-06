@@ -2,6 +2,7 @@ import { ChangePasswordArgsSchema, LoginArgsSchema } from '../../../shared/api/s
 import { PasswordPolicyError } from '../../auth/PostgresWebAuthService'
 import { recordAuthAudit } from '../audit'
 import { isPlatformIdentityEnabled } from '../platform-identity-config'
+import { newSessionId } from '../session-revocation'
 import type { OverrideHandler } from './types'
 
 function platformMutationDenied(reply: { code: (statusCode: number) => unknown }): {
@@ -47,6 +48,8 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
           const { id, username: name, role, password_changed_at: passwordChangedAt } = result.user
           request.session.user = { id, username: name, role, passwordChangedAt }
           request.session.mustChangePassword = result.mustChangePassword === true
+          // Fresh browser-session id: never inherit a revoked one from a stale cookie.
+          request.session.sid = newSessionId()
           await recordAuthAudit(deps, {
             action_type: 'auth_login_success',
             username: name,
@@ -75,6 +78,10 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
     'auth:logout': {
       async handle(_args, request, _reply, deps) {
         const username = request.session.user?.username
+        // Stateless cookie: revoke its sid so a copy of the cookie is dead too,
+        // and end the SSE streams this browser session opened.
+        deps.sessions?.revoke(request.session.sid)
+        deps.events.closeSession(request.session.sid)
         if (username !== undefined) {
           deps.authService.invalidateUser(username)
           await recordAuthAudit(deps, {

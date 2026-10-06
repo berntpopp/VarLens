@@ -19,6 +19,7 @@ import {
   WEB_EVENT_COHORT_SUMMARY_REBUILT
 } from '../web-event-types'
 import { serverPathImportDisabled, serverPathImportDisabledResponse } from './server-path-import'
+import { jobViewerOf } from './jobs'
 import type { OverrideHandler } from './types'
 import { isWebUploadRef, resolveWebUploadRef, stageExistingFileUpload } from './upload-staging'
 
@@ -150,10 +151,14 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
     },
 
     'batch-import:cancel': {
-      async handle() {
-        const runningBatchJobs = jobRunner.list({ kind: 'import_batch', status: 'running' })
-        await Promise.all(runningBatchJobs.map((job) => jobRunner.cancel(job.id)))
-        cancelImport()
+      async handle(_args, request, _reply, { jobs }) {
+        // Owner-checked (see import:cancel): 403 for another user's batch.
+        if (jobs === undefined) return
+        const cancelled = await jobs.registry.cancelActive(jobViewerOf(request), [
+          'import_batch',
+          'import_single'
+        ])
+        if (cancelled > 0) cancelImport()
       }
     },
 

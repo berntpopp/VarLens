@@ -322,10 +322,32 @@ async function pickAndUploadFiles(params: {
 
 const NOOP_UNSUBSCRIBE = (): void => {}
 
+/** Browser event fired when the server could not replay missed SSE events. */
+export const WEB_EVENTS_RESYNC_DOM_EVENT = 'varlens:events-resync'
+
+/**
+ * One EventSource per page. The browser reconnects on its own and sends
+ * `Last-Event-ID`, so the server replays what was missed; `events:resync`
+ * means it could not, and listeners should re-poll. `session:revoked` (logout,
+ * deactivation, password reset) and a permanently failed connection drop the
+ * shared source so the next subscriber after re-login opens a fresh one.
+ */
 function getSharedEventSource(): EventSource | null {
   if (typeof EventSource === 'undefined') return null
   if (sharedEventSource === null) {
-    sharedEventSource = new EventSource(`${API_BASE}/events`, { withCredentials: true })
+    const source = new EventSource(`${API_BASE}/events`, { withCredentials: true })
+    const drop = (): void => {
+      source.close()
+      if (sharedEventSource === source) sharedEventSource = null
+    }
+    source.addEventListener('session:revoked', drop)
+    source.addEventListener('error', () => {
+      if (source.readyState === EventSource.CLOSED) drop()
+    })
+    source.addEventListener('events:resync', () => {
+      window.dispatchEvent(new CustomEvent(WEB_EVENTS_RESYNC_DOM_EVENT))
+    })
+    sharedEventSource = source
   }
   return sharedEventSource
 }

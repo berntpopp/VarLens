@@ -25,4 +25,15 @@ export interface Job<P = unknown> {
   createdAt: number // epoch ms
   startedAt: number | null
   finishedAt: number | null
+  /**
+   * Who started the job. Set by the web server (multi-user); absent on
+   * desktop, where every job belongs to the single local user. Non-admin web
+   * users only ever see their own jobs, so this matters for admin views.
+   */
+  owner?: JobOwner
+}
+
+export interface JobOwner {
+  userId: number
+  username: string
 }

@@ -20,7 +20,7 @@ import { UserAdminError } from '../../auth/postgres-user-admin'
 import { recordAuthAudit, recordUserAdminAudit } from '../audit'
 import { isPlatformIdentityEnabled } from '../platform-identity-config'
 import { requireAdmin } from './guards'
-import type { OverrideHandler } from './types'
+import type { DispatcherDeps, OverrideHandler } from './types'
 
 interface AdminFailure {
   success: false
@@ -61,6 +61,12 @@ function mapAdminError(reply: FastifyReply, err: unknown): AdminFailure {
     return fail(reply, 404, 'user-not-found', err.message)
   }
   throw err
+}
+
+/** End the user's SSE streams now instead of at their next heartbeat revalidation. */
+async function closeEventStreamsOf(deps: DispatcherDeps, username: string): Promise<void> {
+  const user = await deps.authService.getUser(username)
+  if (user !== undefined) deps.events.closeUser(user.id)
 }
 
 export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
@@ -140,6 +146,7 @@ export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
         } catch (err) {
           return mapAdminError(reply, err)
         }
+        await closeEventStreamsOf(deps, username)
         await recordAuthAudit(deps, {
           action_type: 'auth_user_deactivate',
           username,
@@ -195,6 +202,7 @@ export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
         } catch (err) {
           return mapAdminError(reply, err)
         }
+        await closeEventStreamsOf(deps, username)
         await recordAuthAudit(deps, {
           action_type: 'auth_password_reset',
           username,

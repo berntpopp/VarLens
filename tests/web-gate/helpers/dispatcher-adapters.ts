@@ -52,11 +52,15 @@ export function makeDeps(): {
       deactivateUser,
       resetPassword,
       invalidateUser: vi.fn(),
+      getUser: vi.fn(async (username: string) => ({ id: 2, username })),
       setRole,
       reactivateUser
     },
     events: {
-      publish
+      publish,
+      publishToUserAndAdmins: vi.fn(),
+      closeSession: vi.fn(),
+      closeUser: vi.fn()
     }
   } as unknown as DispatcherDeps
   return {

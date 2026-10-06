@@ -40,6 +40,8 @@ import { recordAuthAudit } from './server/audit'
 import { buildDispatcher, registerDispatcher } from './server/dispatcher'
 import { registerSessions } from './server/auth'
 import { registerEventStream, WebEventHub } from './server/events'
+import { revalidateStreamSession } from './server/event-stream-session'
+import { SessionRevocations } from './server/session-revocation'
 import { registerLoginRoute, resolveAppPathPrefix } from './server/login-route'
 import { registerPageGate } from './server/page-gate'
 import { PlatformIdentityService } from './server/platform-identity'
@@ -157,8 +159,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await maybeBootstrapAdmin(authService, options.admin, app.log)
   }
 
+  const revocations = new SessionRevocations()
   await registerSessions(app, {
     authService,
+    revocations,
     ...(platformIdentity !== undefined ? { platformIdentity } : {})
   })
   await registerOpenApi(app)
@@ -215,13 +219,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     events,
     metrics,
     auditBuffer: runtime.auditBuffer,
-    jobs: runtime.jobs
+    jobs: runtime.jobs,
+    sessions: revocations
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
   registerImportUploadRoutes(app, dispatcherDeps)
   registerExportDownloadRoutes(app, dispatcherDeps)
   registerDispatcher(app, dispatcherDeps, overrides)
-  registerEventStream(app, events)
+  registerEventStream(app, events, {
+    revalidate: (request) => revalidateStreamSession(request, authService, revocations)
+  })
 
   // Liveness answers as soon as the event loop does: it must not depend on
   // Postgres, or a DB outage would get the pod restarted instead of merely

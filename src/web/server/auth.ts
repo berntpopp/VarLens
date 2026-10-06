@@ -38,6 +38,7 @@ import secureSession from '@fastify/secure-session'
 import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
 import { PlatformIdentityRevokedError, type PlatformIdentityService } from './platform-identity'
 import { registerAuthLoginRateLimit } from './rate-limit'
+import { newSessionId, type SessionRevocations } from './session-revocation'
 
 declare module '@fastify/secure-session' {
   interface SessionData {
@@ -61,6 +62,12 @@ declare module '@fastify/secure-session' {
      * every request doesn't have to re-query the DB.
      */
     mustChangePassword: boolean
+    /**
+     * Random per-browser-session id, assigned on the first authenticated API
+     * call. Logout revokes it (session-revocation.ts) and closes the SSE
+     * streams opened under it.
+     */
+    sid?: string
   }
 }
 
@@ -192,7 +199,11 @@ function loadOrCreateSessionKey(): Buffer {
 
 export async function registerSessions(
   app: FastifyInstance,
-  options: { authService: PostgresWebAuthService; platformIdentity?: PlatformIdentityService }
+  options: {
+    authService: PostgresWebAuthService
+    platformIdentity?: PlatformIdentityService
+    revocations?: SessionRevocations
+  }
 ): Promise<void> {
   const key = loadOrCreateSessionKey()
   const production = isProductionMode()
@@ -265,6 +276,17 @@ export async function registerSessions(
     }
 
     const sessionUser = request.session.user
+
+    if (options.revocations?.isRevoked(request.session.sid) === true) {
+      request.session.delete()
+      reply.code(401)
+      return reply.send({
+        code: 'UNAUTHENTICATED',
+        message: 'session no longer valid',
+        userMessage: 'Please log in again.'
+      })
+    }
+    if (request.session.sid === undefined) request.session.sid = newSessionId()
 
     if (request.session.authMode === 'platform') {
       if (options.platformIdentity === undefined) {
