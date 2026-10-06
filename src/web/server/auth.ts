@@ -22,8 +22,8 @@
  *
  *   - `/api/auth/login`
  *   - `/api/auth/isAccountsEnabled`
- *   - `/api/openapi.json`
- *   - `/api/docs` and `/api/docs/*`
+ *   - `/api/openapi.json`, `/api/docs` and `/api/docs/*` only when
+ *     VARLENS_WEB_PUBLIC_API_DOCS=1 (otherwise they need a session)
  *
  * `/healthz` and static assets bypass the gate naturally because
  * they don't start with `/api/`.
@@ -39,6 +39,7 @@ import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
 import { PlatformIdentityRevokedError, type PlatformIdentityService } from './platform-identity'
 import { registerAuthLoginRateLimit } from './rate-limit'
 import { newSessionId, type SessionRevocations } from './session-revocation'
+import { isPublicApiDocsEnabled } from './instance-settings'
 
 declare module '@fastify/secure-session' {
   interface SessionData {
@@ -102,17 +103,23 @@ function isProductionMode(): boolean {
   return env !== 'development' && env !== 'test'
 }
 
-const PUBLIC_API_PATHS = new Set<string>([
-  '/api/auth/login',
-  '/api/auth/isAccountsEnabled',
-  '/api/openapi.json',
-  '/api/docs'
-])
-const PUBLIC_API_PREFIXES = ['/api/docs/']
+const PUBLIC_API_PATHS = new Set<string>(['/api/auth/login', '/api/auth/isAccountsEnabled'])
+const API_DOCS_PATHS = new Set<string>(['/api/openapi.json', '/api/docs'])
+const API_DOCS_PREFIXES = ['/api/docs/']
 const UNSAFE_METHODS = new Set<string>(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-export function isPublicApiPath(path: string): boolean {
-  return PUBLIC_API_PATHS.has(path) || PUBLIC_API_PREFIXES.some((prefix) => path.startsWith(prefix))
+export function isApiDocsPath(path: string): boolean {
+  return API_DOCS_PATHS.has(path) || API_DOCS_PREFIXES.some((prefix) => path.startsWith(prefix))
+}
+
+/**
+ * Paths reachable without a session. The OpenAPI document and Swagger UI
+ * describe the whole RPC surface, so they need a session unless the operator
+ * opts in with VARLENS_WEB_PUBLIC_API_DOCS=1 (spec P-21).
+ */
+export function isPublicApiPath(path: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (PUBLIC_API_PATHS.has(path)) return true
+  return isApiDocsPath(path) && isPublicApiDocsEnabled(env)
 }
 
 function headerValue(value: string | string[] | undefined): string | undefined {

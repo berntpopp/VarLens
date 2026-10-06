@@ -1,18 +1,15 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
+import { createApi } from '../../src/web/client/api'
 import {
   buildCohortExportUrl,
-  buildExportApi,
   buildVariantExportUrl,
   MAX_EXPORT_URL_LENGTH
 } from '../../src/web/client/export-download'
+import { ErrorCode } from '../../src/shared/types/errors'
 
-interface ExportApi {
-  variants: (caseId: number, filters: unknown, caseName: string) => Promise<unknown>
-  cohort: (params: unknown) => Promise<unknown>
-  revealInFolder: (filePath: string) => Promise<unknown>
-  cancel: () => Promise<unknown>
-  other: unknown
+function exportApi() {
+  return createApi().export
 }
 
 function captureAnchorClicks(): { clicks: HTMLAnchorElement[]; restore: () => void } {
@@ -28,18 +25,20 @@ function captureAnchorClicks(): { clicks: HTMLAnchorElement[]; restore: () => vo
 describe('web export download (window.api.export in web mode)', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   test('variant export starts an anchor download of the streaming endpoint', async () => {
-    const rpcVariants = vi.fn()
-    const api = buildExportApi({ variants: rpcVariants }) as ExportApi
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const api = exportApi()
     const { clicks } = captureAnchorClicks()
 
     const filters = { consequences: ['HIGH'], gnomad_af_max: 0.01 }
-    const result = await api.variants(12, filters, 'Case A/1')
+    const result = await api.variants(12, filters as never, 'Case A/1')
 
     expect(result).toEqual({ success: true, filePath: 'Case_A_1_variants.csv' })
-    expect(rpcVariants).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
     expect(clicks).toHaveLength(1)
     const anchor = clicks[0]
     expect(anchor.download).toBe('Case_A_1_variants.csv')
@@ -53,11 +52,11 @@ describe('web export download (window.api.export in web mode)', () => {
   })
 
   test('cohort export starts an anchor download with the JSON params', async () => {
-    const api = buildExportApi({}) as ExportApi
+    const api = exportApi()
     const { clicks } = captureAnchorClicks()
 
     const params = { gene_symbol: 'TP53', consequences: ['HIGH'] }
-    const result = (await api.cohort(params)) as { success: boolean; filePath: string }
+    const result = (await api.cohort(params as never)) as { success: boolean; filePath: string }
 
     expect(result.success).toBe(true)
     expect(result.filePath).toMatch(/^cohort_variants_\d{4}-\d{2}-\d{2}\.csv$/)
@@ -67,27 +66,33 @@ describe('web export download (window.api.export in web mode)', () => {
   })
 
   test('refuses filters that would overflow the request line instead of failing silently', async () => {
-    const api = buildExportApi({}) as ExportApi
+    const api = exportApi()
     const { clicks } = captureAnchorClicks()
 
-    const result = await api.variants(1, { gene_symbol: 'G'.repeat(MAX_EXPORT_URL_LENGTH) }, 'x')
+    const result = await api.variants(
+      1,
+      { gene_symbol: 'G'.repeat(MAX_EXPORT_URL_LENGTH) } as never,
+      'x'
+    )
 
     expect(result).toMatchObject({ success: false })
     expect(clicks).toHaveLength(0)
   })
 
-  test('revealInFolder is a no-op and other methods fall through to RPC', async () => {
-    const other = vi.fn()
-    const api = buildExportApi({ other }) as ExportApi
-    await expect(api.revealInFolder('x.csv')).resolves.toEqual({ success: false })
-    expect(api.other).toBe(other)
+  test('revealInFolder is desktop-only: refused locally without a request', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(exportApi().revealInFolder('x.csv')).resolves.toMatchObject({
+      code: ErrorCode.UNSUPPORTED_RUNTIME
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   test('cancel is a local no-op: the browser download manager owns the stream', async () => {
-    const cancel = vi.fn()
-    const api = buildExportApi({ cancel }) as ExportApi
-    await expect(api.cancel()).resolves.toEqual({ cancelled: false })
-    expect(cancel).not.toHaveBeenCalled()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(exportApi().cancel()).resolves.toEqual({ cancelled: false })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   test('URL builders honour a sub-path API base', () => {

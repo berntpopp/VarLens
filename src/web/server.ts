@@ -38,6 +38,7 @@ import { AdminAlreadyExistsError, PostgresWebAuthService } from './auth/Postgres
 import { resolveAuthUserCacheTtlMs } from './auth/user-lookup-cache'
 import { recordAuthAudit } from './server/audit'
 import { buildDispatcher, registerDispatcher } from './server/dispatcher'
+import { assertParityAtStartup } from './server/method-resolution'
 import { registerSessions } from './server/auth'
 import { registerEventStream, WebEventHub } from './server/events'
 import { revalidateStreamSession } from './server/event-stream-session'
@@ -223,6 +224,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     sessions: revocations
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
+  // Parity manifest startup assertion (spec §4.2): production refuses to boot
+  // when a shared method is unserved or a desktop-only method is served.
+  assertParityAtStartup(overrides, {
+    production: process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test',
+    warn: (message) => app.log.warn(message)
+  })
   registerImportUploadRoutes(app, dispatcherDeps)
   registerExportDownloadRoutes(app, dispatcherDeps)
   registerDispatcher(app, dispatcherDeps, overrides)

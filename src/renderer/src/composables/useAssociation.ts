@@ -5,7 +5,9 @@
  * with typed access via useApiService (no window.api casting).
  */
 
+import { computed } from 'vue'
 import { useApiService } from './useApiService'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { logService } from '../services/LogService'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { formatError } from '../utils/ipc-result'
@@ -25,14 +27,19 @@ interface CohortGroup {
 
 export function useAssociation() {
   const { api } = useApiService()
+  // Association tests are `pending` in web (parity manifest): Run is disabled
+  // with this reason instead of failing with a 501.
+  const capabilities = useCapabilityStore()
+  const unavailableReason = computed(() => capabilities.capabilityReason('cohortAssociation'))
 
   async function runAssociation(config: unknown): Promise<unknown> {
     if (!api) throw new Error('API not available')
+    capabilities.requireCapability('cohortAssociation')
     return unwrapIpcResult(await api.cohort.runAssociation(config))
   }
 
   function cancelAssociation(): void {
-    if (!api) return
+    if (!api || !capabilities.canUse('cohortAssociation')) return
     api.cohort.cancelAssociation().catch((e) => {
       logService.warn(
         'Failed to cancel association: ' + formatError(e, 'unknown error'),
@@ -44,7 +51,7 @@ export function useAssociation() {
   function onAssociationProgress(
     callback: (progress: { completed: number; total: number }) => void
   ): () => void {
-    if (!api) return () => {}
+    if (!api || !capabilities.canUse('cohortAssociation')) return () => {}
     return api.cohort.onAssociationProgress(callback)
   }
 
@@ -82,5 +89,11 @@ export function useAssociation() {
     return { cases, cohortGroups: cohorts }
   }
 
-  return { runAssociation, cancelAssociation, onAssociationProgress, loadCasesWithMetadata }
+  return {
+    runAssociation,
+    cancelAssociation,
+    onAssociationProgress,
+    loadCasesWithMetadata,
+    unavailableReason
+  }
 }

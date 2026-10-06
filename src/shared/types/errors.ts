@@ -11,8 +11,10 @@ export enum ErrorCode {
   VALIDATION = 'VALIDATION',
   NOT_FOUND = 'NOT_FOUND',
   CONFLICT = 'CONFLICT',
+  /** The session's role may not call this method (web client / dispatcher). */
   FORBIDDEN = 'FORBIDDEN',
   UNAUTHENTICATED = 'UNAUTHENTICATED',
+  /** The method is desktop-only or not yet served in this runtime (parity manifest). */
   UNSUPPORTED_RUNTIME = 'UNSUPPORTED_RUNTIME',
   UNAVAILABLE_UPSTREAM = 'UNAVAILABLE_UPSTREAM',
   CANCELLED = 'CANCELLED',

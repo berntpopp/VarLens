@@ -21,7 +21,7 @@
         </template>
         <v-list density="compact">
           <v-list-item
-            v-if="!isWebMode"
+            v-if="multiFileImportAvailable"
             :prepend-icon="mdiFileDocumentMultiple"
             title="Import VCF Files"
             subtitle="Multi-file case (SNV + SV + CNV + STR)"
@@ -48,10 +48,10 @@ import {
   mdiFileDocumentMultiple,
   mdiFileImportOutline
 } from '@mdi/js'
-import { isWebRuntime } from '../utils/runtime-mode'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import IconButton from './common/IconButton.vue'
 
-const isWebMode = isWebRuntime()
+const multiFileImportAvailable = useCapabilityStore().canUse('multiFileImport')
 
 defineProps<{
   caseCount?: number

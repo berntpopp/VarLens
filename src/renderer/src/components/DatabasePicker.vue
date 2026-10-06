@@ -17,7 +17,7 @@
       </v-btn>
     </template>
 
-    <v-list v-if="isWebMode">
+    <v-list v-if="isHostedWorkspace">
       <v-list-item>
         <template #prepend>
           <v-icon :icon="mdiDatabaseCog" />
@@ -270,7 +270,7 @@
 import { onMounted, ref } from 'vue'
 import { useDatabaseStore } from '../stores/databaseStore'
 import { useApiService } from '../composables/useApiService'
-import { isWebRuntime } from '../utils/runtime-mode'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import PasswordDialog from './PasswordDialog.vue'
 import CreateDatabaseDialog from './CreateDatabaseDialog.vue'
 import ChangePasswordDialog from './ChangePasswordDialog.vue'
@@ -298,7 +298,8 @@ import {
 
 const databaseStore = useDatabaseStore()
 const { api } = useApiService()
-const isWebMode = isWebRuntime()
+// Hosted (web) workspace: one server database, no local files to pick or manage.
+const isHostedWorkspace = !useCapabilityStore().canUse('localDatabaseFiles')
 
 // Component refs
 const passwordDialogRef = ref<InstanceType<typeof PasswordDialog> | null>(null)
@@ -324,7 +325,7 @@ const emit = defineEmits<{
 }>()
 
 onMounted(() => {
-  if (!isWebMode) {
+  if (!isHostedWorkspace) {
     void fetchPostgresProfiles()
   }
 })
@@ -441,7 +442,7 @@ function handlePasswordChanged(): void {
 }
 
 async function handleMenuToggle(isOpen: boolean): Promise<void> {
-  if (isOpen && !isWebMode) {
+  if (isOpen && !isHostedWorkspace) {
     await fetchPostgresProfiles()
   }
 }

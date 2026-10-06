@@ -7,11 +7,20 @@ import {
 } from '../../src/web/server/auth'
 
 describe('web auth origin gate', () => {
-  test('treats the Swagger UI entry route and nested assets as public API paths', () => {
-    expect(isPublicApiPath('/api/docs')).toBe(true)
-    expect(isPublicApiPath('/api/docs/')).toBe(true)
-    expect(isPublicApiPath('/api/docs/static/swagger-initializer.js')).toBe(true)
-    expect(isPublicApiPath('/api/docs-evil')).toBe(false)
+  test('API docs require a session unless the operator makes them public (P-21)', () => {
+    for (const path of ['/api/docs', '/api/docs/', '/api/openapi.json']) {
+      expect(isPublicApiPath(path, {})).toBe(false)
+    }
+    expect(isPublicApiPath('/api/auth/login', {})).toBe(true)
+  })
+
+  test('treats the Swagger UI entry route and nested assets as public when opted in', () => {
+    const env = { VARLENS_WEB_PUBLIC_API_DOCS: '1' }
+    expect(isPublicApiPath('/api/docs', env)).toBe(true)
+    expect(isPublicApiPath('/api/docs/', env)).toBe(true)
+    expect(isPublicApiPath('/api/docs/static/swagger-initializer.js', env)).toBe(true)
+    expect(isPublicApiPath('/api/openapi.json', env)).toBe(true)
+    expect(isPublicApiPath('/api/docs-evil', env)).toBe(false)
   })
 
   test('rejects missing Origin for unsafe API requests', () => {

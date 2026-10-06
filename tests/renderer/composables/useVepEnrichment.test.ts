@@ -1,6 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useVepEnrichment } from '../../../src/renderer/src/composables/useVepEnrichment'
+import { installCapabilities } from '../helpers/capabilities'
+
+// The capability store fails closed: install a desktop document.
+beforeEach(() => installCapabilities())
 
 // Mock the API service
 const mockVepFetch = vi.fn()
