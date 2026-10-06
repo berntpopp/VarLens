@@ -255,6 +255,10 @@ jobs:
     permissions:
       contents: read
       actions: read # required to read another workflow run's artifacts
+    outputs:
+      # 'true' only when the eSigner steps ran; consumed by publish-release so
+      # the publishing job's summary states the signing status too.
+      signed: ${{ steps.signing-status.outputs.signed }}
 
     steps:
       - name: Checkout code
@@ -434,6 +438,52 @@ jobs:
         shell: bash
         run: node scripts/release/verify-latest-yml.mjs promoted/win/latest.yml promoted/win
 
+      # Visibility only (issue #365, gap 1). The ESIGNER_ENABLED gate above is
+      # deliberate — it conserves the 20/month eSigner quota — but skipping it
+      # used to be silent: a fully green run published unsigned installers that
+      # were indistinguishable from signed ones. This step never fails the job
+      # and never changes what is shipped; it only makes the outcome loud.
+      # SIGNING_RAN evaluates the exact expression the signing steps are gated
+      # on, so the report cannot drift from what actually ran.
+      - name: Report Windows signing status
+        id: signing-status
+        shell: bash
+        env:
+          SIGNING_RAN: ${{ vars.ESIGNER_ENABLED == 'true' }}
+          VERSION: ${{ needs.create-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "signed=${SIGNING_RAN}" >> "$GITHUB_OUTPUT"
+          if [ "$SIGNING_RAN" = "true" ]; then
+            {
+              echo "### Windows code signing: signed"
+              echo
+              echo "Signed with SSL.com eSigner and checked for an Authenticode signature:"
+              echo
+              echo "- \`Varlens-Setup-${VERSION}.exe\`"
+              echo "- \`Varlens-Portable-${VERSION}.exe\`"
+              echo
+              echo "Not signed: \`Varlens-Setup-${VERSION}.zip\` — the \`Varlens.exe\` inside the archive is the pre-signing build output (issue #365, gap 2)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          shopt -s nullglob
+          cd promoted/win
+          UNSIGNED=(*.exe *.zip)
+          echo "::warning title=Unsigned Windows release::${GITHUB_REF_NAME} ships UNSIGNED Windows artifacts (${UNSIGNED[*]}): code signing was skipped because the ESIGNER_ENABLED repository variable is not 'true'."
+          {
+            echo "### :warning: Windows code signing: SKIPPED — unsigned artifacts"
+            echo
+            echo "The \`ESIGNER_ENABLED\` repository variable is not \`true\`, so every eSigner step was skipped."
+            echo "These Windows artifacts of \`${GITHUB_REF_NAME}\` are **not code-signed** and are published as-is:"
+            echo
+            for f in "${UNSIGNED[@]}"; do
+              echo "- \`${f}\`"
+            done
+            echo
+            echo "Users will see SmartScreen / unknown-publisher warnings. To ship a signed build, set \`ESIGNER_ENABLED\` to \`true\` and release a new tag."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
         with:
@@ -492,3 +542,46 @@ jobs:
             -F make_latest=true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Runs after the release is public so the summary describes what was
+      # actually published (issue #365, gap 1). Anything other than an explicit
+      # 'true' from the signing job is reported as unsigned. Visibility only:
+      # this step never fails the job.
+      - name: Summarize published release and Windows signing status
+        env:
+          WINDOWS_SIGNED: ${{ needs.sign-windows.outputs.signed }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          cd artifacts
+          if [ "$WINDOWS_SIGNED" = "true" ]; then
+            {
+              echo "### Published ${GITHUB_REF_NAME}"
+              echo
+              echo "Windows installers are code-signed:"
+              echo
+              for f in Varlens-Setup-*.exe Varlens-Portable-*.exe; do
+                echo "- \`${f}\`"
+              done
+              echo
+              echo "Not signed (issue #365, gap 2 — the archive contains the pre-signing \`Varlens.exe\`):"
+              echo
+              for f in Varlens-Setup-*.zip; do
+                echo "- \`${f}\`"
+              done
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          UNSIGNED=(Varlens-Setup-*.exe Varlens-Portable-*.exe Varlens-Setup-*.zip)
+          echo "::warning title=Unsigned Windows release published::${GITHUB_REF_NAME} was published with UNSIGNED Windows artifacts (${UNSIGNED[*]}): the ESIGNER_ENABLED repository variable is not 'true'."
+          {
+            echo "### :warning: Published ${GITHUB_REF_NAME} with UNSIGNED Windows artifacts"
+            echo
+            echo "Code signing was skipped (\`ESIGNER_ENABLED\` is not \`true\`). These published release assets are **not code-signed**:"
+            echo
+            for f in "${UNSIGNED[@]}"; do
+              echo "- \`${f}\`"
+            done
+            echo
+            echo "To replace them with signed builds, set \`ESIGNER_ENABLED\` to \`true\` and release a new tag."
+          } >> "$GITHUB_STEP_SUMMARY"

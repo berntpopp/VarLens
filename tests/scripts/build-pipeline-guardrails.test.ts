@@ -218,6 +218,19 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
     expect(readWorkflow('release.yml')).toContain('actions: read')
   })
 
+  test('release.yml makes an unsigned Windows release visible (issue #365)', () => {
+    // Signing is deliberately gated on ESIGNER_ENABLED (eSigner quota). The
+    // skip must stay loud in both the signing job and the publishing job —
+    // without these steps a green run ships unsigned installers silently.
+    const yaml = readWorkflow('release.yml')
+    expect(yaml).toContain("SIGNING_RAN: ${{ vars.ESIGNER_ENABLED == 'true' }}")
+    expect(yaml).toContain('signed: ${{ steps.signing-status.outputs.signed }}')
+    expect(yaml).toContain('WINDOWS_SIGNED: ${{ needs.sign-windows.outputs.signed }}')
+    expect(yaml.match(/::warning title=Unsigned Windows release/g)?.length).toBe(2)
+    // Visibility only: the report must not turn the gate into a hard failure.
+    expect(yaml).not.toMatch(/::error[^\n]*ESIGNER_ENABLED/)
+  })
+
   test('build.yml can be re-run against a ref, so expired artifacts are recoverable', () => {
     // `gh run rerun` is only permitted for 30 days; artifacts are retained for 90.
     expect(readWorkflow('build.yml')).toContain('workflow_dispatch:')
