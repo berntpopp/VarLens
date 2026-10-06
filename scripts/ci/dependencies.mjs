@@ -6,6 +6,7 @@ import { hashValue, readReceipt, writeReceipt, digestPaths } from './receipt.mjs
 // Native build output changes deliberately between the serialized Node/Electron
 // lanes. Its bytes are checked by assert-native-abi, independently of this tree.
 const excluded = (path) =>
+  path === 'vitest/dist/tsconfig.tmp.tsbuildinfo' ||
   /(^|\/)(\.cache|\.vite|\.vitest|\.vite-temp)(\/|$)/.test(path) ||
   /^better-sqlite3-multiple-ciphers\/(build|\.forge-meta)(\/|$)/.test(path)
 export async function installedFingerprint(cwd, cacheFile) {

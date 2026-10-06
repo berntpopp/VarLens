@@ -159,8 +159,8 @@ export function createAppApi(domains: PreloadDomainApis): AppWindowApi {
       logout: () => authDomain.logout(),
       currentUser: () => authDomain.currentUser(),
       isAccountsEnabled: () => authDomain.isAccountsEnabled(),
-      createUser: (username, displayName, tempPassword) =>
-        authDomain.createUser(username, displayName, tempPassword),
+      createUser: (username, displayName, tempPassword, role) =>
+        authDomain.createUser(username, displayName, tempPassword, role),
       listUsers: () => authDomain.listUsers(),
       deactivateUser: (username) => authDomain.deactivateUser(username),
       reactivateUser: (username) => authDomain.reactivateUser(username),

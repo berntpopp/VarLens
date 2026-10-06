@@ -9,6 +9,7 @@ import { finished } from 'node:stream/promises'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { recordApiWriteAudit } from '../audit'
+import { requireOperation } from '../security/secure'
 import type { DispatcherDeps } from './types'
 
 const DEFAULT_RECOVERY_KEY_DIR = '/data'
@@ -90,6 +91,15 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
         message: 'authentication required',
         userMessage: 'Please log in to continue.'
       }
+    }
+    // Staging an upload is the first step of an import: analysts and up.
+    if (requireOperation('http:import:upload', request, reply) === undefined) {
+      deps?.metrics?.recordOperationEvent({
+        operation: 'upload-stage',
+        result: 'error',
+        failureClass: 'forbidden'
+      })
+      return reply
     }
 
     const originalName = headerString(request.headers['x-varlens-file-name'])

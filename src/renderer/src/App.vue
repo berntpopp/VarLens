@@ -89,6 +89,9 @@
       @metadata-changed="handleMetadataChanged"
     />
 
+    <!-- Progress + cancel for exports, deletes and imports in every view. -->
+    <BackgroundJobsPanel />
+
     <KeyboardShortcutsDialog v-if="keyboardHelpMounted" v-model="showKeyboardHelp" />
 
     <ViewTransitionOverlay v-if="transitionOverlayMounted" :model-value="transitioning" />
@@ -108,6 +111,7 @@ import { useThemePreference } from './composables/useThemePreference'
 import { installUrlStateSync } from './composables/useUrlState'
 import { useCaseUrlParam } from './composables/useViewUrlBindings'
 import AppFooter from './components/AppFooter.vue'
+import BackgroundJobsPanel from './components/jobs/BackgroundJobsPanel.vue'
 import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
@@ -134,7 +138,9 @@ import {
 import { resetRendererPerfSnapshot } from './services/PerfSnapshot'
 import { getTraceSnapshot } from './services/PerfTrace'
 import { unwrapIpcResult } from '../../shared/types/errors'
+import { formatError } from './utils/ipc-result'
 import { getCurrentUnsupportedReason } from './utils/backend-capabilities'
+import { usePermissions } from './composables/usePermissions'
 
 const ImportStatusBar = defineAsyncComponent(() => import('./components/ImportStatusBar.vue'))
 const VariantDetailsPanel = defineAsyncComponent(
@@ -149,6 +155,7 @@ const ViewTransitionOverlay = defineAsyncComponent(
 )
 const router = useRouter()
 const { api } = useApiService()
+const permissions = usePermissions()
 const importStore = useImportStatusStore()
 const variantColumnMeta = useVariantColumnMeta()
 
@@ -247,7 +254,8 @@ const handleResetFilters = () => {
 
 const handleDeleteAllCases = async () => {
   if (!api) return
-  const reason = await getCurrentUnsupportedReason('cases.deleteAll')
+  const reason =
+    permissions.adminBlockedReason.value ?? (await getCurrentUnsupportedReason('cases.deleteAll'))
   if (reason !== null) {
     logService.warn(reason, 'backend-capabilities')
     dialogHostRef.value?.showSnackbar(reason, 'error')
@@ -255,14 +263,20 @@ const handleDeleteAllCases = async () => {
   }
   const confirmed = await dialogHostRef.value?.showDeleteAllCases(caseCount.value)
   if (confirmed === true) {
-    const deleted = unwrapIpcResult(await api.cases.deleteAll())
-    resetCaseContext()
-    incrementDataGeneration()
-    await caseListRef.value?.refreshCases()
-    dialogHostRef.value?.showSnackbar(
-      `Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`,
-      'success'
-    )
+    // Progress and cancel are shown by the background-jobs panel meanwhile.
+    try {
+      const deleted = unwrapIpcResult(await api.cases.deleteAll())
+      dialogHostRef.value?.showSnackbar(
+        `Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`,
+        'success'
+      )
+    } catch (error) {
+      dialogHostRef.value?.showSnackbar(formatError(error, 'Deleting all cases failed.'), 'error')
+    } finally {
+      resetCaseContext()
+      incrementDataGeneration()
+      await caseListRef.value?.refreshCases()
+    }
   }
 }
 
@@ -371,7 +385,10 @@ useKeyboardShortcuts({
     showKeyboardHelp.value = true
   },
   onClearAllFilters: () => filterToolbarRef.value?.handleClearAll(),
-  onImport: () => dialogHostRef.value?.showImportDialog()
+  onImport: () => {
+    // Viewers are read-only: the shortcut does nothing (the menu item is disabled).
+    if (permissions.canWrite.value) dialogHostRef.value?.showImportDialog()
+  }
 })
 
 const perfModeEnabled = api?.perf?.isEnabled?.() === true
@@ -451,7 +468,7 @@ onUnmounted(() => {
 
 :deep(.v-main) {
   --v-layout-top: 0px !important;
-  padding-top: 48px !important;
+  padding-top: var(--app-bar-height, 48px) !important;
 }
 
 :deep(.v-window) {

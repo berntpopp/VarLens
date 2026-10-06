@@ -62,9 +62,20 @@ export function registerAuthHandlers({ ipcMain, getDb }: HandlerDependencies): v
 
   ipcMain.handle(
     'auth:createUser',
-    async (_event, username: unknown, displayName: unknown, tempPassword: unknown) => {
+    async (
+      _event,
+      username: unknown,
+      displayName: unknown,
+      tempPassword: unknown,
+      role: unknown
+    ) => {
       return wrapHandler(async () => {
-        const validated = CreateUserSchema.safeParse({ username, displayName, tempPassword })
+        const validated = CreateUserSchema.safeParse({
+          username,
+          displayName,
+          tempPassword,
+          role: role ?? undefined
+        })
         if (!validated.success) {
           mainLogger.error(`Invalid auth:createUser params: ${validated.error.message}`, 'auth')
           throw new Error('Invalid user creation parameters')
@@ -73,7 +84,8 @@ export function registerAuthHandlers({ ipcMain, getDb }: HandlerDependencies): v
           validated.data.username,
           validated.data.displayName,
           validated.data.tempPassword,
-          getDb
+          getDb,
+          validated.data.role
         )
       })
     }
@@ -115,7 +127,7 @@ export function registerAuthHandlers({ ipcMain, getDb }: HandlerDependencies): v
         mainLogger.error('Invalid auth:setRole params', 'auth')
         throw new Error('Invalid role change parameters')
       }
-      setRole(validatedUsername.data, validatedRole.data, getDb)
+      await setRole(validatedUsername.data, validatedRole.data, getDb)
     })
   })
 

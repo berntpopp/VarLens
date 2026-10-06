@@ -145,6 +145,11 @@ COPY --from=builder \
 # panel interval resolution for case/cohort panel filters). The web server
 # looks for <cwd>/resources/gene_reference.db (override: VARLENS_GENE_REF_DB_PATH).
 COPY --from=builder /app/resources/gene_reference.db ./resources/gene_reference.db
+# Bundled HPO term list (same file the desktop renderer searches offline):
+# `hpo:search` is served from it, so phenotype queries never leave the server.
+# The web server looks for <cwd>/resources/hpo-terms.json (override:
+# VARLENS_HPO_TERMS_PATH).
+COPY --from=builder /app/src/renderer/src/assets/data/hpo-terms.json ./resources/hpo-terms.json
 
 USER varlens
 

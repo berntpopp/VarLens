@@ -67,7 +67,7 @@ const representations: Array<{ value: RepresentationType; label: string; icon: s
     </v-btn-group>
 
     <!-- Variant residue style toggle -->
-    <span class="text-caption text-medium-emphasis mx-2">Variants:</span>
+    <span class="text-caption mx-2">Variants:</span>
     <v-btn-group density="compact" variant="outlined" divided class="mr-3">
       <v-btn
         v-for="vs in variantStyles"
@@ -97,7 +97,7 @@ const representations: Array<{ value: RepresentationType; label: string; icon: s
 
     <!-- pLDDT confidence legend (AlphaFold only) -->
     <div v-if="isAlphaFold" class="plddt-legend d-flex align-center ga-1">
-      <span class="text-caption text-medium-emphasis mr-1">pLDDT:</span>
+      <span class="text-caption mr-1">pLDDT:</span>
       <div
         v-for="item in plddtLegend"
         :key="item.label"
@@ -105,7 +105,7 @@ const representations: Array<{ value: RepresentationType; label: string; icon: s
         :title="`${item.description} (${item.label})`"
       >
         <div class="plddt-swatch" :style="{ backgroundColor: item.color }" />
-        <span class="text-caption text-medium-emphasis">{{ item.label }}</span>
+        <span class="text-caption">{{ item.label }}</span>
       </div>
     </div>
   </v-toolbar>

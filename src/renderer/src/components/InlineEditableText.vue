@@ -1,7 +1,10 @@
 <template>
   <div class="inline-editable">
     <!-- Display mode -->
-    <div v-if="!isEditing" class="editable-text d-flex align-center" @click="startEdit">
+    <div v-if="readonly" class="d-flex align-center">
+      <span :class="{ 'text-muted': !modelValue }">{{ modelValue || '—' }}</span>
+    </div>
+    <div v-else-if="!isEditing" class="editable-text d-flex align-center" @click="startEdit">
       <span :class="{ 'text-muted': !modelValue }">
         {{ modelValue || placeholder }}
       </span>
@@ -33,11 +36,14 @@ interface Props {
   modelValue: string | null
   placeholder?: string
   loading?: boolean
+  /** Display only (e.g. viewer role): no edit affordance. */
+  readonly?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: 'Click to add...',
-  loading: false
+  loading: false,
+  readonly: false
 })
 
 const emit = defineEmits<{

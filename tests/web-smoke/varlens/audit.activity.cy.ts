@@ -34,7 +34,11 @@ describe('VarLens audit activity smoke', () => {
     cy.varlensApi('auth', 'currentUser').then((currentUserResponse) => {
       expect(currentUserResponse.status, 'current user HTTP status').to.eq(200)
       const currentUser = currentUserResponse.body as { role?: string }
-      expect(currentUser.role, 'supported smoke user role').to.be.oneOf(['admin', 'user'])
+      expect(currentUser.role, 'supported smoke user role').to.be.oneOf([
+        'admin',
+        'analyst',
+        'viewer'
+      ])
       if (currentUser.role === 'user') {
         cy.varlensApi('audit', 'query', [{ limit: 5 }]).then((response) => {
           expect(response.status, 'non-admin audit:query').to.eq(403)
@@ -68,7 +72,11 @@ describe('VarLens audit activity smoke', () => {
     cy.varlensApi('auth', 'currentUser').then((currentUserResponse) => {
       expect(currentUserResponse.status, 'current user HTTP status').to.eq(200)
       const currentUser = currentUserResponse.body as { role?: string }
-      expect(currentUser.role, 'supported smoke user role').to.be.oneOf(['admin', 'user'])
+      expect(currentUser.role, 'supported smoke user role').to.be.oneOf([
+        'admin',
+        'analyst',
+        'viewer'
+      ])
       if (currentUser.role === 'user') {
         this.skip()
       }

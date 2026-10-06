@@ -19,6 +19,7 @@ import {
 import type { MultiFileImportSpec } from '../../../shared/types/api'
 import { WEB_EVENT_COHORT_SUMMARY_REBUILT, WEB_EVENT_IMPORT_PROGRESS } from '../web-event-types'
 import { serverPathImportDisabled, serverPathImportDisabledResponse } from './server-path-import'
+import { jobViewerOf } from './jobs'
 import type { OverrideHandler } from './types'
 import {
   isWebUploadRef,
@@ -29,24 +30,6 @@ import {
 
 export function buildImportOverrides(): Record<string, OverrideHandler> {
   return {
-    'import:selectFile': {
-      handle() {
-        return null
-      }
-    },
-
-    'import:selectFiles': {
-      handle() {
-        return []
-      }
-    },
-
-    'import:selectBedFile': {
-      handle() {
-        return null
-      }
-    },
-
     'import:vcfPreview': {
       async handle(args, request, reply) {
         const [filePath] = args
@@ -262,8 +245,13 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
     },
 
     'import:cancel': {
-      handle() {
-        cancelImport()
+      async handle(_args, request, _reply, { jobs }) {
+        // Owner-checked: imports are single-flight per process, so the old
+        // process-wide cancelImport() let any user stop another user's run.
+        // The registry throws ForbiddenError (403) for someone else's import.
+        if (jobs === undefined) return
+        const cancelled = await jobs.registry.cancelActive(jobViewerOf(request), ['import_single'])
+        if (cancelled > 0) cancelImport()
       }
     }
   }

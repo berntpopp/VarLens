@@ -25,6 +25,8 @@ export interface UpdaterAPI {
   onStatusChange: (callback: (status: UpdateStatus) => void) => () => void
 }
 
+import type { CapabilityDocument } from '../ipc/capability-document'
+
 // Import database and import types for reuse
 import type {
   Case,
@@ -107,9 +109,11 @@ import type { CasesDomainContract } from '../ipc/domains/cases'
 import type { DatabaseDomainContract } from '../ipc/domains/database'
 import type { DebugApi } from '../ipc/domains/debug'
 import type { JobsApi } from '../ipc/domains/jobs'
+import type { ReferenceServicesApi } from '../ipc/domains/reference-services'
 import type { CaseMetadataDomainContract } from '../ipc/domains/case-metadata'
 import type { ImportDomainContract } from '../ipc/domains/import'
 import type { AuthDomainContract } from '../ipc/domains/auth'
+import type { ExportOptions, ExportProgress } from '../ipc/domains/export'
 export type { DatabaseInfo, DatabaseOpenResult, RecentDatabase } from '../ipc/domains/database'
 
 // Re-export for convenience
@@ -260,6 +264,8 @@ export interface SystemAPI {
   setWorkerThreads: (count: number) => Promise<IpcResult<void>>
   getWorkerThreads: () => Promise<IpcResult<number>>
   getLogFilePath: () => Promise<IpcResult<string>>
+  /** Per-session capability document (src/shared/ipc/capability-document.ts). */
+  getCapabilities: () => Promise<IpcResult<CapabilityDocument>>
 }
 
 export interface ShellOpenExternalResult {
@@ -283,11 +289,14 @@ export interface ExportAPI {
   variants: (
     caseId: number,
     filters: Omit<VariantFilter, 'case_id'>,
-    caseName: string
+    caseName: string,
+    options?: ExportOptions
   ) => Promise<IpcResult<ExportResult>>
-  cohort: (params: CohortSearchParams) => Promise<IpcResult<ExportResult>>
+  cohort: (params: CohortSearchParams, options?: ExportOptions) => Promise<IpcResult<ExportResult>>
   revealInFolder: (filePath: string) => Promise<IpcResult<{ success: boolean }>>
   cancel: () => Promise<IpcResult<{ cancelled: boolean }>>
+  /** `export:progress` push events (desktop IPC event / web SSE). */
+  onProgress: (callback: (progress: ExportProgress) => void) => () => void
 }
 
 export type DatabaseAPI = DatabaseDomainContract
@@ -374,6 +383,9 @@ export interface CohortAPI {
       total_count: number
       /** Optional same-load read warnings (Sprint A PR-3 C5). */
       warnings?: { staleSummary?: boolean }
+      /** Keyset cursor for the directly following page (default sort). */
+      next_cursor?: string
+      paging?: 'keyset'
     }>
   >
   getSummary: () => Promise<IpcResult<CohortSummary>>
@@ -826,11 +838,14 @@ export interface WindowAPI {
   perf: PerfAPI
   debug: DebugAPI
   jobs: JobsAPI
+  referenceServices: ReferenceServicesAPI
 }
 
 export type DebugAPI = DebugApi
 
 export type JobsAPI = JobsApi
+
+export type ReferenceServicesAPI = ReferenceServicesApi
 
 export interface PresetsAPI {
   list: () => Promise<IpcResult<FilterPreset[]>>

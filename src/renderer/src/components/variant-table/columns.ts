@@ -1,6 +1,7 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
 import type { useColumnPreferences } from '../../composables/useColumnPreferences'
-import { useVariantLinks } from '../../composables/useVariantLinks'
+import { useExternalLinksStore } from '../../stores/externalLinksStore'
+import { LINKS_COLUMN_KEY, linksColumnWidthRem } from '../../utils/link-outs'
 import { svHeaders } from './sv-columns'
 import { cnvHeaders } from './cnv-columns'
 import { strHeaders } from './str-columns'
@@ -50,7 +51,11 @@ export function getHeadersForType(variantType: string): ColumnDef[] {
   }
 }
 
-/** Static base column definitions for the variant table. */
+/**
+ * Static base column definitions for the variant table. ClinVar and gnomAD AF
+ * sit right after Gene/Consequence so the clinically critical columns are on
+ * screen at 1366 px (audit 06 §3.2); a saved user order still wins.
+ */
 export const baseHeaders: ColumnDef[] = [
   { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' },
   { title: 'Chr', key: 'chr', sortable: true },
@@ -59,19 +64,35 @@ export const baseHeaders: ColumnDef[] = [
   { title: 'Alt', key: 'alt', sortable: false, width: '100px' },
   { title: 'GT', key: 'gt_num', sortable: true },
   { title: 'Gene', key: 'gene_symbol', sortable: true },
-  { title: 'OMIM', key: 'omim_mim_number', sortable: true, width: '100px' },
-  { title: 'Func', key: 'func', sortable: true },
   { title: 'Consequence', key: 'consequence', sortable: true },
+  { title: 'ClinVar', key: 'clinvar', sortable: true },
+  { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' },
+  { title: 'CADD', key: 'cadd', sortable: true, align: 'end' },
+  { title: 'Func', key: 'func', sortable: true },
+  { title: 'OMIM', key: 'omim_mim_number', sortable: true, width: '100px' },
   { title: 'Transcript', key: 'transcript', sortable: true },
   { title: 'cDNA', key: 'cdna', sortable: true },
   { title: 'AA Change', key: 'aa_change', sortable: true },
-  { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' },
-  { title: 'CADD', key: 'cadd', sortable: true, align: 'end' },
   { title: 'Qual', key: 'qual', sortable: true, align: 'end' },
-  { title: 'ClinVar', key: 'clinvar', sortable: true },
   { title: 'HPO Score', key: 'hpo_sim_score', sortable: true, align: 'end' },
   { title: 'MoI', key: 'moi', sortable: true }
 ]
+
+/**
+ * The merged Links column (one icon link per `virtual` external link), or
+ * nothing when no such link is enabled. Shared by case, cohort and shortlist.
+ */
+export function linksColumn(linkCount: number): ColumnDef[] {
+  if (linkCount === 0) return []
+  return [
+    {
+      title: 'Links',
+      key: LINKS_COLUMN_KEY,
+      sortable: false,
+      width: `${linksColumnWidthRem(linkCount)}rem`
+    }
+  ]
+}
 
 /**
  * Composable that computes dynamic, ordered, and visible column sets.
@@ -88,24 +109,15 @@ export function useVariantColumns(
   prefs: ReturnType<typeof useColumnPreferences>['prefs'],
   variantType?: Ref<string> | ComputedRef<string>
 ) {
-  const { linksStore } = useVariantLinks()
+  const linksStore = useExternalLinksStore()
 
-  /** All headers including dynamic virtual link columns from store. */
+  /** All headers including the merged Links column (SNV/Indel view only). */
   const headers: ComputedRef<ColumnDef[]> = computed(() => {
-    const typeHeaders = getHeadersForType(variantType?.value ?? 'snv')
-    const allHeaders: ColumnDef[] = [...typeHeaders]
-    // Only add virtual link columns for SNV/Indel view (type-specific views have curated columns)
-    if ((variantType?.value ?? 'snv') === 'snv') {
-      for (const link of linksStore.virtualLinks) {
-        allHeaders.push({
-          title: link.name,
-          key: `_link_${link.id}`,
-          sortable: false,
-          width: '80px'
-        })
-      }
-    }
-    return allHeaders
+    const type = variantType?.value ?? 'snv'
+    const typeHeaders = getHeadersForType(type)
+    // Type-specific views (SV/CNV/STR) have curated columns and no link-outs
+    if (type !== 'snv') return typeHeaders
+    return [...typeHeaders, ...linksColumn(linksStore.virtualLinks.length)]
   })
 
   /** Columns ordered by user preferences. */
@@ -131,10 +143,10 @@ export function useVariantColumns(
     orderedColumns.value.filter((h) => isVisible(h.key)).map(withFixedWidth)
   )
 
-  /** Filterable columns: sortable data columns (exclude annotations, actions, link columns). */
+  /** Filterable columns: sortable data columns (exclude annotations and the Links column). */
   const filterableColumns = computed(() =>
     visibleHeaders.value.filter(
-      (h) => h.sortable !== false && !h.key.startsWith('_link_') && h.key !== 'annotations'
+      (h) => h.sortable !== false && h.key !== LINKS_COLUMN_KEY && h.key !== 'annotations'
     )
   )
 

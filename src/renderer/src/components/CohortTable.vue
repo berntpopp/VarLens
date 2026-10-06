@@ -162,6 +162,7 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
 import { isWebRuntime } from '../utils/runtime-mode'
+import { useCapabilityStore } from '../stores/capabilityStore'
 
 // Emit for navigation and row click
 const emit = defineEmits<{
@@ -373,7 +374,7 @@ const snackbar = ref({
   actionCallback: null as (() => void) | null
 })
 
-const exportToExcel = async (): Promise<void> => {
+const exportToExcel = async (format?: 'csv' | 'xlsx'): Promise<void> => {
   if (!api) {
     logService.warn('API not available - running outside Electron', 'cohort')
     return
@@ -408,7 +409,7 @@ const exportToExcel = async (): Promise<void> => {
       genome_build: genomeBuild.value || undefined,
       variant_type: selectedVariantType.value || undefined
     }
-    const result = unwrapIpcResult(await api.export.cohort(plainParams))
+    const result = unwrapIpcResult(await api.export.cohort(plainParams, { format }))
 
     if (result !== null && result !== undefined && result.success === true) {
       snackbar.value = {
@@ -416,7 +417,7 @@ const exportToExcel = async (): Promise<void> => {
         message: `Exported to ${result.filePath}`,
         color: 'success',
         timeout: 3000,
-        actionText: isWebRuntime() ? null : 'Open folder', // web: no folder to reveal
+        actionText: useCapabilityStore().canUse('revealInFolder') ? 'Open folder' : null,
         actionCallback: () => {
           if (result.filePath != null && result.filePath !== '')
             void api.export.revealInFolder(result.filePath)
@@ -548,8 +549,8 @@ const handleCommentClick = (item: CohortVariant) => {
   annotationDialogsRef.value?.openCommentDialog(item)
 }
 
-const handleExport = () => {
-  exportToExcel()
+const handleExport = (format?: 'csv' | 'xlsx') => {
+  void exportToExcel(format)
 }
 
 const handleNavigateToCase = (payload: { caseId: number; item: CohortVariant }) => {

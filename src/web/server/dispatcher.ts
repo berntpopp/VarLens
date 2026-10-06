@@ -1,9 +1,9 @@
 /**
  * Single-route HTTP dispatcher for `window.api.<domain>.<method>(...)`.
  *
- * The browser's `window.api` is a Proxy (src/web/client/api.ts) that
- * forwards every call as `POST /api/<domain>/<method>` with body
- * `{ args: [...] }`. This file is the server side: one route resolves
+ * The browser's typed `window.api` client (src/web/client/api.ts) sends
+ * every `shared` parity-manifest method as `POST /api/<domain>/<method>`
+ * with body `{ args: [...] }`. This file is the server side: one route resolves
  * the call against three layers, in order:
  *
  *   1. Per-domain OVERRIDES — for methods that don't fit the
@@ -17,23 +17,30 @@
  * `as const satisfies` against the executor unions, so the
  * autoroute mapping cannot drift silently.
  *
+ * Every resolved method then runs through `secure()` (security/secure.ts),
+ * which applies the ONE security map (security/operation-security-map.ts):
+ * role-gated authorization, the request context carrying the actor, and the
+ * method's audit rule. A method without a policy is refused.
+ *
  * Sessions / auth are wired separately as a Fastify preHandler in
  * server/auth.ts; this dispatcher assumes the caller is already
  * authenticated for everything except the few public overrides
  * marked `public: true`.
  */
-import type { FastifyInstance, FastifyReply } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 import type { StorageReadTask } from '../../main/storage/read-executor'
 import type { StorageWriteTask } from '../../main/storage/write-executor'
 import { ErrorCode, type SerializableError } from '../../shared/types/errors'
+import { httpStatusForErrorCode } from '../../shared/errors/error-status'
 import {
   applyJsonResponseHeaders,
   safeIdentifier,
   toSerializableWebError
 } from './dispatcher-errors'
 import { isReadTaskType, isWriteTaskType, toTaskDomain } from './task-types'
+import { runAsJobActor, type JobActor } from './jobs/job-actor'
 import { buildAnalysisGroupOverrides } from './routes/analysis-groups'
 import { buildAnnotationOverrides } from './routes/annotations'
 import { buildAuditLogOverrides } from './routes/audit-log'
@@ -45,24 +52,25 @@ import { buildCasesOverrides } from './routes/cases'
 import { buildCohortOverrides } from './routes/cohort'
 import { buildDatabaseOverrides } from './routes/database'
 import { buildExportOverrides } from './routes/export'
+import { buildExportDownloadOverrides } from './routes/export-download'
+import { buildGnomadOverrides } from './routes/gnomad'
 import { buildGeneListOverrides } from './routes/gene-lists'
 import { buildGeneRefOverrides } from './routes/gene-ref'
 import { buildHpoOverrides } from './routes/hpo'
 import { buildImportOverrides } from './routes/import'
 import { buildJobOverrides } from './routes/jobs'
+import { buildMyVariantOverrides } from './routes/myvariant'
 import { buildPanelOverrides } from './routes/panels'
 import { buildProteinOverrides } from './routes/protein'
+import { buildReferenceServicesOverrides } from './routes/reference-services'
 import { buildRegionFileOverrides } from './routes/region-files'
+import { buildSpliceAiOverrides } from './routes/spliceai'
+import { buildSystemOverrides } from './routes/system'
 import { buildTranscriptOverrides } from './routes/transcripts'
 import { buildVepOverrides } from './routes/vep'
 import { buildVariantOverrides } from './routes/variants'
 import type { DispatcherDeps, InvokeBody, OverrideHandler } from './routes/types'
-import {
-  recordApiReadAudit,
-  recordApiWriteAudit,
-  shouldAuditApiRead,
-  shouldAuditOverrideWrite
-} from './audit'
+import { secure } from './security/secure'
 import {
   DispatcherErrorResponseSchema,
   DispatcherInvokeBodySchema,
@@ -105,16 +113,34 @@ async function invokeAsIpcResult(
   try {
     const result = await invoke()
     if (reply.statusCode >= 400) {
-      return toSerializableWebError(result)
+      const serialized = toSerializableWebError(result)
+      // Handler-level role refusals (`{ error: 'admin-required' }` + 403)
+      // share the security map's code, so the client sees ONE FORBIDDEN.
+      if (reply.statusCode === 403 && serialized.code === ErrorCode.UNKNOWN) {
+        serialized.code = ErrorCode.FORBIDDEN
+      }
+      return serialized
     }
     return result
   } catch (error) {
-    reply.code(500)
     // The stack goes to the server log only; the client gets the
-    // sanitised SerializableError built by toSerializableWebError.
-    reply.log.error({ err: error }, 'web dispatcher: handler threw')
-    return toSerializableWebError(error)
+    // sanitised SerializableError built by toSerializableWebError. The
+    // status comes from the error code (parity spec §4.4): a name clash is
+    // a 409, an ownership failure a 403, and only real faults stay 500.
+    const serialized = toSerializableWebError(error)
+    const status = httpStatusForErrorCode(serialized.code)
+    reply.code(status)
+    if (status >= 500) reply.log.error({ err: error }, 'web dispatcher: handler threw')
+    else reply.log.info({ code: serialized.code }, 'web dispatcher: handler rejected request')
+    return serialized
   }
+}
+
+function jobActorOf(request: FastifyRequest): JobActor | undefined {
+  const user = request.session?.user
+  return user === undefined
+    ? undefined
+    : { userId: user.id, username: user.username, role: user.role }
 }
 
 export function resolveDevApiLatencyMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -235,14 +261,20 @@ function buildOverrides(): Record<string, OverrideHandler> {
     ...buildCohortOverrides(),
     ...buildDatabaseOverrides(),
     ...buildExportOverrides(),
+    ...buildExportDownloadOverrides(),
     ...buildGeneListOverrides(),
     ...buildGeneRefOverrides(),
+    ...buildGnomadOverrides(),
     ...buildHpoOverrides(),
     ...buildImportOverrides(),
     ...buildJobOverrides(),
+    ...buildMyVariantOverrides(),
     ...buildPanelOverrides(),
     ...buildProteinOverrides(),
+    ...buildReferenceServicesOverrides(),
     ...buildRegionFileOverrides(),
+    ...buildSpliceAiOverrides(),
+    ...buildSystemOverrides(),
     ...buildTranscriptOverrides(),
     ...buildVepOverrides(),
     ...buildVariantOverrides()
@@ -266,6 +298,34 @@ export function buildDispatcher(_deps: DispatcherDeps): {
 } {
   const overrides = buildOverrides()
   return { overrides, publicMethods: publicOverrideKeys(overrides) }
+}
+
+/**
+ * Resolve `<domain>:<method>` to the function that serves it: a per-domain
+ * override first, then the read / write executor autoroutes. Undefined means
+ * the method does not exist (404). Authorization and audit are NOT decided
+ * here — `secure()` applies the security map to whatever this returns.
+ */
+function resolveInvocation(
+  key: string,
+  args: unknown[],
+  request: FastifyRequest,
+  reply: FastifyReply,
+  deps: DispatcherDeps,
+  override: OverrideHandler | undefined
+): (() => Promise<unknown>) | undefined {
+  if (override !== undefined) {
+    return async () => override.handle(args, request, reply, deps)
+  }
+  if (isReadTaskType(key)) {
+    const task = { type: key, params: args } as StorageReadTask
+    return () => deps.session.getReadExecutor().execute(task)
+  }
+  if (isWriteTaskType(key)) {
+    const task = { type: key, params: args } as StorageWriteTask
+    return () => deps.session.getWriteExecutor().execute(task)
+  }
+  return undefined
 }
 
 /**
@@ -298,115 +358,69 @@ export function registerDispatcher(
           401: DispatcherErrorResponseSchema,
           403: DispatcherErrorResponseSchema,
           404: DispatcherErrorResponseSchema,
+          409: DispatcherErrorResponseSchema,
           500: DispatcherErrorResponseSchema,
-          501: DispatcherErrorResponseSchema
+          501: DispatcherErrorResponseSchema,
+          502: DispatcherErrorResponseSchema
         }
       }
     },
-    async (request, reply) => {
-      applyJsonResponseHeaders(reply)
-      await applyDevApiLatency()
+    async (request, reply) =>
+      // Jobs enqueued while serving this call record the caller as owner.
+      runAsJobActor(jobActorOf(request), async () => {
+        applyJsonResponseHeaders(reply)
+        await applyDevApiLatency()
 
-      const { domain, method } = request.params
-      const args = (request.body?.args ?? []) as unknown[]
+        const { domain, method } = request.params
+        const args = (request.body?.args ?? []) as unknown[]
 
-      const taskDomain = toTaskDomain(domain)
-      const key = `${taskDomain}:${method}`
-      const override = overrides[key]
+        const taskDomain = toTaskDomain(domain)
+        const key = `${taskDomain}:${method}`
+        const override = overrides[key]
 
-      // Pre-rotation gate. A session that still carries
-      // must_change_password gets exactly two methods reachable —
-      // changePassword (the way out) and logout (the escape hatch).
-      // Everything else, including reads, is 403'd. This closes the
-      // bootstrap-credential exposure window completely: there is no
-      // moment in which a user with the bootstrap password can call
-      // any application endpoint.
-      if (
-        request.session?.user !== undefined &&
-        request.session.mustChangePassword === true &&
-        !PRE_ROTATION_ALLOWED.has(key)
-      ) {
-        reply.code(403)
-        return {
-          code: ErrorCode.UNKNOWN,
-          message: 'password-rotation-required',
-          userMessage:
-            'Your password must be changed before any other action. ' +
-            'Call auth:changePassword first.'
-        } satisfies SerializableError
-      }
+        // Pre-rotation gate. A session that still carries
+        // must_change_password gets exactly two methods reachable —
+        // changePassword (the way out) and logout (the escape hatch).
+        // Everything else, including reads, is 403'd. This closes the
+        // bootstrap-credential exposure window completely: there is no
+        // moment in which a user with the bootstrap password can call
+        // any application endpoint.
+        if (
+          request.session?.user !== undefined &&
+          request.session.mustChangePassword === true &&
+          !PRE_ROTATION_ALLOWED.has(key)
+        ) {
+          reply.code(403)
+          return {
+            code: ErrorCode.UNKNOWN,
+            message: 'password-rotation-required',
+            userMessage:
+              'Your password must be changed before any other action. ' +
+              'Call auth:changePassword first.'
+          } satisfies SerializableError
+        }
 
-      if (override !== undefined) {
-        const result = await invokeAsIpcResult(reply, async () =>
-          override.handle(args, request, reply, deps)
-        )
+        const invoke = resolveInvocation(key, args, request, reply, deps, override)
+        if (invoke === undefined) {
+          reply.code(404)
+          return {
+            code: ErrorCode.NOT_FOUND,
+            message: 'unknown method',
+            userMessage: 'Unknown API method.',
+            details: { domain: safeIdentifier(domain), method: safeIdentifier(method) }
+          } satisfies SerializableError
+        }
+
+        // One wrapper for every method: role check from the security map,
+        // request context (actor) for the handler, then the audit rule.
+        const result = await secure(key, request, reply, deps, invoke, invokeAsIpcResult)
         recordDispatcherOperationMetrics({
           metrics: deps.metrics,
           key,
           statusCode: reply.statusCode,
           result
         })
-        if (reply.statusCode < 400 && (isWriteTaskType(key) || shouldAuditOverrideWrite(key))) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        } else if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiReadAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        }
         return result
-      }
-
-      if (isReadTaskType(key)) {
-        const task = { type: key, params: args } as StorageReadTask
-        const result = await invokeAsIpcResult(reply, () =>
-          deps.session.getReadExecutor().execute(task)
-        )
-        recordDispatcherOperationMetrics({
-          metrics: deps.metrics,
-          key,
-          statusCode: reply.statusCode,
-          result
-        })
-        if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiReadAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        }
-        return result
-      }
-
-      if (isWriteTaskType(key)) {
-        const task = { type: key, params: args } as StorageWriteTask
-        const result = await invokeAsIpcResult(reply, () =>
-          deps.session.getWriteExecutor().execute(task)
-        )
-        recordDispatcherOperationMetrics({
-          metrics: deps.metrics,
-          key,
-          statusCode: reply.statusCode,
-          result
-        })
-        if (reply.statusCode < 400) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        }
-        return result
-      }
-
-      reply.code(404)
-      return {
-        code: ErrorCode.NOT_FOUND,
-        message: 'unknown method',
-        userMessage: 'Unknown API method.',
-        details: { domain: safeIdentifier(domain), method: safeIdentifier(method) }
-      } satisfies SerializableError
-    }
+      })
   )
 }

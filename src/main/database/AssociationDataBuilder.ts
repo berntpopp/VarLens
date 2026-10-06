@@ -1,5 +1,12 @@
 import type Database from 'better-sqlite3-multiple-ciphers'
-import type { GeneContingencyData, SampleBurdenData, VariantFilters } from '../statistics/types'
+import type { GeneContingencyData, VariantFilters } from '../statistics/types'
+import {
+  buildCovariateMap,
+  buildGeneContingencyData,
+  type AssociationVariantRow,
+  type CaseMetaRow,
+  type CaseMetricRow
+} from '../statistics/contingency'
 import { GT_DOSAGE_SQL } from '../../shared/sql/genotype-dosage'
 import { sqlPlaceholders } from './sql-utils'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
@@ -20,8 +27,6 @@ export class AssociationDataBuilder {
   ): GeneContingencyData[] {
     const allIds = [...groupA_ids, ...groupB_ids]
     if (allIds.length === 0) return []
-
-    const groupASet = new Set(groupA_ids)
 
     const baseAlias = 'v'
 
@@ -74,150 +79,23 @@ export class AssociationDataBuilder {
       ORDER BY ${baseAlias}.gene_symbol, variant_key, ${baseAlias}.case_id
     `
       )
-      .all(...allIds, ...baseParams, ...extParams) as Array<{
-      gene_symbol: string
-      case_id: number
-      variant_key: string
-      dosage: number
-      gnomad_af: number | null
-      cadd: number | null
-    }>
+      .all(...allIds, ...baseParams, ...extParams) as AssociationVariantRow[]
 
     if (variantRows.length === 0) return []
 
-    // Step 2: Load covariates if requested
-    const covariateMap = new Map<number, number[]>()
-    if (covariateNames.length > 0) {
-      this.loadCovariates(allIds, covariateNames, covariateMap)
-    }
-
-    // Step 3: Group by gene -> variant_key -> case_id
-    const geneMap = new Map<
-      string,
-      Map<string, Map<number, { dosage: number; gnomad_af: number | null; cadd: number | null }>>
-    >()
-
-    for (const row of variantRows) {
-      if (!geneMap.has(row.gene_symbol)) {
-        geneMap.set(row.gene_symbol, new Map())
-      }
-      const variantMap = geneMap.get(row.gene_symbol)!
-      if (!variantMap.has(row.variant_key)) {
-        variantMap.set(row.variant_key, new Map())
-      }
-      variantMap.get(row.variant_key)!.set(row.case_id, {
-        dosage: row.dosage,
-        gnomad_af: row.gnomad_af,
-        cadd: row.cadd
-      })
-    }
-
-    // Step 4: Build GeneContingencyData per gene
-    const results: GeneContingencyData[] = []
-
-    for (const [geneSymbol, variantMap] of geneMap) {
-      const variantKeys = [...variantMap.keys()]
-
-      // Compute carrier status per case
-      let groupA_carriers = 0
-      let groupA_nonCarriers = 0
-      let groupB_carriers = 0
-      let groupB_nonCarriers = 0
-
-      const casesWithVariants = new Set<number>()
-      for (const caseMap of variantMap.values()) {
-        for (const [caseId, data] of caseMap) {
-          if (data.dosage > 0) {
-            casesWithVariants.add(caseId)
-          }
-        }
-      }
-
-      for (const caseId of groupA_ids) {
-        if (casesWithVariants.has(caseId)) groupA_carriers++
-        else groupA_nonCarriers++
-      }
-      for (const caseId of groupB_ids) {
-        if (casesWithVariants.has(caseId)) groupB_carriers++
-        else groupB_nonCarriers++
-      }
-
-      // Build per-sample burden data
-      // Compute MAF from all samples
-      const variantMafs: number[] = []
-      const variantCadds: (number | null)[] = []
-
-      for (const vKey of variantKeys) {
-        const caseMap = variantMap.get(vKey)!
-        let altCount = 0
-        let totalAlleles = 0
-        let caddSum = 0
-        let caddCount = 0
-
-        for (const caseId of allIds) {
-          const data = caseMap.get(caseId)
-          const dosage = data?.dosage ?? 0
-          altCount += dosage
-          totalAlleles += 2
-          if (data?.cadd !== null && data?.cadd !== undefined) {
-            caddSum += data.cadd
-            caddCount++
-          }
-        }
-
-        const maf = totalAlleles > 0 ? altCount / totalAlleles : 0
-        variantMafs.push(Math.max(maf, 1e-8))
-        variantCadds.push(caddCount > 0 ? caddSum / caddCount : null)
-      }
-
-      // Build sample data
-      const samples: SampleBurdenData[] = []
-      for (const caseId of allIds) {
-        const dosages: number[] = []
-        for (const vKey of variantKeys) {
-          const data = variantMap.get(vKey)!.get(caseId)
-          dosages.push(data?.dosage ?? 0)
-        }
-
-        samples.push({
-          group: groupASet.has(caseId) ? 1 : 0,
-          dosages,
-          variant_mafs: variantMafs,
-          variant_cadds: variantCadds,
-          covariate_values: covariateMap.get(caseId) ?? []
-        })
-      }
-
-      results.push({
-        gene_symbol: geneSymbol,
-        groupA_carrier_count: groupA_carriers,
-        groupA_non_carrier_count: groupA_nonCarriers,
-        groupB_carrier_count: groupB_carriers,
-        groupB_non_carrier_count: groupB_nonCarriers,
-        samples
-      })
-    }
-
-    return results
+    const covariateMap =
+      covariateNames.length > 0
+        ? this.loadCovariates(allIds, covariateNames)
+        : new Map<number, number[]>()
+    return buildGeneContingencyData(variantRows, groupA_ids, groupB_ids, covariateMap)
   }
 
-  private loadCovariates(
-    caseIds: number[],
-    covariateNames: string[],
-    covariateMap: Map<number, number[]>
-  ): void {
-    // Load sex and age from case_metadata
+  private loadCovariates(caseIds: number[], covariateNames: string[]): Map<number, number[]> {
     const placeholders = sqlPlaceholders(caseIds.length)
     const metaRows = this.db
       .prepare(`SELECT case_id, sex, age FROM case_metadata WHERE case_id IN (${placeholders})`)
-      .all(...caseIds) as Array<{ case_id: number; sex: string | null; age: number | null }>
+      .all(...caseIds) as CaseMetaRow[]
 
-    const metaMap = new Map<number, { sex: string | null; age: number | null }>()
-    for (const row of metaRows) {
-      metaMap.set(row.case_id, { sex: row.sex, age: row.age })
-    }
-
-    // Load custom metrics
     const metricRows = this.db
       .prepare(
         `
@@ -228,34 +106,8 @@ export class AssociationDataBuilder {
         AND md.name IN (${sqlPlaceholders(covariateNames.length)})
     `
       )
-      .all(...caseIds, ...covariateNames) as Array<{
-      case_id: number
-      name: string
-      numeric_value: number | null
-    }>
+      .all(...caseIds, ...covariateNames) as CaseMetricRow[]
 
-    const metricsMap = new Map<number, Map<string, number | null>>()
-    for (const row of metricRows) {
-      if (!metricsMap.has(row.case_id)) metricsMap.set(row.case_id, new Map())
-      metricsMap.get(row.case_id)!.set(row.name, row.numeric_value)
-    }
-
-    // Build covariate vectors
-    for (const caseId of caseIds) {
-      const values: number[] = []
-      for (const name of covariateNames) {
-        if (name === 'sex') {
-          const meta = metaMap.get(caseId)
-          values.push(meta?.sex === 'male' ? 1 : meta?.sex === 'female' ? 0 : 0.5)
-        } else if (name === 'age') {
-          const meta = metaMap.get(caseId)
-          values.push(meta?.age ?? 0)
-        } else {
-          const metricVal = metricsMap.get(caseId)?.get(name)
-          values.push(metricVal ?? 0)
-        }
-      }
-      covariateMap.set(caseId, values)
-    }
+    return buildCovariateMap(caseIds, covariateNames, metaRows, metricRows)
   }
 }

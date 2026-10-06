@@ -156,6 +156,11 @@ describe('receipt readiness boundaries', () => {
     expect(installs).toBe(1)
     mkdirSync(join(cwd, 'node_modules/.vitest'), { recursive: true })
     writeFileSync(join(cwd, 'node_modules/.vitest/cache'), 'generated')
+    mkdirSync(join(cwd, 'node_modules/vitest/dist'), { recursive: true })
+    writeFileSync(
+      join(cwd, 'node_modules/vitest/dist/tsconfig.tmp.tsbuildinfo'),
+      'generated typecheck cache'
+    )
     await ensureDependencies(options)
     expect(installs).toBe(1)
     writeFileSync(join(cwd, 'node_modules/example/index.js'), 'evil')

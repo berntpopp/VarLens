@@ -52,11 +52,15 @@ export function makeDeps(): {
       deactivateUser,
       resetPassword,
       invalidateUser: vi.fn(),
+      getUser: vi.fn(async (username: string) => ({ id: 2, username })),
       setRole,
       reactivateUser
     },
     events: {
-      publish
+      publish,
+      publishToUserAndAdmins: vi.fn(),
+      closeSession: vi.fn(),
+      closeUser: vi.fn()
     }
   } as unknown as DispatcherDeps
   return {
@@ -67,4 +71,22 @@ export function makeDeps(): {
     importMultiFile,
     reply: { code: vi.fn() }
   }
+}
+
+/**
+ * Give every request a signed-in session, as the real session preHandler
+ * (src/web/server/auth.ts) does for authenticated traffic. The dispatcher's
+ * `secure()` wrapper refuses anonymous calls to non-public methods.
+ */
+export function withSession(
+  app: { addHook: (name: 'preHandler', hook: (request: never) => Promise<void>) => unknown },
+  role: 'viewer' | 'analyst' | 'admin' = 'admin',
+  username = role
+): void {
+  app.addHook('preHandler', async (request: never) => {
+    const target = request as { session?: unknown }
+    target.session ??= {
+      user: { id: 1, username, role, passwordChangedAt: null }
+    }
+  })
 }

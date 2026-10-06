@@ -19,7 +19,7 @@ interface CliResult {
   stderr: string
 }
 
-function runCli(schema: string, subject: string, role = 'user'): Promise<CliResult> {
+function runCli(schema: string, subject: string, role = 'analyst'): Promise<CliResult> {
   return new Promise((resolveResult, reject) => {
     const child = spawn(
       process.execPath,
@@ -82,7 +82,7 @@ describe.skipIf(!RUN)('provision-platform-user built CLI — real PostgreSQL', (
 
     expect(successes).toHaveLength(1)
     expect(failures).toHaveLength(1)
-    expect(JSON.parse(successes[0].stdout)).toMatchObject({ ok: true, role: 'user' })
+    expect(JSON.parse(successes[0].stdout)).toMatchObject({ ok: true, role: 'analyst' })
     expect(JSON.parse(failures[0].stderr)).toMatchObject({ ok: false })
     expect(failures[0].stderr).toMatch(/already bound to another platform subject/i)
 

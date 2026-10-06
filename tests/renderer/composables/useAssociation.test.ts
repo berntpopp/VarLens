@@ -9,6 +9,10 @@ import { withSetup } from '../../utils/test-helpers'
 import { createMockApi } from '../../utils/mock-api'
 import { useAssociation } from '@renderer/composables/useAssociation'
 import { ErrorCode } from '../../../src/shared/types/errors'
+import { installCapabilities } from '../helpers/capabilities'
+
+// The capability store fails closed: install a desktop document.
+beforeEach(() => installCapabilities())
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: {

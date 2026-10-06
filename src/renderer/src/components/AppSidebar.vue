@@ -15,13 +15,14 @@
         size="small"
         class="mr-1"
       />
-      <v-menu location="bottom end" offset="4">
+      <!-- Import is an analyst action; viewers do not get the menu at all. -->
+      <v-menu v-if="canWrite" location="bottom end" offset="4">
         <template #activator="{ props: menuProps }">
           <IconButton v-bind="menuProps" label="Import data" :icon="mdiPlus" class="mr-1" />
         </template>
         <v-list density="compact">
           <v-list-item
-            v-if="!isWebMode"
+            v-if="multiFileImportAvailable"
             :prepend-icon="mdiFileDocumentMultiple"
             title="Import VCF Files"
             subtitle="Multi-file case (SNV + SV + CNV + STR)"
@@ -48,10 +49,13 @@ import {
   mdiFileDocumentMultiple,
   mdiFileImportOutline
 } from '@mdi/js'
-import { isWebRuntime } from '../utils/runtime-mode'
+import { usePermissions } from '../composables/usePermissions'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import IconButton from './common/IconButton.vue'
 
-const isWebMode = isWebRuntime()
+const { canWrite } = usePermissions()
+
+const multiFileImportAvailable = useCapabilityStore().canUse('multiFileImport')
 
 defineProps<{
   caseCount?: number

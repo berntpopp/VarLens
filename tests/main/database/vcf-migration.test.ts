@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
-import { runMigrations } from '../../../src/main/database/migrations'
+import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 
 describe('Migration v23: VCF import columns', () => {
   let db: DatabaseType
@@ -46,14 +46,14 @@ describe('Migration v23: VCF import columns', () => {
   it('sets user_version to latest', () => {
     runMigrations(db)
     const result = db.prepare('PRAGMA user_version').get() as { user_version: number }
-    expect(result.user_version).toBe(35)
+    expect(result.user_version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
   it('is idempotent — running migrations twice does not fail', () => {
     runMigrations(db)
     expect(() => runMigrations(db)).not.toThrow()
     const result = db.prepare('PRAGMA user_version').get() as { user_version: number }
-    expect(result.user_version).toBe(35)
+    expect(result.user_version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
   it('new variant columns are nullable and default to NULL', () => {

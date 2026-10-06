@@ -28,6 +28,7 @@ import {
   profileCount
 } from '../storage/postgres/postgres-import-profile'
 import { quoteIdentifier } from '../storage/postgres/identifiers'
+import { classifyWorkerError } from '../storage/import-worker-errors'
 import { PostgresCohortSummaryRepository } from '../storage/postgres/PostgresCohortSummaryRepository'
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
 import type { FormatInfo } from '../import/strategies/ImportStrategy'
@@ -952,7 +953,7 @@ export async function runImport(
         }
       })
     } else {
-      post({ type: 'error', message })
+      post({ type: 'error', message, ...classifyWorkerError(err) })
     }
   } finally {
     try {

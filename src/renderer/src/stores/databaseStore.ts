@@ -3,7 +3,7 @@
  * Manages current database state, recent databases, and database operations
  */
 
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { DatabaseOpenResult, RecentDatabase, WindowAPI } from '../../../shared/types/api'
 import { unwrapIpcResult } from '../../../shared/types/errors'
@@ -19,7 +19,7 @@ import type {
   PostgresConnectionProfileSaveInput,
   PostgresConnectionTestResult
 } from '../../../shared/types/postgres-profile'
-import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
+import { useCapabilityStore } from './capabilityStore'
 
 /** Lazy accessor for window.api -- avoids import-time evaluation */
 function getApi(): WindowAPI {
@@ -33,6 +33,11 @@ function getApi(): WindowAPI {
  * Database store using setup store pattern
  */
 export const useDatabaseStore = defineStore('database', () => {
+  // Desktop-only methods (local files, encryption, Postgres profiles) are gated
+  // on the capability document; see src/shared/ipc/parity-manifest/core.ts.
+  const capabilityStore = useCapabilityStore()
+  const { requireCapability } = capabilityStore
+
   // State
   const currentPath = ref<string | null>(null)
   const currentName = ref<string>('')
@@ -50,7 +55,8 @@ export const useDatabaseStore = defineStore('database', () => {
   const keyManaged = ref<boolean>(false)
   const isLoading = ref<boolean>(false)
   const recentDatabases = ref<RecentDatabase[]>([])
-  const capabilities = ref<StorageCapabilities | null>(null)
+  /** Storage-backend flags from the capability document (null until loaded). */
+  const capabilities = computed(() => capabilityStore.storage)
   const postgresProfiles = ref<PostgresConnectionProfilePublic[]>([])
   const isTestingPostgres = ref<boolean>(false)
 
@@ -69,39 +75,50 @@ export const useDatabaseStore = defineStore('database', () => {
     const info = unwrapIpcResult(await getApi().database.info())
     if (info) {
       applyInfo(info)
-      await loadCapabilities()
     } else {
       currentPath.value = null
       currentName.value = ''
       isEncrypted.value = false
       unencryptedMigratable.value = false
       keyManaged.value = false
-      capabilities.value = null
     }
+    await loadCapabilities()
     await fetchRecent()
   }
 
   async function fetchRecent(): Promise<void> {
+    // The hosted web workspace has no local recent-files list.
+    if (!capabilityStore.canUse('localDatabaseFiles')) {
+      recentDatabases.value = []
+      return
+    }
     recentDatabases.value = unwrapIpcResult(await getApi().database.recentList())
   }
 
+  /** Reload the capability document (storage flags change with the open database). */
   async function loadCapabilities(): Promise<void> {
-    capabilities.value = unwrapIpcResult(await getApi().database.capabilities())
+    await capabilityStore.load()
   }
 
   async function fetchPostgresProfiles(): Promise<void> {
+    if (!capabilityStore.canUse('postgresProfiles')) {
+      postgresProfiles.value = []
+      return
+    }
     postgresProfiles.value = unwrapIpcResult(await getApi().database.postgresProfilesList())
   }
 
   async function savePostgresProfile(
     input: PostgresConnectionProfileSaveInput
   ): Promise<PostgresConnectionProfilePublic> {
+    requireCapability('postgresProfiles')
     const profile = unwrapIpcResult(await getApi().database.postgresProfileSave(input))
     await fetchPostgresProfiles()
     return profile
   }
 
   async function removePostgresProfile(profileId: string): Promise<{ success: boolean }> {
+    requireCapability('postgresProfiles')
     const result = unwrapIpcResult(await getApi().database.postgresProfileRemove(profileId))
     await fetchPostgresProfiles()
     return result
@@ -110,6 +127,7 @@ export const useDatabaseStore = defineStore('database', () => {
   async function testPostgresProfile(
     input: PostgresConnectionProfileInput
   ): Promise<PostgresConnectionTestResult> {
+    requireCapability('postgresProfiles')
     isTestingPostgres.value = true
     try {
       return unwrapIpcResult(await getApi().database.postgresProfileTest(input))
@@ -119,6 +137,7 @@ export const useDatabaseStore = defineStore('database', () => {
   }
 
   async function openDatabase(path: string, password?: string): Promise<DatabaseOpenResult> {
+    requireCapability('localDatabaseFiles')
     isLoading.value = true
     try {
       const result = unwrapIpcResult(await getApi().database.open(path, password))
@@ -138,6 +157,7 @@ export const useDatabaseStore = defineStore('database', () => {
     password?: string,
     setupPassphrase?: string
   ): Promise<DatabaseOpenResult> {
+    requireCapability('localDatabaseFiles')
     isLoading.value = true
     try {
       const result = unwrapIpcResult(
@@ -155,6 +175,7 @@ export const useDatabaseStore = defineStore('database', () => {
   }
 
   async function openPostgresProfile(profileId: string): Promise<DatabaseOpenResult> {
+    requireCapability('postgresProfiles')
     isLoading.value = true
     try {
       const result = unwrapIpcResult(await getApi().database.postgresProfileOpen(profileId))
@@ -171,6 +192,7 @@ export const useDatabaseStore = defineStore('database', () => {
   }
 
   async function selectAndOpenFile(): Promise<DatabaseOpenResult | null> {
+    requireCapability('localDatabaseFiles')
     const path = await getApi().database.selectFile()
     if (path === null) {
       return null
@@ -179,12 +201,14 @@ export const useDatabaseStore = defineStore('database', () => {
   }
 
   async function selectSaveLocation(defaultName: string): Promise<string | null> {
+    requireCapability('localDatabaseFiles')
     return await getApi().database.selectSaveLocation(defaultName)
   }
 
   async function changePassword(
     newPassword: string
   ): Promise<{ success: boolean; error?: string }> {
+    requireCapability('databaseEncryption')
     return unwrapIpcResult(await getApi().database.rekey(newPassword))
   }
 
@@ -197,6 +221,7 @@ export const useDatabaseStore = defineStore('database', () => {
   async function migrateToEncrypted(
     options: MigrateToEncryptedOptions
   ): Promise<MigrateToEncryptedResult> {
+    requireCapability('databaseEncryption')
     isLoading.value = true
     try {
       const result = unwrapIpcResult(await getApi().database.migrateToEncrypted(options))
@@ -213,6 +238,7 @@ export const useDatabaseStore = defineStore('database', () => {
 
   /** Delete a plaintext backup produced by a prior `migrateToEncrypted` call. */
   async function deletePlaintextBackup(backupPath: string): Promise<{ success: boolean }> {
+    requireCapability('databaseEncryption')
     return unwrapIpcResult(await getApi().database.deletePlaintextBackup(backupPath))
   }
 
@@ -224,6 +250,7 @@ export const useDatabaseStore = defineStore('database', () => {
    * for databases with no managed key (explicit-password or unencrypted).
    */
   async function setRecoveryPassphrase(passphrase: string): Promise<SetRecoveryPassphraseResult> {
+    requireCapability('databaseEncryption')
     return unwrapIpcResult(await getApi().database.setRecoveryPassphrase(passphrase))
   }
 

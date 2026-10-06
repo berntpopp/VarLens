@@ -5,11 +5,12 @@
     @update:model-value="emit('update:modelValue', $event)"
   >
     <v-card>
-      <v-card-title class="text-title-medium">Protein view not available in web mode</v-card-title>
-      <v-card-text>
-        The protein structure, domain, and ClinVar lollipop views rely on external annotation
-        services that the web server does not provide yet. Open this variant in the VarLens desktop
-        app to use them.
+      <v-card-title class="text-title-medium">Protein view unavailable</v-card-title>
+      <v-card-text data-testid="protein-view-unavailable-reason">
+        {{
+          reason ??
+          'The protein structure, domain, and ClinVar lollipop views need external annotation services that are not available here.'
+        }}
       </v-card-text>
       <v-card-actions>
         <v-spacer />
@@ -20,7 +21,11 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ modelValue: boolean }>()
+/**
+ * Shown instead of the protein view when its lookups are off (web: the
+ * administrator has not enabled the "Protein view" external lookup).
+ */
+defineProps<{ modelValue: boolean; reason?: string | null }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]

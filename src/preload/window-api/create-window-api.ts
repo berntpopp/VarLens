@@ -3,6 +3,7 @@ import { createCoreApi } from './core-api'
 import { createPreloadDomainApis } from './domains'
 import { createDebugApi } from '../domains/debug'
 import { createJobsApi } from '../domains/jobs'
+import { createReferenceServicesApi } from '../domains/reference-services'
 import type { WindowAPI } from '../../shared/types/api'
 
 export function createWindowApi(): WindowAPI {
@@ -44,6 +45,7 @@ export function createWindowApi(): WindowAPI {
     perf: core.perf,
     presets: app.presets,
     debug: createDebugApi(),
-    jobs: createJobsApi()
+    jobs: createJobsApi(),
+    referenceServices: createReferenceServicesApi()
   }
 }

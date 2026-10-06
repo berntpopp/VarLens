@@ -10,7 +10,13 @@ import {
   getCohortGeneBurdenViaSession,
   getCohortSummaryStatusViaSession
 } from '../../../main/ipc/handlers/cohort-logic'
-import { unsupportedWebCapability } from './common'
+import { AssociationConfigSchema } from '../../../shared/types/ipc-schemas'
+import {
+  cancelOwnAssociation,
+  runAssociationInProcess
+} from '../../../main/ipc/handlers/association-logic'
+import { AssociationBusyError } from '../association/web-association-runs'
+import { badRequest, serviceNotConfigured } from './common'
 import type { OverrideHandler } from './types'
 
 export function buildCohortOverrides(): Record<string, OverrideHandler> {
@@ -46,21 +52,48 @@ export function buildCohortOverrides(): Record<string, OverrideHandler> {
       }
     },
 
-    'cohort:rebuildSummary': {
-      handle(_args, _request, reply) {
-        return unsupportedWebCapability(reply, 'cohort.rebuildSummary')
-      }
-    },
-
+    // Gene-burden association on Postgres: same contingency builder, tests
+    // and FDR as desktop, run in-process per user (src/web/server/association/).
     'cohort:runAssociation': {
-      handle(_args, _request, reply) {
-        return unsupportedWebCapability(reply, 'cohort.runAssociation')
+      async handle(args, request, reply, deps) {
+        const runs = deps.association
+        const userId = request.session?.user?.id
+        if (runs === undefined || userId === undefined) {
+          return serviceNotConfigured(reply, 'cohort association')
+        }
+        const parsed = AssociationConfigSchema.safeParse(args[0])
+        if (!parsed.success) {
+          return badRequest(reply, 'invalid-association-config', 'Invalid association parameters')
+        }
+        try {
+          return await runs.run(userId, (ctx) =>
+            runAssociationInProcess(parsed.data, ctx.buildData, {
+              signal: ctx.signal,
+              onProgress: ctx.onProgress
+            })
+          )
+        } catch (error) {
+          if (error instanceof AssociationBusyError) {
+            reply.code(409)
+            return { error: 'association-running', message: error.message }
+          }
+          if (error instanceof Error && error.message.startsWith('Groups overlap')) {
+            return badRequest(reply, 'association-groups-overlap', error.message)
+          }
+          throw error
+        }
       }
     },
 
+    // Cancels only the caller's own run; resolves like desktop (void).
     'cohort:cancelAssociation': {
-      handle(_args, _request, reply) {
-        return unsupportedWebCapability(reply, 'cohort.cancelAssociation')
+      handle(_args, request, reply, deps) {
+        const userId = request.session?.user?.id
+        if (deps.association === undefined || userId === undefined) {
+          return serviceNotConfigured(reply, 'cohort association')
+        }
+        cancelOwnAssociation(deps.association, userId)
+        return null
       }
     },
 

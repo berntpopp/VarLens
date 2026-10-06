@@ -6,6 +6,7 @@ import { join, resolve } from 'path'
 
 import { Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
+import * as XLSX from 'xlsx'
 
 import { SAME_ORIGIN_HEADERS, startWebDriver, type WebDriver } from '../helpers/web-driver'
 
@@ -13,10 +14,11 @@ import { SAME_ORIGIN_HEADERS, startWebDriver, type WebDriver } from '../helpers/
  * Web-mode export downloads against a live buildApp + real PostgreSQL.
  *
  * Seeds one case through the real upload → import path, then exercises
- * GET /api/export/{variants,cohort}/download: status, attachment headers,
- * CSV rows that match the filtered query, auth (401), validation (400),
- * the api_read audit row, and that a client abort mid-stream hands the
- * pooled connection back (no lingering non-idle backend).
+ * POST /api/export/prepareDownload + GET /api/download/:token: status,
+ * attachment headers, CSV / XLSX rows that match the filtered query, auth
+ * (401), validation (400), single use, the api_read audit row, and that a
+ * client abort mid-stream hands the pooled connection back (no lingering
+ * non-idle backend).
  *
  * Gated on the web build + Postgres availability.
  */
@@ -26,8 +28,6 @@ const isWebBuilt = existsSync(WEB_BUILD_PATH)
 const PG_URL = process.env.VARLENS_PG_URL ?? ''
 const HAS_PG = PG_URL !== ''
 
-const VARIANT_PATH = '/api/export/variants/download'
-const COHORT_PATH = '/api/export/cohort/download'
 const APP_NAME = `varlens-export-gate-${process.pid}`
 /** Enough rows that a paused client forces back-pressure on the cursor. */
 const BULK_ROWS = 40_000
@@ -121,6 +121,16 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web export downloads (PostgreSQL)', () 
     }) as unknown as Promise<InjectResult>
   }
 
+  async function prepare(request: Record<string, unknown>): Promise<string> {
+    const res = await driver.api('export', 'prepareDownload', request)
+    expect(res.statusCode, res.body).toBe(200)
+    return `/api/${(res.json() as { downloadPath: string }).downloadPath}`
+  }
+
+  async function download(request: Record<string, unknown>): Promise<InjectResult> {
+    return get(await prepare(request))
+  }
+
   test('variant export streams the filtered rows as a CSV attachment', async () => {
     const filters = { consequences: ['HIGH'] }
     const expected = await driver.api('variants', 'query', caseId, filters, 0, 1000)
@@ -129,16 +139,16 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web export downloads (PostgreSQL)', () 
     expect(expectedTotal).toBeGreaterThan(0)
     expect(expectedTotal).toBeLessThan(30)
 
-    const query = new URLSearchParams({
-      caseId: String(caseId),
+    const res = await download({
+      kind: 'variants',
+      caseId,
       caseName: 'Export Gate/Case',
-      filters: JSON.stringify(filters)
+      filters
     })
-    const res = await get(`${VARIANT_PATH}?${query}`)
 
     expect(res.statusCode, res.body).toBe(200)
     expect(res.headers['content-type']).toBe('text/csv; charset=utf-8')
-    expect(res.headers['content-disposition']).toBe(
+    expect(res.headers['content-disposition']).toContain(
       'attachment; filename="Export_Gate_Case_variants.csv"'
     )
     const [header, ...rows] = csvRows(res.body)
@@ -152,15 +162,35 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web export downloads (PostgreSQL)', () 
     const consequenceIndex = header.split(',').indexOf('Consequence')
     for (const row of rows) expect(row.split(',')[consequenceIndex]).toBe('HIGH')
 
-    const unfiltered = await get(
-      `${VARIANT_PATH}?${new URLSearchParams({ caseId: String(caseId), caseName: 'x' })}`
-    )
+    const unfiltered = await download({ kind: 'variants', caseId, caseName: 'x', filters: {} })
     expect(csvRows(unfiltered.body)).toHaveLength(31)
+  })
+
+  test('variant export streams a valid XLSX workbook', async () => {
+    const path = await prepare({
+      kind: 'variants',
+      format: 'xlsx',
+      caseId,
+      caseName: 'x',
+      filters: {}
+    })
+    const res = (await driver.app.inject({
+      method: 'GET',
+      url: path,
+      headers: { ...SAME_ORIGIN_HEADERS, cookie: driver.cookie }
+    })) as unknown as InjectResult & { rawPayload: Buffer }
+    expect(res.statusCode).toBe(200)
+    const workbook = XLSX.read(res.rawPayload, { type: 'buffer' })
+    expect(workbook.SheetNames).toEqual(['Variants', 'Export Info'])
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets.Variants, { header: 1 })
+    expect(rows).toHaveLength(31)
+    // A download link works once.
+    expect((await get(path)).statusCode).toBe(404)
   })
 
   test('cohort export streams the cohort rows as a CSV attachment', async () => {
     const params = { gene_symbol: 'COMT' }
-    const res = await get(`${COHORT_PATH}?params=${encodeURIComponent(JSON.stringify(params))}`)
+    const res = await download({ kind: 'cohort', params })
 
     expect(res.statusCode, res.body).toBe(200)
     expect(res.headers['content-type']).toBe('text/csv; charset=utf-8')
@@ -198,20 +228,21 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web export downloads (PostgreSQL)', () 
   })
 
   test('unauthenticated requests get 401 and invalid params get 400', async () => {
-    const anon = await get(`${VARIANT_PATH}?caseId=${caseId}&caseName=x`, null)
+    const path = await prepare({ kind: 'variants', caseId, caseName: 'x', filters: {} })
+    const anon = await get(path, null)
     expect(anon.statusCode).toBe(401)
     expect(anon.headers['content-disposition']).toBeUndefined()
-    const anonCohort = await get(COHORT_PATH, null)
-    expect(anonCohort.statusCode).toBe(401)
 
-    expect((await get(`${VARIANT_PATH}?caseId=0&caseName=x`)).statusCode).toBe(400)
-    expect((await get(`${VARIANT_PATH}?caseId=${caseId}`)).statusCode).toBe(400)
-    expect((await get(`${VARIANT_PATH}?caseId=${caseId}&caseName=x&filters=%7B`)).statusCode).toBe(
-      400
-    )
-    expect(
-      (await get(`${COHORT_PATH}?params=${encodeURIComponent('{"limit":0}')}`)).statusCode
-    ).toBe(400)
+    const invalid = [
+      { kind: 'variants', caseId: 0, caseName: 'x', filters: {} },
+      { kind: 'variants', caseId, filters: {} },
+      { kind: 'variants', caseId, caseName: 'x', filters: { gnomad_af_max: 7 } },
+      { kind: 'cohort', params: { limit: 0 } }
+    ]
+    for (const request of invalid) {
+      const res = await driver.api('export', 'prepareDownload', request)
+      expect(res.statusCode, JSON.stringify(request)).toBe(400)
+    }
   })
 
   test('a client abort mid-stream releases the pooled connection', async () => {
@@ -228,13 +259,19 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web export downloads (PostgreSQL)', () 
       return result.rows[0].busy
     }
 
+    const bulkPath = await prepare({
+      kind: 'variants',
+      caseId: bulkCaseId,
+      caseName: 'bulk',
+      filters: {}
+    })
     try {
       await new Promise<void>((resolveAbort, reject) => {
         const req = httpRequest(
           {
             host: '127.0.0.1',
             port,
-            path: `${VARIANT_PATH}?caseId=${bulkCaseId}&caseName=bulk`,
+            path: bulkPath,
             headers: { ...SAME_ORIGIN_HEADERS, cookie: driver.cookie }
           },
           (res) => {
@@ -259,7 +296,7 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web export downloads (PostgreSQL)', () 
       await vi.waitFor(async () => expect(await busyAppConnections()).toBe(0), { timeout: 10_000 })
 
       // The pool is healthy afterwards: a full export still completes.
-      const after = await get(`${VARIANT_PATH}?caseId=${caseId}&caseName=x`)
+      const after = await download({ kind: 'variants', caseId, caseName: 'x', filters: {} })
       expect(after.statusCode).toBe(200)
       expect(csvRows(after.body)).toHaveLength(31)
     } finally {

@@ -6,8 +6,13 @@
       :cohort-groups="cohortGroups"
       :running="isRunning"
       :has-results="results !== null"
+      :unavailable-reason="unavailableReason"
       @run="runAnalysis"
     />
+
+    <v-alert v-if="unavailableReason" type="info" variant="tonal" density="compact" class="mb-3">
+      {{ unavailableReason }}
+    </v-alert>
 
     <!-- Progress bar -->
     <div v-if="isRunning" class="mb-3">
@@ -97,6 +102,7 @@ import VolcanoPlot from './VolcanoPlot.vue'
 import ManhattanPlot from './ManhattanPlot.vue'
 import { useAssociation } from '../../composables/useAssociation'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
+import { formatError } from '../../utils/ipc-result'
 
 interface CaseInfo {
   id: number
@@ -147,7 +153,8 @@ const {
   runAssociation: apiRunAssociation,
   cancelAssociation: apiCancelAssociation,
   onAssociationProgress,
-  loadCasesWithMetadata
+  loadCasesWithMetadata,
+  unavailableReason
 } = useAssociation()
 
 const cases = ref<CaseInfo[]>([])
@@ -176,7 +183,7 @@ async function loadCases(): Promise<void> {
     cases.value = data.cases
     cohortGroups.value = data.cohortGroups
   } catch (err) {
-    error.value = `Failed to load cases: ${err instanceof Error ? err.message : String(err)}`
+    error.value = `Failed to load cases: ${formatError(err, 'unknown error')}`
   }
 }
 
@@ -196,7 +203,7 @@ async function runAnalysis(config: unknown): Promise<void> {
   try {
     results.value = unwrapIpcResult(await apiRunAssociation(config)) as AssociationResultsData
   } catch (err) {
-    error.value = `Analysis failed: ${err instanceof Error ? err.message : String(err)}`
+    error.value = `Analysis failed: ${formatError(err, 'unknown error')}`
   } finally {
     isRunning.value = false
     if (cleanupProgress !== null) {

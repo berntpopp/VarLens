@@ -1,6 +1,6 @@
 {
   "name": "varlens",
-  "version": "0.74.0",
+  "version": "0.75.0",
   "description": "Genetic variant analysis tool for external collaborators",
   "main": "./out/main/index.js",
   "homepage": "https://github.com/berntpopp/VarLens",
@@ -29,7 +29,7 @@
     "rebuild:node": "node scripts/native/rebuild-native.mjs node",
     "lint": "eslint . --cache --cache-strategy content --concurrency=off --fix",
     "lint:check": "eslint . --no-cache --concurrency=off",
-    "agent:check": "node scripts/check-agent-health.mjs",
+    "agent:check": "node scripts/check-agent-health.mjs && node scripts/parity/check-renderer-gates.mjs",
     "format": "node scripts/format.mjs --write \"*.{js,cjs,mjs,ts,tsx,vue,json,css,scss,html,md,yml,yaml}\" \"{src,tests,scripts,.github}/**/*.{js,cjs,mjs,ts,tsx,vue,json,css,scss,html,md,yml,yaml}\" \".vscode/*.json\"",
     "format:check": "node scripts/format.mjs --check \"*.{js,cjs,mjs,ts,tsx,vue,json,css,scss,html,md,yml,yaml}\" \"{src,tests,scripts,.github}/**/*.{js,cjs,mjs,ts,tsx,vue,json,css,scss,html,md,yml,yaml}\" \".vscode/*.json\"",
     "test": "vitest run --project main --project renderer",

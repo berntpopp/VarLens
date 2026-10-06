@@ -1,3 +1,4 @@
+import { createPinia } from 'pinia'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
@@ -6,6 +7,10 @@ import * as directives from 'vuetify/directives'
 import CohortFilterBar from '../../../src/renderer/src/components/cohort/CohortFilterBar.vue'
 import { createMockApi } from '../../utils/mock-api'
 import { FiltersKey, createFilters } from '../../../src/renderer/src/composables/useFilters'
+import { installCapabilities } from '../helpers/capabilities'
+
+// The capability store fails closed: install a desktop document.
+beforeEach(() => installCapabilities())
 
 const vuetify = createVuetify({
   components,
@@ -45,7 +50,7 @@ describe('CohortFilterBar', () => {
 
   // Provide FiltersKey for useFilters() inject in CohortFilterBar
   const globalConfig = {
-    plugins: [vuetify],
+    plugins: [vuetify, createPinia()],
     stubs: drawerStubs,
     provide: { [FiltersKey as symbol]: createFilters() }
   }

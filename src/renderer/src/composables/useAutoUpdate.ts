@@ -2,6 +2,7 @@ import { ref, computed, onUnmounted } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { UpdateStatus } from '../../../shared/types/api'
 import { useApiService } from './useApiService'
+import { useCapabilityStore } from '../stores/capabilityStore'
 
 export interface UseAutoUpdateReturn {
   updateStatus: Ref<UpdateStatus>
@@ -14,7 +15,9 @@ export interface UseAutoUpdateReturn {
 }
 
 export function useAutoUpdate(): UseAutoUpdateReturn {
-  const { api } = useApiService()
+  // The auto-updater is desktop-only (capability `autoUpdate`); the web
+  // deployment updates itself, so the status stays idle there.
+  const api = useCapabilityStore().canUse('autoUpdate') ? useApiService().api : undefined
   const updateStatus = ref<UpdateStatus>({ state: 'idle' })
   let cleanup: (() => void) | null = null
 

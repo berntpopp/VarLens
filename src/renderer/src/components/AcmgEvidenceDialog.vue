@@ -26,6 +26,9 @@
             <span v-if="variantAaChange">{{ variantAaChange }}</span>
           </span>
         </div>
+        <div v-if="!canWrite" class="text-body-small text-medium-emphasis mb-2" role="note">
+          {{ writeBlockedReason }}
+        </div>
         <AcmgClassificationPanel
           :evidence-json="evidenceJson"
           :variant-data="variantData"
@@ -42,6 +45,7 @@ import type { AcmgClassification } from '../../../shared/config/domain.config'
 import type { VariantAnnotationData } from '../utils/acmg/acmg-suggestions'
 import AcmgClassificationPanel from './AcmgClassificationPanel.vue'
 import { mdiClipboardCheckOutline, mdiClose } from '@mdi/js'
+import { usePermissions } from '../composables/usePermissions'
 
 defineProps<{
   /** Evidence JSON from database */
@@ -71,10 +75,13 @@ function open(): void {
   dialogOpen.value = true
 }
 
+const { canWrite, writeBlockedReason } = usePermissions()
+
 function handleChange(payload: {
   classification: AcmgClassification | null
   evidenceJson: string
 }): void {
+  if (!canWrite.value) return
   emit('change', payload)
 }
 

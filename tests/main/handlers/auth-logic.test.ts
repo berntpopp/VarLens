@@ -126,7 +126,7 @@ describe('auth-logic', () => {
         role: string
       }
       expect(result.username).toBe('newuser')
-      expect(result.role).toBe('user')
+      expect(result.role).toBe('viewer')
     })
   })
 

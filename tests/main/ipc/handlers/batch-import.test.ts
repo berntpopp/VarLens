@@ -75,8 +75,10 @@ function makeIpcMain(): { handle: ReturnType<typeof vi.fn> } {
 function makeDeps(ipcMain: { handle: ReturnType<typeof vi.fn> }): {
   ipcMain: typeof ipcMain
   getDb: ReturnType<typeof vi.fn>
+  getDbManager: () => { getCurrentSession: () => { capabilities: { backend: string } } }
 } {
-  return { ipcMain, getDb: vi.fn() }
+  const session = { capabilities: { backend: 'sqlite' } }
+  return { ipcMain, getDb: vi.fn(), getDbManager: () => ({ getCurrentSession: () => session }) }
 }
 
 function getHandler(

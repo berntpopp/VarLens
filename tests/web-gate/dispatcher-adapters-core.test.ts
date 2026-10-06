@@ -7,7 +7,7 @@ import {
   OPERATION_METRIC_KEYS,
   registerDispatcher
 } from '../../src/web/server/dispatcher'
-import { makeDeps } from './helpers/dispatcher-adapters'
+import { makeDeps, withSession } from './helpers/dispatcher-adapters'
 import { UniqueConstraintError } from '../../src/main/database/errors'
 import { AppMetrics, registerRequestMetrics } from '../../src/web/server/metrics'
 
@@ -228,6 +228,7 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     const app = fastify()
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
+    withSession(app)
     registerDispatcher(app, deps, {
       'variants:query': {
         async handle(_args, _request, reply) {
@@ -258,6 +259,7 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     const app = fastify()
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
+    withSession(app)
     registerDispatcher(app, deps, {
       'variants:query': {
         async handle() {
@@ -286,11 +288,12 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     await app.close()
   })
 
-  test('dispatcher preserves duplicate case errors as unique constraint errors', async () => {
+  test('dispatcher maps duplicate case errors to 409 CONFLICT', async () => {
     const { deps } = makeDeps()
     const app = fastify()
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
+    withSession(app)
     registerDispatcher(app, deps, {
       'import:start': {
         async handle() {
@@ -305,11 +308,11 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
       payload: { args: ['web-upload:1:sample.vcf', 'SAMPLE'] }
     })
 
-    expect(response.statusCode).toBe(500)
+    expect(response.statusCode).toBe(409)
     expect(response.json()).toEqual({
-      code: 'UNIQUE_CONSTRAINT',
+      code: 'CONFLICT',
       message: "case 'SAMPLE' already exists",
-      userMessage: "case 'SAMPLE' already exists"
+      userMessage: "Case 'SAMPLE' already exists. Choose a different name."
     })
     await app.close()
   })
@@ -332,6 +335,7 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
       }
       return undefined
     })
+    withSession(app)
     registerDispatcher(app, deps, {
       'cases:list': {
         async handle() {
@@ -437,6 +441,7 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
     registerRequestMetrics(app, metrics)
+    withSession(app)
     registerDispatcher(app, deps, {
       'import:start': {
         async handle() {
@@ -470,6 +475,7 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
     registerRequestMetrics(app, metrics)
+    withSession(app)
     registerDispatcher(app, deps, {
       'import:selectFile': {
         async handle() {
@@ -503,6 +509,7 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
     registerRequestMetrics(app, metrics)
+    withSession(app)
     registerDispatcher(app, deps, {
       'import:start': {
         async handle() {

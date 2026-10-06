@@ -135,7 +135,7 @@ describe('auth IPC handlers', () => {
 
       expect(result.id).toBeGreaterThan(0)
       expect(result.username).toBe('newuser')
-      expect(result.role).toBe('user')
+      expect(result.role).toBe('viewer')
       expect(result.must_change_password).toBe(1)
     })
   })

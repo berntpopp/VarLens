@@ -2,11 +2,10 @@ import type {
   AssociationConfig,
   AssociationResults,
   GeneAssociationResult,
-  GeneContingencyData,
-  GeneAssociationResultWithFDR
+  GeneContingencyData
 } from './types'
 import { AssociationDataBuilder } from '../database/AssociationDataBuilder'
-import { benjaminiHochberg } from './fdr'
+import { emptyAssociationResults, finalizeAssociationResults } from './finalize'
 import { WorkerPool } from './WorkerPool'
 import type Database from 'better-sqlite3-multiple-ciphers'
 import type { DbPool } from '../database/DbPool'
@@ -38,7 +37,6 @@ export class AssociationEngine {
 
   async run(config: AssociationConfig): Promise<AssociationResults> {
     const start = Date.now()
-    const warnings: string[] = []
     this.aborted = false
 
     // 1. Build per-gene contingency data (off main thread when pool available)
@@ -54,25 +52,11 @@ export class AssociationEngine {
     }
 
     if (genes.length === 0) {
-      return {
-        results: [],
-        primary_test: config.primary_test,
-        config,
-        warnings: ['No genes with qualifying variants'],
-        elapsed_ms: Date.now() - start
-      }
+      return emptyAssociationResults(config, 'No genes with qualifying variants', start)
     }
 
     // Check abort after the (potentially async) build step completes
-    if (this.aborted) {
-      return {
-        results: [],
-        primary_test: config.primary_test,
-        config,
-        warnings: ['Analysis cancelled'],
-        elapsed_ms: Date.now() - start
-      }
-    }
+    if (this.aborted) return emptyAssociationResults(config, 'Analysis cancelled', start)
 
     // 2. Run tests in parallel across worker threads
     this.pool = new WorkerPool(config.max_threads > 0 ? config.max_threads : undefined)
@@ -83,51 +67,10 @@ export class AssociationEngine {
       this.pool = null
     }
 
-    if (this.aborted) {
-      return {
-        results: [],
-        primary_test: config.primary_test,
-        config,
-        warnings: ['Analysis cancelled'],
-        elapsed_ms: Date.now() - start
-      }
-    }
+    if (this.aborted) return emptyAssociationResults(config, 'Analysis cancelled', start)
 
-    // Collect warnings from logistic burden results
-    for (const result of rawResults) {
-      if (result.logistic_burden.warning !== undefined && result.logistic_burden.warning !== '') {
-        warnings.push(`${result.gene_symbol}: ${result.logistic_burden.warning}`)
-      }
-    }
-
-    // 3. Apply FDR correction
-    const pValues = rawResults.map((r) => {
-      if (config.primary_test === 'fisher') return r.fisher.p_value
-      return r.logistic_burden.p_value
-    })
-    const qValues = benjaminiHochberg(pValues)
-
-    const results: GeneAssociationResultWithFDR[] = rawResults.map((r, i) => ({
-      ...r,
-      q_value: qValues[i]
-    }))
-
-    // Sort by primary test p-value
-    results.sort((a, b) => {
-      const pa = config.primary_test === 'fisher' ? a.fisher.p_value : a.logistic_burden.p_value
-      const pb = config.primary_test === 'fisher' ? b.fisher.p_value : b.logistic_burden.p_value
-      if (pa === null) return 1
-      if (pb === null) return -1
-      return pa - pb
-    })
-
-    return {
-      results,
-      primary_test: config.primary_test,
-      config,
-      warnings,
-      elapsed_ms: Date.now() - start
-    }
+    // 3. Warnings, FDR correction and sorting (shared with the web runner)
+    return finalizeAssociationResults(rawResults, config, start)
   }
 
   abort(): void {

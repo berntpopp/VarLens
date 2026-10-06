@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
-import { runMigrations } from '../../../src/main/database/migrations'
+import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 
 /**
  * v35 backfills case_data_info rows that the worker import path failed to
@@ -36,8 +36,8 @@ describe('Migration v35: case_data_info backfill', () => {
     runMigrations(db)
   }
 
-  it('lands at schema version 35', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+  it('lands at the latest schema version', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
   it('inserts a provenance row for every case without one', () => {

@@ -3,6 +3,9 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { resolve } from 'path'
 import { Project, SyntaxKind } from 'ts-morph'
 
+import { getChannelPolicy } from '../../src/shared/ipc/parity-manifest'
+import { DOMAIN_CAMEL_TO_KEBAB } from '../../src/web/server/task-types'
+
 /**
  * Handler-seam gate.
  *
@@ -35,14 +38,27 @@ const ROUTE_OVERRIDE_LOGIC_EXCEPTIONS: Record<string, string> = {
   'cases.ts':
     'cases:list storage read adapter plus the web case_delete job (lock-free Postgres phases)',
   'database.ts': 'web-only database identity/capability adapters',
+  'export-download.ts':
+    'web-only download transport: mints signed single-use grants (desktop uses a save dialog)',
   'gene-lists.ts': 'thin storage-executor adapters with web-only argument validation',
   'gene-ref.ts': 'read-only adapters over the bundled gene_reference.db (no external fetches)',
-  'hpo.ts': 'web mode intentionally disables external reference fetches',
+  'gnomad.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API client',
+  'hpo.ts': 'search over the bundled HPO term list via the shared hpo-term-search helper',
   'import.ts': 'web upload pipeline with file-picker stubs and shared import-logic delegation',
   'jobs.ts': 'jobs: contract served from the web process JobRunner (desktop: main JobRunner)',
-  'protein.ts': 'web mode intentionally disables external reference fetches',
+  'myvariant.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API client',
+  'protein.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API clients',
+  'reference-services.ts':
+    'web-only instance setting (external-lookup egress policy): admin gate, validation, audit',
   'region-files.ts': 'web-only server-path guards and storage-executor adapters',
-  'vep.ts': 'web mode intentionally disables external reference fetches'
+  'system.ts': 'capability document built by the shared computeCapabilityDocument',
+  'spliceai.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API client',
+  'vep.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API client'
 }
 
 /**
@@ -65,14 +81,20 @@ const EXPECTED_ROUTE_OVERRIDE_MODULES = new Set([
   'cohort.ts',
   'database.ts',
   'export.ts',
+  'export-download.ts',
   'gene-lists.ts',
   'gene-ref.ts',
+  'gnomad.ts',
   'hpo.ts',
   'import.ts',
   'jobs.ts',
+  'myvariant.ts',
   'panels.ts',
   'protein.ts',
+  'reference-services.ts',
   'region-files.ts',
+  'spliceai.ts',
+  'system.ts',
   'transcripts.ts',
   'variants.ts',
   'vep.ts'
@@ -125,12 +147,26 @@ function propCallsUnsupported(prop: import('ts-morph').Node): boolean {
  *   'unsupported'   — calls unsupportedWebCapability() (web-disabled method), no real work
  *   'inline'        — anything else (multi-call, type-mismatch, inline event logic, etc.)
  */
+// Loading the tsconfig.node.json program is the expensive part (seconds per
+// route file under load); build it once and memoize verdicts per file so the
+// two per-key gates below do not each re-parse every route module.
+let sharedProject: Project | undefined
+const verdictCache = new Map<string, Record<string, KeyVerdict>>()
+
 function analyzeOverrideKeys(routePath: string): Record<string, KeyVerdict> {
-  const project = new Project({
+  const cached = verdictCache.get(routePath)
+  if (cached !== undefined) return cached
+  const verdicts = analyzeOverrideKeysUncached(routePath)
+  verdictCache.set(routePath, verdicts)
+  return verdicts
+}
+
+function analyzeOverrideKeysUncached(routePath: string): Record<string, KeyVerdict> {
+  sharedProject ??= new Project({
     tsConfigFilePath: resolve(process.cwd(), 'tsconfig.node.json'),
     skipAddingFilesFromTsConfig: false
   })
-  const sf = project.addSourceFileAtPath(resolve(process.cwd(), routePath))
+  const sf = sharedProject.addSourceFileAtPath(resolve(process.cwd(), routePath))
   const logicNames = collectLogicImportNames(sf)
   const verdicts: Record<string, KeyVerdict> = {}
 
@@ -316,6 +352,29 @@ describe('handler-seam gate', () => {
       }
     }
 
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
+  test('a 501 override is only allowed for a pending (or client-adapter) manifest method', () => {
+    // The parity manifest, not this gate, decides which gaps are acceptable:
+    // unsupportedWebCapability() is a passing verdict only while the method is
+    // `pending` (counted against scripts/parity-baseline.json) or served by a
+    // web-client adapter so the RPC is never used by the SPA.
+    const kebabToCamel = Object.fromEntries(
+      Object.entries(DOMAIN_CAMEL_TO_KEBAB).map(([camel, kebab]) => [kebab, camel])
+    )
+    const offenders: string[] = []
+    for (const file of listRouteOverrideModules()) {
+      const verdicts = analyzeOverrideKeys(`${WEB_ROUTES_DIR}/${file}`)
+      for (const [key, verdict] of Object.entries(verdicts)) {
+        if (verdict !== 'unsupported') continue
+        const [domain, method] = key.split(':')
+        const web = getChannelPolicy(kebabToCamel[domain] ?? domain, method)?.policy.web
+        if (web !== 'pending' && web !== 'adapter') {
+          offenders.push(`${file} → ${key} answers 501 but the manifest says ${web ?? 'nothing'}`)
+        }
+      }
+    }
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 

@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar color="primary" density="compact" flat>
+  <v-app-bar color="primary" density="default" :height="appBarHeight" flat>
     <v-btn
       :icon="sidebarOpen ? mdiChevronDoubleLeft : mdiChevronDoubleRight"
       variant="text"
@@ -69,6 +69,17 @@
     </div>
 
     <ImportStatusChip @click="$emit('show-import-progress')" />
+    <v-chip
+      v-if="role === 'viewer'"
+      size="small"
+      variant="outlined"
+      class="ml-2"
+      :prepend-icon="mdiEyeOutline"
+      :title="writeBlockedReason ?? undefined"
+      data-testid="read-only-chip"
+    >
+      Read-only
+    </v-chip>
 
     <v-spacer />
 
@@ -112,20 +123,22 @@
           title="Database Overview"
           @click="$emit('show-database-overview')"
         />
+        <!-- Role-blocked actions are hidden (viewers see the Read-only chip). -->
         <v-list-item
+          v-if="canWrite"
           :prepend-icon="mdiDatabaseImport"
           title="Import Data"
           :subtitle="importShortcut"
           @click="$emit('import-click')"
         />
         <v-list-item
-          v-if="!isWebMode"
+          v-if="multiFileImportAvailable && canWrite"
           :prepend-icon="mdiFileDocumentMultiple"
           title="Import VCF Files"
           subtitle="Multi-file case (SNV + SV + CNV + STR)"
           @click="$emit('vcf-import-click')"
         />
-        <v-divider class="my-1" />
+        <v-divider class="my-1" role="none" />
         <v-list-subheader>Settings</v-list-subheader>
         <v-list-item
           :prepend-icon="mdiLink"
@@ -133,6 +146,7 @@
           @click="$emit('show-external-links')"
         />
         <v-list-item
+          v-if="canWrite"
           :prepend-icon="mdiTagMultiple"
           title="Custom Tags"
           @click="$emit('show-tag-management')"
@@ -143,11 +157,18 @@
           @click="$emit('show-panel-manager')"
         />
         <v-list-item
+          v-if="showExternalLookups"
+          :prepend-icon="mdiCloudLockOutline"
+          title="External lookups"
+          data-testid="settings-external-lookups"
+          @click="externalLookupsOpen = true"
+        />
+        <v-list-item
           :prepend-icon="mdiTune"
           title="Application Preferences"
           @click="$emit('show-preferences')"
         />
-        <v-divider class="my-1" />
+        <v-divider class="my-1" role="none" />
         <v-list-subheader>Reset Preferences</v-list-subheader>
         <v-list-item
           :prepend-icon="mdiTableColumn"
@@ -161,9 +182,16 @@
           subtitle="Restore default filter group arrangement"
           @click="$emit('reset-filters')"
         />
-        <v-divider class="my-1" />
-        <v-list-subheader class="danger-zone-subheader">Danger Zone</v-list-subheader>
-        <v-list-item :disabled="deleteAllReason !== null" @click="$emit('delete-all-cases')">
+        <template v-if="canAdmin">
+          <v-divider class="my-1" role="none" />
+          <v-list-subheader class="danger-zone-subheader">Danger Zone</v-list-subheader>
+        </template>
+        <v-list-item
+          v-if="canAdmin"
+          :disabled="deleteAllReason !== null"
+          :aria-disabled="deleteAllReason !== null ? 'true' : undefined"
+          @click="$emit('delete-all-cases')"
+        >
           <template #prepend>
             <v-icon color="error" :icon="mdiDeleteSweep" />
           </template>
@@ -176,10 +204,12 @@
     </v-menu>
     <AccountMenu />
   </v-app-bar>
+  <ExternalLookupsDialog v-if="externalLookupsOpen" v-model="externalLookupsOpen" />
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch, watchEffect } from 'vue'
+import { useAuthStore } from '../stores/authStore'
 import DatabasePicker from './DatabasePicker.vue'
 import CaseStatusIcons from './CaseStatusIcons.vue'
 import ImportStatusChip from './ImportStatusChip.vue'
@@ -188,8 +218,11 @@ import IconButton from './common/IconButton.vue'
 import { useAppState } from '../composables/useAppState'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
+import { useCapabilityStore } from '../stores/capabilityStore'
+import { remToPx, useRootFontSize } from '../composables/useRootFontSize'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { getCurrentUnsupportedReasonSync } from '../utils/backend-capabilities'
+import { usePermissions } from '../composables/usePermissions'
 import type { AffectedStatus, CaseSex } from '../../../shared/types/api'
 import {
   mdiAccount,
@@ -200,6 +233,7 @@ import {
   mdiCog,
   mdiDatabaseImport,
   mdiDeleteSweep,
+  mdiEyeOutline,
   mdiFileDocumentMultiple,
   mdiFilterOff,
   mdiInformationOutline,
@@ -207,7 +241,8 @@ import {
   mdiTableColumn,
   mdiPlaylistEdit,
   mdiTagMultiple,
-  mdiTune
+  mdiTune,
+  mdiCloudLockOutline
 } from '@mdi/js'
 
 const {
@@ -223,11 +258,24 @@ const {
 } = useAppState()
 
 const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
+
+// 3rem tall (48 px at 100 % text) so the Case/Cohort toggle never clips at
+// 200 % text. Vuetify's layout needs a px number; the CSS var lets v-main and
+// the full-height views offset by the same height.
+const APP_BAR_HEIGHT_REM = 3
+const rootFontPx = useRootFontSize()
+const appBarHeight = computed(() => remToPx(APP_BAR_HEIGHT_REM, rootFontPx.value))
+watchEffect(() => {
+  document.documentElement.style.setProperty('--app-bar-height', `${appBarHeight.value}px`)
+})
 const { getMetadata, loadMetadata } = useCaseMetadata()
-const isWebMode = isWebRuntime()
+const multiFileImportAvailable = useCapabilityStore().canUse('multiFileImport')
 const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+O' : 'Alt+Shift+O'
-// Capability-gated: disabled with the reason instead of failing after a click.
-const deleteAllReason = computed(() => getCurrentUnsupportedReasonSync('cases.deleteAll'))
+const { role, canWrite, canAdmin, writeBlockedReason, adminBlockedReason } = usePermissions()
+// Role- and capability-gated: disabled with the reason instead of failing after a click.
+const deleteAllReason = computed(
+  () => adminBlockedReason.value ?? getCurrentUnsupportedReasonSync('cases.deleteAll')
+)
 
 // Preload metadata when a case is selected so status/sex icons display immediately
 watch(
@@ -285,6 +333,15 @@ const handleSidebarToggle = (): void => {
 const handleHomeClick = (): void => {
   returnToCaseHome()
 }
+
+// Admin, web only: the egress policy for external lookups (protein view,
+// VEP, gnomAD, ...) is a server instance setting.
+const ExternalLookupsDialog = defineAsyncComponent(
+  () => import('./account/ExternalLookupsDialog.vue')
+)
+const toolbarAuth = useAuthStore()
+const externalLookupsOpen = ref(false)
+const showExternalLookups = computed(() => isWebRuntime() && toolbarAuth.isAdmin)
 </script>
 
 <style scoped>
@@ -326,7 +383,7 @@ const handleHomeClick = (): void => {
 }
 
 .mode-toggle {
-  height: 32px;
+  height: 2rem;
 }
 
 .mode-toggle :deep(.v-btn--active),

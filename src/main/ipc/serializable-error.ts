@@ -5,14 +5,29 @@ import {
   UniqueConstraintError,
   WrongPasswordError
 } from '../database/errors'
-import { InvalidParametersError } from './errors'
+import { AppError, InvalidParametersError } from './errors'
+import { uniqueViolationFromDriverError } from './unique-violation'
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1)
+}
+
+function conflict(message: string, userMessage: string): SerializableError {
+  return { code: ErrorCode.CONFLICT, message, userMessage }
+}
 
 /**
  * Convert any application error to the renderer-facing SerializableError shape.
  * Shared by Electron IPC and the web dispatcher so both runtimes classify
- * domain errors identically.
+ * domain errors identically: a Postgres `23505`, a SQLite
+ * `SQLITE_CONSTRAINT_UNIQUE` and a repository `UniqueConstraintError` all
+ * become `CONFLICT` (HTTP 409 in web).
  */
 export function toSerializableError(error: unknown): SerializableError {
+  if (error instanceof AppError) {
+    return { code: error.code, message: error.message, userMessage: error.userMessage }
+  }
+
   if (error instanceof WrongPasswordError) {
     return {
       code: ErrorCode.WRONG_PASSWORD,
@@ -31,11 +46,16 @@ export function toSerializableError(error: unknown): SerializableError {
   }
 
   if (error instanceof UniqueConstraintError) {
-    return {
-      code: ErrorCode.UNIQUE_CONSTRAINT,
-      message: error.message,
-      userMessage: error.message
-    }
+    // Built from the message ("name 'X' already exists") rather than fields,
+    // so the class rehydrated by worker-error-codec reads the same.
+    return conflict(error.message, `${capitalize(error.message)}. Choose a different name.`)
+  }
+
+  const driverConflict =
+    uniqueViolationFromDriverError(error) ??
+    (error instanceof Error ? uniqueViolationFromDriverError(error.cause) : undefined)
+  if (driverConflict !== undefined) {
+    return conflict(driverConflict.message, driverConflict.userMessage)
   }
 
   if (error instanceof DatabaseError) {

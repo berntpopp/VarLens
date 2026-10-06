@@ -79,6 +79,27 @@ describe('useCohortData', () => {
     )
   })
 
+  it('passes the previous page cursor only for the directly following page', async () => {
+    window.api.cohort.getVariants = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], total_count: 100, next_cursor: 'c1' })
+      .mockResolvedValue({ data: [], total_count: 100 })
+    const [result, appInstance] = withSetup(() => useCohortData())
+    app = appInstance
+
+    await result.fetchVariants({ limit: 10, sort_order: 'desc' })
+    await result.fetchVariants({ limit: 10, offset: 10, sort_order: 'desc' })
+    await result.fetchVariants({ limit: 10, offset: 20, sort_order: 'desc' })
+    await result.fetchVariants({ limit: 10, offset: 10, sort_order: 'desc', gene_symbol: 'X' })
+
+    const calls = vi.mocked(window.api.cohort.getVariants).mock.calls.map((c) => c[0])
+    expect(calls[0]).not.toHaveProperty('cursor')
+    expect(calls[1]).toMatchObject({ offset: 10, cursor: 'c1' })
+    expect(calls[2]).not.toHaveProperty('cursor')
+    // Different filter scope → no cursor reuse.
+    expect(calls[3]).not.toHaveProperty('cursor')
+  })
+
   it('sets isLoading during fetch', async () => {
     // Use a promise we can control to verify loading state
     let resolvePromise: (value: unknown) => void

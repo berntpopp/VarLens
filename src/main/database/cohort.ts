@@ -22,6 +22,7 @@ import { emitCohortSearch } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
+import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
 
 /**
  * Sortable columns for cohort queries
@@ -227,11 +228,15 @@ export class CohortService {
     // also satisfies the cohort-parity requirement for S7.
     // Natural chromosome order in the tiebreaker (and for sort_by=chr) —
     // shared with both PostgreSQL cohort paths; see chromosome-order.ts.
-    const orderByClause = cohortOrderByClause(
-      validatedSortKey,
-      sortBy,
-      sortOrder === 'asc' ? 'asc' : 'desc'
-    )
+    const direction = sortOrder === 'asc' ? 'asc' : 'desc'
+    // Default carrier-count sort: keyset order (+ cursor seek), else OFFSET.
+    const keyset = planSqliteCohortKeyset(params, validatedSortKey, direction)
+    const orderByClause =
+      keyset?.orderBy ?? cohortOrderByClause(validatedSortKey, sortBy, direction)
+    const seekCondition =
+      keyset !== null && keyset.seeking
+        ? `${whereClause === '' ? 'WHERE' : 'AND'} ${keyset.seekCondition}`
+        : ''
 
     // Data query — no window function, LIMIT benefits from early termination
     const sql = `
@@ -255,19 +260,30 @@ export class CohortService {
         cvs.gnomad_af,
         cvs.cadd AS cadd_phred,
         cvs.transcript,
-        cvs.omim_mim_number AS omim_id
+        cvs.omim_mim_number AS omim_id${
+          keyset !== null
+            ? `,
+        ${SQLITE_KEYSET_EXTRA_COLUMNS}`
+            : ''
+        }
       FROM cohort_variant_summary cvs
       ${whereClause}
+      ${seekCondition}
       ${orderByClause}
       LIMIT ? OFFSET ?
     `
 
     const stmt = this.getStatement(sql)
-    const results = stmt.all(...paramsArray, limit, offset) as CohortVariant[]
+    const seeking = keyset?.seeking === true
+    const bound: unknown[] = [...paramsArray, limit, seeking ? 0 : offset]
+    if (seeking && keyset !== null) bound.push(keyset.seekBindings)
+    const results = stmt.all(...bound) as CohortVariant[]
+    const paging = keyset?.finalize(results as unknown as Array<Record<string, unknown>>, limit)
 
     return {
       data: results,
-      total_count: totalCount
+      total_count: totalCount,
+      ...paging
     }
   }
 

@@ -17,6 +17,8 @@
  */
 import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { jobRunner } from '../../services/jobs/runner'
+import { withImportJobProgress } from '../import-job-progress'
+import { workerErrorToError } from '../import-worker-errors'
 import { BedFilter } from '../../import/vcf/bed-filter'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { ImportFilters } from '../../import/vcf/import-filters'
@@ -117,7 +119,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
         // Cancellation posts { type: 'cancel' } to the worker via the client's
         // cancel() method (ImportWorkerClient.cancel), NOT terminate().
         ctx.registerCancel(() => this.workerClient?.cancel())
-        return await this._performImport(p)
+        return await this._performImport(withImportJobProgress(ctx, p))
       }
     )
     return await handle.result
@@ -204,7 +206,13 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                 elapsed: capturedElapsed
               })
             } else {
-              reject(new Error(detail?.error ?? 'Import failed'))
+              reject(
+                workerErrorToError({
+                  message: detail?.error ?? 'Import failed',
+                  code: detail?.errorCode,
+                  userMessage: detail?.userMessage
+                })
+              )
             }
           },
           onError: (msg) => {
@@ -241,7 +249,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       params,
       async (ctx, p) => {
         ctx.registerCancel(() => this.workerClient?.cancel())
-        return await this._performMultiImport(p)
+        return await this._performMultiImport(withImportJobProgress(ctx, p))
       }
     )
     return await handle.result
