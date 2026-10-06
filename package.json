@@ -172,7 +172,13 @@
         "portable",
         "zip"
       ],
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "signtoolOptions": {
+        "sign": "scripts/release/windows-sign-hook.mjs",
+        "signingHashAlgorithms": [
+          "sha256"
+        ]
+      }
     },
     "portable": {
       "artifactName": "${productName}-Portable-${version}.exe"

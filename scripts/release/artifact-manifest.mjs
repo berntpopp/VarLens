@@ -34,6 +34,10 @@ export function expectedArtifacts(platform, version) {
     case 'win':
       // win.artifactName is "${productName}-Setup-${version}.${ext}", which
       // the zip target also picks up; only the `portable` target overrides it.
+      // This is what build.yml must hand over, not what a release publishes:
+      // the zip carries the unpacked app directory to the signing re-wrap and
+      // is not a release asset (windows-signing/signing-plan.mjs,
+      // publishedWindowsArtifacts).
       return [
         `${PRODUCT}-Setup-${version}.exe`,
         `${PRODUCT}-Portable-${version}.exe`,
