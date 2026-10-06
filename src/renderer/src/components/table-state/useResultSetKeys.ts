@@ -29,8 +29,10 @@ export interface ResultSetKeys<T> {
 
 export function useResultSetKeys<T>(
   rows: () => readonly T[],
-  idOf: (row: T) => string | number
+  id: keyof T | ((row: T) => string | number)
 ): ResultSetKeys<T> {
+  const idOf = (row: T): string | number =>
+    typeof id === 'function' ? id(row) : (row[id] as unknown as string | number)
   const generation = ref(0)
   watch(
     () => rows().map(idOf).join('\u0000'),

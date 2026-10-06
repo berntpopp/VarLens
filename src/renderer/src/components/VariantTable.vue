@@ -482,11 +482,7 @@ const linkConfig = computed<
 // Precomputed row view models: annotation + link state per variant key
 const { rowViewModels } = useVariantRowViewModel(variants, annotationCache, linkConfig)
 const { renderRows } = useVariantRenderRows(variants, rowViewModels)
-// Fresh <tr>s per result set: moved rows are layout shifts (see useResultSetKeys)
-const { rowKey } = useResultSetKeys(
-  () => renderRows.value,
-  (row) => row.id
-)
+const { rowKey } = useResultSetKeys(() => renderRows.value, 'id') // fresh <tr>s per result set
 
 const hasAnnotationBackedFilters = computed(
   () =>

@@ -282,10 +282,7 @@ const { getRowProps } = useTableRowProps<CohortVariant>({
 })
 const { expandedRows, getCarriers, hasCarriers, clearCache: clearCarrierCache } = useCarriers()
 // Fresh <tr>s per result set (moved rows are layout shifts); expanded stays by variant_key
-const { rowKey, keyedModel } = useResultSetKeys(
-  () => props.variants,
-  (v) => v.variant_key
-)
+const { rowKey, keyedModel } = useResultSetKeys(() => props.variants, 'variant_key')
 const expandedKeys = keyedModel(expandedRows)
 
 // Keyboard navigation
