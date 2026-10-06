@@ -6,6 +6,7 @@ import { useAnnotations } from '../../composables/useAnnotations'
 import { logService } from '../../services/LogService'
 import { useColumnFilters } from '../../composables/useColumnFilters'
 import { useDebounce } from '../../composables/useDebounce'
+import { useDeferredReload } from '../../composables/useDeferredReload'
 import { useApiService } from '../../composables/useApiService'
 import { stripVueProxies } from '../../utils/stripVueProxies'
 import { traceStart, traceEnd } from '../../services/PerfTrace'
@@ -135,15 +136,19 @@ export function useVariantData(options: UseVariantDataOptions) {
     return { class: className }
   }
 
-  // Update counts when variants load
-  watch(totalCount, (filtered) => {
-    onCountsUpdate({ filtered, total: unfilteredCount.value })
+  // Update counts when variants load. Watch both totals: a case switch can land
+  // on the same filtered total while the unfiltered total changes.
+  watch([totalCount, unfilteredCount], ([filtered, total]) => {
+    onCountsUpdate({ filtered, total })
   })
+
+  // Work requested while hidden (KeepAlive / Shortlist tab) is replayed on show (P0-3).
+  const { requestReload, markPending, isPending } = useDeferredReload(active, invalidateAndReload)
 
   // Reset state on case change; unfiltered count is fetched with the first page load
   watch(
     caseId,
-    (newCaseId) => {
+    (newCaseId, oldCaseId) => {
       selectedVariantId.value = null
       clearAllColumnFilters()
 
@@ -158,7 +163,9 @@ export function useVariantData(options: UseVariantDataOptions) {
         resetState()
         clearAnnotationCache()
         needsUnfilteredCount = true
-        // The first loadPage triggered by resetState will include the unfiltered count
+        // The initial mount is loaded by Vuetify's first update:options; any
+        // later case switch must issue its own query (now or when visible).
+        if (oldCaseId !== undefined) void requestReload()
       }
     },
     { immediate: true }
@@ -166,7 +173,10 @@ export function useVariantData(options: UseVariantDataOptions) {
 
   // Reload when filters change (serialized key avoids deep reactive traversal)
   watch(filterKey, () => {
-    if (!active.value) return
+    if (!active.value) {
+      markPending()
+      return
+    }
     if (import.meta.env.DEV) {
       if (activeFlowTraceId !== null) {
         traceEnd(activeFlowTraceId, activeFlowBudget)
@@ -180,7 +190,10 @@ export function useVariantData(options: UseVariantDataOptions) {
   // Debounced reload when per-column filters change
   const { debouncedFn: debouncedColumnFilterReload } = useDebounce(invalidateAndReload, 300)
   watch(columnFilterState.columnFilters, () => {
-    if (!active.value) return
+    if (!active.value) {
+      markPending()
+      return
+    }
     debouncedColumnFilterReload()
   })
 
@@ -206,7 +219,8 @@ export function useVariantData(options: UseVariantDataOptions) {
   watch(
     active,
     async (isActive) => {
-      if (!isActive) return
+      // A pending reload replaces the rows; the variants watcher hydrates those.
+      if (!isActive || isPending()) return
       if (variants.value.length === 0 || caseId.value === undefined || caseId.value === 0) return
       invalidateAnnotationGeneration()
       await loadAnnotationsBatch(caseId.value, variants.value)

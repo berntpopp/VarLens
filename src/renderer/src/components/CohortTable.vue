@@ -150,6 +150,7 @@ import { logService } from '../services/LogService'
 import { traceStart, traceEnd } from '../services/PerfTrace'
 import type { PerfBudgetKey } from '../../../shared/config/perf-budgets'
 import { useDebounce } from '../composables/useDebounce'
+import { useDeferredReload } from '../composables/useDeferredReload'
 // Sub-components
 import CohortFilterBar from './cohort/CohortFilterBar.vue'
 import CohortDataTable from './cohort/CohortDataTable.vue'
@@ -261,12 +262,8 @@ const cohortFilterBarRef = ref<InstanceType<typeof CohortFilterBar> | null>(null
  * cohort-metadata IPC round-trip finished. This is the cohort equivalent
  * of CaseView's `typeCountsLoaded`.
  *
- * Trade-off (Pass-9 #4): this reuses the established CaseView
- * "populated-array = loaded" convention. If `fetchColumnMeta` fails or the
- * backend is capability-blocked, `columnMeta` stays `[]` and the filter bar
- * never mounts even though the unguarded CohortDataTable still loads. We
- * deliberately keep parity with CaseView rather than introduce a divergent
- * "fetch settled" sentinel here; tightening this is a cross-view change.
+ * Trade-off (Pass-9 #4): same "populated-array = loaded" convention as
+ * CaseView — if the fetch fails, the filter bar never mounts (kept for parity).
  */
 const columnMetaLoaded = computed(() => columnMeta.value.length > 0)
 
@@ -386,6 +383,9 @@ const {
   },
   prefetchEnabled: isActive
 })
+
+// Reloads requested while KeepAlive-deactivated are replayed on activation (P0-3 parity).
+const { requestReload } = useDeferredReload(isActive, invalidateAndReload)
 
 // Local state
 const selectedVariantKey = ref<string | null>(null)
@@ -556,7 +556,7 @@ const handleRetry = async () => {
 
 const handleAnnotationChanged = (): void => {
   if (!isWebRuntime() || !hasAnnotationBackedFilters.value) return
-  void invalidateAndReload()
+  void requestReload()
 }
 
 // Delegate annotation events to AnnotationDialogs
@@ -692,7 +692,7 @@ watch(
       // Summary rebuilt — stop timer, cache duration, refresh current page
       // and metadata.
       stopRebuildTimer(true)
-      void invalidateAndReload()
+      void requestReload()
       void fetchSupportedCohortSummary()
       void fetchSupportedCohortColumnMeta()
     }

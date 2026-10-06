@@ -12,6 +12,7 @@
       v-model:sort-by="sortBy"
       :headers="visibleHeaders"
       :items="renderRows"
+      item-value="id"
       :items-length="totalCount"
       :loading="loading"
       :items-per-page-options="itemsPerPageOptions"

@@ -461,12 +461,12 @@ const searchGeneSymbols = async (query: string) => {
   }
 }
 
-// Debounced filter change emission
-const { debouncedFn: emitFilterChange } = useDebounce(() => emit('filter-change'), 300)
+// One shared debouncer: search + drawer edits in the same window coalesce.
+const { debouncedFn: emitFilterChange } = useDebounce(() => emit('filter-change'), 250)
 
-// Watch filter state changes
+// Watch filter state changes (searchTerm lives outside `filters` — P0-4)
 const cohortFilterKey = computed(() => JSON.stringify(filters.value))
-watch(cohortFilterKey, () => emitFilterChange())
+watch([cohortFilterKey, searchTerm], () => emitFilterChange())
 watch(selectedImpactPresets, () => emitFilterChange())
 watch([selectedAfPreset, selectedCaddPreset], () => emitFilterChange())
 

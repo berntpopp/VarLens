@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
@@ -49,6 +49,30 @@ describe('CohortFilterBar', () => {
     stubs: drawerStubs,
     provide: { [FiltersKey as symbol]: createFilters() }
   }
+
+  describe('Search reactivity (P0-4)', () => {
+    it('emits filter-change ~250 ms after the search term changes', async () => {
+      vi.useFakeTimers()
+      try {
+        const filters = createFilters()
+        const wrapper = mount(CohortFilterBar, {
+          props: defaultProps,
+          global: { ...globalConfig, provide: { [FiltersKey as symbol]: filters } }
+        })
+        await vi.advanceTimersByTimeAsync(1000)
+        const before = wrapper.emitted('filter-change')?.length ?? 0
+
+        filters.searchTerm.value = 'BRCA1'
+        await vi.advanceTimersByTimeAsync(100)
+        expect(wrapper.emitted('filter-change')?.length ?? 0).toBe(before)
+
+        await vi.advanceTimersByTimeAsync(200)
+        expect(wrapper.emitted('filter-change')?.length ?? 0).toBe(before + 1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
 
   describe('Filter Inputs Rendering', () => {
     it('renders search input field', () => {

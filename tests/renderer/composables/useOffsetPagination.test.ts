@@ -305,3 +305,160 @@ describe('predictive pre-fetch', () => {
     expect(fetchPage).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('request ordering and resilience', () => {
+  let app: { unmount: () => void }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    // Isolate the request-ordering contract from background prefetch calls.
+    useSettingsStore().prefetchEnabled = false
+  })
+
+  afterEach(() => {
+    if (app) app.unmount()
+  })
+
+  function deferred<T>() {
+    let resolve!: (v: T) => void
+    let reject!: (e: unknown) => void
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res
+      reject = rej
+    })
+    return { promise, resolve, reject }
+  }
+
+  const row = (id: number): MockItem => ({ id, name: `r${id}`, nested: { value: id } })
+
+  it('latest request wins: a slow earlier response never overwrites a newer one', async () => {
+    const slow = deferred<OffsetPageResult<MockItem>>()
+    const fast = deferred<OffsetPageResult<MockItem>>()
+    const fetchPage = vi.fn().mockReturnValueOnce(slow.promise).mockReturnValueOnce(fast.promise)
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    result.page.value = 5
+    const first = result.loadPage()
+    result.page.value = 1
+    const second = result.loadPage()
+
+    fast.resolve({ data: [row(1)], total_count: 100 })
+    await second
+    expect(result.items.value.map((r) => r.id)).toEqual([1])
+    expect(result.loading.value).toBe(false)
+
+    slow.resolve({ data: [row(999)], total_count: 7 })
+    await first
+    await flushPromises()
+
+    expect(result.items.value.map((r) => r.id)).toEqual([1])
+    expect(result.totalCount.value).toBe(100)
+  })
+
+  it('keeps loading=true while a newer request is still pending', async () => {
+    const first = deferred<OffsetPageResult<MockItem>>()
+    const second = deferred<OffsetPageResult<MockItem>>()
+    const fetchPage = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    const p1 = result.loadPage()
+    result.page.value = 2
+    const p2 = result.loadPage()
+
+    first.resolve({ data: [row(1)], total_count: 10 })
+    await p1
+    expect(result.loading.value).toBe(true)
+    expect(result.items.value).toEqual([])
+
+    second.resolve({ data: [row(2)], total_count: 10 })
+    await p2
+    expect(result.loading.value).toBe(false)
+    expect(result.items.value.map((r) => r.id)).toEqual([2])
+  })
+
+  it('keeps previous rows and total on error', async () => {
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [row(1), row(2)], total_count: 2 })
+      .mockRejectedValueOnce(new Error('boom'))
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    await result.loadPage()
+    await result.invalidateAndReload()
+
+    expect(result.error.value?.message).toBe('boom')
+    expect(result.items.value.map((r) => r.id)).toEqual([1, 2])
+    expect(result.totalCount.value).toBe(2)
+  })
+
+  it('never exposes NaN/undefined totals: missing count keeps the last known total', async () => {
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [row(1)], total_count: 40 })
+      .mockResolvedValueOnce({ data: [row(2)], total_count: undefined })
+      .mockResolvedValueOnce({ data: [row(3)], total_count: Number.NaN })
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    await result.loadPage()
+    await result.invalidateAndReload()
+    expect(result.totalCount.value).toBe(40)
+    await result.invalidateAndReload()
+    expect(result.totalCount.value).toBe(40)
+  })
+
+  it('keeps the cached total when the count cache is reset mid-flight', async () => {
+    const pending = deferred<OffsetPageResult<MockItem>>()
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [row(1)], total_count: 30 })
+      .mockReturnValueOnce(pending.promise)
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    await result.loadPage()
+    result.page.value = 2
+    const p = result.loadPage() // skipCount=true (count cached)
+    result.resetCount() // filter change races in
+    pending.resolve({ data: [row(2)], total_count: 0 })
+    await p
+
+    expect(Number.isFinite(result.totalCount.value)).toBe(true)
+    expect(result.totalCount.value).toBe(30)
+  })
+
+  it('keeps the last known total visible while a fresh count is pending', async () => {
+    const pending = deferred<OffsetPageResult<MockItem>>()
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [row(1)], total_count: 30 })
+      .mockReturnValueOnce(pending.promise)
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    await result.loadPage()
+    const p = result.invalidateAndReload()
+    expect(result.totalCount.value).toBe(30)
+    pending.resolve({ data: [row(2)], total_count: 12 })
+    await p
+    expect(result.totalCount.value).toBe(12)
+  })
+
+  it('coalesces identical in-flight requests into one fetch', async () => {
+    const pending = deferred<OffsetPageResult<MockItem>>()
+    const fetchPage = vi.fn().mockReturnValue(pending.promise)
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    const a = result.loadPage()
+    const b = result.loadPage()
+    pending.resolve({ data: [row(1)], total_count: 1 })
+    await Promise.all([a, b])
+
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+    expect(result.items.value.map((r) => r.id)).toEqual([1])
+  })
+})

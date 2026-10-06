@@ -16,20 +16,20 @@ const EMPTY_RENDER: RowViewModel = Object.freeze({
   hasGlobalComment: false
 })
 
-function variantKey(variant: Pick<Variant, 'chr' | 'pos' | 'ref' | 'alt'>): string {
-  return `${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}`
-}
-
-type VariantRenderRowCache = Map<string, VariantRenderRow>
+/**
+ * Rows are identified by `variant.id`. A chr:pos:ref:alt key is NOT unique per
+ * row (one locus may carry several transcript/gene rows) and would merge them.
+ */
+type VariantRenderRowCache = Map<number, VariantRenderRow>
 
 export function buildVariantRenderRows(
   variants: Variant[],
-  rowViewModels: Map<string, RowViewModel>,
+  rowViewModels: Map<number, RowViewModel>,
   cache: VariantRenderRowCache = new Map()
 ): VariantRenderRow[] {
   const nextCache: VariantRenderRowCache = new Map()
   const rows = variants.map((variant) => {
-    const key = variantKey(variant)
+    const key = variant.id
     const render = rowViewModels.get(key) ?? EMPTY_RENDER
     const cached = cache.get(key)
 
@@ -58,7 +58,7 @@ export function buildVariantRenderRows(
 
 export function useVariantRenderRows(
   variants: Ref<Variant[]>,
-  rowViewModels: ComputedRef<Map<string, RowViewModel>>
+  rowViewModels: ComputedRef<Map<number, RowViewModel>>
 ) {
   const rowCache = shallowRef<VariantRenderRowCache>(new Map())
   const renderRows = computed(() =>

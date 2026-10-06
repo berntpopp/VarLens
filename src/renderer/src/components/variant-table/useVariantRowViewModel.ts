@@ -1,9 +1,14 @@
 /**
  * Composable for precomputing variant row display state
  *
- * Builds a Map<variantKey, RowViewModel> from the current page's variants,
+ * Builds a Map<variant.id, RowViewModel> from the current page's variants,
  * annotation cache, and link configuration. Template slots read from this map
- * by variant key instead of calling per-cell functions on every render.
+ * by row id instead of calling per-cell functions on every render.
+ *
+ * Rows are keyed by `variant.id`, NOT by locus: one locus can appear on
+ * several rows (different transcripts/genes/consequences), and a locus key
+ * would collapse them onto a single cached row. Annotations, however, are
+ * locus-scoped, so the annotation cache is still looked up by chr:pos:ref:alt.
  *
  * This turns O(rows × columns × function calls) into O(rows) for annotation
  * and link lookups.
@@ -57,13 +62,13 @@ export function buildRowViewModels(
   variants: Variant[],
   annotationCache: ReadableMap<string, AnnotationEntry>,
   linkConfig: Record<string, LinkConfig>,
-  previous: Map<string, RowViewModel> = new Map()
-): Map<string, RowViewModel> {
-  const map = new Map<string, RowViewModel>()
+  previous: Map<number, RowViewModel> = new Map()
+): Map<number, RowViewModel> {
+  const map = new Map<number, RowViewModel>()
 
   for (const v of variants) {
-    const key = variantKey(v.chr, v.pos, v.ref, v.alt)
-    const ann = annotationCache.get(key)
+    const key = v.id
+    const ann = annotationCache.get(variantKey(v.chr, v.pos, v.ref, v.alt))
     const perCase = ann?.perCase ?? null
     const global = ann?.global ?? null
 
@@ -128,18 +133,13 @@ export function useVariantRowViewModel(
   annotationCache: ShallowRef<ReadableMap<string, AnnotationEntry>>,
   linkConfig: Ref<Record<string, LinkConfig>>
 ) {
-  const rowViewModels = computed<Map<string, RowViewModel>>(
-    (previous?: Map<string, RowViewModel>) =>
+  const rowViewModels = computed<Map<number, RowViewModel>>(
+    (previous?: Map<number, RowViewModel>) =>
       buildRowViewModels(variants.value, annotationCache.value, linkConfig.value, previous)
   )
 
-  function getViewModel(
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string
-  ): RowViewModel | undefined {
-    return rowViewModels.value.get(variantKey(chr, pos, ref, alt))
+  function getViewModel(variantId: number): RowViewModel | undefined {
+    return rowViewModels.value.get(variantId)
   }
 
   return { rowViewModels, getViewModel }

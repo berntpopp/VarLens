@@ -138,28 +138,47 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     })
   }
 
-  /**
-   * Load the current page. Use as @update:options handler.
-   * Reads page/sortBy/itemsPerPage from reactive refs (set by Vuetify v-model).
-   */
-  const loadPage = async (): Promise<void> => {
-    loading.value = true
-    error.value = null
-    try {
-      const offset = (page.value - 1) * itemsPerPage.value
-      const key = buildPrefetchKey(offset)
+  // ─── Request ordering ─────────────────────────────────────────────────────
+  // Several sources can call loadPage concurrently (Vuetify update:options,
+  // filter watchers, case switches). Every call gets a monotonically
+  // increasing id; only the most recent call may commit results or clear the
+  // loading flag (latest-request-wins, same pattern as useShortlistQuery).
+  // The transport has no abort support, so stale responses are dropped.
+  let latestRequestId = 0
+  // An identical request already in flight is joined instead of re-issued.
+  let inFlight: { signature: string; promise: Promise<void> } | null = null
 
+  /** Accept only finite, non-negative totals from the backend. */
+  const isValidTotal = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0
+
+  const commitTotal = (fromResult: unknown, skipCount: boolean): void => {
+    if (!skipCount && isValidTotal(fromResult)) {
+      cachedTotalCount = fromResult
+      totalCount.value = fromResult
+      return
+    }
+    // Count skipped (or the backend returned garbage): keep the cached value,
+    // falling back to the last displayed total — never null/undefined/NaN.
+    if (cachedTotalCount !== null) totalCount.value = cachedTotalCount
+  }
+
+  async function runRequest(requestId: number, offset: number): Promise<void> {
+    const key = buildPrefetchKey(offset)
+    const isCurrent = (): boolean => requestId === latestRequestId
+
+    try {
       // Check pre-fetch cache first
       const cached = prefetchCache.get(key)
       if (cached) {
         prefetchCache.delete(key)
         try {
           const result = await cached
-
+          if (!isCurrent()) return
           // A pre-fetched result always used skipCount=true, so keep cached count
           items.value = result.data
-          totalCount.value = cachedTotalCount ?? result.total_count
-
+          commitTotal(result.total_count, cachedTotalCount !== null)
+          error.value = null
           prefetchNextPage()
           return
         } catch (e) {
@@ -168,6 +187,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
               (e instanceof Error ? e.message : String(e)),
             'pagination'
           )
+          if (!isCurrent()) return
         }
       }
 
@@ -181,26 +201,39 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
         sortBy: normalizeSortBy(sortBy.value),
         skipCount
       })
+      if (!isCurrent()) return
 
       items.value = result.data
-
-      if (skipCount) {
-        // Keep the cached count; the backend may return 0 or a stale value
-        // when skipCount is true — we use the cached value instead.
-        totalCount.value = cachedTotalCount!
-      } else {
-        totalCount.value = result.total_count
-        cachedTotalCount = result.total_count
-      }
-
+      commitTotal(result.total_count, skipCount)
+      error.value = null
       prefetchNextPage()
     } catch (err) {
+      if (!isCurrent()) return
+      // Keep the previous rows and total visible; surface the error instead.
       error.value = err instanceof Error ? err : new Error(String(err))
-      items.value = []
-      totalCount.value = 0
     } finally {
-      loading.value = false
+      if (isCurrent()) loading.value = false
     }
+  }
+
+  /**
+   * Load the current page. Use as @update:options handler.
+   * Reads page/sortBy/itemsPerPage from reactive refs (set by Vuetify v-model).
+   */
+  const loadPage = (): Promise<void> => {
+    const offset = (page.value - 1) * itemsPerPage.value
+    const signature = `${buildPrefetchKey(offset)}|count:${cachedTotalCount === null ? 'need' : 'cached'}`
+    if (inFlight !== null && inFlight.signature === signature) {
+      return inFlight.promise
+    }
+
+    const requestId = ++latestRequestId
+    loading.value = true
+    const promise = runRequest(requestId, offset).finally(() => {
+      if (inFlight?.promise === promise) inFlight = null
+    })
+    inFlight = { signature, promise }
+    return promise
   }
 
   /**
@@ -209,6 +242,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
    */
   const resetCount = (): void => {
     cachedTotalCount = null
+    inFlight = null
   }
 
   /**
@@ -242,6 +276,8 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   }
 
   const resetState = (): void => {
+    latestRequestId++ // any in-flight response belongs to the previous scope
+    inFlight = null
     loading.value = true // show loading immediately to prevent "no data" flash
     items.value = []
     totalCount.value = 0

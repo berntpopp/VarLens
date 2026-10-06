@@ -188,11 +188,17 @@ describe('VariantFilterBuilder', () => {
   })
 
   describe('applySort', () => {
-    it('applies default sort (pos ASC, id ASC) when no sortBy', () => {
+    it('applies default sort (chr ASC, pos ASC, id ASC) when no sortBy', () => {
       const query = builder.build({ case_id: caseId })
       const sorted = builder.applySort(query)
       const compiled = sorted.compile()
-      expect(compiled.sql).toContain('order by')
+      expect(compiled.sql).toMatch(/order by chr ASC, pos ASC NULLS LAST, id ASC/)
+      const results = db.prepare(compiled.sql).all(...compiled.parameters) as {
+        chr: string
+        pos: number
+      }[]
+      const keys = results.map((r) => `${r.chr}\u0000${String(r.pos).padStart(12, '0')}`)
+      expect(keys).toEqual([...keys].sort())
     })
 
     it('applies custom sort direction', () => {
