@@ -169,4 +169,41 @@ describe('SqliteReadExecutor', () => {
       executor.execute({ type: 'variants:geneSymbols', params: [1, 'BR', 20] })
     ).resolves.toStrictEqual(['BRCA1'])
   })
+
+  it('uses the worker read pool for transcripts:list when a pool exists', async () => {
+    const expected = [{ transcript_id: 'NM_000059.4' }]
+    const dbPool = {
+      run: vi.fn().mockResolvedValue(expected)
+    }
+    const databaseService = {
+      transcripts: {
+        getVariantTranscripts: vi.fn()
+      }
+    }
+    const executor = new SqliteReadExecutor(databaseService as never, dbPool as never)
+
+    await expect(executor.execute({ type: 'transcripts:list', params: [42] })).resolves.toBe(
+      expected
+    )
+    expect(dbPool.run).toHaveBeenCalledWith({
+      type: 'transcripts:list',
+      params: [42]
+    })
+    expect(databaseService.transcripts.getVariantTranscripts).not.toHaveBeenCalled()
+  })
+
+  it('falls back to DatabaseService for transcripts:list when no pool exists', async () => {
+    const expected = [{ transcript_id: 'NM_000059.4' }]
+    const databaseService = {
+      transcripts: {
+        getVariantTranscripts: vi.fn().mockReturnValue(expected)
+      }
+    }
+    const executor = new SqliteReadExecutor(databaseService as never, null)
+
+    await expect(executor.execute({ type: 'transcripts:list', params: [42] })).resolves.toBe(
+      expected
+    )
+    expect(databaseService.transcripts.getVariantTranscripts).toHaveBeenCalledWith(42)
+  })
 })
