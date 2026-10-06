@@ -365,6 +365,12 @@ onKeyStroke(
   overflow: auto;
 }
 
+/* Fixed layout: the header widths are the column widths, so a sort or a new
+   case's rows can never re-flow the columns (same as the case/cohort tables). */
+.shortlist-data-table :deep(.v-table__wrapper > table) {
+  table-layout: fixed;
+}
+
 .shortlist-data-table :deep(.v-data-table-footer) {
   flex: 0 0 auto;
 }
