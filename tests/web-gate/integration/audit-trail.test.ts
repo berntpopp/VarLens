@@ -80,17 +80,26 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('audit trail end-to-end', () => {
 
       // DB-level proof: the rows exist in the central table, stamped with
       // this driver's project schema, attributed to the acting user.
-      const rows = await pool.query<AuditRow>(
-        `SELECT action_type, entity_key, user_name
-           FROM varlens_audit.audit_log
-          WHERE project_schema = $1
-          ORDER BY id`,
-        [driver.schema]
-      )
+      // Read audits are batched (AuditBuffer, flushed every 250 ms by default),
+      // so the audit:query self-audit row lands shortly after the response.
+      // Poll briefly instead of asserting on the first read.
+      const readTrail = () =>
+        pool.query<AuditRow>(
+          `SELECT action_type, entity_key, user_name
+             FROM varlens_audit.audit_log
+            WHERE project_schema = $1
+            ORDER BY id`,
+          [driver.schema]
+        )
+      let rows = await readTrail()
       const has = (action: string, entityKey: string, userName: string | null): boolean =>
         rows.rows.some(
           (r) => r.action_type === action && r.entity_key === entityKey && r.user_name === userName
         )
+      for (let i = 0; i < 30 && !has('api_read', 'audit:query', 'web-gate-admin'); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        rows = await readTrail()
+      }
 
       expect(has('auth_login_success', 'web-gate-admin', 'web-gate-admin'), 'login').toBe(true)
       expect(has('auth_password_change', 'web-gate-admin', 'web-gate-admin'), 'rotation').toBe(true)
@@ -133,7 +142,9 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('audit trail end-to-end', () => {
       expect(blocked.statusCode).toBe(403)
       expect(blocked.json()).toMatchObject({ details: { error: 'admin-required' } })
 
-      // The blocked attempt must not have produced an api_read row.
+      // The blocked attempt must not have produced an api_read row. Wait past
+      // one audit-buffer flush interval so a buffered row would have landed.
+      await new Promise((resolve) => setTimeout(resolve, 400))
       const blockedRead = await pool.query(
         `SELECT 1 FROM varlens_audit.audit_log
           WHERE project_schema = $1 AND action_type = 'api_read'

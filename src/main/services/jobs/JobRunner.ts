@@ -1,4 +1,4 @@
-import { toSerializableError } from '../../ipc/errorHandler'
+import { toSerializableError } from '../../ipc/serializable-error'
 import type { SerializableError } from '../../../shared/types/errors'
 import type { Job, JobKind } from './types'
 

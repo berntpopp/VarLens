@@ -25,9 +25,16 @@ import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import type { PostgresVariantColumnDefinition } from './postgres-variant-columns'
 import { addPostgresClinicalVariantFilters } from './postgres-variant-clinical-filter-sql'
 import {
-  buildVariantOrderTerms,
-  type ResolvedVariantSort
-} from '../../../shared/sql/chromosome-order'
+  buildPostgresVariantOrderTerms,
+  decodeVariantCursor,
+  encodeVariantCursor,
+  keysetPredicate,
+  keysetScope,
+  orderTermsToSql,
+  planKeyset,
+  type PostgresOrderTerm
+} from './postgres-variant-order'
+import type { VariantPageRequest, VariantPageResult } from '../../../shared/types/variant-paging'
 
 const POSTGRES_BASE_SORT_COLUMNS = Object.fromEntries(
   Object.entries(BASE_SORTABLE_COLUMNS).map(([key, column]) => [key, `v.${column}`])
@@ -94,6 +101,7 @@ function isNonEmptyArray(value: unknown): value is unknown[] {
 export interface PostgresVariantQueryParts {
   fromAndWhereSql: string
   orderBySql: string
+  orderTerms: PostgresOrderTerm[]
   params: unknown[]
   projections: string[]
 }
@@ -244,11 +252,13 @@ export function buildPostgresVariantQueryParts(
   addPostgresClinicalVariantFilters(filter, { schemaName, addParam, addWhere })
   addPostgresColumnFilters(filter, addParam, addWhere)
 
+  const orderTerms = buildPostgresVariantOrderTerms(sortBy, POSTGRES_BASE_SORT_COLUMNS)
   return {
     fromAndWhereSql: `FROM ${schemaName}."variants" v
       ${joins.join('\n')}
       WHERE ${whereParts.join('\n        AND ')}`,
-    orderBySql: buildPostgresVariantOrderBy(sortBy),
+    orderBySql: orderTermsToSql(orderTerms),
+    orderTerms,
     params,
     projections
   }
@@ -307,19 +317,6 @@ function normalizePostgresColumnFilterValue(value: string | number): string | nu
   if (typeof value === 'number') return value
   const numericValue = Number(value)
   return Number.isFinite(numericValue) ? numericValue : value
-}
-
-function buildPostgresVariantOrderBy(sortBy?: SortItem[]): string {
-  const resolvedSorts: ResolvedVariantSort[] = []
-  for (const sort of sortBy ?? []) {
-    const column = POSTGRES_BASE_SORT_COLUMNS[sort.key]
-    if (column !== undefined) resolvedSorts.push({ key: sort.key, column, order: sort.order })
-  }
-  // Shared with the SQLite sink (VariantFilterBuilder.applySort): natural
-  // chromosome order (1..22, X, Y, MT) via the chr-rank expression; the
-  // default (chr, pos) order is served by idx_variants_case_chr_rank (0017).
-  // Direction is normalised at the sink inside buildVariantOrderTerms (S7).
-  return `ORDER BY ${[...buildVariantOrderTerms(resolvedSorts, 'v', 'postgres'), 'v.id ASC'].join(', ')}`
 }
 
 export class PostgresVariantReadRepository {
@@ -409,13 +406,11 @@ export class PostgresVariantReadRepository {
     offset: number = 0,
     sortBy?: SortItem[],
     skipCount?: boolean,
-    includeUnfilteredCount?: boolean
-  ): Promise<PaginatedResult<Variant> & { unfiltered_count?: number }> {
-    const { fromAndWhereSql, orderBySql, params, projections } = buildPostgresVariantQueryParts(
-      filter,
-      this.schemaName,
-      sortBy
-    )
+    includeUnfilteredCount?: boolean,
+    page?: VariantPageRequest
+  ): Promise<PaginatedResult<Variant> & { unfiltered_count?: number } & VariantPageResult> {
+    const { fromAndWhereSql, orderBySql, orderTerms, params, projections } =
+      buildPostgresVariantQueryParts(filter, this.schemaName, sortBy)
 
     let totalCount = 0
     if (skipCount !== true) {
@@ -429,11 +424,28 @@ export class PostgresVariantReadRepository {
       totalCount = toNumber((countResult.rows[0] as { count?: unknown } | undefined)?.count)
     }
 
-    const dataParams = [...params, limit, offset]
+    // Keyset ("seek") paging when the sort allows it and the client sent a
+    // cursor from the previous page; OFFSET otherwise (postgres-variant-order.ts).
+    const plan = planKeyset(orderTerms)
+    const scope = plan !== null ? keysetScope(plan, filter) : ''
+    const seek =
+      plan !== null && page?.cursor !== undefined
+        ? decodeVariantCursor(plan, scope, page.cursor)
+        : null
+    const dataParams = [...params]
+    const seekSql =
+      plan !== null && seek !== null
+        ? `AND ${keysetPredicate(plan, seek, (value) => {
+            dataParams.push(value)
+            return `$${dataParams.length}`
+          })}`
+        : ''
+    dataParams.push(limit, seek !== null ? 0 : offset)
     const dataResult = await runNamedDynamic<Record<string, unknown>>(this.pool as Pool, {
-      baseName: 'variants:query_page',
+      baseName: seek !== null ? 'variants:query_page_keyset' : 'variants:query_page',
       text: `SELECT ${projections.join(', ')}
        ${fromAndWhereSql}
+       ${seekSql}
        ${orderBySql}
        LIMIT $${dataParams.length - 1}
        OFFSET $${dataParams.length}`,
@@ -450,11 +462,18 @@ export class PostgresVariantReadRepository {
       unfilteredCount = toNumber((result.rows[0] as { count?: unknown } | undefined)?.count)
     }
 
+    const rows = dataResult.rows as Array<Record<string, unknown>>
+    const lastRow = rows[rows.length - 1]
+    const nextCursor =
+      page !== undefined && plan !== null && lastRow !== undefined && rows.length === limit
+        ? encodeVariantCursor(plan, scope, lastRow)
+        : undefined
+
     return {
-      data: (dataResult.rows as Array<Record<string, unknown>>).map((row) =>
-        normalizeVariantRow(row)
-      ),
+      data: rows.map((row) => normalizeVariantRow(row)),
       total_count: totalCount,
+      ...(seek !== null ? { paging: 'keyset' as const } : {}),
+      ...(nextCursor !== undefined ? { next_cursor: nextCursor } : {}),
       ...(unfilteredCount !== undefined ? { unfiltered_count: unfilteredCount } : {})
     }
   }

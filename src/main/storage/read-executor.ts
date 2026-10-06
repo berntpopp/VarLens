@@ -1,4 +1,5 @@
 import type { SortItem, VariantFilter } from '../../shared/types/database'
+import type { VariantPageRequest } from '../../shared/types/variant-paging'
 import type { CohortSearchParams } from '../../shared/types/cohort'
 import type { ValidatedCaseSearchParams } from '../../shared/types/ipc-schemas'
 import type { VariantCoords, VariantKey } from '../ipc/handlers/annotations-logic'
@@ -42,7 +43,9 @@ export type StorageReadTask =
         offset: number,
         sortBy: SortItem[] | undefined,
         skipCount: boolean,
-        includeUnfilteredCount: boolean
+        includeUnfilteredCount: boolean,
+        /** Keyset paging hint (Postgres only; SQLite ignores it). */
+        page?: VariantPageRequest
       ]
     }
   | { type: 'variants:filterOptions'; params: [caseId: number] }

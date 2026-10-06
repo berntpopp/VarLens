@@ -152,6 +152,7 @@ describe('web dispatcher adapters: auth and import', () => {
 
     expect(result).toEqual({ ok: true })
     expect(request.session.delete).toHaveBeenCalledTimes(1)
+    expect(deps.authService.invalidateUser).toHaveBeenCalledWith('admin')
     expect(writeExecute).toHaveBeenCalledWith({
       type: 'audit:append',
       params: [

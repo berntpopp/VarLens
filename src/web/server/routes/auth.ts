@@ -83,6 +83,7 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
       async handle(_args, request, _reply, deps) {
         const username = request.session.user?.username
         if (username !== undefined) {
+          deps.authService.invalidateUser(username)
           await recordAuthAudit(deps, {
             action_type: 'auth_logout',
             username,

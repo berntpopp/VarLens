@@ -30,12 +30,14 @@ const ROUTE_OVERRIDE_LOGIC_EXCEPTIONS: Record<string, string> = {
   'batch-import.ts':
     'web upload/job-runner pipeline with file-picker stubs replacing desktop dialogs',
   'case-metadata.ts': 'thin storage-executor adapters with web-only argument validation',
-  'cases.ts': 'simple cases:list storage read adapter',
+  'cases.ts':
+    'cases:list storage read adapter plus the web case_delete job (lock-free Postgres phases)',
   'database.ts': 'web-only database identity/capability adapters',
   'gene-lists.ts': 'thin storage-executor adapters with web-only argument validation',
   'gene-ref.ts': 'web mode intentionally disables external reference fetches',
   'hpo.ts': 'web mode intentionally disables external reference fetches',
   'import.ts': 'web upload pipeline with file-picker stubs and shared import-logic delegation',
+  'jobs.ts': 'jobs: contract served from the web process JobRunner (desktop: main JobRunner)',
   'protein.ts': 'web mode intentionally disables external reference fetches',
   'region-files.ts': 'web-only server-path guards and storage-executor adapters',
   'vep.ts': 'web mode intentionally disables external reference fetches'
@@ -64,6 +66,7 @@ const EXPECTED_ROUTE_OVERRIDE_MODULES = new Set([
   'gene-ref.ts',
   'hpo.ts',
   'import.ts',
+  'jobs.ts',
   'panels.ts',
   'protein.ts',
   'region-files.ts',

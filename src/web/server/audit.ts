@@ -10,7 +10,11 @@ const AUDITED_OVERRIDE_WRITE_METHODS = new Set<string>([
   'import:start',
   'import:startMultiFile',
   'batch-import:start',
-  'batch-import:cleanupZipTemp'
+  'batch-import:cleanupZipTemp',
+  'cases:startDelete',
+  'cases:deleteBatch',
+  'cases:deleteAll',
+  'jobs:cancel'
 ])
 
 const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
@@ -27,7 +31,11 @@ const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
   'database:info',
   'database:getOverview',
   'database:recentList',
-  'database:overview'
+  'database:overview',
+  // Background-job status polls: ids and counters only, high frequency.
+  'jobs:get',
+  'jobs:list',
+  'jobs:progress'
 ])
 
 interface WebAuditEvent {
@@ -116,10 +124,29 @@ export async function recordApiWriteAudit(
   })
 }
 
+/**
+ * Read audits are the per-request hot path, so they go through the batched
+ * AuditBuffer when one is configured (flushed on interval/size/shutdown).
+ * Write and auth audits above stay synchronous: a mutation must not report
+ * success without its audit row.
+ */
 export async function recordApiReadAudit(
   deps: DispatcherDeps,
   params: { key: string; username?: string | null }
 ): Promise<void> {
+  if (deps.auditBuffer !== undefined) {
+    await deps.auditBuffer.enqueue({
+      action_type: 'api_read',
+      entity_type: 'api_call',
+      entity_key: params.key,
+      old_value: null,
+      new_value: { success: true, method: params.key },
+      user_name: params.username ?? null,
+      metadata: { source: 'web-dispatcher' },
+      occurred_at: Date.now()
+    })
+    return
+  }
   await appendWebAudit(deps, {
     action_type: 'api_read',
     entity_type: 'api_call',

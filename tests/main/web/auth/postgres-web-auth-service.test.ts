@@ -686,6 +686,82 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
   })
 })
 
+describe('PostgresWebAuthService — cached session-user lookup', () => {
+  function newCachedSvc(pool: FakePool): PostgresWebAuthService {
+    return new PostgresWebAuthService({
+      pool: pool as unknown as SvcOpts['pool'],
+      schema: SCHEMA,
+      passwordProvider: fakePasswordProvider,
+      userCacheTtlMs: 60_000
+    })
+  }
+
+  it('getSessionUser hits the database once per TTL window', async () => {
+    const pool = new FakePool()
+    const svc = newCachedSvc(pool)
+    pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
+
+    const first = await svc.getSessionUser('alice')
+    const second = await svc.getSessionUser('alice')
+
+    expect(first?.username).toBe('alice')
+    expect(second).toEqual(first)
+    expect(pool.queries).toHaveLength(1)
+  })
+
+  it('deactivateUser invalidates the cached row so the next check sees is_active = 0', async () => {
+    const pool = new FakePool()
+    const svc = newCachedSvc(pool)
+    pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
+    expect((await svc.getSessionUser('alice'))?.is_active).toBe(1)
+
+    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [], rowCount: 1 })
+    await svc.deactivateUser('alice')
+
+    pool.enqueueResponse({ rows: [pgUserRow({ is_active: false })], rowCount: 1 })
+    expect((await svc.getSessionUser('alice'))?.is_active).toBe(0)
+  })
+
+  it('resetPassword, changePassword and invalidateUser drop the cached row', async () => {
+    const pool = new FakePool()
+    const svc = newCachedSvc(pool)
+    pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
+    const before = await svc.getSessionUser('alice')
+
+    pool.enqueueResponse({ rows: [], rowCount: 1 })
+    await svc.resetPassword('alice', FIXTURE_NEW_PW)
+    const rotatedAt = new Date('2026-10-06T10:00:00Z')
+    pool.enqueueResponse({ rows: [pgUserRow({ password_changed_at: rotatedAt })], rowCount: 1 })
+    const afterReset = await svc.getSessionUser('alice')
+    expect(afterReset?.password_changed_at).not.toEqual(before?.password_changed_at)
+
+    pool.enqueueResponse({
+      rows: [pgUserRow({ password_hash: `hashed::${FIXTURE_PW}` })],
+      rowCount: 1
+    })
+    pool.enqueueResponse({ rows: [], rowCount: 1 })
+    expect(await svc.changePassword('alice', FIXTURE_PW, FIXTURE_NEW_PW)).toBe(true)
+    pool.enqueueResponse({ rows: [pgUserRow({ must_change_password: false })], rowCount: 1 })
+    await svc.getSessionUser('alice')
+
+    svc.invalidateUser('alice')
+    pool.enqueueResponse({ rows: [], rowCount: 0 })
+    expect(await svc.getSessionUser('alice')).toBeUndefined()
+    expect(pool.queries).toHaveLength(7)
+  })
+
+  it('is uncached by default for direct construction (ttl 0)', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
+    pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
+    await svc.getSessionUser('alice')
+    await svc.getSessionUser('alice')
+    expect(pool.queries).toHaveLength(2)
+  })
+})
+
 afterAll(() => {
   // Sanity: no real Pool leaks into other suites.
 })

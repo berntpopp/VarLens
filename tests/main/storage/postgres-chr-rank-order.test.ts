@@ -45,7 +45,8 @@ describe('PG migration 0017 — chr_rank_indexes (static)', () => {
 
   it('is registered after 0016', () => {
     expect(migration?.name).toBe('chr_rank_indexes')
-    expect(POSTGRES_MIGRATIONS.at(-1)?.version).toBe('0017')
+    const versions = POSTGRES_MIGRATIONS.map((m) => m.version)
+    expect(versions.indexOf('0017')).toBe(versions.indexOf('0016') + 1)
   })
 
   it('builds all three indexes on the exact shared chr-rank expression', () => {

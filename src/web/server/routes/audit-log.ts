@@ -13,9 +13,12 @@ import type { OverrideHandler } from './types'
 export function buildAuditLogOverrides(): Record<string, OverrideHandler> {
   const adminRead =
     (type: 'audit:getByEntity' | 'audit:query'): OverrideHandler['handle'] =>
-    (args, request, reply, deps) => {
+    async (args, request, reply, deps) => {
       const admin = requireAdmin(request, reply)
       if (admin === undefined) return { error: 'admin-required' }
+      // Read audits are buffered; drain them first so an admin's view of the
+      // trail includes every access up to this request.
+      await deps.auditBuffer?.flush()
       return deps.session.getReadExecutor().execute({ type, params: args } as StorageReadTask)
     }
 
