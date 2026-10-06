@@ -7,7 +7,8 @@ This note is for the next agent. It records what shipped, what is still in fligh
 | Item | State |
 |---|---|
 | **v0.74.0** | Released. PR #432 (`integration/ui-ux-followups-2026-10`), tag on `4687e8ad`, which also contains PR #433 (variant simulator). 10 assets, signed Windows build. |
-| **PR 2: parity + leftovers** | Branch `integration/parity-2026-10`, intended as **v0.75.0**. See §3. |
+| **v0.75.0** | PR #450 (`integration/parity-2026-10`) merged as `8856dae1`. Release commit `a76d2940` (`chore(release): v0.75.0`). Tag `v0.75.0` is pushed automatically once `Build` is green on `a76d2940`. **First action for the next agent:** run `gh release view v0.75.0 --json isDraft,assets`. If the release is missing, check `Build` on `a76d2940` and follow §6. |
+| **PR #450 CI caveat** | The user asked for #450 to be merged while 5 of 12 PR checks were still pending (7 had passed). Every local CI-equivalent gate was green on `fd624f9d` (§3). Check the PR's final check results and the `Build` on `main`. If anything went red, fix it in a follow-up PR. |
 | Dependabot | All 18 PRs superseded by #432 are closed. One alert is still open: **#142 sprintf-js**. There is no upstream fix, and it is only used at build time through the electron-builder chain, never shipped. Triage: `.planning/code-review/security-2026-10-06/dependency-alerts.md`. |
 | CodeQL #16–#25 | Fixed in #432 (`src/web/server/dispatcher-errors.ts`). They should close after the next scan of `main`. If they don't, check again. |
 
@@ -46,7 +47,15 @@ Merged or being merged, in this order: the parity spec, **P-A**, **P-B**, `main`
 
 Migration numbering (final, set at integration): PG `0020_user_roles` (P-D roles) and `0021_cohort_keyset_index` (L2); SQLite v36 roles and v37 cohort keyset (`LATEST_SQLITE_SCHEMA_VERSION = 37`). P-B and P-C added no migrations. The next free numbers are PG 0022 and SQLite v38. A test enforces unique and contiguous PG migration numbers; the reserved-gap allowance is gone.
 
-If PR 2 is not merged when you start: push `integration/parity-2026-10`, open the PR, merge when CI is green, then follow the release procedure in §6.
+PR 2 is merged (#450, `8856dae1`). Final local gates on `fd624f9d` were all green: `make ci` (5146 tests), `test:coverage`, `agent-check`, `ci-full` (startup and packaged smoke), `perf-interaction-gates` 3/3, `ui-gates` 15/15, and `web-ci` including PostgreSQL. Next free migration numbers: PG **0022**, SQLite **v38**.
+
+The integrator made these conflict decisions. Keep them unless the user says otherwise:
+- BED export uses only the signed-download flow; the query-string route is removed.
+- Job cancel requires analyst or higher **and** ownership of the job, or admin.
+- Role refusals return `FORBIDDEN` (403); a missing session returns `UNAUTHENTICATED` (401).
+- Cache clears are admin-only and carry no feature capability, so they don't switch lookups off for analysts.
+
+The web server now opens SQLite for its reference cache. Run `make rebuild-node` before the ui-gates, which CI already does.
 
 ## 4. Binding user decisions
 
