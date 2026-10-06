@@ -13,6 +13,14 @@ interface UseShellNavigationOptions {
   router: Router
 }
 
+/** Resolves after the next frame has been rendered (two rAF ticks). */
+function afterNextFrame(): Promise<void> {
+  if (typeof requestAnimationFrame !== 'function') return Promise.resolve()
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  )
+}
+
 export function useShellNavigation({
   activeTab,
   sidebarOpen,
@@ -68,8 +76,13 @@ export function useShellNavigation({
         await router.push('/case')
       }
     } finally {
-      // Allow the activated route view to settle before hiding the overlay.
+      // Allow the activated route view to settle before hiding the overlay,
+      // and keep layout transitions off until the collapsed layout has been
+      // styled once: re-enabling them in the same frame let the browser
+      // animate v-main from the old sidebar width, sliding the (now
+      // immediately rendered) cohort table sideways (desktop CLS ~1.4).
       await nextTick()
+      await afterNextFrame()
       transitioning.value = false
     }
   })
