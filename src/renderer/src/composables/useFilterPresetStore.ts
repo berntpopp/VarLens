@@ -44,6 +44,21 @@ const activeByScope: Record<PresetScope, Ref<Set<number>>> = {
 const loading = ref(false)
 const visiblePresets = computed(() => presets.value.filter((p) => p.isVisible))
 
+// Load dedupe: FilterToolbar, CohortFilterBar and useShortlistQuery each call
+// loadPresets() on mount. One in-flight request is shared, and once loaded the
+// list is reused until a mutation (or a database switch) invalidates it.
+let inFlightLoad: Promise<void> | null = null
+let loaded = false
+
+/**
+ * Drop the cached preset list so the next loadPresets() refetches. Called on
+ * database switch, where the preset table belongs to a different workspace.
+ */
+export function invalidateFilterPresets(): void {
+  loaded = false
+  inFlightLoad = null
+}
+
 /**
  * Clear all shared preset store state. Exported for use in unit tests that
  * need fresh state between cases — production code must NEVER call this.
@@ -53,20 +68,40 @@ export function __resetFilterPresetStoreForTest(): void {
   activeByScope.case.value = new Set()
   activeByScope.cohort.value = new Set()
   loading.value = false
+  invalidateFilterPresets()
 }
 
 export function useFilterPresetStore(scope: PresetScope = 'case') {
   const { api } = useApiService()
   const activePresetIds = activeByScope[scope]
 
-  async function loadPresets(): Promise<void> {
+  async function fetchPresets(): Promise<void> {
     if (!api) return
     loading.value = true
     try {
       presets.value = unwrapIpcResult(await api.presets.list())
+      loaded = true
     } finally {
       loading.value = false
     }
+  }
+
+  /** Load once per session; concurrent callers share the same request. */
+  function loadPresets(): Promise<void> {
+    if (loaded) return Promise.resolve()
+    if (inFlightLoad === null) {
+      const request = fetchPresets().finally(() => {
+        if (inFlightLoad === request) inFlightLoad = null
+      })
+      inFlightLoad = request
+    }
+    return inFlightLoad
+  }
+
+  /** Unconditional refetch after this client changed the preset table. */
+  async function reloadPresets(): Promise<void> {
+    invalidateFilterPresets()
+    await loadPresets()
   }
 
   function togglePreset(id: number): void {
@@ -130,7 +165,7 @@ export function useFilterPresetStore(scope: PresetScope = 'case') {
   async function savePreset(params: FilterPresetCreate): Promise<FilterPreset | null> {
     if (!api) return null
     const created = unwrapIpcResult(await api.presets.create(params))
-    await loadPresets()
+    await reloadPresets()
     return created
   }
 
@@ -140,7 +175,7 @@ export function useFilterPresetStore(scope: PresetScope = 'case') {
   ): Promise<FilterPreset | null> {
     if (!api) return null
     const updated = unwrapIpcResult(await api.presets.update(id, updates))
-    await loadPresets()
+    await reloadPresets()
     return updated
   }
 
@@ -151,13 +186,13 @@ export function useFilterPresetStore(scope: PresetScope = 'case') {
     const newSet = new Set(activePresetIds.value)
     newSet.delete(id)
     activePresetIds.value = newSet
-    await loadPresets()
+    await reloadPresets()
   }
 
   async function reorderPresets(items: { id: number; sortOrder: number }[]): Promise<void> {
     if (!api) return
     unwrapIpcResult(await api.presets.reorder(items))
-    await loadPresets()
+    await reloadPresets()
   }
 
   return {

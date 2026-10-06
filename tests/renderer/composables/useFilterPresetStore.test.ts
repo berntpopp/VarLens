@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   useFilterPresetStore,
-  __resetFilterPresetStoreForTest
+  __resetFilterPresetStoreForTest,
+  invalidateFilterPresets
 } from '../../../src/renderer/src/composables/useFilterPresetStore'
 import type { FilterPreset } from '../../../src/shared/types/filter-presets'
 
@@ -67,6 +68,37 @@ describe('useFilterPresetStore', () => {
     await loadPresets()
     expect(presets.value).toHaveLength(2)
     expect(mockApi.list).toHaveBeenCalledOnce()
+  })
+
+  it('dedupes concurrent and repeated loads into one presets:list per session', async () => {
+    // FilterToolbar, CohortFilterBar and useShortlistQuery all call loadPresets()
+    // on mount; that used to be 3 identical round-trips per session.
+    const a = useFilterPresetStore()
+    const b = useFilterPresetStore()
+    await Promise.all([a.loadPresets(), b.loadPresets()])
+    await useFilterPresetStore().loadPresets()
+    expect(mockApi.list).toHaveBeenCalledOnce()
+    expect(a.presets.value).toHaveLength(2)
+  })
+
+  it('refetches after a mutation and after invalidation (database switch)', async () => {
+    const store = useFilterPresetStore()
+    await store.loadPresets()
+    await store.savePreset({ name: 'Mine', filterJson: {} } as never)
+    expect(mockApi.list).toHaveBeenCalledTimes(2)
+
+    invalidateFilterPresets()
+    await store.loadPresets()
+    expect(mockApi.list).toHaveBeenCalledTimes(3)
+  })
+
+  it('retries on the next call when a load fails', async () => {
+    mockApi.list.mockRejectedValueOnce(new Error('offline'))
+    const store = useFilterPresetStore()
+    await expect(store.loadPresets()).rejects.toThrow('offline')
+    await store.loadPresets()
+    expect(mockApi.list).toHaveBeenCalledTimes(2)
+    expect(store.presets.value).toHaveLength(2)
   })
 
   it('visiblePresets filters by isVisible', async () => {

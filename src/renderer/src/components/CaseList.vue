@@ -66,8 +66,12 @@
       class="case-list-skeleton"
     />
 
-    <v-list v-model:selected="selected" density="compact" select-strategy="single-leaf">
-      <!-- Case items -->
+    <v-list
+      v-if="cases.length > 0"
+      v-model:selected="selected"
+      density="compact"
+      select-strategy="single-leaf"
+    >
       <v-list-item
         v-for="caseItem in cases"
         :key="caseItem.id"
@@ -127,7 +131,6 @@
     </v-list>
   </v-infinite-scroll>
 
-  <!-- Context menu -->
   <v-menu
     v-model="contextMenu.show.value"
     :style="{
@@ -218,10 +221,10 @@ const emit = defineEmits<{
   'case-selected': [caseId: number, caseName: string, variantCount: number, createdAt: number]
   'case-deleted': [caseId: number]
   'cases-loaded': [count: number]
+  'cases-load-failed': []
   'edit-case': [caseId: number, caseName: string, variantCount: number, createdAt: number]
 }>()
 
-// State
 const cases = shallowRef<CaseWithCohorts[]>([])
 const loading = ref(false)
 const searchTerm = ref('')
@@ -232,12 +235,10 @@ const contextMenuCase = ref<CaseWithCohorts | null>(null)
 const contextMenu = useContextMenu()
 const { api } = useApiService()
 
-// Infinite scroll state
 const currentOffset = ref(0)
 const totalCaseCount = ref(0)
 const scrollKey = ref(0)
 
-// Multi-select state
 const multiSelected = ref<Set<number>>(new Set())
 const isMultiSelectMode = computed(() => multiSelected.value.size > 0)
 const multiSelectedCount = computed(() => multiSelected.value.size)
@@ -256,7 +257,6 @@ function caseSex(caseItem: CaseWithCohorts): CaseSex {
   return toCaseSex(cached?.metadata?.sex ?? caseItem.sex)
 }
 
-// Component refs
 const dialogRef = ref<InstanceType<typeof DeleteCaseDialog> | null>(null)
 const snackbarRef = ref<InstanceType<typeof AppSnackbar> | null>(null)
 
@@ -286,7 +286,6 @@ const hasActiveFilters = computed(
   () => !!searchTerm.value || selectedCohortIds.value.length > 0 || selectedHpoIds.value.length > 0
 )
 
-// Empty text for infinite scroll
 const emptyText = computed(() => {
   if (cases.value.length === 0) return ''
   return 'All cases loaded'
@@ -333,6 +332,7 @@ const onLoad = async ({
       'Failed to load cases page: ' + formatErrorMessage(e, 'Unknown error'),
       'case-list'
     )
+    if (currentOffset.value === 0) emit('cases-load-failed')
     done('error')
   } finally {
     loading.value = false

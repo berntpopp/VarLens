@@ -38,9 +38,14 @@ export default defineConfig({
       strictPort: false
     },
     resolve: {
-      alias: {
-        '@renderer': resolve('src/renderer/src')
-      }
+      // vuedraggable's UMD build `require('vue')`s, which through CJS interop
+      // resolves to Vue's full build (with @vue/compiler-core). Pin bare `vue`
+      // to the runtime-only ESM build. Keep in sync with vite.web-renderer.config.ts.
+      alias: [
+        { find: '@renderer', replacement: resolve('src/renderer/src') },
+        { find: /^vue$/, replacement: 'vue/dist/vue.runtime.esm-bundler.js' }
+      ],
+      dedupe: ['vue']
     },
     plugins: [vue(), vuetify({ autoImport: true })],
     define: {

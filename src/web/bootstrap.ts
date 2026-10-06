@@ -2,15 +2,15 @@
  * Web-mode entry point.
  *
  * The renderer (`src/renderer/src/main.ts`) reads `window.api`
- * synchronously during Vue setup. We install the HTTP Proxy here
- * BEFORE dynamic-importing the renderer entry — order is load-bearing.
+ * synchronously during Vue setup, so the HTTP Proxy must be installed
+ * first. Both imports are STATIC (not `await import(...)`) so Vite puts
+ * the renderer graph in the entry chunk and emits `modulepreload` hints:
+ * the browser fetches the whole critical path in parallel from the HTML
+ * instead of discovering it after the bootstrap chunk runs. Static
+ * imports evaluate in source order — `install-api` runs before `main`.
  *
  * The renderer also has a `window.api === undefined` mock fallback;
  * because we assign first, that branch is never taken in web mode.
  */
-import type { WindowAPI } from '../shared/types/api'
-import { createApi } from './client/api'
-;(window as Window & { api: WindowAPI; __VARLENS_WEB__: true }).__VARLENS_WEB__ = true
-;(window as Window & { api: WindowAPI }).api = createApi()
-
-await import('../renderer/src/main')
+import './client/install-api'
+import '../renderer/src/main'

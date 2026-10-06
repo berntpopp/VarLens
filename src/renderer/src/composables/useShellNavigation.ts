@@ -48,8 +48,22 @@ export function useShellNavigation({
 
     try {
       if (newTab === 'cohort') {
-        sidebarOpen.value = false
-        await router.push('/cohort')
+        // Collapse the sidebar in the same render flush that swaps the views
+        // (App.vue disables layout transitions while `transitioning`): the
+        // outgoing case view is gone and the cohort view is new, so nothing
+        // already on screen is shifted. Collapsing before the push slid the
+        // still-visible case view sideways (CLS ~0.7); collapsing after the
+        // awaited push shifted the freshly rendered cohort table (~0.18).
+        // afterEach runs synchronously when the route commits, before Vue's
+        // render flush.
+        const removeCollapseHook = router.afterEach((to) => {
+          if (to.path === '/cohort') sidebarOpen.value = false
+        })
+        try {
+          await router.push('/cohort')
+        } finally {
+          removeCollapseHook()
+        }
       } else {
         await router.push('/case')
       }

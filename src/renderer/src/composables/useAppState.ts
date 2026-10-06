@@ -9,6 +9,7 @@
  * - In App.vue (root): call `createAppState()` and `provide(AppStateKey, ...)`
  * - In child components: call `useAppState()` which injects from the provider
  */
+import { invalidateFilterPresets } from './useFilterPresetStore'
 import { ref, computed, inject } from 'vue'
 import type { Ref, ComputedRef, InjectionKey } from 'vue'
 import type { VariantFilter, Variant } from '../../../shared/types/api'
@@ -32,6 +33,8 @@ export interface AppStateReturn {
   selectedVariantCount: Ref<number>
   selectedCreatedAt: Ref<number>
   caseCount: Ref<number>
+  /** True once the sidebar case list has answered at least once (or failed). */
+  casesLoaded: Ref<boolean>
 
   // Navigation
   activeTab: Ref<'case' | 'cohort'>
@@ -59,6 +62,7 @@ export interface AppStateReturn {
 
   // Shell-owned reset actions
   setCaseCount: (count: number) => void
+  markCasesLoadFailed: () => void
   incrementDataGeneration: () => void
   setActiveTab: (tab: 'case' | 'cohort') => void
   openSidebar: () => void
@@ -95,6 +99,7 @@ export function createAppState(): AppStateReturn {
   const selectedVariantCount = ref(0)
   const selectedCreatedAt = ref(0)
   const caseCount = ref(0)
+  const casesLoaded = ref(false)
 
   // Navigation
   const activeTab = ref<'case' | 'cohort'>('case')
@@ -149,6 +154,11 @@ export function createAppState(): AppStateReturn {
 
   function setCaseCount(count: number): void {
     caseCount.value = count
+    casesLoaded.value = true
+  }
+
+  function markCasesLoadFailed(): void {
+    casesLoaded.value = true
   }
 
   function incrementDataGeneration(): void {
@@ -183,6 +193,8 @@ export function createAppState(): AppStateReturn {
   }
 
   function resetForDatabaseSwitch(): void {
+    // Presets live in the workspace database; the cached list is now stale.
+    invalidateFilterPresets()
     resetCaseContext()
     setActiveTab('case')
     panelOpen.value = false
@@ -214,6 +226,7 @@ export function createAppState(): AppStateReturn {
     selectedVariantCount,
     selectedCreatedAt,
     caseCount,
+    casesLoaded,
 
     // Navigation
     activeTab,
@@ -241,6 +254,7 @@ export function createAppState(): AppStateReturn {
 
     // Shell-owned reset actions
     setCaseCount,
+    markCasesLoadFailed,
     incrementDataGeneration,
     setActiveTab,
     openSidebar,

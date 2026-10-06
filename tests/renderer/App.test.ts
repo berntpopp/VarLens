@@ -136,4 +136,41 @@ describe('App.vue', () => {
     expect(useShellLifecycleSpy.mock.calls[0]?.[0]).toHaveProperty('api')
     expect(useShellLifecycleSpy.mock.calls[0]?.[0]).toHaveProperty('importStore')
   })
+
+  async function mountWithDisplay(mobileBreakpoint: number) {
+    useShellLifecycleSpy.mockReturnValue({
+      handleDatabaseSwitched: vi.fn(),
+      handleImportComplete: vi.fn(),
+      handleBatchImportComplete: vi.fn()
+    })
+    router.push('/case')
+    await router.isReady()
+    // The suite replaces `window` with a plain object; give Vuetify's display
+    // service a viewport so `mobile` (width < mobileBreakpoint) is meaningful.
+    Object.assign(window, { innerWidth: 1350, innerHeight: 900 })
+    const display = createVuetify({ components, directives, display: { mobileBreakpoint } })
+    return mount(App, {
+      global: { plugins: [display, createPinia(), router], stubs: asyncComponentStubs }
+    })
+  }
+
+  it('keeps the docked desktop sidebar open when a case is opened (no layout shift)', async () => {
+    const wrapper = await mountWithDisplay(0)
+    wrapper.findComponent({ name: 'CaseList' }).vm.$emit('case-selected', 7, 'LB-1', 10, 0)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent({ name: 'VNavigationDrawer' }).props('modelValue')).toBe(true)
+  })
+
+  it('dismisses the sidebar when it is a temporary overlay (mobile widths)', async () => {
+    const wrapper = await mountWithDisplay(100_000)
+    wrapper.findComponent({ name: 'CaseList' }).vm.$emit('case-selected', 7, 'LB-1', 10, 0)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent({ name: 'VNavigationDrawer' }).props('modelValue')).toBe(false)
+  })
+
+  it('does not mount the details panel or shortcut dialog until first opened', async () => {
+    const wrapper = await mountWithDisplay(0)
+    expect(wrapper.findComponent({ name: 'VariantDetailsPanel' }).exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'KeyboardShortcutsDialog' }).exists()).toBe(false)
+  })
 })

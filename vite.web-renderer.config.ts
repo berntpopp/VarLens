@@ -17,6 +17,7 @@ import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
 
 import pkg from './package.json'
+import { precompressDirectory } from './scripts/web/precompress-assets.mjs'
 
 function normalizeBase(value: string | undefined): string {
   const raw = value?.trim()
@@ -54,6 +55,23 @@ function copyWebPublicAssets(): Plugin {
   }
 }
 
+function precompressWebAssets(): Plugin {
+  const outDir = resolve(__dirname, 'out/web/public')
+  return {
+    name: 'web-renderer:precompress-assets',
+    apply: 'build',
+    // closeBundle runs after every writeBundle (incl. the brand-asset copy),
+    // so the copied favicon/manifest get .br/.gz siblings too.
+    closeBundle() {
+      const summary = precompressDirectory(outDir)
+      this.info(
+        `precompressed ${summary.files} files: ${summary.rawBytes} B raw -> ` +
+          `${summary.brotliBytes} B br / ${summary.gzipBytes} B gzip`
+      )
+    }
+  }
+}
+
 export default defineConfig({
   root: resolve(__dirname, 'src/web'),
   // Reverse proxies may mount the app under a path prefix such as /varlens.
@@ -63,14 +81,20 @@ export default defineConfig({
   base: normalizeBase(process.env.VARLENS_WEB_BASE),
   publicDir: resolve(__dirname, 'src/renderer/src/assets'),
   resolve: {
-    alias: {
-      '@renderer': resolve(__dirname, 'src/renderer/src')
-    }
+    // vuedraggable ships a UMD build that `require('vue')`s; through CJS
+    // interop that resolves to Vue's full build and drags @vue/compiler-core
+    // into the bundle. Pin bare `vue` to the runtime-only ESM build (templates
+    // are precompiled by plugin-vue). Keep in sync with electron.vite.config.ts.
+    alias: [
+      { find: '@renderer', replacement: resolve(__dirname, 'src/renderer/src') },
+      { find: /^vue$/, replacement: 'vue/dist/vue.runtime.esm-bundler.js' }
+    ],
+    dedupe: ['vue']
   },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version)
   },
-  plugins: [vue(), vuetify({ autoImport: true }), copyWebPublicAssets()],
+  plugins: [vue(), vuetify({ autoImport: true }), copyWebPublicAssets(), precompressWebAssets()],
   build: {
     target: 'es2022',
     outDir: resolve(__dirname, 'out/web/public'),
