@@ -16,6 +16,7 @@ import type { RebuildWorkerResponse, RebuildPhase } from '../../workers/rebuild-
 import type { StorageSession } from '../../storage/session'
 import { AssociationEngine } from '../../statistics/AssociationEngine'
 import { jobRunner } from '../../services/jobs/runner'
+import { trackDatabaseWorker } from '../../services/jobs/database-activity'
 import { computePanelIntervals } from './panelIntervalHelper'
 import { convertBigInts } from '../../utils/convertBigInts'
 import type { ValidatedCohortSearchParams } from '../../../shared/types/ipc-schemas'
@@ -66,6 +67,19 @@ function getPostgresSession(getSession?: GetSession): StorageSession | undefined
  *   messages do that.
  */
 export function spawnRebuildWorker(
+  dbPath: string,
+  encryptionKey?: string,
+  onProgress?: (data: CohortRebuildProgressData) => void
+): Promise<void> {
+  // Not a JobRunner job (it also runs at startup and after imports), so it
+  // registers itself: a re-key must not start while this worker is writing.
+  return trackDatabaseWorker(
+    'cohort summary rebuild',
+    runRebuildWorker(dbPath, encryptionKey, onProgress)
+  )
+}
+
+function runRebuildWorker(
   dbPath: string,
   encryptionKey?: string,
   onProgress?: (data: CohortRebuildProgressData) => void

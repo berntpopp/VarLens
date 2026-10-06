@@ -100,6 +100,21 @@ describe('useCohortData', () => {
     expect(calls[3]).not.toHaveProperty('cursor')
   })
 
+  it('reuses the page cursor when only the _count_needed hint differs between pages', async () => {
+    window.api.cohort.getVariants = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], total_count: 100, next_cursor: 'c1' })
+      .mockResolvedValue({ data: [], total_count: 100 })
+    const [result, appInstance] = withSetup(() => useCohortData())
+    app = appInstance
+
+    await result.fetchVariants({ limit: 10, sort_order: 'desc', _count_needed: true })
+    await result.fetchVariants({ limit: 10, offset: 10, sort_order: 'desc', _count_needed: false })
+
+    const calls = vi.mocked(window.api.cohort.getVariants).mock.calls.map((c) => c[0])
+    expect(calls[1]).toMatchObject({ offset: 10, cursor: 'c1', _count_needed: false })
+  })
+
   it('sets isLoading during fetch', async () => {
     // Use a promise we can control to verify loading state
     let resolvePromise: (value: unknown) => void
@@ -294,6 +309,19 @@ describe('useCohortData', () => {
         carrier_count_min: 2
       })
     )
+  })
+
+  it('preserves _count_needed: false in buildIpcParams', () => {
+    const [result, appInstance] = withSetup(() => useCohortData())
+    app = appInstance
+
+    const ipcParams = result.buildIpcParams({
+      limit: 25,
+      sort_order: 'asc',
+      _count_needed: false
+    })
+
+    expect(ipcParams._count_needed).toBe(false)
   })
 
   it('handles window.api unavailable gracefully', async () => {

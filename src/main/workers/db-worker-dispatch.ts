@@ -128,7 +128,10 @@ export function resolvePanelIntervalsInPlace(
 
   delete filter.active_panel_ids
   delete filter.panel_padding_bp
-  delete filter.genome_build
+  // `genome_build` is an IPC-only hint on a single-case filter, but on a cohort
+  // query it IS the build restriction: dropping it there would mix builds into
+  // the result whenever a panel is active (issue #447).
+  if (caseId !== undefined) delete filter.genome_build
 }
 
 /**

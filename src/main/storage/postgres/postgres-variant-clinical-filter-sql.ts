@@ -33,7 +33,7 @@ function addTagFilter(
 
 function addPanelFilter(
   filter: VariantFilter,
-  { schemaName, addParam, addWhere }: PostgresClinicalVariantFilterSqlContext
+  { addParam, addWhere }: PostgresClinicalVariantFilterSqlContext
 ): void {
   if ((filter.panel_intervals?.length ?? 0) > 0) {
     const intervalClauses = filter.panel_intervals!.map((interval) => {
@@ -46,16 +46,16 @@ function addPanelFilter(
     return
   }
 
-  if ((filter.active_panel_ids?.length ?? 0) === 0) return
-
-  addWhere(`EXISTS (
-          SELECT 1
-          FROM ${schemaName}."case_active_panels" cap
-          INNER JOIN ${schemaName}."panel_genes" pg ON pg.panel_id = cap.panel_id
-          WHERE cap.case_id = ${addParam(filter.case_id)}
-            AND cap.panel_id = ANY(${addParam(filter.active_panel_ids)}::bigint[])
-            AND pg.symbol = v.gene_symbol
-        )`)
+  // An unresolved panel request must never reach SQL. There is deliberately no
+  // gene-symbol fallback: it ignored padding and genome build and dropped
+  // variants the SQLite backend keeps (issue #447). Callers resolve
+  // `active_panel_ids` into `panel_intervals` through
+  // PostgresPanelIntervalResolver before building the query.
+  if ((filter.active_panel_ids?.length ?? 0) > 0) {
+    throw new Error(
+      'Active gene panel filter was not resolved to genomic intervals before building the PostgreSQL variant query'
+    )
+  }
 }
 
 function addAnnotationFilters(

@@ -265,7 +265,7 @@ export class PostgresStorageSession implements StorageSession {
     return unsupported('Startup rebuild is not supported for postgres sessions')
   }
 
-  rekey(_newPassword: string): void {
+  async rekey(_newPassword: string): Promise<void> {
     unsupported('SQLite rekey is not supported for postgres sessions')
   }
 

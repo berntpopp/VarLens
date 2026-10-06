@@ -932,51 +932,59 @@ describe('database lifecycle logic', () => {
   })
 
   describe('rekeyDatabase', () => {
-    it('BLOCKER 1: refuses to rekey a key-store-managed database -- no PRAGMA rekey is executed', () => {
+    const rekey = (
+      manager: object,
+      keyStore: { getKeyIdForPath: ReturnType<typeof vi.fn> }
+    ): Promise<{ success: boolean }> =>
+      logic.rekeyDatabase('new-password', () => manager as never, keyStore)
+
+    it('BLOCKER 1: refuses to rekey a key-store-managed database -- no PRAGMA rekey is executed', async () => {
       const manager = {
         getCurrentPath: vi.fn().mockReturnValue('/tmp/managed.db'),
         rekey: vi.fn()
       }
       const keyStore = { getKeyIdForPath: vi.fn().mockReturnValue('key-id-1') }
 
-      expect(() => logic.rekeyDatabase('new-password', () => manager as never, keyStore)).toThrow(
-        DatabaseError
-      )
-      expect(() => logic.rekeyDatabase('new-password', () => manager as never, keyStore)).toThrow(
-        /managed encryption key/i
-      )
+      await expect(rekey(manager, keyStore)).rejects.toThrow(DatabaseError)
+      await expect(rekey(manager, keyStore)).rejects.toThrow(/managed encryption key/i)
 
       expect(manager.rekey).not.toHaveBeenCalled()
       expect(keyStore.getKeyIdForPath).toHaveBeenCalledWith('/tmp/managed.db')
     })
 
-    it('still rekeys a legacy explicit-password database with no key-store entry', () => {
+    it('still rekeys a legacy explicit-password database with no key-store entry', async () => {
       const manager = {
         getCurrentPath: vi.fn().mockReturnValue('/tmp/legacy.db'),
-        rekey: vi.fn()
+        rekey: vi.fn().mockResolvedValue(undefined)
       }
       const keyStore = { getKeyIdForPath: vi.fn().mockReturnValue(null) }
 
-      expect(logic.rekeyDatabase('new-password', () => manager as never, keyStore)).toEqual({
-        success: true
-      })
+      await expect(rekey(manager, keyStore)).resolves.toEqual({ success: true })
 
       expect(manager.rekey).toHaveBeenCalledWith('new-password')
     })
 
-    it('rekeys when no database is currently open (unchanged edge-case behavior)', () => {
+    it('rekeys when no database is currently open (unchanged edge-case behavior)', async () => {
       const manager = {
         getCurrentPath: vi.fn().mockReturnValue(null),
-        rekey: vi.fn()
+        rekey: vi.fn().mockResolvedValue(undefined)
       }
       const keyStore = { getKeyIdForPath: vi.fn() }
 
-      expect(logic.rekeyDatabase('new-password', () => manager as never, keyStore)).toEqual({
-        success: true
-      })
+      await expect(rekey(manager, keyStore)).resolves.toEqual({ success: true })
 
       expect(manager.rekey).toHaveBeenCalledWith('new-password')
       expect(keyStore.getKeyIdForPath).not.toHaveBeenCalled()
+    })
+
+    it('reports failure, not success, when the session re-key rejects', async () => {
+      const manager = {
+        getCurrentPath: vi.fn().mockReturnValue('/tmp/legacy.db'),
+        rekey: vi.fn().mockRejectedValue(new DatabaseError('work is in progress'))
+      }
+      const keyStore = { getKeyIdForPath: vi.fn().mockReturnValue(null) }
+
+      await expect(rekey(manager, keyStore)).rejects.toThrow('work is in progress')
     })
   })
 

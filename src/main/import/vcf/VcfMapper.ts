@@ -52,17 +52,31 @@ export function mapVcfRecord(
   const gtIdx = record.format.indexOf('GT')
   const rawGt = gtIdx >= 0 && gtIdx < selectedValues.length ? selectedValues[gtIdx] : '.'
   const carriedAlleles = carriedAltAlleles(rawGt)
+  const isNoCallGt = rawGt === '.' || rawGt === './.' || rawGt === '.|.'
   const targetAltIndexes: number[] = []
 
   for (let altIdx = 0; altIdx < record.alt.length; altIdx++) {
     const rawAlt = record.alt[altIdx]
+    if (rawAlt === '<NON_REF>' || rawAlt === '<*>' || rawAlt.toUpperCase() === '<NON_REF>') {
+      continue
+    }
+
     const isStructural =
       rawAlt.startsWith('<') ||
       rawAlt.includes('[') ||
       rawAlt.includes(']') ||
       record.info.has('SVTYPE')
-    if (isStructural || carriedAlleles.has(altIdx + 1)) targetAltIndexes.push(altIdx)
+
+    if (!isNoCallGt) {
+      if (carriedAlleles.has(altIdx + 1)) {
+        targetAltIndexes.push(altIdx)
+      }
+    } else if (isStructural) {
+      targetAltIndexes.push(altIdx)
+    }
   }
+
+  if (targetAltIndexes.length === 0) return results
 
   assertBoundedExpandedRecord(record, targetAltIndexes.length)
   assertBoundedAlleleExpansionWork(record, header, targetAltIndexes.length)

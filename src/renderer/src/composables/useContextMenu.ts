@@ -1,4 +1,5 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { tryOnScopeDispose } from '@vueuse/core'
 
 /** A viewport (client) coordinate pair, the shape Vuetify's `v-menu :target` accepts. */
 export type ContextMenuPoint = [x: number, y: number]
@@ -57,6 +58,14 @@ export function isKeyboardContextMenuEvent(event: MouseEvent): boolean {
  * location strategy expects for a point target; it flips/shifts the menu to
  * stay inside the viewport. The invoking element is remembered so focus can
  * return to it when the menu closes.
+ *
+ * Escape is handled here rather than left to Vuetify alone: `VOverlay` only
+ * closes on Escape once it has flagged itself as the top-most overlay, and it
+ * sets that flag from a `setTimeout` after the open has been flushed
+ * (`useStack`). An Escape that lands in that gap — a fast keypress while the
+ * main thread is busy rendering the opening menu — is dropped and the menu
+ * stays open (issue #452). The listener below is live from the moment `show`
+ * turns true, so Escape always closes an opening menu.
  */
 export function useContextMenu() {
   const show = ref(false)
@@ -64,6 +73,21 @@ export function useContextMenu() {
   const openedByKeyboard = ref(false)
   let returnFocusEl: HTMLElement | null = null
   let keyboardOpenedAt = Number.NEGATIVE_INFINITY
+
+  const closeOnEscape = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') show.value = false
+  }
+  const stopListeningForEscape = () => window.removeEventListener('keydown', closeOnEscape)
+  // Sync, so the listener exists before the browser can deliver the next key.
+  watch(
+    show,
+    (isOpen) => {
+      if (isOpen) window.addEventListener('keydown', closeOnEscape)
+      else stopListeningForEscape()
+    },
+    { flush: 'sync' }
+  )
+  tryOnScopeDispose(stopListeningForEscape)
 
   const openAt = (point: ContextMenuPoint, invoker: EventTarget | null, keyboard: boolean) => {
     target.value = point

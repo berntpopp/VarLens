@@ -8,7 +8,17 @@ import { SqliteStorageSession } from './SqliteStorageSession'
 
 const hasKey = (key?: string): key is string => key !== undefined && key.length > 0
 
-export function createSqliteStorageSession(dbPath: string, key?: string): SqliteStorageSession {
+/** Worker-bundle overrides for tests; production resolves both next to the main bundle. */
+export interface SqliteStorageSessionWorkerPaths {
+  dbWorkerPath?: string
+  writeWorkerPath?: string | null
+}
+
+export function createSqliteStorageSession(
+  dbPath: string,
+  key?: string,
+  workerPaths: SqliteStorageSessionWorkerPaths = {}
+): SqliteStorageSession {
   // A wrong/missing key against an actually-encrypted file fails INSIDE the
   // DatabaseService constructor (the `journal_mode` pragma is what triggers
   // SQLite's read validation) -- so this must wrap the constructor call
@@ -50,11 +60,15 @@ export function createSqliteStorageSession(dbPath: string, key?: string): Sqlite
 
   dbPool.init(dbPath, key, {
     ...(maxThreads !== undefined ? { maxThreads } : {}),
-    ...(geneRefDbPath !== undefined ? { geneRefDbPath } : {})
+    ...(geneRefDbPath !== undefined ? { geneRefDbPath } : {}),
+    ...(workerPaths.dbWorkerPath !== undefined ? { workerPath: workerPaths.dbWorkerPath } : {})
   })
 
   return new SqliteStorageSession({
     databaseService,
-    dbPool
+    dbPool,
+    ...(workerPaths.writeWorkerPath !== undefined
+      ? { writeWorkerPath: workerPaths.writeWorkerPath }
+      : {})
   })
 }

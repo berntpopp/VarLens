@@ -309,10 +309,10 @@ export class DatabaseManager {
    * Change the encryption key for the current database
    *
    * @param newPassword - New encryption password
-   * @throws DatabaseError if no database is open or rekey fails
+   * Rejects with DatabaseError if no database is open, work is in progress, or the rekey fails
    */
-  rekey(newPassword: string): void {
-    this.getCurrentSession().rekey(newPassword)
+  async rekey(newPassword: string): Promise<void> {
+    await this.getCurrentSession().rekey(newPassword)
   }
 
   /**

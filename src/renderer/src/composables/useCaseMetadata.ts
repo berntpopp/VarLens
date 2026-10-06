@@ -11,6 +11,7 @@ import { useCaseComments } from './useCaseComments'
 import { useCaseMetrics } from './useCaseMetrics'
 import { useApiService } from './useApiService'
 import { LruMap } from '../../../shared/utils/lru-map'
+import { PER_CASE_CACHE_LIMIT } from './per-case-cache'
 import {
   mdiAccountAlert,
   mdiAccountCheck,
@@ -31,7 +32,7 @@ import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 
 /** Maximum cached case metadata entries — evicts oldest on overflow */
-const MAX_METADATA_CACHE_SIZE = 200
+const MAX_METADATA_CACHE_SIZE = PER_CASE_CACHE_LIMIT
 
 // Cache full metadata by caseId — shallowRef avoids deep reactivity overhead
 // on the Map's values (FullCaseMetadata objects are never observed individually)
@@ -106,6 +107,8 @@ export function useCaseMetadata() {
     try {
       const result = unwrapIpcResult(await api.caseMetadata.getFullMetadata(caseId))
       if (!isCurrentGeneration(generation)) return
+      // invalidateCase() ran while this was in flight (case deleted): drop it.
+      if (loadingStates.value.get(caseId) !== true) return
       metadataCache.value.set(caseId, result)
       triggerCacheUpdate()
     } catch (error) {
@@ -115,7 +118,7 @@ export function useCaseMetadata() {
         'case-metadata'
       )
     } finally {
-      if (isCurrentGeneration(generation)) {
+      if (isCurrentGeneration(generation) && loadingStates.value.has(caseId)) {
         loadingStates.value.set(caseId, false)
         triggerRef(loadingStates)
       }
@@ -477,12 +480,27 @@ export function useCaseMetadata() {
     useCaseMetrics().clearCache()
   }
 
-  // Invalidate single case (force reload)
+  // Single entry point for evicting one case from EVERY per-case cache
+  // (metadata, comments, metrics) — call when a case is deleted. A new
+  // per-case cache must be added here and in invalidateAllCases().
   function invalidateCase(caseId: number): void {
     metadataCache.value.delete(caseId)
     triggerCacheUpdate()
     loadingStates.value.delete(caseId)
     triggerRef(loadingStates)
+    useCaseComments().invalidateCase(caseId)
+    useCaseMetrics().invalidateCase(caseId)
+  }
+
+  // Evict every case but keep the global catalogs (cohort groups, metric
+  // definitions) — call when all cases are deleted.
+  function invalidateAllCases(): void {
+    metadataCache.value.clear()
+    triggerRef(metadataCache)
+    loadingStates.value.clear()
+    triggerRef(loadingStates)
+    useCaseComments().clearCache()
+    useCaseMetrics().invalidateAllCases()
   }
 
   return {
@@ -501,6 +519,7 @@ export function useCaseMetadata() {
     removeHpoTerm,
     clearCache,
     invalidateCase,
+    invalidateAllCases,
     // Expose cache refs for direct access (reactive)
     cohortGroupsCache,
     metadataCache

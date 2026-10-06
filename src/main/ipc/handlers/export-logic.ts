@@ -19,6 +19,7 @@ import type { CohortSearchParams } from '../../../shared/types/cohort'
 import type { ExportFilterSummary } from '../../../shared/types/export-worker'
 import { EXPORT_COLUMNS, type ExportColumn } from '../../workers/export-pipeline'
 import { csvEscape, formatCellValue } from '../../workers/export-renderer'
+import { buildVariantFilter } from './variants-logic'
 
 const EXPORT_HARD_LIMIT = 100_000
 
@@ -115,10 +116,11 @@ export async function prepareVariantExport(
   | ExportResult
 > {
   const db = getDb()
-  const fullFilter: VariantFilter = {
-    ...filters,
-    case_id: caseId
-  }
+  // Resolve the active gene panel exactly as the on-screen query does
+  // (buildVariantFilter): the compiled export SQL only understands
+  // `panel_intervals`, so an unresolved `active_panel_ids` would export the
+  // whole case while the table shows the panel-restricted set (issue #447).
+  const fullFilter = buildVariantFilter(caseId, filters, getDb)
   const dbPool = getDbPool?.() ?? null
   const count =
     dbPool !== null
