@@ -1,6 +1,6 @@
 # Local-first CI and build optimization
 
-Date: 2026-10-06. Status: proposed for review; not implemented.
+Date: 2026-10-06. Status: approved by the user; Opus 5.5 review incorporated; implementation in progress.
 
 Evidence: [comparison and audit](../docs/2026-10-06-ci-build-optimization-audit.md),
 [baseline measurements](../artifacts/perf/build/audit-2026-10-06.md).
@@ -182,10 +182,10 @@ Publish the exact single-platform image that passed the vulnerability gate;
 verify image identity/digest rather than treating a second cached build as
 automatically identical. Preserve current scan severity and exception policy.
 
-Docs-only prose updates use existing tracked screenshots. Screenshot inputs
-include app source, fixtures, capture scripts, tool versions, and build config;
-changes to those still require capture. Do not cache solely by documentation
-source while ignoring application pixels.
+Docs-only prose updates reuse verified screenshot artifacts for the exact capture-input
+fingerprint. Cache misses regenerate; never fall back to older tracked pixels.
+Local captures write outside tracked documentation. Screenshot inputs include app
+source, fixtures, capture scripts, tool versions, and build configuration.
 
 ## Actions and agent workflow
 
