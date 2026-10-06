@@ -60,12 +60,6 @@ interface MutationPlan {
   updates: AnnotationUpdates
   /** On failure: re-apply these fields, or restore the whole previous slot. */
   rollback: SlotPatch | 'restore-previous'
-  /**
-   * Whether watchers are notified after a failed write: only when an entry
-   * was cached, always, or never. Preserved per operation as it was before
-   * the per-scope implementations were merged.
-   */
-  notifyOnFailure: 'if-cached' | 'always' | 'never'
   /** Log prefix, e.g. `Failed to toggle star: `. */
   failureMessage: string
 }
@@ -140,7 +134,6 @@ function toggleStarPlan(scope: AnnotationWriteScope, previous: SlotValue | null)
     optimistic: { starred: wasStarred ? 0 : 1 },
     updates: { starred: !wasStarred },
     rollback: { starred: wasStarred ? 1 : 0 },
-    notifyOnFailure: scope.kind === 'case' ? 'if-cached' : 'always',
     failureMessage: `Failed to toggle ${scopeQualifier(scope)}star: `
   }
 }
@@ -154,7 +147,6 @@ function acmgPlan(
     optimistic: { acmg_classification: classification },
     updates: { acmg_classification: classification },
     rollback: { acmg_classification: previous?.acmg_classification ?? null },
-    notifyOnFailure: 'always',
     failureMessage: `Failed to set ${scopeQualifier(scope)}ACMG classification: `
   }
 }
@@ -169,7 +161,6 @@ function commentPlan(
       optimistic: { per_case_comment: comment },
       updates: { per_case_comment: comment },
       rollback: { per_case_comment: current?.perCase?.per_case_comment ?? null },
-      notifyOnFailure: 'always',
       failureMessage: 'Failed to upsert per-case comment: '
     }
   }
@@ -177,7 +168,6 @@ function commentPlan(
     optimistic: { global_comment: comment },
     updates: { global_comment: comment },
     rollback: { global_comment: current?.global?.global_comment ?? null },
-    notifyOnFailure: 'always',
     failureMessage: 'Failed to upsert global comment: '
   }
 }
@@ -196,7 +186,6 @@ function acmgWithEvidencePlan(
       user_name: userName
     },
     rollback: 'restore-previous',
-    notifyOnFailure: 'never',
     failureMessage: `Failed to set ${scopeQualifier(scope)}ACMG classification with evidence: `
   }
 }
@@ -239,10 +228,10 @@ async function mutate(
     cacheSet(key, mergeServerSlot(current, scope, updated))
   } catch (error) {
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
+    // Every failed write rolls back and notifies, so no view keeps showing the
+    // optimistic value of a write that never landed.
     if (current) rollBackSlot(current, scope, plan, previous)
-    if (plan.notifyOnFailure === 'always' || (plan.notifyOnFailure === 'if-cached' && current)) {
-      triggerAnnotationCache()
-    }
+    triggerAnnotationCache()
   }
 }
 

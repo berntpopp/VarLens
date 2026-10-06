@@ -10684,7 +10684,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -10731,7 +10731,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -10982,7 +10982,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11060,7 +11060,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11219,7 +11219,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -11250,7 +11250,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -11431,7 +11431,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11478,7 +11478,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11753,7 +11753,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11833,7 +11833,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -12008,7 +12008,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -12041,7 +12041,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -12727,7 +12727,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope case > un
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -12756,7 +12756,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope case > un
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
