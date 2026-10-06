@@ -16,6 +16,7 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
 import { useApiService } from '../composables/useApiService'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useCaseTabUrlParam } from '../composables/useViewUrlBindings'
 
 const {
   selectedCaseId,
@@ -147,11 +148,21 @@ watch(
   { immediate: true }
 )
 
+// URL `?tab=` (web deep links / back-forward); the URL wins over the default-tab rule.
+const countsLoading = ref(false)
+const { consumePendingTab } = useCaseTabUrlParam({
+  selectedCaseId,
+  selectedVariantType,
+  countsLoading,
+  availableTabs: () => tabItems.value.map((item) => item.type)
+})
+
 async function loadTypeCounts(caseId: number | null): Promise<void> {
   if (caseId === null || caseId === 0 || api === undefined) {
     typeCounts.value = {}
     return
   }
+  countsLoading.value = true
   try {
     typeCounts.value = unwrapIpcResult(await api.variants.typeCounts(caseId))
   } catch (error) {
@@ -166,6 +177,8 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
     )
     typeCounts.value = {}
     return
+  } finally {
+    countsLoading.value = false
   }
 
   // Default-selection rule: if the caller hasn't explicitly picked a
@@ -184,6 +197,13 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
   //
   // Empty case (no variants) → leave the sentinel `'snv'` default.
   const presentTypes = getPresentTabTypes(typeCounts.value)
+
+  const requestedTab = consumePendingTab(presentTypes)
+  if (requestedTab !== null) {
+    lastNonShortlistType.value = requestedTab === 'shortlist' ? presentTypes[0] : requestedTab
+    selectedVariantType.value = requestedTab
+    return
+  }
 
   if (selectedVariantType.value === 'snv' && presentTypes.length >= 1) {
     // Always seed `lastNonShortlistType` regardless of preference so

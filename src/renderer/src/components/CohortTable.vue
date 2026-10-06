@@ -343,6 +343,7 @@ const {
   reloadIfFiltersChanged,
   resetSort
 } = useOffsetPagination<CohortVariant>({
+  urlSortRoute: 'cohort',
   fetchPage: async ({ offset, limit, sortBy: sortItems, skipCount }) => {
     if (!api || !isActive.value) {
       return { data: [], total_count: 0 }

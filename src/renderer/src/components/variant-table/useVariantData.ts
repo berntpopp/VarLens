@@ -74,6 +74,7 @@ export function useVariantData(options: UseVariantDataOptions) {
     resetSort,
     resetState
   } = useOffsetPagination<Variant>({
+    urlSortRoute: 'case',
     fetchPage: async ({ offset, limit, sortBy: sortItems, skipCount }) => {
       if (!api) {
         logService.warn('API not available - running outside Electron', 'variants')
