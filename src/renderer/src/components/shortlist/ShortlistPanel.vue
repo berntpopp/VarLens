@@ -56,7 +56,9 @@ const { showStale, ariaBusy, liveMessage } = useTableLoadingState({
   loading,
   totalCount: computed(() => result.value?.rows.length ?? null)
 })
-const showSkeleton = computed(() => loading.value && result.value === null)
+// Skeleton until the first result, not only while `loading`: the query starts
+// asynchronously, so gating on loading left the body empty for a frame or two.
+const showSkeleton = computed(() => result.value === null && error.value === null)
 
 /**
  * Toggle the star annotation for a row. Writes through

@@ -115,6 +115,24 @@ describe('ShortlistPanel', () => {
     resetState()
   })
 
+  it('shows the skeleton before the first query has started (no empty-body frame)', () => {
+    state.loading.value = false
+    state.result.value = null
+    const wrapper = mount(ShortlistPanel, {
+      props: { caseId: 1 },
+      global: { plugins: [vuetify] }
+    })
+    expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(true)
+  })
+
+  it('keeps the summary slot rendered before a result so the header height is fixed', () => {
+    const wrapper = mount(ShortlistPanel, {
+      props: { caseId: 1 },
+      global: { plugins: [vuetify] }
+    })
+    expect(wrapper.find('.shortlist-panel__summary').exists()).toBe(true)
+  })
+
   it('renders loading skeleton when loading=true', () => {
     state.loading.value = true
     state.result.value = null

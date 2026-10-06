@@ -23,6 +23,7 @@ import RankScoreTooltip from './RankScoreTooltip.vue'
 import { useRowHoverTarget } from './useRowHoverTarget'
 import { CellChip, CellIcon } from '../table-cells/cell-components'
 import { useSharedMenu } from '../table-cells/shared-menu'
+import { useResultSetKeys } from '../table-state/useResultSetKeys'
 import { useTableKeyboardNav, isInputFocused } from '../../composables/useTableKeyboardNav'
 import type { ShortlistRow } from '../../../../shared/types/shortlist'
 
@@ -152,6 +153,12 @@ const rankTipRow = computed(() =>
 const actionsMenu = useSharedMenu<ShortlistRow>()
 const { open: actionsOpen, activator: actionsActivator, payload: actionsRow } = actionsMenu
 
+// Fresh <tr>s when another case/preset result arrives: moved rows are layout shifts
+const { rowKey } = useResultSetKeys(
+  () => props.rows,
+  (row) => row.id
+)
+
 // Keyboard navigation and row selection
 const rowsRef = computed(() => props.rows)
 
@@ -230,7 +237,7 @@ onKeyStroke(
   <v-data-table
     :headers="headers"
     :items="props.rows"
-    item-value="id"
+    :item-value="rowKey"
     density="compact"
     :items-per-page="50"
     :items-per-page-options="[25, 50, 100, 250, 500]"

@@ -80,6 +80,8 @@ function getPresentTabTypes(counts: Record<string, number>): PerTypeTab[] {
  * filter/query code that only accepts real DB variant types.
  */
 const selectedVariantType = ref<VisibleTab>('snv')
+/** Tab chosen automatically on the last case switch (see the selectedCaseId watcher). */
+const autoSelectedTab = ref<VisibleTab>('snv')
 
 /**
  * Tracks the last non-shortlist tab the user (or the default-selection
@@ -168,9 +170,9 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
     return
   }
 
-  // Default-selection rule: if the caller hasn't explicitly picked a
-  // tab yet (`selectedVariantType.value === 'snv'` is the reset sentinel
-  // set by the case watcher below), consult the user preference
+  // Default-selection rule: if the user hasn't explicitly picked a tab
+  // since the case switch (the tab still equals `autoSelectedTab`, set by
+  // the case watcher below), consult the user preference
   // `settingsStore.defaultCaseTab`:
   //
   //   • 'shortlist' (default) → land on Shortlist AND seed
@@ -182,10 +184,14 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
   //     preserves the "open the non-empty tab" behavior the app had
   //     before the Shortlist feature.
   //
-  // Empty case (no variants) → leave the sentinel `'snv'` default.
+  // Empty case (no variants) → `'snv'` (no Shortlist tab exists).
   const presentTypes = getPresentTabTypes(typeCounts.value)
 
-  if (selectedVariantType.value === 'snv' && presentTypes.length >= 1) {
+  // Apply the default only if the user has not picked a tab since the switch.
+  if (selectedVariantType.value !== autoSelectedTab.value) return
+  if (presentTypes.length === 0) {
+    selectedVariantType.value = 'snv'
+  } else {
     // Always seed `lastNonShortlistType` regardless of preference so
     // toggling Shortlist → per-type → Shortlist works without a stale
     // VariantTable bind on sv-only / cnv+str cases.
@@ -204,9 +210,12 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
 watch(
   selectedCaseId,
   (newCaseId) => {
-    // Reset to the conventional default; loadTypeCounts may override this
-    // after the counts resolve if the case has zero SNV/indel variants.
-    selectedVariantType.value = 'snv'
+    // Land on the preferred tab right away. Resetting to 'snv' until the type
+    // counts arrived swapped Shortlist -> SNV table -> Shortlist on every case
+    // switch (visible flicker + a needless FilterToolbar mount); the counts
+    // only correct the choice for empty or snv-preference cases.
+    autoSelectedTab.value = settingsStore.defaultCaseTab === 'shortlist' ? 'shortlist' : 'snv'
+    selectedVariantType.value = autoSelectedTab.value
     void loadTypeCounts(newCaseId)
   },
   { immediate: true }
@@ -392,6 +401,13 @@ defineExpose({
         </v-chip>
       </v-tab>
     </v-tabs>
+    <!-- Reserve the tab row while the first type counts load, so it does not
+         push the banner and table down when it appears (open-case shift). -->
+    <div
+      v-else-if="!typeCountsLoaded"
+      class="variant-type-tabs variant-type-tabs--pending"
+      aria-hidden="true"
+    />
 
     <!-- Persistent Proband & Phenotype Context Banner -->
     <ProbandContextBanner
@@ -528,6 +544,12 @@ defineExpose({
   border-radius: 6px;
   margin-right: 6px;
   border-right: 1px solid rgba(var(--v-theme-outline), 0.3);
+}
+
+.variant-type-tabs--pending {
+  /* Same height as the compact v-tabs bar */
+  height: var(--v-tabs-height, 36px);
+  flex: 0 0 auto;
 }
 
 .variant-type-tabs :deep(.v-tab.shortlist-tab.v-tab--selected) {
