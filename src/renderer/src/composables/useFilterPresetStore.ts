@@ -135,6 +135,7 @@ export function useFilterPresetStore(scope: PresetScope = 'case') {
       const fj = preset.filterJson
       // Scalar fields: last wins
       if (fj.maxGnomadAf !== undefined) merged.maxGnomadAf = fj.maxGnomadAf
+      if (fj.maxInternalAf !== undefined) merged.maxInternalAf = fj.maxInternalAf
       if (fj.minCadd !== undefined) merged.minCadd = fj.minCadd
       if (fj.minCarriers !== undefined) merged.minCarriers = fj.minCarriers
       if (fj.searchQuery !== undefined) merged.searchQuery = fj.searchQuery
