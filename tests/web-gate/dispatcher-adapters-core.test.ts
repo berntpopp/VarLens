@@ -40,7 +40,8 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
         20,
         [{ key: 'pos', order: 'desc' }],
         true,
-        true
+        true,
+        undefined
       ]
     })
   })
@@ -54,8 +55,29 @@ describe('web dispatcher adapters: variants, transcripts, and errors', () => {
     expect(reply.code).not.toHaveBeenCalled()
     expect(execute).toHaveBeenCalledWith({
       type: 'variants:query',
-      params: [{ case_id: 7 }, 50, 0, undefined, false, false]
+      params: [{ case_id: 7 }, 50, 0, undefined, false, false, undefined]
     })
+  })
+
+  test('variants.query maps the keyset cursor opt-in (8th arg) to the page param', async () => {
+    const { deps, execute, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const call = (cursor: unknown) =>
+      overrides['variants:query'].handle(
+        [7, {}, 0, 50, undefined, false, false, cursor],
+        {} as never,
+        reply as never,
+        deps
+      )
+
+    await call('')
+    expect(execute.mock.calls.at(-1)?.[0].params[6]).toEqual({})
+    await call('opaque-cursor')
+    expect(execute.mock.calls.at(-1)?.[0].params[6]).toEqual({ cursor: 'opaque-cursor' })
+    expect(reply.code).not.toHaveBeenCalled()
+
+    await call(42)
+    expect(reply.code).toHaveBeenCalledWith(400)
   })
 
   test('variants.getFilterOptions maps the preload method name to variants:filterOptions', async () => {
