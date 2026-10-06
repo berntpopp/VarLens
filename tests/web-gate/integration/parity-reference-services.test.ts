@@ -86,9 +86,17 @@ describe.skipIf(!HAS_PG)('parity P-C reference services (web/Postgres)', () => {
     ])
     expect(set.statusCode, set.body).toBe(200)
 
+    // panels.exportBed uses P-D's signed single-use download grant.
+    const prepared = await driver.api('export', 'prepareDownload', {
+      kind: 'panel-bed',
+      panelId: panel.id,
+      assembly: 'GRCh38',
+      paddingBp: 0
+    })
+    expect(prepared.statusCode, prepared.body).toBe(200)
     const bed = await driver.app.inject({
       method: 'GET',
-      url: `/api/panels/export-bed?panelId=${panel.id}&assembly=GRCh38&paddingBp=0`,
+      url: `/api/${(prepared.json() as { downloadPath: string }).downloadPath}`,
       headers: { cookie: driver.cookie }
     })
     expect(bed.statusCode, bed.body).toBe(200)
