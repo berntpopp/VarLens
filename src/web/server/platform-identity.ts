@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 
 import type { FastifyRequest } from 'fastify'
 
-import type { UserRole } from '../../shared/auth/auth-constants'
+import { normalizeUserRole, type UserRole } from '../../shared/auth/auth-constants'
 import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
 import type { PlatformIdentityConfig } from './platform-identity-config'
 import {
@@ -99,10 +99,6 @@ export class PlatformIdentityRevokedError extends Error {
     super(message)
     this.name = 'PlatformIdentityRevokedError'
   }
-}
-
-function isUserRole(value: string): value is UserRole {
-  return value === 'admin' || value === 'user'
 }
 
 function assertObjectResponse(value: unknown, label: string): Record<string, unknown> {
@@ -310,10 +306,12 @@ export class PlatformIdentityService {
         `platform entitlement is not active: ${entitlement.status}`
       )
     }
-    if (typeof entitlement.role !== 'string' || !isUserRole(entitlement.role)) {
+    // Accepts the legacy `user` claim as analyst (pre-0024 entitlement services).
+    const role = normalizeUserRole(entitlement.role)
+    if (role === undefined) {
       throw new PlatformIdentityRevokedError('platform entitlement role is not valid for VarLens')
     }
-    const result = { role: entitlement.role }
+    const result = { role }
     this.entitlementCache.delete(subject)
     if (this.entitlementCache.size >= ENTITLEMENT_CACHE_MAX_ENTRIES) {
       const firstKey = this.entitlementCache.keys().next().value

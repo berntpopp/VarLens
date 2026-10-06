@@ -2,7 +2,12 @@
   <div class="tags-section">
     <div class="d-flex align-center justify-space-between mb-2">
       <h3 class="text-title-small">Tags</h3>
-      <v-menu v-model="menuOpen" :close-on-content-click="false" location="bottom end">
+      <v-menu
+        v-if="canWrite"
+        v-model="menuOpen"
+        :close-on-content-click="false"
+        location="bottom end"
+      >
         <template #activator="{ props: menuProps }">
           <v-btn
             aria-label="Add tag"
@@ -58,7 +63,7 @@
           :color="tag.color"
           size="small"
           variant="flat"
-          closable
+          :closable="canWrite"
           :disabled="loading"
           @click:close="removeTag(tag.id)"
         >
@@ -72,6 +77,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useTags } from '../composables/useTags'
+import { usePermissions } from '../composables/usePermissions'
 import type { Tag } from '../../../shared/types/database-entities'
 import { mdiCheckboxBlankOutline, mdiCheckboxMarked, mdiPlus } from '@mdi/js'
 import { logService } from '../services/LogService'
@@ -84,6 +90,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { canWrite } = usePermissions()
 
 const emit = defineEmits<{
   changed: []

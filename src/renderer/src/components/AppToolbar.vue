@@ -69,6 +69,17 @@
     </div>
 
     <ImportStatusChip @click="$emit('show-import-progress')" />
+    <v-chip
+      v-if="role === 'viewer'"
+      size="small"
+      variant="outlined"
+      class="ml-2"
+      :prepend-icon="mdiEyeOutline"
+      :title="writeBlockedReason ?? undefined"
+      data-testid="read-only-chip"
+    >
+      Read-only
+    </v-chip>
 
     <v-spacer />
 
@@ -112,20 +123,22 @@
           title="Database Overview"
           @click="$emit('show-database-overview')"
         />
+        <!-- Role-blocked actions are hidden (viewers see the Read-only chip). -->
         <v-list-item
+          v-if="canWrite"
           :prepend-icon="mdiDatabaseImport"
           title="Import Data"
           :subtitle="importShortcut"
           @click="$emit('import-click')"
         />
         <v-list-item
-          v-if="multiFileImportAvailable"
+          v-if="multiFileImportAvailable && canWrite"
           :prepend-icon="mdiFileDocumentMultiple"
           title="Import VCF Files"
           subtitle="Multi-file case (SNV + SV + CNV + STR)"
           @click="$emit('vcf-import-click')"
         />
-        <v-divider class="my-1" />
+        <v-divider class="my-1" role="none" />
         <v-list-subheader>Settings</v-list-subheader>
         <v-list-item
           :prepend-icon="mdiLink"
@@ -133,6 +146,7 @@
           @click="$emit('show-external-links')"
         />
         <v-list-item
+          v-if="canWrite"
           :prepend-icon="mdiTagMultiple"
           title="Custom Tags"
           @click="$emit('show-tag-management')"
@@ -147,7 +161,7 @@
           title="Application Preferences"
           @click="$emit('show-preferences')"
         />
-        <v-divider class="my-1" />
+        <v-divider class="my-1" role="none" />
         <v-list-subheader>Reset Preferences</v-list-subheader>
         <v-list-item
           :prepend-icon="mdiTableColumn"
@@ -161,9 +175,16 @@
           subtitle="Restore default filter group arrangement"
           @click="$emit('reset-filters')"
         />
-        <v-divider class="my-1" />
-        <v-list-subheader class="danger-zone-subheader">Danger Zone</v-list-subheader>
-        <v-list-item :disabled="deleteAllReason !== null" @click="$emit('delete-all-cases')">
+        <template v-if="canAdmin">
+          <v-divider class="my-1" role="none" />
+          <v-list-subheader class="danger-zone-subheader">Danger Zone</v-list-subheader>
+        </template>
+        <v-list-item
+          v-if="canAdmin"
+          :disabled="deleteAllReason !== null"
+          :aria-disabled="deleteAllReason !== null ? 'true' : undefined"
+          @click="$emit('delete-all-cases')"
+        >
           <template #prepend>
             <v-icon color="error" :icon="mdiDeleteSweep" />
           </template>
@@ -188,9 +209,9 @@ import IconButton from './common/IconButton.vue'
 import { useAppState } from '../composables/useAppState'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
-import { useAuthStore } from '../stores/authStore'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import { getCurrentUnsupportedReasonSync } from '../utils/backend-capabilities'
+import { usePermissions } from '../composables/usePermissions'
 import type { AffectedStatus, CaseSex } from '../../../shared/types/api'
 import {
   mdiAccount,
@@ -201,6 +222,7 @@ import {
   mdiCog,
   mdiDatabaseImport,
   mdiDeleteSweep,
+  mdiEyeOutline,
   mdiFileDocumentMultiple,
   mdiFilterOff,
   mdiInformationOutline,
@@ -227,16 +249,10 @@ const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const multiFileImportAvailable = useCapabilityStore().canUse('multiFileImport')
 const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+O' : 'Alt+Shift+O'
-const authStore = useAuthStore()
-// Capability-gated: disabled with the reason instead of failing after a click.
-// With user accounts, deleting every case is admin-only (the web server
-// enforces it too).
+const { role, canWrite, canAdmin, writeBlockedReason, adminBlockedReason } = usePermissions()
+// Role- and capability-gated: disabled with the reason instead of failing after a click.
 const deleteAllReason = computed(
-  () =>
-    getCurrentUnsupportedReasonSync('cases.deleteAll') ??
-    (authStore.currentUser !== null && !authStore.isAdmin
-      ? 'Only administrators can delete all cases'
-      : null)
+  () => adminBlockedReason.value ?? getCurrentUnsupportedReasonSync('cases.deleteAll')
 )
 
 // Preload metadata when a case is selected so status/sex icons display immediately

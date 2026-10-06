@@ -7,7 +7,7 @@
       <div class="d-flex align-center justify-space-between mb-1">
         <span class="text-body-small font-weight-medium">Global Comment</span>
         <v-btn
-          v-if="globalComment"
+          v-if="globalComment && canWrite"
           aria-label="Delete global comment"
           icon
           size="x-small"
@@ -22,6 +22,7 @@
         :model-value="globalComment"
         placeholder="Add a global comment..."
         :loading="globalSaving"
+        :readonly="!canWrite"
         @update:model-value="handleGlobalSave"
       />
       <div v-if="globalTimestamps" class="text-body-small text-muted mt-1">
@@ -37,7 +38,7 @@
       <div class="d-flex align-center justify-space-between mb-1">
         <span class="text-body-small font-weight-medium">Case Comment</span>
         <v-btn
-          v-if="perCaseComment"
+          v-if="perCaseComment && canWrite"
           aria-label="Delete case comment"
           icon
           size="x-small"
@@ -52,6 +53,7 @@
         :model-value="perCaseComment"
         placeholder="Add a case-specific comment..."
         :loading="perCaseSaving"
+        :readonly="!canWrite"
         @update:model-value="handlePerCaseSave"
       />
       <div v-if="perCaseTimestamps" class="text-body-small text-muted mt-1">
@@ -87,6 +89,7 @@ import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import { mdiDelete } from '@mdi/js'
 import { logService } from '../services/LogService'
+import { usePermissions } from '../composables/usePermissions'
 
 interface Props {
   variant: Variant | CohortVariant
@@ -95,6 +98,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { canWrite } = usePermissions()
 
 const {
   getAnnotations,

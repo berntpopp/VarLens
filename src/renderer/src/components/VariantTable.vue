@@ -67,6 +67,7 @@
           :has-global-comment="item.render.hasGlobalComment"
           :show-global-indicators="true"
           :annotation-scope="annotationScope"
+          :read-only="!canWrite"
           @star-toggle="annotationDialogsRef?.handleStarToggle(item)"
           @acmg-select="(c) => annotationDialogsRef?.handleQuickAcmgSelect(item, c)"
           @acmg-evidence-click="annotationDialogsRef?.openAcmgEvidenceDialog(item)"
@@ -322,6 +323,9 @@ import {
 import AcmgQuickMenu from './table-cells/AcmgQuickMenu.vue'
 import { provideAcmgQuickMenu } from './table-cells/acmg-quick-menu'
 import { useResultSetKeys } from './table-state/useResultSetKeys'
+import { usePermissions } from '../composables/usePermissions'
+
+const { canWrite } = usePermissions()
 
 interface Props {
   caseId: number

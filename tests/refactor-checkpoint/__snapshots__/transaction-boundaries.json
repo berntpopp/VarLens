@@ -48,6 +48,11 @@
       "assignedTo": "seedTransaction"
     },
     {
+      "file": "src/main/database/user-roles-migration.ts",
+      "callerFunction": "migrateUserRoles",
+      "assignedTo": "rebuild"
+    },
+    {
       "file": "src/main/database/VariantFilterBuilder.ts",
       "callerFunction": "setupPanelIntervalsTable",
       "assignedTo": "insertMany"

@@ -7,6 +7,8 @@
     :active-filter-count="mergedActiveFilterCount"
     :active-filters-list="mergedActiveFiltersList"
     :exporting="exporting"
+    :export-blocked-reason="writeBlockedReason"
+    :export-formats="isWebRuntime()"
     :columns="columns"
     @clear-all="handleClearAll"
     @clear-filter="handleClearFilter"
@@ -166,6 +168,9 @@ import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
 import { stripVueProxies } from '../utils/stripVueProxies'
+import { isWebRuntime } from '../utils/runtime-mode'
+import { usePermissions } from '../composables/usePermissions'
+import type { ExportFormat } from '../../../shared/ipc/domains/export'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import { useAutoHiddenColumns, useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useApiService } from '../composables/useApiService'
@@ -571,8 +576,10 @@ watch(
 )
 
 // Export to Excel - wrapper that bridges composable result to emit events
-const exportToExcel = async () => {
-  const result = await composableExportToExcel(props.caseId, props.caseName)
+const { writeBlockedReason } = usePermissions()
+
+const exportToExcel = async (format?: ExportFormat) => {
+  const result = await composableExportToExcel(props.caseId, props.caseName, format)
 
   if (result === null) return
 

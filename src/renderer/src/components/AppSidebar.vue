@@ -15,7 +15,8 @@
         size="small"
         class="mr-1"
       />
-      <v-menu location="bottom end" offset="4">
+      <!-- Import is an analyst action; viewers do not get the menu at all. -->
+      <v-menu v-if="canWrite" location="bottom end" offset="4">
         <template #activator="{ props: menuProps }">
           <IconButton v-bind="menuProps" label="Import data" :icon="mdiPlus" class="mr-1" />
         </template>
@@ -48,8 +49,11 @@ import {
   mdiFileDocumentMultiple,
   mdiFileImportOutline
 } from '@mdi/js'
+import { usePermissions } from '../composables/usePermissions'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import IconButton from './common/IconButton.vue'
+
+const { canWrite } = usePermissions()
 
 const multiFileImportAvailable = useCapabilityStore().canUse('multiFileImport')
 

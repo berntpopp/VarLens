@@ -8,7 +8,11 @@
 import type { WindowAPI } from '../../shared/types/api'
 import { ALLOWED_DOMAINS } from '../../shared/config/allowed-domains'
 import { isIpcError } from '../../shared/types/errors'
-import { exportCohortDownload, exportVariantsDownload } from './export-download'
+import {
+  exportCohortDownload,
+  exportPanelBedDownload,
+  exportVariantsDownload
+} from './export-download'
 import { subscribeWebEvent } from './sse'
 import { httpInvoke } from './transport'
 import { pickAndUploadFiles, uploadImportFiles } from './uploads'
@@ -119,9 +123,16 @@ export const LOCAL_API: LocalApi = {
     // Streamed browser downloads (export-download.ts). The browser's download
     // manager owns a running export: cancelling it there closes the socket,
     // which ends the server-side query stream, so `cancel` has nothing to stop.
-    variants: exportVariantsDownload,
-    cohort: exportCohortDownload,
-    cancel: () => Promise.resolve({ cancelled: false })
+    variants: (caseId, filters, caseName, options) =>
+      exportVariantsDownload(caseId, filters, caseName, options),
+    cohort: (params, options) => exportCohortDownload(params, options),
+    cancel: () => Promise.resolve({ cancelled: false }),
+    onProgress: (callback) => subscribeWebEvent('export:progress', callback)
+  },
+  panels: {
+    // Signed single-use BED download; the rest of panel tooling is RPC.
+    exportBed: (panelId, assembly, paddingBp) =>
+      exportPanelBedDownload(panelId, assembly, paddingBp)
   },
   shell,
   system: {

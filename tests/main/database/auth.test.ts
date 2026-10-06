@@ -52,7 +52,7 @@ describe('Users table migration', () => {
 
     expect(() => {
       db.prepare(
-        "INSERT INTO users (username, password_hash, role) VALUES ('admin', 'hash2', 'user')"
+        "INSERT INTO users (username, password_hash, role) VALUES ('admin', 'hash2', 'analyst')"
       ).run()
     }).toThrow(/UNIQUE constraint failed/)
   })
@@ -166,7 +166,7 @@ describe('AuthService', () => {
 
     it('should create regular user', async () => {
       const user = await authService.createUser('user1', 'User One', 'temppass', 'admin1')
-      expect(user.role).toBe('user')
+      expect(user.role).toBe('viewer')
       expect(user.must_change_password).toBe(1)
     })
 
@@ -183,9 +183,9 @@ describe('AuthService', () => {
       await authService.createUser('user1', 'User One', 'pass', 'admin1')
       authService.setRole('user1', 'admin')
       expect(authService.getUser('user1')?.role).toBe('admin')
-      authService.setRole('admin1', 'user')
-      expect(authService.getUser('admin1')?.role).toBe('user')
-      expect(() => authService.setRole('user1', 'user')).toThrow(/last active admin/)
+      authService.setRole('admin1', 'analyst')
+      expect(authService.getUser('admin1')?.role).toBe('analyst')
+      expect(() => authService.setRole('user1', 'analyst')).toThrow(/last active admin/)
       expect(() => authService.setRole('ghost', 'admin')).toThrow(/User not found/)
     })
 
@@ -296,7 +296,7 @@ describe('AuthService', () => {
       const admin = users.find((u) => u.username === 'admin1')
       expect(admin?.role).toBe('admin')
       const regularUser = users.find((u) => u.username === 'user1')
-      expect(regularUser?.role).toBe('user')
+      expect(regularUser?.role).toBe('viewer')
     })
 
     it('should handle changing password with wrong old password', async () => {

@@ -288,6 +288,7 @@ describe('web dispatcher adapters: auth and import', () => {
     )
 
     expect(deps.authService.resetPassword).toHaveBeenCalledWith('analyst', 'temporary-secret')
+    expect(reply.code).toHaveBeenCalledWith(202)
     expect(deps.authService.deactivateUser).toHaveBeenCalledWith('analyst')
     expect(writeExecute).toHaveBeenCalledWith({
       type: 'audit:append',
@@ -312,6 +313,64 @@ describe('web dispatcher adapters: auth and import', () => {
       ]
     })
     expect(JSON.stringify(writeExecute.mock.calls)).not.toContain('temporary-secret')
+  })
+
+  test('auth.resetPassword answers an unknown user exactly like a known one, but audits the failure', async () => {
+    const { UserAdminError } = await import('../../src/web/auth/postgres-user-admin')
+    const request = {
+      session: { user: { id: 1, username: 'admin', role: 'admin', passwordChangedAt: null } }
+    }
+
+    const known = makeDeps()
+    const knownResult = await buildDispatcher(known.deps).overrides['auth:resetPassword'].handle(
+      ['analyst', 'temporary-secret'],
+      request as never,
+      known.reply as never,
+      known.deps
+    )
+
+    const unknown = makeDeps()
+    unknown.deps.authService.resetPassword = vi.fn(async () => {
+      throw new UserAdminError('user-not-found', 'User not found: ghost')
+    })
+    const unknownResult = await buildDispatcher(unknown.deps).overrides[
+      'auth:resetPassword'
+    ].handle(['ghost', 'temporary-secret'], request as never, unknown.reply as never, unknown.deps)
+
+    // No enumeration: identical status and body.
+    expect(unknownResult).toEqual(knownResult)
+    expect(unknownResult).toEqual({ accepted: true })
+    expect(unknown.reply.code.mock.calls).toEqual(known.reply.code.mock.calls)
+    expect(unknown.reply.code).toHaveBeenCalledWith(202)
+
+    // No pretending: the trail says the reset did not happen.
+    expect(unknown.writeExecute).toHaveBeenCalledWith({
+      type: 'audit:append',
+      params: [
+        expect.objectContaining({
+          action_type: 'auth_password_reset',
+          entity_key: 'ghost',
+          user_name: 'admin',
+          new_value: { success: false, reason: 'user-not-found' }
+        })
+      ]
+    })
+  })
+
+  test('auth.resetPassword still surfaces password-policy errors', async () => {
+    const { PasswordPolicyError } = await import('../../src/web/auth/PostgresWebAuthService')
+    const { deps, reply } = makeDeps()
+    deps.authService.resetPassword = vi.fn(async () => {
+      throw new PasswordPolicyError('too-short', 'New password must be at least 12 characters.')
+    })
+    const result = await buildDispatcher(deps).overrides['auth:resetPassword'].handle(
+      ['analyst', 'temporary-secret'],
+      { session: { user: { id: 1, username: 'admin', role: 'admin' } } } as never,
+      reply as never,
+      deps
+    )
+    expect(reply.code).toHaveBeenCalledWith(422)
+    expect(result).toMatchObject({ error: 'too-short' })
   })
 
   test('import.start rejects raw server paths in production web mode', async () => {
@@ -1156,7 +1215,8 @@ describe('web dispatcher adapters: auth and import', () => {
       'analyst',
       'Analyst',
       'temporary-password',
-      'admin'
+      'admin',
+      'viewer'
     )
     const audit = writeExecute.mock.calls.map(
       ([task]) => task as { type: string; params: unknown[] }
@@ -1175,6 +1235,35 @@ describe('web dispatcher adapters: auth and import', () => {
       })
     )
     expect(JSON.stringify(audit)).not.toContain('temporary-password')
+  })
+
+  test('auth.createUser accepts an explicit role and rejects unknown roles', async () => {
+    const { deps, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 1, username: 'admin', role: 'admin' } } }
+
+    await overrides['auth:createUser'].handle(
+      ['ana', 'Ana', 'temporary-password', 'analyst'],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(deps.authService.createUser).toHaveBeenCalledWith(
+      'ana',
+      'Ana',
+      'temporary-password',
+      'admin',
+      'analyst'
+    )
+
+    const invalid = await overrides['auth:createUser'].handle(
+      ['eve', 'Eve', 'temporary-password', 'root'],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(reply.code).toHaveBeenLastCalledWith(400)
+    expect(invalid).toMatchObject({ error: 'invalid-user-payload' })
   })
 
   test('auth.createUser maps a duplicate username to 409', async () => {
@@ -1210,7 +1299,7 @@ describe('web dispatcher adapters: auth and import', () => {
     expect(deps.authService.setRole).toHaveBeenCalledWith('analyst', 'admin')
 
     const self = await overrides['auth:setRole'].handle(
-      ['admin', 'user'],
+      ['admin', 'analyst'],
       request as never,
       reply as never,
       deps
@@ -1239,7 +1328,7 @@ describe('web dispatcher adapters: auth and import', () => {
     expect(deps.authService.setRole).not.toHaveBeenCalled()
 
     const lastAdmin = await overrides['auth:setRole'].handle(
-      ['other-admin', 'user'],
+      ['other-admin', 'analyst'],
       request as never,
       reply as never,
       deps

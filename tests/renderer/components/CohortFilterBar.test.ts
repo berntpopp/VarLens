@@ -1,3 +1,4 @@
+import { createPinia } from 'pinia'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
@@ -49,7 +50,7 @@ describe('CohortFilterBar', () => {
 
   // Provide FiltersKey for useFilters() inject in CohortFilterBar
   const globalConfig = {
-    plugins: [vuetify],
+    plugins: [vuetify, createPinia()],
     stubs: drawerStubs,
     provide: { [FiltersKey as symbol]: createFilters() }
   }

@@ -106,9 +106,11 @@ describe('web upload boundary', () => {
 
     const app = Fastify()
     app.addHook('preHandler', async (request) => {
-      const requestWithSession = request as unknown as { session: { user: { id: number } } }
+      const requestWithSession = request as unknown as {
+        session: { user: { id: number; username: string; role: string } }
+      }
       requestWithSession.session = {
-        user: { id: 1 }
+        user: { id: 1, username: 'analyst', role: 'analyst' }
       }
     })
     registerImportUploadRoutes(app, { metrics } as never)

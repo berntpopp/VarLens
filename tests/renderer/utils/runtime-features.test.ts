@@ -17,7 +17,6 @@ const WEB_GATED: RuntimeFeature[] = [
   'vepEnrichment',
   'panelAppImport',
   'stringDbPanels',
-  'panelBedExport',
   'geneRefUpdate',
   'cohortAssociation',
   'localDatabaseFiles',

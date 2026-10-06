@@ -38,6 +38,8 @@ const ROUTE_OVERRIDE_LOGIC_EXCEPTIONS: Record<string, string> = {
   'cases.ts':
     'cases:list storage read adapter plus the web case_delete job (lock-free Postgres phases)',
   'database.ts': 'web-only database identity/capability adapters',
+  'export-download.ts':
+    'web-only download transport: mints signed single-use grants (desktop uses a save dialog)',
   'gene-lists.ts': 'thin storage-executor adapters with web-only argument validation',
   'gene-ref.ts': 'read-only adapters over the bundled gene_reference.db (no external fetches)',
   'hpo.ts': 'pending in the parity manifest (P-C reference services)',
@@ -69,6 +71,7 @@ const EXPECTED_ROUTE_OVERRIDE_MODULES = new Set([
   'cohort.ts',
   'database.ts',
   'export.ts',
+  'export-download.ts',
   'gene-lists.ts',
   'gene-ref.ts',
   'hpo.ts',

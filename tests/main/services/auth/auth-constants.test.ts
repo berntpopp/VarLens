@@ -8,10 +8,14 @@ import {
   DEFAULT_USER_ROLE,
   LOCKOUT_DURATION_MINUTES,
   MAX_FAILED_ATTEMPTS,
+  LEGACY_ROLE_USER,
   ROLE_ADMIN,
-  ROLE_USER,
+  ROLE_ANALYST,
+  ROLE_VIEWER,
   WEB_MIN_PASSWORD_LENGTH,
   USER_ROLES,
+  normalizeUserRole,
+  roleAtLeast,
   type UserRole
 } from '../../../../src/shared/auth/auth-constants'
 
@@ -37,11 +41,24 @@ import {
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
 
-const SQLITE_MIGRATION_PATH = resolve(REPO_ROOT, 'src/main/database/migrations.ts')
+// The users.role enum was last redefined by SQLite v38 / Postgres 0024.
+const SQLITE_MIGRATION_PATH = resolve(REPO_ROOT, 'src/main/database/user-roles-migration.ts')
 const PG_USERS_MIGRATION_PATH = resolve(
   REPO_ROOT,
-  'src/main/storage/postgres/migrations/sql/0008_create_users_and_settings.sql'
+  'src/main/storage/postgres/migrations/sql/0024_user_roles.sql'
 )
+
+/** Postgres 0024 alters the column: DEFAULT and CHECK are separate statements. */
+function extractPgAlteredRoleEnum(sql: string): string[] {
+  const def = sql.match(/ALTER\s+COLUMN\s+role\s+SET\s+DEFAULT\s+'([^']+)'/i)
+  const check = sql.match(/CHECK\s*\(\s*role\s+IN\s*\(([^)]+)\)\s*\)/i)
+  if (!def || !check) throw new Error('Could not locate the role DEFAULT/CHECK in Postgres 0024')
+  const roles = check[1]
+    .split(',')
+    .map((v) => v.trim().replace(/^'(.*)'$/s, '$1'))
+    .filter(Boolean)
+  return [def[1], ...roles]
+}
 
 function readOrFail(path: string, hint: string): string {
   if (!existsSync(path)) {
@@ -79,15 +96,39 @@ function extractEnumFromCheckClause(sql: string, tableHint: string): string[] {
 }
 
 describe('auth-constants module', () => {
-  it('exposes USER_ROLES with admin and user (no others)', () => {
-    expect(new Set(USER_ROLES)).toEqual(new Set(['admin', 'user']))
+  it('exposes USER_ROLES viewer < analyst < admin (no others)', () => {
+    expect([...USER_ROLES]).toEqual(['viewer', 'analyst', 'admin'])
   })
 
-  it('exposes named role constants (ROLE_ADMIN, ROLE_USER) matching USER_ROLES', () => {
+  it('exposes named role constants matching USER_ROLES', () => {
     expect(ROLE_ADMIN).toBe('admin')
-    expect(ROLE_USER).toBe('user')
+    expect(ROLE_ANALYST).toBe('analyst')
+    expect(ROLE_VIEWER).toBe('viewer')
     expect(USER_ROLES).toContain(ROLE_ADMIN)
-    expect(USER_ROLES).toContain(ROLE_USER)
+    expect(USER_ROLES).toContain(ROLE_ANALYST)
+    expect(USER_ROLES).toContain(ROLE_VIEWER)
+  })
+
+  it('defaults new accounts to least privilege', () => {
+    expect(DEFAULT_USER_ROLE).toBe(ROLE_VIEWER)
+  })
+
+  it('normalises the legacy user role to analyst and rejects unknown roles', () => {
+    expect(normalizeUserRole(LEGACY_ROLE_USER)).toBe(ROLE_ANALYST)
+    expect(normalizeUserRole('viewer')).toBe('viewer')
+    expect(normalizeUserRole('root')).toBeUndefined()
+    expect(normalizeUserRole(undefined)).toBeUndefined()
+  })
+
+  it('roleAtLeast orders viewer < analyst < admin and denies unknown roles', () => {
+    expect(roleAtLeast('viewer', 'viewer')).toBe(true)
+    expect(roleAtLeast('viewer', 'analyst')).toBe(false)
+    expect(roleAtLeast('analyst', 'analyst')).toBe(true)
+    expect(roleAtLeast('analyst', 'admin')).toBe(false)
+    expect(roleAtLeast('admin', 'analyst')).toBe(true)
+    expect(roleAtLeast('user', 'analyst')).toBe(true)
+    expect(roleAtLeast('superuser', 'viewer')).toBe(false)
+    expect(roleAtLeast(undefined, 'viewer')).toBe(false)
   })
 
   it('DEFAULT_USER_ROLE is a member of USER_ROLES', () => {
@@ -114,13 +155,14 @@ describe('auth-constants module', () => {
     // someone widens UserRole to `string` or adds a value missing from
     // USER_ROLES.
     const _admin = ROLE_ADMIN satisfies UserRole
-    const _user = ROLE_USER satisfies UserRole
-    expect([_admin, _user]).toEqual(['admin', 'user'])
+    const _analyst = ROLE_ANALYST satisfies UserRole
+    const _viewer = ROLE_VIEWER satisfies UserRole
+    expect([_viewer, _analyst, _admin]).toEqual(['viewer', 'analyst', 'admin'])
   })
 })
 
 describe('AuthService.ts uses the constants module (no role literals)', () => {
-  it('imports ROLE_ADMIN, ROLE_USER, and UserRole from auth-constants', () => {
+  it('imports ROLE_ADMIN, DEFAULT_USER_ROLE, and UserRole from auth-constants', () => {
     const src = readOrFail(
       resolve(REPO_ROOT, 'src/main/services/auth/AuthService.ts'),
       'AuthService.ts'
@@ -128,7 +170,7 @@ describe('AuthService.ts uses the constants module (no role literals)', () => {
     expect(src, 'AuthService must import named role constants from the shared module').toMatch(
       /import\s*\{[\s\S]*?ROLE_ADMIN[\s\S]*?\}\s*from\s*['"][^'"]*shared\/auth\/auth-constants['"]/
     )
-    expect(src, 'AuthService must import ROLE_USER').toMatch(/ROLE_USER/)
+    expect(src, 'AuthService must import DEFAULT_USER_ROLE').toMatch(/DEFAULT_USER_ROLE/)
     expect(src, 'AuthService must import the UserRole type').toMatch(/type UserRole/)
   })
 
@@ -143,7 +185,7 @@ describe('AuthService.ts uses the constants module (no role literals)', () => {
     )
   })
 
-  it('uses ROLE_ADMIN/ROLE_USER as parameter values (no inline role string literals in SQL or returns)', () => {
+  it('uses ROLE_ADMIN/DEFAULT_USER_ROLE as parameter values (no inline role string literals in SQL or returns)', () => {
     const src = readOrFail(
       resolve(REPO_ROOT, 'src/main/services/auth/AuthService.ts'),
       'AuthService.ts'
@@ -157,8 +199,8 @@ describe('AuthService.ts uses the constants module (no role literals)', () => {
     expect(stripped, `AuthService must use ROLE_ADMIN, not the string literal 'admin'`).not.toMatch(
       /'admin'/
     )
-    expect(stripped, `AuthService must use ROLE_USER, not the string literal 'user'`).not.toMatch(
-      /'user'/
+    expect(stripped, `AuthService must not hard-code role string literals`).not.toMatch(
+      /'(user|analyst|viewer)'/
     )
   })
 })
@@ -183,22 +225,19 @@ describe('web password policy uses the shared constant', () => {
   })
 })
 
-describe('migration parity — SQLite v12', () => {
+describe('migration parity — SQLite v38', () => {
   it('users.role CHECK enumerates exactly USER_ROLES', () => {
-    const sql = readOrFail(SQLITE_MIGRATION_PATH, 'SQLite migrations.ts')
-    const [defaultValue, ...enumerated] = extractEnumFromCheckClause(
-      sql,
-      'CREATE TABLE IF NOT EXISTS users'
-    )
+    const sql = readOrFail(SQLITE_MIGRATION_PATH, 'SQLite user-roles-migration.ts')
+    const [defaultValue, ...enumerated] = extractEnumFromCheckClause(sql, 'CREATE TABLE users_v38')
     expect(new Set(enumerated)).toEqual(new Set(USER_ROLES))
     expect(defaultValue).toBe(DEFAULT_USER_ROLE)
   })
 })
 
-describe('migration parity — Postgres 0008', () => {
+describe('migration parity — Postgres 0024', () => {
   it('users.role CHECK enumerates exactly USER_ROLES', () => {
-    const sql = readOrFail(PG_USERS_MIGRATION_PATH, 'Postgres 0008 migration')
-    const [defaultValue, ...enumerated] = extractEnumFromCheckClause(sql, '"users"')
+    const sql = readOrFail(PG_USERS_MIGRATION_PATH, 'Postgres 0024 migration')
+    const [defaultValue, ...enumerated] = extractPgAlteredRoleEnum(sql)
     expect(new Set(enumerated)).toEqual(new Set(USER_ROLES))
     expect(defaultValue).toBe(DEFAULT_USER_ROLE)
   })
@@ -206,10 +245,10 @@ describe('migration parity — Postgres 0008', () => {
 
 describe('cross-backend defaults agree', () => {
   it('SQLite and Postgres both DEFAULT to DEFAULT_USER_ROLE', () => {
-    const sqlite = readOrFail(SQLITE_MIGRATION_PATH, 'SQLite migrations.ts')
-    const pg = readOrFail(PG_USERS_MIGRATION_PATH, 'Postgres 0008 migration')
-    const [sqliteDefault] = extractEnumFromCheckClause(sqlite, 'CREATE TABLE IF NOT EXISTS users')
-    const [pgDefault] = extractEnumFromCheckClause(pg, '"users"')
+    const sqlite = readOrFail(SQLITE_MIGRATION_PATH, 'SQLite user-roles-migration.ts')
+    const pg = readOrFail(PG_USERS_MIGRATION_PATH, 'Postgres 0024 migration')
+    const [sqliteDefault] = extractEnumFromCheckClause(sqlite, 'CREATE TABLE users_v38')
+    const [pgDefault] = extractPgAlteredRoleEnum(pg)
     expect(sqliteDefault).toBe(pgDefault)
     expect(sqliteDefault).toBe(DEFAULT_USER_ROLE)
   })

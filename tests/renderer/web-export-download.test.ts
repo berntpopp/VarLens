@@ -1,25 +1,31 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { createApi } from '../../src/web/client/api'
-import {
-  buildCohortExportUrl,
-  buildVariantExportUrl,
-  MAX_EXPORT_URL_LENGTH
-} from '../../src/web/client/export-download'
+import { prepareAndDownload } from '../../src/web/client/export-download'
 import { ErrorCode } from '../../src/shared/types/errors'
 
-function exportApi() {
-  return createApi().export
-}
+const PREPARED = { downloadPath: 'download/abc123abc123abc123ab.1700000000000.sig', expiresAt: 1 }
 
-function captureAnchorClicks(): { clicks: HTMLAnchorElement[]; restore: () => void } {
+function captureAnchorClicks(): { clicks: HTMLAnchorElement[] } {
   const clicks: HTMLAnchorElement[] = []
-  const spy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
     this: HTMLAnchorElement
   ) {
     clicks.push(this)
   })
-  return { clicks, restore: () => spy.mockRestore() }
+  return { clicks }
+}
+
+/** fetch stub answering POST /api/export/prepareDownload with `body`. */
+function stubPrepare(body: unknown, status = 200): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status }))
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+function sentRequest(fetchMock: ReturnType<typeof vi.fn>): { url: string; args: unknown[] } {
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+  return { url, args: (JSON.parse(String(init.body)) as { args: unknown[] }).args }
 }
 
 describe('web export download (window.api.export in web mode)', () => {
@@ -28,61 +34,82 @@ describe('web export download (window.api.export in web mode)', () => {
     vi.unstubAllGlobals()
   })
 
-  test('variant export starts an anchor download of the streaming endpoint', async () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-    const api = exportApi()
+  test('variant export prepares a grant over RPC, then downloads it by navigation', async () => {
+    const fetchMock = stubPrepare(PREPARED)
     const { clicks } = captureAnchorClicks()
 
-    const filters = { consequences: ['HIGH'], gnomad_af_max: 0.01 }
-    const result = await api.variants(12, filters as never, 'Case A/1')
+    // Large filters travel in the POST body: no URL-length limit any more.
+    const filters = { consequences: ['HIGH'], gene_symbol: 'G'.repeat(20_000) }
+    const result = await createApi().export.variants(12, filters as never, 'Case A/1')
 
     expect(result).toEqual({ success: true, filePath: 'Case_A_1_variants.csv' })
-    expect(fetchMock).not.toHaveBeenCalled()
+    const sent = sentRequest(fetchMock)
+    expect(sent.url).toBe('/api/export/prepareDownload')
+    expect(sent.args).toEqual([
+      { kind: 'variants', format: 'csv', caseId: 12, caseName: 'Case A/1', filters }
+    ])
     expect(clicks).toHaveLength(1)
-    const anchor = clicks[0]
-    expect(anchor.download).toBe('Case_A_1_variants.csv')
-    const url = new URL(anchor.href, 'http://localhost')
-    expect(url.pathname).toBe('/api/export/variants/download')
-    expect(url.searchParams.get('caseId')).toBe('12')
-    expect(url.searchParams.get('caseName')).toBe('Case A/1')
-    expect(JSON.parse(url.searchParams.get('filters') ?? '')).toEqual(filters)
-    // The anchor is transient: nothing is left in the DOM after the click.
+    expect(clicks[0].download).toBe('Case_A_1_variants.csv')
+    expect(new URL(clicks[0].href, 'http://localhost').pathname).toBe(
+      `/api/${PREPARED.downloadPath}`
+    )
     expect(document.querySelectorAll('a[download]')).toHaveLength(0)
   })
 
-  test('cohort export starts an anchor download with the JSON params', async () => {
-    const api = exportApi()
+  test('cohort export honours the xlsx format option', async () => {
+    const fetchMock = stubPrepare(PREPARED)
     const { clicks } = captureAnchorClicks()
+    const params = { gene_symbol: 'TP53' }
 
-    const params = { gene_symbol: 'TP53', consequences: ['HIGH'] }
-    const result = (await api.cohort(params as never)) as { success: boolean; filePath: string }
+    const result = (await createApi().export.cohort(params as never, { format: 'xlsx' })) as {
+      filePath: string
+    }
 
-    expect(result.success).toBe(true)
-    expect(result.filePath).toMatch(/^cohort_variants_\d{4}-\d{2}-\d{2}\.csv$/)
-    const url = new URL(clicks[0].href, 'http://localhost')
-    expect(url.pathname).toBe('/api/export/cohort/download')
-    expect(JSON.parse(url.searchParams.get('params') ?? '')).toEqual(params)
+    expect(result.filePath).toMatch(/^cohort_variants_\d{4}-\d{2}-\d{2}\.xlsx$/)
+    expect(sentRequest(fetchMock).args).toEqual([{ kind: 'cohort', format: 'xlsx', params }])
+    expect(clicks).toHaveLength(1)
   })
 
-  test('refuses filters that would overflow the request line instead of failing silently', async () => {
-    const api = exportApi()
+  test('a refused prepare (viewer role) returns the IPC error and starts no download', async () => {
+    const refusal = {
+      code: 'UNKNOWN',
+      message: 'role-required',
+      userMessage: 'Your role does not allow this action (requires analyst).'
+    }
+    stubPrepare(refusal, 403)
     const { clicks } = captureAnchorClicks()
 
-    const result = await api.variants(
-      1,
-      { gene_symbol: 'G'.repeat(MAX_EXPORT_URL_LENGTH) } as never,
-      'x'
-    )
+    await expect(createApi().export.variants(1, {} as never, 'x')).resolves.toEqual(refusal)
+    expect(clicks).toHaveLength(0)
+  })
 
-    expect(result).toMatchObject({ success: false })
+  test('panels.exportBed downloads the BED artifact', async () => {
+    const fetchMock = stubPrepare(PREPARED)
+    const { clicks } = captureAnchorClicks()
+
+    await expect(createApi().panels.exportBed(4, 'GRCh38', 50)).resolves.toEqual({
+      success: true,
+      path: 'panel_4_GRCh38.bed'
+    })
+    expect(sentRequest(fetchMock).args).toEqual([
+      { kind: 'panel-bed', panelId: 4, assembly: 'GRCh38', paddingBp: 50 }
+    ])
+    expect(clicks).toHaveLength(1)
+  })
+
+  test('a malformed prepare answer is reported, not downloaded', async () => {
+    const invoke = vi.fn(async () => ({ downloadPath: '../../etc/passwd' }))
+    const { clicks } = captureAnchorClicks()
+    await expect(prepareAndDownload({ kind: 'cohort' }, 'x.csv', invoke)).resolves.toMatchObject({
+      success: false
+    })
     expect(clicks).toHaveLength(0)
   })
 
   test('revealInFolder is desktop-only: refused locally without a request', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    await expect(exportApi().revealInFolder('x.csv')).resolves.toMatchObject({
+    await expect(createApi().export.revealInFolder('x.csv')).resolves.toMatchObject({
       code: ErrorCode.UNSUPPORTED_RUNTIME
     })
     expect(fetchMock).not.toHaveBeenCalled()
@@ -91,16 +118,7 @@ describe('web export download (window.api.export in web mode)', () => {
   test('cancel is a local no-op: the browser download manager owns the stream', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    await expect(exportApi().cancel()).resolves.toEqual({ cancelled: false })
+    await expect(createApi().export.cancel()).resolves.toEqual({ cancelled: false })
     expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  test('URL builders honour a sub-path API base', () => {
-    expect(buildVariantExportUrl(1, {}, 'c', '/varlens/api')).toMatch(
-      /^\/varlens\/api\/export\/variants\/download\?/
-    )
-    expect(buildCohortExportUrl({}, '/varlens/api')).toBe(
-      '/varlens/api/export/cohort/download?params=%7B%7D'
-    )
   })
 })

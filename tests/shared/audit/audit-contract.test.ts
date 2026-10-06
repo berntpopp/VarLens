@@ -8,9 +8,10 @@ import {
 
 describe('audit contract', () => {
   it('describes the current technical roles without adding role identifiers', () => {
-    expect(Object.keys(AUDIT_ROLE_MEANINGS)).toEqual(['admin', 'user'])
+    expect(Object.keys(AUDIT_ROLE_MEANINGS)).toEqual(['viewer', 'analyst', 'admin'])
     expect(AUDIT_ROLE_MEANINGS.admin).toContain('administrator')
-    expect(AUDIT_ROLE_MEANINGS.user).toContain('Clinical')
+    expect(AUDIT_ROLE_MEANINGS.analyst).toContain('analyst')
+    expect(AUDIT_ROLE_MEANINGS.viewer).toContain('Read-only')
   })
 
   it('keeps coded audit fields and redacts free text evidence content', () => {

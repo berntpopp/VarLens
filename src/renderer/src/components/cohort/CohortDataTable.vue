@@ -65,6 +65,7 @@
           :acmg-classification="getGlobalAcmgClassification(item.chr, item.pos, item.ref, item.alt)"
           :has-comment="!!getGlobalComment(item.chr, item.pos, item.ref, item.alt)"
           :show-global-indicators="false"
+          :read-only="!canWrite"
           @star-toggle="emit('star-toggle', item)"
           @acmg-select="(classification) => emit('acmg-select', { item, classification })"
           @acmg-evidence-click="emit('acmg-evidence-click', item)"
@@ -223,6 +224,8 @@ import { useExternalLinksStore } from '../../stores/externalLinksStore'
 import { APP_CONFIG } from '../../../../shared/config'
 import { resolveUrlTemplate, type VariantLinkData } from '../../utils/externalLinks'
 import { getAdaptiveRowScrollBehavior } from '../../utils/adaptiveRowScroll'
+import { usePermissions } from '../../composables/usePermissions'
+const { canWrite } = usePermissions()
 
 interface Props {
   variants: CohortVariant[]

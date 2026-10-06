@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { WEB_UPLOAD_CANCEL_EVENT, WEB_UPLOAD_EVENT, createApi } from '../../src/web/client/api'
+import { setCapabilityDocument } from '../../src/web/client/call-policy'
+import { computeCapabilityDocument } from '../../src/shared/ipc/capability-document'
 
 interface TestApi {
   cases: {
@@ -443,8 +445,14 @@ describe('web client api', () => {
       body: JSON.stringify({ caseId: 1 })
     })
 
+    // import.start is an analyst write: the client holds it back until the
+    // capability document grants the role.
+    setCapabilityDocument(
+      computeCapabilityDocument({ runtime: 'web', role: 'analyst', storage: null })
+    )
     const api = createApi() as unknown as TestApi
     await expect(api.import.start('/tmp/input.vcf', 'Case A')).resolves.toEqual({ caseId: 1 })
+    setCapabilityDocument(null)
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/import/start',

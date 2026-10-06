@@ -14,6 +14,7 @@ import {
   INSTANCE_FEATURES,
   type CapabilityFeature
 } from './capability-features'
+import { roleAtLeast, type UserRole } from '../auth/auth-constants'
 import type { ChannelAuthz, ChannelPolicy } from './parity-manifest-types'
 import { listManifestEntries } from './parity-manifest'
 
@@ -49,11 +50,15 @@ export interface CapabilityInputs {
   readonly instanceFeatures?: Partial<Record<CapabilityFeature, boolean>>
 }
 
-const ROLE_REQUIRED_REASON = 'Requires the administrator role.'
+const ROLE_REQUIRED_REASON: Readonly<Record<UserRole, string>> = {
+  viewer: 'Requires a signed-in account.',
+  analyst: 'Your account is read-only (viewer). Ask an administrator for the analyst role.',
+  admin: 'Requires the administrator role.'
+}
 
+/** viewer < analyst < admin; `public` methods need no role. Unknown roles meet nothing. */
 export function roleMeetsAuthz(role: string, authz: ChannelAuthz): boolean {
-  if (authz === 'admin') return role === 'admin'
-  return true
+  return authz === 'public' || roleAtLeast(role, authz)
 }
 
 /** Why a method is unusable in this session, or null when it may be called. */
@@ -71,7 +76,7 @@ export function methodBlockReason(
 
 export function computeCapabilityDocument(inputs: CapabilityInputs): CapabilityDocument {
   const blockedMethods: string[] = []
-  const blockedFeatures = new Map<CapabilityFeature, 'runtime' | 'role'>()
+  const blockedFeatures = new Map<CapabilityFeature, FeatureBlock>()
 
   for (const entry of listManifestEntries()) {
     const reason = methodBlockReason(entry.policy, inputs.runtime, inputs.role)
@@ -80,7 +85,17 @@ export function computeCapabilityDocument(inputs: CapabilityInputs): CapabilityD
     const feature = entry.policy.capability
     // A runtime block wins over a role block: the copy explains the bigger gap.
     if (feature !== undefined && blockedFeatures.get(feature) !== 'runtime') {
-      blockedFeatures.set(feature, reason)
+      // Role blocks keep the most privileged role any gated method needs.
+      const needed = reason === 'runtime' ? 'runtime' : roleBlock(entry.policy.authz)
+      const previous = blockedFeatures.get(feature)
+      if (
+        needed === 'runtime' ||
+        previous === undefined ||
+        previous === 'viewer' ||
+        needed === 'admin'
+      ) {
+        blockedFeatures.set(feature, needed)
+      }
     }
   }
 
@@ -99,9 +114,16 @@ export function computeCapabilityDocument(inputs: CapabilityInputs): CapabilityD
   }
 }
 
+/** Why a feature is off: the runtime, or the least role its gated methods need. */
+type FeatureBlock = 'runtime' | UserRole
+
+function roleBlock(authz: ChannelAuthz): UserRole {
+  return authz === 'public' ? 'viewer' : authz
+}
+
 function featureState(
   feature: CapabilityFeature,
-  blocked: 'runtime' | 'role' | undefined,
+  blocked: FeatureBlock | undefined,
   inputs: CapabilityInputs
 ): FeatureState {
   const copy = CAPABILITY_FEATURES[feature].unavailableInWeb
@@ -110,6 +132,6 @@ function featureState(
     return enabled ? { enabled } : { enabled, reason: copy }
   }
   if (blocked === 'runtime') return { enabled: false, reason: copy }
-  if (blocked === 'role') return { enabled: false, reason: ROLE_REQUIRED_REASON }
+  if (blocked !== undefined) return { enabled: false, reason: ROLE_REQUIRED_REASON[blocked] }
   return { enabled: true }
 }

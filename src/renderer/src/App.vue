@@ -140,6 +140,7 @@ import { getTraceSnapshot } from './services/PerfTrace'
 import { unwrapIpcResult } from '../../shared/types/errors'
 import { formatError } from './utils/ipc-result'
 import { getCurrentUnsupportedReason } from './utils/backend-capabilities'
+import { usePermissions } from './composables/usePermissions'
 
 const ImportStatusBar = defineAsyncComponent(() => import('./components/ImportStatusBar.vue'))
 const VariantDetailsPanel = defineAsyncComponent(
@@ -154,6 +155,7 @@ const ViewTransitionOverlay = defineAsyncComponent(
 )
 const router = useRouter()
 const { api } = useApiService()
+const permissions = usePermissions()
 const importStore = useImportStatusStore()
 const variantColumnMeta = useVariantColumnMeta()
 
@@ -252,7 +254,8 @@ const handleResetFilters = () => {
 
 const handleDeleteAllCases = async () => {
   if (!api) return
-  const reason = await getCurrentUnsupportedReason('cases.deleteAll')
+  const reason =
+    permissions.adminBlockedReason.value ?? (await getCurrentUnsupportedReason('cases.deleteAll'))
   if (reason !== null) {
     logService.warn(reason, 'backend-capabilities')
     dialogHostRef.value?.showSnackbar(reason, 'error')
@@ -382,7 +385,10 @@ useKeyboardShortcuts({
     showKeyboardHelp.value = true
   },
   onClearAllFilters: () => filterToolbarRef.value?.handleClearAll(),
-  onImport: () => dialogHostRef.value?.showImportDialog()
+  onImport: () => {
+    // Viewers are read-only: the shortcut does nothing (the menu item is disabled).
+    if (permissions.canWrite.value) dialogHostRef.value?.showImportDialog()
+  }
 })
 
 const perfModeEnabled = api?.perf?.isEnabled?.() === true

@@ -5,6 +5,7 @@
  * lands (P-C). See ../parity-manifest.ts for how to flip an entry.
  */
 import {
+  adapter,
   desktopOnly,
   pending,
   sharedRead,
@@ -79,5 +80,5 @@ export const panelsManifest = {
   searchPanelApp: pending('panelAppImport', ENRICHMENT, PANELS_UX),
   importPanelApp: pending('panelAppImport', ENRICHMENT, PANELS_UX),
   generateStringDb: pending('stringDbPanels', ENRICHMENT, PANELS_UX),
-  exportBed: pending('panelBedExport', 'P-D (PR-W5 export artifacts)', PANELS_UX)
+  exportBed: adapter('download', { authz: 'analyst', capability: 'panelBedExport' })
 } satisfies DomainManifest<'panels'>

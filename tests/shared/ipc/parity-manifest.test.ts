@@ -30,8 +30,10 @@ import {
   checkManifestAgainstDispatcher,
   dispatcherKey
 } from '../../../src/web/server/method-resolution'
-import { shouldAuditApiRead, shouldAuditOverrideWrite } from '../../../src/web/server/audit'
-import { isWriteTaskType } from '../../../src/web/server/task-types'
+import {
+  DISPATCHER_SECURITY_MAP,
+  HTTP_ROUTE_SECURITY_MAP
+} from '../../../src/web/server/security/operation-security-map'
 import { makeDeps } from '../../web-gate/helpers/dispatcher-adapters'
 
 const ipc = vi.hoisted(() => ({
@@ -162,17 +164,54 @@ describe('parity manifest: web dispatcher', () => {
     expect(report).toEqual({ unresolvedShared: [], servedDesktopOnly: [], unclassifiedServed: [] })
   })
 
-  it('declares audit expectations the dispatcher actually applies', () => {
+  /**
+   * L9 audit registry: the dispatcher's audit behaviour comes from the ONE
+   * web security map (src/web/server/security/operation-security-map.ts),
+   * applied by secure(). The manifest's audit and authz fields must say the
+   * same thing: `write` / `read` when secure() audits the call, an exemption
+   * (with its reason) when the handler audits itself or nothing does, and the
+   * same least role. tests/web-gate/operation-security-registry.test.ts
+   * enforces that every write is audited or exempt with a reason.
+   */
+  it('declares the audit and role the web security map applies', () => {
     const mismatches: string[] = []
     for (const entry of listManifestEntries()) {
       if (entry.policy.policy.web !== 'shared') continue
       const key = dispatcherKey(entry.domain, entry.method)
-      const writes = isWriteTaskType(key) || shouldAuditOverrideWrite(key)
-      const actual = writes ? 'write' : shouldAuditApiRead(key) ? 'read' : 'exempt'
+      const policy = DISPATCHER_SECURITY_MAP[key]
+      if (policy === undefined) {
+        mismatches.push(`${entryKey(entry)}: no security-map policy for ${key}`)
+        continue
+      }
+      const actual = policy.audit.mode === 'wrapper' ? policy.kind : 'exempt'
       const declared = typeof entry.policy.audit === 'object' ? 'exempt' : entry.policy.audit
-      if (declared !== actual) mismatches.push(`${entryKey(entry)}: ${declared} vs ${actual}`)
+      if (declared !== actual) mismatches.push(`${entryKey(entry)}: audit ${declared} vs ${actual}`)
+      if (entry.policy.authz !== policy.minRole) {
+        mismatches.push(`${entryKey(entry)}: authz ${entry.policy.authz} vs ${policy.minRole}`)
+      }
     }
     expect(mismatches, mismatches.join('\n')).toEqual([])
+  })
+
+  it('declares download / upload adapters with the role of the route behind them', () => {
+    const expected: Record<string, string> = {
+      'export.variants': DISPATCHER_SECURITY_MAP['export:prepareDownload'].minRole,
+      'export.cohort': DISPATCHER_SECURITY_MAP['export:prepareDownload'].minRole,
+      'panels.exportBed': DISPATCHER_SECURITY_MAP['export:prepareDownload'].minRole,
+      'import.selectFile': HTTP_ROUTE_SECURITY_MAP['http:import:upload'].minRole,
+      'import.selectFiles': HTTP_ROUTE_SECURITY_MAP['http:import:upload'].minRole,
+      'import.selectBedFile': HTTP_ROUTE_SECURITY_MAP['http:import:upload'].minRole,
+      'import.enrollDroppedFiles': HTTP_ROUTE_SECURITY_MAP['http:import:upload'].minRole,
+      'batchImport.selectFiles': HTTP_ROUTE_SECURITY_MAP['http:import:upload'].minRole,
+      'batchImport.selectFolder': HTTP_ROUTE_SECURITY_MAP['http:import:upload'].minRole,
+      'batchImport.selectZip': HTTP_ROUTE_SECURITY_MAP['http:import:upload'].minRole
+    }
+    const actual = Object.fromEntries(
+      listManifestEntries()
+        .filter((entry) => entryKey(entry) in expected)
+        .map((entry) => [entryKey(entry), entry.policy.authz])
+    )
+    expect(actual).toEqual(expected)
   })
 
   it('answers every shared method over HTTP without 404 or 501', async () => {

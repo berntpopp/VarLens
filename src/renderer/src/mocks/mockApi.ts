@@ -81,11 +81,7 @@ export const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
     geneBurden: true,
     columnMeta: true
   },
-  export: {
-    variants: true,
-    cohort: true,
-    streaming: true
-  }
+  export: { variants: true, cohort: true, streaming: true }
 }
 
 export const mockApi: WindowAPI = {
@@ -291,7 +287,8 @@ export const mockApi: WindowAPI = {
     variants: async () => ({ success: true, filePath: '/mock/export.xlsx' }),
     cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' }),
     revealInFolder: async () => ({ success: false }),
-    cancel: async () => ({ cancelled: false })
+    cancel: async () => ({ cancelled: false }),
+    onProgress: () => () => {}
   },
   shell: {
     openExternal: async (url) => {

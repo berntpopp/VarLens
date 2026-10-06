@@ -42,18 +42,20 @@ export const variantsManifest = {
 
 export const importManifest = {
   onProgress: adapter('sse'),
-  selectFile: adapter('upload'),
-  selectFiles: adapter('upload'),
-  selectBedFile: adapter('upload'),
-  enrollDroppedFiles: adapter('upload'),
+  selectFile: adapter('upload', { authz: 'analyst' }),
+  selectFiles: adapter('upload', { authz: 'analyst' }),
+  selectBedFile: adapter('upload', { authz: 'analyst' }),
+  enrollDroppedFiles: adapter('upload', { authz: 'analyst' }),
   start: sharedWrite(),
   startMultiFile: sharedWrite({ capability: 'multiFileImport' }),
-  vcfPreview: sharedRead(),
+  vcfPreview: sharedRead({ authz: 'analyst' }),
   vcfMultiPreview: sharedRead({
+    authz: 'analyst',
     degraded: { tracking: 'P-B (PR-W9a)', note: 'sibling BED discovery is empty for uploads' }
   }),
-  // Owner-checked (WebJobRegistry): 403 for another user's import.
-  cancel: sharedRead()
+  // Role >= analyst (security map) AND owner-checked (WebJobRegistry):
+  // 403 for another user's import unless the caller is an admin.
+  cancel: sharedWrite()
 } satisfies DomainManifest<'import'>
 
 export const systemManifest = {
@@ -70,10 +72,11 @@ export const systemManifest = {
 } satisfies DomainManifest<'system'>
 
 export const exportManifest = {
-  variants: adapter('download'),
-  cohort: adapter('download'),
+  variants: adapter('download', { authz: 'analyst' }),
+  cohort: adapter('download', { authz: 'analyst' }),
   revealInFolder: desktopOnly('revealInFolder', 'Hidden: the browser download replaces it.'),
-  cancel: adapter('client')
+  cancel: adapter('client'),
+  onProgress: adapter('sse')
 } satisfies DomainManifest<'export'>
 
 export const shellManifest = {
@@ -106,16 +109,17 @@ export const databaseManifest = {
 } satisfies DomainManifest<'database'>
 
 export const batchImportManifest = {
-  selectFiles: adapter('upload'),
-  selectFolder: adapter('upload'),
-  checkDuplicates: sharedRead(),
+  selectFiles: adapter('upload', { authz: 'analyst' }),
+  selectFolder: adapter('upload', { authz: 'analyst' }),
+  checkDuplicates: sharedRead({ authz: 'analyst' }),
   start: sharedWrite(),
-  cancel: sharedRead(),
+  // Role >= analyst AND owner-checked, like import.cancel.
+  cancel: sharedWrite(),
   onProgress: adapter('sse'),
   onComplete: adapter('sse'),
-  selectZip: adapter('upload'),
-  testZipPassword: sharedRead(),
-  extractZip: sharedRead(),
+  selectZip: adapter('upload', { authz: 'analyst' }),
+  testZipPassword: sharedRead({ authz: 'analyst' }),
+  extractZip: sharedWrite(),
   cleanupZipTemp: sharedWrite()
 } satisfies DomainManifest<'batchImport'>
 

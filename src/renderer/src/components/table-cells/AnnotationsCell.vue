@@ -9,6 +9,7 @@
       :aria-pressed="displayStarred"
       :data-tooltip="labels.star"
       data-tooltip-location="top"
+      :disabled="readOnly"
       @click.stop="emit('star-toggle')"
     >
       <CellIcon
@@ -29,6 +30,7 @@
       :aria-expanded="menu.isOpenFor(acmgButtonRef)"
       :data-tooltip="labels.acmg"
       data-tooltip-location="top"
+      :disabled="readOnly"
       @click.stop="openAcmgMenu"
     >
       <CellChip v-if="displayAcmg" :color="ACMG_COLORS[displayAcmg]" size="x-small" label>
@@ -97,6 +99,8 @@ interface Props {
   showGlobalIndicators?: boolean
   /** Annotation scope: controls display priority and action routing */
   annotationScope?: AnnotationScope
+  /** Viewer role: star and ACMG are display-only (comment still opens read-only). */
+  readOnly?: boolean
 }
 
 interface Emits {

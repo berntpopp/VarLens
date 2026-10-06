@@ -23,7 +23,9 @@ export type WebMethodResolution = 'override' | 'read-task' | 'write-task'
 export const SERVER_ONLY_DISPATCHER_KEYS: Readonly<Record<string, string>> = {
   'database:health': 'operator health probe for the hosted workspace',
   'batch-import:inspectZip':
-    'web half of batchImport.selectZip (adapter): encrypted-entry probe after the upload (P-08)'
+    'web half of batchImport.selectZip (adapter): encrypted-entry probe after the upload (P-08)',
+  'export:prepareDownload':
+    'mints the signed download grant behind the export / panels.exportBed download adapters'
 }
 
 const KEBAB_TO_CAMEL: Readonly<Record<string, string>> = Object.fromEntries(

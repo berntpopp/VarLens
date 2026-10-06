@@ -46,6 +46,33 @@ describe('computeCapabilityDocument', () => {
     expect(admin.features.userAdmin.enabled).toBe(true)
   })
 
+  it('viewer / analyst / admin: viewers are read-only, analysts write, admins administer', () => {
+    const doc = (role: string) => computeCapabilityDocument({ runtime: 'web', role, storage: null })
+    const viewer = doc('viewer')
+    const analyst = doc('analyst')
+    const admin = doc('admin')
+    for (const write of [
+      'annotations.upsertGlobal',
+      'tags.create',
+      'import.start',
+      'export.variants'
+    ]) {
+      expect(viewer.blockedMethods, write).toContain(write)
+      expect(analyst.blockedMethods, write).not.toContain(write)
+    }
+    expect(viewer.blockedMethods).not.toContain('variants.query')
+    expect(viewer.features.panelBedExport).toEqual({
+      enabled: false,
+      reason: expect.stringMatching(/read-only \(viewer\)/)
+    })
+    expect(analyst.features.panelBedExport.enabled).toBe(true)
+    expect(analyst.blockedMethods).toContain('cases.deleteAll')
+    expect(admin.blockedMethods).not.toContain('cases.deleteAll')
+    // Legacy role name from a stale session acts as analyst; unknown roles get nothing.
+    expect(doc('user').blockedMethods).not.toContain('tags.create')
+    expect(doc('superuser').blockedMethods).toContain('variants.query')
+  })
+
   it('reports instance features from server configuration', () => {
     const off = computeCapabilityDocument({ runtime: 'web', role: 'user', storage: null })
     const on = computeCapabilityDocument({

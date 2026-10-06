@@ -10,7 +10,7 @@
  * Fail-closed: an `admin` method is refused until a capability document has
  * been loaded that grants the admin role.
  */
-import type { CapabilityDocument } from '../../shared/ipc/capability-document'
+import { roleMeetsAuthz, type CapabilityDocument } from '../../shared/ipc/capability-document'
 import { CAPABILITY_FEATURES } from '../../shared/ipc/capability-features'
 import type { ChannelPolicy } from '../../shared/ipc/parity-manifest-types'
 import { ErrorCode, type SerializableError } from '../../shared/types/errors'
@@ -63,12 +63,18 @@ export function refusalFor(
       details: { method: key, policy: web }
     }
   }
-  const roleRefused = policy.authz === 'admin' && currentDocument?.role !== 'admin'
+  // Writes (analyst) and administration (admin) fail closed until the
+  // capability document grants the role; viewer-level reads are not held back.
+  const needsRole = policy.authz === 'analyst' || policy.authz === 'admin'
+  const roleRefused = needsRole && !roleMeetsAuthz(currentDocument?.role ?? '', policy.authz)
   if (roleRefused || currentDocument?.blockedMethods.includes(key) === true) {
     return {
       code: ErrorCode.FORBIDDEN,
       message: `${key} is not allowed for this session`,
-      userMessage: 'Your account is not allowed to perform this action.',
+      userMessage:
+        policy.authz === 'analyst'
+          ? 'Your account is read-only (viewer). Ask an administrator for the analyst role.'
+          : 'Your account is not allowed to perform this action.',
       details: { method: key, authz: policy.authz }
     }
   }

@@ -8,6 +8,7 @@
  *
  * Spec: .planning/specs/2026-10-06-desktop-web-parity-spec.md §4.2
  */
+import type { UserRole } from '../auth/auth-constants'
 import type { WindowAPI } from '../types/api'
 import type { CapabilityFeature } from './capability-features'
 
@@ -27,10 +28,12 @@ export type WebPolicy =
   | { readonly web: 'pending'; readonly tracking: string; readonly webUx: string }
 
 /**
- * Who may call the method in web mode. `public` needs no session (login
- * flow), `user` any signed-in account, `admin` the administrator role.
+ * Least role that may call the method (`public` needs no session: login
+ * flow). Roles are ordered viewer < analyst < admin; data is shared and the
+ * role gates writes. For served methods this must equal the web security
+ * map's `minRole` (tests/shared/ipc/parity-manifest.test.ts).
  */
-export type ChannelAuthz = 'public' | 'user' | 'admin'
+export type ChannelAuthz = 'public' | UserRole
 
 /** Audit expectation for the web dispatcher (L9). */
 export type ChannelAudit = 'write' | 'read' | { readonly exempt: string }
@@ -80,10 +83,14 @@ interface PolicyOptions {
 
 const NOT_SERVED: ChannelAudit = { exempt: 'not served by the web dispatcher' }
 
+/**
+ * Writes default to analyst (viewers are read-only), everything else to
+ * viewer (any signed-in account).
+ */
 function build(policy: WebPolicy, defaults: ChannelAudit, options: PolicyOptions): ChannelPolicy {
   return {
     policy,
-    authz: options.authz ?? 'user',
+    authz: options.authz ?? (defaults === 'write' ? 'analyst' : 'viewer'),
     audit: options.audit ?? defaults,
     ...(options.capability !== undefined ? { capability: options.capability } : {}),
     ...(options.degraded !== undefined ? { degraded: options.degraded } : {})

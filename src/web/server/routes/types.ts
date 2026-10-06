@@ -9,6 +9,8 @@ import type { WebEventHub } from '../events'
 import type { WebJobRegistry } from '../jobs/web-job-registry'
 import type { SessionRevocations } from '../session-revocation'
 import type { AppMetrics } from '../metrics'
+import type { DownloadGrantRegistry } from '../downloads/download-grants'
+import type { ExportArtifactRequest } from '../downloads/export-artifacts'
 
 export interface DispatcherDeps {
   session: StorageSession
@@ -25,6 +27,11 @@ export interface DispatcherDeps {
    * case-delete job contract is src/shared/types/case-delete-job.ts).
    * Absent → `cases:delete` falls back to the synchronous write task.
    */
+  /**
+   * Signed single-use export download grants (routes/export-download.ts).
+   * Absent → one process-wide registry.
+   */
+  downloadGrants?: DownloadGrantRegistry<ExportArtifactRequest>
   jobs?: {
     runner: JobRunner
     caseDelete: PostgresCaseDeleteJobs

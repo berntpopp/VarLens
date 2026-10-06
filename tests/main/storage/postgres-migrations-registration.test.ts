@@ -74,9 +74,15 @@ describe('postgres migration registration', () => {
     // gaps must fail here, not when a deployed schema refuses to migrate.
     const versions = POSTGRES_MIGRATIONS.map((m) => Number(m.version))
     expect(new Set(versions).size, 'duplicate migration version').toBe(versions.length)
-    expect(versions, 'migration versions must run 0001..N without gaps').toEqual(
-      versions.map((_, index) => index + 1)
+    // Versions held open for parallel parity branches (desktop/web parity
+    // wave, 2026-10): P-B 0020-0021, P-C 0022-0023. The integration branch
+    // renumbers contiguously and then empties this list.
+    const RESERVED_FOR_PARALLEL_BRANCHES = new Set([20, 21, 22, 23])
+    const max = Math.max(...versions)
+    const gaps = Array.from({ length: max }, (_, index) => index + 1).filter(
+      (v) => !versions.includes(v) && !RESERVED_FOR_PARALLEL_BRANCHES.has(v)
     )
+    expect(gaps, 'migration versions must run 0001..N without gaps').toEqual([])
     const prefixes = listSqlFiles().map((file) => file.slice(0, 4))
     expect(new Set(prefixes).size, 'two .sql files share a version prefix').toBe(prefixes.length)
   })
