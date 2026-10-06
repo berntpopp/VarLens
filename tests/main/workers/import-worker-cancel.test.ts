@@ -92,4 +92,28 @@ describe('import session cancellation via the injected isCancelled', () => {
     const complete = messages.find((message) => message.type === 'complete')
     expect(complete?.type === 'complete' && complete.results.cancelled).toBe(true)
   })
+
+  it('does not keep or report the partially imported case', async () => {
+    const messages = await importCancelledAfterFirstBatch()
+
+    // A case holding only the first part of its file must never look like a
+    // completed import: no row, no variants, no success report.
+    const db = new Database(dbPath, { readonly: true })
+    try {
+      expect(db.prepare('SELECT name FROM cases').all()).toEqual([])
+      expect(db.prepare('SELECT COUNT(*) AS n FROM variants').get()).toEqual({ n: 0 })
+      expect(db.prepare('SELECT COUNT(*) AS n FROM variant_frequency').get()).toEqual({ n: 0 })
+    } finally {
+      db.close()
+    }
+
+    expect(messages.some((message) => message.type === 'file-complete')).toBe(false)
+    const complete = messages.find((message) => message.type === 'complete')
+    if (complete?.type !== 'complete') throw new Error('no complete message')
+    expect(complete.results).toMatchObject({ succeeded: 0, failed: 0, skipped: 2, cancelled: true })
+    expect(complete.results.details.map((detail) => [detail.caseName, detail.status])).toEqual([
+      ['cancelled-case', 'skipped'],
+      ['never-started', 'skipped']
+    ])
+  })
 })

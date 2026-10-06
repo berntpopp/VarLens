@@ -227,6 +227,21 @@ export async function runImportSession(
             stmts.finishBulkInsert(caseId, variantCount)
           }
 
+          if (isCancelled()) {
+            // Cancelled mid-file: the case holds only part of its file. Remove
+            // it rather than reporting a truncated case as a successful import.
+            stmts.deleteCase.run(caseId)
+            results.push({
+              filePath: file.filePath,
+              fileName,
+              caseName: file.caseName,
+              status: 'skipped',
+              error: 'Cancelled by user'
+            })
+            skipped++
+            continue
+          }
+
           // Insert data_info provenance
           try {
             stmts.insertDataInfo.run(caseId, fileName, formatInfo.format)
