@@ -431,9 +431,10 @@ export function useCohortData(): UseCohortDataReturn {
 
       // Discard stale responses from superseded requests
       if (thisGeneration !== requestGeneration) return
-      if (result.next_cursor !== undefined) {
+      const nextCursor = (result as { next_cursor?: string }).next_cursor
+      if (nextCursor !== undefined) {
         if (pageCursors.size >= MAX_PAGE_CURSORS) pageCursors.clear()
-        pageCursors.set(`${cursorScope}@${offset + params.limit}`, result.next_cursor)
+        pageCursors.set(`${cursorScope}@${offset + params.limit}`, nextCursor)
       }
 
       variants.value = markRaw(result.data ?? [])
