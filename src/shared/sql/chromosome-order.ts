@@ -14,7 +14,7 @@
  * expression, so the query side must emit it through this function and never
  * hand-write it:
  *   - SQLite: `idx_variants_case_chr_rank`, `idx_cvs_chr_rank`, `idx_cvs_carrier_chr_rank`
- *     (migration v33, `sqlite-chr-rank-migration.ts`)
+ *     (migration v33, `src/main/database/chr-rank-indexes.ts`)
  *   - PostgreSQL: the same three names (migration `0017_chr_rank_indexes.sql`)
  * Changing the expression means a new migration on both backends that rebuilds
  * those indexes; otherwise ORDER BY no longer matches them and falls back to a sort.
