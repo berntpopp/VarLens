@@ -444,12 +444,6 @@ onUnmounted(() => {
   height: 100%;
 }
 
-/* The selected case's tinted row drops the medium-emphasis subtitle below AA
-   (3.7:1); render it at full emphasis there. */
-:deep(.v-navigation-drawer--left .v-list-item--active .v-list-item-subtitle) {
-  opacity: 1;
-}
-
 .sidebar-resize-handle {
   position: absolute;
   right: 0;

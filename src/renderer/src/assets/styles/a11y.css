@@ -95,7 +95,9 @@
    ~0.61 effective): 4.43:1 on the page background (#F0F4F8) where the
    cohort toolbar selects sit. Active list items paint a primary tint, which
    drops the medium-emphasis subtitle to 3.7:1 (light) / 3.1:1 (dark).
-   Both found by the axe UI gate (tests/ui-gates/a11y.gate.ts).
+   Both found by the axe UI gate (tests/ui-gates/a11y.gate.ts) and by the
+   responsive-scaling audit; this is the single fix for both (no per-view
+   overrides in App.vue / CohortView.vue).
    ---------------------------------------- */
 .v-field-label {
   opacity: var(--v-high-emphasis-opacity);

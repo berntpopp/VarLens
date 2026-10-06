@@ -199,11 +199,6 @@ defineExpose({ refresh })
   flex-shrink: 0;
 }
 
-/* Surface background keeps the floating select labels at AA contrast */
-.cohort-header {
-  background: rgb(var(--v-theme-surface));
-}
-
 .cohort-tabs :deep(.v-tab--selected) {
   font-weight: 700;
   background-color: rgba(var(--v-theme-primary), 0.12);
