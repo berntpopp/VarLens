@@ -14,7 +14,7 @@ import {
   CHR_RANK_CVS_INDEX,
   CHR_RANK_VARIANTS_INDEX
 } from '../../../src/main/database/chr-rank-indexes'
-import { runMigrations } from '../../../src/main/database/migrations'
+import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { DROP_INDEXES, RECREATE_INDEXES } from '../../../src/main/workers/import-pipeline'
 import { chrRankSql } from '../../../src/shared/sql/chromosome-order'
@@ -135,7 +135,7 @@ describe('migration v33 — chr-rank indexes', () => {
     try {
       initializeSchema(db)
       runMigrations(db)
-      expect(db.pragma('user_version', { simple: true })).toBe(35)
+      expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
       const names = (
         db.prepare(`SELECT name FROM sqlite_master WHERE type = 'index'`).all() as Array<{
           name: string
@@ -174,7 +174,7 @@ describe('migration v33 — chr-rank indexes', () => {
       db.pragma('user_version = 32')
       runMigrations(db)
       runMigrations(db)
-      expect(db.pragma('user_version', { simple: true })).toBe(35)
+      expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
       const count = db
         .prepare(
           `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'index' AND name LIKE '%chr_rank%'`

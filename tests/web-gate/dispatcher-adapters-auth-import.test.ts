@@ -1160,7 +1160,8 @@ describe('web dispatcher adapters: auth and import', () => {
       'analyst',
       'Analyst',
       'temporary-password',
-      'admin'
+      'admin',
+      'viewer'
     )
     const audit = writeExecute.mock.calls.map(
       ([task]) => task as { type: string; params: unknown[] }
@@ -1179,6 +1180,35 @@ describe('web dispatcher adapters: auth and import', () => {
       })
     )
     expect(JSON.stringify(audit)).not.toContain('temporary-password')
+  })
+
+  test('auth.createUser accepts an explicit role and rejects unknown roles', async () => {
+    const { deps, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 1, username: 'admin', role: 'admin' } } }
+
+    await overrides['auth:createUser'].handle(
+      ['ana', 'Ana', 'temporary-password', 'analyst'],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(deps.authService.createUser).toHaveBeenCalledWith(
+      'ana',
+      'Ana',
+      'temporary-password',
+      'admin',
+      'analyst'
+    )
+
+    const invalid = await overrides['auth:createUser'].handle(
+      ['eve', 'Eve', 'temporary-password', 'root'],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(reply.code).toHaveBeenLastCalledWith(400)
+    expect(invalid).toMatchObject({ error: 'invalid-user-payload' })
   })
 
   test('auth.createUser maps a duplicate username to 409', async () => {
@@ -1214,7 +1244,7 @@ describe('web dispatcher adapters: auth and import', () => {
     expect(deps.authService.setRole).toHaveBeenCalledWith('analyst', 'admin')
 
     const self = await overrides['auth:setRole'].handle(
-      ['admin', 'user'],
+      ['admin', 'analyst'],
       request as never,
       reply as never,
       deps
@@ -1243,7 +1273,7 @@ describe('web dispatcher adapters: auth and import', () => {
     expect(deps.authService.setRole).not.toHaveBeenCalled()
 
     const lastAdmin = await overrides['auth:setRole'].handle(
-      ['other-admin', 'user'],
+      ['other-admin', 'analyst'],
       request as never,
       reply as never,
       deps

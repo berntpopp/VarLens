@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { ROLE_ADMIN, ROLE_USER } from '../../../../src/shared/auth/auth-constants'
+import { ROLE_ADMIN, ROLE_ANALYST } from '../../../../src/shared/auth/auth-constants'
 import { PostgresPlatformUserStore } from '../../../../src/web/auth/PostgresPlatformUserStore'
 
 interface QueryResponse {
-  rows: Array<{ id: string; username: string; role: 'admin' | 'user' }>
+  rows: Array<{ id: string; username: string; role: 'admin' | 'analyst' | 'viewer' }>
   rowCount: number
 }
 
@@ -23,14 +23,14 @@ class FakePool {
 describe('PostgresPlatformUserStore', () => {
   it('creates a disabled-password local binding for an OIDC subject', async () => {
     const pool = new FakePool({
-      rows: [{ id: '9', username: 'oidc-subject-1', role: ROLE_USER }],
+      rows: [{ id: '9', username: 'oidc-subject-1', role: ROLE_ANALYST }],
       rowCount: 1
     })
     const users = new PostgresPlatformUserStore(pool as never, 'instance_alice')
 
     await expect(
-      users.upsert({ subject: 'oidc-subject-1', displayName: 'Alice', role: ROLE_USER })
-    ).resolves.toEqual({ id: 9, subject: 'oidc-subject-1', role: ROLE_USER })
+      users.upsert({ subject: 'oidc-subject-1', displayName: 'Alice', role: ROLE_ANALYST })
+    ).resolves.toEqual({ id: 9, subject: 'oidc-subject-1', role: ROLE_ANALYST })
 
     const insertQuery = pool.queries.find((q) => q.text.startsWith('INSERT INTO'))
     expect(insertQuery).toBeDefined()
@@ -38,7 +38,7 @@ describe('PostgresPlatformUserStore', () => {
       'oidc-subject-1',
       'Alice',
       'platform-identity-disabled-local-password',
-      ROLE_USER,
+      ROLE_ANALYST,
       'platform-identity-disabled-local-password'
     ])
     expect(insertQuery?.text).toContain('"instance_alice"."users"')
@@ -55,7 +55,7 @@ describe('PostgresPlatformUserStore', () => {
     )
 
     await expect(
-      users.upsert({ subject: 'oidc-subject-1', displayName: 'Alice', role: ROLE_USER })
+      users.upsert({ subject: 'oidc-subject-1', displayName: 'Alice', role: ROLE_ANALYST })
     ).rejects.toThrow(/cannot overwrite local user/i)
   })
 
@@ -99,7 +99,7 @@ describe('PostgresPlatformUserStore', () => {
     const users = new PostgresPlatformUserStore(new FakePool(conflict) as never, 'public')
 
     await expect(
-      users.upsert({ subject: 'second-subject', displayName: 'Mallory', role: ROLE_USER })
+      users.upsert({ subject: 'second-subject', displayName: 'Mallory', role: ROLE_ANALYST })
     ).rejects.toThrow(/already bound to another platform subject/i)
   })
 })

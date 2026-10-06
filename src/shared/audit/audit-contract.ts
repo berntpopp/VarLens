@@ -1,4 +1,4 @@
-import { ROLE_ADMIN, ROLE_USER } from '../auth/auth-constants'
+import { ROLE_ADMIN, ROLE_ANALYST, ROLE_VIEWER, normalizeUserRole } from '../auth/auth-constants'
 
 type SafeAuditObject = Record<string, unknown>
 
@@ -25,8 +25,9 @@ export type AuditEntityType =
   'variant_annotation' | 'case_variant_annotation' | 'user_account' | 'api_call'
 
 export const AUDIT_ROLE_MEANINGS = Object.freeze({
-  [ROLE_ADMIN]: 'App administrator',
-  [ROLE_USER]: 'Clinical user'
+  [ROLE_VIEWER]: 'Read-only reviewer',
+  [ROLE_ANALYST]: 'Clinical analyst',
+  [ROLE_ADMIN]: 'App administrator'
 })
 
 const REDACTED_VALUE = Object.freeze({ redacted: true })
@@ -72,7 +73,7 @@ function sanitizeAuditField(key: string, value: unknown): unknown {
     case 'tag_id':
       return typeof value === 'number' ? value : String(value)
     case 'role':
-      return value === ROLE_ADMIN || value === ROLE_USER ? value : 'unknown'
+      return normalizeUserRole(value) ?? 'unknown'
     case 'method':
     case 'reason':
       return typeof value === 'string' && value.length <= 120 ? value : undefined

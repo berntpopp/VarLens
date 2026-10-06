@@ -152,7 +152,7 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
     )
 
     const result = await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
-    expect(result.applied).toEqual(['0014', '0015', '0016', '0017', '0018', '0019'])
+    expect(result.applied).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0024'])
 
     const migratedTranscript = await probeClient.query<{ consequence: string; func: string }>(
       `SELECT consequence, func
@@ -232,9 +232,16 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
       )
     ).rejects.toThrow()
 
-    // Role CHECK must enumerate exactly admin + user, the same enum as SQLite
-    // migrations.ts v12. The shared constants module is the cross-backend
-    // source of truth.
+    // 0024 moved the legacy `user` role to `analyst` (same write abilities).
+    await expect(
+      probeClient.query(
+        `SELECT role FROM "${schema}".users WHERE username = 'legacy-platform-subject'`
+      )
+    ).resolves.toMatchObject({ rows: [{ role: 'analyst' }] })
+
+    // Role CHECK must enumerate exactly viewer + analyst + admin, the same
+    // enum as SQLite migrations.ts v38. The shared constants module is the
+    // cross-backend source of truth.
     const checkRow = await probeClient.query<{ check_clause: string }>(
       `SELECT cc.check_clause
          FROM information_schema.table_constraints tc
@@ -246,7 +253,15 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
     )
     expect(checkRow.rows.length, 'users.role CHECK constraint must be present').toBeGreaterThan(0)
     const clauses = checkRow.rows.map((r) => r.check_clause)
-    expect(clauses.some((c) => c.includes("'admin'") && c.includes("'user'"))).toBe(true)
+    expect(
+      clauses.some(
+        (c) =>
+          c.includes("'admin'") &&
+          c.includes("'analyst'") &&
+          c.includes("'viewer'") &&
+          !c.includes("'user'")
+      )
+    ).toBe(true)
 
     // Unique constraint on username is the auth path's only defence
     // against duplicate-account creation race conditions.

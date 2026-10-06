@@ -25,8 +25,9 @@ import {
   LOCKOUT_DURATION_MINUTES,
   MAX_FAILED_ATTEMPTS,
   ROLE_ADMIN,
-  ROLE_USER,
+  DEFAULT_USER_ROLE,
   WEB_MIN_PASSWORD_LENGTH,
+  normalizeUserRole,
   type UserRole
 } from '../../shared/auth/auth-constants'
 import { assertUserExists, reactivateUser, setUserRole } from './postgres-user-admin'
@@ -150,7 +151,7 @@ function mapPgRowToUser(raw: Record<string, unknown>): User {
     username: String(raw.username),
     display_name: raw.display_name === null ? null : String(raw.display_name),
     password_hash: String(raw.password_hash),
-    role: String(raw.role) as UserRole,
+    role: normalizeUserRole(raw.role) ?? DEFAULT_USER_ROLE,
     is_active: toBoolNumber(raw.is_active),
     must_change_password: toBoolNumber(raw.must_change_password),
     failed_login_count: Number(raw.failed_login_count ?? 0),
@@ -394,7 +395,8 @@ export class PostgresWebAuthService {
     username: string,
     displayName: string,
     tempPassword: string,
-    createdByUsername: string
+    createdByUsername: string,
+    role: UserRole = DEFAULT_USER_ROLE
   ): Promise<{ id: number; username: string; role: UserRole; must_change_password: number }> {
     const sch = this.schemaQuoted
     assertPasswordMinLength(tempPassword, 'Temporary password')
@@ -406,13 +408,13 @@ export class PostgresWebAuthService {
         (username, display_name, password_hash, role, must_change_password, created_by, password_changed_at)
        VALUES ($1, $2, $3, $4, TRUE, $5, now())
        RETURNING id`,
-      [username, displayName, passwordHash, ROLE_USER, creator?.id ?? null]
+      [username, displayName, passwordHash, role, creator?.id ?? null]
     )
 
     return {
       id: Number(inserted.rows[0].id),
       username,
-      role: ROLE_USER,
+      role,
       must_change_password: 1
     }
   }

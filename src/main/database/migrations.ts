@@ -10,6 +10,10 @@ import { CLINICAL_METRICS } from './clinical-metrics'
 import { BUILT_IN_PRESETS } from './built-in-presets'
 import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
 import { createChrRankIndexes } from './chr-rank-indexes'
+import { migrateUserRoles } from './user-roles-migration'
+
+/** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
+export const LATEST_SQLITE_SCHEMA_VERSION = 38
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -51,6 +55,8 @@ import { createChrRankIndexes } from './chr-rank-indexes'
  * - 33: chr-rank expression indexes for natural chromosome order (chr-rank-indexes.ts)
  * - 34: reserved (unused)
  * - 35: backfill case_data_info rows the worker import path failed to write
+ * - 36, 37: reserved by parallel parity branches (renumbered at integration)
+ * - 38: viewer / analyst / admin roles (users table rebuild; `user` → `analyst`)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1872,6 +1878,12 @@ export function runMigrations(db: Database.Database): void {
   if (currentVersion < 35) {
     backfillMissingCaseDataInfo(db)
     db.exec('PRAGMA user_version = 35')
+  }
+
+  // ── Migration v38: viewer / analyst / admin role model (mirrors PG 0024) ──
+  if (currentVersion < 38) {
+    migrateUserRoles(db)
+    db.exec('PRAGMA user_version = 38')
   }
 }
 

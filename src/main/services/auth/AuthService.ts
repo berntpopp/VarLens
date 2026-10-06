@@ -16,7 +16,7 @@ import {
   LOCKOUT_DURATION_MINUTES,
   MAX_FAILED_ATTEMPTS,
   ROLE_ADMIN,
-  ROLE_USER,
+  DEFAULT_USER_ROLE,
   type UserRole
 } from '../../../shared/auth/auth-constants'
 import type { AuthResult, User } from '../../../shared/auth/types'
@@ -129,7 +129,8 @@ export class AuthService {
     username: string,
     displayName: string,
     tempPassword: string,
-    createdByUsername: string
+    createdByUsername: string,
+    role: UserRole = DEFAULT_USER_ROLE
   ): Promise<{ id: number; username: string; role: UserRole; must_change_password: number }> {
     const creator = this.getUser(createdByUsername)
     const passwordHash = await this.passwordProvider.hashPassword(tempPassword)
@@ -139,12 +140,12 @@ export class AuthService {
         `INSERT INTO users (username, display_name, password_hash, role, must_change_password, created_by, password_changed_at)
          VALUES (?, ?, ?, ?, 1, ?, datetime('now'))`
       )
-      .run(username, displayName, passwordHash, ROLE_USER, creator?.id ?? null)
+      .run(username, displayName, passwordHash, role, creator?.id ?? null)
 
     return {
       id: Number(result.lastInsertRowid),
       username,
-      role: ROLE_USER,
+      role,
       must_change_password: 1
     }
   }

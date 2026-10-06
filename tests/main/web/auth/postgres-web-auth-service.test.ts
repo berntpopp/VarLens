@@ -11,7 +11,8 @@ import {
   LOCKOUT_DURATION_MINUTES,
   MAX_FAILED_ATTEMPTS,
   ROLE_ADMIN,
-  ROLE_USER
+  ROLE_ANALYST,
+  ROLE_VIEWER
 } from '../../../../src/shared/auth/auth-constants'
 import {
   ARGON2_POLICY,
@@ -121,7 +122,7 @@ function pgUserRow(overrides: Partial<CannedRow> = {}): CannedRow {
     username: 'alice',
     display_name: 'Alice',
     password_hash: 'hashed::pw',
-    role: 'user',
+    role: 'analyst',
     is_active: true,
     must_change_password: false,
     failed_login_count: 0,
@@ -523,7 +524,7 @@ describe('PostgresWebAuthService — authenticate', () => {
 })
 
 describe('PostgresWebAuthService — createUser', () => {
-  it('creates with ROLE_USER, parameterised, attributes creator id', async () => {
+  it('creates with the least-privileged default role, parameterised, attributes creator id', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
     pool.enqueueResponse({ rows: [pgUserRow({ id: '99', username: 'admin' })], rowCount: 1 }) // getUser(creator)
@@ -531,12 +532,12 @@ describe('PostgresWebAuthService — createUser', () => {
 
     const r = await svc.createUser('bob', 'Bob', FIXTURE_PW, 'admin')
     expect(r.id).toBe(7)
-    expect(r.role).toBe(ROLE_USER)
+    expect(r.role).toBe(ROLE_VIEWER)
     expect(r.must_change_password).toBe(1)
 
     const insert = pool.queries.find((q) => /INSERT INTO[\s\S]+users/i.test(q.text))
-    expect(insert!.text, 'role must be parameterised').not.toMatch(/'user'/)
-    expect(insert!.values).toContain(ROLE_USER)
+    expect(insert!.text, 'role must be parameterised').not.toMatch(/'(user|viewer|analyst)'/)
+    expect(insert!.values).toContain(ROLE_VIEWER)
     expect(insert!.values).toContain(99) // creator id propagated
   })
 
@@ -629,7 +630,7 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
   it('deactivateUser issues UPDATE is_active = FALSE for non-admin users', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
-    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.deactivateUser('alice')
     const upd = pool.queries[1]
@@ -640,7 +641,7 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
   it('resetPassword clears lockout state and forces password change', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
-    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 }) // existence check
+    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 }) // existence check
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.resetPassword('alice', FIXTURE_NEW_PW)
     const upd = pool.queries[1]
@@ -660,7 +661,7 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
   it('setRole promotes a user with a parameterised update', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
-    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.setRole('bob', ROLE_ADMIN)
     expect(pool.queries[1].text).toMatch(/UPDATE[\s\S]+SET role = \$1/i)
@@ -672,14 +673,14 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
     const svc = newSvc(pool)
     pool.enqueueResponse({ rows: [{ role: ROLE_ADMIN }], rowCount: 1 })
     pool.enqueueResponse({ rows: [{ c: '0' }], rowCount: 1 })
-    await expect(svc.setRole('admin', ROLE_USER)).rejects.toThrow(/last active admin/i)
+    await expect(svc.setRole('admin', ROLE_ANALYST)).rejects.toThrow(/last active admin/i)
     expect(pool.queries).toHaveLength(2)
   })
 
   it('reactivateUser re-enables and clears lockout; unknown users throw', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
-    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.reactivateUser('bob')
     expect(pool.queries[1].text).toMatch(/is_active = TRUE/i)
@@ -776,7 +777,7 @@ describe('PostgresWebAuthService — cached session-user lookup', () => {
     pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
     expect((await svc.getSessionUser('alice'))?.is_active).toBe(1)
 
-    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.deactivateUser('alice')
 
@@ -788,9 +789,9 @@ describe('PostgresWebAuthService — cached session-user lookup', () => {
     const pool = new FakePool()
     const svc = newCachedSvc(pool)
     pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
-    expect((await svc.getSessionUser('alice'))?.role).toBe(ROLE_USER)
+    expect((await svc.getSessionUser('alice'))?.role).toBe(ROLE_ANALYST)
 
-    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.setRole('alice', ROLE_ADMIN)
     pool.enqueueResponse({ rows: [pgUserRow({ role: ROLE_ADMIN })], rowCount: 1 })
@@ -799,7 +800,7 @@ describe('PostgresWebAuthService — cached session-user lookup', () => {
     pool.enqueueResponse({ rows: [pgUserRow({ is_active: false })], rowCount: 1 })
     svc.invalidateUser('alice')
     expect((await svc.getSessionUser('alice'))?.is_active).toBe(0)
-    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.reactivateUser('alice')
     pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
@@ -812,7 +813,7 @@ describe('PostgresWebAuthService — cached session-user lookup', () => {
     pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
     const before = await svc.getSessionUser('alice')
 
-    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 }) // existence check
+    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 }) // existence check
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.resetPassword('alice', FIXTURE_NEW_PW)
     const rotatedAt = new Date('2026-10-06T10:00:00Z')

@@ -86,6 +86,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { isWebRuntime } from '../../utils/runtime-mode'
 import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference'
+import { roleLabel as labelForRole } from '../../utils/role-labels'
 import { logService } from '../../services/LogService'
 
 // Dialog bodies load on first open so the toolbar chunk stays small.
@@ -101,7 +102,7 @@ const passwordOpen = ref(false)
 const usersOpen = ref(false)
 
 const visible = computed(() => authStore.accountsEnabled && authStore.currentUser !== null)
-const roleLabel = computed(() => (authStore.isAdmin ? 'Administrator' : 'User'))
+const roleLabel = computed(() => labelForRole(authStore.currentUser?.role))
 
 onMounted(() => {
   if (isWebRuntime() || authStore.accountsEnabled) void authStore.checkAccountsEnabled()

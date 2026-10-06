@@ -1,3 +1,4 @@
+import type { UserRole } from '../../auth/auth-constants'
 import type { IpcResult } from '../../types/errors'
 
 export interface AuthDomainContract {
@@ -15,10 +16,12 @@ export interface AuthDomainContract {
   logout: () => Promise<IpcResult<void>>
   currentUser: () => Promise<IpcResult<{ id: number; username: string; role: string } | null>>
   isAccountsEnabled: () => Promise<IpcResult<boolean>>
+  /** Create an account (admin only). `role` defaults to least privilege (`viewer`). */
   createUser: (
     username: string,
     displayName: string,
-    tempPassword: string
+    tempPassword: string,
+    role?: UserRole
   ) => Promise<IpcResult<void>>
   listUsers: () => Promise<
     IpcResult<
@@ -38,7 +41,7 @@ export interface AuthDomainContract {
   /** Re-enable a deactivated account (admin only). */
   reactivateUser: (username: string) => Promise<IpcResult<void>>
   /** Change another user's role (admin only; never demotes the last admin). */
-  setRole: (username: string, role: 'admin' | 'user') => Promise<IpcResult<void>>
+  setRole: (username: string, role: UserRole) => Promise<IpcResult<void>>
   resetPassword: (username: string, newPassword: string) => Promise<IpcResult<void>>
   changePassword: (oldPassword: string, newPassword: string) => Promise<IpcResult<void>>
 }

@@ -18,8 +18,18 @@
  * touches these constants as a security review, not a routine cleanup.
  */
 
-/** Allowed values for the users.role column. */
-export const USER_ROLES = ['admin', 'user'] as const
+/**
+ * Allowed values for the users.role column, least to most privileged.
+ *
+ * Data is SHARED across users; the role only gates writes:
+ *   - `viewer`  read-only (browse cases, variants, cohorts, audit of an entity)
+ *   - `analyst` viewer + classify / comment / tag / import / export / curate
+ *   - `admin`   analyst + user management, settings, delete-all, egress config
+ *
+ * Postgres migration 0024 and SQLite v38 moved the old `'user'` role to
+ * `'analyst'` (same write abilities it always had).
+ */
+export const USER_ROLES = ['viewer', 'analyst', 'admin'] as const
 export type UserRole = (typeof USER_ROLES)[number]
 
 /**
@@ -28,13 +38,44 @@ export type UserRole = (typeof USER_ROLES)[number]
  * rather than a silent runtime divergence between schema and inserts.
  */
 export const ROLE_ADMIN: UserRole = 'admin'
-export const ROLE_USER: UserRole = 'user'
+export const ROLE_ANALYST: UserRole = 'analyst'
+export const ROLE_VIEWER: UserRole = 'viewer'
 
 /**
- * Default value for the users.role column. Both backends declare
- * `DEFAULT 'user'`; the migration-parity tests pin both to this value.
+ * Pre-0024 / pre-v38 name of the analyst role. Never written any more; only
+ * accepted on input (platform entitlements, provisioning CLI, stale cookies)
+ * and normalised to {@link ROLE_ANALYST}.
  */
-export const DEFAULT_USER_ROLE: UserRole = ROLE_USER
+export const LEGACY_ROLE_USER = 'user'
+
+/**
+ * Default value for the users.role column and for accounts created without
+ * an explicit role: least privilege. Both backends declare
+ * `DEFAULT 'viewer'`; the migration-parity tests pin both to this value.
+ */
+export const DEFAULT_USER_ROLE: UserRole = ROLE_VIEWER
+
+const ROLE_RANK: Readonly<Record<UserRole, number>> = Object.freeze({
+  viewer: 0,
+  analyst: 1,
+  admin: 2
+})
+
+export function isUserRole(value: unknown): value is UserRole {
+  return typeof value === 'string' && (USER_ROLES as readonly string[]).includes(value)
+}
+
+/** Maps a stored/claimed role to the current enum (`'user'` → analyst); unknown → undefined. */
+export function normalizeUserRole(value: unknown): UserRole | undefined {
+  if (value === LEGACY_ROLE_USER) return ROLE_ANALYST
+  return isUserRole(value) ? value : undefined
+}
+
+/** True when `role` grants at least `minimum`. Unknown roles grant nothing. */
+export function roleAtLeast(role: unknown, minimum: UserRole): boolean {
+  const normalized = normalizeUserRole(role)
+  return normalized !== undefined && ROLE_RANK[normalized] >= ROLE_RANK[minimum]
+}
 
 /**
  * Minimum length for passwords accepted by the web track. Desktop auth keeps

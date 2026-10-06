@@ -116,7 +116,14 @@ describe('auth preload domain behavior', () => {
     expect(invoke).toHaveBeenNthCalledWith(2, 'auth:logout')
     expect(invoke).toHaveBeenNthCalledWith(3, 'auth:currentUser')
     expect(invoke).toHaveBeenNthCalledWith(4, 'auth:isAccountsEnabled')
-    expect(invoke).toHaveBeenNthCalledWith(5, 'auth:createUser', 'user1', 'User One', 'temppass123')
+    expect(invoke).toHaveBeenNthCalledWith(
+      5,
+      'auth:createUser',
+      'user1',
+      'User One',
+      'temppass123',
+      undefined
+    )
     expect(invoke).toHaveBeenNthCalledWith(6, 'auth:listUsers')
     expect(invoke).toHaveBeenNthCalledWith(7, 'auth:deactivateUser', 'user1')
     expect(invoke).toHaveBeenNthCalledWith(8, 'auth:resetPassword', 'user1', 'newpass456')

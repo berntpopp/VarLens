@@ -21,7 +21,7 @@ import { unlinkSync, existsSync } from 'fs'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { DatabaseService } from '../../../src/main/database'
 import { initializeSchema } from '../../../src/main/database/schema'
-import { runMigrations } from '../../../src/main/database/migrations'
+import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { BUILT_IN_SHORTLIST_PRESETS } from '../../../src/main/database/built-in-shortlist-presets'
 
 describe('Schema Migrations', () => {
@@ -131,7 +131,7 @@ describe('Schema Migrations', () => {
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(35)
+      expect(versionResult.user_version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
 
       service.close()
 
@@ -141,7 +141,7 @@ describe('Schema Migrations', () => {
       const versionAfterReopen = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionAfterReopen.user_version).toBe(35)
+      expect(versionAfterReopen.user_version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
 
       service.close()
     })
@@ -468,7 +468,7 @@ describe('Schema Migrations', () => {
       let versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(35)
+      expect(versionResult.user_version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
 
       service.close()
 
@@ -488,7 +488,7 @@ describe('Schema Migrations', () => {
       versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(35)
+      expect(versionResult.user_version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
 
       service.close()
     })
@@ -522,7 +522,7 @@ describe('Schema Migrations', () => {
       const versionResult = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(versionResult.user_version).toBe(35)
+      expect(versionResult.user_version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
 
       service.close()
     })
@@ -760,7 +760,7 @@ describe('Schema Migrations', () => {
       const version = service.database.prepare('PRAGMA user_version').get() as {
         user_version: number
       }
-      expect(version.user_version).toBe(35)
+      expect(version.user_version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
 
       service.close()
     })
@@ -801,7 +801,7 @@ describe('Schema Migrations', () => {
 
       // Verify user_version = latest (v15 + v16 + v17 + v18 + … + v28 + v29 all run)
       const version = db.pragma('user_version', { simple: true }) as number
-      expect(version).toBe(35)
+      expect(version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
 
       service.close()
     })
@@ -1257,9 +1257,9 @@ describe('migration v27 — filter_presets.kind + shortlist seeds', () => {
     expect(idx).toBeTruthy()
   })
 
-  it('PRAGMA user_version = 35 (latest) after migration', () => {
+  it('PRAGMA user_version is the latest after migration', () => {
     const v = db.pragma('user_version', { simple: true })
-    expect(v).toBe(35)
+    expect(v).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 })
 
@@ -1314,7 +1314,7 @@ describe('migration v31 — projects registry (D5)', () => {
     }
     expect(row).toEqual({ id: 1, name: 'default', schema_name: 'main' })
 
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
   it('SQLite v31: re-running migrations is idempotent (single default row)', () => {
@@ -1325,7 +1325,7 @@ describe('migration v31 — projects registry (D5)', () => {
 
     const count = db.prepare(`SELECT COUNT(*) AS c FROM projects`).get() as { c: number }
     expect(count.c).toBe(1)
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 })
 
@@ -1349,7 +1349,7 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
     expect(funcCol).toBeDefined()
     expect(funcCol!.notnull).toBe(0)
 
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
   it('is idempotent — re-running migrations does not throw or duplicate the column', () => {
@@ -1362,7 +1362,7 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
       name: string
     }>
     expect(columns.filter((c) => c.name === 'func')).toHaveLength(1)
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
   it('canonicalizes legacy SO terms without guessing an unavailable impact', () => {
@@ -1497,6 +1497,6 @@ describe('migration v32 — variant_transcripts.func (D1 canonical impact/SO mod
         .get(jsonVariantId, 'NM_JSON.1')
     ).toEqual({ consequence: 'LOW', func: 'synonymous_variant' })
 
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 })

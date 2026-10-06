@@ -8,7 +8,7 @@
  */
 import type { Pool } from 'pg'
 
-import { ROLE_ADMIN, USER_ROLES, type UserRole } from '../../shared/auth/auth-constants'
+import { ROLE_ADMIN, isUserRole, type UserRole } from '../../shared/auth/auth-constants'
 
 export class UserAdminError extends Error {
   constructor(
@@ -18,10 +18,6 @@ export class UserAdminError extends Error {
     super(message)
     this.name = 'UserAdminError'
   }
-}
-
-export function isUserRole(value: unknown): value is UserRole {
-  return typeof value === 'string' && (USER_ROLES as readonly string[]).includes(value)
 }
 
 async function requireExistingRole(
