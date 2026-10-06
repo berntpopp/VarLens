@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
 import { resolve } from 'path'
 import pkg from './package.json'
+import { isolateTransformTemp } from './scripts/vitest/transform-temp.mjs'
 
 /**
  * Vitest config — split by test environment via Projects so:
@@ -36,6 +37,12 @@ import pkg from './package.json'
  */
 
 const coverageEnabled = process.env.COVERAGE === '1'
+
+// The forks pool reads transformed modules from files below the runner's
+// temporary directory. Keep them in this worktree (ignored, and outside the
+// preflight dependency fingerprint) so nothing pruning the shared host temp
+// directory can fail a live run; test code keeps the host directory.
+const transformTemp = isolateTransformTemp(__dirname)
 
 export default defineConfig({
   plugins: [vue(), vuetify({ autoImport: true })],
@@ -82,6 +89,8 @@ export default defineConfig({
     // Vitest issue in rare cases — keep the graceful-ignore so they don't
     // fail the run when all tests have already passed.
     dangerouslyIgnoreUnhandledErrors: true,
+
+    env: transformTemp.workerEnv,
 
     setupFiles: ['tests/setup.ts'],
     server: {

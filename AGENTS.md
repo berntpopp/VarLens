@@ -161,6 +161,13 @@ On hosts that require the existing Electron test sandbox opt-out, explicitly pas
 `PREFLIGHT_ARGS=--electron-no-sandbox` or set `git config --worktree varlens.ciNoSandbox true`
 after hook setup. This option is confined to test launches and bound into the receipt.
 
+The gate's own large scratch data (Trivy database and image export, builder configuration) lives
+under `~/.cache/varlens-ci/scratch/`, not `os.tmpdir()`: `/tmp` is often tmpfs, whose pages count
+against a `systemd-run -p MemoryMax=…` scope. Override with an absolute `VARLENS_CI_SCRATCH_DIR`.
+Stage children still use the ambient `TMPDIR`. Vitest's transform copies live per worktree in
+`node_modules/.vite-temp/vitest/` (`scripts/vitest/transform-temp.mjs`); test code keeps the host
+temporary directory.
+
 Pass receipts live under the worktree Git directory and bind clean commit/tree, merge-base,
 gate policy, tools, installed dependencies, and output bytes. Ignored source/build-input files
 (including local Git excludes) also block readiness; known generated fixture bytes are bound
