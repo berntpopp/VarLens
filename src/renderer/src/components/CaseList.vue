@@ -83,6 +83,7 @@
         color="primary"
         @click="handleCaseClick($event, caseItem)"
         @contextmenu.prevent="handleContextMenu($event, caseItem)"
+        @keydown="handleContextMenuKey($event, caseItem)"
       >
         <template #prepend>
           <!-- Multi-select checkbox when in multi-select mode -->
@@ -131,47 +132,15 @@
     </v-list>
   </v-infinite-scroll>
 
-  <v-menu
-    v-model="contextMenu.show.value"
-    :style="{
-      position: 'fixed',
-      left: contextMenu.x.value + 'px',
-      top: contextMenu.y.value + 'px'
-    }"
-    location-strategy="static"
-  >
-    <v-list density="compact">
-      <!-- Edit single case -->
-      <v-list-item @click="handleEdit">
-        <template #prepend>
-          <v-icon :icon="mdiPencil" />
-        </template>
-        <v-list-item-title>Edit</v-list-item-title>
-      </v-list-item>
-      <v-divider />
-      <!-- Delete selected when multi-select active -->
-      <v-list-item v-if="isMultiSelectMode" @click="handleDeleteSelected">
-        <template #prepend>
-          <v-icon color="error" :icon="mdiDelete" />
-        </template>
-        <v-list-item-title>Delete {{ multiSelectedCount }} Selected</v-list-item-title>
-      </v-list-item>
-      <!-- Single delete option -->
-      <v-list-item @click="handleDelete">
-        <template #prepend>
-          <v-icon :icon="mdiDelete" />
-        </template>
-        <v-list-item-title>Delete</v-list-item-title>
-      </v-list-item>
-      <!-- Clear selection when multi-select active -->
-      <v-list-item v-if="isMultiSelectMode" @click="clearMultiSelect">
-        <template #prepend>
-          <v-icon :icon="mdiSelectionOff" />
-        </template>
-        <v-list-item-title>Clear Selection</v-list-item-title>
-      </v-list-item>
-    </v-list>
-  </v-menu>
+  <CaseContextMenu
+    ref="contextMenuRef"
+    :multi-select-mode="isMultiSelectMode"
+    :selected-count="multiSelectedCount"
+    @edit="handleEdit"
+    @delete="handleDelete"
+    @delete-selected="handleDeleteSelected"
+    @clear-selection="clearMultiSelect"
+  />
 
   <DeleteCaseDialog ref="dialogRef" />
   <AppSnackbar ref="snackbarRef" />
@@ -182,7 +151,6 @@ import { ref, computed, watch, shallowRef, markRaw } from 'vue'
 import type { CaseWithCohorts, CaseSex, AffectedStatus } from '../../../shared/types/api'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
-import { useContextMenu } from '../composables/useContextMenu'
 import { logService } from '../services/LogService'
 
 const VALID_AFFECTED: Set<string> = new Set(['affected', 'unaffected', 'unknown'])
@@ -200,19 +168,17 @@ import { useDebounce } from '../composables/useDebounce'
 import { useApiService } from '../composables/useApiService'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
 import CaseStatusIcons from './CaseStatusIcons.vue'
+import CaseContextMenu from './CaseContextMenu.vue'
 import DeleteCaseDialog from './DeleteCaseDialog.vue'
 import AppSnackbar from './AppSnackbar.vue'
 import {
   mdiAccountGroup,
   mdiCheckboxBlankOutline,
   mdiCheckboxMarked,
-  mdiDelete,
   mdiFilterOff,
   mdiFolderOpenOutline,
   mdiHuman,
-  mdiMagnify,
-  mdiPencil,
-  mdiSelectionOff
+  mdiMagnify
 } from '@mdi/js'
 
 const PAGE_SIZE = 50
@@ -232,7 +198,7 @@ const selectedCohortIds = ref<number[]>([])
 const selectedHpoIds = ref<string[]>([])
 const selected = ref<number[]>([])
 const contextMenuCase = ref<CaseWithCohorts | null>(null)
-const contextMenu = useContextMenu()
+const contextMenuRef = ref<InstanceType<typeof CaseContextMenu> | null>(null)
 const { api } = useApiService()
 
 const currentOffset = ref(0)
@@ -424,25 +390,30 @@ const handleCaseClick = (event: MouseEvent | KeyboardEvent, caseItem: CaseWithCo
 
 // Clear multi-select helper
 const clearMultiSelect = (): void => {
-  contextMenu.close()
+  contextMenuRef.value?.close()
   multiSelected.value = new Set()
 }
 
 // Context menu handlers
 const handleContextMenu = (event: MouseEvent, caseItem: CaseWithCohorts): void => {
   contextMenuCase.value = caseItem
-  contextMenu.open(event)
+  contextMenuRef.value?.open(event)
+}
+
+// Shift+F10 / ContextMenu key opens the same menu anchored at the focused item.
+const handleContextMenuKey = (event: KeyboardEvent, caseItem: CaseWithCohorts): void => {
+  if (contextMenuRef.value?.openFromKeyboard(event) === true) contextMenuCase.value = caseItem
 }
 
 const handleEdit = (): void => {
-  contextMenu.close()
+  contextMenuRef.value?.close()
   if (contextMenuCase.value == null) return
   const c = contextMenuCase.value
   emit('edit-case', c.id, c.name, c.variant_count, c.created_at)
 }
 
 const handleDelete = async (): Promise<void> => {
-  contextMenu.close()
+  contextMenuRef.value?.close()
 
   if (contextMenuCase.value === null || contextMenuCase.value === undefined) return
 
@@ -529,7 +500,7 @@ const handleDelete = async (): Promise<void> => {
 }
 
 const handleDeleteSelected = async (): Promise<void> => {
-  contextMenu.close()
+  contextMenuRef.value?.close()
 
   const ids = Array.from(multiSelected.value)
   if (ids.length === 0) return
