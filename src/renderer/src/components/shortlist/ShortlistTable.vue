@@ -20,7 +20,11 @@ import { computed } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import { mdiStar, mdiStarOutline, mdiDotsVertical } from '@mdi/js'
 import RankScoreTooltip from './RankScoreTooltip.vue'
-import { useTableKeyboardNav, isInputFocused } from '../../composables/useTableKeyboardNav'
+import {
+  useTableKeyboardNav,
+  isInputFocused,
+  hasCommandModifier
+} from '../../composables/useTableKeyboardNav'
 import type { ShortlistRow } from '../../../../shared/types/shortlist'
 
 const props = defineProps<{
@@ -194,7 +198,7 @@ onKeyStroke(
 onKeyStroke(
   's',
   (e: KeyboardEvent) => {
-    if (isInputFocused() || !selectedItem.value) return
+    if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
     e.preventDefault()
     emit('toggle-star', selectedItem.value)
   },

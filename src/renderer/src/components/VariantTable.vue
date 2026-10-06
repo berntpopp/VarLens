@@ -289,7 +289,7 @@ import { resolveUrlTemplate } from '../utils/externalLinks'
 import { formatConsequence } from '../utils/formatters'
 import { getAdaptiveRowScrollBehavior } from '../utils/adaptiveRowScroll'
 import { useTableScroll } from '../composables/useTableScroll'
-import { useTableKeyboardNav } from '../composables/useTableKeyboardNav'
+import { useTableKeyboardNav, hasCommandModifier } from '../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
 import VariantColumnHeader from './variant-table/VariantColumnHeader.vue'
 import AnnotationDialogs from './AnnotationDialogs.vue'
@@ -601,7 +601,7 @@ onKeyStroke(
 onKeyStroke(
   's',
   (e: KeyboardEvent) => {
-    if (!props.interactive || !viewActive.value || isInputFocused()) return
+    if (hasCommandModifier(e) || !props.interactive || !viewActive.value || isInputFocused()) return
     if (selectedItem.value === null) return
     e.preventDefault()
     annotationDialogsRef.value?.handleStarToggle(selectedItem.value)
@@ -612,7 +612,7 @@ onKeyStroke(
 onKeyStroke(
   'c',
   (e: KeyboardEvent) => {
-    if (!props.interactive || !viewActive.value || isInputFocused()) return
+    if (hasCommandModifier(e) || !props.interactive || !viewActive.value || isInputFocused()) return
     if (selectedItem.value === null) return
     e.preventDefault()
     annotationDialogsRef.value?.openCommentDialog(selectedItem.value)
@@ -623,7 +623,7 @@ onKeyStroke(
 onKeyStroke(
   'a',
   (e: KeyboardEvent) => {
-    if (!props.interactive || !viewActive.value || isInputFocused()) return
+    if (hasCommandModifier(e) || !props.interactive || !viewActive.value || isInputFocused()) return
     if (selectedItem.value === null) return
     e.preventDefault()
     annotationDialogsRef.value?.openAcmgEvidenceDialog(selectedItem.value)

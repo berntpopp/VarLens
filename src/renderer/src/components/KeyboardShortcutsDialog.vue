@@ -72,9 +72,10 @@ const shortcutGroups = [
     title: 'General',
     shortcuts: [
       { key: '?', description: 'Show this help' },
-      { key: `${mod}+L`, description: 'Toggle log viewer' },
-      { key: `${mod}+Shift+D`, description: 'Show disclaimer' },
-      { key: `${mod}+Shift+Q`, description: 'Show FAQ' }
+      { key: `${alt}+Shift+O`, description: 'Import data' },
+      { key: `${alt}+Shift+L`, description: 'Toggle log viewer' },
+      { key: `${alt}+Shift+D`, description: 'Show disclaimer' },
+      { key: `${alt}+Shift+Q`, description: 'Show FAQ' }
     ]
   }
 ]

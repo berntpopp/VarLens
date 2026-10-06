@@ -177,7 +177,7 @@
 <script setup lang="ts">
 import { ref, toRef, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
 import { logService } from '../../services/LogService'
-import { useTableKeyboardNav } from '../../composables/useTableKeyboardNav'
+import { useTableKeyboardNav, hasCommandModifier } from '../../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
@@ -477,7 +477,7 @@ onKeyStroke(
 onKeyStroke(
   's',
   (e: KeyboardEvent) => {
-    if (!viewActive.value || isInputFocused()) return
+    if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
     e.preventDefault()
     emit('star-toggle', navSelectedItem.value)
@@ -488,7 +488,7 @@ onKeyStroke(
 onKeyStroke(
   'c',
   (e: KeyboardEvent) => {
-    if (!viewActive.value || isInputFocused()) return
+    if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
     e.preventDefault()
     emit('comment-click', navSelectedItem.value)
@@ -499,7 +499,7 @@ onKeyStroke(
 onKeyStroke(
   'a',
   (e: KeyboardEvent) => {
-    if (!viewActive.value || isInputFocused()) return
+    if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
     e.preventDefault()
     emit('acmg-evidence-click', navSelectedItem.value)
@@ -510,7 +510,7 @@ onKeyStroke(
 onKeyStroke(
   'e',
   (e: KeyboardEvent) => {
-    if (!viewActive.value || isInputFocused()) return
+    if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
     e.preventDefault()
     const key = navSelectedItem.value.variant_key

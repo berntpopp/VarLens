@@ -53,7 +53,13 @@ const fakeSelectedItem = ref<Record<string, unknown> | null>({
 // action functions let us assert gate behavior. Everything else returns the
 // smallest no-op shape VariantTable needs to finish its setup.
 
-vi.mock('../../../../src/renderer/src/composables/useTableKeyboardNav', () => ({
+vi.mock('../../../../src/renderer/src/composables/useTableKeyboardNav', async (importOriginal) => ({
+  // Real modifier guard: the browser-shortcut tests below exercise it.
+  hasCommandModifier: (
+    await importOriginal<
+      typeof import('../../../../src/renderer/src/composables/useTableKeyboardNav')
+    >()
+  ).hasCommandModifier,
   useTableKeyboardNav: () => ({
     selectedIndex: ref(0),
     selectedItem: computed(() => fakeSelectedItem.value),
@@ -308,5 +314,22 @@ describe('VariantTable interactive prop (keyboard gate)', () => {
     mountTable({ interactive: true })
     pressKey('s')
     expect(handleStarToggleSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['Ctrl+C (copy)', { key: 'c', ctrlKey: true }],
+    ['Cmd+C (copy)', { key: 'c', metaKey: true }],
+    ['Ctrl+A (select all)', { key: 'a', ctrlKey: true }],
+    ['Cmd+A (select all)', { key: 'a', metaKey: true }],
+    ['Ctrl+S (save page)', { key: 's', ctrlKey: true }],
+    ['Alt+S', { key: 's', altKey: true }]
+  ])('row letter shortcuts leave browser combo %s alone', (_label, init) => {
+    mountTable({ interactive: true })
+    const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
+    window.dispatchEvent(event)
+    expect(handleStarToggleSpy).not.toHaveBeenCalled()
+    expect(openCommentDialogSpy).not.toHaveBeenCalled()
+    expect(openAcmgEvidenceDialogSpy).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(false)
   })
 })
