@@ -392,10 +392,8 @@ const INP_BUDGET_MS = 200
  * has to be removed. Never add a new regression here.
  */
 const KNOWN_INTERACTION_FAILURES: Record<string, string> = {
-  // TODO(track 2, table render perf): cohort column widths change when the
-  // sort direction changes; shift 0.046-0.072 lands inside the 500 ms input
-  // window, so CWV CLS reads 0 but the user sees the columns jump.
-  'cohort-sort:allShifts': 'cohort sort shifts columns (track 2)'
+  // (empty) cohort-sort:allShifts was fixed by track 2 (result-set row keys
+  // + fixed table layout): 0.046-0.072 -> 0.000.
 }
 
 function expectWithinBudget(name: string, metric: 'cls' | 'allShifts' | 'inpMs', value: number): void {
