@@ -69,6 +69,17 @@
     </div>
 
     <ImportStatusChip @click="$emit('show-import-progress')" />
+    <v-chip
+      v-if="role === 'viewer'"
+      size="small"
+      variant="outlined"
+      class="ml-2"
+      :prepend-icon="mdiEyeOutline"
+      :title="writeBlockedReason ?? undefined"
+      data-testid="read-only-chip"
+    >
+      Read-only
+    </v-chip>
 
     <v-spacer />
 
@@ -115,14 +126,16 @@
         <v-list-item
           :prepend-icon="mdiDatabaseImport"
           title="Import Data"
-          :subtitle="importShortcut"
+          :subtitle="writeBlockedReason ?? importShortcut"
+          :disabled="!canWrite"
           @click="$emit('import-click')"
         />
         <v-list-item
           v-if="!isWebMode"
           :prepend-icon="mdiFileDocumentMultiple"
           title="Import VCF Files"
-          subtitle="Multi-file case (SNV + SV + CNV + STR)"
+          :subtitle="writeBlockedReason ?? 'Multi-file case (SNV + SV + CNV + STR)'"
+          :disabled="!canWrite"
           @click="$emit('vcf-import-click')"
         />
         <v-divider class="my-1" />
@@ -135,6 +148,8 @@
         <v-list-item
           :prepend-icon="mdiTagMultiple"
           title="Custom Tags"
+          :subtitle="writeBlockedReason ?? undefined"
+          :disabled="!canWrite"
           @click="$emit('show-tag-management')"
         />
         <v-list-item
@@ -190,6 +205,7 @@ import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { getCurrentUnsupportedReasonSync } from '../utils/backend-capabilities'
+import { usePermissions } from '../composables/usePermissions'
 import type { AffectedStatus, CaseSex } from '../../../shared/types/api'
 import {
   mdiAccount,
@@ -200,6 +216,7 @@ import {
   mdiCog,
   mdiDatabaseImport,
   mdiDeleteSweep,
+  mdiEyeOutline,
   mdiFileDocumentMultiple,
   mdiFilterOff,
   mdiInformationOutline,
@@ -226,8 +243,11 @@ const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const isWebMode = isWebRuntime()
 const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+O' : 'Alt+Shift+O'
-// Capability-gated: disabled with the reason instead of failing after a click.
-const deleteAllReason = computed(() => getCurrentUnsupportedReasonSync('cases.deleteAll'))
+const { role, canWrite, writeBlockedReason, adminBlockedReason } = usePermissions()
+// Role- and capability-gated: disabled with the reason instead of failing after a click.
+const deleteAllReason = computed(
+  () => adminBlockedReason.value ?? getCurrentUnsupportedReasonSync('cases.deleteAll')
+)
 
 // Preload metadata when a case is selected so status/sex icons display immediately
 watch(

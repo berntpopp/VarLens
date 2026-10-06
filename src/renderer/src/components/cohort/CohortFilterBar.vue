@@ -7,6 +7,8 @@
     :active-filter-count="activeFilterCount"
     :active-filters-list="mergedActiveFilters"
     :exporting="exporting"
+    :export-blocked-reason="writeBlockedReason"
+    :export-formats="isWebRuntime()"
     :columns="columns"
     @clear-all="handleClearAll"
     @clear-filter="handleClearFilter"
@@ -150,6 +152,9 @@ import { logService } from '../../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import { useApiService } from '../../composables/useApiService'
 import { getCurrentUnsupportedReason, type CapabilityPath } from '../../utils/backend-capabilities'
+import { isWebRuntime } from '../../utils/runtime-mode'
+import { usePermissions } from '../../composables/usePermissions'
+import type { ExportFormat } from '../../../../shared/ipc/domains/export'
 
 interface Props {
   totalCount: number | null
@@ -185,7 +190,7 @@ const emit = defineEmits<{
   'clear-filter': [filterId: string]
   'clear-column-filter': [columnKey: string]
   'clear-column-filters': []
-  export: []
+  export: [format?: ExportFormat]
   'toggle-column': [key: string]
   'reorder-columns': [keys: string[]]
   'reset-columns': []
@@ -599,8 +604,10 @@ const handleResetColumns = () => {
   emit('reset-columns')
 }
 
-const handleExport = () => {
-  emit('export')
+const { writeBlockedReason } = usePermissions()
+
+const handleExport = (format?: ExportFormat) => {
+  emit('export', format)
 }
 
 // Load presets + cohort case IDs on mount

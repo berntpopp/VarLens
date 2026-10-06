@@ -24,8 +24,6 @@ export type RuntimeFeature =
   | 'panelAppImport'
   /** panels:generateStringDb has no web route (outbound STRING API). */
   | 'stringDbPanels'
-  /** panels:exportBed writes to a desktop save-dialog path; no web download route. */
-  | 'panelBedExport'
   /** gene-ref:checkUpdates / update rebuild the bundled file; the web image owns it. */
   | 'geneRefUpdate'
 
@@ -35,7 +33,6 @@ const WEB_UNAVAILABLE: ReadonlySet<RuntimeFeature> = new Set<RuntimeFeature>([
   'vepEnrichment',
   'panelAppImport',
   'stringDbPanels',
-  'panelBedExport',
   'geneRefUpdate'
 ])
 
@@ -47,7 +44,6 @@ export const WEB_UNAVAILABLE_MESSAGE: Record<RuntimeFeature, string> = {
   vepEnrichment: 'Fetching annotations from Ensembl VEP is not available in the web version yet.',
   panelAppImport: 'PanelApp import is not available in the web version yet.',
   stringDbPanels: 'StringDB panel generation is not available in the web version yet.',
-  panelBedExport: 'BED export is not available in the web version yet.',
   geneRefUpdate: 'The gene reference is part of the server installation and cannot be updated here.'
 }
 

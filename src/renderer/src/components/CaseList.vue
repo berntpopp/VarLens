@@ -150,14 +150,14 @@
       </v-list-item>
       <v-divider />
       <!-- Delete selected when multi-select active -->
-      <v-list-item v-if="isMultiSelectMode" @click="handleDeleteSelected">
+      <v-list-item v-if="isMultiSelectMode" :disabled="!canWrite" @click="handleDeleteSelected">
         <template #prepend>
           <v-icon color="error" :icon="mdiDelete" />
         </template>
         <v-list-item-title>Delete {{ multiSelectedCount }} Selected</v-list-item-title>
       </v-list-item>
-      <!-- Single delete option -->
-      <v-list-item @click="handleDelete">
+      <!-- Single delete option (analysts and admins; viewers are read-only) -->
+      <v-list-item :disabled="!canWrite" @click="handleDelete">
         <template #prepend>
           <v-icon :icon="mdiDelete" />
         </template>
@@ -214,6 +214,9 @@ import {
   mdiPencil,
   mdiSelectionOff
 } from '@mdi/js'
+import { usePermissions } from '../composables/usePermissions'
+
+const { canWrite } = usePermissions()
 
 const PAGE_SIZE = 50
 

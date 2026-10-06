@@ -9,6 +9,7 @@
       :aria-pressed="displayStarred"
       :data-tooltip="labels.star"
       data-tooltip-location="top"
+      :disabled="readOnly"
       @click.stop="emit('star-toggle')"
     >
       <v-icon
@@ -19,7 +20,7 @@
     </button>
 
     <!-- ACMG classification (menu with quick-classify + evidence editor) -->
-    <v-menu :close-on-content-click="true">
+    <v-menu :close-on-content-click="true" :disabled="readOnly">
       <template #activator="{ props: menuProps }">
         <button
           v-bind="menuProps"
@@ -125,6 +126,8 @@ interface Props {
   showGlobalIndicators?: boolean
   /** Annotation scope: controls display priority and action routing */
   annotationScope?: AnnotationScope
+  /** Viewer role: star and ACMG are display-only (comment still opens read-only). */
+  readOnly?: boolean
 }
 
 interface Emits {

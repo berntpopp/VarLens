@@ -78,9 +78,35 @@
             >
           </v-btn>
 
+          <v-menu v-if="exportFormats && exportBlockedReason == null">
+            <template #activator="{ props: exportMenuProps }">
+              <v-btn
+                v-bind="exportMenuProps"
+                :loading="exporting"
+                :disabled="filteredCount === 0"
+                color="success"
+                variant="tonal"
+                data-testid="export-menu"
+              >
+                <v-icon start size="small" :icon="mdiMicrosoftExcel" />
+                Export
+              </v-btn>
+            </template>
+            <v-list density="compact">
+              <v-list-item
+                v-for="option in EXPORT_FORMAT_OPTIONS"
+                :key="option.format"
+                :title="option.title"
+                :subtitle="`${filteredCount.toLocaleString()} variants`"
+                :data-testid="`export-${option.format}`"
+                @click="emit('export', option.format)"
+              />
+            </v-list>
+          </v-menu>
           <v-btn
+            v-else
             :loading="exporting"
-            :disabled="filteredCount === 0"
+            :disabled="filteredCount === 0 || exportBlockedReason != null"
             color="success"
             variant="tonal"
             @click="emit('export')"
@@ -88,7 +114,9 @@
             <v-icon start size="small" :icon="mdiMicrosoftExcel" />
             Export
             <v-tooltip activator="parent" location="bottom">
-              Export {{ filteredCount.toLocaleString() }} variants to Excel
+              {{
+                exportBlockedReason ?? `Export ${filteredCount.toLocaleString()} variants to Excel`
+              }}
             </v-tooltip>
           </v-btn>
         </template>
@@ -108,10 +136,22 @@
               title="Columns"
               @click="emit('open-columns-drawer')"
             />
+            <template v-if="exportFormats && exportBlockedReason == null">
+              <v-list-item
+                v-for="option in EXPORT_FORMAT_OPTIONS"
+                :key="option.format"
+                :prepend-icon="mdiMicrosoftExcel"
+                :title="option.title"
+                :disabled="filteredCount === 0"
+                @click="emit('export', option.format)"
+              />
+            </template>
             <v-list-item
+              v-else
               :prepend-icon="mdiMicrosoftExcel"
               title="Export"
-              :disabled="filteredCount === 0"
+              :subtitle="exportBlockedReason ?? undefined"
+              :disabled="filteredCount === 0 || exportBlockedReason != null"
               @click="emit('export')"
             />
           </v-list>
@@ -193,7 +233,16 @@ interface Props {
   columns?: ColumnDef[]
   /** When true, Clear button is enabled even without active filters (e.g. sort is applied) */
   hasClearableState?: boolean
+  /** Why export is unavailable for this user (role); null/undefined = allowed. */
+  exportBlockedReason?: string | null
+  /** Offer a CSV / Excel choice (web: the browser download has no save dialog). */
+  exportFormats?: boolean
 }
+
+const EXPORT_FORMAT_OPTIONS = [
+  { format: 'csv', title: 'Download CSV' },
+  { format: 'xlsx', title: 'Download Excel (.xlsx)' }
+] as const
 
 const props = defineProps<Props>()
 
@@ -226,7 +275,7 @@ const emit = defineEmits<{
   'clear-filter': [filterId: string]
   'open-filter-drawer': []
   'open-columns-drawer': []
-  export: []
+  export: [format?: 'csv' | 'xlsx']
 }>()
 
 const rootRef = ref<HTMLElement | null>(null)

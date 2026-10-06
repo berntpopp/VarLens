@@ -135,12 +135,12 @@
                     <v-tooltip activator="parent" location="top">Copy</v-tooltip>
                   </v-btn>
                   <v-btn
-                    v-if="webOnlyNote === null"
-                    aria-label="Export"
+                    aria-label="Export BED"
                     size="small"
                     variant="text"
                     color="info"
                     :icon="mdiExport"
+                    :disabled="!canWrite"
                     @click="exportBed(panel)"
                   >
                     <v-icon :icon="mdiExport" />
@@ -281,6 +281,7 @@ import {
   mdiShareVariant
 } from '@mdi/js'
 import type { GeneRefInfo } from '../../../../shared/types/api'
+import { usePermissions } from '../../composables/usePermissions'
 
 const props = defineProps<{
   modelValue: boolean
@@ -303,12 +304,14 @@ const panelAppImportOpen = ref(false)
 const stringDbGenerateOpen = ref(false)
 const geneRefInfo = ref<GeneRefInfo | null>(null)
 const geneRefUpdating = ref(false)
-// PanelApp / StringDB / BED export / gene-reference update have no web
-// routes (outbound APIs, desktop file paths): hide them with one note.
+// PanelApp / StringDB / gene-reference update have no web routes (outbound
+// APIs): hide them with one note. BED export is a signed browser download in
+// web (analysts and admins).
 const webOnlyNote = isRuntimeFeatureAvailable('panelAppImport')
   ? null
-  : 'PanelApp import, StringDB generation, BED export and gene-reference updates are ' +
+  : 'PanelApp import, StringDB generation and gene-reference updates are ' +
     'available in the desktop app only for now.'
+const { canWrite } = usePermissions()
 const errorSnackbar = ref(false)
 const errorSnackbarText = ref('')
 const exportAssemblyDialogOpen = ref(false)

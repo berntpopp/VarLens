@@ -18,6 +18,7 @@
  * Plan: .planning/plans/2026-04-11-unified-shortlist-plan.md (Task 6)
  */
 
+import { createPinia } from 'pinia'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { ref, computed } from 'vue'
@@ -208,7 +209,7 @@ function mountTable(props: Record<string, unknown> = {}): VueWrapper {
       ...props
     } as never,
     global: {
-      plugins: [vuetify],
+      plugins: [vuetify, createPinia()],
       stubs: {
         // Stub the heavy data-table so happy-dom doesn't try to render
         // Vuetify's internal grid machinery — we only need the

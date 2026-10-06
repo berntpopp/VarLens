@@ -3,6 +3,7 @@ import type { FilterOptions, VariantFilter } from '../../../shared/types/api'
 import type { Tag } from '../../../shared/types/database-entities'
 import type { FilterState, ActiveFilter } from '../../../shared/types/filters'
 import { FILTER_DEFAULTS } from '../../../shared/filters/filterDefaults'
+import type { ExportFormat } from '../../../shared/ipc/domains/export'
 export { buildVariantFilterFromState as buildFilterFromState } from '../utils/filters/filterSerialization'
 
 // Re-export for existing consumers
@@ -69,7 +70,11 @@ export interface UseFilterStateReturn {
   invalidateFilterOptionsCache: () => void
   resetForCaseSwitch: () => void
   setInitialSearch: (search: string) => void
-  exportToExcel: (caseId: number, caseName: string) => Promise<ExportResult | null>
+  exportToExcel: (
+    caseId: number,
+    caseName: string,
+    format?: ExportFormat
+  ) => Promise<ExportResult | null>
 }
 
 /**

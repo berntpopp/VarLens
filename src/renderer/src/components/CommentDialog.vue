@@ -56,7 +56,7 @@
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="handleCancel">Cancel</v-btn>
-        <v-btn color="primary" variant="flat" @click="handleSave">Save</v-btn>
+        <v-btn v-if="canWrite" color="primary" variant="flat" @click="handleSave">Save</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -65,6 +65,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { mdiCommentTextOutline } from '@mdi/js'
+import { usePermissions } from '../composables/usePermissions'
 
 interface Props {
   modelValue: boolean
@@ -75,6 +76,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { canWrite } = usePermissions()
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]

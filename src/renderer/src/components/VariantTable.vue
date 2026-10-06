@@ -67,6 +67,7 @@
           :has-global-comment="item.render.hasGlobalComment"
           :show-global-indicators="true"
           :annotation-scope="annotationScope"
+          :read-only="!canWrite"
           @star-toggle="annotationDialogsRef?.handleStarToggle(item)"
           @acmg-select="(c) => annotationDialogsRef?.handleQuickAcmgSelect(item, c)"
           @acmg-evidence-click="annotationDialogsRef?.openAcmgEvidenceDialog(item)"
@@ -319,6 +320,9 @@ import {
   EmptyPlaceholder,
   HgvsCell
 } from './table-cells'
+import { usePermissions } from '../composables/usePermissions'
+
+const { canWrite } = usePermissions()
 
 interface Props {
   caseId: number

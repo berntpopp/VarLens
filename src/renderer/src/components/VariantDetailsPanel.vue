@@ -106,12 +106,13 @@
                 size="small"
                 label
                 class="cursor-pointer"
+                :disabled="!canWrite"
                 @click="handleQuickClassify(cls)"
               >
                 {{ ACMG_ABBREV[cls] }}
               </v-chip>
               <v-chip
-                v-if="currentQuickClassification"
+                v-if="currentQuickClassification && canWrite"
                 variant="text"
                 size="small"
                 class="cursor-pointer text-medium-emphasis"
@@ -123,7 +124,7 @@
             </div>
 
             <!-- Evidence-based classification panel -->
-            <v-expansion-panels variant="accordion" class="mb-1">
+            <v-expansion-panels v-if="canWrite" variant="accordion" class="mb-1">
               <v-expansion-panel>
                 <v-expansion-panel-title class="text-body-2 pa-2">
                   <v-icon size="small" class="mr-1" :icon="mdiClipboardCheckOutline" />
@@ -261,6 +262,9 @@ import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { isProteinViewerAvailable, isRuntimeFeatureAvailable } from '../utils/runtime-features'
 import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
+import { usePermissions } from '../composables/usePermissions'
+
+const { canWrite } = usePermissions()
 
 interface Props {
   open: boolean
