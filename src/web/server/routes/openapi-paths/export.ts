@@ -1,6 +1,7 @@
 import {
   ExportInvokeBodySchemas,
-  ExportUnknownResponseSchema
+  ExportUnknownResponseSchema,
+  PrepareDownloadResponseSchema
 } from '../../../../shared/api/schemas/export'
 import { dispatcherMethodOperation, type OpenApiPathItem } from '../openapi-utils'
 
@@ -19,6 +20,15 @@ export function buildExportOpenApiPaths(): Record<string, OpenApiPathItem> {
       body: ExportInvokeBodySchemas.cohort,
       response: ExportUnknownResponseSchema,
       mayReturnUnsupported: true
+    }),
+    '/api/export/prepareDownload': dispatcherMethodOperation({
+      tag: 'export',
+      summary:
+        'Prepare a variants / cohort (CSV or XLSX) or panel BED export; returns a ' +
+        'single-use, 60 s, user-bound path for GET /api/download/{token} (analyst+)',
+      body: ExportInvokeBodySchemas.prepareDownload,
+      response: PrepareDownloadResponseSchema,
+      forbiddenDescription: 'The session role is below analyst'
     })
   }
 }

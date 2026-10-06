@@ -284,7 +284,8 @@ export const mockApi: WindowAPI = {
     variants: async () => ({ success: true, filePath: '/mock/export.xlsx' }),
     cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' }),
     revealInFolder: async () => ({ success: false }),
-    cancel: async () => ({ cancelled: false })
+    cancel: async () => ({ cancelled: false }),
+    onProgress: () => () => {}
   },
   shell: {
     openExternal: async (url) => {

@@ -100,7 +100,8 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       variants: (caseId, filters, caseName) => exportDomain.variants(caseId, filters, caseName),
       cohort: (params) => exportDomain.cohort(params),
       revealInFolder: (filePath) => exportDomain.revealInFolder(filePath),
-      cancel: () => exportDomain.cancel()
+      cancel: () => exportDomain.cancel(),
+      onProgress: (callback) => subscribeToIpcEvent('export:progress', callback)
     },
 
     shell: {

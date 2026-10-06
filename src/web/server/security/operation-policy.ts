@@ -42,6 +42,11 @@ export function readExempt(reason: string, minRole: MinRole = 'viewer'): Operati
   return { kind: 'read', minRole, audit: { mode: 'exempt', reason } }
 }
 
+/** Read whose route records its own, more specific audit row. */
+export function readAuditedByHandler(event: string, minRole: MinRole): OperationPolicy {
+  return { kind: 'read', minRole, audit: { mode: 'handler', event } }
+}
+
 /** Audited write; analysts and up unless stated. */
 export function write(minRole: MinRole = 'analyst'): OperationPolicy {
   return { kind: 'write', minRole, audit: WRAPPER }

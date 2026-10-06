@@ -6,10 +6,7 @@ import fastify, { type FastifyInstance } from 'fastify'
 import { describe, expect, test } from 'vitest'
 
 import { registerImportUploadRoutes } from '../../src/web/server/routes/upload-staging'
-import {
-  registerExportDownloadRoutes,
-  VARIANT_EXPORT_DOWNLOAD_PATH
-} from '../../src/web/server/routes/export-download'
+import { registerExportDownloadRoutes } from '../../src/web/server/routes/export-download'
 import { makeDeps } from './helpers/dispatcher-adapters'
 
 function jsonBody(response: { body: string }): unknown {
@@ -36,7 +33,7 @@ function routeApp(role: string): { app: FastifyInstance; made: ReturnType<typeof
 
 describe('role matrix: non-dispatcher routes', () => {
   test.each([['viewer'], ['analyst'], ['admin']])(
-    '%s: upload staging and CSV download follow the analyst policy',
+    '%s: upload staging and artifact download follow the analyst policy',
     async (role) => {
       const { app, made } = routeApp(role)
       const upload = await app.inject({
@@ -47,7 +44,7 @@ describe('role matrix: non-dispatcher routes', () => {
       })
       const download = await app.inject({
         method: 'GET',
-        url: `${VARIANT_EXPORT_DOWNLOAD_PATH}?caseId=x&caseName=A`
+        url: '/api/download/unknowntokenvalue1.1.sig'
       })
       if (role === 'viewer') {
         expect(isRoleRefusal(upload.statusCode, jsonBody(upload))).toBe(true)
@@ -55,9 +52,9 @@ describe('role matrix: non-dispatcher routes', () => {
         expect(made.execute).not.toHaveBeenCalled()
         expect(made.writeExecute).not.toHaveBeenCalled()
       } else {
-        // Past authorization: both fail validation (no file name / bad case id).
+        // Past authorization: missing file name / unknown download grant.
         expect(upload.statusCode).toBe(400)
-        expect(download.statusCode).toBe(400)
+        expect(download.statusCode).toBe(404)
       }
       await app.close()
     }

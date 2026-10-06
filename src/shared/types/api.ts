@@ -110,6 +110,7 @@ import type { JobsApi } from '../ipc/domains/jobs'
 import type { CaseMetadataDomainContract } from '../ipc/domains/case-metadata'
 import type { ImportDomainContract } from '../ipc/domains/import'
 import type { AuthDomainContract } from '../ipc/domains/auth'
+import type { ExportOptions, ExportProgress } from '../ipc/domains/export'
 export type { DatabaseInfo, DatabaseOpenResult, RecentDatabase } from '../ipc/domains/database'
 
 // Re-export for convenience
@@ -283,11 +284,14 @@ export interface ExportAPI {
   variants: (
     caseId: number,
     filters: Omit<VariantFilter, 'case_id'>,
-    caseName: string
+    caseName: string,
+    options?: ExportOptions
   ) => Promise<IpcResult<ExportResult>>
-  cohort: (params: CohortSearchParams) => Promise<IpcResult<ExportResult>>
+  cohort: (params: CohortSearchParams, options?: ExportOptions) => Promise<IpcResult<ExportResult>>
   revealInFolder: (filePath: string) => Promise<IpcResult<{ success: boolean }>>
   cancel: () => Promise<IpcResult<{ cancelled: boolean }>>
+  /** `export:progress` push events (desktop IPC event / web SSE). */
+  onProgress: (callback: (progress: ExportProgress) => void) => () => void
 }
 
 export type DatabaseAPI = DatabaseDomainContract

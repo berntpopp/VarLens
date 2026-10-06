@@ -24,7 +24,7 @@ import type { WindowAPI } from '../../shared/types/api'
 import type { UpdateStatus } from '../../shared/types/api'
 import { isIpcError } from '../../shared/types/errors'
 import { ALLOWED_DOMAINS } from '../../shared/config/allowed-domains'
-import { buildExportApi } from './export-download'
+import { buildExportApi, buildPanelsApi } from './export-download'
 
 declare const __APP_VERSION__: string
 
@@ -551,9 +551,13 @@ const DOMAIN_OVERRIDES: Record<string, unknown> = {
   batchImport: buildBatchImportApi(),
   'batch-import': buildBatchImportApi(),
   cohort: buildCohortApi(),
-  export: buildExportApi(buildDomainProxy('export') as Record<string, unknown>),
+  export: buildExportApi(buildDomainProxy('export') as Record<string, unknown>, subscribeWebEvent),
   import: buildImportApi(),
   jobs: buildJobsApi(),
+  panels: buildPanelsApi(
+    buildDomainProxy('panels') as Record<string, unknown>,
+    buildDomainProxy('export') as Record<string, unknown>
+  ),
   perf: PERF_API,
   shell: SHELL_API,
   system: SYSTEM_API,

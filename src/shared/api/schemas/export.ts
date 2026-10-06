@@ -23,8 +23,23 @@ export const ExportInvokeBodySchemas = {
   }),
   cohort: z.object({
     args: z.tuple([ExportCohortSearchOpenApiSchema])
+  }),
+  prepareDownload: z.object({
+    args: z.tuple([
+      z
+        .object({
+          kind: z.enum(['variants', 'cohort', 'panel-bed']),
+          format: z.enum(['csv', 'xlsx']).optional()
+        })
+        .passthrough()
+    ])
   })
 } as const
+
+export const PrepareDownloadResponseSchema = z.object({
+  downloadPath: z.string(),
+  expiresAt: z.number().int()
+})
 
 export const ExportUnknownResponseSchema = z.unknown()
 

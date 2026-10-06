@@ -1,289 +1,193 @@
 /**
- * Browser downloads for variant and cohort exports in web mode.
+ * Web export delivery: prepare (POST) → signed single-use download (GET).
  *
- * The desktop export handlers write to a path chosen in a native save
- * dialog. A browser has no such path, so web mode exposes two GET
- * endpoints the SPA navigates to with an `<a download>` click:
+ *   1. `POST /api/export/prepareDownload` (dispatcher override, analyst+,
+ *      CSRF-gated like every POST) validates an ExportArtifactRequest and
+ *      returns `{ downloadPath, expiresAt }` holding a short-lived signed
+ *      grant (downloads/download-grants.ts explains the choice).
+ *   2. The SPA navigates a hidden `<a download>` to `GET /api/download/:token`.
+ *      The route redeems the grant for the session user, re-checks the role,
+ *      audits the export and streams the artifact (CSV / XLSX / BED) as an
+ *      attachment. The browser's download manager consumes the stream, so a
+ *      large export never sits in page or server memory.
  *
- *   GET /api/export/variants/download?caseId=<id>&caseName=<name>&filters=<json>
- *   GET /api/export/cohort/download?params=<json>
- *
- * Each streams CSV straight from the PostgreSQL query stream into the
- * HTTP response (same columns and cell formatting as the desktop
- * PostgreSQL CSV export), so nothing is buffered whole in memory or
- * written to the server's disk. A client abort destroys the response
- * stream, which returns the row iterator and releases its pooled client.
- *
- * Auth: the session preHandler in server/auth.ts already 401s anonymous
- * `/api/*` requests; this module re-checks the session, applies the
- * dispatcher's password-rotation gate, then validates params with the
- * same zod schemas the desktop IPC handlers use. Every accepted export
- * is recorded as an `api_read` audit event, like any other web read.
+ * Progress is pushed to the requesting user as `export:progress` SSE events.
+ * A client abort destroys the response stream, which returns the row
+ * iterator and releases its pooled Postgres client.
  */
 import { Readable } from 'node:stream'
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
-import { COHORT_EXPORT_COLUMNS } from '../../../main/workers/cohort-export'
-import { EXPORT_COLUMNS, type ExportColumn } from '../../../main/workers/export-pipeline'
-import { csvEscape, formatCellValue } from '../../../main/workers/export-renderer'
-import {
-  CohortSearchParamsSchema,
-  VariantExportParamsSchema
-} from '../../../shared/api/schemas/export'
 import { ErrorCode, type SerializableError } from '../../../shared/types/errors'
+import type { ExportProgress } from '../../../shared/ipc/domains/export'
 import { recordApiReadAudit } from '../audit'
+import { DownloadGrantRegistry } from '../downloads/download-grants'
+import {
+  ExportArtifactRequestSchema,
+  openExportArtifact,
+  type ExportArtifactRequest
+} from '../downloads/export-artifacts'
 import { requireOperation } from '../security/secure'
-import type { DispatcherDeps } from './types'
+import type { DispatcherDeps, OverrideHandler } from './types'
 
-export const VARIANT_EXPORT_DOWNLOAD_PATH = '/api/export/variants/download'
-export const COHORT_EXPORT_DOWNLOAD_PATH = '/api/export/cohort/download'
+export const DOWNLOAD_ROUTE = '/api/download/:token'
+const PROGRESS_INTERVAL_MS = 250
 
-/** Flush to the socket in ~64 KiB chunks rather than one write per row. */
-const CHUNK_TARGET_CHARS = 64 * 1024
-const INVALID_JSON = Symbol('invalid-json')
+let defaultGrants: DownloadGrantRegistry<ExportArtifactRequest> | null = null
 
-type Row = Record<string, unknown>
-type Query = Record<string, string | string[] | undefined>
-type ExportRequest = FastifyRequest<{ Querystring: Query }>
-
-function firstValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value
+export function downloadGrants(deps: DispatcherDeps): DownloadGrantRegistry<ExportArtifactRequest> {
+  if (deps.downloadGrants !== undefined) return deps.downloadGrants
+  defaultGrants ??= new DownloadGrantRegistry<ExportArtifactRequest>()
+  return defaultGrants
 }
 
-function parseJsonParam(raw: string | undefined): unknown {
-  if (raw === undefined || raw === '') return {}
-  try {
-    return JSON.parse(raw) as unknown
-  } catch {
-    return INVALID_JSON
-  }
+function jsonError(
+  reply: FastifyReply,
+  status: number,
+  code: ErrorCode,
+  message: string,
+  userMessage: string
+): FastifyReply {
+  return reply
+    .code(status)
+    .header('cache-control', 'no-store')
+    .send({ code, message, userMessage } satisfies SerializableError)
 }
 
-/** Same sanitisation as the desktop save-dialog default name. */
-export function exportFileStem(caseName: string): string {
-  return caseName.replace(/[^a-z0-9]/gi, '_')
-}
-
-/**
- * Returns the authenticated username, or sends 401/403 and returns
- * undefined. Mirrors the session preHandler's 401 body and the
- * dispatcher's pre-rotation gate: a session that must still change its
- * password gets no data access.
- */
-function requireExportSession(request: FastifyRequest, reply: FastifyReply): string | undefined {
-  const user = request.session?.user
-  if (user === undefined) {
-    void reply.code(401).send({
-      code: 'UNAUTHENTICATED',
-      message: 'authentication required',
-      userMessage: 'Please log in to continue.'
-    })
-    return undefined
-  }
-  // Exporting is an analyst action (security/operation-security-map.ts).
-  if (requireOperation('http:export:download', request, reply) === undefined) return undefined
-  if (request.session.mustChangePassword === true) {
-    void reply.code(403).send({
-      code: ErrorCode.UNKNOWN,
-      message: 'password-rotation-required',
-      userMessage: 'Your password must be changed before any other action.'
-    } satisfies SerializableError)
-    return undefined
-  }
-  return user.username
-}
-
-function sendInvalidParams(reply: FastifyReply, error: string, detail: string): FastifyReply {
-  return reply.code(400).send({
-    code: ErrorCode.INVALID_PARAMETERS,
-    message: detail,
-    userMessage: 'Invalid export parameters.',
-    details: { error }
-  } satisfies SerializableError)
-}
-
-function rowToCsvLine(columns: readonly ExportColumn[], row: Row): string {
-  return columns.map((column) => csvEscape(formatCellValue(column.key, row[column.key]))).join(',')
-}
-
-async function* csvChunks(
-  columns: readonly ExportColumn[],
-  first: IteratorResult<Row>,
-  iterator: AsyncIterator<Row>,
-  onDone: (rowCount: number, completed: boolean) => Promise<void>
-): AsyncGenerator<string> {
-  let rowCount = 0
-  let completed = false
-  try {
-    let buffer = `${columns.map((column) => csvEscape(column.header)).join(',')}\r\n`
-    let current = first
-    while (current.done !== true) {
-      buffer += `${rowToCsvLine(columns, current.value)}\r\n`
-      rowCount += 1
-      if (buffer.length >= CHUNK_TARGET_CHARS) {
-        yield buffer
-        buffer = ''
+export function buildExportDownloadOverrides(): Record<string, OverrideHandler> {
+  return {
+    'export:prepareDownload': {
+      handle(args, request, reply, deps) {
+        const user = request.session?.user
+        if (user === undefined) {
+          reply.code(401)
+          return { error: 'unauthenticated' }
+        }
+        const parsed = ExportArtifactRequestSchema.safeParse(args[0])
+        if (!parsed.success) {
+          reply.code(400)
+          return { error: 'invalid-export-request', message: parsed.error.message }
+        }
+        const { token, expiresAt } = downloadGrants(deps).issue(user, parsed.data)
+        return { downloadPath: `download/${token}`, expiresAt }
       }
-      current = await iterator.next()
     }
-    if (buffer !== '') yield buffer
-    completed = true
-  } finally {
-    await onDone(rowCount, completed)
   }
 }
 
-/**
- * Pulls the first row before any header is sent, so a query that fails
- * up front (bad filter, DB unavailable) still produces a JSON 500 the
- * browser reports as a failed download instead of a truncated file.
- *
- * Release contract: whenever the response ends without draining the
- * source (client abort, socket error, mid-stream query error) the source
- * iterator is returned exactly once, which ends the pg-query-stream and
- * releases its pooled client. The `close` listener covers a response torn
- * down before the generator body ever ran (a never-started generator
- * skips its `finally`).
- */
-async function streamCsvDownload(params: {
-  request: FastifyRequest
-  reply: FastifyReply
-  rows: AsyncIterable<Row>
-  columns: readonly ExportColumn[]
-  fileName: string
-  kind: 'variants' | 'cohort'
-}): Promise<FastifyReply> {
-  const { request, reply, rows, columns, fileName, kind } = params
-  const iterator = rows[Symbol.asyncIterator]()
-  const first = await iterator.next()
+function attachmentDisposition(fileName: string): string {
+  const ascii = fileName.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_')
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+}
 
-  let released = first.done === true
-  const releaseSource = async (): Promise<void> => {
-    if (released) return
-    released = true
-    await iterator.return?.()
+function progressPublisher(
+  deps: DispatcherDeps,
+  userId: number,
+  downloadId: string,
+  fileName: string
+): (rows: number, done: boolean) => void {
+  let lastSent = 0
+  return (rows, done) => {
+    const now = Date.now()
+    if (!done && now - lastSent < PROGRESS_INTERVAL_MS) return
+    lastSent = now
+    const payload: ExportProgress = { current: rows, total: 0, done, downloadId, fileName }
+    deps.events.publish(userId, 'export:progress', payload)
+  }
+}
+
+function mapOpenError(reply: FastifyReply, error: unknown): FastifyReply {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/not found/i.test(message)) {
+    return jsonError(reply, 404, ErrorCode.NOT_FOUND, message, message)
+  }
+  if (/no genes|no coordinates/i.test(message)) {
+    return jsonError(reply, 422, ErrorCode.INVALID_PARAMETERS, message, message)
+  }
+  reply.log.error({ err: error }, 'export artifact failed before streaming')
+  return jsonError(reply, 500, ErrorCode.UNKNOWN, 'export failed', 'The export failed. Try again.')
+}
+
+async function handleDownload(
+  request: FastifyRequest<{ Params: { token: string } }>,
+  reply: FastifyReply,
+  deps: DispatcherDeps
+): Promise<FastifyReply> {
+  const actor = requireOperation('http:export:download', request, reply)
+  if (actor === undefined) return reply
+  if (request.session.mustChangePassword === true) {
+    return jsonError(
+      reply,
+      403,
+      ErrorCode.UNKNOWN,
+      'password-rotation-required',
+      'Your password must be changed before any other action.'
+    )
   }
 
-  const source = Readable.from(
-    csvChunks(columns, first, iterator, async (rowCount, completed) => {
-      if (completed) released = true
-      else await releaseSource()
-      request.log.info({ event: 'web-export', kind, rowCount, completed }, 'web export finished')
-    }),
-    { objectMode: false }
-  )
+  const redeemed = downloadGrants(deps).redeem(request.params.token, actor.id)
+  if (!redeemed.ok) {
+    request.log.warn({ event: 'web-export', reason: redeemed.reason }, 'download grant refused')
+    if (redeemed.reason === 'wrong-user') {
+      return jsonError(reply, 403, ErrorCode.UNKNOWN, 'download-forbidden', 'Not your download.')
+    }
+    const expired = redeemed.reason === 'expired'
+    return jsonError(
+      reply,
+      expired ? 410 : 404,
+      ErrorCode.NOT_FOUND,
+      expired ? 'download-expired' : 'download-not-found',
+      'This download link has expired or was already used. Start the export again.'
+    )
+  }
+
+  const { grant } = redeemed
+  let progress: (rows: number, done: boolean) => void = () => undefined
+  let artifact
+  try {
+    artifact = await openExportArtifact(grant.artifact, deps.session, (rows, done) =>
+      progress(rows, done)
+    )
+  } catch (error) {
+    return mapOpenError(reply, error)
+  }
+  progress = progressPublisher(deps, actor.id, grant.id, artifact.fileName)
+  await recordApiReadAudit(deps, { key: artifact.auditKey, username: actor.username })
+
+  const source = Readable.from(artifact.body, { objectMode: false })
+  let completed = false
+  source.once('end', () => {
+    completed = true
+    request.log.info({ event: 'web-export', key: artifact.auditKey }, 'web export finished')
+  })
   source.once('close', () => {
-    releaseSource().catch((error: unknown) => {
-      request.log.warn({ event: 'web-export', kind, err: error }, 'export source release failed')
+    if (completed) return
+    artifact.release().catch((error: unknown) => {
+      request.log.warn({ event: 'web-export', err: error }, 'export source release failed')
     })
   })
 
   return reply
-    .header('content-type', 'text/csv; charset=utf-8')
-    .header('content-disposition', `attachment; filename="${fileName}"`)
+    .header('content-type', artifact.contentType)
+    .header('content-disposition', attachmentDisposition(artifact.fileName))
     .header('cache-control', 'no-store')
     .header('x-content-type-options', 'nosniff')
     .send(source)
 }
 
-async function handleVariantDownload(
-  request: ExportRequest,
-  reply: FastifyReply,
-  deps: DispatcherDeps
-): Promise<FastifyReply> {
-  const username = requireExportSession(request, reply)
-  if (username === undefined) return reply
-
-  const filters = parseJsonParam(firstValue(request.query.filters))
-  if (filters === INVALID_JSON) {
-    return sendInvalidParams(reply, 'invalid-export-variants-params', 'filters must be JSON')
-  }
-  const caseIdRaw = firstValue(request.query.caseId)
-  const validated = VariantExportParamsSchema.safeParse({
-    caseId: caseIdRaw !== undefined && /^\d+$/.test(caseIdRaw) ? Number(caseIdRaw) : caseIdRaw,
-    filters,
-    caseName: firstValue(request.query.caseName)
-  })
-  if (!validated.success) {
-    return sendInvalidParams(reply, 'invalid-export-variants-params', validated.error.message)
-  }
-
-  await recordApiReadAudit(deps, { key: 'export:variants', username })
-  const rows = (await deps.session.getReadExecutor().execute({
-    type: 'export:variants',
-    params: [{ ...validated.data.filters, case_id: validated.data.caseId }]
-  })) as AsyncIterable<Row>
-
-  return await streamCsvDownload({
-    request,
-    reply,
-    rows,
-    columns: EXPORT_COLUMNS,
-    fileName: `${exportFileStem(validated.data.caseName)}_variants.csv`,
-    kind: 'variants'
-  })
-}
-
-async function handleCohortDownload(
-  request: ExportRequest,
-  reply: FastifyReply,
-  deps: DispatcherDeps
-): Promise<FastifyReply> {
-  const username = requireExportSession(request, reply)
-  if (username === undefined) return reply
-
-  const params = parseJsonParam(firstValue(request.query.params))
-  if (params === INVALID_JSON) {
-    return sendInvalidParams(reply, 'invalid-export-cohort-params', 'params must be JSON')
-  }
-  const validated = CohortSearchParamsSchema.safeParse(params)
-  if (!validated.success) {
-    return sendInvalidParams(reply, 'invalid-export-cohort-params', validated.error.message)
-  }
-
-  await recordApiReadAudit(deps, { key: 'export:cohort', username })
-  const rows = (await deps.session.getReadExecutor().execute({
-    type: 'export:cohort',
-    params: [validated.data]
-  })) as AsyncIterable<Row>
-
-  return await streamCsvDownload({
-    request,
-    reply,
-    rows,
-    columns: COHORT_EXPORT_COLUMNS,
-    fileName: `cohort_variants_${new Date().toISOString().slice(0, 10)}.csv`,
-    kind: 'cohort'
-  })
-}
-
 export function registerExportDownloadRoutes(app: FastifyInstance, deps: DispatcherDeps): void {
-  app.get<{ Querystring: Query }>(
-    VARIANT_EXPORT_DOWNLOAD_PATH,
+  app.get<{ Params: { token: string } }>(
+    DOWNLOAD_ROUTE,
     {
       schema: {
         tags: ['export'],
-        summary: 'Download a case variant export as CSV',
+        summary: 'Download a prepared export artifact (CSV, XLSX or BED)',
         description:
-          'Streams the filtered variants of one case as a CSV attachment. Query: caseId, ' +
-          'caseName, filters (JSON-encoded variant filter).'
+          'Redeems a single-use, user-bound, short-lived token returned by ' +
+          'POST /api/export/prepareDownload and streams the artifact as an attachment.'
       }
     },
-    async (request, reply) => handleVariantDownload(request, reply, deps)
-  )
-
-  app.get<{ Querystring: Query }>(
-    COHORT_EXPORT_DOWNLOAD_PATH,
-    {
-      schema: {
-        tags: ['export'],
-        summary: 'Download a cohort variant export as CSV',
-        description:
-          'Streams the filtered cohort variants as a CSV attachment. Query: params ' +
-          '(JSON-encoded cohort search params).'
-      }
-    },
-    async (request, reply) => handleCohortDownload(request, reply, deps)
+    async (request, reply) => handleDownload(request, reply, deps)
   )
 }

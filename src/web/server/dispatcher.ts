@@ -50,6 +50,7 @@ import { buildCasesOverrides } from './routes/cases'
 import { buildCohortOverrides } from './routes/cohort'
 import { buildDatabaseOverrides } from './routes/database'
 import { buildExportOverrides } from './routes/export'
+import { buildExportDownloadOverrides } from './routes/export-download'
 import { buildGeneListOverrides } from './routes/gene-lists'
 import { buildGeneRefOverrides } from './routes/gene-ref'
 import { buildHpoOverrides } from './routes/hpo'
@@ -235,6 +236,7 @@ function buildOverrides(): Record<string, OverrideHandler> {
     ...buildCohortOverrides(),
     ...buildDatabaseOverrides(),
     ...buildExportOverrides(),
+    ...buildExportDownloadOverrides(),
     ...buildGeneListOverrides(),
     ...buildGeneRefOverrides(),
     ...buildHpoOverrides(),

@@ -17,6 +17,7 @@
  */
 import {
   read,
+  readAuditedByHandler,
   readExempt,
   write,
   writeAuditedByHandler,
@@ -158,6 +159,8 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   // ── export ──────────────────────────────────────────────────────────────
   'export:variants': read('analyst'),
   'export:cohort': read('analyst'),
+  // Mints a single-use download grant; the artifact is audited when redeemed.
+  'export:prepareDownload': read('analyst'),
 
   // ── import ──────────────────────────────────────────────────────────────
   'import:start': write(),
@@ -248,8 +251,11 @@ export const HTTP_ROUTE_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
     'api_write import:upload (upload staging)',
     'analyst'
   ),
-  /** GET /api/export/{variants,cohort}/download — streamed CSV exports. */
-  'http:export:download': read('analyst'),
+  /** GET /api/download/:token — redeems a grant and streams the artifact. */
+  'http:export:download': readAuditedByHandler(
+    'api_read export:variants | export:cohort | panels:exportBed',
+    'analyst'
+  ),
   /** GET /api/events — SSE change hints (ids only). */
   'http:events': readExempt('Server-sent change hints carry ids only, no clinical data.')
 })
