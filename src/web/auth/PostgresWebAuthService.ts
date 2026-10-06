@@ -491,8 +491,10 @@ export class PostgresWebAuthService {
   async resetPassword(username: string, newPassword: string): Promise<void> {
     const sch = this.schemaQuoted
     assertPasswordMinLength(newPassword, 'New password')
-    await assertUserExists(this.pool, sch, username)
+    // Hash before the existence check so an unknown username costs the same
+    // Argon2 time as a real reset (no timing oracle for enumeration).
     const passwordHash = await this.passwordProvider.hashPassword(newPassword)
+    await assertUserExists(this.pool, sch, username)
     await this.pool.query(
       `UPDATE ${sch}."users"
          SET password_hash = $1, must_change_password = TRUE,

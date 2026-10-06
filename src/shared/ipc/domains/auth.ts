@@ -1,6 +1,14 @@
 import type { UserRole } from '../../auth/auth-constants'
 import type { IpcResult } from '../../types/errors'
 
+/**
+ * Web `auth:resetPassword` answers with this whether or not the account
+ * exists (no username enumeration); desktop resolves `undefined`.
+ */
+export interface PasswordResetAck {
+  accepted: true
+}
+
 export interface AuthDomainContract {
   login: (
     username: string,
@@ -42,6 +50,9 @@ export interface AuthDomainContract {
   reactivateUser: (username: string) => Promise<IpcResult<void>>
   /** Change another user's role (admin only; never demotes the last admin). */
   setRole: (username: string, role: UserRole) => Promise<IpcResult<void>>
-  resetPassword: (username: string, newPassword: string) => Promise<IpcResult<void>>
+  resetPassword: (
+    username: string,
+    newPassword: string
+  ) => Promise<IpcResult<PasswordResetAck | void>>
   changePassword: (oldPassword: string, newPassword: string) => Promise<IpcResult<void>>
 }

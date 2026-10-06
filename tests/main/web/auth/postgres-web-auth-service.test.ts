@@ -658,6 +658,25 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
     expect(pool.queries).toHaveLength(1)
   })
 
+  it('resetPassword pays the hash cost before the existence check (no timing oracle)', async () => {
+    const pool = new FakePool()
+    let queriesAtHash = -1
+    const svc = new PostgresWebAuthService({
+      pool: pool as unknown as SvcOpts['pool'],
+      schema: SCHEMA,
+      passwordProvider: {
+        ...fakePasswordProvider,
+        hashPassword: async (password: string) => {
+          queriesAtHash = pool.queries.length
+          return fakePasswordProvider.hashPassword(password)
+        }
+      }
+    })
+    pool.enqueueResponse({ rows: [], rowCount: 0 })
+    await expect(svc.resetPassword('ghost', FIXTURE_NEW_PW)).rejects.toThrow(/user not found/i)
+    expect(queriesAtHash).toBe(0)
+  })
+
   it('setRole promotes a user with a parameterised update', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)

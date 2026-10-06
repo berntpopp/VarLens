@@ -107,7 +107,7 @@ export function useUserAdmin(): UseUserAdminReturn {
     resetPassword: (username, newPassword) =>
       run(
         () => api!.auth.resetPassword(username, newPassword),
-        `Password for ${username} reset. They must change it at next sign-in.`,
+        `Password reset requested for ${username}. They must change it at next sign-in.`,
         'Failed to reset password'
       ),
     setActive: (username, active) =>

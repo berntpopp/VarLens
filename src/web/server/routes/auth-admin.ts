@@ -18,6 +18,7 @@ import {
 import { DEFAULT_USER_ROLE, USER_ROLES } from '../../../shared/auth/auth-constants'
 import { PasswordPolicyError } from '../../auth/PostgresWebAuthService'
 import { UserAdminError } from '../../auth/postgres-user-admin'
+import type { PasswordResetAck } from '../../../shared/ipc/domains/auth'
 import { recordAuthAudit, recordUserAdminAudit } from '../audit'
 import { isPlatformIdentityEnabled } from '../platform-identity-config'
 import { requireAdmin } from './guards'
@@ -44,6 +45,17 @@ function platformMutationDenied(reply: FastifyReply): AdminFailure {
 }
 
 const PG_UNIQUE_VIOLATION = '23505'
+
+/**
+ * Same status and body whether or not the account exists, so the endpoint
+ * cannot be used to enumerate usernames. Nothing is reported as done: the
+ * client is told the request was accepted, and the audit row (not the
+ * response) records whether a password was actually reset.
+ */
+function passwordResetAccepted(reply: FastifyReply): PasswordResetAck {
+  reply.code(202)
+  return { accepted: true }
+}
 
 /** Maps known domain errors to 4xx; anything else rethrows (500). */
 function mapAdminError(reply: FastifyReply, err: unknown): AdminFailure {
@@ -209,18 +221,24 @@ export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
             'Use "Change password" for your own account.'
           )
         }
+        let reset = true
         try {
           await deps.authService.resetPassword(username, newPassword)
         } catch (err) {
-          return mapAdminError(reply, err)
+          if (!(err instanceof UserAdminError && err.code === 'user-not-found')) {
+            return mapAdminError(reply, err)
+          }
+          reset = false
         }
+        // The trail records what really happened; the response does not.
         await recordAuthAudit(deps, {
           action_type: 'auth_password_reset',
           username,
           actor: admin.username,
-          success: true
+          success: reset,
+          ...(reset ? {} : { reason: 'user-not-found' })
         })
-        return undefined
+        return passwordResetAccepted(reply)
       }
     }
   }
