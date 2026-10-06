@@ -451,7 +451,7 @@ onUnmounted(() => {
 
 :deep(.v-main) {
   --v-layout-top: 0px !important;
-  padding-top: 48px !important;
+  padding-top: var(--app-bar-height, 48px) !important;
 }
 
 :deep(.v-window) {

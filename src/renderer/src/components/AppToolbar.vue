@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar color="primary" density="compact" flat>
+  <v-app-bar color="primary" density="default" :height="appBarHeight" flat>
     <v-btn
       :icon="sidebarOpen ? mdiChevronDoubleLeft : mdiChevronDoubleRight"
       variant="text"
@@ -179,7 +179,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, watch, watchEffect } from 'vue'
 import DatabasePicker from './DatabasePicker.vue'
 import CaseStatusIcons from './CaseStatusIcons.vue'
 import ImportStatusChip from './ImportStatusChip.vue'
@@ -188,6 +188,7 @@ import IconButton from './common/IconButton.vue'
 import { useAppState } from '../composables/useAppState'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
+import { remToPx, useRootFontSize } from '../composables/useRootFontSize'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { getCurrentUnsupportedReasonSync } from '../utils/backend-capabilities'
 import type { AffectedStatus, CaseSex } from '../../../shared/types/api'
@@ -223,6 +224,16 @@ const {
 } = useAppState()
 
 const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
+
+// 3rem tall (48 px at 100 % text) so the Case/Cohort toggle never clips at
+// 200 % text. Vuetify's layout needs a px number; the CSS var lets v-main and
+// the full-height views offset by the same height.
+const APP_BAR_HEIGHT_REM = 3
+const rootFontPx = useRootFontSize()
+const appBarHeight = computed(() => remToPx(APP_BAR_HEIGHT_REM, rootFontPx.value))
+watchEffect(() => {
+  document.documentElement.style.setProperty('--app-bar-height', `${appBarHeight.value}px`)
+})
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const isWebMode = isWebRuntime()
 const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+O' : 'Alt+Shift+O'
@@ -326,7 +337,7 @@ const handleHomeClick = (): void => {
 }
 
 .mode-toggle {
-  height: 32px;
+  height: 2rem;
 }
 
 .mode-toggle :deep(.v-btn--active),
