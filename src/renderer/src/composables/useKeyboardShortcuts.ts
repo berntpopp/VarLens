@@ -15,6 +15,10 @@ interface KeyboardShortcutCallbacks {
   onImport?: () => void
 }
 
+export function isColumnsShortcut(e: KeyboardEvent): boolean {
+  return e.code === 'KeyC' && e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey
+}
+
 export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks): void {
   onKeyStroke('D', (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
@@ -44,11 +48,14 @@ export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks): void
     }
   })
 
-  onKeyStroke('C', (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
-      e.preventDefault()
-      callbacks.onToggleColumnsDrawer?.()
-    }
+  // Toggle columns: Alt+Shift+C (Option+Shift+C on macOS). Ctrl/Cmd+Shift+C is
+  // deliberately left alone so the DevTools element picker keeps working.
+  // Match on `code`, not `key`: on macOS Option rewrites `key` (e.g. to 'Ç').
+  // Skip while typing so Option+Shift+C can still insert its character.
+  onKeyStroke(isColumnsShortcut, (e: KeyboardEvent) => {
+    if (isInputFocused()) return
+    e.preventDefault()
+    callbacks.onToggleColumnsDrawer?.()
   })
 
   onKeyStroke('/', (e: KeyboardEvent) => {
