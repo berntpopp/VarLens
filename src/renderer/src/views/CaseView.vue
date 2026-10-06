@@ -477,11 +477,26 @@ defineExpose({
   background: rgb(var(--v-theme-surface));
 }
 
+/*
+ * Fills the viewport between the app bar (48px) and the app footer (its real
+ * height, published by Vuetify's layout as --v-layout-bottom). On short or
+ * zoomed viewports (200% zoom, 320px reflow) the stacked chrome no longer
+ * leaves room for the table, so the region keeps a minimum height and this
+ * container scrolls instead of clipping the table to zero rows
+ * (WCAG 1.4.4 / 1.4.10). On ordinary desktop heights nothing overflows and the
+ * table keeps scrolling internally under its sticky header.
+ */
 .case-content {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 48px - 32px);
-  overflow: hidden;
+  height: calc(100dvh - 48px - var(--v-layout-bottom, 32px));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Chrome rows keep their natural height; only the table region flexes. */
+.case-content > * {
+  flex-shrink: 0;
 }
 
 .variant-type-tabs {
@@ -491,7 +506,7 @@ defineExpose({
 }
 
 .variant-type-tabs :deep(.v-tab) {
-  min-height: 36px;
+  min-height: 2.25rem;
   text-transform: none;
   font-weight: 500;
 }
@@ -538,7 +553,9 @@ defineExpose({
  * Per-type region wraps the FilterToolbar + VariantTable. It must fill
  * the remaining vertical space of `.case-content` so VariantTable's
  * internal scroller sizes correctly, exactly like it did before the
- * wrapper was introduced.
+ * wrapper was introduced. The table's rem minimum (~5 rows plus header and
+ * pagination) only engages on short/zoomed viewports: the table then
+ * overflows this region and `.case-content` scrolls to reach it.
  */
 .per-type-region {
   display: flex;
@@ -547,8 +564,12 @@ defineExpose({
   min-height: 0;
 }
 
+.per-type-region > :deep(.table-container) {
+  min-height: 20rem;
+}
+
 .shortlist-region {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 20rem;
 }
 </style>

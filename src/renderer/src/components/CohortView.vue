@@ -34,7 +34,7 @@
     <v-tabs-window
       v-model="activeTab"
       class="flex-grow-1 cohort-tabs-window"
-      style="min-height: 0; overflow: hidden"
+      style="overflow: hidden"
       transition="none"
       reverse-transition="none"
     >
@@ -172,11 +172,36 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
+/* Same viewport-fill + short-viewport scroll contract as CaseView's
+   .case-content: the tab window keeps a rem minimum (filter bar + ~5 rows)
+   and this container scrolls when zoom or a short window cannot fit it. */
 .cohort-content {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 48px - 32px);
-  overflow: hidden;
+  height: calc(100dvh - 48px - var(--v-layout-bottom, 32px));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Filter bar (~8rem, ~16rem once the preset chips wrap on phones) + a 20rem table */
+.cohort-tabs-window {
+  min-height: 28rem;
+}
+
+@media (max-width: 599.98px) {
+  .cohort-tabs-window {
+    min-height: 36rem;
+  }
+}
+
+.cohort-header,
+.cohort-tabs {
+  flex-shrink: 0;
+}
+
+/* Surface background keeps the floating select labels at AA contrast */
+.cohort-header {
+  background: rgb(var(--v-theme-surface));
 }
 
 .cohort-tabs :deep(.v-tab--selected) {

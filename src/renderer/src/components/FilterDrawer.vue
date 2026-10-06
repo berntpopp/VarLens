@@ -845,7 +845,7 @@ const inheritanceSummary = computed(() => {
 }
 
 .filter-section-header {
-  font-size: 10px;
+  font-size: 0.625rem;
   letter-spacing: 0.1em;
   color: rgba(var(--v-theme-on-surface), 0.6);
 }

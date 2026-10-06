@@ -71,6 +71,14 @@ const emit = defineEmits<{
   flex-wrap: wrap;
 }
 
+/* Narrow widths wrap the chips into many rows: 18px chips + 8px row gap keep
+   them >24px apart (WCAG 2.5.8 spacing) without costing desktop table rows. */
+@media (max-width: 839.98px) {
+  .preset-bar {
+    row-gap: 0.5rem;
+  }
+}
+
 .preset-bar :deep(.v-chip) {
   transition:
     background-color 150ms ease,

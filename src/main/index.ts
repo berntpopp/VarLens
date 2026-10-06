@@ -72,6 +72,8 @@ function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: APP_CONFIG.WINDOW_WIDTH,
     height: APP_CONFIG.WINDOW_HEIGHT,
+    minWidth: APP_CONFIG.WINDOW_MIN_WIDTH,
+    minHeight: APP_CONFIG.WINDOW_MIN_HEIGHT,
     show: false,
     backgroundColor: '#F0F4F8',
     title: 'Varlens',

@@ -4,7 +4,7 @@
     tag="aside"
     aria-label="Variant details"
     location="right"
-    temporary
+    :temporary="!detailPanelDocked"
     :persistent="true"
     :scrim="false"
     :width="effectiveWidth"
@@ -209,6 +209,7 @@
 import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
+import { clampDetailPanelWidth } from '../utils/responsive-layout'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
@@ -293,10 +294,13 @@ function handleTagsChanged(): void {
 // Use panel resize composable
 const { panelWidth, startResize } = usePanelResize()
 
-// Use responsive layout composable
-const { detailPanelFullWidth, width: displayWidth } = useResponsiveLayout()
+// Docked beside the table at >= 1440 px (v-main shrinks, nothing is covered);
+// an overlay below that, capped at min(800px, 45vw); full width when narrow.
+const { detailPanelFullWidth, detailPanelDocked, width: displayWidth } = useResponsiveLayout()
 const effectiveWidth = computed(() =>
-  detailPanelFullWidth.value ? displayWidth.value : panelWidth.value
+  detailPanelFullWidth.value
+    ? displayWidth.value
+    : clampDetailPanelWidth(panelWidth.value, displayWidth.value)
 )
 
 // Use annotations composable
