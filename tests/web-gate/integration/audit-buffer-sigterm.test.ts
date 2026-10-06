@@ -9,7 +9,7 @@ import { Pool } from 'pg'
  * Buffered read audits must survive a graceful shutdown.
  *
  * `api_read` rows are batched in memory (src/web/server/audit-buffer.ts).
- * This test runs the BUILT server with a 60 s flush interval so every row
+ * This test runs the BUILT server with a 10 s flush interval (the maximum) so every row
  * is guaranteed to still be pending, performs N authenticated reads over a
  * real socket, sends SIGTERM, and asserts that all N rows reached
  * varlens_audit.audit_log before the process exited.
@@ -53,7 +53,7 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('buffered audit rows on SIGTERM', () => 
         VARLENS_ADMIN_USERNAME: ADMIN,
         VARLENS_ADMIN_PASSWORD_HASH: passwordHash,
         VARLENS_ADMIN_MUST_CHANGE_PASSWORD: 'false',
-        VARLENS_AUDIT_FLUSH_INTERVAL_MS: '60000',
+        VARLENS_AUDIT_FLUSH_INTERVAL_MS: '10000',
         VARLENS_AUDIT_BATCH_SIZE: '1000'
       },
       stdio: 'pipe'
