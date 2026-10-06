@@ -183,3 +183,13 @@ src/__impeccable_provider_smoke_*.html
 
 
 
+
+# UI/UX audit raw evidence — keep the .md reports and reusable harness scripts,
+# ignore regenerable raw outputs (Lighthouse reports, axe/probe JSON, frames).
+.planning/code-review/*/lighthouse/
+.planning/code-review/*/table-loading/frames/
+.planning/code-review/*/table-loading/data/
+.planning/code-review/*/**/*.json
+.planning/code-review/*/**/*.html
+.planning/code-review/*/**/*.webm
+.planning/code-review/*/**/*.trace

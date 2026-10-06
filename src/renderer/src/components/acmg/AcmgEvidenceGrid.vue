@@ -10,7 +10,7 @@
     <div v-for="group in groups" :key="group.label" class="mb-1">
       <div class="text-caption text-medium-emphasis mb-half strength-label">
         {{ group.label }}
-        <span class="text-disabled">({{ group.points }}pt{{ group.points !== 1 ? 's' : '' }})</span>
+        <span class="text-muted">({{ group.points }}pt{{ group.points !== 1 ? 's' : '' }})</span>
       </div>
       <div class="criteria-grid">
         <v-tooltip v-for="code in group.codes" :key="code" location="top" :open-delay="300">

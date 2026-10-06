@@ -5,7 +5,7 @@
         <v-icon class="mr-2" :icon="mdiKeyboard" />
         Keyboard Shortcuts
         <v-spacer />
-        <v-btn icon size="small" variant="text" @click="model = false">
+        <v-btn aria-label="Close" icon size="small" variant="text" @click="model = false">
           <v-icon :icon="mdiClose" />
         </v-btn>
       </v-card-title>

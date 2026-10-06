@@ -40,7 +40,7 @@ export interface UseTableRowPropsReturn<T> {
    * @param params - Object with item and index
    * @returns Object with class string for row styling
    */
-  getRowProps: (params: { item: T; index: number }) => { class: string }
+  getRowProps: (params: { item: T; index: number }) => TableRowProps
 }
 
 /**
@@ -68,6 +68,12 @@ export interface UseTableRowPropsReturn<T> {
  * <v-data-table :row-props="getRowProps" />
  * ```
  */
+export interface TableRowProps {
+  class: string
+  'aria-current'?: 'true'
+  tabindex?: number
+}
+
 export function useTableRowProps<T>(params: UseTableRowPropsParams<T>): UseTableRowPropsReturn<T> {
   /**
    * Compute class bindings for a table row
@@ -76,7 +82,7 @@ export function useTableRowProps<T>(params: UseTableRowPropsParams<T>): UseTable
    * @param index - The row's index in the visible data
    * @returns Object with class string containing applicable CSS classes
    */
-  const getRowProps = ({ item, index }: { item: T; index: number }): { class: string } => {
+  const getRowProps = ({ item, index }: { item: T; index: number }): TableRowProps => {
     const classes: string[] = []
 
     // Zebra striping - odd rows get striped background
@@ -84,9 +90,12 @@ export function useTableRowProps<T>(params: UseTableRowPropsParams<T>): UseTable
       classes.push('variant-row--striped')
     }
 
-    // Selection highlight - matching ID gets selected styling
+    // Selection highlight - matching ID gets selected styling. The selected row
+    // is exposed to assistive tech (aria-current) and is the focus-return target
+    // when the details panel closes.
     if (params.getItemId(item) === params.selectedId.value) {
       classes.push('variant-row--selected')
+      return { class: classes.join(' '), 'aria-current': 'true', tabindex: 0 }
     }
 
     return { class: classes.join(' ') }

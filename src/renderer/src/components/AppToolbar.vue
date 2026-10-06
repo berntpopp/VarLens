@@ -39,10 +39,13 @@
         >
           {{ selectedCaseName }}
         </span>
-        <v-btn icon size="x-small" variant="text" class="ml-1" @click="$emit('show-case-metadata')">
-          <v-icon size="small" :icon="mdiInformationOutline" />
-          <v-tooltip activator="parent" location="bottom">Case details</v-tooltip>
-        </v-btn>
+        <IconButton
+          label="Case details"
+          :icon="mdiInformationOutline"
+          size="small"
+          class="ml-1"
+          @click="$emit('show-case-metadata')"
+        />
       </template>
       <template v-else-if="activeTab === 'cohort'">
         <v-icon size="small" class="mr-1" :icon="mdiAccountGroup" />
@@ -94,16 +97,13 @@
     />
     <v-menu>
       <template #activator="{ props }">
-        <v-btn
-          icon
-          size="small"
-          data-testid="app-settings-menu"
-          aria-label="Application settings"
+        <IconButton
           v-bind="props"
-        >
-          <v-icon :icon="mdiCog" />
-          <v-tooltip activator="parent" location="bottom">Settings</v-tooltip>
-        </v-btn>
+          label="Application settings"
+          tooltip="Settings"
+          :icon="mdiCog"
+          data-testid="app-settings-menu"
+        />
       </template>
       <v-list density="compact">
         <v-list-subheader>Data</v-list-subheader>
@@ -180,6 +180,7 @@ import { computed, watch } from 'vue'
 import DatabasePicker from './DatabasePicker.vue'
 import CaseStatusIcons from './CaseStatusIcons.vue'
 import ImportStatusChip from './ImportStatusChip.vue'
+import IconButton from './common/IconButton.vue'
 import { useAppState } from '../composables/useAppState'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
@@ -322,15 +323,14 @@ const handleHomeClick = (): void => {
 
 .mode-toggle :deep(.v-btn--active),
 .mode-toggle :deep(.mode-toggle--active) {
-  background-color: rgba(255, 255, 255, 0.85) !important;
-  color: rgba(var(--v-theme-primary)) !important;
+  /* Inverted pill: on-primary background, primary text (11.5:1 light, 7.8:1 dark) */
+  background-color: rgb(var(--v-theme-on-primary)) !important;
+  color: rgb(var(--v-theme-primary)) !important;
   font-weight: 600;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.9);
 }
 
 .mode-toggle :deep(.v-btn:not(.v-btn--active)) {
-  color: rgba(255, 255, 255, 0.85) !important;
-  opacity: 0.85;
+  color: rgb(var(--v-theme-on-primary)) !important;
 }
 
 .sidebar-toggle-btn :deep(.v-icon) {

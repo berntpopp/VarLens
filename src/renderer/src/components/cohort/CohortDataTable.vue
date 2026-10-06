@@ -5,6 +5,7 @@
       <div ref="topScrollbarInnerRef" class="top-scrollbar-inner"></div>
     </div>
 
+    <TableLoadIndicator :active="showStale" :message="liveMessage" />
     <v-data-table-server
       ref="dataTableRef"
       v-model:page="page"
@@ -14,12 +15,15 @@
       :headers="headers"
       :items="renderRows"
       :items-length="totalCount"
-      :loading="loading"
+      :loading="firstLoad"
       :items-per-page-options="itemsPerPageOptions"
+      :aria-busy="ariaBusy"
       item-value="variant_key"
       density="compact"
+      fixed-header
       show-expand
       class="elevation-1"
+      :class="{ 'table--stale': showStale }"
       :row-props="getRowProps"
       @update:options="handleTableOptions"
       @click:row="handleRowClick"
@@ -51,6 +55,9 @@
         />
       </template>
 
+      <template #[`header.annotations`]><AnnotationsHeader /></template>
+      <template #[`header.data-table-expand`]><ExpandToggleCell header /></template>
+      <template #[`item.data-table-expand`]="slot"><ExpandToggleCell v-bind="slot" /></template>
       <!-- Annotations column (star, ACMG, comment) -->
       <template #[`item.annotations`]="{ item }">
         <AnnotationsCell
@@ -85,12 +92,10 @@
         />
       </template>
 
-      <!-- Ref allele -->
       <template #[`item.ref`]="{ value }">
         <AlleleCell :allele="value" />
       </template>
 
-      <!-- Alt allele -->
       <template #[`item.alt`]="{ value }">
         <AlleleCell :allele="value" />
       </template>
@@ -104,17 +109,14 @@
         />
       </template>
 
-      <!-- cDNA HGVS -->
       <template #[`item.cdna`]="{ value }">
         <span class="hgvs-notation">{{ value ?? '--' }}</span>
       </template>
 
-      <!-- Protein change -->
       <template #[`item.aa_change`]="{ value }">
         <span class="hgvs-notation">{{ value ?? '--' }}</span>
       </template>
 
-      <!-- Impact/Consequence -->
       <template #[`item.consequence`]="{ value }">
         <ConsequenceCell :consequence="value" />
       </template>
@@ -143,12 +145,10 @@
         <CaddScoreCell :score="value" />
       </template>
 
-      <!-- Carrier count -->
       <template #[`item.carrier_count`]="{ item }">
         {{ item.carrier_count ?? 0 }}
       </template>
 
-      <!-- Cohort frequency -->
       <template #[`item.cohort_frequency`]="{ value }">
         {{ value !== null && value !== undefined ? (value * 100).toFixed(2) + '%' : '--' }}
       </template>
@@ -156,6 +156,10 @@
       <!-- Het / Hom combined column -->
       <template #[`item.het_count`]="{ item }">
         {{ item.het_count ?? 0 }} / {{ item.hom_count ?? 0 }}
+      </template>
+
+      <template #loading>
+        <TableSkeletonRows :rows="Math.min(itemsPerPage, 15)" />
       </template>
 
       <!-- Expandable row with carrier details -->
@@ -171,7 +175,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
+import { ref, toRef, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
 import { logService } from '../../services/LogService'
 import { useTableKeyboardNav } from '../../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
@@ -192,9 +196,14 @@ import {
   GeneSymbolCell,
   ConsequenceCell,
   AnnotationsCell,
+  AnnotationsHeader,
+  ExpandToggleCell,
   ExternalLinkCell
 } from '../table-cells'
 import CarrierExpandedRow from './CarrierExpandedRow.vue'
+import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
+import TableSkeletonRows from '../table-state/TableSkeletonRows.vue'
+import { useTableLoadingState } from '../../composables/useTableLoadingState'
 import VariantColumnHeader from '../variant-table/VariantColumnHeader.vue'
 import { useColumnFilters } from '../../composables/useColumnFilters'
 import { useColumnFilterMeta } from '../../composables/useColumnFilterMeta'
@@ -258,7 +267,6 @@ const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
 
 const props = defineProps<Props>()
 
-// Composables
 const { api } = useApiService()
 // Template refs (used in template via ref="...")
 // @ts-expect-error - These refs ARE used in template bindings
@@ -282,8 +290,7 @@ const {
   items: computed(() => props.variants),
   getItemId: (item: CohortVariant) => item.variant_key,
   onSelect: () => {
-    // onSelect intentionally empty — row-click is emitted by handleRowClick
-    // (mouse) and Enter handler (keyboard) separately.
+    // onSelect intentionally empty: row-click is emitted by mouse + Enter handlers.
   }
 })
 
@@ -325,16 +332,17 @@ watch(getColumnFiltersParam, (newFilters) => {
   debouncedEmitColumnFilters(newFilters)
 })
 
-// Stores
+// Loading presentation (shared with the case VariantTable): skeleton on first
+// load only, dimmed rows + thin bar on refetch, polite result-count announcement
+const { firstLoad, showStale, ariaBusy, liveMessage } = useTableLoadingState({
+  loading: toRef(props, 'loading'),
+  totalCount: toRef(props, 'totalCount')
+})
+
 const linksStore = useExternalLinksStore()
 
-// ============================================================================
-// External link resolution helpers (same as VariantTable.vue)
-// ============================================================================
+// --- External link resolution helpers (same as VariantTable.vue) ---
 
-/**
- * Get link data for a cohort variant
- */
 const getVariantLinkData = (item: CohortVariant): VariantLinkData => ({
   chr: item.chr,
   pos: item.pos,
@@ -364,9 +372,6 @@ const { renderRows } = useCohortRenderRows(
   linkConfig
 )
 
-/**
- * Handle external link click
- */
 const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> => {
   if (!url) return
 
@@ -394,17 +399,12 @@ const dataTableRef = ref<InstanceType<typeof import('vuetify/components').VDataT
   null
 )
 
-/**
- * Forward table options update to parent for data loading
- */
+// Forward table options update to parent for data loading
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const handleTableOptions = (options: any): void => {
   emit('update:options', options)
 }
 
-/**
- * Handle row click
- */
 const handleRowClick = (_event: Event, data: { item: CohortVariant }): void => {
   pendingScrollBehavior.value = 'smooth'
   lastKeyboardMoveAtMs.value = null

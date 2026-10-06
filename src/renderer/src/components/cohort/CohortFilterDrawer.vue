@@ -66,9 +66,7 @@
           >
             Save
           </v-btn>
-          <v-btn size="x-small" variant="text" density="compact" @click="onPresetManage?.()">
-            <v-icon size="x-small" :icon="mdiCogOutline" />
-          </v-btn>
+          <IconButton label="Manage presets" :icon="mdiCogOutline" @click="onPresetManage?.()" />
         </div>
         <div class="d-flex ga-1 flex-wrap pb-1">
           <v-chip
@@ -410,6 +408,7 @@
 
 <script setup lang="ts">
 import { inject, ref, computed, watch } from 'vue'
+import IconButton from '../common/IconButton.vue'
 import FilterDrawerShell from '../filters/FilterDrawerShell.vue'
 import FilterPanelTitle from '../filters/FilterPanelTitle.vue'
 import DslSearchBar from '../DslSearchBar.vue'

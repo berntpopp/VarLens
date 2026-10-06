@@ -111,7 +111,7 @@ function formatText(val: string | null | undefined): string {
 <template>
   <div v-if="showSection" class="extension-section mb-4">
     <div class="d-flex align-center mb-2">
-      <div class="text-title-small">{{ sectionTitle }}</div>
+      <h3 class="text-title-small">{{ sectionTitle }}</h3>
       <v-chip v-if="variant?.caller" size="x-small" class="ml-2" variant="tonal">
         {{ variant.caller }}
       </v-chip>

@@ -46,6 +46,7 @@
           <template #append>
             <div class="d-flex align-center ml-2">
               <v-btn
+                aria-label="Show in folder"
                 icon
                 size="x-small"
                 variant="text"
@@ -57,6 +58,7 @@
               </v-btn>
               <v-btn
                 v-if="db.path !== databaseStore.currentPath"
+                aria-label="Remove from list"
                 icon
                 size="x-small"
                 variant="text"
@@ -68,6 +70,7 @@
               </v-btn>
               <v-btn
                 v-if="db.path !== databaseStore.currentPath"
+                aria-label="Delete file from disk"
                 icon
                 size="x-small"
                 variant="text"

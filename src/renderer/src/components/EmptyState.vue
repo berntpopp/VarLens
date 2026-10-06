@@ -3,45 +3,52 @@
     <v-row class="align-center justify-center">
       <v-col cols="12" sm="8" md="6" class="text-center">
         <v-icon size="220" class="mb-4" icon="custom:varlens-dna" />
-        <h2 class="text-headline-large font-weight-medium text-grey-darken-2">
+        <h2 class="text-headline-large font-weight-medium text-high-emphasis">
           Welcome to VarLens
         </h2>
-        <p class="text-body-large mt-3 text-grey-darken-1">
+        <p class="text-body-large mt-3 text-medium-emphasis">
           Analyze genetic variants with a data-dense interface designed for research analysis.
         </p>
 
         <v-divider class="my-6 mx-auto" style="max-width: 200px" />
 
-        <!-- Show different content based on whether cases exist -->
-        <template v-if="hasCases">
-          <p class="text-body-medium text-grey">
-            <v-icon size="small" class="mr-1" :icon="mdiArrowLeft" />
-            Select a case from the sidebar to view variants
-          </p>
-        </template>
-        <template v-else-if="allowImport">
-          <p class="text-body-medium text-grey mb-4">
-            Get started by importing your first variant file
-          </p>
-          <v-btn color="primary" size="large" :prepend-icon="mdiUpload" @click="$emit('import')">
-            Import Variants
-          </v-btn>
-          <p class="text-body-small text-grey mt-4">Supports .json and .json.gz files</p>
-          <div class="mt-4">
-            <v-icon size="small" class="mr-1" :icon="mdiTrayArrowDown" />
-            <span class="text-body-small text-grey">or drag and drop files here</span>
-          </div>
-        </template>
-        <template v-else>
-          <p class="text-body-medium text-grey">No cases are available in this workspace yet.</p>
-        </template>
+        <!-- Fixed-height slot: the case count arrives after first paint, and
+             swapping "Import" (tall) for "Select a case" (short) inside a
+             vertically-centred row shifted the whole block (CLS ~0.18). Render
+             nothing until the case list has answered, in reserved space. -->
+        <div class="empty-state__cta" :aria-busy="!casesLoaded">
+          <template v-if="casesLoaded && hasCases">
+            <p class="text-body-medium text-muted">
+              <v-icon size="small" class="mr-1" :icon="mdiArrowLeft" />
+              Select a case from the sidebar to view variants
+            </p>
+          </template>
+          <template v-else-if="casesLoaded && allowImport">
+            <p class="text-body-medium text-muted mb-4">
+              Get started by importing your first variant file
+            </p>
+            <v-btn color="primary" size="large" :prepend-icon="mdiUpload" @click="$emit('import')">
+              Import Variants
+            </v-btn>
+            <p class="text-body-small text-muted mt-4">Supports .json and .json.gz files</p>
+            <div class="mt-4">
+              <v-icon size="small" class="mr-1" :icon="mdiTrayArrowDown" />
+              <span class="text-body-small text-muted">or drag and drop files here</span>
+            </div>
+          </template>
+          <template v-else-if="casesLoaded">
+            <p class="text-body-medium text-muted">No cases are available in this workspace yet.</p>
+          </template>
+        </div>
       </v-col>
     </v-row>
   </v-container>
 </template>
 
 <script setup lang="ts">
+import { computed, inject } from 'vue'
 import { mdiArrowLeft, mdiTrayArrowDown, mdiUpload } from '@mdi/js'
+import { AppStateKey } from '../composables/useAppState'
 withDefaults(
   defineProps<{
     hasCases?: boolean
@@ -55,4 +62,15 @@ withDefaults(
 defineEmits<{
   import: []
 }>()
+
+// Optional injection: outside the app shell (isolated tests) treat the list as loaded.
+const appState = inject(AppStateKey, null)
+const casesLoaded = computed(() => appState?.casesLoaded.value ?? true)
 </script>
+
+<style scoped>
+/* Height of the tallest variant (import CTA: hint + large button + 2 notes). */
+.empty-state__cta {
+  min-height: 172px;
+}
+</style>

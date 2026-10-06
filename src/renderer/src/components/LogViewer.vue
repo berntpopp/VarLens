@@ -22,15 +22,15 @@
 
         <!-- Action buttons -->
         <div class="log-viewer-actions d-flex align-center">
-          <v-btn icon size="small" variant="text" @click="handleExport">
+          <v-btn aria-label="Download logs" icon size="small" variant="text" @click="handleExport">
             <v-icon size="small" :icon="mdiDownload" />
             <v-tooltip activator="parent" location="top">Download logs</v-tooltip>
           </v-btn>
-          <v-btn icon size="small" variant="text" @click="handleClear">
+          <v-btn aria-label="Clear logs" icon size="small" variant="text" @click="handleClear">
             <v-icon size="small" :icon="mdiDeleteOutline" />
             <v-tooltip activator="parent" location="top">Clear logs</v-tooltip>
           </v-btn>
-          <v-btn icon size="small" variant="text" @click="isOpen = false">
+          <v-btn aria-label="Close" icon size="small" variant="text" @click="isOpen = false">
             <v-icon size="small" :icon="mdiClose" />
             <v-tooltip activator="parent" location="top">Close</v-tooltip>
           </v-btn>
@@ -110,6 +110,7 @@
         <!-- Scroll to latest FAB -->
         <v-btn
           v-if="!isAutoScroll"
+          aria-label="Scroll to latest"
           :icon="mdiChevronDown"
           size="small"
           color="primary"

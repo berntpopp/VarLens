@@ -5,7 +5,7 @@
         <v-icon :icon="mdiLink" class="mr-2" />
         External Links Settings
         <v-spacer />
-        <v-btn icon variant="text" size="small" @click="isOpen = false">
+        <v-btn aria-label="Close" icon variant="text" size="small" @click="isOpen = false">
           <v-icon :icon="mdiClose" />
         </v-btn>
       </v-card-title>
@@ -69,6 +69,7 @@
                 </div>
               </div>
               <v-btn
+                :aria-label="`Edit ${link.name}`"
                 :icon="mdiPencil"
                 size="x-small"
                 variant="text"
@@ -77,6 +78,7 @@
               />
               <v-btn
                 v-if="!link.isBuiltIn"
+                :aria-label="`Delete ${link.name}`"
                 :icon="mdiDelete"
                 size="x-small"
                 variant="text"

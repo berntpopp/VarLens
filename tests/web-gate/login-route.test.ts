@@ -24,6 +24,21 @@ import {
 
 const SOURCE_LOGIN_HTML = resolve(process.cwd(), 'src/web/login/login.html')
 
+describe('renderLoginPage — first-load quality', () => {
+  test('has a meta description and declares the app light color-scheme', () => {
+    const html = renderLoginPage('/varlens', '/varlens/')
+    expect(html).toMatch(/<meta\s+name="description"\s+content="[^"]{20,}"/)
+    expect(html).toMatch(/<meta\s+name="color-scheme"\s+content="light"/)
+    // The app ships no dark theme switch; the login wall must not go dark either.
+    expect(html).not.toContain('prefers-color-scheme: dark')
+  })
+
+  test('hints the LCP logo with fetchpriority=high', () => {
+    const html = renderLoginPage('/varlens', '/varlens/')
+    expect(html).toMatch(/class="brand-logo"[\s\S]*?fetchpriority="high"/)
+  })
+})
+
 describe('resolveAppPathPrefix', () => {
   const original = process.env.APP_PATH_PREFIX
   beforeEach(() => {

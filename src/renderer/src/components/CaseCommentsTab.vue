@@ -85,12 +85,14 @@
             </div>
             <div>
               <v-btn
+                aria-label="Edit comment"
                 :icon="mdiPencilOutline"
                 size="x-small"
                 variant="text"
                 @click="startEdit(comment)"
               />
               <v-btn
+                aria-label="Delete comment"
                 :icon="mdiDeleteOutline"
                 size="x-small"
                 variant="text"

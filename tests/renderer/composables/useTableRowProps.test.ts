@@ -370,4 +370,26 @@ describe('useTableRowProps', () => {
       expect(props.class).not.toContain('variant-row--selected')
     })
   })
+
+  describe('Accessibility', () => {
+    it('exposes the selected row with aria-current and makes it focusable', () => {
+      const selectedId = ref<string | null>('row-2')
+      const [result, appInstance] = withSetup(() =>
+        useTableRowProps<{ id: string }>({
+          selectedId,
+          getItemId: (item) => item.id
+        })
+      )
+      app = appInstance
+
+      expect(result.getRowProps({ item: { id: 'row-2' }, index: 1 })).toEqual({
+        class: 'variant-row--striped variant-row--selected',
+        'aria-current': 'true',
+        tabindex: 0
+      })
+      const other = result.getRowProps({ item: { id: 'row-1' }, index: 0 })
+      expect(other['aria-current']).toBeUndefined()
+      expect(other.tabindex).toBeUndefined()
+    })
+  })
 })

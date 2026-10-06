@@ -36,10 +36,12 @@
       </v-btn>
 
       <!-- Manage presets -->
-      <v-btn size="x-small" variant="text" @click="emit('manage')">
-        <v-icon size="x-small" :icon="mdiCogOutline" />
-        <v-tooltip activator="parent" location="bottom">Manage presets</v-tooltip>
-      </v-btn>
+      <IconButton
+        label="Manage presets"
+        :icon="mdiCogOutline"
+        size="x-small"
+        @click="emit('manage')"
+      />
     </div>
   </v-expand-transition>
 </template>
@@ -47,6 +49,7 @@
 <script setup lang="ts">
 import type { FilterPreset } from '../../../shared/types/filter-presets'
 import { mdiAccount, mdiCogOutline, mdiContentSaveOutline } from '@mdi/js'
+import IconButton from './common/IconButton.vue'
 
 defineProps<{
   visiblePresets: FilterPreset[]

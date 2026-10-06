@@ -4,7 +4,14 @@
       <!-- Zoom controls -->
       <v-tooltip location="bottom">
         <template #activator="{ props: tip }">
-          <v-btn v-bind="tip" icon size="small" variant="text" @click="emit('zoom-in')">
+          <v-btn
+            aria-label="Zoom in"
+            v-bind="tip"
+            icon
+            size="small"
+            variant="text"
+            @click="emit('zoom-in')"
+          >
             <v-icon size="small" :icon="mdiMagnifyPlusOutline" />
           </v-btn>
         </template>
@@ -13,7 +20,14 @@
 
       <v-tooltip location="bottom">
         <template #activator="{ props: tip }">
-          <v-btn v-bind="tip" icon size="small" variant="text" @click="emit('zoom-out')">
+          <v-btn
+            aria-label="Zoom out"
+            v-bind="tip"
+            icon
+            size="small"
+            variant="text"
+            @click="emit('zoom-out')"
+          >
             <v-icon size="small" :icon="mdiMagnifyMinusOutline" />
           </v-btn>
         </template>
@@ -22,7 +36,14 @@
 
       <v-tooltip location="bottom">
         <template #activator="{ props: tip }">
-          <v-btn v-bind="tip" icon size="small" variant="text" @click="emit('zoom-reset')">
+          <v-btn
+            aria-label="Reset zoom"
+            v-bind="tip"
+            icon
+            size="small"
+            variant="text"
+            @click="emit('zoom-reset')"
+          >
             <v-icon size="small" :icon="mdiFitToScreenOutline" />
           </v-btn>
         </template>
@@ -115,7 +136,14 @@
       <!-- Export buttons -->
       <v-tooltip location="bottom">
         <template #activator="{ props: tip }">
-          <v-btn v-bind="tip" icon size="small" variant="text" @click="emit('export-svg')">
+          <v-btn
+            aria-label="Export SVG"
+            v-bind="tip"
+            icon
+            size="small"
+            variant="text"
+            @click="emit('export-svg')"
+          >
             <v-icon size="small" :icon="mdiFileImageOutline" />
           </v-btn>
         </template>
@@ -124,7 +152,14 @@
 
       <v-tooltip location="bottom">
         <template #activator="{ props: tip }">
-          <v-btn v-bind="tip" icon size="small" variant="text" @click="emit('export-png')">
+          <v-btn
+            aria-label="Export PNG"
+            v-bind="tip"
+            icon
+            size="small"
+            variant="text"
+            @click="emit('export-png')"
+          >
             <v-icon size="small" :icon="mdiImageOutline" />
           </v-btn>
         </template>

@@ -11,6 +11,7 @@ import { ref, shallowRef, watch, computed, type Ref } from 'vue'
 import { useSettingsStore } from '../stores/settingsStore'
 import { APP_CONFIG } from '../../../shared/config'
 import { logService } from '../services/LogService'
+import { createPageCache, runWhenIdle } from './pageCache'
 
 export interface SortItem {
   key: string
@@ -80,10 +81,11 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   // Invalidated via resetCount() when filters change.
   let cachedTotalCount: number | null = null
 
-  // Pre-fetch cache: Map<cacheKey, Promise<result>>
-  // Keyed by `offset:sortKey` so stale entries are naturally ignored after
-  // sort/filter changes (which also call prefetchCache.clear()).
-  const prefetchCache = new Map<string, Promise<OffsetPageResult<T>>>()
+  // Page cache (LRU, reads do not evict): fetched and prefetched pages keyed
+  // by offset + page size + sort + filter key, so prev/next/back navigation
+  // within one filter set is served without a round trip. Cleared on any
+  // filter, sort or page-size change and on invalidateAndReload().
+  const pageCache = createPageCache<Promise<OffsetPageResult<T>>>(8)
 
   function buildPrefetchKey(offset: number): string {
     const sortKey = JSON.stringify(normalizeSortBy(sortBy.value))
@@ -91,76 +93,97 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     return `${offset}:${itemsPerPage.value}:${sortKey}:${fKey}`
   }
 
-  /** Fire-and-forget: pre-fetch the next page and store in cache. */
-  function prefetchNextPage(): void {
-    if (!settingsStore.prefetchEnabled) return
-    if (options.prefetchEnabled?.value === false) return
+  const prefetchAllowed = (): boolean =>
+    settingsStore.prefetchEnabled && options.prefetchEnabled?.value !== false
 
-    const nextOffset = page.value * itemsPerPage.value
-    if (nextOffset >= totalCount.value) return // no more pages
-
-    const key = buildPrefetchKey(nextOffset)
-    if (prefetchCache.has(key)) return // already pre-fetched
-
-    // Limit cache to 3 entries — evict oldest
-    if (prefetchCache.size >= 3) {
-      const oldestKey = prefetchCache.keys().next().value
-      if (oldestKey !== undefined) prefetchCache.delete(oldestKey)
-    }
-
+  /** Fire-and-forget: fetch one page (without COUNT) into the cache. */
+  function prefetchPage(offset: number): void {
+    if (offset < 0 || offset >= totalCount.value) return
+    const key = buildPrefetchKey(offset)
+    if (pageCache.has(key)) return
     const promise = options
       .fetchPage({
-        offset: nextOffset,
+        offset,
         limit: itemsPerPage.value,
         sortBy: normalizeSortBy(sortBy.value),
         skipCount: true
       })
       .catch((err) => {
-        // Delete failed entry so the normal fetch path runs when this page is requested
-        prefetchCache.delete(key)
+        // Drop failed entries so the normal fetch path runs when requested
+        pageCache.delete(key)
         throw err
       })
+    pageCache.set(key, promise)
+  }
 
-    prefetchCache.set(key, promise)
+  /** After a page settles, warm the next and previous pages when idle. */
+  function prefetchAdjacentPages(): void {
+    if (!prefetchAllowed()) return
+    runWhenIdle(() => {
+      if (!prefetchAllowed() || loading.value) return
+      const offset = (page.value - 1) * itemsPerPage.value
+      prefetchPage(offset + itemsPerPage.value)
+      prefetchPage(offset - itemsPerPage.value)
+    })
   }
 
   // Sync items-per-page to settings store and invalidate prefetch cache
   watch(itemsPerPage, (v) => {
     settingsStore.itemsPerPage = v
-    prefetchCache.clear()
+    pageCache.clear()
   })
 
   // Clear prefetch cache when filter key changes so stale pre-fetched results
   // are never served after a filter change.
   if (options.filterKey) {
     watch(options.filterKey, () => {
-      prefetchCache.clear()
+      pageCache.clear()
     })
   }
 
-  /**
-   * Load the current page. Use as @update:options handler.
-   * Reads page/sortBy/itemsPerPage from reactive refs (set by Vuetify v-model).
-   */
-  const loadPage = async (): Promise<void> => {
-    loading.value = true
-    error.value = null
-    try {
-      const offset = (page.value - 1) * itemsPerPage.value
-      const key = buildPrefetchKey(offset)
+  // ─── Request ordering ─────────────────────────────────────────────────────
+  // Several sources can call loadPage concurrently (Vuetify update:options,
+  // filter watchers, case switches). Every call gets a monotonically
+  // increasing id; only the most recent call may commit results or clear the
+  // loading flag (latest-request-wins, same pattern as useShortlistQuery).
+  // The transport has no abort support, so stale responses are dropped.
+  let latestRequestId = 0
+  // An identical request already in flight is joined instead of re-issued.
+  let inFlight: { signature: string; promise: Promise<void> } | null = null
+  // Filter key of the most recently issued request (see reloadIfFiltersChanged).
+  let lastIssuedFilterKey: string | undefined
 
-      // Check pre-fetch cache first
-      const cached = prefetchCache.get(key)
+  /** Accept only finite, non-negative totals from the backend. */
+  const isValidTotal = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0
+
+  const commitTotal = (fromResult: unknown, skipCount: boolean): void => {
+    if (!skipCount && isValidTotal(fromResult)) {
+      cachedTotalCount = fromResult
+      totalCount.value = fromResult
+      return
+    }
+    // Count skipped (or the backend returned garbage): keep the cached value,
+    // falling back to the last displayed total — never null/undefined/NaN.
+    if (cachedTotalCount !== null) totalCount.value = cachedTotalCount
+  }
+
+  async function runRequest(requestId: number, offset: number): Promise<void> {
+    const key = buildPrefetchKey(offset)
+    const isCurrent = (): boolean => requestId === latestRequestId
+
+    try {
+      // Serve from the page cache first (kept for later revisits)
+      const cached = pageCache.get(key)
       if (cached) {
-        prefetchCache.delete(key)
         try {
           const result = await cached
-
-          // A pre-fetched result always used skipCount=true, so keep cached count
+          if (!isCurrent()) return
+          // Cached pages may lack a count, so keep the cached total
           items.value = result.data
-          totalCount.value = cachedTotalCount ?? result.total_count
-
-          prefetchNextPage()
+          commitTotal(result.total_count, cachedTotalCount !== null)
+          error.value = null
+          prefetchAdjacentPages()
           return
         } catch (e) {
           logService.warn(
@@ -168,6 +191,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
               (e instanceof Error ? e.message : String(e)),
             'pagination'
           )
+          if (!isCurrent()) return
         }
       }
 
@@ -181,26 +205,41 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
         sortBy: normalizeSortBy(sortBy.value),
         skipCount
       })
+      if (!isCurrent()) return
 
       items.value = result.data
-
-      if (skipCount) {
-        // Keep the cached count; the backend may return 0 or a stale value
-        // when skipCount is true — we use the cached value instead.
-        totalCount.value = cachedTotalCount!
-      } else {
-        totalCount.value = result.total_count
-        cachedTotalCount = result.total_count
-      }
-
-      prefetchNextPage()
+      commitTotal(result.total_count, skipCount)
+      error.value = null
+      pageCache.set(key, Promise.resolve(result))
+      prefetchAdjacentPages()
     } catch (err) {
+      if (!isCurrent()) return
+      // Keep the previous rows and total visible; surface the error instead.
       error.value = err instanceof Error ? err : new Error(String(err))
-      items.value = []
-      totalCount.value = 0
     } finally {
-      loading.value = false
+      if (isCurrent()) loading.value = false
     }
+  }
+
+  /**
+   * Load the current page. Use as @update:options handler.
+   * Reads page/sortBy/itemsPerPage from reactive refs (set by Vuetify v-model).
+   */
+  const loadPage = (): Promise<void> => {
+    const offset = (page.value - 1) * itemsPerPage.value
+    const signature = `${buildPrefetchKey(offset)}|count:${cachedTotalCount === null ? 'need' : 'cached'}`
+    if (inFlight !== null && inFlight.signature === signature) {
+      return inFlight.promise
+    }
+
+    const requestId = ++latestRequestId
+    lastIssuedFilterKey = options.filterKey?.value
+    loading.value = true
+    const promise = runRequest(requestId, offset).finally(() => {
+      if (inFlight?.promise === promise) inFlight = null
+    })
+    inFlight = { signature, promise }
+    return promise
   }
 
   /**
@@ -216,13 +255,23 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
    * Use when filters change or data needs a full refresh.
    */
   const invalidateAndReload = async (): Promise<void> => {
-    prefetchCache.clear()
+    pageCache.clear()
     resetCount()
     page.value = 1
     await loadPage()
   }
 
-  // Watch sort changes — reset page and clear pre-fetch cache.
+  /**
+   * Reload only when the filter key differs from the last issued request.
+   * Lets several filter-change sources (Clear, debounced chips, column
+   * filters) converge on one query. Without a filterKey it always reloads.
+   */
+  const reloadIfFiltersChanged = async (): Promise<void> => {
+    if (options.filterKey !== undefined && options.filterKey.value === lastIssuedFilterKey) return
+    await invalidateAndReload()
+  }
+
+  // Watch sort changes — reset page and clear the page cache.
   // Computed key avoids deep traversal of sortBy array objects.
   const sortKey = computed(() =>
     normalizeSortBy(sortBy.value)
@@ -232,7 +281,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   watch(sortKey, (serialized) => {
     if (serialized === prevSortSerialized) return
     prevSortSerialized = serialized
-    prefetchCache.clear()
+    pageCache.clear()
     page.value = 1
     options.onSortChange?.(sortBy.value.length > 0)
   })
@@ -242,6 +291,8 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   }
 
   const resetState = (): void => {
+    latestRequestId++ // any in-flight response belongs to the previous scope
+    inFlight = null
     loading.value = true // show loading immediately to prevent "no data" flash
     items.value = []
     totalCount.value = 0
@@ -250,7 +301,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     sortBy.value = []
     prevSortSerialized = ''
     cachedTotalCount = null
-    prefetchCache.clear()
+    pageCache.clear()
   }
 
   return {
@@ -269,6 +320,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     // Methods
     loadPage,
     invalidateAndReload,
+    reloadIfFiltersChanged,
     resetCount,
     resetSort,
     resetState

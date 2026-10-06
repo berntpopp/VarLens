@@ -14,6 +14,7 @@
         </td>
         <td style="width: 40px">
           <v-btn
+            :aria-label="`Delete ${extId.id_type}`"
             :icon="mdiDeleteOutline"
             size="x-small"
             variant="text"

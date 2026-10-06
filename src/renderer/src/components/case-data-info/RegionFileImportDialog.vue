@@ -10,6 +10,7 @@
         <span>Import BED Region File</span>
         <v-spacer />
         <v-btn
+          aria-label="Close"
           :icon="mdiClose"
           variant="text"
           size="small"

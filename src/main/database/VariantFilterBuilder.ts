@@ -708,7 +708,8 @@ export class VariantFilterBuilder {
    */
   applySort(query: VariantQueryBuilder, sortBy?: SortItem[]): VariantQueryBuilder {
     if (!sortBy || sortBy.length === 0) {
-      return query.orderBy(sql`pos ASC NULLS LAST`).orderBy(sql`id ASC`)
+      // Genomic default (chr, pos) — Postgres + cohort parity; idx_variants_case_coords
+      return query.orderBy(sql`chr ASC, pos ASC NULLS LAST`).orderBy(sql`id ASC`)
     }
 
     let sorted = query

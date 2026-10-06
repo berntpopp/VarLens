@@ -317,6 +317,11 @@ describe('PostgresVariantReadRepository', () => {
     expect(orderBySql).not.toContain('DROP TABLE')
   })
 
+  it('defaults to chromosome-then-position ordering when no sort is given (cohort/SQLite parity)', () => {
+    const { orderBySql } = buildPostgresVariantQueryParts({ case_id: 1 }, '"public"', [])
+    expect(orderBySql).toBe('ORDER BY v.chr ASC, v.pos ASC NULLS LAST, v.id ASC')
+  })
+
   it('rejects unsupported postgres column filter keys instead of ignoring them', async () => {
     const pool = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const repository = new PostgresVariantReadRepository(pool as never, 'public')

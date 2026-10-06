@@ -10,6 +10,7 @@
         <span>{{ editingGeneList ? 'Edit Gene List' : 'Create Gene List' }}</span>
         <v-spacer />
         <v-btn
+          aria-label="Close"
           :icon="mdiClose"
           variant="text"
           size="small"

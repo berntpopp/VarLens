@@ -29,49 +29,34 @@
       />
 
       <!-- Star toggle -->
-      <v-tooltip location="bottom">
-        <template #activator="{ props: tooltipProps }">
-          <v-btn
-            v-bind="tooltipProps"
-            :color="filters.starredOnly ? 'amber-darken-2' : undefined"
-            :variant="filters.starredOnly ? 'flat' : 'text'"
-            density="compact"
-            icon
-            @click="filters.starredOnly = !filters.starredOnly"
-          >
-            <v-icon size="small" :icon="filters.starredOnly ? mdiStar : mdiStarOutline" />
-          </v-btn>
-        </template>
-        {{
+      <IconButton
+        label="Starred variants only"
+        :tooltip="
           filters.starredOnly
-            ? 'Showing starred only \u2014 click to clear'
+            ? 'Showing starred only — click to clear'
             : 'Show starred variants only'
-        }}
-      </v-tooltip>
+        "
+        :pressed="filters.starredOnly"
+        :color="filters.starredOnly ? 'star' : undefined"
+        :variant="filters.starredOnly ? 'flat' : 'text'"
+        :icon="filters.starredOnly ? mdiStar : mdiStarOutline"
+        @click="filters.starredOnly = !filters.starredOnly"
+      />
 
       <!-- Comment toggle -->
-      <v-tooltip location="bottom">
-        <template #activator="{ props: tooltipProps }">
-          <v-btn
-            v-bind="tooltipProps"
-            :color="filters.hasCommentOnly ? 'primary' : undefined"
-            :variant="filters.hasCommentOnly ? 'flat' : 'text'"
-            density="compact"
-            icon
-            @click="filters.hasCommentOnly = !filters.hasCommentOnly"
-          >
-            <v-icon
-              size="small"
-              :icon="filters.hasCommentOnly ? mdiCommentText : mdiCommentTextOutline"
-            />
-          </v-btn>
-        </template>
-        {{
+      <IconButton
+        label="Commented variants only"
+        :tooltip="
           filters.hasCommentOnly
-            ? 'Showing commented only \u2014 click to clear'
+            ? 'Showing commented only — click to clear'
             : 'Show variants with comments only'
-        }}
-      </v-tooltip>
+        "
+        :pressed="filters.hasCommentOnly"
+        :color="filters.hasCommentOnly ? 'primary' : undefined"
+        :variant="filters.hasCommentOnly ? 'flat' : 'text'"
+        :icon="filters.hasCommentOnly ? mdiCommentText : mdiCommentTextOutline"
+        @click="filters.hasCommentOnly = !filters.hasCommentOnly"
+      />
 
       <!-- ACMG classification chips -->
       <v-chip-group v-model="filters.acmgClassifications" multiple class="flex-nowrap">
@@ -136,9 +121,10 @@
 </template>
 
 <script setup lang="ts">
+import IconButton from '../common/IconButton.vue'
 import { ref, computed, watch, provide, onMounted, nextTick } from 'vue'
 import { useFilters } from '../../composables/useFilters'
-import { useDebounce } from '../../composables/useDebounce'
+import { useFilterEmitScheduler } from '../../composables/useFilterEmitScheduler'
 import { useFilterPresetStore } from '../../composables/useFilterPresetStore'
 import SlimFilterToolbar from '../SlimFilterToolbar.vue'
 import DslSearchBar from '../DslSearchBar.vue'
@@ -233,7 +219,7 @@ const {
   savePreset,
   updatePreset: updatePresetStore,
   deletePreset: deletePresetStore
-} = useFilterPresetStore()
+} = useFilterPresetStore('cohort')
 
 // Dialog state
 const showSavePresetDialog = ref(false)
@@ -461,12 +447,12 @@ const searchGeneSymbols = async (query: string) => {
   }
 }
 
-// Debounced filter change emission
-const { debouncedFn: emitFilterChange } = useDebounce(() => emit('filter-change'), 300)
-
-// Watch filter state changes
-const cohortFilterKey = computed(() => JSON.stringify(filters.value))
-watch(cohortFilterKey, () => emitFilterChange())
+const { emitNow: emitFilterChange, onStateChange } = useFilterEmitScheduler(() =>
+  emit('filter-change')
+)
+// searchTerm is outside `filters` (P0-4), DSL-debounced upstream; typed fields wait 250 ms
+const cohortFilterKey = computed(() => JSON.stringify({ ...filters.value, q: searchTerm.value }))
+watch(cohortFilterKey, onStateChange)
 watch(selectedImpactPresets, () => emitFilterChange())
 watch([selectedAfPreset, selectedCaddPreset], () => emitFilterChange())
 

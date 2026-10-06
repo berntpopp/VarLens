@@ -6,7 +6,13 @@
           <v-icon size="small" color="primary" :icon="mdiClipboardCheckOutline" />
           <span class="text-body-2 font-weight-bold">ACMG Evidence Classification</span>
         </div>
-        <v-btn :icon="mdiClose" size="x-small" variant="text" @click="dialogOpen = false" />
+        <v-btn
+          aria-label="Close"
+          :icon="mdiClose"
+          size="x-small"
+          variant="text"
+          @click="dialogOpen = false"
+        />
       </v-card-title>
 
       <v-divider />

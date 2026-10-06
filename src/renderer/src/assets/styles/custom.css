@@ -137,9 +137,9 @@ html::-webkit-scrollbar-thumb {
   top: -40px;
   left: 0;
   background: rgb(var(--v-theme-primary));
-  color: white;
+  color: rgb(var(--v-theme-on-primary));
   padding: 8px 16px;
-  z-index: 100;
+  z-index: 3000;
   transition: top 0.2s ease;
 }
 

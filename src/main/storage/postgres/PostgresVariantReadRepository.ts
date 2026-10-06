@@ -317,7 +317,9 @@ function buildPostgresVariantOrderBy(sortBy?: SortItem[]): string {
   }
 
   if (orderParts.length === 0) {
-    orderParts.push('v.pos ASC NULLS LAST')
+    // Genomic default order (chr, then pos) — mirrors the SQLite case path
+    // (VariantFilterBuilder.applySort) and the cohort ORDER BY tiebreaker.
+    orderParts.push('v.chr ASC', 'v.pos ASC NULLS LAST')
   }
   orderParts.push('v.id ASC')
   return `ORDER BY ${orderParts.join(', ')}`

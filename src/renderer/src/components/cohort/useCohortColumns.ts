@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import type { useColumnPreferences } from '../../composables/useColumnPreferences'
 import type { ColumnDef } from '../variant-table/columns'
+import { withFixedWidth } from '../variant-table/column-widths'
 
 /** Static base column definitions for the cohort table. */
 export const baseHeaders: ColumnDef[] = [
@@ -43,10 +44,10 @@ export function useCohortColumns(prefs: ReturnType<typeof useColumnPreferences>[
     return baseHeaders
   })
 
-  /** Only columns visible per user preferences. */
-  const visibleHeaders = computed(() => {
-    return orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false)
-  })
+  /** Only columns visible per user preferences, with shared fixed widths (no jitter). */
+  const visibleHeaders = computed(() =>
+    orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false).map(withFixedWidth)
+  )
 
   return { orderedColumns, visibleHeaders }
 }

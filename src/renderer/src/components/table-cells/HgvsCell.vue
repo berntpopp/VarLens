@@ -1,10 +1,7 @@
 <template>
-  <v-tooltip v-if="value" location="top">
-    <template #activator="{ props: tipProps }">
-      <span v-bind="tipProps" class="hgvs-notation">{{ value }}</span>
-    </template>
-    {{ value }}
-  </v-tooltip>
+  <span v-if="value" class="hgvs-notation" :data-tooltip="value" data-tooltip-location="top">{{
+    value
+  }}</span>
   <EmptyPlaceholder v-else />
 </template>
 

@@ -462,14 +462,26 @@ describe('useFilterState', () => {
       expect(onFiltersUpdate).toHaveBeenCalled()
     })
 
-    it('does not call onFiltersUpdate before debounce period elapses', async () => {
+    it('debounces typed fields (gene symbol) by 250 ms', async () => {
       const { result, onFiltersUpdate } = createState()
 
-      result.filters.value.searchQuery = 'BRCA1'
+      result.filters.value.geneSymbol = 'TP5'
       await nextTick()
-      vi.advanceTimersByTime(100) // less than 300ms debounce
-
+      vi.advanceTimersByTime(100) // less than the 250 ms typed-field debounce
       expect(onFiltersUpdate).not.toHaveBeenCalled()
+
+      vi.advanceTimersByTime(150)
+      expect(onFiltersUpdate).toHaveBeenCalledOnce()
+    })
+
+    it('applies discrete changes (chips/checkboxes) immediately', async () => {
+      const { result, onFiltersUpdate } = createState()
+
+      result.filters.value.consequences = ['HIGH']
+      await nextTick()
+
+      expect(onFiltersUpdate).toHaveBeenCalledOnce()
+      expect(onFiltersUpdate.mock.calls[0][0].consequences).toEqual(['HIGH'])
     })
 
     it('emitted filter contains search_query from searchQuery', async () => {

@@ -1,12 +1,12 @@
 <template>
-  <v-tooltip v-if="isTruncated" location="top">
-    <template #activator="{ props: tooltipProps }">
-      <span v-bind="tooltipProps" class="text-truncate allele-cell variant-data-mono">
-        {{ truncatedValue }}
-      </span>
-    </template>
-    <span class="variant-data-mono">{{ allele }}</span>
-  </v-tooltip>
+  <span
+    v-if="isTruncated"
+    class="text-truncate allele-cell variant-data-mono"
+    :data-tooltip="allele"
+    data-tooltip-location="top"
+  >
+    {{ truncatedValue }}
+  </span>
   <span v-else class="variant-data-mono">{{ allele }}</span>
 </template>
 

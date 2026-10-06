@@ -16,6 +16,7 @@
  *   /livez, /readyz,
  *   /healthz               | passthrough          | passthrough  (health probes)
  *   /login, /login/        | passthrough          | passthrough  (the wall itself)
+ *   /robots.txt            | passthrough          | passthrough  (crawler policy)
  *   non-GET                | passthrough          | passthrough  (auth.ts/CSRF surface)
  *   anything else (GET)    | passthrough          | 302 → /login?next=<path>
  *
@@ -33,8 +34,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { hasControlOrWhitespace } from './login-route'
 import { PROBE_PATHS } from './probe-paths'
+import { ROBOTS_TXT_PATH } from './robots'
 
-const ALWAYS_PUBLIC_PATHS = new Set<string>([...PROBE_PATHS, '/login', '/login/'])
+const ALWAYS_PUBLIC_PATHS = new Set<string>([...PROBE_PATHS, '/login', '/login/', ROBOTS_TXT_PATH])
 
 /**
  * Root-level brand/icon assets that must load for an unauthenticated browser

@@ -39,7 +39,7 @@ function makeViewModel(overrides: Partial<RowViewModel> = {}): RowViewModel {
 describe('buildVariantRenderRows', () => {
   it('attaches precomputed render state to each row', () => {
     const variant = makeVariant('1', 100, 'A', 'T')
-    const rows = buildVariantRenderRows([variant], new Map([['1:100:A:T', makeViewModel()]]))
+    const rows = buildVariantRenderRows([variant], new Map([[100, makeViewModel()]]))
 
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
@@ -68,10 +68,47 @@ describe('buildVariantRenderRows', () => {
   })
 })
 
+describe('buildVariantRenderRows row identity', () => {
+  it('renders distinct rows for two variants sharing a locus but differing in gene/consequence', () => {
+    const a = {
+      ...makeVariant('1', 100, 'A', 'T'),
+      id: 11,
+      gene_symbol: 'GENE_A',
+      func: 'missense_variant'
+    } as Variant
+    const b = {
+      ...makeVariant('1', 100, 'A', 'T'),
+      id: 12,
+      gene_symbol: 'GENE_B',
+      func: 'intron_variant'
+    } as Variant
+    const cache = new Map()
+    const rows = buildVariantRenderRows(
+      [a, b],
+      new Map([
+        [11, makeViewModel({ isStarred: true })],
+        [12, makeViewModel({ isStarred: false })]
+      ]),
+      cache
+    )
+
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).not.toBe(rows[1])
+    expect(rows.map((r) => r.gene_symbol)).toEqual(['GENE_A', 'GENE_B'])
+    expect(rows.map((r) => r.func)).toEqual(['missense_variant', 'intron_variant'])
+    expect(rows.map((r) => r.render.isStarred)).toEqual([true, false])
+
+    // A second pass through the cache must not collapse them either.
+    const again = buildVariantRenderRows([a, b], new Map(), cache)
+    expect(again.map((r) => r.gene_symbol)).toEqual(['GENE_A', 'GENE_B'])
+    expect(again[0]).not.toBe(again[1])
+  })
+})
+
 describe('useVariantRenderRows', () => {
   it('recomputes rows when the row-view-model map changes', () => {
     const variants = ref([makeVariant('3', 300, 'C', 'A')])
-    const rowViewModels = ref(new Map<string, RowViewModel>())
+    const rowViewModels = ref(new Map<number, RowViewModel>())
 
     const { renderRows } = useVariantRenderRows(
       variants,
@@ -80,7 +117,7 @@ describe('useVariantRenderRows', () => {
 
     expect(renderRows.value[0].render.isStarred).toBe(false)
 
-    rowViewModels.value = new Map([['3:300:C:A', makeViewModel({ isStarred: true })]])
+    rowViewModels.value = new Map([[300, makeViewModel({ isStarred: true })]])
 
     expect(renderRows.value[0].render.isStarred).toBe(true)
   })
@@ -88,7 +125,7 @@ describe('useVariantRenderRows', () => {
   it('preserves row object identity when only render state changes', () => {
     const variants = ref([makeVariant('4', 400, 'T', 'G')])
     const rowViewModels = ref(
-      new Map<string, RowViewModel>([['4:400:T:G', makeViewModel({ isStarred: false })]])
+      new Map<number, RowViewModel>([[400, makeViewModel({ isStarred: false })]])
     )
 
     const { renderRows } = useVariantRenderRows(
@@ -98,7 +135,7 @@ describe('useVariantRenderRows', () => {
 
     const firstRow = renderRows.value[0]
 
-    rowViewModels.value = new Map([['4:400:T:G', makeViewModel({ isStarred: true })]])
+    rowViewModels.value = new Map([[400, makeViewModel({ isStarred: true })]])
 
     expect(renderRows.value[0]).toBe(firstRow)
     expect(renderRows.value[0].render.isStarred).toBe(true)

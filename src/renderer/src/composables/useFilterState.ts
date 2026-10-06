@@ -15,10 +15,9 @@
  */
 
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
-import { useDebounce } from './useDebounce'
+import { useFilterEmitScheduler } from './useFilterEmitScheduler'
 import { useTags } from './useTags'
 import { useApiService } from './useApiService'
-import { APP_CONFIG } from '../../../shared/config'
 import { createFilterState } from '../../../shared/filters/filterDefaults'
 import { buildVariantFilterFromState } from '../utils/filters/filterSerialization'
 import {
@@ -95,7 +94,7 @@ export function useFilterState(
     caddPresets,
     impactPresets,
     resetPresets
-  } = useFilterPresets(filters, () => debouncedEmit())
+  } = useFilterPresets(filters, () => emitNow())
 
   // -------------------------------------------------------------------------
   // 5. Filter emission with debounce
@@ -106,13 +105,12 @@ export function useFilterState(
     onFiltersUpdate(variantFilter)
   }
 
-  const { debouncedFn: debouncedEmit } = useDebounce(emitFilters, APP_CONFIG.DEBOUNCE_MS)
+  // Discrete changes apply immediately; typed fields wait 250 ms (shared with cohort)
+  const { emitNow, onStateChange } = useFilterEmitScheduler(emitFilters)
 
   // Watch filters and emit changes (serialized key avoids deep traversal)
   const filterEmitKey = computed(() => JSON.stringify(filters.value))
-  watch(filterEmitKey, () => {
-    debouncedEmit()
-  })
+  watch(filterEmitKey, onStateChange)
 
   // Export state
   const exporting = ref(false)

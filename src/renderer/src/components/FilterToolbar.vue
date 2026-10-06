@@ -30,49 +30,34 @@
       />
 
       <!-- Star toggle -->
-      <v-tooltip location="bottom">
-        <template #activator="{ props: tooltipProps }">
-          <v-btn
-            v-bind="tooltipProps"
-            :color="filters.starredOnly ? 'amber-darken-2' : undefined"
-            :variant="filters.starredOnly ? 'flat' : 'text'"
-            density="compact"
-            icon
-            @click="toggleStarred"
-          >
-            <v-icon size="small" :icon="filters.starredOnly ? mdiStar : mdiStarOutline" />
-          </v-btn>
-        </template>
-        {{
+      <IconButton
+        label="Starred variants only"
+        :tooltip="
           filters.starredOnly
             ? 'Showing starred only — click to clear'
             : 'Show starred variants only'
-        }}
-      </v-tooltip>
+        "
+        :pressed="filters.starredOnly"
+        :color="filters.starredOnly ? 'star' : undefined"
+        :variant="filters.starredOnly ? 'flat' : 'text'"
+        :icon="filters.starredOnly ? mdiStar : mdiStarOutline"
+        @click="toggleStarred"
+      />
 
       <!-- Comment toggle -->
-      <v-tooltip location="bottom">
-        <template #activator="{ props: tooltipProps }">
-          <v-btn
-            v-bind="tooltipProps"
-            :color="filters.hasCommentOnly ? 'primary' : undefined"
-            :variant="filters.hasCommentOnly ? 'flat' : 'text'"
-            density="compact"
-            icon
-            @click="toggleCommented"
-          >
-            <v-icon
-              size="small"
-              :icon="filters.hasCommentOnly ? mdiCommentText : mdiCommentTextOutline"
-            />
-          </v-btn>
-        </template>
-        {{
+      <IconButton
+        label="Commented variants only"
+        :tooltip="
           filters.hasCommentOnly
             ? 'Showing commented only — click to clear'
             : 'Show variants with comments only'
-        }}
-      </v-tooltip>
+        "
+        :pressed="filters.hasCommentOnly"
+        :color="filters.hasCommentOnly ? 'primary' : undefined"
+        :variant="filters.hasCommentOnly ? 'flat' : 'text'"
+        :icon="filters.hasCommentOnly ? mdiCommentText : mdiCommentTextOutline"
+        @click="toggleCommented"
+      />
 
       <!-- ACMG classification chips (hidden at narrow widths, available in drawer) -->
       <v-chip-group
@@ -166,6 +151,7 @@ import { useFilterPresetStore } from '../composables/useFilterPresetStore'
 import { useDslFilterIntegration } from '../composables/useDslFilterIntegration'
 import SlimFilterToolbar from './SlimFilterToolbar.vue'
 import DslSearchBar from './DslSearchBar.vue'
+import IconButton from './common/IconButton.vue'
 import ColumnsDrawer from './ColumnsDrawer.vue'
 import FilterDrawer from './FilterDrawer.vue'
 import PresetBar from './PresetBar.vue'
@@ -665,9 +651,9 @@ const mergedActiveFiltersList = computed(() => [
 
 // Clear all: reset drawer filters + presets + DSL + notify parent to clear column filters
 function handleClearAll() {
-  handleDslClear() // Must be first — clears dslColumnFilters before filter watchers fire
   clearAllFilters()
   clearActivePresets()
+  handleDslClear() // last: emits once with the fully cleared state (one query per Clear)
   emit('clear-column-filters')
 }
 

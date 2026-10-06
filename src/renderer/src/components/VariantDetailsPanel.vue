@@ -1,6 +1,8 @@
 <template>
   <v-navigation-drawer
     :model-value="open"
+    tag="aside"
+    aria-label="Variant details"
     location="right"
     temporary
     :persistent="true"
@@ -14,10 +16,14 @@
     <v-card flat class="h-100 d-flex flex-column">
       <!-- Header with title and close button -->
       <v-toolbar color="transparent" density="compact" flat>
-        <v-toolbar-title class="text-body-large"> Variant Details </v-toolbar-title>
-        <v-btn icon size="small" @click="emit('update:open', false)">
-          <v-icon :icon="mdiClose" />
-        </v-btn>
+        <v-toolbar-title class="text-body-large">
+          <h2 ref="headingRef" tabindex="-1" class="panel-heading">Variant Details</h2>
+        </v-toolbar-title>
+        <IconButton
+          label="Close variant details"
+          :icon="mdiClose"
+          @click="emit('update:open', false)"
+        />
       </v-toolbar>
 
       <v-divider />
@@ -80,7 +86,7 @@
             </v-chip>
           </div>
 
-          <div v-if="isCached && cachedAt" class="text-body-small text-grey mb-2">
+          <div v-if="isCached && cachedAt" class="text-body-small text-muted mb-2">
             Cached from {{ cachedAt.toLocaleDateString() }}
           </div>
 
@@ -88,7 +94,7 @@
 
           <!-- Section 3: ACMG Classification -->
           <div class="acmg-section mb-4">
-            <div class="text-title-small mb-2">ACMG Classification</div>
+            <h3 class="text-title-small mb-2">ACMG Classification</h3>
 
             <!-- Quick-classify chips -->
             <div class="d-flex flex-wrap ga-1 mb-2">
@@ -109,6 +115,7 @@
                 variant="text"
                 size="small"
                 class="cursor-pointer text-medium-emphasis"
+                aria-label="Clear classification"
                 @click="handleQuickClassify(null)"
               >
                 <v-icon size="x-small" :icon="mdiClose" />
@@ -135,7 +142,7 @@
               </v-expansion-panel>
             </v-expansion-panels>
 
-            <div v-if="hasGlobalAcmg && mode === 'case'" class="text-body-small text-grey mt-1">
+            <div v-if="hasGlobalAcmg && mode === 'case'" class="text-body-small text-muted mt-1">
               Global: {{ globalAcmgClassification }}
             </div>
           </div>
@@ -177,15 +184,22 @@
           <ExternalLinksSection :variant="variant" />
         </template>
 
-        <div v-else class="text-grey text-center mt-4">Select a variant to view details</div>
+        <div v-else class="text-muted text-center mt-4">Select a variant to view details</div>
       </div>
 
-      <!-- Protein Visualization Modal -->
+      <!-- Protein Visualization Modal: mounted on first open only. Rendering it
+           closed still fetched its chunk and fired protein/ClinVar requests on
+           every variant change. -->
       <ProteinVisualizationModal
+        v-if="proteinViewerAvailable && proteinModalMounted"
         v-model="proteinModalOpen"
         :variant="variant"
         :case-id="caseId"
         :mode="mode"
+      />
+      <ProteinViewUnavailableDialog
+        v-else-if="!proteinViewerAvailable"
+        v-model="proteinModalOpen"
       />
     </v-card>
   </v-navigation-drawer>
@@ -198,6 +212,8 @@ import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
+import IconButton from './common/IconButton.vue'
+import { usePanelFocus } from '../composables/usePanelFocus'
 import AnnotationScoresSection from './AnnotationScoresSection.vue'
 import TranscriptSection from './TranscriptSection.vue'
 import ExtensionDetailsSection from './variant-details/ExtensionDetailsSection.vue'
@@ -231,12 +247,17 @@ const ProteinVisualizationModal = defineAsyncComponent({
   loader: () => import('./protein/ProteinVisualizationModal.vue'),
   ...asyncOpts
 })
+const ProteinViewUnavailableDialog = defineAsyncComponent(
+  () => import('./protein/ProteinViewUnavailableDialog.vue')
+)
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
+import { isProteinViewerAvailable } from '../utils/runtime-features'
+import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 
 interface Props {
   open: boolean
@@ -252,8 +273,14 @@ const emit = defineEmits<{
   'variant-updated': []
 }>()
 
+// Move focus into the panel on open; restore it to the originating row on close
+const headingRef = ref<HTMLElement | null>(null)
+usePanelFocus(() => props.open, headingRef)
+
 // Protein visualization modal state
 const proteinModalOpen = ref(false)
+const proteinViewerAvailable = isProteinViewerAvailable()
+const proteinModalMounted = useMountOnFirstOpen(() => proteinModalOpen.value)
 
 function openProteinView(): void {
   proteinModalOpen.value = true
@@ -502,6 +529,19 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.panel-heading {
+  font: inherit;
+  margin: 0;
+}
+
+.panel-heading:focus {
+  outline: none;
+}
+
+.panel-heading:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+}
+
 .resize-handle {
   position: absolute;
   left: 0;

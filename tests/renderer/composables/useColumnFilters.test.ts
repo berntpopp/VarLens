@@ -129,4 +129,12 @@ describe('useColumnFilters', () => {
       value: ['missense', 'nonsense']
     })
   })
+
+  it('does not replace the filter object when clearing already-empty state', () => {
+    const { columnFilters, clearAllColumnFilters, clearColumnFilter } = useColumnFilters()
+    const before = columnFilters.value
+    clearAllColumnFilters()
+    clearColumnFilter('gene_symbol')
+    expect(columnFilters.value).toBe(before)
+  })
 })

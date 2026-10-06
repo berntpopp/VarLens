@@ -334,12 +334,23 @@ describe('CaseView — Shortlist tab integration', () => {
     expect(wrapper.findComponent({ name: 'ShortlistPanelStub' }).exists()).toBe(true)
   })
 
-  it('ShortlistPanel is NOT mounted when a per-type tab is active', async () => {
+  it('ShortlistPanel stays mounted but hidden after the first visit when a per-type tab is active', async () => {
     typeCountsMock.mockResolvedValue({ snv: 10, sv: 3 })
     const { wrapper } = mountCaseView(1)
     await flushPromises()
     const vm = wrapper.vm as unknown as { selectedVariantType: string }
     vm.selectedVariantType = 'sv'
+    await flushPromises()
+    const panel = wrapper.findComponent({ name: 'ShortlistPanelStub' })
+    expect(panel.exists()).toBe(true)
+    expect((panel.element as HTMLElement).style.display).toBe('none')
+  })
+
+  it('ShortlistPanel is NOT mounted on cases where the Shortlist was never opened', async () => {
+    typeCountsMock.mockResolvedValue({ snv: 10, sv: 3 })
+    const { useSettingsStore } = await import('../../../src/renderer/src/stores/settingsStore')
+    useSettingsStore().defaultCaseTab = 'snv'
+    const { wrapper } = mountCaseView(1)
     await flushPromises()
     expect(wrapper.findComponent({ name: 'ShortlistPanelStub' }).exists()).toBe(false)
   })

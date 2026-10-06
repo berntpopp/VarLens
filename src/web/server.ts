@@ -49,6 +49,8 @@ import { serializeRequestForTechnicalLog } from './server/request-logging'
 import { registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
+import { registerResponseCompression } from './server/compression'
+import { registerRobotsTxt } from './server/robots'
 import {
   type AppMetrics,
   createAppMetricsFromEnv,
@@ -130,6 +132,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id)
   })
+  // Registered on the root context before any route so every buffered text
+  // reply (JSON API, login page) is eligible; static streams are skipped.
+  registerResponseCompression(app)
   registerRequestMetrics(app, metrics)
   await registerWebRateLimit(app)
 
@@ -181,6 +186,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       }
     })
   }
+  registerRobotsTxt(app)
   registerLoginRoute(app, { platformAuthEnabled: platformIdentity !== undefined })
   registerPageGate(app, {
     appPathPrefix,

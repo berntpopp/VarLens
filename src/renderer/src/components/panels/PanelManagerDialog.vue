@@ -11,6 +11,7 @@
         <span>Gene Panels</span>
         <v-spacer />
         <v-btn
+          aria-label="Close"
           :icon="mdiClose"
           variant="text"
           size="small"
@@ -104,6 +105,7 @@
               <td>
                 <div class="d-flex ga-1">
                   <v-btn
+                    aria-label="Edit"
                     size="small"
                     variant="text"
                     color="primary"
@@ -114,6 +116,7 @@
                     <v-tooltip activator="parent" location="top">Edit</v-tooltip>
                   </v-btn>
                   <v-btn
+                    aria-label="Copy"
                     size="small"
                     variant="text"
                     :icon="mdiContentCopy"
@@ -123,6 +126,7 @@
                     <v-tooltip activator="parent" location="top">Copy</v-tooltip>
                   </v-btn>
                   <v-btn
+                    aria-label="Export"
                     size="small"
                     variant="text"
                     color="info"
@@ -133,6 +137,7 @@
                     <v-tooltip activator="parent" location="top">Export</v-tooltip>
                   </v-btn>
                   <v-btn
+                    aria-label="Delete"
                     size="small"
                     variant="text"
                     color="error"

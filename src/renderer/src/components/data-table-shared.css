@@ -130,6 +130,34 @@
   overflow-x: auto;
 }
 
+/* Fixed layout: every column gets its width from variant-table/column-widths.ts,
+   so swapping rows during a load can never reflow (jitter) the columns. */
+.table-container .v-table__wrapper > table {
+  table-layout: fixed;
+}
+
+/* Stale-while-revalidate: rows stay visible while a refetch runs and are
+   dimmed (after a short delay, see useTableLoadingState) instead of being
+   replaced by a skeleton. */
+.table-container .v-data-table tbody {
+  transition: opacity 150ms ease-out;
+}
+
+.table-container .table--stale tbody {
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-container .v-data-table tbody {
+    transition: none;
+  }
+}
+
+/* First-load skeleton row (TableSkeletonRows) supplies its own row geometry */
+.table-container .v-data-table-rows-loading > td {
+  padding: 0 !important;
+}
+
 /* Style bottom scrollbar to match top scrollbar */
 .table-container .v-table__wrapper::-webkit-scrollbar {
   height: 10px;
@@ -170,7 +198,7 @@
 .table-container .variant-table--sticky th:nth-child(2),
 .table-container .variant-table--sticky td:nth-child(2) {
   position: sticky;
-  left: 100px;
+  left: 108px; /* = ANNOTATIONS_COLUMN_WIDTH in variant-table/column-widths.ts */
   z-index: 2;
   background-color: rgb(var(--v-theme-surface));
   box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.12);

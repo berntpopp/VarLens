@@ -1,5 +1,9 @@
 <template>
-  <v-app>
+  <!-- During a Case/Cohort switch the sidebar collapses in the same tick the
+       new view mounts; animating v-main's padding there shifted the incoming
+       view sideways (CLS ~0.3). Collapse instantly instead. -->
+  <v-app :class="{ 'shell--instant-layout': transitioning }">
+    <A11yShell />
     <AppToolbar
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
       @show-database-overview="dialogHostRef?.showDatabaseOverview()"
@@ -17,7 +21,12 @@
       @database-error="handleDatabaseError"
     />
 
-    <v-navigation-drawer v-model="sidebarOpen" :width="sidebarWidth" :scrim="tier === 'narrow'">
+    <v-navigation-drawer
+      v-model="sidebarOpen"
+      aria-label="Cases sidebar"
+      :width="sidebarWidth"
+      :scrim="tier === 'narrow'"
+    >
       <AppSidebar
         :case-count="caseCount"
         @import-click="dialogHostRef?.showImportDialog()"
@@ -28,6 +37,7 @@
           @case-selected="handleCaseSelected"
           @case-deleted="handleCaseDeleted"
           @cases-loaded="handleCasesLoaded"
+          @cases-load-failed="markCasesLoadFailed"
           @edit-case="handleEditCase"
         />
       </AppSidebar>
@@ -38,7 +48,8 @@
       />
     </v-navigation-drawer>
 
-    <v-main>
+    <v-main id="main-content" tabindex="-1">
+      <h1 class="visually-hidden" data-testid="view-heading">{{ viewTitle.heading }}</h1>
       <router-view v-slot="{ Component }">
         <keep-alive :max="2">
           <component :is="Component" />
@@ -49,6 +60,7 @@
     <ImportStatusBar @expand="handleShowImportProgress" @cancel="handleCancelImport" />
 
     <VariantDetailsPanel
+      v-if="detailsPanelMounted"
       v-model:open="panelOpen"
       :variant="selectedPanelVariant"
       :case-id="activeTab === 'case' ? selectedCaseId : null"
@@ -71,18 +83,21 @@
       @metadata-changed="handleMetadataChanged"
     />
 
-    <KeyboardShortcutsDialog v-model="showKeyboardHelp" />
+    <KeyboardShortcutsDialog v-if="keyboardHelpMounted" v-model="showKeyboardHelp" />
 
-    <ViewTransitionOverlay :model-value="transitioning" />
+    <ViewTransitionOverlay v-if="transitionOverlayMounted" :model-value="transitioning" />
   </v-app>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, provide, defineAsyncComponent, toRef } from 'vue'
 import { useRouter } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import AppToolbar from './components/AppToolbar.vue'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
+import A11yShell from './components/common/A11yShell.vue'
+import { useViewTitle } from './composables/useViewTitle'
 import AppFooter from './components/AppFooter.vue'
 import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'
@@ -92,6 +107,7 @@ import { useCaseMetadata } from './composables/useCaseMetadata'
 import { useColumnPreferences } from './composables/useColumnPreferences'
 import { useFilterPreferences } from './composables/useFilterPreferences'
 import { useResponsiveLayout } from './composables/useResponsiveLayout'
+import { useMountOnFirstOpen } from './composables/useMountOnFirstOpen'
 import { logService } from './services/LogService'
 import { AppStateKey, createAppState } from './composables/useAppState'
 import { useShellNavigation } from './composables/useShellNavigation'
@@ -129,6 +145,7 @@ const variantColumnMeta = useVariantColumnMeta()
 // Create and provide shared app state for child components
 const appState = createAppState()
 provide(AppStateKey, appState)
+const viewTitle = useViewTitle(appState)
 
 const {
   selectedCaseId,
@@ -141,6 +158,7 @@ const {
   variantTableRef,
   filterToolbarRef,
   setCaseCount,
+  markCasesLoadFailed,
   incrementDataGeneration,
   closeSidebar,
   clearSelectedCase,
@@ -158,6 +176,15 @@ const transitioning = ref(false)
 
 // Responsive layout
 const { tier } = useResponsiveLayout()
+// Same signal v-navigation-drawer uses to switch to a temporary overlay.
+const { mobile: sidebarIsOverlay } = useDisplay()
+
+// Heavy overlays mount on first open only: rendering an async component with
+// v-model=false still downloads its chunk (and runs its fetch watchers) on
+// first paint, which taxed every cold Home load.
+const detailsPanelMounted = useMountOnFirstOpen(() => panelOpen.value)
+const keyboardHelpMounted = useMountOnFirstOpen(() => showKeyboardHelp.value)
+const transitionOverlayMounted = useMountOnFirstOpen(() => transitioning.value)
 
 // Database store
 const databaseStore = useDatabaseStore()
@@ -231,7 +258,10 @@ const handleCaseSelected = (
   createdAt: number
 ): void => {
   selectCase({ caseId, caseName, variantCount, createdAt })
-  closeSidebar()
+  // Docked (desktop) sidebar stays put: collapsing it animated the whole
+  // case view sideways right after open (CLS ~0.19). Only dismiss it when it
+  // is a temporary overlay covering the content (narrow/mobile widths).
+  if (sidebarIsOverlay.value) closeSidebar()
 }
 
 const handleEditCase = (
@@ -390,6 +420,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.shell--instant-layout :deep(.v-main),
+.shell--instant-layout :deep(.v-navigation-drawer) {
+  transition: none !important;
+}
+
 :deep(.v-main) {
   --v-layout-top: 0px !important;
   padding-top: 48px !important;

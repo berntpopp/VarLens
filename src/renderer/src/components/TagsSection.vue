@@ -1,16 +1,23 @@
 <template>
   <div class="tags-section">
     <div class="d-flex align-center justify-space-between mb-2">
-      <span class="text-title-small">Tags</span>
+      <h3 class="text-title-small">Tags</h3>
       <v-menu v-model="menuOpen" :close-on-content-click="false" location="bottom end">
         <template #activator="{ props: menuProps }">
-          <v-btn v-bind="menuProps" icon size="x-small" variant="text" :loading="loading">
+          <v-btn
+            aria-label="Add tag"
+            v-bind="menuProps"
+            icon
+            size="x-small"
+            variant="text"
+            :loading="loading"
+          >
             <v-icon size="small" :icon="mdiPlus" />
           </v-btn>
         </template>
         <v-card min-width="200" max-width="280">
           <v-card-text class="pa-2">
-            <div v-if="availableTags.length === 0" class="text-body-small text-grey pa-2">
+            <div v-if="availableTags.length === 0" class="text-body-small text-muted pa-2">
               No tags available. Create tags in Settings.
             </div>
             <v-list v-else density="compact" class="pa-0">
@@ -41,7 +48,9 @@
 
     <!-- Assigned tags display -->
     <div class="tags-container">
-      <div v-if="assignedTags.length === 0" class="text-body-small text-grey">No tags assigned</div>
+      <div v-if="assignedTags.length === 0" class="text-body-small text-muted">
+        No tags assigned
+      </div>
       <div v-else class="d-flex flex-wrap ga-1">
         <v-chip
           v-for="tag in assignedTags"
