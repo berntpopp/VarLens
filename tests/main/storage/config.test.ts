@@ -149,7 +149,7 @@ describe('buildPostgresPoolConfig', () => {
       query_timeout: 30000,
       lock_timeout: 5000,
       idle_in_transaction_session_timeout: 10000,
-      max: 4
+      max: 10
     })
   })
 
