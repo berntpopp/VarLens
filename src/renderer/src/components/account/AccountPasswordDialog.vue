@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="open" max-width="420">
+  <v-dialog v-model="open" max-width="420" aria-label="Change your password">
     <v-card>
       <v-card-title>Change your password</v-card-title>
       <v-card-text>

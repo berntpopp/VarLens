@@ -17,8 +17,9 @@
           </v-list-item-title>
           <v-list-item-subtitle>{{ roleLabel }}</v-list-item-subtitle>
         </v-list-item>
-        <v-divider class="my-1" />
+        <!-- No v-divider: an <hr> inside role=list fails axe aria-required-children -->
         <v-list-item
+          class="account-menu__group-start"
           :prepend-icon="mdiLockReset"
           title="Change password"
           @click="passwordOpen = true"
@@ -30,20 +31,19 @@
           data-testid="open-user-management"
           @click="usersOpen = true"
         />
-        <v-divider class="my-1" />
-        <v-list-subheader>Theme</v-list-subheader>
+        <v-list-subheader class="account-menu__group-start">Theme</v-list-subheader>
         <v-list-item
           v-for="opt in THEME_PREFERENCE_OPTIONS"
           :key="opt.value"
           :title="opt.label"
           :active="settings.themePreference === opt.value"
-          :aria-checked="settings.themePreference === opt.value"
-          role="menuitemradio"
+          :aria-current="settings.themePreference === opt.value ? 'true' : undefined"
+          :aria-label="`Theme: ${opt.label}`"
           :prepend-icon="settings.themePreference === opt.value ? mdiCheck : mdiBlankIcon"
           @click="settings.themePreference = opt.value"
         />
-        <v-divider class="my-1" />
         <v-list-item
+          class="account-menu__group-start"
           :prepend-icon="mdiLogout"
           title="Sign out"
           data-testid="sign-out"
@@ -54,7 +54,7 @@
 
     <AccountPasswordDialog v-if="passwordOpen" v-model="passwordOpen" />
 
-    <v-dialog v-model="usersOpen" max-width="900" scrollable>
+    <v-dialog v-model="usersOpen" max-width="900" scrollable aria-label="User management">
       <v-card>
         <div class="d-flex justify-end pa-1">
           <IconButton label="Close user management" :icon="mdiClose" @click="usersOpen = false" />
@@ -122,3 +122,9 @@ async function signOut(): Promise<void> {
   else window.location.reload()
 }
 </script>
+
+<style scoped>
+.account-menu__group-start {
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+</style>
