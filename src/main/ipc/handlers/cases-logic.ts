@@ -47,6 +47,11 @@ export function releaseDeleteLock(): void {
   deleteInProgress = false
 }
 
+/** Delete worker outcome; `summaryStale` = a cancelled rebuild left the cohort summary stale. */
+export interface SqliteDeleteWorkerResult extends CaseDeleteJobResult {
+  summaryStale: boolean
+}
+
 /** Hooks for a running delete worker. */
 export interface DeleteWorkerHooks {
   onProgress?: (progress: CaseDeleteProgress) => void
@@ -64,7 +69,7 @@ export interface DeleteWorkerHooks {
 export function runDeleteWorker(
   request: Extract<DeleteWorkerRequest, { type: 'start' }>,
   hooks: DeleteWorkerHooks = {}
-): Promise<CaseDeleteJobResult> {
+): Promise<SqliteDeleteWorkerResult> {
   return new Promise((res, rej) => {
     const workerPath = hooks.workerPath ?? resolve(__dirname, 'delete-worker.js')
     const worker = new Worker(workerPath)
@@ -87,7 +92,9 @@ export function runDeleteWorker(
       if (msg.type === 'progress') {
         hooks.onProgress?.({ phase: msg.phase, current: msg.current, total: msg.total })
       } else if (msg.type === 'complete') {
-        finish(() => res({ deleted: msg.deleted, cancelled: msg.cancelled }))
+        finish(() =>
+          res({ deleted: msg.deleted, cancelled: msg.cancelled, summaryStale: msg.summaryStale })
+        )
       } else {
         finish(() => rej(new Error(msg.error)))
       }
@@ -192,9 +199,9 @@ export function startSqliteCaseDeleteJob(
           registerCancel: (cancel) => ctx.registerCancel(cancel)
         })
         callbacks.onDeleted?.({ deleted: result.deleted })
-        callbacks.onCohortStale?.({ is_stale: false })
+        callbacks.onCohortStale?.({ is_stale: result.summaryStale })
         if (result.cancelled) throw new CaseDeleteCancelledError(result.deleted)
-        return result
+        return { deleted: result.deleted, cancelled: result.cancelled }
       } catch (error) {
         if (!(error instanceof CaseDeleteCancelledError)) {
           mainLogger.error(

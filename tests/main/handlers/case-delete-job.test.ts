@@ -85,10 +85,30 @@ describe('SQLite case delete background job', () => {
 
     const phases = snapshots.map((job) => job.progress?.message).filter(Boolean)
     expect(phases).toContain('deleting')
-    expect(phases).toContain('rebuilding-search-index')
+    // FTS is maintained per row now: no global search-index rebuild phase.
+    expect(phases).not.toContain('rebuilding-search-index')
+    // A fresh database starts with a stale summary → one full rebuild.
     expect(phases).toContain('rebuilding-cohort-summary')
     expect(snapshots.at(-1)?.status).toBe('completed')
     expect(jobRunner.get(handle.id)?.status).toBe('completed')
+  })
+
+  it('patches a current cohort summary incrementally (no rebuild phase)', async () => {
+    seed(db, 3)
+    db.cohortSummary.rebuild()
+    const job = startSqliteCaseDeleteJob({ mode: 'ids', ids: [2] }, () => db, {}, { workerPath })
+    await job.result
+
+    const phases = snapshots.map((s) => s.progress?.message).filter(Boolean)
+    expect(phases).not.toContain('rebuilding-cohort-summary')
+    expect(db.cohortSummary.getStatus().is_stale).toBe(false)
+    const shared = db.database
+      .prepare('SELECT carrier_count FROM cohort_variant_summary WHERE pos = 100')
+      .get() as { carrier_count: number }
+    expect(shared.carrier_count).toBe(2)
+    expect(
+      db.database.prepare('SELECT COUNT(*) AS c FROM cohort_variant_summary WHERE pos = 1002').get()
+    ).toEqual({ c: 0 })
   })
 
   it('delete-all clears the frequency table', async () => {
