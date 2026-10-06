@@ -70,18 +70,7 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="lookupsOpen" max-width="720" scrollable aria-label="External lookups">
-      <v-card>
-        <div class="d-flex justify-end pa-1">
-          <IconButton
-            label="Close external lookups"
-            :icon="mdiClose"
-            @click="lookupsOpen = false"
-          />
-        </div>
-        <ExternalLookupsSettings v-if="lookupsOpen" />
-      </v-card>
-    </v-dialog>
+    <ExternalLookupsDialog v-if="lookupsOpen" v-model="lookupsOpen" />
   </template>
 </template>
 
@@ -112,7 +101,7 @@ import { logService } from '../../services/LogService'
 // Dialog bodies load on first open so the toolbar chunk stays small.
 const AccountPasswordDialog = defineAsyncComponent(() => import('./AccountPasswordDialog.vue'))
 const UserManagement = defineAsyncComponent(() => import('../UserManagement.vue'))
-const ExternalLookupsSettings = defineAsyncComponent(() => import('./ExternalLookupsSettings.vue'))
+const ExternalLookupsDialog = defineAsyncComponent(() => import('./ExternalLookupsDialog.vue'))
 
 /** Empty path keeps list items aligned without drawing an icon. */
 const mdiBlankIcon = 'M0 0'

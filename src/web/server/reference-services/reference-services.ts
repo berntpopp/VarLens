@@ -12,14 +12,13 @@
  *     with the user, the service and the identifier BEFORE the outbound call.
  *     If the audit write fails the lookup does not happen (fail closed).
  *
- * Responses are cached process-wide in an in-memory SQLite `api_cache`
- * (the desktop ApiCache class), shared across users, so repeated lookups of
- * the same variant or gene do not leave the server again.
+ * Responses are cached process-wide in a bounded LRU + TTL cache
+ * (bounded-api-cache.ts, the desktop ApiCache interface), shared across
+ * users, so repeated lookups of the same variant or gene do not leave the
+ * server again.
  */
-import Database from 'better-sqlite3-multiple-ciphers'
-
 import { AlphaFoldApiClient } from '../../../main/services/api/AlphaFoldApiClient'
-import { ApiCache } from '../../../main/services/api/ApiCache'
+import type { ApiCache } from '../../../main/services/api/ApiCache'
 import { EnsemblApiClient } from '../../../main/services/api/EnsemblApiClient'
 import { GnomadApiClient } from '../../../main/services/api/GnomadApiClient'
 import { InterProApiClient } from '../../../main/services/api/InterProApiClient'
@@ -37,6 +36,7 @@ import {
   type ReferenceServicePolicyUpdate,
   type ReferenceServicesStatus
 } from '../../../shared/ipc/domains/reference-services'
+import { BoundedApiCache } from './bounded-api-cache'
 import type { ExternalLookupPolicySource } from './policy-store'
 
 export interface ExternalLookupAuditEvent {
@@ -79,6 +79,8 @@ export interface ReferenceClients {
 export interface WebReferenceServicesOptions {
   policy: ExternalLookupPolicySource
   audit: ExternalLookupAuditSink
+  /** Shared response cache (default: a BoundedApiCache with default limits). */
+  cache?: ApiCache
   /** Test seam: replace some or all clients. */
   clients?: Partial<ReferenceClients>
 }
@@ -87,21 +89,6 @@ export interface LookupContext {
   username: string | null
   method: string
   identifier: string
-}
-
-function createMemoryApiCache(): ApiCache {
-  const db = new Database(':memory:')
-  db.exec(`
-    CREATE TABLE api_cache (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cache_key TEXT NOT NULL UNIQUE,
-      response_data TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      expires_at INTEGER NOT NULL
-    );
-    CREATE INDEX idx_api_cache_expires ON api_cache(expires_at);
-  `)
-  return new ApiCache(db)
 }
 
 function memo<T>(create: () => T): () => T {
@@ -132,7 +119,7 @@ export class WebReferenceServices {
   constructor(options: WebReferenceServicesOptions) {
     this.policy = options.policy
     this.audit = options.audit
-    const getCache = memo(createMemoryApiCache)
+    const getCache = memo(() => options.cache ?? new BoundedApiCache())
     this.clients = { ...defaultClients(getCache), ...options.clients }
   }
 

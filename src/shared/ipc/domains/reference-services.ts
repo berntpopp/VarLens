@@ -101,6 +101,33 @@ export const REFERENCE_SERVICE_CATALOG: Record<ReferenceServiceId, ReferenceServ
   }
 }
 
+/** Admin UI groups: one switch per group turns all of its services on or off. */
+export const REFERENCE_SERVICE_GROUPS: ReadonlyArray<{
+  id: string
+  label: string
+  description: string
+  services: readonly ReferenceServiceId[]
+}> = [
+  {
+    id: 'protein-view',
+    label: 'Protein view sources',
+    description: 'Protein structure, domains, ClinVar lollipop and gnomAD variant tracks.',
+    services: ['protein', 'gnomad']
+  },
+  {
+    id: 'variant-annotation',
+    label: 'Variant annotation',
+    description: 'On-demand VEP, MyVariant.info and SpliceAI scores in the variant details.',
+    services: ['vep', 'myvariant', 'spliceai']
+  },
+  {
+    id: 'gene-panels',
+    label: 'Gene panel sources',
+    description: 'Import panels from PanelApp and build panels from STRING networks.',
+    services: ['panelapp', 'stringdb']
+  }
+]
+
 export function isReferenceServiceId(value: unknown): value is ReferenceServiceId {
   return typeof value === 'string' && (REFERENCE_SERVICE_IDS as readonly string[]).includes(value)
 }

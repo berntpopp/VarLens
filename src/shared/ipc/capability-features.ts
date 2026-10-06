@@ -17,12 +17,12 @@ export const CAPABILITY_FEATURES = {
   proteinViewer: {
     label: 'protein view',
     unavailableInWeb:
-      'Protein view (UniProt, InterPro, AlphaFold, Ensembl) lookups are turned off on this server. An administrator can enable them under External lookups.'
+      'Protein view (UniProt, InterPro, AlphaFold, Ensembl) lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   gnomadVariants: {
     label: 'gnomAD and ClinVar variant tracks',
     unavailableInWeb:
-      'gnomAD (population variants and ClinVar) lookups are turned off on this server. An administrator can enable them under External lookups.'
+      'gnomAD (population variants and ClinVar) lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   hpoSearch: {
     label: 'HPO term search',
@@ -31,27 +31,27 @@ export const CAPABILITY_FEATURES = {
   vepEnrichment: {
     label: 'Ensembl VEP annotation',
     unavailableInWeb:
-      'Ensembl VEP lookups are turned off on this server. An administrator can enable them under External lookups.'
+      'Ensembl VEP lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   myvariantEnrichment: {
     label: 'MyVariant.info annotation',
     unavailableInWeb:
-      'MyVariant.info lookups are turned off on this server. An administrator can enable them under External lookups.'
+      'MyVariant.info lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   spliceaiEnrichment: {
     label: 'SpliceAI scores',
     unavailableInWeb:
-      'SpliceAI Lookup lookups are turned off on this server. An administrator can enable them under External lookups.'
+      'SpliceAI Lookup lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   panelAppImport: {
     label: 'PanelApp import',
     unavailableInWeb:
-      'PanelApp (UK and Australia) lookups are turned off on this server. An administrator can enable them under External lookups.'
+      'PanelApp (UK and Australia) lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   stringDbPanels: {
     label: 'StringDB panel generation',
     unavailableInWeb:
-      'STRING lookups are turned off on this server. An administrator can enable them under External lookups.'
+      'STRING lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   panelBedExport: {
     label: 'panel BED export',
