@@ -21,7 +21,12 @@
       @database-error="handleDatabaseError"
     />
 
-    <v-navigation-drawer v-model="sidebarOpen" :width="sidebarWidth" :scrim="tier === 'narrow'">
+    <v-navigation-drawer
+      v-model="sidebarOpen"
+      aria-label="Cases sidebar"
+      :width="sidebarWidth"
+      :scrim="tier === 'narrow'"
+    >
       <AppSidebar
         :case-count="caseCount"
         @import-click="dialogHostRef?.showImportDialog()"

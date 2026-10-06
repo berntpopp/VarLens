@@ -27,29 +27,33 @@ export function usePanelFocus(
 ): void {
   let opener: HTMLElement | null = null
 
-  watch(isOpen, async (open, wasOpen) => {
-    if (open && !wasOpen) {
-      opener = focusableOpener()
-      await nextTick()
-      heading.value?.focus({ preventScroll: true })
-      return
-    }
-    if (!open && wasOpen) {
-      const row = document.querySelector<HTMLElement>(fallbackSelector)
-      // A click on a (non-focusable) row leaves focus on its container, e.g.
-      // <main>; prefer the row itself in that case.
-      const openerUsable = opener?.isConnected === true && !(row && opener.contains(row))
-      const target = openerUsable ? opener : (row ?? opener)
-      opener = null
-      // Closing clears the table selection, and the row re-render that drops
-      // its tabindex lands after this tick; focus once rendering has settled and
-      // keep the originating row programmatically focusable.
-      await nextTick()
-      await nextFrame()
-      if (target && target === row && !target.hasAttribute('tabindex')) {
-        target.setAttribute('tabindex', '-1')
+  watch(
+    isOpen,
+    async (open, wasOpen) => {
+      if (open && wasOpen !== true) {
+        opener = focusableOpener()
+        await nextTick()
+        heading.value?.focus({ preventScroll: true })
+        return
       }
-      target?.focus({ preventScroll: true })
-    }
-  })
+      if (!open && wasOpen === true) {
+        const row = document.querySelector<HTMLElement>(fallbackSelector)
+        // A click on a (non-focusable) row leaves focus on its container, e.g.
+        // <main>; prefer the row itself in that case.
+        const openerUsable = opener?.isConnected === true && !(row && opener.contains(row))
+        const target = openerUsable ? opener : (row ?? opener)
+        opener = null
+        // Closing clears the table selection, and the row re-render that drops
+        // its tabindex lands after this tick; focus once rendering has settled and
+        // keep the originating row programmatically focusable.
+        await nextTick()
+        await nextFrame()
+        if (target && target === row && !target.hasAttribute('tabindex')) {
+          target.setAttribute('tabindex', '-1')
+        }
+        target?.focus({ preventScroll: true })
+      }
+    },
+    { immediate: true }
+  ) // the panel is lazy-mounted, so it can mount already open
 }

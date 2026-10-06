@@ -1,6 +1,8 @@
 <template>
   <v-navigation-drawer
     :model-value="open"
+    tag="aside"
+    aria-label="Variant details"
     location="right"
     temporary
     :persistent="true"

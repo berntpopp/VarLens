@@ -10,6 +10,14 @@ import {
 } from '../utils/mergeTranscripts'
 import { EMPTY_VALUE_PLACEHOLDER } from '../utils/formatters'
 import IconButton from './common/IconButton.vue'
+
+/** WCAG 2.1.1: Vuetify's horizontally scrollable table wrapper must be keyboard-reachable. */
+function makeScrollRegionFocusable(vnode: { el: unknown }): void {
+  const wrapper = (vnode.el as HTMLElement | null)?.querySelector('.v-table__wrapper')
+  wrapper?.setAttribute('tabindex', '0')
+  wrapper?.setAttribute('role', 'region')
+  wrapper?.setAttribute('aria-label', 'Transcripts')
+}
 import {
   mdiCheckAll,
   mdiChevronDown,
@@ -238,6 +246,7 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
         :items-per-page="-1"
         hide-default-footer
         class="transcript-table"
+        @vue:mounted="makeScrollRegionFocusable"
       >
         <template #[`item.transcript_id`]="{ item }">
           <span class="text-body-medium">{{ item.transcript_id }}</span>
