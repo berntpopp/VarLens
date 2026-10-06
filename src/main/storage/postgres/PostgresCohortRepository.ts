@@ -11,6 +11,7 @@ import type {
   GeneBurden
 } from '../../../shared/types/cohort'
 import { mainLogger } from '../../services/MainLogger'
+import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
 import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
 import {
   prepareCohortRead,
@@ -878,12 +879,10 @@ export class PostgresCohortRepository {
   }
 
   private buildOrderBy(params: CohortSearchParams): string {
-    const sortColumn =
-      params.sort_by !== undefined && SORTABLE_COLUMNS[params.sort_by] !== undefined
-        ? SORTABLE_COLUMNS[params.sort_by]
-        : 'carrier_count'
-    const sortOrder = params.sort_order === 'asc' ? 'ASC' : 'DESC'
-    return `ORDER BY ${sortColumn} ${sortOrder} NULLS LAST, chr ASC, pos ASC, ref ASC, alt ASC`
+    const known = SORTABLE_COLUMNS[params.sort_by ?? ''] !== undefined
+    const sortKey = known ? (params.sort_by as string) : 'carrier_count' // 'v' alias: GROUP BY v.chr
+    const dir = params.sort_order ?? 'desc'
+    return cohortOrderByClause(sortKey, SORTABLE_COLUMNS[sortKey], dir, 'v', 'postgres')
   }
 
   private buildOptionalLimitOffset(

@@ -375,7 +375,8 @@ export class VariantRepository extends BaseRepository {
   getAllVariantsForExport(filter: VariantFilter): Variant[] {
     const useTempTable = this.filterBuilder.preparePanelIntervals(filter)
     try {
-      const query = this.filterBuilder.build(filter).orderBy('chr', 'asc').orderBy('pos', 'asc')
+      // Natural genomic order (1..22, X, Y, MT, then pos) — same as the table.
+      const query = this.filterBuilder.applySort(this.filterBuilder.build(filter))
       return this.execAll<Variant>(query)
     } finally {
       if (useTempTable) this.filterBuilder.cleanupPanelIntervalsTable()
@@ -428,9 +429,7 @@ export class VariantRepository extends BaseRepository {
   ): { sql: string; parameters: readonly unknown[] } {
     // Force OR chain for compiled queries — temp tables don't transfer to worker threads
     const query = this.filterBuilder
-      .build(filter, { forceOrChain: true })
-      .orderBy('chr', 'asc')
-      .orderBy('pos', 'asc')
+      .applySort(this.filterBuilder.build(filter, { forceOrChain: true }))
       .limit(limit)
     return query.compile()
   }
