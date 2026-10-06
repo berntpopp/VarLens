@@ -4,14 +4,15 @@
  * Production workers are bundled by electron-vite; Vitest runs the sources
  * directly and cannot spawn a `.ts` file as a worker thread. Tests that need
  * the *real* worker (real SQLite connection, real message protocol) bundle it
- * with esbuild (Vite's own bundler dependency) into `tests/.cache/` so that
+ * with esbuild (Vite's own bundler dependency) into `node_modules/.cache/` so that
  * `require('better-sqlite3-multiple-ciphers')` resolves from the project's
  * node_modules.
  */
 import { mkdirSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-const OUT_DIR = resolve(process.cwd(), 'tests/.cache/bundled-workers')
+// Inside node_modules: ignored by lint/format, and bare imports still resolve.
+const OUT_DIR = resolve(process.cwd(), 'node_modules/.cache/varlens-bundled-workers')
 const built = new Map<string, string>()
 
 export async function bundleWorker(entry: string): Promise<string> {
