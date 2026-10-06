@@ -5,11 +5,11 @@
  * Used by CaseCommentsTab for comment CRUD.
  */
 
-import { ref } from 'vue'
 import type { CaseComment, CommentCategory } from '../../../shared/types/api'
 import { useApiService } from './useApiService'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { createPerCaseCache } from './per-case-cache'
 import {
   mdiCalendarCheck,
   mdiFamilyTree,
@@ -19,9 +19,8 @@ import {
   mdiStethoscope
 } from '@mdi/js'
 
-// Cache comments by caseId
-const commentsCache = ref<Map<number, CaseComment[]>>(new Map())
-const loadingStates = ref<Map<number, boolean>>(new Map())
+// Comments by caseId — bounded LRU. Lists are replaced, never mutated in place.
+const commentsCache = createPerCaseCache<CaseComment[]>()
 
 export const COMMENT_CATEGORIES: CommentCategory[] = [
   'Clinical Note',
@@ -55,12 +54,10 @@ export function useCaseComments() {
 
   async function loadComments(caseId: number): Promise<void> {
     if (!api) return
-    if (loadingStates.value.get(caseId) === true) return
-
-    loadingStates.value.set(caseId, true)
     try {
-      const comments = unwrapIpcResult(await api.caseComments.list(caseId))
-      commentsCache.value.set(caseId, comments)
+      await commentsCache.load(caseId, async () =>
+        unwrapIpcResult(await api.caseComments.list(caseId))
+      )
     } catch (error) {
       logService.error(
         'Failed to load comments: ' +
@@ -71,17 +68,15 @@ export function useCaseComments() {
               : String(error)),
         'comments'
       )
-    } finally {
-      loadingStates.value.set(caseId, false)
     }
   }
 
   function getComments(caseId: number): CaseComment[] {
-    return commentsCache.value.get(caseId) ?? []
+    return commentsCache.get(caseId) ?? []
   }
 
   function isLoading(caseId: number): boolean {
-    return loadingStates.value.get(caseId) ?? false
+    return commentsCache.isLoading(caseId)
   }
 
   async function createComment(
@@ -93,9 +88,7 @@ export function useCaseComments() {
     const comment = unwrapIpcResult(await api.caseComments.create(caseId, category, content))
 
     // Add to cache (newest first)
-    const cached = commentsCache.value.get(caseId) ?? []
-    cached.unshift(comment)
-    commentsCache.value.set(caseId, cached)
+    commentsCache.set(caseId, [comment, ...(commentsCache.get(caseId) ?? [])])
 
     return comment
   }
@@ -105,13 +98,13 @@ export function useCaseComments() {
     const updated = unwrapIpcResult(await api.caseComments.update(commentId, content))
 
     // Update in cache
-    const cached = commentsCache.value.get(caseId)
+    const cached = commentsCache.get(caseId)
     if (cached) {
       const index = cached.findIndex((c) => c.id === commentId)
       if (index !== -1) {
         const updatedList = [...cached]
         updatedList[index] = updated
-        commentsCache.value.set(caseId, updatedList)
+        commentsCache.set(caseId, updatedList)
       }
     }
   }
@@ -121,9 +114,9 @@ export function useCaseComments() {
     unwrapIpcResult(await api.caseComments.delete(commentId))
 
     // Remove from cache
-    const cached = commentsCache.value.get(caseId)
+    const cached = commentsCache.get(caseId)
     if (cached) {
-      commentsCache.value.set(
+      commentsCache.set(
         caseId,
         cached.filter((c) => c.id !== commentId)
       )
@@ -131,8 +124,12 @@ export function useCaseComments() {
   }
 
   function clearCache(): void {
-    commentsCache.value.clear()
-    loadingStates.value.clear()
+    commentsCache.clear()
+  }
+
+  /** Drop one case's comments (e.g. after the case is deleted). */
+  function invalidateCase(caseId: number): void {
+    commentsCache.invalidate(caseId)
   }
 
   return {
@@ -142,6 +139,7 @@ export function useCaseComments() {
     createComment,
     updateComment,
     deleteComment,
-    clearCache
+    clearCache,
+    invalidateCase
   }
 }
