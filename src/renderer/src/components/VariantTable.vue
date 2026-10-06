@@ -212,20 +212,9 @@
         <EmptyPlaceholder v-else />
       </template>
 
-      <!-- Dynamic virtual link columns from store -->
-      <template
-        v-for="link in linksStore.virtualLinks"
-        :key="link.id"
-        #[`item._link_${link.id}`]="{ item }"
-      >
-        <ExternalLinkCell
-          v-if="item.render.links[`_link_${link.id}`]"
-          :url="item.render.links[`_link_${link.id}`]!"
-          label="View"
-          :aria-label="`View in ${link.name} (opens in a new tab)`"
-          @click="openExternalLink"
-        />
-        <span v-else class="text-muted">--</span>
+      <!-- Merged Links column: one icon link per configured link-out -->
+      <template #[`item._links`]="{ item }">
+        <LinkOutsCell :links="linkOuts" :urls="item.render.links" @click="openExternalLink" />
       </template>
 
       <!-- First-load skeleton only; refetches keep rows (stale-while-revalidate) -->
@@ -284,11 +273,11 @@ import { buildColumnFilterChips } from '../utils/filters/activeFilters'
 import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
 import { useAnnotations, annotationCache } from '../composables/useAnnotations'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
-import { useVariantRowViewModel } from './variant-table/useVariantRowViewModel'
+import { useVariantRowViewModel, type LinkConfig } from './variant-table/useVariantRowViewModel'
 import { useVariantRenderRows } from './variant-table/useVariantRenderRows'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useVariantLinks } from '../composables/useVariantLinks'
-import { resolveUrlTemplate } from '../utils/externalLinks'
+import { useLinkResolvers } from '../composables/useLinkResolvers'
 import { formatConsequence } from '../utils/formatters'
 import { getAdaptiveRowScrollBehavior } from '../utils/adaptiveRowScroll'
 import { useTableScroll } from '../composables/useTableScroll'
@@ -314,6 +303,7 @@ import {
   GeneSymbolCell,
   ConsequenceCell,
   ExternalLinkCell,
+  LinkOutsCell,
   AnnotationsCell,
   AnnotationsHeader,
   EmptyPlaceholder,
@@ -405,7 +395,7 @@ const annotationActions = {
 }
 
 // Links
-const { linksStore, buildOmimEntryUrl, openExternalLink } = useVariantLinks()
+const { buildOmimEntryUrl, openExternalLink } = useVariantLinks()
 
 // Column preferences and column definitions — swap columns on variant type change
 const { prefs } = useColumnPreferences('variant-table')
@@ -453,32 +443,12 @@ watch(() => props.caseId, resetFirstLoad)
 // Column metadata map + filter modes (shared composable)
 const { columnMetaMap, columnFilterModes } = useColumnFilterMeta(columnMeta)
 
-// Precomputed link config: one resolver per column, updated when store changes
-const linkConfig = computed<
-  Record<string, import('./variant-table/useVariantRowViewModel').LinkConfig>
->(() => {
-  const config: Record<string, import('./variant-table/useVariantRowViewModel').LinkConfig> = {}
-  for (const link of linksStore.enabledLinks) {
-    const capturedLink = link
-    const columnKey = link.column === 'virtual' ? `_link_${link.id}` : link.column
-    config[columnKey] = {
-      id: link.id,
-      resolve: (item) =>
-        resolveUrlTemplate(
-          capturedLink.urlTemplate,
-          {
-            chr: item.chr ?? null,
-            pos: item.pos ?? null,
-            ref: item.ref ?? null,
-            alt: item.alt ?? null,
-            gene_symbol: item.gene_symbol ?? null,
-            mim_number: item.omim_mim_number ?? null
-          },
-          linksStore.genomeBuild,
-          capturedLink.requiredFields
-        )
-    }
-  }
+// Precomputed link config: one resolver per link slot, updated when store changes
+const { resolvers: linkResolvers, linkOuts } = useLinkResolvers()
+const linkConfig = computed<Record<string, LinkConfig>>(() => {
+  const config: Record<string, LinkConfig> = {}
+  for (const [key, resolve] of Object.entries(linkResolvers.value))
+    config[key] = { id: key, resolve }
   return config
 })
 

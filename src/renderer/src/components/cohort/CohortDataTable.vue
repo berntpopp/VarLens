@@ -158,6 +158,11 @@
         {{ item.het_count ?? 0 }} / {{ item.hom_count ?? 0 }}
       </template>
 
+      <!-- Merged Links column: one icon link per configured link-out -->
+      <template #[`item._links`]="{ item }">
+        <LinkOutsCell :links="linkOuts" :urls="item.render.links" @click="openExternalLink" />
+      </template>
+
       <template #loading>
         <TableSkeletonRows :rows="Math.min(itemsPerPage, 15)" />
       </template>
@@ -177,13 +182,11 @@
 
 <script setup lang="ts">
 import { ref, toRef, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
-import { logService } from '../../services/LogService'
 import { useTableKeyboardNav, hasCommandModifier } from '../../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import type { SortItem } from '../../composables/useOffsetPagination'
-import { useApiService } from '../../composables/useApiService'
 import { useTableScroll } from '../../composables/useTableScroll'
 import { useTableRowProps } from '../../composables/useTableRowProps'
 import { useCarriers } from '../../composables/useCarriers'
@@ -199,7 +202,8 @@ import {
   AnnotationsCell,
   AnnotationsHeader,
   ExpandToggleCell,
-  ExternalLinkCell
+  ExternalLinkCell,
+  LinkOutsCell
 } from '../table-cells'
 import CarrierExpandedRow from './CarrierExpandedRow.vue'
 import AcmgQuickMenu from '../table-cells/AcmgQuickMenu.vue'
@@ -219,9 +223,10 @@ import type {
 import type { ActiveFilter } from '../../../../shared/types/filters'
 import { buildActiveFiltersList } from '../../utils/filters/activeFilters'
 import { useDebounce } from '../../composables/useDebounce'
-import { useExternalLinksStore } from '../../stores/externalLinksStore'
+import { useLinkResolvers } from '../../composables/useLinkResolvers'
+import { useVariantLinks } from '../../composables/useVariantLinks'
 import { APP_CONFIG } from '../../../../shared/config'
-import { resolveUrlTemplate, type VariantLinkData } from '../../utils/externalLinks'
+import { LINKS_COLUMN_KEY } from '../../utils/link-outs'
 import { getAdaptiveRowScrollBehavior } from '../../utils/adaptiveRowScroll'
 
 interface Props {
@@ -271,7 +276,6 @@ const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
 
 const props = defineProps<Props>()
 
-const { api } = useApiService()
 const acmgQuickMenu = provideAcmgQuickMenu() // one shared ACMG menu, not one per row
 // Template refs (used in template via ref="...")
 // @ts-expect-error - These refs ARE used in template bindings
@@ -319,7 +323,7 @@ const filterableColumns = computed(() =>
   props.headers.filter(
     (h) =>
       h.sortable !== false &&
-      !h.key.startsWith('_link_') &&
+      h.key !== LINKS_COLUMN_KEY &&
       h.key !== 'annotations' &&
       h.key !== 'data-table-expand'
   )
@@ -347,60 +351,13 @@ const { firstLoad, showStale, ariaBusy, liveMessage } = useTableLoadingState({
   totalCount: toRef(props, 'totalCount')
 })
 
-const linksStore = useExternalLinksStore()
-
-// --- External link resolution helpers (same as VariantTable.vue) ---
-
-const getVariantLinkData = (item: CohortVariant): VariantLinkData => ({
-  chr: item.chr,
-  pos: item.pos,
-  ref: item.ref,
-  alt: item.alt,
-  gene_symbol: item.gene_symbol ?? null,
-  mim_number: null // Cohort variants don't have OMIM MIM numbers
-})
-
-const linkConfig = computed<Record<string, (item: CohortVariant) => string | null>>(() => {
-  const config: Record<string, (item: CohortVariant) => string | null> = {}
-  for (const link of linksStore.enabledLinks) {
-    if (link.column === 'virtual') continue
-    const capturedLink = link
-    config[link.column] = (item: CohortVariant) =>
-      resolveUrlTemplate(
-        capturedLink.urlTemplate,
-        getVariantLinkData(item),
-        linksStore.genomeBuild,
-        capturedLink.requiredFields
-      )
-  }
-  return config
-})
+// Link resolvers shared with the case table (incl. the merged Links column)
+const { resolvers: linkConfig, linkOuts } = useLinkResolvers()
 const { renderRows } = useCohortRenderRows(
   computed(() => props.variants),
   linkConfig
 )
-
-const openExternalLink = async (url: string, event?: MouseEvent): Promise<void> => {
-  if (!url) return
-
-  // Brief highlight on clicked element
-  const target = event?.currentTarget as HTMLElement
-  if (target !== null && target !== undefined) {
-    target.classList.add('external-link--clicked')
-    setTimeout(() => target.classList.remove('external-link--clicked'), 200)
-  }
-
-  if (api) {
-    try {
-      await api.shell.openExternal(url)
-    } catch (e) {
-      logService.warn(
-        'Failed to open external link: ' + (e instanceof Error ? e.message : String(e)),
-        'cohort'
-      )
-    }
-  }
-}
+const { openExternalLink } = useVariantLinks()
 
 // Table state
 const dataTableRef = ref<InstanceType<typeof import('vuetify/components').VDataTableServer> | null>(

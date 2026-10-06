@@ -64,6 +64,10 @@ vi.mock('../../../../src/renderer/src/composables/useApiService', () => ({
 
 import * as composableMod from '../../../../src/renderer/src/composables/useShortlistQuery'
 import ShortlistPanel from '../../../../src/renderer/src/components/shortlist/ShortlistPanel.vue'
+import { createPinia, setActivePinia } from 'pinia'
+
+// ShortlistTable resolves its Links column through the external-links store
+beforeEach(() => setActivePinia(createPinia()))
 
 const state = (
   composableMod as unknown as { __state: ReturnType<typeof composableMod.useShortlistQuery> }

@@ -21,7 +21,7 @@ export interface ExternalLinkConfig {
   name: string
   /** URL template with variable placeholders */
   urlTemplate: string
-  /** Which column this link attaches to (virtual = own column at end) */
+  /** Which column this link attaches to (virtual = icon link in the merged Links column) */
   column: LinkColumn
   /** Which variant fields are required for this link */
   requiredFields: string[]

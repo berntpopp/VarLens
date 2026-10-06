@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { baseHeaders as caseHeaders } from '../../../../src/renderer/src/components/variant-table/columns'
+import {
+  baseHeaders as caseHeaders,
+  linksColumn
+} from '../../../../src/renderer/src/components/variant-table/columns'
 import { baseHeaders as cohortHeaders } from '../../../../src/renderer/src/components/cohort/useCohortColumns'
 import {
   COLUMN_WIDTHS,
@@ -23,8 +26,14 @@ describe('shared fixed column widths (case/cohort parity)', () => {
     }
   })
 
-  it('falls back to link/default widths for dynamic columns', () => {
-    expect(columnWidthPx('_link_varsome')).toBeGreaterThan(0)
+  it('falls back to the default width for dynamic columns', () => {
+    expect(columnWidthPx('sv.support')).toBeGreaterThan(0)
     expect(withFixedWidth({ key: 'sv.support' }).width).toMatch(/^\d+px$/)
+  })
+
+  it('keeps the Links column width computed from its link count', () => {
+    const [links] = linksColumn(7)
+    expect(withFixedWidth(links).width).toBe(links.width)
+    expect(linksColumn(0)).toEqual([])
   })
 })

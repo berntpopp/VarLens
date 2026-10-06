@@ -1,5 +1,6 @@
 import { useStorage } from '@vueuse/core'
 import type { Ref } from 'vue'
+import { migrateLinkColumnPrefs } from '../utils/link-outs'
 
 /**
  * Column preferences stored per table
@@ -35,6 +36,10 @@ export function useColumnPreferences(tableId: string) {
     localStorage,
     { mergeDefaults: true }
   )
+
+  // Saved per-link columns (`_link_<id>`) fold into the merged Links column
+  const migrated = migrateLinkColumnPrefs(prefs.value)
+  if (migrated !== null) prefs.value = migrated
 
   /**
    * Reset all preferences to defaults

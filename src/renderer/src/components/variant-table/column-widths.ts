@@ -10,6 +10,7 @@
  * Keep this the single source of truth for both views (cohort parity).
  */
 import type { ColumnDef } from './columns'
+import { LINKS_COLUMN_KEY } from '../../utils/link-outs'
 
 /** Width of the leading annotations column; the sticky 2nd column offsets by it. */
 export const ANNOTATIONS_COLUMN_WIDTH = 108
@@ -18,9 +19,9 @@ export const COLUMN_WIDTHS: Readonly<Record<string, number>> = {
   'data-table-expand': 40,
   annotations: ANNOTATIONS_COLUMN_WIDTH,
   chr: 92,
-  pos: 150,
-  ref: 90,
-  alt: 90,
+  pos: 140,
+  ref: 80,
+  alt: 80,
   gt_num: 100,
   gene_symbol: 120,
   omim_mim_number: 104,
@@ -41,15 +42,17 @@ export const COLUMN_WIDTHS: Readonly<Record<string, number>> = {
   het_count: 128
 }
 
-export const LINK_COLUMN_WIDTH = 106
 export const DEFAULT_COLUMN_WIDTH = 140
 
 export function columnWidthPx(key: string): number {
-  if (key in COLUMN_WIDTHS) return COLUMN_WIDTHS[key]
-  return key.startsWith('_link_') ? LINK_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH
+  return COLUMN_WIDTHS[key] ?? DEFAULT_COLUMN_WIDTH
 }
 
-/** Return the column with its shared fixed width applied. */
+/**
+ * Return the column with its shared fixed width applied. The Links column
+ * keeps the width it was built with: it depends on how many links exist.
+ */
 export function withFixedWidth<T extends Pick<ColumnDef, 'key' | 'width'>>(column: T): T {
+  if (column.key === LINKS_COLUMN_KEY && column.width !== undefined) return column
   return { ...column, width: `${columnWidthPx(column.key)}px` }
 }
