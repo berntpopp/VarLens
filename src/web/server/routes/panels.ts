@@ -1,15 +1,20 @@
 import {
   AutocompleteSchema,
+  PanelCreateSchema,
+  PanelExportBedSchema,
   PanelIdSchema,
   PanelUpdateSchema,
   ValidateSymbolsSchema
 } from '../../../shared/types/ipc-schemas'
 import {
   autocomplete,
+  generateBedContentForSession,
   getPanelWithGenes,
   validateSymbols
 } from '../../../main/ipc/handlers/panels-logic'
 import { getWebGeneReferenceService } from '../web-gene-reference'
+import { PANEL_BED_DOWNLOAD_PATH } from '../panel-bed-download'
+import { badRequest } from './common'
 import type { OverrideHandler } from './types'
 
 export function buildPanelOverrides(): Record<string, OverrideHandler> {
@@ -56,6 +61,50 @@ export function buildPanelOverrides(): Record<string, OverrideHandler> {
           validated.data.limit,
           getWebGeneReferenceService()
         )
+      }
+    },
+
+    // A browser has no save-dialog path: the RPC validates the export (panel,
+    // genes, coordinates) and returns the download URL as `path`; the web
+    // client (src/web/client/panel-bed-download.ts) navigates to it.
+    'panels:exportBed': {
+      async handle(args, _request, reply, { session }) {
+        const parsed = PanelExportBedSchema.safeParse({
+          panelId: args[0],
+          assembly: args[1],
+          paddingBp: args[2] ?? undefined
+        })
+        if (!parsed.success) {
+          return badRequest(reply, 'invalid-panel-bed', 'Invalid BED export parameters')
+        }
+        const { panelId, assembly, paddingBp } = parsed.data
+        await generateBedContentForSession(
+          session,
+          panelId,
+          assembly,
+          paddingBp,
+          getWebGeneReferenceService()
+        )
+        const query = new URLSearchParams({
+          panelId: String(panelId),
+          assembly,
+          paddingBp: String(paddingBp)
+        })
+        return { success: true, path: `${PANEL_BED_DOWNLOAD_PATH}?${query.toString()}` }
+      }
+    },
+
+    // Validate like desktop so schema defaults apply (source = 'manual'); the
+    // raw write autoroute let `source: undefined` hit the NOT NULL column.
+    'panels:create': {
+      async handle(args, _request, reply, { session }) {
+        const validated = PanelCreateSchema.safeParse(args[0])
+        if (!validated.success) {
+          return badRequest(reply, 'invalid-panel-create', 'Invalid panel parameters')
+        }
+        return await session
+          .getWriteExecutor()
+          .execute({ type: 'panels:create', params: [validated.data] })
       }
     },
 

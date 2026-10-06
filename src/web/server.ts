@@ -54,6 +54,7 @@ import { registerStatic } from './server/static'
 import { registerResponseCompression } from './server/compression'
 import { registerRobotsTxt } from './server/robots'
 import { createWebRuntimeServices } from './server/runtime-services'
+import { registerPanelBedDownloadRoute } from './server/panel-bed-download'
 import {
   type AppMetrics,
   createAppMetricsFromEnv,
@@ -220,6 +221,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const { overrides } = buildDispatcher(dispatcherDeps)
   registerImportUploadRoutes(app, dispatcherDeps)
   registerExportDownloadRoutes(app, dispatcherDeps)
+  registerPanelBedDownloadRoute(app, dispatcherDeps)
   registerDispatcher(app, dispatcherDeps, overrides)
   registerEventStream(app, events)
 

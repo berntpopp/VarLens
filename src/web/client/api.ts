@@ -25,6 +25,7 @@ import type { UpdateStatus } from '../../shared/types/api'
 import { isIpcError } from '../../shared/types/errors'
 import { ALLOWED_DOMAINS } from '../../shared/config/allowed-domains'
 import { buildExportApi } from './export-download'
+import { buildPanelsApi } from './panel-bed-download'
 
 declare const __APP_VERSION__: string
 
@@ -554,6 +555,7 @@ const DOMAIN_OVERRIDES: Record<string, unknown> = {
   export: buildExportApi(buildDomainProxy('export') as Record<string, unknown>),
   import: buildImportApi(),
   jobs: buildJobsApi(),
+  panels: buildPanelsApi(buildDomainProxy('panels') as Record<string, unknown>),
   perf: PERF_API,
   shell: SHELL_API,
   system: SYSTEM_API,
