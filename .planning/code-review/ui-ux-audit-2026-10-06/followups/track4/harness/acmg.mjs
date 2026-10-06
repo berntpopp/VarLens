@@ -1,0 +1,50 @@
+// ACMG confirm + undo in the built web instance. Usage: node acmg.mjs <base> <outdir>
+import { chromium } from '/home/bernt-popp/development/VarLens/.claude/worktrees/agent-ac57519ac046a3228/node_modules/playwright/index.mjs'
+import fs from 'node:fs'
+const BASE = process.argv[2] ?? 'http://127.0.0.1:8840'
+const OUT = process.argv[3] ?? './acmg'
+fs.mkdirSync(OUT, { recursive: true })
+const browser = await chromium.launch()
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+await ctx.addInitScript(() => { try { localStorage.setItem('varlens_disclaimer_acknowledged_version', '0.73.0') } catch {} })
+const page = await ctx.newPage()
+page.setDefaultTimeout(8000)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const writes = []
+page.on('request', (r) => { if (r.url().includes('/api/annotations/upsert')) writes.push(r.postData()) })
+const check = (n, c, x = '') => console.log(`${c ? 'PASS' : 'FAIL'} ${n} ${x}`)
+await page.goto(BASE + '/login')
+await page.fill('input[autocomplete=username]', 'admin')
+await page.fill('input[autocomplete=current-password]', 'varlens-dev-admin')
+await page.press('input[autocomplete=current-password]', 'Enter')
+await page.waitForURL((u) => !u.pathname.startsWith('/login'))
+await sleep(2500)
+await page.goto(BASE + '/case?case=1&tab=snv'); await sleep(4000)
+await page.locator('.v-main tbody tr.v-data-table__tr td:nth-child(7)').nth(2).click(); await sleep(2500)
+const panel = page.locator('.v-navigation-drawer--right, [aria-label="Variant details"]').last()
+await page.getByText('Evidence editor').click(); await sleep(1200)
+await page.getByRole('button', { name: /^PVS1/ }).first().click(); await sleep(800)
+check('criterion click does not write', writes.length === 0, `writes=${writes.length}`)
+const bar = page.getByTestId('acmg-apply-bar')
+check('confirm bar shows draft summary', await bar.isVisible(), await bar.innerText().catch(() => ''))
+await page.screenshot({ path: `${OUT}/1-draft.png` })
+await page.getByTestId('acmg-apply').click(); await sleep(1500)
+check('apply writes once', writes.length === 1, `writes=${writes.length}`)
+const snack = page.locator('.v-snackbar')
+const snackText = await snack.innerText().catch(() => '')
+check('undo snackbar after apply', /Classified as|ACMG/.test(snackText) && /Undo/.test(snackText), snackText.replace(/\n/g, ' '))
+await page.screenshot({ path: `${OUT}/2-applied-snackbar.png` })
+await snack.getByRole('button', { name: 'Undo' }).click(); await sleep(1500)
+check('undo writes the previous state', writes.length === 2 && /"acmg_classification":null/.test(writes[1] ?? ''), (writes[1] ?? '').slice(0, 200))
+await page.screenshot({ path: `${OUT}/3-undone.png` })
+// quick pill path
+writes.length = 0
+await page.locator('.acmg-section').getByRole('button', { name: /^LP$/ }).first().click().catch(async () => {
+  await page.locator('.acmg-section').getByText('LP', { exact: true }).first().click()
+})
+await sleep(1500)
+const s2 = await page.locator('.v-snackbar').innerText().catch(() => '')
+check('quick pick shows undo', /Likely pathogenic/.test(s2) && /Undo/.test(s2), s2.replace(/\n/g, ' '))
+await page.locator('.v-snackbar').getByRole('button', { name: 'Undo' }).click(); await sleep(1500)
+check('quick pick undo restores', writes.length === 2, JSON.stringify(writes.map((w) => (w ?? '').slice(0, 120))))
+await browser.close()
