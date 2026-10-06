@@ -70,11 +70,12 @@ describe('web upload boundary', () => {
   })
 
   test('browser upload mechanics are isolated to the web client adapter', () => {
-    const webClient = readRepoFile('src/web/client/api.ts')
+    const uploads = readRepoFile('src/web/client/uploads.ts')
+    const localApi = readRepoFile('src/web/client/local-api.ts')
 
-    expect(webClient).toContain("document.createElement('input')")
-    expect(webClient).toContain('uploadImportFile(file: File)')
-    expect(webClient).toContain("httpInvoke('batch-import', 'testZipPassword'")
+    expect(uploads).toContain("document.createElement('input')")
+    expect(uploads).toContain('uploadImportFile(file: File)')
+    expect(localApi).toContain("httpInvoke('batch-import', 'testZipPassword'")
   })
 
   test('web batch import resolves upload refs at the server edge and uses JobRunner/import seams', () => {

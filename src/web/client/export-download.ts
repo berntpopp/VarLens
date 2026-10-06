@@ -9,9 +9,9 @@
  * in page memory (no fetch-to-blob) and the SPA never navigates away.
  *
  * The returned `ExportResult` reports the download file name in
- * `filePath`; there is no server-side path to reveal, so
- * `revealInFolder` is a no-op that reports `success: false`, and
- * `cancel` reports `cancelled: false` (cancel the download in the browser).
+ * `filePath`; there is no server-side path to reveal (`revealInFolder` is
+ * desktop-only in the parity manifest). local-api.ts wires these into the
+ * typed web client.
  */
 import type { ExportResult } from '../../shared/ipc/domains/export'
 
@@ -84,27 +84,4 @@ export function exportVariantsDownload(
 export function exportCohortDownload(params: unknown): Promise<ExportResult> {
   const fileName = `cohort_variants_${new Date().toISOString().slice(0, 10)}.csv`
   return Promise.resolve(startDownload(buildCohortExportUrl(params), fileName))
-}
-
-/** `rpc` is the generic dispatcher proxy for the `export` domain. */
-export function buildExportApi(rpc: Record<string, unknown>): unknown {
-  return new Proxy(
-    {},
-    {
-      get(_target, prop: string | symbol) {
-        if (prop === 'variants') return exportVariantsDownload
-        if (prop === 'cohort') return exportCohortDownload
-        if (prop === 'revealInFolder') {
-          return () => Promise.resolve({ success: false })
-        }
-        // The browser's download manager owns a streamed export: cancelling it
-        // there closes the socket, which ends the server-side query stream.
-        // There is no server-side export job for `export:cancel` to stop.
-        if (prop === 'cancel') {
-          return () => Promise.resolve({ cancelled: false })
-        }
-        return typeof prop === 'string' ? rpc[prop] : undefined
-      }
-    }
-  )
 }

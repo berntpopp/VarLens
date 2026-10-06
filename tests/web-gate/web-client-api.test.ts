@@ -529,12 +529,12 @@ describe('web client api', () => {
     expect(MockXMLHttpRequest.instances).toHaveLength(2)
   })
 
-  test('export.revealInFolder is an explicit unsupported web capability', async () => {
+  test('export.revealInFolder is desktop-only and refused locally', async () => {
     const fetchMock = mockFetch({ ok: true, status: 200, statusText: 'OK', body: '{}' })
     const api = createApi() as unknown as TestApi
 
-    await expect(api.export.revealInFolder('/server/export.xlsx')).resolves.toEqual({
-      success: false
+    await expect(api.export.revealInFolder('/server/export.xlsx')).resolves.toMatchObject({
+      code: 'UNSUPPORTED_RUNTIME'
     })
     expect(fetchMock).not.toHaveBeenCalled()
   })
