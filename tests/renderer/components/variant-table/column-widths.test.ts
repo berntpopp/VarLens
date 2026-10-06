@@ -5,15 +5,15 @@ import {
 } from '../../../../src/renderer/src/components/variant-table/columns'
 import { baseHeaders as cohortHeaders } from '../../../../src/renderer/src/components/cohort/useCohortColumns'
 import {
-  COLUMN_WIDTHS,
-  columnWidthPx,
+  COLUMN_WIDTHS_REM,
+  columnWidthRem,
   withFixedWidth
 } from '../../../../src/renderer/src/components/variant-table/column-widths'
 
 describe('shared fixed column widths (case/cohort parity)', () => {
   it('gives every main case and cohort column an explicit measured width', () => {
     for (const h of [...caseHeaders, ...cohortHeaders]) {
-      expect(COLUMN_WIDTHS[h.key], `missing width for ${h.key}`).toBeGreaterThan(0)
+      expect(COLUMN_WIDTHS_REM[h.key], `missing width for ${h.key}`).toBeGreaterThan(0)
     }
   })
 
@@ -27,8 +27,14 @@ describe('shared fixed column widths (case/cohort parity)', () => {
   })
 
   it('falls back to the default width for dynamic columns', () => {
-    expect(columnWidthPx('sv.support')).toBeGreaterThan(0)
-    expect(withFixedWidth({ key: 'sv.support' }).width).toMatch(/^\d+px$/)
+    expect(columnWidthRem('sv.support')).toBeGreaterThan(0)
+    expect(withFixedWidth({ key: 'sv.support' }).width).toMatch(/^[\d.]+rem$/)
+  })
+
+  it('sizes columns in rem so headers grow with the text size (no clipping at 200 %)', () => {
+    for (const h of [...caseHeaders, ...cohortHeaders]) {
+      expect(withFixedWidth(h).width).toMatch(/^[\d.]+rem$/)
+    }
   })
 
   it('keeps the Links column width computed from its link count', () => {

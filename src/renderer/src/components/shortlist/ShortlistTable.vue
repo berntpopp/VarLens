@@ -46,17 +46,18 @@ const emit = defineEmits<{
   (e: 'toggle-star', row: ShortlistRow): void
 }>()
 
+// Widths in rem so headers grow with the text size (no clipping at 200 %)
 const baseHeaders = [
-  { title: '#', key: 'rank', width: 60, sortable: false },
-  { title: 'Score', key: 'rank_score', width: 90, sortable: false },
-  { title: 'Type', key: 'variant_type', width: 80, sortable: false },
-  { title: 'Gene', key: 'gene_symbol', width: 140 },
-  { title: 'Variant', key: 'variant_notation', width: 280, sortable: false },
-  { title: 'Impact', key: 'consequence', width: 110 },
-  { title: 'AF', key: 'gnomad_af', width: 90 },
-  { title: 'ClinVar', key: 'clinvar', width: 130 },
-  { title: '★', key: 'is_starred', width: 50, sortable: false },
-  { title: '', key: 'actions', width: 80, sortable: false }
+  { title: '#', key: 'rank', width: '3.75rem', sortable: false },
+  { title: 'Score', key: 'rank_score', width: '5.625rem', sortable: false },
+  { title: 'Type', key: 'variant_type', width: '5rem', sortable: false },
+  { title: 'Gene', key: 'gene_symbol', width: '8.75rem' },
+  { title: 'Variant', key: 'variant_notation', width: '17.5rem', sortable: false },
+  { title: 'Impact', key: 'consequence', width: '6.875rem' },
+  { title: 'AF', key: 'gnomad_af', width: '5.625rem' },
+  { title: 'ClinVar', key: 'clinvar', width: '8.125rem' },
+  { title: '★', key: 'is_starred', width: '3.125rem', sortable: false },
+  { title: '', key: 'actions', width: '5rem', sortable: false }
 ] as const
 
 // Link-outs resolve exactly like the case/cohort tables (shared resolvers)

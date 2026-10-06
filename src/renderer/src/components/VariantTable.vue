@@ -655,7 +655,7 @@ defineExpose({
 
 /* Transcript column truncation */
 .transcript-truncated {
-  max-width: 120px;
+  max-width: 7.5rem;
   display: inline-block;
   overflow: hidden;
   text-overflow: ellipsis;

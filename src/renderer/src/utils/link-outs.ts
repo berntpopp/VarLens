@@ -53,7 +53,7 @@ export function linkAbbreviation(id: string, name: string): string {
 /** Badge geometry (rem) — kept in sync with `.link-outs` in assets/styles/table-cells.scss. */
 const BADGE_REM = 1.5
 const BADGE_GAP_REM = 0.125
-const CELL_PADDING_REM = 1.5
+const CELL_PADDING_REM = 2
 
 /** Fixed width of the Links column for `count` links, in rem (scales with text size). */
 export function linksColumnWidthRem(count: number): number {
