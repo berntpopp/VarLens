@@ -138,6 +138,7 @@
           v-if="value && buildOmimEntryUrl(value)"
           :url="buildOmimEntryUrl(value)!"
           :label="value"
+          :aria-label="`OMIM ${value} (opens in a new tab)`"
           @click="openExternalLink"
         />
         <EmptyPlaceholder v-else />
@@ -222,6 +223,7 @@
           v-if="item.render.links[`_link_${link.id}`]"
           :url="item.render.links[`_link_${link.id}`]!"
           label="View"
+          :aria-label="`View in ${link.name} (opens in a new tab)`"
           @click="openExternalLink"
         />
         <span v-else class="text-muted">--</span>

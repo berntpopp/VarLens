@@ -1,17 +1,22 @@
 <template>
   <!-- Tooltips via the app-wide DelegatedTooltip (data-tooltip), not per-cell v-tooltip -->
-  <span
+  <!-- Real anchor (focusable, announced as a link); see ExternalLinkCell -->
+  <a
     v-if="hasValue && hasLink"
     class="external-link"
+    :href="url ?? undefined"
+    target="_blank"
+    rel="noopener noreferrer"
+    :aria-label="`ClinVar: ${displayValue} (opens in a new tab)`"
     :data-tooltip="significance"
     data-tooltip-location="top"
-    @click="handleClick"
+    @click.prevent="handleClick"
   >
-    <v-chip :color="chipColor" size="small" label>
+    <v-chip :color="chipColor" size="small" label tag="span">
       {{ displayValue }}
     </v-chip>
     <v-icon size="x-small" class="external-link__icon" :icon="mdiOpenInNew" />
-  </span>
+  </a>
   <v-chip
     v-else-if="hasValue"
     :color="chipColor"

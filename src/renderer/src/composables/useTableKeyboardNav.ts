@@ -38,6 +38,8 @@ export function isInputFocused(): boolean {
   const tag = el.tagName.toLowerCase()
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
   if (el.getAttribute('contenteditable') === 'true') return true
+  // A focused link (table link cells) owns Enter; don't also open the row panel.
+  if (tag === 'a' && el.hasAttribute('href')) return true
   return false
 }
 

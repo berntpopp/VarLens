@@ -55,9 +55,9 @@
       </template>
       <template v-else>
         <v-icon size="small" class="mr-1" :icon="mdiAccount" style="opacity: 0.7" />
+        <!-- No opacity on the text: 0.7 dropped it to 4.34:1 on the dark-theme app bar -->
         <span
           class="text-body-medium select-case-hint"
-          style="opacity: 0.7"
           role="button"
           tabindex="0"
           @click="openSidebar"
