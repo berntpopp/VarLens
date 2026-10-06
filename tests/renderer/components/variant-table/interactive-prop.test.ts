@@ -18,6 +18,7 @@
  * Plan: .planning/plans/2026-04-11-unified-shortlist-plan.md (Task 6)
  */
 
+import { createPinia } from 'pinia'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { ref, computed } from 'vue'
@@ -116,6 +117,20 @@ vi.mock('../../../../src/renderer/src/composables/useVariantLinks', () => ({
   })
 }))
 
+vi.mock('../../../../src/renderer/src/composables/useAutoPageSize', () => ({
+  useAutoPageSize: () => ({
+    tableItemsPerPage: ref(25),
+    pageSizeOptions: computed(() => [25])
+  })
+}))
+
+vi.mock('../../../../src/renderer/src/composables/useLinkResolvers', () => ({
+  useLinkResolvers: () => ({
+    resolvers: computed(() => ({})),
+    linkOuts: computed(() => [])
+  })
+}))
+
 vi.mock('../../../../src/renderer/src/components/variant-table/useVariantRowViewModel', () => ({
   useVariantRowViewModel: () => ({
     rowViewModels: computed(() => new Map()),
@@ -208,7 +223,7 @@ function mountTable(props: Record<string, unknown> = {}): VueWrapper {
       ...props
     } as never,
     global: {
-      plugins: [vuetify],
+      plugins: [vuetify, createPinia()],
       stubs: {
         // Stub the heavy data-table so happy-dom doesn't try to render
         // Vuetify's internal grid machinery — we only need the

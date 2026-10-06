@@ -37,6 +37,8 @@ const props = defineProps<{
   variantRef?: string
   variantAlt?: string
   fetchVep?: (chr: string, pos: number, ref: string, alt: string) => Promise<void>
+  /** Why on-demand VEP is unavailable (web: the admin has not enabled it). */
+  fetchVepUnavailableReason?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -224,6 +226,15 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
     </v-card-title>
 
     <v-divider />
+
+    <div
+      v-if="fetchVep === undefined && fetchVepUnavailableReason"
+      class="px-4 pt-2 text-body-small text-medium-emphasis"
+      role="note"
+      data-testid="vep-unavailable-reason"
+    >
+      {{ fetchVepUnavailableReason }}
+    </div>
 
     <v-progress-linear v-if="isLoading" indeterminate color="primary" />
 

@@ -10,6 +10,10 @@ import { withSetup } from '../../utils/test-helpers'
 import { useFilterOptionsCache } from '@renderer/composables/useFilterOptionsCache'
 import type { WindowAPI, FilterOptions } from '../../../src/shared/types/api'
 import { ErrorCode } from '../../../src/shared/types/errors'
+import { installCapabilities } from '../helpers/capabilities'
+
+// The capability store fails closed: install a desktop document.
+beforeEach(() => installCapabilities())
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }

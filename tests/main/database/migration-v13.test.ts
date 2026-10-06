@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
-import { runMigrations } from '../../../src/main/database/migrations'
+import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 
 describe('Migration v13-v14: cohort summary tables', () => {
   let db: Database.Database
@@ -67,6 +67,6 @@ describe('Migration v13-v14: cohort summary tables', () => {
     runMigrations(db)
     expect(() => runMigrations(db)).not.toThrow()
     const version = db.prepare('PRAGMA user_version').get() as { user_version: number }
-    expect(version.user_version).toBe(35)
+    expect(version.user_version).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 })

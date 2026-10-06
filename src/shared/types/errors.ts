@@ -1,9 +1,29 @@
+/**
+ * Closed set of error codes carried by {@link SerializableError}.
+ *
+ * The first block is the envelope from the desktop/web parity spec (§4.4):
+ * every code maps to exactly one HTTP status in the web dispatcher
+ * (`src/shared/errors/error-status.ts`). The second block holds the older,
+ * more specific codes that pre-date the envelope; they keep their meaning
+ * (renderer code may branch on them) and map onto the same status table.
+ */
 export enum ErrorCode {
+  VALIDATION = 'VALIDATION',
+  NOT_FOUND = 'NOT_FOUND',
+  CONFLICT = 'CONFLICT',
+  /** The session's role may not call this method (web client / dispatcher). */
+  FORBIDDEN = 'FORBIDDEN',
+  UNAUTHENTICATED = 'UNAUTHENTICATED',
+  /** The method is desktop-only or not yet served in this runtime (parity manifest). */
+  UNSUPPORTED_RUNTIME = 'UNSUPPORTED_RUNTIME',
+  UNAVAILABLE_UPSTREAM = 'UNAVAILABLE_UPSTREAM',
+  CANCELLED = 'CANCELLED',
+  INTERNAL = 'INTERNAL',
+
   FILE_NOT_FOUND = 'FILE_NOT_FOUND',
   PARSE_ERROR = 'PARSE_ERROR',
   DB_ERROR = 'DB_ERROR',
-  CANCELLED = 'CANCELLED',
-  NOT_FOUND = 'NOT_FOUND',
+  /** @deprecated Unique violations are reported as {@link ErrorCode.CONFLICT}. */
   UNIQUE_CONSTRAINT = 'UNIQUE_CONSTRAINT',
   WRONG_PASSWORD = 'WRONG_PASSWORD',
   INVALID_PARAMETERS = 'INVALID_PARAMETERS',

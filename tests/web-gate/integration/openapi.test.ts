@@ -60,14 +60,15 @@ const TAG_PATHS = [
 ] as const
 
 describe.skipIf(!isWebBuilt || !HAS_PG)('web OpenAPI endpoint', () => {
-  test('serves the public contract and exposes dispatcher and auth method paths', async () => {
+  test('serves the contract to signed-in users and exposes dispatcher and auth method paths', async () => {
     const driver = await startWebDriver()
     try {
       const unauthenticated = await driver.app.inject({
         method: 'GET',
         url: '/api/openapi.json'
       })
-      expect(unauthenticated.statusCode, unauthenticated.body).toBe(200)
+      // P-21: the API description needs a session unless VARLENS_WEB_PUBLIC_API_DOCS=1.
+      expect(unauthenticated.statusCode, unauthenticated.body).toBe(401)
 
       const authenticated = await driver.app.inject({
         method: 'GET',
@@ -76,7 +77,7 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web OpenAPI endpoint', () => {
       })
       expect(authenticated.statusCode, authenticated.body).toBe(200)
 
-      const spec = unauthenticated.json() as {
+      const spec = authenticated.json() as {
         openapi?: string
         info?: { title?: string }
         paths?: Record<string, unknown>
@@ -108,7 +109,7 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web OpenAPI endpoint', () => {
       expect(spec.paths).toHaveProperty('/api/cohort/runAssociation')
       expect(spec.paths).toHaveProperty('/api/cohort/getSummaryStatus')
       expect(spec.paths).toHaveProperty('/api/database/info')
-      expect(spec.paths).toHaveProperty('/api/database/recentList')
+      expect(spec.paths).not.toHaveProperty('/api/database/recentList')
       expect(spec.paths).toHaveProperty('/api/export/variants')
       expect(spec.paths).toHaveProperty('/api/export/cohort')
       expect(spec.paths).toHaveProperty('/api/import/start')
@@ -161,7 +162,6 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web OpenAPI endpoint', () => {
       expect(paths['/api/cohort/runAssociation']?.post?.responses?.['501']).toBeDefined()
       expect(paths['/api/cohort/runAssociation']?.post?.responses?.['200']).toBeUndefined()
       expect(paths['/api/database/info']?.post?.responses?.['200']).toBeDefined()
-      expect(paths['/api/database/recentList']?.post?.responses?.['200']).toBeDefined()
       expect(paths['/api/export/variants']?.post?.requestBody).toBeDefined()
       expect(paths['/api/export/variants']?.post?.responses?.['200']).toBeDefined()
       expect(paths['/api/export/variants']?.post?.responses?.['501']).toBeDefined()

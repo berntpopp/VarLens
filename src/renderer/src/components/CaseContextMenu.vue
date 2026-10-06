@@ -24,14 +24,19 @@
         </template>
         <v-list-item-title>Edit</v-list-item-title>
       </v-list-item>
-      <v-divider />
-      <v-list-item v-if="multiSelectMode" role="menuitem" @click="emit('delete-selected')">
+      <!-- Role-blocked actions are hidden, not disabled (disabled menu items fail axe contrast). -->
+      <v-divider v-if="canDelete" role="none" />
+      <v-list-item
+        v-if="multiSelectMode && canDelete"
+        role="menuitem"
+        @click="emit('delete-selected')"
+      >
         <template #prepend>
           <v-icon color="error" :icon="mdiDelete" />
         </template>
         <v-list-item-title>Delete {{ selectedCount }} Selected</v-list-item-title>
       </v-list-item>
-      <v-list-item role="menuitem" @click="emit('delete')">
+      <v-list-item v-if="canDelete" role="menuitem" @click="emit('delete')">
         <template #prepend>
           <v-icon :icon="mdiDelete" />
         </template>
@@ -52,10 +57,15 @@ import { ref } from 'vue'
 import { mdiDelete, mdiPencil, mdiSelectionOff } from '@mdi/js'
 import { useContextMenu } from '../composables/useContextMenu'
 
-defineProps<{
-  multiSelectMode: boolean
-  selectedCount: number
-}>()
+withDefaults(
+  defineProps<{
+    multiSelectMode: boolean
+    selectedCount: number
+    /** False for read-only roles (web viewer): the delete actions are hidden. */
+    canDelete?: boolean
+  }>(),
+  { canDelete: true }
+)
 
 const emit = defineEmits<{
   edit: []

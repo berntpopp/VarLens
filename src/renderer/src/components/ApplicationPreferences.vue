@@ -62,8 +62,8 @@
         <!-- Performance Section -->
         <div class="text-subtitle-2 text-medium-emphasis mb-2">Performance</div>
         <!-- Worker threads size the desktop import/query pool; the web server
-             manages its own workers, so the control is meaningless there. -->
-        <template v-if="!isWebMode">
+             manages its own workers (capability `workerThreads`). -->
+        <template v-if="workerThreadsAvailable">
           <v-slider
             v-model="workerThreadsValue"
             :min="0"
@@ -111,14 +111,15 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useApiService } from '../composables/useApiService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
-import { isWebRuntime } from '../utils/runtime-mode'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { THEME_PREFERENCE_OPTIONS } from '../utils/theme-preference'
 
 const settings = useSettingsStore()
 const { api } = useApiService()
 
 const isOpen = ref(false)
-const isWebMode = isWebRuntime()
+const { canUse } = useCapabilityStore()
+const workerThreadsAvailable = canUse('workerThreads')
 const cpuCount = ref(navigator.hardwareConcurrency || 4)
 
 // Options for the "Default active tab" preference. Label wording matches
@@ -130,9 +131,9 @@ const defaultCaseTabOptions = [
 
 // Get CPU count from main process via typed API
 onMounted(async () => {
-  if (isWebMode) return
+  if (!workerThreadsAvailable) return
   try {
-    if (api?.system?.getCpuCount) {
+    if (api) {
       cpuCount.value = unwrapIpcResult(await api.system.getCpuCount())
     }
   } catch (e) {
@@ -154,8 +155,9 @@ const workerThreadsValue = computed({
 })
 
 async function syncWorkerThreads(value: number): Promise<void> {
+  if (!workerThreadsAvailable) return
   try {
-    if (api?.system?.setWorkerThreads) {
+    if (api) {
       unwrapIpcResult(await api.system.setWorkerThreads(value))
     }
   } catch (e) {

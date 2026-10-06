@@ -6,7 +6,13 @@ import type { AuditBuffer } from '../audit-buffer'
 import type { JobRunner } from '../../../main/services/jobs/JobRunner'
 import type { PostgresCaseDeleteJobs } from '../jobs/case-delete-jobs'
 import type { WebEventHub } from '../events'
+import type { WebJobRegistry } from '../jobs/web-job-registry'
+import type { SessionRevocations } from '../session-revocation'
 import type { AppMetrics } from '../metrics'
+import type { DownloadGrantRegistry } from '../downloads/download-grants'
+import type { ExportArtifactRequest } from '../downloads/export-artifacts'
+import type { WebReferenceServices } from '../reference-services/reference-services'
+import type { WebAssociationRuns } from '../association/web-association-runs'
 
 export interface DispatcherDeps {
   session: StorageSession
@@ -23,10 +29,26 @@ export interface DispatcherDeps {
    * case-delete job contract is src/shared/types/case-delete-job.ts).
    * Absent → `cases:delete` falls back to the synchronous write task.
    */
+  /**
+   * Signed single-use export download grants (routes/export-download.ts).
+   * Absent → one process-wide registry.
+   */
+  downloadGrants?: DownloadGrantRegistry<ExportArtifactRequest>
   jobs?: {
     runner: JobRunner
     caseDelete: PostgresCaseDeleteJobs
+    /** Per-user view (ownership, visibility, owner-checked cancel). */
+    registry: WebJobRegistry
   }
+  /** Revoked browser-session ids (logout of a stateless cookie session). */
+  sessions?: SessionRevocations
+  /**
+   * External reference lookups behind the admin egress policy
+   * (src/web/server/reference-services/). Absent → those methods answer 501.
+   */
+  referenceServices?: WebReferenceServices
+  /** Per-user cohort association runs (Postgres). Absent → 501. */
+  association?: WebAssociationRuns
 }
 
 export interface InvokeBodyPayload {

@@ -1,5 +1,5 @@
 /**
- * Side-effect module: installs the HTTP `window.api` Proxy and the web
+ * Side-effect module: installs the typed HTTP `window.api` client and the web
  * runtime marker. `src/web/bootstrap.ts` imports this BEFORE the renderer
  * entry; ES modules evaluate their static imports in order, so the
  * renderer sees `window.api` already set when its setup code runs.

@@ -4,6 +4,7 @@
  * All functions take explicit dependencies (db) as parameters
  * and never touch IPC/Electron APIs directly.
  */
+import { DEFAULT_USER_ROLE, type UserRole } from '../../../shared/auth/auth-constants'
 import type { DatabaseService } from '../../database/DatabaseService'
 
 /**
@@ -57,14 +58,15 @@ export async function createUser(
   username: string,
   displayName: string,
   tempPassword: string,
-  getDb: () => DatabaseService
+  getDb: () => DatabaseService,
+  role: UserRole = DEFAULT_USER_ROLE
 ): Promise<unknown> {
   const db = getDb()
   const currentUser = db.user
   if (!currentUser || currentUser.role !== 'admin') {
     throw new Error('Only admins can create users')
   }
-  return db.auth.createUser(username, displayName, tempPassword, currentUser.username)
+  return db.auth.createUser(username, displayName, tempPassword, currentUser.username, role)
 }
 
 /**
@@ -115,11 +117,11 @@ export async function reactivateUser(
 /**
  * Change a user's role. Only admins; cannot change own role.
  */
-export function setRole(
+export async function setRole(
   username: string,
-  role: 'admin' | 'user',
+  role: UserRole,
   getDb: () => DatabaseService
-): void {
+): Promise<void> {
   const db = getDb()
   const currentUser = db.user
   if (!currentUser || currentUser.role !== 'admin') {
@@ -128,7 +130,7 @@ export function setRole(
   if (currentUser.username === username) {
     throw new Error('Cannot change your own role')
   }
-  db.auth.setRole(username, role)
+  await db.auth.setRole(username, role)
 }
 
 /**

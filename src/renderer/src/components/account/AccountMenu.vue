@@ -31,6 +31,13 @@
           data-testid="open-user-management"
           @click="usersOpen = true"
         />
+        <v-list-item
+          v-if="authStore.isAdmin && isWebRuntime()"
+          :prepend-icon="mdiCloudLockOutline"
+          title="External lookups"
+          data-testid="open-external-lookups"
+          @click="lookupsOpen = true"
+        />
         <v-list-subheader class="account-menu__group-start">Theme</v-list-subheader>
         <v-list-item
           v-for="opt in THEME_PREFERENCE_OPTIONS"
@@ -62,6 +69,8 @@
         <UserManagement v-if="usersOpen" />
       </v-card>
     </v-dialog>
+
+    <ExternalLookupsDialog v-if="lookupsOpen" v-model="lookupsOpen" />
   </template>
 </template>
 
@@ -78,6 +87,7 @@ import {
   mdiAccountMultiple,
   mdiCheck,
   mdiClose,
+  mdiCloudLockOutline,
   mdiLockReset,
   mdiLogout
 } from '@mdi/js'
@@ -86,11 +96,13 @@ import { useAuthStore } from '../../stores/authStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { isWebRuntime } from '../../utils/runtime-mode'
 import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference'
+import { roleLabel as labelForRole } from '../../utils/role-labels'
 import { logService } from '../../services/LogService'
 
 // Dialog bodies load on first open so the toolbar chunk stays small.
 const AccountPasswordDialog = defineAsyncComponent(() => import('./AccountPasswordDialog.vue'))
 const UserManagement = defineAsyncComponent(() => import('../UserManagement.vue'))
+const ExternalLookupsDialog = defineAsyncComponent(() => import('./ExternalLookupsDialog.vue'))
 
 /** Empty path keeps list items aligned without drawing an icon. */
 const mdiBlankIcon = 'M0 0'
@@ -99,9 +111,10 @@ const authStore = useAuthStore()
 const settings = useSettingsStore()
 const passwordOpen = ref(false)
 const usersOpen = ref(false)
+const lookupsOpen = ref(false)
 
 const visible = computed(() => authStore.accountsEnabled && authStore.currentUser !== null)
-const roleLabel = computed(() => (authStore.isAdmin ? 'Administrator' : 'User'))
+const roleLabel = computed(() => labelForRole(authStore.currentUser?.role))
 
 onMounted(() => {
   if (isWebRuntime() || authStore.accountsEnabled) void authStore.checkAccountsEnabled()

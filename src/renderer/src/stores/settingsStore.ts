@@ -36,6 +36,8 @@ export type DefaultCaseTab = 'shortlist' | 'snv'
 
 interface PersistedSettings {
   itemsPerPage: number
+  /** Case/cohort tables size their page to the visible table height ("Auto (fit)"); itemsPerPage then holds the last fit size so a reload starts with it. */
+  autoFitPageSize: boolean
   userName: string
   workerThreads: number // 0 = auto (cpus - 1)
   prefetchEnabled: boolean
@@ -46,6 +48,7 @@ interface PersistedSettings {
 
 const DEFAULTS: PersistedSettings = {
   itemsPerPage: 25,
+  autoFitPageSize: false,
   userName: '',
   workerThreads: 0,
   prefetchEnabled: true,
@@ -81,6 +84,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const persisted = load()
 
   const itemsPerPage = ref(persisted.itemsPerPage)
+  const autoFitPageSize = ref(persisted.autoFitPageSize)
   const userName = ref(persisted.userName)
   const workerThreads = ref(persisted.workerThreads)
   const prefetchEnabled = ref(persisted.prefetchEnabled)
@@ -89,10 +93,19 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Auto-persist on change
   watch(
-    [itemsPerPage, userName, workerThreads, prefetchEnabled, defaultCaseTab, themePreference],
+    [
+      itemsPerPage,
+      autoFitPageSize,
+      userName,
+      workerThreads,
+      prefetchEnabled,
+      defaultCaseTab,
+      themePreference
+    ],
     () => {
       save({
         itemsPerPage: itemsPerPage.value,
+        autoFitPageSize: autoFitPageSize.value,
         userName: userName.value,
         workerThreads: workerThreads.value,
         prefetchEnabled: prefetchEnabled.value,
@@ -104,6 +117,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     itemsPerPage,
+    autoFitPageSize,
     userName,
     workerThreads,
     prefetchEnabled,

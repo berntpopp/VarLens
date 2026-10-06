@@ -120,6 +120,13 @@ export interface PostgresImportWorkerErrorMessage {
   type: 'error'
   message: string
   cause?: string
+  /**
+   * Envelope code (`ErrorCode`) of the failure, so the executor can rebuild a
+   * typed error across the thread boundary (a duplicate case name is
+   * `CONFLICT`, not a generic failure).
+   */
+  code?: string
+  userMessage?: string
 }
 
 export type PostgresImportWorkerOutboundMessage =

@@ -63,8 +63,8 @@ describe('computeAutoHiddenColumns', () => {
     'clinvar',
     'hpo_sim_score',
     'moi',
-    '_link_varsome',
-    '_link_franklin'
+    '_links',
+    'sv.support'
   ]
 
   it('hides nothing when the budget is unlimited', () => {
@@ -73,8 +73,8 @@ describe('computeAutoHiddenColumns', () => {
 
   it('keeps clinically critical columns and hides link-outs first', () => {
     const hidden = computeAutoHiddenColumns(caseKeys, 14)
-    expect(hidden.has('_link_varsome')).toBe(true)
-    expect(hidden.has('_link_franklin')).toBe(true)
+    expect(hidden.has('_links')).toBe(true)
+    expect(hidden.has('sv.support')).toBe(true)
     expect(hidden.has('moi')).toBe(true)
     expect(hidden.has('qual')).toBe(true)
     for (const key of ['gene_symbol', 'consequence', 'clinvar', 'gnomad_af', 'cdna', 'aa_change']) {

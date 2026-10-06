@@ -26,7 +26,8 @@ export default defineConfig({
           ),
           'db-worker': resolve(__dirname, 'src/main/workers/db-worker.ts'),
           'write-worker': resolve(__dirname, 'src/main/workers/write-worker.ts'),
-          'zip-worker': resolve(__dirname, 'src/main/import/zip-worker.ts')
+          'zip-worker': resolve(__dirname, 'src/main/import/zip-worker.ts'),
+          'migration-worker': resolve(__dirname, 'src/main/workers/migration-worker.ts')
         }
       }
     }

@@ -99,6 +99,8 @@ export class SqliteStorageSession implements StorageSession {
     this.dbPool = options.dbPool
     this.readExecutor = new SqliteReadExecutor(this.databaseService, this.dbPool)
     this.writeExecutor = new SqliteWriteExecutor(this.databaseService)
+    // Auth writes (failed-login counters, user admin) join the writer thread.
+    this.databaseService.auth.setWriter((op) => this.writeExecutor.executeAuthWrite(op))
     this.importExecutor = new SqliteImportExecutor({
       getDatabaseService: () => this.databaseService,
       // `getSession` is a deferred closure: it is only invoked at import time

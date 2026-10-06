@@ -43,8 +43,17 @@
           rows="8"
           hide-details
         />
-        <div class="text-caption text-medium-emphasis mt-1">
-          {{ parsedGeneCount }} gene(s) recognized
+        <div class="text-caption text-medium-emphasis mt-1" data-testid="gene-list-count">
+          {{ geneCountText }}
+        </div>
+        <div
+          v-if="unknownSymbols.length > 0"
+          class="text-caption text-error mt-1"
+          role="alert"
+          data-testid="gene-list-unknown"
+        >
+          Not recognised as HGNC gene symbols: {{ unknownSymbols.join(', ') }}. Remove or correct
+          them to save.
         </div>
       </v-card-text>
       <v-card-actions>
@@ -56,7 +65,7 @@
         <v-btn
           color="primary"
           variant="flat"
-          :disabled="!geneListName.trim()"
+          :disabled="!geneListName.trim() || unknownSymbols.length > 0"
           :loading="savingGeneList"
           @click="saveGeneList"
         >
@@ -70,6 +79,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useApiService } from '../../composables/useApiService'
+import { useDebounce } from '../../composables/useDebounce'
 import { mdiClose } from '@mdi/js'
 import { logService } from '../../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
@@ -98,8 +108,15 @@ const geneListDescription = ref('')
 const geneListGenesText = ref('')
 const savingGeneList = ref(false)
 
-const parsedGeneCount = computed(() => {
-  return parseGeneText(geneListGenesText.value).length
+const parsedGenes = computed(() => parseGeneText(geneListGenesText.value))
+/** Symbols the gene reference does not know (validated against HGNC). */
+const unknownSymbols = ref<string[]>([])
+const validatedFor = ref<string | null>(null)
+
+const geneCountText = computed(() => {
+  const total = parsedGenes.value.length
+  if (validatedFor.value !== parsedGenes.value.join(',')) return `${total} gene(s) entered`
+  return `${total - unknownSymbols.value.length} of ${total} gene(s) recognized`
 })
 
 function parseGeneText(text: string): string[] {
@@ -110,6 +127,43 @@ function parseGeneText(text: string): string[] {
 }
 
 const { api } = useApiService()
+
+/**
+ * Check symbols against the bundled gene reference (same service as the
+ * panel editor). Returns the unknown ones; on a lookup failure nothing is
+ * flagged so an unavailable reference never blocks editing.
+ */
+async function findUnknownSymbols(genes: string[]): Promise<string[]> {
+  if (!api || genes.length === 0) return []
+  try {
+    const results = unwrapIpcResult(await api.panels.validateSymbols(genes))
+    return results.filter((r) => r.status === 'unknown').map((r) => r.input)
+  } catch (e) {
+    logService.warn(
+      'Gene symbol validation failed: ' +
+        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
+      'gene-list'
+    )
+    return []
+  }
+}
+
+async function validateGenes(): Promise<string[]> {
+  const genes = parsedGenes.value
+  const unknown = await findUnknownSymbols(genes)
+  if (genes.join(',') === parsedGenes.value.join(',')) {
+    unknownSymbols.value = unknown
+    validatedFor.value = genes.join(',')
+  }
+  return unknown
+}
+
+const { debouncedFn: debouncedValidate } = useDebounce(() => void validateGenes(), 400)
+watch(geneListGenesText, () => {
+  unknownSymbols.value = []
+  validatedFor.value = null
+  debouncedValidate()
+})
 
 // Initialize dialog state when opened
 watch(
@@ -143,6 +197,7 @@ async function saveGeneList(): Promise<void> {
   if (name === '' || !api) return
   savingGeneList.value = true
   try {
+    if ((await validateGenes()).length > 0) return
     const geneListsApi = api.geneLists
     let listId: number
     if (editingGeneList.value != null) {

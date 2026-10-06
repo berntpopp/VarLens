@@ -484,7 +484,7 @@ defineExpose({
 }
 
 /*
- * Fills the viewport between the app bar (48px) and the app footer (its real
+ * Fills the viewport between the app bar (--app-bar-height, 3rem) and the app footer (its real
  * height, published by Vuetify's layout as --v-layout-bottom). On short or
  * zoomed viewports (200% zoom, 320px reflow) the stacked chrome no longer
  * leaves room for the table, so the region keeps a minimum height and this
@@ -495,7 +495,7 @@ defineExpose({
 .case-content {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 48px - var(--v-layout-bottom, 32px));
+  height: calc(100dvh - var(--app-bar-height, 48px) - var(--v-layout-bottom, 32px));
   overflow-x: hidden;
   overflow-y: auto;
 }

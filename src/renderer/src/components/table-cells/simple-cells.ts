@@ -88,6 +88,58 @@ ExternalLinkCell.props = {
 }
 ExternalLinkCell.emits = ['click']
 
+/** One icon link of a {@link LinkOutsCell}. */
+export interface LinkOutItem {
+  /** Key of the resolved URL in `urls`. */
+  key: string
+  name: string
+  abbreviation: string
+}
+
+/**
+ * The merged Links column: one compact badge anchor per configured link-out
+ * (VarSome, Franklin, ...). Each badge is a real, focusable `<a>` with an
+ * accessible name; links that cannot resolve for this row (missing gene or
+ * alleles) keep their slot as an inert spacer so badges line up across rows.
+ */
+export const LinkOutsCell: FunctionalComponent<
+  { links: readonly LinkOutItem[]; urls: Readonly<Record<string, string | null | undefined>> },
+  LinkEmits
+> = (props, { emit }) => {
+  const badges: VNode[] = []
+  let resolved = 0
+  for (const link of props.links) {
+    const url = props.urls[link.key]
+    if (!hasText(url)) {
+      badges.push(
+        h('span', { class: 'link-outs__badge link-outs__badge--empty', 'aria-hidden': 'true' })
+      )
+      continue
+    }
+    resolved += 1
+    badges.push(
+      h(
+        'a',
+        {
+          class: 'link-outs__badge',
+          'data-tooltip': link.name,
+          'data-tooltip-location': TOOLTIP_TOP,
+          ...linkAttrs(emit as LinkEmit, url, `Open in ${link.name} (opens in a new tab)`)
+        },
+        link.abbreviation
+      )
+    )
+  }
+  if (resolved === 0) return placeholder('text-medium-emphasis')
+  return h('span', { class: 'link-outs' }, badges)
+}
+LinkOutsCell.displayName = 'LinkOutsCell'
+LinkOutsCell.props = {
+  links: { type: Array as PropType<readonly LinkOutItem[]>, required: true },
+  urls: { type: Object as PropType<Record<string, string | null | undefined>>, required: true }
+}
+LinkOutsCell.emits = ['click']
+
 export const PositionCell: FunctionalComponent<
   { position: number; url?: string | null },
   LinkEmits

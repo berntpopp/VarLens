@@ -1,0 +1,26 @@
+{
+  "axe": {
+    "case-view-with-panel": [],
+    "cohort-view-with-panel": []
+  },
+  "checks": {
+    "startDelete": {
+      "status": 200,
+      "body": {
+        "jobId": "01M495RHNR000000"
+      }
+    },
+    "caseViewText": "Deleting cases\nCancel\nDeleting · 0 of 4 cases",
+    "progressbar": {
+      "label": "Deleting cases progress",
+      "now": "0"
+    },
+    "liveRegion": "Deleting cases started.",
+    "visibleInCohort": true,
+    "cancelReachableByTab": true,
+    "afterCancelText": "Deleting cases: Cancelled.\nBackground tasks\nDeleting cases\nCancelled",
+    "mobileNoHScroll": true
+  },
+  "seriousCase": [],
+  "seriousCohort": []
+}

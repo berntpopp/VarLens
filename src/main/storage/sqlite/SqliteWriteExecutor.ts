@@ -4,6 +4,11 @@ import type { DatabaseService } from '../../database/DatabaseService'
 import type { StorageWriteExecutor, StorageWriteTask } from '../write-executor'
 import { executeSqliteWriteTask } from './sqlite-write-dispatch'
 import { WriteWorkerClient } from './WriteWorkerClient'
+import {
+  applyAuthWrite,
+  type AuthWriteOp,
+  type AuthWriteResult
+} from '../../services/auth/auth-writes'
 
 export interface SqliteWriteExecutorOptions {
   /**
@@ -51,7 +56,20 @@ export class SqliteWriteExecutor implements StorageWriteExecutor {
   }
 
   execute(task: StorageWriteTask): Promise<unknown> {
-    const result = this.writeTail.then(() => this.executeTask(task))
+    return this.enqueue(() => this.executeTask(task))
+  }
+
+  /** Desktop auth writes (login bookkeeping, user admin) on the same FIFO writer. */
+  executeAuthWrite(op: AuthWriteOp): Promise<AuthWriteResult> {
+    return this.enqueue(async () =>
+      this.worker !== null
+        ? ((await this.worker.runAuth(op)) as AuthWriteResult)
+        : applyAuthWrite(this.databaseService.database, op)
+    )
+  }
+
+  private enqueue<T>(run: () => Promise<T>): Promise<T> {
+    const result = this.writeTail.then(run)
     this.writeTail = result.then(
       () => undefined,
       () => undefined

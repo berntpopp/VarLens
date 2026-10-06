@@ -35,7 +35,7 @@
         size="small"
         label
         variant="outlined"
-        color="grey-darken-1"
+        color="grey-darken-3"
         class="ml-2"
         @click="emit('select-all-categories')"
       >
@@ -78,7 +78,7 @@
         size="small"
         label
         variant="outlined"
-        color="grey-darken-1"
+        color="grey-darken-3"
         class="ml-2"
         @click="emit('select-all-clinvar')"
       >
@@ -121,7 +121,7 @@
         size="small"
         label
         variant="outlined"
-        color="grey-darken-1"
+        color="grey-darken-3"
         class="ml-2"
         @click="emit('select-all-clinvar-consequences')"
       >
@@ -193,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import { readableTextOn } from '../../utils/readable-text-color'
 import { computed } from 'vue'
 import type {
   ConsequenceCategory,
@@ -270,7 +271,7 @@ function formatCategory(category: string): string {
 
 function chipStyle(category: ConsequenceCategory, color: string): Record<string, string> {
   if (isActive(category)) {
-    return { backgroundColor: color, color: '#fff', borderColor: color }
+    return { backgroundColor: color, color: readableTextOn(color), borderColor: color }
   }
   return { borderColor: color, color, opacity: '0.6' }
 }
@@ -309,16 +310,14 @@ function clinvarConsequenceChipStyle(
   color: string
 ): Record<string, string> {
   if (isClinVarConsequenceActive(category)) {
-    return { backgroundColor: color, color: '#fff', borderColor: color }
+    return { backgroundColor: color, color: readableTextOn(color), borderColor: color }
   }
   return { borderColor: color, color, opacity: '0.6' }
 }
 
 function clinvarChipStyle(category: ClinVarSignificance, color: string): Record<string, string> {
   if (isClinVarActive(category)) {
-    // For light colors (uncertain/yellow), use dark text
-    const textColor = category === 'uncertain' ? '#333' : '#fff'
-    return { backgroundColor: color, color: textColor, borderColor: color }
+    return { backgroundColor: color, color: readableTextOn(color), borderColor: color }
   }
   return { borderColor: color, color, opacity: '0.6' }
 }

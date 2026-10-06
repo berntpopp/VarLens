@@ -48,6 +48,11 @@
       "assignedTo": "seedTransaction"
     },
     {
+      "file": "src/main/database/user-roles-migration.ts",
+      "callerFunction": "migrateUserRoles",
+      "assignedTo": "rebuild"
+    },
+    {
       "file": "src/main/database/VariantFilterBuilder.ts",
       "callerFunction": "setupPanelIntervalsTable",
       "assignedTo": "insertMany"
@@ -58,9 +63,14 @@
       "assignedTo": "runTransaction"
     },
     {
-      "file": "src/main/services/auth/AuthService.ts",
+      "file": "src/main/services/auth/auth-writes.ts",
       "callerFunction": "createFirstUser",
-      "assignedTo": "createUser"
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/services/auth/auth-writes.ts",
+      "callerFunction": "setRole",
+      "assignedTo": null
     },
     {
       "file": "src/main/workers/delete-operations.ts",

@@ -18,6 +18,7 @@ import { createRepositories } from '../database/createRepositories'
 import { assertNotHexLiteralKey } from '../database/sqlcipher-key-guard'
 import { encodeWorkerError } from '../database/worker-error-codec'
 import { executeSqliteWriteTask } from '../storage/sqlite/sqlite-write-dispatch'
+import { applyAuthWrite } from '../services/auth/auth-writes'
 import type {
   WriteWorkerData,
   WriteWorkerRequest,
@@ -63,7 +64,10 @@ port.on('message', (request: WriteWorkerRequest) => {
   tail = tail.then(async () => {
     let response: WriteWorkerResponse
     try {
-      const result = await executeSqliteWriteTask(repos, request.task)
+      const result =
+        'auth' in request
+          ? applyAuthWrite(db, request.auth)
+          : await executeSqliteWriteTask(repos, request.task)
       response = { id: request.id, ok: true, result }
     } catch (error) {
       response = { id: request.id, ok: false, error: encodeWorkerError(error) }

@@ -11,6 +11,7 @@ import { setActivePinia, createPinia } from 'pinia'
 import { withSetup, flushPromises } from '../../utils/test-helpers'
 import { createMockApi } from '../../utils/mock-api'
 import { useFilterState } from '@renderer/composables/useFilterState'
+import { installCapabilities } from '../helpers/capabilities'
 
 // Mock useTags — avoid real API calls for tags
 vi.mock('@renderer/composables/useTags', () => ({
@@ -25,6 +26,7 @@ describe('useFilterState', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    installCapabilities()
     // Assign a fresh mock API — add geneSymbols which is not in base mock
     const mockApi = createMockApi()
     ;(mockApi.variants as Record<string, unknown>).geneSymbols = vi

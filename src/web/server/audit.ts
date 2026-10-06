@@ -1,44 +1,14 @@
+/**
+ * Audit-row writers for the web server. WHICH operations are audited is not
+ * decided here: the security map (security/operation-security-map.ts) gives
+ * every operation an audit rule, and `secure()` calls these writers.
+ * The actor comes from the request context when one is active.
+ */
 import type { StorageWriteTask } from '../../main/storage/write-executor'
 import type { AuditActionType, AuditEntityType } from '../../shared/types/database'
 import type { UserRole } from '../../shared/auth/auth-constants'
+import { auditActorName } from '../../main/security/request-context'
 import type { DispatcherDeps } from './routes/types'
-
-const AUDITED_OVERRIDE_WRITE_METHODS = new Set<string>([
-  'annotations:upsertGlobal',
-  'annotations:upsertPerCase',
-  'case-metadata:createCohort',
-  'import:start',
-  'import:startMultiFile',
-  'batch-import:start',
-  'batch-import:cleanupZipTemp',
-  'cases:startDelete',
-  'cases:deleteBatch',
-  'cases:deleteAll',
-  'jobs:cancel'
-])
-
-const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
-  'auth:login',
-  'auth:logout',
-  'auth:currentUser',
-  'auth:isAccountsEnabled',
-  'auth:changePassword',
-  'auth:createUser',
-  'auth:deactivateUser',
-  'auth:resetPassword',
-  'auth:setRole',
-  'auth:reactivateUser',
-  'database:capabilities',
-  'database:health',
-  'database:info',
-  'database:getOverview',
-  'database:recentList',
-  'database:overview',
-  // Background-job status polls: ids and counters only, high frequency.
-  'jobs:get',
-  'jobs:list',
-  'jobs:progress'
-])
 
 interface WebAuditEvent {
   action_type: AuditActionType
@@ -64,14 +34,6 @@ async function appendWebAudit(deps: DispatcherDeps, event: WebAuditEvent): Promi
       }
     ]
   } satisfies StorageWriteTask)
-}
-
-export function shouldAuditOverrideWrite(key: string): boolean {
-  return AUDITED_OVERRIDE_WRITE_METHODS.has(key)
-}
-
-export function shouldAuditApiRead(key: string): boolean {
-  return !READ_AUDIT_EXCLUDED_METHODS.has(key)
 }
 
 export async function recordAuthAudit(
@@ -144,7 +106,7 @@ export async function recordApiWriteAudit(
     action_type: 'api_write',
     entity_type: 'api_call',
     entity_key: params.key,
-    user_name: params.username ?? null,
+    user_name: auditActorName(params.username),
     new_value: { success: true, method: params.key },
     metadata: { source: 'web-dispatcher' }
   })
@@ -167,7 +129,7 @@ export async function recordApiReadAudit(
       entity_key: params.key,
       old_value: null,
       new_value: { success: true, method: params.key },
-      user_name: params.username ?? null,
+      user_name: auditActorName(params.username),
       metadata: { source: 'web-dispatcher' },
       occurred_at: Date.now()
     })
@@ -177,7 +139,7 @@ export async function recordApiReadAudit(
     action_type: 'api_read',
     entity_type: 'api_call',
     entity_key: params.key,
-    user_name: params.username ?? null,
+    user_name: auditActorName(params.username),
     new_value: { success: true, method: params.key },
     metadata: { source: 'web-dispatcher' }
   })

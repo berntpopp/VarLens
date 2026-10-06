@@ -1,5 +1,7 @@
+import type { FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
+import { ForbiddenError } from '../../../main/ipc/errors'
 import type { StorageWriteTask } from '../../../main/storage/write-executor'
 import type { CaseDeleteTarget } from '../../../shared/types/case-delete-job'
 import { ErrorCode, type SerializableError } from '../../../shared/types/errors'
@@ -23,6 +25,18 @@ function notFound(message: string): SerializableError {
   return { code: ErrorCode.NOT_FOUND, message, userMessage: 'This case no longer exists.' }
 }
 
+/**
+ * Deleting every case is admin-only in web (multi-user, shared data). Bulk
+ * deletes of selected cases follow the normal write rules.
+ */
+function assertMayDeleteAll(request: FastifyRequest, target: CaseDeleteTarget): void {
+  if (target.mode !== 'all' || request.session?.user?.role === 'admin') return
+  throw new ForbiddenError(
+    `user ${request.session?.user?.username ?? '?'} may not delete all cases`,
+    'Only administrators can delete all cases.'
+  )
+}
+
 /** Start the background `case_delete` job and wait for it (blocking variants). */
 async function runDeleteJob(
   deps: DispatcherDeps,
@@ -41,6 +55,9 @@ async function runDeleteJob(
  *                                         `jobs:changed` SSE, cancel via
  *                                         `jobs:cancel`
  *   cases:delete / deleteBatch / deleteAll  run the same job and wait for it
+ *
+ * Deleting all cases (`deleteAll`, `startDelete({ mode: 'all' })`) is
+ * admin-only: 403 FORBIDDEN for other roles.
  *
  * The case disappears from every read as soon as its hide phase commits.
  * Without a job runner (unit tests) `cases:delete` falls back to the write task.
@@ -64,6 +81,7 @@ export function buildCasesOverrides(): Record<string, OverrideHandler> {
           reply.code(501)
           return badRequest('background case deletion is not available')
         }
+        assertMayDeleteAll(request, parsed.data)
         const handle = deps.jobs.caseDelete.start(parsed.data, request.session?.user?.id)
         return { jobId: handle.id }
       }
@@ -118,6 +136,7 @@ export function buildCasesOverrides(): Record<string, OverrideHandler> {
           reply.code(501)
           return badRequest('background case deletion is not available')
         }
+        assertMayDeleteAll(request, { mode: 'all' })
         return runDeleteJob(deps, { mode: 'all' }, request.session?.user?.id)
       }
     }

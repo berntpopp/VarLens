@@ -8,6 +8,7 @@ import {
   type PlatformIdentityAuditInput
 } from './platform-identity'
 import { buildPlatformAuthRateLimitConfig } from './rate-limit'
+import { newSessionId } from './session-revocation'
 
 const OIDC_STATE_TTL_MS = 10 * 60 * 1000
 const MAX_PENDING_OIDC_STATES = 2
@@ -315,6 +316,7 @@ export function registerPlatformIdentityRoutes(
         request.session.user = sessionUser
         request.session.authMode = 'platform'
         request.session.mustChangePassword = false
+        request.session.sid = newSessionId()
         await auditBestEffort({
           action: 'auth_login_success',
           subject,

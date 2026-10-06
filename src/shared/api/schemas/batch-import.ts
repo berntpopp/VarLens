@@ -4,6 +4,9 @@ export const BatchImportInvokeBodySchemas = {
   extractZip: z.object({
     args: z.tuple([z.string().min(1), z.string().optional()])
   }),
+  inspectZip: z.object({
+    args: z.tuple([z.string().min(1)])
+  }),
   testZipPassword: z.object({
     args: z.tuple([z.string().min(1), z.string()])
   }),

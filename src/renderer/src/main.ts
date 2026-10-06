@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import { useCapabilityStore } from './stores/capabilityStore'
 import vuetify from './plugins/vuetify'
 import router from './router'
 import './assets/styles/main.scss'
@@ -23,7 +24,11 @@ async function bootstrap(): Promise<void> {
   const app = createApp(App)
 
   // Register Pinia first so stores work in components and services
-  app.use(createPinia())
+  const pinia = createPinia()
+  app.use(pinia)
+  // Load the per-session capability document before the shell renders: the
+  // store fails closed, so gated UI never flashes an action it then refuses.
+  await useCapabilityStore(pinia).load()
   app.use(router)
   app.use(vuetify)
   app.mount('#app')

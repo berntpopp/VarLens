@@ -195,8 +195,8 @@ describe('parity (auth): multi-user isolation — user A cannot see user B data'
   // gains user_id NOT NULL DEFAULT 1). The auth surface is multi-user-
   // ready (createUser, role enum, password rotation), but data-row
   // scoping isn't.
-  test('USER_ROLES is shared, two-element enum (admin, user)', () => {
-    expect(new Set(USER_ROLES)).toEqual(new Set(['admin', 'user']))
+  test('USER_ROLES is shared, three-element enum (viewer, analyst, admin)', () => {
+    expect(new Set(USER_ROLES)).toEqual(new Set(['viewer', 'analyst', 'admin']))
   })
 
   test.skip('Stage 3: row-level isolation against per-tenant schemas — activate when tests/web-gate/user-id-schema.test.ts goes green', () => {

@@ -13,7 +13,7 @@
           variant="outlined"
           density="compact"
           :rules="[rules.required, rules.maxLength]"
-          :error-messages="errorMessage"
+          :error-messages="error ?? errorMessage"
           autofocus
           class="mb-2"
         />
@@ -44,12 +44,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean
   /** Driven by parent — true while the API call is in flight */
   saving?: boolean
+  /** Driven by parent — the save failure to show (e.g. a duplicate name) */
+  error?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -66,6 +68,18 @@ const rules = {
   maxLength: (v: string) => v.length <= 100 || 'Max 100 characters'
 }
 
+// Start every opening with empty fields; keep them while the dialog is open
+// so a rejected save (duplicate name) can be corrected instead of retyped.
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (!open) return
+    name.value = ''
+    description.value = ''
+    errorMessage.value = ''
+  }
+)
+
 function save(): void {
   if (!name.value.trim()) return
   errorMessage.value = ''
@@ -73,7 +87,5 @@ function save(): void {
     name: name.value.trim(),
     description: description.value.trim() || null
   })
-  name.value = ''
-  description.value = ''
 }
 </script>

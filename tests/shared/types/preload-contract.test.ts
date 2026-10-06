@@ -27,6 +27,7 @@ const DOMAIN_CONTRACT_PATHS: Record<string, string> = {
   FilterPresetsDomainContract: 'src/shared/ipc/domains/filter-presets.ts',
   DebugApi: 'src/shared/ipc/domains/debug.ts',
   JobsApi: 'src/shared/ipc/domains/jobs.ts',
+  ReferenceServicesApi: 'src/shared/ipc/domains/reference-services.ts',
   CaseMetadataDomainContract: 'src/shared/ipc/domains/case-metadata.ts',
   ImportDomainContract: 'src/shared/ipc/domains/import.ts',
   AuthDomainContract: 'src/shared/ipc/domains/auth.ts'

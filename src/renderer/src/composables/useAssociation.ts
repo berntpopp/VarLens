@@ -5,9 +5,12 @@
  * with typed access via useApiService (no window.api casting).
  */
 
+import { computed } from 'vue'
 import { useApiService } from './useApiService'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { logService } from '../services/LogService'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { unwrapIpcResult } from '../../../shared/types/errors'
+import { formatError } from '../utils/ipc-result'
 
 interface CaseInfo {
   id: number
@@ -24,17 +27,23 @@ interface CohortGroup {
 
 export function useAssociation() {
   const { api } = useApiService()
+  // Association runs in both runtimes (web: per-user runs on Postgres). The
+  // capability still decides availability, so a session without it (e.g. no
+  // capability document yet) shows the reason instead of failing.
+  const capabilities = useCapabilityStore()
+  const unavailableReason = computed(() => capabilities.capabilityReason('cohortAssociation'))
 
   async function runAssociation(config: unknown): Promise<unknown> {
     if (!api) throw new Error('API not available')
+    capabilities.requireCapability('cohortAssociation')
     return unwrapIpcResult(await api.cohort.runAssociation(config))
   }
 
   function cancelAssociation(): void {
-    if (!api) return
+    if (!api || !capabilities.canUse('cohortAssociation')) return
     api.cohort.cancelAssociation().catch((e) => {
       logService.warn(
-        'Failed to cancel association: ' + (e instanceof Error ? e.message : String(e)),
+        'Failed to cancel association: ' + formatError(e, 'unknown error'),
         'association'
       )
     })
@@ -43,7 +52,7 @@ export function useAssociation() {
   function onAssociationProgress(
     callback: (progress: { completed: number; total: number }) => void
   ): () => void {
-    if (!api) return () => {}
+    if (!api || !capabilities.canUse('cohortAssociation')) return () => {}
     return api.cohort.onAssociationProgress(callback)
   }
 
@@ -71,12 +80,7 @@ export function useAssociation() {
           }
         } catch (e) {
           logService.warn(
-            `Failed to load metadata for case ${c.id}: ` +
-              (e instanceof Error
-                ? e.message
-                : isIpcError(e)
-                  ? (e.userMessage ?? e.message)
-                  : String(e)),
+            `Failed to load metadata for case ${c.id}: ` + formatError(e, 'unknown error'),
             'association'
           )
           return { id: c.id, name: c.name, status: null, sex: null, cohortIds: [] }
@@ -86,5 +90,11 @@ export function useAssociation() {
     return { cases, cohortGroups: cohorts }
   }
 
-  return { runAssociation, cancelAssociation, onAssociationProgress, loadCasesWithMetadata }
+  return {
+    runAssociation,
+    cancelAssociation,
+    onAssociationProgress,
+    loadCasesWithMetadata,
+    unavailableReason
+  }
 }

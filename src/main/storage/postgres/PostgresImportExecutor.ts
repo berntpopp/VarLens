@@ -8,6 +8,7 @@
  */
 import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
+import { withImportJobProgress } from '../import-job-progress'
 import type {
   StorageImportExecutor,
   StorageImportSingleFileParams,
@@ -21,6 +22,7 @@ import type {
   PostgresImportWorkerStartMessage,
   PostgresClientConfig
 } from '../../../shared/types/postgres-import-worker'
+import { workerErrorToError } from '../import-worker-errors'
 
 export interface PostgresImportExecutorOptions {
   schema: string
@@ -50,7 +52,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
         // Cancellation posts { type: 'cancel' } to the worker via the client's
         // cancel() method (PostgresImportWorkerClient.cancel), NOT terminate().
         ctx.registerCancel(() => this.currentClient?.cancel())
-        return await this._performImport(p)
+        return await this._performImport(withImportJobProgress(ctx, p))
       }
     )
     return handle.result
@@ -99,7 +101,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
         // Cancellation posts { type: 'cancel' } to the worker via the client's
         // cancel() method (PostgresImportWorkerClient.cancel), NOT terminate().
         ctx.registerCancel(() => this.currentClient?.cancel())
-        return await this._performMultiImport(p)
+        return await this._performMultiImport(withImportJobProgress(ctx, p))
       }
     )
     return handle.result
@@ -199,10 +201,13 @@ export class PostgresImportExecutor implements StorageImportExecutor {
             `PostgresImportExecutor worker error: ${msg.message}`,
             'PostgresImportExecutor'
           )
-          reject(new Error(msg.message))
+          reject(workerErrorToError(msg))
         }
       }
       client.start(start, callbacks)
     })
   }
 }
+
+// Re-exported for callers/tests that predate the shared module.
+export { workerErrorToError }

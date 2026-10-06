@@ -34,12 +34,6 @@ export function buildDatabaseOverrides(): Record<string, OverrideHandler> {
           params: []
         })
       }
-    },
-
-    'database:recentList': {
-      handle() {
-        return []
-      }
     }
   }
 }

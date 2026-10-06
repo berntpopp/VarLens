@@ -132,19 +132,22 @@ html::-webkit-scrollbar-thumb {
 }
 
 /* Improved skip link for accessibility */
+/* Hidden by its own height (not a fixed -40px), so it stays off-screen at
+   200 % text instead of peeking over the app bar. */
 .skip-link {
   position: absolute;
-  top: -40px;
+  top: 0;
   left: 0;
+  transform: translateY(-100%);
   background: rgb(var(--v-theme-primary));
   color: rgb(var(--v-theme-on-primary));
   padding: 8px 16px;
   z-index: 3000;
-  transition: top 0.2s ease;
+  transition: transform 0.2s ease;
 }
 
 .skip-link:focus {
-  top: 0;
+  transform: translateY(0);
 }
 
 /* ========================================

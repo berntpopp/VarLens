@@ -56,6 +56,45 @@
   }
 }
 
+// Merged Links column (LinkOutsCell): one 1.5rem badge per link-out, in rem
+// so it scales with text size; utils/link-outs.ts sizes the column from it.
+.link-outs {
+  display: inline-flex;
+  gap: 0.125rem;
+  vertical-align: middle;
+  white-space: nowrap;
+
+  &__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 1.5rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 1px solid color-mix(in srgb, rgb(var(--v-theme-primary)) 45%, transparent);
+    border-radius: 4px;
+    color: rgb(var(--v-theme-primary));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+  }
+
+  &__badge--empty {
+    border-color: transparent;
+  }
+
+  a.link-outs__badge:hover {
+    background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 12%, transparent);
+  }
+
+  a.link-outs__badge:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: 1px;
+  }
+}
+
 // Gene symbol styling
 .gene-symbol {
   font-weight: 500;

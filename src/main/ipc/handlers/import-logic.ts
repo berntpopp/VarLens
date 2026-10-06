@@ -13,6 +13,7 @@
  * (`startMultiFileImportSqlite`).
  */
 import { mainLogger } from '../../services/MainLogger'
+import { ConflictError } from '../errors'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
 import { VariantFrequencyService } from '../../database/VariantFrequencyService'
@@ -96,7 +97,7 @@ async function withActiveImportOperation<T>(
   operation: () => Promise<T>
 ): Promise<T> {
   if (activeImportOperation !== null) {
-    throw new Error('An import operation is already in progress')
+    throw new ConflictError('An import operation is already in progress')
   }
   const current = { cancel }
   activeImportOperation = current

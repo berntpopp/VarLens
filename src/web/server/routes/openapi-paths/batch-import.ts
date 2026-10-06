@@ -15,6 +15,12 @@ export function buildBatchImportOpenApiPaths(): Record<string, OpenApiPathItem> 
       response: BatchImportUnknownResponseSchema,
       forbiddenDescription
     }),
+    '/api/batch-import/inspectZip': dispatcherMethodOperation({
+      tag: 'batch-import',
+      summary: 'Report whether an uploaded ZIP archive has encrypted entries',
+      body: BatchImportInvokeBodySchemas.inspectZip,
+      response: BatchImportUnknownResponseSchema
+    }),
     '/api/batch-import/testZipPassword': dispatcherMethodOperation({
       tag: 'batch-import',
       summary: 'Test a server-side ZIP archive password',

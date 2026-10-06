@@ -2,6 +2,7 @@ import type { ColumnFilter } from '../../../shared/types/column-filters'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
+import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/sql/cohort-keyset'
 
 /**
  * Summary read-side query builder (Sprint A PR-3 C4).
@@ -24,6 +25,8 @@ export interface SummaryQueryParts {
   whereParts: string[]
   orderBy: string
   values: unknown[]
+  /** True when `orderBy` is the keyset order (default carrier-count sort). */
+  keyset: boolean
 }
 
 /** `WHERE ...` clause (or empty string) for a summary-page query. */
@@ -73,7 +76,9 @@ export function buildSummaryPageSql(
       cvs.gnomad_af,
       cvs.cadd AS cadd_phred,
       cvs.transcript,
-      cvs.omim_mim_number AS omim_id
+      cvs.omim_mim_number AS omim_id,
+      cvs.variant_type AS _keyset_variant_type,
+      cvs.genome_build AS _keyset_genome_build
     FROM ${qualifiedTable} cvs
     ${summaryWhereClause(whereParts)}
     ${orderBy}
@@ -167,7 +172,7 @@ function hasExtensionPredicate(params: CohortSearchParams): boolean {
 }
 
 function emptyParts(): SummaryQueryParts {
-  return { joins: '', whereParts: [], orderBy: '', values: [] }
+  return { joins: '', whereParts: [], orderBy: '', values: [], keyset: false }
 }
 
 function normalizeColumnFilterValue(column: string, value: string | number): string | number {
@@ -346,13 +351,12 @@ export function buildSummaryQueryParts(
     params.sort_by !== undefined && SUMMARY_SORT_COLUMNS[params.sort_by] !== undefined
       ? params.sort_by
       : 'carrier_count'
-  const orderBy = cohortOrderByClause(
-    sortKey,
-    SUMMARY_SORT_COLUMNS[sortKey],
-    params.sort_order === 'asc' ? 'asc' : 'desc',
-    'cvs',
-    'postgres'
-  )
+  const direction = params.sort_order === 'asc' ? 'asc' : 'desc'
+  // Default carrier-count sort → all-ascending keyset order (idx_cvs_carrier_keyset).
+  const keyset = isCohortKeysetSort(sortKey, direction)
+  const orderBy = keyset
+    ? cohortKeysetOrderByClause('cvs', 'postgres')
+    : cohortOrderByClause(sortKey, SUMMARY_SORT_COLUMNS[sortKey], direction, 'cvs', 'postgres')
 
-  return { parts: { joins: '', whereParts, orderBy, values }, unavailable: false }
+  return { parts: { joins: '', whereParts, orderBy, values, keyset }, unavailable: false }
 }

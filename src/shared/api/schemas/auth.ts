@@ -12,10 +12,13 @@ export const LoginParamsSchema = z.object({
   password: z.string().min(1).max(256)
 })
 
+export const UserRoleSchema = z.enum(USER_ROLES)
+
 export const CreateUserSchema = z.object({
   username: UsernameSchema,
   displayName: z.string().min(1).max(200),
-  tempPassword: PasswordSchema
+  tempPassword: PasswordSchema,
+  role: UserRoleSchema.optional()
 })
 
 export const ChangePasswordSchema = z.object({
@@ -24,13 +27,21 @@ export const ChangePasswordSchema = z.object({
 })
 
 export const LoginArgsSchema = z.tuple([LoginParamsSchema.shape.username, PasswordInputSchema])
-export const CreateUserArgsSchema = z.tuple([
-  CreateUserSchema.shape.username,
-  CreateUserSchema.shape.displayName,
-  CreateUserSchema.shape.tempPassword
+export const CreateUserArgsSchema = z.union([
+  z.tuple([
+    CreateUserSchema.shape.username,
+    CreateUserSchema.shape.displayName,
+    CreateUserSchema.shape.tempPassword
+  ]),
+  z.tuple([
+    CreateUserSchema.shape.username,
+    CreateUserSchema.shape.displayName,
+    CreateUserSchema.shape.tempPassword,
+    // JSON turns an omitted trailing `role` into null; treat null as "default".
+    UserRoleSchema.nullable()
+  ])
 ])
 export const UsernameArgsSchema = z.tuple([UsernameSchema])
-export const UserRoleSchema = z.enum(USER_ROLES)
 export const SetRoleArgsSchema = z.tuple([UsernameSchema, UserRoleSchema])
 export const ResetPasswordArgsSchema = z.tuple([UsernameSchema, PasswordSchema])
 export const ChangePasswordArgsSchema = z.tuple([

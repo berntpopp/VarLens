@@ -15,6 +15,9 @@ export interface CohortDomainContract {
       total_count: number
       /** Optional same-load read warnings (Sprint A PR-3 C5). */
       warnings?: { staleSummary?: boolean }
+      /** Keyset cursor for the directly following page (default sort). */
+      next_cursor?: string
+      paging?: 'keyset'
     }>
   >
   getColumnMeta: () => Promise<IpcResult<ColumnFilterMeta[]>>

@@ -188,34 +188,32 @@ export function useCohortData(): UseCohortDataReturn {
   function registerSummaryListener(): void {
     if (!api || cleanupSummaryListener) return
     const cohortApi = api.cohort
-    if (typeof cohortApi.onSummaryRebuilt === 'function') {
-      cleanupSummaryListener = cohortApi.onSummaryRebuilt(
-        (status: {
-          is_stale: boolean
-          phase?: string
-          phase_index?: number
-          phase_total?: number
-          label?: string
-        }) => {
-          summaryStale.value = status.is_stale
-          // Phase progress is optional — if the payload carries phase fields
-          // update them; if not (start/end events), clear them when the
-          // rebuild finishes.
-          if (status.phase !== undefined) {
-            rebuildPhase.value = status.phase
-            rebuildPhaseIndex.value = status.phase_index ?? null
-            rebuildPhaseTotal.value = status.phase_total ?? null
-            rebuildPhaseLabel.value = status.label ?? null
-          } else if (status.is_stale === false) {
-            // Rebuild finished — reset phase state.
-            rebuildPhase.value = null
-            rebuildPhaseIndex.value = null
-            rebuildPhaseTotal.value = null
-            rebuildPhaseLabel.value = null
-          }
+    cleanupSummaryListener = cohortApi.onSummaryRebuilt(
+      (status: {
+        is_stale: boolean
+        phase?: string
+        phase_index?: number
+        phase_total?: number
+        label?: string
+      }) => {
+        summaryStale.value = status.is_stale
+        // Phase progress is optional — if the payload carries phase fields
+        // update them; if not (start/end events), clear them when the
+        // rebuild finishes.
+        if (status.phase !== undefined) {
+          rebuildPhase.value = status.phase
+          rebuildPhaseIndex.value = status.phase_index ?? null
+          rebuildPhaseTotal.value = status.phase_total ?? null
+          rebuildPhaseLabel.value = status.label ?? null
+        } else if (status.is_stale === false) {
+          // Rebuild finished — reset phase state.
+          rebuildPhase.value = null
+          rebuildPhaseIndex.value = null
+          rebuildPhaseTotal.value = null
+          rebuildPhaseLabel.value = null
         }
-      )
-    }
+      }
+    )
   }
 
   function unregisterSummaryListener(): void {
@@ -231,25 +229,23 @@ export function useCohortData(): UseCohortDataReturn {
   // Initialize staleness from current status (catches in-progress rebuilds)
   if (api) {
     const cohortApi = api.cohort
-    if (typeof cohortApi.getSummaryStatus === 'function') {
-      cohortApi
-        .getSummaryStatus()
-        .then((statusResult) => {
-          const status = unwrapIpcResult(statusResult)
-          summaryStale.value = status.is_stale
-        })
-        .catch((e: unknown) => {
-          logService.warn(
-            'Failed to get cohort summary status: ' +
-              (e instanceof Error
-                ? e.message
-                : isIpcError(e)
-                  ? (e.userMessage ?? e.message)
-                  : String(e)),
-            'cohort'
-          )
-        })
-    }
+    cohortApi
+      .getSummaryStatus()
+      .then((statusResult) => {
+        const status = unwrapIpcResult(statusResult)
+        summaryStale.value = status.is_stale
+      })
+      .catch((e: unknown) => {
+        logService.warn(
+          'Failed to get cohort summary status: ' +
+            (e instanceof Error
+              ? e.message
+              : isIpcError(e)
+                ? (e.userMessage ?? e.message)
+                : String(e)),
+          'cohort'
+        )
+      })
   }
 
   function activate(): void {
@@ -377,6 +373,9 @@ export function useCohortData(): UseCohortDataReturn {
    * Uses generation counter to discard stale responses and count caching
    * to skip COUNT queries on pagination/sort changes.
    */
+  const pageCursors = new Map<string, string>()
+  const MAX_PAGE_CURSORS = 64
+
   const fetchVariants = async (params: CohortQueryParams): Promise<void> => {
     if (!api) {
       logService.warn('API not available - running outside Electron', 'cohort')
@@ -413,6 +412,12 @@ export function useCohortData(): UseCohortDataReturn {
       const filtersChanged = filterHash !== cachedFilterHash
 
       const ipcParams = buildIpcParams(params)
+      // Keyset paging (default carrier-count sort, both backends): reuse the
+      // cursor the previous page returned for this offset + query scope.
+      const offset = params.offset ?? 0
+      const cursorScope = JSON.stringify({ ...ipcParams, offset: undefined })
+      const cursor = pageCursors.get(`${cursorScope}@${offset}`)
+      if (cursor !== undefined) ipcParams.cursor = cursor
       if (!filtersChanged) {
         ipcParams._count_needed = false
       }
@@ -422,6 +427,11 @@ export function useCohortData(): UseCohortDataReturn {
 
       // Discard stale responses from superseded requests
       if (thisGeneration !== requestGeneration) return
+      const nextCursor = (result as { next_cursor?: string }).next_cursor
+      if (nextCursor !== undefined) {
+        if (pageCursors.size >= MAX_PAGE_CURSORS) pageCursors.clear()
+        pageCursors.set(`${cursorScope}@${offset + params.limit}`, nextCursor)
+      }
 
       variants.value = markRaw(result.data ?? [])
       if (filtersChanged) {
