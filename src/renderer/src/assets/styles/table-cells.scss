@@ -54,16 +54,37 @@
   font-weight: 500;
 }
 
-// Annotation icon wrapper with global indicator ring
-.annotation-icon-wrapper {
+// Row annotation action buttons (star / ACMG / comment). Native <button>s keep
+// per-row cost low; 24x24 meets WCAG 2.5.8 target size. The ring marks an
+// annotation that exists in the other scope (case vs global).
+.annotation-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 2px;
+  border: 0;
   border-radius: 4px;
-  padding: 2px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background-color: color-mix(in srgb, rgb(var(--v-theme-on-surface)) 8%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgb(var(--v-theme-primary));
+    outline-offset: 1px;
+  }
 
   &.has-global {
-    box-shadow: 0 0 0 2px color-mix(in srgb, rgb(var(--v-theme-primary)) 40%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, rgb(var(--v-theme-primary)) 55%, transparent);
+  }
+
+  .v-chip {
+    cursor: pointer;
   }
 }
 

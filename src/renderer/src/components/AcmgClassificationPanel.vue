@@ -62,13 +62,15 @@
             </span>
             <v-menu location="bottom" :close-on-content-click="true">
               <template #activator="{ props: menuProps }">
-                <v-icon
+                <button
                   v-bind="menuProps"
-                  size="x-small"
-                  class="ml-1 cursor-pointer"
-                  :icon="mdiChevronDown"
+                  type="button"
+                  class="inline-icon-btn ml-1"
+                  :aria-label="`Change ${entry.code} strength`"
                   @click.stop
-                />
+                >
+                  <v-icon size="x-small" :icon="mdiChevronDown" />
+                </button>
               </template>
               <v-list density="compact" nav>
                 <v-list-item

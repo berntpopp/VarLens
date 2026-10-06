@@ -51,6 +51,9 @@
         />
       </template>
 
+      <template #[`header.annotations`]><AnnotationsHeader /></template>
+      <template #[`header.data-table-expand`]><ExpandToggleCell header /></template>
+      <template #[`item.data-table-expand`]="slot"><ExpandToggleCell v-bind="slot" /></template>
       <!-- Annotations column (star, ACMG, comment) -->
       <template #[`item.annotations`]="{ item }">
         <AnnotationsCell
@@ -192,6 +195,8 @@ import {
   GeneSymbolCell,
   ConsequenceCell,
   AnnotationsCell,
+  AnnotationsHeader,
+  ExpandToggleCell,
   ExternalLinkCell
 } from '../table-cells'
 import CarrierExpandedRow from './CarrierExpandedRow.vue'

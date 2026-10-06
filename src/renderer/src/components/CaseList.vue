@@ -46,7 +46,7 @@
     <!-- Empty state (shown when no cases after first load completes) -->
     <template v-if="cases.length === 0 && !loading" #empty>
       <v-list-item>
-        <v-list-item-title class="text-grey text-center py-4">
+        <v-list-item-title class="text-muted text-center py-4">
           <template v-if="hasActiveFilters">
             <v-icon class="mb-1" :icon="mdiFilterOff" />
             <div>No matching cases</div>
@@ -66,7 +66,7 @@
       class="case-list-skeleton"
     />
 
-    <v-list v-model:selected="selected" density="compact" select-strategy="single-leaf">
+    <v-list v-model:selected="selected" selectable aria-label="Cases" select-strategy="single-leaf">
       <!-- Case items -->
       <v-list-item
         v-for="caseItem in cases"
@@ -98,12 +98,9 @@
         <v-list-item-title>{{ caseItem.name }}</v-list-item-title>
         <v-list-item-subtitle>
           {{ caseItem.variant_count.toLocaleString() }} variants •
-          <v-tooltip location="top">
-            <template #activator="{ props: dateProps }">
-              <span v-bind="dateProps">{{ formatDate(caseItem.created_at) }}</span>
-            </template>
-            {{ formatFullDate(caseItem.created_at) }}
-          </v-tooltip>
+          <span :data-tooltip="formatFullDate(caseItem.created_at)" data-tooltip-location="top">{{
+            formatDate(caseItem.created_at)
+          }}</span>
         </v-list-item-subtitle>
 
         <!-- Cohort chips (show max 3, then +N more) -->

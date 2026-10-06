@@ -12,3 +12,6 @@
 
 // Legacy custom styles (accessibility, ClinVar badges, etc.)
 @use './custom.css';
+
+// Accessibility foundations: target-size floor, icon floor, reduced motion
+@use './a11y.css';

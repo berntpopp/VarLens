@@ -34,7 +34,7 @@
           <div v-for="t in overflowHpoTerms" :key="t.hpo_id">{{ t.hpo_id }}: {{ t.hpo_label }}</div>
         </div>
       </v-tooltip>
-      <span v-if="displayedHpoTerms.length === 0" class="text-caption text-disabled font-italic">
+      <span v-if="displayedHpoTerms.length === 0" class="text-caption text-muted font-italic">
         No clinical phenotypes recorded
       </span>
     </div>

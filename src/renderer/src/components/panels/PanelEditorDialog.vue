@@ -10,7 +10,7 @@
       <v-card-title class="d-flex align-center">
         <span>{{ editPanelId ? 'Edit Panel' : 'Create Panel' }}</span>
         <v-spacer />
-        <v-btn :icon="mdiClose" variant="text" size="small" @click="close" />
+        <v-btn aria-label="Close" :icon="mdiClose" variant="text" size="small" @click="close" />
       </v-card-title>
 
       <v-card-text>
@@ -158,6 +158,7 @@
                     "
                   />
                   <v-btn
+                    aria-label="Remove result"
                     size="x-small"
                     variant="text"
                     color="error"

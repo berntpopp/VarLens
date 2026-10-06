@@ -29,14 +29,13 @@
           </v-chip>
         </div>
         <v-btn
-          icon
+          aria-label="Close"
+          :icon="mdiClose"
           size="small"
           variant="text"
           :disabled="phase === 'progress'"
           @click="handleClose"
-        >
-          <v-icon :icon="mdiClose" />
-        </v-btn>
+        />
       </v-card-title>
 
       <v-divider />

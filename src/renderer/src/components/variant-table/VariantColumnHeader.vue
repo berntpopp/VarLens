@@ -6,12 +6,14 @@
     <div
       class="d-flex align-center flex-grow-1 sortable-header"
       :class="{ 'sorted-header': isSorted(headerColumn) }"
+      role="button"
+      tabindex="0"
+      :aria-label="`Sort by ${headerColumn.title}`"
       @click.stop="toggleSort(headerColumn)"
+      @keydown.enter.prevent.stop="toggleSort(headerColumn)"
+      @keydown.space.prevent.stop="toggleSort(headerColumn)"
     >
-      <span class="header-title"
-        >{{ headerColumn.title }}
-        <v-tooltip activator="parent" location="bottom">{{ headerColumn.title }}</v-tooltip>
-      </span>
+      <span class="header-title" :data-tooltip="headerColumn.title">{{ headerColumn.title }}</span>
       <span v-if="isSorted(headerColumn)" class="sort-indicator ml-1">
         <v-icon size="x-small" :icon="getSortIcon(headerColumn)" />
         <span v-if="sortIndex > 0" class="sort-priority">{{ sortIndex }}</span>
@@ -20,17 +22,15 @@
     </div>
     <v-menu v-model="menuOpen" :close-on-content-click="false" location="bottom">
       <template #activator="{ props: menuProps }">
-        <v-btn
+        <IconButton
           v-bind="menuProps"
-          icon
-          size="x-small"
-          variant="text"
+          :label="`Filter ${headerColumn.title}`"
+          tooltip="Filter this column"
+          :icon="hasFilter ? mdiFilter : mdiFilterOutline"
           :color="hasFilter ? 'primary' : undefined"
+          size="x-small"
           @click.stop
-        >
-          <v-icon size="small" :icon="hasFilter ? mdiFilter : mdiFilterOutline" />
-          <v-tooltip activator="parent" location="bottom">Filter this column</v-tooltip>
-        </v-btn>
+        />
       </template>
 
       <!-- Numeric filter -->
@@ -88,6 +88,7 @@ import NumericColumnFilter from './NumericColumnFilter.vue'
 import CategoricalColumnFilter from './CategoricalColumnFilter.vue'
 import TextSuggestColumnFilter from './TextSuggestColumnFilter.vue'
 import { mdiFilter, mdiFilterOutline, mdiSort } from '@mdi/js'
+import IconButton from '../common/IconButton.vue'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type VuetifyInternalColumn = any

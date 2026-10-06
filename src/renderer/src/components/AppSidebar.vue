@@ -8,23 +8,16 @@
         >
       </span>
       <v-spacer />
-      <v-tooltip location="bottom">
-        <template #activator="{ props: tipProps }">
-          <v-btn icon size="x-small" variant="text" v-bind="tipProps">
-            <v-icon size="x-small" :icon="mdiInformationOutline" />
-          </v-btn>
-        </template>
-        <div class="text-body-small">
-          <div>Ctrl+Click to multi-select cases</div>
-          <div>Right-click for context menu</div>
-        </div>
-      </v-tooltip>
+      <IconButton
+        label="Case list help"
+        tooltip="Ctrl+Click to multi-select cases · Right-click for the context menu"
+        :icon="mdiInformationOutline"
+        size="small"
+        class="mr-1"
+      />
       <v-menu location="bottom end" offset="4">
         <template #activator="{ props: menuProps }">
-          <v-btn icon size="small" variant="text" v-bind="menuProps">
-            <v-icon :icon="mdiPlus" />
-            <v-tooltip activator="parent" location="bottom">Import data</v-tooltip>
-          </v-btn>
+          <IconButton v-bind="menuProps" label="Import data" :icon="mdiPlus" class="mr-1" />
         </template>
         <v-list density="compact">
           <v-list-item
@@ -56,6 +49,7 @@ import {
   mdiFileImportOutline
 } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
+import IconButton from './common/IconButton.vue'
 
 const isWebMode = isWebRuntime()
 

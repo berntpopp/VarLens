@@ -1,5 +1,5 @@
 <template>
-  <span class="text-grey">{{ EMPTY_VALUE_PLACEHOLDER }}</span>
+  <span class="text-muted">{{ EMPTY_VALUE_PLACEHOLDER }}</span>
 </template>
 
 <script setup lang="ts">

@@ -26,7 +26,7 @@
               variant="outlined"
               class="mt-4"
             />
-            <div v-if="globalTimestamps" class="text-body-small text-grey mt-1">
+            <div v-if="globalTimestamps" class="text-body-small text-muted mt-1">
               Created: {{ formatTimestamp(globalTimestamps.created_at) }}
               <span v-if="globalTimestamps.updated_at !== globalTimestamps.created_at">
                 | Updated: {{ formatTimestamp(globalTimestamps.updated_at) }}
@@ -43,7 +43,7 @@
               variant="outlined"
               class="mt-4"
             />
-            <div v-if="perCaseTimestamps" class="text-body-small text-grey mt-1">
+            <div v-if="perCaseTimestamps" class="text-body-small text-muted mt-1">
               Created: {{ formatTimestamp(perCaseTimestamps.created_at) }}
               <span v-if="perCaseTimestamps.updated_at !== perCaseTimestamps.created_at">
                 | Updated: {{ formatTimestamp(perCaseTimestamps.updated_at) }}

@@ -11,7 +11,14 @@
         <v-icon :icon="mdiDatabaseImport" class="mr-2" />
         Import Data
         <v-spacer />
-        <v-btn v-if="step !== 3" icon variant="text" size="small" @click="handleClose">
+        <v-btn
+          v-if="step !== 3"
+          aria-label="Close"
+          icon
+          variant="text"
+          size="small"
+          @click="handleClose"
+        >
           <v-icon :icon="mdiClose" />
         </v-btn>
       </v-card-title>

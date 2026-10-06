@@ -9,7 +9,7 @@
       <v-card-title class="d-flex align-center">
         <span>Import from PanelApp</span>
         <v-spacer />
-        <v-btn :icon="mdiClose" variant="text" size="small" @click="close" />
+        <v-btn aria-label="Close" :icon="mdiClose" variant="text" size="small" @click="close" />
       </v-card-title>
 
       <v-card-text>
@@ -101,6 +101,7 @@
                 {{ selectedPanel.region === 'uk' ? 'UK' : 'AUS' }}
               </v-chip>
               <v-btn
+                aria-label="Clear selected panel"
                 variant="text"
                 size="small"
                 :icon="mdiClose"

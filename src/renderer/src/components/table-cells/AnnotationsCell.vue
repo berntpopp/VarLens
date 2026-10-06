@@ -1,104 +1,40 @@
 <template>
   <div class="d-flex align-center ga-1">
     <!-- Star toggle -->
-    <v-tooltip v-if="showGlobalIndicators" location="top">
-      <template #activator="{ props: tooltipProps }">
-        <span
-          v-bind="tooltipProps"
-          class="annotation-icon-wrapper"
-          :class="{ 'has-global': displayGlobalStarred }"
-        >
-          <v-icon
-            :icon="displayStarred ? mdiStar : mdiStarOutline"
-            :color="displayStarred ? 'amber' : 'grey-lighten-1'"
-            size="small"
-            class="cursor-pointer"
-            @click.stop="emit('star-toggle')"
-          />
-        </span>
-      </template>
-      <span v-if="displayGlobalStarred && displayStarred">Starred (case + global)</span>
-      <span v-else-if="displayGlobalStarred">
-        {{
-          annotationScope === 'all'
-            ? 'Case star (click to toggle global)'
-            : 'Global star (click to add case star)'
-        }}
-      </span>
-      <span v-else-if="displayStarred">
-        {{ annotationScope === 'all' ? 'Starred globally' : 'Starred for this case' }}
-      </span>
-      <span v-else>Click to star</span>
-    </v-tooltip>
-    <v-icon
-      v-else
-      :icon="displayStarred ? mdiStar : mdiStarOutline"
-      :color="displayStarred ? 'amber' : 'grey-lighten-1'"
-      size="small"
-      class="cursor-pointer"
+    <button
+      type="button"
+      class="annotation-btn"
+      :class="{ 'has-global': showGlobalIndicators && displayGlobalStarred }"
+      :aria-label="labels.star"
+      :aria-pressed="displayStarred"
+      :data-tooltip="labels.star"
+      data-tooltip-location="top"
       @click.stop="emit('star-toggle')"
-    />
+    >
+      <v-icon
+        :icon="displayStarred ? mdiStar : mdiStarOutline"
+        :color="displayStarred ? 'star' : 'muted'"
+        size="x-small"
+      />
+    </button>
 
     <!-- ACMG classification (menu with quick-classify + evidence editor) -->
     <v-menu :close-on-content-click="true">
       <template #activator="{ props: menuProps }">
-        <v-tooltip v-if="showGlobalIndicators" location="top">
-          <template #activator="{ props: tooltipPropsAcmg }">
-            <span
-              v-bind="{ ...menuProps, ...tooltipPropsAcmg }"
-              class="annotation-icon-wrapper"
-              :class="{ 'has-global': displayGlobalAcmg }"
-            >
-              <v-chip
-                v-if="displayAcmg"
-                :color="ACMG_COLORS[displayAcmg]"
-                size="x-small"
-                label
-                class="cursor-pointer"
-              >
-                {{ ACMG_ABBREV[displayAcmg] }}
-              </v-chip>
-              <v-icon
-                v-else
-                :icon="mdiClipboardCheckOutline"
-                size="small"
-                color="grey-lighten-1"
-                class="cursor-pointer"
-              />
-            </span>
-          </template>
-          <span v-if="displayGlobalAcmg && displayAcmg">
-            {{ annotationScope === 'all' ? 'Global' : 'Case' }}: {{ displayAcmg }}<br />
-            {{ annotationScope === 'all' ? 'Case' : 'Global' }}: {{ displayGlobalAcmg }}
-          </span>
-          <span v-else-if="displayGlobalAcmg">
-            {{ annotationScope === 'all' ? 'Case' : 'Global' }}: {{ displayGlobalAcmg }}
-          </span>
-          <span v-else-if="displayAcmg">
-            {{ annotationScope === 'all' ? 'Classified globally' : displayAcmg }}
-          </span>
-          <span v-else>Set ACMG classification</span>
-        </v-tooltip>
-        <template v-else>
-          <v-chip
-            v-if="displayAcmg"
-            v-bind="menuProps"
-            size="x-small"
-            :color="ACMG_COLORS[displayAcmg]"
-            label
-            class="cursor-pointer"
-          >
+        <button
+          v-bind="menuProps"
+          type="button"
+          class="annotation-btn"
+          :class="{ 'has-global': showGlobalIndicators && displayGlobalAcmg }"
+          :aria-label="labels.acmg"
+          :data-tooltip="labels.acmg"
+          data-tooltip-location="top"
+        >
+          <v-chip v-if="displayAcmg" :color="ACMG_COLORS[displayAcmg]" size="x-small" label>
             {{ ACMG_ABBREV[displayAcmg] }}
           </v-chip>
-          <v-icon
-            v-else
-            v-bind="menuProps"
-            :icon="mdiClipboardCheckOutline"
-            size="small"
-            color="grey-lighten-1"
-            class="cursor-pointer"
-          />
-        </template>
+          <v-icon v-else :icon="mdiClipboardCheckOutline" size="x-small" color="muted" />
+        </button>
       </template>
       <v-card class="pa-2" min-width="200">
         <div class="d-flex flex-wrap ga-1 mb-2">
@@ -134,44 +70,22 @@
       </v-card>
     </v-menu>
 
-    <!-- Comment icon -->
-    <v-tooltip v-if="showGlobalIndicators" location="top">
-      <template #activator="{ props: tooltipProps }">
-        <span
-          v-bind="tooltipProps"
-          class="annotation-icon-wrapper"
-          :class="{ 'has-global': displayHasGlobalComment }"
-        >
-          <v-icon
-            :icon="hasAnyComment ? mdiCommentText : mdiCommentTextOutline"
-            :color="hasAnyComment ? 'primary' : 'grey-lighten-1'"
-            size="small"
-            class="cursor-pointer"
-            @click.stop="emit('comment-click')"
-          />
-        </span>
-      </template>
-      <span v-if="displayHasGlobalComment && displayHasComment">
-        {{
-          annotationScope === 'all' ? 'Has case + global comments' : 'Has global + case comments'
-        }}
-      </span>
-      <span v-else-if="displayHasGlobalComment">
-        {{ annotationScope === 'all' ? 'Has case comment' : 'Has global comment' }}
-      </span>
-      <span v-else-if="displayHasComment">
-        {{ annotationScope === 'all' ? 'Has global comment' : 'Has case comment' }}
-      </span>
-      <span v-else>Add comment</span>
-    </v-tooltip>
-    <v-icon
-      v-else
-      :icon="displayHasComment ? mdiCommentText : mdiCommentTextOutline"
-      :color="displayHasComment ? 'primary' : 'grey-lighten-1'"
-      size="small"
-      class="cursor-pointer"
+    <!-- Comment -->
+    <button
+      type="button"
+      class="annotation-btn"
+      :class="{ 'has-global': showGlobalIndicators && displayHasGlobalComment }"
+      :aria-label="labels.comment"
+      :data-tooltip="labels.comment"
+      data-tooltip-location="top"
       @click.stop="emit('comment-click')"
-    />
+    >
+      <v-icon
+        :icon="commentFilled ? mdiCommentText : mdiCommentTextOutline"
+        :color="commentFilled ? 'primary' : 'muted'"
+        size="x-small"
+      />
+    </button>
   </div>
 </template>
 
@@ -187,6 +101,12 @@ import {
   mdiStar,
   mdiStarOutline
 } from '@mdi/js'
+import {
+  acmgLabel,
+  commentLabel,
+  starLabel,
+  type AnnotationDisplayState
+} from './annotations-cell-labels'
 
 interface Props {
   /** Current starred state (per-case for Case Analysis, global for Cohort) */
@@ -244,6 +164,25 @@ const displayHasGlobalComment = computed(() =>
   props.annotationScope === 'all' ? props.hasComment : props.hasGlobalComment
 )
 
-// For Case Analysis tooltip logic
-const hasAnyComment = computed(() => displayHasComment.value || displayHasGlobalComment.value)
+// Case Analysis fills the comment icon for either scope; Cohort only for its own
+const commentFilled = computed(() =>
+  props.showGlobalIndicators
+    ? displayHasComment.value || displayHasGlobalComment.value
+    : displayHasComment.value
+)
+
+// One string per action: aria-label and delegated tooltip (no per-cell v-tooltip)
+const labels = computed(() => {
+  const state: AnnotationDisplayState = {
+    scope: props.annotationScope,
+    showGlobalIndicators: props.showGlobalIndicators,
+    starred: displayStarred.value,
+    secondaryStarred: displayGlobalStarred.value,
+    acmg: displayAcmg.value,
+    secondaryAcmg: displayGlobalAcmg.value,
+    hasComment: displayHasComment.value,
+    secondaryHasComment: displayHasGlobalComment.value
+  }
+  return { star: starLabel(state), acmg: acmgLabel(state), comment: commentLabel(state) }
+})
 </script>

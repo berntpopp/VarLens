@@ -29,49 +29,34 @@
       />
 
       <!-- Star toggle -->
-      <v-tooltip location="bottom">
-        <template #activator="{ props: tooltipProps }">
-          <v-btn
-            v-bind="tooltipProps"
-            :color="filters.starredOnly ? 'amber-darken-2' : undefined"
-            :variant="filters.starredOnly ? 'flat' : 'text'"
-            density="compact"
-            icon
-            @click="filters.starredOnly = !filters.starredOnly"
-          >
-            <v-icon size="small" :icon="filters.starredOnly ? mdiStar : mdiStarOutline" />
-          </v-btn>
-        </template>
-        {{
+      <IconButton
+        label="Starred variants only"
+        :tooltip="
           filters.starredOnly
-            ? 'Showing starred only \u2014 click to clear'
+            ? 'Showing starred only — click to clear'
             : 'Show starred variants only'
-        }}
-      </v-tooltip>
+        "
+        :pressed="filters.starredOnly"
+        :color="filters.starredOnly ? 'star' : undefined"
+        :variant="filters.starredOnly ? 'flat' : 'text'"
+        :icon="filters.starredOnly ? mdiStar : mdiStarOutline"
+        @click="filters.starredOnly = !filters.starredOnly"
+      />
 
       <!-- Comment toggle -->
-      <v-tooltip location="bottom">
-        <template #activator="{ props: tooltipProps }">
-          <v-btn
-            v-bind="tooltipProps"
-            :color="filters.hasCommentOnly ? 'primary' : undefined"
-            :variant="filters.hasCommentOnly ? 'flat' : 'text'"
-            density="compact"
-            icon
-            @click="filters.hasCommentOnly = !filters.hasCommentOnly"
-          >
-            <v-icon
-              size="small"
-              :icon="filters.hasCommentOnly ? mdiCommentText : mdiCommentTextOutline"
-            />
-          </v-btn>
-        </template>
-        {{
+      <IconButton
+        label="Commented variants only"
+        :tooltip="
           filters.hasCommentOnly
-            ? 'Showing commented only \u2014 click to clear'
+            ? 'Showing commented only — click to clear'
             : 'Show variants with comments only'
-        }}
-      </v-tooltip>
+        "
+        :pressed="filters.hasCommentOnly"
+        :color="filters.hasCommentOnly ? 'primary' : undefined"
+        :variant="filters.hasCommentOnly ? 'flat' : 'text'"
+        :icon="filters.hasCommentOnly ? mdiCommentText : mdiCommentTextOutline"
+        @click="filters.hasCommentOnly = !filters.hasCommentOnly"
+      />
 
       <!-- ACMG classification chips -->
       <v-chip-group v-model="filters.acmgClassifications" multiple class="flex-nowrap">
@@ -136,6 +121,7 @@
 </template>
 
 <script setup lang="ts">
+import IconButton from '../common/IconButton.vue'
 import { ref, computed, watch, provide, onMounted, nextTick } from 'vue'
 import { useFilters } from '../../composables/useFilters'
 import { useDebounce } from '../../composables/useDebounce'

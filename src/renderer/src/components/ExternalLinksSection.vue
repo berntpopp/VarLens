@@ -1,6 +1,6 @@
 <template>
   <div class="external-links-section">
-    <div class="text-title-small mb-2">External Links</div>
+    <h3 class="text-title-small mb-2">External Links</h3>
     <div class="d-flex flex-wrap ga-1">
       <div
         v-for="link in visibleLinks"
@@ -10,6 +10,7 @@
         <v-tooltip location="top">
           <template #activator="{ props: tooltipProps }">
             <v-btn
+              :aria-label="`Open ${link.name}`"
               v-bind="tooltipProps"
               icon
               size="small"

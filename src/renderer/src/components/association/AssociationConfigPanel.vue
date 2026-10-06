@@ -5,6 +5,7 @@
       <v-spacer />
       <v-btn
         v-if="hasResults"
+        :aria-label="collapsed ? 'Expand configuration' : 'Collapse configuration'"
         variant="text"
         size="small"
         :icon="collapsed ? mdiChevronDown : mdiChevronUp"

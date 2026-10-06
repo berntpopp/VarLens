@@ -5,7 +5,13 @@
         <v-icon class="mr-2" :icon="mdiChartBoxOutline" />
         Database Overview
         <v-spacer />
-        <v-btn :icon="mdiClose" variant="text" size="small" @click="isOpen = false" />
+        <v-btn
+          aria-label="Close"
+          :icon="mdiClose"
+          variant="text"
+          size="small"
+          @click="isOpen = false"
+        />
       </v-card-title>
       <v-divider />
       <v-card-text>

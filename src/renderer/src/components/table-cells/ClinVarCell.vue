@@ -1,24 +1,28 @@
 <template>
-  <v-tooltip v-if="hasValue && hasLink" location="top">
-    <template #activator="{ props: tooltipProps }">
-      <span v-bind="tooltipProps" class="external-link" @click="handleClick">
-        <v-chip :color="chipColor" size="small" label>
-          {{ displayValue }}
-        </v-chip>
-        <v-icon size="x-small" class="external-link__icon" :icon="mdiOpenInNew" />
-      </span>
-    </template>
-    {{ significance }}
-  </v-tooltip>
-  <v-tooltip v-else-if="hasValue" location="top">
-    <template #activator="{ props: tooltipProps }">
-      <v-chip v-bind="tooltipProps" :color="chipColor" size="small" label>
-        {{ displayValue }}
-      </v-chip>
-    </template>
-    {{ significance }}
-  </v-tooltip>
-  <span v-else class="text-grey">--</span>
+  <!-- Tooltips via the app-wide DelegatedTooltip (data-tooltip), not per-cell v-tooltip -->
+  <span
+    v-if="hasValue && hasLink"
+    class="external-link"
+    :data-tooltip="significance"
+    data-tooltip-location="top"
+    @click="handleClick"
+  >
+    <v-chip :color="chipColor" size="small" label>
+      {{ displayValue }}
+    </v-chip>
+    <v-icon size="x-small" class="external-link__icon" :icon="mdiOpenInNew" />
+  </span>
+  <v-chip
+    v-else-if="hasValue"
+    :color="chipColor"
+    size="small"
+    label
+    :data-tooltip="significance"
+    data-tooltip-location="top"
+  >
+    {{ displayValue }}
+  </v-chip>
+  <span v-else class="text-muted">--</span>
 </template>
 
 <script setup lang="ts">

@@ -25,6 +25,7 @@
         <v-tooltip location="bottom">
           <template #activator="{ props: tipProps }">
             <v-btn
+              :aria-label="allExpanded ? 'Collapse all' : 'Expand all'"
               v-bind="tipProps"
               icon
               size="x-small"
@@ -39,7 +40,7 @@
           </template>
           {{ allExpanded ? 'Collapse all' : 'Expand all' }}
         </v-tooltip>
-        <v-btn icon size="small" @click="emit('update:open', false)">
+        <v-btn aria-label="Close filters" icon size="small" @click="emit('update:open', false)">
           <v-icon :icon="mdiClose" />
         </v-btn>
       </v-toolbar>

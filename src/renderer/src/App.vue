@@ -1,5 +1,6 @@
 <template>
   <v-app>
+    <A11yShell />
     <AppToolbar
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
       @show-database-overview="dialogHostRef?.showDatabaseOverview()"
@@ -38,7 +39,7 @@
       />
     </v-navigation-drawer>
 
-    <v-main>
+    <v-main id="main-content" tabindex="-1">
       <router-view v-slot="{ Component }">
         <keep-alive :max="2">
           <component :is="Component" />
@@ -83,6 +84,7 @@ import { useRouter } from 'vue-router'
 import AppToolbar from './components/AppToolbar.vue'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
+import A11yShell from './components/common/A11yShell.vue'
 import AppFooter from './components/AppFooter.vue'
 import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'

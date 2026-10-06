@@ -1,6 +1,6 @@
 <template>
   <div class="comments-section">
-    <div class="text-title-small mb-2">Comments</div>
+    <h3 class="text-title-small mb-2">Comments</h3>
 
     <!-- Global comment -->
     <div class="comment-block mb-3">
@@ -8,6 +8,7 @@
         <span class="text-body-small font-weight-medium">Global Comment</span>
         <v-btn
           v-if="globalComment"
+          aria-label="Delete global comment"
           icon
           size="x-small"
           variant="text"
@@ -23,7 +24,7 @@
         :loading="globalSaving"
         @update:model-value="handleGlobalSave"
       />
-      <div v-if="globalTimestamps" class="text-body-small text-grey mt-1">
+      <div v-if="globalTimestamps" class="text-body-small text-muted mt-1">
         {{ formatTimestamp(globalTimestamps.created_at) }}
         <span v-if="globalTimestamps.updated_at !== globalTimestamps.created_at">
           (edited {{ formatTimestamp(globalTimestamps.updated_at) }})
@@ -37,6 +38,7 @@
         <span class="text-body-small font-weight-medium">Case Comment</span>
         <v-btn
           v-if="perCaseComment"
+          aria-label="Delete case comment"
           icon
           size="x-small"
           variant="text"
@@ -52,7 +54,7 @@
         :loading="perCaseSaving"
         @update:model-value="handlePerCaseSave"
       />
-      <div v-if="perCaseTimestamps" class="text-body-small text-grey mt-1">
+      <div v-if="perCaseTimestamps" class="text-body-small text-muted mt-1">
         {{ formatTimestamp(perCaseTimestamps.created_at) }}
         <span v-if="perCaseTimestamps.updated_at !== perCaseTimestamps.created_at">
           (edited {{ formatTimestamp(perCaseTimestamps.updated_at) }})

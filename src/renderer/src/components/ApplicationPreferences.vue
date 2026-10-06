@@ -5,7 +5,7 @@
         <v-icon :icon="mdiTune" class="mr-2" />
         Application Preferences
         <v-spacer />
-        <v-btn icon variant="text" size="small" @click="isOpen = false">
+        <v-btn aria-label="Close" icon variant="text" size="small" @click="isOpen = false">
           <v-icon :icon="mdiClose" />
         </v-btn>
       </v-card-title>

@@ -1,0 +1,90 @@
+/* ========================================
+   Accessibility foundations (WCAG 2.2 AA)
+   ======================================== */
+
+/* Visually hidden but announced by screen readers (headings, live text). */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Semantic headings promoted from styled <div>s keep their typography class
+   and spacing utilities; drop the user-agent heading margins. Lives in
+   Vuetify's override layer so spacing utilities (mb-2, …) still win. */
+@layer vuetify-overrides {
+  :where(h1, h2, h3, h4, h5, h6):where([class*='text-']) {
+    margin-block: 0;
+  }
+}
+
+/* ----------------------------------------
+   Target size floor (WCAG 2.5.8, 24x24 CSS px)
+   Global compact density makes x-small/small buttons collapse to 8-20px
+   (e.g. "Fetch VEP" rendered 8px tall). Keep compact density for toolbar
+   rhythm but never drop below the minimum target size.
+   ---------------------------------------- */
+.v-btn.v-btn--density-compact.v-btn--size-x-small:not(.v-btn--icon),
+.v-btn.v-btn--density-compact.v-btn--size-small:not(.v-btn--icon) {
+  min-height: 24px;
+}
+
+.v-btn--icon.v-btn--density-compact.v-btn--size-x-small,
+.v-btn--icon.v-btn--density-compact.v-btn--size-small {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* Bare inline icon button (inside chips/text) — a real <button>, no chrome. */
+.inline-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ----------------------------------------
+   Icon size floor
+   Vuetify sizes icons relative to the surrounding font-size, so x-small
+   icons shrink to 10-12px in dense text. Floor them at 16px; IconButton
+   pins the 16 / 20 / 24 px scale explicitly for icon-only buttons.
+   ---------------------------------------- */
+.v-icon--size-x-small {
+  font-size: max(16px, calc(var(--v-icon-size-multiplier) * 1em));
+}
+
+/* ----------------------------------------
+   Reduced motion (WCAG 2.3.3 / user preference)
+   One global strategy: collapse every non-essential Vuetify transition,
+   animation and smooth scroll. Progress indicators keep their state change
+   but stop animating.
+   ---------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .v-progress-circular--indeterminate > svg,
+  .v-progress-circular--indeterminate .v-progress-circular__overlay,
+  .v-progress-linear__indeterminate .v-progress-linear__indeterminate,
+  .v-skeleton-loader__bone::after {
+    animation: none !important;
+  }
+}

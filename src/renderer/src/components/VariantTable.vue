@@ -49,6 +49,8 @@
         />
       </template>
 
+      <template #[`header.annotations`]><AnnotationsHeader /></template>
+
       <!-- Annotations column (star, ACMG, comment) -->
       <template #[`item.annotations`]="{ item }">
         <AnnotationsCell
@@ -217,7 +219,7 @@
           label="View"
           @click="openExternalLink"
         />
-        <span v-else class="text-grey">--</span>
+        <span v-else class="text-muted">--</span>
       </template>
 
       <!-- Loading skeleton: shown inside the table body to prevent layout shift -->
@@ -302,6 +304,7 @@ import {
   ConsequenceCell,
   ExternalLinkCell,
   AnnotationsCell,
+  AnnotationsHeader,
   EmptyPlaceholder,
   HgvsCell
 } from './table-cells'
