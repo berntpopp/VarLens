@@ -27,7 +27,7 @@ VarLens supports keyboard shortcuts for navigating variant tables, performing ac
 |--------------------------|------------------|--------|
 | `/` | `/` | Focus search field |
 | `Ctrl+Shift+F` | `Cmd+Shift+F` | Toggle filter panel |
-| `Ctrl+Shift+C` | `Cmd+Shift+C` | Toggle columns panel |
+| `Alt+Shift+C` | `Option+Shift+C` | Toggle columns panel |
 | `Ctrl+Shift+X` | `Cmd+Shift+X` | Clear all filters |
 | `Escape` | `Escape` | Blur search bar (when focused) |
 

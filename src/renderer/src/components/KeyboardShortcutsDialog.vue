@@ -38,6 +38,7 @@ const isMac =
   typeof navigator.platform === 'string' &&
   navigator.platform.toUpperCase().indexOf('MAC') >= 0
 const mod = isMac ? 'Cmd' : 'Ctrl'
+const alt = isMac ? 'Option' : 'Alt'
 
 const shortcutGroups = [
   {
@@ -62,7 +63,7 @@ const shortcutGroups = [
     shortcuts: [
       { key: '/', description: 'Focus search field' },
       { key: `${mod}+Shift+F`, description: 'Toggle filter panel' },
-      { key: `${mod}+Shift+C`, description: 'Toggle columns panel' },
+      { key: `${alt}+Shift+C`, description: 'Toggle columns panel' },
       { key: `${mod}+Shift+X`, description: 'Clear all filters' },
       { key: 'Escape', description: 'Close drawer / blur search' }
     ]
