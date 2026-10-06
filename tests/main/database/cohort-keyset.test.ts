@@ -140,17 +140,15 @@ describe('SQLite cohort keyset paging', () => {
     }
     expect(seen.length).toBeGreaterThan(0)
     const plan = (
-      db
-        .prepare(`EXPLAIN QUERY PLAN ${seen[0]}`)
-        .all(5, 0, {
-          keyset_0: 1,
-          keyset_1: '1',
-          keyset_2: 1,
-          keyset_3: 'A',
-          keyset_4: 'G',
-          keyset_5: 'snv',
-          keyset_6: 'GRCh38'
-        }) as Array<{
+      db.prepare(`EXPLAIN QUERY PLAN ${seen[0]}`).all(5, 0, {
+        keyset_0: 1,
+        keyset_1: '1',
+        keyset_2: 1,
+        keyset_3: 'A',
+        keyset_4: 'G',
+        keyset_5: 'snv',
+        keyset_6: 'GRCh38'
+      }) as Array<{
         detail: string
       }>
     )
