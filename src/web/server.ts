@@ -46,6 +46,7 @@ import { readPlatformIdentityConfig } from './server/platform-identity-config'
 import { registerPlatformIdentityRoutes } from './server/platform-identity-routes'
 import { registerWebRateLimit } from './server/rate-limit'
 import { serializeRequestForTechnicalLog } from './server/request-logging'
+import { registerExportDownloadRoutes } from './server/routes/export-download'
 import { registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
@@ -207,6 +208,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
   registerImportUploadRoutes(app, dispatcherDeps)
+  registerExportDownloadRoutes(app, dispatcherDeps)
   registerDispatcher(app, dispatcherDeps, overrides)
   registerEventStream(app, events)
 

@@ -164,6 +164,7 @@ import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
 import { stripVueProxies } from '../utils/stripVueProxies'
+import { isWebRuntime } from '../utils/runtime-mode'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useApiService } from '../composables/useApiService'
 import {
@@ -205,7 +206,7 @@ interface Emits {
   (e: 'clear-column-filter', columnKey: string): void
   (
     e: 'export-success',
-    data: { filePath: string; action: { text: string; callback: () => void } }
+    data: { filePath: string; action?: { text: string; callback: () => void } }
   ): void
   (e: 'export-error', error: string): void
 }
@@ -575,13 +576,11 @@ const exportToExcel = async () => {
     emit('export-error', result.error)
   } else if (result.success && result.filePath !== undefined && result.filePath !== '') {
     const filePath = result.filePath
-    emit('export-success', {
-      filePath,
-      action: {
-        text: 'Open folder',
-        callback: () => api?.export.revealInFolder(filePath)
-      }
-    })
+    // Web exports land in the browser's downloads; there is no folder to reveal.
+    const action = isWebRuntime()
+      ? undefined
+      : { text: 'Open folder', callback: () => api?.export.revealInFolder(filePath) }
+    emit('export-success', { filePath, action })
   }
 }
 
