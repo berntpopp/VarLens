@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { effectScope } from 'vue'
 import {
   clampMenuPoint,
   isContextMenuKey,
@@ -132,5 +133,49 @@ describe('useContextMenu', () => {
     menu.close()
     menu.restoreFocus()
     expect(document.activeElement).toBe(item)
+  })
+
+  it('closes on Escape immediately after opening, with no tick or timer in between', () => {
+    const menu = useContextMenu()
+    const item = rectEl({ left: 0, top: 240, width: 279, height: 48 })
+    menu.open(mouseContextMenu(item, 84, 264))
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }))
+    expect(menu.show.value).toBe(true)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(menu.show.value).toBe(false)
+  })
+
+  it('listens for Escape only while open, however the menu was closed', () => {
+    const add = vi.spyOn(window, 'addEventListener')
+    const remove = vi.spyOn(window, 'removeEventListener')
+    const keydownCalls = (spy: typeof add | typeof remove) =>
+      spy.mock.calls.filter(([type]) => type === 'keydown')
+
+    const menu = useContextMenu()
+    expect(keydownCalls(add)).toHaveLength(0)
+
+    const item = rectEl({ left: 0, top: 240, width: 279, height: 48 })
+    menu.open(mouseContextMenu(item, 84, 264))
+    expect(keydownCalls(add)).toHaveLength(1)
+    const listener = keydownCalls(add)[0][1]
+
+    // Closed through the v-model (Vuetify: outside click, item click, its own Escape).
+    menu.show.value = false
+    expect(keydownCalls(remove).map(([, fn]) => fn)).toEqual([listener])
+
+    add.mockRestore()
+    remove.mockRestore()
+  })
+
+  it('stops listening when its owning scope is disposed while open', () => {
+    const scope = effectScope()
+    const menu = scope.run(() => useContextMenu())!
+    const item = rectEl({ left: 0, top: 240, width: 279, height: 48 })
+    menu.open(mouseContextMenu(item, 84, 264))
+    scope.stop()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(menu.show.value).toBe(true)
   })
 })
