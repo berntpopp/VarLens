@@ -17,6 +17,7 @@ import type {
   CohortPaginatedResult
 } from '../../shared/types/cohort'
 import type { ColumnFilterMeta, ColumnFiltersParam } from '../../shared/types/column-filters'
+import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
 import { tokenize, parse } from '../../shared/utils/boolean-search'
 import { emitCohortSearch } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
@@ -121,6 +122,10 @@ export class CohortService {
       })
       whereConditions.push(`(${intervalConditions.join(' OR ')})`)
     }
+
+    // Validate against the caller's keys (before remapping, and covering the
+    // dotted extension keys) so the error matches the PostgreSQL cohort path.
+    assertValidColumnFilterValues(params.column_filters)
 
     // Remap column_filters keys through SORTABLE_COLUMNS to preserve the
     // existing alias mapping (e.g. 'cadd_phred' -> 'cadd') and the whitelist
