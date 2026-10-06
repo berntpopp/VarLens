@@ -137,7 +137,7 @@ describe('App.vue', () => {
     expect(useShellLifecycleSpy.mock.calls[0]?.[0]).toHaveProperty('importStore')
   })
 
-  async function mountWithDisplay(mobileBreakpoint: number) {
+  async function mountWithDisplay(innerWidth: number) {
     useShellLifecycleSpy.mockReturnValue({
       handleDatabaseSwitched: vi.fn(),
       handleImportComplete: vi.fn(),
@@ -146,30 +146,31 @@ describe('App.vue', () => {
     router.push('/case')
     await router.isReady()
     // The suite replaces `window` with a plain object; give Vuetify's display
-    // service a viewport so `mobile` (width < mobileBreakpoint) is meaningful.
-    Object.assign(window, { innerWidth: 1350, innerHeight: 900 })
-    const display = createVuetify({ components, directives, display: { mobileBreakpoint } })
+    // service a viewport so the sidebar's md (840 px) overlay breakpoint applies.
+    Object.assign(window, { innerWidth, innerHeight: 900 })
+    const display = createVuetify({ components, directives })
     return mount(App, {
       global: { plugins: [display, createPinia(), router], stubs: asyncComponentStubs }
     })
   }
 
   it('keeps the docked desktop sidebar open when a case is opened (no layout shift)', async () => {
-    const wrapper = await mountWithDisplay(0)
+    // 1024 px workstations keep the docked sidebar (breakpoint is md, not lg/1145)
+    const wrapper = await mountWithDisplay(1024)
     wrapper.findComponent({ name: 'CaseList' }).vm.$emit('case-selected', 7, 'LB-1', 10, 0)
     await wrapper.vm.$nextTick()
     expect(wrapper.findComponent({ name: 'VNavigationDrawer' }).props('modelValue')).toBe(true)
   })
 
   it('dismisses the sidebar when it is a temporary overlay (mobile widths)', async () => {
-    const wrapper = await mountWithDisplay(100_000)
+    const wrapper = await mountWithDisplay(800)
     wrapper.findComponent({ name: 'CaseList' }).vm.$emit('case-selected', 7, 'LB-1', 10, 0)
     await wrapper.vm.$nextTick()
     expect(wrapper.findComponent({ name: 'VNavigationDrawer' }).props('modelValue')).toBe(false)
   })
 
   it('does not mount the details panel or shortcut dialog until first opened', async () => {
-    const wrapper = await mountWithDisplay(0)
+    const wrapper = await mountWithDisplay(1350)
     expect(wrapper.findComponent({ name: 'VariantDetailsPanel' }).exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'KeyboardShortcutsDialog' }).exists()).toBe(false)
   })

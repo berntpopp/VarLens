@@ -300,6 +300,6 @@ watch(
 
 <style scoped>
 .acmg-classification-panel {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 </style>

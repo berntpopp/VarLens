@@ -25,6 +25,7 @@
       v-model="sidebarOpen"
       aria-label="Cases sidebar"
       :width="sidebarWidth"
+      mobile-breakpoint="md"
       :scrim="tier === 'narrow'"
     >
       <AppSidebar
@@ -176,8 +177,9 @@ const transitioning = ref(false)
 
 // Responsive layout
 const { tier } = useResponsiveLayout()
-// Same signal v-navigation-drawer uses to switch to a temporary overlay.
-const { mobile: sidebarIsOverlay } = useDisplay()
+// Same signal the sidebar's `mobile-breakpoint="md"` uses to switch to a
+// temporary overlay (below 840 px; Vuetify's default would be `lg`, 1145 px).
+const { smAndDown: sidebarIsOverlay } = useDisplay()
 
 // Heavy overlays mount on first open only: rendering an async component with
 // v-model=false still downloads its chunk (and runs its fetch watchers) on
@@ -440,6 +442,12 @@ onUnmounted(() => {
 
 :deep(.v-window-item) {
   height: 100%;
+}
+
+/* The selected case's tinted row drops the medium-emphasis subtitle below AA
+   (3.7:1); render it at full emphasis there. */
+:deep(.v-navigation-drawer--left .v-list-item--active .v-list-item-subtitle) {
+  opacity: 1;
 }
 
 .sidebar-resize-handle {
