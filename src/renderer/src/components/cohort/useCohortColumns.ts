@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import type { useColumnPreferences } from '../../composables/useColumnPreferences'
 import type { ColumnDef } from '../variant-table/columns'
 import { withFixedWidth } from '../variant-table/column-widths'
+import { useAutoHiddenColumns } from '../../composables/useResponsiveLayout'
 
 /** Static base column definitions for the cohort table. */
 export const baseHeaders: ColumnDef[] = [
@@ -27,6 +28,8 @@ export const baseHeaders: ColumnDef[] = [
 
 /**
  * Composable that computes dynamic, ordered, and visible column sets for the cohort table.
+ * Columns without an explicit visibility preference follow the responsive
+ * default from `useAutoHiddenColumns`, exactly like the case table.
  */
 export function useCohortColumns(prefs: ReturnType<typeof useColumnPreferences>['prefs']) {
   /** Columns ordered by user preferences. */
@@ -44,10 +47,16 @@ export function useCohortColumns(prefs: ReturnType<typeof useColumnPreferences>[
     return baseHeaders
   })
 
-  /** Only columns visible per user preferences, with shared fixed widths (no jitter). */
-  const visibleHeaders = computed(() =>
-    orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false).map(withFixedWidth)
+  // Responsive default for columns without an explicit choice (parity with the case table)
+  const { isVisible } = useAutoHiddenColumns(
+    baseHeaders.map((h) => h.key),
+    prefs
   )
 
-  return { orderedColumns, visibleHeaders }
+  /** Only columns visible per user preferences, with shared fixed widths (no jitter). */
+  const visibleHeaders = computed(() =>
+    orderedColumns.value.filter((h) => isVisible(h.key)).map(withFixedWidth)
+  )
+
+  return { orderedColumns, visibleHeaders, isVisible }
 }

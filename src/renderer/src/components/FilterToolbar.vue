@@ -123,7 +123,7 @@
         :columns="orderedColumns"
         :visible-columns="visibleColumnKeys"
         table-id="variant-table"
-        @toggle:column="toggleColumnVisibility"
+        @toggle:column="(k: string) => toggleColumnVisibility(k, isColumnShown(k))"
         @reorder="setColumnOrder"
         @reset="resetColumnDefaults"
       />
@@ -164,7 +164,7 @@ import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
 import { stripVueProxies } from '../utils/stripVueProxies'
-import { useResponsiveLayout } from '../composables/useResponsiveLayout'
+import { useAutoHiddenColumns, useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useApiService } from '../composables/useApiService'
 import {
   currentCanUseFeature,
@@ -609,11 +609,14 @@ const orderedColumns = computed(() => {
   return props.columns
 })
 
-const visibleColumnKeys = computed(() => {
-  return orderedColumns.value
-    .filter((h) => columnPrefs.value.visibility[h.key] !== false)
-    .map((h) => h.key)
-})
+// Same responsive default as VariantTable's useVariantColumns (same keys → same result)
+const { isVisible: isColumnShown } = useAutoHiddenColumns(
+  () => (props.columns ?? []).map((c) => c.key),
+  columnPrefs
+)
+const visibleColumnKeys = computed(() =>
+  orderedColumns.value.filter((h) => isColumnShown(h.key)).map((h) => h.key)
+)
 
 // Toggle drawer methods for keyboard shortcuts
 const toggleFilterDrawer = () => {

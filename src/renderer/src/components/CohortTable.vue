@@ -73,7 +73,7 @@
       @clear-column-filter="handleClearColumnFilter"
       @clear-column-filters="handleClearColumnFilters"
       @export="handleExport"
-      @toggle-column="toggleColumnVisibility"
+      @toggle-column="(k: string) => toggleColumnVisibility(k, isColumnShown(k))"
       @reorder-columns="setColumnOrder"
       @reset-columns="resetToDefaults"
     />
@@ -215,7 +215,7 @@ const {
 } = useAnnotations()
 const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
   useColumnPreferences('cohort-table')
-const { orderedColumns, visibleHeaders } = useCohortColumns(prefs)
+const { orderedColumns, visibleHeaders, isVisible: isColumnShown } = useCohortColumns(prefs)
 
 async function getCohortQueryBlockReason(): Promise<string | null> {
   return getCurrentUnsupportedReason('cohort.query')
@@ -779,7 +779,7 @@ defineExpose({ refresh })
   color: rgb(var(--v-theme-info));
   border: 1px solid color-mix(in srgb, rgb(var(--v-theme-info)) 25%, transparent);
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.4;
   /* Base tint + shimmer highlight band. The middle stop at 0.18 alpha is
      brighter than the 0.06 edges so the user sees a sweeping highlight. */

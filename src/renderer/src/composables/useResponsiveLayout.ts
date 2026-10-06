@@ -1,5 +1,12 @@
-import { computed } from 'vue'
+import { computed, toValue, type MaybeRefOrGetter, type Ref } from 'vue'
 import { useDisplay } from 'vuetify'
+import {
+  computeAutoHiddenColumns,
+  getColumnPriority,
+  getMaxAutoVisibleColumns,
+  isColumnVisible,
+  isDetailPanelDocked
+} from '../utils/responsive-layout'
 
 export type LayoutTier = 'full' | 'compact' | 'narrow'
 
@@ -31,40 +38,11 @@ export function useResponsiveLayout() {
   // Detail panel becomes full-width overlay at narrow
   const detailPanelFullWidth = computed(() => tier.value === 'narrow')
 
-  // Maximum columns to auto-show by tier
-  const maxAutoVisibleColumns = computed(() => {
-    if (tier.value === 'narrow') return 5
-    if (tier.value === 'compact') return 10
-    return Infinity
-  })
+  // Detail panel docks beside the table (shrinking v-main) on wide viewports
+  const detailPanelDocked = computed(() => isDetailPanelDocked(width.value))
 
-  // Column priority for auto-hide (lower = more important, shown first)
-  const COLUMN_PRIORITY: Record<string, number> = {
-    gene_symbol: 1,
-    consequence: 2,
-    clinvar: 3,
-    gnomad_af: 4,
-    cadd: 5,
-    annotations: 6,
-    func: 7,
-    chr: 8,
-    pos: 9,
-    ref: 10,
-    alt: 11,
-    gt_num: 12,
-    aa_change: 13,
-    cdna: 14,
-    transcript: 15,
-    omim_mim_number: 16,
-    hpo_sim_score: 17,
-    qual: 18,
-    moi: 19
-  }
-
-  // Get priority for a column (unknown columns get lowest priority)
-  const getColumnPriority = (key: string): number => {
-    return COLUMN_PRIORITY[key] ?? 100
-  }
+  // Maximum data columns to auto-show at the current viewport width
+  const maxAutoVisibleColumns = computed(() => getMaxAutoVisibleColumns(width.value))
 
   return {
     tier,
@@ -74,7 +52,27 @@ export function useResponsiveLayout() {
     showContextIndicator,
     showFooterLinks,
     detailPanelFullWidth,
+    detailPanelDocked,
     maxAutoVisibleColumns,
     getColumnPriority
   }
+}
+
+/**
+ * Responsive default column visibility. `autoHidden` holds the keys hidden by
+ * default at the current viewport width, ranked by `COLUMN_PRIORITY`; columns
+ * with an explicit user visibility choice are never part of it. `isVisible`
+ * resolves the effective visibility (explicit choice first, then the default).
+ */
+export function useAutoHiddenColumns(
+  keys: MaybeRefOrGetter<readonly string[]>,
+  prefs: Readonly<Ref<{ visibility: Readonly<Record<string, boolean>> }>>
+) {
+  const { maxAutoVisibleColumns } = useResponsiveLayout()
+  const autoHidden = computed(() =>
+    computeAutoHiddenColumns(toValue(keys), maxAutoVisibleColumns.value, prefs.value.visibility)
+  )
+  const isVisible = (key: string): boolean =>
+    isColumnVisible(key, prefs.value.visibility, autoHidden.value)
+  return { autoHidden, isVisible }
 }
