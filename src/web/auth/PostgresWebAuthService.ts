@@ -519,10 +519,14 @@ export class PostgresWebAuthService {
 
   async setRole(username: string, role: UserRole): Promise<void> {
     await setUserRole(this.pool, this.schemaQuoted, username, role)
+    // The session preHandler reads role/status through userCache; drop the
+    // cached row so a demotion or promotion applies on the next request.
+    this.invalidateUser(username)
   }
 
   async reactivateUser(username: string): Promise<void> {
     await reactivateUser(this.pool, this.schemaQuoted, username)
+    this.invalidateUser(username)
   }
 
   async resetPassword(username: string, newPassword: string): Promise<void> {

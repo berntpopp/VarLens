@@ -784,12 +784,35 @@ describe('PostgresWebAuthService — cached session-user lookup', () => {
     expect((await svc.getSessionUser('alice'))?.is_active).toBe(0)
   })
 
+  it('setRole and reactivateUser invalidate the cached row', async () => {
+    const pool = new FakePool()
+    const svc = newCachedSvc(pool)
+    pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
+    expect((await svc.getSessionUser('alice'))?.role).toBe(ROLE_USER)
+
+    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [], rowCount: 1 })
+    await svc.setRole('alice', ROLE_ADMIN)
+    pool.enqueueResponse({ rows: [pgUserRow({ role: ROLE_ADMIN })], rowCount: 1 })
+    expect((await svc.getSessionUser('alice'))?.role).toBe(ROLE_ADMIN)
+
+    pool.enqueueResponse({ rows: [pgUserRow({ is_active: false })], rowCount: 1 })
+    svc.invalidateUser('alice')
+    expect((await svc.getSessionUser('alice'))?.is_active).toBe(0)
+    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [], rowCount: 1 })
+    await svc.reactivateUser('alice')
+    pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
+    expect((await svc.getSessionUser('alice'))?.is_active).toBe(1)
+  })
+
   it('resetPassword, changePassword and invalidateUser drop the cached row', async () => {
     const pool = new FakePool()
     const svc = newCachedSvc(pool)
     pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
     const before = await svc.getSessionUser('alice')
 
+    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 }) // existence check
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.resetPassword('alice', FIXTURE_NEW_PW)
     const rotatedAt = new Date('2026-10-06T10:00:00Z')
@@ -809,7 +832,7 @@ describe('PostgresWebAuthService — cached session-user lookup', () => {
     svc.invalidateUser('alice')
     pool.enqueueResponse({ rows: [], rowCount: 0 })
     expect(await svc.getSessionUser('alice')).toBeUndefined()
-    expect(pool.queries).toHaveLength(7)
+    expect(pool.queries).toHaveLength(8)
   })
 
   it('is uncached by default for direct construction (ttl 0)', async () => {
