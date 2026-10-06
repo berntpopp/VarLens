@@ -542,16 +542,12 @@ describe('web dispatcher adapters: auth and import', () => {
       expect(newBatchJob).toBeDefined()
       if (newBatchJob === undefined) throw new Error('expected batch job to be tracked')
       expect(newBatchJob).toMatchObject({ kind: 'import_batch', status: 'completed' })
-      const params = newBatchJob.params as {
-        files: Array<{ inputPath: string; storedPath: string }>
-        duplicateStrategy: string
-      }
-      expect(params.duplicateStrategy).toBe('skip')
-      const paramFile = params.files[0]
-      expect(paramFile).toBeDefined()
-      expect(paramFile).toMatchObject({
-        inputPath: upload.ref,
-        storedPath: upload.storedPath
+      // Job params never carry staged server paths (they reach the browser
+      // through jobs:list); the files are counted instead.
+      expect(newBatchJob.params).toEqual({
+        fileCount: 1,
+        duplicateStrategy: 'skip',
+        runId: 'web-run-1'
       })
     } finally {
       if (prevNodeEnv === undefined) delete process.env.NODE_ENV

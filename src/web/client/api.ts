@@ -506,13 +506,10 @@ function buildBatchImportApi(): unknown {
             const filePath = refs[0]
             if (filePath === undefined) return null
 
-            const passwordProbe = await httpInvoke('batch-import', 'testZipPassword', [
-              filePath,
-              ''
-            ])
-            if (isIpcError(passwordProbe)) return passwordProbe
-            const isEncrypted = !(passwordProbe as { success: boolean }).success
-            return { filePath, isEncrypted }
+            // Not testZipPassword(ref, ''): that is false for a plain ZIP too.
+            const inspected = await httpInvoke('batch-import', 'inspectZip', [filePath])
+            if (isIpcError(inspected)) return inspected
+            return { filePath, isEncrypted: (inspected as { isEncrypted: boolean }).isEncrypted }
           }
         }
         return typeof prop === 'string' ? rpc[prop] : undefined
