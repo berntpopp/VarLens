@@ -330,6 +330,9 @@ export class SqliteReadExecutor implements StorageReadExecutor {
         return this.databaseService.auditLog.query(task.params[0])
 
       case 'transcripts:list':
+        if (this.dbPool !== null) {
+          return await this.dbPool.run({ type: 'transcripts:list', params: task.params })
+        }
         return this.databaseService.transcripts.getVariantTranscripts(task.params[0])
     }
 

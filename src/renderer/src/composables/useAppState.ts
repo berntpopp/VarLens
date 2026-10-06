@@ -10,6 +10,7 @@
  * - In child components: call `useAppState()` which injects from the provider
  */
 import { invalidateFilterPresets } from './useFilterPresetStore'
+import { useCarriers } from './useCarriers'
 import { ref, computed, inject } from 'vue'
 import type { Ref, ComputedRef, InjectionKey } from 'vue'
 import type { VariantFilter, Variant } from '../../../shared/types/api'
@@ -195,6 +196,8 @@ export function createAppState(): AppStateReturn {
   function resetForDatabaseSwitch(): void {
     // Presets live in the workspace database; the cached list is now stale.
     invalidateFilterPresets()
+    useCarriers().reset()
+    incrementDataGeneration()
     resetCaseContext()
     setActiveTab('case')
     panelOpen.value = false

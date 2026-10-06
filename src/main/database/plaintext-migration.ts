@@ -80,6 +80,7 @@ import {
   type ContentSignal
 } from './plaintext-migration-signal'
 import { fsyncContainingDirectory, fsyncFile } from './fs-durability'
+import { quoteSqlLiteral, requestDeleteJournalMode } from './journal-mode'
 
 export type { ContentSignal }
 
@@ -143,10 +144,6 @@ export interface PlaintextMigrationDeps {
   afterCandidateRekey?: (candidatePath: string, dek: string) => void
 }
 
-function quoteSqlLiteral(value: string): string {
-  return value.split("'").join("''")
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -185,7 +182,7 @@ export function realVerifyEncrypted(filePath: string, dek: string): ContentSigna
  * comparing the returned value.
  */
 function checkpointOutOfWalMode(db: DatabaseType, context: string): void {
-  const journalMode = db.pragma('journal_mode = DELETE', { simple: true }) as string
+  const journalMode = requestDeleteJournalMode(db)
   if (journalMode !== 'delete') {
     throw new PlaintextMigrationError(
       `Failed to checkpoint ${context} out of WAL mode (journal_mode is '${journalMode}', ` +

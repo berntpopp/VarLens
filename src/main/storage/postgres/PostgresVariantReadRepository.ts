@@ -24,6 +24,8 @@ import { runNamed, runNamedDynamic } from './named-query'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import type { PostgresVariantColumnDefinition } from './postgres-variant-columns'
 import { addPostgresClinicalVariantFilters } from './postgres-variant-clinical-filter-sql'
+import { PostgresPanelIntervalResolver } from './postgres-panel-interval-resolver'
+import { assertValidColumnFilterValues } from '../../../shared/filters/column-filter-validation'
 import {
   buildPostgresVariantOrderTerms,
   decodeVariantCursor,
@@ -264,8 +266,11 @@ export function buildPostgresVariantQueryParts(
   }
 }
 
-function assertSupportedPostgresVariantFilter(_filter: VariantFilter): void {
-  // Dynamic column filter support is validated in addPostgresColumnFilters.
+function assertSupportedPostgresVariantFilter(filter: VariantFilter): void {
+  // Value/column-type validation is shared with the SQLite builder so both
+  // backends reject e.g. `cadd < 'abc'` identically (issue #447). Whether a
+  // column key is filterable at all is checked in addPostgresColumnFilters.
+  assertValidColumnFilterValues(filter.column_filters)
 }
 
 function addPostgresColumnFilters(
@@ -292,7 +297,9 @@ function addPostgresColumnFilters(
       addWhere(`${sqlColumn} IN (${value.map((item) => addParam(String(item))).join(', ')})`)
     } else if (operator === 'like' && typeof value === 'string') {
       if (value.trim() === '') continue
-      addWhere(`${sqlColumn} ILIKE ${addParam(`%${value}%`)}`)
+      // Numeric columns need the cast: `double precision ILIKE text` does not exist.
+      const textColumn = definition.kind === 'numeric' ? `${sqlColumn}::text` : sqlColumn
+      addWhere(`${textColumn} ILIKE ${addParam(`%${value}%`)}`)
     } else if (
       (operator === '=' || operator === '!=') &&
       (typeof value === 'string' || typeof value === 'number')
@@ -323,12 +330,16 @@ export class PostgresVariantReadRepository {
   private readonly schemaName: string
   private readonly schema: string
 
+  private readonly panelIntervals: PostgresPanelIntervalResolver
+
   constructor(
     private readonly pool: Pick<Pool, 'query'>,
-    schema: string
+    schema: string,
+    panelIntervals?: PostgresPanelIntervalResolver
   ) {
     this.schema = schema
     this.schemaName = quoteIdentifier(schema)
+    this.panelIntervals = panelIntervals ?? new PostgresPanelIntervalResolver(pool, schema)
   }
 
   async getVariantTypeCounts(caseId: number): Promise<Record<string, number>> {
@@ -401,7 +412,7 @@ export class PostgresVariantReadRepository {
   }
 
   async queryVariants(
-    filter: VariantFilter,
+    requestedFilter: VariantFilter,
     limit: number,
     offset: number = 0,
     sortBy?: SortItem[],
@@ -409,6 +420,9 @@ export class PostgresVariantReadRepository {
     includeUnfilteredCount?: boolean,
     page?: VariantPageRequest
   ): Promise<PaginatedResult<Variant> & { unfiltered_count?: number } & VariantPageResult> {
+    // Active gene panels become genomic regions (gene coordinates +/- padding
+    // for the case's build) before SQL is built; a failure propagates.
+    const filter = await this.panelIntervals.resolveCaseFilter(requestedFilter)
     const { fromAndWhereSql, orderBySql, orderTerms, params, projections } =
       buildPostgresVariantQueryParts(filter, this.schemaName, sortBy)
 

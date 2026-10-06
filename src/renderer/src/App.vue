@@ -56,6 +56,7 @@
 
     <v-main id="main-content" tabindex="-1">
       <h1 class="visually-hidden" data-testid="view-heading">{{ viewTitle.heading }}</h1>
+      <ChunkLoadErrorBanner />
       <router-view v-slot="{ Component }">
         <keep-alive :max="2">
           <component :is="Component" />
@@ -106,6 +107,7 @@ import AppToolbar from './components/AppToolbar.vue'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
 import A11yShell from './components/common/A11yShell.vue'
+import ChunkLoadErrorBanner from './components/common/ChunkLoadErrorBanner.vue'
 import { useViewTitle } from './composables/useViewTitle'
 import { useThemePreference } from './composables/useThemePreference'
 import { installUrlStateSync } from './composables/useUrlState'
@@ -117,6 +119,7 @@ import { usePanelResize } from './composables/usePanelResize'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useDatabaseStore } from './stores/databaseStore'
 import { useCaseMetadata } from './composables/useCaseMetadata'
+import { useCaseDeletion } from './composables/useCaseDeletion'
 import { useColumnPreferences } from './composables/useColumnPreferences'
 import { useFilterPreferences } from './composables/useFilterPreferences'
 import { useResponsiveLayout } from './composables/useResponsiveLayout'
@@ -215,6 +218,7 @@ const databasePath = toRef(databaseStore, 'currentPath')
 
 // Case metadata
 const { clearCache: clearMetadataCache } = useCaseMetadata()
+const { deleteAllCases } = useCaseDeletion()
 
 // Preference resets
 const { resetToDefaults: resetVariantColumns } = useColumnPreferences('variant-table')
@@ -265,7 +269,7 @@ const handleDeleteAllCases = async () => {
   if (confirmed === true) {
     // Progress and cancel are shown by the background-jobs panel meanwhile.
     try {
-      const deleted = unwrapIpcResult(await api.cases.deleteAll())
+      const deleted = await deleteAllCases()
       dialogHostRef.value?.showSnackbar(
         `Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`,
         'success'

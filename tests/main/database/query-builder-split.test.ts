@@ -42,11 +42,12 @@ function insertVariant(
     gnomad_af?: number
     cadd?: number
     carrier_count?: number
+    end_pos?: number | null
   } = {}
 ): void {
   db.prepare(
-    `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, func, clinvar, gnomad_af, cadd)
-     VALUES (?, ?, ?, 'A', 'T', ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, func, clinvar, gnomad_af, cadd, end_pos)
+     VALUES (?, ?, ?, 'A', 'T', ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     caseId,
     chr,
@@ -56,7 +57,8 @@ function insertVariant(
     options.func ?? null,
     options.clinvar ?? null,
     options.gnomad_af ?? null,
-    options.cadd ?? null
+    options.cadd ?? null,
+    options.end_pos ?? null
   )
 }
 
@@ -219,6 +221,22 @@ describe('CohortService – buildWhereClause', () => {
     expect(result.data[0].chr).toBe('1')
   })
 
+  it('matches a spanning structural variant when filtered by panel interval', () => {
+    const c3 = insertCase(db, 'CaseSpanning')
+    insertVariant(db, c3, '1', 100, {
+      gene_symbol: 'SPAN1',
+      consequence: 'HIGH',
+      func: 'transcript_ablation',
+      end_pos: 500
+    })
+    summaryService.rebuild()
+
+    const result = cohortService.getCohortVariants({
+      panel_intervals: [{ chr: '1', start: 200, end: 300 }]
+    })
+    expect(result.data.some((v) => v.chr === '1' && v.pos === 100)).toBe(true)
+  })
+
   it('returns empty result when filter matches nothing', () => {
     const result = cohortService.getCohortVariants({ gene_symbol: 'NONEXISTENT_GENE_XYZ' })
     expect(result.data.length).toBe(0)
@@ -275,6 +293,31 @@ describe('VariantRepository – getFilteredCount', () => {
     const count = service.variants.getFilteredCount(filter)
     const paginated = service.variants.getVariants(filter, 100)
     expect(count).toBe(paginated.total_count)
+  })
+
+  it('matches a spanning structural variant when filtered by panel interval', () => {
+    const caseId = service.cases.createCase('test', '/test/test.vcf', 1024)
+    service.variants.insertVariantsBatch(caseId, [
+      {
+        ...createTestVariants(1)[0],
+        chr: '1',
+        pos: 100,
+        end_pos: 500,
+        variant_type: 'sv'
+      }
+    ])
+
+    const filter: VariantFilter = {
+      case_id: caseId,
+      panel_intervals: [{ chr: '1', start: 200, end: 300 }]
+    }
+    const count = service.variants.getFilteredCount(filter)
+    expect(count).toBe(1)
+
+    const paginated = service.variants.getVariants(filter, 10)
+    expect(paginated.data).toHaveLength(1)
+    expect(paginated.data[0].pos).toBe(100)
+    expect(paginated.data[0].end_pos).toBe(500)
   })
 })
 

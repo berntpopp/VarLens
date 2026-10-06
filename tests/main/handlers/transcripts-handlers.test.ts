@@ -104,7 +104,7 @@ describe('transcript PostgreSQL executor routing', () => {
       is_selected: 0
     })
 
-    expect(result).toMatchObject({ code: 'UNKNOWN', message: 'Invalid parameters' })
+    expect(result).toMatchObject({ code: 'INVALID_PARAMETERS', message: 'Invalid parameters' })
     expect(writeExecute).not.toHaveBeenCalled()
   })
 })

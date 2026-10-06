@@ -412,11 +412,11 @@ function reconcileMissingPendingProvision(
  * Legacy `rekey` stays valid ONLY for explicit-user-password databases that
  * have no key-store entry for their current path.
  */
-export function rekeyDatabase(
+export async function rekeyDatabase(
   newPassword: string,
   getDbManager: () => DatabaseManager,
   keyStore: Pick<DbKeyStoreWithPassphraseLike, 'getKeyIdForPath'>
-): { success: boolean } {
+): Promise<{ success: boolean }> {
   const manager = getDbManager()
   const currentPath = manager.getCurrentPath()
 
@@ -429,7 +429,7 @@ export function rekeyDatabase(
     )
   }
 
-  manager.rekey(newPassword)
+  await manager.rekey(newPassword)
   return { success: true }
 }
 

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { PostgresVariantReadRepository } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
+import { PostgresPanelIntervalResolver } from '../../../src/main/storage/postgres/postgres-panel-interval-resolver'
+import {
+  buildPostgresVariantQueryParts,
+  PostgresVariantReadRepository
+} from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
 
 function repoWithQueryCapture() {
   const calls: string[] = []
@@ -120,16 +124,52 @@ describe('PostgreSQL clinical variant filters', () => {
     expect(sql).toContain('va.starred')
   })
 
-  it('resolves active panel filters from case workflow tables', async () => {
-    const { repo, calls, paramsByCall } = repoWithQueryCapture()
-    await repo.queryVariants({ case_id: 1, active_panel_ids: [3, 4] }, 25)
+  it('resolves active panels to padded genomic regions for the build of the case (issue #447)', async () => {
+    const calls: string[] = []
+    const query = vi.fn(async (arg: unknown) => {
+      const sql = typeof arg === 'string' ? arg : ((arg as { text?: string }).text ?? '')
+      calls.push(sql)
+      if (sql.includes('AS genome_build'))
+        return { rows: [{ genome_build: 'GRCh37', chr: 'chr7' }] }
+      return { rows: sql.includes('SELECT COUNT(*)::int AS count') ? [{ count: 0 }] : [] }
+    })
+    const lookup = vi.fn().mockResolvedValue([{ chr: 'chr7', start: 95_000, end: 205_000 }])
+    const repo = new PostgresVariantReadRepository(
+      { query } as never,
+      'public',
+      new PostgresPanelIntervalResolver({ query } as never, 'public', lookup)
+    )
 
-    const sql = calls.join('\n')
-    expect(sql).toContain('case_active_panels')
-    expect(sql).toContain('panel_genes')
-    expect(sql).toContain('pg.symbol = v.gene_symbol')
-    expect(sql).toMatch(/cap\.panel_id\s*=\s*ANY\(\$\d+::bigint\[\]\)/)
-    expect(paramsByCall[0]).toContainEqual([3, 4])
+    await repo.queryVariants({ case_id: 1, active_panel_ids: [3, 4], panel_padding_bp: 2500 }, 25)
+
+    expect(lookup).toHaveBeenCalledWith([3, 4], 'GRCh37', 2500, true)
+    const filterSql = calls.filter((sql) => sql.includes('FROM "public"."variants" v')).join('\n')
+    expect(filterSql).toContain('(v.chr = $2 AND v.pos <= $4 AND COALESCE(v.end_pos, v.pos) >= $3)')
+    // The gene-symbol fallback is gone: it ignored padding and genome build.
+    expect(filterSql).not.toContain('case_active_panels')
+    expect(filterSql).not.toContain('gene_symbol')
+  })
+
+  it('fails the query when panel regions cannot be resolved, never widening or narrowing it', async () => {
+    const query = vi.fn(async () => ({ rows: [{ genome_build: 'GRCh38', chr: '7' }] }))
+    const lookup = vi.fn().mockRejectedValue(new Error('gene reference unavailable'))
+    const repo = new PostgresVariantReadRepository(
+      { query } as never,
+      'public',
+      new PostgresPanelIntervalResolver({ query } as never, 'public', lookup)
+    )
+
+    await expect(repo.queryVariants({ case_id: 1, active_panel_ids: [3] }, 25)).rejects.toThrow(
+      'gene reference unavailable'
+    )
+    // Only the case-context read ran; no variant query was issued.
+    expect(query).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses to build SQL for a panel request that was never resolved', () => {
+    expect(() =>
+      buildPostgresVariantQueryParts({ case_id: 1, active_panel_ids: [3] }, '"public"')
+    ).toThrow(/not resolved to genomic intervals/)
   })
 
   it('uses precomputed panel intervals instead of active panel lookup when intervals are present', async () => {

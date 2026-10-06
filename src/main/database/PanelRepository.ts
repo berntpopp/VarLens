@@ -1,6 +1,10 @@
 import { BaseRepository } from './BaseRepository'
 import type { GeneReferenceDb } from './GeneReferenceDb'
 import { sqlPlaceholders } from './sql-utils'
+import {
+  buildPaddedPanelIntervals,
+  mergeOverlappingIntervals
+} from '../../shared/filters/panel-intervals'
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -200,48 +204,12 @@ export class PanelRepository extends BaseRepository {
     // Look up coordinates from gene reference DB
     const coordsMap = geneRefDb.getCoordinatesForGenes(hgncIds, assembly)
 
-    // Build intervals with padding and optional chr prefix
-    const intervals: GenomicInterval[] = []
-    for (const coords of coordsMap.values()) {
-      const chr = chrPrefix
-        ? coords.chromosome.startsWith('chr')
-          ? coords.chromosome
-          : `chr${coords.chromosome}`
-        : coords.chromosome
-      intervals.push({
-        chr,
-        start: Math.max(1, coords.start_pos - paddingBp),
-        end: coords.end_pos + paddingBp
-      })
-    }
-
-    return mergeOverlappingIntervals(intervals)
+    // Padding, chr-prefix style and merging are shared with the PostgreSQL
+    // resolver so both backends derive identical regions (issue #447).
+    return buildPaddedPanelIntervals(coordsMap.values(), paddingBp, chrPrefix)
   }
 }
 
-// ── Helpers ──────────────────────────────────────────────────
-
-/**
- * Sort intervals by chromosome (natural sort) then start position,
- * and merge overlapping or adjacent intervals on the same chromosome.
- */
-export function mergeOverlappingIntervals(intervals: GenomicInterval[]): GenomicInterval[] {
-  if (intervals.length === 0) return []
-
-  const sorted = [...intervals].sort((a, b) => {
-    if (a.chr !== b.chr) return a.chr.localeCompare(b.chr, undefined, { numeric: true })
-    return a.start - b.start
-  })
-
-  const merged: GenomicInterval[] = [{ ...sorted[0] }]
-  for (let i = 1; i < sorted.length; i++) {
-    const last = merged[merged.length - 1]
-    const curr = sorted[i]
-    if (curr.chr === last.chr && curr.start <= last.end + 1) {
-      last.end = Math.max(last.end, curr.end)
-    } else {
-      merged.push({ ...curr })
-    }
-  }
-  return merged
-}
+// Re-exported for existing importers; the implementation is shared with the
+// PostgreSQL backend in src/shared/filters/panel-intervals.ts.
+export { mergeOverlappingIntervals }

@@ -29,6 +29,8 @@ export default [
       '.agent/**',
       '.claude/**',
       '.github/skills/**',
+      '.understand-anything/**',
+      '.ua/**',
       '.impeccable/**',
       'coverage/**',
       // Third-party bundles shipped directly to the renderer's public
@@ -134,6 +136,42 @@ export default [
           selector: "BinaryExpression[operator='in'][left.value='error'][right.type='Identifier']",
           message:
             "Use isIpcError() from shared/types/errors instead of ad-hoc 'error' in result checks."
+        }
+      ]
+    }
+  },
+  // Ban Electron in shared handler logic and handlers-core modules
+  {
+    files: [
+      'src/main/ipc/handlers/*-logic.ts',
+      'src/main/handlers-core/**/*.ts',
+      'src/main/platform/platform-port.ts'
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'electron',
+              message:
+                'Shared handler logic must not import electron. Keep handlers transport-neutral.'
+            }
+          ],
+          patterns: [
+            {
+              group: ['electron/*', '@electron/*'],
+              message:
+                'Shared handler logic must not import electron subpaths. Keep handlers transport-neutral.'
+            }
+          ]
+        }
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression[source.value=/^(@electron\\/|electron(\\/|$))/]',
+          message: 'Dynamic electron imports are forbidden in transport-neutral handler logic.'
         }
       ]
     }

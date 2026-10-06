@@ -14,6 +14,8 @@ import type { FilterState } from '../../../../shared/types/filters'
  */
 interface FilterFields {
   maxGnomadAf: number | null
+  /** Internal cohort frequency threshold — same meaning in case and cohort view. */
+  maxInternalAf: number | null
   minCadd: number | null
   consequences: string[]
   funcs: string[]
@@ -58,6 +60,7 @@ export function applyPresetStateToFilters({
 }: ApplyPresetOptions): void {
   // Step 1: Reset all preset-manageable fields to defaults
   filters.value.maxGnomadAf = null
+  filters.value.maxInternalAf = null
   filters.value.minCadd = null
   filters.value.consequences = []
   filters.value.funcs = []
@@ -77,6 +80,8 @@ export function applyPresetStateToFilters({
 
   // Step 2: Apply merged preset state on top of defaults
   if (presetState.maxGnomadAf !== undefined) filters.value.maxGnomadAf = presetState.maxGnomadAf
+  if (presetState.maxInternalAf !== undefined)
+    filters.value.maxInternalAf = presetState.maxInternalAf
   if (presetState.minCadd !== undefined) filters.value.minCadd = presetState.minCadd
   if (presetState.funcs !== undefined) filters.value.funcs = presetState.funcs
   if (presetState.clinvars !== undefined) filters.value.clinvars = presetState.clinvars
@@ -127,6 +132,7 @@ export function isPresetDiverged({
   const fj = presetFilterJson
 
   if (fj.maxGnomadAf !== undefined && filters.maxGnomadAf !== fj.maxGnomadAf) return true
+  if (fj.maxInternalAf !== undefined && filters.maxInternalAf !== fj.maxInternalAf) return true
   if (fj.minCadd !== undefined && filters.minCadd !== fj.minCadd) return true
   if (fj.starredOnly !== undefined && filters.starredOnly !== fj.starredOnly) return true
   if (fj.hasCommentOnly !== undefined && filters.hasCommentOnly !== fj.hasCommentOnly) return true

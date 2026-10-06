@@ -1,6 +1,7 @@
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { isExtensionColumnKey } from './variant-extension-registry'
 import { BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
+import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
 
 export interface BuildBaseWhereContext {
   /** SQL alias for base columns: 'v' for variants-backed paths, 'cvs' for cohort listing. */
@@ -36,6 +37,8 @@ export function buildBaseWhere(
   filters: BaseFilterInput,
   ctx: BuildBaseWhereContext
 ): BuildBaseWhereResult {
+  // Same value/column-type check as every other builder on both backends (#447).
+  assertValidColumnFilterValues(filters.column_filters)
   const conditions: string[] = []
   const params: (string | number)[] = []
   const { baseAlias, scope } = ctx

@@ -339,8 +339,12 @@ export function buildSummaryQueryParts(
   }
 
   // Aggregate predicates (HAVING → WHERE on stored columns).
-  if (params.max_internal_af !== undefined) {
-    whereParts.push(`cvs.cohort_frequency <= ${addParam(params.max_internal_af)}`)
+  // 0 means "no frequency filter" and rows without a stored frequency are
+  // kept — the same contract as the case view and the SQLite cohort listing.
+  if (params.max_internal_af !== undefined && params.max_internal_af > 0) {
+    whereParts.push(
+      `(cvs.cohort_frequency IS NULL OR cvs.cohort_frequency <= ${addParam(params.max_internal_af)})`
+    )
   }
 
   if (params.carrier_count_min !== undefined) {

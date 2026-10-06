@@ -1,0 +1,2924 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > acmg_classifications empty scope=all 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > acmg_classifications empty scope=case 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > acmg_classifications empty scope=undefined 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > acmg_classifications scope=all 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    "Pathogenic",
+    "Likely pathogenic",
+    "Pathogenic",
+    "Likely pathogenic",
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?, ?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?, ?) and "v2"."case_id" = ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > acmg_classifications scope=case 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    "Pathogenic",
+    "Likely pathogenic",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?, ?))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > acmg_classifications scope=undefined 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    "Pathogenic",
+    "Likely pathogenic",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?, ?))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > has_comment scope=all 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    "",
+    "",
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > has_comment scope=case 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    "",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > has_comment scope=undefined 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    "",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > starred + comment + acmg scope=all 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    1,
+    1,
+    2,
+    2,
+    "",
+    "",
+    2,
+    2,
+    "Benign",
+    "Benign",
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > starred + comment + acmg scope=case 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    1,
+    2,
+    "",
+    2,
+    "Benign",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > starred + comment + acmg scope=undefined 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    1,
+    2,
+    "",
+    2,
+    "Benign",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > starred_only scope=all 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    1,
+    1,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > starred_only scope=case 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    1,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > starred_only scope=undefined 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    1,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > starred_only=false scope=all 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > starred_only=false scope=case 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > annotation scope filters > starred_only=false scope=undefined 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters != number 1`] = `
+{
+  "parameters": [
+    2,
+    20,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "cadd" != ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters < includeEmpty default 1`] = `
+{
+  "parameters": [
+    2,
+    0.01,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("gnomad_af" is null or "gnomad_af" < ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters < includeEmpty=false string value 1`] = `
+{
+  "parameters": [
+    2,
+    15,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "cadd" < ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters < includeEmpty=true 1`] = `
+{
+  "parameters": [
+    2,
+    30,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("qual" is null or "qual" < ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters <= includeEmpty default 1`] = `
+{
+  "parameters": [
+    2,
+    0.01,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("gnomad_af" is null or "gnomad_af" <= ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters <= includeEmpty=false string value 1`] = `
+{
+  "parameters": [
+    2,
+    15,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "cadd" <= ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters <= includeEmpty=true 1`] = `
+{
+  "parameters": [
+    2,
+    30,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("qual" is null or "qual" <= ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters = numeric string 1`] = `
+{
+  "parameters": [
+    2,
+    100000,
+  ],
+  "prepareError": "ambiguous column name: pos",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "pos" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters = text 1`] = `
+{
+  "parameters": [
+    2,
+    "X",
+  ],
+  "prepareError": "ambiguous column name: chr",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "chr" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters > includeEmpty default 1`] = `
+{
+  "parameters": [
+    2,
+    0.01,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("gnomad_af" is null or "gnomad_af" > ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters > includeEmpty=false string value 1`] = `
+{
+  "parameters": [
+    2,
+    15,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "cadd" > ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters > includeEmpty=true 1`] = `
+{
+  "parameters": [
+    2,
+    30,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("qual" is null or "qual" > ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters >= includeEmpty default 1`] = `
+{
+  "parameters": [
+    2,
+    0.01,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("gnomad_af" is null or "gnomad_af" >= ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters >= includeEmpty=false string value 1`] = `
+{
+  "parameters": [
+    2,
+    15,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "cadd" >= ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters >= includeEmpty=true 1`] = `
+{
+  "parameters": [
+    2,
+    30,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("qual" is null or "qual" >= ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters empty object 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters every base sortable column (=) 1`] = `
+{
+  "parameters": [
+    2,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+  ],
+  "prepareError": "ambiguous column name: chr",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "chr" = ? and "pos" = ? and "gene_symbol" = ? and "omim_mim_number" = ? and "func" = ? and "consequence" = ? and "transcript" = ? and "cdna" = ? and "aa_change" = ? and "gt_num" = ? and "gnomad_af" = ? and "cadd" = ? and "qual" = ? and "hpo_sim_score" = ? and "clinvar" = ? and "moi" = ? and "variant_type" = ? and "end_pos" = ? and "sv_type" = ? and "sv_length" = ? and "caller" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters in 1`] = `
+{
+  "parameters": [
+    2,
+    "HIGH",
+    "LOW",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "consequence" IN (?, ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters in empty is skipped 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters in numeric values are stringified 1`] = `
+{
+  "parameters": [
+    2,
+    "1",
+    "2",
+  ],
+  "prepareError": "ambiguous column name: pos",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "pos" IN (?, ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters like 1`] = `
+{
+  "parameters": [
+    2,
+    "%brc%",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "gene_symbol" COLLATE NOCASE like ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters like blank is skipped 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters mixed base operators 1`] = `
+{
+  "parameters": [
+    2,
+    "%TP%",
+    "HIGH",
+    0.01,
+    20,
+    5,
+  ],
+  "prepareError": "ambiguous column name: pos",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "gene_symbol" COLLATE NOCASE like ? and "consequence" IN (?) and ("gnomad_af" is null or "gnomad_af" <= ?) and "cadd" >= ? and "pos" != ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > column filters > column_filters unknown bare key is ignored 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > combined > kitchen sink scope=all 1`] = `
+{
+  "parameters": [
+    2,
+    "snv",
+    "indel",
+    1,
+    "%BR%",
+    "HIGH",
+    "stop_gained",
+    "pathogenic",
+    0.01,
+    10,
+    3,
+    0.2,
+    ""BRCA1"*",
+    ""BRCA1"*",
+    ""BRCA1"*",
+    ""TP53"*",
+    ""TP53"*",
+    ""TP53"*",
+    "1",
+    100000,
+    "A",
+    "T",
+    2,
+    3,
+    "1",
+    1500,
+    1000,
+    "2",
+    2500,
+    2000,
+    2,
+    1,
+    1,
+    2,
+    2,
+    "",
+    "",
+    2,
+    2,
+    "Pathogenic",
+    "Pathogenic",
+    2,
+    0.5,
+    2,
+    4,
+    2,
+    4,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and "consequence" in (?) and "func" in (?) and "clinvar" in (?) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?) and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?) and ("gnomad_af" is null or "gnomad_af" <= ?) and (variants.gt_num IN ('0/1', '0|1', '1|0') OR (
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.gene_symbol IS NOT NULL
+            AND variants.gene_symbol IN (
+              SELECT v_inner.gene_symbol
+              FROM variants v_inner
+              WHERE v_inner.case_id = ?
+                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
+                AND v_inner.gene_symbol IS NOT NULL
+              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
+            )
+            AND variants.gene_symbol IN (
+              SELECT pf.gene_symbol
+              FROM variants pf
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ? AND agm_f.role = 'father'
+              INNER JOIN variants f ON f.case_id = agm_f.case_id
+                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
+                AND f.gt_num IN ('0/1', '0|1', '1|0')
+              INNER JOIN variants pm
+                ON pm.case_id = ?
+                AND pm.gene_symbol = pf.gene_symbol
+                AND pm.gt_num IN ('0/1', '0|1', '1|0')
+                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ? AND agm_m.role = 'mother'
+              INNER JOIN variants m ON m.case_id = agm_m.case_id
+                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
+                AND m.gt_num IN ('0/1', '0|1', '1|0')
+              WHERE pf.case_id = ?
+                AND pf.gt_num IN ('0/1', '0|1', '1|0')
+                AND pf.gene_symbol IS NOT NULL
+            )
+          )) order by cnv.copy_number ASC NULLS LAST, variants.pos DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > combined > kitchen sink scope=case 1`] = `
+{
+  "parameters": [
+    2,
+    "snv",
+    "indel",
+    1,
+    "%BR%",
+    "HIGH",
+    "stop_gained",
+    "pathogenic",
+    0.01,
+    10,
+    3,
+    0.2,
+    ""BRCA1"*",
+    ""BRCA1"*",
+    ""BRCA1"*",
+    ""TP53"*",
+    ""TP53"*",
+    ""TP53"*",
+    "1",
+    100000,
+    "A",
+    "T",
+    2,
+    3,
+    "1",
+    1500,
+    1000,
+    "2",
+    2500,
+    2000,
+    2,
+    1,
+    2,
+    "",
+    2,
+    "Pathogenic",
+    0.5,
+    2,
+    4,
+    2,
+    4,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and "consequence" in (?) and "func" in (?) and "clinvar" in (?) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?) and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and (variants.gt_num IN ('0/1', '0|1', '1|0') OR (
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.gene_symbol IS NOT NULL
+            AND variants.gene_symbol IN (
+              SELECT v_inner.gene_symbol
+              FROM variants v_inner
+              WHERE v_inner.case_id = ?
+                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
+                AND v_inner.gene_symbol IS NOT NULL
+              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
+            )
+            AND variants.gene_symbol IN (
+              SELECT pf.gene_symbol
+              FROM variants pf
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ? AND agm_f.role = 'father'
+              INNER JOIN variants f ON f.case_id = agm_f.case_id
+                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
+                AND f.gt_num IN ('0/1', '0|1', '1|0')
+              INNER JOIN variants pm
+                ON pm.case_id = ?
+                AND pm.gene_symbol = pf.gene_symbol
+                AND pm.gt_num IN ('0/1', '0|1', '1|0')
+                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ? AND agm_m.role = 'mother'
+              INNER JOIN variants m ON m.case_id = agm_m.case_id
+                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
+                AND m.gt_num IN ('0/1', '0|1', '1|0')
+              WHERE pf.case_id = ?
+                AND pf.gt_num IN ('0/1', '0|1', '1|0')
+                AND pf.gene_symbol IS NOT NULL
+            )
+          )) order by cnv.copy_number ASC NULLS LAST, variants.pos DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > combined > kitchen sink scope=undefined 1`] = `
+{
+  "parameters": [
+    2,
+    "snv",
+    "indel",
+    1,
+    "%BR%",
+    "HIGH",
+    "stop_gained",
+    "pathogenic",
+    0.01,
+    10,
+    3,
+    0.2,
+    ""BRCA1"*",
+    ""BRCA1"*",
+    ""BRCA1"*",
+    ""TP53"*",
+    ""TP53"*",
+    ""TP53"*",
+    "1",
+    100000,
+    "A",
+    "T",
+    2,
+    3,
+    "1",
+    1500,
+    1000,
+    "2",
+    2500,
+    2000,
+    2,
+    1,
+    2,
+    "",
+    2,
+    "Pathogenic",
+    0.5,
+    2,
+    4,
+    2,
+    4,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and "consequence" in (?) and "func" in (?) and "clinvar" in (?) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?) and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and (variants.gt_num IN ('0/1', '0|1', '1|0') OR (
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.gene_symbol IS NOT NULL
+            AND variants.gene_symbol IN (
+              SELECT v_inner.gene_symbol
+              FROM variants v_inner
+              WHERE v_inner.case_id = ?
+                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
+                AND v_inner.gene_symbol IS NOT NULL
+              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
+            )
+            AND variants.gene_symbol IN (
+              SELECT pf.gene_symbol
+              FROM variants pf
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ? AND agm_f.role = 'father'
+              INNER JOIN variants f ON f.case_id = agm_f.case_id
+                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
+                AND f.gt_num IN ('0/1', '0|1', '1|0')
+              INNER JOIN variants pm
+                ON pm.case_id = ?
+                AND pm.gene_symbol = pf.gene_symbol
+                AND pm.gt_num IN ('0/1', '0|1', '1|0')
+                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ? AND agm_m.role = 'mother'
+              INNER JOIN variants m ON m.case_id = agm_m.case_id
+                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
+                AND m.gt_num IN ('0/1', '0|1', '1|0')
+              WHERE pf.case_id = ?
+                AND pf.gt_num IN ('0/1', '0|1', '1|0')
+                AND pf.gene_symbol IS NOT NULL
+            )
+          )) order by cnv.copy_number ASC NULLS LAST, variants.pos DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > cadd_min 1`] = `
+{
+  "parameters": [
+    2,
+    20,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("cadd" is null or "cadd" >= ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > clinvars 1`] = `
+{
+  "parameters": [
+    2,
+    "pathogenic",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "clinvar" in (?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > consequence (legacy single) 1`] = `
+{
+  "parameters": [
+    2,
+    "HIGH",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "consequence" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > consequence empty string is ignored 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > consequences array 1`] = `
+{
+  "parameters": [
+    2,
+    "HIGH",
+    "MODERATE",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "consequence" in (?, ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > consequences array wins over consequence 1`] = `
+{
+  "parameters": [
+    2,
+    "HIGH",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "consequence" in (?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > consider_phasing is ignored 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > empty consequences falls back to consequence 1`] = `
+{
+  "parameters": [
+    2,
+    "LOW",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "consequence" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > exact chr only 1`] = `
+{
+  "parameters": [
+    2,
+    "X",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "variants"."chr" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > exact chr/pos/ref/alt 1`] = `
+{
+  "parameters": [
+    2,
+    "1",
+    100000,
+    "A",
+    "T",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > exact empty strings are ignored 1`] = `
+{
+  "parameters": [
+    2,
+    5,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "variants"."pos" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > funcs 1`] = `
+{
+  "parameters": [
+    2,
+    "missense_variant",
+    "stop_gained",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "func" in (?, ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > funcs empty 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > gene_symbol 1`] = `
+{
+  "parameters": [
+    2,
+    "%BRCA%",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "gene_symbol" like ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > gene_symbol empty string is ignored 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > gnomad_af_max 1`] = `
+{
+  "parameters": [
+    2,
+    0.01,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("gnomad_af" is null or "gnomad_af" <= ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > gnomad_af_max zero 1`] = `
+{
+  "parameters": [
+    2,
+    0,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("gnomad_af" is null or "gnomad_af" <= ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > ipc-only keys are ignored 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > max_internal_af 1`] = `
+{
+  "parameters": [
+    2,
+    3,
+    0.05,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > max_internal_af zero is ignored 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > no filters 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > search_query boolean 1`] = `
+{
+  "parameters": [
+    2,
+    ""BRCA1"*",
+    ""BRCA1"*",
+    ""BRCA1"*",
+    ""TP53"*",
+    ""TP53"*",
+    ""TP53"*",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) AND (NOT (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?))))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > search_query empty 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > search_query hgvs 1`] = `
+{
+  "parameters": [
+    2,
+    "%c.123A>G%",
+    "%c.123A>G%",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (cdna LIKE ? OR aa_change LIKE ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > search_query single term 1`] = `
+{
+  "parameters": [
+    2,
+    ""BRCA1"*",
+    ""BRCA1"*",
+    ""BRCA1"*",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > tag_ids 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    1,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?, ?))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > core filters > tag_ids empty 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter cnv.copy_number (implicit narrowing) 1`] = `
+{
+  "parameters": [
+    2,
+    3,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and variants.variant_type = 'cnv' AND cnv.copy_number >= ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter cnv.copy_number with variant_type=cnv 1`] = `
+{
+  "parameters": [
+    2,
+    "cnv",
+    3,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af", "cnv"."copy_number" as "_cnv_copy_number", "cnv"."copy_number_quality" as "_cnv_gq", "cnv"."homozygosity_ref" as "_cnv_ho_ref", "cnv"."homozygosity_alt" as "_cnv_ho_alt" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and "variants"."variant_type" = ? and cnv.copy_number >= ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter cross-type sv + cnv + str 1`] = `
+{
+  "parameters": [
+    2,
+    5,
+    1,
+    "%x%",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" left join "variant_str" as "str" on "str"."variant_id" = "variants"."id" where "variants"."case_id" = ? and sv.support >= ? AND cnv.copy_number = ? AND str.disease LIKE ? COLLATE NOCASE",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter mixed with base column filter 1`] = `
+{
+  "parameters": [
+    2,
+    1,
+    "%A%",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and variants.variant_type = 'cnv' AND cnv.copy_number <= ? and "gene_symbol" COLLATE NOCASE like ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter str.disease like 1`] = `
+{
+  "parameters": [
+    2,
+    "%hunt%",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_str" as "str" on "str"."variant_id" = "variants"."id" where "variants"."case_id" = ? and variants.variant_type = 'str' AND str.disease LIKE ? COLLATE NOCASE",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter str.str_status in with variant_type=str (str + str_ext aliases) 1`] = `
+{
+  "parameters": [
+    2,
+    "str",
+    "full_mutation",
+    "premutation",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af", "str_ext"."repeat_id" as "_str_repeat_id", "str_ext"."repeat_unit" as "_str_repeat_unit", "str_ext"."display_repeat_unit" as "_str_display_ru", "str_ext"."ref_copies" as "_str_ref_copies", "str_ext"."alt_copies" as "_str_alt_copies", "str_ext"."str_status" as "_str_status", "str_ext"."normal_max" as "_str_normal_max", "str_ext"."pathologic_min" as "_str_pathologic_min", "str_ext"."disease" as "_str_disease", "str_ext"."inheritance_mode" as "_str_inheritance_mode", "str_ext"."rank_score" as "_str_rank_score" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_str" as "str_ext" on "str_ext"."variant_id" = "variants"."id" left join "variant_str" as "str" on "str"."variant_id" = "variants"."id" where "variants"."case_id" = ? and "variants"."variant_type" = ? and str.str_status IN (?, ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter sv.support with variant_type=cnv (cross type) 1`] = `
+{
+  "parameters": [
+    2,
+    "cnv",
+    1,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af", "cnv"."copy_number" as "_cnv_copy_number", "cnv"."copy_number_quality" as "_cnv_gq", "cnv"."homozygosity_ref" as "_cnv_ho_ref", "cnv"."homozygosity_alt" as "_cnv_ho_alt" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and "variants"."variant_type" = ? and sv.support > ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter sv.support with variant_type=sv 1`] = `
+{
+  "parameters": [
+    2,
+    "sv",
+    10,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af", "sv"."support" as "_sv_support", "sv"."dr" as "_sv_dr", "sv"."dv" as "_sv_dv", "sv"."vaf" as "_sv_vaf", "sv"."sv_is_precise" as "_sv_is_precise", "sv"."strand" as "_sv_strand", "sv"."coverage" as "_sv_coverage", "sv"."stdev_len" as "_sv_stdev_len", "sv"."stdev_pos" as "_sv_stdev_pos" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and "variants"."variant_type" = ? and sv.support >= ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter sv.support without variant_type 1`] = `
+{
+  "parameters": [
+    2,
+    10,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and variants.variant_type = 'sv' AND sv.support < ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext filter unknown dotted key is ignored 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext sort + ext filter on same table 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and variants.variant_type = 'sv' AND sv.support >= ? order by sv.vaf ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext sort cnv.copy_number 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? order by cnv.copy_number DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext sort str key with variant_type=str 1`] = `
+{
+  "parameters": [
+    2,
+    "str",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af", "str_ext"."repeat_id" as "_str_repeat_id", "str_ext"."repeat_unit" as "_str_repeat_unit", "str_ext"."display_repeat_unit" as "_str_display_ru", "str_ext"."ref_copies" as "_str_ref_copies", "str_ext"."alt_copies" as "_str_alt_copies", "str_ext"."str_status" as "_str_status", "str_ext"."normal_max" as "_str_normal_max", "str_ext"."pathologic_min" as "_str_pathologic_min", "str_ext"."disease" as "_str_disease", "str_ext"."inheritance_mode" as "_str_inheritance_mode", "str_ext"."rank_score" as "_str_rank_score" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_str" as "str_ext" on "str_ext"."variant_id" = "variants"."id" left join "variant_str" as "str" on "str"."variant_id" = "variants"."id" where "variants"."case_id" = ? and "variants"."variant_type" = ? order by str.repeat_unit ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > ext sort sv.support with variant_type=sv (no duplicate join) 1`] = `
+{
+  "parameters": [
+    2,
+    "sv",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af", "sv"."support" as "_sv_support", "sv"."dr" as "_sv_dr", "sv"."dv" as "_sv_dv", "sv"."vaf" as "_sv_vaf", "sv"."sv_is_precise" as "_sv_is_precise", "sv"."strand" as "_sv_strand", "sv"."coverage" as "_sv_coverage", "sv"."stdev_len" as "_sv_stdev_len", "sv"."stdev_pos" as "_sv_stdev_pos" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and "variants"."variant_type" = ? order by sv.support ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > extension filters and sorts > sortBy with base + unknown keys adds no join 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance all modes with group (reverse input order) 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    7,
+    2,
+    7,
+    2,
+    7,
+    2,
+    2,
+    7,
+    2,
+    7,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('1/1', '1|1') OR variants.gt_num IN ('0/1', '0|1', '1|0') OR (variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1')) OR (variants.gene_symbol IN (
+            SELECT v2.gene_symbol FROM variants v2
+            WHERE v2.case_id = ?
+              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gene_symbol IS NOT NULL
+            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
+          ) AND variants.gt_num IN ('0/1', '0|1', '1|0')) OR (
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ? AND agm_f.role = 'father'
+              INNER JOIN variants f
+                ON f.case_id = agm_f.case_id
+                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
+                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+              WHERE p.case_id = ?
+            )
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ? AND agm_m.role = 'mother'
+              INNER JOIN variants f
+                ON f.case_id = agm_m.case_id
+                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
+                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+              WHERE p.case_id = ?
+            )
+          ) OR (
+            variants.gt_num IN ('1/1', '1|1')
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_par
+                ON agm_par.group_id = ? AND agm_par.role IN ('father', 'mother')
+              INNER JOIN variants par
+                ON par.case_id = agm_par.case_id
+                AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+                AND par.gt_num IN ('1/1', '1|1')
+              WHERE p.case_id = ?
+            )
+          ) OR (
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.gene_symbol IS NOT NULL
+            AND variants.gene_symbol IN (
+              SELECT v_inner.gene_symbol
+              FROM variants v_inner
+              WHERE v_inner.case_id = ?
+                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
+                AND v_inner.gene_symbol IS NOT NULL
+              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
+            )
+            AND variants.gene_symbol IN (
+              SELECT pf.gene_symbol
+              FROM variants pf
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ? AND agm_f.role = 'father'
+              INNER JOIN variants f ON f.case_id = agm_f.case_id
+                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
+                AND f.gt_num IN ('0/1', '0|1', '1|0')
+              INNER JOIN variants pm
+                ON pm.case_id = ?
+                AND pm.gene_symbol = pf.gene_symbol
+                AND pm.gt_num IN ('0/1', '0|1', '1|0')
+                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ? AND agm_m.role = 'mother'
+              INNER JOIN variants m ON m.case_id = agm_m.case_id
+                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
+                AND m.gt_num IN ('0/1', '0|1', '1|0')
+              WHERE pf.case_id = ?
+                AND pf.gt_num IN ('0/1', '0|1', '1|0')
+                AND pf.gene_symbol IS NOT NULL
+            )
+          ))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance all solo 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('1/1', '1|1') OR variants.gt_num IN ('0/1', '0|1', '1|0') OR (variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1')) OR (variants.gene_symbol IN (
+            SELECT v2.gene_symbol FROM variants v2
+            WHERE v2.case_id = ?
+              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gene_symbol IS NOT NULL
+            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
+          ) AND variants.gt_num IN ('0/1', '0|1', '1|0')))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance all trio with group 1`] = `
+{
+  "parameters": [
+    2,
+    7,
+    2,
+    7,
+    2,
+    7,
+    2,
+    2,
+    7,
+    2,
+    7,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ? AND agm_f.role = 'father'
+              INNER JOIN variants f
+                ON f.case_id = agm_f.case_id
+                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
+                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+              WHERE p.case_id = ?
+            )
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ? AND agm_m.role = 'mother'
+              INNER JOIN variants f
+                ON f.case_id = agm_m.case_id
+                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
+                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+              WHERE p.case_id = ?
+            )
+          ) OR (
+            variants.gt_num IN ('1/1', '1|1')
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_par
+                ON agm_par.group_id = ? AND agm_par.role IN ('father', 'mother')
+              INNER JOIN variants par
+                ON par.case_id = agm_par.case_id
+                AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+                AND par.gt_num IN ('1/1', '1|1')
+              WHERE p.case_id = ?
+            )
+          ) OR (
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.gene_symbol IS NOT NULL
+            AND variants.gene_symbol IN (
+              SELECT v_inner.gene_symbol
+              FROM variants v_inner
+              WHERE v_inner.case_id = ?
+                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
+                AND v_inner.gene_symbol IS NOT NULL
+              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
+            )
+            AND variants.gene_symbol IN (
+              SELECT pf.gene_symbol
+              FROM variants pf
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ? AND agm_f.role = 'father'
+              INNER JOIN variants f ON f.case_id = agm_f.case_id
+                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
+                AND f.gt_num IN ('0/1', '0|1', '1|0')
+              INNER JOIN variants pm
+                ON pm.case_id = ?
+                AND pm.gene_symbol = pf.gene_symbol
+                AND pm.gt_num IN ('0/1', '0|1', '1|0')
+                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ? AND agm_m.role = 'mother'
+              INNER JOIN variants m ON m.case_id = agm_m.case_id
+                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
+                AND m.gt_num IN ('0/1', '0|1', '1|0')
+              WHERE pf.case_id = ?
+                AND pf.gt_num IN ('0/1', '0|1', '1|0')
+                AND pf.gene_symbol IS NOT NULL
+            )
+          ))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance empty 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance solo + trio without group 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('0/1', '0|1', '1|0'))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance solo candidate_compound_het 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.gene_symbol IN (
+            SELECT v2.gene_symbol FROM variants v2
+            WHERE v2.case_id = ?
+              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gene_symbol IS NOT NULL
+            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
+          ) AND variants.gt_num IN ('0/1', '0|1', '1|0')))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance solo heterozygous 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('0/1', '0|1', '1|0'))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance solo homozygous 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('1/1', '1|1'))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance solo x_hemizygous 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1')))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio autosomal_recessive with group 1`] = `
+{
+  "parameters": [
+    2,
+    7,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((
+            variants.gt_num IN ('1/1', '1|1')
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_par
+                ON agm_par.group_id = ? AND agm_par.role IN ('father', 'mother')
+              INNER JOIN variants par
+                ON par.case_id = agm_par.case_id
+                AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+                AND par.gt_num IN ('1/1', '1|1')
+              WHERE p.case_id = ?
+            )
+          ))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio autosomal_recessive without group (no-op) 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio compound_het with group 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+    7,
+    2,
+    7,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.gene_symbol IS NOT NULL
+            AND variants.gene_symbol IN (
+              SELECT v_inner.gene_symbol
+              FROM variants v_inner
+              WHERE v_inner.case_id = ?
+                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
+                AND v_inner.gene_symbol IS NOT NULL
+              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
+            )
+            AND variants.gene_symbol IN (
+              SELECT pf.gene_symbol
+              FROM variants pf
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ? AND agm_f.role = 'father'
+              INNER JOIN variants f ON f.case_id = agm_f.case_id
+                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
+                AND f.gt_num IN ('0/1', '0|1', '1|0')
+              INNER JOIN variants pm
+                ON pm.case_id = ?
+                AND pm.gene_symbol = pf.gene_symbol
+                AND pm.gt_num IN ('0/1', '0|1', '1|0')
+                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ? AND agm_m.role = 'mother'
+              INNER JOIN variants m ON m.case_id = agm_m.case_id
+                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
+                AND m.gt_num IN ('0/1', '0|1', '1|0')
+              WHERE pf.case_id = ?
+                AND pf.gt_num IN ('0/1', '0|1', '1|0')
+                AND pf.gene_symbol IS NOT NULL
+            )
+          ))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio compound_het without group (no-op) 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio de_novo with group 1`] = `
+{
+  "parameters": [
+    2,
+    7,
+    2,
+    7,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((
+            variants.gt_num IN ('0/1', '0|1', '1|0')
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_f
+                ON agm_f.group_id = ? AND agm_f.role = 'father'
+              INNER JOIN variants f
+                ON f.case_id = agm_f.case_id
+                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
+                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+              WHERE p.case_id = ?
+            )
+            AND variants.id NOT IN (
+              SELECT p.id FROM variants p
+              INNER JOIN analysis_group_members agm_m
+                ON agm_m.group_id = ? AND agm_m.role = 'mother'
+              INNER JOIN variants f
+                ON f.case_id = agm_m.case_id
+                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
+                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+              WHERE p.case_id = ?
+            )
+          ))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio de_novo without group (no-op) 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance unknown mode 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > max_internal_af is a no-op when the cases table is empty 1`] = `
+{
+  "parameters": [
+    1,
+  ],
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > panel intervals > panel_intervals 1 1`] = `
+{
+  "parameters": [
+    2,
+    "1",
+    1500,
+    1000,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > panel intervals > panel_intervals 3 forceOrChain=false 1`] = `
+{
+  "parameters": [
+    2,
+    "1",
+    1500,
+    1000,
+    "2",
+    2500,
+    2000,
+    "3",
+    3500,
+    3000,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > panel intervals > panel_intervals 49 (OR chain) 1`] = `
+{
+  "parameters": [
+    2,
+    "1",
+    1500,
+    1000,
+    "2",
+    2500,
+    2000,
+    "3",
+    3500,
+    3000,
+    "4",
+    4500,
+    4000,
+    "5",
+    5500,
+    5000,
+    "6",
+    6500,
+    6000,
+    "7",
+    7500,
+    7000,
+    "8",
+    8500,
+    8000,
+    "9",
+    9500,
+    9000,
+    "10",
+    10500,
+    10000,
+    "11",
+    11500,
+    11000,
+    "12",
+    12500,
+    12000,
+    "13",
+    13500,
+    13000,
+    "14",
+    14500,
+    14000,
+    "15",
+    15500,
+    15000,
+    "16",
+    16500,
+    16000,
+    "17",
+    17500,
+    17000,
+    "18",
+    18500,
+    18000,
+    "19",
+    19500,
+    19000,
+    "20",
+    20500,
+    20000,
+    "21",
+    21500,
+    21000,
+    "22",
+    22500,
+    22000,
+    "1",
+    23500,
+    23000,
+    "2",
+    24500,
+    24000,
+    "3",
+    25500,
+    25000,
+    "4",
+    26500,
+    26000,
+    "5",
+    27500,
+    27000,
+    "6",
+    28500,
+    28000,
+    "7",
+    29500,
+    29000,
+    "8",
+    30500,
+    30000,
+    "9",
+    31500,
+    31000,
+    "10",
+    32500,
+    32000,
+    "11",
+    33500,
+    33000,
+    "12",
+    34500,
+    34000,
+    "13",
+    35500,
+    35000,
+    "14",
+    36500,
+    36000,
+    "15",
+    37500,
+    37000,
+    "16",
+    38500,
+    38000,
+    "17",
+    39500,
+    39000,
+    "18",
+    40500,
+    40000,
+    "19",
+    41500,
+    41000,
+    "20",
+    42500,
+    42000,
+    "21",
+    43500,
+    43000,
+    "22",
+    44500,
+    44000,
+    "1",
+    45500,
+    45000,
+    "2",
+    46500,
+    46000,
+    "3",
+    47500,
+    47000,
+    "4",
+    48500,
+    48000,
+    "5",
+    49500,
+    49000,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > panel intervals > panel_intervals 50 (temp table) 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and EXISTS (SELECT 1 FROM _panel_intervals pi WHERE variants.chr = pi.chr AND variants.pos <= pi.end_pos AND COALESCE(variants.end_pos, variants.pos) >= pi.start_pos)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > panel intervals > panel_intervals 50 forceOrChain 1`] = `
+{
+  "parameters": [
+    2,
+    "1",
+    1500,
+    1000,
+    "2",
+    2500,
+    2000,
+    "3",
+    3500,
+    3000,
+    "4",
+    4500,
+    4000,
+    "5",
+    5500,
+    5000,
+    "6",
+    6500,
+    6000,
+    "7",
+    7500,
+    7000,
+    "8",
+    8500,
+    8000,
+    "9",
+    9500,
+    9000,
+    "10",
+    10500,
+    10000,
+    "11",
+    11500,
+    11000,
+    "12",
+    12500,
+    12000,
+    "13",
+    13500,
+    13000,
+    "14",
+    14500,
+    14000,
+    "15",
+    15500,
+    15000,
+    "16",
+    16500,
+    16000,
+    "17",
+    17500,
+    17000,
+    "18",
+    18500,
+    18000,
+    "19",
+    19500,
+    19000,
+    "20",
+    20500,
+    20000,
+    "21",
+    21500,
+    21000,
+    "22",
+    22500,
+    22000,
+    "1",
+    23500,
+    23000,
+    "2",
+    24500,
+    24000,
+    "3",
+    25500,
+    25000,
+    "4",
+    26500,
+    26000,
+    "5",
+    27500,
+    27000,
+    "6",
+    28500,
+    28000,
+    "7",
+    29500,
+    29000,
+    "8",
+    30500,
+    30000,
+    "9",
+    31500,
+    31000,
+    "10",
+    32500,
+    32000,
+    "11",
+    33500,
+    33000,
+    "12",
+    34500,
+    34000,
+    "13",
+    35500,
+    35000,
+    "14",
+    36500,
+    36000,
+    "15",
+    37500,
+    37000,
+    "16",
+    38500,
+    38000,
+    "17",
+    39500,
+    39000,
+    "18",
+    40500,
+    40000,
+    "19",
+    41500,
+    41000,
+    "20",
+    42500,
+    42000,
+    "21",
+    43500,
+    43000,
+    "22",
+    44500,
+    44000,
+    "1",
+    45500,
+    45000,
+    "2",
+    46500,
+    46000,
+    "3",
+    47500,
+    47000,
+    "4",
+    48500,
+    48000,
+    "5",
+    49500,
+    49000,
+    "6",
+    50500,
+    50000,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?))",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > panel intervals > panel_intervals 120 (temp table) 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and EXISTS (SELECT 1 FROM _panel_intervals pi WHERE variants.chr = pi.chr AND variants.pos <= pi.end_pos AND COALESCE(variants.end_pos, variants.pos) >= pi.start_pos)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > panel intervals > panel_intervals empty 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > panel temp table lifecycle is unchanged 1`] = `
+[
+  {
+    "chr": "1",
+    "end_pos": 1500,
+    "start_pos": 1000,
+  },
+  {
+    "chr": "2",
+    "end_pos": 2500,
+    "start_pos": 2000,
+  },
+  {
+    "chr": "3",
+    "end_pos": 3500,
+    "start_pos": 3000,
+  },
+  {
+    "chr": "4",
+    "end_pos": 4500,
+    "start_pos": 4000,
+  },
+  {
+    "chr": "5",
+    "end_pos": 5500,
+    "start_pos": 5000,
+  },
+  {
+    "chr": "6",
+    "end_pos": 6500,
+    "start_pos": 6000,
+  },
+  {
+    "chr": "7",
+    "end_pos": 7500,
+    "start_pos": 7000,
+  },
+  {
+    "chr": "8",
+    "end_pos": 8500,
+    "start_pos": 8000,
+  },
+  {
+    "chr": "9",
+    "end_pos": 9500,
+    "start_pos": 9000,
+  },
+  {
+    "chr": "10",
+    "end_pos": 10500,
+    "start_pos": 10000,
+  },
+  {
+    "chr": "11",
+    "end_pos": 11500,
+    "start_pos": 11000,
+  },
+  {
+    "chr": "12",
+    "end_pos": 12500,
+    "start_pos": 12000,
+  },
+  {
+    "chr": "13",
+    "end_pos": 13500,
+    "start_pos": 13000,
+  },
+  {
+    "chr": "14",
+    "end_pos": 14500,
+    "start_pos": 14000,
+  },
+  {
+    "chr": "15",
+    "end_pos": 15500,
+    "start_pos": 15000,
+  },
+  {
+    "chr": "16",
+    "end_pos": 16500,
+    "start_pos": 16000,
+  },
+  {
+    "chr": "17",
+    "end_pos": 17500,
+    "start_pos": 17000,
+  },
+  {
+    "chr": "18",
+    "end_pos": 18500,
+    "start_pos": 18000,
+  },
+  {
+    "chr": "19",
+    "end_pos": 19500,
+    "start_pos": 19000,
+  },
+  {
+    "chr": "20",
+    "end_pos": 20500,
+    "start_pos": 20000,
+  },
+  {
+    "chr": "21",
+    "end_pos": 21500,
+    "start_pos": 21000,
+  },
+  {
+    "chr": "22",
+    "end_pos": 22500,
+    "start_pos": 22000,
+  },
+  {
+    "chr": "1",
+    "end_pos": 23500,
+    "start_pos": 23000,
+  },
+  {
+    "chr": "2",
+    "end_pos": 24500,
+    "start_pos": 24000,
+  },
+  {
+    "chr": "3",
+    "end_pos": 25500,
+    "start_pos": 25000,
+  },
+  {
+    "chr": "4",
+    "end_pos": 26500,
+    "start_pos": 26000,
+  },
+  {
+    "chr": "5",
+    "end_pos": 27500,
+    "start_pos": 27000,
+  },
+  {
+    "chr": "6",
+    "end_pos": 28500,
+    "start_pos": 28000,
+  },
+  {
+    "chr": "7",
+    "end_pos": 29500,
+    "start_pos": 29000,
+  },
+  {
+    "chr": "8",
+    "end_pos": 30500,
+    "start_pos": 30000,
+  },
+  {
+    "chr": "9",
+    "end_pos": 31500,
+    "start_pos": 31000,
+  },
+  {
+    "chr": "10",
+    "end_pos": 32500,
+    "start_pos": 32000,
+  },
+  {
+    "chr": "11",
+    "end_pos": 33500,
+    "start_pos": 33000,
+  },
+  {
+    "chr": "12",
+    "end_pos": 34500,
+    "start_pos": 34000,
+  },
+  {
+    "chr": "13",
+    "end_pos": 35500,
+    "start_pos": 35000,
+  },
+  {
+    "chr": "14",
+    "end_pos": 36500,
+    "start_pos": 36000,
+  },
+  {
+    "chr": "15",
+    "end_pos": 37500,
+    "start_pos": 37000,
+  },
+  {
+    "chr": "16",
+    "end_pos": 38500,
+    "start_pos": 38000,
+  },
+  {
+    "chr": "17",
+    "end_pos": 39500,
+    "start_pos": 39000,
+  },
+  {
+    "chr": "18",
+    "end_pos": 40500,
+    "start_pos": 40000,
+  },
+  {
+    "chr": "19",
+    "end_pos": 41500,
+    "start_pos": 41000,
+  },
+  {
+    "chr": "20",
+    "end_pos": 42500,
+    "start_pos": 42000,
+  },
+  {
+    "chr": "21",
+    "end_pos": 43500,
+    "start_pos": 43000,
+  },
+  {
+    "chr": "22",
+    "end_pos": 44500,
+    "start_pos": 44000,
+  },
+  {
+    "chr": "1",
+    "end_pos": 45500,
+    "start_pos": 45000,
+  },
+  {
+    "chr": "2",
+    "end_pos": 46500,
+    "start_pos": 46000,
+  },
+  {
+    "chr": "3",
+    "end_pos": 47500,
+    "start_pos": 47000,
+  },
+  {
+    "chr": "4",
+    "end_pos": 48500,
+    "start_pos": 48000,
+  },
+  {
+    "chr": "5",
+    "end_pos": 49500,
+    "start_pos": 49000,
+  },
+  {
+    "chr": "6",
+    "end_pos": 50500,
+    "start_pos": 50000,
+  },
+]
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > panel temp table lifecycle is unchanged 2`] = `
+[
+  {
+    "name": "_idx_panel_intervals",
+    "sql": "CREATE INDEX _idx_panel_intervals ON _panel_intervals (chr, start_pos, end_pos)",
+  },
+  {
+    "name": "_panel_intervals",
+    "sql": "CREATE TABLE _panel_intervals (chr TEXT, start_pos INTEGER, end_pos INTEGER)",
+  },
+]
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pins the public sort surface 1`] = `
+{
+  "aa_change": "aa_change",
+  "cadd": "cadd",
+  "caller": "caller",
+  "cdna": "cdna",
+  "chr": "chr",
+  "clinvar": "clinvar",
+  "consequence": "consequence",
+  "end_pos": "end_pos",
+  "func": "func",
+  "gene_symbol": "gene_symbol",
+  "gnomad_af": "gnomad_af",
+  "gt_num": "gt_num",
+  "hpo_sim_score": "hpo_sim_score",
+  "moi": "moi",
+  "omim_mim_number": "omim_mim_number",
+  "pos": "pos",
+  "qual": "qual",
+  "sv_length": "sv_length",
+  "sv_type": "sv_type",
+  "transcript": "transcript",
+  "variant_type": "variant_type",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pins the public sort surface 2`] = `
+[
+  [
+    "pos",
+    {
+      "isExtension": false,
+      "sql": "variants.pos",
+    },
+  ],
+  [
+    "gnomad_af",
+    {
+      "isExtension": false,
+      "sql": "variants.gnomad_af",
+    },
+  ],
+  [
+    "sv.support",
+    {
+      "extensionType": "sv",
+      "isExtension": true,
+      "sql": "sv.support",
+    },
+  ],
+  [
+    "cnv.copy_number",
+    {
+      "extensionType": "cnv",
+      "isExtension": true,
+      "sql": "cnv.copy_number",
+    },
+  ],
+  [
+    "str.repeat_unit",
+    {
+      "extensionType": "str",
+      "isExtension": true,
+      "sql": "str.repeat_unit",
+    },
+  ],
+  [
+    "cnv.nope",
+    null,
+  ],
+  [
+    "bogus",
+    null,
+  ],
+]
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > skips FTS when no search service is injected 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort aa_change asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.aa_change ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort aa_change desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.aa_change DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort cadd asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.cadd ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort cadd desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.cadd DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort caller asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.caller ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort caller desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.caller DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort cdna asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.cdna ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort cdna desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.cdna DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort chr asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by (CASE upper(CASE WHEN lower(substr(variants.chr, 1, 3)) = 'chr' THEN substr(variants.chr, 4) ELSE variants.chr END) WHEN '1' THEN 1 WHEN '2' THEN 2 WHEN '3' THEN 3 WHEN '4' THEN 4 WHEN '5' THEN 5 WHEN '6' THEN 6 WHEN '7' THEN 7 WHEN '8' THEN 8 WHEN '9' THEN 9 WHEN '10' THEN 10 WHEN '11' THEN 11 WHEN '12' THEN 12 WHEN '13' THEN 13 WHEN '14' THEN 14 WHEN '15' THEN 15 WHEN '16' THEN 16 WHEN '17' THEN 17 WHEN '18' THEN 18 WHEN '19' THEN 19 WHEN '20' THEN 20 WHEN '21' THEN 21 WHEN '22' THEN 22 WHEN 'X' THEN 23 WHEN 'Y' THEN 24 WHEN 'M' THEN 25 WHEN 'MT' THEN 25 ELSE 100 END) ASC, variants.chr ASC, variants.pos ASC, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort chr desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by (CASE upper(CASE WHEN lower(substr(variants.chr, 1, 3)) = 'chr' THEN substr(variants.chr, 4) ELSE variants.chr END) WHEN '1' THEN 1 WHEN '2' THEN 2 WHEN '3' THEN 3 WHEN '4' THEN 4 WHEN '5' THEN 5 WHEN '6' THEN 6 WHEN '7' THEN 7 WHEN '8' THEN 8 WHEN '9' THEN 9 WHEN '10' THEN 10 WHEN '11' THEN 11 WHEN '12' THEN 12 WHEN '13' THEN 13 WHEN '14' THEN 14 WHEN '15' THEN 15 WHEN '16' THEN 16 WHEN '17' THEN 17 WHEN '18' THEN 18 WHEN '19' THEN 19 WHEN '20' THEN 20 WHEN '21' THEN 21 WHEN '22' THEN 22 WHEN 'X' THEN 23 WHEN 'Y' THEN 24 WHEN 'M' THEN 25 WHEN 'MT' THEN 25 ELSE 100 END) DESC, variants.chr DESC, variants.pos ASC, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort clinvar asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.clinvar ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort clinvar desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.clinvar DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort consequence asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.consequence ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort consequence desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.consequence DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort default 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by (CASE upper(CASE WHEN lower(substr(variants.chr, 1, 3)) = 'chr' THEN substr(variants.chr, 4) ELSE variants.chr END) WHEN '1' THEN 1 WHEN '2' THEN 2 WHEN '3' THEN 3 WHEN '4' THEN 4 WHEN '5' THEN 5 WHEN '6' THEN 6 WHEN '7' THEN 7 WHEN '8' THEN 8 WHEN '9' THEN 9 WHEN '10' THEN 10 WHEN '11' THEN 11 WHEN '12' THEN 12 WHEN '13' THEN 13 WHEN '14' THEN 14 WHEN '15' THEN 15 WHEN '16' THEN 16 WHEN '17' THEN 17 WHEN '18' THEN 18 WHEN '19' THEN 19 WHEN '20' THEN 20 WHEN '21' THEN 21 WHEN '22' THEN 22 WHEN 'X' THEN 23 WHEN 'Y' THEN 24 WHEN 'M' THEN 25 WHEN 'MT' THEN 25 ELSE 100 END) ASC, variants.chr ASC, variants.pos ASC, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort empty array 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by (CASE upper(CASE WHEN lower(substr(variants.chr, 1, 3)) = 'chr' THEN substr(variants.chr, 4) ELSE variants.chr END) WHEN '1' THEN 1 WHEN '2' THEN 2 WHEN '3' THEN 3 WHEN '4' THEN 4 WHEN '5' THEN 5 WHEN '6' THEN 6 WHEN '7' THEN 7 WHEN '8' THEN 8 WHEN '9' THEN 9 WHEN '10' THEN 10 WHEN '11' THEN 11 WHEN '12' THEN 12 WHEN '13' THEN 13 WHEN '14' THEN 14 WHEN '15' THEN 15 WHEN '16' THEN 16 WHEN '17' THEN 17 WHEN '18' THEN 18 WHEN '19' THEN 19 WHEN '20' THEN 20 WHEN '21' THEN 21 WHEN '22' THEN 22 WHEN 'X' THEN 23 WHEN 'Y' THEN 24 WHEN 'M' THEN 25 WHEN 'MT' THEN 25 ELSE 100 END) ASC, variants.chr ASC, variants.pos ASC, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort end_pos asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.end_pos ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort end_pos desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.end_pos DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort func asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.func ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort func desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.func DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort gene_symbol asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.gene_symbol ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort gene_symbol desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.gene_symbol DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort gnomad_af asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.gnomad_af ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort gnomad_af desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.gnomad_af DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort gt_num asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.gt_num ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort gt_num desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.gt_num DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort hpo_sim_score asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.hpo_sim_score ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort hpo_sim_score desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.hpo_sim_score DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort moi asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.moi ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort moi desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.moi DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort multi-key with invalid key dropped 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.gene_symbol ASC NULLS LAST, variants.cadd DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort omim_mim_number asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.omim_mim_number ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort omim_mim_number desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.omim_mim_number DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort pos asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.pos ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort pos desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.pos DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort qual asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.qual ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort qual desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.qual DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort sv_length asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.sv_length ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort sv_length desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.sv_length DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort sv_type asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.sv_type ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort sv_type desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.sv_type DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort transcript asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.transcript ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort transcript desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.transcript DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort variant_type asc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.variant_type ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort variant_type desc 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? order by variants.variant_type DESC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > variant type joins > variant_type="" 1`] = `
+{
+  "parameters": [
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > variant type joins > variant_type="cnv" 1`] = `
+{
+  "parameters": [
+    2,
+    "cnv",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af", "cnv"."copy_number" as "_cnv_copy_number", "cnv"."copy_number_quality" as "_cnv_gq", "cnv"."homozygosity_ref" as "_cnv_ho_ref", "cnv"."homozygosity_alt" as "_cnv_ho_alt" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and "variants"."variant_type" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > variant type joins > variant_type="indel" 1`] = `
+{
+  "parameters": [
+    2,
+    "indel",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "variants"."variant_type" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > variant type joins > variant_type="snv" 1`] = `
+{
+  "parameters": [
+    2,
+    "snv",
+    "indel",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?)",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > variant type joins > variant_type="str" 1`] = `
+{
+  "parameters": [
+    2,
+    "str",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af", "str_ext"."repeat_id" as "_str_repeat_id", "str_ext"."repeat_unit" as "_str_repeat_unit", "str_ext"."display_repeat_unit" as "_str_display_ru", "str_ext"."ref_copies" as "_str_ref_copies", "str_ext"."alt_copies" as "_str_alt_copies", "str_ext"."str_status" as "_str_status", "str_ext"."normal_max" as "_str_normal_max", "str_ext"."pathologic_min" as "_str_pathologic_min", "str_ext"."disease" as "_str_disease", "str_ext"."inheritance_mode" as "_str_inheritance_mode", "str_ext"."rank_score" as "_str_rank_score" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_str" as "str_ext" on "str_ext"."variant_id" = "variants"."id" where "variants"."case_id" = ? and "variants"."variant_type" = ?",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > variant type joins > variant_type="sv" 1`] = `
+{
+  "parameters": [
+    2,
+    "sv",
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0) as "internal_af", "sv"."support" as "_sv_support", "sv"."dr" as "_sv_dr", "sv"."dv" as "_sv_dv", "sv"."vaf" as "_sv_vaf", "sv"."sv_is_precise" as "_sv_is_precise", "sv"."strand" as "_sv_strand", "sv"."coverage" as "_sv_coverage", "sv"."stdev_len" as "_sv_stdev_len", "sv"."stdev_pos" as "_sv_stdev_pos" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and "variants"."variant_type" = ?",
+}
+`;

@@ -9,13 +9,6 @@
       "reason": "existing script module; must not grow before responsibility split"
     },
     {
-      "path": "src/main/database/VariantFilterBuilder.ts",
-      "lines": 782,
-      "threshold": 600,
-      "category": "source",
-      "reason": "existing large storage/import module; must not grow before responsibility split"
-    },
-    {
       "path": "src/main/database/VariantRepository.ts",
       "lines": 758,
       "threshold": 600,
@@ -105,13 +98,6 @@
       "threshold": 600,
       "category": "source",
       "reason": "existing large renderer component; must not grow before component split. Baseline synced after already-merged web changes; this audit-contract branch does not add new VariantTable responsibility."
-    },
-    {
-      "path": "src/renderer/src/composables/useAnnotations.ts",
-      "lines": 923,
-      "threshold": 600,
-      "category": "source",
-      "reason": "existing large renderer composable; must not grow before responsibility split"
     },
     {
       "path": "src/renderer/src/composables/useGeneStructurePlot.ts",
