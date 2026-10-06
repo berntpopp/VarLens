@@ -27,6 +27,7 @@ import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { GetShortlistParamsSchema } from '../../../shared/types/ipc-schemas'
 import { DatabaseError } from '../../database/errors'
+import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
 import { resolveSortColumn } from '../../database/VariantFilterBuilder'
 import { mainLogger } from '../../services/MainLogger'
 import type { GetShortlistParams } from '../../database/ShortlistService'
@@ -102,7 +103,10 @@ export function registerShortlistHandlers({
       }
 
       const db = getDb()
-      return db.shortlistService.getShortlist(parsed.data as unknown as GetShortlistParams)
+      return db.shortlistService.getShortlist(
+        parsed.data as unknown as GetShortlistParams,
+        getGeneReferenceDb
+      )
     })
   })
 }

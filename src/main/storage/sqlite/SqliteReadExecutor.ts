@@ -1,5 +1,6 @@
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
+import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
 
 export class SqliteReadExecutor implements StorageReadExecutor {
@@ -177,7 +178,10 @@ export class SqliteReadExecutor implements StorageReadExecutor {
         return this.databaseService.variants.getFilterOptions(task.params[0])
 
       case 'variants:shortlist':
-        return this.databaseService.shortlistService.getShortlist(task.params[0])
+        return this.databaseService.shortlistService.getShortlist(
+          task.params[0],
+          getGeneReferenceDb
+        )
 
       case 'variants:columnMeta':
         if (this.dbPool !== null)

@@ -32,13 +32,13 @@ export function createBaseVariantQuery(
     .where('variants.case_id', '=', filter.case_id)
 }
 
-/** Variant type filter (snv includes both snv and indel). */
+/** Variant type filter (snv includes both snv and indel unless `exact_variant_type`). */
 export function applyVariantTypeFilter(
   query: VariantQueryBuilder,
   filter: VariantFilter
 ): VariantQueryBuilder {
   return query.$if(filter.variant_type !== undefined && filter.variant_type !== '', (qb) => {
-    if (filter.variant_type === 'snv') {
+    if (filter.variant_type === 'snv' && filter.exact_variant_type !== true) {
       return qb.where((eb) =>
         eb.or([eb('variants.variant_type', '=', 'snv'), eb('variants.variant_type', '=', 'indel')])
       )

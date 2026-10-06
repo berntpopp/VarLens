@@ -21,11 +21,15 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
-import { createKysely } from '../../../src/main/database/kysely'
-import { FilterPresetRepository } from '../../../src/main/database/FilterPresetRepository'
-import { ShortlistService, ShortlistQueryError } from '../../../src/main/database/ShortlistService'
+import { createRepositories } from '../../../src/main/database/createRepositories'
+import type { FilterPresetRepository } from '../../../src/main/database/FilterPresetRepository'
+import {
+  ShortlistQueryError,
+  type GetShortlistParams,
+  type ShortlistService
+} from '../../../src/main/database/ShortlistService'
 import * as scoringModule from '../../../src/main/services/scoring'
-import type { ShortlistConfig } from '../../../src/shared/types/shortlist'
+import type { ShortlistConfig, ShortlistResult } from '../../../src/shared/types/shortlist'
 
 function insertCase(db: DatabaseType, caseId: number, name: string): void {
   db.prepare(
@@ -262,9 +266,9 @@ describe('ShortlistService', () => {
     db.pragma('foreign_keys = ON')
     initializeSchema(db)
     runMigrations(db)
-    const kysely = createKysely(db)
-    presetRepo = new FilterPresetRepository(db, kysely)
-    service = new ShortlistService(db, presetRepo)
+    const repos = createRepositories(db)
+    presetRepo = repos.filterPresets
+    service = repos.shortlistService
     seedMultiTypeCase(db, 1)
   })
 
@@ -272,12 +276,17 @@ describe('ShortlistService', () => {
     db.close()
   })
 
+  /** No gene panel is active in these tests, so no gene reference is needed. */
+  function getShortlist(params: GetShortlistParams): ShortlistResult {
+    return service.getShortlist(params, () => null)
+  }
+
   describe('by presetId', () => {
     it('loads Tier 1 preset and returns ranked rows', () => {
       const tier1 = db
         .prepare(`SELECT id FROM filter_presets WHERE name = 'Tier 1 candidates'`)
         .get() as { id: number }
-      const result = service.getShortlist({ caseId: 1, presetId: tier1.id })
+      const result = getShortlist({ caseId: 1, presetId: tier1.id })
       expect(result.rows.length).toBeGreaterThan(0)
       expect(result.rows[0].rank).toBe(1)
       expect(result.presetUsed?.name).toBe('Tier 1 candidates')
@@ -285,7 +294,7 @@ describe('ShortlistService', () => {
     })
 
     it('throws NotFoundError when preset id does not exist', () => {
-      expect(() => service.getShortlist({ caseId: 1, presetId: 999999 })).toThrow(/not found/i)
+      expect(() => getShortlist({ caseId: 1, presetId: 999999 })).toThrow(/not found/i)
     })
 
     it("throws when preset.kind != 'shortlist'", () => {
@@ -295,7 +304,7 @@ describe('ShortlistService', () => {
         filterJson: { maxGnomadAf: 0.01 },
         kind: 'filter'
       })
-      expect(() => service.getShortlist({ caseId: 1, presetId: classic.id })).toThrow(
+      expect(() => getShortlist({ caseId: 1, presetId: classic.id })).toThrow(
         /not a shortlist preset/i
       )
     })
@@ -307,7 +316,7 @@ describe('ShortlistService', () => {
         filterJson: {},
         kind: 'shortlist'
       })
-      expect(() => service.getShortlist({ caseId: 1, presetId: malformed.id })).toThrow(
+      expect(() => getShortlist({ caseId: 1, presetId: malformed.id })).toThrow(
         /missing filter_json\.shortlist/i
       )
     })
@@ -331,7 +340,7 @@ describe('ShortlistService', () => {
         } as unknown as Record<string, unknown>,
         kind: 'shortlist'
       })
-      expect(() => service.getShortlist({ caseId: 1, presetId: broken.id })).toThrow(
+      expect(() => getShortlist({ caseId: 1, presetId: broken.id })).toThrow(
         /invalid filter_json\.shortlist payload/i
       )
     })
@@ -339,13 +348,13 @@ describe('ShortlistService', () => {
 
   describe('by adHocConfig', () => {
     it('executes ad-hoc config and returns presetUsed=null', () => {
-      const result = service.getShortlist({ caseId: 1, adHocConfig: baseAdHocConfig() })
+      const result = getShortlist({ caseId: 1, adHocConfig: baseAdHocConfig() })
       expect(result.presetUsed).toBeNull()
       expect(result.rows.length).toBeGreaterThan(0)
     })
 
     it('enforces topN', () => {
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({ topN: 2 })
       })
@@ -355,7 +364,7 @@ describe('ShortlistService', () => {
     it('reports totalCandidates >= rows.length (pre-slice)', () => {
       // topN=1 → perTypeLimit = 4. The fixture seeds 8 SNVs (capped at 4),
       // 1 indel, 1 SV, 1 CNV, 1 STR → totalCandidates = 4+1+1+1+1 = 8.
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({ topN: 1 })
       })
@@ -366,7 +375,7 @@ describe('ShortlistService', () => {
 
     it('observes per-type cap at topN*4 during Stage 1', () => {
       // topN=1 means only 4 SNV rows should make it past the cap despite 8 seeded.
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({ topN: 1, variantTypeScope: ['snv'] })
       })
@@ -374,7 +383,7 @@ describe('ShortlistService', () => {
     })
 
     it('with larger topN, pre-slice count matches full fixture (no cap hit)', () => {
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({ topN: 50 })
       })
@@ -387,7 +396,7 @@ describe('ShortlistService', () => {
       // comparator looks up flat row aliases. Regression for Copilot review
       // comment #12 — previously only normalized in the handler, which meant
       // the presetId branch skipped normalization entirely.
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({
           topN: 50,
@@ -430,7 +439,7 @@ describe('ShortlistService', () => {
 
       // Must not throw. The service resolves the preset, normalizes the
       // dotted keys, and hands the flat-key form to the comparator.
-      const result = service.getShortlist({ caseId: 1, presetId: preset.id })
+      const result = getShortlist({ caseId: 1, presetId: preset.id })
       expect(result.presetUsed?.id).toBe(preset.id)
       expect(result.rows.length).toBeGreaterThan(0)
     })
@@ -438,7 +447,7 @@ describe('ShortlistService', () => {
 
   describe('Stage 1 candidate generation', () => {
     it('detects present variant types via DISTINCT query when scope omitted', () => {
-      const result = service.getShortlist({ caseId: 1, adHocConfig: baseAdHocConfig() })
+      const result = getShortlist({ caseId: 1, adHocConfig: baseAdHocConfig() })
       const typesSeen = new Set(result.rows.map((r) => r.variant_type))
       // Fixture seeds snv, indel, sv, cnv, str — expect all present after topN=50.
       expect(typesSeen.has('snv')).toBe(true)
@@ -449,7 +458,7 @@ describe('ShortlistService', () => {
     })
 
     it('variantTypeScope narrows the query set', () => {
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({ variantTypeScope: ['sv', 'cnv'] })
       })
@@ -459,7 +468,7 @@ describe('ShortlistService', () => {
     })
 
     it('applies baseFilters across all types (consequences=HIGH)', () => {
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({
           variantTypeScope: ['snv', 'indel'],
@@ -474,7 +483,7 @@ describe('ShortlistService', () => {
       // baseFilters: consequences=['HIGH'] → only BRCA1 (snv) + MLH1 (indel).
       // perTypeOverrides.indel: consequences=['MODERATE'] → MLH1 is HIGH and drops out,
       // no indel rows (fixture has no MODERATE indel). snv still sees only HIGH.
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({
           variantTypeScope: ['snv', 'indel'],
@@ -497,14 +506,14 @@ describe('ShortlistService', () => {
       ;(db as unknown as { prepare: typeof originalPrepare }).prepare = ((sql: string) => {
         // Let DISTINCT (scope detection) and non-variant queries succeed.
         // Fail only the Stage-1 variants SELECT for a specific type.
-        if (sql.includes('FROM variants v') && callCount++ === 1) {
+        if (sql.includes('is_starred_int') && callCount++ === 1) {
           throw new Error('simulated Stage-1 failure')
         }
         return originalPrepare(sql)
       }) as typeof originalPrepare
 
       expect(() =>
-        service.getShortlist({
+        getShortlist({
           caseId: 1,
           adHocConfig: baseAdHocConfig({ variantTypeScope: ['snv', 'indel'] })
         })
@@ -514,7 +523,7 @@ describe('ShortlistService', () => {
 
   describe('Stage 2 ranking', () => {
     it('sorts rows by rank_score descending (ignoring pinned partitions)', () => {
-      const result = service.getShortlist({ caseId: 1, adHocConfig: baseAdHocConfig() })
+      const result = getShortlist({ caseId: 1, adHocConfig: baseAdHocConfig() })
       for (let i = 1; i < result.rows.length; i++) {
         const prev = result.rows[i - 1]
         const curr = result.rows[i]
@@ -529,7 +538,7 @@ describe('ShortlistService', () => {
       // Scope to SNV+indel so we test clinvar pinning in isolation without
       // STR's known-locus shortcut (which synthesises clinvar=0.9 and would
       // also pin, see score-str.ts).
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({
           variantTypeScope: ['snv', 'indel'],
@@ -559,7 +568,7 @@ describe('ShortlistService', () => {
          VALUES (1, 4, 1, ?, ?)`
       ).run(Date.now(), Date.now())
 
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({
           rankConfig: {
@@ -575,14 +584,14 @@ describe('ShortlistService', () => {
     })
 
     it('assigns rank 1-based after sort', () => {
-      const result = service.getShortlist({ caseId: 1, adHocConfig: baseAdHocConfig() })
+      const result = getShortlist({ caseId: 1, adHocConfig: baseAdHocConfig() })
       result.rows.forEach((row, i) => expect(row.rank).toBe(i + 1))
     })
   })
 
   describe('empty results', () => {
     it('returns rows=[] + totalCandidates=0 when nothing matches', () => {
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({
           baseFilters: { consequences: ['NONEXISTENT'] as unknown as string[] }
@@ -594,7 +603,7 @@ describe('ShortlistService', () => {
 
     it('handles caseId with no variants at all', () => {
       insertCase(db, 2, 'empty-case')
-      const result = service.getShortlist({ caseId: 2, adHocConfig: baseAdHocConfig() })
+      const result = getShortlist({ caseId: 2, adHocConfig: baseAdHocConfig() })
       expect(result.rows).toEqual([])
       expect(result.totalCandidates).toBe(0)
     })
@@ -639,7 +648,7 @@ describe('ShortlistService', () => {
 
       // Run the shortlist — a single row gets ZERO_COMPONENTS, the rest
       // score normally, and the envelope still returns a full result set.
-      const result = service.getShortlist({
+      const result = getShortlist({
         caseId: 1,
         adHocConfig: baseAdHocConfig({ topN: 50 })
       })

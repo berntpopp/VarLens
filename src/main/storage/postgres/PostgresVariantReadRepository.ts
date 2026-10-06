@@ -128,8 +128,7 @@ export function buildPostgresVariantQueryParts(
 
   addWhere(`v.case_id = ${addParam(filter.case_id)}`)
 
-  const exactVariantType =
-    (filter as VariantFilter & { exact_variant_type?: boolean }).exact_variant_type === true
+  const exactVariantType = filter.exact_variant_type === true
   if (filter.variant_type !== undefined && filter.variant_type !== '') {
     if (filter.variant_type === 'snv' && !exactVariantType) {
       addWhere("v.variant_type IN ('snv', 'indel')")

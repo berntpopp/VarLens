@@ -293,6 +293,48 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     })
   })
 
+  describe('SQLite shortlist gene panel', () => {
+    const config = (baseFilters: Record<string, unknown>): never =>
+      ({
+        variantTypeScope: ['snv', 'cnv'],
+        baseFilters,
+        topN: 50,
+        rankConfig: {
+          weights: { impact: 1, pathogenicity: 1, rarity: 1, clinvar: 1, phenotype: 0 },
+          pinStarredTop: true
+        }
+      }) as never
+    const shortlist = (
+      caseId: number,
+      baseFilters: Record<string, unknown>,
+      provider: () => GeneReferenceDb | null = () => geneRef as unknown as GeneReferenceDb
+    ): number[] =>
+      sqlite.shortlistService
+        .getShortlist({ caseId, adHocConfig: config(baseFilters) }, provider)
+        .rows.map((row) => row.pos)
+        .sort((a, b) => a - b)
+
+    it('restricts candidates to the panel regions, like the variant table', () => {
+      expect(shortlist(grch38Case, {})).toEqual([90_000, 150_000, 202_000, 300_000])
+      expect(shortlist(grch38Case, { activePanelIds: [panelId], panelPaddingBp: 5000 })).toEqual([
+        90_000, 150_000, 202_000
+      ])
+      expect(shortlist(grch38Case, { activePanelIds: [panelId], panelPaddingBp: 0 })).toEqual([
+        90_000, 150_000
+      ])
+    })
+
+    it('fails instead of dropping a panel that cannot be resolved', () => {
+      const panel = { activePanelIds: [panelId] }
+      expect(() => shortlist(grch38Case, panel, () => null)).toThrow(/Shortlist query failed/)
+
+      // Genes without coordinates for the case's build: the typed, user-facing error.
+      const grch37Case = sqlite.cases.createCase('guard-37c', '/tmp/guard-37c.json', 0, 'GRCh37')
+      sqlite.variants.insertVariantsBatch(grch37Case, [variant('7', 150_000, { alt: 'G' })])
+      expect(() => shortlist(grch37Case, panel)).toThrow(PanelRegionsUnavailableError)
+    })
+  })
+
   describe('numeric-looking value on a text column', () => {
     // better-sqlite3 binds JS numbers as REAL, and SQLite renders a REAL as
     // '7.0' before comparing it with a TEXT column — so the value must be
