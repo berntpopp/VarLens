@@ -29,18 +29,25 @@ export interface UseTableKeyboardNavReturn<T> {
 }
 
 /**
- * Check if an input/textarea/select/contenteditable element is currently focused.
- * Exported at module level for reuse by useKeyboardShortcuts.
+ * Check if a text-entry element (input/textarea/select/contenteditable) is
+ * focused. Global app shortcuts (useKeyboardShortcuts) bail out only here.
  */
-export function isInputFocused(): boolean {
+export function isTextEntryFocused(): boolean {
   const el = document.activeElement
   if (!el) return false
   const tag = el.tagName.toLowerCase()
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
-  if (el.getAttribute('contenteditable') === 'true') return true
-  // A focused link (table link cells) owns Enter; don't also open the row panel.
-  if (tag === 'a' && el.hasAttribute('href')) return true
-  return false
+  return el.getAttribute('contenteditable') === 'true'
+}
+
+/**
+ * Table row shortcuts bail out on text entry and on a focused link: a
+ * focused link cell owns Enter, so it must not also open the row panel.
+ */
+export function isInputFocused(): boolean {
+  if (isTextEntryFocused()) return true
+  const el = document.activeElement
+  return el !== null && el.tagName.toLowerCase() === 'a' && el.hasAttribute('href')
 }
 
 /**

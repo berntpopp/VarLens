@@ -19,9 +19,9 @@ vi.mock('@vueuse/core', () => ({
   }
 }))
 
-// Mock the isInputFocused import used by the composable
+// Mock the isTextEntryFocused import used by the composable
 vi.mock('../../../src/renderer/src/composables/useTableKeyboardNav', () => ({
-  isInputFocused: () => inputFocused.value
+  isTextEntryFocused: () => inputFocused.value
 }))
 
 /** Mimic VueUse's dispatch: string filters match e.key, predicates get the event. */

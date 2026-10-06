@@ -1,5 +1,5 @@
 import { onKeyStroke } from '@vueuse/core'
-import { isInputFocused } from './useTableKeyboardNav'
+import { isTextEntryFocused } from './useTableKeyboardNav'
 
 interface KeyboardShortcutCallbacks {
   /** Alt+Shift+D (Option+Shift+D on macOS): Show disclaimer */
@@ -40,7 +40,7 @@ export const isColumnsShortcut = altShift('KeyC')
  */
 function onAltShift(code: string, callback: (() => void) | undefined): void {
   onKeyStroke(altShift(code), (e: KeyboardEvent) => {
-    if (isInputFocused()) return
+    if (isTextEntryFocused()) return
     e.preventDefault()
     callback?.()
   })
@@ -61,13 +61,13 @@ export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks): void
   })
 
   onKeyStroke('/', (e: KeyboardEvent) => {
-    if (isInputFocused()) return
+    if (isTextEntryFocused()) return
     e.preventDefault()
     callbacks.onSearchFocus?.()
   })
 
   onKeyStroke('?', (e: KeyboardEvent) => {
-    if (isInputFocused()) return
+    if (isTextEntryFocused()) return
     e.preventDefault()
     callbacks.onHelp?.()
   })
