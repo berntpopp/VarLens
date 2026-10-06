@@ -48,7 +48,8 @@ export function makeDeps(): {
       createUser,
       listUsers,
       deactivateUser,
-      resetPassword
+      resetPassword,
+      invalidateUser: vi.fn()
     },
     events: {
       publish

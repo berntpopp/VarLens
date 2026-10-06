@@ -35,6 +35,7 @@ import { createPostgresStorageSession } from '../main/storage/postgres/createPos
 import type { PostgresStorageSession } from '../main/storage/postgres/PostgresStorageSession'
 import type { StorageSession } from '../main/storage/session'
 import { AdminAlreadyExistsError, PostgresWebAuthService } from './auth/PostgresWebAuthService'
+import { resolveAuthUserCacheTtlMs } from './auth/user-lookup-cache'
 import { recordAuthAudit } from './server/audit'
 import { buildDispatcher, registerDispatcher } from './server/dispatcher'
 import { registerSessions } from './server/auth'
@@ -146,7 +147,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const pool = session.getPool()
   const authService = new PostgresWebAuthService({
     pool,
-    schema: pgConfig.schema
+    schema: pgConfig.schema,
+    userCacheTtlMs: resolveAuthUserCacheTtlMs(process.env)
   })
 
   if (options.admin !== undefined) {

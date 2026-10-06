@@ -316,7 +316,7 @@ export async function registerSessions(
       })
     }
 
-    const liveUser = await options.authService.getUser(sessionUser.username)
+    const liveUser = await options.authService.getSessionUser(sessionUser.username)
     if (
       liveUser === undefined ||
       liveUser.id !== sessionUser.id ||

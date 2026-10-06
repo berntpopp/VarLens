@@ -110,6 +110,7 @@ export { isLikelyArgon2idHash, assertArgon2idHashMatchesProviderPolicy }
 // Cross-backend User + AuthResult shape: both implementations import the same
 // types so shape parity is enforced at compile time.
 import type { AuthResult, User } from '../../shared/auth/types'
+import { UserLookupCache } from './user-lookup-cache'
 
 export type { AuthResult, User }
 
@@ -117,6 +118,12 @@ export interface PostgresWebAuthServiceOptions {
   pool: Pool
   schema: string
   passwordProvider?: PasswordProvider
+  /**
+   * TTL for the per-request live-user check (`getSessionUser`). 0 (the
+   * default for direct construction) disables caching; the web server passes
+   * `VARLENS_AUTH_USER_CACHE_TTL_MS` (default 5 s). See user-lookup-cache.ts.
+   */
+  userCacheTtlMs?: number
 }
 
 /**
@@ -209,11 +216,27 @@ export class PostgresWebAuthService {
   private readonly pool: Pool
   private readonly schemaQuoted: string
   private readonly passwordProvider: PasswordProvider
+  private readonly userCache: UserLookupCache<User | undefined>
 
   constructor(options: PostgresWebAuthServiceOptions) {
     this.pool = options.pool
     this.schemaQuoted = quoteSchema(options.schema)
     this.passwordProvider = options.passwordProvider ?? defaultPasswordProvider
+    this.userCache = new UserLookupCache({ ttlMs: options.userCacheTtlMs ?? 0 })
+  }
+
+  /**
+   * Cached live-user lookup for the session preHandler. Every mutation in
+   * this service invalidates the affected username, so in-process changes
+   * are visible immediately; out-of-process changes within the TTL.
+   */
+  async getSessionUser(username: string): Promise<User | undefined> {
+    return this.userCache.get(username, () => this.getUser(username))
+  }
+
+  /** Drop the cached live-user row (logout, external role/status change). */
+  invalidateUser(username: string): void {
+    this.userCache.invalidate(username)
   }
 
   // ---------- bootstrap ----------
@@ -346,6 +369,7 @@ export class PostgresWebAuthService {
 
   async authenticate(username: string, password: string): Promise<AuthResult> {
     const sch = this.schemaQuoted
+    this.invalidateUser(username)
     const sel = await this.pool.query<Record<string, unknown>>(
       `SELECT * FROM ${sch}."users" WHERE username = $1 AND is_active = TRUE`,
       [username]
@@ -478,6 +502,7 @@ export class PostgresWebAuthService {
       `UPDATE ${sch}."users" SET is_active = FALSE, updated_at = now() WHERE username = $1`,
       [username]
     )
+    this.invalidateUser(username)
     if ((result.rowCount ?? 0) === 0) {
       throw new Error(`User not found: ${username}`)
     }
@@ -495,6 +520,7 @@ export class PostgresWebAuthService {
        WHERE username = $2`,
       [passwordHash, username]
     )
+    this.invalidateUser(username)
   }
 
   /**
@@ -545,6 +571,7 @@ export class PostgresWebAuthService {
        WHERE username = $2`,
       [passwordHash, username]
     )
+    this.invalidateUser(username)
     return true
   }
 
