@@ -51,14 +51,13 @@
 
     <!-- Filter Bar -->
     <!--
-      A3 cohort parity (Pass-9 #3): deferred mount. CohortFilterBar is gated
-      on `firstActivated` so it does not render until cohort column metadata
-      has arrived. The CohortDataTable below is unguarded so its own
-      `update:options` immediate fetch still drives the first page load.
-      `firstActivated` flips true once metadata loads and never resets.
+      Rendered in the same frame as the table (no deferred mount): mounting it
+      after the column metadata arrived pushed the already-painted table down
+      by the bar's height (cohort-switch CLS 0.18 on mobile). The bar takes no
+      column metadata, so it has nothing to wait for. The case view still
+      defers FilterToolbar, but only while the Shortlist tab hides it.
     -->
     <CohortFilterBar
-      v-if="firstActivated"
       ref="cohortFilterBarRef"
       :total-count="totalCount"
       :cohort-summary="summary"
@@ -251,36 +250,6 @@ let activeFlowBudget: PerfBudgetKey | undefined = undefined
 
 // Ref to CohortFilterBar for accessing DSL column filters
 const cohortFilterBarRef = ref<InstanceType<typeof CohortFilterBar> | null>(null)
-
-/**
- * True once `fetchColumnMeta` has resolved with at least one column.
- * `[]` is the not-yet-loaded sentinel; any populated array means the
- * cohort-metadata IPC round-trip finished. This is the cohort equivalent
- * of CaseView's `typeCountsLoaded`.
- *
- * Trade-off (Pass-9 #4): same "populated-array = loaded" convention as
- * CaseView — if the fetch fails, the filter bar never mounts (kept for parity).
- */
-const columnMetaLoaded = computed(() => columnMeta.value.length > 0)
-
-/**
- * A3 cohort parity (Pass-9 #3): deferred CohortFilterBar mount. Flips true
- * the first time cohort column metadata has loaded. Once true it never
- * resets, mirroring the CaseView `firstActivated` pattern so the filter bar
- * does not remount (and re-run its option load) across genome-build /
- * variant-type changes. Required by feedback_cohort_parity.md.
- */
-const firstActivated = ref(false)
-
-watch(
-  columnMetaLoaded,
-  (loaded) => {
-    if (loaded && !firstActivated.value) {
-      firstActivated.value = true
-    }
-  },
-  { immediate: true }
-)
 
 // Per-column text filters from CohortDataTable
 const cohortColumnFilters = ref<ColumnFiltersParam | undefined>(undefined)

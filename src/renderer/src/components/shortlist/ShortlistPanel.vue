@@ -105,11 +105,16 @@ function dismissError(): void {
         density="compact"
         hide-details
         variant="outlined"
-        style="max-width: 320px"
+        class="shortlist-panel__preset"
       />
-      <div v-if="result" class="text-caption text-medium-emphasis">
-        Scored (capped): {{ result.totalCandidates }} → top {{ result.rows.length }}
-        <span class="ml-2">({{ result.elapsedMs }}ms)</span>
+      <!-- Always rendered, single line: the summary arriving with the first
+           result must not resize the select or wrap the header taller (that
+           pushed the table down: open-case CLS 0.11 on mobile). -->
+      <div class="shortlist-panel__summary text-caption text-medium-emphasis">
+        <template v-if="result">
+          Scored (capped): {{ result.totalCandidates }} → top {{ result.rows.length }}
+          <span class="ml-2">({{ result.elapsedMs }}ms)</span>
+        </template>
       </div>
       <v-spacer />
       <v-btn
@@ -183,6 +188,17 @@ function dismissError(): void {
 .shortlist-panel__header {
   flex: 0 0 auto;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.shortlist-panel__preset {
+  flex: 0 1 320px;
+  min-width: 140px;
+}
+.shortlist-panel__summary {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /*
  * The body wrapper is the flex-grow region that hosts whichever of the
