@@ -47,7 +47,8 @@ export function buildVariantOverrides(): Record<string, OverrideHandler> {
 
     'variants:query': {
       async handle(args, _request, reply, { session }) {
-        const [caseId, filters, offset, limit, sortBy, skipCount, includeUnfilteredCount] = args
+        const [caseId, filters, offset, limit, sortBy, skipCount, includeUnfilteredCount, cursor] =
+          args
 
         const validatedCaseId = CaseIdSchema.safeParse(caseId)
         if (!validatedCaseId.success) {
@@ -85,6 +86,15 @@ export function buildVariantOverrides(): Record<string, OverrideHandler> {
           validatedSortBy = sortByResult.data
         }
 
+        if (
+          cursor !== undefined &&
+          cursor !== null &&
+          (typeof cursor !== 'string' || cursor.length > 1024)
+        ) {
+          reply.code(400)
+          return { error: 'invalid-cursor', message: 'Invalid page cursor' }
+        }
+
         const fullFilter: VariantFilter = {
           case_id: validatedCaseId.data,
           ...validatedFilters.data
@@ -98,7 +108,10 @@ export function buildVariantOverrides(): Record<string, OverrideHandler> {
             offsetResult.data,
             validatedSortBy,
             skipCount === true,
-            includeUnfilteredCount === true
+            includeUnfilteredCount === true,
+            // Opt-in: '' asks for a first page plus next_cursor; a cursor
+            // string resumes after the previous page (variant-paging.ts).
+            typeof cursor === 'string' ? (cursor === '' ? {} : { cursor }) : undefined
           ]
         })
       }

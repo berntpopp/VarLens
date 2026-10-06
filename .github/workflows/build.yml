@@ -73,6 +73,9 @@ jobs:
               - 'src/shared/**'
               - 'tests/web-gate/**'
               - 'tests/web-smoke/**'
+              - 'tests/ui-gates/**'
+              - 'scripts/ui-gates/**'
+              - 'playwright.ui-gates.config.ts'
               - 'vite.web*.config.ts'
               - '.github/workflows/build.yml'
               - '.github/workflows/*web*.yml'
@@ -303,6 +306,14 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" npx playwright test tests/e2e/startup-smoke.e2e.ts --workers=1
 
+      # Table interaction-quality gates (audit 2026-10-06 §9): CLS <= 0.02 and
+      # INP < 200 ms per case/cohort interaction, one visible-page query per
+      # sort, no stale render under a delayed first response. ~35 s on the
+      # frozen 3x50-variant fixture; mirrors `make perf-interaction-gates`.
+      - name: Run interaction quality gates (Linux)
+        if: runner.os == 'Linux'
+        run: make perf-interaction-gates
+
       - name: Upload startup smoke artifacts (Linux)
         if: runner.os == 'Linux' && always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
@@ -311,6 +322,7 @@ jobs:
           path: |
             test-results/
             .planning/artifacts/perf/phase1/baseline/startup-smoke/
+            .planning/artifacts/perf/phase1/baseline/interaction-quality/
 
       # Content-addressed tool archives (nsis-resources, 7zip, winCodeSign, the
       # Electron zip itself, …) re-verified by sha256 on use, so — unlike the
@@ -518,6 +530,32 @@ jobs:
 
       - name: Run opt-in web gate
         run: make web-ci
+
+      # UI quality gates (audit 2026-10-06 §9): axe on 5 key states x light/dark
+      # and Lighthouse desktop budgets against the root-mounted web build.
+      # Mirrors `make ui-gates-build ui-gates`.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build web bundle for UI gates
+        run: make ui-gates-build
+
+      # Lighthouse launches its own Chrome (without Playwright's --no-sandbox);
+      # Ubuntu 24.04 runners restrict unprivileged user namespaces via AppArmor,
+      # so Chrome's sandbox fails with "No usable sandbox!". Same fix as docs.yml.
+      - name: Allow Chrome to use unprivileged user namespaces (Ubuntu 24.04)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Run UI quality gates (axe + Lighthouse)
+        run: make ui-gates
+
+      - name: Upload UI gate reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
+        with:
+          name: ui-gates
+          path: test-results/ui-gates/
+          if-no-files-found: ignore
 
       - name: Docker runtime image smoke
         if: github.event_name == 'pull_request'

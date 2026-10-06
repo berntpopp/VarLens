@@ -32,6 +32,7 @@ import { useGeneAutocomplete } from './useGeneAutocomplete'
 import { useFilterOptionsCache } from './useFilterOptionsCache'
 import { useFilterComputed } from './useFilterComputed'
 import { useFilterLifecycle } from './useFilterLifecycle'
+import { useFilterUrlParam } from './useViewUrlBindings'
 
 // Re-export types so existing consumers (e.g. filterDrawerTypes.ts) continue to work
 export type { FilterState, ActiveFilter, ExportResult, UseFilterStateReturn } from './filter-types'
@@ -111,6 +112,18 @@ export function useFilterState(
   // Watch filters and emit changes (serialized key avoids deep traversal)
   const filterEmitKey = computed(() => JSON.stringify(filters.value))
   watch(filterEmitKey, onStateChange)
+
+  // URL `?f=` (case view): restore/serialise drawer filters + impact chips.
+  // Core refs mirror filters, so resync them after a restore.
+  useFilterUrlParam('case', filters, selectedImpactPresets, () => {
+    core.consequences.value = [...filters.value.consequences]
+    core.funcs.value = [...filters.value.funcs]
+    core.clinvars.value = [...filters.value.clinvars]
+    core.gnomadAfMax.value = filters.value.maxGnomadAf
+    core.caddMin.value = filters.value.minCadd
+    core.maxInternalAf.value = filters.value.maxInternalAf
+    core.acmgClassifications.value = [...filters.value.acmgClassifications]
+  })
 
   // Export state
   const exporting = ref(false)

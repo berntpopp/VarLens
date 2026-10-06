@@ -123,7 +123,7 @@
         :columns="orderedColumns"
         :visible-columns="visibleColumnKeys"
         table-id="variant-table"
-        @toggle:column="toggleColumnVisibility"
+        @toggle:column="(k: string) => toggleColumnVisibility(k, isColumnShown(k))"
         @reorder="setColumnOrder"
         @reset="resetColumnDefaults"
       />
@@ -164,7 +164,8 @@ import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
 import { stripVueProxies } from '../utils/stripVueProxies'
-import { useResponsiveLayout } from '../composables/useResponsiveLayout'
+import { isWebRuntime } from '../utils/runtime-mode'
+import { useAutoHiddenColumns, useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useApiService } from '../composables/useApiService'
 import {
   currentCanUseFeature,
@@ -205,7 +206,7 @@ interface Emits {
   (e: 'clear-column-filter', columnKey: string): void
   (
     e: 'export-success',
-    data: { filePath: string; action: { text: string; callback: () => void } }
+    data: { filePath: string; action?: { text: string; callback: () => void } }
   ): void
   (e: 'export-error', error: string): void
 }
@@ -365,6 +366,7 @@ const {
   handleDslClear,
   applySuggestion
 } = useDslFilterIntegration({
+  urlRoute: 'case',
   columnFiltersRef: dslColumnFiltersRef,
   presetNames: () => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')),
   searchQueryRef: computed({
@@ -575,13 +577,11 @@ const exportToExcel = async () => {
     emit('export-error', result.error)
   } else if (result.success && result.filePath !== undefined && result.filePath !== '') {
     const filePath = result.filePath
-    emit('export-success', {
-      filePath,
-      action: {
-        text: 'Open folder',
-        callback: () => api?.export.revealInFolder(filePath)
-      }
-    })
+    // Web exports land in the browser's downloads; there is no folder to reveal.
+    const action = isWebRuntime()
+      ? undefined
+      : { text: 'Open folder', callback: () => api?.export.revealInFolder(filePath) }
+    emit('export-success', { filePath, action })
   }
 }
 
@@ -609,11 +609,14 @@ const orderedColumns = computed(() => {
   return props.columns
 })
 
-const visibleColumnKeys = computed(() => {
-  return orderedColumns.value
-    .filter((h) => columnPrefs.value.visibility[h.key] !== false)
-    .map((h) => h.key)
-})
+// Same responsive default as VariantTable's useVariantColumns (same keys → same result)
+const { isVisible: isColumnShown } = useAutoHiddenColumns(
+  () => (props.columns ?? []).map((c) => c.key),
+  columnPrefs
+)
+const visibleColumnKeys = computed(() =>
+  orderedColumns.value.filter((h) => isColumnShown(h.key)).map((h) => h.key)
+)
 
 // Toggle drawer methods for keyboard shortcuts
 const toggleFilterDrawer = () => {

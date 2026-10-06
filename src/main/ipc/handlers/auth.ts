@@ -5,7 +5,8 @@ import {
   CreateUserSchema,
   UsernameSchema,
   PasswordSchema,
-  ChangePasswordSchema
+  ChangePasswordSchema,
+  UserRoleSchema
 } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
 import {
@@ -16,6 +17,8 @@ import {
   createUser,
   listUsers,
   deactivateUser,
+  reactivateUser,
+  setRole,
   resetPassword,
   changePassword
 } from './auth-logic'
@@ -24,6 +27,7 @@ import {
  * Auth IPC handlers
  * Channels: auth:login, auth:logout, auth:currentUser, auth:isAccountsEnabled,
  *           auth:createUser, auth:listUsers, auth:deactivateUser,
+ *           auth:reactivateUser, auth:setRole,
  *           auth:resetPassword, auth:changePassword
  */
 export function registerAuthHandlers({ ipcMain, getDb }: HandlerDependencies): void {
@@ -89,6 +93,29 @@ export function registerAuthHandlers({ ipcMain, getDb }: HandlerDependencies): v
         throw new Error('Invalid username')
       }
       await deactivateUser(validated.data, getDb)
+    })
+  })
+
+  ipcMain.handle('auth:reactivateUser', async (_event, username: unknown) => {
+    return wrapHandler(async () => {
+      const validated = UsernameSchema.safeParse(username)
+      if (!validated.success) {
+        mainLogger.error(`Invalid auth:reactivateUser username: ${validated.error.message}`, 'auth')
+        throw new Error('Invalid username')
+      }
+      await reactivateUser(validated.data, getDb)
+    })
+  })
+
+  ipcMain.handle('auth:setRole', async (_event, username: unknown, role: unknown) => {
+    return wrapHandler(async () => {
+      const validatedUsername = UsernameSchema.safeParse(username)
+      const validatedRole = UserRoleSchema.safeParse(role)
+      if (!validatedUsername.success || !validatedRole.success) {
+        mainLogger.error('Invalid auth:setRole params', 'auth')
+        throw new Error('Invalid role change parameters')
+      }
+      setRole(validatedUsername.data, validatedRole.data, getDb)
     })
   })
 

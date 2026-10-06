@@ -1,6 +1,7 @@
 import type { ColumnFilter } from '../../../shared/types/column-filters'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
+import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
 
 /**
  * Summary read-side query builder (Sprint A PR-3 C4).
@@ -341,12 +342,17 @@ export function buildSummaryQueryParts(
     whereParts.push(`cvs.carrier_count >= ${addParam(params.carrier_count_min)}`)
   }
 
-  const sortColumn =
+  const sortKey =
     params.sort_by !== undefined && SUMMARY_SORT_COLUMNS[params.sort_by] !== undefined
-      ? SUMMARY_SORT_COLUMNS[params.sort_by]
-      : 'cvs.carrier_count'
-  const sortOrder = params.sort_order === 'asc' ? 'ASC' : 'DESC'
-  const orderBy = `ORDER BY ${sortColumn} ${sortOrder} NULLS LAST, cvs.chr ASC, cvs.pos ASC, cvs.ref ASC, cvs.alt ASC`
+      ? params.sort_by
+      : 'carrier_count'
+  const orderBy = cohortOrderByClause(
+    sortKey,
+    SUMMARY_SORT_COLUMNS[sortKey],
+    params.sort_order === 'asc' ? 'asc' : 'desc',
+    'cvs',
+    'postgres'
+  )
 
   return { parts: { joins: '', whereParts, orderBy, values }, unavailable: false }
 }

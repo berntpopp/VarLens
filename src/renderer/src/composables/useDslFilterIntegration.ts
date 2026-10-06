@@ -6,6 +6,8 @@
  * Used by both FilterToolbar (variant view) and CohortFilterBar (cohort view).
  */
 
+import type { ViewRoute } from './useUrlState'
+import { useSearchUrlParam } from './useViewUrlBindings'
 import { ref, watch, computed } from 'vue'
 import type { Ref } from 'vue'
 import { useDslSearch } from './useDslSearch'
@@ -24,6 +26,8 @@ interface DslFilterIntegrationOptions {
   resolvePreset?: (presetName: string) => void
   /** Optional: externally provided ref for DSL column filters (for forward-ref patterns) */
   columnFiltersRef?: Ref<Record<string, ColumnFilter>>
+  /** Mirror the raw search/DSL text into the URL query (`?q=`) for this view. */
+  urlRoute?: ViewRoute
 }
 
 export function useDslFilterIntegration(options: DslFilterIntegrationOptions) {
@@ -106,6 +110,10 @@ export function useDslFilterIntegration(options: DslFilterIntegrationOptions) {
     if (!hasDslFilters.value && !existing) return undefined
     if (!hasDslFilters.value) return existing
     return { ...(existing ?? {}), ...dslColumnFilters.value }
+  }
+
+  if (options.urlRoute !== undefined) {
+    useSearchUrlParam(options.urlRoute, dslInput, applyDslFilters)
   }
 
   return {

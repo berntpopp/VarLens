@@ -58,9 +58,12 @@ export function useColumnPreferences(tableId: string) {
   /**
    * Toggle column visibility
    * @param key Column key to toggle
+   * @param currentlyVisible Effective visibility as rendered (includes the
+   *   responsive default for columns without an explicit choice). Defaults to
+   *   the stored preference, or visible when there is none.
    */
-  const toggleColumnVisibility = (key: string): void => {
-    const currentVisibility = prefs.value.visibility[key] ?? true
+  const toggleColumnVisibility = (key: string, currentlyVisible?: boolean): void => {
+    const currentVisibility = currentlyVisible ?? prefs.value.visibility[key] ?? true
     prefs.value.visibility = {
       ...prefs.value.visibility,
       [key]: !currentVisibility

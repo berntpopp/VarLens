@@ -19,19 +19,15 @@
     <template #item="{ props: itemProps, item }">
       <v-list-item v-bind="itemProps" :title="undefined">
         <template #title>
-          <span class="font-weight-bold">{{
-            (item as unknown as { raw: DisplayItem }).raw.symbol
-          }}</span>
-          <span class="text-medium-emphasis ml-2">{{
-            (item as unknown as { raw: DisplayItem }).raw.name
-          }}</span>
+          <span class="font-weight-bold">{{ (item as DisplayItem).symbol }}</span>
+          <span class="text-medium-emphasis ml-2">{{ (item as DisplayItem).name }}</span>
         </template>
         <template #subtitle>
           <span class="text-caption">
-            {{ (item as unknown as { raw: DisplayItem }).raw.locusGroup }}
-            <template v-if="(item as unknown as { raw: DisplayItem }).raw.matchType === 'alias'">
+            {{ (item as DisplayItem).locusGroup }}
+            <template v-if="(item as DisplayItem).matchType === 'alias'">
               <span class="text-warning ml-1"
-                >(alias: {{ (item as unknown as { raw: DisplayItem }).raw.matchedAlias }})</span
+                >(alias: {{ (item as DisplayItem).matchedAlias }})</span
               >
             </template>
           </span>

@@ -74,6 +74,7 @@ import type {
   SpliceAIFetchResult
 } from './api-enrichment'
 import type { ColumnFilterMeta } from './column-filters'
+import type { VariantPageResult } from './variant-paging'
 import type { FilterPreset, FilterPresetCreate, FilterPresetUpdate } from './filter-presets'
 import type { ShortlistResult } from './shortlist'
 import type { ValidatedGetShortlistParams } from './ipc-schemas'
@@ -169,8 +170,12 @@ export interface VariantsAPI {
     limit?: number,
     sortBy?: SortItem[],
     skipCount?: boolean,
-    includeUnfilteredCount?: boolean
-  ) => Promise<IpcResult<PaginatedResult<Variant> & { unfiltered_count?: number }>>
+    includeUnfilteredCount?: boolean,
+    /** Keyset opt-in (web/Postgres only); see VariantsDomainContract.query. */
+    cursor?: string
+  ) => Promise<
+    IpcResult<PaginatedResult<Variant> & { unfiltered_count?: number } & VariantPageResult>
+  >
   getFilterOptions: (caseId: number) => Promise<IpcResult<FilterOptions>>
   search: (caseId: number, query: string, limit?: number) => Promise<IpcResult<Variant[]>>
   geneSymbols: (caseId: number, query: string, limit?: number) => Promise<IpcResult<string[]>>
@@ -282,6 +287,7 @@ export interface ExportAPI {
   ) => Promise<IpcResult<ExportResult>>
   cohort: (params: CohortSearchParams) => Promise<IpcResult<ExportResult>>
   revealInFolder: (filePath: string) => Promise<IpcResult<{ success: boolean }>>
+  cancel: () => Promise<IpcResult<{ cancelled: boolean }>>
 }
 
 export type DatabaseAPI = DatabaseDomainContract

@@ -36,12 +36,9 @@ export function registerFilterPresetHandlers({
         throw new Error('Invalid preset parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session
-          .getWriteExecutor()
-          .execute({ type: 'presets:create', params: [validated.data] })
-      }
-      return getDb().filterPresets.createPreset(validated.data)
+      return await session
+        .getWriteExecutor()
+        .execute({ type: 'presets:create', params: [validated.data] })
     })
   })
 
@@ -61,13 +58,10 @@ export function registerFilterPresetHandlers({
         throw new Error('Invalid preset update parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'presets:update',
-          params: [validatedId.data, validatedUpdates.data]
-        })
-      }
-      return getDb().filterPresets.updatePreset(validatedId.data, validatedUpdates.data)
+      return await session.getWriteExecutor().execute({
+        type: 'presets:update',
+        params: [validatedId.data, validatedUpdates.data]
+      })
     })
   })
 
@@ -79,13 +73,9 @@ export function registerFilterPresetHandlers({
         throw new Error('Invalid preset ID')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session
-          .getWriteExecutor()
-          .execute({ type: 'presets:delete', params: [validatedId.data] })
-        return undefined
-      }
-      getDb().filterPresets.deletePreset(validatedId.data)
+      await session
+        .getWriteExecutor()
+        .execute({ type: 'presets:delete', params: [validatedId.data] })
       return undefined
     })
   })
@@ -98,13 +88,9 @@ export function registerFilterPresetHandlers({
         throw new Error('Invalid reorder parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session
-          .getWriteExecutor()
-          .execute({ type: 'presets:reorder', params: [validated.data] })
-        return undefined
-      }
-      getDb().filterPresets.reorderPresets(validated.data)
+      await session
+        .getWriteExecutor()
+        .execute({ type: 'presets:reorder', params: [validated.data] })
       return undefined
     })
   })

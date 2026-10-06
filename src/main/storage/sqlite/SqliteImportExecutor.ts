@@ -16,7 +16,6 @@
  * (it calls `startImport` internally for the first file).
  */
 import { ImportWorkerClient } from '../../workers/import-worker-client'
-import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import { BedFilter } from '../../import/vcf/bed-filter'
 import type { DatabaseService } from '../../database/DatabaseService'
@@ -194,14 +193,8 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                 skipped: 0
               })
 
-              try {
-                db.variants.updateFrequencies(capturedCaseId)
-              } catch (freqError) {
-                mainLogger.warn(
-                  `Failed to update variant frequencies: ${freqError instanceof Error ? freqError.message : String(freqError)}`,
-                  'SqliteImportExecutor'
-                )
-              }
+              // Variant frequencies were already updated inside the import
+              // worker's transaction — nothing to do on the main thread.
 
               resolve({
                 caseId: capturedCaseId,

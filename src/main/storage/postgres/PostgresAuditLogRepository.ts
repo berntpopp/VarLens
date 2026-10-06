@@ -108,6 +108,43 @@ export class PostgresAuditLogRepository {
     )
   }
 
+  /**
+   * Multi-row append used by the web audit buffer. One INSERT per batch
+   * instead of one round-trip per row. `occurred_at` (epoch ms) preserves the
+   * time the audited request happened rather than the flush time; rows
+   * without it fall back to the column default clock.
+   */
+  async appendMany(
+    rows: ReadonlyArray<AuditAppendParams & { occurred_at?: number }>
+  ): Promise<void> {
+    if (rows.length === 0) return
+    const values: unknown[] = []
+    const tuples = rows.map((row) => {
+      const base = values.length
+      values.push(
+        this.projectSchema,
+        row.action_type,
+        row.entity_type,
+        row.entity_key,
+        serializeAuditContractValue(row.old_value),
+        serializeAuditContractValue(row.new_value),
+        row.user_name ?? null,
+        serializeAuditContractMetadata(row.metadata),
+        row.occurred_at ?? null
+      )
+      const p = (offset: number): string => `$${base + offset}`
+      return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}, ${p(6)}, ${p(7)}, ${p(8)},
+        COALESCE(${p(9)}::bigint, (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint))`
+    })
+    await this.pool.query(
+      `INSERT INTO ${AUDIT_TABLE} (
+        project_schema, action_type, entity_type, entity_key, old_value, new_value, user_name,
+        metadata_json, created_at
+      ) VALUES ${tuples.join(',\n')}`,
+      values
+    )
+  }
+
   private buildWhere(params: AuditQueryParams): { whereSql: string; values: unknown[] } {
     const where: string[] = []
     const values: unknown[] = []

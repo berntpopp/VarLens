@@ -456,4 +456,63 @@ describe('CaseView — Shortlist tab integration', () => {
     expect((wrapper.vm as unknown as { firstActivated: boolean }).firstActivated).toBe(false)
     expect(wrapper.findComponent({ name: 'FilterToolbarStub' }).exists()).toBe(false)
   })
+
+  // ── Shortlist flicker on case switch (track 2, 2026-10-06) ─────────
+  // The case watcher used to reset the tab to 'snv' until the new case's
+  // type counts resolved, so every switch showed Shortlist -> SNV table ->
+  // Shortlist and mounted the FilterToolbar.
+  it('keeps the Shortlist tab active throughout a case switch (no SNV flash)', async () => {
+    typeCountsMock.mockResolvedValue({ snv: 10, sv: 3 })
+    const { wrapper, state } = mountCaseView(1)
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { selectedVariantType: string; firstActivated: boolean }
+
+    const seen: string[] = []
+    const stop = wrapper.vm.$watch(
+      () => vm.selectedVariantType,
+      (tab: string) => seen.push(tab),
+      { flush: 'sync' }
+    )
+    let resolveCounts: (counts: Record<string, number>) => void = () => {}
+    typeCountsMock.mockReturnValueOnce(new Promise((resolve) => (resolveCounts = resolve)))
+    state.selectedCaseId.value = 2
+    await flushPromises()
+    expect(vm.selectedVariantType).toBe('shortlist')
+    resolveCounts({ snv: 4 })
+    await flushPromises()
+    stop()
+
+    expect(seen).not.toContain('snv')
+    expect(vm.selectedVariantType).toBe('shortlist')
+    expect(vm.firstActivated).toBe(false)
+    expect(wrapper.findComponent({ name: 'FilterToolbarStub' }).exists()).toBe(false)
+  })
+
+  it('falls back to the empty per-type view when the new case has no variants', async () => {
+    typeCountsMock.mockResolvedValue({ snv: 10 })
+    const { wrapper, state } = mountCaseView(1)
+    await flushPromises()
+    typeCountsMock.mockResolvedValue({})
+    state.selectedCaseId.value = 2
+    await flushPromises()
+    expect((wrapper.vm as unknown as { selectedVariantType: string }).selectedVariantType).toBe(
+      'snv'
+    )
+  })
+
+  it('does not override a tab the user picked while the counts were loading', async () => {
+    typeCountsMock.mockResolvedValue({ snv: 10, sv: 3 })
+    const { wrapper, state } = mountCaseView(1)
+    await flushPromises()
+    let resolveCounts: (counts: Record<string, number>) => void = () => {}
+    typeCountsMock.mockReturnValueOnce(new Promise((resolve) => (resolveCounts = resolve)))
+    state.selectedCaseId.value = 2
+    await flushPromises()
+    await wrapper.findComponent({ name: 'VTabs' }).vm.$emit('update:modelValue', 'sv')
+    resolveCounts({ snv: 10, sv: 3 })
+    await flushPromises()
+    expect((wrapper.vm as unknown as { selectedVariantType: string }).selectedVariantType).toBe(
+      'sv'
+    )
+  })
 })

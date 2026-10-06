@@ -4,6 +4,7 @@ import { aliases, mdi } from 'vuetify/iconsets/mdi-svg'
 import { h, type Component } from 'vue'
 import type { IconSet, IconProps } from 'vuetify'
 import DnaIcon from '../components/icons/DnaIcon.vue'
+import { resolveInitialThemeName } from '../utils/theme-preference'
 
 // Custom icon set registration
 const customSvgNameToComponent: Record<string, Component> = {
@@ -96,7 +97,9 @@ const warmDark: ThemeDefinition = {
 
 export default createVuetify({
   theme: {
-    defaultTheme: 'warmLight',
+    // Resolved from the stored preference + prefers-color-scheme before mount,
+    // so dark-OS users don't get a light flash after the (dark) login page.
+    defaultTheme: resolveInitialThemeName(),
     themes: {
       warmLight,
       warmDark

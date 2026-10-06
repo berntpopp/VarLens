@@ -134,8 +134,9 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web OpenAPI endpoint', () => {
       >
       expect(paths['/api/auth/login']?.post?.requestBody).toBeDefined()
       expect(paths['/api/auth/createUser']?.post?.requestBody).toBeDefined()
-      expect(paths['/api/auth/createUser']?.post?.responses?.['501']).toBeDefined()
-      expect(paths['/api/auth/createUser']?.post?.responses?.['200']).toBeUndefined()
+      expect(paths['/api/auth/createUser']?.post?.responses?.['200']).toBeDefined()
+      expect(paths['/api/auth/setRole']?.post?.requestBody).toBeDefined()
+      expect(paths['/api/auth/reactivateUser']?.post?.requestBody).toBeDefined()
       expect(paths['/api/auth/changePassword']?.post?.requestBody).toBeDefined()
       for (const path of ANNOTATION_PATHS) {
         expect(paths[path]?.post?.requestBody).toBeDefined()

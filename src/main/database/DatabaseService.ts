@@ -310,6 +310,10 @@ export class DatabaseService {
     try {
       const safePassword = newPassword.split("'").join("''")
       this.db.pragma(`rekey='${safePassword}'`)
+      // Keep the key handed to worker connections (writer, import, delete,
+      // export) in sync with the file's new key.
+      this._encryptionKey = newPassword
+      this.encrypted = newPassword !== ''
     } catch (error) {
       throw new DatabaseError(
         'Failed to change database encryption key',

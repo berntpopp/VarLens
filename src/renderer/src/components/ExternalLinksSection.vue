@@ -210,7 +210,7 @@ async function jumpToLocalIgv(): Promise<void> {
 
 .external-link-label {
   max-width: 72px;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.2;
   margin-top: 2px;
 }

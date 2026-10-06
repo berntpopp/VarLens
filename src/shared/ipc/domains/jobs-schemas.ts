@@ -15,7 +15,8 @@ const JobKindSchema: z.ZodType<JobKind> = z.enum([
   'import_batch',
   'cohort_rebuild',
   'association',
-  'export'
+  'export',
+  'case_delete'
 ])
 
 /** Keep in sync with `JobStatus` in src/shared/types/jobs.ts. */
@@ -38,3 +39,4 @@ const JobsFilterSchema = z
 export const JobsListParamsSchema = z.tuple([JobsFilterSchema])
 export const JobsGetParamsSchema = z.tuple([JobIdSchema])
 export const JobsProgressParamsSchema = z.tuple([JobIdSchema])
+export const JobsCancelParamsSchema = z.tuple([JobIdSchema])

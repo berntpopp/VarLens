@@ -26,7 +26,8 @@
  */
 
 import { computed, toRef } from 'vue'
-import { mdiRefresh } from '@mdi/js'
+import { mdiInformationOutline, mdiRefresh } from '@mdi/js'
+import IconButton from '../common/IconButton.vue'
 import ShortlistTable from './ShortlistTable.vue'
 import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
 import { useTableLoadingState } from '../../composables/useTableLoadingState'
@@ -56,7 +57,22 @@ const { showStale, ariaBusy, liveMessage } = useTableLoadingState({
   loading,
   totalCount: computed(() => result.value?.rows.length ?? null)
 })
-const showSkeleton = computed(() => loading.value && result.value === null)
+// Skeleton until the first result, not only while `loading`: the query starts
+// asynchronously, so gating on loading left the body empty for a frame or two.
+const showSkeleton = computed(() => result.value === null && error.value === null)
+
+// Plain-language explanation of the capped Stage-1 pre-selection (was the
+// developer-facing "Scored (capped): N → top M (Xms)" readout).
+const shortlistExplanation = computed(() => {
+  const r = result.value
+  if (r === null) return ''
+  return (
+    `To stay fast, VarLens first pre-selects up to ${r.totalCandidates} likely candidates ` +
+    `matching the preset, scores them, and shows the best ${r.rows.length}. ` +
+    `Variants outside the pre-selection are not ranked here; use the variant-type tabs ` +
+    `to browse everything. Ranked in ${r.elapsedMs} ms.`
+  )
+})
 
 /**
  * Toggle the star annotation for a row. Writes through
@@ -105,11 +121,25 @@ function dismissError(): void {
         density="compact"
         hide-details
         variant="outlined"
-        style="max-width: 320px"
+        class="shortlist-panel__preset"
       />
-      <div v-if="result" class="text-caption text-medium-emphasis">
-        Scored (capped): {{ result.totalCandidates }} → top {{ result.rows.length }}
-        <span class="ml-2">({{ result.elapsedMs }}ms)</span>
+      <!-- Always rendered, single line: the summary arriving with the first
+           result must not resize the select or wrap the header taller (that
+           pushed the table down: open-case CLS 0.11 on mobile). -->
+      <div
+        class="shortlist-panel__summary text-caption text-medium-emphasis"
+        data-testid="shortlist-summary"
+      >
+        <template v-if="result">
+          Top {{ result.rows.length }} of {{ result.totalCandidates }} pre-selected candidates
+          <IconButton
+            label="How the shortlist is built"
+            :tooltip="shortlistExplanation"
+            :icon="mdiInformationOutline"
+            size="x-small"
+            class="ml-1"
+          />
+        </template>
       </div>
       <v-spacer />
       <v-btn
@@ -183,6 +213,17 @@ function dismissError(): void {
 .shortlist-panel__header {
   flex: 0 0 auto;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.shortlist-panel__preset {
+  flex: 0 1 320px;
+  min-width: 140px;
+}
+.shortlist-panel__summary {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /*
  * The body wrapper is the flex-grow region that hosts whichever of the

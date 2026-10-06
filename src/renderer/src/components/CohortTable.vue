@@ -51,14 +51,13 @@
 
     <!-- Filter Bar -->
     <!--
-      A3 cohort parity (Pass-9 #3): deferred mount. CohortFilterBar is gated
-      on `firstActivated` so it does not render until cohort column metadata
-      has arrived. The CohortDataTable below is unguarded so its own
-      `update:options` immediate fetch still drives the first page load.
-      `firstActivated` flips true once metadata loads and never resets.
+      Rendered in the same frame as the table (no deferred mount): mounting it
+      after the column metadata arrived pushed the already-painted table down
+      by the bar's height (cohort-switch CLS 0.18 on mobile). The bar takes no
+      column metadata, so it has nothing to wait for. The case view still
+      defers FilterToolbar, but only while the Shortlist tab hides it.
     -->
     <CohortFilterBar
-      v-if="firstActivated"
       ref="cohortFilterBarRef"
       :total-count="totalCount"
       :cohort-summary="summary"
@@ -73,7 +72,7 @@
       @clear-column-filter="handleClearColumnFilter"
       @clear-column-filters="handleClearColumnFilters"
       @export="handleExport"
-      @toggle-column="toggleColumnVisibility"
+      @toggle-column="(k: string) => toggleColumnVisibility(k, isColumnShown(k))"
       @reorder-columns="setColumnOrder"
       @reset-columns="resetToDefaults"
     />
@@ -140,6 +139,7 @@ import { useCohortData } from '../composables/useCohortData'
 import { useFilters } from '../composables/useFilters'
 import { useCarriers } from '../composables/useCarriers'
 import { useAnnotations } from '../composables/useAnnotations'
+import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
@@ -208,14 +208,13 @@ const {
   getGlobalComment,
   loadGlobalAnnotationsBatch,
   toggleGlobalStar,
-  setGlobalAcmgClassification,
-  setGlobalAcmgClassificationWithEvidence,
   upsertGlobalComment,
   getAnnotations
 } = useAnnotations()
+const { setGlobalAcmgClassification, setGlobalAcmgClassificationWithEvidence } = useAcmgUndo()
 const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
   useColumnPreferences('cohort-table')
-const { orderedColumns, visibleHeaders } = useCohortColumns(prefs)
+const { orderedColumns, visibleHeaders, isVisible: isColumnShown } = useCohortColumns(prefs)
 
 async function getCohortQueryBlockReason(): Promise<string | null> {
   return getCurrentUnsupportedReason('cohort.query')
@@ -251,36 +250,6 @@ let activeFlowBudget: PerfBudgetKey | undefined = undefined
 
 // Ref to CohortFilterBar for accessing DSL column filters
 const cohortFilterBarRef = ref<InstanceType<typeof CohortFilterBar> | null>(null)
-
-/**
- * True once `fetchColumnMeta` has resolved with at least one column.
- * `[]` is the not-yet-loaded sentinel; any populated array means the
- * cohort-metadata IPC round-trip finished. This is the cohort equivalent
- * of CaseView's `typeCountsLoaded`.
- *
- * Trade-off (Pass-9 #4): same "populated-array = loaded" convention as
- * CaseView — if the fetch fails, the filter bar never mounts (kept for parity).
- */
-const columnMetaLoaded = computed(() => columnMeta.value.length > 0)
-
-/**
- * A3 cohort parity (Pass-9 #3): deferred CohortFilterBar mount. Flips true
- * the first time cohort column metadata has loaded. Once true it never
- * resets, mirroring the CaseView `firstActivated` pattern so the filter bar
- * does not remount (and re-run its option load) across genome-build /
- * variant-type changes. Required by feedback_cohort_parity.md.
- */
-const firstActivated = ref(false)
-
-watch(
-  columnMetaLoaded,
-  (loaded) => {
-    if (loaded && !firstActivated.value) {
-      firstActivated.value = true
-    }
-  },
-  { immediate: true }
-)
 
 // Per-column text filters from CohortDataTable
 const cohortColumnFilters = ref<ColumnFiltersParam | undefined>(undefined)
@@ -343,6 +312,7 @@ const {
   reloadIfFiltersChanged,
   resetSort
 } = useOffsetPagination<CohortVariant>({
+  urlSortRoute: 'cohort',
   fetchPage: async ({ offset, limit, sortBy: sortItems, skipCount }) => {
     if (!api || !isActive.value) {
       return { data: [], total_count: 0 }
@@ -446,7 +416,7 @@ const exportToExcel = async (): Promise<void> => {
         message: `Exported to ${result.filePath}`,
         color: 'success',
         timeout: 3000,
-        actionText: 'Open folder',
+        actionText: isWebRuntime() ? null : 'Open folder', // web: no folder to reveal
         actionCallback: () => {
           if (result.filePath != null && result.filePath !== '')
             void api.export.revealInFolder(result.filePath)
@@ -779,7 +749,7 @@ defineExpose({ refresh })
   color: rgb(var(--v-theme-info));
   border: 1px solid color-mix(in srgb, rgb(var(--v-theme-info)) 25%, transparent);
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.4;
   /* Base tint + shimmer highlight band. The middle stop at 0.18 alpha is
      brighter than the 0.06 edges so the user sees a sweeping highlight. */

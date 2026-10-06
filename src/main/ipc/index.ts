@@ -1,4 +1,5 @@
-import { ipcMain } from 'electron'
+import { ipcMain as rawIpcMain } from 'electron'
+import { gateIpcMainOnDatabaseStartup } from '../database/startup-gate'
 import { mainLogger } from '../services/MainLogger'
 import type { HandlerDependencies } from './types'
 import { getDatabaseService, getDatabaseManager } from '../database'
@@ -55,6 +56,10 @@ export { initDbPool, destroyDbPool } from './dbPoolManager'
  * `HandlerDependencies` shape.
  */
 export function registerIpcHandlers(): void {
+  // Handlers are registered before the default database is opened (the
+  // window is shown first); every invoke waits for the startup gate.
+  const ipcMain = gateIpcMainOnDatabaseStartup(rawIpcMain)
+
   setActiveSessionResolver(() => {
     try {
       return getDatabaseManager().getCurrentSession()

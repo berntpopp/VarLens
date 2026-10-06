@@ -6,17 +6,15 @@ const cleanupState = vi.hoisted(() => ({
   nextDirectory: 0
 }))
 
-vi.mock('../../../src/main/import', () => ({
-  ZipExtractor: class {
-    async extract(zipPath: string): Promise<{
-      extractedFiles: string[]
-      errors: string[]
-      totalEntries: number
-    }> {
-      if (zipPath === 'broken.zip') throw new Error('archive decode failed')
-      return { extractedFiles: [], errors: [], totalEntries: 0 }
-    }
+vi.mock('../../../src/main/import/zip-worker-client', () => ({
+  extractZipOffThread: async (zipPath: string) => {
+    if (zipPath === 'broken.zip') throw new Error('archive decode failed')
+    return { extractedFiles: [], errors: [], totalEntries: 0 }
   },
+  testZipPasswordOffThread: async () => false
+}))
+
+vi.mock('../../../src/main/import', () => ({
   TempDirectoryManager: class {
     create(): string {
       cleanupState.nextDirectory += 1

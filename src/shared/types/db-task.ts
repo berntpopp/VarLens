@@ -17,6 +17,7 @@ export type DbTaskType =
   | 'variants:typeCounts'
   | 'variants:columnMeta'
   | 'variants:typesPresent'
+  | 'variants:exportCount'
   // Cohort
   | 'cohort:variants'
   | 'cohort:columnMeta'

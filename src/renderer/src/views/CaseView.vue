@@ -4,6 +4,7 @@ import { mdiStarFourPoints } from '@mdi/js'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { AnnotationScope } from '../../../shared/types/annotations'
 import type { VisibleTab, PerTypeTab } from '../../../shared/types/shortlist'
+import { getPresentTabTypes, type TabItem } from '../utils/case-tabs'
 import EmptyState from '../components/EmptyState.vue'
 import FilterToolbar from '../components/FilterToolbar.vue'
 import VariantTable from '../components/VariantTable.vue'
@@ -16,6 +17,7 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
 import { useApiService } from '../composables/useApiService'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useCaseTabUrlParam } from '../composables/useViewUrlBindings'
 
 const {
   selectedCaseId,
@@ -43,43 +45,13 @@ const hasCases = computed(() => caseCount.value > 0)
 // ── Variant type tabs ─────────────────────────────────────────
 
 /**
- * Single display-row descriptor used by `v-tabs`. `count` is `null` for
- * the synthetic Shortlist tab (it has no single row count) and a number
- * for every real per-type tab. `icon` is optional; only Shortlist uses
- * it today.
- */
-interface TabItem {
-  type: VisibleTab
-  label: string
-  count: number | null
-  icon?: string
-}
-
-/**
- * Returns the per-type tabs that should be shown for this case, in the
- * canonical display order (snv → sv → cnv → str). Folds `indel` into
- * `snv` because the UI presents them as a single "SNV/Indel" tab.
- *
- * Shared between `tabItems` (display) and `loadTypeCounts`
- * (default-selection) because SNV/indel folding is domain logic, not a
- * display-layer concern — keeping a single helper prevents the two
- * consumers from drifting.
- */
-function getPresentTabTypes(counts: Record<string, number>): PerTypeTab[] {
-  const present: PerTypeTab[] = []
-  if ((counts.snv ?? 0) + (counts.indel ?? 0) > 0) present.push('snv')
-  if ((counts.sv ?? 0) > 0) present.push('sv')
-  if ((counts.cnv ?? 0) > 0) present.push('cnv')
-  if ((counts.str ?? 0) > 0) present.push('str')
-  return present
-}
-
-/**
  * The currently visible tab in the case view. Narrowed to `VisibleTab`
  * so TypeScript rejects any attempt to pass `'shortlist'` into
  * filter/query code that only accepts real DB variant types.
  */
 const selectedVariantType = ref<VisibleTab>('snv')
+/** Tab chosen automatically on the last case switch (see the selectedCaseId watcher). */
+const autoSelectedTab = ref<VisibleTab>('snv')
 
 /**
  * Tracks the last non-shortlist tab the user (or the default-selection
@@ -147,11 +119,21 @@ watch(
   { immediate: true }
 )
 
+// URL `?tab=` (web deep links / back-forward); the URL wins over the default-tab rule.
+const countsLoading = ref(false)
+const { consumePendingTab } = useCaseTabUrlParam({
+  selectedCaseId,
+  selectedVariantType,
+  countsLoading,
+  availableTabs: () => tabItems.value.map((item) => item.type)
+})
+
 async function loadTypeCounts(caseId: number | null): Promise<void> {
   if (caseId === null || caseId === 0 || api === undefined) {
     typeCounts.value = {}
     return
   }
+  countsLoading.value = true
   try {
     typeCounts.value = unwrapIpcResult(await api.variants.typeCounts(caseId))
   } catch (error) {
@@ -166,11 +148,13 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
     )
     typeCounts.value = {}
     return
+  } finally {
+    countsLoading.value = false
   }
 
-  // Default-selection rule: if the caller hasn't explicitly picked a
-  // tab yet (`selectedVariantType.value === 'snv'` is the reset sentinel
-  // set by the case watcher below), consult the user preference
+  // Default-selection rule: if the user hasn't explicitly picked a tab
+  // since the case switch (the tab still equals `autoSelectedTab`, set by
+  // the case watcher below), consult the user preference
   // `settingsStore.defaultCaseTab`:
   //
   //   • 'shortlist' (default) → land on Shortlist AND seed
@@ -182,10 +166,22 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
   //     preserves the "open the non-empty tab" behavior the app had
   //     before the Shortlist feature.
   //
-  // Empty case (no variants) → leave the sentinel `'snv'` default.
+  // Empty case (no variants) → `'snv'` (no Shortlist tab exists).
   const presentTypes = getPresentTabTypes(typeCounts.value)
 
-  if (selectedVariantType.value === 'snv' && presentTypes.length >= 1) {
+  // A `?tab=` from the URL (deep link, back/forward) wins over the default rule.
+  const requestedTab = consumePendingTab(presentTypes)
+  if (requestedTab !== null) {
+    lastNonShortlistType.value = requestedTab === 'shortlist' ? presentTypes[0] : requestedTab
+    selectedVariantType.value = requestedTab
+    return
+  }
+
+  // Apply the default only if the user has not picked a tab since the switch.
+  if (selectedVariantType.value !== autoSelectedTab.value) return
+  if (presentTypes.length === 0) {
+    selectedVariantType.value = 'snv'
+  } else {
     // Always seed `lastNonShortlistType` regardless of preference so
     // toggling Shortlist → per-type → Shortlist works without a stale
     // VariantTable bind on sv-only / cnv+str cases.
@@ -204,9 +200,12 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
 watch(
   selectedCaseId,
   (newCaseId) => {
-    // Reset to the conventional default; loadTypeCounts may override this
-    // after the counts resolve if the case has zero SNV/indel variants.
-    selectedVariantType.value = 'snv'
+    // Land on the preferred tab right away. Resetting to 'snv' until the type
+    // counts arrived swapped Shortlist -> SNV table -> Shortlist on every case
+    // switch (visible flicker + a needless FilterToolbar mount); the counts
+    // only correct the choice for empty or snv-preference cases.
+    autoSelectedTab.value = settingsStore.defaultCaseTab === 'shortlist' ? 'shortlist' : 'snv'
+    selectedVariantType.value = autoSelectedTab.value
     void loadTypeCounts(newCaseId)
   },
   { immediate: true }
@@ -329,7 +328,7 @@ function handleDeselect(): void {
 
 function handleExportSuccess(data: {
   filePath: string
-  action: { text: string; callback: () => void }
+  action?: { text: string; callback: () => void }
 }): void {
   showSnack(`Exported to ${data.filePath}`, 'success', {
     timeout: APP_CONFIG.SNACKBAR_SUCCESS_MS,
@@ -392,6 +391,13 @@ defineExpose({
         </v-chip>
       </v-tab>
     </v-tabs>
+    <!-- Reserve the tab row while the first type counts load, so it does not
+         push the banner and table down when it appears (open-case shift). -->
+    <div
+      v-else-if="!typeCountsLoaded"
+      class="variant-type-tabs variant-type-tabs--pending"
+      aria-hidden="true"
+    />
 
     <!-- Persistent Proband & Phenotype Context Banner -->
     <ProbandContextBanner
@@ -477,11 +483,26 @@ defineExpose({
   background: rgb(var(--v-theme-surface));
 }
 
+/*
+ * Fills the viewport between the app bar (48px) and the app footer (its real
+ * height, published by Vuetify's layout as --v-layout-bottom). On short or
+ * zoomed viewports (200% zoom, 320px reflow) the stacked chrome no longer
+ * leaves room for the table, so the region keeps a minimum height and this
+ * container scrolls instead of clipping the table to zero rows
+ * (WCAG 1.4.4 / 1.4.10). On ordinary desktop heights nothing overflows and the
+ * table keeps scrolling internally under its sticky header.
+ */
 .case-content {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 48px - 32px);
-  overflow: hidden;
+  height: calc(100dvh - 48px - var(--v-layout-bottom, 32px));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Chrome rows keep their natural height; only the table region flexes. */
+.case-content > * {
+  flex-shrink: 0;
 }
 
 .variant-type-tabs {
@@ -491,7 +512,7 @@ defineExpose({
 }
 
 .variant-type-tabs :deep(.v-tab) {
-  min-height: 36px;
+  min-height: 2.25rem;
   text-transform: none;
   font-weight: 500;
 }
@@ -530,6 +551,12 @@ defineExpose({
   border-right: 1px solid rgba(var(--v-theme-outline), 0.3);
 }
 
+.variant-type-tabs--pending {
+  /* Same height as the compact v-tabs bar */
+  height: var(--v-tabs-height, 36px);
+  flex: 0 0 auto;
+}
+
 .variant-type-tabs :deep(.v-tab.shortlist-tab.v-tab--selected) {
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 14%, transparent);
 }
@@ -538,7 +565,9 @@ defineExpose({
  * Per-type region wraps the FilterToolbar + VariantTable. It must fill
  * the remaining vertical space of `.case-content` so VariantTable's
  * internal scroller sizes correctly, exactly like it did before the
- * wrapper was introduced.
+ * wrapper was introduced. The table's rem minimum (~5 rows plus header and
+ * pagination) only engages on short/zoomed viewports: the table then
+ * overflows this region and `.case-content` scrolls to reach it.
  */
 .per-type-region {
   display: flex;
@@ -547,8 +576,12 @@ defineExpose({
   min-height: 0;
 }
 
+.per-type-region > :deep(.table-container) {
+  min-height: 20rem;
+}
+
 .shortlist-region {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 20rem;
 }
 </style>

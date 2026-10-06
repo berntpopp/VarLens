@@ -1,0 +1,59 @@
+# npm audit report
+
+elliptic  *
+Elliptic Uses a Cryptographic Primitive with a Risky Implementation - https://github.com/advisories/GHSA-848j-6mx2-7j84
+fix available via `npm audit fix --force`
+Will install pdbe-molstar@3.1.3, which is a breaking change
+node_modules/elliptic
+  browserify-sign  >=2.4.0
+  Depends on vulnerable versions of elliptic
+  node_modules/browserify-sign
+    crypto-browserify  >=3.4.0
+    Depends on vulnerable versions of browserify-sign
+    Depends on vulnerable versions of create-ecdh
+    node_modules/crypto-browserify
+      pdbe-molstar  >=3.2.0-beta.1
+      Depends on vulnerable versions of crypto-browserify
+      node_modules/pdbe-molstar
+  create-ecdh  *
+  Depends on vulnerable versions of elliptic
+  node_modules/create-ecdh
+
+sprintf-js  *
+Severity: moderate
+sprintf-js vulnerable to denial of service through unbounded precision specifiers - https://github.com/advisories/GHSA-hp3w-g68c-fv3c
+fix available via `npm audit fix --force`
+Will install electron-builder@26.5.0, which is a breaking change
+node_modules/sprintf-js
+  roarr  <=2.15.4
+  Depends on vulnerable versions of sprintf-js
+  node_modules/roarr
+    global-agent  <=3.0.0
+    Depends on vulnerable versions of roarr
+    node_modules/global-agent
+      @electron/get  1.6.0 - 4.0.3
+      Depends on vulnerable versions of global-agent
+      node_modules/app-builder-lib/node_modules/@electron/get
+        app-builder-lib  26.6.0 - 27.0.0-alpha.2
+        Depends on vulnerable versions of @electron/get
+        Depends on vulnerable versions of dmg-builder
+        Depends on vulnerable versions of electron-builder-squirrel-windows
+        node_modules/app-builder-lib
+          dmg-builder  26.6.0 - 27.0.0-alpha.2
+          Depends on vulnerable versions of app-builder-lib
+          node_modules/dmg-builder
+            electron-builder  19.25.0 || 26.6.0 - 27.0.0-alpha.2
+            Depends on vulnerable versions of app-builder-lib
+            Depends on vulnerable versions of dmg-builder
+            node_modules/electron-builder
+          electron-builder-squirrel-windows  26.6.0 - 27.0.0-alpha.2
+          Depends on vulnerable versions of app-builder-lib
+          node_modules/electron-builder-squirrel-windows
+
+13 vulnerabilities (5 low, 8 moderate)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force

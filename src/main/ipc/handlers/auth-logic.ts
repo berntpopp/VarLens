@@ -98,6 +98,40 @@ export async function deactivateUser(
 }
 
 /**
+ * Re-enable a deactivated user. Only admins can perform this action.
+ */
+export async function reactivateUser(
+  username: string,
+  getDb: () => DatabaseService
+): Promise<void> {
+  const db = getDb()
+  const currentUser = db.user
+  if (!currentUser || currentUser.role !== 'admin') {
+    throw new Error('Only admins can re-activate users')
+  }
+  await db.auth.reactivateUser(username)
+}
+
+/**
+ * Change a user's role. Only admins; cannot change own role.
+ */
+export function setRole(
+  username: string,
+  role: 'admin' | 'user',
+  getDb: () => DatabaseService
+): void {
+  const db = getDb()
+  const currentUser = db.user
+  if (!currentUser || currentUser.role !== 'admin') {
+    throw new Error('Only admins can change roles')
+  }
+  if (currentUser.username === username) {
+    throw new Error('Cannot change your own role')
+  }
+  db.auth.setRole(username, role)
+}
+
+/**
  * Reset a user's password. Only admins can perform this action.
  */
 export async function resetPassword(

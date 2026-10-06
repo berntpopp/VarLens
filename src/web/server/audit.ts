@@ -10,7 +10,11 @@ const AUDITED_OVERRIDE_WRITE_METHODS = new Set<string>([
   'import:start',
   'import:startMultiFile',
   'batch-import:start',
-  'batch-import:cleanupZipTemp'
+  'batch-import:cleanupZipTemp',
+  'cases:startDelete',
+  'cases:deleteBatch',
+  'cases:deleteAll',
+  'jobs:cancel'
 ])
 
 const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
@@ -22,12 +26,18 @@ const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
   'auth:createUser',
   'auth:deactivateUser',
   'auth:resetPassword',
+  'auth:setRole',
+  'auth:reactivateUser',
   'database:capabilities',
   'database:health',
   'database:info',
   'database:getOverview',
   'database:recentList',
-  'database:overview'
+  'database:overview',
+  // Background-job status polls: ids and counters only, high frequency.
+  'jobs:get',
+  'jobs:list',
+  'jobs:progress'
 ])
 
 interface WebAuditEvent {
@@ -102,6 +112,30 @@ export async function recordAuthAudit(
   })
 }
 
+/**
+ * Audit admin user-management mutations that have no dedicated
+ * `auth_*` action type (create / role change / re-activate). Uses the
+ * generic `api_write` action on the `user_account` entity so no audit
+ * CHECK-constraint migration is needed; `method` disambiguates.
+ */
+export async function recordUserAdminAudit(
+  deps: DispatcherDeps,
+  params: { method: string; username: string; actor: string; role?: UserRole }
+): Promise<void> {
+  await appendWebAudit(deps, {
+    action_type: 'api_write',
+    entity_type: 'user_account',
+    entity_key: params.username,
+    user_name: params.actor,
+    new_value: {
+      success: true,
+      method: `auth:${params.method}`,
+      ...(params.role !== undefined ? { role: params.role } : {})
+    },
+    metadata: { source: 'web-auth-admin' }
+  })
+}
+
 export async function recordApiWriteAudit(
   deps: DispatcherDeps,
   params: { key: string; username?: string | null }
@@ -116,10 +150,29 @@ export async function recordApiWriteAudit(
   })
 }
 
+/**
+ * Read audits are the per-request hot path, so they go through the batched
+ * AuditBuffer when one is configured (flushed on interval/size/shutdown).
+ * Write and auth audits above stay synchronous: a mutation must not report
+ * success without its audit row.
+ */
 export async function recordApiReadAudit(
   deps: DispatcherDeps,
   params: { key: string; username?: string | null }
 ): Promise<void> {
+  if (deps.auditBuffer !== undefined) {
+    await deps.auditBuffer.enqueue({
+      action_type: 'api_read',
+      entity_type: 'api_call',
+      entity_key: params.key,
+      old_value: null,
+      new_value: { success: true, method: params.key },
+      user_name: params.username ?? null,
+      metadata: { source: 'web-dispatcher' },
+      occurred_at: Date.now()
+    })
+    return
+  }
   await appendWebAudit(deps, {
     action_type: 'api_read',
     entity_type: 'api_call',

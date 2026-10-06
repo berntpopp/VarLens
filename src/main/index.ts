@@ -13,6 +13,8 @@ import { markMilestone } from './services/MainPerfTrace'
 import { isMainWindowNavigationAllowed } from './window-navigation-policy'
 import { createContentSecurityPolicyHeaderHandler } from './security/csp-header'
 import { installWebContentsSecurityGuards } from './security/web-contents-guard'
+import { beginDatabaseStartup, completeDatabaseStartup } from './database/startup-gate'
+import { openDefaultDatabaseAfterWindow } from './startup-sequence'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -65,11 +67,13 @@ function getAppIcon(): Electron.NativeImage {
   return nativeImage.createFromPath(iconPath)
 }
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: APP_CONFIG.WINDOW_WIDTH,
     height: APP_CONFIG.WINDOW_HEIGHT,
+    minWidth: APP_CONFIG.WINDOW_MIN_WIDTH,
+    minHeight: APP_CONFIG.WINDOW_MIN_HEIGHT,
     show: false,
     backgroundColor: '#F0F4F8',
     title: 'Varlens',
@@ -125,6 +129,8 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
 }
 
 // Single instance lock
@@ -202,20 +208,11 @@ if (gotTheLock !== true) {
       return
     }
 
-    // Initialize database manager with default database.
-    // Wrapped in try/catch so a corrupted/locked default DB does not prevent
-    // the window from opening — the user can still switch databases from the UI.
-    try {
-      await initDatabaseManager()
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      mainLogger.error(`Failed to open default database: ${msg}`, 'database')
-      // Create manager without opening a database so the app can still start.
-      // The user will see "No database" and can pick/create one from the UI.
-      initDatabaseManagerSafe()
-    }
-
-    // Register IPC handlers
+    // Window first, database second (audit 05, M-6): IPC handlers are
+    // registered now but every invoke waits on the startup gate until the
+    // default database is open, so the renderer can paint its loading state
+    // while schema checks / migrations / key derivation run.
+    beginDatabaseStartup()
     registerIpcHandlers()
 
     // Default open or close DevTools by F12 in development
@@ -266,11 +263,29 @@ if (gotTheLock !== true) {
     )
 
     // Create window after security handlers are registered
-    createWindow()
+    const mainWindow = createWindow()
     markMilestone('window-created')
 
     ipcMain.once('perf:interactive', () => {
       markMilestone('renderer-interactive')
+    })
+
+    await openDefaultDatabaseAfterWindow(mainWindow, {
+      openDefault: async () => {
+        await initDatabaseManager()
+      },
+      // A corrupted/locked default DB must not keep the app from starting:
+      // create the manager without a database; the user can pick or create
+      // one from the UI.
+      onOpenFailed: (error) => {
+        const msg = error instanceof Error ? error.message : String(error)
+        mainLogger.error(`Failed to open default database: ${msg}`, 'database')
+        initDatabaseManagerSafe()
+      },
+      onSettled: () => {
+        completeDatabaseStartup()
+        markMilestone('database-ready')
+      }
     })
 
     // Deferred by 5s to avoid competing with startup data loading and rendering
