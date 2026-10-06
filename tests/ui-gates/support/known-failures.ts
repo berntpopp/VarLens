@@ -9,9 +9,8 @@
  * Key format: `axe:<theme>:<state>` or `lighthouse:<step>:<check>`.
  */
 export const KNOWN_FAILURES: Readonly<Record<string, string>> = {
-  // TODO(track 2, table render perf; listed with mobile TBT in the
-  // 2026-10-06 follow-ups): Case -> Cohort switch shifts the layout, CLS ~0.08.
-  'lighthouse:switch-cohort:cls': 'Case->Cohort switch CLS ~0.08 (track 2)'
+  // (empty) axe:dark:home fixed by track 4; lighthouse:switch-cohort:cls
+  // fixed by track 2 (0.08 -> 0.007).
 }
 
 export function expectedFailureFor(key: string): string | undefined {
