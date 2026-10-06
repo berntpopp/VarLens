@@ -32,7 +32,9 @@ export const vepManifest = {
   cancel: sharedExempt('aborts the caller’s own in-flight lookup', {
     capability: 'vepEnrichment'
   }),
-  clearCache: sharedWrite({ authz: 'admin', capability: 'vepEnrichment', degraded: SHARED_CACHE }),
+  // Admin-only cache control carries no feature capability: an analyst's
+  // missing admin role must not switch the whole lookup feature off.
+  clearCache: sharedWrite({ authz: 'admin', degraded: SHARED_CACHE }),
   getCacheStats: sharedExempt('cache size counters only', {
     capability: 'vepEnrichment',
     degraded: SHARED_CACHE
@@ -41,25 +43,17 @@ export const vepManifest = {
 
 export const hpoManifest = {
   search: sharedRead({ capability: 'hpoSearch' }),
-  clearCache: sharedWrite({ authz: 'admin', capability: 'hpoSearch' })
+  clearCache: sharedWrite({ authz: 'admin' })
 } satisfies DomainManifest<'hpo'>
 
 export const myvariantManifest = {
   fetch: sharedExempt(EGRESS_AUDITED, { capability: 'myvariantEnrichment' }),
-  clearCache: sharedWrite({
-    authz: 'admin',
-    capability: 'myvariantEnrichment',
-    degraded: SHARED_CACHE
-  })
+  clearCache: sharedWrite({ authz: 'admin', degraded: SHARED_CACHE })
 } satisfies DomainManifest<'myvariant'>
 
 export const spliceaiManifest = {
   fetch: sharedExempt(EGRESS_AUDITED, { capability: 'spliceaiEnrichment' }),
-  clearCache: sharedWrite({
-    authz: 'admin',
-    capability: 'spliceaiEnrichment',
-    degraded: SHARED_CACHE
-  })
+  clearCache: sharedWrite({ authz: 'admin', degraded: SHARED_CACHE })
 } satisfies DomainManifest<'spliceai'>
 
 export const proteinManifest = {
