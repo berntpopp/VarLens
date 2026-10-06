@@ -1,21 +1,31 @@
 import {
   AutocompleteSchema,
+  PanelAppImportSchema,
+  PanelAppSearchSchema,
   PanelCreateSchema,
   PanelExportBedSchema,
   PanelIdSchema,
   PanelUpdateSchema,
+  StringDbGenerateSchema,
   ValidateSymbolsSchema
 } from '../../../shared/types/ipc-schemas'
 import {
   autocomplete,
   generateBedContentForSession,
+  generateStringDbForSession,
   getPanelWithGenes,
+  importPanelAppForSession,
+  searchPanelApp,
   validateSymbols
 } from '../../../main/ipc/handlers/panels-logic'
+import { runReferenceLookup } from '../reference-services/route-helpers'
 import { getWebGeneReferenceService } from '../web-gene-reference'
 import { PANEL_BED_DOWNLOAD_PATH } from '../panel-bed-download'
 import { badRequest } from './common'
 import type { OverrideHandler } from './types'
+
+/** Web has no per-process panel interval cache to invalidate. */
+const NO_CACHE = { clearPanelIntervalCache: () => undefined }
 
 export function buildPanelOverrides(): Record<string, OverrideHandler> {
   return {
@@ -61,6 +71,81 @@ export function buildPanelOverrides(): Record<string, OverrideHandler> {
           validated.data.limit,
           getWebGeneReferenceService()
         )
+      }
+    },
+
+    // PanelApp / STRING: outbound lookups behind the egress policy
+    // (services `panelapp` / `stringdb`, off by default). Panel creation and
+    // symbol resolution reuse the desktop session helpers.
+    'panels:searchPanelApp': {
+      async handle(args, request, reply, deps) {
+        const parsed = PanelAppSearchSchema.safeParse({
+          keyword: args[0],
+          region: args[1] ?? undefined
+        })
+        if (!parsed.success) {
+          return badRequest(reply, 'invalid-panelapp-search', 'keyword must be 1-200 characters')
+        }
+        const { keyword, region } = parsed.data
+        return await runReferenceLookup({
+          deps,
+          request,
+          reply,
+          service: 'panelapp',
+          method: 'panels:searchPanelApp',
+          identifier: `${region}:${keyword}`,
+          run: (clients) => searchPanelApp(keyword, region, clients.panelApp())
+        })
+      }
+    },
+
+    'panels:importPanelApp': {
+      async handle(args, request, reply, deps) {
+        const parsed = PanelAppImportSchema.safeParse(args[0])
+        if (!parsed.success) {
+          return badRequest(reply, 'invalid-panelapp-import', 'Invalid PanelApp import parameters')
+        }
+        return await runReferenceLookup({
+          deps,
+          request,
+          reply,
+          service: 'panelapp',
+          method: 'panels:importPanelApp',
+          identifier: `${parsed.data.region}:${parsed.data.panelId}`,
+          run: (clients) =>
+            importPanelAppForSession(
+              deps.session,
+              parsed.data,
+              getWebGeneReferenceService(),
+              clients.panelApp(),
+              NO_CACHE
+            )
+        })
+      }
+    },
+
+    'panels:generateStringDb': {
+      async handle(args, request, reply, deps) {
+        const parsed = StringDbGenerateSchema.safeParse(args[0])
+        if (!parsed.success) {
+          return badRequest(reply, 'invalid-stringdb', 'Invalid STRING generation parameters')
+        }
+        return await runReferenceLookup({
+          deps,
+          request,
+          reply,
+          service: 'stringdb',
+          method: 'panels:generateStringDb',
+          identifier: parsed.data.seedGenes.join(','),
+          run: (clients) =>
+            generateStringDbForSession(
+              deps.session,
+              parsed.data,
+              getWebGeneReferenceService(),
+              clients.stringDb(),
+              NO_CACHE
+            )
+        })
       }
     },
 

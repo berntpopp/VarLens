@@ -42,36 +42,40 @@
           New Panel
         </v-btn>
         <v-btn
-          v-if="webOnlyNote === null"
           color="primary"
           variant="outlined"
           density="comfortable"
           size="small"
           class="ml-2"
           :prepend-icon="mdiDownload"
+          :disabled="panelAppReason !== null"
+          data-testid="panels-import-panelapp"
           @click="panelAppImportOpen = true"
         >
           Import PanelApp
         </v-btn>
         <v-btn
-          v-if="webOnlyNote === null"
           color="primary"
           variant="outlined"
           density="comfortable"
           size="small"
           class="ml-2"
           :prepend-icon="mdiShareVariant"
+          :disabled="stringDbReason !== null"
+          data-testid="panels-generate-stringdb"
           @click="stringDbGenerateOpen = true"
         >
           StringDB Generate
         </v-btn>
       </v-toolbar>
       <div
-        v-if="webOnlyNote !== null"
-        class="text-body-small text-medium-emphasis px-4 py-2"
+        v-for="note in externalLookupNotes"
+        :key="note"
+        class="text-body-small text-medium-emphasis px-4 py-1"
+        role="note"
         data-testid="panels-web-note"
       >
-        {{ webOnlyNote }}
+        {{ note }}
       </div>
 
       <v-card-text class="pa-0">
@@ -135,7 +139,6 @@
                     <v-tooltip activator="parent" location="top">Copy</v-tooltip>
                   </v-btn>
                   <v-btn
-                    v-if="webOnlyNote === null"
                     aria-label="Export"
                     size="small"
                     variant="text"
@@ -175,7 +178,7 @@
           {{ formatDate(geneRefInfo.builtAt * 1000) }}
         </span>
         <v-btn
-          v-if="webOnlyNote === null"
+          v-if="geneRefUpdateAvailable"
           size="x-small"
           variant="text"
           color="primary"
@@ -261,6 +264,7 @@
 import { ref, computed, watch } from 'vue'
 import { logService } from '../../services/LogService'
 import { isRuntimeFeatureAvailable } from '../../utils/runtime-features'
+import { useReferenceServicesStore } from '../../stores/referenceServicesStore'
 import PanelEditorDialog from './PanelEditorDialog.vue'
 import PanelAppImportDialog from './PanelAppImportDialog.vue'
 import StringDbGenerateDialog from './StringDbGenerateDialog.vue'
@@ -303,12 +307,20 @@ const panelAppImportOpen = ref(false)
 const stringDbGenerateOpen = ref(false)
 const geneRefInfo = ref<GeneRefInfo | null>(null)
 const geneRefUpdating = ref(false)
-// PanelApp / StringDB / BED export / gene-reference update have no web
-// routes (outbound APIs, desktop file paths): hide them with one note.
-const webOnlyNote = isRuntimeFeatureAvailable('panelAppImport')
-  ? null
-  : 'PanelApp import, StringDB generation, BED export and gene-reference updates are ' +
-    'available in the desktop app only for now.'
+// PanelApp / STRING are outbound lookups: always on in desktop, an
+// admin-enabled server setting in web (buttons stay visible but disabled,
+// with the reason shown). The gene reference is part of the web image.
+const referenceServices = useReferenceServicesStore()
+void referenceServices.ensureLoaded()
+const panelAppReason = computed(() => referenceServices.reason('panelapp'))
+const stringDbReason = computed(() => referenceServices.reason('stringdb'))
+const externalLookupNotes = computed(() => {
+  const notes = [panelAppReason.value, stringDbReason.value].filter(
+    (note): note is string => note !== null
+  )
+  return [...new Set(notes)]
+})
+const geneRefUpdateAvailable = isRuntimeFeatureAvailable('geneRefUpdate')
 const errorSnackbar = ref(false)
 const errorSnackbarText = ref('')
 const exportAssemblyDialogOpen = ref(false)

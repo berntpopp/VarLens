@@ -45,14 +45,18 @@ import { buildCasesOverrides } from './routes/cases'
 import { buildCohortOverrides } from './routes/cohort'
 import { buildDatabaseOverrides } from './routes/database'
 import { buildExportOverrides } from './routes/export'
+import { buildGnomadOverrides } from './routes/gnomad'
 import { buildGeneListOverrides } from './routes/gene-lists'
 import { buildGeneRefOverrides } from './routes/gene-ref'
 import { buildHpoOverrides } from './routes/hpo'
 import { buildImportOverrides } from './routes/import'
 import { buildJobOverrides } from './routes/jobs'
+import { buildMyVariantOverrides } from './routes/myvariant'
 import { buildPanelOverrides } from './routes/panels'
 import { buildProteinOverrides } from './routes/protein'
+import { buildReferenceServicesOverrides } from './routes/reference-services'
 import { buildRegionFileOverrides } from './routes/region-files'
+import { buildSpliceAiOverrides } from './routes/spliceai'
 import { buildTranscriptOverrides } from './routes/transcripts'
 import { buildVepOverrides } from './routes/vep'
 import { buildVariantOverrides } from './routes/variants'
@@ -237,12 +241,16 @@ function buildOverrides(): Record<string, OverrideHandler> {
     ...buildExportOverrides(),
     ...buildGeneListOverrides(),
     ...buildGeneRefOverrides(),
+    ...buildGnomadOverrides(),
     ...buildHpoOverrides(),
     ...buildImportOverrides(),
     ...buildJobOverrides(),
+    ...buildMyVariantOverrides(),
     ...buildPanelOverrides(),
     ...buildProteinOverrides(),
+    ...buildReferenceServicesOverrides(),
     ...buildRegionFileOverrides(),
+    ...buildSpliceAiOverrides(),
     ...buildTranscriptOverrides(),
     ...buildVepOverrides(),
     ...buildVariantOverrides()

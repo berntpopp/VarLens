@@ -7,6 +7,7 @@ import type { JobRunner } from '../../../main/services/jobs/JobRunner'
 import type { PostgresCaseDeleteJobs } from '../jobs/case-delete-jobs'
 import type { WebEventHub } from '../events'
 import type { AppMetrics } from '../metrics'
+import type { WebReferenceServices } from '../reference-services/reference-services'
 
 export interface DispatcherDeps {
   session: StorageSession
@@ -27,6 +28,11 @@ export interface DispatcherDeps {
     runner: JobRunner
     caseDelete: PostgresCaseDeleteJobs
   }
+  /**
+   * External reference lookups behind the admin egress policy
+   * (src/web/server/reference-services/). Absent → those methods answer 501.
+   */
+  referenceServices?: WebReferenceServices
 }
 
 export interface InvokeBodyPayload {

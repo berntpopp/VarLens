@@ -8,6 +8,7 @@
 
 import type { WindowAPI, CommentCategory } from '../../../shared/types/api'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
+import { mockReferenceServicesApi } from './referenceServicesMock'
 import { mockCases } from './fixtures/cases'
 import { mockVariants, mockFilterOptions } from './fixtures/variants'
 
@@ -1223,5 +1224,6 @@ export const mockApi: WindowAPI = {
     progress: async () => null,
     cancel: async () => ({ requested: false }),
     onChanged: () => () => {}
-  }
+  },
+  referenceServices: mockReferenceServicesApi
 }

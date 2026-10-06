@@ -137,6 +137,7 @@
 </template>
 
 <script setup lang="ts">
+import { isReferenceServiceEnabled } from '../../stores/referenceServicesStore'
 import { ref, computed, watch } from 'vue'
 import { mdiClose, mdiAlertCircleOutline, mdiDna } from '@mdi/js'
 import { useProteinData } from '../../composables/useProteinData'
@@ -221,7 +222,7 @@ watch(
   geneSymbol,
   async (gene) => {
     clinvarVariants.value = []
-    if (gene !== null && gene !== '' && api !== undefined) {
+    if (gene !== null && gene !== '' && api !== undefined && isReferenceServiceEnabled('gnomad')) {
       clinvarLoading.value = true
       try {
         const result = unwrapIpcResult(await api.gnomad.getClinVarVariants(gene))

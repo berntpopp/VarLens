@@ -14,7 +14,11 @@ const AUDITED_OVERRIDE_WRITE_METHODS = new Set<string>([
   'cases:startDelete',
   'cases:deleteBatch',
   'cases:deleteAll',
-  'jobs:cancel'
+  'jobs:cancel',
+  // Create a panel from an external source (the lookup itself is audited
+  // separately by the reference-services egress audit).
+  'panels:importPanelApp',
+  'panels:generateStringDb'
 ])
 
 const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
@@ -34,6 +38,10 @@ const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
   'database:getOverview',
   'database:recentList',
   'database:overview',
+  // Egress policy: status is a capability read; setPolicy writes its own
+  // api_write row with the change (routes/reference-services.ts).
+  'reference-services:status',
+  'reference-services:setPolicy',
   // Background-job status polls: ids and counters only, high frequency.
   'jobs:get',
   'jobs:list',

@@ -19,6 +19,15 @@
       @export-png="handleExportPng"
     />
 
+    <div
+      v-if="gnomadReason !== null"
+      class="px-3 py-1 text-body-small text-medium-emphasis"
+      role="note"
+      data-testid="gnomad-unavailable-reason"
+    >
+      {{ gnomadReason }}
+    </div>
+
     <!-- Loading bar for gnomAD / ClinVar fetch -->
     <v-progress-linear
       v-if="gnomadLoading || clinvarLoading"
@@ -68,6 +77,7 @@
 </template>
 
 <script setup lang="ts">
+import { useReferenceServicesStore } from '../../stores/referenceServicesStore'
 import { ref, computed, watch, type ComponentPublicInstance } from 'vue'
 import LollipopToolbar from './LollipopToolbar.vue'
 import LollipopPlot from './LollipopPlot.vue'
@@ -124,8 +134,13 @@ const plotRef = ref<ComponentPublicInstance<{
   exportPng: () => Promise<Blob | null>
 }> | null>(null)
 
-// gnomAD state - ON by default
-const showGnomad = ref(true)
+// gnomAD + ClinVar come from the `gnomad` reference service: always on in
+// desktop, an admin-enabled server lookup in web.
+const referenceServices = useReferenceServicesStore()
+const gnomadReason = computed(() => referenceServices.reason('gnomad'))
+
+// gnomAD state - ON by default (when the service is available)
+const showGnomad = ref(referenceServices.isEnabled('gnomad'))
 const gnomadLoading = ref(false)
 const gnomadVariants = ref<GnomadVariant[]>([])
 
@@ -180,7 +195,7 @@ watch(
 )
 
 async function fetchGnomad(gene: string, generation?: number): Promise<void> {
-  if (api === undefined) return
+  if (api === undefined || !referenceServices.isEnabled('gnomad')) return
   gnomadLoading.value = true
   try {
     const result = unwrapIpcResult(await api.gnomad.getVariants(gene))
@@ -208,6 +223,7 @@ async function fetchGnomad(gene: string, generation?: number): Promise<void> {
 }
 
 async function handleToggleGnomad(): Promise<void> {
+  if (!referenceServices.isEnabled('gnomad')) return
   showGnomad.value = !showGnomad.value
 
   // Fetch gnomAD variants when toggling on if not already loaded

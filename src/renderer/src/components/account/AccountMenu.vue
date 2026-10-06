@@ -31,6 +31,13 @@
           data-testid="open-user-management"
           @click="usersOpen = true"
         />
+        <v-list-item
+          v-if="authStore.isAdmin && isWebRuntime()"
+          :prepend-icon="mdiCloudLockOutline"
+          title="External lookups"
+          data-testid="open-external-lookups"
+          @click="lookupsOpen = true"
+        />
         <v-list-subheader class="account-menu__group-start">Theme</v-list-subheader>
         <v-list-item
           v-for="opt in THEME_PREFERENCE_OPTIONS"
@@ -62,6 +69,19 @@
         <UserManagement v-if="usersOpen" />
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="lookupsOpen" max-width="720" scrollable aria-label="External lookups">
+      <v-card>
+        <div class="d-flex justify-end pa-1">
+          <IconButton
+            label="Close external lookups"
+            :icon="mdiClose"
+            @click="lookupsOpen = false"
+          />
+        </div>
+        <ExternalLookupsSettings v-if="lookupsOpen" />
+      </v-card>
+    </v-dialog>
   </template>
 </template>
 
@@ -78,6 +98,7 @@ import {
   mdiAccountMultiple,
   mdiCheck,
   mdiClose,
+  mdiCloudLockOutline,
   mdiLockReset,
   mdiLogout
 } from '@mdi/js'
@@ -91,6 +112,7 @@ import { logService } from '../../services/LogService'
 // Dialog bodies load on first open so the toolbar chunk stays small.
 const AccountPasswordDialog = defineAsyncComponent(() => import('./AccountPasswordDialog.vue'))
 const UserManagement = defineAsyncComponent(() => import('../UserManagement.vue'))
+const ExternalLookupsSettings = defineAsyncComponent(() => import('./ExternalLookupsSettings.vue'))
 
 /** Empty path keeps list items aligned without drawing an icon. */
 const mdiBlankIcon = 'M0 0'
@@ -99,6 +121,7 @@ const authStore = useAuthStore()
 const settings = useSettingsStore()
 const passwordOpen = ref(false)
 const usersOpen = ref(false)
+const lookupsOpen = ref(false)
 
 const visible = computed(() => authStore.accountsEnabled && authStore.currentUser !== null)
 const roleLabel = computed(() => (authStore.isAdmin ? 'Administrator' : 'User'))

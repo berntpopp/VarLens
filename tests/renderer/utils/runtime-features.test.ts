@@ -23,7 +23,7 @@ describe('runtime feature gating', () => {
     }
   })
 
-  it('names HPO search explicitly rather than implying no matches', () => {
-    expect(runtimeFeatureUnavailableReason('hpoSearch', true)).toMatch(/HPO term search/)
+  it('keeps only the gene-reference update desktop-only', () => {
+    expect(ALL).toEqual(['geneRefUpdate'])
   })
 })

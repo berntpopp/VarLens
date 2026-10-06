@@ -54,6 +54,7 @@ import { registerStatic } from './server/static'
 import { registerResponseCompression } from './server/compression'
 import { registerRobotsTxt } from './server/robots'
 import { createWebRuntimeServices } from './server/runtime-services'
+import { createWebReferenceServices } from './server/reference-services/create'
 import { registerPanelBedDownloadRoute } from './server/panel-bed-download'
 import {
   type AppMetrics,
@@ -216,7 +217,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     events,
     metrics,
     auditBuffer: runtime.auditBuffer,
-    jobs: runtime.jobs
+    jobs: runtime.jobs,
+    referenceServices: createWebReferenceServices({
+      pool,
+      schema: pgConfig.schema,
+      session: session as StorageSession
+    })
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
   registerImportUploadRoutes(app, dispatcherDeps)

@@ -78,6 +78,22 @@ function sanitizeAuditField(key: string, value: unknown): unknown {
       return typeof value === 'string' && value.length <= 120 ? value : undefined
     case 'audited':
       return value === false ? false : true
+    // External reference lookups (web egress audit): which service, what
+    // identifier left the server (coordinates / gene symbol / keyword), to
+    // which hosts, and whether the policy allowed it.
+    case 'service':
+    case 'outcome':
+      return typeof value === 'string' && value.length <= 40 ? value : undefined
+    case 'identifier':
+      return typeof value === 'string' && value.length <= 500 ? value : undefined
+    case 'hosts':
+      return Array.isArray(value) && value.every((host) => typeof host === 'string')
+        ? value.slice(0, 10)
+        : undefined
+    case 'update':
+      return isPlainObject(value) && Object.values(value).every((v) => typeof v === 'boolean')
+        ? value
+        : undefined
     default:
       return undefined
   }

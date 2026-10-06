@@ -19,6 +19,7 @@ import type {
 } from '../../../shared/types/api-enrichment'
 import type { VepTranscriptConsequence, VepColocatedVariant } from '../../../shared/types/vep'
 import { useApiService } from './useApiService'
+import { isReferenceServiceEnabled } from '../stores/referenceServicesStore'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 
 export function useVepEnrichment() {
@@ -152,10 +153,14 @@ export function useVepEnrichment() {
     spliceaiData.value = null
 
     // Fetch all APIs in parallel
+    // Web: each lookup is an admin-controlled egress service; skip the ones
+    // that are off rather than collecting a server refusal.
+    const skipped = Promise.reject(new Error('lookup disabled'))
+    skipped.catch(() => undefined)
     const [vepResult, myvariantResult, spliceaiResult] = await Promise.allSettled([
-      api.vep.fetch(chr, pos, ref, alt),
-      api.myvariant.fetch(chr, pos, ref, alt),
-      api.spliceai.fetch(chr, pos, ref, alt)
+      isReferenceServiceEnabled('vep') ? api.vep.fetch(chr, pos, ref, alt) : skipped,
+      isReferenceServiceEnabled('myvariant') ? api.myvariant.fetch(chr, pos, ref, alt) : skipped,
+      isReferenceServiceEnabled('spliceai') ? api.spliceai.fetch(chr, pos, ref, alt) : skipped
     ])
 
     // Discard results if the variant changed while we were fetching

@@ -60,6 +60,7 @@
             :variant-ref="variant.ref"
             :variant-alt="variant.alt"
             :fetch-vep="vepFetchAvailable ? fetchVep : undefined"
+            :fetch-vep-unavailable-reason="referenceServices.reason('vep')"
             class="mb-4"
             @transcript-switched="emit('variant-updated')"
           />
@@ -200,6 +201,7 @@
       <ProteinViewUnavailableDialog
         v-else-if="!proteinViewerAvailable"
         v-model="proteinModalOpen"
+        :reason="referenceServices.reason('protein')"
       />
     </v-card>
   </v-navigation-drawer>
@@ -259,7 +261,7 @@ import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
-import { isProteinViewerAvailable, isRuntimeFeatureAvailable } from '../utils/runtime-features'
+import { useReferenceServicesStore } from '../stores/referenceServicesStore'
 import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 
 interface Props {
@@ -282,9 +284,12 @@ usePanelFocus(() => props.open, headingRef)
 
 // Protein visualization modal state
 const proteinModalOpen = ref(false)
-const proteinViewerAvailable = isProteinViewerAvailable()
-// vep:fetch answers 501 in web: hide the on-demand button instead of failing.
-const vepFetchAvailable = isRuntimeFeatureAvailable('vepEnrichment')
+// External lookups: always on in desktop; an admin-controlled, default-off
+// server setting in web (fail-closed until the status has loaded).
+const referenceServices = useReferenceServicesStore()
+void referenceServices.ensureLoaded()
+const proteinViewerAvailable = computed(() => referenceServices.isEnabled('protein'))
+const vepFetchAvailable = computed(() => referenceServices.isEnabled('vep'))
 const proteinModalMounted = useMountOnFirstOpen(() => proteinModalOpen.value)
 
 function openProteinView(): void {

@@ -107,6 +107,7 @@ import type { CasesDomainContract } from '../ipc/domains/cases'
 import type { DatabaseDomainContract } from '../ipc/domains/database'
 import type { DebugApi } from '../ipc/domains/debug'
 import type { JobsApi } from '../ipc/domains/jobs'
+import type { ReferenceServicesApi } from '../ipc/domains/reference-services'
 import type { CaseMetadataDomainContract } from '../ipc/domains/case-metadata'
 import type { ImportDomainContract } from '../ipc/domains/import'
 import type { AuthDomainContract } from '../ipc/domains/auth'
@@ -826,11 +827,14 @@ export interface WindowAPI {
   perf: PerfAPI
   debug: DebugAPI
   jobs: JobsAPI
+  referenceServices: ReferenceServicesAPI
 }
 
 export type DebugAPI = DebugApi
 
 export type JobsAPI = JobsApi
+
+export type ReferenceServicesAPI = ReferenceServicesApi
 
 export interface PresetsAPI {
   list: () => Promise<IpcResult<FilterPreset[]>>

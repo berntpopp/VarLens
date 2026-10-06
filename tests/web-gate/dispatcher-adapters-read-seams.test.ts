@@ -218,6 +218,25 @@ describe('web dispatcher adapters: read seams', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 
+  test('external reference lookups answer 501 when the server has no ReferenceServices', async () => {
+    const { deps, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+
+    const result = await overrides['vep:fetch'].handle(
+      ['chr1', 100, 'A', 'T'],
+      {} as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(501)
+    expect(result).toEqual({
+      error: 'unsupported-web-capability',
+      capability: 'vep:fetch',
+      message: 'vep:fetch is not available in web mode yet.'
+    })
+  })
+
   test('reference API fixture-backed methods reject invalid args as bad requests', async () => {
     const previousFixtureFlag = process.env.VARLENS_WEB_PARITY_FIXTURES
     const previousFixtureDir = process.env.VARLENS_API_FIXTURES_DIR

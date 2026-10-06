@@ -7,6 +7,10 @@ import * as directives from 'vuetify/directives'
 
 import VariantDetailsPanel from '../../../src/renderer/src/components/VariantDetailsPanel.vue'
 import { createMockApi } from '../../utils/mock-api'
+import {
+  buildReferenceServicesStatus,
+  uniformReferenceServicePolicy
+} from '../../../src/shared/ipc/domains/reference-services'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -68,8 +72,11 @@ describe('VariantDetailsPanel protein view mounting', () => {
     expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(true)
   })
 
-  it('in web mode shows an explicit unavailable state and never calls protein endpoints', async () => {
+  it('in web mode with the protein lookup off: unavailable state with the reason, no protein calls', async () => {
     testWindow.__VARLENS_WEB__ = true
+    api.referenceServices.status.mockResolvedValue(
+      buildReferenceServicesStatus('web', uniformReferenceServicePolicy(false))
+    )
     const wrapper = mountPanel()
     wrapper.findComponent({ name: 'VariantIdentitySection' }).vm.$emit('open-protein-view')
     await flushPromises()
@@ -77,5 +84,25 @@ describe('VariantDetailsPanel protein view mounting', () => {
     expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'ProteinViewUnavailableDialog' }).exists()).toBe(true)
     expect(api.protein.getMapping).not.toHaveBeenCalled()
+    expect(
+      wrapper.findComponent({ name: 'ProteinViewUnavailableDialog' }).attributes('reason')
+    ).toMatch(/Protein view .* turned off on this server/)
+  })
+
+  it('in web mode with the protein lookup enabled by an admin: mounts the protein modal', async () => {
+    testWindow.__VARLENS_WEB__ = true
+    api.referenceServices.status.mockResolvedValue(
+      buildReferenceServicesStatus('web', {
+        ...uniformReferenceServicePolicy(false),
+        protein: true
+      })
+    )
+    const wrapper = mountPanel()
+    await flushPromises()
+    wrapper.findComponent({ name: 'VariantIdentitySection' }).vm.$emit('open-protein-view')
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ProteinViewUnavailableDialog' }).exists()).toBe(false)
   })
 })
