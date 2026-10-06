@@ -181,12 +181,12 @@ describe('AuthService', () => {
 
     it('should change role and refuse to demote the last active admin', async () => {
       await authService.createUser('user1', 'User One', 'pass', 'admin1')
-      authService.setRole('user1', 'admin')
+      await authService.setRole('user1', 'admin')
       expect(authService.getUser('user1')?.role).toBe('admin')
-      authService.setRole('admin1', 'analyst')
+      await authService.setRole('admin1', 'analyst')
       expect(authService.getUser('admin1')?.role).toBe('analyst')
-      expect(() => authService.setRole('user1', 'analyst')).toThrow(/last active admin/)
-      expect(() => authService.setRole('ghost', 'admin')).toThrow(/User not found/)
+      await expect(authService.setRole('user1', 'analyst')).rejects.toThrow(/last active admin/)
+      await expect(authService.setRole('ghost', 'admin')).rejects.toThrow(/User not found/)
     })
 
     it('should re-activate a deactivated user', async () => {

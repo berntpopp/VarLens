@@ -15,6 +15,7 @@ import {
   CHR_RANK_VARIANTS_INDEX
 } from '../../../src/main/database/chr-rank-indexes'
 import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
+import { COHORT_KEYSET_INDEX } from '../../../src/shared/sql/cohort-keyset'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { DROP_INDEXES, RECREATE_INDEXES } from '../../../src/main/workers/import-pipeline'
 import { chrRankSql } from '../../../src/shared/sql/chromosome-order'
@@ -142,12 +143,10 @@ describe('migration v33 — chr-rank indexes', () => {
         }>
       ).map((r) => r.name)
       expect(names).toEqual(
-        expect.arrayContaining([
-          CHR_RANK_VARIANTS_INDEX,
-          CHR_RANK_CVS_INDEX,
-          CHR_RANK_CVS_CARRIER_INDEX
-        ])
+        expect.arrayContaining([CHR_RANK_VARIANTS_INDEX, CHR_RANK_CVS_INDEX, COHORT_KEYSET_INDEX])
       )
+      // v37 replaces the mixed-direction carrier index with the keyset index.
+      expect(names).not.toContain(CHR_RANK_CVS_CARRIER_INDEX)
       const variantIndexSql = (
         db.prepare(`SELECT sql FROM sqlite_master WHERE name = ?`).get(CHR_RANK_VARIANTS_INDEX) as {
           sql: string
@@ -164,11 +163,7 @@ describe('migration v33 — chr-rank indexes', () => {
     try {
       initializeSchema(db)
       runMigrations(db)
-      for (const name of [
-        CHR_RANK_VARIANTS_INDEX,
-        CHR_RANK_CVS_INDEX,
-        CHR_RANK_CVS_CARRIER_INDEX
-      ]) {
+      for (const name of [CHR_RANK_VARIANTS_INDEX, CHR_RANK_CVS_INDEX, COHORT_KEYSET_INDEX]) {
         db.exec(`DROP INDEX ${name}`)
       }
       db.pragma('user_version = 32')
@@ -180,7 +175,8 @@ describe('migration v33 — chr-rank indexes', () => {
           `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'index' AND name LIKE '%chr_rank%'`
         )
         .get() as { n: number }
-      expect(count.n).toBe(3)
+      // v33 re-creates three, v36 drops the superseded carrier index again.
+      expect(count.n).toBe(2)
     } finally {
       db.close()
     }

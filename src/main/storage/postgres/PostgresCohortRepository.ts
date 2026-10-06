@@ -21,11 +21,7 @@ import {
 import { quoteIdentifier } from './identifiers'
 import { runNamed, runNamedDynamic } from './named-query'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
-import {
-  buildSummaryCountSql,
-  buildSummaryPageSql,
-  buildSummaryQueryParts
-} from './postgres-cohort-summary-query'
+import { querySummaryPage } from './postgres-cohort-summary-page'
 
 type CohortPool = Pick<Pool, 'query' | 'connect'>
 type CohortClient = Pick<PoolClient, 'query' | 'release'>
@@ -291,58 +287,21 @@ export class PostgresCohortRepository {
     return readCohortSummaryStatus({ pool: this.pool, schema: this.schema })
   }
 
-  /**
-   * C4 summary-page read. Builds predicate parts against `cohort_variant_summary`
-   * via buildSummaryQueryParts and runs count + page in one materialised path.
-   * Returns null when the predicate set is not materialisable so the caller can
-   * fall back to live aggregation.
-   */
+  /** C4 summary-page read (+ keyset paging); null → live-aggregation fallback. */
   private async querySummaryPage(
     params: CohortSearchParams,
     totalCases: number
   ): Promise<CohortPaginatedResult | null> {
-    const summary = buildSummaryQueryParts(params, totalCases)
-    if (summary.unavailable) return null
-
-    const { whereParts, orderBy, values } = summary.parts
-    const table = this.tbl('cohort_variant_summary')
-
-    let totalCount = 0
-    if (params._count_needed !== false) {
-      const countResult = await runNamedDynamic<{ total_count?: unknown }>(this.pool as Pool, {
-        baseName: 'cohort:summary_count',
-        text: buildSummaryCountSql(table, whereParts),
-        values,
-        schema: this.schema
-      })
-      totalCount = toNumber(
-        (countResult.rows[0] as { total_count?: unknown } | undefined)?.total_count
-      )
-    }
-
-    const limit = params.limit ?? 50
-    const offset = params.offset ?? 0
-    const dataValues = [...values, limit, offset]
-    const dataResult = await runNamedDynamic<Record<string, unknown>>(this.pool as Pool, {
-      baseName: 'cohort:summary_page',
-      text: buildSummaryPageSql(
-        table,
-        whereParts,
-        orderBy,
-        totalCases,
-        dataValues.length - 1,
-        dataValues.length
-      ),
-      values: dataValues,
-      schema: this.schema
-    })
-
-    return {
-      data: (dataResult.rows as Array<Record<string, unknown>>).map((row) =>
-        this.toCohortVariant(row, totalCases)
-      ),
-      total_count: totalCount
-    }
+    return querySummaryPage(
+      {
+        pool: this.pool as Pool,
+        schema: this.schema,
+        table: this.tbl('cohort_variant_summary'),
+        toVariant: (row) => this.toCohortVariant(row, totalCases)
+      },
+      params,
+      totalCases
+    )
   }
 
   /** Live-aggregation page query (fallback path when the summary is unavailable). */

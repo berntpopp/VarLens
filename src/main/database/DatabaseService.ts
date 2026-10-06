@@ -34,6 +34,7 @@ import type { PanelRepository } from './PanelRepository'
 import type { AnalysisGroupRepository } from './AnalysisGroupRepository'
 import type { ShortlistService } from './ShortlistService'
 import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
+import { applyConnectionPragmas } from './connection-pragmas'
 
 /**
  * DatabaseService class
@@ -72,30 +73,9 @@ export class DatabaseService {
     try {
       this.db = new Database(dbPath)
 
-      // CRITICAL: Encryption key must be the FIRST pragma issued
-      if (this.encrypted) {
-        const safeKey = encryptionKey!.split("'").join("''")
-        this.db.pragma(`key='${safeKey}'`)
-      }
-
-      // Set page size for new databases (no-op on existing ones with data).
-      // Must be issued BEFORE journal_mode = WAL and any table creation.
-      this.db.pragma(`page_size = ${DATABASE_CONFIG.PAGE_SIZE}`)
-
-      // Enable WAL mode for better concurrent read performance
-      this.db.pragma('journal_mode = WAL')
-
-      // Enable foreign key constraints
-      this.db.pragma('foreign_keys = ON')
-
-      // Performance PRAGMAs
-      this.db.pragma('synchronous = NORMAL')
-      this.db.pragma(`busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}`)
-      this.db.pragma(`cache_size = ${DATABASE_CONFIG.CACHE_SIZE_KB}`)
-      this.db.pragma('temp_store = MEMORY')
-      this.db.pragma(`mmap_size = ${DATABASE_CONFIG.MMAP_SIZE_BYTES}`)
-      this.db.pragma(`analysis_limit = ${DATABASE_CONFIG.ANALYSIS_LIMIT}`)
-      this.db.pragma('journal_size_limit = 6144000') // 6 MB — prevents WAL bloat
+      // Key first, then page size / WAL / performance pragmas (shared with
+      // the migration worker so both open the file identically).
+      applyConnectionPragmas(this.db, encryptionKey)
 
       // Initialize database schema (tables, indexes, FTS5)
       initializeSchema(this.db)

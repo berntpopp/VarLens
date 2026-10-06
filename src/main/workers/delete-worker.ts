@@ -1,11 +1,14 @@
 /**
  * Worker thread for background case deletion.
  *
- * Runs the whole delete job off the Electron main thread: per-case deletes
- * (each in its own transaction together with the internal allele-frequency
- * decrement), then the FTS and cohort-summary rebuilds. Progress is posted
- * after every case and every phase; a `cancel` message stops the job between
- * cases (the loop yields to this worker's event loop after each case).
+ * Runs the whole delete job off the Electron main thread. Each case is deleted
+ * in its own transaction together with its internal allele-frequency
+ * decrement, its FTS rows (row triggers) and its cohort-summary contribution
+ * (incremental, see cohort-summary-case-removal.ts) -- no global FTS or
+ * summary rebuild (audit 05, D-1). Delete-all, or a summary that was already
+ * stale, ends with one chunked full summary rebuild. Progress is posted after
+ * every case and phase; a `cancel` message stops the job between cases or
+ * between chromosomes of the rebuild (which then rolls back, summary stale).
  */
 import { parentPort } from 'worker_threads'
 import Database from 'better-sqlite3-multiple-ciphers'
@@ -15,7 +18,8 @@ import type { CaseDeletePhase } from '../../shared/types/case-delete-job'
 import { createFTSTriggers } from '../database/schema'
 import { assertNotHexLiteralKey } from '../database/sqlcipher-key-guard'
 import { MARK_STALE_SQL } from '../../shared/sql/cohort-summary-rebuild'
-import { rebuildFts, rebuildCohortSummary, DROP_FTS_TRIGGERS } from './worker-db'
+import { openCaseSummaryRemoval } from '../database/cohort-summary-case-removal'
+import { rebuildCohortSummaryCancellable } from './cancellable-summary-rebuild'
 import { deleteCasesIncrementally, listAllCaseIds } from './delete-operations'
 import type { DeleteWorkerRequest, DeleteWorkerResponse } from './delete-worker-protocol'
 
@@ -48,27 +52,41 @@ async function runDelete(msg: Extract<DeleteWorkerRequest, { type: 'start' }>): 
 
   try {
     db = openDatabase(msg.dbPath, msg.encryptionKey)
-    const ids = msg.mode === 'all' ? listAllCaseIds(db) : (msg.ids ?? [])
+    const deletingAll = msg.mode === 'all'
+    const ids = deletingAll ? listAllCaseIds(db) : (msg.ids ?? [])
 
-    // Drop FTS triggers before bulk delete; rebuilt once at the end.
-    db.exec(DROP_FTS_TRIGGERS)
-    markCohortSummaryStale(db)
+    // FTS stays incremental: the row triggers delete each variant's index
+    // entries as its case cascades away (no global 'rebuild', audit D-1).
+    db.exec(createFTSTriggers)
+    // Single/batch deletes patch the cohort summary per case inside the
+    // delete transaction; delete-all and an already-stale summary fall back
+    // to one (cancellable) full rebuild at the end.
+    const summary = deletingAll ? null : openCaseSummaryRemoval(db)
+    if (summary === null) markCohortSummaryStale(db)
 
     const result = await deleteCasesIncrementally(db, ids, {
-      deletingAll: msg.mode === 'all',
+      deletingAll,
+      summary,
       isCancelled: () => cancelled,
       onProgress: (current, total) => postPhase('deleting', current, total)
     })
 
-    postPhase('rebuilding-search-index', result.deleted, ids.length)
-    rebuildFts(db)
-    postPhase('rebuilding-cohort-summary', result.deleted, ids.length)
-    rebuildCohortSummary(db)
+    let summaryStale = false
+    if (summary === null) {
+      postPhase('rebuilding-cohort-summary', result.deleted, ids.length)
+      const outcome = await rebuildCohortSummaryCancellable(db, () => cancelled)
+      summaryStale = outcome === 'cancelled'
+    }
     postPhase('finalizing', result.deleted, ids.length)
+    optimizeAfterDelete(db)
 
-    post({ type: 'complete', deleted: result.deleted, cancelled: result.cancelled })
+    post({
+      type: 'complete',
+      deleted: result.deleted,
+      cancelled: result.cancelled || cancelled,
+      summaryStale
+    })
   } catch (error) {
-    if (db) restoreFtsTriggers(db)
     post({ type: 'error', error: error instanceof Error ? error.message : String(error) })
   } finally {
     if (db) {
@@ -84,23 +102,25 @@ async function runDelete(msg: Extract<DeleteWorkerRequest, { type: 'start' }>): 
   }
 }
 
+/** Bounded statistics refresh instead of the old whole-database ANALYZE. */
+function optimizeAfterDelete(db: DatabaseType): void {
+  try {
+    db.pragma('analysis_limit = 1000')
+    db.pragma('optimize')
+  } catch (e) {
+    console.warn(
+      '[delete-worker] PRAGMA optimize failed:',
+      e instanceof Error ? e.message : String(e)
+    )
+  }
+}
+
 function markCohortSummaryStale(db: DatabaseType): void {
   try {
     db.exec(MARK_STALE_SQL)
   } catch (e) {
     console.warn(
       '[delete-worker] Failed to mark cohort summary as stale (table may not exist):',
-      e instanceof Error ? e.message : String(e)
-    )
-  }
-}
-
-function restoreFtsTriggers(db: DatabaseType): void {
-  try {
-    db.exec(createFTSTriggers)
-  } catch (e) {
-    console.warn(
-      '[delete-worker] Failed to restore FTS triggers after error:',
       e instanceof Error ? e.message : String(e)
     )
   }

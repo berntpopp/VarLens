@@ -117,7 +117,11 @@ export async function reactivateUser(
 /**
  * Change a user's role. Only admins; cannot change own role.
  */
-export function setRole(username: string, role: UserRole, getDb: () => DatabaseService): void {
+export async function setRole(
+  username: string,
+  role: UserRole,
+  getDb: () => DatabaseService
+): Promise<void> {
   const db = getDb()
   const currentUser = db.user
   if (!currentUser || currentUser.role !== 'admin') {
@@ -126,7 +130,7 @@ export function setRole(username: string, role: UserRole, getDb: () => DatabaseS
   if (currentUser.username === username) {
     throw new Error('Cannot change your own role')
   }
-  db.auth.setRole(username, role)
+  await db.auth.setRole(username, role)
 }
 
 /**
