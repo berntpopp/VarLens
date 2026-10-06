@@ -76,32 +76,55 @@ export function prepareStatements(db: DatabaseType) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
-  const insertCnvStmt = db.prepare(`
-    INSERT INTO variant_cnv (variant_id, copy_number, copy_number_quality,
-      homozygosity_ref, homozygosity_alt, sm, bin_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `)
+  const insertCnvStmt = db.prepare(
+    'INSERT INTO variant_cnv (variant_id, copy_number, copy_number_quality, homozygosity_ref, homozygosity_alt, sm, bin_count) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  )
 
   const insertStrStmt = db.prepare(`
-    INSERT INTO variant_str (variant_id, repeat_id, variant_catalog_id,
-      repeat_unit, display_repeat_unit, ref_copies, alt_copies, repeat_length,
-      str_status, normal_max, pathologic_min, disease, inheritance_mode,
+    INSERT INTO variant_str (variant_id, repeat_id, variant_catalog_id, repeat_unit, display_repeat_unit,
+      ref_copies, alt_copies, repeat_length, str_status, normal_max, pathologic_min, disease, inheritance_mode,
       source_display, rank_score, locus_coverage, support_type, confidence_interval)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
-  const insertTranscriptStmt = db.prepare(`
-    INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol,
-      consequence, func, cdna, aa_change, hpo_sim_score, moi, is_selected)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
+  const insertTranscriptStmt = db.prepare(
+    'INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change, hpo_sim_score, moi, is_selected) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  )
 
-  const insertCaseStmt = db.prepare(`
-    INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build)
-    VALUES (?, ?, ?, 0, ?, ?)
-  `)
+  const insertCaseStmt = db.prepare(
+    'INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build) VALUES (?, ?, ?, 0, ?, ?)'
+  )
 
-  const deleteCaseStmt = db.prepare('DELETE FROM cases WHERE id = ?')
+  // Child deletion statements for atomic case cleanup when foreign_keys = OFF (F01)
+  const deleteChildSqls = [
+    'DELETE FROM variant_transcripts WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
+    'DELETE FROM variant_sv WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
+    'DELETE FROM variant_cnv WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
+    'DELETE FROM variant_str WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
+    'DELETE FROM case_variant_annotations WHERE case_id = ?',
+    'DELETE FROM case_data_info WHERE case_id = ?',
+    'DELETE FROM variants WHERE case_id = ?',
+    'DELETE FROM cases WHERE id = ?'
+  ]
+  const deleteCaseStmts = deleteChildSqls
+    .map((sql) => {
+      try {
+        return db.prepare(sql)
+      } catch {
+        return null
+      }
+    })
+    .filter((s): s is NonNullable<typeof s> => s !== null)
+
+  const runDeleteCase = (caseId: number) => {
+    let lastResult = { changes: 0, lastInsertRowid: 0 }
+    for (const stmt of deleteCaseStmts) {
+      lastResult = stmt.run(caseId) as { changes: number; lastInsertRowid: number }
+    }
+    return lastResult
+  }
+  const deleteCase = Object.assign(runDeleteCase, { run: runDeleteCase })
+
   const getCaseByNameStmt = db.prepare('SELECT id FROM cases WHERE name = ?')
   const updateVariantCountStmt = db.prepare('UPDATE cases SET variant_count = ? WHERE id = ?')
 
@@ -109,8 +132,8 @@ export function prepareStatements(db: DatabaseType) {
   let insertDataInfoStmt: { run: (...args: unknown[]) => void } | null = null
   try {
     insertDataInfoStmt = db.prepare<unknown[]>(`
-      INSERT OR REPLACE INTO case_data_info (case_id, import_file_name, import_file_type)
-      VALUES (?, ?, ?)
+      INSERT OR REPLACE INTO case_data_info (case_id, import_file_name, import_file_type, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
     `)
   } catch (e) {
     console.warn(
@@ -122,38 +145,15 @@ export function prepareStatements(db: DatabaseType) {
   const insertBatch = db.transaction((caseId: number, variants: Array<Record<string, unknown>>) => {
     for (const v of variants) {
       const result = insertVariantStmt.run(
-        caseId,
-        v.chr,
-        v.pos,
-        v.ref,
-        v.alt,
-        v.gene_symbol ?? null,
-        v.omim_mim_number ?? null,
-        v.consequence ?? null,
-        v.gnomad_af ?? null,
-        v.cadd ?? null,
-        v.clinvar ?? null,
-        v.gt_num ?? null,
-        v.func ?? null,
-        v.qual ?? null,
-        v.hpo_sim_score ?? null,
-        v.transcript ?? null,
-        v.cdna ?? null,
-        v.aa_change ?? null,
-        v.moi ?? null,
-        v.gq ?? null,
-        v.dp ?? null,
-        v.ad_ref ?? null,
-        v.ad_alt ?? null,
-        v.ab ?? null,
-        v.filter ?? null,
-        v.info_json ?? null,
-        v.source_format ?? null,
-        v.variant_type ?? 'snv',
-        v.end_pos ?? null,
-        v.sv_type ?? null,
-        v.sv_length ?? null,
-        v.caller ?? null
+        caseId, v.chr, v.pos, v.ref, v.alt,
+        v.gene_symbol ?? null, v.omim_mim_number ?? null, v.consequence ?? null,
+        v.gnomad_af ?? null, v.cadd ?? null, v.clinvar ?? null, v.gt_num ?? null,
+        v.func ?? null, v.qual ?? null, v.hpo_sim_score ?? null, v.transcript ?? null,
+        v.cdna ?? null, v.aa_change ?? null, v.moi ?? null, v.gq ?? null,
+        v.dp ?? null, v.ad_ref ?? null, v.ad_alt ?? null, v.ab ?? null,
+        v.filter ?? null, v.info_json ?? null, v.source_format ?? null,
+        v.variant_type ?? 'snv', v.end_pos ?? null, v.sv_type ?? null,
+        v.sv_length ?? null, v.caller ?? null
       )
 
       const variantId = result.lastInsertRowid
@@ -162,16 +162,9 @@ export function prepareStatements(db: DatabaseType) {
       if (transcripts && transcripts.length > 0) {
         for (const t of transcripts) {
           insertTranscriptStmt.run(
-            variantId,
-            t.transcript_id,
-            t.gene_symbol,
-            t.consequence,
-            t.func,
-            t.cdna,
-            t.aa_change,
-            t.hpo_sim_score,
-            t.moi,
-            t.is_selected
+            variantId, t.transcript_id, t.gene_symbol, t.consequence,
+            t.func, t.cdna, t.aa_change, t.hpo_sim_score, t.moi,
+            t.is_selected === true || t.is_selected === 1 ? 1 : 0
           )
         }
       }
@@ -180,57 +173,23 @@ export function prepareStatements(db: DatabaseType) {
       if (v._sv !== undefined) {
         const s = v._sv as Record<string, unknown>
         insertSvStmt.run(
-          variantId,
-          s.sv_is_precise,
-          s.cipos_left,
-          s.cipos_right,
-          s.ciend_left,
-          s.ciend_right,
-          s.support,
-          s.coverage,
-          s.strand,
-          s.stdev_len,
-          s.stdev_pos,
-          s.vaf,
-          s.dr,
-          s.dv,
-          s.pe_support,
-          s.sr_support,
-          s.event_id,
-          s.mate_id
+          variantId, s.sv_is_precise, s.cipos_left, s.cipos_right, s.ciend_left, s.ciend_right,
+          s.support, s.coverage, s.strand, s.stdev_len, s.stdev_pos, s.vaf,
+          s.dr, s.dv, s.pe_support, s.sr_support, s.event_id, s.mate_id
         )
       } else if (v._cnv !== undefined) {
         const c = v._cnv as Record<string, unknown>
         insertCnvStmt.run(
-          variantId,
-          c.copy_number,
-          c.copy_number_quality,
-          c.homozygosity_ref,
-          c.homozygosity_alt,
-          c.sm,
-          c.bin_count
+          variantId, c.copy_number, c.copy_number_quality,
+          c.homozygosity_ref, c.homozygosity_alt, c.sm, c.bin_count
         )
       } else if (v._str !== undefined) {
         const t = v._str as Record<string, unknown>
         insertStrStmt.run(
-          variantId,
-          t.repeat_id,
-          t.variant_catalog_id,
-          t.repeat_unit,
-          t.display_repeat_unit,
-          t.ref_copies,
-          t.alt_copies,
-          t.repeat_length,
-          t.str_status,
-          t.normal_max,
-          t.pathologic_min,
-          t.disease,
-          t.inheritance_mode,
-          t.source_display,
-          t.rank_score,
-          t.locus_coverage,
-          t.support_type,
-          t.confidence_interval
+          variantId, t.repeat_id, t.variant_catalog_id, t.repeat_unit, t.display_repeat_unit,
+          t.ref_copies, t.alt_copies, t.repeat_length, t.str_status, t.normal_max,
+          t.pathologic_min, t.disease, t.inheritance_mode, t.source_display,
+          t.rank_score, t.locus_coverage, t.support_type, t.confidence_interval
         )
       }
     }
@@ -254,13 +213,14 @@ export function prepareStatements(db: DatabaseType) {
 
   return {
     insertCase: insertCaseStmt,
-    deleteCase: deleteCaseStmt,
+    deleteCase,
     getCaseByName: getCaseByNameStmt,
     updateVariantCount: updateVariantCountStmt,
     insertDataInfo: {
       run: (caseId: number, fileName: string, format: string) => {
         if (insertDataInfoStmt) {
-          insertDataInfoStmt.run(caseId, fileName, format)
+          const now = Date.now()
+          insertDataInfoStmt.run(caseId, fileName, format, now, now)
         }
       }
     },

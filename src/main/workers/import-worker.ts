@@ -23,131 +23,135 @@ import {
 } from './import-pipeline'
 import { ImportSkipTracker } from './import-skip-tracker'
 
-if (!parentPort) throw new Error('Must be run as worker thread')
-
-const port = parentPort
+export interface ImportWorkerPort {
+  postMessage: (message: WorkerMessage) => void
+}
 
 let cancelled = false
 
-port.on('message', async (msg: MainMessage) => {
-  if (msg.type === 'cancel') {
-    cancelled = true
-    return
+export async function runImportSession(
+  msg: Extract<MainMessage, { type: 'start' }>,
+  port: ImportWorkerPort,
+  isCancelled: () => boolean = () => cancelled
+): Promise<void> {
+  let db: DatabaseType | null = null
+  let terminalMessage: WorkerMessage | undefined
+  const ftsFinalizationState: ImportFtsFinalizationState = {
+    ftsTriggersDropped: false,
+    ftsRebuilt: false
   }
 
-  if (msg.type === 'start') {
-    cancelled = false
-    let db: DatabaseType | null = null
-    let terminalMessage: WorkerMessage | undefined
-    const ftsFinalizationState: ImportFtsFinalizationState = {
-      ftsTriggersDropped: false,
-      ftsRebuilt: false
+  try {
+    db = openWorkerDatabase(msg.dbPath, msg.encryptionKey)
+
+    const stmts = prepareStatements(db)
+
+    // Drop FTS triggers and non-essential indexes at start (batch optimization)
+    db.exec(DROP_FTS_TRIGGERS)
+    ftsFinalizationState.ftsTriggersDropped = true
+    db.exec(DROP_INDEXES)
+
+    // Mark cohort summary as stale before import
+    try {
+      db.exec(MARK_STALE_SQL)
+    } catch (e) {
+      console.warn(
+        '[import-worker] Failed to mark cohort summary as stale (table may not exist yet):',
+        e instanceof Error ? e.message : String(e)
+      )
     }
 
-    try {
-      db = openWorkerDatabase(msg.dbPath, msg.encryptionKey)
+    const totalFiles = msg.files.length
+    const batchSize = msg.batchSize ?? DATABASE_CONFIG.BATCH_INSERT_SIZE
+    const importedInBatch = new Set<string>()
+    const results: Array<{
+      filePath: string
+      fileName: string
+      caseName: string
+      status: 'success' | 'failed' | 'skipped'
+      variantCount?: number
+      error?: string
+    }> = []
+    let succeeded = 0
+    let failed = 0
+    let skipped = 0
+    let lastProgressTime = 0
 
-      const stmts = prepareStatements(db)
-
-      // Drop FTS triggers and non-essential indexes at start (batch optimization)
-      db.exec(DROP_FTS_TRIGGERS)
-      ftsFinalizationState.ftsTriggersDropped = true
-      db.exec(DROP_INDEXES)
-
-      // Mark cohort summary as stale before import
-      try {
-        db.exec(MARK_STALE_SQL)
-      } catch (e) {
-        console.warn(
-          '[import-worker] Failed to mark cohort summary as stale (table may not exist yet):',
-          e instanceof Error ? e.message : String(e)
-        )
+    for (let fileIndex = 0; fileIndex < totalFiles; fileIndex++) {
+      if (isCancelled()) {
+        for (let j = fileIndex; j < totalFiles; j++) {
+          const f = msg.files[j]
+          results.push({
+            filePath: f.filePath,
+            fileName: basename(f.filePath),
+            caseName: f.caseName,
+            status: 'skipped',
+            error: 'Cancelled by user'
+          })
+          skipped++
+        }
+        break
       }
 
-      const totalFiles = msg.files.length
-      const batchSize = msg.batchSize ?? DATABASE_CONFIG.BATCH_INSERT_SIZE
-      const importedInBatch = new Set<string>()
-      const results: Array<{
-        filePath: string
-        fileName: string
-        caseName: string
-        status: 'success' | 'failed' | 'skipped'
-        variantCount?: number
-        error?: string
-      }> = []
-      let succeeded = 0
-      let failed = 0
-      let skipped = 0
-      let lastProgressTime = 0
+      const file = msg.files[fileIndex]
+      const fileName = basename(file.filePath)
 
-      for (let fileIndex = 0; fileIndex < totalFiles; fileIndex++) {
-        if (cancelled) {
-          for (let j = fileIndex; j < totalFiles; j++) {
-            const f = msg.files[j]
+      try {
+        // Validate file existence and accessibility before touching database or deleting existing case (F02)
+        const fileStat = statSync(file.filePath)
+        if (!fileStat.isFile()) {
+          throw new Error(`File is not a regular file: ${file.filePath}`)
+        }
+        const fileSize = fileStat.size
+
+        // Handle duplicates (database + in-batch)
+        const existing = stmts.getCaseByName.get(file.caseName) as { id: number } | undefined
+        const isInBatchDuplicate = importedInBatch.has(file.caseName)
+
+        if (existing || file.isDuplicate || isInBatchDuplicate) {
+          if (file.duplicateStrategy === 'skip') {
             results.push({
-              filePath: f.filePath,
-              fileName: basename(f.filePath),
-              caseName: f.caseName,
+              filePath: file.filePath,
+              fileName,
+              caseName: file.caseName,
               status: 'skipped',
-              error: 'Cancelled by user'
+              error: 'Duplicate case name'
             })
             skipped++
+            continue
+          } else if (existing) {
+            stmts.deleteCase.run(existing.id)
           }
-          break
         }
 
-        const file = msg.files[fileIndex]
-        const fileName = basename(file.filePath)
+        // Create case record
+        // Use VCF genome build override if provided, otherwise default to GRCh38
+        const genomeBuild = file.vcfGenomeBuild ?? 'GRCh38'
+        const caseResult = stmts.insertCase.run(
+          file.caseName,
+          file.filePath,
+          fileSize,
+          Date.now(),
+          genomeBuild
+        )
+        const caseId = Number(caseResult.lastInsertRowid)
+
+        const startTime = Date.now()
+        let variantCount = 0
+        const skipTracker = new ImportSkipTracker()
 
         try {
-          // Handle duplicates (database + in-batch)
-          const existing = stmts.getCaseByName.get(file.caseName) as { id: number } | undefined
-          const isInBatchDuplicate = importedInBatch.has(file.caseName)
-
-          if (existing || file.isDuplicate || isInBatchDuplicate) {
-            if (file.duplicateStrategy === 'skip') {
-              results.push({
-                filePath: file.filePath,
-                fileName,
-                caseName: file.caseName,
-                status: 'skipped',
-                error: 'Duplicate case name'
-              })
-              skipped++
-              continue
-            } else if (existing) {
-              stmts.deleteCase.run(existing.id)
-            }
-          }
-
-          // Create case record
-          const fileSize = statSync(file.filePath).size
-          // Use VCF genome build override if provided, otherwise default to GRCh38
-          const genomeBuild = file.vcfGenomeBuild ?? 'GRCh38'
-          const caseResult = stmts.insertCase.run(
-            file.caseName,
-            file.filePath,
-            fileSize,
-            Date.now(),
-            genomeBuild
+          // Emit parsing phase progress
+          sendProgress(
+            port,
+            fileIndex,
+            totalFiles,
+            fileName,
+            Math.round((fileIndex / totalFiles) * 100),
+            'parsing',
+            0,
+            0
           )
-          const caseId = Number(caseResult.lastInsertRowid)
-
-          const startTime = Date.now()
-          let variantCount = 0
-          const skipTracker = new ImportSkipTracker()
-
-          try {
-            // Emit parsing phase progress
-            sendProgress(
-              fileIndex,
-              totalFiles,
-              fileName,
-              Math.round((fileIndex / totalFiles) * 100),
-              'parsing',
-              0,
-              0
-            )
 
             const formatInfo = await detectFormat(file.filePath)
 
@@ -266,14 +270,14 @@ port.on('message', async (msg: MainMessage) => {
       }
 
       // FTS rebuild + ANALYZE + optimize
-      sendProgress(totalFiles, totalFiles, '', 99, 'finalizing', 0, 0)
+      sendProgress(port, totalFiles, totalFiles, '', 99, 'finalizing', 0, 0)
       rebuildFts(db)
       ftsFinalizationState.ftsRebuilt = true
       rebuildCohortSummary(db)
 
       const completeMsg: WorkerMessage = {
         type: 'complete',
-        results: { succeeded, failed, skipped, cancelled, details: results }
+        results: { succeeded, failed, skipped, cancelled: isCancelled(), details: results }
       }
       terminalMessage = completeMsg
     } catch (fatalError) {
@@ -331,10 +335,25 @@ port.on('message', async (msg: MainMessage) => {
         (message) => port.postMessage(message)
       )
     }
-  }
-})
+}
+
+if (parentPort) {
+  const port = parentPort
+  port.on('message', async (msg: MainMessage) => {
+    if (msg.type === 'cancel') {
+      cancelled = true
+      return
+    }
+
+    if (msg.type === 'start') {
+      cancelled = false
+      await runImportSession(msg, port, () => cancelled)
+    }
+  })
+}
 
 function sendProgress(
+  port: ImportWorkerPort,
   fileIndex: number,
   totalFiles: number,
   fileName: string,
