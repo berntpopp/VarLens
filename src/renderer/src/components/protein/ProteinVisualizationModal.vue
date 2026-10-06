@@ -57,7 +57,12 @@
       </v-toolbar>
 
       <!-- Loading state -->
-      <v-progress-linear v-if="proteinData.loading.value" indeterminate color="primary" />
+      <v-progress-linear
+        v-if="proteinData.loading.value"
+        indeterminate
+        color="primary"
+        aria-label="Loading protein data"
+      />
 
       <!-- Content area -->
       <div class="flex-grow-1" style="min-height: 0">

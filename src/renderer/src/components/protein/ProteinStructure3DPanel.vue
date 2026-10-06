@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { readableTextOn } from '../../utils/readable-text-color'
 /**
  * ProteinStructure3DPanel - Assembly component for 3D protein structure viewer
  * Combines StructureControls, MolstarViewer, and a variant sidebar
@@ -188,8 +189,12 @@ function onClinvarClick(cv: ClinVarVariant): void {
                   size="x-small"
                   label
                   :variant="activeClinvar.has(chip.key) ? 'flat' : 'outlined'"
-                  :color="activeClinvar.has(chip.key) ? chip.color : 'grey-lighten-1'"
-                  :style="{ opacity: activeClinvar.has(chip.key) ? 1 : 0.5 }"
+                  :color="activeClinvar.has(chip.key) ? chip.color : 'grey-darken-2'"
+                  :style="
+                    activeClinvar.has(chip.key) && chip.color.startsWith('#')
+                      ? { color: readableTextOn(chip.color) }
+                      : undefined
+                  "
                   @click="toggleClinvar(chip.key)"
                 >
                   {{ chip.label }} ({{ clinvarCounts[chip.key] ?? 0 }})
@@ -208,7 +213,7 @@ function onClinvarClick(cv: ClinVarVariant): void {
               size="x-small"
               label
               variant="outlined"
-              color="grey-darken-1"
+              color="grey-darken-3"
               @click="clinvarAll()"
             >
               All
@@ -284,6 +289,11 @@ function onClinvarClick(cv: ClinVarVariant): void {
 </template>
 
 <style scoped>
+/* Vuetify dims list subtitles to medium emphasis, below 4.5:1 on this panel. */
+.structure-3d-panel :deep(.v-list-item-subtitle) {
+  opacity: 0.92;
+}
+
 .structure-3d-panel {
   background-color: #faf8f6;
   border-radius: 8px;

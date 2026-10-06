@@ -31,6 +31,7 @@
     <!-- Loading bar for gnomAD / ClinVar fetch -->
     <v-progress-linear
       v-if="gnomadLoading || clinvarLoading"
+      aria-label="Loading gnomAD and ClinVar variants"
       indeterminate
       color="info"
       height="2"

@@ -74,8 +74,11 @@
       <template v-if="showGnomad">
         <v-menu :close-on-content-click="false" location="bottom" offset="4">
           <template #activator="{ props: menuProps }">
+            <!-- A real <button>: aria-haspopup is not allowed on the default <span> (axe). -->
             <v-chip
               v-bind="menuProps"
+              tag="button"
+              type="button"
               size="small"
               label
               variant="outlined"
@@ -83,7 +86,7 @@
               :prepend-icon="mdiFilterVariant"
             >
               AF &le; {{ formatAf(gnomadMaxAf) }}
-              <span v-if="gnomadTotal > 0" class="ml-1 text-medium-emphasis">
+              <span v-if="gnomadTotal > 0" class="ml-1">
                 ({{ gnomadCount }}/{{ gnomadTotal }})
               </span>
             </v-chip>
