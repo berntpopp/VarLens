@@ -446,7 +446,7 @@ const exportToExcel = async (): Promise<void> => {
         message: `Exported to ${result.filePath}`,
         color: 'success',
         timeout: 3000,
-        actionText: 'Open folder',
+        actionText: isWebRuntime() ? null : 'Open folder', // web: no folder to reveal
         actionCallback: () => {
           if (result.filePath != null && result.filePath !== '')
             void api.export.revealInFolder(result.filePath)

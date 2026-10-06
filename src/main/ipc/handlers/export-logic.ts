@@ -22,7 +22,7 @@ import { csvEscape, formatCellValue } from '../../workers/export-renderer'
 const EXPORT_HARD_LIMIT = 100_000
 
 // Cohort export column headers
-const COHORT_EXPORT_COLUMNS = [
+export const COHORT_EXPORT_COLUMNS: readonly ExportColumn[] = [
   { key: 'chr', header: 'Chromosome' },
   { key: 'pos', header: 'Position' },
   { key: 'ref', header: 'Reference' },

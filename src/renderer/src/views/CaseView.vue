@@ -329,7 +329,7 @@ function handleDeselect(): void {
 
 function handleExportSuccess(data: {
   filePath: string
-  action: { text: string; callback: () => void }
+  action?: { text: string; callback: () => void }
 }): void {
   showSnack(`Exported to ${data.filePath}`, 'success', {
     timeout: APP_CONFIG.SNACKBAR_SUCCESS_MS,
