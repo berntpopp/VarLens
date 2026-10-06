@@ -84,6 +84,9 @@
       @metadata-changed="handleMetadataChanged"
     />
 
+    <!-- Progress + cancel for exports, deletes and imports in every view. -->
+    <BackgroundJobsPanel />
+
     <KeyboardShortcutsDialog v-if="keyboardHelpMounted" v-model="showKeyboardHelp" />
 
     <ViewTransitionOverlay v-if="transitionOverlayMounted" :model-value="transitioning" />
@@ -103,6 +106,7 @@ import { useThemePreference } from './composables/useThemePreference'
 import { installUrlStateSync } from './composables/useUrlState'
 import { useCaseUrlParam } from './composables/useViewUrlBindings'
 import AppFooter from './components/AppFooter.vue'
+import BackgroundJobsPanel from './components/jobs/BackgroundJobsPanel.vue'
 import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
@@ -128,6 +132,7 @@ import {
 import { resetRendererPerfSnapshot } from './services/PerfSnapshot'
 import { getTraceSnapshot } from './services/PerfTrace'
 import { unwrapIpcResult } from '../../shared/types/errors'
+import { formatError } from './utils/ipc-result'
 import { getCurrentUnsupportedReason } from './utils/backend-capabilities'
 
 const ImportStatusBar = defineAsyncComponent(() => import('./components/ImportStatusBar.vue'))
@@ -247,14 +252,20 @@ const handleDeleteAllCases = async () => {
   }
   const confirmed = await dialogHostRef.value?.showDeleteAllCases(caseCount.value)
   if (confirmed === true) {
-    const deleted = unwrapIpcResult(await api.cases.deleteAll())
-    resetCaseContext()
-    incrementDataGeneration()
-    await caseListRef.value?.refreshCases()
-    dialogHostRef.value?.showSnackbar(
-      `Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`,
-      'success'
-    )
+    // Progress and cancel are shown by the background-jobs panel meanwhile.
+    try {
+      const deleted = unwrapIpcResult(await api.cases.deleteAll())
+      dialogHostRef.value?.showSnackbar(
+        `Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`,
+        'success'
+      )
+    } catch (error) {
+      dialogHostRef.value?.showSnackbar(formatError(error, 'Deleting all cases failed.'), 'error')
+    } finally {
+      resetCaseContext()
+      incrementDataGeneration()
+      await caseListRef.value?.refreshCases()
+    }
   }
 }
 

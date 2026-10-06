@@ -8,6 +8,7 @@
  */
 import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
+import { withImportJobProgress } from '../import-job-progress'
 import type {
   StorageImportExecutor,
   StorageImportSingleFileParams,
@@ -53,7 +54,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
         // Cancellation posts { type: 'cancel' } to the worker via the client's
         // cancel() method (PostgresImportWorkerClient.cancel), NOT terminate().
         ctx.registerCancel(() => this.currentClient?.cancel())
-        return await this._performImport(p)
+        return await this._performImport(withImportJobProgress(ctx, p))
       }
     )
     return handle.result
@@ -102,7 +103,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
         // Cancellation posts { type: 'cancel' } to the worker via the client's
         // cancel() method (PostgresImportWorkerClient.cancel), NOT terminate().
         ctx.registerCancel(() => this.currentClient?.cancel())
-        return await this._performMultiImport(p)
+        return await this._performMultiImport(withImportJobProgress(ctx, p))
       }
     )
     return handle.result

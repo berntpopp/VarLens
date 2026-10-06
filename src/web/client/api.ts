@@ -24,6 +24,7 @@ import type { WindowAPI } from '../../shared/types/api'
 import type { UpdateStatus } from '../../shared/types/api'
 import { isIpcError } from '../../shared/types/errors'
 import { ALLOWED_DOMAINS } from '../../shared/config/allowed-domains'
+import { EVENTS_RESYNC_DOM_EVENT } from '../../shared/ipc/domains/jobs'
 import { buildExportApi } from './export-download'
 
 declare const __APP_VERSION__: string
@@ -322,9 +323,6 @@ async function pickAndUploadFiles(params: {
 
 const NOOP_UNSUBSCRIBE = (): void => {}
 
-/** Browser event fired when the server could not replay missed SSE events. */
-export const WEB_EVENTS_RESYNC_DOM_EVENT = 'varlens:events-resync'
-
 /**
  * One EventSource per page. The browser reconnects on its own and sends
  * `Last-Event-ID`, so the server replays what was missed; `events:resync`
@@ -345,7 +343,7 @@ function getSharedEventSource(): EventSource | null {
       if (source.readyState === EventSource.CLOSED) drop()
     })
     source.addEventListener('events:resync', () => {
-      window.dispatchEvent(new CustomEvent(WEB_EVENTS_RESYNC_DOM_EVENT))
+      window.dispatchEvent(new CustomEvent(EVENTS_RESYNC_DOM_EVENT))
     })
     sharedEventSource = source
   }
