@@ -1,4 +1,5 @@
 import { sql } from 'kysely'
+import { NUMERIC_COLUMN_FILTER_KEYS } from '../../../shared/filters/column-filter-validation'
 import type { Variant, VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
 import { SORTABLE_COLUMNS } from './sortable-columns'
@@ -11,8 +12,16 @@ function isComparable(value: unknown): value is ComparableValue {
   return typeof value === 'string' || typeof value === 'number'
 }
 
-/** Numeric strings compare as numbers; everything else compares as given. */
-function coerceComparisonValue(value: ComparableValue): ComparableValue {
+/**
+ * Bind a comparison value in the storage class of its column: numbers for
+ * numeric columns, text for everything else.
+ *
+ * The distinction matters because better-sqlite3 binds every JS number as a
+ * REAL. Compared with a TEXT column SQLite renders it as text first, so
+ * `chr = 7` becomes `chr = '7.0'` and can never match the stored `'7'`.
+ */
+function coerceComparisonValue(value: ComparableValue, numericColumn: boolean): ComparableValue {
+  if (!numericColumn) return String(value)
   const num = Number(value)
   return typeof value === 'number' ? value : Number.isFinite(num) ? num : value
 }
@@ -43,10 +52,9 @@ function whereRange(
   query: VariantQueryBuilder,
   sqlColumn: string,
   operator: RangeOperator,
-  value: ComparableValue,
+  compValue: ComparableValue,
   includeEmpty: boolean | undefined
 ): VariantQueryBuilder {
-  const compValue = coerceComparisonValue(value)
   const col = sqlColumn as keyof Variant
   if (includeEmpty !== false) {
     return query.where(({ or, eb }) => or([eb(col, 'is', null), eb(col, operator, compValue)]))
@@ -58,20 +66,23 @@ function whereRange(
 function applyColumnFilter(
   query: VariantQueryBuilder,
   sqlColumn: string,
-  filterDef: ColumnFilterDef
+  filterDef: ColumnFilterDef,
+  numericColumn: boolean
 ): VariantQueryBuilder {
   const { operator, value } = filterDef
   if (operator === 'in' && Array.isArray(value)) return whereIn(query, sqlColumn, value)
   if (operator === 'like' && typeof value === 'string') return whereLike(query, sqlColumn, value)
   if ((operator === '=' || operator === '!=') && isComparable(value)) {
     // Exact match — NULLs excluded (user is looking for specific values)
-    return query.where(sqlColumn as keyof Variant, operator, coerceComparisonValue(value))
+    const compValue = coerceComparisonValue(value, numericColumn)
+    return query.where(sqlColumn as keyof Variant, operator, compValue)
   }
   if (
     (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
     isComparable(value)
   ) {
-    return whereRange(query, sqlColumn, operator, value, filterDef.includeEmpty)
+    const compValue = coerceComparisonValue(value, numericColumn)
+    return whereRange(query, sqlColumn, operator, compValue, filterDef.includeEmpty)
   }
   return query
 }
@@ -98,7 +109,12 @@ export function applyBareColumnFilters(
   for (const [column, filterDef] of Object.entries(filter.column_filters)) {
     const sqlColumn = SORTABLE_COLUMNS[column]
     if (sqlColumn === undefined) continue
-    filtered = applyColumnFilter(filtered, sqlColumn, filterDef)
+    filtered = applyColumnFilter(
+      filtered,
+      sqlColumn,
+      filterDef,
+      NUMERIC_COLUMN_FILTER_KEYS.has(column)
+    )
   }
   return filtered
 }

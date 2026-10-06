@@ -469,6 +469,23 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     }
   }, 120_000)
 
+  // ── Numeric-looking value on a text column ────────────────────────────────
+
+  it('a number compared with a text column matches the stored text on every path', async () => {
+    // The DSL sends `gene_symbol = 5` style values as numbers.
+    await expectAll(
+      cohortPaths({ genome_build: 'GRCh38', column_filters: { chr: { operator: '=', value: 8 } } }),
+      ok([A.otherChr])
+    )
+    await expectAll(
+      cohortPaths({
+        genome_build: 'GRCh38',
+        column_filters: { chr: { operator: '=', value: '8' } }
+      }),
+      ok([A.otherChr])
+    )
+  }, 120_000)
+
   // ── Invalid numeric filter value ──────────────────────────────────────────
 
   it('a non-numeric value on a numeric column is rejected identically everywhere', async () => {

@@ -64,7 +64,7 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
       variant('7', 150_000, { cadd: 25 }),
       variant('7', 202_000),
       variant('7', 90_000, { end_pos: 210_000, alt: '<DEL>', variant_type: 'cnv' }),
-      variant('7', 300_000, { gene_symbol: GENE.symbol, cadd: 10 })
+      variant('7', 300_000, { gene_symbol: GENE.symbol, cadd: 10, omim_mim_number: '600000' })
     ])
     const grch37Case = sqlite.cases.createCase('guard-37', '/tmp/guard-37.json', 0, 'GRCh37')
     sqlite.variants.insertVariantsBatch(grch37Case, [variant('7', 150_000, { alt: 'C' })])
@@ -111,6 +111,32 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
       '7:202000:A:T',
       '7:90000:A:<DEL>'
     ])
+  })
+
+  describe('numeric-looking value on a text column', () => {
+    // better-sqlite3 binds JS numbers as REAL, and SQLite renders a REAL as
+    // '7.0' before comparing it with a TEXT column — so the value must be
+    // bound as text or `chr = 7` can never match the stored '7'.
+    it('SQLite case view matches the stored text', () => {
+      for (const value of ['600000', 600000]) {
+        const result = sqlite.variants.getVariants(
+          { case_id: grch38Case, column_filters: { omim_mim_number: { operator: '=', value } } },
+          100,
+          0
+        )
+        expect(result.data.map((row) => row.pos)).toEqual([300_000])
+      }
+    })
+
+    it('SQLite cohort view matches the stored text', () => {
+      for (const value of ['7', 7]) {
+        const result = sqlite.cohort.getCohortVariants({
+          genome_build: 'GRCh38',
+          column_filters: { chr: { operator: '=', value } }
+        })
+        expect(result.data).toHaveLength(4)
+      }
+    })
   })
 
   describe('non-numeric value on a numeric column', () => {
