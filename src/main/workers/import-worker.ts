@@ -203,7 +203,7 @@ export async function runImportSession(
                 caseId,
                 batchSize,
                 stmts,
-                () => cancelled,
+                isCancelled,
                 file.vcfSelectedSamples,
                 onProgress,
                 (reason) => {
@@ -219,7 +219,7 @@ export async function runImportSession(
                 caseId,
                 batchSize,
                 stmts,
-                () => cancelled,
+                isCancelled,
                 onProgress
               )
             }
