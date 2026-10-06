@@ -81,11 +81,7 @@ export const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
     geneBurden: true,
     columnMeta: true
   },
-  export: {
-    variants: true,
-    cohort: true,
-    streaming: true
-  }
+  export: { variants: true, cohort: true, streaming: true }
 }
 
 export const mockApi: WindowAPI = {

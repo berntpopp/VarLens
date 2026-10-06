@@ -163,7 +163,6 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
 import { isWebRuntime } from '../utils/runtime-mode'
-import type { ExportFormat } from '../../../shared/ipc/domains/export'
 import { useCapabilityStore } from '../stores/capabilityStore'
 
 // Emit for navigation and row click
@@ -406,7 +405,7 @@ const snackbar = ref({
   actionCallback: null as (() => void) | null
 })
 
-const exportToExcel = async (format?: ExportFormat): Promise<void> => {
+const exportToExcel = async (format?: 'csv' | 'xlsx'): Promise<void> => {
   if (!api) {
     logService.warn('API not available - running outside Electron', 'cohort')
     return
@@ -441,9 +440,7 @@ const exportToExcel = async (format?: ExportFormat): Promise<void> => {
       genome_build: genomeBuild.value || undefined,
       variant_type: selectedVariantType.value || undefined
     }
-    const result = unwrapIpcResult(
-      await api.export.cohort(plainParams, format === undefined ? undefined : { format })
-    )
+    const result = unwrapIpcResult(await api.export.cohort(plainParams, { format }))
 
     if (result !== null && result !== undefined && result.success === true) {
       snackbar.value = {
@@ -583,7 +580,7 @@ const handleCommentClick = (item: CohortVariant) => {
   annotationDialogsRef.value?.openCommentDialog(item)
 }
 
-const handleExport = (format?: ExportFormat) => {
+const handleExport = (format?: 'csv' | 'xlsx') => {
   void exportToExcel(format)
 }
 

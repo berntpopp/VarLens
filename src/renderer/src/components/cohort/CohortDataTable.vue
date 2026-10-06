@@ -221,7 +221,6 @@ import { APP_CONFIG } from '../../../../shared/config'
 import { resolveUrlTemplate, type VariantLinkData } from '../../utils/externalLinks'
 import { getAdaptiveRowScrollBehavior } from '../../utils/adaptiveRowScroll'
 import { usePermissions } from '../../composables/usePermissions'
-
 const { canWrite } = usePermissions()
 
 interface Props {
@@ -540,12 +539,8 @@ watch(selectedIndex, async (newIndex) => {
   pendingScrollBehavior.value = 'smooth'
 })
 
-/**
- * Watch for expanded rows - emit load-carriers event for parent orchestration
- *
- * This component doesn't load carriers directly - it asks the parent orchestrator
- * to handle the IPC call. The parent will then update the carrier cache via useCarriers.
- */
+// Expanded rows: ask the parent orchestrator to load carriers (it owns the IPC
+// call and updates the carrier cache via useCarriers).
 watch(expandedRows, (newExpandedKeys) => {
   for (const key of newExpandedKeys) {
     if (!hasCarriers(key)) {
@@ -559,9 +554,7 @@ watch(expandedRows, (newExpandedKeys) => {
   }
 })
 
-/**
- * Initialize scroll sync after component mounts
- */
+// Initialize scroll sync after component mounts
 onMounted(async () => {
   await nextTick()
   const tableEl = dataTableRef.value?.$el as HTMLElement | undefined

@@ -156,7 +156,7 @@
         </template>
         <v-list-item-title>Delete {{ multiSelectedCount }} Selected</v-list-item-title>
       </v-list-item>
-      <!-- Single delete option (analysts and admins; viewers are read-only) -->
+      <!-- Single delete option -->
       <v-list-item :disabled="!canWrite" @click="handleDelete">
         <template #prepend>
           <v-icon :icon="mdiDelete" />
@@ -215,7 +215,6 @@ import {
   mdiSelectionOff
 } from '@mdi/js'
 import { usePermissions } from '../composables/usePermissions'
-
 const { canWrite } = usePermissions()
 
 const PAGE_SIZE = 50
@@ -461,15 +460,10 @@ const handleDelete = async (): Promise<void> => {
   if (confirmed !== true) return
 
   // ── Optimistic UI update ──
-  // The IPC handler already runs the delete inside a worker thread on the
-  // main process (see src/main/ipc/handlers/cases-logic.ts#deleteSingleCase),
-  // but the renderer was previously `await`ing the whole operation — which
-  // meant the deleted case stayed visible for the full duration of the
-  // worker run (seconds for large cases). That opened a window where a
-  // user could re-click the deleted case, navigate into it, or click
-  // delete again. We now remove the case from the list immediately and
-  // fire the IPC async; failures re-insert the case and show an error
-  // snackbar.
+  // The delete runs in a main-process worker (cases-logic.ts#deleteSingleCase);
+  // awaiting it kept the case visible (and clickable) for seconds. Remove it
+  // from the list now, fire the IPC async, and re-insert it with an error
+  // snackbar on failure.
   const deletedId = caseToDelete.id
   const deletedName = caseToDelete.name
   const priorIndex = cases.value.findIndex((c) => c.id === deletedId)
