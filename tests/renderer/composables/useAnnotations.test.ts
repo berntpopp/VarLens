@@ -437,6 +437,42 @@ describe('stale-request guard (annotation generation)', () => {
     expect(result.getAnnotations('chr2', 200, 'C', 'T')).toBeDefined()
   })
 
+  // A newer page that shows a row again skips it as "in flight"; if the batch
+  // carrying it were then discarded wholesale, that row would never be loaded.
+  it.each(['case', 'global'] as const)(
+    'a discarded %s batch still delivers rows the new page asked for',
+    async (scope) => {
+      const resolveBatch = deferBatchGet()
+      const [result, appInstance] = withSetup(() => useAnnotations())
+      app = appInstance
+      const rowA = { id: 1, chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+      const rowB = { id: 2, chr: 'chr2', pos: 200, ref: 'C', alt: 'T' }
+      const load = (rows: (typeof rowA)[]): Promise<void> =>
+        scope === 'case'
+          ? result.loadAnnotationsBatch(1, rows)
+          : result.loadGlobalAnnotationsBatch(rows)
+      const invalidate =
+        scope === 'case'
+          ? result.invalidateAnnotationGeneration
+          : result.invalidateGlobalAnnotationGeneration
+
+      const first = load([rowA, rowB])
+      // New page: row A is still visible, row B is gone.
+      invalidate()
+      await load([rowA])
+      expect(window.api.annotations.batchGet).toHaveBeenCalledTimes(1)
+
+      resolveBatch({
+        'chr1:100:A:G': { global: null, perCase: null },
+        'chr2:200:C:T': { global: null, perCase: null }
+      })
+      await first
+
+      expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeDefined()
+      expect(result.getAnnotations('chr2', 200, 'C', 'T')).toBeUndefined()
+    }
+  )
+
   it('applies results when generation has not advanced', async () => {
     window.api.annotations.batchGet = vi
       .fn()

@@ -31,8 +31,11 @@ import {
   getAnnotationGeneration,
   hasDbSwitchedSince,
   isCachedOrLoading,
+  isKeyLoading,
   isTrackedCase,
+  markAwaited,
   setLoading,
+  takeAwaited,
   triggerAnnotationCache,
   variantKey,
   type AnnotationCache,
@@ -300,9 +303,15 @@ async function loadBatch(
   const generation = getAnnotationGeneration(scope.kind)
 
   // Filter out cached AND in-flight keys to prevent duplicate IPC calls
-  const uncached = variants
-    .filter((v) => !isCachedOrLoading(variantKey(v)))
-    .map((v) => batchKey(scope, v))
+  const uncached: BatchAnnotationKey[] = []
+  for (const v of variants) {
+    const key = variantKey(v)
+    if (annotationCache.value.has(key)) continue
+    // Already in flight: rely on that request, even if its batch is later
+    // found to belong to a previous page.
+    if (isKeyLoading(key)) markAwaited(scope.kind, key)
+    else uncached.push(batchKey(scope, v))
+  }
   if (uncached.length === 0) return
 
   // Mark all keys as in-flight before the IPC call
@@ -310,10 +319,13 @@ async function loadBatch(
 
   try {
     const results = unwrapIpcResult(await api.annotations.batchGet(scopeCaseId(scope), uncached))
-    // Discard the batch when this scope's table paged meanwhile.
-    if (generation !== getAnnotationGeneration(scope.kind)) return
     if (isResponseStale(scope, dbPath)) return
+    // When this scope's table paged meanwhile the batch is discarded, except
+    // for the rows the current page is still waiting for.
+    const fromPriorPage = generation !== getAnnotationGeneration(scope.kind)
     for (const [key, value] of Object.entries(results)) {
+      const awaited = takeAwaited(scope.kind, key)
+      if (fromPriorPage && !awaited) continue
       cacheSet(key, value as AnnotationCache)
     }
   } catch (error) {

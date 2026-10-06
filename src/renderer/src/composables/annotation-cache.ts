@@ -102,6 +102,34 @@ export function getAnnotationGeneration(kind: AnnotationBatchKind): number {
   return annotationGenerations[kind]
 }
 
+// Keys a batch load skipped because an earlier batch already had them in
+// flight. If that earlier batch turns out to be from a previous page it is
+// discarded — except for these keys, which the current page is waiting for.
+const awaitedKeys: Record<AnnotationBatchKind, Set<string>> = {
+  case: new Set(),
+  global: new Set()
+}
+
+/** Record that the current page of `kind` relies on an in-flight request for `key`. */
+export function markAwaited(kind: AnnotationBatchKind, key: string): void {
+  awaitedKeys[kind].add(key)
+}
+
+/** True (once) when the current page of `kind` is waiting for `key`. */
+export function takeAwaited(kind: AnnotationBatchKind, key: string): boolean {
+  return awaitedKeys[kind].delete(key)
+}
+
+/** Drop every cached entry, loading flag and pending expectation, and notify. */
+function clearEntries(): void {
+  annotationCache.value.clear()
+  loadingStates.value.clear()
+  awaitedKeys.case.clear()
+  awaitedKeys.global.clear()
+  triggerRef(annotationCache)
+  triggerRef(loadingStates)
+}
+
 /**
  * Get current database path safely (returns null if Pinia not available,
  * e.g. in unit tests without a store setup).
@@ -125,12 +153,7 @@ function ensureScopeOrClear(dbPath: string | null, caseId: number | null): void 
   const dbChanged = dbPath !== null && lastDbPath !== null && dbPath !== lastDbPath
   const caseChanged = caseId !== null && lastCaseId !== null && caseId !== lastCaseId
 
-  if (dbChanged || caseChanged) {
-    annotationCache.value.clear()
-    loadingStates.value.clear()
-    triggerRef(annotationCache)
-    triggerRef(loadingStates)
-  }
+  if (dbChanged || caseChanged) clearEntries()
 
   if (dbPath !== null) lastDbPath = dbPath
   if (caseId !== null) lastCaseId = caseId
@@ -159,10 +182,7 @@ export function isTrackedCase(caseId: number): boolean {
 
 /** Clear cache and forget the tracked scope (call on case switch). */
 export function clearAnnotationCache(): void {
-  annotationCache.value.clear()
-  loadingStates.value.clear()
-  triggerRef(annotationCache)
-  triggerRef(loadingStates)
+  clearEntries()
   lastDbPath = null
   lastCaseId = null
 }
