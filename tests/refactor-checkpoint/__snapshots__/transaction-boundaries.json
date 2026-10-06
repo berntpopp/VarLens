@@ -34,6 +34,11 @@
     },
     {
       "file": "src/main/database/migrations.ts",
+      "callerFunction": "backfillMissingCaseDataInfo",
+      "assignedTo": "backfillTransaction"
+    },
+    {
+      "file": "src/main/database/migrations.ts",
       "callerFunction": "runMigrations",
       "assignedTo": "cleanupTransaction"
     },

@@ -1886,7 +1886,7 @@ function backfillMissingCaseDataInfo(db: Database.Database): void {
      VALUES (?, ?, ?, ?, ?)`
   )
   const now = Date.now()
-  db.transaction(() => {
+  const backfillTransaction = db.transaction(() => {
     for (const c of missing) {
       const filePath = c.file_path ?? ''
       const parts = filePath.split(/[/\\]/)
@@ -1895,5 +1895,6 @@ function backfillMissingCaseDataInfo(db: Database.Database): void {
       const createdAt = c.created_at !== null && c.created_at > 0 ? c.created_at : now
       insert.run(c.id, fileName, fileType, createdAt, now)
     }
-  })()
+  })
+  backfillTransaction()
 }
