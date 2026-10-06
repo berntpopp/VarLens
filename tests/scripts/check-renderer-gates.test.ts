@@ -20,10 +20,12 @@ describe('renderer parity gate', () => {
     const gated = loadGatedMethods() as { domain: string; method: string; feature: string }[]
     const keys = gated.map((g) => `${g.domain}.${g.method}`)
     expect(keys).toContain('database.open')
-    expect(keys).toContain('hpo.search')
-    expect(gated.find((g) => g.domain === 'hpo' && g.method === 'search')?.feature).toBe(
-      'hpoSearch'
+    expect(keys).toContain('geneRef.update')
+    expect(gated.find((g) => g.domain === 'geneRef' && g.method === 'update')?.feature).toBe(
+      'geneRefUpdate'
     )
+    // Served methods (e.g. hpo.search since parity P-C) are not gated.
+    expect(keys).not.toContain('hpo.search')
   })
 
   it('finds no ungated renderer call', () => {
