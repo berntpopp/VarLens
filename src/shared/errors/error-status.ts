@@ -22,6 +22,7 @@ export const ERROR_HTTP_STATUS: Readonly<Record<ErrorCode, number>> = {
   [ErrorCode.CONFLICT]: 409,
   [ErrorCode.UNIQUE_CONSTRAINT]: 409,
   [ErrorCode.CANCELLED]: 409,
+  [ErrorCode.RESOURCE_LIMIT]: 413,
   [ErrorCode.UNSUPPORTED_RUNTIME]: 501,
   [ErrorCode.UNAVAILABLE_UPSTREAM]: 502,
   [ErrorCode.DB_ERROR]: 500,

@@ -10,8 +10,34 @@ const TYPED_WORKER_CODES = new Set<string>([
   ErrorCode.FILE_NOT_FOUND,
   ErrorCode.VALIDATION,
   ErrorCode.INVALID_PARAMETERS,
-  ErrorCode.PARSE_ERROR
+  ErrorCode.PARSE_ERROR,
+  ErrorCode.RESOURCE_LIMIT
 ])
+
+const RESOURCE_LIMIT_USER_MESSAGE =
+  'The import ran out of memory and was stopped. The file contains records too large to ' +
+  'import on this machine; nothing from it was kept.'
+
+/** An import worker was stopped at its heap limit (`ERR_WORKER_OUT_OF_MEMORY`). */
+export class ImportResourceLimitError extends AppError {
+  constructor(message: string) {
+    super(ErrorCode.RESOURCE_LIMIT, message, RESOURCE_LIMIT_USER_MESSAGE)
+    this.name = 'ImportResourceLimitError'
+  }
+}
+
+/**
+ * Main side: describe the `error` event of a worker thread. A worker stopped
+ * at its heap limit becomes a typed `RESOURCE_LIMIT` failure; any other crash
+ * stays an unclassified message.
+ */
+export function describeWorkerCrash(error: Error): WorkerErrorFields {
+  if ((error as NodeJS.ErrnoException).code !== 'ERR_WORKER_OUT_OF_MEMORY') {
+    return { message: error.message }
+  }
+  const typed = new ImportResourceLimitError(`Import exceeded its memory budget: ${error.message}`)
+  return { message: typed.message, code: typed.code, userMessage: typed.userMessage }
+}
 
 /** Wire form of an import failure: the message plus its envelope code. */
 export interface WorkerErrorFields {
@@ -39,6 +65,7 @@ export function classifyWorkerError(
  */
 export function workerErrorToError(fields: WorkerErrorFields): Error {
   const code = fields.code
+  if (code === ErrorCode.RESOURCE_LIMIT) return new ImportResourceLimitError(fields.message)
   if (code !== undefined && KNOWN_ERROR_CODES.has(code) && TYPED_WORKER_CODES.has(code)) {
     return new AppError(code as ErrorCode, fields.message, fields.userMessage ?? fields.message)
   }

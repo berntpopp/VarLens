@@ -70,6 +70,13 @@ export async function runImportSession(
       )
     }
 
+    // Recovery: a previous worker died mid-file (heap limit) and could not
+    // run its own cleanup. Its frequencies were never counted, so the rows
+    // are simply removed; the session end rebuilds FTS and indexes.
+    for (const partialCaseId of msg.discardCaseIds ?? []) {
+      stmts.deleteCase.run(partialCaseId)
+    }
+
     const totalFiles = msg.files.length
     const importedInBatch = new Set<string>()
     const results: Array<{
@@ -148,6 +155,7 @@ export async function runImportSession(
           genomeBuild
         )
         const caseId = Number(caseResult.lastInsertRowid)
+        port.postMessage({ type: 'case-started', fileIndex, caseId })
 
         const startTime = Date.now()
         let variantCount = 0
@@ -307,12 +315,14 @@ export async function runImportSession(
   } catch (fatalError) {
     // Index/trigger recreation is handled unconditionally in the finally block below
 
+    const { code: errorCode, userMessage } = classifyWorkerError(fatalError)
     terminalMessage = {
       type: 'error',
       fileIndex: -1,
       error: fatalError instanceof Error ? fatalError.message : String(fatalError),
       phase: 'fatal',
-      stack: fatalError instanceof Error ? fatalError.stack : undefined
+      stack: fatalError instanceof Error ? fatalError.stack : undefined,
+      ...(errorCode !== undefined ? { errorCode, userMessage } : {})
     }
   } finally {
     postTerminalMessageAfterCleanup(
