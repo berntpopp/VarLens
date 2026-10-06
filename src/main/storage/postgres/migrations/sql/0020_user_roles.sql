@@ -8,7 +8,7 @@
 --
 -- The old `user` role had every write ability an analyst has, so existing
 -- accounts move to `analyst` (no one loses access). New accounts default to
--- the least-privileged `viewer`. Mirrors SQLite migration v38.
+-- the least-privileged `viewer`. Mirrors SQLite migration v36.
 
 ALTER TABLE "__schema__"."users" DROP CONSTRAINT IF EXISTS "users_role_check";
 

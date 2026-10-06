@@ -4,11 +4,11 @@ import { initializeSchema } from '../../../src/main/database/schema'
 import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 
 /**
- * v38 rebuilds `users` for the viewer / analyst / admin role model (mirrors
- * Postgres 0024): legacy `user` rows become `analyst`, the default becomes
+ * v36 rebuilds `users` for the viewer / analyst / admin role model (mirrors
+ * Postgres 0020): legacy `user` rows become `analyst`, the default becomes
  * `viewer`, ids and the self-referencing created_by survive.
  */
-describe('Migration v38: viewer / analyst / admin roles', () => {
+describe('Migration v36: viewer / analyst / admin roles', () => {
   let db: Database.Database
 
   beforeEach(() => {

@@ -26,7 +26,7 @@
  *   - `analyst` viewer + classify / comment / tag / import / export / curate
  *   - `admin`   analyst + user management, settings, delete-all, egress config
  *
- * Postgres migration 0024 and SQLite v38 moved the old `'user'` role to
+ * Postgres migration 0020 and SQLite v36 moved the old `'user'` role to
  * `'analyst'` (same write abilities it always had).
  */
 export const USER_ROLES = ['viewer', 'analyst', 'admin'] as const
@@ -42,7 +42,7 @@ export const ROLE_ANALYST: UserRole = 'analyst'
 export const ROLE_VIEWER: UserRole = 'viewer'
 
 /**
- * Pre-0024 / pre-v38 name of the analyst role. Never written any more; only
+ * Pre-0020 / pre-v36 name of the analyst role. Never written any more; only
  * accepted on input (platform entitlements, provisioning CLI, stale cookies)
  * and normalised to {@link ROLE_ANALYST}.
  */

@@ -306,7 +306,7 @@ export class PlatformIdentityService {
         `platform entitlement is not active: ${entitlement.status}`
       )
     }
-    // Accepts the legacy `user` claim as analyst (pre-0024 entitlement services).
+    // Accepts the legacy `user` claim as analyst (pre-0020 entitlement services).
     const role = normalizeUserRole(entitlement.role)
     if (role === undefined) {
       throw new PlatformIdentityRevokedError('platform entitlement role is not valid for VarLens')

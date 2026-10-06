@@ -41,18 +41,18 @@ import {
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
 
-// The users.role enum was last redefined by SQLite v38 / Postgres 0024.
+// The users.role enum was last redefined by SQLite v36 / Postgres 0020.
 const SQLITE_MIGRATION_PATH = resolve(REPO_ROOT, 'src/main/database/user-roles-migration.ts')
 const PG_USERS_MIGRATION_PATH = resolve(
   REPO_ROOT,
-  'src/main/storage/postgres/migrations/sql/0024_user_roles.sql'
+  'src/main/storage/postgres/migrations/sql/0020_user_roles.sql'
 )
 
-/** Postgres 0024 alters the column: DEFAULT and CHECK are separate statements. */
+/** Postgres 0020 alters the column: DEFAULT and CHECK are separate statements. */
 function extractPgAlteredRoleEnum(sql: string): string[] {
   const def = sql.match(/ALTER\s+COLUMN\s+role\s+SET\s+DEFAULT\s+'([^']+)'/i)
   const check = sql.match(/CHECK\s*\(\s*role\s+IN\s*\(([^)]+)\)\s*\)/i)
-  if (!def || !check) throw new Error('Could not locate the role DEFAULT/CHECK in Postgres 0024')
+  if (!def || !check) throw new Error('Could not locate the role DEFAULT/CHECK in Postgres 0020')
   const roles = check[1]
     .split(',')
     .map((v) => v.trim().replace(/^'(.*)'$/s, '$1'))
@@ -225,18 +225,18 @@ describe('web password policy uses the shared constant', () => {
   })
 })
 
-describe('migration parity — SQLite v38', () => {
+describe('migration parity — SQLite v36', () => {
   it('users.role CHECK enumerates exactly USER_ROLES', () => {
     const sql = readOrFail(SQLITE_MIGRATION_PATH, 'SQLite user-roles-migration.ts')
-    const [defaultValue, ...enumerated] = extractEnumFromCheckClause(sql, 'CREATE TABLE users_v38')
+    const [defaultValue, ...enumerated] = extractEnumFromCheckClause(sql, 'CREATE TABLE users_v36')
     expect(new Set(enumerated)).toEqual(new Set(USER_ROLES))
     expect(defaultValue).toBe(DEFAULT_USER_ROLE)
   })
 })
 
-describe('migration parity — Postgres 0024', () => {
+describe('migration parity — Postgres 0020', () => {
   it('users.role CHECK enumerates exactly USER_ROLES', () => {
-    const sql = readOrFail(PG_USERS_MIGRATION_PATH, 'Postgres 0024 migration')
+    const sql = readOrFail(PG_USERS_MIGRATION_PATH, 'Postgres 0020 migration')
     const [defaultValue, ...enumerated] = extractPgAlteredRoleEnum(sql)
     expect(new Set(enumerated)).toEqual(new Set(USER_ROLES))
     expect(defaultValue).toBe(DEFAULT_USER_ROLE)
@@ -246,8 +246,8 @@ describe('migration parity — Postgres 0024', () => {
 describe('cross-backend defaults agree', () => {
   it('SQLite and Postgres both DEFAULT to DEFAULT_USER_ROLE', () => {
     const sqlite = readOrFail(SQLITE_MIGRATION_PATH, 'SQLite user-roles-migration.ts')
-    const pg = readOrFail(PG_USERS_MIGRATION_PATH, 'Postgres 0024 migration')
-    const [sqliteDefault] = extractEnumFromCheckClause(sqlite, 'CREATE TABLE users_v38')
+    const pg = readOrFail(PG_USERS_MIGRATION_PATH, 'Postgres 0020 migration')
+    const [sqliteDefault] = extractEnumFromCheckClause(sqlite, 'CREATE TABLE users_v36')
     const [pgDefault] = extractPgAlteredRoleEnum(pg)
     expect(sqliteDefault).toBe(pgDefault)
     expect(sqliteDefault).toBe(DEFAULT_USER_ROLE)

@@ -152,7 +152,7 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
     )
 
     const result = await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
-    expect(result.applied).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0024'])
+    expect(result.applied).toEqual(['0014', '0015', '0016', '0017', '0018', '0019', '0020'])
 
     const migratedTranscript = await probeClient.query<{ consequence: string; func: string }>(
       `SELECT consequence, func
@@ -232,7 +232,7 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
       )
     ).rejects.toThrow()
 
-    // 0024 moved the legacy `user` role to `analyst` (same write abilities).
+    // 0020 moved the legacy `user` role to `analyst` (same write abilities).
     await expect(
       probeClient.query(
         `SELECT role FROM "${schema}".users WHERE username = 'legacy-platform-subject'`
@@ -240,7 +240,7 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
     ).resolves.toMatchObject({ rows: [{ role: 'analyst' }] })
 
     // Role CHECK must enumerate exactly viewer + analyst + admin, the same
-    // enum as SQLite migrations.ts v38. The shared constants module is the
+    // enum as SQLite migrations.ts v36. The shared constants module is the
     // cross-backend source of truth.
     const checkRow = await probeClient.query<{ check_clause: string }>(
       `SELECT cc.check_clause

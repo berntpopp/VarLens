@@ -25,7 +25,7 @@ describe('Postgres migration definitions', () => {
       '0017',
       '0018',
       '0019',
-      '0024'
+      '0020'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',

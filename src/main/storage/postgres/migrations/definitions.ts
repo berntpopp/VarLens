@@ -99,11 +99,10 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     name: 'multi_admin',
     fileName: '0019_multi_admin.sql'
   },
-  // 0020-0023 are reserved by parallel parity branches (renumbered at integration).
   {
-    version: '0024',
+    version: '0020',
     name: 'user_roles',
-    fileName: '0024_user_roles.sql'
+    fileName: '0020_user_roles.sql'
   }
 ]
 
