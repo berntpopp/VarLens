@@ -56,17 +56,10 @@ export function registerCaseCommentHandlers({
         }
 
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          return await session.getWriteExecutor().execute({
-            type: 'case-comments:create',
-            params: [validated.data.caseId, validated.data.category, validated.data.content]
-          })
-        }
-        return getDb().metadata.createCaseComment(
-          validated.data.caseId,
-          validated.data.category,
-          validated.data.content
-        )
+        return await session.getWriteExecutor().execute({
+          type: 'case-comments:create',
+          params: [validated.data.caseId, validated.data.category, validated.data.content]
+        })
       })
     }
   )
@@ -84,13 +77,10 @@ export function registerCaseCommentHandlers({
       }
 
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'case-comments:update',
-          params: [validated.data.commentId, validated.data.content]
-        })
-      }
-      return getDb().metadata.updateCaseComment(validated.data.commentId, validated.data.content)
+      return await session.getWriteExecutor().execute({
+        type: 'case-comments:update',
+        params: [validated.data.commentId, validated.data.content]
+      })
     })
   })
 
@@ -107,13 +97,9 @@ export function registerCaseCommentHandlers({
       }
 
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session
-          .getWriteExecutor()
-          .execute({ type: 'case-comments:delete', params: [validated.data] })
-        return undefined
-      }
-      getDb().metadata.deleteCaseComment(validated.data)
+      await session
+        .getWriteExecutor()
+        .execute({ type: 'case-comments:delete', params: [validated.data] })
       return undefined
     })
   })

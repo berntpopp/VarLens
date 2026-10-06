@@ -160,6 +160,16 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
         )
       }
 
+      case 'variants:exportCount': {
+        // Export pre-count (can be a full-case count(*) at WGS scale) — kept
+        // off the Electron main thread like every other variant read.
+        const filter = params[0] as PanelAwareFilter & VariantFilter
+        if ((filter.active_panel_ids?.length ?? 0) > 0) {
+          resolvePanelIntervalsInPlace(filter, repos, geneRefDb, db, filter.case_id)
+        }
+        return repos.variants.getExportCount(filter)
+      }
+
       case 'variants:filterOptions':
         return repos.variants.getFilterOptions(params[0] as number)
 

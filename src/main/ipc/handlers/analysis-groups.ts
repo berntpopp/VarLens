@@ -73,17 +73,10 @@ export function registerAnalysisGroupHandlers({
         throw new Error('Invalid group parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'analysis-groups:create',
-          params: [validated.data.name, validated.data.groupType, validated.data.description]
-        })
-      }
-      return getDb().analysisGroups.createGroup(
-        validated.data.name,
-        validated.data.groupType,
-        validated.data.description
-      )
+      return await session.getWriteExecutor().execute({
+        type: 'analysis-groups:create',
+        params: [validated.data.name, validated.data.groupType, validated.data.description]
+      })
     })
   })
 
@@ -109,13 +102,10 @@ export function registerAnalysisGroupHandlers({
         throw new Error('Invalid update parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'analysis-groups:update',
-          params: [validatedId.data, validatedParams.data]
-        })
-      }
-      return getDb().analysisGroups.updateGroup(validatedId.data, validatedParams.data)
+      return await session.getWriteExecutor().execute({
+        type: 'analysis-groups:update',
+        params: [validatedId.data, validatedParams.data]
+      })
     })
   })
 
@@ -133,13 +123,9 @@ export function registerAnalysisGroupHandlers({
         throw new Error('Invalid group ID')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session
-          .getWriteExecutor()
-          .execute({ type: 'analysis-groups:delete', params: [validated.data] })
-        return undefined
-      }
-      getDb().analysisGroups.deleteGroup(validated.data)
+      await session
+        .getWriteExecutor()
+        .execute({ type: 'analysis-groups:delete', params: [validated.data] })
       return undefined
     })
   })
@@ -158,25 +144,16 @@ export function registerAnalysisGroupHandlers({
         throw new Error('Invalid member parameters')
       }
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'analysis-groups:addMember',
-          params: [
-            validated.data.groupId,
-            validated.data.caseId,
-            validated.data.role,
-            validated.data.affectedStatus,
-            validated.data.individualId
-          ]
-        })
-      }
-      return getDb().analysisGroups.addMember(
-        validated.data.groupId,
-        validated.data.caseId,
-        validated.data.role,
-        validated.data.affectedStatus,
-        validated.data.individualId
-      )
+      return await session.getWriteExecutor().execute({
+        type: 'analysis-groups:addMember',
+        params: [
+          validated.data.groupId,
+          validated.data.caseId,
+          validated.data.role,
+          validated.data.affectedStatus,
+          validated.data.individualId
+        ]
+      })
     })
   })
 
@@ -194,14 +171,10 @@ export function registerAnalysisGroupHandlers({
           throw new Error('Invalid parameters')
         }
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          await session.getWriteExecutor().execute({
-            type: 'analysis-groups:removeMember',
-            params: [vGroup.data, vCase.data]
-          })
-          return undefined
-        }
-        getDb().analysisGroups.removeMember(vGroup.data, vCase.data)
+        await session.getWriteExecutor().execute({
+          type: 'analysis-groups:removeMember',
+          params: [vGroup.data, vCase.data]
+        })
         return undefined
       })
     }

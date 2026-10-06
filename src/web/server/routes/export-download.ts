@@ -24,7 +24,7 @@ import { Readable } from 'node:stream'
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
-import { COHORT_EXPORT_COLUMNS } from '../../../main/ipc/handlers/export-logic'
+import { COHORT_EXPORT_COLUMNS } from '../../../main/workers/cohort-export'
 import { EXPORT_COLUMNS, type ExportColumn } from '../../../main/workers/export-pipeline'
 import { csvEscape, formatCellValue } from '../../../main/workers/export-renderer'
 import {

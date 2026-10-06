@@ -531,12 +531,29 @@ function buildCohortApi(): unknown {
   )
 }
 
+function buildJobsApi(): unknown {
+  const rpc = buildDomainProxy('jobs') as Record<string, unknown>
+  return new Proxy(
+    {},
+    {
+      get(_target, prop: string | symbol) {
+        // `jobs:changed` is a push event (desktop IPC event / web SSE), never an RPC.
+        if (prop === 'onChanged') {
+          return (callback: (job: unknown) => void) => subscribeWebEvent('jobs:changed', callback)
+        }
+        return typeof prop === 'string' ? rpc[prop] : undefined
+      }
+    }
+  )
+}
+
 const DOMAIN_OVERRIDES: Record<string, unknown> = {
   batchImport: buildBatchImportApi(),
   'batch-import': buildBatchImportApi(),
   cohort: buildCohortApi(),
   export: buildExportApi(buildDomainProxy('export') as Record<string, unknown>),
   import: buildImportApi(),
+  jobs: buildJobsApi(),
   perf: PERF_API,
   shell: SHELL_API,
   system: SYSTEM_API,

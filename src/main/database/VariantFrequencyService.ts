@@ -29,9 +29,10 @@ export class VariantFrequencyService {
 
   /**
    * Decrement variant_frequency counts for all variants in a case.
-   * Called before case deletion. Removes rows where count reaches 0.
+   * Called before case deletion. Removes rows where count reaches 0 unless
+   * `prune` is false — batch callers decrement many cases and prune once.
    */
-  decrementFrequencies(caseId: number): void {
+  decrementFrequencies(caseId: number, prune = true): void {
     this.db
       .prepare(
         `
@@ -43,7 +44,17 @@ export class VariantFrequencyService {
     `
       )
       .run(caseId)
+    if (prune) this.pruneZeroCounts()
+  }
+
+  /** Remove frequency rows whose case count dropped to zero. */
+  pruneZeroCounts(): void {
     this.db.exec('DELETE FROM variant_frequency WHERE case_count <= 0')
+  }
+
+  /** Clear every frequency row (used when every case was deleted). */
+  clearAll(): void {
+    this.db.exec('DELETE FROM variant_frequency')
   }
 
   /**

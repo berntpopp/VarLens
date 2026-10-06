@@ -85,6 +85,7 @@ export default defineConfig({
       input: {
         server: resolve(__dirname, 'src/web/server.ts'),
         'postgres-import-worker': resolve(__dirname, 'src/main/workers/postgres-import-worker.ts'),
+        'zip-worker': resolve(__dirname, 'src/main/import/zip-worker.ts'),
         'provision-platform-user': resolve(__dirname, 'src/web/provision-platform-user.ts')
       },
       output: {

@@ -78,16 +78,10 @@ export function registerTranscriptHandlers({
         }
 
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          return await session.getWriteExecutor().execute({
-            type: 'transcripts:switch',
-            params: [validatedVariantId.data, validatedTranscriptId.data]
-          })
-        }
-
-        const db = getDb()
-        db.transcripts.switchSelectedTranscript(validatedVariantId.data, validatedTranscriptId.data)
-        return { success: true }
+        return await session.getWriteExecutor().execute({
+          type: 'transcripts:switch',
+          params: [validatedVariantId.data, validatedTranscriptId.data]
+        })
       })
     }
   )
@@ -120,19 +114,10 @@ export function registerTranscriptHandlers({
         }
 
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          return await session.getWriteExecutor().execute({
-            type: 'transcripts:insertAndSwitch',
-            params: [validatedVariantId.data, validatedTranscript.data as TranscriptInsertRow]
-          })
-        }
-
-        const db = getDb()
-        db.transcripts.insertTranscriptAndSwitch(
-          validatedVariantId.data,
-          validatedTranscript.data as TranscriptInsertRow
-        )
-        return { success: true }
+        return await session.getWriteExecutor().execute({
+          type: 'transcripts:insertAndSwitch',
+          params: [validatedVariantId.data, validatedTranscript.data as TranscriptInsertRow]
+        })
       })
     }
   )

@@ -11,17 +11,7 @@ import {
 import { mainLogger } from '../../services/MainLogger'
 import type { AuditAppendParams } from '../../storage/audit-log-types'
 import type { StorageWriteExecutor } from '../../storage/write-executor'
-import {
-  listTags,
-  createTag,
-  updateTag,
-  deleteTag,
-  getUsageCount,
-  getVariantTags,
-  assignVariantTag,
-  removeVariantTag,
-  setVariantTags
-} from './tags-logic'
+import { listTags, getUsageCount, getVariantTags } from './tags-logic'
 
 async function appendTagAudit(
   writeExecutor: StorageWriteExecutor,
@@ -63,14 +53,12 @@ export function registerTagHandlers({
         mainLogger.error(`Invalid tags:create params: ${validated.error.message}`, 'tags')
         throw new Error('Invalid tag parameters')
       }
-      const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'tags:create',
-          params: [validated.data.name, validated.data.color]
-        })
-      }
-      return createTag(validated.data.name, validated.data.color, getDb)
+      // Both backends write through the session executor (SQLite: the
+      // dedicated writer thread, never the Electron main thread).
+      return await getDbManager()
+        .getCurrentSession()
+        .getWriteExecutor()
+        .execute({ type: 'tags:create', params: [validated.data.name, validated.data.color] })
     })
   })
 
@@ -86,14 +74,10 @@ export function registerTagHandlers({
         mainLogger.error(`Invalid tags:update updates: ${validatedUpdates.error.message}`, 'tags')
         throw new Error('Invalid tag update parameters')
       }
-      const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getWriteExecutor().execute({
-          type: 'tags:update',
-          params: [validatedId.data, validatedUpdates.data]
-        })
-      }
-      return updateTag(validatedId.data, validatedUpdates.data, getDb)
+      return await getDbManager()
+        .getCurrentSession()
+        .getWriteExecutor()
+        .execute({ type: 'tags:update', params: [validatedId.data, validatedUpdates.data] })
     })
   })
 
@@ -104,14 +88,10 @@ export function registerTagHandlers({
         mainLogger.error(`Invalid tags:delete id: ${validatedId.error.message}`, 'tags')
         throw new Error('Invalid tag ID')
       }
-      const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session
-          .getWriteExecutor()
-          .execute({ type: 'tags:delete', params: [validatedId.data] })
-        return undefined
-      }
-      deleteTag(validatedId.data, getDb)
+      await getDbManager()
+        .getCurrentSession()
+        .getWriteExecutor()
+        .execute({ type: 'tags:delete', params: [validatedId.data] })
       return undefined
     })
   })
@@ -168,12 +148,13 @@ export function registerTagHandlers({
           throw new Error('Invalid tag assignment parameters')
         }
         const session = getDbManager().getCurrentSession()
+        const writeExecutor = session.getWriteExecutor()
+        await writeExecutor.execute({
+          type: 'tags:assignVariantTag',
+          params: [validated.data.caseId, validated.data.variantId, validated.data.tagId]
+        })
+        // Tag audit rows are a PostgreSQL-only behaviour today.
         if (session.capabilities.backend === 'postgres') {
-          const writeExecutor = session.getWriteExecutor()
-          await writeExecutor.execute({
-            type: 'tags:assignVariantTag',
-            params: [validated.data.caseId, validated.data.variantId, validated.data.tagId]
-          })
           await appendTagAudit(writeExecutor, {
             action_type: 'tag_assign',
             entity_type: 'case_variant_annotation',
@@ -181,14 +162,7 @@ export function registerTagHandlers({
             old_value: null,
             new_value: JSON.stringify({ tag_id: validated.data.tagId })
           })
-          return undefined
         }
-        assignVariantTag(
-          validated.data.caseId,
-          validated.data.variantId,
-          validated.data.tagId,
-          getDb
-        )
         return undefined
       })
     }
@@ -207,12 +181,13 @@ export function registerTagHandlers({
           throw new Error('Invalid tag removal parameters')
         }
         const session = getDbManager().getCurrentSession()
+        const writeExecutor = session.getWriteExecutor()
+        await writeExecutor.execute({
+          type: 'tags:removeVariantTag',
+          params: [validated.data.caseId, validated.data.variantId, validated.data.tagId]
+        })
+        // Tag audit rows are a PostgreSQL-only behaviour today.
         if (session.capabilities.backend === 'postgres') {
-          const writeExecutor = session.getWriteExecutor()
-          await writeExecutor.execute({
-            type: 'tags:removeVariantTag',
-            params: [validated.data.caseId, validated.data.variantId, validated.data.tagId]
-          })
           await appendTagAudit(writeExecutor, {
             action_type: 'tag_remove',
             entity_type: 'case_variant_annotation',
@@ -220,14 +195,7 @@ export function registerTagHandlers({
             old_value: JSON.stringify({ tag_id: validated.data.tagId }),
             new_value: null
           })
-          return undefined
         }
-        removeVariantTag(
-          validated.data.caseId,
-          validated.data.variantId,
-          validated.data.tagId,
-          getDb
-        )
         return undefined
       })
     }
@@ -242,20 +210,13 @@ export function registerTagHandlers({
           mainLogger.error(`Invalid tags:setVariantTags params: ${validated.error.message}`, 'tags')
           throw new Error('Invalid tag set parameters')
         }
-        const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          await session.getWriteExecutor().execute({
+        await getDbManager()
+          .getCurrentSession()
+          .getWriteExecutor()
+          .execute({
             type: 'tags:setVariantTags',
             params: [validated.data.caseId, validated.data.variantId, validated.data.tagIds]
           })
-          return undefined
-        }
-        setVariantTags(
-          validated.data.caseId,
-          validated.data.variantId,
-          validated.data.tagIds,
-          getDb
-        )
         return undefined
       })
     }

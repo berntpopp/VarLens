@@ -5,43 +5,22 @@
  * and never touch IPC/Electron APIs directly. This makes them testable
  * without mocking Electron internals.
  */
-import * as XLSX from 'xlsx'
 import { once } from 'node:events'
 import { createWriteStream } from 'node:fs'
-import { writeFile } from 'fs/promises'
 import { mainLogger } from '../../services/MainLogger'
-import { CohortService } from '../../database/cohort'
+import { jobRunner } from '../../services/jobs/runner'
+import type { JobContext } from '../../services/jobs/JobRunner'
 import { ExportWorkerClient } from '../../workers/export-worker-client'
+import { COHORT_EXPORT_COLUMNS } from '../../workers/cohort-export'
 import type { DatabaseService } from '../../database/DatabaseService'
+import type { DbPool } from '../../database/DbPool'
 import type { VariantFilter } from '../../database/types'
-import type { CohortSearchParams, CohortVariant } from '../../../shared/types/cohort'
+import type { CohortSearchParams } from '../../../shared/types/cohort'
 import type { ExportFilterSummary } from '../../../shared/types/export-worker'
 import { EXPORT_COLUMNS, type ExportColumn } from '../../workers/export-pipeline'
 import { csvEscape, formatCellValue } from '../../workers/export-renderer'
 
 const EXPORT_HARD_LIMIT = 100_000
-
-// Cohort export column headers
-export const COHORT_EXPORT_COLUMNS: readonly ExportColumn[] = [
-  { key: 'chr', header: 'Chromosome' },
-  { key: 'pos', header: 'Position' },
-  { key: 'ref', header: 'Reference' },
-  { key: 'alt', header: 'Alternate' },
-  { key: 'gene_symbol', header: 'Gene' },
-  { key: 'cdna', header: 'cDNA Change' },
-  { key: 'aa_change', header: 'AA Change' },
-  { key: 'consequence', header: 'Impact' },
-  { key: 'func', header: 'Function' },
-  { key: 'clinvar', header: 'ClinVar' },
-  { key: 'gnomad_af', header: 'gnomAD AF' },
-  { key: 'cadd_phred', header: 'CADD Score' },
-  { key: 'carrier_count', header: 'Carriers' },
-  { key: 'total_cases', header: 'Total Cases' },
-  { key: 'cohort_frequency', header: 'Cohort Frequency' },
-  { key: 'het_count', header: 'Heterozygous' },
-  { key: 'hom_count', header: 'Homozygous' },
-  { key: 'transcript', header: 'Transcript' }
-]
 
 /** Callbacks for emitting events to the renderer during export. */
 export interface ExportCallbacks {
@@ -55,26 +34,96 @@ export interface ExportResult {
   error?: string
 }
 
+const CANCELLED_RESULT: ExportResult = { success: false, error: 'Export cancelled' }
+
+/**
+ * Run an export as a tracked `export` job so it shows up in `jobs:changed`
+ * and can be cancelled via `export:cancel` / `jobs:cancel`. The JobRunner's
+ * per-kind single-flight rejects a second concurrent export.
+ */
+function runExportJob(
+  label: string,
+  run: (ctx: JobContext) => Promise<ExportResult>
+): Promise<ExportResult> {
+  return jobRunner.enqueue<{ label: string }, ExportResult>('export', { label }, (ctx) => run(ctx))
+    .result
+}
+
+/**
+ * Cancel the running export job, if any. Resolves `true` when a running
+ * export was asked to stop.
+ */
+export async function cancelActiveExport(): Promise<boolean> {
+  const running = jobRunner.list({ kind: 'export', status: 'running' })
+  for (const job of running) await jobRunner.cancel(job.id)
+  return running.length > 0
+}
+
+/** Bridge an export worker into a job: progress, cancel and completion. */
+function runWorkerExport(
+  ctx: JobContext,
+  callbacks: ExportCallbacks,
+  start: (client: ExportWorkerClient, hooks: WorkerExportHooks) => void
+): Promise<ExportResult> {
+  const workerClient = new ExportWorkerClient()
+  return new Promise<ExportResult>((resolve) => {
+    ctx.registerCancel(() => workerClient.cancel())
+    start(workerClient, {
+      onProgress: (current, total) => {
+        ctx.reportProgress(current, total)
+        callbacks.onProgress?.({ current, total })
+      },
+      onComplete: (filePath, rowCount) => {
+        mainLogger.info(`Export complete: ${rowCount} rows to ${filePath}`, 'export')
+        resolve({ success: true, filePath })
+      },
+      onError: (error) => {
+        mainLogger.error(`Export worker error: ${error}`, 'export')
+        resolve({ success: false, error })
+      },
+      onCancelled: () => {
+        mainLogger.info('Export cancelled by user', 'export')
+        resolve(CANCELLED_RESULT)
+      }
+    })
+  })
+}
+
+interface WorkerExportHooks {
+  onProgress: (current: number, total: number) => void
+  onComplete: (filePath: string, rowCount: number) => void
+  onError: (error: string) => void
+  onCancelled: () => void
+}
+
 /**
  * Pre-check variant count and compile export query.
  * If the count exceeds the hard limit, returns an ExportResult with success: false.
+ * The count runs in the read pool when one is available (it can be a
+ * whole-case `count(*)`); compiling the SQL is cheap and stays on main.
  */
-export function prepareVariantExport(
+export async function prepareVariantExport(
   getDb: () => DatabaseService,
   caseId: number,
-  filters: Partial<VariantFilter>
-):
+  filters: Partial<VariantFilter>,
+  getDbPool?: () => DbPool | null
+): Promise<
   | {
       compiled: { sql: string; parameters: readonly unknown[] }
       count: number
     }
-  | ExportResult {
+  | ExportResult
+> {
   const db = getDb()
   const fullFilter: VariantFilter = {
     ...filters,
     case_id: caseId
   }
-  const count = db.variants.getExportCount(fullFilter)
+  const dbPool = getDbPool?.() ?? null
+  const count =
+    dbPool !== null
+      ? await dbPool.run<number>({ type: 'variants:exportCount', params: [fullFilter] })
+      : db.variants.getExportCount(fullFilter)
 
   if (count > EXPORT_HARD_LIMIT) {
     return {
@@ -126,30 +175,20 @@ export function exportVariants(
   const db = getDb()
   const filterSummary = buildFilterSummary(filters)
 
-  const workerClient = new ExportWorkerClient()
-
-  return new Promise<ExportResult>((resolve) => {
-    workerClient.start({
-      dbPath: db.getPath(),
-      encryptionKey: db.getEncryptionKey(),
-      compiledSql: compiled.sql,
-      compiledParams: compiled.parameters,
-      outputFilePath,
-      caseName,
-      filterSummary,
-      onProgress: (current, total) => {
-        callbacks.onProgress?.({ current, total })
-      },
-      onComplete: (filePath, rowCount) => {
-        mainLogger.info(`Export complete: ${rowCount} variants to ${filePath}`, 'export')
-        resolve({ success: true, filePath })
-      },
-      onError: (error) => {
-        mainLogger.error(`Export worker error: ${error}`, 'export')
-        resolve({ success: false, error })
-      }
-    })
-  })
+  return runExportJob('variants', (ctx) =>
+    runWorkerExport(ctx, callbacks, (client, hooks) =>
+      client.start({
+        dbPath: db.getPath(),
+        encryptionKey: db.getEncryptionKey(),
+        compiledSql: compiled.sql,
+        compiledParams: compiled.parameters,
+        outputFilePath,
+        caseName,
+        filterSummary,
+        ...hooks
+      })
+    )
+  )
 }
 
 async function exportRowsToCsv(
@@ -157,7 +196,8 @@ async function exportRowsToCsv(
   outputFilePath: string,
   columns: readonly ExportColumn[],
   callbacks: ExportCallbacks,
-  label: string
+  label: string,
+  signal?: AbortSignal
 ): Promise<ExportResult> {
   const stream = createWriteStream(outputFilePath, { encoding: 'utf8' })
 
@@ -181,6 +221,11 @@ async function exportRowsToCsv(
 
     let rowCount = 0
     for await (const row of rows) {
+      if (signal?.aborted === true) {
+        stream.destroy()
+        mainLogger.info(`${label} cancelled after ${rowCount} rows`, 'export')
+        return CANCELLED_RESULT
+      }
       const line = columns
         .map((column) => csvEscape(formatCellValue(column.key, row[column.key])))
         .join(',')
@@ -213,12 +258,15 @@ export function exportPostgresVariants(
   outputFilePath: string,
   callbacks: ExportCallbacks
 ): Promise<ExportResult> {
-  return exportRowsToCsv(
-    rows,
-    outputFilePath,
-    EXPORT_COLUMNS,
-    callbacks,
-    'PostgreSQL variant export'
+  return runExportJob('postgres-variants', (ctx) =>
+    exportRowsToCsv(
+      rows,
+      outputFilePath,
+      EXPORT_COLUMNS,
+      callbacks,
+      'PostgreSQL variant export',
+      ctx.signal
+    )
   )
 }
 
@@ -227,103 +275,39 @@ export function exportPostgresCohort(
   outputFilePath: string,
   callbacks: ExportCallbacks
 ): Promise<ExportResult> {
-  return exportRowsToCsv(
-    rows,
-    outputFilePath,
-    COHORT_EXPORT_COLUMNS,
-    callbacks,
-    'PostgreSQL cohort export'
+  return runExportJob('postgres-cohort', (ctx) =>
+    exportRowsToCsv(
+      rows,
+      outputFilePath,
+      COHORT_EXPORT_COLUMNS,
+      callbacks,
+      'PostgreSQL cohort export',
+      ctx.signal
+    )
   )
 }
 
 /**
- * Export cohort variants to XLSX file.
+ * Export cohort variants to XLSX. The cohort query (≤100k rows) and the
+ * workbook build run in the export worker; progress is relayed and the job
+ * can be cancelled.
  */
-export async function exportCohort(
+export function exportCohort(
   getDb: () => DatabaseService,
   params: CohortSearchParams,
-  outputFilePath: string
+  outputFilePath: string,
+  callbacks: ExportCallbacks = {}
 ): Promise<ExportResult> {
   const db = getDb()
-  const cohortService = new CohortService(db.database)
-
-  // Get cohort variants matching filters (hard limit of 100k rows)
-  const exportParams: CohortSearchParams = {
-    ...params,
-    limit: 100000
-  }
-  const cohortResult = cohortService.getCohortVariants(exportParams)
-  const variants = cohortResult.data
-
-  // Convert variants to worksheet data
-  const headers = COHORT_EXPORT_COLUMNS.map((col) => col.header)
-  const rows = variants.map((variant: CohortVariant) =>
-    COHORT_EXPORT_COLUMNS.map((col) => {
-      const value = variant[col.key as keyof CohortVariant]
-      // Format specific columns
-      if (col.key === 'gnomad_af' && typeof value === 'number') {
-        return value.toExponential(2)
-      }
-      if (col.key === 'cadd_phred' && typeof value === 'number') {
-        return value.toFixed(2)
-      }
-      if (col.key === 'cohort_frequency' && typeof value === 'number') {
-        return `${(value * 100).toFixed(1)}%`
-      }
-      return value ?? ''
-    })
+  return runExportJob('cohort', (ctx) =>
+    runWorkerExport(ctx, callbacks, (client, hooks) =>
+      client.startCohort({
+        dbPath: db.getPath(),
+        encryptionKey: db.getEncryptionKey(),
+        params,
+        outputFilePath,
+        ...hooks
+      })
+    )
   )
-
-  // Create workbook
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-
-  // Set column widths
-  ws['!cols'] = COHORT_EXPORT_COLUMNS.map((col) => ({
-    wch: col.key === 'aa_change' || col.key === 'cdna' ? 20 : 15
-  }))
-
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Cohort Variants')
-
-  // Add metadata sheet
-  const summary = cohortService.getCohortSummary()
-  const metaData = [
-    ['Cohort Export Information'],
-    ['Total Cases in Cohort', summary.total_cases],
-    ['Unique Variants Exported', variants.length],
-    ['Export Date', new Date().toISOString()],
-    [''],
-    ['Active Filters'],
-    ...(params.search_term !== undefined && params.search_term !== ''
-      ? [['Search Term', params.search_term]]
-      : []),
-    ...(params.gene_symbol !== undefined && params.gene_symbol !== ''
-      ? [['Gene', params.gene_symbol]]
-      : []),
-    ...(params.consequences !== undefined && params.consequences.length > 0
-      ? [['Impact Levels', params.consequences.join(', ')]]
-      : []),
-    ...(params.funcs !== undefined && params.funcs.length > 0
-      ? [['Functions', params.funcs.join(', ')]]
-      : []),
-    ...(params.clinvars !== undefined && params.clinvars.length > 0
-      ? [['ClinVar', params.clinvars.join(', ')]]
-      : []),
-    ...(params.gnomad_af_max !== undefined ? [['Max gnomAD AF', params.gnomad_af_max]] : []),
-    ...(params.cadd_min !== undefined ? [['Min CADD', params.cadd_min]] : []),
-    ...(params.max_internal_af !== undefined
-      ? [['Max Internal Frequency', `${(params.max_internal_af * 100).toFixed(1)}%`]]
-      : []),
-    ...(params.carrier_count_min !== undefined
-      ? [['Min Carrier Count', params.carrier_count_min]]
-      : [])
-  ]
-  const metaWs = XLSX.utils.aoa_to_sheet(metaData)
-  XLSX.utils.book_append_sheet(wb, metaWs, 'Export Info')
-
-  // Write file
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-  await writeFile(outputFilePath, buffer)
-
-  return { success: true, filePath: outputFilePath }
 }
