@@ -5,7 +5,10 @@ import { decodeWorkerError, encodeWorkerError } from '../../../src/main/database
 import { AppError, ConflictError, ForbiddenError } from '../../../src/main/ipc/errors'
 import { toSerializableError } from '../../../src/main/ipc/serializable-error'
 import { JobRunner } from '../../../src/main/services/jobs/JobRunner'
-import { workerErrorToError } from '../../../src/main/storage/postgres/PostgresImportExecutor'
+import {
+  classifyWorkerError,
+  workerErrorToError
+} from '../../../src/main/storage/import-worker-errors'
 import { ERROR_HTTP_STATUS, httpStatusForErrorCode } from '../../../src/shared/errors/error-status'
 import { ErrorCode } from '../../../src/shared/types/errors'
 
@@ -91,6 +94,16 @@ describe('error envelope', () => {
     expect(
       workerErrorToError({ type: 'error', message: 'boom', code: 'UNKNOWN' })
     ).not.toBeInstanceOf(AppError)
+  })
+
+  it('a duplicate case name in either import worker comes back as CONFLICT', () => {
+    const wire = classifyWorkerError(new UniqueConstraintError('case', 'HG005'))
+    expect(wire.code).toBe(ErrorCode.CONFLICT)
+    const rebuilt = workerErrorToError({ message: "case 'HG005' already exists", ...wire })
+    expect(toSerializableError(rebuilt)).toMatchObject({
+      code: ErrorCode.CONFLICT,
+      userMessage: "Case 'HG005' already exists. Choose a different name."
+    })
   })
 
   it('a job single-flight rejection is a CONFLICT', () => {

@@ -18,6 +18,7 @@
 import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { jobRunner } from '../../services/jobs/runner'
 import { withImportJobProgress } from '../import-job-progress'
+import { workerErrorToError } from '../import-worker-errors'
 import { BedFilter } from '../../import/vcf/bed-filter'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { ImportFilters } from '../../import/vcf/import-filters'
@@ -205,7 +206,13 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                 elapsed: capturedElapsed
               })
             } else {
-              reject(new Error(detail?.error ?? 'Import failed'))
+              reject(
+                workerErrorToError({
+                  message: detail?.error ?? 'Import failed',
+                  code: detail?.errorCode,
+                  userMessage: detail?.userMessage
+                })
+              )
             }
           },
           onError: (msg) => {

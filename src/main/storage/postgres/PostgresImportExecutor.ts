@@ -20,11 +20,9 @@ import { PostgresImportWorkerClient } from './PostgresImportWorkerClient'
 import type { PostgresImportWorkerCallbacks } from './PostgresImportWorkerClient'
 import type {
   PostgresImportWorkerStartMessage,
-  PostgresImportWorkerErrorMessage,
   PostgresClientConfig
 } from '../../../shared/types/postgres-import-worker'
-import { ErrorCode } from '../../../shared/types/errors'
-import { AppError } from '../../ipc/errors'
+import { workerErrorToError } from '../import-worker-errors'
 
 export interface PostgresImportExecutorOptions {
   schema: string
@@ -211,22 +209,5 @@ export class PostgresImportExecutor implements StorageImportExecutor {
   }
 }
 
-const KNOWN_ERROR_CODES = new Set<string>(Object.values(ErrorCode))
-/** Codes that carry meaning for the caller; anything else stays a plain Error. */
-const TYPED_WORKER_CODES = new Set<string>([
-  ErrorCode.CONFLICT,
-  ErrorCode.NOT_FOUND,
-  ErrorCode.FILE_NOT_FOUND,
-  ErrorCode.VALIDATION,
-  ErrorCode.INVALID_PARAMETERS,
-  ErrorCode.PARSE_ERROR
-])
-
-/** Rebuild a typed error from a worker `error` message (codes survive the thread hop). */
-export function workerErrorToError(msg: PostgresImportWorkerErrorMessage): Error {
-  const code = msg.code
-  if (code !== undefined && KNOWN_ERROR_CODES.has(code) && TYPED_WORKER_CODES.has(code)) {
-    return new AppError(code as ErrorCode, msg.message, msg.userMessage ?? msg.message)
-  }
-  return new Error(msg.message)
-}
+// Re-exported for callers/tests that predate the shared module.
+export { workerErrorToError }
