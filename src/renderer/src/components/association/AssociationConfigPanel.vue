@@ -184,6 +184,7 @@
           <v-radio-group
             v-model="primaryTest"
             label="Primary test"
+            class="primary-test-group"
             density="compact"
             hide-details
             inline
@@ -545,3 +546,10 @@ defineExpose({
   scopeCaseIds
 })
 </script>
+
+<style scoped>
+/* The group label is a heading for the radios: full emphasis for contrast (axe). */
+.primary-test-group :deep(.v-label) {
+  opacity: 1;
+}
+</style>
