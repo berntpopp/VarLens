@@ -36,6 +36,9 @@ import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
 import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlist'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
+import { usePermissions } from '../../composables/usePermissions'
+
+const { canWrite } = usePermissions()
 
 const props = defineProps<{
   caseId: number
@@ -180,6 +183,7 @@ function dismissError(): void {
 
       <ShortlistTable
         v-else-if="result"
+        :read-only="!canWrite"
         :rows="result.rows"
         @row-click="(row) => emit('row-click', row)"
         @open-in-tab="(t) => emit('open-in-tab', t)"

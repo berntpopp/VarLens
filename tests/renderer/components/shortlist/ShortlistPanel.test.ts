@@ -64,6 +64,10 @@ vi.mock('../../../../src/renderer/src/composables/useApiService', () => ({
 
 import * as composableMod from '../../../../src/renderer/src/composables/useShortlistQuery'
 import ShortlistPanel from '../../../../src/renderer/src/components/shortlist/ShortlistPanel.vue'
+import { installCapabilities } from '../../helpers/capabilities'
+
+// The star is role-gated (usePermissions reads the capability document).
+beforeEach(() => installCapabilities())
 
 const state = (
   composableMod as unknown as { __state: ReturnType<typeof composableMod.useShortlistQuery> }

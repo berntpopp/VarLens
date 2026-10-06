@@ -29,6 +29,8 @@ import type { ShortlistRow } from '../../../../shared/types/shortlist'
 
 const props = defineProps<{
   rows: ShortlistRow[]
+  /** Viewer role: the star is display-only. */
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -199,6 +201,7 @@ onKeyStroke(
   's',
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
+    if (props.readOnly === true) return
     e.preventDefault()
     emit('toggle-star', selectedItem.value)
   },
@@ -278,6 +281,7 @@ onKeyStroke(
         variant="text"
         size="x-small"
         :data-testid="`shortlist-star-${item.id}`"
+        :disabled="props.readOnly === true"
         @click.stop="emit('toggle-star', item)"
       >
         <v-icon
