@@ -28,6 +28,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import type { StorageReadTask } from '../../main/storage/read-executor'
 import type { StorageWriteTask } from '../../main/storage/write-executor'
 import { ErrorCode, type SerializableError } from '../../shared/types/errors'
+import { httpStatusForErrorCode } from '../../shared/errors/error-status'
 import {
   applyJsonResponseHeaders,
   safeIdentifier,
@@ -109,11 +110,16 @@ async function invokeAsIpcResult(
     }
     return result
   } catch (error) {
-    reply.code(500)
     // The stack goes to the server log only; the client gets the
-    // sanitised SerializableError built by toSerializableWebError.
-    reply.log.error({ err: error }, 'web dispatcher: handler threw')
-    return toSerializableWebError(error)
+    // sanitised SerializableError built by toSerializableWebError. The
+    // status comes from the error code (parity spec §4.4): a name clash is
+    // a 409, an ownership failure a 403, and only real faults stay 500.
+    const serialized = toSerializableWebError(error)
+    const status = httpStatusForErrorCode(serialized.code)
+    reply.code(status)
+    if (status >= 500) reply.log.error({ err: error }, 'web dispatcher: handler threw')
+    else reply.log.info({ code: serialized.code }, 'web dispatcher: handler rejected request')
+    return serialized
   }
 }
 
@@ -298,8 +304,10 @@ export function registerDispatcher(
           401: DispatcherErrorResponseSchema,
           403: DispatcherErrorResponseSchema,
           404: DispatcherErrorResponseSchema,
+          409: DispatcherErrorResponseSchema,
           500: DispatcherErrorResponseSchema,
-          501: DispatcherErrorResponseSchema
+          501: DispatcherErrorResponseSchema,
+          502: DispatcherErrorResponseSchema
         }
       }
     },

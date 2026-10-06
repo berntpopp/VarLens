@@ -28,6 +28,7 @@ import {
   profileCount
 } from '../storage/postgres/postgres-import-profile'
 import { quoteIdentifier } from '../storage/postgres/identifiers'
+import { toSerializableError } from '../ipc/serializable-error'
 import { PostgresCohortSummaryRepository } from '../storage/postgres/PostgresCohortSummaryRepository'
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
 import type { FormatInfo } from '../import/strategies/ImportStrategy'
@@ -952,7 +953,13 @@ export async function runImport(
         }
       })
     } else {
-      post({ type: 'error', message })
+      const classified = toSerializableError(err)
+      post({
+        type: 'error',
+        message,
+        code: classified.code,
+        userMessage: classified.userMessage
+      })
     }
   } finally {
     try {

@@ -97,6 +97,7 @@ import VolcanoPlot from './VolcanoPlot.vue'
 import ManhattanPlot from './ManhattanPlot.vue'
 import { useAssociation } from '../../composables/useAssociation'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
+import { formatError } from '../../utils/ipc-result'
 
 interface CaseInfo {
   id: number
@@ -176,7 +177,7 @@ async function loadCases(): Promise<void> {
     cases.value = data.cases
     cohortGroups.value = data.cohortGroups
   } catch (err) {
-    error.value = `Failed to load cases: ${err instanceof Error ? err.message : String(err)}`
+    error.value = `Failed to load cases: ${formatError(err, 'unknown error')}`
   }
 }
 
@@ -196,7 +197,7 @@ async function runAnalysis(config: unknown): Promise<void> {
   try {
     results.value = unwrapIpcResult(await apiRunAssociation(config)) as AssociationResultsData
   } catch (err) {
-    error.value = `Analysis failed: ${err instanceof Error ? err.message : String(err)}`
+    error.value = `Analysis failed: ${formatError(err, 'unknown error')}`
   } finally {
     isRunning.value = false
     if (cleanupProgress !== null) {
