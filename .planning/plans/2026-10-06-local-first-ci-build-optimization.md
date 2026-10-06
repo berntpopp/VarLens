@@ -1,6 +1,6 @@
 # Local-first CI and Build Optimization Implementation Plan
 
-> **For agentic workers:** Use superpowers:executing-plans for inline implementation, with the user-requested independent Claude Code Opus 5.5 review before implementation and again for the final change. The user approved the design and explicitly requested end-to-end execution after review; no additional approval checkpoint is required.
+> **For agentic workers:** Use superpowers:executing-plans with the user-requested parallel agents for disjoint areas, with the user-requested independent Claude Code Opus 5.5 review before implementation and again for the final change. The user approved the design and explicitly requested end-to-end execution after review; no additional approval checkpoint is required.
 
 **Goal:** Enforce complete applicable local verification before push while removing repeated CI work and reducing build time and payloads.
 
@@ -64,7 +64,7 @@
 - [ ] Implement unique disposable PostgreSQL/network/container resources with cleanup on signals and failures. Runtime Docker smoke must invoke health/native behavior after prune. Do not use developer `.env` or existing databases. Bound builder resources and do not change the user's default builder.
 - [ ] Implement receipts with committed input fingerprints, base SHA, validated install, environment/tool identities, selected gates, and output digests; require clean tree before/after recording. Mutable advisories and remote base are refreshed on push. Fingerprint native cache inputs independently of current ABI so deliberate sequential switches do not corrupt reuse.
 - [ ] Add tests for wrong-ref, multiple refs, deletion, tag, missing/corrupt receipt, changed base/toolchain/env/output, dirty tree, changed files during run, missing required tooling, cancellation, and sanitized nested Git fixtures.
-- [ ] Install hooks only in this worktree when requested through Make; preserve unrelated hooks and global config. Validate actual pushed commits, with explicit failures for unsupported/non-HEAD refs; tags additionally require exact-SHA hosted prerequisites.
+- [ ] Install hooks only in this worktree when requested through Make; preserve unrelated hooks and global config. Validate actual pushed commits, with explicit failures for unsupported/non-HEAD refs; tags additionally require version consistency and reachability from fresh remote main; exact-SHA hosted success remains a publication gate.
 - [ ] Refactor Make composition to avoid repeated install/build/startup. Separate web static from integration execution and require bundles/PostgreSQL in authoritative integration. Preserve usable standalone commands and desktop-default `make ci`.
 - [ ] Update AGENTS and Make help with the mandatory preflight/push workflow, exact validation reporting, draft-first batching, tool setup, and limitations. Keep detailed policy in `.planning/`.
 
@@ -79,7 +79,7 @@
 - [ ] Use Node-targeted install in test/web lanes, runtime-separated caches, correct Prettier paths, fresh typed lint, and the shared gate commands. Keep full platform matrix and immutable SHA action pins.
 - [ ] Enable bounded BuildKit layer caches with trusted-main writes and PR-scoped writes/restores that cannot overwrite trusted entries. Narrow Docker build inputs while preserving workers, migration SQL, and runtime native probes.
 - [ ] Build/load and scan the web image once; tag/push that same image ID and report verified registry digest. Do not invoke a second build for publication.
-- [ ] Select screenshot capture from actual app/fixture/config inputs; prose-only docs use tracked screenshots. Keep the docs build/deployment contract and deterministic capture behavior.
+- [ ] Select screenshot capture from actual app/fixture/config inputs; prose-only docs reuse verified screenshot artifacts with the same capture fingerprint; cache misses recapture into temporary output. Keep the docs build/deployment contract and deterministic capture behavior.
 - [ ] Add separate Dependabot security groups while preserving native/Electron major exceptions; document version batching without skip-CI merges.
 - [ ] Run actionlint/ShellCheck, gate contract tests, and Docker build/runtime checks.
 

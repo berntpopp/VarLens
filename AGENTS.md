@@ -48,6 +48,8 @@ Makefile         Canonical command surface — mirrored by GitHub Actions workfl
 
 ```bash
 npm ci                 # install deps; postinstall rebuilds native module for Electron
+make hooks-install     # install fail-closed pre-push hook for this worktree
+make tools-setup       # verified local actionlint, ShellCheck, Gitleaks, Trivy
 make dev               # rebuild for Electron + start electron-vite dev server
 ```
 
@@ -131,12 +133,39 @@ The **Makefile is the source of truth**. GitHub Actions workflows mirror it targ
 | `make build`                                                        | `electron-vite build` into `out/`                                                             |
 | `make dist` / `make dist-linux` / `make dist-mac` / `make dist-win` | Build + package                                                                               |
 | `make ci`                                                           | Local minimum: lint-check + format-check + typecheck + rebuild-node + test                    |
-| `make ci-full` / `make ci-actions`                                  | Full local mirror of GitHub Actions pipeline                                                  |
+| `make quick`                                                        | Optional cached edit feedback; insufficient for push                                          |
+| `make preflight` / `make preflight-full`                            | All applicable / all supported local gates against freshly fetched base                       |
+| `make workflows` / `make hooks-install` / `make tools-setup`        | Workflow/shell checks, worktree hook setup, verified validation tools                         |
+| `make ci-full` / `make ci-actions`                                  | Compatibility aliases for `make preflight-full`                                               |
 | `make ci-startup-smoke`                                             | Playwright Electron startup smoke under xvfb (Linux)                                          |
 | `make docs-dev` / `make docs`                                       | VitePress user docs                                                                           |
 | `VARLENS_WEB=1 make ...`                                            | Mode toggle: extends `dev` / `test` / `ci` to include the web layer (see "Mode toggle" below) |
 
-**Before claiming work is done, run `make ci` at minimum.** This target intentionally serializes the heavyweight gates to keep local peak memory bounded. For anything touching Electron lifecycle, IPC, workers, or packaging, run `make ci-full`.
+**Before claiming work is done, run `make ci` at minimum.** This target intentionally serializes the heavyweight gates to keep local peak memory bounded. For anything touching Electron lifecycle, IPC, workers, or packaging, run `make preflight-full`.
+
+**Before pushing or marking a PR ready, commit the intended changes and run `make preflight`.**
+Use `make preflight-full PREFLIGHT_ARGS=--clean-install` for dependency/build-system changes.
+The pre-push hook validates every outgoing ref against the actual clean HEAD; a different ref
+needs its own checked-out worktree. Branch deletions require no build. Never use `--no-verify`,
+`[skip ci]`, or missing tools/databases to bypass selected gates. Keep work in draft PRs while
+iterating, then batch a verified push before ready-for-review.
+
+Preflight serializes heavyweight work and Node/Electron ABI consumers, installs dependencies
+once when their validated contents change, creates disposable PostgreSQL/container resources,
+and packages with `--publish never`. It does not source developer environment files; Vite's
+auto-loaded `.env`, `.env.local`, and production env files must be moved aside. Hooks install
+only for the current worktree (`extensions.worktreeConfig`); existing unrelated hooks/config
+cause an actionable refusal. Re-run `make hooks-install` in each worktree you use.
+On hosts that require the existing Electron test sandbox opt-out, explicitly pass
+`PREFLIGHT_ARGS=--electron-no-sandbox` or set `git config --worktree varlens.ciNoSandbox true`
+after hook setup. This option is confined to test launches and bound into the receipt.
+
+Pass receipts live under the worktree Git directory and bind clean commit/tree, merge-base,
+gate policy, tools, installed dependencies, and output bytes. Each push fetches the base and
+refreshes outgoing-history secret scans and current container advisories. Receipts are local
+conveniences, not attestations. Report the exact command and outcome, including reused work
+and unavailable checks; other-OS packages, the hosted merge result, signing, and publication
+provenance still require hosted evidence. Detailed policy: `.planning/specs/2026-10-06-local-first-ci-build-optimization.md`.
 
 ### Mode toggle: desktop (default) / web (opt-in)
 
@@ -251,7 +280,7 @@ Test data lives at `tests/test-data/vcf/` (GIAB Chinese Trio, chr22:29M–30.5M,
   - Use git worktrees when useful or when the current checkout should stay clean.
   - Only documentation/archive housekeeping may be committed directly to `main` if explicitly requested.
 - **Conventional Commits.** Types used in this repo: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `style`, `chore`, `ci`, `merge`. Optional scope in parentheses: `refactor(ipc): …`, `fix(renderer): …`. Read `git log --oneline -30` before opening a PR if you're unsure of current phrasing.
-- **Release flow.** Versions are tagged `vX.Y.Z`. `.github/workflows/release.yml` **refuses to publish** if `build.yml` has not passed on the exact tagged SHA. Do not tag until CI is green on the commit you're tagging. Release no longer rebuilds that commit: it downloads `build.yml`'s installers for that exact SHA, verifies provenance, checksums, and expected filenames, applies Windows signing, and publishes.
+- **Release flow.** Versions are tagged `vX.Y.Z`. `.github/workflows/release.yml` **refuses to publish** if `build.yml` has not passed on the exact tagged SHA. Version tags must match the tagged package version, point to a commit reachable from freshly fetched remote `main`, and pass full local preflight. Waiting for Build to turn green before tagging is recommended to avoid the release workflow polling timeout; exact-SHA Build success remains a mandatory publication gate enforced by `release.yml`. Release no longer rebuilds that commit: it downloads `build.yml`'s installers for that exact SHA, verifies provenance, checksums, and expected filenames, applies Windows signing, and publishes.
 - **PRs.** Small, focused, green CI. If a change spans shell + IPC + database, split it unless the atomicity is load-bearing. Reference the `.planning/` plan or review that motivates the change.
 
 ## Workflow Maintenance

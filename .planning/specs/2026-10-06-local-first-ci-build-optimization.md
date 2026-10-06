@@ -114,7 +114,9 @@ on success or failure. Never reuse or reset a developer's existing database.
 Install a small pre-push wrapper calling the gate runner. Parse every ref update
 from Git's hook input and verify the actual commit being pushed. A clean HEAD
 cannot authorize a different pushed commit. Branch deletions require no build;
-version tags also require the existing exact-SHA hosted release prerequisites.
+version tags require version consistency and reachability from fresh remote main.
+Exact-SHA successful Build and artifact provenance remain publication prerequisites
+enforced by release.yml, rather than prerequisites for creating the tag.
 Non-HEAD pushes without a matching record fail with a concrete checkout/preflight
 instruction. Do not silently validate the wrong revision.
 

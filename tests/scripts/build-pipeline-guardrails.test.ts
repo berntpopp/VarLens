@@ -45,8 +45,8 @@ describe('native rebuild stays cacheable', () => {
     }
   )
 
-  test('postinstall targets the electron ABI, rebuild:node targets node', () => {
-    expect(scripts.postinstall).toMatch(/rebuild-native\.mjs electron$/)
+  test('postinstall selects its runtime while explicit rebuilds stay deterministic', () => {
+    expect(scripts.postinstall).toMatch(/rebuild-native\.mjs install$/)
     expect(scripts['rebuild:electron']).toMatch(/rebuild-native\.mjs electron$/)
     expect(scripts['rebuild:node']).toMatch(/rebuild-native\.mjs node$/)
   })
@@ -147,7 +147,7 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
     }
   })
 
-  test('keys the native cache on os, arch, electron version and lockfile, with no restore-keys, across every workflow that declares one', () => {
+  test('keys native caches on runtime, Node ABI, os, arch, Electron and full lockfile without partial restores', () => {
     // Task 7 (build.yml, web-ci.yml, publish-web.yml, docs.yml) and release.yml
     // (which must have none — it promotes build.yml's artifacts, it never
     // rebuilds) are all scanned. A per-file "at least one" minimum would be
@@ -163,6 +163,14 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
       totalKeys += keys.length
 
       for (const key of keys) {
+        expect(key, `${name}: native cache must separate Node and Electron`).toContain(
+          'env.VARLENS_NATIVE_RUNTIME'
+        )
+        expect(key, `${name}: native cache must pin the Node ABI`).toContain('node-abi')
+        expect(
+          key,
+          `${name}: native cache must pin the Node version and rebuild scripts`
+        ).toContain("hashFiles('.nvmrc', 'scripts/native/**')")
         expect(key, `${name}: native- key must pin runner.os`).toContain('runner.os')
         expect(key, `${name}: native- key must pin runner.arch`).toContain('runner.arch')
         expect(key, `${name}: native- key must pin the electron version`).toContain(

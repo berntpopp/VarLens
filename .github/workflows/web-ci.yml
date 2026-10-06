@@ -1,33 +1,17 @@
 name: Web CI
 
 on:
-  pull_request:
-    paths:
-      - 'Dockerfile'
-      - '.dockerignore'
-      - '.env.web.example'
-      - 'Makefile'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'src/main/storage/**'
-      - 'src/web/**'
-      - 'src/renderer/src/**'
-      - 'src/shared/**'
-      - 'tests/web-gate/**'
-      - 'tests/web-smoke/**'
-      - 'vite.web*.config.ts'
-      - '.github/workflows/build.yml'
-      - '.github/workflows/*web*.yml'
   push:
     branches:
       - VarLens-Web
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   web-ci:
@@ -47,6 +31,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
+      VARLENS_NATIVE_RUNTIME: node
       VARLENS_PG_URL: postgres://varlens:varlens@127.0.0.1:5432/varlens_web_ci
       VARLENS_RECOVERY_KEY_DIR: /tmp/varlens-web-ci-secrets
     steps:
@@ -62,10 +47,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsqlite3-dev build-essential
 
-      - name: Extract Electron version
+      - name: Resolve native toolchain identity
         id: electron-ver
         shell: bash
-        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")" >> "$GITHUB_OUTPUT"
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
 
       # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
       # postinstall restores a binary instead of compiling one. `.cache/native`
@@ -77,13 +64,10 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
-          key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Rebuild native modules for Node.js
-        run: npm run rebuild:node
 
       # `make web-ci` runs the web gate under Node (no Electron process
       # involved), so assert the NODE ABI, not electron.
@@ -92,7 +76,3 @@ jobs:
 
       - name: Run opt-in web gate
         run: make web-ci
-
-      - name: Docker runtime image smoke
-        if: github.event_name == 'pull_request'
-        run: docker build --target runtime -t varlens-web-pr-smoke .

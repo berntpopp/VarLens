@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # VarLens — web build container.
 #
 # Multi-stage:
@@ -35,8 +36,13 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts \
  && npm rebuild better-sqlite3-multiple-ciphers @node-rs/argon2
 
-COPY . .
-RUN VARLENS_WEB_BASE=/ npm run build:web
+COPY src/ ./src/
+COPY scripts/web/ ./scripts/web/
+COPY vite.web.config.ts vite.web-renderer.config.ts tsconfig*.json ./
+# Cache mounts persist only in a retained builder; type=gha exports layer cache,
+# not this mount's payloads. Unchanged builds still reuse the entire build layer.
+RUN --mount=type=cache,id=varlens-precompress,target=/app/.cache/precompress,sharing=locked \
+    VARLENS_WEB_BASE=/ npm run build:web
 
 # Reduce to production deps only.
 RUN npm prune --omit=dev --ignore-scripts
