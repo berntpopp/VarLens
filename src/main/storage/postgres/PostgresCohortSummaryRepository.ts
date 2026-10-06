@@ -273,7 +273,11 @@ export class PostgresCohortSummaryRepository {
     includeProvisional = false
   }: ScopedClient & { affectedBuilds?: string[]; includeProvisional?: boolean }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
-    const casesTable = tbl(includeProvisional ? 'cases_all' : 'cases')
+    // Provisional (importing) cases count toward the denominator during import
+    // publication; cases being deleted in the background never do.
+    const casesTable = includeProvisional
+      ? `(SELECT genome_build FROM ${tbl('cases_all')} WHERE import_status <> 'deleting') provisional_cases`
+      : tbl('cases')
     if (affectedBuilds && affectedBuilds.length > 0) {
       await client.query(
         `UPDATE ${tbl('cohort_variant_summary')} cvs

@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg'
 
+import { InvalidParametersError } from '../../ipc/errors'
 import { applyAnnotationFlagsOnCaseDelete } from './cohort-annotation-flags-sql'
 import { quoteIdentifier } from './identifiers'
 import {
@@ -7,20 +8,95 @@ import {
   SCOPED_DEDUPED_AGG_SQL
 } from './PostgresCohortSummaryRepository'
 
-type TransactionClient = Pick<PoolClient, 'query' | 'release'>
-
 /** The subset of PostgresCohortSummaryRepository this repo drives (test seam). */
 type CohortSummaryMaintenance = Pick<
   PostgresCohortSummaryRepository,
   'recomputeCohortFrequency' | 'removeColumnMetas'
 >
 
+type LifecyclePool = Pick<Pool, 'connect' | 'query'>
+
+export const DEFAULT_CASE_DELETE_BATCH_SIZE = 5000
+
+export type CaseDeletionPhase = 'hiding' | 'purging' | 'finalizing'
+
+export interface CaseDeletionProgress {
+  phase: CaseDeletionPhase
+  /** Variant rows purged so far (purging phase). */
+  done: number
+  /** Variant rows the case held when it was hidden, if known. */
+  total: number | null
+}
+
+export interface HideCaseResult {
+  /** 'hidden' = this call hid it; 'resume' = already 'deleting'; 'missing' = no row. */
+  state: 'hidden' | 'resume' | 'missing'
+  genomeBuild?: string
+  variantCount: number
+}
+
+export interface CaseDeletionOptions {
+  batchSize?: number
+  onProgress?: (progress: CaseDeletionProgress) => void
+  /** Yield between purge batches so request traffic gets pool connections. */
+  pauseBetweenBatchesMs?: number
+  /**
+   * Checked between purge batches. An aborted deletion leaves the case in
+   * 'deleting' (invisible to readers) and is resumed at the next start.
+   */
+  signal?: AbortSignal
+}
+
+export type CaseLifecycleStatus = 'ready' | 'importing' | 'deleting'
+
+/**
+ * statement_timeout for the case-scoped maintenance transaction. It only
+ * takes row locks (readers never wait on it), but a WGS-sized case's summary
+ * subtraction can exceed the pool's 30 s default.
+ */
+const MAINTENANCE_STATEMENT_TIMEOUT_MS = 10 * 60 * 1000
+
+export class CaseDeletionInterruptedError extends Error {
+  constructor(caseId: number) {
+    super(`deletion of case ${caseId} was interrupted; it resumes at the next start`)
+    this.name = 'CaseDeletionInterruptedError'
+  }
+}
+
+const DELETING_NAME_PREFIX = '__deleting__:'
+
+/**
+ * Case deletion without global locks (2026-10 blocking audit, W-1).
+ *
+ * The old single-transaction delete TRUNCATEd and rebuilt `variant_frequency`
+ * (ACCESS EXCLUSIVE: every `variants:query` joins it, so every web user
+ * blocked) and cascade-deleted the whole case in one statement. Now:
+ *
+ *   1. `hideCase` — ONE short transaction, row locks only: annotation flags,
+ *      cohort-summary carrier/het/hom subtraction, zero-carrier cleanup and
+ *      the variant_frequency decrement are all scoped to the case's own
+ *      coordinates; column metas are dropped; the row is renamed (freeing the
+ *      UNIQUE name for re-import) and flipped to import_status='deleting'.
+ *      The `cases` / `variants` views (migration 0015) hide it from every
+ *      reader at commit. Doing the summary maths in the same transaction as
+ *      the flip keeps a concurrent full summary rebuild (which reads the
+ *      views) from double-counting the subtraction.
+ *   2. `recomputeCohortFrequency` for the case's build in its own
+ *      transaction (denominator now excludes the hidden case).
+ *   3. `purgeCaseVariants` — DELETE variants_all in `batchSize` chunks, each
+ *      its own short transaction; FK cascades remove transcripts / SV / CNV /
+ *      STR / per-case annotation rows per chunk.
+ *   4. `finalizeCaseDeletion` — delete the (now small) cases_all row.
+ *
+ * Steps 2-4 are idempotent, so a crash after step 1 is resumed by
+ * `listPendingDeletions()` + `deleteCase()` at the next start.
+ */
 export class PostgresCaseLifecycleRepository {
   private readonly schemaName: string
   private readonly summary: CohortSummaryMaintenance
 
   constructor(
-    private readonly pool: Pick<Pool, 'connect'>,
+    private readonly pool: LifecyclePool,
     private readonly schema: string,
     summary?: CohortSummaryMaintenance
   ) {
@@ -28,124 +104,237 @@ export class PostgresCaseLifecycleRepository {
     this.summary = summary ?? new PostgresCohortSummaryRepository()
   }
 
-  /**
-   * Sprint A PR-3 C3 (delete half). Deletes one case and keeps the materialised
-   * cohort summary in lockstep, all inside the existing single transaction. The
-   * 8-step ordering is load-bearing:
-   *
-   *   1. SELECT genome_build (Pass-4 HIGH #1) — captured BEFORE the cascade so
-   *      step 7 can narrow the cohort_frequency recompute to the right build.
-   *   2. applyAnnotationFlagsOnCaseDelete (C5a third variant, Pass-5 HIGH #1) —
-   *      runs BEFORE the case delete; the ` AND v.case_id <> $1` predicate
-   *      excludes the about-to-be-cascade-deleted rows so flags backed solely by
-   *      this case clear in the same transaction.
-   *   3. UPDATE cohort_variant_summary subtracting carrier/het/hom together
-   *      (Pass-6 MED #3) from the deduped per-case CTE.
-   *   4. DELETE summary rows that dropped to zero carriers (sibling statement,
-   *      Pass-2 verdict #1).
-   *   5. DELETE the case (cascades to variants + case_variant_annotations +
-   *      cohort_column_meta).
-   *   6. rebuildVariantFrequency (Pass-6 HIGH #1) — vf.case_count powers
-   *      internal_af, so it must be rebuilt after the cascade.
-   *   7. recomputeCohortFrequency narrowed to the captured build — the
-   *      denominator now excludes the deleted case.
-   *   8. removeColumnMetas — keyed on case_id, independent of step 5's cascade.
-   */
-  async deleteCase(caseId: number): Promise<void> {
-    const client = await this.pool.connect()
+  /** Run (or resume) the full deletion and resolve when the case is gone. */
+  async deleteCase(caseId: number, options: CaseDeletionOptions = {}): Promise<void> {
+    options.onProgress?.({ phase: 'hiding', done: 0, total: null })
+    const hidden = await this.hideCase(caseId)
+    if (hidden.state === 'missing') return
+    await this.completeHiddenDeletion(caseId, hidden, options)
+  }
 
+  /** Steps 2-4 for a case already flipped to 'deleting'. */
+  async completeHiddenDeletion(
+    caseId: number,
+    hidden: Pick<HideCaseResult, 'genomeBuild' | 'variantCount'>,
+    options: CaseDeletionOptions = {}
+  ): Promise<void> {
+    await this.recomputeFrequencyForBuild(hidden.genomeBuild)
+    const total = hidden.variantCount > 0 ? hidden.variantCount : null
+    options.onProgress?.({ phase: 'purging', done: 0, total })
+    const purged = await this.purgeCaseVariants(caseId, options, total)
+    options.onProgress?.({ phase: 'finalizing', done: purged, total })
+    await this.finalizeCaseDeletion(caseId)
+  }
+
+  /** Lifecycle status of a case row (including hidden ones), or undefined. */
+  async getCaseStatus(caseId: number): Promise<CaseLifecycleStatus | undefined> {
+    const result = await this.pool.query<{ import_status: CaseLifecycleStatus }>(
+      `SELECT import_status FROM ${this.tbl('cases_all')} WHERE id = $1`,
+      [caseId]
+    )
+    return result.rows[0]?.import_status
+  }
+
+  async hideCase(caseId: number): Promise<HideCaseResult> {
+    const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
-
-      // Step 1: capture genome_build for the step-7 recompute. A missing case
-      // (zero rows) leaves capturedBuild undefined and the recompute falls back
-      // to all builds — correct because there is nothing build-specific to scope.
-      const buildRes = await client.query<{ genome_build: string }>(
-        `SELECT genome_build FROM ${this.schemaName}."cases" WHERE id = $1`,
+      await client.query(`SET LOCAL statement_timeout = ${MAINTENANCE_STATEMENT_TIMEOUT_MS}`)
+      const row = await client.query<{
+        genome_build: string
+        import_status: string
+        variant_count: string | number
+      }>(
+        `SELECT genome_build, import_status, variant_count
+           FROM ${this.tbl('cases_all')} WHERE id = $1 FOR UPDATE`,
         [caseId]
       )
-      const capturedBuild = buildRes.rows[0]?.genome_build
-
-      // Step 2: recompute annotation flags excluding the about-to-be-deleted
-      // case, BEFORE the cascade removes its annotations (Pass-5 HIGH #1).
-      await applyAnnotationFlagsOnCaseDelete(client as unknown as Pool, {
-        schema: this.schema,
-        deletedCaseId: caseId
-      })
-
-      // Step 3: subtract carrier_count, het_count, hom_count simultaneously
-      // (Pass-6 MED #3). Reuses the canonical SCOPED_DEDUPED_AGG_SQL so intra-case
-      // duplicate coordinate rows (multiple gt_num under one case, no unique
-      // constraint on variants(case_id,chr,pos,ref,alt,variant_type)) collapse to
-      // a single carrier — keeping the remove delta symmetric with incrementalAdd
-      // (one carrier per coordinate per case) instead of over-subtracting COUNT(*).
-      const tbl = (t: string): string => `${this.schemaName}."${t}"`
-      await client.query(
-        `
-        ${SCOPED_DEDUPED_AGG_SQL(tbl)}
-        UPDATE ${this.schemaName}."cohort_variant_summary" cvs
-        SET carrier_count = cvs.carrier_count - per_case.carrier_delta,
-            het_count = cvs.het_count - per_case.het_delta,
-            hom_count = cvs.hom_count - per_case.hom_delta
-        FROM per_case
-        WHERE cvs.chr = per_case.chr AND cvs.pos = per_case.pos
-          AND cvs.ref = per_case.ref AND cvs.alt = per_case.alt
-          AND cvs.variant_type = per_case.variant_type
-          AND cvs.genome_build = per_case.genome_build
-        `,
-        [caseId]
-      )
-
-      // Step 4: drop summary rows that fell to zero carriers (sibling DELETE,
-      // Pass-2 verdict #1 — not a sibling CTE).
-      await client.query(
-        `DELETE FROM ${this.schemaName}."cohort_variant_summary" WHERE carrier_count <= 0`
-      )
-
-      // Step 5: delete the case — cascades to variants, case_variant_annotations
-      // and cohort_column_meta.
-      await client.query(`DELETE FROM ${this.schemaName}."cases" WHERE id = $1`, [caseId])
-
-      // Step 6: rebuild variant_frequency so internal_af stays current
-      // (Pass-6 HIGH #1).
-      await this.rebuildVariantFrequency(client)
-
-      // Step 7: recompute cohort_frequency narrowed to the captured build so the
-      // denominator excludes the deleted case (Pass-4 HIGH #1).
-      await this.summary.recomputeCohortFrequency({
-        schema: this.schema,
-        client: client as unknown as PoolClient,
-        affectedBuilds: capturedBuild !== undefined ? [capturedBuild] : undefined
-      })
-
-      // Step 8: drop the case's column-meta rows. Keyed on case_id and therefore
-      // independent of step 5's cascade.
-      await this.summary.removeColumnMetas({
-        schema: this.schema,
-        client: client as unknown as PoolClient,
-        caseId
-      })
-
-      await client.query('COMMIT')
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK')
-      } catch {
-        // Preserve the original transaction failure for callers.
+      const current = row.rows[0]
+      if (current === undefined) {
+        await client.query('COMMIT')
+        return { state: 'missing', variantCount: 0 }
       }
+      const variantCount = Number(current.variant_count ?? 0)
+      if (current.import_status === 'deleting') {
+        await client.query('COMMIT')
+        return { state: 'resume', genomeBuild: current.genome_build, variantCount }
+      }
+      if (current.import_status !== 'ready') {
+        throw new InvalidParametersError(
+          `case ${caseId} cannot be deleted while import_status=${current.import_status}`,
+          'This case is still being imported. Delete it after the import finishes.'
+        )
+      }
+
+      await this.applyCaseScopedMaintenance(client, caseId)
+      await client.query(
+        `UPDATE ${this.tbl('cases_all')}
+            SET import_status = 'deleting',
+                name = $2::text || id::text || ':' || name
+          WHERE id = $1`,
+        [caseId, DELETING_NAME_PREFIX]
+      )
+      await client.query('COMMIT')
+      return { state: 'hidden', genomeBuild: current.genome_build, variantCount }
+    } catch (error) {
+      await rollbackQuietly(client)
       throw error
     } finally {
       client.release()
     }
   }
 
-  private async rebuildVariantFrequency(client: TransactionClient): Promise<void> {
-    await client.query(`TRUNCATE ${this.schemaName}."variant_frequency"`)
-    await client.query(`
-      INSERT INTO ${this.schemaName}."variant_frequency" (chr, pos, ref, alt, case_count)
-      SELECT chr, pos, ref, alt, COUNT(DISTINCT case_id)::bigint
-      FROM ${this.schemaName}."variants"
-      GROUP BY chr, pos, ref, alt
-    `)
+  async purgeCaseVariants(
+    caseId: number,
+    options: CaseDeletionOptions = {},
+    total: number | null = null
+  ): Promise<number> {
+    const batchSize = Math.max(1, options.batchSize ?? DEFAULT_CASE_DELETE_BATCH_SIZE)
+    let purged = 0
+    for (;;) {
+      if (options.signal?.aborted === true) throw new CaseDeletionInterruptedError(caseId)
+      const result = await this.pool.query(
+        `WITH doomed AS (
+           SELECT id FROM ${this.tbl('variants_all')} WHERE case_id = $1 LIMIT $2
+         )
+         DELETE FROM ${this.tbl('variants_all')} v USING doomed d WHERE v.id = d.id`,
+        [caseId, batchSize]
+      )
+      const deleted = result.rowCount ?? 0
+      purged += deleted
+      if (deleted > 0) options.onProgress?.({ phase: 'purging', done: purged, total })
+      if (deleted < batchSize) return purged
+      await pause(options.pauseBetweenBatchesMs ?? 0)
+    }
   }
+
+  async finalizeCaseDeletion(caseId: number): Promise<void> {
+    // Remaining children (metadata, comments, links, column metas) are small;
+    // the cascade from this single row is cheap once variants are gone.
+    await this.pool.query(
+      `DELETE FROM ${this.tbl('cases_all')} WHERE id = $1 AND import_status = 'deleting'`,
+      [caseId]
+    )
+  }
+
+  /** Case ids left in 'deleting' (crash or shutdown mid-purge), oldest first. */
+  async listPendingDeletions(): Promise<
+    Array<{ caseId: number; genomeBuild: string; variantCount: number }>
+  > {
+    const result = await this.pool.query<{
+      id: string | number
+      genome_build: string
+      variant_count: string | number
+    }>(
+      `SELECT id, genome_build, variant_count FROM ${this.tbl('cases_all')}
+        WHERE import_status = 'deleting' ORDER BY id`
+    )
+    return result.rows.map((row) => ({
+      caseId: Number(row.id),
+      genomeBuild: row.genome_build,
+      variantCount: Number(row.variant_count ?? 0)
+    }))
+  }
+
+  private async applyCaseScopedMaintenance(
+    client: Pick<PoolClient, 'query'>,
+    caseId: number
+  ): Promise<void> {
+    // Annotation flags: only coordinates where THIS case carried a per-case
+    // annotation can change; the hook excludes the case via v.case_id <> $1.
+    await applyAnnotationFlagsOnCaseDelete(client as unknown as Pool, {
+      schema: this.schema,
+      deletedCaseId: caseId
+    })
+
+    // Subtract carrier/het/hom together from the deduped per-case CTE (one
+    // carrier per coordinate per case — symmetric with incrementalAdd).
+    const tbl = (t: string): string => this.tbl(t)
+    await client.query(
+      `
+      ${SCOPED_DEDUPED_AGG_SQL(tbl)}
+      UPDATE ${tbl('cohort_variant_summary')} cvs
+      SET carrier_count = cvs.carrier_count - per_case.carrier_delta,
+          het_count = cvs.het_count - per_case.het_delta,
+          hom_count = cvs.hom_count - per_case.hom_delta
+      FROM per_case
+      WHERE cvs.chr = per_case.chr AND cvs.pos = per_case.pos
+        AND cvs.ref = per_case.ref AND cvs.alt = per_case.alt
+        AND cvs.variant_type = per_case.variant_type
+        AND cvs.genome_build = per_case.genome_build
+      `,
+      [caseId]
+    )
+
+    // Zero-carrier cleanup scoped to this case's coordinates (no full scan).
+    await client.query(
+      `DELETE FROM ${tbl('cohort_variant_summary')} cvs
+        USING (
+          SELECT DISTINCT chr, pos, ref, alt, variant_type
+            FROM ${tbl('variants_all')} WHERE case_id = $1
+        ) touched
+        WHERE cvs.chr = touched.chr AND cvs.pos = touched.pos
+          AND cvs.ref = touched.ref AND cvs.alt = touched.alt
+          AND cvs.variant_type = touched.variant_type
+          AND cvs.carrier_count <= 0`,
+      [caseId]
+    )
+
+    // variant_frequency: symmetric decrement of rebuildVariantFrequencyForCase
+    // (one count per distinct coordinate per case) — replaces TRUNCATE+rebuild.
+    const caseCoords = `SELECT DISTINCT coord_hash FROM ${tbl('variants_all')} WHERE case_id = $1`
+    await client.query(
+      `UPDATE ${tbl('variant_frequency')} vf
+          SET case_count = vf.case_count - 1
+         FROM (${caseCoords}) coords
+        WHERE vf.coord_hash = coords.coord_hash`,
+      [caseId]
+    )
+    await client.query(
+      `DELETE FROM ${tbl('variant_frequency')} vf
+        USING (${caseCoords}) coords
+        WHERE vf.coord_hash = coords.coord_hash AND vf.case_count <= 0`,
+      [caseId]
+    )
+
+    await this.summary.removeColumnMetas({
+      schema: this.schema,
+      client: client as unknown as PoolClient,
+      caseId
+    })
+  }
+
+  private async recomputeFrequencyForBuild(genomeBuild: string | undefined): Promise<void> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      await this.summary.recomputeCohortFrequency({
+        schema: this.schema,
+        client: client as unknown as PoolClient,
+        affectedBuilds: genomeBuild !== undefined ? [genomeBuild] : undefined
+      })
+      await client.query('COMMIT')
+    } catch (error) {
+      await rollbackQuietly(client)
+      throw error
+    } finally {
+      client.release()
+    }
+  }
+
+  private tbl(table: string): string {
+    return `${this.schemaName}."${table}"`
+  }
+}
+
+async function rollbackQuietly(client: Pick<PoolClient, 'query'>): Promise<void> {
+  try {
+    await client.query('ROLLBACK')
+  } catch {
+    // Preserve the original failure for callers.
+  }
+}
+
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => (ms > 0 ? setTimeout(resolve, ms) : setImmediate(resolve)))
 }

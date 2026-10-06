@@ -27,7 +27,10 @@ const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
   'database:info',
   'database:getOverview',
   'database:recentList',
-  'database:overview'
+  'database:overview',
+  // Background-job status polls: ids and counters only, high frequency.
+  'jobs:get',
+  'jobs:list'
 ])
 
 interface WebAuditEvent {

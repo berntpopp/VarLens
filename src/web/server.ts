@@ -156,14 +156,18 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await maybeBootstrapAdmin(authService, options.admin, app.log)
   }
 
-  const runtime = createWebRuntimeServices({ pool, schema: pgConfig.schema, logger: app.log })
-
   await registerSessions(app, {
     authService,
     ...(platformIdentity !== undefined ? { platformIdentity } : {})
   })
   await registerOpenApi(app)
   const events = new WebEventHub()
+  const runtime = createWebRuntimeServices({
+    pool,
+    schema: pgConfig.schema,
+    events,
+    logger: app.log
+  })
 
   // Login wall: the `/login` page itself + the preHandler that redirects
   // unauthenticated GETs to it. Registered before the dispatcher and
@@ -209,7 +213,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     authService,
     events,
     metrics,
-    auditBuffer: runtime.auditBuffer
+    auditBuffer: runtime.auditBuffer,
+    jobs: runtime.jobs
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
   registerImportUploadRoutes(app, dispatcherDeps)
@@ -238,6 +243,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.get('/healthz', { schema: { hide: true } }, readinessHandler)
 
   await registerStatic(app)
+
+  // Resume case deletions a previous process left half-done (the cases are
+  // already hidden from readers; only the purge remains).
+  runtime.resumeInterruptedWork()
 
   app.addHook('onClose', async () => {
     // Drain buffered audit rows and stop job runners while the pool is

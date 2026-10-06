@@ -44,6 +44,7 @@ import { buildGeneListOverrides } from './routes/gene-lists'
 import { buildGeneRefOverrides } from './routes/gene-ref'
 import { buildHpoOverrides } from './routes/hpo'
 import { buildImportOverrides } from './routes/import'
+import { buildJobOverrides } from './routes/jobs'
 import { buildPanelOverrides } from './routes/panels'
 import { buildProteinOverrides } from './routes/protein'
 import { buildRegionFileOverrides } from './routes/region-files'
@@ -250,6 +251,7 @@ function buildOverrides(): Record<string, OverrideHandler> {
     ...buildGeneRefOverrides(),
     ...buildHpoOverrides(),
     ...buildImportOverrides(),
+    ...buildJobOverrides(),
     ...buildPanelOverrides(),
     ...buildProteinOverrides(),
     ...buildRegionFileOverrides(),
