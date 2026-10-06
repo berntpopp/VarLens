@@ -884,6 +884,7 @@ exports[`useAnnotations characterization > load batch > scope case > first-cache
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -981,6 +982,7 @@ exports[`useAnnotations characterization > load batch > scope case > first-cache
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1069,6 +1071,7 @@ exports[`useAnnotations characterization > load batch > scope case > first-cache
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1157,6 +1160,7 @@ exports[`useAnnotations characterization > load batch > scope case > first-cache
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1250,6 +1254,7 @@ exports[`useAnnotations characterization > load batch > scope case > first-cache
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1336,6 +1341,7 @@ exports[`useAnnotations characterization > load batch > scope case > first-cache
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1380,12 +1386,14 @@ exports[`useAnnotations characterization > load batch > scope case > uncached / 
             "chr": "chr1",
             "pos": 100,
             "ref": "A",
+            "variantId": 11,
           },
           {
             "alt": "T",
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1431,12 +1439,14 @@ exports[`useAnnotations characterization > load batch > scope case > uncached / 
             "chr": "chr1",
             "pos": 100,
             "ref": "A",
+            "variantId": 11,
           },
           {
             "alt": "T",
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1473,12 +1483,14 @@ exports[`useAnnotations characterization > load batch > scope case > uncached / 
             "chr": "chr1",
             "pos": 100,
             "ref": "A",
+            "variantId": 11,
           },
           {
             "alt": "T",
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1515,12 +1527,14 @@ exports[`useAnnotations characterization > load batch > scope case > uncached / 
             "chr": "chr1",
             "pos": 100,
             "ref": "A",
+            "variantId": 11,
           },
           {
             "alt": "T",
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1562,12 +1576,14 @@ exports[`useAnnotations characterization > load batch > scope case > uncached / 
             "chr": "chr1",
             "pos": 100,
             "ref": "A",
+            "variantId": 11,
           },
           {
             "alt": "T",
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -1628,12 +1644,14 @@ exports[`useAnnotations characterization > load batch > scope case > uncached / 
             "chr": "chr1",
             "pos": 100,
             "ref": "A",
+            "variantId": 11,
           },
           {
             "alt": "T",
             "chr": "chr2",
             "pos": 200,
             "ref": "C",
+            "variantId": 22,
           },
         ],
       ],
@@ -2557,16 +2575,25 @@ exports[`useAnnotations characterization > load batch > scope global > first-cac
       "chr1:100:A:G",
       {
         "global": {
+          "acmg_classification": "Benign",
+          "acmg_evidence": "{"BA1":true}",
+          "alt": "G",
+          "chr": "chr1",
+          "global_comment": "old global",
+          "id": 5,
+          "pos": 100,
+          "ref": "A",
           "starred": 1,
         },
-        "perCase": null,
-      },
-    ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": null,
-        "perCase": null,
+        "perCase": {
+          "acmg_classification": "Likely benign",
+          "acmg_evidence": "{"BS1":true}",
+          "case_id": 1,
+          "id": 6,
+          "per_case_comment": "old case",
+          "starred": 1,
+          "variant_id": 11,
+        },
       },
     ],
   ],
@@ -2624,7 +2651,7 @@ exports[`useAnnotations characterization > load batch > scope global > first-cac
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 0,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -2824,7 +2851,15 @@ exports[`useAnnotations characterization > load batch > scope global > first-cac
         "global": {
           "starred": 1,
         },
-        "perCase": null,
+        "perCase": {
+          "acmg_classification": "Likely benign",
+          "acmg_evidence": "{"BS1":true}",
+          "case_id": 1,
+          "id": 6,
+          "per_case_comment": "old case",
+          "starred": 1,
+          "variant_id": 11,
+        },
       },
     ],
     [
@@ -3013,24 +3048,7 @@ exports[`useAnnotations characterization > load batch > scope global > uncached 
 
 exports[`useAnnotations characterization > load batch > scope global > uncached / generationInvalidated 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "starred": 1,
-        },
-        "perCase": null,
-      },
-    ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": null,
-        "perCase": null,
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": [],
   "ipc": {
     "batchGet": [
@@ -3065,7 +3083,7 @@ exports[`useAnnotations characterization > load batch > scope global > uncached 
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 0,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -6160,19 +6178,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope case > cac
 
 exports[`useAnnotations characterization > mutation clearAcmg > scope case > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": null,
-        "perCase": {
-          "acmg_classification": null,
-          "case_id": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": null,
     "perCase": {
@@ -6196,7 +6202,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope case > cac
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -6394,33 +6400,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope case > cac
 
 exports[`useAnnotations characterization > mutation clearAcmg > scope case > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": null,
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Benign",
@@ -6458,7 +6438,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope case > cac
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -6732,7 +6712,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope case > unc
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -6834,16 +6814,6 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope global > c
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -6881,17 +6851,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope global > c
 
 exports[`useAnnotations characterization > mutation clearAcmg > scope global > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": null,
-        },
-        "perCase": null,
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": null,
@@ -6915,7 +6875,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope global > c
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -7058,24 +7018,6 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope global > c
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -7129,33 +7071,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope global > c
 
 exports[`useAnnotations characterization > mutation clearAcmg > scope global > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": null,
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": null,
@@ -7195,7 +7111,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope global > c
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -7426,16 +7342,6 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope global > u
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -7487,7 +7393,7 @@ exports[`useAnnotations characterization > mutation clearAcmg > scope global > u
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -7632,19 +7538,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope case >
 
 exports[`useAnnotations characterization > mutation deleteComment > scope case > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": null,
-        "perCase": {
-          "case_id": 1,
-          "per_case_comment": null,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": null,
     "perCase": {
@@ -7668,7 +7562,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope case >
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -7866,33 +7760,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope case >
 
 exports[`useAnnotations characterization > mutation deleteComment > scope case > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": null,
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Benign",
@@ -7930,7 +7798,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope case >
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -8204,7 +8072,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope case >
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -8306,16 +8174,6 @@ exports[`useAnnotations characterization > mutation deleteComment > scope global
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -8353,17 +8211,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope global
 
 exports[`useAnnotations characterization > mutation deleteComment > scope global > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "global_comment": null,
-        },
-        "perCase": null,
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "global_comment": null,
@@ -8387,7 +8235,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope global
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -8530,24 +8378,6 @@ exports[`useAnnotations characterization > mutation deleteComment > scope global
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -8601,33 +8431,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope global
 
 exports[`useAnnotations characterization > mutation deleteComment > scope global > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": null,
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Benign",
@@ -8667,7 +8471,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope global
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -8898,16 +8702,6 @@ exports[`useAnnotations characterization > mutation deleteComment > scope global
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -8959,7 +8753,7 @@ exports[`useAnnotations characterization > mutation deleteComment > scope global
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -9104,19 +8898,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope case > cache
 
 exports[`useAnnotations characterization > mutation setAcmg > scope case > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": null,
-        "perCase": {
-          "acmg_classification": "Pathogenic",
-          "case_id": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": null,
     "perCase": {
@@ -9140,7 +8922,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope case > cache
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -9338,33 +9120,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope case > cache
 
 exports[`useAnnotations characterization > mutation setAcmg > scope case > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Pathogenic",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Benign",
@@ -9402,7 +9158,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope case > cache
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -9676,7 +9432,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope case > uncac
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -9778,16 +9534,6 @@ exports[`useAnnotations characterization > mutation setAcmg > scope global > cac
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -9825,17 +9571,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope global > cac
 
 exports[`useAnnotations characterization > mutation setAcmg > scope global > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Pathogenic",
-        },
-        "perCase": null,
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Pathogenic",
@@ -9859,7 +9595,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope global > cac
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -10002,24 +9738,6 @@ exports[`useAnnotations characterization > mutation setAcmg > scope global > cac
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -10073,33 +9791,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope global > cac
 
 exports[`useAnnotations characterization > mutation setAcmg > scope global > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Pathogenic",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Pathogenic",
@@ -10139,7 +9831,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope global > cac
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -10370,16 +10062,6 @@ exports[`useAnnotations characterization > mutation setAcmg > scope global > unc
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -10431,7 +10113,7 @@ exports[`useAnnotations characterization > mutation setAcmg > scope global > unc
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -10579,20 +10261,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
 
 exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope case > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": null,
-        "perCase": {
-          "acmg_classification": "Likely pathogenic",
-          "acmg_evidence": "{"PVS1":true}",
-          "case_id": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": null,
     "perCase": {
@@ -10619,7 +10288,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -10666,7 +10335,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -10713,7 +10382,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -10820,33 +10489,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
 
 exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope case > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely pathogenic",
-          "acmg_evidence": "{"PVS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Benign",
@@ -10886,7 +10529,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -10964,7 +10607,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11042,7 +10685,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11170,7 +10813,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -11201,7 +10844,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -11232,7 +10875,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -11278,16 +10921,6 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -11328,18 +10961,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
 
 exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope global > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Likely pathogenic",
-          "acmg_evidence": "{"PVS1":true}",
-        },
-        "perCase": null,
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Likely pathogenic",
@@ -11366,7 +10988,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11413,7 +11035,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11460,7 +11082,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11513,24 +11135,6 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
 exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope global > cached-populated / caseSwitch 1`] = `
 {
   "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
     [
       "chr9:9:C:T",
       {
@@ -11587,33 +11191,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
 
 exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope global > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Likely pathogenic",
-          "acmg_evidence": "{"PVS1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Likely pathogenic",
@@ -11655,7 +11233,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11735,7 +11313,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11815,7 +11393,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -11892,16 +11470,6 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -11957,7 +11525,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -11990,7 +11558,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -12023,7 +11591,7 @@ exports[`useAnnotations characterization > mutation setAcmgWithEvidence > scope 
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -12108,19 +11676,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope case > ca
 
 exports[`useAnnotations characterization > mutation toggleStar > scope case > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": null,
-        "perCase": {
-          "case_id": 1,
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": null,
     "perCase": {
@@ -12144,7 +11700,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope case > ca
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -12342,33 +11898,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope case > ca
 
 exports[`useAnnotations characterization > mutation toggleStar > scope case > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 0,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Benign",
@@ -12406,7 +11936,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope case > ca
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -12680,7 +12210,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope case > un
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -12709,7 +12239,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope case > un
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -12738,7 +12268,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope case > un
     ],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -12782,16 +12312,6 @@ exports[`useAnnotations characterization > mutation toggleStar > scope global > 
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -12829,17 +12349,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope global > 
 
 exports[`useAnnotations characterization > mutation toggleStar > scope global > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "starred": 1,
-        },
-        "perCase": null,
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "starred": 1,
@@ -12863,7 +12373,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope global > 
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -13006,24 +12516,6 @@ exports[`useAnnotations characterization > mutation toggleStar > scope global > 
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -13077,33 +12569,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope global > 
 
 exports[`useAnnotations characterization > mutation toggleStar > scope global > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 0,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Benign",
@@ -13143,7 +12609,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope global > 
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -13374,16 +12840,6 @@ exports[`useAnnotations characterization > mutation toggleStar > scope global > 
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -13435,7 +12891,7 @@ exports[`useAnnotations characterization > mutation toggleStar > scope global > 
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -13580,19 +13036,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope case >
 
 exports[`useAnnotations characterization > mutation upsertComment > scope case > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": null,
-        "perCase": {
-          "case_id": 1,
-          "per_case_comment": "new note",
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": null,
     "perCase": {
@@ -13616,7 +13060,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope case >
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -13814,33 +13258,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope case >
 
 exports[`useAnnotations characterization > mutation upsertComment > scope case > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "new note",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Benign",
@@ -13878,7 +13296,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope case >
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -14152,7 +13570,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope case >
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -14254,16 +13672,6 @@ exports[`useAnnotations characterization > mutation upsertComment > scope global
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -14301,17 +13709,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope global
 
 exports[`useAnnotations characterization > mutation upsertComment > scope global > cached-empty / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "global_comment": "new note",
-        },
-        "perCase": null,
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "global_comment": "new note",
@@ -14335,7 +13733,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope global
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -14478,24 +13876,6 @@ exports[`useAnnotations characterization > mutation upsertComment > scope global
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -14549,33 +13929,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope global
 
 exports[`useAnnotations characterization > mutation upsertComment > scope global > cached-populated / dbSwitch 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "new note",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": {
     "global": {
       "acmg_classification": "Benign",
@@ -14615,7 +13969,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope global
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 2,
   "triggersBeforeSettle": 1,
 }
 `;
@@ -14846,16 +14200,6 @@ exports[`useAnnotations characterization > mutation upsertComment > scope global
 {
   "after": [
     [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "from": "server",
-          "scope": "global",
-        },
-        "perCase": null,
-      },
-    ],
-    [
       "chr9:9:C:T",
       {
         "global": null,
@@ -14907,7 +14251,7 @@ exports[`useAnnotations characterization > mutation upsertComment > scope global
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
+  "triggers": 1,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -15635,5 +14979,6 @@ exports[`useAnnotations characterization > pins the module exports and the compo
   "setAcmgClassificationWithEvidence",
   "setGlobalAcmgClassificationWithEvidence",
   "invalidateAnnotationGeneration",
+  "invalidateGlobalAnnotationGeneration",
 ]
 `;
