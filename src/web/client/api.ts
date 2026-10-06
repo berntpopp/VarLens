@@ -526,6 +526,10 @@ function buildCohortApi(): unknown {
           return (callback: (status: unknown) => void) =>
             subscribeWebEvent('cohort:summaryRebuilt', callback)
         }
+        if (prop === 'onAssociationProgress') {
+          return (callback: (progress: unknown) => void) =>
+            subscribeWebEvent('cohort:geneBurdenProgress', callback)
+        }
         return typeof prop === 'string' ? rpc[prop] : undefined
       }
     }

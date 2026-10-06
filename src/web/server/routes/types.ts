@@ -8,6 +8,7 @@ import type { PostgresCaseDeleteJobs } from '../jobs/case-delete-jobs'
 import type { WebEventHub } from '../events'
 import type { AppMetrics } from '../metrics'
 import type { WebReferenceServices } from '../reference-services/reference-services'
+import type { WebAssociationRuns } from '../association/web-association-runs'
 
 export interface DispatcherDeps {
   session: StorageSession
@@ -33,6 +34,8 @@ export interface DispatcherDeps {
    * (src/web/server/reference-services/). Absent → those methods answer 501.
    */
   referenceServices?: WebReferenceServices
+  /** Per-user cohort association runs (Postgres). Absent → 501. */
+  association?: WebAssociationRuns
 }
 
 export interface InvokeBodyPayload {

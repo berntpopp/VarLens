@@ -56,6 +56,8 @@ import { registerRobotsTxt } from './server/robots'
 import { createWebRuntimeServices } from './server/runtime-services'
 import { createWebReferenceServices } from './server/reference-services/create'
 import { registerPanelBedDownloadRoute } from './server/panel-bed-download'
+import { WebAssociationRuns } from './server/association/web-association-runs'
+import { PostgresAssociationDataBuilder } from '../main/storage/postgres/PostgresAssociationDataBuilder'
 import {
   type AppMetrics,
   createAppMetricsFromEnv,
@@ -222,6 +224,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       pool,
       schema: pgConfig.schema,
       session: session as StorageSession
+    }),
+    association: new WebAssociationRuns({
+      builder: new PostgresAssociationDataBuilder(pool, pgConfig.schema),
+      events
     })
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
@@ -261,6 +267,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.addHook('onClose', async () => {
     // Drain buffered audit rows and stop job runners while the pool is
     // still open; only then close the storage session.
+    dispatcherDeps.association.cancelAll()
     try {
       await runtime.close()
     } catch (err) {
