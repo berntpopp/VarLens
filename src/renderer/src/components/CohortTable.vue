@@ -139,6 +139,7 @@ import { useCohortData } from '../composables/useCohortData'
 import { useFilters } from '../composables/useFilters'
 import { useCarriers } from '../composables/useCarriers'
 import { useAnnotations } from '../composables/useAnnotations'
+import { useCohortAnnotationLoader } from '../composables/useCohortAnnotationLoader'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useApiService } from '../composables/useApiService'
@@ -207,7 +208,6 @@ const {
   getGlobalAcmgClassification,
   getGlobalAcmgEvidence,
   getGlobalComment,
-  loadGlobalAnnotationsBatch,
   toggleGlobalStar,
   upsertGlobalComment,
   getAnnotations
@@ -569,21 +569,11 @@ const handleLoadCarriers = async (variant: CohortVariant) => {
   await loadCarriers(variant)
 }
 
-// Watch variants and load annotations (debounced to prevent overlapping
-// IPC calls during rapid page changes)
-const { debouncedFn: debouncedLoadAnnotations } = useDebounce(
-  async (newVariants: CohortVariant[]) => {
-    if (newVariants.length > 0) {
-      await loadGlobalAnnotationsBatch(
-        newVariants.map((v) => ({ chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }))
-      )
-    }
-  },
-  150
-)
+// Hydrate annotations for the visible rows (page-change guarded, debounced)
+const { hydrate: hydrateAnnotations } = useCohortAnnotationLoader()
 watch(variants, (newVariants) => {
   if (!isActive.value) return
-  debouncedLoadAnnotations(newVariants)
+  hydrateAnnotations(newVariants)
   // End flow trace when new data arrives (primary visual update)
   if (import.meta.env.DEV && activeFlowTraceId !== null) {
     traceEnd(activeFlowTraceId, activeFlowBudget)

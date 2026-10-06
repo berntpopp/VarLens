@@ -38,9 +38,14 @@ export const annotationCache = shallowRef<LruMap<string, AnnotationCache>>(lruCa
 // Loading states per variant key
 const loadingStates = shallowRef<Map<string, boolean>>(new Map())
 
-// Generation counter — incremented on page/variant-set change so in-flight
-// batch results from a prior page are discarded when they resolve.
-let annotationGeneration = 0
+/** Which table a batch load serves: the case table or the cohort (global) table. */
+export type AnnotationBatchKind = 'case' | 'global'
+
+// Generation counters — incremented on page/variant-set change so in-flight
+// batch results from a prior page are discarded when they resolve. One per
+// table: both tables can be alive at once (KeepAlive), and a page change in
+// one must not drop the batch the other is still waiting for.
+const annotationGenerations: Record<AnnotationBatchKind, number> = { case: 0, global: 0 }
 
 // Scope tracking — detect db/case switches and auto-clear stale cache
 let lastDbPath: string | null = null
@@ -89,12 +94,12 @@ export function isCachedOrLoading(key: string): boolean {
   return annotationCache.value.has(key) || loadingStates.value.get(key) === true
 }
 
-export function invalidateAnnotationGeneration(): void {
-  annotationGeneration++
+export function invalidateAnnotationGeneration(kind: AnnotationBatchKind): void {
+  annotationGenerations[kind]++
 }
 
-export function getAnnotationGeneration(): number {
-  return annotationGeneration
+export function getAnnotationGeneration(kind: AnnotationBatchKind): number {
+  return annotationGenerations[kind]
 }
 
 /**
@@ -162,8 +167,9 @@ export function clearAnnotationCache(): void {
   lastCaseId = null
 }
 
-/** Full reset including the generation counter — test isolation only. */
+/** Full reset including the generation counters — test isolation only. */
 export function resetAnnotationState(): void {
   clearAnnotationCache()
-  annotationGeneration = 0
+  annotationGenerations.case = 0
+  annotationGenerations.global = 0
 }

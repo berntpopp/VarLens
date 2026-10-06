@@ -325,7 +325,9 @@ export function useAnnotations() {
     getGlobalAcmgEvidence: getters.getGlobalAcmgEvidence,
     setAcmgClassificationWithEvidence: acmg.setAcmgClassificationWithEvidence,
     setGlobalAcmgClassificationWithEvidence: acmg.setGlobalAcmgClassificationWithEvidence,
-    invalidateAnnotationGeneration
+    // Page-change guards: drop in-flight batches of the case / cohort table.
+    invalidateAnnotationGeneration: () => invalidateAnnotationGeneration('case'),
+    invalidateGlobalAnnotationGeneration: () => invalidateAnnotationGeneration('global')
   }
 }
 

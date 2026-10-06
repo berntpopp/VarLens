@@ -297,7 +297,7 @@ async function loadBatch(
   if (!api) return
   const dbPath = beginAnnotationRequest(scopeCaseId(scope))
   // Captured at call time — used to detect results from a prior page.
-  const generation = getAnnotationGeneration()
+  const generation = getAnnotationGeneration(scope.kind)
 
   // Filter out cached AND in-flight keys to prevent duplicate IPC calls
   const uncached = variants
@@ -310,8 +310,8 @@ async function loadBatch(
 
   try {
     const results = unwrapIpcResult(await api.annotations.batchGet(scopeCaseId(scope), uncached))
-    // Only per-case batches are discarded when the user paged meanwhile.
-    if (scope.kind === 'case' && generation !== getAnnotationGeneration()) return
+    // Discard the batch when this scope's table paged meanwhile.
+    if (generation !== getAnnotationGeneration(scope.kind)) return
     if (isResponseStale(scope, dbPath)) return
     for (const [key, value] of Object.entries(results)) {
       cacheSet(key, value as AnnotationCache)

@@ -403,7 +403,9 @@ describe('useAnnotations characterization', () => {
     const triggersBeforeSettle = triggers
 
     if (outcome === 'generationInvalidated') {
-      a.invalidateAnnotationGeneration()
+      // Each table invalidates its own generation (case table / cohort table).
+      if (scope === 'case') a.invalidateAnnotationGeneration()
+      else a.invalidateGlobalAnnotationGeneration()
       pending.resolve(load.value)
     } else {
       await settle(outcome, pending, load.value)

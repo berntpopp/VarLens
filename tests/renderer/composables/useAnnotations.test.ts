@@ -385,6 +385,58 @@ describe('stale-request guard (annotation generation)', () => {
     expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeUndefined()
   })
 
+  function deferBatchGet(): (v: Record<string, unknown>) => void {
+    let resolveBatch!: (v: Record<string, unknown>) => void
+    window.api.annotations.batchGet = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        resolveBatch = resolve
+      })
+    )
+    return resolveBatch
+  }
+
+  it('invalidateGlobalAnnotationGeneration discards an in-flight global batch', async () => {
+    const resolveBatch = deferBatchGet()
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    const batchPromise = result.loadGlobalAnnotationsBatch([
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+    ])
+    // The cohort table paged before the batch resolved.
+    result.invalidateGlobalAnnotationGeneration()
+    resolveBatch({ 'chr1:100:A:G': { global: { starred: 1 }, perCase: null } })
+    await batchPromise
+
+    expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeUndefined()
+    expect(result.isLoading('chr1', 100, 'A', 'G')).toBe(false)
+  })
+
+  it('each view only invalidates its own batches', async () => {
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    // A case-table page change must not drop the cohort table's batch ...
+    let resolveBatch = deferBatchGet()
+    let batchPromise = result.loadGlobalAnnotationsBatch([
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+    ])
+    result.invalidateAnnotationGeneration()
+    resolveBatch({ 'chr1:100:A:G': { global: { starred: 1 }, perCase: null } })
+    await batchPromise
+    expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeDefined()
+
+    // ... nor a cohort-table page change the case table's.
+    resolveBatch = deferBatchGet()
+    batchPromise = result.loadAnnotationsBatch(1, [
+      { id: 2, chr: 'chr2', pos: 200, ref: 'C', alt: 'T' }
+    ])
+    result.invalidateGlobalAnnotationGeneration()
+    resolveBatch({ 'chr2:200:C:T': { global: null, perCase: { starred: 1 } } })
+    await batchPromise
+    expect(result.getAnnotations('chr2', 200, 'C', 'T')).toBeDefined()
+  })
+
   it('applies results when generation has not advanced', async () => {
     window.api.annotations.batchGet = vi
       .fn()

@@ -2575,16 +2575,25 @@ exports[`useAnnotations characterization > load batch > scope global > first-cac
       "chr1:100:A:G",
       {
         "global": {
+          "acmg_classification": "Benign",
+          "acmg_evidence": "{"BA1":true}",
+          "alt": "G",
+          "chr": "chr1",
+          "global_comment": "old global",
+          "id": 5,
+          "pos": 100,
+          "ref": "A",
           "starred": 1,
         },
-        "perCase": null,
-      },
-    ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": null,
-        "perCase": null,
+        "perCase": {
+          "acmg_classification": "Likely benign",
+          "acmg_evidence": "{"BS1":true}",
+          "case_id": 1,
+          "id": 6,
+          "per_case_comment": "old case",
+          "starred": 1,
+          "variant_id": 11,
+        },
       },
     ],
   ],
@@ -2642,7 +2651,7 @@ exports[`useAnnotations characterization > load batch > scope global > first-cac
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 0,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -3031,24 +3040,7 @@ exports[`useAnnotations characterization > load batch > scope global > uncached 
 
 exports[`useAnnotations characterization > load batch > scope global > uncached / generationInvalidated 1`] = `
 {
-  "after": [
-    [
-      "chr1:100:A:G",
-      {
-        "global": {
-          "starred": 1,
-        },
-        "perCase": null,
-      },
-    ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": null,
-        "perCase": null,
-      },
-    ],
-  ],
+  "after": [],
   "duringFlight": [],
   "ipc": {
     "batchGet": [
@@ -3083,7 +3075,7 @@ exports[`useAnnotations characterization > load batch > scope global > uncached 
     "error": [],
     "warn": [],
   },
-  "triggers": 1,
+  "triggers": 0,
   "triggersBeforeSettle": 0,
 }
 `;
@@ -15653,5 +15645,6 @@ exports[`useAnnotations characterization > pins the module exports and the compo
   "setAcmgClassificationWithEvidence",
   "setGlobalAcmgClassificationWithEvidence",
   "invalidateAnnotationGeneration",
+  "invalidateGlobalAnnotationGeneration",
 ]
 `;
