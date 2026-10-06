@@ -37,6 +37,14 @@ A smaller run with 1M victim rows and no resident case still showed a worst read
 - Postgres e2e (`VARLENS_RUN_POSTGRES_E2E=1`, `varlens_nbweb`): `postgres-case-lifecycle-repository.e2e.test.ts` and `postgres-variant-keyset.e2e.test.ts`. The keyset test checks that keyset pages are identical to OFFSET pages, including ties. The lifecycle test checks that a held purge batch does not block a concurrent read that runs with a 200 ms lock timeout.
 - web-gate integration: `case-delete-job.test.ts`, and `audit-buffer-sigterm.test.ts`. The SIGTERM test runs the built server with a 60 s flush interval, makes 25 reads, sends SIGTERM, and checks that all 25 `api_read` rows reached `varlens_audit.audit_log`.
 
+## Gates (final)
+
+- Locked `make ci`: exit 0. Test Files 445 passed, 8 skipped. Tests 4764 passed, 112 skipped.
+- Locked `make web-gate-postgres` (`VARLENS_PG_URL=…/varlens_nbweb`, `VARLENS_METRICS_PORT=9160`): exit 0. Integration: 19 files passed, 1 skipped; 42 tests passed, 2 skipped.
+- Locked `npx vitest run --project web-gate` with the same database: 57 files passed, 1 skipped. Tests: 319 passed, 1 expected fail, 2 skipped.
+- `VARLENS_RUN_POSTGRES_E2E=1 npx vitest run tests/main/storage tests/main/web` against `varlens_nbweb`, with `public` migrated and `out/web` built: 81 files passed. 696 tests passed, 11 skipped.
+- `make agent-check`: passed.
+
 ## Integration notes
 
 - The 5a delete contract is implemented on the web side: `cases:startDelete` returns `{jobId}`; `cases:delete`, `cases:deleteBatch` and `cases:deleteAll` wait for the job; `jobs:list`, `jobs:get`, `jobs:progress` and `jobs:cancel` are available; `jobs:changed` is pushed over SSE to the user who started the job. The web server uses its own `JobRunner` instance. One-line edit to 5a's `JobRunner.ts`: it now imports `toSerializableError` from `ipc/serializable-error` instead of `ipc/errorHandler`, so the web bundle does not pull in MainLogger/electron.
