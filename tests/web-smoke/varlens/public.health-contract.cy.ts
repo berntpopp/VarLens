@@ -3,7 +3,7 @@ import {
   expectLivezEndpointOk,
   expectPublicLoginApiReachable,
   expectReadyzEndpointReady,
-  expectSwaggerAndOpenApiContractPublic,
+  expectSwaggerAndOpenApiContractRequireSession,
   resetAnonymousBrowser
 } from '../support/public-contracts'
 
@@ -22,7 +22,7 @@ describe('VarLens public health and API contract smoke', () => {
     expectPublicLoginApiReachable()
   })
 
-  it('serves the Swagger UI and OpenAPI contract publicly', () => {
-    expectSwaggerAndOpenApiContractPublic()
+  it('keeps the Swagger UI and OpenAPI contract behind a session', () => {
+    expectSwaggerAndOpenApiContractRequireSession()
   })
 })

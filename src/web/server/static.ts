@@ -12,6 +12,7 @@ import { relative, resolve, sep } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import fastifyStatic from '@fastify/static'
 
+import { isLocalIgvAllowed, LOCAL_IGV_ORIGINS } from './instance-settings'
 import { isProbePath } from './probe-paths'
 
 // At runtime the bundle lives at `/app/out/web/server.cjs`, so __dirname is
@@ -19,7 +20,19 @@ import { isProbePath } from './probe-paths'
 const DEFAULT_PUBLIC_DIR = resolve(__dirname, 'public')
 
 export const WEB_APP_CSP_HEADER =
-  "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' data: https://alphafold.ebi.ac.uk https://www.ebi.ac.uk https://files.rcsb.org https://models.rcsb.org https://data.rcsb.org https://rest.ensembl.org https://gnomad.broadinstitute.org https://www.proteins.uniprot.org https://rest.uniprot.org https://www.interpro.ebi.ac.uk blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+  "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' data: https://alphafold.ebi.ac.uk https://www.ebi.ac.uk https://files.rcsb.org https://models.rcsb.org https://data.rcsb.org https://rest.ensembl.org https://gnomad.broadinstitute.org https://www.proteins.uniprot.org https://rest.uniprot.org https://www.interpro.ebi.ac.uk http://localhost:60151 http://127.0.0.1:60151 blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+/**
+ * The CSP header actually sent with the SPA shell. The meta CSP in
+ * src/web/index.html allows the local IGV batch port; the effective policy is
+ * the intersection of meta and header, so the header keeps it blocked unless the
+ * operator opts in with VARLENS_WEB_ALLOW_LOCAL_IGV=1 (the capability document
+ * reports the same flag as `igvLocalBroadcast`).
+ */
+export function webAppCspHeader(env: NodeJS.ProcessEnv = process.env): string {
+  if (isLocalIgvAllowed(env)) return WEB_APP_CSP_HEADER
+  return WEB_APP_CSP_HEADER.replace(` ${LOCAL_IGV_ORIGINS}`, '')
+}
 
 export function getPublicDir(): string {
   const env = process.env.VARLENS_WEB_PUBLIC_DIR
@@ -80,7 +93,7 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
       }
       reply.header('cache-control', REVALIDATE_CACHE_CONTROL)
       if (assetPath === 'index.html') {
-        reply.header('Content-Security-Policy', WEB_APP_CSP_HEADER)
+        reply.header('Content-Security-Policy', webAppCspHeader())
       }
     }
   })
@@ -99,6 +112,6 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
       reply.code(404)
       return { error: 'not found' }
     }
-    return reply.header('Content-Security-Policy', WEB_APP_CSP_HEADER).sendFile('index.html')
+    return reply.header('Content-Security-Policy', webAppCspHeader()).sendFile('index.html')
   })
 }

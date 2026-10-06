@@ -30,7 +30,8 @@ const CSP_DIRECTIVES: readonly string[] = [
     'https://files.rcsb.org https://models.rcsb.org https://data.rcsb.org ' +
     'https://rest.ensembl.org https://gnomad.broadinstitute.org ' +
     'https://www.proteins.uniprot.org https://rest.uniprot.org ' +
-    'https://www.interpro.ebi.ac.uk blob:',
+    // Local IGV batch port: the "Local IGV" link broadcasts the locus there.
+    'https://www.interpro.ebi.ac.uk http://localhost:60151 http://127.0.0.1:60151 blob:',
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

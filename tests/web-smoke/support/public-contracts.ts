@@ -69,33 +69,14 @@ export function expectPublicLoginApiReachable(): void {
   })
 }
 
-export function expectSwaggerAndOpenApiContractPublic(): void {
-  cy.request('/api/docs/').then((response) => {
-    expect(response.status).to.eq(200)
-    expect(response.headers['content-type']).to.contain('text/html')
-    expect(response.body).to.contain('VarLens Web API Docs')
-    expect(response.body).to.contain('swagger-ui')
-  })
-
-  cy.request('/api/docs/static/swagger-initializer.js').then((response) => {
-    expect(response.status).to.eq(200)
-    expect(response.body).to.contain('/api/openapi.json')
-  })
-
-  cy.request('/api/openapi.json').then((response) => {
-    expect(response.status).to.eq(200)
-    expect(response.body.openapi).to.match(/^3\./)
-    expect(response.body.info.title).to.eq('VarLens Web API')
-    expect(response.body.paths).to.have.property('/api/auth/login')
-    expect(response.body.paths).to.have.property('/api/import/upload')
-    expect(response.body.paths).to.have.property('/api/import/start')
-    expect(response.body.paths).to.have.property('/api/import/startMultiFile')
-    expect(response.body.paths).to.have.property('/api/batch-import/testZipPassword')
-    expect(response.body.paths).to.have.property('/api/batch-import/extractZip')
-    expect(response.body.paths).to.have.property('/api/batch-import/cleanupZipTemp')
-    expect(response.body.paths).to.have.property('/api/region-files/importBed')
-    expect(response.body.paths).to.not.have.property('/login')
-    expect(response.body.paths).to.not.have.property('/login/')
-    expect(JSON.stringify(response.body)).to.not.contain('Generic RPC fallback')
-  })
+/**
+ * P-21: the Swagger UI and OpenAPI document describe the whole RPC surface, so
+ * anonymous clients get 401 unless the operator sets VARLENS_WEB_PUBLIC_API_DOCS=1.
+ */
+export function expectSwaggerAndOpenApiContractRequireSession(): void {
+  for (const url of ['/api/docs/', '/api/openapi.json']) {
+    cy.request({ url, failOnStatusCode: false }).then((response) => {
+      expect(response.status).to.eq(401)
+    })
+  }
 }
