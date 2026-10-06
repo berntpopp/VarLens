@@ -13,7 +13,11 @@
 
 import { logService } from '../services/LogService'
 import type { WindowAPI } from '../../../shared/types/api'
-import type { GlobalAnnotationUpdates, PerCaseAnnotationUpdates } from '../../../shared/types/api'
+import type {
+  BatchAnnotationKey,
+  GlobalAnnotationUpdates,
+  PerCaseAnnotationUpdates
+} from '../../../shared/types/api'
 import type {
   VariantAnnotation,
   CaseVariantAnnotation
@@ -280,11 +284,26 @@ async function load(
   }
 }
 
+/** A row to batch-load: per-case rows also carry their `variants.id`. */
+export type BatchLoadVariant = VariantCoords & { id?: number }
+
+/**
+ * The key sent to `annotations:batchGet`. Per-case keys MUST carry `variantId`
+ * (`BatchAnnotationKey` in shared/types/api.ts): without it the server matches
+ * per-case annotations by coordinates alone, so a row would show the annotation
+ * of another variant row of the same case that shares its chr:pos:ref:alt.
+ */
+function batchKey(scope: AnnotationLoadScope, v: BatchLoadVariant): BatchAnnotationKey {
+  const key: BatchAnnotationKey = { chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }
+  if (scope.kind === 'case' && typeof v.id === 'number') key.variantId = v.id
+  return key
+}
+
 /** Bulk load annotations for visible variants. */
 async function loadBatch(
   api: WindowAPI | undefined,
   scope: AnnotationLoadScope,
-  variants: VariantCoords[]
+  variants: BatchLoadVariant[]
 ): Promise<void> {
   if (!api) return
   const dbPath = beginAnnotationRequest(scopeCaseId(scope))
@@ -294,7 +313,7 @@ async function loadBatch(
   // Filter out cached AND in-flight keys to prevent duplicate IPC calls
   const uncached = variants
     .filter((v) => !isCachedOrLoading(variantKey(v)))
-    .map((v) => ({ chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }))
+    .map((v) => batchKey(scope, v))
   if (uncached.length === 0) return
 
   // Mark all keys as in-flight before the IPC call
@@ -329,7 +348,7 @@ export function createScopedAnnotationOps(
 ) {
   return {
     load: (scope: AnnotationLoadScope, coords: VariantCoords) => load(api, scope, coords),
-    loadBatch: (scope: AnnotationLoadScope, variants: VariantCoords[]) =>
+    loadBatch: (scope: AnnotationLoadScope, variants: BatchLoadVariant[]) =>
       loadBatch(api, scope, variants),
     toggleStar: (scope: AnnotationWriteScope, coords: VariantCoords) =>
       mutate(api, scope, coords, (_current, previous) => toggleStarPlan(scope, previous)),

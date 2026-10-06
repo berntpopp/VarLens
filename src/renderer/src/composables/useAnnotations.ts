@@ -91,6 +91,9 @@ function createAnnotationGetters() {
 
 type ScopedOps = ReturnType<typeof createScopedAnnotationOps>
 
+/** A per-case row to batch-load: coordinates plus its `variants.id`. */
+export type CaseBatchVariant = VariantCoords & { id: number }
+
 /** Per-case / global load functions. */
 function bindLoads(ops: ScopedOps) {
   // Load annotations for a variant (call on row visible or expand)
@@ -104,8 +107,9 @@ function bindLoads(ops: ScopedOps) {
     return ops.load({ kind: 'case', caseId }, coordsOf(chr, pos, ref, alt))
   }
 
-  // Bulk load annotations for visible variants
-  function loadAnnotationsBatch(caseId: number, variants: VariantCoords[]): Promise<void> {
+  // Bulk load annotations for visible variants. Rows must carry their
+  // `variants.id` so the per-case lookup is bound to the row, not just its coordinates.
+  function loadAnnotationsBatch(caseId: number, variants: CaseBatchVariant[]): Promise<void> {
     return ops.loadBatch({ kind: 'case', caseId }, variants)
   }
 

@@ -259,6 +259,27 @@ describe('loadAnnotationsBatch uses batch endpoint', () => {
     expect(window.api.annotations.getForVariant).not.toHaveBeenCalled()
   })
 
+  // BatchAnnotationKey contract (src/shared/types/api.ts): the per-case path
+  // MUST carry variantId. Without it the main process matches per-case
+  // annotations by coordinates alone, so a row shows the annotation of any
+  // other variant row of the case that shares its chr:pos:ref:alt.
+  it('sends each row id as variantId on the per-case path', async () => {
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({})
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    await result.loadAnnotationsBatch(1, [
+      { id: 11, chr: 'chr1', pos: 100, ref: 'A', alt: 'G' },
+      { id: 12, chr: 'chr2', pos: 200, ref: 'T', alt: 'C' }
+    ])
+
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(1, [
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G', variantId: 11 },
+      { chr: 'chr2', pos: 200, ref: 'T', alt: 'C', variantId: 12 }
+    ])
+  })
+
   it('populates cache from batch response', async () => {
     const batchResult = {
       'chr1:100:A:G': { global: { starred: 1 }, perCase: null }
@@ -313,7 +334,10 @@ describe('loadGlobalAnnotationsBatch uses batch endpoint', () => {
     const [result, appInstance] = withSetup(() => useAnnotations())
     app = appInstance
 
-    await result.loadGlobalAnnotationsBatch([{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }])
+    // Cohort rows carry no per-case variant id; an `id` on the row is not one.
+    await result.loadGlobalAnnotationsBatch([
+      { id: 7, chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+    ] as never)
 
     expect(window.api.annotations.batchGet).toHaveBeenCalledWith(null, [
       { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
