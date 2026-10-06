@@ -164,7 +164,7 @@ import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
 import { stripVueProxies } from '../utils/stripVueProxies'
-import { isWebRuntime } from '../utils/runtime-mode'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { useAutoHiddenColumns, useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useApiService } from '../composables/useApiService'
 import {
@@ -214,6 +214,7 @@ interface Emits {
 const emit = defineEmits<Emits>()
 
 const { api } = useApiService()
+const { canUse } = useCapabilityStore()
 
 function warnUnsupported(reason: string): void {
   logService.warn(reason, 'backend-capabilities')
@@ -578,9 +579,9 @@ const exportToExcel = async () => {
   } else if (result.success && result.filePath !== undefined && result.filePath !== '') {
     const filePath = result.filePath
     // Web exports land in the browser's downloads; there is no folder to reveal.
-    const action = isWebRuntime()
-      ? undefined
-      : { text: 'Open folder', callback: () => api?.export.revealInFolder(filePath) }
+    const action = canUse('revealInFolder')
+      ? { text: 'Open folder', callback: () => api?.export.revealInFolder(filePath) }
+      : undefined
     emit('export-success', { filePath, action })
   }
 }

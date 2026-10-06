@@ -107,11 +107,8 @@ const hpoApiAvailable = ref(false)
 const searchError = ref('')
 
 onMounted(() => {
-  hpoApiAvailable.value =
-    hpoUnavailableReason === null &&
-    api != null &&
-    typeof api.hpo !== 'undefined' &&
-    typeof api.hpo.search === 'function'
+  // Availability comes from the capability document, not `typeof` detection.
+  hpoApiAvailable.value = hpoUnavailableReason === null && api != null
 })
 
 // Search function for debouncing

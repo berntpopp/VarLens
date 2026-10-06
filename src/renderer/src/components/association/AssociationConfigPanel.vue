@@ -237,7 +237,7 @@
       <v-btn
         color="primary"
         variant="elevated"
-        :disabled="!canRun"
+        :disabled="!canRun || unavailableReason != null"
         :loading="running"
         :prepend-icon="mdiPlay"
         @click="handleRun"
@@ -279,6 +279,8 @@ defineProps<{
   cohortGroups: CohortGroup[]
   running?: boolean
   hasResults?: boolean
+  /** Capability reason when association tests are unavailable (Run disabled). */
+  unavailableReason?: string | null
 }>()
 
 /**

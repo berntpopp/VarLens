@@ -163,6 +163,7 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
 import { isWebRuntime } from '../utils/runtime-mode'
+import { useCapabilityStore } from '../stores/capabilityStore'
 
 // Emit for navigation and row click
 const emit = defineEmits<{
@@ -447,7 +448,7 @@ const exportToExcel = async (): Promise<void> => {
         message: `Exported to ${result.filePath}`,
         color: 'success',
         timeout: 3000,
-        actionText: isWebRuntime() ? null : 'Open folder', // web: no folder to reveal
+        actionText: useCapabilityStore().canUse('revealInFolder') ? 'Open folder' : null,
         actionCallback: () => {
           if (result.filePath != null && result.filePath !== '')
             void api.export.revealInFolder(result.filePath)
