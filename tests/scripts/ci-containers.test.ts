@@ -10,6 +10,8 @@ afterEach(async () => {
   await Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 import { createContainerServices } from '../../scripts/ci/containers.mjs'
+import { containerScope } from '../../scripts/ci/container-lifecycle.mjs'
+import { createScratch } from '../../scripts/ci/scratch.mjs'
 
 type Call = { command: string; args: string[]; options: Record<string, unknown> }
 function fixture(fail?: (args: string[]) => boolean) {
@@ -71,15 +73,18 @@ function fixture(fail?: (args: string[]) => boolean) {
     }
     return { stdout: '' }
   }
+  const scratch = join(directory, 'scratch')
   const services = createContainerServices({
     run,
     runTool: run,
+    createScratch: (kind: string) =>
+      createScratch(kind, { env: { VARLENS_CI_SCRATCH_DIR: scratch } }),
     signals,
     now: () => now.getTime(),
     sleep: async () => {},
     fetch: async () => ({ ok: true, json: async () => ({ status: 'ok', db: { open: true } }) })
   })
-  return { services, calls, signals, now, directory, images }
+  return { services, calls, signals, now, directory, images, scratch }
 }
 
 describe('disposable CI containers', () => {
@@ -308,7 +313,10 @@ describe('disposable CI containers', () => {
     const { services, now } = fixture()
     now.setUTCDate(now.getUTCDate() - 2)
     // A separate clock simulates metadata from an earlier database download.
+    const { scratch } = fixture()
     const stale = createContainerServices({
+      createScratch: (kind: string) =>
+        createScratch(kind, { env: { VARLENS_CI_SCRATCH_DIR: scratch } }),
       run: async () => ({
         stdout: JSON.stringify([{ Id: 'sha256:abc', Architecture: 'amd64', Os: 'linux' }])
       }),
@@ -319,5 +327,81 @@ describe('disposable CI containers', () => {
     })
     await expect(stale.scanContainer('image', {})).rejects.toThrow(/24 hours/)
     expect(services).toBeDefined()
+  })
+
+  it('keeps Trivy databases and image exports in removable disk-backed scratch', async () => {
+    const { services, calls, scratch } = fixture()
+    await services.scanContainer('image', { env: { PATH: '/usr/bin', TMPDIR: '/dev/shm' } })
+    const trivy = calls.filter((call) => call.command === 'trivy')
+    expect(trivy).toHaveLength(3)
+    for (const call of trivy) {
+      const cache = call.args[call.args.indexOf('--cache-dir') + 1]
+      const env = call.options.env as Record<string, string>
+      expect(cache.startsWith(`${scratch}/`)).toBe(true)
+      // Trivy has no flag for its docker-export directory; it follows TMPDIR.
+      expect(env.TMPDIR.startsWith(`${scratch}/`)).toBe(true)
+      expect(env.TMPDIR).not.toBe(cache)
+      expect(env.PATH).toBe('/usr/bin')
+    }
+    expect(await readdir(scratch)).toEqual([])
+  })
+
+  it('removes scan scratch when the scanner fails or the run is cancelled', async () => {
+    const failing = fixture((args) => args.includes('--severity'))
+    await expect(failing.services.scanContainer('image', {})).rejects.toThrow(/simulated/)
+    expect(await readdir(failing.scratch)).toEqual([])
+
+    const { scratch, signals } = fixture()
+    let populated: string[] = []
+    const cancelled = createContainerServices({
+      signals,
+      createScratch: (kind: string) =>
+        createScratch(kind, { env: { VARLENS_CI_SCRATCH_DIR: scratch } }),
+      run: async () => ({
+        stdout: JSON.stringify([{ Id: 'sha256:abc', Architecture: 'amd64', Os: 'linux' }])
+      }),
+      runTool: async (_name: string, _args: string[], options: { signal: AbortSignal }) => {
+        populated = await readdir(scratch)
+        signals.emit('SIGTERM')
+        options.signal.throwIfAborted()
+        return { stdout: '' }
+      }
+    })
+    await expect(cancelled.scanContainer('image', {})).rejects.toThrow(/cancelled/)
+    expect(populated).toHaveLength(1)
+    expect(await readdir(scratch)).toEqual([])
+  })
+
+  it('keeps the private builder configuration out of the temporary directory', async () => {
+    const { services, calls, directory, scratch } = fixture()
+    await services.buildAndSmokeContainer({ cwd: directory, scan: true })
+    const create = calls.find((call) => call.args[0] === 'buildx' && call.args[1] === 'create')!
+    const config = create.args[create.args.indexOf('--buildkitd-config') + 1]
+    expect(config.startsWith(`${scratch}/`)).toBe(true)
+    expect(await readdir(scratch)).toEqual([])
+  })
+
+  it('stays subscribed to termination signals until owned resources are removed', async () => {
+    const signals = new EventEmitter()
+    const scope = containerScope({ signals })
+    let duringCleanup = -1
+    let release!: () => void
+    const removing = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    scope.defer(async () => {
+      // A second SIGTERM (make forwarding the one the cgroup already delivered)
+      // must not find the process without a handler and kill it mid-removal.
+      duringCleanup = signals.listenerCount('SIGTERM')
+      await removing
+    })
+    signals.emit('SIGTERM')
+    const closing = scope.close()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(duringCleanup).toBe(1)
+    expect(() => signals.emit('SIGTERM')).not.toThrow()
+    release()
+    await closing
+    for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP']) expect(signals.listenerCount(name)).toBe(0)
   })
 })

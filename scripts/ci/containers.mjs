@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { randomBytes, randomUUID } from 'node:crypto'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +10,7 @@ import { gateEnvironment } from './process.mjs'
 import { dockerLayerCache } from './docker-cache.mjs'
 import { receiptImages } from './container-images.mjs'
 import { runTool as pinnedTool } from './tools.mjs'
+import { createScratch as diskScratch } from './scratch.mjs'
 
 const uniqueName = (kind) => `varlens-ci-${kind}-${randomUUID()}`
 const nativeProbe = `(async () => {
@@ -31,6 +31,7 @@ export function createContainerServices(dependencies = {}) {
   const {
     run = toolCommand,
     runTool = pinnedTool,
+    createScratch = diskScratch,
     signals = process,
     sleep = (ms, signal) => delay(ms, undefined, { signal }),
     now = Date.now
@@ -251,22 +252,32 @@ export function createContainerServices(dependencies = {}) {
       const metadata = await imageIdentity(image, commandOptions)
       // Fresh run-scoped DB: advisories are never a reusable scan verdict and
       // the previous database cannot suppress a remote refresh via NextUpdate.
-      const cache = await mkdtemp(join(tmpdir(), 'varlens-ci-trivy-'))
-      scope.defer(() => rm(cache, { recursive: true, force: true }))
-      const config = join(cache, 'trivy.yaml')
-      const ignore = join(cache, '.trivyignore')
+      const scratch = createScratch('trivy', { env: options.env })
+      scope.defer(scratch.close)
+      const cache = join(scratch.directory, 'cache')
+      const temporary = join(scratch.directory, 'tmp')
+      await mkdir(cache)
+      await mkdir(temporary)
+      const config = join(scratch.directory, 'trivy.yaml')
+      const ignore = join(scratch.directory, '.trivyignore')
       await writeFile(config, '{}\n')
       await writeFile(ignore, '')
       const common = ['--cache-dir', cache, '--config', config]
+      // Trivy exports the image (gigabytes) below its temporary directory and
+      // has no flag for it. Keep that beside the database, off a tmpfs /tmp.
+      const scanOptions = {
+        ...commandOptions,
+        env: { ...options.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary }
+      }
       await runTool(
         'trivy',
         ['image', ...common, '--download-db-only', '--no-progress'],
-        commandOptions
+        scanOptions
       )
       const version = await runTool(
         'trivy',
         ['--version', ...common, '--format', 'json'],
-        commandOptions
+        scanOptions
       )
       const updatedAt = JSON.parse(String(version.stdout)).VulnerabilityDB?.UpdatedAt
       const age = now() - Date.parse(updatedAt)
@@ -293,7 +304,7 @@ export function createContainerServices(dependencies = {}) {
           '--no-progress',
           metadata.imageId
         ],
-        commandOptions
+        scanOptions
       )
       await scope.close()
       return {
@@ -320,9 +331,9 @@ export function createContainerServices(dependencies = {}) {
         resolve(options.cwd ?? process.cwd(), '.cache/docker/linux-amd64')
       )
       scope.defer(cache.close)
-      const directory = await mkdtemp(join(tmpdir(), 'varlens-ci-builder-'))
-      scope.defer(() => rm(directory, { recursive: true, force: true }))
-      const config = join(directory, 'buildkitd.toml')
+      const scratch = createScratch('builder', { env: options.env })
+      scope.defer(scratch.close)
+      const config = join(scratch.directory, 'buildkitd.toml')
       await writeFile(config, '[worker.oci]\n  max-parallelism = 2\n')
       const builder = uniqueName('builder')
       scope.defer(() => remove(['buildx', 'rm', '--force', builder], options))

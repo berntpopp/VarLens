@@ -12,11 +12,12 @@ import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { tmpdir } from 'node:os'
 import { randomBytes } from 'node:crypto'
-import { gateEnvironment, git, runCommand } from './process.mjs'
+import { gateEnvironment, git, runCommand, signalAbort } from './process.mjs'
 import { fullSelection, resolveChanges } from './changes.mjs'
 import { selectStages, executeStages, stageEnvironment } from './stages.mjs'
 import { acquireLock } from './lock.mjs'
 import { ensureDependencies, installedFingerprint } from './dependencies.mjs'
+import { materializeFixtures } from './fixtures.mjs'
 import {
   assertCleanSnapshot,
   assertNoLocalEnv,
@@ -265,7 +266,7 @@ export async function runPreflight({
   } catch {
     /* Default keeps the sandbox enabled. */
   }
-  const snapshot = snapshotSource(cwd)
+  let snapshot = snapshotSource(cwd)
   const initial = resolveChanges({ cwd, base, workingTree: true })
   const fingerprint = screenshotFingerprint({ root: cwd })
   const screenshots = {
@@ -295,16 +296,12 @@ export async function runPreflight({
   const commonDir = resolve(cwd, git(['rev-parse', '--git-common-dir'], { cwd }))
   const releaseWorktree = acquireLock(join(stateDir, 'run.lock'))
   let releaseCommon
-  const controller = new AbortController()
-  const abort = () => controller.abort(new Error('Preflight aborted by signal'))
-  process.once('SIGINT', abort)
-  process.once('SIGTERM', abort)
-  process.once('SIGHUP', abort)
+  const termination = signalAbort()
   let context
   try {
     releaseCommon = acquireLock(join(commonDir, 'varlens-ci-heavy.lock'))
     const env = gateEnvironment()
-    const signal = controller.signal
+    const signal = termination.signal
     const baseCommit = await refreshBase({ cwd, remote, base, env, signal })
     const changes = resolveChanges({ cwd, base, workingTree: true })
     const selection = full ? fullSelection('explicit full preflight') : changes.selection
@@ -316,14 +313,17 @@ export async function runPreflight({
     mkdirSync(logDir, { recursive: true })
     const options = { cwd, env, signal, logFile: join(logDir, 'commands.log') }
     context = { cwd, env, options, commit: snapshot.commit, remote, screenshots, noSandbox }
+    const execute = (command, args, overrides) =>
+      runCommand(command, args, { ...options, ...overrides })
     const dependencies = await ensureDependencies({
       cwd,
       stateDir,
       env,
-      execute: (command, args, overrides) =>
-        runCommand(command, args, { ...options, ...overrides }),
+      execute,
       clean: cleanInstall
     })
+    // Setup ends here: from this snapshot on, source and fixture bytes are bound.
+    snapshot = await materializeFixtures({ cwd, execute, initial: snapshot })
     const toolchain = {
       node: process.version,
       abi: process.versions.modules,
@@ -419,11 +419,9 @@ export async function runPreflight({
       await context?.postgres?.close()
     } finally {
       context?.webState?.close()
-      process.removeListener('SIGHUP', abort)
-      process.removeListener('SIGINT', abort)
-      process.removeListener('SIGTERM', abort)
       releaseCommon?.()
       releaseWorktree()
+      termination.dispose()
     }
   }
 }

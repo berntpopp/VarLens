@@ -75,7 +75,7 @@ export async function matchesReceipt(receipt, inputs, { cwd = process.cwd() } = 
 }
 // Generated public-data fixtures are deliberate runtime inputs. Permit exactly
 // the repository's known generated files, and bind their bytes into each pass.
-const GENERATED_FIXTURES = new Set(
+export const GENERATED_FIXTURES = Object.freeze(
   [
     'bed/test-regions.bed',
     'json/columnar-unwrapped-format.json.gz',
@@ -95,6 +95,7 @@ const GENERATED_FIXTURES = new Set(
     'zip/json-batch.zip'
   ].map((path) => `tests/.cache/public-data/generated/${path}`)
 )
+const KNOWN_FIXTURES = new Set(GENERATED_FIXTURES)
 function ignoredSourceInputs(cwd) {
   const paths = git(
     [
@@ -130,9 +131,9 @@ function ignoredSourceInputs(cwd) {
         path
       )
   )
-  const fixtures = relevant.filter((path) => GENERATED_FIXTURES.has(path)).sort()
+  const fixtures = relevant.filter((path) => KNOWN_FIXTURES.has(path)).sort()
   return {
-    ignoredInputs: relevant.filter((path) => !GENERATED_FIXTURES.has(path)),
+    ignoredInputs: relevant.filter((path) => !KNOWN_FIXTURES.has(path)),
     generatedFixtures: fixtures.map((path) => [
       path,
       createHash('sha256')
@@ -163,6 +164,10 @@ export function assertUnchanged(before, after) {
   assertCleanSnapshot(after)
   if (hashValue(before) !== hashValue(after))
     throw new Error('Source changed during preflight; no passing receipt was written.')
+}
+/** Commit, tree, status and ignored inputs must match; fixture bytes are compared separately. */
+export function assertSameSource(before, after) {
+  assertUnchanged({ ...before, generatedFixtures: null }, { ...after, generatedFixtures: null })
 }
 export function assertNoLocalEnv(cwd) {
   // Vite auto-loads these even when the parent environment is sanitized.
