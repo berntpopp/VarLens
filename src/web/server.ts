@@ -275,6 +275,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     // Drain buffered audit rows and stop job runners while the pool is
     // still open; only then close the storage session.
     dispatcherDeps.association.cancelAll()
+    dispatcherDeps.referenceServices.close()
     try {
       await runtime.close()
     } catch (err) {

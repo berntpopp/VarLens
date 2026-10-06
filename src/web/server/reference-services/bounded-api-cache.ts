@@ -75,6 +75,11 @@ export class BoundedApiCache extends ApiCache {
     this.evict()
   }
 
+  /** Close the in-memory database (server shutdown). */
+  close(): void {
+    if (this.cacheDb.open) this.cacheDb.close()
+  }
+
   /** Number of cached responses (tests / metrics). */
   size(): number {
     return (this.cacheDb.prepare('SELECT COUNT(*) AS c FROM api_cache').get() as { c: number }).c

@@ -115,11 +115,14 @@ export class WebReferenceServices {
   readonly clients: ReferenceClients
   private readonly policy: ExternalLookupPolicySource
   private readonly audit: ExternalLookupAuditSink
+  private readonly cacheOption: ApiCache | undefined
+  private createdCache: ApiCache | undefined
 
   constructor(options: WebReferenceServicesOptions) {
     this.policy = options.policy
     this.audit = options.audit
-    const getCache = memo(() => options.cache ?? new BoundedApiCache())
+    this.cacheOption = options.cache
+    const getCache = memo(() => (this.createdCache ??= options.cache ?? new BoundedApiCache()))
     this.clients = { ...defaultClients(getCache), ...options.clients }
   }
 
@@ -129,6 +132,12 @@ export class WebReferenceServices {
       updatedAt: policy.updatedAt,
       updatedBy: policy.updatedBy
     })
+  }
+
+  /** Release the response cache's native database handle (server shutdown). */
+  close(): void {
+    const cache = this.createdCache ?? this.cacheOption
+    if (cache instanceof BoundedApiCache) cache.close()
   }
 
   /** Per-service on/off map from the persisted policy. */
