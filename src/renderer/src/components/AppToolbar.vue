@@ -115,7 +115,7 @@
         <v-list-item
           :prepend-icon="mdiDatabaseImport"
           title="Import Data"
-          subtitle="Ctrl+I"
+          :subtitle="importShortcut"
           @click="$emit('import-click')"
         />
         <v-list-item
@@ -220,6 +220,7 @@ const {
 const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const isWebMode = isWebRuntime()
+const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+I' : 'Alt+Shift+I'
 
 // Preload metadata when a case is selected so status/sex icons display immediately
 watch(

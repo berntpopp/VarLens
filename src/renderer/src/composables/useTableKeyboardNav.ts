@@ -41,6 +41,15 @@ export function isInputFocused(): boolean {
   return false
 }
 
+/**
+ * True when Ctrl, Cmd or Alt is held. Bare-letter row shortcuts (s/c/a/e) must
+ * bail out on these so Ctrl/Cmd+C (copy), +A (select all), +S (save), Ctrl+E
+ * (browser search) etc. reach the browser instead of opening a dialog.
+ */
+export function hasCommandModifier(e: KeyboardEvent): boolean {
+  return e.ctrlKey || e.metaKey || e.altKey
+}
+
 export function useTableKeyboardNav<T>(
   options: UseTableKeyboardNavOptions<T>
 ): UseTableKeyboardNavReturn<T> {
