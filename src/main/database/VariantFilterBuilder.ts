@@ -3,6 +3,7 @@ import { sql, type Kysely, type SelectQueryBuilder } from 'kysely'
 import type { VarlensDatabase } from '../../shared/types/database-schema'
 import type { Variant, VariantFilter, SortItem } from './types'
 import { mainLogger } from '../services/MainLogger'
+import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
 import { buildVariantOrderTerms, type ResolvedVariantSort } from '../../shared/sql/chromosome-order'
 import type { VariantSearchService } from './VariantSearchService'
 import {
@@ -119,6 +120,7 @@ export class VariantFilterBuilder {
     filter: VariantFilter,
     options?: { forceOrChain?: boolean; sortBy?: SortItem[] }
   ): VariantQueryBuilder {
+    assertValidColumnFilterValues(filter.column_filters) // shared with Postgres (#447)
     let query: VariantQueryBuilder = this.kysely
       .selectFrom('variants')
       .selectAll('variants')

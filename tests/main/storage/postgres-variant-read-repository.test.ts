@@ -93,7 +93,11 @@ describe('PostgresVariantReadRepository', () => {
       { starred_only: true, annotation_scope: 'all' },
       'variant_annotations'
     ],
-    ['active_panel_ids', { active_panel_ids: [1] }, 'case_active_panels'],
+    [
+      'panel_intervals',
+      { panel_intervals: [{ chr: '1', start: 100, end: 200 }] },
+      'COALESCE(v.end_pos, v.pos)'
+    ],
     ['inheritance_modes', { inheritance_modes: ['heterozygous'] }, 'gt_num'],
     [
       'analysis_group_id',

@@ -10,9 +10,7 @@ import type {
   CohortVariant,
   GeneBurden
 } from '../../../shared/types/cohort'
-import { mainLogger } from '../../services/MainLogger'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
-import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
 import {
   prepareCohortRead,
   readCohortSummaryStatus,
@@ -22,6 +20,11 @@ import { quoteIdentifier } from './identifiers'
 import { runNamed, runNamedDynamic } from './named-query'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { querySummaryPage } from './postgres-cohort-summary-page'
+import {
+  PostgresPanelIntervalResolver,
+  type PanelIntervalLookup
+} from './postgres-panel-interval-resolver'
+import { assertValidColumnFilterValues } from '../../../shared/filters/column-filter-validation'
 
 type CohortPool = Pick<Pool, 'query' | 'connect'>
 type CohortClient = Pick<PoolClient, 'query' | 'release'>
@@ -32,19 +35,6 @@ type CohortCarrierWithDepth = CohortCarrier & {
   gq?: number | null
   dp?: number | null
 }
-
-interface GenomicInterval {
-  chr: string
-  start: number
-  end: number
-}
-
-type PanelIntervalResolver = (
-  panelIds: number[],
-  genomeBuild: string,
-  paddingBp: number,
-  chrPrefix: boolean
-) => Promise<GenomicInterval[]>
 
 const SORTABLE_COLUMNS: Record<string, string> = {
   chr: 'chr',
@@ -201,51 +191,22 @@ function isNonEmptyArray(value: unknown): value is unknown[] {
   return Array.isArray(value) && value.length > 0
 }
 
-function mergeOverlappingIntervals(intervals: GenomicInterval[]): GenomicInterval[] {
-  if (intervals.length === 0) return []
-
-  const sorted = [...intervals].sort((a, b) => {
-    const chrCompare = a.chr.localeCompare(b.chr, undefined, { numeric: true })
-    return chrCompare !== 0 ? chrCompare : a.start - b.start
-  })
-
-  const merged: GenomicInterval[] = []
-  for (const interval of sorted) {
-    const previous = merged[merged.length - 1]
-    if (
-      previous !== undefined &&
-      previous.chr === interval.chr &&
-      interval.start <= previous.end + 1
-    ) {
-      previous.end = Math.max(previous.end, interval.end)
-    } else {
-      merged.push({ ...interval })
-    }
-  }
-  return merged
-}
-
-function withoutActivePanelFields(params: CohortSearchParams): CohortSearchParams {
-  const rest = { ...params }
-  delete rest.active_panel_ids
-  delete rest.panel_padding_bp
-  return rest
-}
-
 export class PostgresCohortRepository {
   private readonly schema: string
   private readonly schemaName: string
-  private readonly panelIntervalResolver: PanelIntervalResolver
+  private readonly panelIntervals: PostgresPanelIntervalResolver
   private columnMetaCache: ColumnFilterMeta[] | null = null
 
   constructor(
     private readonly pool: CohortPool,
     schema: string,
-    panelIntervalResolver?: PanelIntervalResolver
+    panelIntervalLookup?: PanelIntervalLookup
   ) {
     this.schema = schema
     this.schemaName = quoteIdentifier(schema)
-    this.panelIntervalResolver = panelIntervalResolver ?? this.resolvePanelIntervals.bind(this)
+    // Shared with the single-case read path so both views derive identical
+    // panel regions (issue #447).
+    this.panelIntervals = new PostgresPanelIntervalResolver(pool, schema, panelIntervalLookup)
   }
 
   private tbl(table: string): string {
@@ -253,7 +214,7 @@ export class PostgresCohortRepository {
   }
 
   async queryVariants(params: CohortSearchParams): Promise<CohortPaginatedResult> {
-    const resolvedParams = await this.resolvePanelParams(params)
+    const resolvedParams = await this.panelIntervals.resolveCohortParams(params)
     this.assertSupportedColumnFilters(resolvedParams)
     const totalCases = await this.getTotalCases(this.pool, resolvedParams)
 
@@ -550,7 +511,7 @@ export class PostgresCohortRepository {
   }
 
   async *streamCohortRows(params: CohortSearchParams): AsyncGenerator<Record<string, unknown>> {
-    const resolvedParams = await this.resolvePanelParams(params)
+    const resolvedParams = await this.panelIntervals.resolveCohortParams(params)
     this.assertSupportedColumnFilters(resolvedParams)
     const totalCases = await this.getTotalCases(this.pool, resolvedParams)
     const queryParts = this.buildQueryParts(resolvedParams, totalCases)
@@ -589,80 +550,6 @@ export class PostgresCohortRepository {
       `SELECT COUNT(*)::bigint AS total_cases FROM ${this.schemaName}."cases"`
     )
     return toNumber((result.rows[0] as { total_cases?: unknown } | undefined)?.total_cases)
-  }
-
-  private async resolvePanelParams(params: CohortSearchParams): Promise<CohortSearchParams> {
-    if (isNonEmptyArray(params.panel_intervals) || !isNonEmptyArray(params.active_panel_ids)) {
-      return params
-    }
-
-    const panelIds = params.active_panel_ids.filter((id): id is number => typeof id === 'number')
-    if (panelIds.length === 0) {
-      return withoutActivePanelFields(params)
-    }
-
-    try {
-      const intervals = await this.panelIntervalResolver(
-        panelIds,
-        params.genome_build ?? 'GRCh38',
-        params.panel_padding_bp ?? 5000,
-        await this.detectChrPrefix()
-      )
-      if (intervals.length === 0) {
-        return withoutActivePanelFields(params)
-      }
-
-      return {
-        ...withoutActivePanelFields(params),
-        panel_intervals: intervals
-      }
-    } catch (error) {
-      mainLogger.error(
-        `Failed to resolve PostgreSQL cohort panel intervals for active gene panel(s): ${error instanceof Error ? error.message : String(error)}`,
-        'cohort'
-      )
-      throw error
-    }
-  }
-
-  private async resolvePanelIntervals(
-    panelIds: number[],
-    genomeBuild: string,
-    paddingBp: number,
-    chrPrefix: boolean
-  ): Promise<GenomicInterval[]> {
-    const panelResult = await this.pool.query<{ hgnc_id: string }>(
-      `SELECT DISTINCT hgnc_id
-       FROM ${this.schemaName}."panel_genes"
-       WHERE panel_id = ANY($1::bigint[])`,
-      [panelIds]
-    )
-    const hgncIds = panelResult.rows.map((row) => row.hgnc_id)
-    if (hgncIds.length === 0) return []
-
-    const coordinates = getGeneReferenceDb().getCoordinatesForGenes(hgncIds, genomeBuild)
-    const intervals: GenomicInterval[] = []
-    for (const coordinate of coordinates.values()) {
-      const chr = chrPrefix
-        ? coordinate.chromosome.startsWith('chr')
-          ? coordinate.chromosome
-          : `chr${coordinate.chromosome}`
-        : coordinate.chromosome
-      intervals.push({
-        chr,
-        start: Math.max(1, coordinate.start_pos - paddingBp),
-        end: coordinate.end_pos + paddingBp
-      })
-    }
-
-    return mergeOverlappingIntervals(intervals)
-  }
-
-  private async detectChrPrefix(): Promise<boolean> {
-    const result = await this.pool.query<{ chr?: string }>(
-      `SELECT chr FROM ${this.schemaName}."variants" LIMIT 1`
-    )
-    return result.rows[0]?.chr?.startsWith('chr') ?? false
   }
 
   private buildQueryParts(
@@ -781,9 +668,12 @@ export class PostgresCohortRepository {
 
     this.addColumnFilters(params, whereParts, havingParts, addParam, totalCases)
 
-    if (params.max_internal_af !== undefined) {
+    // 0 means "no frequency filter" and rows without a frequency are kept —
+    // the same contract as the case view and the SQLite cohort listing.
+    if (params.max_internal_af !== undefined && params.max_internal_af > 0) {
+      const frequency = this.cohortFrequencyExpression(totalCases)
       havingParts.push(
-        `${this.cohortFrequencyExpression(totalCases)} <= ${addParam(params.max_internal_af)}`
+        `(${frequency} IS NULL OR ${frequency} <= ${addParam(params.max_internal_af)})`
       )
     }
 
@@ -927,6 +817,7 @@ export class PostgresCohortRepository {
 
   private assertSupportedColumnFilters(params: CohortSearchParams): void {
     if (params.column_filters === undefined) return
+    assertValidColumnFilterValues(params.column_filters)
 
     const unsupportedColumns = Object.keys(params.column_filters).filter(
       (column) => COHORT_COLUMN_FILTER_DEFINITIONS[column] === undefined
