@@ -224,7 +224,9 @@ describe('buildSummaryQueryParts', () => {
 
   it('defaults ORDER BY to carrier_count when sort_by is unknown', () => {
     const result = buildSummaryQueryParts({ sort_by: 'nonexistent_column' }, TOTAL_CASES)
-    expect(result.parts.orderBy).toContain('cvs.carrier_count DESC')
+    // Default sort is served by the all-ascending keyset order (migration 0020).
+    expect(result.parts.keyset).toBe(true)
+    expect(result.parts.orderBy).toContain('(-COALESCE(cvs.carrier_count, -1)) ASC')
   })
 
   it('produces sequential positional placeholders across mixed predicates', () => {
