@@ -107,11 +107,13 @@ export function applyBareColumnFilters(
   if (filter.column_filters === undefined) return query
   let filtered = query
   for (const [column, filterDef] of Object.entries(filter.column_filters)) {
-    const sqlColumn = SORTABLE_COLUMNS[column]
-    if (sqlColumn === undefined) continue
+    const baseColumn = SORTABLE_COLUMNS[column]
+    if (baseColumn === undefined) continue
+    // Always table-qualified: the `variant_frequency` join in the base query
+    // also exposes `chr` / `pos`, so a bare reference is ambiguous in SQLite.
     filtered = applyColumnFilter(
       filtered,
-      sqlColumn,
+      `variants.${baseColumn}`,
       filterDef,
       NUMERIC_COLUMN_FILTER_KEYS.has(column)
     )

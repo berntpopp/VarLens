@@ -486,6 +486,67 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     )
   }, 120_000)
 
+  // ── Bare chr / pos column filters ─────────────────────────────────────────
+
+  it('bare chr and pos column filters select the same rows on every path', async () => {
+    const chr7 = A_ALL.filter((v) => v.chr === '7')
+    const grch38 = { genome_build: 'GRCh38' }
+    await expectAll(
+      casePaths(0, { column_filters: { chr: { operator: '=', value: '7' } } }),
+      ok(chr7)
+    )
+    // A number against the text column `chr` (the DSL sends `chr = 8` as a number).
+    await expectAll(
+      casePaths(0, { column_filters: { chr: { operator: '=', value: 8 } } }),
+      ok([A.otherChr])
+    )
+    await expectAll(
+      cohortPaths({ ...grch38, column_filters: { chr: { operator: '=', value: 8 } } }),
+      ok([A.otherChr])
+    )
+    await expectAll(
+      casePaths(0, { column_filters: { chr: { operator: 'in', value: ['8'] } } }),
+      ok([A.otherChr])
+    )
+    await expectAll(
+      cohortPaths({ ...grch38, column_filters: { chr: { operator: '=', value: '8' } } }),
+      ok([A.otherChr])
+    )
+    for (const value of [150_000, '150000']) {
+      await expectAll(
+        casePaths(0, { column_filters: { pos: { operator: '=', value } } }),
+        ok([A.inGene, A.otherChr])
+      )
+      await expectAll(
+        cohortPaths({ ...grch38, column_filters: { pos: { operator: '=', value } } }),
+        ok([A.inGene, A.otherChr])
+      )
+    }
+    await expectAll(
+      casePaths(0, { column_filters: { pos: { operator: 'in', value: [90_000, 300_000] } } }),
+      ok([A.spanningCnv, A.symbolOnly])
+    )
+    await expectAll(
+      casePaths(0, {
+        column_filters: {
+          chr: { operator: '=', value: '7' },
+          pos: { operator: '>', value: 205_000 }
+        }
+      }),
+      ok([A.afterEnd, A.symbolOnly])
+    )
+    await expectAll(
+      cohortPaths({
+        ...grch38,
+        column_filters: {
+          chr: { operator: '=', value: '7' },
+          pos: { operator: '>', value: 205_000 }
+        }
+      }),
+      ok([A.afterEnd, A.symbolOnly])
+    )
+  }, 120_000)
+
   // ── Invalid numeric filter value ──────────────────────────────────────────
 
   it('a non-numeric value on a numeric column is rejected identically everywhere', async () => {

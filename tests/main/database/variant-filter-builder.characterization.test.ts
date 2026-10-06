@@ -459,9 +459,9 @@ describe('VariantFilterBuilder characterization (compiled SQL + parameters)', ()
       if (scenario.sort !== undefined) query = builder.applySort(query, scenario.sort.sortBy)
       const compiled = query.compile()
       // Pin whether the emitted SQL is accepted by SQLite against the real
-      // schema. A few bare-key column filters (`chr`, `pos`) are currently
-      // rejected as ambiguous because of the `vf` join; that pre-existing
-      // behaviour is recorded here rather than fixed (see issue #446 report).
+      // schema. Every scenario must prepare cleanly: bare-key column filters
+      // are table-qualified, so `chr` / `pos` are no longer ambiguous with
+      // the `vf` join.
       let prepareError: string | null = null
       try {
         db.prepare(compiled.sql)

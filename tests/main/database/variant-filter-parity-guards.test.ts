@@ -139,6 +139,45 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     })
   })
 
+  describe('bare chr / pos column filters', () => {
+    const positions = (columnFilters: ColumnFiltersParam): number[] =>
+      sqlite.variants
+        .getVariants({ case_id: grch38Case, column_filters: columnFilters }, 100, 0)
+        .data.map((row) => row.pos)
+        .sort((a, b) => a - b)
+
+    // `variant_frequency` is joined into every case query and also has `chr`
+    // and `pos`, so an unqualified column reference is ambiguous in SQLite.
+    it('SQLite case view accepts them (columns are qualified with the variants table)', () => {
+      expect(positions({ chr: { operator: '=', value: '7' } })).toEqual([
+        90_000, 150_000, 202_000, 300_000
+      ])
+      expect(positions({ chr: { operator: 'like', value: '8' } })).toEqual([])
+      expect(positions({ pos: { operator: '=', value: '150000' } })).toEqual([150_000])
+      expect(positions({ pos: { operator: 'in', value: [90_000, 202_000] } })).toEqual([
+        90_000, 202_000
+      ])
+      expect(positions({ pos: { operator: '>=', value: 202_000 } })).toEqual([202_000, 300_000])
+      expect(positions({ pos: { operator: '!=', value: 150_000 } })).toEqual([
+        90_000, 202_000, 300_000
+      ])
+    })
+
+    it('SQLite export SQL built from them is accepted too', async () => {
+      const prepared = await prepareVariantExport(() => sqlite, grch38Case, {
+        column_filters: {
+          chr: { operator: '=', value: '7' },
+          pos: { operator: '<', value: 100_000 }
+        }
+      })
+      if (!('compiled' in prepared)) throw new Error(prepared.error)
+      const rows = sqlite.db
+        .prepare(prepared.compiled.sql)
+        .all(...(prepared.compiled.parameters as unknown[])) as Array<{ pos: number }>
+      expect(rows.map((row) => row.pos)).toEqual([90_000])
+    })
+  })
+
   describe('non-numeric value on a numeric column', () => {
     const MESSAGE = 'Invalid numeric value for column filter "cadd": "abc" is not a number'
     const caseFilters: ColumnFiltersParam = { cadd: { operator: '<', value: 'abc' } }
