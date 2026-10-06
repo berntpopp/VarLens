@@ -18,7 +18,6 @@
 import type { Pool } from 'pg'
 
 import {
-  ARGON2_POLICY,
   defaultPasswordProvider,
   type PasswordProvider
 } from '../../main/auth/providers/argon2-provider'
@@ -31,6 +30,7 @@ import {
   type UserRole
 } from '../../shared/auth/auth-constants'
 import { assertUserExists, reactivateUser, setUserRole } from './postgres-user-admin'
+import { assertArgon2idHashMatchesProviderPolicy, isLikelyArgon2idHash } from './argon2id-phc'
 
 /**
  * Minimum length for any new password set on the web track. Picked at
@@ -64,50 +64,7 @@ function assertPasswordMinLength(password: string, label = 'Password'): void {
   }
 }
 
-/**
- * Shape-check an Argon2id PHC string without invoking the verifier. This
- * rejects plaintext, other hash families, malformed salt/hash segments, and
- * parameter values that do not match the provider policy so bootstrap fails
- * loudly before any database write.
- */
-const ARGON2ID_PHC_PATTERN =
-  /^\$argon2id\$v=(\d+)\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+={0,2})\$([A-Za-z0-9+/]+={0,2})$/
-
-function isValidPhcBase64(value: string): boolean {
-  return value.length > 0 && value.length % 4 !== 1
-}
-
-function isLikelyArgon2idHash(value: string): boolean {
-  const match = value.match(ARGON2ID_PHC_PATTERN)
-  return match !== null && isValidPhcBase64(match[5]) && isValidPhcBase64(match[6])
-}
-
-function assertArgon2idHashMatchesProviderPolicy(value: string): void {
-  const match = value.match(ARGON2ID_PHC_PATTERN)
-  if (match === null || !isValidPhcBase64(match[5]) || !isValidPhcBase64(match[6])) {
-    throw new Error(
-      'createFirstUserFromHash: passwordHash does not look like an Argon2id hash. ' +
-        'Generate one with `npm run varlens:hash-password`.'
-    )
-  }
-
-  const [, version, memoryCost, timeCost, parallelism] = match
-  const mismatches: string[] = []
-  if (version !== '19') mismatches.push(`v=${version}`)
-  if (Number(memoryCost) !== ARGON2_POLICY.memoryCost) mismatches.push(`m=${memoryCost}`)
-  if (Number(timeCost) !== ARGON2_POLICY.timeCost) mismatches.push(`t=${timeCost}`)
-  if (Number(parallelism) !== ARGON2_POLICY.parallelism) mismatches.push(`p=${parallelism}`)
-
-  if (mismatches.length > 0) {
-    throw new Error(
-      'createFirstUserFromHash: passwordHash Argon2id parameters do not match the ' +
-        `VarLens provider policy (m=${ARGON2_POLICY.memoryCost},t=${ARGON2_POLICY.timeCost},` +
-        `p=${ARGON2_POLICY.parallelism}). Mismatched parameter(s): ${mismatches.join(', ')}.`
-    )
-  }
-}
-
-export { isLikelyArgon2idHash, assertArgon2idHashMatchesProviderPolicy }
+export { isLikelyArgon2idHash, assertArgon2idHashMatchesProviderPolicy } from './argon2id-phc'
 // Cross-backend User + AuthResult shape: both implementations import the same
 // types so shape parity is enforced at compile time.
 import type { AuthResult, User } from '../../shared/auth/types'
