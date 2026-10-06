@@ -190,12 +190,13 @@ const COLUMN_FILTER_SCENARIOS: Scenario[] = [
     filter: { column_filters: { not_a_column: { operator: '=', value: 1 } } }
   },
   {
+    // A numeric-looking value: shared validation (#447) rejects non-numeric values on numeric columns.
     name: 'column_filters every base sortable column (=)',
     filter: {
       column_filters: Object.fromEntries(
         Object.keys(BASE_SORTABLE_COLUMNS).map((key) => [
           key,
-          { operator: '=' as const, value: 'x' }
+          { operator: '=' as const, value: '1' }
         ])
       )
     }
