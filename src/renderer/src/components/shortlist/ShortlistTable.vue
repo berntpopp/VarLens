@@ -20,6 +20,10 @@ import { computed } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import { mdiStar, mdiStarOutline, mdiDotsVertical } from '@mdi/js'
 import RankScoreTooltip from './RankScoreTooltip.vue'
+import { useRowHoverTarget } from './useRowHoverTarget'
+import { CellChip, CellIcon } from '../table-cells/cell-components'
+import { useSharedMenu } from '../table-cells/shared-menu'
+import { useResultSetKeys } from '../table-state/useResultSetKeys'
 import {
   useTableKeyboardNav,
   isInputFocused,
@@ -142,6 +146,23 @@ function displayVariantType(t: ShortlistRow['variant_type']): string {
   return (t ?? 'snv').toUpperCase()
 }
 
+// Shared per-row overlays (one instance per table instead of one per row)
+const rankTip = useRowHoverTarget('data-rank-tip')
+const rankTipRow = computed(() =>
+  rankTip.rowId.value === null
+    ? null
+    : (props.rows.find((r) => String(r.id) === rankTip.rowId.value) ?? null)
+)
+
+const actionsMenu = useSharedMenu<ShortlistRow>()
+const { open: actionsOpen, activator: actionsActivator, payload: actionsRow } = actionsMenu
+
+// Fresh <tr>s when another case/preset result arrives: moved rows are layout shifts
+const { rowKey } = useResultSetKeys(
+  () => props.rows,
+  (row) => row.id
+)
+
 // Keyboard navigation and row selection
 const rowsRef = computed(() => props.rows)
 
@@ -220,31 +241,25 @@ onKeyStroke(
   <v-data-table
     :headers="headers"
     :items="props.rows"
-    item-value="id"
+    :item-value="rowKey"
     density="compact"
     :items-per-page="50"
     :items-per-page-options="[25, 50, 100, 250, 500]"
     class="shortlist-data-table"
     :row-props="getRowProps"
     @click:row="(_: MouseEvent, { item }: { item: ShortlistRow }) => handleRowClick(item)"
+    @mouseover="rankTip.onMouseover"
+    @mouseout="rankTip.onMouseout"
   >
+    <!-- Score breakdown: one shared tooltip (below), not a v-tooltip per row -->
     <template #[`item.rank_score`]="{ item }">
-      <v-tooltip location="right">
-        <template #activator="{ props: tipProps }">
-          <span v-bind="tipProps">{{ item.rank_score.toFixed(2) }}</span>
-        </template>
-        <RankScoreTooltip
-          :score="item.rank_score"
-          :components="item.rank_components"
-          :pinned="pinFor(item)"
-        />
-      </v-tooltip>
+      <span :data-rank-tip="item.id">{{ item.rank_score.toFixed(2) }}</span>
     </template>
 
     <template #[`item.variant_type`]="{ item }">
-      <v-chip :color="typeChipColor(item.variant_type)" size="x-small" variant="flat">
+      <CellChip :color="typeChipColor(item.variant_type)" size="x-small" variant="flat">
         {{ displayVariantType(item.variant_type) }}
-      </v-chip>
+      </CellChip>
     </template>
 
     <template #[`item.variant_notation`]="{ item }">
@@ -271,49 +286,66 @@ onKeyStroke(
       {{ item.gnomad_af == null ? '—' : item.gnomad_af.toExponential(2) }}
     </template>
 
+    <!-- Native buttons + static icons: no VBtn/VIcon instances per row -->
     <template #[`item.is_starred`]="{ item }">
-      <v-btn
+      <button
+        type="button"
+        class="annotation-btn"
         :aria-label="item.is_starred ? 'Unstar variant' : 'Star variant'"
-        icon
-        variant="text"
-        size="x-small"
+        :aria-pressed="item.is_starred"
         :data-testid="`shortlist-star-${item.id}`"
         @click.stop="emit('toggle-star', item)"
       >
-        <v-icon
-          :color="item.is_starred ? 'primary' : undefined"
+        <CellIcon
+          class="shortlist-row-icon"
+          :color="item.is_starred ? 'primary' : null"
           :icon="item.is_starred ? mdiStar : mdiStarOutline"
         />
-      </v-btn>
+      </button>
     </template>
 
     <template #[`item.actions`]="{ item }">
-      <v-menu>
-        <template #activator="{ props: actProps }">
-          <v-btn
-            aria-label="Variant actions"
-            icon
-            variant="text"
-            size="x-small"
-            :data-testid="`shortlist-actions-${item.id}`"
-            v-bind="actProps"
-          >
-            <v-icon :icon="mdiDotsVertical" />
-          </v-btn>
-        </template>
-        <v-list density="compact">
-          <v-list-item @click="emit('row-click', item)">
-            <v-list-item-title>View details</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click="emit('open-in-tab', targetTabFor(item.variant_type))">
-            <v-list-item-title>
-              View in {{ targetTabFor(item.variant_type).toUpperCase() }} tab
-            </v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
+      <button
+        type="button"
+        class="annotation-btn"
+        aria-label="Variant actions"
+        aria-haspopup="menu"
+        :aria-expanded="actionsMenu.open.value && actionsMenu.payload.value?.id === item.id"
+        :data-testid="`shortlist-actions-${item.id}`"
+        @click.stop="actionsMenu.toggle($event.currentTarget as HTMLElement, item)"
+      >
+        <CellIcon class="shortlist-row-icon" :icon="mdiDotsVertical" />
+      </button>
     </template>
   </v-data-table>
+
+  <!-- One shared actions menu and one score tooltip for all rows -->
+  <v-menu v-model="actionsOpen" :activator="actionsActivator ?? undefined" :open-on-click="false">
+    <v-list v-if="actionsRow" density="compact">
+      <v-list-item @click="emit('row-click', actionsRow)">
+        <v-list-item-title>View details</v-list-item-title>
+      </v-list-item>
+      <v-list-item @click="emit('open-in-tab', targetTabFor(actionsRow.variant_type))">
+        <v-list-item-title>
+          View in {{ targetTabFor(actionsRow.variant_type).toUpperCase() }} tab
+        </v-list-item-title>
+      </v-list-item>
+    </v-list>
+  </v-menu>
+  <v-tooltip
+    v-model="rankTip.open.value"
+    :activator="rankTip.element.value ?? undefined"
+    :open-on-hover="false"
+    :open-on-focus="false"
+    location="right"
+  >
+    <RankScoreTooltip
+      v-if="rankTipRow"
+      :score="rankTipRow.rank_score"
+      :components="rankTipRow.rank_components"
+      :pinned="pinFor(rankTipRow)"
+    />
+  </v-tooltip>
 </template>
 
 <style scoped>
@@ -335,6 +367,12 @@ onKeyStroke(
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+}
+
+/* Fixed layout: the header widths are the column widths, so a sort or a new
+   case's rows can never re-flow the columns (same as the case/cohort tables). */
+.shortlist-data-table :deep(.v-table__wrapper > table) {
+  table-layout: fixed;
 }
 
 .shortlist-data-table :deep(.v-data-table-footer) {
@@ -368,6 +406,11 @@ onKeyStroke(
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
+}
+
+/* Same 18px glyph box the former x-small icon v-btn rendered */
+.shortlist-row-icon {
+  font-size: 18px;
 }
 
 .shortlist-data-table :deep(tbody tr) {

@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
-import ExternalLinkCell from '../../../../src/renderer/src/components/table-cells/ExternalLinkCell.vue'
-import ClinVarCell from '../../../../src/renderer/src/components/table-cells/ClinVarCell.vue'
-import PositionCell from '../../../../src/renderer/src/components/table-cells/PositionCell.vue'
+import {
+  ClinVarCell,
+  ExternalLinkCell,
+  GeneSymbolCell,
+  PositionCell
+} from '../../../../src/renderer/src/components/table-cells/simple-cells'
 
 const vuetify = createVuetify({ components })
 const URL_ = 'https://www.omim.org/entry/612555'
@@ -51,6 +54,19 @@ describe('link cells are real, keyboard-reachable anchors', () => {
     expect(linked.find('a').exists()).toBe(true)
     const plain = mount(PositionCell, {
       props: { position: 1234567, url: null },
+      global: { plugins: [vuetify] }
+    })
+    expect(plain.find('a').exists()).toBe(false)
+  })
+
+  it('GeneSymbolCell links as an anchor only when a link URL is configured', () => {
+    const linked = mount(GeneSymbolCell, {
+      props: { value: 'COMT', linkUrl: 'https://www.genenames.org/' },
+      global: { plugins: [vuetify] }
+    })
+    expect(linked.get('a').attributes('aria-label')).toBe('COMT (opens in a new tab)')
+    const plain = mount(GeneSymbolCell, {
+      props: { value: 'COMT', linkUrl: null },
       global: { plugins: [vuetify] }
     })
     expect(plain.find('a').exists()).toBe(false)

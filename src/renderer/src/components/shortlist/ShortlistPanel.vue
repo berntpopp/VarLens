@@ -57,7 +57,9 @@ const { showStale, ariaBusy, liveMessage } = useTableLoadingState({
   loading,
   totalCount: computed(() => result.value?.rows.length ?? null)
 })
-const showSkeleton = computed(() => loading.value && result.value === null)
+// Skeleton until the first result, not only while `loading`: the query starts
+// asynchronously, so gating on loading left the body empty for a frame or two.
+const showSkeleton = computed(() => result.value === null && error.value === null)
 
 // Plain-language explanation of the capped Stage-1 pre-selection (was the
 // developer-facing "Scored (capped): N → top M (Xms)" readout).
@@ -119,21 +121,25 @@ function dismissError(): void {
         density="compact"
         hide-details
         variant="outlined"
-        style="max-width: 320px"
+        class="shortlist-panel__preset"
       />
+      <!-- Always rendered, single line: the summary arriving with the first
+           result must not resize the select or wrap the header taller (that
+           pushed the table down: open-case CLS 0.11 on mobile). -->
       <div
-        v-if="result"
-        class="text-caption text-medium-emphasis d-flex align-center"
+        class="shortlist-panel__summary text-caption text-medium-emphasis"
         data-testid="shortlist-summary"
       >
-        Top {{ result.rows.length }} of {{ result.totalCandidates }} pre-selected candidates
-        <IconButton
-          label="How the shortlist is built"
-          :tooltip="shortlistExplanation"
-          :icon="mdiInformationOutline"
-          size="x-small"
-          class="ml-1"
-        />
+        <template v-if="result">
+          Top {{ result.rows.length }} of {{ result.totalCandidates }} pre-selected candidates
+          <IconButton
+            label="How the shortlist is built"
+            :tooltip="shortlistExplanation"
+            :icon="mdiInformationOutline"
+            size="x-small"
+            class="ml-1"
+          />
+        </template>
       </div>
       <v-spacer />
       <v-btn
@@ -207,6 +213,17 @@ function dismissError(): void {
 .shortlist-panel__header {
   flex: 0 0 auto;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.shortlist-panel__preset {
+  flex: 0 1 320px;
+  min-width: 140px;
+}
+.shortlist-panel__summary {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /*
  * The body wrapper is the flex-grow region that hosts whichever of the

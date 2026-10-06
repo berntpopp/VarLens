@@ -1,49 +1,49 @@
 <template>
-  <v-expand-transition>
-    <div v-if="visiblePresets.length > 0" class="preset-bar px-3 py-1 d-flex align-center ga-1">
-      <!-- Preset toggle chips -->
-      <v-chip
-        v-for="preset in visiblePresets"
-        :key="preset.id"
-        :color="isPresetActive(preset.id) ? 'primary' : undefined"
-        :variant="isPresetActive(preset.id) ? 'flat' : 'outlined'"
-        size="small"
-        label
-        role="button"
-        :aria-pressed="isPresetActive(preset.id)"
-        :aria-label="`Filter preset: ${preset.name}`"
-        @click="emit('toggle', preset.id)"
-      >
-        <v-icon v-if="!preset.isBuiltIn" start size="x-small" :icon="mdiAccount" />
-        {{ preset.name }}
-        <v-tooltip activator="parent" location="bottom">
-          {{ preset.description || 'No description' }}
-        </v-tooltip>
-      </v-chip>
+  <!-- No expand transition: animating the row height shifted the table below
+       it on every frame of the animation (layout shift). -->
+  <div v-if="visiblePresets.length > 0" class="preset-bar px-3 py-1 d-flex align-center ga-1">
+    <!-- Preset toggle chips -->
+    <v-chip
+      v-for="preset in visiblePresets"
+      :key="preset.id"
+      :color="isPresetActive(preset.id) ? 'primary' : undefined"
+      :variant="isPresetActive(preset.id) ? 'flat' : 'outlined'"
+      size="small"
+      label
+      role="button"
+      :aria-pressed="isPresetActive(preset.id)"
+      :aria-label="`Filter preset: ${preset.name}`"
+      @click="emit('toggle', preset.id)"
+    >
+      <v-icon v-if="!preset.isBuiltIn" start size="x-small" :icon="mdiAccount" />
+      {{ preset.name }}
+      <v-tooltip activator="parent" location="bottom">
+        {{ preset.description || 'No description' }}
+      </v-tooltip>
+    </v-chip>
 
-      <v-divider v-if="hasActiveFilters" vertical class="mx-1" />
+    <v-divider v-if="hasActiveFilters" vertical class="mx-1" />
 
-      <!-- Save current filters as preset -->
-      <v-btn
-        v-if="hasActiveFilters"
-        size="x-small"
-        variant="text"
-        color="primary"
-        @click="emit('save')"
-      >
-        <v-icon start size="x-small" :icon="mdiContentSaveOutline" />
-        Save
-      </v-btn>
+    <!-- Save current filters as preset -->
+    <v-btn
+      v-if="hasActiveFilters"
+      size="x-small"
+      variant="text"
+      color="primary"
+      @click="emit('save')"
+    >
+      <v-icon start size="x-small" :icon="mdiContentSaveOutline" />
+      Save
+    </v-btn>
 
-      <!-- Manage presets -->
-      <IconButton
-        label="Manage presets"
-        :icon="mdiCogOutline"
-        size="x-small"
-        @click="emit('manage')"
-      />
-    </div>
-  </v-expand-transition>
+    <!-- Manage presets -->
+    <IconButton
+      label="Manage presets"
+      :icon="mdiCogOutline"
+      size="x-small"
+      @click="emit('manage')"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">

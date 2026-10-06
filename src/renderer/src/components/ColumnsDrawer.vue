@@ -6,7 +6,8 @@
     :width="340"
     @update:model-value="emit('update:open', $event)"
   >
-    <v-card flat class="d-flex flex-column h-100">
+    <!-- Content mounts on first open (off-canvas while closed) -->
+    <v-card v-if="contentMounted" flat class="d-flex flex-column h-100">
       <!-- Header -->
       <v-toolbar density="compact" flat>
         <v-toolbar-title class="text-body-large font-weight-medium">
@@ -107,6 +108,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import draggable from 'vuedraggable'
+import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 import { groupColumns, getGroupConfig } from '../config/columnGroups'
 import {
   mdiClose,
@@ -134,6 +136,8 @@ const emit = defineEmits<{
   reorder: [keys: string[]]
   reset: []
 }>()
+
+const contentMounted = useMountOnFirstOpen(() => props.open)
 
 /** Columns organized by group */
 const groupedColumns = computed(() => groupColumns(props.columns))
