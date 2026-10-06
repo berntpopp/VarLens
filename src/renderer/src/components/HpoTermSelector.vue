@@ -34,8 +34,9 @@
       hide-details
       clearable
       :disabled="disabled || !hpoApiAvailable"
-      placeholder="Search HPO terms..."
-      aria-label="Search HPO terms"
+      label="Search HPO terms"
+      placeholder="Type a term or HPO ID"
+      :list-props="HPO_LIST_PROPS"
       data-testid="hpo-term-search"
       no-filter
       @update:model-value="handleTermSelected"
@@ -86,6 +87,9 @@ const emit = defineEmits<{
 }>()
 
 const { api } = useApiService()
+
+/** Name the suggestion listbox and make its scroll region keyboard-reachable (axe). */
+const HPO_LIST_PROPS = { 'aria-label': 'Matching HPO terms', tabindex: 0 }
 
 const searchQuery = ref('')
 const searchResults = ref<HpoSearchResult[]>([])
