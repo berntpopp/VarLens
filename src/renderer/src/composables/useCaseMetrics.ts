@@ -15,14 +15,14 @@ import type {
 import { useApiService } from './useApiService'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { createPerCaseCache } from './per-case-cache'
 
 // Global metric definitions cache
 const definitionsCache = ref<MetricDefinition[]>([])
 const definitionsLoaded = ref(false)
 
-// Per-case metrics cache
-const metricsCache = ref<Map<number, CaseMetricWithDefinition[]>>(new Map())
-const loadingStates = ref<Map<number, boolean>>(new Map())
+// Per-case metrics cache — bounded LRU. Lists are replaced, never mutated in place.
+const metricsCache = createPerCaseCache<CaseMetricWithDefinition[]>()
 
 export function useCaseMetrics() {
   const { api } = useApiService()
@@ -59,12 +59,10 @@ export function useCaseMetrics() {
 
   async function loadMetrics(caseId: number): Promise<void> {
     if (!api) return
-    if (loadingStates.value.get(caseId) === true) return
-
-    loadingStates.value.set(caseId, true)
     try {
-      const metrics = unwrapIpcResult(await api.caseMetrics.listForCase(caseId))
-      metricsCache.value.set(caseId, metrics)
+      await metricsCache.load(caseId, async () =>
+        unwrapIpcResult(await api.caseMetrics.listForCase(caseId))
+      )
     } catch (error) {
       logService.error(
         'Failed to load case metrics: ' +
@@ -75,25 +73,22 @@ export function useCaseMetrics() {
               : String(error)),
         'metrics'
       )
-    } finally {
-      loadingStates.value.set(caseId, false)
     }
   }
 
   function getMetrics(caseId: number): CaseMetricWithDefinition[] {
-    return metricsCache.value.get(caseId) ?? []
+    return metricsCache.get(caseId) ?? []
   }
 
   function isLoading(caseId: number): boolean {
-    return loadingStates.value.get(caseId) ?? false
+    return metricsCache.isLoading(caseId)
   }
 
   async function upsertMetric(caseId: number, metricId: number, value: MetricValue): Promise<void> {
     if (!api) return
     unwrapIpcResult(await api.caseMetrics.upsert(caseId, metricId, value))
     // Reload to get joined data
-    loadingStates.value.delete(caseId) // Allow reload
-    metricsCache.value.delete(caseId)
+    metricsCache.invalidate(caseId) // Allow reload
     await loadMetrics(caseId)
   }
 
@@ -102,9 +97,9 @@ export function useCaseMetrics() {
     unwrapIpcResult(await api.caseMetrics.delete(caseId, metricId))
 
     // Remove from cache
-    const cached = metricsCache.value.get(caseId)
+    const cached = metricsCache.get(caseId)
     if (cached) {
-      metricsCache.value.set(
+      metricsCache.set(
         caseId,
         cached.filter((m) => m.metric_id !== metricId)
       )
@@ -132,8 +127,17 @@ export function useCaseMetrics() {
   function clearCache(): void {
     definitionsCache.value = []
     definitionsLoaded.value = false
-    metricsCache.value.clear()
-    loadingStates.value.clear()
+    metricsCache.clear()
+  }
+
+  /** Drop one case's metrics (e.g. after the case is deleted). */
+  function invalidateCase(caseId: number): void {
+    metricsCache.invalidate(caseId)
+  }
+
+  /** Drop every case's metrics but keep the definitions catalog. */
+  function invalidateAllCases(): void {
+    metricsCache.clear()
   }
 
   return {
@@ -146,6 +150,8 @@ export function useCaseMetrics() {
     upsertMetric,
     deleteMetric,
     createDefinition,
-    clearCache
+    clearCache,
+    invalidateCase,
+    invalidateAllCases
   }
 }

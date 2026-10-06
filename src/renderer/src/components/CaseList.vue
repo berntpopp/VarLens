@@ -165,6 +165,7 @@ function toCaseSex(value: string | null | undefined): CaseSex {
   return value != null && VALID_SEX.has(value) ? (value as CaseSex) : 'unknown'
 }
 import { useCaseMetadata, getCohortColor } from '../composables/useCaseMetadata'
+import { useCaseDeletion } from '../composables/useCaseDeletion'
 import { useDebounce } from '../composables/useDebounce'
 import { useApiService } from '../composables/useApiService'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
@@ -215,6 +216,7 @@ const isMultiSelected = (id: number): boolean => multiSelected.value.has(id)
 
 // Load cohort groups for filter dropdown + reactive metadata for sidebar icons
 const { loadCohortGroups, cohortGroupsCache, metadataCache } = useCaseMetadata()
+const { deleteCase, deleteCases } = useCaseDeletion()
 
 // Reactive status/sex that prefer metadata cache over stale query data
 function caseStatus(caseItem: CaseWithCohorts): AffectedStatus {
@@ -472,10 +474,8 @@ const handleDelete = async (): Promise<void> => {
   // Fire-and-forget — still catch errors and roll back the optimistic
   // update if the worker rejects the delete. We intentionally do NOT
   // `await` so the UI stays responsive during large deletes.
-  api!.cases
-    .delete(deletedId)
-    .then((result) => {
-      unwrapIpcResult(result)
+  deleteCase(deletedId)
+    .then(() => {
       snackbarRef.value?.show(`Deleted "${deletedName}"`)
     })
     .catch((error) => {
@@ -546,10 +546,8 @@ const handleDeleteSelected = async (): Promise<void> => {
   }
   snackbarRef.value?.show(`Deleting ${ids.length} ${ids.length === 1 ? 'case' : 'cases'}…`)
 
-  api!.cases
-    .deleteBatch(ids)
-    .then((result) => {
-      const deleted = unwrapIpcResult(result)
+  deleteCases(ids)
+    .then((deleted) => {
       snackbarRef.value?.show(`Deleted ${deleted} ${deleted === 1 ? 'case' : 'cases'}`)
     })
     .catch((error) => {
