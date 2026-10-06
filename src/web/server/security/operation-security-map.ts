@@ -28,6 +28,7 @@ import {
 const POLL = 'High-frequency status poll; ids and counters only, no clinical data.'
 const SELF_SESSION = 'Reads only the caller’s own session identity.'
 const CAPABILITY = 'Backend capability/health probe; no clinical data.'
+const EGRESS_AUDIT = 'api_read reference lookup (egress audit, allowed or blocked)'
 const CANCEL_LOOKUP = 'Aborts the caller’s own in-flight request; changes no stored data.'
 
 /** Methods the dispatcher serves (overrides and read/write autoroutes). */
@@ -226,7 +227,28 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'protein:getMapping': read(),
   'protein:getDomains': read(),
   'protein:getStructure': read(),
-  'protein:getGeneStructure': read()
+  'protein:getGeneStructure': read(),
+  // P-C outbound lookups: refused unless an admin enabled the service; every
+  // allowed or blocked call writes its own egress api_read row
+  // (reference-services/audit-sink.ts), so the wrapper does not add one.
+  'gnomad:getVariants': readAuditedByHandler(EGRESS_AUDIT, 'viewer'),
+  'gnomad:getClinVarVariants': readAuditedByHandler(EGRESS_AUDIT, 'viewer'),
+  'myvariant:fetch': readAuditedByHandler(EGRESS_AUDIT, 'viewer'),
+  'myvariant:clearCache': write('admin'),
+  'spliceai:fetch': readAuditedByHandler(EGRESS_AUDIT, 'viewer'),
+  'spliceai:clearCache': write('admin'),
+  'panels:searchPanelApp': readAuditedByHandler(EGRESS_AUDIT, 'viewer'),
+  // Creating a panel from PanelApp / STRING is a curation write (analyst);
+  // the lookup inside it is egress-audited separately.
+  'panels:importPanelApp': write(),
+  'panels:generateStringDb': write(),
+
+  // ── external lookup (egress) policy ─────────────────────────────────────
+  'reference-services:status': readExempt(CAPABILITY),
+  'reference-services:setPolicy': writeAuditedByHandler(
+    'api_write reference_services (policy change)',
+    'admin'
+  )
 })
 
 /** Non-dispatcher HTTP routes that also go through `secure()`. */

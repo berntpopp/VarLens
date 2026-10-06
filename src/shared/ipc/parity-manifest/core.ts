@@ -135,8 +135,8 @@ export const cohortManifest = {
   ),
   onSummaryRebuilt: adapter('sse'),
   // Postgres association runs per user on the web server (PR-W13).
-  runAssociation: sharedRead({ capability: 'cohortAssociation' }),
-  cancelAssociation: sharedRead({ capability: 'cohortAssociation' }),
+  runAssociation: sharedWrite({ capability: 'cohortAssociation' }),
+  cancelAssociation: sharedWrite({ capability: 'cohortAssociation' }),
   onAssociationProgress: adapter('sse', { capability: 'cohortAssociation' })
 } satisfies DomainManifest<'cohort'>
 

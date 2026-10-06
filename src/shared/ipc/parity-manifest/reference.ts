@@ -19,6 +19,9 @@ import {
 } from '../parity-manifest-types'
 
 /** The web response cache is shared server-wide: per-user clear/stats are no-ops. */
+/** Lookups write their own egress audit row (allowed or blocked) in the handler. */
+const EGRESS_AUDITED = 'egress api_read row written by the reference-services handler'
+
 const SHARED_CACHE = {
   tracking: 'P-C (PR-W7c reference services)',
   note: 'shared server-side cache: clearCache/getCacheStats are per-user no-ops'
@@ -26,24 +29,37 @@ const SHARED_CACHE = {
 
 export const vepManifest = {
   fetch: sharedRead({ capability: 'vepEnrichment' }),
-  cancel: sharedRead({ capability: 'vepEnrichment' }),
-  clearCache: sharedRead({ capability: 'vepEnrichment', degraded: SHARED_CACHE }),
-  getCacheStats: sharedRead({ capability: 'vepEnrichment', degraded: SHARED_CACHE })
+  cancel: sharedExempt('aborts the caller’s own in-flight lookup', {
+    capability: 'vepEnrichment'
+  }),
+  clearCache: sharedWrite({ authz: 'admin', capability: 'vepEnrichment', degraded: SHARED_CACHE }),
+  getCacheStats: sharedExempt('cache size counters only', {
+    capability: 'vepEnrichment',
+    degraded: SHARED_CACHE
+  })
 } satisfies DomainManifest<'vep'>
 
 export const hpoManifest = {
   search: sharedRead({ capability: 'hpoSearch' }),
-  clearCache: sharedRead({ capability: 'hpoSearch' })
+  clearCache: sharedWrite({ authz: 'admin', capability: 'hpoSearch' })
 } satisfies DomainManifest<'hpo'>
 
 export const myvariantManifest = {
-  fetch: sharedRead({ capability: 'myvariantEnrichment' }),
-  clearCache: sharedRead({ capability: 'myvariantEnrichment', degraded: SHARED_CACHE })
+  fetch: sharedExempt(EGRESS_AUDITED, { capability: 'myvariantEnrichment' }),
+  clearCache: sharedWrite({
+    authz: 'admin',
+    capability: 'myvariantEnrichment',
+    degraded: SHARED_CACHE
+  })
 } satisfies DomainManifest<'myvariant'>
 
 export const spliceaiManifest = {
-  fetch: sharedRead({ capability: 'spliceaiEnrichment' }),
-  clearCache: sharedRead({ capability: 'spliceaiEnrichment', degraded: SHARED_CACHE })
+  fetch: sharedExempt(EGRESS_AUDITED, { capability: 'spliceaiEnrichment' }),
+  clearCache: sharedWrite({
+    authz: 'admin',
+    capability: 'spliceaiEnrichment',
+    degraded: SHARED_CACHE
+  })
 } satisfies DomainManifest<'spliceai'>
 
 export const proteinManifest = {
@@ -54,8 +70,8 @@ export const proteinManifest = {
 } satisfies DomainManifest<'protein'>
 
 export const gnomadManifest = {
-  getVariants: sharedRead({ capability: 'gnomadVariants' }),
-  getClinVarVariants: sharedRead({ capability: 'gnomadVariants' })
+  getVariants: sharedExempt(EGRESS_AUDITED, { capability: 'gnomadVariants' }),
+  getClinVarVariants: sharedExempt(EGRESS_AUDITED, { capability: 'gnomadVariants' })
 } satisfies DomainManifest<'gnomad'>
 
 export const referenceServicesManifest = {
@@ -88,7 +104,7 @@ export const panelsManifest = {
   activeForCase: sharedRead(),
   validateSymbols: sharedRead(),
   autocomplete: sharedRead(),
-  searchPanelApp: sharedRead({ capability: 'panelAppImport' }),
+  searchPanelApp: sharedExempt(EGRESS_AUDITED, { capability: 'panelAppImport' }),
   importPanelApp: sharedWrite({ capability: 'panelAppImport' }),
   generateStringDb: sharedWrite({ capability: 'stringDbPanels' }),
   // Browser download via export:prepareDownload + a single-use GET /api/download/:token.

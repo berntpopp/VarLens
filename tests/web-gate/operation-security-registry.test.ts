@@ -93,7 +93,14 @@ describe('operation security registry', () => {
       'auth:logout',
       'auth:reactivateUser',
       'auth:resetPassword',
-      'auth:setRole'
+      'auth:setRole',
+      // Outbound reference lookups write their own egress audit row (P-C).
+      'gnomad:getClinVarVariants',
+      'gnomad:getVariants',
+      'myvariant:fetch',
+      'panels:searchPanelApp',
+      'reference-services:setPolicy',
+      'spliceai:fetch'
     ])
   })
 
@@ -120,6 +127,9 @@ describe('operation security registry', () => {
       'auth:setRole',
       'cases:deleteAll',
       'hpo:clearCache',
+      'myvariant:clearCache',
+      'reference-services:setPolicy',
+      'spliceai:clearCache',
       'vep:clearCache'
     ])
   })
