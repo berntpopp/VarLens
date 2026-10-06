@@ -54,32 +54,53 @@ export function prepareStatements(db: DatabaseType) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
-  const insertCnvStmt = db.prepare(`
-    INSERT INTO variant_cnv (variant_id, copy_number, copy_number_quality,
-      homozygosity_ref, homozygosity_alt, sm, bin_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `)
+  const insertCnvStmt = db.prepare(
+    'INSERT INTO variant_cnv (variant_id, copy_number, copy_number_quality, homozygosity_ref, homozygosity_alt, sm, bin_count) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  )
 
   const insertStrStmt = db.prepare(`
-    INSERT INTO variant_str (variant_id, repeat_id, variant_catalog_id,
-      repeat_unit, display_repeat_unit, ref_copies, alt_copies, repeat_length,
-      str_status, normal_max, pathologic_min, disease, inheritance_mode,
+    INSERT INTO variant_str (variant_id, repeat_id, variant_catalog_id, repeat_unit, display_repeat_unit,
+      ref_copies, alt_copies, repeat_length, str_status, normal_max, pathologic_min, disease, inheritance_mode,
       source_display, rank_score, locus_coverage, support_type, confidence_interval)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
-  const insertTranscriptStmt = db.prepare(`
-    INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol,
-      consequence, func, cdna, aa_change, hpo_sim_score, moi, is_selected)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
+  const insertTranscriptStmt = db.prepare(
+    'INSERT INTO variant_transcripts (variant_id, transcript_id, gene_symbol, consequence, func, cdna, aa_change, hpo_sim_score, moi, is_selected) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  )
 
-  const insertCaseStmt = db.prepare(`
-    INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build)
-    VALUES (?, ?, ?, 0, ?, ?)
-  `)
+  const insertCaseStmt = db.prepare(
+    'INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build) VALUES (?, ?, ?, 0, ?, ?)'
+  )
 
-  const deleteCaseStmt = db.prepare('DELETE FROM cases WHERE id = ?')
+  // Child deletion statements for atomic case cleanup when foreign_keys = OFF (F01)
+  const deleteChildSqls = [
+    'DELETE FROM variant_transcripts WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
+    'DELETE FROM variant_sv WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
+    'DELETE FROM variant_cnv WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
+    'DELETE FROM variant_str WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
+    'DELETE FROM case_variant_annotations WHERE case_id = ?',
+    'DELETE FROM case_data_info WHERE case_id = ?',
+    'DELETE FROM variants WHERE case_id = ?',
+    'DELETE FROM cases WHERE id = ?'
+  ]
+  const deleteCaseStmts = deleteChildSqls.flatMap((sql) => {
+    try {
+      return [db.prepare(sql)]
+    } catch {
+      return []
+    }
+  })
+
+  const runDeleteCase = (caseId: number) => {
+    let lastResult = { changes: 0, lastInsertRowid: 0 }
+    for (const stmt of deleteCaseStmts) {
+      lastResult = stmt.run(caseId) as { changes: number; lastInsertRowid: number }
+    }
+    return lastResult
+  }
+  const deleteCase = Object.assign(runDeleteCase, { run: runDeleteCase })
+
   const getCaseByNameStmt = db.prepare('SELECT id FROM cases WHERE name = ?')
   const updateVariantCountStmt = db.prepare('UPDATE cases SET variant_count = ? WHERE id = ?')
 
@@ -154,7 +175,7 @@ export function prepareStatements(db: DatabaseType) {
             t.aa_change,
             t.hpo_sim_score,
             t.moi,
-            t.is_selected
+            t.is_selected === true || t.is_selected === 1 ? 1 : 0
           )
         }
       }
@@ -237,7 +258,7 @@ export function prepareStatements(db: DatabaseType) {
 
   return {
     insertCase: insertCaseStmt,
-    deleteCase: deleteCaseStmt,
+    deleteCase,
     getCaseByName: getCaseByNameStmt,
     updateVariantCount: updateVariantCountStmt,
     insertDataInfo: {

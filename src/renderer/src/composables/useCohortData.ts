@@ -334,6 +334,9 @@ export function useCohortData(): UseCohortDataReturn {
     if (effectiveVariantType !== undefined && effectiveVariantType !== '') {
       ipcParams.variant_type = effectiveVariantType
     }
+    if (params._count_needed !== undefined) {
+      ipcParams._count_needed = params._count_needed
+    }
 
     return ipcParams
   }
@@ -415,7 +418,13 @@ export function useCohortData(): UseCohortDataReturn {
       // Keyset paging (default carrier-count sort, both backends): reuse the
       // cursor the previous page returned for this offset + query scope.
       const offset = params.offset ?? 0
-      const cursorScope = JSON.stringify({ ...ipcParams, offset: undefined })
+      // `_count_needed` is a per-request hint, not part of the query scope: a
+      // caller that only counts on page 1 must still hit the page-2 cursor.
+      const cursorScope = JSON.stringify({
+        ...ipcParams,
+        offset: undefined,
+        _count_needed: undefined
+      })
       const cursor = pageCursors.get(`${cursorScope}@${offset}`)
       if (cursor !== undefined) ipcParams.cursor = cursor
       if (!filtersChanged) {

@@ -149,6 +149,51 @@ describe('prepareStatements', () => {
 
     expect(execSpy).not.toHaveBeenCalled()
   })
+
+  it('deleteCase cleans up all child variants and transcripts when foreign_keys is OFF', () => {
+    db.pragma('foreign_keys = OFF')
+    const stmts = prepareStatements(db)
+    const caseResult = stmts.insertCase.run('test', '/path', 100, Date.now(), 'GRCh38')
+    const caseId = Number(caseResult.lastInsertRowid)
+
+    stmts.insertBatch(caseId, [
+      {
+        chr: 'chr1',
+        pos: 100,
+        ref: 'A',
+        alt: 'T',
+        _transcripts: [{ transcript_id: 'NM_001', gene_symbol: 'TEST', is_selected: 1 }]
+      }
+    ])
+
+    const varCountBefore = db
+      .prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?')
+      .get(caseId) as { c: number }
+    const txCountBefore = db
+      .prepare(
+        'SELECT COUNT(*) as c FROM variant_transcripts WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)'
+      )
+      .get(caseId) as { c: number }
+    expect(varCountBefore.c).toBe(1)
+    expect(txCountBefore.c).toBe(1)
+
+    stmts.deleteCase.run(caseId)
+
+    const caseCountAfter = db
+      .prepare('SELECT COUNT(*) as c FROM cases WHERE id = ?')
+      .get(caseId) as { c: number }
+    const varCountAfter = db
+      .prepare('SELECT COUNT(*) as c FROM variants WHERE case_id = ?')
+      .get(caseId) as { c: number }
+    const txCountAfter = db
+      .prepare(
+        'SELECT COUNT(*) as c FROM variant_transcripts WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)'
+      )
+      .get(caseId) as { c: number }
+    expect(caseCountAfter.c).toBe(0)
+    expect(varCountAfter.c).toBe(0)
+    expect(txCountAfter.c).toBe(0)
+  })
 })
 
 describe('index management SQL', () => {
