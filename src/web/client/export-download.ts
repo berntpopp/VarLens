@@ -10,7 +10,8 @@
  *
  * The returned `ExportResult` reports the download file name in
  * `filePath`; there is no server-side path to reveal, so
- * `revealInFolder` is a no-op that reports `success: false`.
+ * `revealInFolder` is a no-op that reports `success: false`, and
+ * `cancel` reports `cancelled: false` (cancel the download in the browser).
  */
 import type { ExportResult } from '../../shared/ipc/domains/export'
 
@@ -95,6 +96,12 @@ export function buildExportApi(rpc: Record<string, unknown>): unknown {
         if (prop === 'cohort') return exportCohortDownload
         if (prop === 'revealInFolder') {
           return () => Promise.resolve({ success: false })
+        }
+        // The browser's download manager owns a streamed export: cancelling it
+        // there closes the socket, which ends the server-side query stream.
+        // There is no server-side export job for `export:cancel` to stop.
+        if (prop === 'cancel') {
+          return () => Promise.resolve({ cancelled: false })
         }
         return typeof prop === 'string' ? rpc[prop] : undefined
       }

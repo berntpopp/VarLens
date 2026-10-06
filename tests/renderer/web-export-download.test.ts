@@ -11,6 +11,7 @@ interface ExportApi {
   variants: (caseId: number, filters: unknown, caseName: string) => Promise<unknown>
   cohort: (params: unknown) => Promise<unknown>
   revealInFolder: (filePath: string) => Promise<unknown>
+  cancel: () => Promise<unknown>
   other: unknown
 }
 
@@ -80,6 +81,13 @@ describe('web export download (window.api.export in web mode)', () => {
     const api = buildExportApi({ other }) as ExportApi
     await expect(api.revealInFolder('x.csv')).resolves.toEqual({ success: false })
     expect(api.other).toBe(other)
+  })
+
+  test('cancel is a local no-op: the browser download manager owns the stream', async () => {
+    const cancel = vi.fn()
+    const api = buildExportApi({ cancel }) as ExportApi
+    await expect(api.cancel()).resolves.toEqual({ cancelled: false })
+    expect(cancel).not.toHaveBeenCalled()
   })
 
   test('URL builders honour a sub-path API base', () => {
