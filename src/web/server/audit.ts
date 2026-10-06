@@ -116,10 +116,29 @@ export async function recordApiWriteAudit(
   })
 }
 
+/**
+ * Read audits are the per-request hot path, so they go through the batched
+ * AuditBuffer when one is configured (flushed on interval/size/shutdown).
+ * Write and auth audits above stay synchronous: a mutation must not report
+ * success without its audit row.
+ */
 export async function recordApiReadAudit(
   deps: DispatcherDeps,
   params: { key: string; username?: string | null }
 ): Promise<void> {
+  if (deps.auditBuffer !== undefined) {
+    await deps.auditBuffer.enqueue({
+      action_type: 'api_read',
+      entity_type: 'api_call',
+      entity_key: params.key,
+      old_value: null,
+      new_value: { success: true, method: params.key },
+      user_name: params.username ?? null,
+      metadata: { source: 'web-dispatcher' },
+      occurred_at: Date.now()
+    })
+    return
+  }
   await appendWebAudit(deps, {
     action_type: 'api_read',
     entity_type: 'api_call',

@@ -52,6 +52,7 @@ import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
 import { registerResponseCompression } from './server/compression'
 import { registerRobotsTxt } from './server/robots'
+import { createWebRuntimeServices } from './server/runtime-services'
 import {
   type AppMetrics,
   createAppMetricsFromEnv,
@@ -155,6 +156,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await maybeBootstrapAdmin(authService, options.admin, app.log)
   }
 
+  const runtime = createWebRuntimeServices({ pool, schema: pgConfig.schema, logger: app.log })
+
   await registerSessions(app, {
     authService,
     ...(platformIdentity !== undefined ? { platformIdentity } : {})
@@ -205,7 +208,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     session: session as StorageSession,
     authService,
     events,
-    metrics
+    metrics,
+    auditBuffer: runtime.auditBuffer
   }
   const { overrides } = buildDispatcher(dispatcherDeps)
   registerImportUploadRoutes(app, dispatcherDeps)
@@ -236,6 +240,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await registerStatic(app)
 
   app.addHook('onClose', async () => {
+    // Drain buffered audit rows and stop job runners while the pool is
+    // still open; only then close the storage session.
+    try {
+      await runtime.close()
+    } catch (err) {
+      app.log.error({ err }, 'error closing web runtime services')
+    }
     try {
       await session.close()
     } catch {
