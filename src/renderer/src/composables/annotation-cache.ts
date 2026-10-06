@@ -120,8 +120,17 @@ export function takeAwaited(kind: AnnotationBatchKind, key: string): boolean {
   return awaitedKeys[kind].delete(key)
 }
 
+// Incremented every time the cache is emptied. A request that captured an
+// older epoch started against entries that no longer exist.
+let cacheEpoch = 0
+
+export function getAnnotationCacheEpoch(): number {
+  return cacheEpoch
+}
+
 /** Drop every cached entry, loading flag and pending expectation, and notify. */
 function clearEntries(): void {
+  cacheEpoch++
   annotationCache.value.clear()
   loadingStates.value.clear()
   awaitedKeys.case.clear()
@@ -167,6 +176,16 @@ export function beginAnnotationRequest(caseId: number | null): string | null {
   const dbPath = getCurrentDbPath()
   ensureScopeOrClear(dbPath, caseId)
   return dbPath
+}
+
+/**
+ * Empty the cache now if it still holds entries of a database that is no
+ * longer open. A request does this on its way in; a response that finds the
+ * database switched under it must do the same, or its optimistic value would
+ * keep being served until the next request.
+ */
+export function dropCacheOfClosedDatabase(): void {
+  ensureScopeOrClear(getCurrentDbPath(), null)
 }
 
 /** Guard against a database switch while a request was awaiting. */

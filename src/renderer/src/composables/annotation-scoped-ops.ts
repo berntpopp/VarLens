@@ -28,6 +28,8 @@ import {
   annotationCache,
   beginAnnotationRequest,
   cacheSet,
+  dropCacheOfClosedDatabase,
+  getAnnotationCacheEpoch,
   getAnnotationGeneration,
   hasDbSwitchedSince,
   isCachedOrLoading,
@@ -86,6 +88,18 @@ function scopeQualifier(scope: AnnotationLoadScope): string {
 function isResponseStale(scope: AnnotationLoadScope, requestDbPath: string | null): boolean {
   if (hasDbSwitchedSince(requestDbPath)) return true
   return scope.kind === 'case' && !isTrackedCase(scope.caseId)
+}
+
+/**
+ * True when a write settled after its database or case was left. The write
+ * must then not touch the cache — and if the cache still holds the old
+ * database (nothing has queried the new one yet), it is emptied so the
+ * write's optimistic value is not served any longer.
+ */
+function leftScope(scope: AnnotationWriteScope, requestDbPath: string | null): boolean {
+  if (!isResponseStale(scope, requestDbPath)) return false
+  dropCacheOfClosedDatabase()
+  return true
 }
 
 function readSlot(entry: AnnotationCache, scope: AnnotationLoadScope): SlotValue | null {
@@ -214,6 +228,7 @@ async function mutate(
 ): Promise<void> {
   if (!api) return
   const dbPath = beginAnnotationRequest(scopeCaseId(scope))
+  const epoch = getAnnotationCacheEpoch()
   const key = variantKey(coords)
   const current = annotationCache.value.get(key)
   const previous = (current ? readSlot(current, scope) : null) ?? null
@@ -227,10 +242,16 @@ async function mutate(
 
   try {
     const updated = unwrapIpcResult<SlotValue>(await upsert(api, scope, coords, plan.updates))
-    if (isResponseStale(scope, dbPath)) return
-    cacheSet(key, mergeServerSlot(current, scope, updated))
+    if (leftScope(scope, dbPath)) return
+    // Merge into what the cache holds now. If the cache was rebuilt while the
+    // write was in flight (case switch), `current` belongs to the old scope:
+    // update the entry the new scope loaded, and never recreate one from it.
+    const live = annotationCache.value.get(key)
+    if (epoch !== getAnnotationCacheEpoch() && !live) return
+    cacheSet(key, mergeServerSlot(live, scope, updated))
   } catch (error) {
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
+    if (leftScope(scope, dbPath)) return
     // Every failed write rolls back and notifies, so no view keeps showing the
     // optimistic value of a write that never landed.
     if (current) rollBackSlot(current, scope, plan, previous)
