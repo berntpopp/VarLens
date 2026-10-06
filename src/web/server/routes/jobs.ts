@@ -1,62 +1,76 @@
-import { z } from 'zod'
-
-import { BACKGROUND_JOB_KINDS } from '../../../shared/types/background-job'
+import {
+  JobsCancelParamsSchema,
+  JobsGetParamsSchema,
+  JobsListParamsSchema,
+  JobsProgressParamsSchema
+} from '../../../shared/ipc/domains/jobs-schemas'
 import { ErrorCode, type SerializableError } from '../../../shared/types/errors'
 import type { OverrideHandler } from './types'
-
-const JobIdSchema = z.string().uuid()
-const JobListFilterSchema = z
-  .object({
-    kind: z.enum(BACKGROUND_JOB_KINDS).optional(),
-    activeOnly: z.boolean().optional()
-  })
-  .strict()
-  .optional()
 
 function invalid(message: string): SerializableError {
   return { code: ErrorCode.INVALID_PARAMETERS, message, userMessage: 'Invalid job request.' }
 }
 
 /**
- * Poll endpoints for the background-job contract
- * (src/shared/types/background-job.ts):
+ * Web side of the `jobs:` contract (src/shared/ipc/domains/jobs.ts), served
+ * from the web process's own JobRunner:
  *
- *   POST /api/jobs/get   { args: [jobId] }                    → BackgroundJob | 404
- *   POST /api/jobs/list  { args: [{ kind?, activeOnly? }?] }   → BackgroundJob[]
+ *   jobs:list(filter?)  → Job[]
+ *   jobs:get(jobId)     → Job | null
+ *   jobs:progress(id)   → Job['progress']
+ *   jobs:cancel(jobId)  → { requested }
  *
- * Jobs carry only ids, counters and status (no clinical data), and cases are
- * shared across users in this single-tenant release, so any authenticated
- * user may read them. Job polls are excluded from read auditing.
+ * `jobs:changed` is pushed over SSE (/api/events) to the user who started
+ * the job. Jobs carry ids, counters and status only, and cases are shared
+ * across users in this single-tenant release, so any authenticated user may
+ * read or cancel them. Status polls are excluded from read auditing; cancel is
+ * a write and is audited.
  */
 export function buildJobOverrides(): Record<string, OverrideHandler> {
   return {
-    'jobs:get': {
-      async handle(args, _request, reply, { jobs }) {
-        const parsed = JobIdSchema.safeParse(args[0])
-        if (!parsed.success) {
-          reply.code(400)
-          return invalid('invalid job id')
-        }
-        const job = jobs?.registry.get(parsed.data)
-        if (job === undefined) {
-          reply.code(404)
-          return {
-            code: ErrorCode.NOT_FOUND,
-            message: jobs === undefined ? 'background jobs are not enabled' : 'job not found',
-            userMessage: 'This job is unknown or has expired.'
-          } satisfies SerializableError
-        }
-        return job
-      }
-    },
     'jobs:list': {
       async handle(args, _request, reply, { jobs }) {
-        const parsed = JobListFilterSchema.safeParse(args[0])
+        const parsed = JobsListParamsSchema.safeParse([args[0]])
         if (!parsed.success) {
           reply.code(400)
           return invalid('invalid job filter')
         }
-        return jobs?.registry.list(parsed.data ?? {}) ?? []
+        return jobs?.runner.list(parsed.data[0]) ?? []
+      }
+    },
+    'jobs:get': {
+      async handle(args, _request, reply, { jobs }) {
+        const parsed = JobsGetParamsSchema.safeParse([args[0]])
+        if (!parsed.success) {
+          reply.code(400)
+          return invalid('invalid job id')
+        }
+        return jobs?.runner.get(parsed.data[0]) ?? null
+      }
+    },
+    'jobs:progress': {
+      async handle(args, _request, reply, { jobs }) {
+        const parsed = JobsProgressParamsSchema.safeParse([args[0]])
+        if (!parsed.success) {
+          reply.code(400)
+          return invalid('invalid job id')
+        }
+        return jobs?.runner.get(parsed.data[0])?.progress ?? null
+      }
+    },
+    'jobs:cancel': {
+      async handle(args, _request, reply, { jobs }) {
+        const parsed = JobsCancelParamsSchema.safeParse([args[0]])
+        if (!parsed.success) {
+          reply.code(400)
+          return invalid('invalid job id')
+        }
+        const job = jobs?.runner.get(parsed.data[0])
+        if (job === undefined || (job.status !== 'running' && job.status !== 'queued')) {
+          return { requested: false }
+        }
+        await jobs!.runner.cancel(job.id)
+        return { requested: true }
       }
     }
   }

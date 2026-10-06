@@ -1,30 +1,41 @@
 /**
- * Web runner for non-blocking case deletion (2026-10 blocking audit, W-1).
+ * Web/Postgres implementation of the backend-neutral `case_delete` job
+ * (contract: src/shared/types/case-delete-job.ts, shared with the desktop
+ * SQLite job from track 5a).
  *
- * `start()` validates the case synchronously (404 / "still importing"
- * surface on the request), registers a `case-delete` BackgroundJob and
- * returns it immediately; the work runs on a serial queue — one deletion at
- * a time, so purges never hold more than one pool connection — using
- * PostgresCaseLifecycleRepository's lock-free phases. Readers stop seeing the
- * case as soon as the hide phase commits.
+ * Jobs run on a process-local {@link JobRunner} (same class as desktop, so
+ * the `Job` snapshots, single-flight rule and cancel semantics are
+ * identical). Each targeted case goes through PostgresCaseLifecycleRepository's
+ * lock-free phases (hide → recompute → batched purge → finalize), so readers
+ * never wait on a delete (blocking audit W-1).
  *
- * `resumePending()` re-queues cases left in import_status='deleting' by a
- * crash or shutdown. `close()` aborts between purge batches; the case stays
- * hidden and resumes at the next boot.
+ * Progress: `current`/`total` count cases; `message` is a CaseDeletePhase.
+ * Cancellation (`jobs:cancel`) is cooperative and lands between cases: every
+ * case that was started is deleted completely. Server shutdown is different:
+ * it aborts between purge batches, leaving the current case hidden
+ * (import_status='deleting'); `resumePending()` finishes it at the next boot.
  */
 import type {
-  CaseDeletionProgress,
+  CaseDeletionPhase,
   PostgresCaseLifecycleRepository
 } from '../../../main/storage/postgres/PostgresCaseLifecycleRepository'
 import { CaseDeletionInterruptedError } from '../../../main/storage/postgres/PostgresCaseLifecycleRepository'
 import { InvalidParametersError } from '../../../main/ipc/errors'
-import type { BackgroundJob } from '../../../shared/types/background-job'
-import type { BackgroundJobRegistry } from './background-job-registry'
+import type { JobHandle, JobRunner } from '../../../main/services/jobs/JobRunner'
+import type {
+  CaseDeleteJobResult,
+  CaseDeletePhase,
+  CaseDeleteTarget
+} from '../../../shared/types/case-delete-job'
+import type { Job } from '../../../shared/types/jobs'
 
 export type CaseDeletionLifecycle = Pick<
   PostgresCaseLifecycleRepository,
   'getCaseStatus' | 'hideCase' | 'completeHiddenDeletion' | 'listPendingDeletions'
->
+> & {
+  /** Ids of every visible ('ready') case, for `{ mode: 'all' }`. */
+  listReadyCaseIds: () => Promise<number[]>
+}
 
 export interface CaseDeleteJobLogger {
   info: (obj: object, msg?: string) => void
@@ -33,14 +44,12 @@ export interface CaseDeleteJobLogger {
 
 export interface CaseDeleteJobRunnerOptions {
   lifecycle: CaseDeletionLifecycle
-  registry: BackgroundJobRegistry
+  runner: JobRunner
   logger?: CaseDeleteJobLogger
   batchSize?: number
   pauseBetweenBatchesMs?: number
-  /** Minimum ms between progress updates published for one job. */
-  progressIntervalMs?: number
-  /** Called after a job reaches a terminal state (e.g. to emit SSE events). */
-  onSettled?: (job: BackgroundJob, ownerUserId: number | undefined) => void
+  /** Called with every job snapshot together with the user that started it. */
+  onJobChanged?: (job: Job, ownerUserId: number | undefined) => void
 }
 
 export class CaseNotFoundError extends Error {
@@ -50,20 +59,56 @@ export class CaseNotFoundError extends Error {
   }
 }
 
-export class CaseDeleteJobRunner {
-  private queue: Promise<void> = Promise.resolve()
-  private readonly abort = new AbortController()
-  private readonly progressIntervalMs: number
+/** Thrown inside the job when `jobs:cancel` lands; JobRunner marks it `cancelled`. */
+class CaseDeleteCancelledError extends Error {
+  constructor(readonly deleted: number) {
+    super(`Case delete cancelled after ${deleted} case(s)`)
+    this.name = 'AbortError'
+  }
+}
+
+const PHASE_MAP: Record<CaseDeletionPhase, CaseDeletePhase> = {
+  hiding: 'deleting',
+  recomputing: 'rebuilding-cohort-summary',
+  purging: 'deleting',
+  finalizing: 'finalizing'
+}
+
+export class PostgresCaseDeleteJobs {
+  private readonly shutdown = new AbortController()
+  private readonly owners = new Map<string, number | undefined>()
+  private readonly running = new Set<Promise<unknown>>()
 
   constructor(private readonly options: CaseDeleteJobRunnerOptions) {
-    this.progressIntervalMs = options.progressIntervalMs ?? 500
+    options.runner.onLifecycle((job) => {
+      if (job.kind !== 'case_delete') return
+      options.onJobChanged?.(snapshot(job), this.owners.get(job.id))
+    })
   }
 
-  async start(caseId: number, ownerUserId?: number): Promise<BackgroundJob> {
-    const subject = { type: 'case' as const, id: caseId }
-    const existing = this.options.registry.findActive('case-delete', subject)
-    if (existing !== undefined) return existing
+  /**
+   * Start a `case_delete` job and return its handle immediately. Throws the
+   * JobRunner single-flight error when a delete is already running.
+   */
+  start(target: CaseDeleteTarget, ownerUserId?: number): JobHandle<CaseDeleteJobResult> {
+    const handle = this.options.runner.enqueue<CaseDeleteTarget, CaseDeleteJobResult>(
+      'case_delete',
+      target,
+      (ctx, params) => this.run(params, ctx)
+    )
+    this.owners.set(handle.id, ownerUserId)
+    // Lifecycle events fired inside enqueue() precede the owner mapping;
+    // re-announce the running job so its owner sees it.
+    const job = this.options.runner.get(handle.id)
+    if (job !== undefined) this.options.onJobChanged?.(snapshot(job), ownerUserId)
+    const tracked = handle.result.catch(() => undefined)
+    this.running.add(tracked)
+    void tracked.finally(() => this.running.delete(tracked))
+    return handle
+  }
 
+  /** Synchronous validation for single-case deletes (404 / still importing). */
+  async assertDeletable(caseId: number): Promise<void> {
     const status = await this.options.lifecycle.getCaseStatus(caseId)
     if (status === undefined) throw new CaseNotFoundError(caseId)
     if (status === 'importing') {
@@ -72,99 +117,69 @@ export class CaseDeleteJobRunner {
         'This case is still being imported. Delete it after the import finishes.'
       )
     }
-    return this.enqueue(caseId, ownerUserId)
   }
 
-  /** Re-queue deletions interrupted by a crash or shutdown. */
-  async resumePending(): Promise<BackgroundJob[]> {
+  /** Re-run deletions interrupted by a crash or shutdown (cases already hidden). */
+  async resumePending(): Promise<JobHandle<CaseDeleteJobResult> | undefined> {
     const pending = await this.options.lifecycle.listPendingDeletions()
-    return pending.map(({ caseId }) => {
-      this.options.logger?.info(
-        { event: 'case-delete', action: 'resume', caseId },
-        'resuming interrupted case deletion'
-      )
-      return (
-        this.options.registry.findActive('case-delete', { type: 'case', id: caseId }) ??
-        this.enqueue(caseId, undefined)
-      )
-    })
-  }
-
-  /** Wait for the queue to drain (tests, measurement). */
-  async idle(): Promise<void> {
-    await this.queue
-  }
-
-  async close(): Promise<void> {
-    this.abort.abort()
-    await this.queue
-  }
-
-  private enqueue(caseId: number, ownerUserId: number | undefined): BackgroundJob {
-    const job = this.options.registry.create(
-      'case-delete',
-      { type: 'case', id: caseId },
-      ownerUserId
+    if (pending.length === 0) return undefined
+    const ids = pending.map((p) => p.caseId)
+    this.options.logger?.info(
+      { event: 'case-delete', action: 'resume', caseIds: ids },
+      'resuming interrupted case deletion'
     )
-    this.queue = this.queue.then(() => this.run(job.id, caseId, ownerUserId))
-    return job
+    return this.start({ mode: 'ids', ids })
   }
 
-  private async run(jobId: string, caseId: number, ownerUserId: number | undefined): Promise<void> {
-    const { registry, lifecycle } = this.options
-    if (this.abort.signal.aborted) return
-    registry.update(jobId, {
-      status: 'running',
-      startedAt: Date.now(),
-      progress: { phase: 'hiding', done: 0, total: null }
-    })
-    const reportProgress = this.progressReporter(jobId)
-    try {
-      const hidden = await lifecycle.hideCase(caseId)
-      if (hidden.state !== 'missing') {
-        await lifecycle.completeHiddenDeletion(caseId, hidden, {
-          batchSize: this.options.batchSize,
-          pauseBetweenBatchesMs: this.options.pauseBetweenBatchesMs,
-          signal: this.abort.signal,
-          onProgress: reportProgress
-        })
-      }
-      const done = registry.update(jobId, {
-        status: 'succeeded',
-        finishedAt: Date.now(),
-        progress: { phase: 'done', done: hidden.variantCount, total: hidden.variantCount }
-      })
-      if (done !== undefined) this.options.onSettled?.(done, ownerUserId)
-    } catch (error) {
-      if (error instanceof CaseDeletionInterruptedError) {
-        this.options.logger?.info(
-          { event: 'case-delete', action: 'interrupted', caseId },
-          error.message
-        )
-        return
-      }
-      this.options.logger?.error({ event: 'case-delete', action: 'failed', caseId, err: error })
-      const failed = registry.update(jobId, {
-        status: 'failed',
-        finishedAt: Date.now(),
-        error: {
-          code: error instanceof InvalidParametersError ? 'INVALID_PARAMETERS' : 'UNKNOWN',
-          message: error instanceof Error ? error.message : String(error)
+  /** Abort between purge batches and wait for the running job to stop. */
+  async close(): Promise<void> {
+    this.shutdown.abort()
+    await Promise.all([...this.running])
+  }
+
+  private async run(
+    target: CaseDeleteTarget,
+    ctx: Parameters<Parameters<JobRunner['enqueue']>[2]>[0]
+  ): Promise<CaseDeleteJobResult> {
+    const { lifecycle } = this.options
+    const ids = target.mode === 'all' ? await lifecycle.listReadyCaseIds() : target.ids
+    let deleted = 0
+    let phase: CaseDeletePhase = 'deleting'
+    const report = (next: CaseDeletePhase): void => {
+      phase = next
+      ctx.reportProgress(deleted, ids.length, phase)
+    }
+    report('deleting')
+    for (const caseId of ids) {
+      if (ctx.signal.aborted) throw new CaseDeleteCancelledError(deleted)
+      try {
+        const hidden = await lifecycle.hideCase(caseId)
+        if (hidden.state !== 'missing') {
+          await lifecycle.completeHiddenDeletion(caseId, hidden, {
+            batchSize: this.options.batchSize,
+            pauseBetweenBatchesMs: this.options.pauseBetweenBatchesMs,
+            signal: this.shutdown.signal,
+            onProgress: (p) => {
+              if (PHASE_MAP[p.phase] !== phase) report(PHASE_MAP[p.phase])
+            }
+          })
+          deleted += 1
         }
-      })
-      if (failed !== undefined) this.options.onSettled?.(failed, ownerUserId)
+      } catch (error) {
+        if (error instanceof CaseDeletionInterruptedError) {
+          this.options.logger?.info({ event: 'case-delete', action: 'interrupted', caseId })
+        } else {
+          this.options.logger?.error({ event: 'case-delete', action: 'failed', caseId, err: error })
+        }
+        throw error
+      }
+      report('deleting')
     }
+    report('finalizing')
+    return { deleted, cancelled: false }
   }
+}
 
-  private progressReporter(jobId: string): (progress: CaseDeletionProgress) => void {
-    let lastAt = 0
-    let lastPhase = ''
-    return (progress) => {
-      const now = Date.now()
-      if (progress.phase === lastPhase && now - lastAt < this.progressIntervalMs) return
-      lastAt = now
-      lastPhase = progress.phase
-      this.options.registry.update(jobId, { progress })
-    }
-  }
+function snapshot(job: Job): Job {
+  return { ...job, progress: job.progress && { ...job.progress } }
 }

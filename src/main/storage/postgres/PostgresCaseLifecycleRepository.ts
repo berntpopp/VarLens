@@ -18,7 +18,7 @@ type LifecyclePool = Pick<Pool, 'connect' | 'query'>
 
 export const DEFAULT_CASE_DELETE_BATCH_SIZE = 5000
 
-export type CaseDeletionPhase = 'hiding' | 'purging' | 'finalizing'
+export type CaseDeletionPhase = 'hiding' | 'recomputing' | 'purging' | 'finalizing'
 
 export interface CaseDeletionProgress {
   phase: CaseDeletionPhase
@@ -118,6 +118,7 @@ export class PostgresCaseLifecycleRepository {
     hidden: Pick<HideCaseResult, 'genomeBuild' | 'variantCount'>,
     options: CaseDeletionOptions = {}
   ): Promise<void> {
+    options.onProgress?.({ phase: 'recomputing', done: 0, total: null })
     await this.recomputeFrequencyForBuild(hidden.genomeBuild)
     const total = hidden.variantCount > 0 ? hidden.variantCount : null
     options.onProgress?.({ phase: 'purging', done: 0, total })
@@ -215,6 +216,14 @@ export class PostgresCaseLifecycleRepository {
       `DELETE FROM ${this.tbl('cases_all')} WHERE id = $1 AND import_status = 'deleting'`,
       [caseId]
     )
+  }
+
+  /** Ids of every visible ('ready') case, oldest first. */
+  async listReadyCaseIds(): Promise<number[]> {
+    const result = await this.pool.query<{ id: string | number }>(
+      `SELECT id FROM ${this.tbl('cases_all')} WHERE import_status = 'ready' ORDER BY id`
+    )
+    return result.rows.map((row) => Number(row.id))
   }
 
   /** Case ids left in 'deleting' (crash or shutdown mid-purge), oldest first. */

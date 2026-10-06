@@ -10,7 +10,11 @@ const AUDITED_OVERRIDE_WRITE_METHODS = new Set<string>([
   'import:start',
   'import:startMultiFile',
   'batch-import:start',
-  'batch-import:cleanupZipTemp'
+  'batch-import:cleanupZipTemp',
+  'cases:startDelete',
+  'cases:deleteBatch',
+  'cases:deleteAll',
+  'jobs:cancel'
 ])
 
 const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
@@ -30,7 +34,8 @@ const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
   'database:overview',
   // Background-job status polls: ids and counters only, high frequency.
   'jobs:get',
-  'jobs:list'
+  'jobs:list',
+  'jobs:progress'
 ])
 
 interface WebAuditEvent {

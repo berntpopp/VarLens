@@ -11,11 +11,11 @@ import type { Pool } from 'pg'
 
 import { PostgresAuditLogRepository } from '../../main/storage/postgres/PostgresAuditLogRepository'
 import { PostgresCaseLifecycleRepository } from '../../main/storage/postgres/PostgresCaseLifecycleRepository'
-import { BACKGROUND_JOB_UPDATED_EVENT } from '../../shared/types/background-job'
+import { JobRunner } from '../../main/services/jobs/JobRunner'
+import { JOBS_CHANNELS } from '../../shared/ipc/domains/jobs'
 import { AuditBuffer, resolveAuditBufferSettings } from './audit-buffer'
 import type { WebEventHub } from './events'
-import { BackgroundJobRegistry } from './jobs/background-job-registry'
-import { CaseDeleteJobRunner } from './jobs/case-delete-jobs'
+import { PostgresCaseDeleteJobs } from './jobs/case-delete-jobs'
 import { WEB_EVENT_COHORT_SUMMARY_REBUILT } from './web-event-types'
 
 export const CASE_DELETE_BATCH_SIZE_ENV = 'VARLENS_PG_DELETE_BATCH_SIZE'
@@ -29,7 +29,7 @@ export interface RuntimeLogger {
 
 export interface WebRuntimeServices {
   auditBuffer: AuditBuffer | undefined
-  jobs: { registry: BackgroundJobRegistry; caseDelete: CaseDeleteJobRunner }
+  jobs: { runner: JobRunner; caseDelete: PostgresCaseDeleteJobs }
   /** Re-queue work interrupted by a previous shutdown/crash (fire-and-forget). */
   resumeInterruptedWork: () => void
   close: () => Promise<void>
@@ -65,31 +65,41 @@ export function createWebRuntimeServices(options: {
           logger: options.logger
         })
 
-  const registry = new BackgroundJobRegistry()
-  registry.onUpdate((job, ownerUserId) => {
-    if (ownerUserId !== undefined) {
-      options.events.publish(ownerUserId, BACKGROUND_JOB_UPDATED_EVENT, job)
-    }
-  })
-  const caseDelete = new CaseDeleteJobRunner({
+  // Process-local JobRunner: same class, Job shape and single-flight rules as
+  // the desktop main process (track 5a).
+  const runner = new JobRunner()
+  const staleAnnounced = new Set<string>()
+  const caseDelete = new PostgresCaseDeleteJobs({
     lifecycle: new PostgresCaseLifecycleRepository(options.pool, options.schema),
-    registry,
+    runner,
     logger: options.logger,
     batchSize: resolveCaseDeleteBatchSize(env),
-    onSettled: (job, ownerUserId) => {
-      if (job.status !== 'succeeded' || ownerUserId === undefined) return
-      options.events.publish(ownerUserId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
-      options.events.publish(ownerUserId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
+    onJobChanged: (job, ownerUserId) => {
+      if (ownerUserId === undefined) return
+      options.events.publish(ownerUserId, JOBS_CHANNELS.changed, job)
+      // Cohort views refresh around a delete, as with the old synchronous path.
+      if (job.status === 'running' && !staleAnnounced.has(job.id)) {
+        staleAnnounced.add(job.id)
+        options.events.publish(ownerUserId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
+      } else if (job.status === 'completed' || job.status === 'cancelled') {
+        staleAnnounced.delete(job.id)
+        options.events.publish(ownerUserId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
+      } else if (job.status === 'failed') {
+        staleAnnounced.delete(job.id)
+      }
     }
   })
 
   return {
     auditBuffer,
-    jobs: { registry, caseDelete },
+    jobs: { runner, caseDelete },
     resumeInterruptedWork() {
-      caseDelete.resumePending().catch((err: unknown) => {
-        options.logger.error({ event: 'case-delete', action: 'resume-failed', err })
-      })
+      caseDelete.resumePending().then(
+        (handle) => handle?.result.catch(() => undefined),
+        (err: unknown) => {
+          options.logger.error({ event: 'case-delete', action: 'resume-failed', err })
+        }
+      )
     },
     async close() {
       await caseDelete.close()

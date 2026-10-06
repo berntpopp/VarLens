@@ -1,14 +1,15 @@
 import { describe, expect, test } from 'vitest'
 import { Pool } from 'pg'
 
-import type { BackgroundJob } from '../../../src/shared/types/background-job'
+import type { Job } from '../../../src/shared/types/jobs'
 import { startWebDriver } from '../helpers/web-driver'
 
 /**
- * Web case deletion is a background job (blocking audit W-1): `cases:delete`
- * returns a queued BackgroundJob at once, `jobs:get` reports progress, the
- * case vanishes from reads, and other users' reads keep working while the
- * purge runs. Runs against the real Postgres stack (buildApp in-process).
+ * Web case deletion runs the shared `case_delete` job
+ * (src/shared/types/case-delete-job.ts) on lock-free Postgres phases
+ * (blocking audit W-1): `cases:startDelete` returns a job id at once,
+ * `jobs:get` reports progress, `cases:delete` waits for the same job, and the
+ * case vanishes from reads. Runs against the real Postgres stack in-process.
  */
 
 const PG_URL = process.env.VARLENS_PG_URL ?? ''
@@ -29,32 +30,38 @@ async function seedCase(pool: Pool, schema: string, name: string, n: number): Pr
   return caseId
 }
 
-describe.skipIf(!HAS_PG)('case delete background job', () => {
-  test('cases:delete returns a job, jobs:get reaches succeeded, the case is gone', async () => {
+async function waitForJob(
+  api: (domain: string, method: string, ...args: unknown[]) => Promise<{ json: () => unknown }>,
+  jobId: string
+): Promise<Job> {
+  for (let i = 0; i < 200; i++) {
+    const job = (await api('jobs', 'get', jobId)).json() as Job | null
+    if (job !== null && ['completed', 'failed', 'cancelled'].includes(job.status)) return job
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error(`job ${jobId} did not finish`)
+}
+
+describe.skipIf(!HAS_PG)('case_delete job (web/Postgres)', () => {
+  test('cases:startDelete returns a job id; the job completes and the case is gone', async () => {
     const driver = await startWebDriver()
     const pool = new Pool({ connectionString: PG_URL, max: 2 })
     try {
       const doomed = await seedCase(pool, driver.schema, 'doomed', 2500)
       const keeper = await seedCase(pool, driver.schema, 'keeper', 10)
 
-      const del = await driver.api('cases', 'delete', doomed)
-      expect(del.statusCode, del.body).toBe(200)
-      const job = del.json() as BackgroundJob
-      expect(job).toMatchObject({
-        kind: 'case-delete',
-        subject: { type: 'case', id: doomed }
-      })
-      expect(['queued', 'running']).toContain(job.status)
+      const started = await driver.api('cases', 'startDelete', { mode: 'ids', ids: [doomed] })
+      expect(started.statusCode, started.body).toBe(200)
+      const { jobId } = started.json() as { jobId: string }
+      expect(typeof jobId).toBe('string')
 
-      let latest = job
-      for (let i = 0; i < 100 && latest.status !== 'succeeded' && latest.status !== 'failed'; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 50))
-        const poll = await driver.api('jobs', 'get', job.id)
-        expect(poll.statusCode, poll.body).toBe(200)
-        latest = poll.json() as BackgroundJob
-      }
-      expect(latest.status, JSON.stringify(latest)).toBe('succeeded')
-      expect(latest.finishedAt).toBeGreaterThanOrEqual(latest.createdAt)
+      const job = await waitForJob(driver.api, jobId)
+      expect(job, JSON.stringify(job)).toMatchObject({
+        kind: 'case_delete',
+        status: 'completed',
+        params: { mode: 'ids', ids: [doomed] },
+        progress: { current: 1, total: 1, message: 'finalizing' }
+      })
 
       const list = await driver.api('cases', 'list')
       const ids = (list.json() as Array<{ id: number }>).map((c) => Number(c.id))
@@ -67,33 +74,59 @@ describe.skipIf(!HAS_PG)('case delete background job', () => {
       )
       expect(stored.rows).toHaveLength(0)
 
-      const jobs = await driver.api('jobs', 'list', { kind: 'case-delete' })
-      expect((jobs.json() as BackgroundJob[]).map((j) => j.id)).toContain(job.id)
+      const jobs = await driver.api('jobs', 'list', { kind: 'case_delete' })
+      expect((jobs.json() as Job[]).map((j) => j.id)).toContain(jobId)
 
-      // The write itself is audited synchronously; job polls are not.
-      const audit = await pool.query<{ entity_key: string }>(
-        `SELECT entity_key FROM varlens_audit.audit_log
-          WHERE project_schema = $1 AND entity_key IN ('cases:delete', 'jobs:get')`,
+      // The start is audited synchronously as a write; job polls are not audited.
+      const audit = await pool.query<{ action_type: string; entity_key: string }>(
+        `SELECT action_type, entity_key FROM varlens_audit.audit_log
+          WHERE project_schema = $1 AND entity_key IN ('cases:startDelete', 'jobs:get')`,
         [driver.schema]
       )
-      expect(audit.rows.map((r) => r.entity_key)).toEqual(['cases:delete'])
+      expect(audit.rows).toEqual([{ action_type: 'api_write', entity_key: 'cases:startDelete' }])
     } finally {
       await pool.end()
       await driver.close()
     }
   }, 60_000)
 
-  test('unknown case → 404, malformed job id → 400, unknown job → 404', async () => {
+  test('cases:delete and cases:deleteBatch wait for the job', async () => {
+    const driver = await startWebDriver()
+    const pool = new Pool({ connectionString: PG_URL, max: 2 })
+    try {
+      const a = await seedCase(pool, driver.schema, 'a', 100)
+      const b = await seedCase(pool, driver.schema, 'b', 100)
+      const c = await seedCase(pool, driver.schema, 'c', 100)
+
+      const single = await driver.api('cases', 'delete', a)
+      expect(single.statusCode, single.body).toBe(200)
+      const batch = await driver.api('cases', 'deleteBatch', [b, c])
+      expect(batch.statusCode, batch.body).toBe(200)
+      expect(batch.json()).toBe(2)
+
+      const remaining = await pool.query(`SELECT id FROM "${driver.schema}".cases_all`)
+      expect(remaining.rows).toHaveLength(0)
+    } finally {
+      await pool.end()
+      await driver.close()
+    }
+  }, 60_000)
+
+  test('validation: unknown case 404, bad target 400, unknown job null, cancel no-op', async () => {
     const driver = await startWebDriver()
     try {
       const missing = await driver.api('cases', 'delete', 987654)
       expect(missing.statusCode, missing.body).toBe(404)
 
-      const badId = await driver.api('jobs', 'get', 'not-a-uuid')
-      expect(badId.statusCode).toBe(400)
+      const badTarget = await driver.api('cases', 'startDelete', { mode: 'ids', ids: [] })
+      expect(badTarget.statusCode).toBe(400)
 
-      const unknown = await driver.api('jobs', 'get', '00000000-0000-4000-8000-000000000000')
-      expect(unknown.statusCode).toBe(404)
+      const unknown = await driver.api('jobs', 'get', 'NOSUCHJOB')
+      expect(unknown.statusCode).toBe(200)
+      expect(unknown.json()).toBeNull()
+
+      const cancel = await driver.api('jobs', 'cancel', 'NOSUCHJOB')
+      expect(cancel.json()).toEqual({ requested: false })
     } finally {
       await driver.close()
     }
