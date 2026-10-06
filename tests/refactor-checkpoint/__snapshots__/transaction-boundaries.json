@@ -59,13 +59,8 @@
     },
     {
       "file": "src/main/workers/delete-operations.ts",
-      "callerFunction": "deleteAllCases",
-      "assignedTo": "deleteAll"
-    },
-    {
-      "file": "src/main/workers/delete-operations.ts",
-      "callerFunction": "deleteCaseBatch",
-      "assignedTo": "deleteBatch"
+      "callerFunction": "deleteCasesIncrementally",
+      "assignedTo": "deleteOne"
     },
     {
       "file": "src/main/workers/import-pipeline.ts",

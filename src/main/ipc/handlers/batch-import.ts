@@ -2,7 +2,7 @@ import { dialog } from 'electron'
 import { dirname, join } from 'path'
 import { readdir } from 'fs/promises'
 import type { HandlerDependencies } from '../types'
-import { ZipExtractor } from '../../import'
+import { isZipEncryptedOffThread } from '../../import/zip-worker-client'
 import { mainLogger } from '../../services/MainLogger'
 import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
@@ -36,9 +36,6 @@ function throwUnallowedBatchPath(channel: string, filePath: string, label = 'fil
     'The selected file is not in an allowed location.'
   )
 }
-
-// ZIP extractor for isEncrypted check (stays in handler — used with dialog)
-const zipExtractor = new ZipExtractor()
 
 function createBatchImportCallbacks(runId: string): BatchImportCallbacks {
   return {
@@ -226,7 +223,7 @@ export function registerBatchImportHandlers({ ipcMain, getDb }: HandlerDependenc
         await saveSettings({ ...settings, lastImportDirectory: dirname(filePath) })
         addAllowedImportPath(filePath)
 
-        const isEncrypted = zipExtractor.isEncrypted(filePath)
+        const isEncrypted = await isZipEncryptedOffThread(filePath)
         return { filePath, isEncrypted }
       } catch (error) {
         mainLogger.error(`batch-import:selectZip error: ${error}`, 'import')

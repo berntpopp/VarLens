@@ -17,10 +17,13 @@ vi.mock('electron', () => ({
 
 const list = vi.fn()
 const get = vi.fn()
+const cancel = vi.fn()
 vi.mock('../../../../src/main/services/jobs/runner', () => ({
   jobRunner: {
     list: (...args: unknown[]) => list(...args),
-    get: (...args: unknown[]) => get(...args)
+    get: (...args: unknown[]) => get(...args),
+    cancel: (...args: unknown[]) => cancel(...args),
+    onLifecycle: () => () => {}
   }
 }))
 
@@ -137,6 +140,36 @@ describe('jobs IPC domain', () => {
       const result = await handler({}, 'job-1')
 
       expect(result).toEqual({ current: 1, total: 2 })
+    })
+  })
+
+  describe('jobs:cancel', () => {
+    it('returns INVALID_PARAMETERS for an empty jobId', async () => {
+      registerJobsHandlers()
+      const result = await getHandler(JOBS_CHANNELS.cancel)({}, '')
+
+      expectInvalidParametersResult(result)
+      expect(cancel).not.toHaveBeenCalled()
+    })
+
+    it('cancels a running job', async () => {
+      get.mockReturnValue({ id: 'job-1', status: 'running' })
+      registerJobsHandlers()
+
+      const result = await getHandler(JOBS_CHANNELS.cancel)({}, 'job-1')
+
+      expect(result).toEqual({ requested: true })
+      expect(cancel).toHaveBeenCalledWith('job-1')
+    })
+
+    it('does nothing for an unknown or finished job', async () => {
+      get.mockReturnValueOnce(undefined).mockReturnValueOnce({ id: 'j', status: 'completed' })
+      registerJobsHandlers()
+      const handler = getHandler(JOBS_CHANNELS.cancel)
+
+      expect(await handler({}, 'missing')).toEqual({ requested: false })
+      expect(await handler({}, 'j')).toEqual({ requested: false })
+      expect(cancel).not.toHaveBeenCalled()
     })
   })
 })

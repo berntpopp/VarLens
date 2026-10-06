@@ -21,7 +21,8 @@ import {
   exportVariants,
   exportCohort,
   exportPostgresVariants,
-  exportPostgresCohort
+  exportPostgresCohort,
+  cancelActiveExport
 } from './export-logic'
 import type { ExportCallbacks } from './export-logic'
 
@@ -37,13 +38,18 @@ function automatedExportPath(defaultFileName: string): string | null {
 
 /**
  * Export IPC handlers
- * Channels: export:variants, export:cohort
+ * Channels: export:variants, export:cohort, export:cancel, export:revealInFolder
  */
 export function registerExportHandlers({
   ipcMain,
   getDb,
-  getDbManager
+  getDbManager,
+  getDbPool
 }: HandlerDependencies): void {
+  ipcMain.handle('export:cancel', async () => {
+    return wrapHandler(async () => ({ cancelled: await cancelActiveExport() }))
+  })
+
   ipcMain.handle('export:revealInFolder', async (_event, filePath: unknown) => {
     return wrapHandler(async () => {
       const validated = FilePathSchema.safeParse(filePath)
@@ -91,7 +97,12 @@ export function registerExportHandlers({
         // the user picking a file path only to be told the export is too large.
         const preparation = isPostgres
           ? null
-          : prepareVariantExport(getDb, validated.data.caseId, validated.data.filters)
+          : await prepareVariantExport(
+              getDb,
+              validated.data.caseId,
+              validated.data.filters,
+              getDbPool
+            )
         if (preparation !== null && 'success' in preparation) {
           return preparation
         }
@@ -239,7 +250,7 @@ export function registerExportHandlers({
           return result
         }
 
-        const result = await exportCohort(getDb, validated.data, outputFilePath)
+        const result = await exportCohort(getDb, validated.data, outputFilePath, exportCallbacks)
         if (result.success) addAllowedExportRevealPath(outputFilePath)
         return result
       }) as Promise<{ success: boolean; filePath?: string; error?: string }>

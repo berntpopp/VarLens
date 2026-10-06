@@ -120,6 +120,10 @@ export const mockApi: WindowAPI = {
       cases = cases.filter((c) => !ids.includes(c.id))
       return before - cases.length
     },
+    startDelete: async (target) => {
+      cases = target.mode === 'all' ? [] : cases.filter((c) => !target.ids.includes(c.id))
+      return { jobId: 'mock-delete-job' }
+    },
     availableBuilds: async () => [{ build: 'GRCh38', caseCount: cases.length }]
   },
 
@@ -286,7 +290,8 @@ export const mockApi: WindowAPI = {
   export: {
     variants: async () => ({ success: true, filePath: '/mock/export.xlsx' }),
     cohort: async () => ({ success: true, filePath: '/mock/cohort_export.xlsx' }),
-    revealInFolder: async () => ({ success: false })
+    revealInFolder: async () => ({ success: false }),
+    cancel: async () => ({ cancelled: false })
   },
   shell: {
     openExternal: async (url) => {
@@ -1220,6 +1225,8 @@ export const mockApi: WindowAPI = {
   jobs: {
     list: async () => [],
     get: async () => null,
-    progress: async () => null
+    progress: async () => null,
+    cancel: async () => ({ requested: false }),
+    onChanged: () => () => {}
   }
 }

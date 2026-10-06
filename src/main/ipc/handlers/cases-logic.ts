@@ -11,7 +11,17 @@ import { mainLogger } from '../../services/MainLogger'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { StorageReadTask } from '../../storage/read-executor'
 import type { StorageSession } from '../../storage/session'
-import type { DeleteWorkerRequest, DeleteWorkerResponse } from '../../workers/delete-worker'
+import type {
+  DeleteWorkerRequest,
+  DeleteWorkerResponse
+} from '../../workers/delete-worker-protocol'
+import { jobRunner } from '../../services/jobs/runner'
+import type { JobHandle } from '../../services/jobs/JobRunner'
+import type {
+  CaseDeleteJobResult,
+  CaseDeleteProgress,
+  CaseDeleteTarget
+} from '../../../shared/types/case-delete-job'
 import type { AvailableBuild } from '../../../shared/types/database'
 import type { ValidatedCaseSearchParams } from '../../../shared/types/ipc-schemas'
 
@@ -37,39 +47,59 @@ export function releaseDeleteLock(): void {
   deleteInProgress = false
 }
 
+/** Hooks for a running delete worker. */
+export interface DeleteWorkerHooks {
+  onProgress?: (progress: CaseDeleteProgress) => void
+  /** Receives a function that asks the worker to stop between cases. */
+  registerCancel?: (cancel: () => void) => void
+  /** Override for tests; defaults to the bundled `delete-worker.js`. */
+  workerPath?: string
+}
+
 /**
- * Run a delete operation in a worker thread to avoid blocking the main process.
+ * Run a delete job in a worker thread so the main process stays responsive.
+ * Frequency upkeep, the per-case deletes and the FTS / cohort-summary
+ * rebuilds all happen inside the worker.
  */
-export function runDeleteWorker(request: DeleteWorkerRequest): Promise<number> {
+export function runDeleteWorker(
+  request: Extract<DeleteWorkerRequest, { type: 'start' }>,
+  hooks: DeleteWorkerHooks = {}
+): Promise<CaseDeleteJobResult> {
   return new Promise((res, rej) => {
-    const workerPath = resolve(__dirname, 'delete-worker.js')
+    const workerPath = hooks.workerPath ?? resolve(__dirname, 'delete-worker.js')
     const worker = new Worker(workerPath)
     let settled = false
 
-    const settle = (fn: typeof res | typeof rej, value: unknown): void => {
+    const finish = (outcome: () => void): void => {
       if (settled) return
       settled = true
-      fn(value as number)
+      outcome()
       worker.terminate().catch((e) => {
         mainLogger.warn(`Delete worker termination failed: ${e}`, 'cases')
       })
     }
 
+    hooks.registerCancel?.(() => {
+      if (!settled) worker.postMessage({ type: 'cancel' } satisfies DeleteWorkerRequest)
+    })
+
     worker.on('message', (msg: DeleteWorkerResponse) => {
-      if (msg.type === 'complete') {
-        settle(res, msg.deleted ?? 0)
+      if (msg.type === 'progress') {
+        hooks.onProgress?.({ phase: msg.phase, current: msg.current, total: msg.total })
+      } else if (msg.type === 'complete') {
+        finish(() => res({ deleted: msg.deleted, cancelled: msg.cancelled }))
       } else {
-        settle(rej, new Error(msg.error ?? 'Delete worker failed'))
+        finish(() => rej(new Error(msg.error)))
       }
     })
 
     worker.on('error', (err: Error) => {
       mainLogger.error(`Delete worker error: ${err.message}`, 'cases')
-      settle(rej, err)
+      finish(() => rej(err))
     })
 
     worker.on('exit', (code) => {
-      settle(rej, new Error(`Delete worker exited unexpectedly with code ${code}`))
+      finish(() => rej(new Error(`Delete worker exited unexpectedly with code ${code}`)))
     })
 
     worker.postMessage(request)
@@ -116,150 +146,94 @@ export async function getAvailableBuilds(
   return (await getSession().getReadExecutor().execute(task)) as AvailableBuild[]
 }
 
+class CaseDeleteCancelledError extends Error {
+  constructor(readonly deleted: number) {
+    super(`Case delete cancelled after ${deleted} case(s)`)
+    this.name = 'AbortError'
+  }
+}
+
 /**
- * Delete a single case by ID.
- * Decrements frequencies before deletion and recomputes on failure.
+ * Start a SQLite case delete as a tracked background job (`case_delete`).
+ *
+ * Returns synchronously with the job handle; the work runs in the delete
+ * worker. Progress is published through the job (→ `jobs:changed`), and
+ * `jobs:cancel` stops the worker between cases. Single-flight per kind is
+ * enforced by the JobRunner, which throws if a delete is already running.
  */
+export function startSqliteCaseDeleteJob(
+  target: CaseDeleteTarget,
+  getDb: () => DatabaseService,
+  callbacks: DeleteCallbacks,
+  options: { workerPath?: string } = {}
+): JobHandle<CaseDeleteJobResult> {
+  if (deleteInProgress) {
+    throw new Error('A delete operation is already in progress. Please wait for it to finish.')
+  }
+  const db = getDb()
+  const request: Extract<DeleteWorkerRequest, { type: 'start' }> = {
+    type: 'start',
+    mode: target.mode,
+    dbPath: db.getPath(),
+    encryptionKey: db.getEncryptionKey(),
+    ...(target.mode === 'ids' ? { ids: target.ids } : {})
+  }
+
+  return jobRunner.enqueue<CaseDeleteTarget, CaseDeleteJobResult>(
+    'case_delete',
+    target,
+    async (ctx) => {
+      mainLogger.info(`Starting case delete job (${describeTarget(target)})`, 'cases')
+      callbacks.onCohortStale?.({ is_stale: true })
+      try {
+        const result = await runDeleteWorker(request, {
+          workerPath: options.workerPath,
+          onProgress: (p) => ctx.reportProgress(p.current, p.total, p.phase),
+          registerCancel: (cancel) => ctx.registerCancel(cancel)
+        })
+        callbacks.onDeleted?.({ deleted: result.deleted })
+        callbacks.onCohortStale?.({ is_stale: false })
+        if (result.cancelled) throw new CaseDeleteCancelledError(result.deleted)
+        return result
+      } catch (error) {
+        if (!(error instanceof CaseDeleteCancelledError)) {
+          mainLogger.error(
+            `Case delete job failed: ${error instanceof Error ? error.message : error}`,
+            'cases'
+          )
+        }
+        throw error
+      }
+    }
+  )
+}
+
+function describeTarget(target: CaseDeleteTarget): string {
+  return target.mode === 'all' ? 'all cases' : `ids: ${target.ids.join(', ')}`
+}
+
+/** Delete a single case by ID (awaits the background job). */
 export async function deleteSingleCase(
   id: number,
   getDb: () => DatabaseService,
   callbacks: DeleteCallbacks
 ): Promise<void> {
-  if (!acquireDeleteLock()) {
-    mainLogger.warn(`Delete already in progress, rejecting delete for case ${id}`, 'cases')
-    throw new Error('A delete operation is already in progress. Please wait for it to finish.')
-  }
-
-  const db = getDb()
-  mainLogger.info(`Starting single-case delete worker (id: ${id})`, 'cases')
-  callbacks.onCohortStale?.({ is_stale: true })
-
-  try {
-    // Decrement frequencies BEFORE worker delete -- needs variant data still present.
-    // This is a fast indexed operation (stays on main thread).
-    try {
-      db.variants.decrementFrequencies(id)
-    } catch (freqError) {
-      mainLogger.warn(`Failed to decrement variant frequencies: ${freqError}`, 'cases')
-    }
-
-    await runDeleteWorker({
-      type: 'deleteBatch',
-      dbPath: db.getPath(),
-      encryptionKey: db.getEncryptionKey(),
-      ids: [id]
-    })
-
-    callbacks.onDeleted?.({ deleted: 1 })
-    callbacks.onCohortStale?.({ is_stale: false })
-  } catch (error) {
-    mainLogger.error(
-      `Single-case delete worker failed: ${error instanceof Error ? error.message : error}`,
-      'cases'
-    )
-    // Recovery: frequencies were decremented before the worker ran.
-    // Recompute to correct any drift from the failed delete.
-    try {
-      db.variants.recomputeAllFrequencies()
-    } catch (e) {
-      mainLogger.warn(
-        'Failed to recompute frequencies after delete failure: ' +
-          (e instanceof Error ? e.message : String(e)),
-        'cases'
-      )
-    }
-    throw error
-  } finally {
-    releaseDeleteLock()
-  }
+  await startSqliteCaseDeleteJob({ mode: 'ids', ids: [id] }, getDb, callbacks).result
 }
 
-/**
- * Delete all cases in the database.
- */
+/** Delete all cases in the database (awaits the background job). */
 export async function deleteAllCases(
   getDb: () => DatabaseService,
   callbacks: DeleteCallbacks
 ): Promise<number> {
-  if (!acquireDeleteLock()) {
-    mainLogger.warn('Delete already in progress, rejecting deleteAll', 'cases')
-    throw new Error('A delete operation is already in progress. Please wait for it to finish.')
-  }
-
-  const db = getDb()
-  mainLogger.info(`Starting deleteAll worker (db: ${db.getPath()})`, 'cases')
-  callbacks.onCohortStale?.({ is_stale: true })
-
-  try {
-    const deleted = await runDeleteWorker({
-      type: 'deleteAll',
-      dbPath: db.getPath(),
-      encryptionKey: db.getEncryptionKey()
-    })
-    mainLogger.info(`deleteAll completed: ${deleted} cases deleted`, 'cases')
-
-    // Recompute variant frequencies after bulk deletion
-    try {
-      db.variants.recomputeAllFrequencies()
-    } catch (freqError) {
-      mainLogger.warn(`Failed to recompute variant frequencies: ${freqError}`, 'cases')
-    }
-
-    callbacks.onDeleted?.({ deleted })
-    callbacks.onCohortStale?.({ is_stale: false })
-    return deleted
-  } catch (error) {
-    mainLogger.error(
-      `deleteAll worker failed: ${error instanceof Error ? error.message : error}`,
-      'cases'
-    )
-    throw error
-  } finally {
-    releaseDeleteLock()
-  }
+  return (await startSqliteCaseDeleteJob({ mode: 'all' }, getDb, callbacks).result).deleted
 }
 
-/**
- * Delete a batch of cases by IDs.
- */
+/** Delete a batch of cases by IDs (awaits the background job). */
 export async function deleteBatchCases(
   ids: number[],
   getDb: () => DatabaseService,
   callbacks: DeleteCallbacks
 ): Promise<number> {
-  if (!acquireDeleteLock()) {
-    mainLogger.warn('Delete already in progress, rejecting deleteBatch', 'cases')
-    throw new Error('A delete operation is already in progress. Please wait for it to finish.')
-  }
-
-  const db = getDb()
-  callbacks.onCohortStale?.({ is_stale: true })
-
-  try {
-    const deleted = await runDeleteWorker({
-      type: 'deleteBatch',
-      dbPath: db.getPath(),
-      encryptionKey: db.getEncryptionKey(),
-      ids
-    })
-
-    // Recompute variant frequencies after batch deletion
-    try {
-      db.variants.recomputeAllFrequencies()
-    } catch (freqError) {
-      mainLogger.warn(`Failed to recompute variant frequencies: ${freqError}`, 'cases')
-    }
-
-    callbacks.onDeleted?.({ deleted })
-    callbacks.onCohortStale?.({ is_stale: false })
-    return deleted
-  } catch (error) {
-    mainLogger.error(
-      `deleteBatch worker failed: ${error instanceof Error ? error.message : error}`,
-      'cases'
-    )
-    throw error
-  } finally {
-    releaseDeleteLock()
-  }
+  return (await startSqliteCaseDeleteJob({ mode: 'ids', ids }, getDb, callbacks).result).deleted
 }

@@ -22,6 +22,7 @@ import {
   streamInsertVcf
 } from './import-pipeline'
 import { ImportSkipTracker } from './import-skip-tracker'
+import { VariantFrequencyService } from '../database/VariantFrequencyService'
 
 if (!parentPort) throw new Error('Must be run as worker thread')
 
@@ -48,6 +49,10 @@ port.on('message', async (msg: MainMessage) => {
       db = openWorkerDatabase(msg.dbPath, msg.encryptionKey)
 
       const stmts = prepareStatements(db)
+      // Internal allele-frequency upkeep runs here, on the worker connection
+      // that already holds the write lock, instead of on the Electron main
+      // thread after the worker finishes (audit 05 finding M-1).
+      const frequencies = new VariantFrequencyService(db)
 
       // Drop FTS triggers and non-essential indexes at start (batch optimization)
       db.exec(DROP_FTS_TRIGGERS)
@@ -116,6 +121,9 @@ port.on('message', async (msg: MainMessage) => {
               skipped++
               continue
             } else if (existing) {
+              // Replacing a case: drop its contribution to the shared
+              // frequency table before its variants disappear.
+              frequencies.decrementFrequencies(existing.id)
               stmts.deleteCase.run(existing.id)
             }
           }
@@ -208,6 +216,15 @@ port.on('message', async (msg: MainMessage) => {
             } catch (e) {
               console.warn(
                 '[import-worker] Failed to insert data_info provenance:',
+                e instanceof Error ? e.message : String(e)
+              )
+            }
+
+            try {
+              frequencies.updateFrequencies(caseId)
+            } catch (e) {
+              console.warn(
+                '[import-worker] Failed to update variant frequencies:',
                 e instanceof Error ? e.message : String(e)
               )
             }

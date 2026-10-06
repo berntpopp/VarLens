@@ -48,6 +48,7 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       delete: (id) => casesDomain.delete(id),
       deleteAll: () => casesDomain.deleteAll(),
       deleteBatch: (ids) => casesDomain.deleteBatch(ids),
+      startDelete: (target) => casesDomain.startDelete(target),
       availableBuilds: () => casesDomain.availableBuilds()
     },
 
@@ -98,7 +99,8 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
     export: {
       variants: (caseId, filters, caseName) => exportDomain.variants(caseId, filters, caseName),
       cohort: (params) => exportDomain.cohort(params),
-      revealInFolder: (filePath) => exportDomain.revealInFolder(filePath)
+      revealInFolder: (filePath) => exportDomain.revealInFolder(filePath),
+      cancel: () => exportDomain.cancel()
     },
 
     shell: {

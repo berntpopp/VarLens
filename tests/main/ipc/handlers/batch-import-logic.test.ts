@@ -164,7 +164,7 @@ describe('startBatchImport — Sprint A D3 (iii) / Gate 12', () => {
     })
   })
 
-  it('(a) frequency update: updateFrequencies is called per successful imported case', async () => {
+  it('(a) frequency update: no main-thread updateFrequencies (the import worker maintains frequencies)', async () => {
     const db = makeDb()
     const promise = startBatchImport(
       () => db,
@@ -177,7 +177,7 @@ describe('startBatchImport — Sprint A D3 (iii) / Gate 12', () => {
     FakeImportWorkerClient.instances[0].emit(COMPLETE_MSG)
     await promise
 
-    expect(db.variants.updateFrequencies).toHaveBeenCalledTimes(2)
+    expect(db.variants.updateFrequencies).not.toHaveBeenCalled()
   })
 
   it('(b) conflict: a second concurrent batch surfaces "A batch import is already in progress"', async () => {

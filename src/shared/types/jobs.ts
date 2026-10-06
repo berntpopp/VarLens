@@ -10,7 +10,8 @@ import type { SerializableError } from './errors'
  * sites that predate this split.
  */
 
-export type JobKind = 'import_single' | 'import_batch' | 'cohort_rebuild' | 'association' | 'export'
+export type JobKind =
+  'import_single' | 'import_batch' | 'cohort_rebuild' | 'association' | 'export' | 'case_delete'
 
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

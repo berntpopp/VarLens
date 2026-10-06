@@ -8,8 +8,21 @@
  * logic duplication.
  */
 
+import type { CohortSearchParams } from './cohort'
+
 /** Main thread → worker */
-export type ExportMainMessage = {
+export type ExportMainMessage = ExportVariantsStartMessage | ExportCohortStartMessage
+
+/** Cohort XLSX export (query + workbook build run inside the worker). */
+export interface ExportCohortStartMessage {
+  type: 'start-cohort'
+  dbPath: string
+  encryptionKey?: string
+  params: CohortSearchParams
+  outputFilePath: string
+}
+
+export type ExportVariantsStartMessage = {
   type: 'start'
   dbPath: string
   encryptionKey?: string

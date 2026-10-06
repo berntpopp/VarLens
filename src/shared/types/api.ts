@@ -282,6 +282,7 @@ export interface ExportAPI {
   ) => Promise<IpcResult<ExportResult>>
   cohort: (params: CohortSearchParams) => Promise<IpcResult<ExportResult>>
   revealInFolder: (filePath: string) => Promise<IpcResult<{ success: boolean }>>
+  cancel: () => Promise<IpcResult<{ cancelled: boolean }>>
 }
 
 export type DatabaseAPI = DatabaseDomainContract
