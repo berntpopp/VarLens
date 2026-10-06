@@ -10,6 +10,7 @@ import { mainLogger } from '../../services/MainLogger'
 import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
 import type { GenomicInterval } from '../../database/PanelRepository'
 import type { DatabaseService } from '../../database/DatabaseService'
+import { DEFAULT_PANEL_GENOME_BUILD } from '../../../shared/filters/panel-intervals'
 
 /**
  * In-memory cache for computed panel intervals.
@@ -117,4 +118,49 @@ export function computePanelIntervals(
     )
     throw error instanceof Error ? error : new Error(message)
   }
+}
+
+/** The cohort query fields that take part in panel resolution. */
+interface CohortPanelRequest {
+  active_panel_ids?: number[]
+  panel_padding_bp?: number
+  genome_build?: string
+  panel_intervals?: GenomicInterval[]
+}
+
+/**
+ * Bring SQLite cohort params into the form `CohortService` understands, on
+ * the calling thread: the genome build defaults to GRCh38 (what the cohort
+ * table shows when none is selected) and the active panel becomes concrete
+ * `panel_intervals` for THAT build.
+ *
+ * Every SQLite cohort read that does not hand the panel to the read-pool
+ * worker goes through here — the no-pool listing fallback and the cohort
+ * export — so both restrict exactly like the on-screen table.
+ *
+ * @throws See {@link computePanelIntervals}.
+ */
+export function resolveCohortPanelOnCallingThread<T extends CohortPanelRequest>(
+  db: DatabaseService,
+  params: T,
+  source: string
+): T {
+  const resolved: T = { ...params, genome_build: params.genome_build ?? DEFAULT_PANEL_GENOME_BUILD }
+  const panelIds = resolved.active_panel_ids
+  if (panelIds !== undefined && panelIds.length > 0) {
+    resolved.panel_intervals = computePanelIntervals(
+      db,
+      {
+        active_panel_ids: panelIds,
+        panel_padding_bp: resolved.panel_padding_bp,
+        genome_build: resolved.genome_build
+      },
+      undefined, // cohort mode: no specific case, sample any variant
+      source
+    )
+  }
+  // IPC-only fields must not reach the service.
+  delete resolved.active_panel_ids
+  delete resolved.panel_padding_bp
+  return resolved
 }

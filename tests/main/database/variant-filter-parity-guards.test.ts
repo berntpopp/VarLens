@@ -15,7 +15,12 @@ vi.mock('../../../src/main/database/geneReferenceLoader', async (importOriginal)
 import { DatabaseService } from '../../../src/main/database'
 import type { Repositories } from '../../../src/main/database/createRepositories'
 import type { GeneReferenceDb } from '../../../src/main/database/GeneReferenceDb'
-import { prepareVariantExport } from '../../../src/main/ipc/handlers/export-logic'
+import { CohortService } from '../../../src/main/database/cohort'
+import { queryCohortVariants } from '../../../src/main/ipc/handlers/cohort-logic'
+import {
+  prepareCohortExportParams,
+  prepareVariantExport
+} from '../../../src/main/ipc/handlers/export-logic'
 import { clearPanelIntervalCache } from '../../../src/main/ipc/handlers/panelIntervalHelper'
 import { buildVariantFilter } from '../../../src/main/ipc/handlers/variants-logic'
 import { toSerializableError } from '../../../src/main/ipc/serializable-error'
@@ -176,6 +181,57 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
       )
       expect(sqlite.variants.getVariants(filter, 100, 0).data).toHaveLength(4)
       expect(cohort({ active_panel_ids: [emptyPanel], genome_build: 'GRCh38' })).toHaveLength(4)
+    })
+  })
+
+  describe('desktop cohort without a read pool, and the cohort export', () => {
+    const GRCH37_KEY = '7:150000:A:C'
+
+    beforeEach(() => {
+      // The gene sits elsewhere in GRCh37, so the GRCh37 variant at 150,000 is
+      // outside the panel — unless GRCh38 coordinates are used by mistake.
+      geneRef.getCoordinatesForGenes.mockImplementation((_ids: string[], assembly: string) =>
+        assembly === 'GRCh38'
+          ? new Map([[GENE.hgncId, { chromosome: '7', start_pos: 100_000, end_pos: 200_000 }]])
+          : new Map([[GENE.hgncId, { chromosome: '7', start_pos: 500_000, end_pos: 600_000 }]])
+      )
+    })
+
+    it('main-thread fallback resolves the panel for the selected genome build', async () => {
+      const panel = { active_panel_ids: [panelId], panel_padding_bp: 5000 }
+      const keys = async (genomeBuild: string): Promise<string[]> => {
+        const result = (await queryCohortVariants(
+          { ...panel, genome_build: genomeBuild, limit: 100, offset: 0 } as never,
+          () => sqlite,
+          () => null
+        )) as { data: Array<{ variant_key: string }> }
+        return result.data.map((row) => row.variant_key).sort()
+      }
+
+      expect(await keys('GRCh37')).toEqual([])
+      expect(await keys('GRCh38')).toEqual(['7:150000:A:T', '7:202000:A:T', '7:90000:A:<DEL>'])
+    })
+
+    it('cohort export restricts to the active panel and build like the cohort table', () => {
+      const exported = (params: Record<string, unknown>): string[] => {
+        const prepared = prepareCohortExportParams(() => sqlite, params as never)
+        expect(prepared).not.toHaveProperty('active_panel_ids')
+        return new CohortService(sqlite.db)
+          .getCohortVariants(prepared)
+          .data.map((row) => row.variant_key)
+          .sort()
+      }
+      const panel = { active_panel_ids: [panelId], panel_padding_bp: 5000 }
+
+      expect(exported({ ...panel, genome_build: 'GRCh38' })).toEqual([
+        '7:150000:A:T',
+        '7:202000:A:T',
+        '7:90000:A:<DEL>'
+      ])
+      expect(exported({ ...panel, genome_build: 'GRCh37' })).toEqual([])
+      // No build selected: the table shows GRCh38, so the export must too.
+      expect(exported({})).not.toContain(GRCH37_KEY)
+      expect(exported({})).toHaveLength(4)
     })
   })
 

@@ -17,7 +17,8 @@ import type { StorageSession } from '../../storage/session'
 import { AssociationEngine } from '../../statistics/AssociationEngine'
 import { jobRunner } from '../../services/jobs/runner'
 import { trackDatabaseWorker } from '../../services/jobs/database-activity'
-import { computePanelIntervals } from './panelIntervalHelper'
+import { resolveCohortPanelOnCallingThread } from './panelIntervalHelper'
+import { DEFAULT_PANEL_GENOME_BUILD } from '../../../shared/filters/panel-intervals'
 import { convertBigInts } from '../../utils/convertBigInts'
 import type { ValidatedCohortSearchParams } from '../../../shared/types/ipc-schemas'
 import type { AssociationConfig } from '../../statistics/types'
@@ -212,51 +213,25 @@ export async function queryCohortVariants(
     return getCohortVariantsViaSession(params, () => postgresSession)
   }
 
-  const cohortParams = { ...params } as typeof params & {
-    panel_intervals?: Array<{ chr: string; start: number; end: number }>
-    genome_build?: string
-    variant_type?: string
-  }
-
-  // Use client-provided build or default to GRCh38 for backward compatibility.
-  // The renderer populates this from the cohort view's genome build selector,
-  // which is seeded from cases:availableBuilds.
-  cohortParams.genome_build = cohortParams.genome_build ?? 'GRCh38'
-
   const pool = getDbPool?.()
-
-  if (cohortParams.active_panel_ids && cohortParams.active_panel_ids.length > 0) {
-    if (pool) {
-      // Pool path: let the worker resolve intervals off the main thread.
-      // Panel interval resolution relies on genome_build being set above.
-      // active_panel_ids and panel_padding_bp are forwarded as-is
-    } else {
-      // Fallback (no pool): compute panel intervals on the main thread
-      const dbRef = getDb()
-      // Throws if the computation itself fails — never treat that as "no
-      // panel configured" (see panelIntervalHelper.ts for the contract).
-      const intervals = computePanelIntervals(
-        dbRef,
-        {
-          active_panel_ids: cohortParams.active_panel_ids,
-          panel_padding_bp: cohortParams.panel_padding_bp
-        },
-        undefined, // cohort mode: no specific case, sample any variant
-        'cohort'
-      )
-      cohortParams.panel_intervals = intervals
-      // Clean up IPC-only fields that shouldn't reach the service
-      delete cohortParams.active_panel_ids
-      delete cohortParams.panel_padding_bp
-    }
-  }
 
   let result: ReturnType<CohortService['getCohortVariants']>
   if (pool) {
+    // Pool path: the worker resolves the active panel off the main thread
+    // (active_panel_ids / panel_padding_bp are forwarded as-is) for the build
+    // set here. Use the client-provided build or default to GRCh38; the
+    // renderer populates it from the cohort view's genome build selector.
+    const cohortParams = {
+      ...params,
+      genome_build: params.genome_build ?? DEFAULT_PANEL_GENOME_BUILD
+    }
     result = await pool.run({ type: 'cohort:variants', params: [cohortParams] })
   } else {
+    // Fallback (no pool): resolve the panel on the main thread. Throws if the
+    // computation fails — never treated as "no panel configured" (see
+    // panelIntervalHelper.ts for the contract).
     const db = getDb()
-    result = db.cohort.getCohortVariants(cohortParams)
+    result = db.cohort.getCohortVariants(resolveCohortPanelOnCallingThread(db, params, 'cohort'))
   }
   return convertBigInts(result)
 }

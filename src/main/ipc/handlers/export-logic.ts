@@ -19,6 +19,7 @@ import type { CohortSearchParams } from '../../../shared/types/cohort'
 import type { ExportFilterSummary } from '../../../shared/types/export-worker'
 import { EXPORT_COLUMNS, type ExportColumn } from '../../workers/export-pipeline'
 import { csvEscape, formatCellValue } from '../../workers/export-renderer'
+import { resolveCohortPanelOnCallingThread } from './panelIntervalHelper'
 import { buildVariantFilter } from './variants-logic'
 
 const EXPORT_HARD_LIMIT = 100_000
@@ -290,17 +291,32 @@ export function exportPostgresCohort(
 }
 
 /**
+ * Resolve cohort export params exactly as the on-screen cohort query does:
+ * same genome-build default, and the active gene panel turned into concrete
+ * regions. The export worker runs `CohortService` directly, which only
+ * understands `panel_intervals` — an unresolved `active_panel_ids` would
+ * export the whole cohort while the table shows the panel-restricted set.
+ */
+export function prepareCohortExportParams(
+  getDb: () => DatabaseService,
+  params: CohortSearchParams
+): CohortSearchParams {
+  return resolveCohortPanelOnCallingThread(getDb(), params, 'export')
+}
+
+/**
  * Export cohort variants to XLSX. The cohort query (≤100k rows) and the
  * workbook build run in the export worker; progress is relayed and the job
  * can be cancelled.
  */
 export function exportCohort(
   getDb: () => DatabaseService,
-  params: CohortSearchParams,
+  requestedParams: CohortSearchParams,
   outputFilePath: string,
   callbacks: ExportCallbacks = {}
 ): Promise<ExportResult> {
   const db = getDb()
+  const params = prepareCohortExportParams(getDb, requestedParams)
   return runExportJob('cohort', (ctx) =>
     runWorkerExport(ctx, callbacks, (client, hooks) =>
       client.startCohort({
