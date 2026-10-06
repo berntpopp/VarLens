@@ -20,6 +20,8 @@ import { writeVcf } from '../../../src/main/simulator/writers/vcf-writer'
 import { writeXlsx } from '../../../src/main/simulator/writers/xlsx-writer'
 import { simulateCohort } from '../../../src/main/simulator/engine'
 import { detectFormat, createDataPipeline } from '../../../src/main/import/format-detection'
+import { parseVcfHeader } from '../../../src/main/import/vcf/vcf-header-parser'
+import { parseVcfLine } from '../../../src/main/import/vcf/vcf-line-parser'
 import type { SampleMetadata } from '../../../src/main/simulator/types'
 
 describe('DeterministicRandom PRNG', () => {
@@ -209,6 +211,19 @@ describe('Format Writers & Roundtrip Detection', () => {
     // VarLens format detection
     const formatInfo = await detectFormat(outPath)
     expect(formatInfo.format).toBe('vcf')
+
+    // Parse VCF header and data line via VarLens VCF import pipeline
+    const { header, firstDataLine } = await parseVcfHeader(outPath)
+    expect(header.samples).toEqual(['SIM-WRITE01'])
+    expect(header.annotationType).toBe('csq')
+    expect(firstDataLine).toBeTruthy()
+
+    const rawRecord = parseVcfLine(firstDataLine!, header.samples)
+    expect(rawRecord).not.toBeNull()
+    expect(rawRecord?.chrom).toBeDefined()
+    expect(rawRecord?.pos).toBeGreaterThan(0)
+    expect(rawRecord?.samples.get('SIM-WRITE01')).toBeDefined()
+    expect(rawRecord?.info.has('CSQ')).toBe(true)
   })
 
   it('writes and validates XLSX format', () => {
