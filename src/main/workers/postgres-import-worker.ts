@@ -360,13 +360,13 @@ export async function runImport(
 
           try {
             for await (const row of stream) {
-              if (cancelled) {
+              if (isCancelled()) {
                 throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
               }
               if (batch.add(row, getRecordBytes(row))) await batch.flush()
             }
             await batch.flush()
-            if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
+            if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
           } catch (error) {
             if (beganTransaction) {
               await client.query('ROLLBACK')
@@ -462,7 +462,7 @@ export async function runImport(
 
       let totalInserted = 0
       const writeVariants = async (session: PostgresJsonImportSession): Promise<void> => {
-        if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
+        if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
         const stream = await deps.createMapperPipeline(filePath, formatInfo)
         const batch = createBoundedBatcher<Record<string, unknown>, Promise<void>>({
           maxRows: batchSize,
@@ -478,17 +478,17 @@ export async function runImport(
         })
         try {
           for await (const chunk of stream) {
-            if (cancelled) {
+            if (isCancelled()) {
               stream.destroy()
               throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             }
             if (chunk === null || chunk === undefined) continue
             if (batch.add(chunk as Record<string, unknown>, getRecordBytes(chunk as object))) {
               await batch.flush()
-              if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
+              if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             }
           }
-          if (!cancelled) {
+          if (!isCancelled()) {
             await batch.flush()
           } else {
             throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
@@ -605,7 +605,7 @@ export async function runImport(
         }
 
         for (let i = 0; i < start.files.length; i += 1) {
-          if (cancelled) break
+          if (isCancelled()) break
           const fileSpec = start.files[i]
           const caseIdBeforeFile = caseId
           let fileVariantCount = 0
@@ -695,16 +695,16 @@ export async function runImport(
             })
 
             for await (const row of stream) {
-              if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
+              if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
               if (batch.add(row, getRecordBytes(row))) await batch.flush()
             }
 
-            if (cancelled) {
+            if (isCancelled()) {
               throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             }
 
             await batch.flush()
-            if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
+            if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             caseId = fileCaseId
             totalVariantCount += fileVariantCount
             lastSuccessfulFileName = fileName
@@ -829,7 +829,7 @@ export async function runImport(
             variantCount: totalVariantCount,
             files: fileResults,
             skipped: totalSkipped,
-            errors: cancelled ? [POSTGRES_IMPORT_CANCELLATION_MESSAGE] : parseErrors,
+            errors: isCancelled() ? [POSTGRES_IMPORT_CANCELLATION_MESSAGE] : parseErrors,
             elapsed: Date.now() - startedAt
           }
         })
