@@ -10,7 +10,8 @@ import { randomUUID } from 'node:crypto'
 import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import { checkDuplicates } from '../../import/batch-utils'
-import { ZipExtractor, TempDirectoryManager } from '../../import'
+import { TempDirectoryManager } from '../../import'
+import { extractZipOffThread, testZipPasswordOffThread } from '../../import/zip-worker-client'
 import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { API_CONFIG } from '../../../shared/config'
 import type { FileImportRequest } from '../../../shared/types/import-worker'
@@ -28,8 +29,7 @@ export interface BatchImportCallbacks {
 // Track current batch import for cancellation
 let workerClient: ImportWorkerClient | null = null
 
-// ZIP extraction utilities
-const zipExtractor = new ZipExtractor()
+// ZIP extraction utilities (adm-zip work runs in a worker thread)
 interface ActiveZipExtraction {
   manager: TempDirectoryManager
   enrolledPaths: string[]
@@ -197,17 +197,8 @@ function runBatchWorker(
         // File complete -- progress already sent via onProgress
       },
       onComplete: (msg) => {
-        // Update internal variant frequency counts for successful imports
-        try {
-          for (const detail of msg.results.details) {
-            if (detail.status === 'success' && detail.caseName) {
-              const c = db.cases.getCaseByName(detail.caseName)
-              db.variants.updateFrequencies(c.id)
-            }
-          }
-        } catch (freqError) {
-          mainLogger.warn(`Failed to update variant frequencies: ${freqError}`, 'batch-import')
-        }
+        // Internal variant frequency counts are maintained inside the import
+        // worker (per case, on the worker's write connection).
 
         // Send final progress
         callbacks.onProgress?.({
@@ -270,9 +261,12 @@ export function cancelBatchImport(): void {
  * not re-collapse that distinction here: a corrupt archive must propagate as
  * an error, not be reported as "incorrect password".
  */
-export function testZipPassword(zipPath: string, password: string): { success: boolean } {
+export async function testZipPassword(
+  zipPath: string,
+  password: string
+): Promise<{ success: boolean }> {
   try {
-    const success = zipExtractor.testPassword(zipPath, password)
+    const success = await testZipPasswordOffThread(zipPath, password)
     return { success }
   } catch (error) {
     mainLogger.error(`batch-import:testZipPassword error: ${error}`, 'import')
@@ -300,7 +294,7 @@ export async function extractZip(
     const extraction: ActiveZipExtraction = { manager, enrolledPaths: [] }
     zipExtractions.set(extractionId, extraction)
 
-    const result = await zipExtractor.extract(zipPath, targetDir, password)
+    const result = await extractZipOffThread(zipPath, targetDir, password)
 
     // Partial extraction is not a safe success state: the renderer cannot
     // know whether a missing case is optional, corrupt, or failed to write.

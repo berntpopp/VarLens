@@ -6,7 +6,28 @@ import {
   launchElectronApp,
   waitForAppShell
 } from './helpers/electron-app'
-import { importFrozenPerfFixture, PERF_CASE_NAMES, selectCaseByName } from './helpers/perf-fixture'
+import {
+  createPerfDatabase,
+  importFrozenPerfFixture,
+  PERF_CASE_NAMES,
+  selectCaseByName
+} from './helpers/perf-fixture'
+import {
+  installQuerySpy,
+  readInteractionWindow,
+  readQuerySpy,
+  startInteractionWindow,
+  type InteractionMetrics
+} from './helpers/interaction-metrics'
+import {
+  CASE_TABLE_STEPS,
+  closeDetailsPanel,
+  COHORT_TABLE_STEPS,
+  firstRenderedPosition,
+  settleTable,
+  sortableHeader,
+  type InteractionStep
+} from './helpers/interaction-workflows'
 import {
   writeJsonArtifact,
   type WorkflowRunArtifact,
@@ -117,7 +138,8 @@ async function prepareLoadedApp() {
   const launched = await launchElectronApp({ perfMode: true })
   await waitForAppShell(launched.window)
   await dismissDisclaimerIfPresent(launched.window)
-  const importedCases = await importFrozenPerfFixture(launched.window)
+  await createPerfDatabase(launched.app, launched.window, launched.userDataDir)
+  const importedCases = await importFrozenPerfFixture(launched.window, launched.app)
   const caseCount = await launched.window.evaluate(async () => {
     const cases = await window.api.cases.list()
     return cases.length
@@ -349,6 +371,163 @@ test.describe.serial('Phase 1 renderer perf baseline', () => {
           ].sort()
         )
       }
+    } finally {
+      await launched.cleanup()
+    }
+  })
+})
+
+/**
+ * Interaction-quality gates (audit 2026-10-06 §9, standards A4 P2/P3):
+ * per table interaction CLS <= 0.02 and INP < 200 ms, exactly one query per
+ * sort, and no stale render when the first request is delayed. Run alone with
+ * `make perf-interaction-gates`.
+ */
+const CLS_BUDGET = 0.02
+const INP_BUDGET_MS = 200
+
+/**
+ * Explicitly-known pending defects owned by another track. Checked inverted:
+ * they must still fail, so the gate goes red (XPASS) once fixed and the entry
+ * has to be removed. Never add a new regression here.
+ */
+const KNOWN_INTERACTION_FAILURES: Record<string, string> = {
+  // (empty) cohort-sort:allShifts was fixed by track 2 (result-set row keys
+  // + fixed table layout): 0.046-0.072 -> 0.000.
+}
+
+function expectWithinBudget(name: string, metric: 'cls' | 'allShifts' | 'inpMs', value: number): void {
+  const budget = metric === 'inpMs' ? INP_BUDGET_MS - 1 : CLS_BUDGET
+  const known = KNOWN_INTERACTION_FAILURES[`${name}:${metric}`]
+  if (known !== undefined) {
+    test.info().annotations.push({ type: 'expected-fail', description: `${name} ${metric}: ${known}` })
+    expect.soft(value, `XPASS ${name} ${metric} — remove it from KNOWN_INTERACTION_FAILURES`).toBeGreaterThan(budget)
+    return
+  }
+  expect.soft(value, `${name} ${metric}`).toBeLessThanOrEqual(budget)
+}
+
+const INTERACTION_ROUNDS = 3
+
+function medianOf(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 2)]
+}
+
+/**
+ * Runs the step list INTERACTION_ROUNDS times and reports the per-step median,
+ * so one GC pause or compositor hiccup on a shared CI runner cannot fail the
+ * gate while a consistently slow interaction still does.
+ */
+async function measureSteps(
+  window: Page,
+  steps: readonly InteractionStep[]
+): Promise<Record<string, InteractionMetrics & { rounds: InteractionMetrics[] }>> {
+  const rounds: Record<string, InteractionMetrics[]> = {}
+  for (let round = 0; round < INTERACTION_ROUNDS; round += 1) {
+    for (const step of steps) {
+      await startInteractionWindow(window)
+      await step.run(window)
+      ;(rounds[step.name] ??= []).push(await readInteractionWindow(window))
+    }
+    await closeDetailsPanel(window)
+  }
+  return Object.fromEntries(
+    Object.entries(rounds).map(([name, samples]) => [
+      name,
+      {
+        cls: medianOf(samples.map((s) => s.cls)),
+        allShifts: medianOf(samples.map((s) => s.allShifts)),
+        inpMs: medianOf(samples.map((s) => s.inpMs)),
+        interactionCount: medianOf(samples.map((s) => s.interactionCount)),
+        rounds: samples
+      }
+    ])
+  )
+}
+
+/**
+ * A sort must fetch the visible page exactly once. Idle prefetch of the
+ * adjacent page (stale-while-revalidate page cache, audit PR 2) is allowed.
+ */
+function expectOneQueryForVisiblePage(spy: { offsets: Array<number | null>; callArgs: string[] }): void {
+  const detail = spy.callArgs.join('\n')
+  expect(spy.offsets.filter((offset) => offset === 0), detail).toHaveLength(1)
+  expect(spy.offsets.filter((offset) => offset !== 0).length, detail).toBeLessThanOrEqual(1)
+}
+
+test.describe.serial('interaction quality gates', () => {
+  test.setTimeout(180_000)
+
+  test('table interactions keep CLS <= 0.02 and INP < 200 ms (case + cohort)', async () => {
+    const launched = await prepareLoadedApp()
+    try {
+      await measureCaseSelectVisibleRows(launched.window, PERF_CASE_NAMES[0], 0)
+      await settleTable(launched.window)
+      const measured = await measureSteps(launched.window, CASE_TABLE_STEPS)
+
+      await closeBlockingDrawers(launched.window)
+      await launched.window.locator('.mode-toggle .v-btn').nth(1).click()
+      await settleTable(launched.window)
+      Object.assign(measured, await measureSteps(launched.window, COHORT_TABLE_STEPS))
+
+      writeJsonArtifact('interaction-quality/metrics.json', measured)
+      test.info().annotations.push({ type: 'metrics', description: JSON.stringify(measured) })
+      for (const [name, metrics] of Object.entries(measured)) {
+        expectWithinBudget(name, 'cls', metrics.cls)
+        expectWithinBudget(name, 'allShifts', metrics.allShifts)
+        expectWithinBudget(name, 'inpMs', metrics.inpMs)
+      }
+    } finally {
+      await launched.cleanup()
+    }
+  })
+
+  test('a sort fetches the visible page exactly once (case + cohort)', async () => {
+    const launched = await prepareLoadedApp()
+    try {
+      await measureCaseSelectVisibleRows(launched.window, PERF_CASE_NAMES[0], 0)
+      await settleTable(launched.window)
+      await installQuerySpy(launched.app, 'variants:query')
+      await sortableHeader(launched.window, 'Gene').click({ position: { x: 12, y: 12 } })
+      await settleTable(launched.window)
+      expectOneQueryForVisiblePage(await readQuerySpy(launched.app, 'variants:query'))
+
+      await closeBlockingDrawers(launched.window)
+      await launched.window.locator('.mode-toggle .v-btn').nth(1).click()
+      await settleTable(launched.window)
+      await installQuerySpy(launched.app, 'cohort:variants')
+      await sortableHeader(launched.window, 'Gene').click({ position: { x: 12, y: 12 } })
+      await settleTable(launched.window)
+      expectOneQueryForVisiblePage(await readQuerySpy(launched.app, 'cohort:variants'))
+    } finally {
+      await launched.cleanup()
+    }
+  })
+
+  test('a delayed first response never overwrites the latest sort', async () => {
+    const launched = await prepareLoadedApp()
+    try {
+      await measureCaseSelectVisibleRows(launched.window, PERF_CASE_NAMES[0], 0)
+      await settleTable(launched.window)
+      await installQuerySpy(launched.app, 'variants:query', { delayedCalls: 1, delayFirstCallsMs: 1500 })
+
+      const position = sortableHeader(launched.window, 'Position')
+      await position.click({ position: { x: 12, y: 12 } }) // asc — held back 1.5 s
+      await launched.window.waitForTimeout(150)
+      await position.click({ position: { x: 12, y: 12 } }) // desc — answers first
+      await launched.window.waitForTimeout(2500) // the stale asc response lands now
+      await settleTable(launched.window)
+
+      const spy = await readQuerySpy(launched.app, 'variants:query')
+      // Visible-page requests only; an idle prefetch of page 2 may follow.
+      const visiblePage = spy.offsets.flatMap((offset, index) =>
+        offset === 0 ? [spy.firstPositions[index]] : []
+      )
+      expect(visiblePage, spy.callArgs.join('\n')).toHaveLength(2)
+      const [staleFirst, latestFirst] = visiblePage
+      expect(staleFirst, 'asc and desc pages must differ for the check to mean anything').not.toBe(latestFirst)
+      expect(await firstRenderedPosition(launched.window)).toBe(latestFirst)
     } finally {
       await launched.cleanup()
     }

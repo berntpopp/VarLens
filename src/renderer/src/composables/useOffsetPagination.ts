@@ -12,6 +12,8 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { APP_CONFIG } from '../../../shared/config'
 import { logService } from '../services/LogService'
 import { createPageCache, runWhenIdle } from './pageCache'
+import type { ViewRoute } from './useUrlState'
+import { useSortUrlParam } from './useViewUrlBindings'
 
 export interface SortItem {
   key: string
@@ -57,6 +59,8 @@ export interface UseOffsetPaginationOptions<T> {
    * filter change. The cache is also cleared automatically when this value changes.
    */
   filterKey?: Ref<string>
+  /** Mirror sort keys into the URL query (`?sort=`) for this view. */
+  urlSortRoute?: ViewRoute
 }
 
 export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
@@ -66,6 +70,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   const page = ref(1)
   const itemsPerPage = ref(settingsStore.itemsPerPage)
   const sortBy = ref<SortItem[]>([])
+  if (options.urlSortRoute !== undefined) useSortUrlParam(options.urlSortRoute, sortBy)
   const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
 
   // Result state

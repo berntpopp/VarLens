@@ -3,6 +3,7 @@ import type { Ref } from 'vue'
 import type { Router } from 'vue-router'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
+import { queryForRoute } from './useUrlState'
 
 interface UseShellNavigationOptions {
   activeTab: Ref<'case' | 'cohort'>
@@ -11,6 +12,14 @@ interface UseShellNavigationOptions {
   selectedPanelVariant: Ref<Variant | CohortVariant | null>
   transitioning: Ref<boolean>
   router: Router
+}
+
+/** Resolves after the next frame has been rendered (two rAF ticks). */
+function afterNextFrame(): Promise<void> {
+  if (typeof requestAnimationFrame !== 'function') return Promise.resolve()
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  )
 }
 
 export function useShellNavigation({
@@ -60,16 +69,22 @@ export function useShellNavigation({
           if (to.path === '/cohort') sidebarOpen.value = false
         })
         try {
-          await router.push('/cohort')
+          // Carry the view's own URL state (cohort filters/sort) across the switch
+          await router.push({ path: '/cohort', query: queryForRoute('cohort') })
         } finally {
           removeCollapseHook()
         }
       } else {
-        await router.push('/case')
+        await router.push({ path: '/case', query: queryForRoute('case') })
       }
     } finally {
-      // Allow the activated route view to settle before hiding the overlay.
+      // Allow the activated route view to settle before hiding the overlay,
+      // and keep layout transitions off until the collapsed layout has been
+      // styled once: re-enabling them in the same frame let the browser
+      // animate v-main from the old sidebar width, sliding the (now
+      // immediately rendered) cohort table sideways (desktop CLS ~1.4).
       await nextTick()
+      await afterNextFrame()
       transitioning.value = false
     }
   })

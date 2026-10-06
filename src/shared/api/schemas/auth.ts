@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { USER_ROLES } from '../../auth/auth-constants'
+
 export const UsernameSchema = z.string().min(1).max(100)
 
 export const PasswordSchema = z.string().min(8).max(256)
@@ -28,6 +30,8 @@ export const CreateUserArgsSchema = z.tuple([
   CreateUserSchema.shape.tempPassword
 ])
 export const UsernameArgsSchema = z.tuple([UsernameSchema])
+export const UserRoleSchema = z.enum(USER_ROLES)
+export const SetRoleArgsSchema = z.tuple([UsernameSchema, UserRoleSchema])
 export const ResetPasswordArgsSchema = z.tuple([UsernameSchema, PasswordSchema])
 export const ChangePasswordArgsSchema = z.tuple([
   ChangePasswordSchema.shape.oldPassword,
@@ -83,6 +87,8 @@ export const AuthInvokeBodySchemas = {
   createUser: z.object({ args: CreateUserArgsSchema }),
   listUsers: z.object({ args: z.tuple([]).optional() }),
   deactivateUser: z.object({ args: UsernameArgsSchema }),
+  reactivateUser: z.object({ args: UsernameArgsSchema }),
+  setRole: z.object({ args: SetRoleArgsSchema }),
   resetPassword: z.object({ args: ResetPasswordArgsSchema }),
   changePassword: z.object({ args: ChangePasswordArgsSchema })
 } as const

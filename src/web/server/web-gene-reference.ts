@@ -2,6 +2,9 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
+import type { Database as BetterSqliteDatabase } from 'better-sqlite3-multiple-ciphers'
+
+import { GeneReferenceDb } from '../../main/database/GeneReferenceDb'
 import type { AssemblyInfo, GeneRefInfo } from '../../shared/types/gene-reference'
 
 interface AssemblyRow {
@@ -25,6 +28,13 @@ export interface WebGeneReferenceDb {
 }
 
 interface WebGeneReferenceDbInstance extends WebGeneReferenceDb {
+  /**
+   * The desktop GeneReferenceDb service (validate / autocomplete /
+   * coordinates) over the same read-only node:sqlite handle. node:sqlite's
+   * `prepare().get/.all` is call-compatible with better-sqlite3 for the
+   * positional-parameter statements that service uses (FTS5 included).
+   */
+  service: GeneReferenceDb
   close: () => void
 }
 
@@ -57,8 +67,10 @@ function firstCount(db: DatabaseSync, tableName: string): number {
 
 function createWebGeneReferenceDb(dbPath: string): WebGeneReferenceDbInstance {
   const db = new DatabaseSync(dbPath, { readOnly: true })
+  const service = new GeneReferenceDb(db as unknown as BetterSqliteDatabase)
 
   return {
+    service,
     getInfo() {
       const assemblies = queryRows<{ id: string }>(
         db,
@@ -95,6 +107,12 @@ function createWebGeneReferenceDb(dbPath: string): WebGeneReferenceDbInstance {
 export function getWebGeneReferenceDb(): WebGeneReferenceDb {
   instance ??= createWebGeneReferenceDb(resolveWebGeneReferencePath())
   return instance
+}
+
+/** Full gene-reference service (panels validation/autocomplete, coordinates). */
+export function getWebGeneReferenceService(): GeneReferenceDb {
+  instance ??= createWebGeneReferenceDb(resolveWebGeneReferencePath())
+  return instance.service
 }
 
 export function closeWebGeneReferenceDb(): void {

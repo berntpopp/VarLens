@@ -18,7 +18,6 @@
 import type { Pool } from 'pg'
 
 import {
-  ARGON2_POLICY,
   defaultPasswordProvider,
   type PasswordProvider
 } from '../../main/auth/providers/argon2-provider'
@@ -30,6 +29,8 @@ import {
   WEB_MIN_PASSWORD_LENGTH,
   type UserRole
 } from '../../shared/auth/auth-constants'
+import { assertUserExists, reactivateUser, setUserRole } from './postgres-user-admin'
+import { assertArgon2idHashMatchesProviderPolicy, isLikelyArgon2idHash } from './argon2id-phc'
 
 /**
  * Minimum length for any new password set on the web track. Picked at
@@ -63,53 +64,11 @@ function assertPasswordMinLength(password: string, label = 'Password'): void {
   }
 }
 
-/**
- * Shape-check an Argon2id PHC string without invoking the verifier. This
- * rejects plaintext, other hash families, malformed salt/hash segments, and
- * parameter values that do not match the provider policy so bootstrap fails
- * loudly before any database write.
- */
-const ARGON2ID_PHC_PATTERN =
-  /^\$argon2id\$v=(\d+)\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+={0,2})\$([A-Za-z0-9+/]+={0,2})$/
-
-function isValidPhcBase64(value: string): boolean {
-  return value.length > 0 && value.length % 4 !== 1
-}
-
-function isLikelyArgon2idHash(value: string): boolean {
-  const match = value.match(ARGON2ID_PHC_PATTERN)
-  return match !== null && isValidPhcBase64(match[5]) && isValidPhcBase64(match[6])
-}
-
-function assertArgon2idHashMatchesProviderPolicy(value: string): void {
-  const match = value.match(ARGON2ID_PHC_PATTERN)
-  if (match === null || !isValidPhcBase64(match[5]) || !isValidPhcBase64(match[6])) {
-    throw new Error(
-      'createFirstUserFromHash: passwordHash does not look like an Argon2id hash. ' +
-        'Generate one with `npm run varlens:hash-password`.'
-    )
-  }
-
-  const [, version, memoryCost, timeCost, parallelism] = match
-  const mismatches: string[] = []
-  if (version !== '19') mismatches.push(`v=${version}`)
-  if (Number(memoryCost) !== ARGON2_POLICY.memoryCost) mismatches.push(`m=${memoryCost}`)
-  if (Number(timeCost) !== ARGON2_POLICY.timeCost) mismatches.push(`t=${timeCost}`)
-  if (Number(parallelism) !== ARGON2_POLICY.parallelism) mismatches.push(`p=${parallelism}`)
-
-  if (mismatches.length > 0) {
-    throw new Error(
-      'createFirstUserFromHash: passwordHash Argon2id parameters do not match the ' +
-        `VarLens provider policy (m=${ARGON2_POLICY.memoryCost},t=${ARGON2_POLICY.timeCost},` +
-        `p=${ARGON2_POLICY.parallelism}). Mismatched parameter(s): ${mismatches.join(', ')}.`
-    )
-  }
-}
-
-export { isLikelyArgon2idHash, assertArgon2idHashMatchesProviderPolicy }
+export { isLikelyArgon2idHash, assertArgon2idHashMatchesProviderPolicy } from './argon2id-phc'
 // Cross-backend User + AuthResult shape: both implementations import the same
 // types so shape parity is enforced at compile time.
 import type { AuthResult, User } from '../../shared/auth/types'
+import { UserLookupCache } from './user-lookup-cache'
 
 export type { AuthResult, User }
 
@@ -117,6 +76,12 @@ export interface PostgresWebAuthServiceOptions {
   pool: Pool
   schema: string
   passwordProvider?: PasswordProvider
+  /**
+   * TTL for the per-request live-user check (`getSessionUser`). 0 (the
+   * default for direct construction) disables caching; the web server passes
+   * `VARLENS_AUTH_USER_CACHE_TTL_MS` (default 5 s). See user-lookup-cache.ts.
+   */
+  userCacheTtlMs?: number
 }
 
 /**
@@ -209,11 +174,27 @@ export class PostgresWebAuthService {
   private readonly pool: Pool
   private readonly schemaQuoted: string
   private readonly passwordProvider: PasswordProvider
+  private readonly userCache: UserLookupCache<User | undefined>
 
   constructor(options: PostgresWebAuthServiceOptions) {
     this.pool = options.pool
     this.schemaQuoted = quoteSchema(options.schema)
     this.passwordProvider = options.passwordProvider ?? defaultPasswordProvider
+    this.userCache = new UserLookupCache({ ttlMs: options.userCacheTtlMs ?? 0 })
+  }
+
+  /**
+   * Cached live-user lookup for the session preHandler. Every mutation in
+   * this service invalidates the affected username, so in-process changes
+   * are visible immediately; out-of-process changes within the TTL.
+   */
+  async getSessionUser(username: string): Promise<User | undefined> {
+    return this.userCache.get(username, () => this.getUser(username))
+  }
+
+  /** Drop the cached live-user row (logout, external role/status change). */
+  invalidateUser(username: string): void {
+    this.userCache.invalidate(username)
   }
 
   // ---------- bootstrap ----------
@@ -289,13 +270,13 @@ export class PostgresWebAuthService {
     mustChangePassword: boolean = true
   ): Promise<{ id: number; username: string; role: UserRole }> {
     const sch = this.schemaQuoted
-    // Race-safety: the SELECT-outside-transaction pattern in earlier
-    // revisions of this method allowed two concurrent first-user calls
-    // to both observe "no admin" and both proceed. The partial unique
-    // index `users_only_one_active_admin` guarantees at most one active admin
-    // row per schema; the second concurrent INSERT trips unique_violation
-    // (SQLSTATE 23505) and we translate it into the same friendly error a
-    // serial caller would see.
+    // Race-safety: a per-schema transaction-scoped advisory lock serialises
+    // concurrent first-user calls, and the "active admin exists?" check runs
+    // under that lock, so exactly one bootstrap wins. (Migration 0017 dropped
+    // the old `users_only_one_active_admin` partial unique index that used to
+    // provide this guarantee, because it also made a second admin impossible.)
+    // A unique_violation (SQLSTATE 23505, e.g. duplicate username or a
+    // not-yet-migrated schema) still maps to the same friendly error.
     //
     // The bootstrapped admin defaults to must_change_password=TRUE so the
     // first login forces a rotation before any session-bearing request can
@@ -307,6 +288,14 @@ export class PostgresWebAuthService {
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${sch}:first-admin-bootstrap`
+      ])
+      const existingAdmin = await client.query(
+        `SELECT 1 FROM ${sch}."users" WHERE role = $1 AND is_active = TRUE LIMIT 1`,
+        [ROLE_ADMIN]
+      )
+      if ((existingAdmin.rowCount ?? 0) > 0) throw new AdminAlreadyExistsError()
       await client.query(
         `INSERT INTO ${sch}."database_settings" (key, value) VALUES ('accounts_enabled', 'true')
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`
@@ -346,6 +335,7 @@ export class PostgresWebAuthService {
 
   async authenticate(username: string, password: string): Promise<AuthResult> {
     const sch = this.schemaQuoted
+    this.invalidateUser(username)
     const sel = await this.pool.query<Record<string, unknown>>(
       `SELECT * FROM ${sch}."users" WHERE username = $1 AND is_active = TRUE`,
       [username]
@@ -478,14 +468,28 @@ export class PostgresWebAuthService {
       `UPDATE ${sch}."users" SET is_active = FALSE, updated_at = now() WHERE username = $1`,
       [username]
     )
+    this.invalidateUser(username)
     if ((result.rowCount ?? 0) === 0) {
       throw new Error(`User not found: ${username}`)
     }
   }
 
+  async setRole(username: string, role: UserRole): Promise<void> {
+    await setUserRole(this.pool, this.schemaQuoted, username, role)
+    // The session preHandler reads role/status through userCache; drop the
+    // cached row so a demotion or promotion applies on the next request.
+    this.invalidateUser(username)
+  }
+
+  async reactivateUser(username: string): Promise<void> {
+    await reactivateUser(this.pool, this.schemaQuoted, username)
+    this.invalidateUser(username)
+  }
+
   async resetPassword(username: string, newPassword: string): Promise<void> {
     const sch = this.schemaQuoted
     assertPasswordMinLength(newPassword, 'New password')
+    await assertUserExists(this.pool, sch, username)
     const passwordHash = await this.passwordProvider.hashPassword(newPassword)
     await this.pool.query(
       `UPDATE ${sch}."users"
@@ -495,6 +499,7 @@ export class PostgresWebAuthService {
        WHERE username = $2`,
       [passwordHash, username]
     )
+    this.invalidateUser(username)
   }
 
   /**
@@ -545,6 +550,7 @@ export class PostgresWebAuthService {
        WHERE username = $2`,
       [passwordHash, username]
     )
+    this.invalidateUser(username)
     return true
   }
 

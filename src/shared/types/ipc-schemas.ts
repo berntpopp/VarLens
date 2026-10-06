@@ -27,7 +27,8 @@ export {
   PasswordSchema,
   LoginParamsSchema,
   CreateUserSchema,
-  ChangePasswordSchema
+  ChangePasswordSchema,
+  UserRoleSchema
 } from '../api/schemas/auth'
 export {
   TagIdSchema,

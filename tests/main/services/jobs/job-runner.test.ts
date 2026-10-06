@@ -52,4 +52,28 @@ describe('JobRunner — Sprint A D2', () => {
     await handle.result
     expect(events).toEqual(['queued', 'running', 'completed'])
   })
+
+  it('reportProgress publishes a progress snapshot to lifecycle listeners while running', async () => {
+    const runner = new JobRunner()
+    const seen: Array<{ status: string; progress: unknown }> = []
+    runner.onLifecycle((job) => seen.push({ status: job.status, progress: job.progress }))
+    let report: ((c: number, t: number, m?: string) => void) | null = null
+    let finish: () => void = () => undefined
+    const handle = runner.enqueue('case_delete', {}, (ctx) => {
+      report = ctx.reportProgress
+      return new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    })
+
+    report!(1, 4, 'deleting')
+    expect(runner.get(handle.id)?.progress).toEqual({ current: 1, total: 4, message: 'deleting' })
+    finish()
+    await handle.result
+    // Late reports after completion are ignored.
+    report!(9, 9)
+
+    expect(seen.map((s) => s.status)).toEqual(['queued', 'running', 'running', 'completed'])
+    expect(runner.get(handle.id)?.progress).toEqual({ current: 1, total: 4, message: 'deleting' })
+  })
 })

@@ -23,13 +23,13 @@
           @update:search="searchQuery = $event"
           @keydown.enter="handleEnterOnSearch"
         >
-          <template #item="{ item, props: itemProps }">
+          <template #item="{ internalItem, props: itemProps }">
             <v-list-item v-bind="itemProps">
               <template #subtitle>
                 <span class="text-caption">
-                  {{ (item as unknown as AutocompleteItem).raw?.category ?? '' }}
-                  <template v-if="(item as unknown as AutocompleteItem).raw?.unit">
-                    &middot; {{ (item as unknown as AutocompleteItem).raw.unit }}
+                  {{ (internalItem as unknown as AutocompleteItem).raw?.category ?? '' }}
+                  <template v-if="(internalItem as unknown as AutocompleteItem).raw?.unit">
+                    &middot; {{ (internalItem as unknown as AutocompleteItem).raw.unit }}
                   </template>
                 </span>
               </template>

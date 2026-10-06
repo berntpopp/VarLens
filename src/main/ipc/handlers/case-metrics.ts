@@ -51,23 +51,15 @@ export function registerCaseMetricHandlers({
         }
 
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          return await session.getWriteExecutor().execute({
-            type: 'case-metrics:createDefinition',
-            params: [
-              validated.data.name,
-              validated.data.valueType,
-              validated.data.unit,
-              validated.data.category
-            ]
-          })
-        }
-        return getDb().metadata.createMetricDefinition(
-          validated.data.name,
-          validated.data.valueType,
-          validated.data.unit,
-          validated.data.category
-        )
+        return await session.getWriteExecutor().execute({
+          type: 'case-metrics:createDefinition',
+          params: [
+            validated.data.name,
+            validated.data.valueType,
+            validated.data.unit,
+            validated.data.category
+          ]
+        })
       })
     }
   )
@@ -109,17 +101,10 @@ export function registerCaseMetricHandlers({
         }
 
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          return await session.getWriteExecutor().execute({
-            type: 'case-metrics:upsert',
-            params: [validated.data.caseId, validated.data.metricId, validated.data.value]
-          })
-        }
-        return getDb().metadata.upsertCaseMetric(
-          validated.data.caseId,
-          validated.data.metricId,
-          validated.data.value
-        )
+        return await session.getWriteExecutor().execute({
+          type: 'case-metrics:upsert',
+          params: [validated.data.caseId, validated.data.metricId, validated.data.value]
+        })
       })
     }
   )
@@ -137,14 +122,10 @@ export function registerCaseMetricHandlers({
       }
 
       const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        await session.getWriteExecutor().execute({
-          type: 'case-metrics:delete',
-          params: [validated.data.caseId, validated.data.metricId]
-        })
-        return undefined
-      }
-      getDb().metadata.deleteCaseMetric(validated.data.caseId, validated.data.metricId)
+      await session.getWriteExecutor().execute({
+        type: 'case-metrics:delete',
+        params: [validated.data.caseId, validated.data.metricId]
+      })
       return undefined
     })
   })

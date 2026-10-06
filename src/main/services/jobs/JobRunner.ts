@@ -1,4 +1,4 @@
-import { toSerializableError } from '../../ipc/errorHandler'
+import { toSerializableError } from '../../ipc/serializable-error'
 import type { SerializableError } from '../../../shared/types/errors'
 import type { Job, JobKind } from './types'
 
@@ -10,6 +10,11 @@ import type { Job, JobKind } from './types'
 export interface JobContext {
   signal: AbortSignal
   registerCancel(fn: () => void | Promise<void>): void
+  /**
+   * Publish a progress snapshot on the tracked job and notify lifecycle
+   * listeners (which forward it to the renderer as `jobs:changed`).
+   */
+  reportProgress(current: number, total: number, message?: string): void
 }
 
 /**
@@ -33,7 +38,8 @@ const SINGLE_FLIGHT_MESSAGES: Record<JobKind, string> = {
   import_batch: 'A batch import is already in progress',
   cohort_rebuild: 'A cohort rebuild is already running',
   association: 'An association analysis is already running',
-  export: 'An export is already in progress'
+  export: 'An export is already in progress',
+  case_delete: 'A delete operation is already in progress. Please wait for it to finish.'
 }
 
 type Listener = (job: Job) => void
@@ -108,12 +114,6 @@ export class JobRunner {
     const cancelFns: Array<() => void | Promise<void>> = []
     this.controllers.set(id, controller)
     this.cancelHandlers.set(id, cancelFns)
-    const ctx: JobContext = {
-      signal: controller.signal,
-      registerCancel: (fn) => {
-        cancelFns.push(fn)
-      }
-    }
     const job: Job<P> = {
       id,
       kind,
@@ -124,6 +124,17 @@ export class JobRunner {
       createdAt: Date.now(),
       startedAt: null,
       finishedAt: null
+    }
+    const ctx: JobContext = {
+      signal: controller.signal,
+      registerCancel: (fn) => {
+        cancelFns.push(fn)
+      },
+      reportProgress: (current, total, message) => {
+        if (job.status !== 'running') return
+        job.progress = message === undefined ? { current, total } : { current, total, message }
+        this.fireLifecycle(job)
+      }
     }
     this.jobs.set(id, job)
     this.fireLifecycle(job)

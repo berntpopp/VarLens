@@ -68,6 +68,19 @@ describe('postgres migration registration', () => {
     )
   })
 
+  it('migration versions are unique and contiguous, one file per version', () => {
+    // Parallel branches that each add "the next" migration collide on the
+    // number (two 0017_*.sql files once landed side by side). Duplicates or
+    // gaps must fail here, not when a deployed schema refuses to migrate.
+    const versions = POSTGRES_MIGRATIONS.map((m) => Number(m.version))
+    expect(new Set(versions).size, 'duplicate migration version').toBe(versions.length)
+    expect(versions, 'migration versions must run 0001..N without gaps').toEqual(
+      versions.map((_, index) => index + 1)
+    )
+    const prefixes = listSqlFiles().map((file) => file.slice(0, 4))
+    expect(new Set(prefixes).size, 'two .sql files share a version prefix').toBe(prefixes.length)
+  })
+
   it('registered migrations are sorted by zero-padded version', () => {
     const versions = POSTGRES_MIGRATIONS.map((m) => m.version)
     expect(versions).toEqual([...versions].sort())

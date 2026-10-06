@@ -35,6 +35,7 @@ import type {
   ScoredCandidate
 } from '../../../shared/types/shortlist'
 import type { SortItem } from '../../../shared/types/database'
+import { compareChromosomes } from '../../../shared/sql/chromosome-order'
 import { SCORING_CONFIG } from './scoring-config'
 import { scoreSnv } from './score-snv'
 import { scoreSv } from './score-sv'
@@ -134,6 +135,8 @@ function compareByKey(a: ScoredCandidate, b: ScoredCandidate, key: string): numb
   if (av == null) return 1
   if (bv == null) return -1
   if (typeof av === 'number' && typeof bv === 'number') return av - bv
+  // Natural chromosome order (1..22, X, Y, MT, then others) — same as the SQL sinks.
+  if (key === 'chr') return compareChromosomes(String(av), String(bv))
   return String(av).localeCompare(String(bv))
 }
 

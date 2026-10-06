@@ -49,6 +49,31 @@ export function schemaToken(schema: string): string {
   return `${slug}_${hash6}`
 }
 
+/**
+ * PostgreSQL truncates prepared-statement names to NAMEDATALEN - 1 = 63
+ * bytes. Two effective names that differ only past byte 63 (long logical
+ * name + long schema token) would collide on the server — Parse fails with
+ * 42P05 "prepared statement already exists" on a shared connection.
+ */
+export const PG_STATEMENT_NAME_MAX_BYTES = 63
+const NAME_HASH_HEX = 16
+
+/**
+ * Bound an effective statement name to 63 bytes without losing uniqueness.
+ * Names that already fit are returned unchanged (readable in pg_stat and
+ * logs). Longer names keep a readable ASCII prefix and end in `~` plus a
+ * 64-bit sha1 of `identity` — the untruncated logical key plus the RAW
+ * schema name, so two schemas whose 24-char slugs and hash6 tokens happen
+ * to coincide still get different names.
+ */
+export function boundStatementName(effectiveName: string, identity: string): string {
+  if (Buffer.byteLength(effectiveName) <= PG_STATEMENT_NAME_MAX_BYTES) return effectiveName
+  const hash = createHash('sha1').update(identity).digest('hex').slice(0, NAME_HASH_HEX)
+  const prefixBytes = PG_STATEMENT_NAME_MAX_BYTES - NAME_HASH_HEX - 1
+  const prefix = effectiveName.replace(/[^\x20-\x7e]/g, '_').slice(0, prefixBytes)
+  return `${prefix}~${hash}`
+}
+
 export interface RunNamedSpec {
   name: string
   text: string
@@ -72,7 +97,10 @@ export async function runNamed<R extends QueryResultRow>(
       `runNamed: logical name "${spec.name}" must not contain "@" (reserved as the schema-token separator).`
     )
   }
-  const effectiveName = `${spec.name}@${schemaToken(spec.schema)}`
+  const effectiveName = boundStatementName(
+    `${spec.name}@${schemaToken(spec.schema)}`,
+    `${spec.name}\u0000${spec.schema}`
+  )
   return executeWithFallback(pool, effectiveName, spec.text, spec.values)
 }
 
@@ -84,7 +112,10 @@ export async function runNamedDynamic<R extends QueryResultRow>(
     throw new Error(`runNamedDynamic: baseName "${spec.baseName}" must not contain "@".`)
   }
   const textHash = createHash('sha1').update(spec.text).digest('hex').slice(0, 8)
-  const effectiveName = `${spec.baseName}:t${textHash}@${schemaToken(spec.schema)}`
+  const effectiveName = boundStatementName(
+    `${spec.baseName}:t${textHash}@${schemaToken(spec.schema)}`,
+    `${spec.baseName}:t${textHash}\u0000${spec.schema}`
+  )
 
   if (seenDynamicNames.size >= dynamicNameCap && !seenDynamicNames.has(effectiveName)) {
     if (!dynamicCapLogged) {

@@ -18,21 +18,29 @@
         <v-icon size="x-small" :icon="getSortIcon(headerColumn)" />
         <span v-if="sortIndex > 0" class="sort-priority">{{ sortIndex }}</span>
       </span>
-      <v-icon v-else size="x-small" class="ml-1 sort-icon-inactive" :icon="mdiSort" />
+      <CellIcon v-else size="x-small" class="ml-1 sort-icon-inactive" :icon="mdiSort" />
     </div>
-    <v-menu v-model="menuOpen" :close-on-content-click="false" location="bottom">
-      <template #activator="{ props: menuProps }">
-        <IconButton
-          v-bind="menuProps"
-          :label="`Filter ${headerColumn.title}`"
-          tooltip="Filter this column"
-          :icon="hasFilter ? mdiFilter : mdiFilterOutline"
-          :color="hasFilter ? 'primary' : undefined"
-          size="x-small"
-          @click.stop
-        />
-      </template>
-
+    <IconButton
+      ref="filterButtonRef"
+      :label="`Filter ${headerColumn.title}`"
+      tooltip="Filter this column"
+      :icon="hasFilter ? mdiFilter : mdiFilterOutline"
+      :color="hasFilter ? 'primary' : undefined"
+      size="x-small"
+      aria-haspopup="menu"
+      :aria-expanded="menuOpen"
+      @click.stop="toggleMenu"
+    />
+    <!-- Mounted on first open: a header row would otherwise mount one
+         VMenu/VOverlay per column on every table render. -->
+    <v-menu
+      v-if="menuMounted"
+      v-model="menuOpen"
+      :activator="filterButtonEl"
+      :open-on-click="false"
+      :close-on-content-click="false"
+      location="bottom"
+    >
       <!-- Numeric filter -->
       <NumericColumnFilter
         v-if="filterMode === 'numeric'"
@@ -89,6 +97,7 @@ import CategoricalColumnFilter from './CategoricalColumnFilter.vue'
 import TextSuggestColumnFilter from './TextSuggestColumnFilter.vue'
 import { mdiFilter, mdiFilterOutline, mdiSort } from '@mdi/js'
 import IconButton from '../common/IconButton.vue'
+import { CellIcon } from '../table-cells/cell-components'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type VuetifyInternalColumn = any
@@ -140,6 +149,16 @@ const emit = defineEmits<{
 }>()
 
 const menuOpen = ref(false)
+const menuMounted = ref(false)
+const filterButtonRef = ref<InstanceType<typeof IconButton> | null>(null)
+const filterButtonEl = computed<HTMLElement | undefined>(
+  () => (filterButtonRef.value?.$el as HTMLElement | undefined) ?? undefined
+)
+
+function toggleMenu(): void {
+  menuMounted.value = true
+  menuOpen.value = !menuOpen.value
+}
 
 // Derive initial values from currentFilter for each filter type
 const numericInitialOperator = computed<ColumnFilterOperator>(() => {

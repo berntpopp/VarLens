@@ -189,4 +189,40 @@ describe('PostgresAuditLogRepository', () => {
       JSON.stringify({ redacted: true, kind: 'metadata' })
     ])
   })
+
+  it('appendMany writes one multi-row INSERT with sanitized values and occurred_at', async () => {
+    const pool = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const repo = new PostgresAuditLogRepository(pool as never, 'public')
+
+    await repo.appendMany([
+      {
+        action_type: 'api_read',
+        entity_type: 'api_call',
+        entity_key: 'tags:list',
+        new_value: { success: true, method: 'tags:list', payload: { patient_id: 'p' } },
+        user_name: 'alice',
+        occurred_at: 1700000000000
+      },
+      { action_type: 'api_read', entity_type: 'api_call', entity_key: 'cases:list' }
+    ])
+
+    expect(pool.query).toHaveBeenCalledTimes(1)
+    const sql = normalizeSql(pool.query.mock.calls[0][0] as string)
+    expect(sql).toContain('INSERT INTO varlens_audit."audit_log"')
+    expect(sql).toContain('COALESCE($9::bigint')
+    expect(sql).toContain('COALESCE($18::bigint')
+    const params = pool.query.mock.calls[0][1] as unknown[]
+    expect(params).toHaveLength(18)
+    expect(params.slice(0, 4)).toEqual(['public', 'api_read', 'api_call', 'tags:list'])
+    expect(String(params[5])).not.toContain('patient_id')
+    expect(params[8]).toBe(1700000000000)
+    expect(params[17]).toBeNull()
+  })
+
+  it('appendMany is a no-op for an empty batch', async () => {
+    const pool = { query: vi.fn() }
+    const repo = new PostgresAuditLogRepository(pool as never, 'public')
+    await repo.appendMany([])
+    expect(pool.query).not.toHaveBeenCalled()
+  })
 })

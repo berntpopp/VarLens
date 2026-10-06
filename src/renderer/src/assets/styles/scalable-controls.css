@@ -1,0 +1,61 @@
+/* ========================================
+   Text-resize-safe control heights (WCAG 1.4.4)
+   ========================================
+   Vuetify sizes chips, buttons and tabs with px height tokens while labels
+   use rem font sizes. With a larger browser default font (text-only zoom to
+   200 %) the labels double but the controls do not, so preset chips, toolbar
+   buttons and ACMG chips clip their text. Re-declare the same height scale in
+   rem: identical at the default 16 px root, proportional when text grows.
+   Stacked buttons keep Vuetify's own (taller) scale.
+   ---------------------------------------- */
+.v-chip.v-chip--size-x-small {
+  --v-chip-height: 1.25rem;
+}
+
+.v-chip.v-chip--size-small {
+  --v-chip-height: 1.625rem;
+}
+
+.v-chip.v-chip--size-default {
+  --v-chip-height: 2rem;
+}
+
+.v-chip.v-chip--size-large {
+  --v-chip-height: 2.375rem;
+}
+
+.v-chip.v-chip--size-x-large {
+  --v-chip-height: 2.75rem;
+}
+
+.v-btn:not(.v-btn--stacked).v-btn--size-x-small {
+  --v-btn-height: 1.25rem;
+}
+
+.v-btn:not(.v-btn--stacked).v-btn--size-small {
+  --v-btn-height: 1.75rem;
+}
+
+.v-btn:not(.v-btn--stacked).v-btn--size-default {
+  --v-btn-height: 2.25rem;
+}
+
+.v-btn:not(.v-btn--stacked).v-btn--size-large {
+  --v-btn-height: 2.75rem;
+}
+
+.v-btn:not(.v-btn--stacked).v-btn--size-x-large {
+  --v-btn-height: 3.25rem;
+}
+
+.v-tabs:not(.v-tabs--stacked).v-tabs--density-default {
+  --v-tabs-height: 3rem;
+}
+
+.v-tabs:not(.v-tabs--stacked).v-tabs--density-comfortable {
+  --v-tabs-height: 2.75rem;
+}
+
+.v-tabs:not(.v-tabs--stacked).v-tabs--density-compact {
+  --v-tabs-height: 2.25rem;
+}

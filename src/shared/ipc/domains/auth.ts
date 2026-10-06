@@ -35,6 +35,10 @@ export interface AuthDomainContract {
     >
   >
   deactivateUser: (username: string) => Promise<IpcResult<void>>
+  /** Re-enable a deactivated account (admin only). */
+  reactivateUser: (username: string) => Promise<IpcResult<void>>
+  /** Change another user's role (admin only; never demotes the last admin). */
+  setRole: (username: string, role: 'admin' | 'user') => Promise<IpcResult<void>>
   resetPassword: (username: string, newPassword: string) => Promise<IpcResult<void>>
   changePassword: (oldPassword: string, newPassword: string) => Promise<IpcResult<void>>
 }

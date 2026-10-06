@@ -22,7 +22,7 @@ export class ApiCache {
   private cleanupExpiredStmt: Database.Statement
   private getCacheStatsStmt: Database.Statement
 
-  constructor(db: Database.Database) {
+  constructor(private readonly db: Database.Database) {
     // Prepare statements for performance - avoid reparsing SQL on each call
     this.getStmt = db.prepare(`
       SELECT response_data, created_at
@@ -89,7 +89,27 @@ export class ApiCache {
     const ttlMs = ttlDays * 24 * 60 * 60 * 1000 * jitterFactor
     const expiresAt = now + ttlMs
 
-    this.setStmt.run(key, data, now, expiresAt)
+    this.runWithoutLockWait(() => this.setStmt.run(key, data, now, expiresAt))
+  }
+
+  /**
+   * Cache writes happen on the Electron main thread's connection. Waiting up
+   * to `busy_timeout` there while an import/delete worker holds the write
+   * lock would freeze the whole app, and a cache entry is only an
+   * optimisation — so the write is attempted without waiting and skipped
+   * when the database is locked.
+   */
+  private runWithoutLockWait(write: () => void): void {
+    const previous = this.db.pragma('busy_timeout', { simple: true }) as number
+    this.db.pragma('busy_timeout = 0')
+    try {
+      write()
+    } catch (error) {
+      const code = (error as { code?: unknown }).code
+      if (typeof code !== 'string' || !code.startsWith('SQLITE_BUSY')) throw error
+    } finally {
+      this.db.pragma(`busy_timeout = ${previous}`)
+    }
   }
 
   /**

@@ -2,7 +2,12 @@
   <!-- During a Case/Cohort switch the sidebar collapses in the same tick the
        new view mounts; animating v-main's padding there shifted the incoming
        view sideways (CLS ~0.3). Collapse instantly instead. -->
-  <v-app :class="{ 'shell--instant-layout': transitioning }">
+  <v-app
+    :class="{
+      'shell--instant-layout': transitioning,
+      'shell--instant-main': dockedPanelInstantLayout
+    }"
+  >
     <A11yShell />
     <AppToolbar
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
@@ -25,6 +30,7 @@
       v-model="sidebarOpen"
       aria-label="Cases sidebar"
       :width="sidebarWidth"
+      mobile-breakpoint="md"
       :scrim="tier === 'narrow'"
     >
       <AppSidebar
@@ -98,6 +104,9 @@ import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
 import A11yShell from './components/common/A11yShell.vue'
 import { useViewTitle } from './composables/useViewTitle'
+import { useThemePreference } from './composables/useThemePreference'
+import { installUrlStateSync } from './composables/useUrlState'
+import { useCaseUrlParam } from './composables/useViewUrlBindings'
 import AppFooter from './components/AppFooter.vue'
 import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'
@@ -108,6 +117,7 @@ import { useColumnPreferences } from './composables/useColumnPreferences'
 import { useFilterPreferences } from './composables/useFilterPreferences'
 import { useResponsiveLayout } from './composables/useResponsiveLayout'
 import { useMountOnFirstOpen } from './composables/useMountOnFirstOpen'
+import { useDockedPanelInstantLayout } from './composables/useDockedPanelInstantLayout'
 import { logService } from './services/LogService'
 import { AppStateKey, createAppState } from './composables/useAppState'
 import { useShellNavigation } from './composables/useShellNavigation'
@@ -146,6 +156,9 @@ const variantColumnMeta = useVariantColumnMeta()
 const appState = createAppState()
 provide(AppStateKey, appState)
 const viewTitle = useViewTitle(appState)
+useThemePreference()
+installUrlStateSync(router)
+useCaseUrlParam(appState)
 
 const {
   selectedCaseId,
@@ -175,9 +188,12 @@ const showKeyboardHelp = ref(false)
 const transitioning = ref(false)
 
 // Responsive layout
-const { tier } = useResponsiveLayout()
-// Same signal v-navigation-drawer uses to switch to a temporary overlay.
-const { mobile: sidebarIsOverlay } = useDisplay()
+const { tier, detailPanelDocked } = useResponsiveLayout()
+// The docked details panel resizes v-main/footer in one frame (no animated reflow).
+const dockedPanelInstantLayout = useDockedPanelInstantLayout(panelOpen, detailPanelDocked)
+// Same signal the sidebar's `mobile-breakpoint="md"` uses to switch to a
+// temporary overlay (below 840 px; Vuetify's default would be `lg`, 1145 px).
+const { smAndDown: sidebarIsOverlay } = useDisplay()
 
 // Heavy overlays mount on first open only: rendering an async component with
 // v-model=false still downloads its chunk (and runs its fetch watchers) on
@@ -422,6 +438,14 @@ onUnmounted(() => {
 <style scoped>
 .shell--instant-layout :deep(.v-main),
 .shell--instant-layout :deep(.v-navigation-drawer) {
+  transition: none !important;
+}
+
+/* Docked details panel: shrink the main area in a single frame. Animating its
+   padding slid every right-aligned control (pagination, toolbar) across ~12
+   frames of layout shift. The panel itself keeps its transform slide-in, and
+   the app footer spans beneath it (layout `order`), so the footer never moves. */
+.shell--instant-main :deep(.v-main) {
   transition: none !important;
 }
 

@@ -52,6 +52,44 @@ describe('prepareStatements', () => {
     expect(found!.id).toBeGreaterThan(0)
   })
 
+  it('insertDataInfo writes the import provenance row (created_at/updated_at are NOT NULL)', () => {
+    const stmts = prepareStatements(db)
+    const caseId = Number(stmts.insertCase.run('c', '/p/f.vcf', 1, 1000, 'GRCh38').lastInsertRowid)
+    const before = Date.now()
+    expect(() => stmts.insertDataInfo.run(caseId, 'f.vcf', 'vcf')).not.toThrow()
+    const row = db.prepare('SELECT * FROM case_data_info WHERE case_id = ?').get(caseId) as {
+      import_file_name: string
+      import_file_type: string
+      created_at: number
+      updated_at: number
+    }
+    expect(row.import_file_name).toBe('f.vcf')
+    expect(row.import_file_type).toBe('vcf')
+    expect(row.created_at).toBeGreaterThanOrEqual(before)
+    expect(row.updated_at).toBe(row.created_at)
+  })
+
+  it('insertDataInfo re-import updates provenance without wiping user-entered fields', () => {
+    const stmts = prepareStatements(db)
+    const caseId = Number(stmts.insertCase.run('c', '/p/a.json', 1, 1000, 'GRCh38').lastInsertRowid)
+    stmts.insertDataInfo.run(caseId, 'a.json', 'json')
+    db.prepare(
+      "UPDATE case_data_info SET platform = 'WES', created_at = 5, updated_at = 5 WHERE case_id = ?"
+    ).run(caseId)
+    stmts.insertDataInfo.run(caseId, 'b.vcf', 'vcf')
+    const rows = db.prepare('SELECT * FROM case_data_info WHERE case_id = ?').all(caseId) as Array<{
+      import_file_name: string
+      platform: string
+      created_at: number
+      updated_at: number
+    }>
+    expect(rows).toHaveLength(1)
+    expect(rows[0].import_file_name).toBe('b.vcf')
+    expect(rows[0].platform).toBe('WES')
+    expect(rows[0].created_at).toBe(5)
+    expect(rows[0].updated_at).toBeGreaterThan(5)
+  })
+
   it('getCaseByName returns undefined for missing case', () => {
     const stmts = prepareStatements(db)
     const found = stmts.getCaseByName.get('nonexistent')

@@ -88,3 +88,21 @@
     animation: none !important;
   }
 }
+
+/* ----------------------------------------
+   Secondary text on tinted backgrounds (WCAG 1.4.3)
+   Vuetify dims field labels twice (0.87 alpha x medium-emphasis opacity,
+   ~0.61 effective): 4.43:1 on the page background (#F0F4F8) where the
+   cohort toolbar selects sit. Active list items paint a primary tint, which
+   drops the medium-emphasis subtitle to 3.7:1 (light) / 3.1:1 (dark).
+   Both found by the axe UI gate (tests/ui-gates/a11y.gate.ts) and by the
+   responsive-scaling audit; this is the single fix for both (no per-view
+   overrides in App.vue / CohortView.vue).
+   ---------------------------------------- */
+.v-field-label {
+  opacity: var(--v-high-emphasis-opacity);
+}
+
+.v-list-item--active .v-list-item-subtitle {
+  opacity: 1;
+}

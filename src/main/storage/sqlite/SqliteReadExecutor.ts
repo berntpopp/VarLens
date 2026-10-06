@@ -156,10 +156,20 @@ export class SqliteReadExecutor implements StorageReadExecutor {
           task.params[2]
         )
 
-      case 'variants:query':
+      case 'variants:query': {
+        // SQLite has no keyset paging: drop the optional 7th (page) param.
+        const [filter, limit, offset, sortBy, skipCount, includeUnfilteredCount] = task.params
         if (this.dbPool !== null)
           return await this.dbPool.run({ type: task.type, params: task.params })
-        return this.databaseService.variants.getVariants(...task.params)
+        return this.databaseService.variants.getVariants(
+          filter,
+          limit,
+          offset,
+          sortBy,
+          skipCount,
+          includeUnfilteredCount
+        )
+      }
 
       case 'variants:filterOptions':
         if (this.dbPool !== null)
