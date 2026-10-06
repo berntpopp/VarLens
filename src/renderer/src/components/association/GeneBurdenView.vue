@@ -6,8 +6,13 @@
       :cohort-groups="cohortGroups"
       :running="isRunning"
       :has-results="results !== null"
+      :unavailable-reason="unavailableReason"
       @run="runAnalysis"
     />
+
+    <v-alert v-if="unavailableReason" type="info" variant="tonal" density="compact" class="mb-3">
+      {{ unavailableReason }}
+    </v-alert>
 
     <!-- Progress bar -->
     <div v-if="isRunning" class="mb-3">
@@ -147,7 +152,8 @@ const {
   runAssociation: apiRunAssociation,
   cancelAssociation: apiCancelAssociation,
   onAssociationProgress,
-  loadCasesWithMetadata
+  loadCasesWithMetadata,
+  unavailableReason
 } = useAssociation()
 
 const cases = ref<CaseInfo[]>([])

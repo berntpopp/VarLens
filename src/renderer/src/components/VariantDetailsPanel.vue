@@ -60,7 +60,7 @@
             :variant-ref="variant.ref"
             :variant-alt="variant.alt"
             :fetch-vep="vepFetchAvailable ? fetchVep : undefined"
-            :fetch-vep-unavailable-reason="referenceServices.reason('vep')"
+            :fetch-vep-unavailable-reason="capabilities.capabilityReason('vepEnrichment')"
             class="mb-4"
             @transcript-switched="emit('variant-updated')"
           />
@@ -201,7 +201,7 @@
       <ProteinViewUnavailableDialog
         v-else-if="!proteinViewerAvailable"
         v-model="proteinModalOpen"
-        :reason="referenceServices.reason('protein')"
+        :reason="capabilities.capabilityReason('proteinViewer')"
       />
     </v-card>
   </v-navigation-drawer>
@@ -261,7 +261,7 @@ import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
-import { useReferenceServicesStore } from '../stores/referenceServicesStore'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 
 interface Props {
@@ -285,11 +285,10 @@ usePanelFocus(() => props.open, headingRef)
 // Protein visualization modal state
 const proteinModalOpen = ref(false)
 // External lookups: always on in desktop; an admin-controlled, default-off
-// server setting in web (fail-closed until the status has loaded).
-const referenceServices = useReferenceServicesStore()
-void referenceServices.ensureLoaded()
-const proteinViewerAvailable = computed(() => referenceServices.isEnabled('protein'))
-const vepFetchAvailable = computed(() => referenceServices.isEnabled('vep'))
+// server setting in web; read from the capability document (fail-closed).
+const capabilities = useCapabilityStore()
+const proteinViewerAvailable = computed(() => capabilities.canUse('proteinViewer'))
+const vepFetchAvailable = computed(() => capabilities.canUse('vepEnrichment'))
 const proteinModalMounted = useMountOnFirstOpen(() => proteinModalOpen.value)
 
 function openProteinView(): void {

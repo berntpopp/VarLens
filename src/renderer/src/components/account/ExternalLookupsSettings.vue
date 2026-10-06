@@ -9,27 +9,49 @@
  */
 import { computed, onMounted, ref } from 'vue'
 
-import { useReferenceServicesStore } from '../../stores/referenceServicesStore'
+import { useApiService } from '../../composables/useApiService'
+import { useCapabilityStore } from '../../stores/capabilityStore'
 import { formatErrorMessage } from '../../../../shared/errors/format-error-message'
-import type { ReferenceServiceId } from '../../../../shared/ipc/domains/reference-services'
+import { unwrapIpcResult } from '../../../../shared/types/errors'
+import type {
+  ReferenceServiceId,
+  ReferenceServicesStatus
+} from '../../../../shared/ipc/domains/reference-services'
 
-const store = useReferenceServicesStore()
+const { api } = useApiService()
+const capabilities = useCapabilityStore()
+const status = ref<ReferenceServicesStatus | null>(null)
+const loadFailed = ref(false)
 const saving = ref<ReferenceServiceId | null>(null)
 const error = ref<string | null>(null)
 
-const services = computed(() => store.status?.services ?? [])
+const services = computed(() => status.value?.services ?? [])
 const lastChange = computed(() => {
-  const status = store.status
-  if (status === null || status.updatedAt === null) return 'Never changed: all lookups are off.'
-  const when = new Date(status.updatedAt).toLocaleString()
-  return `Last changed ${when}${status.updatedBy !== null ? ` by ${status.updatedBy}` : ''}.`
+  const current = status.value
+  if (current === null || current.updatedAt === null) return 'Never changed: all lookups are off.'
+  const when = new Date(current.updatedAt).toLocaleString()
+  return `Last changed ${when}${current.updatedBy !== null ? ` by ${current.updatedBy}` : ''}.`
 })
 
+async function load(): Promise<void> {
+  if (!api) return
+  try {
+    status.value = unwrapIpcResult(await api.referenceServices.status())
+    loadFailed.value = false
+  } catch {
+    loadFailed.value = true
+  }
+}
+
 async function toggle(id: ReferenceServiceId, enabled: boolean): Promise<void> {
+  if (!api) return
   saving.value = id
   error.value = null
   try {
-    await store.setPolicy({ [id]: enabled })
+    status.value = unwrapIpcResult(await api.referenceServices.setPolicy({ [id]: enabled }))
+    // The capability document carries the lookups as instance features:
+    // refresh it so this session's UI follows the new policy at once.
+    await capabilities.load()
   } catch (e) {
     error.value = formatErrorMessage(e, 'Saving the setting failed.')
   } finally {
@@ -37,7 +59,7 @@ async function toggle(id: ReferenceServiceId, enabled: boolean): Promise<void> {
   }
 }
 
-onMounted(() => void store.ensureLoaded(true))
+onMounted(() => void load())
 </script>
 
 <template>
@@ -55,7 +77,7 @@ onMounted(() => void store.ensureLoaded(true))
         {{ error }}
       </v-alert>
       <v-alert
-        v-if="store.loadFailed && store.status === null"
+        v-if="loadFailed && status === null"
         type="warning"
         variant="tonal"
         density="compact"

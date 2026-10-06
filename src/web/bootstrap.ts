@@ -2,7 +2,7 @@
  * Web-mode entry point.
  *
  * The renderer (`src/renderer/src/main.ts`) reads `window.api`
- * synchronously during Vue setup, so the HTTP Proxy must be installed
+ * synchronously during Vue setup, so the typed HTTP client must be installed
  * first. Both imports are STATIC (not `await import(...)`) so Vite puts
  * the renderer graph in the entry chunk and emits `modulepreload` hints:
  * the browser fetches the whole critical path in parallel from the HTML

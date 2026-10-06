@@ -34,20 +34,23 @@
       >
         <v-tooltip location="top">
           <template #activator="{ props: tooltipProps }">
-            <v-btn
-              v-bind="tooltipProps"
-              icon
-              size="small"
-              variant="tonal"
-              color="primary"
-              :loading="igvLoading"
-              aria-label="Broadcast locus to local IGV"
-              @click="jumpToLocalIgv"
-            >
-              <v-icon :icon="mdiLaptop" />
-            </v-btn>
+            <!-- The span carries the tooltip so it still explains a disabled button. -->
+            <span v-bind="tooltipProps">
+              <v-btn
+                icon
+                size="small"
+                variant="tonal"
+                color="primary"
+                :loading="igvLoading"
+                :disabled="igvUnavailableReason !== null"
+                aria-label="Broadcast locus to local IGV"
+                @click="jumpToLocalIgv"
+              >
+                <v-icon :icon="mdiLaptop" />
+              </v-btn>
+            </span>
           </template>
-          Jump to locus in local IGV (port 60151)
+          {{ igvUnavailableReason ?? 'Jump to locus in local IGV (port 60151)' }}
         </v-tooltip>
         <span class="text-body-small text-center text-truncate external-link-label">
           Local IGV
@@ -61,6 +64,7 @@
 import { computed, ref } from 'vue'
 import { useExternalLinksStore } from '../stores/externalLinksStore'
 import { useApiService } from '../composables/useApiService'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { resolveUrlTemplate } from '../utils/externalLinks'
 import { logService } from '../services/LogService'
 import type { Variant } from '../../../shared/types/api'
@@ -88,6 +92,8 @@ const props = defineProps<Props>()
 
 const { api } = useApiService()
 const externalLinksStore = useExternalLinksStore()
+// The web CSP blocks localhost:60151 unless the operator enables it.
+const igvUnavailableReason = useCapabilityStore().capabilityReason('igvLocalBroadcast')
 
 /**
  * Map link IDs to Material Design Icons
@@ -183,7 +189,7 @@ const igvLoading = ref(false)
 async function jumpToLocalIgv(): Promise<void> {
   const chr = props.variant.chr
   const pos = props.variant.pos
-  if (!chr || !pos) return
+  if (!chr || !pos || igvUnavailableReason !== null) return
 
   igvLoading.value = true
   const locus = `${chr}:${pos}-${pos}`

@@ -11,9 +11,12 @@ import {
   getCohortSummaryStatusViaSession
 } from '../../../main/ipc/handlers/cohort-logic'
 import { AssociationConfigSchema } from '../../../shared/types/ipc-schemas'
-import { runAssociationInProcess } from '../../../main/ipc/handlers/association-logic'
+import {
+  cancelOwnAssociation,
+  runAssociationInProcess
+} from '../../../main/ipc/handlers/association-logic'
 import { AssociationBusyError } from '../association/web-association-runs'
-import { badRequest, unsupportedWebCapability } from './common'
+import { badRequest, serviceNotConfigured } from './common'
 import type { OverrideHandler } from './types'
 
 export function buildCohortOverrides(): Record<string, OverrideHandler> {
@@ -49,12 +52,6 @@ export function buildCohortOverrides(): Record<string, OverrideHandler> {
       }
     },
 
-    'cohort:rebuildSummary': {
-      handle(_args, _request, reply) {
-        return unsupportedWebCapability(reply, 'cohort.rebuildSummary')
-      }
-    },
-
     // Gene-burden association on Postgres: same contingency builder, tests
     // and FDR as desktop, run in-process per user (src/web/server/association/).
     'cohort:runAssociation': {
@@ -62,7 +59,7 @@ export function buildCohortOverrides(): Record<string, OverrideHandler> {
         const runs = deps.association
         const userId = request.session?.user?.id
         if (runs === undefined || userId === undefined) {
-          return unsupportedWebCapability(reply, 'cohort.runAssociation')
+          return serviceNotConfigured(reply, 'cohort association')
         }
         const parsed = AssociationConfigSchema.safeParse(args[0])
         if (!parsed.success) {
@@ -93,9 +90,9 @@ export function buildCohortOverrides(): Record<string, OverrideHandler> {
       handle(_args, request, reply, deps) {
         const userId = request.session?.user?.id
         if (deps.association === undefined || userId === undefined) {
-          return unsupportedWebCapability(reply, 'cohort.cancelAssociation')
+          return serviceNotConfigured(reply, 'cohort association')
         }
-        deps.association.cancel(userId)
+        cancelOwnAssociation(deps.association, userId)
         return null
       }
     },

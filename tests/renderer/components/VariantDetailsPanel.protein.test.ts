@@ -7,10 +7,7 @@ import * as directives from 'vuetify/directives'
 
 import VariantDetailsPanel from '../../../src/renderer/src/components/VariantDetailsPanel.vue'
 import { createMockApi } from '../../utils/mock-api'
-import {
-  buildReferenceServicesStatus,
-  uniformReferenceServicePolicy
-} from '../../../src/shared/ipc/domains/reference-services'
+import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -25,8 +22,13 @@ const variant = {
 
 type TestWindow = Window & { api?: unknown; __VARLENS_WEB__?: boolean }
 
-function mountPanel() {
+function mountPanel(runtime: 'desktop' | 'web' = 'desktop', proteinLookupEnabled = false) {
   setActivePinia(createPinia())
+  installCapabilities({
+    runtime,
+    role: 'user',
+    instanceFeatures: { proteinViewer: proteinLookupEnabled }
+  })
   return shallowMount(VariantDetailsPanel, {
     props: { open: true, variant: variant as never, caseId: 1, mode: 'case' as const },
     global: {
@@ -72,12 +74,9 @@ describe('VariantDetailsPanel protein view mounting', () => {
     expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(true)
   })
 
-  it('in web mode with the protein lookup off: unavailable state with the reason, no protein calls', async () => {
+  it('web, protein lookup off (egress policy default): reason shown, no protein calls', async () => {
     testWindow.__VARLENS_WEB__ = true
-    api.referenceServices.status.mockResolvedValue(
-      buildReferenceServicesStatus('web', uniformReferenceServicePolicy(false))
-    )
-    const wrapper = mountPanel()
+    const wrapper = mountPanel('web')
     wrapper.findComponent({ name: 'VariantIdentitySection' }).vm.$emit('open-protein-view')
     await flushPromises()
 
@@ -89,16 +88,9 @@ describe('VariantDetailsPanel protein view mounting', () => {
     ).toMatch(/Protein view .* turned off on this server/)
   })
 
-  it('in web mode with the protein lookup enabled by an admin: mounts the protein modal', async () => {
+  it('web, protein lookup enabled by an administrator: mounts the protein modal', async () => {
     testWindow.__VARLENS_WEB__ = true
-    api.referenceServices.status.mockResolvedValue(
-      buildReferenceServicesStatus('web', {
-        ...uniformReferenceServicePolicy(false),
-        protein: true
-      })
-    )
-    const wrapper = mountPanel()
-    await flushPromises()
+    const wrapper = mountPanel('web', true)
     wrapper.findComponent({ name: 'VariantIdentitySection' }).vm.$emit('open-protein-view')
     await flushPromises()
 

@@ -3,6 +3,9 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { resolve } from 'path'
 import { Project, SyntaxKind } from 'ts-morph'
 
+import { getChannelPolicy } from '../../src/shared/ipc/parity-manifest'
+import { DOMAIN_CAMEL_TO_KEBAB } from '../../src/web/server/task-types'
+
 /**
  * Handler-seam gate.
  *
@@ -49,6 +52,7 @@ const ROUTE_OVERRIDE_LOGIC_EXCEPTIONS: Record<string, string> = {
   'reference-services.ts':
     'web-only instance setting (external-lookup egress policy): admin gate, validation, audit',
   'region-files.ts': 'web-only server-path guards and storage-executor adapters',
+  'system.ts': 'capability document built by the shared computeCapabilityDocument',
   'spliceai.ts':
     'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API client',
   'vep.ts':
@@ -87,6 +91,7 @@ const EXPECTED_ROUTE_OVERRIDE_MODULES = new Set([
   'reference-services.ts',
   'region-files.ts',
   'spliceai.ts',
+  'system.ts',
   'transcripts.ts',
   'variants.ts',
   'vep.ts'
@@ -330,6 +335,29 @@ describe('handler-seam gate', () => {
       }
     }
 
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
+  test('a 501 override is only allowed for a pending (or client-adapter) manifest method', () => {
+    // The parity manifest, not this gate, decides which gaps are acceptable:
+    // unsupportedWebCapability() is a passing verdict only while the method is
+    // `pending` (counted against scripts/parity-baseline.json) or served by a
+    // web-client adapter so the RPC is never used by the SPA.
+    const kebabToCamel = Object.fromEntries(
+      Object.entries(DOMAIN_CAMEL_TO_KEBAB).map(([camel, kebab]) => [kebab, camel])
+    )
+    const offenders: string[] = []
+    for (const file of listRouteOverrideModules()) {
+      const verdicts = analyzeOverrideKeys(`${WEB_ROUTES_DIR}/${file}`)
+      for (const [key, verdict] of Object.entries(verdicts)) {
+        if (verdict !== 'unsupported') continue
+        const [domain, method] = key.split(':')
+        const web = getChannelPolicy(kebabToCamel[domain] ?? domain, method)?.policy.web
+        if (web !== 'pending' && web !== 'adapter') {
+          offenders.push(`${file} → ${key} answers 501 but the manifest says ${web ?? 'nothing'}`)
+        }
+      }
+    }
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 

@@ -47,24 +47,6 @@ type BatchFileResolution =
 
 export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
   return {
-    'batch-import:selectFiles': {
-      handle() {
-        return []
-      }
-    },
-
-    'batch-import:selectFolder': {
-      handle() {
-        return []
-      }
-    },
-
-    'batch-import:selectZip': {
-      handle() {
-        return null
-      }
-    },
-
     'batch-import:checkDuplicates': {
       async handle(args, request, reply, { session }) {
         const [filePaths, stripText] = args

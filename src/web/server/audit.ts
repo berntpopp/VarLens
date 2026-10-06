@@ -33,10 +33,10 @@ const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
   'auth:setRole',
   'auth:reactivateUser',
   'database:capabilities',
+  'system:getCapabilities',
   'database:health',
   'database:info',
   'database:getOverview',
-  'database:recentList',
   'database:overview',
   // Egress policy: status is a capability read; setPolicy writes its own
   // api_write row with the change (routes/reference-services.ts).

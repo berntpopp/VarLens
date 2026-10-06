@@ -29,24 +29,6 @@ import {
 
 export function buildImportOverrides(): Record<string, OverrideHandler> {
   return {
-    'import:selectFile': {
-      handle() {
-        return null
-      }
-    },
-
-    'import:selectFiles': {
-      handle() {
-        return []
-      }
-    },
-
-    'import:selectBedFile': {
-      handle() {
-        return null
-      }
-    },
-
     'import:vcfPreview': {
       async handle(args, request, reply) {
         const [filePath] = args

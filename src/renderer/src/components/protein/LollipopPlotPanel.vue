@@ -77,7 +77,6 @@
 </template>
 
 <script setup lang="ts">
-import { useReferenceServicesStore } from '../../stores/referenceServicesStore'
 import { ref, computed, watch, type ComponentPublicInstance } from 'vue'
 import LollipopToolbar from './LollipopToolbar.vue'
 import LollipopPlot from './LollipopPlot.vue'
@@ -97,6 +96,7 @@ import {
   getClinVarCategory
 } from '../../../../shared/utils/protein-utils'
 import { useApiService } from '../../composables/useApiService'
+import { useCapabilityStore } from '../../stores/capabilityStore'
 import { logService } from '../../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 
@@ -123,7 +123,8 @@ const emit = defineEmits<{
   'toggle-case-variants': []
 }>()
 
-const { api } = useApiService()
+// protein.* / gnomad.* are gated on the proteinViewer capability (parity manifest).
+const api = useCapabilityStore().canUse('proteinViewer') ? useApiService().api : undefined
 
 // Exposed LollipopPlot methods
 const plotRef = ref<ComponentPublicInstance<{
@@ -136,11 +137,11 @@ const plotRef = ref<ComponentPublicInstance<{
 
 // gnomAD + ClinVar come from the `gnomad` reference service: always on in
 // desktop, an admin-enabled server lookup in web.
-const referenceServices = useReferenceServicesStore()
-const gnomadReason = computed(() => referenceServices.reason('gnomad'))
+const capabilities = useCapabilityStore()
+const gnomadReason = computed(() => capabilities.capabilityReason('gnomadVariants'))
 
 // gnomAD state - ON by default (when the service is available)
-const showGnomad = ref(referenceServices.isEnabled('gnomad'))
+const showGnomad = ref(capabilities.canUse('gnomadVariants'))
 const gnomadLoading = ref(false)
 const gnomadVariants = ref<GnomadVariant[]>([])
 
@@ -195,7 +196,7 @@ watch(
 )
 
 async function fetchGnomad(gene: string, generation?: number): Promise<void> {
-  if (api === undefined || !referenceServices.isEnabled('gnomad')) return
+  if (api === undefined || !capabilities.canUse('gnomadVariants')) return
   gnomadLoading.value = true
   try {
     const result = unwrapIpcResult(await api.gnomad.getVariants(gene))
@@ -223,7 +224,7 @@ async function fetchGnomad(gene: string, generation?: number): Promise<void> {
 }
 
 async function handleToggleGnomad(): Promise<void> {
-  if (!referenceServices.isEnabled('gnomad')) return
+  if (!capabilities.canUse('gnomadVariants')) return
   showGnomad.value = !showGnomad.value
 
   // Fetch gnomAD variants when toggling on if not already loaded

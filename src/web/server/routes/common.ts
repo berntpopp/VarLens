@@ -12,6 +12,23 @@ export function badRequest(
   return { error, message }
 }
 
+/**
+ * 503 for a served method whose server-side service was not wired (a
+ * deployment/configuration fault, not a parity gap): the method is `shared`
+ * in the parity manifest and must never answer 501.
+ */
+export function serviceNotConfigured(
+  reply: FastifyReply,
+  service: string
+): { error: string; service: string; message: string } {
+  reply.code(503)
+  return {
+    error: 'service-not-configured',
+    service,
+    message: `${service} is not configured on this server.`
+  }
+}
+
 export function unsupportedWebCapability(
   reply: FastifyReply,
   capability: string

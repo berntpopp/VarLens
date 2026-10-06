@@ -1,8 +1,8 @@
 /**
- * Web-mode `window.api.panels`: BED export becomes a browser download from
- * GET /api/panels/export-bed (src/web/server/panel-bed-download.ts); every
- * other panels method stays RPC. The server names the file via
- * Content-Disposition, so the anchor's `download` attribute is left empty.
+ * Web-mode `panels.exportBed` (manifest adapter `download`): a browser
+ * download from GET /api/panels/export-bed (src/web/server/panel-bed-download.ts).
+ * The server names the file via Content-Disposition, so the anchor's
+ * `download` attribute is left empty. Wired in local-api.ts.
  */
 import { triggerBrowserDownload } from './export-download'
 
@@ -29,17 +29,4 @@ export function exportPanelBedDownload(
 ): Promise<{ success: boolean; path?: string }> {
   triggerBrowserDownload(buildPanelBedUrl(panelId, assembly, paddingBp), '')
   return Promise.resolve({ success: true })
-}
-
-/** `rpc` is the generic dispatcher proxy for the `panels` domain. */
-export function buildPanelsApi(rpc: Record<string, unknown>): unknown {
-  return new Proxy(
-    {},
-    {
-      get(_target, prop: string | symbol) {
-        if (prop === 'exportBed') return exportPanelBedDownload
-        return typeof prop === 'string' ? rpc[prop] : undefined
-      }
-    }
-  )
 }

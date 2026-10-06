@@ -28,6 +28,25 @@ export function buildAnnotationOverrides(): Record<string, OverrideHandler> {
       }
     },
 
+    // Spec P-22: the write autoroute passed (chr, pos, ref, alt) straight
+    // through, but the executor task takes one VariantCoords object. Pack and
+    // validate the coordinates like the desktop handler does.
+    'annotations:deleteGlobal': {
+      async handle(args, _request, reply, { session }) {
+        const [chr, pos, ref, alt] = args
+        const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        if (!validated.success) {
+          reply.code(400)
+          return { error: 'invalid-annotation-coordinates' }
+        }
+        await session.getWriteExecutor().execute({
+          type: 'annotations:deleteGlobal',
+          params: [validated.data]
+        })
+        return undefined
+      }
+    },
+
     'annotations:upsertGlobal': {
       async handle(args, _request, reply, { session }) {
         const [chr, pos, ref, alt, updates] = args

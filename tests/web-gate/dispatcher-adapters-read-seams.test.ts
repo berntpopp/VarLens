@@ -161,19 +161,12 @@ describe('web dispatcher adapters: read seams', () => {
     })
   })
 
-  test('database.recentList returns an empty desktop-file list in web mode', async () => {
-    const { deps, reply } = makeDeps()
+  test('desktop-only database methods are not served in web mode (parity manifest)', () => {
+    const { deps } = makeDeps()
     const { overrides } = buildDispatcher(deps)
 
-    const result = await overrides['database:recentList'].handle(
-      [],
-      {} as never,
-      reply as never,
-      deps
-    )
-
-    expect(reply.code).not.toHaveBeenCalled()
-    expect(result).toEqual([])
+    expect(overrides['database:recentList']).toBeUndefined()
+    expect(overrides['cohort:rebuildSummary']).toBeUndefined()
   })
 
   test('database.capabilities reports export as supported (served as browser downloads)', async () => {
@@ -198,7 +191,7 @@ describe('web dispatcher adapters: read seams', () => {
     })
   })
 
-  test('web-only unsupported cohort actions fail explicitly', async () => {
+  test('cohort association answers 503 when the server has no association runner', async () => {
     const { deps, execute, reply } = makeDeps()
     const { overrides } = buildDispatcher(deps)
 
@@ -209,16 +202,16 @@ describe('web dispatcher adapters: read seams', () => {
       deps
     )
 
-    expect(reply.code).toHaveBeenCalledWith(501)
+    expect(reply.code).toHaveBeenCalledWith(503)
     expect(result).toEqual({
-      error: 'unsupported-web-capability',
-      capability: 'cohort.runAssociation',
-      message: 'cohort.runAssociation is not available in web mode yet.'
+      error: 'service-not-configured',
+      service: 'cohort association',
+      message: 'cohort association is not configured on this server.'
     })
     expect(execute).not.toHaveBeenCalled()
   })
 
-  test('external reference lookups answer 501 when the server has no ReferenceServices', async () => {
+  test('external reference lookups answer 503 when the server has no ReferenceServices', async () => {
     const { deps, reply } = makeDeps()
     const { overrides } = buildDispatcher(deps)
 
@@ -229,11 +222,11 @@ describe('web dispatcher adapters: read seams', () => {
       deps
     )
 
-    expect(reply.code).toHaveBeenCalledWith(501)
+    expect(reply.code).toHaveBeenCalledWith(503)
     expect(result).toEqual({
-      error: 'unsupported-web-capability',
-      capability: 'vep:fetch',
-      message: 'vep:fetch is not available in web mode yet.'
+      error: 'service-not-configured',
+      service: 'reference services',
+      message: 'reference services is not configured on this server.'
     })
   })
 

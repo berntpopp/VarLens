@@ -19,11 +19,14 @@ import type {
 } from '../../../shared/types/api-enrichment'
 import type { VepTranscriptConsequence, VepColocatedVariant } from '../../../shared/types/vep'
 import { useApiService } from './useApiService'
-import { isReferenceServiceEnabled } from '../stores/referenceServicesStore'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 
 export function useVepEnrichment() {
   const { api } = useApiService()
+  // VEP / MyVariant / SpliceAI are external lookups, `pending` in web until the
+  // admin egress policy lands (parity manifest): skip a disabled provider.
+  const capabilities = useCapabilityStore()
 
   function formatError(error: unknown, fallback: string): string {
     if (isIpcError(error)) {
@@ -152,15 +155,12 @@ export function useVepEnrichment() {
     myvariantData.value = null
     spliceaiData.value = null
 
-    // Fetch all APIs in parallel
-    // Web: each lookup is an admin-controlled egress service; skip the ones
-    // that are off rather than collecting a server refusal.
-    const skipped = Promise.reject(new Error('lookup disabled'))
-    skipped.catch(() => undefined)
+    // Fetch all enabled providers in parallel
+    const vepReason = capabilities.capabilityReason('vepEnrichment')
     const [vepResult, myvariantResult, spliceaiResult] = await Promise.allSettled([
-      isReferenceServiceEnabled('vep') ? api.vep.fetch(chr, pos, ref, alt) : skipped,
-      isReferenceServiceEnabled('myvariant') ? api.myvariant.fetch(chr, pos, ref, alt) : skipped,
-      isReferenceServiceEnabled('spliceai') ? api.spliceai.fetch(chr, pos, ref, alt) : skipped
+      vepReason === null ? api.vep.fetch(chr, pos, ref, alt) : Promise.reject(new Error(vepReason)),
+      capabilities.canUse('myvariantEnrichment') ? api.myvariant.fetch(chr, pos, ref, alt) : null,
+      capabilities.canUse('spliceaiEnrichment') ? api.spliceai.fetch(chr, pos, ref, alt) : null
     ])
 
     // Discard results if the variant changed while we were fetching
@@ -182,7 +182,7 @@ export function useVepEnrichment() {
     vepLoading.value = false
 
     // Process myvariant result
-    if (myvariantResult.status === 'fulfilled') {
+    if (myvariantResult.status === 'fulfilled' && myvariantResult.value !== null) {
       try {
         myvariantData.value = unwrapIpcResult(myvariantResult.value)
       } catch {
@@ -192,7 +192,7 @@ export function useVepEnrichment() {
     myvariantLoading.value = false
 
     // Process SpliceAI result
-    if (spliceaiResult.status === 'fulfilled') {
+    if (spliceaiResult.status === 'fulfilled' && spliceaiResult.value !== null) {
       try {
         spliceaiData.value = unwrapIpcResult(spliceaiResult.value)
       } catch {

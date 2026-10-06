@@ -1,4 +1,5 @@
 import type { IpcResult } from '../../types/errors'
+import { CAPABILITY_FEATURES, type CapabilityFeature } from '../capability-features'
 
 /**
  * External reference services: every outbound lookup VarLens can make on a
@@ -104,9 +105,29 @@ export function isReferenceServiceId(value: unknown): value is ReferenceServiceI
   return typeof value === 'string' && (REFERENCE_SERVICE_IDS as readonly string[]).includes(value)
 }
 
-/** Reason shown when an administrator has not enabled a service. */
+/** Capability feature each service backs (instance features in the capability document). */
+export const REFERENCE_SERVICE_FEATURE: Record<ReferenceServiceId, CapabilityFeature> = {
+  vep: 'vepEnrichment',
+  myvariant: 'myvariantEnrichment',
+  spliceai: 'spliceaiEnrichment',
+  gnomad: 'gnomadVariants',
+  protein: 'proteinViewer',
+  panelapp: 'panelAppImport',
+  stringdb: 'stringDbPanels'
+}
+
+/** Reason shown when an administrator has not enabled a service (capability copy). */
 export function referenceServiceDisabledReason(id: ReferenceServiceId): string {
-  return `${REFERENCE_SERVICE_CATALOG[id].label} lookups are turned off on this server. An administrator can enable them under External lookups.`
+  return CAPABILITY_FEATURES[REFERENCE_SERVICE_FEATURE[id]].unavailableInWeb
+}
+
+/** Capability-document instance features for a per-service on/off map. */
+export function referenceServiceInstanceFeatures(
+  enabled: Record<ReferenceServiceId, boolean>
+): Partial<Record<CapabilityFeature, boolean>> {
+  return Object.fromEntries(
+    REFERENCE_SERVICE_IDS.map((id) => [REFERENCE_SERVICE_FEATURE[id], enabled[id]])
+  )
 }
 
 /** Build the status document from a per-service on/off map. */

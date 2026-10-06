@@ -137,11 +137,11 @@
 </template>
 
 <script setup lang="ts">
-import { isReferenceServiceEnabled } from '../../stores/referenceServicesStore'
 import { ref, computed, watch } from 'vue'
 import { mdiClose, mdiAlertCircleOutline, mdiDna } from '@mdi/js'
 import { useProteinData } from '../../composables/useProteinData'
 import { useApiService } from '../../composables/useApiService'
+import { useCapabilityStore } from '../../stores/capabilityStore'
 import LollipopPlotPanel from './LollipopPlotPanel.vue'
 import GeneStructurePanel from './GeneStructurePanel.vue'
 import ProteinStructure3DPanel from './ProteinStructure3DPanel.vue'
@@ -170,7 +170,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const { api } = useApiService()
+// protein.* / gnomad.* are gated on the proteinViewer capability (parity manifest).
+const api = useCapabilityStore().canUse('proteinViewer') ? useApiService().api : undefined
 
 const activeTab = ref('lollipop')
 
@@ -222,7 +223,12 @@ watch(
   geneSymbol,
   async (gene) => {
     clinvarVariants.value = []
-    if (gene !== null && gene !== '' && api !== undefined && isReferenceServiceEnabled('gnomad')) {
+    if (
+      gene !== null &&
+      gene !== '' &&
+      api !== undefined &&
+      useCapabilityStore().canUse('gnomadVariants')
+    ) {
       clinvarLoading.value = true
       try {
         const result = unwrapIpcResult(await api.gnomad.getClinVarVariants(gene))

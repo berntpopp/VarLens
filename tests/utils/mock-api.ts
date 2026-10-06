@@ -264,7 +264,9 @@ export function createMockApi(): MockApi {
       getGeneBurden: vi.fn().mockResolvedValue([]),
       runAssociation: vi.fn().mockResolvedValue({ results: [], warnings: [] }),
       cancelAssociation: vi.fn().mockResolvedValue(undefined),
-      onAssociationProgress: vi.fn(() => vi.fn()) // Returns cleanup function
+      onAssociationProgress: vi.fn(() => vi.fn()), // Returns cleanup function
+      onSummaryRebuilt: vi.fn(() => vi.fn()),
+      getSummaryStatus: vi.fn().mockResolvedValue({ is_stale: false })
     },
 
     annotations: {

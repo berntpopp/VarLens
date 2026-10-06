@@ -20,8 +20,19 @@
     </div>
     <div v-else class="text-muted text-body-medium mb-2">No phenotype terms assigned</div>
 
+    <!-- Capability off (e.g. the document has not loaded): say so instead of "No matching terms" -->
+    <div
+      v-if="hpoUnavailableReason !== null"
+      class="text-body-medium text-medium-emphasis"
+      role="note"
+      data-testid="hpo-search-unavailable"
+    >
+      {{ hpoUnavailableReason }}
+    </div>
+
     <!-- Autocomplete for adding new terms -->
     <v-autocomplete
+      v-else
       v-model="selectedTerm"
       v-model:search="searchQuery"
       :items="searchResults"
@@ -70,6 +81,7 @@ import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { CaseHpoTerm } from '../../../shared/types/api'
+import { runtimeFeatureUnavailableReason } from '../utils/runtime-features'
 
 interface HpoSearchResult {
   id: string
@@ -89,19 +101,20 @@ const emit = defineEmits<{
 const { api } = useApiService()
 
 /** Name the suggestion listbox and make its scroll region keyboard-reachable (axe). */
-const HPO_LIST_PROPS = { 'aria-label': 'Matching HPO terms', tabindex: 0 }
+const HPO_LIST_PROPS: Record<string, unknown> = { 'aria-label': 'Matching HPO terms', tabindex: 0 }
 
 const searchQuery = ref('')
 const searchResults = ref<HpoSearchResult[]>([])
 const loading = ref(false)
 const selectedTerm = ref<HpoSearchResult | null>(null)
+const hpoUnavailableReason = runtimeFeatureUnavailableReason('hpoSearch')
 const hpoApiAvailable = ref(false)
 /** Search failure (as opposed to "no matches") shown in the dropdown. */
 const searchError = ref('')
 
 onMounted(() => {
-  hpoApiAvailable.value =
-    api != null && typeof api.hpo !== 'undefined' && typeof api.hpo.search === 'function'
+  // Availability comes from the capability document, not `typeof` detection.
+  hpoApiAvailable.value = hpoUnavailableReason === null && api != null
 })
 
 // Search function for debouncing

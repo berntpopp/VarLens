@@ -269,7 +269,7 @@ describe('web reference services egress policy', () => {
     )
   })
 
-  test('without a ReferenceServices facade the methods answer 501, never 404', async () => {
+  test('without a ReferenceServices facade the methods answer 503, never 404/501', async () => {
     const base = makeDeps()
     const { overrides } = buildDispatcher(base.deps)
     const reply = { code: vi.fn() }
@@ -279,7 +279,7 @@ describe('web reference services egress policy', () => {
       reply as never,
       base.deps
     )
-    expect(reply.code).toHaveBeenCalledWith(501)
+    expect(reply.code).toHaveBeenCalledWith(503)
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 })

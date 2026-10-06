@@ -144,6 +144,11 @@ export class WebReferenceServices {
     })
   }
 
+  /** Per-service on/off map from the persisted policy. */
+  async enabledServices(): Promise<Record<ReferenceServiceId, boolean>> {
+    return { ...(await this.policy.load()).services }
+  }
+
   async setPolicy(
     update: ReferenceServicePolicyUpdate,
     actor: string

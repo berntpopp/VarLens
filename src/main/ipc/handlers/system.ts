@@ -10,11 +10,13 @@ import { wrapHandler } from '../errorHandler'
 import { InvalidParametersError } from '../errors'
 import { mainLogger } from '../../services/MainLogger'
 import { getMainPerfSnapshot } from '../../services/MainPerfTrace'
+import { computeCapabilityDocument } from '../../../shared/ipc/capability-document'
+import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 
 /**
  * System IPC handlers
  * Channels: system:version, system:userDataPath, system:getCpuCount,
- *           system:setWorkerThreads, system:getWorkerThreads
+ *           system:setWorkerThreads, system:getWorkerThreads, system:capabilities
  */
 
 const SetWorkerThreadsCountSchema = z.number().int().min(0).max(64)
@@ -53,7 +55,26 @@ async function getAppVersion(): Promise<string> {
   return reportedVersion
 }
 
-export function registerSystemHandlers({ ipcMain }: HandlerDependencies): void {
+/** Storage capabilities of the open session, or null before a database is open. */
+function currentStorageCapabilities(
+  getDbManager: HandlerDependencies['getDbManager']
+): StorageCapabilities | null {
+  return getDbManager().getCurrentSessionOrNull()?.capabilities ?? null
+}
+
+export function registerSystemHandlers({ ipcMain, getDbManager }: HandlerDependencies): void {
+  // Desktop capability document: the local user owns the workspace (admin role)
+  // and every manifest method is reachable; storage flags come from the session.
+  ipcMain.handle('system:capabilities', async () => {
+    return wrapHandler(async () =>
+      computeCapabilityDocument({
+        runtime: 'desktop',
+        role: 'admin',
+        storage: currentStorageCapabilities(getDbManager)
+      })
+    )
+  })
+
   ipcMain.handle('system:version', async () => {
     return wrapHandler(async () => {
       return { app: await getAppVersion(), electron: process.versions.electron }

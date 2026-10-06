@@ -4,7 +4,7 @@ import {
   REFERENCE_SERVICE_IDS,
   type ReferenceServiceId
 } from '../../../shared/ipc/domains/reference-services'
-import { badRequest, unsupportedWebCapability } from './common'
+import { badRequest, serviceNotConfigured } from './common'
 import { requireAdmin } from './guards'
 import { recordPolicyChangeAudit } from '../reference-services/audit-sink'
 import type { OverrideHandler } from './types'
@@ -28,7 +28,7 @@ export function buildReferenceServicesOverrides(): Record<string, OverrideHandle
     'reference-services:status': {
       async handle(_args, _request, reply, deps) {
         if (deps.referenceServices === undefined) {
-          return unsupportedWebCapability(reply, 'referenceServices.status')
+          return serviceNotConfigured(reply, 'reference services')
         }
         return await deps.referenceServices.status()
       }
@@ -44,7 +44,7 @@ export function buildReferenceServicesOverrides(): Record<string, OverrideHandle
           }
         }
         if (deps.referenceServices === undefined) {
-          return unsupportedWebCapability(reply, 'referenceServices.setPolicy')
+          return serviceNotConfigured(reply, 'reference services')
         }
         const parsed = PolicyUpdateSchema.safeParse(args[0])
         if (!parsed.success) {

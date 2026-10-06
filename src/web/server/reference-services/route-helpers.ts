@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify'
 
 import type { ReferenceServiceId } from '../../../shared/ipc/domains/reference-services'
 import { VariantCoordsSchema } from '../../../shared/types/ipc-schemas'
-import { unsupportedWebCapability } from '../routes/common'
+import { serviceNotConfigured } from '../routes/common'
 import type { DispatcherDeps } from '../routes/types'
 import { ExternalLookupDisabledError, type ReferenceClients } from './reference-services'
 
@@ -28,9 +28,9 @@ export async function runReferenceLookup<T>(params: {
   method: string
   identifier: string
   run: (clients: ReferenceClients) => Promise<T>
-}): Promise<T | ExternalLookupDisabledBody | ReturnType<typeof unsupportedWebCapability>> {
+}): Promise<T | ExternalLookupDisabledBody | ReturnType<typeof serviceNotConfigured>> {
   const services = params.deps.referenceServices
-  if (services === undefined) return unsupportedWebCapability(params.reply, params.method)
+  if (services === undefined) return serviceNotConfigured(params.reply, 'reference services')
   try {
     return await services.lookup(
       params.service,

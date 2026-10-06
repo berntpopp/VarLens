@@ -77,3 +77,14 @@ export async function runAssociationInProcess(
   }
   return finalizeAssociationResults(raw, config, startedAt)
 }
+
+/**
+ * Cancel the caller's own run on a per-user run registry (web). Returns
+ * whether a run was running; another user's run is never touched.
+ */
+export function cancelOwnAssociation(
+  runs: { cancel: (userId: number) => boolean },
+  userId: number
+): boolean {
+  return runs.cancel(userId)
+}
