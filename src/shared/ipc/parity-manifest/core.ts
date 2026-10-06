@@ -6,7 +6,6 @@
 import {
   adapter,
   desktopOnly,
-  pending,
   sharedExempt,
   sharedRead,
   sharedWrite,
@@ -123,9 +122,6 @@ export const batchImportManifest = {
   cleanupZipTemp: sharedWrite()
 } satisfies DomainManifest<'batchImport'>
 
-const ASSOCIATION = 'P-C (PR-W13 cohort association)'
-const ASSOCIATION_UX = 'Run button disabled with the capability reason.'
-
 export const cohortManifest = {
   getVariants: sharedRead(),
   getSummary: sharedRead(),
@@ -138,9 +134,10 @@ export const cohortManifest = {
     'Hidden: the Postgres cohort summary is computed live.'
   ),
   onSummaryRebuilt: adapter('sse'),
-  runAssociation: pending('cohortAssociation', ASSOCIATION, ASSOCIATION_UX),
-  cancelAssociation: pending('cohortAssociation', ASSOCIATION, ASSOCIATION_UX),
-  onAssociationProgress: pending('cohortAssociation', ASSOCIATION, ASSOCIATION_UX)
+  // Postgres association runs per user on the web server (PR-W13).
+  runAssociation: sharedRead({ capability: 'cohortAssociation' }),
+  cancelAssociation: sharedRead({ capability: 'cohortAssociation' }),
+  onAssociationProgress: adapter('sse', { capability: 'cohortAssociation' })
 } satisfies DomainManifest<'cohort'>
 
 export const annotationsManifest = {

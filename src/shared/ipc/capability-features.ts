@@ -12,39 +12,50 @@
  * web version. It started as track 4's `runtime-features.ts` copy.
  */
 export const CAPABILITY_FEATURES = {
+  // External lookups (web: admin egress policy, see INSTANCE_FEATURES). The
+  // copy is the reason shown while an administrator has not enabled them.
   proteinViewer: {
     label: 'protein view',
-    unavailableInWeb: 'The protein view is not available in the web version yet.'
+    unavailableInWeb:
+      'Protein view (UniProt, InterPro, AlphaFold, Ensembl) lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
+  },
+  gnomadVariants: {
+    label: 'gnomAD and ClinVar variant tracks',
+    unavailableInWeb:
+      'gnomAD (population variants and ClinVar) lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   hpoSearch: {
     label: 'HPO term search',
-    unavailableInWeb:
-      'HPO term search is not available in the web version yet. Existing terms are shown; add new ones in the desktop app.'
+    unavailableInWeb: 'HPO term search is not available here.'
   },
   vepEnrichment: {
     label: 'Ensembl VEP annotation',
     unavailableInWeb:
-      'Fetching annotations from Ensembl VEP is not available in the web version yet.'
+      'Ensembl VEP lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   myvariantEnrichment: {
     label: 'MyVariant.info annotation',
-    unavailableInWeb: 'MyVariant.info annotations are not available in the web version yet.'
+    unavailableInWeb:
+      'MyVariant.info lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   spliceaiEnrichment: {
     label: 'SpliceAI scores',
-    unavailableInWeb: 'SpliceAI scores are not available in the web version yet.'
+    unavailableInWeb:
+      'SpliceAI Lookup lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   panelAppImport: {
     label: 'PanelApp import',
-    unavailableInWeb: 'PanelApp import is not available in the web version yet.'
+    unavailableInWeb:
+      'PanelApp (UK and Australia) lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   stringDbPanels: {
     label: 'StringDB panel generation',
-    unavailableInWeb: 'StringDB panel generation is not available in the web version yet.'
+    unavailableInWeb:
+      'STRING lookups are turned off on this server. An administrator can enable them in Settings > External lookups.'
   },
   panelBedExport: {
     label: 'panel BED export',
-    unavailableInWeb: 'BED export is not available in the web version yet.'
+    unavailableInWeb: 'BED export is not available here.'
   },
   geneRefUpdate: {
     label: 'gene reference updates',
@@ -53,7 +64,7 @@ export const CAPABILITY_FEATURES = {
   },
   cohortAssociation: {
     label: 'cohort association tests',
-    unavailableInWeb: 'Association tests are not available in the web version yet.'
+    unavailableInWeb: 'Association tests are not available here.'
   },
   cohortSummaryRebuild: {
     label: 'cohort summary rebuild',
@@ -115,7 +126,16 @@ export type CapabilityFeature = keyof typeof CAPABILITY_FEATURES
 
 /** Features computed from instance configuration rather than manifest methods. */
 export const INSTANCE_FEATURES = [
-  'igvLocalBroadcast'
+  'igvLocalBroadcast',
+  // External lookups: on in desktop; in web an administrator enables each one
+  // (reference-services egress policy, persisted on the server).
+  'vepEnrichment',
+  'myvariantEnrichment',
+  'spliceaiEnrichment',
+  'gnomadVariants',
+  'proteinViewer',
+  'panelAppImport',
+  'stringDbPanels'
 ] as const satisfies readonly CapabilityFeature[]
 
 export function isCapabilityFeature(value: string): value is CapabilityFeature {

@@ -28,11 +28,18 @@ describe('computeCapabilityDocument', () => {
   it('blocks desktop-only and pending methods in web with the user-facing reason', () => {
     const doc = computeCapabilityDocument({ runtime: 'web', role: 'admin', storage: null })
     expect(doc.blockedMethods).toContain('database.open')
-    expect(doc.blockedMethods).toContain('hpo.search')
+    expect(doc.blockedMethods).toContain('geneRef.update')
     expect(doc.blockedMethods).not.toContain('cases.list')
-    expect(doc.features.hpoSearch).toEqual({
+    expect(doc.blockedMethods).not.toContain('hpo.search')
+    expect(doc.features.geneRefUpdate).toEqual({
       enabled: false,
-      reason: CAPABILITY_FEATURES.hpoSearch.unavailableInWeb
+      reason: CAPABILITY_FEATURES.geneRefUpdate.unavailableInWeb
+    })
+    // External lookups are served but default-off instance features (egress policy).
+    expect(doc.blockedMethods).not.toContain('vep.fetch')
+    expect(doc.features.vepEnrichment).toEqual({
+      enabled: false,
+      reason: CAPABILITY_FEATURES.vepEnrichment.unavailableInWeb
     })
     expect(doc.features.multiFileImport.enabled).toBe(true)
   })

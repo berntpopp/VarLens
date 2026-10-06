@@ -72,6 +72,7 @@
               v-bind="tip"
               icon
               size="small"
+              density="default"
               variant="text"
               @click="handleExportSvg"
             >
@@ -88,6 +89,7 @@
               v-bind="tip"
               icon
               size="small"
+              density="default"
               variant="text"
               @click="handleExportPng"
             >
@@ -100,7 +102,13 @@
     </v-toolbar>
 
     <!-- Loading bar -->
-    <v-progress-linear v-if="loading || clinvarLoading" indeterminate color="info" height="2" />
+    <v-progress-linear
+      v-if="loading || clinvarLoading"
+      indeterminate
+      color="info"
+      height="2"
+      aria-label="Loading gene structure"
+    />
 
     <!-- Error state -->
     <div v-if="error" class="d-flex flex-column align-center justify-center flex-grow-1 pa-8">
@@ -137,7 +145,7 @@
       <div class="d-flex align-center ga-1 flex-wrap mb-1">
         <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">Legend:</span>
         <v-chip size="small" label variant="flat" color="primary">Exon</v-chip>
-        <v-chip size="small" label variant="outlined" color="grey">Intron</v-chip>
+        <v-chip size="small" label variant="outlined" color="grey-darken-2">Intron</v-chip>
         <v-chip v-if="genomicVariant" size="small" label variant="flat" color="error"
           >Your Variant</v-chip
         >

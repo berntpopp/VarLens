@@ -5,6 +5,6 @@
     "tsBuildInfoFile": "./.cache/tsbuildinfo/web.tsbuildinfo",
     "assumeChangesOnlyAffectDirectDependencies": true
   },
-  "include": ["src/web/**/*", "src/shared/**/*", "src/main/storage/**/*"],
+  "include": ["src/web/**/*", "src/shared/**/*", "src/main/storage/**/*", "src/main/jstat.d.ts"],
   "exclude": ["src/web/bootstrap.ts", "src/web/client/**/*"]
 }

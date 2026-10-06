@@ -11,6 +11,8 @@ import type { SessionRevocations } from '../session-revocation'
 import type { AppMetrics } from '../metrics'
 import type { DownloadGrantRegistry } from '../downloads/download-grants'
 import type { ExportArtifactRequest } from '../downloads/export-artifacts'
+import type { WebReferenceServices } from '../reference-services/reference-services'
+import type { WebAssociationRuns } from '../association/web-association-runs'
 
 export interface DispatcherDeps {
   session: StorageSession
@@ -40,6 +42,13 @@ export interface DispatcherDeps {
   }
   /** Revoked browser-session ids (logout of a stateless cookie session). */
   sessions?: SessionRevocations
+  /**
+   * External reference lookups behind the admin egress policy
+   * (src/web/server/reference-services/). Absent → those methods answer 501.
+   */
+  referenceServices?: WebReferenceServices
+  /** Per-user cohort association runs (Postgres). Absent → 501. */
+  association?: WebAssociationRuns
 }
 
 export interface InvokeBodyPayload {

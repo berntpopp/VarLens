@@ -27,8 +27,9 @@ interface CohortGroup {
 
 export function useAssociation() {
   const { api } = useApiService()
-  // Association tests are `pending` in web (parity manifest): Run is disabled
-  // with this reason instead of failing with a 501.
+  // Association runs in both runtimes (web: per-user runs on Postgres). The
+  // capability still decides availability, so a session without it (e.g. no
+  // capability document yet) shows the reason instead of failing.
   const capabilities = useCapabilityStore()
   const unavailableReason = computed(() => capabilities.capabilityReason('cohortAssociation'))
 

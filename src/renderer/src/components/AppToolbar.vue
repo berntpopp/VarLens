@@ -157,6 +157,13 @@
           @click="$emit('show-panel-manager')"
         />
         <v-list-item
+          v-if="showExternalLookups"
+          :prepend-icon="mdiCloudLockOutline"
+          title="External lookups"
+          data-testid="settings-external-lookups"
+          @click="externalLookupsOpen = true"
+        />
+        <v-list-item
           :prepend-icon="mdiTune"
           title="Application Preferences"
           @click="$emit('show-preferences')"
@@ -197,10 +204,13 @@
     </v-menu>
     <AccountMenu />
   </v-app-bar>
+  <ExternalLookupsDialog v-if="externalLookupsOpen" v-model="externalLookupsOpen" />
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { useAuthStore } from '../stores/authStore'
+import { isWebRuntime } from '../utils/runtime-mode'
 import DatabasePicker from './DatabasePicker.vue'
 import CaseStatusIcons from './CaseStatusIcons.vue'
 import ImportStatusChip from './ImportStatusChip.vue'
@@ -230,7 +240,8 @@ import {
   mdiTableColumn,
   mdiPlaylistEdit,
   mdiTagMultiple,
-  mdiTune
+  mdiTune,
+  mdiCloudLockOutline
 } from '@mdi/js'
 
 const {
@@ -311,6 +322,15 @@ const handleSidebarToggle = (): void => {
 const handleHomeClick = (): void => {
   returnToCaseHome()
 }
+
+// Admin, web only: the egress policy for external lookups (protein view,
+// VEP, gnomAD, ...) is a server instance setting.
+const ExternalLookupsDialog = defineAsyncComponent(
+  () => import('./account/ExternalLookupsDialog.vue')
+)
+const toolbarAuth = useAuthStore()
+const externalLookupsOpen = ref(false)
+const showExternalLookups = computed(() => isWebRuntime() && toolbarAuth.isAdmin)
 </script>
 
 <style scoped>

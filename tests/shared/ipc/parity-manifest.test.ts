@@ -35,6 +35,9 @@ import {
   HTTP_ROUTE_SECURITY_MAP
 } from '../../../src/web/server/security/operation-security-map'
 import { makeDeps } from '../../web-gate/helpers/dispatcher-adapters'
+import { WebReferenceServices } from '../../../src/web/server/reference-services/reference-services'
+import { defaultExternalLookupPolicy } from '../../../src/web/server/reference-services/policy-store'
+import { WebAssociationRuns } from '../../../src/web/server/association/web-association-runs'
 
 const ipc = vi.hoisted(() => ({
   invoke: vi.fn(() => Promise.resolve(undefined)),
@@ -223,7 +226,25 @@ describe('parity manifest: web dispatcher', () => {
         assertDeletable: async () => undefined
       }
     }
-    const withJobs = { ...deps, jobs: fakeJobs } as unknown as typeof deps
+    // External lookups and association are served through their facades; the
+    // egress policy is all-off here, so lookups answer 403, never 404/501.
+    const referenceServices = new WebReferenceServices({
+      policy: {
+        load: async () => defaultExternalLookupPolicy(),
+        save: async () => defaultExternalLookupPolicy()
+      },
+      audit: async () => undefined
+    })
+    const association = new WebAssociationRuns({
+      builder: { build: async () => [] },
+      events: { publish: () => undefined }
+    })
+    const withJobs = {
+      ...deps,
+      jobs: fakeJobs,
+      referenceServices,
+      association
+    } as unknown as typeof deps
     const app = fastify({ logger: false })
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)

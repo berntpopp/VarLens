@@ -24,6 +24,7 @@ import { registerGeneListsDomain } from './domains/gene-lists'
 import { registerGeneRefDomain } from './domains/gene-ref'
 import { registerGnomadDomain } from './domains/gnomad'
 import { registerHpoDomain } from './domains/hpo'
+import { registerReferenceServicesDomain } from './domains/reference-services'
 import { registerImportDomain } from './domains/import'
 import { registerJobsHandlers } from './domains/jobs'
 import { registerMyvariantDomain } from './domains/myvariant'
@@ -99,6 +100,7 @@ export function registerIpcHandlers(): void {
   registerMyvariantDomain(ipcMain)
   registerPanelsDomain(ipcMain)
   registerProteinDomain(ipcMain)
+  registerReferenceServicesDomain(ipcMain)
   registerRegionFilesDomain(ipcMain)
   registerSpliceaiDomain(ipcMain)
   registerTagsDomain(ipcMain)

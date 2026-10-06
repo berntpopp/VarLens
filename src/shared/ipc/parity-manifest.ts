@@ -51,6 +51,7 @@ import {
   myvariantManifest,
   panelsManifest,
   proteinManifest,
+  referenceServicesManifest,
   spliceaiManifest,
   vepManifest
 } from './parity-manifest/reference'
@@ -102,7 +103,8 @@ export const PARITY_MANIFEST = {
   gnomad: gnomadManifest,
   perf: perfManifest,
   debug: debugManifest,
-  jobs: jobsManifest
+  jobs: jobsManifest,
+  referenceServices: referenceServicesManifest
 } as const satisfies ParityManifestShape
 
 /** Flat list of every manifest entry, in declaration order. */

@@ -20,7 +20,7 @@
     </div>
     <div v-else class="text-muted text-body-medium mb-2">No phenotype terms assigned</div>
 
-    <!-- Web: hpo:search is not served (501) — say so instead of "No matching terms" -->
+    <!-- Capability off (e.g. the document has not loaded): say so instead of "No matching terms" -->
     <div
       v-if="hpoUnavailableReason !== null"
       class="text-body-medium text-medium-emphasis"
@@ -45,7 +45,10 @@
       hide-details
       clearable
       :disabled="disabled || !hpoApiAvailable"
-      placeholder="Search HPO terms..."
+      label="Search HPO terms"
+      placeholder="Type a term or HPO ID"
+      :list-props="HPO_LIST_PROPS"
+      data-testid="hpo-term-search"
       no-filter
       @update:model-value="handleTermSelected"
     >
@@ -96,6 +99,9 @@ const emit = defineEmits<{
 }>()
 
 const { api } = useApiService()
+
+/** Name the suggestion listbox and make its scroll region keyboard-reachable (axe). */
+const HPO_LIST_PROPS: Record<string, unknown> = { 'aria-label': 'Matching HPO terms', tabindex: 0 }
 
 const searchQuery = ref('')
 const searchResults = ref<HpoSearchResult[]>([])

@@ -42,13 +42,23 @@ const ROUTE_OVERRIDE_LOGIC_EXCEPTIONS: Record<string, string> = {
     'web-only download transport: mints signed single-use grants (desktop uses a save dialog)',
   'gene-lists.ts': 'thin storage-executor adapters with web-only argument validation',
   'gene-ref.ts': 'read-only adapters over the bundled gene_reference.db (no external fetches)',
-  'hpo.ts': 'pending in the parity manifest (P-C reference services)',
+  'gnomad.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API client',
+  'hpo.ts': 'search over the bundled HPO term list via the shared hpo-term-search helper',
   'import.ts': 'web upload pipeline with file-picker stubs and shared import-logic delegation',
   'jobs.ts': 'jobs: contract served from the web process JobRunner (desktop: main JobRunner)',
-  'protein.ts': 'pending in the parity manifest (P-C reference services)',
+  'myvariant.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API client',
+  'protein.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API clients',
+  'reference-services.ts':
+    'web-only instance setting (external-lookup egress policy): admin gate, validation, audit',
   'region-files.ts': 'web-only server-path guards and storage-executor adapters',
   'system.ts': 'capability document built by the shared computeCapabilityDocument',
-  'vep.ts': 'pending in the parity manifest (P-C reference services)'
+  'spliceai.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API client',
+  'vep.ts':
+    'egress-gated reference lookup: argument validation + ReferenceServices facade (policy, audit) around the shared API client'
 }
 
 /**
@@ -74,12 +84,16 @@ const EXPECTED_ROUTE_OVERRIDE_MODULES = new Set([
   'export-download.ts',
   'gene-lists.ts',
   'gene-ref.ts',
+  'gnomad.ts',
   'hpo.ts',
   'import.ts',
   'jobs.ts',
+  'myvariant.ts',
   'panels.ts',
   'protein.ts',
+  'reference-services.ts',
   'region-files.ts',
+  'spliceai.ts',
   'system.ts',
   'transcripts.ts',
   'variants.ts',

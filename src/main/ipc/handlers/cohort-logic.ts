@@ -5,6 +5,7 @@
  * and never touch IPC/Electron APIs directly. This makes them testable
  * without mocking Electron internals.
  */
+import { assertDisjointGroups } from './association-logic'
 import { Worker } from 'worker_threads'
 import { resolve } from 'node:path'
 import { mainLogger } from '../../services/MainLogger'
@@ -359,11 +360,7 @@ export async function runGeneBurdenCompare(
 ): Promise<unknown> {
   // Validate no overlap between groups (preserved from pre-PR-4; runs before the
   // engine is constructed so a bad request never occupies the single-flight slot).
-  const groupASet = new Set(config.groupA_ids)
-  const overlap = config.groupB_ids.filter((id) => groupASet.has(id))
-  if (overlap.length > 0) {
-    throw new Error(`Groups overlap: case IDs ${overlap.join(', ')} appear in both groups`)
-  }
+  assertDisjointGroups(config)
 
   // Single-flight gating moves to the shared JobRunner (kind 'association').
   // The 'association' single-flight message in JobRunner is identical to the

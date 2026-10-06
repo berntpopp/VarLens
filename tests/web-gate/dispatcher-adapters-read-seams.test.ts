@@ -191,9 +191,44 @@ describe('web dispatcher adapters: read seams', () => {
     })
   })
 
-  // Unsupported reference/association methods are no longer pinned as 501s
-  // here: they are `pending` entries in src/shared/ipc/parity-manifest.ts and
-  // the typed web client refuses them before they reach the dispatcher.
+  test('cohort association answers 503 when the server has no association runner', async () => {
+    const { deps, execute, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+
+    const result = await overrides['cohort:runAssociation'].handle(
+      [{}],
+      {} as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(503)
+    expect(result).toEqual({
+      error: 'service-not-configured',
+      service: 'cohort association',
+      message: 'cohort association is not configured on this server.'
+    })
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  test('external reference lookups answer 503 when the server has no ReferenceServices', async () => {
+    const { deps, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+
+    const result = await overrides['vep:fetch'].handle(
+      ['chr1', 100, 'A', 'T'],
+      {} as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(503)
+    expect(result).toEqual({
+      error: 'service-not-configured',
+      service: 'reference services',
+      message: 'reference services is not configured on this server.'
+    })
+  })
 
   test('reference API fixture-backed methods reject invalid args as bad requests', async () => {
     const previousFixtureFlag = process.env.VARLENS_WEB_PARITY_FIXTURES
@@ -208,7 +243,7 @@ describe('web dispatcher adapters: read seams', () => {
           args: [123],
           expected: {
             error: 'invalid-hpo-search',
-            message: 'hpo.search query must be a string'
+            message: 'hpo.search query must be a 1-500 character string; maxResults 1-100'
           }
         },
         {

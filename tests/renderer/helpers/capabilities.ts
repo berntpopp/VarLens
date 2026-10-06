@@ -13,12 +13,15 @@ import {
   type CapabilityRuntime
 } from '../../../src/shared/ipc/capability-document'
 import type { StorageCapabilities } from '../../../src/shared/types/storage-capabilities'
+import type { CapabilityFeature } from '../../../src/shared/ipc/capability-features'
 
 export function installCapabilities(
   options: {
     runtime?: CapabilityRuntime
     role?: string
     storage?: StorageCapabilities | null
+    /** Web instance features (e.g. external lookups an admin enabled). */
+    instanceFeatures?: Partial<Record<CapabilityFeature, boolean>>
   } = {}
 ): void {
   if (getActivePinia() === undefined) setActivePinia(createPinia())
@@ -26,7 +29,8 @@ export function installCapabilities(
     computeCapabilityDocument({
       runtime: options.runtime ?? 'desktop',
       role: options.role ?? 'admin',
-      storage: options.storage === undefined ? MOCK_SQLITE_CAPABILITIES : options.storage
+      storage: options.storage === undefined ? MOCK_SQLITE_CAPABILITIES : options.storage,
+      instanceFeatures: options.instanceFeatures
     })
   )
 }

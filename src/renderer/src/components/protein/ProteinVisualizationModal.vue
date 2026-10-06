@@ -57,7 +57,12 @@
       </v-toolbar>
 
       <!-- Loading state -->
-      <v-progress-linear v-if="proteinData.loading.value" indeterminate color="primary" />
+      <v-progress-linear
+        v-if="proteinData.loading.value"
+        indeterminate
+        color="primary"
+        aria-label="Loading protein data"
+      />
 
       <!-- Content area -->
       <div class="flex-grow-1" style="min-height: 0">
@@ -223,7 +228,12 @@ watch(
   geneSymbol,
   async (gene) => {
     clinvarVariants.value = []
-    if (gene !== null && gene !== '' && api !== undefined) {
+    if (
+      gene !== null &&
+      gene !== '' &&
+      api !== undefined &&
+      useCapabilityStore().canUse('gnomadVariants')
+    ) {
       clinvarLoading.value = true
       try {
         const result = unwrapIpcResult(await api.gnomad.getClinVarVariants(gene))

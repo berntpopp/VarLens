@@ -13,6 +13,14 @@ import type { PanelAppClient } from '../../services/api/PanelAppClient'
 import type { StringDbClient } from '../../services/api/StringDbClient'
 import type { StorageSession } from '../../storage/session'
 
+// Session-based (backend-neutral) panel creation from external sources and
+// BED generation, shared by desktop-on-Postgres and the web server.
+export {
+  importPanelAppForSession,
+  generateStringDbForSession,
+  generateBedContentForSession
+} from './panels-session'
+
 /** Confidence levels considered "green" (high confidence) */
 const GREEN_LEVELS = new Set(['3', '4', 'green'])
 

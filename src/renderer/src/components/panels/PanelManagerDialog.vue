@@ -42,36 +42,40 @@
           New Panel
         </v-btn>
         <v-btn
-          v-if="canImportPanelApp"
           color="primary"
           variant="outlined"
           density="comfortable"
           size="small"
           class="ml-2"
           :prepend-icon="mdiDownload"
+          :disabled="!canImportPanelApp"
+          data-testid="panels-import-panelapp"
           @click="panelAppImportOpen = true"
         >
           Import PanelApp
         </v-btn>
         <v-btn
-          v-if="canGenerateStringDb"
           color="primary"
           variant="outlined"
           density="comfortable"
           size="small"
           class="ml-2"
           :prepend-icon="mdiShareVariant"
+          :disabled="!canGenerateStringDb"
+          data-testid="panels-generate-stringdb"
           @click="stringDbGenerateOpen = true"
         >
           StringDB Generate
         </v-btn>
       </v-toolbar>
       <div
-        v-if="webOnlyNote !== null"
-        class="text-body-small text-medium-emphasis px-4 py-2"
+        v-for="note in externalLookupNotes"
+        :key="note"
+        class="text-body-small text-medium-emphasis px-4 py-1"
+        role="note"
         data-testid="panels-web-note"
       >
-        {{ webOnlyNote }}
+        {{ note }}
       </div>
 
       <v-card-text class="pa-0">
@@ -303,20 +307,23 @@ const panelAppImportOpen = ref(false)
 const stringDbGenerateOpen = ref(false)
 const geneRefInfo = ref<GeneRefInfo | null>(null)
 const geneRefUpdating = ref(false)
-// PanelApp / StringDB / BED export / gene-reference update are gated per
-// capability (parity manifest); unavailable ones are hidden and explained.
-const { canUse, capabilityReason } = useCapabilityStore()
-const canImportPanelApp = canUse('panelAppImport')
-const canGenerateStringDb = canUse('stringDbPanels')
-const canExportBed = canUse('panelBedExport')
-const canUpdateGeneRef = canUse('geneRefUpdate')
-const unavailableReasons = [
-  capabilityReason('panelAppImport'),
-  capabilityReason('stringDbPanels'),
-  capabilityReason('panelBedExport'),
-  capabilityReason('geneRefUpdate')
-].filter((reason): reason is string => reason !== null)
-const webOnlyNote = unavailableReasons.length > 0 ? unavailableReasons.join(' ') : null
+// PanelApp / STRING are outbound lookups: always on in desktop, an
+// admin-enabled server setting in web. Their buttons stay visible but
+// disabled, with the capability reason shown; BED export and the
+// gene-reference update are gated per capability as well.
+const capabilities = useCapabilityStore()
+const canImportPanelApp = computed(() => capabilities.canUse('panelAppImport'))
+const canGenerateStringDb = computed(() => capabilities.canUse('stringDbPanels'))
+const canExportBed = computed(() => capabilities.canUse('panelBedExport'))
+const canUpdateGeneRef = computed(() => capabilities.canUse('geneRefUpdate'))
+const externalLookupNotes = computed(() => {
+  const notes = [
+    capabilities.capabilityReason('panelAppImport'),
+    capabilities.capabilityReason('stringDbPanels'),
+    capabilities.capabilityReason('panelBedExport')
+  ].filter((note): note is string => note !== null)
+  return [...new Set(notes)]
+})
 const errorSnackbar = ref(false)
 const errorSnackbarText = ref('')
 const exportAssemblyDialogOpen = ref(false)
@@ -424,7 +431,7 @@ function onExternalImport(): void {
 }
 
 async function updateGeneRef(): Promise<void> {
-  if (!api || !canUpdateGeneRef) return
+  if (!api || !canUpdateGeneRef.value) return
   geneRefUpdating.value = true
   try {
     const result = unwrapIpcResult(await api.geneRef.update())
@@ -451,7 +458,7 @@ function exportBed(panel: PanelListItem): void {
 }
 
 async function doExportBed(): Promise<void> {
-  if (!exportingPanel.value || !api || !canExportBed) return
+  if (!exportingPanel.value || !api || !canExportBed.value) return
   try {
     unwrapIpcResult(
       await api.panels.exportBed(exportingPanel.value.id, exportAssembly.value, exportPadding.value)

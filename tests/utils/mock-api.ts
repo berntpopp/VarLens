@@ -8,6 +8,10 @@
 import { vi, type Mock } from 'vitest'
 import type { WindowAPI } from '../../src/shared/types/api'
 import type { StorageCapabilities } from '../../src/shared/types/storage-capabilities'
+import {
+  buildReferenceServicesStatus,
+  uniformReferenceServicePolicy
+} from '../../src/shared/ipc/domains/reference-services'
 
 type MockApiDomain<T extends Record<string, unknown>> = {
   [K in keyof T]: T[K] extends (...args: infer Args) => infer Result
@@ -54,6 +58,7 @@ export type MockApi = {
   perf: MockApiDomain<WindowAPI['perf']>
   debug: MockApiDomain<WindowAPI['debug']>
   jobs: MockApiDomain<WindowAPI['jobs']>
+  referenceServices: MockApiDomain<WindowAPI['referenceServices']>
 }
 
 const TEST_SQLITE_CAPABILITIES: StorageCapabilities = {
@@ -481,6 +486,14 @@ export function createMockApi(): MockApi {
       progress: vi.fn().mockResolvedValue({ data: null }),
       cancel: vi.fn().mockResolvedValue({ data: { requested: false } }),
       onChanged: vi.fn().mockReturnValue(() => {})
+    },
+    referenceServices: {
+      status: vi
+        .fn()
+        .mockResolvedValue(
+          buildReferenceServicesStatus('desktop', uniformReferenceServicePolicy(true))
+        ),
+      setPolicy: vi.fn().mockResolvedValue(undefined)
     }
   }
 

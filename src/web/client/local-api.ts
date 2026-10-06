@@ -113,7 +113,8 @@ export const LOCAL_API: LocalApi = {
   import: importApi,
   batchImport: batchImportApi,
   cohort: {
-    onSummaryRebuilt: (callback) => subscribeWebEvent('cohort:summaryRebuilt', callback)
+    onSummaryRebuilt: (callback) => subscribeWebEvent('cohort:summaryRebuilt', callback),
+    onAssociationProgress: (callback) => subscribeWebEvent('cohort:geneBurdenProgress', callback)
   },
   jobs: {
     // `jobs:changed` is a push event (desktop IPC event / web SSE), never an RPC.

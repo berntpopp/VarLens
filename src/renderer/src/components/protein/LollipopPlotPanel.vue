@@ -19,9 +19,19 @@
       @export-png="handleExportPng"
     />
 
+    <div
+      v-if="gnomadReason !== null"
+      class="px-3 py-1 text-body-small text-medium-emphasis"
+      role="note"
+      data-testid="gnomad-unavailable-reason"
+    >
+      {{ gnomadReason }}
+    </div>
+
     <!-- Loading bar for gnomAD / ClinVar fetch -->
     <v-progress-linear
       v-if="gnomadLoading || clinvarLoading"
+      aria-label="Loading gnomAD and ClinVar variants"
       indeterminate
       color="info"
       height="2"
@@ -126,8 +136,13 @@ const plotRef = ref<ComponentPublicInstance<{
   exportPng: () => Promise<Blob | null>
 }> | null>(null)
 
-// gnomAD state - ON by default
-const showGnomad = ref(true)
+// gnomAD + ClinVar come from the `gnomad` reference service: always on in
+// desktop, an admin-enabled server lookup in web.
+const capabilities = useCapabilityStore()
+const gnomadReason = computed(() => capabilities.capabilityReason('gnomadVariants'))
+
+// gnomAD state - ON by default (when the service is available)
+const showGnomad = ref(capabilities.canUse('gnomadVariants'))
 const gnomadLoading = ref(false)
 const gnomadVariants = ref<GnomadVariant[]>([])
 
@@ -182,7 +197,7 @@ watch(
 )
 
 async function fetchGnomad(gene: string, generation?: number): Promise<void> {
-  if (api === undefined) return
+  if (api === undefined || !capabilities.canUse('gnomadVariants')) return
   gnomadLoading.value = true
   try {
     const result = unwrapIpcResult(await api.gnomad.getVariants(gene))
@@ -210,6 +225,7 @@ async function fetchGnomad(gene: string, generation?: number): Promise<void> {
 }
 
 async function handleToggleGnomad(): Promise<void> {
+  if (!capabilities.canUse('gnomadVariants')) return
   showGnomad.value = !showGnomad.value
 
   // Fetch gnomAD variants when toggling on if not already loaded

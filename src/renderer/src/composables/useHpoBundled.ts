@@ -7,16 +7,12 @@
 
 import { ref, computed } from 'vue'
 import { logService } from '../services/LogService'
+import { searchHpoTerms, type HpoTermEntry } from '../../../shared/utils/hpo-term-search'
 
 /**
  * HPO term structure matching bundled JSON format
  */
-export interface HpoTerm {
-  /** HPO ID (e.g., "HP:0001250") */
-  id: string
-  /** HPO term name */
-  name: string
-}
+export type HpoTerm = HpoTermEntry
 
 // Lazy-loaded HPO terms cache
 let hpoTermsCache: HpoTerm[] | null = null
@@ -83,69 +79,14 @@ export function useHpoBundled() {
    * @returns Array of matching HPO terms
    */
   async function search(query: string, maxResults: number = 20): Promise<HpoTerm[]> {
-    // Require minimum query length
+    // Require minimum query length before loading the term list
     if (!query || query.length < 2) {
       return []
     }
 
     // Load terms if not cached
     const terms = await loadHpoTerms()
-    if (terms.length === 0) {
-      return []
-    }
-
-    // Normalize query for case-insensitive search
-    const normalizedQuery = query.toLowerCase().trim()
-
-    // Search both ID and name
-    const results: HpoTerm[] = []
-
-    for (const term of terms) {
-      // Check ID match (case-insensitive)
-      if (term.id.toLowerCase().includes(normalizedQuery)) {
-        results.push(term)
-        if (results.length >= maxResults) break
-        continue
-      }
-
-      // Check name match (case-insensitive)
-      if (term.name.toLowerCase().includes(normalizedQuery)) {
-        results.push(term)
-        if (results.length >= maxResults) break
-      }
-    }
-
-    // Sort results: exact ID matches first, then exact name matches, then partial matches
-    results.sort((a, b) => {
-      // Exact ID match has highest priority
-      const aIdExact = a.id.toLowerCase() === normalizedQuery
-      const bIdExact = b.id.toLowerCase() === normalizedQuery
-      if (aIdExact && !bIdExact) return -1
-      if (!aIdExact && bIdExact) return 1
-
-      // ID starts with query has second priority
-      const aIdStarts = a.id.toLowerCase().startsWith(normalizedQuery)
-      const bIdStarts = b.id.toLowerCase().startsWith(normalizedQuery)
-      if (aIdStarts && !bIdStarts) return -1
-      if (!aIdStarts && bIdStarts) return 1
-
-      // Exact name match has third priority
-      const aNameExact = a.name.toLowerCase() === normalizedQuery
-      const bNameExact = b.name.toLowerCase() === normalizedQuery
-      if (aNameExact && !bNameExact) return -1
-      if (!aNameExact && bNameExact) return 1
-
-      // Name starts with query has fourth priority
-      const aNameStarts = a.name.toLowerCase().startsWith(normalizedQuery)
-      const bNameStarts = b.name.toLowerCase().startsWith(normalizedQuery)
-      if (aNameStarts && !bNameStarts) return -1
-      if (!aNameStarts && bNameStarts) return 1
-
-      // Default: alphabetical by name
-      return a.name.localeCompare(b.name)
-    })
-
-    return results
+    return searchHpoTerms(terms, query, maxResults)
   }
 
   /**

@@ -129,10 +129,10 @@
     },
     {
       "path": "src/renderer/src/mocks/mockApi.ts",
-      "lines": 1234,
+      "lines": 1236,
       "threshold": 600,
       "category": "source",
-      "reason": "existing large renderer mock surface; must not grow before responsibility split. Each new top-level WindowAPI domain requires a matching renderer mock entry, which unavoidably grows this central mock surface: PR-2 added the `debug` block (mirroring `perf`), and PR-4 added the `jobs` block (list/get/progress), and the web-mode-completeness branch added auth.reactivateUser + auth.setRole (admin user management contract). Neither can be split out without diverging from the WindowAPI contract the mock must satisfy. The parity wave added system.getCapabilities (capability document), which the mock must implement to satisfy WindowAPI."
+      "reason": "existing large renderer mock surface; must not grow before responsibility split. Each new top-level WindowAPI domain requires a matching renderer mock entry, which unavoidably grows this central mock surface: PR-2 added the `debug` block (mirroring `perf`), and PR-4 added the `jobs` block (list/get/progress), and the web-mode-completeness branch added auth.reactivateUser + auth.setRole (admin user management contract). Neither can be split out without diverging from the WindowAPI contract the mock must satisfy. The parity wave added system.getCapabilities (capability document), which the mock must implement to satisfy WindowAPI, and the parity reference-services branch added the `referenceServices` domain (+2 lines: one import, one entry; the body lives in mocks/referenceServicesMock.ts)."
     },
     {
       "path": "src/shared/types/api.ts",

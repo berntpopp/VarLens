@@ -146,6 +146,7 @@ export const DOMAIN_CAMEL_TO_KEBAB: Record<string, string> = {
   regionFiles: 'region-files',
   analysisGroups: 'analysis-groups',
   batchImport: 'batch-import',
+  referenceServices: 'reference-services',
   audit: 'audit'
 }
 
