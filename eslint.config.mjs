@@ -18,6 +18,7 @@ export default [
       'out/**',
       'dist/**',
       'release/**',
+      '.cache/**',
       'node_modules/**',
       '**/*.d.ts',
       'docs/**',

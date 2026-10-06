@@ -6,9 +6,9 @@
  * with `preCompressed: true`, so the server never spends CPU compressing the
  * same immutable chunk twice. Sourcemaps are skipped (only fetched by devtools).
  */
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { extname, join } from 'node:path'
-import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib'
+import { readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { extname, join, resolve } from 'node:path'
+import { compressCached, pruneCompressionCache } from './compression-cache.mjs'
 
 export const PRECOMPRESS_EXTENSIONS = new Set([
   '.js',
@@ -34,28 +34,31 @@ function* walkFiles(dir) {
 
 /**
  * @param {string} dir absolute path to the built public directory
- * @returns {{ files: number, rawBytes: number, brotliBytes: number, gzipBytes: number }}
+ * @param {{ cacheDir?: string }} options
+ * @returns {{ files: number, rawBytes: number, brotliBytes: number, gzipBytes: number, cacheHits: number }}
  */
-export function precompressDirectory(dir) {
-  const summary = { files: 0, rawBytes: 0, brotliBytes: 0, gzipBytes: 0 }
+export function precompressDirectory(dir, { cacheDir = resolve('.cache/precompress') } = {}) {
+  const summary = { files: 0, rawBytes: 0, brotliBytes: 0, gzipBytes: 0, cacheHits: 0 }
   for (const file of walkFiles(dir)) {
     if (!PRECOMPRESS_EXTENSIONS.has(extname(file))) continue
-    if (statSync(file).size < PRECOMPRESS_MIN_BYTES) continue
+    if (statSync(file).size < PRECOMPRESS_MIN_BYTES) {
+      rmSync(`${file}.br`, { force: true })
+      rmSync(`${file}.gz`, { force: true })
+      continue
+    }
     const raw = readFileSync(file)
-    const br = brotliCompressSync(raw, {
-      params: {
-        [zlibConstants.BROTLI_PARAM_QUALITY]: zlibConstants.BROTLI_MAX_QUALITY,
-        [zlibConstants.BROTLI_PARAM_SIZE_HINT]: raw.length
-      }
-    })
-    const gz = gzipSync(raw, { level: 9 })
+    const { br, gz, cacheHit } = compressCached(raw, cacheDir)
+    if (cacheHit) summary.cacheHits += 1
     // Only keep a variant that actually saves bytes.
     if (br.length < raw.length) writeFileSync(`${file}.br`, br)
+    else rmSync(`${file}.br`, { force: true })
     if (gz.length < raw.length) writeFileSync(`${file}.gz`, gz)
+    else rmSync(`${file}.gz`, { force: true })
     summary.files += 1
     summary.rawBytes += raw.length
     summary.brotliBytes += Math.min(br.length, raw.length)
     summary.gzipBytes += Math.min(gz.length, raw.length)
   }
+  pruneCompressionCache(cacheDir)
   return summary
 }

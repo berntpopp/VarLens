@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs'
+import { execFileSync } from 'node:child_process'
 import { resolve } from 'path'
 
 import { describe, expect, test } from 'vitest'
@@ -9,8 +10,14 @@ describe('web CI target wiring', () => {
   test('root Makefile keeps web CI explicit and Postgres-gated', () => {
     const makefile = readFileSync(resolve(ROOT, 'Makefile'), 'utf8')
 
-    expect(makefile).toMatch(/^web-ci: rebuild-node build-web web-gate-static web-gate-postgres/m)
-    expect(makefile).toMatch(/^web-gate-postgres: build-web/m)
+    const commands = execFileSync('make', ['-n', 'web-ci'], { cwd: ROOT, encoding: 'utf8' })
+    expect(commands.match(/^npm run build:web$/gm)).toHaveLength(1)
+    expect(commands.match(/^npm run rebuild:node$/gm)).toHaveLength(1)
+    expect(
+      commands.match(/^npx vitest run --project web-gate tests\/web-gate\/integration$/gm)
+    ).toHaveLength(1)
+    expect(commands).toContain("--exclude 'tests/web-gate/integration/**'")
+    expect(makefile).toContain('out/web/server.cjs and out/web/public/index.html are required')
     expect(makefile).toMatch(/^web-gate-parity: web-data-verify/m)
     expect(makefile).toContain('VARLENS_PG_URL is required for web-gate-postgres')
     // `ci` keeps memory-heavy checks serialized. The npm scripts already do their

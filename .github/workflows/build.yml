@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -19,86 +20,62 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # ── 1. Change detection (always runs, ~5 s) ─────────────────────────
-  # Docs-only / .planning-only PRs skip the whole code pipeline and the
-  # aggregation gate still reports success. Job-level filter is used
-  # instead of workflow-level `paths-ignore` because the latter leaves
-  # required status checks in permanent "pending" and blocks merges.
-  # See https://github.com/orgs/community/discussions/54877
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.code }}
-      web: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.web }}
+      code: ${{ steps.filter.outputs.code }}
+      web: ${{ steps.filter.outputs.web }}
+      docker: ${{ steps.filter.outputs.docker }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # dorny/paths-filter@v4.0.3
-        id: filter
-        if: github.event_name != 'workflow_dispatch'
         with:
-          filters: |
-            code:
-              - 'src/**'
-              - 'tests/e2e/**'
-              - 'tests/fixtures/**'
-              - 'tests/main/**'
-              - 'tests/perf/**'
-              - 'tests/refactor-checkpoint/**'
-              - 'tests/renderer/**'
-              - 'tests/scripts/**'
-              - 'tests/shared/**'
-              - 'tests/test-data/**'
-              - 'tests/utils/**'
-              - 'package.json'
-              - 'package-lock.json'
-              - 'electron.vite.config.ts'
-              - 'playwright.config.ts'
-              - 'tsconfig*.json'
-              - 'eslint.config.mjs'
-              - '.prettierignore'
-              - '.github/workflows/**'
-              - 'vitest.config.ts'
-              - 'Makefile'
-            web:
-              - 'Dockerfile'
-              - '.dockerignore'
-              - '.env.web.example'
-              - 'Makefile'
-              - 'package.json'
-              - 'package-lock.json'
-              - 'src/main/storage/**'
-              - 'src/web/**'
-              - 'src/renderer/src/**'
-              - 'src/shared/**'
-              - 'tests/web-gate/**'
-              - 'tests/web-smoke/**'
-              - 'tests/ui-gates/**'
-              - 'scripts/ui-gates/**'
-              - 'playwright.ui-gates.config.ts'
-              - 'vite.web*.config.ts'
-              - '.github/workflows/build.yml'
-              - '.github/workflows/*web*.yml'
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.nvmrc'
+      - name: Classify shared gate inputs
+        id: filter
+        run: node scripts/ci/changes.mjs --github-output
+
+  workflows:
+    name: Workflow and repository policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Install formatting tools without native compilation
+        run: npm ci --ignore-scripts
+      - name: Restore formatter cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+        with:
+          path: .cache/prettier
+          key: prettier-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json', '.prettierignore', 'scripts/format.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            prettier-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json', '.prettierignore', 'scripts/format.mjs') }}-
+      - name: Repository hygiene
+        run: make format-check agent-check
+      - name: Workflow syntax, pinned actions, and shell scripts
+        run: node scripts/ci/run.mjs --workflows
 
   secrets-scan:
     name: Secrets Scan
     runs-on: ubuntu-latest
-    env:
-      GITLEAKS_VERSION: 8.30.1
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Install gitleaks
-        run: |
-          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
-          tar -xzf gitleaks.tar.gz gitleaks
-          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.nvmrc'
 
-      - name: Run gitleaks
-        run: gitleaks git --no-banner --redact --report-format sarif --report-path gitleaks-results.sarif --exit-code 1 .
+      - name: Scan history with checksum-verified Gitleaks
+        run: node scripts/ci/tools.mjs gitleaks git --no-banner --redact --report-format sarif --report-path gitleaks-results.sarif --exit-code 1 .
 
       - name: Upload gitleaks report
         if: always()
@@ -114,8 +91,10 @@ jobs:
   # issues at the compiled-build step.
   checks:
     name: Checks (Ubuntu)
+    env:
+      VARLENS_NATIVE_RUNTIME: node
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
@@ -136,10 +115,12 @@ jobs:
       - name: Restore git mtimes
         run: git restore-mtime
 
-      - name: Extract Electron version
+      - name: Resolve native toolchain identity
         id: electron-ver
         shell: bash
-        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")" >> "$GITHUB_OUTPUT"
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
 
       # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
       # postinstall restores a binary instead of compiling one. `.cache/native`
@@ -151,30 +132,14 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
-          key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native modules for Node.js
-        run: npm run rebuild:node
-
       # checks runs Vitest under Node, so assert the NODE ABI, not electron.
       - name: Assert native ABI
         run: node scripts/native/assert-native-abi.mjs node
-
-      # Cache ESLint + Prettier results across CI runs. Key on lockfile +
-      # lint/format config so stale caches auto-invalidate when rules change.
-      - name: Restore lint caches
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
-        with:
-          path: |
-            .eslintcache
-            .prettiercache
-          key: lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', '.prettierignore') }}-${{ github.sha }}
-          restore-keys: |
-            lint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', '.prettierignore') }}-
-            lint-${{ runner.os }}-
 
       # Cache TypeScript --incremental build info. Partial restores are fine
       # because tsc/vue-tsc use content hashes inside .tsbuildinfo to decide
@@ -189,13 +154,19 @@ jobs:
             tsbuildinfo-${{ runner.os }}-
 
       - name: Run linter
-        run: npm run lint:check
-
-      - name: Run format check
-        run: npm run format:check
+        run: make lint-check
 
       - name: Run type check
-        run: npm run typecheck
+        run: make typecheck
+
+      # DbPool integration needs the emitted worker. electron-vite 5 has no
+      # supported skipRenderer build flag, so use its complete JS build here.
+      # Compilation leaves the native addon on the Node ABI used by Vitest.
+      - name: Build fresh worker artifacts for integration tests
+        run: |
+          rm -rf out/main out/preload out/renderer
+          npm run build
+          test -s out/main/db-worker.js
 
       # Coverage only on push-to-main — PRs and manual `workflow_dispatch`
       # reruns (e.g. re-generating installers past the 30-day rerun window)
@@ -207,11 +178,11 @@ jobs:
       # run satisfy that gate.
       - name: Run tests
         if: github.event_name != 'push'
-        run: npm run test
+        run: make test
 
       - name: Run tests with coverage (main)
         if: github.event_name == 'push'
-        run: npm run test:coverage
+        run: make test-coverage
 
       - name: Upload coverage
         if: github.event_name == 'push'
@@ -229,7 +200,7 @@ jobs:
   package:
     name: Package (${{ matrix.os }})
     needs: [changes, checks]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && github.event.pull_request.draft != true
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -250,6 +221,7 @@ jobs:
     # below and the `Package Electron app` step (which invokes electron-builder
     # itself) see the identical value.
     env:
+      VARLENS_NATIVE_RUNTIME: electron
       ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
 
     steps:
@@ -269,10 +241,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsqlite3-dev build-essential
 
-      - name: Extract Electron version
+      - name: Resolve native toolchain identity
         id: electron-ver
         shell: bash
-        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")" >> "$GITHUB_OUTPUT"
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
 
       # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
       # postinstall restores a binary instead of compiling one. `.cache/native`
@@ -284,16 +258,10 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
-          key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
 
       - name: Install dependencies
         run: npm ci
-
-      # Unconditional: a warm cache makes this a ~0.1s restore, and a cold
-      # cache self-heals with a real compile. There is no cache-hit guard
-      # to fall out of sync with.
-      - name: Rebuild native modules for Electron
-        run: npm run rebuild:electron
 
       - name: Assert native ABI
         shell: bash
@@ -461,14 +429,11 @@ jobs:
             release/SHA256SUMS
 
   # ── 4. Web-mode required check for web app surfaces ────────────────
-  # The standalone `Web CI` workflow stays for readability, but this
-  # job folds the same web readiness gate into the required Build / CI
-  # aggregator. A web-only app change therefore cannot merge on the
-  # desktop checks alone.
+  # The only PR web gate; standalone Web CI handles VarLens-Web/manual runs.
   web-ci:
     name: Web CI
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.web == 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -485,6 +450,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
+      VARLENS_NATIVE_RUNTIME: node
       VARLENS_PG_URL: postgres://varlens:varlens@127.0.0.1:5432/varlens_web_ci
       VARLENS_RECOVERY_KEY_DIR: /tmp/varlens-web-ci-secrets
     steps:
@@ -500,10 +466,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsqlite3-dev build-essential
 
-      - name: Extract Electron version
+      - name: Resolve native toolchain identity
         id: electron-ver
         shell: bash
-        run: echo "ver=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")" >> "$GITHUB_OUTPUT"
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
 
       # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
       # postinstall restores a binary instead of compiling one. `.cache/native`
@@ -515,13 +483,10 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
-          key: native-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}
+          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Rebuild native modules for Node.js
-        run: npm run rebuild:node
 
       # `make web-ci` runs the web gate under Node (no Electron process
       # involved), so assert the NODE ABI, not electron.
@@ -557,51 +522,56 @@ jobs:
           path: test-results/ui-gates/
           if-no-files-found: ignore
 
-      - name: Docker runtime image smoke
-        if: github.event_name == 'pull_request'
-        run: docker build --target runtime -t varlens-web-pr-smoke .
+  docker:
+    name: Docker runtime and security
+    needs: changes
+    if: needs.changes.outputs.docker == 'true' && github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.nvmrc'
+      - name: Set up bounded Docker builder
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # docker/setup-buildx-action@v4.4.1
+        with:
+          driver: docker-container
+          driver-opts: |
+            memory=6g
+            memory-swap=6g
+          buildkitd-config-inline: |
+            [worker.oci]
+              max-parallelism = 2
+      - name: Build runtime image once
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # docker/build-push-action@v7.4.0
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: varlens-web-ci
+          cache-from: |
+            type=gha,scope=web-main
+            type=gha,scope=web-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
+          cache-to: type=gha,mode=max,scope=web-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
+      - name: Runtime smoke against disposable PostgreSQL
+        run: node scripts/ci/containers.mjs smoke varlens-web-ci
+      - name: Trivy 0.70.0 critical fixed-vulnerability gate
+        run: node scripts/ci/containers.mjs scan varlens-web-ci
 
-  # ── 5. Required-status-check aggregator ────────────────────────────
-  # Branch protection should require THIS job (and secrets-scan) only.
-  # It succeeds when all required upstream jobs for the changed surface
-  # succeeded, except docs-only / planning-only PRs where desktop and web
-  # gated jobs were intentionally skipped. This avoids the `paths-ignore`
-  # pending-forever trap while still failing on cancelled or unexpectedly
-  # skipped upstream jobs.
+  # Stable required check: selected lanes must report success, including cancellation.
   ci:
     name: CI
-    needs: [changes, secrets-scan, checks, package, web-ci]
+    needs: [changes, secrets-scan, workflows, checks, package, web-ci, docker]
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.nvmrc'
       - name: Compute overall result
-        run: |
-          for r in \
-            "${{ needs.changes.result }}" \
-            "${{ needs.secrets-scan.result }}"; do
-            if [ "$r" != "success" ]; then
-              echo "::error::Required job result was '$r' (expected 'success'). Failing."
-              exit 1
-            fi
-          done
-          if [ "${{ needs.changes.outputs.code }}" = "false" ] && [ "${{ needs.changes.outputs.web }}" = "false" ]; then
-            echo "No code or web surface changed; build jobs were intentionally skipped. PASS."
-            exit 0
-          fi
-          if [ "${{ needs.changes.outputs.code }}" = "true" ]; then
-            for r in \
-              "${{ needs.checks.result }}" \
-              "${{ needs.package.result }}"; do
-              if [ "$r" != "success" ]; then
-                echo "::error::Required desktop job result was '$r' (expected 'success'). Failing."
-                exit 1
-              fi
-            done
-          fi
-          if [ "${{ needs.changes.outputs.web }}" = "true" ]; then
-            if [ "${{ needs.web-ci.result }}" != "success" ]; then
-              echo "::error::Required web-ci job result was '${{ needs.web-ci.result }}' (expected 'success'). Failing."
-              exit 1
-            fi
-          fi
-          echo "All required jobs succeeded."
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node scripts/ci/workflow-policy.mjs aggregate
