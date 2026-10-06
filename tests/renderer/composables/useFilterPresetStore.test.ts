@@ -140,6 +140,28 @@ describe('useFilterPresetStore', () => {
     expect(merged.consequences).toEqual(['HIGH'])
   })
 
+  it.each(['case', 'cohort'] as const)(
+    'getActiveFilterState carries maxInternalAf for the %s view (last preset wins)',
+    async (scope) => {
+      mockApi.list.mockResolvedValueOnce([
+        { ...mockPresets[0], filterJson: { maxGnomadAf: 0.01, maxInternalAf: 0.01 } },
+        { ...mockPresets[1], filterJson: { consequences: ['HIGH'], maxInternalAf: 0.05 } }
+      ])
+      const { togglePreset, getActiveFilterState, loadPresets } = useFilterPresetStore(scope)
+      await loadPresets()
+
+      togglePreset(1)
+      expect(getActiveFilterState()).toMatchObject({ maxGnomadAf: 0.01, maxInternalAf: 0.01 })
+
+      togglePreset(2)
+      expect(getActiveFilterState().maxInternalAf).toBe(0.05)
+
+      togglePreset(1)
+      togglePreset(2)
+      expect(getActiveFilterState().maxInternalAf).toBeUndefined()
+    }
+  )
+
   it('keeps active presets separate for the case and cohort views (P0-3 isolation)', () => {
     const caseStore = useFilterPresetStore('case')
     const cohortStore = useFilterPresetStore('cohort')
