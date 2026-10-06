@@ -1,9 +1,12 @@
 <template>
+  <!-- order=1: laid out after the app footer, so the footer spans beneath the
+       panel and docking never moves the footer controls (layout shift). -->
   <v-navigation-drawer
     :model-value="open"
     tag="aside"
     aria-label="Variant details"
     location="right"
+    :order="1"
     :temporary="!detailPanelDocked"
     :persistent="true"
     :scrim="false"
