@@ -1,9 +1,9 @@
 /**
  * Single-route HTTP dispatcher for `window.api.<domain>.<method>(...)`.
  *
- * The browser's `window.api` is a Proxy (src/web/client/api.ts) that
- * forwards every call as `POST /api/<domain>/<method>` with body
- * `{ args: [...] }`. This file is the server side: one route resolves
+ * The browser's typed `window.api` client (src/web/client/api.ts) sends
+ * every `shared` parity-manifest method as `POST /api/<domain>/<method>`
+ * with body `{ args: [...] }`. This file is the server side: one route resolves
  * the call against three layers, in order:
  *
  *   1. Per-domain OVERRIDES — for methods that don't fit the
