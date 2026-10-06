@@ -169,6 +169,34 @@ export class AuthService {
     }
   }
 
+  async reactivateUser(username: string): Promise<void> {
+    const result = this.db
+      .prepare(
+        `UPDATE users SET is_active = 1, failed_login_count = 0, locked_until = NULL,
+         updated_at = datetime('now') WHERE username = ?`
+      )
+      .run(username)
+    if (result.changes === 0) throw new Error(`User not found: ${username}`)
+  }
+
+  /** Change a user's role; never demotes the last active admin. */
+  setRole(username: string, role: UserRole): void {
+    const user = this.getUser(username)
+    if (!user) throw new Error(`User not found: ${username}`)
+    if (user.role === role) return
+    if (user.role === ROLE_ADMIN) {
+      const others = this.db
+        .prepare(
+          'SELECT COUNT(*) AS c FROM users WHERE role = ? AND is_active = 1 AND username <> ?'
+        )
+        .get(ROLE_ADMIN, username) as { c: number }
+      if (others.c === 0) throw new Error('Cannot demote the last active admin')
+    }
+    this.db
+      .prepare("UPDATE users SET role = ?, updated_at = datetime('now') WHERE username = ?")
+      .run(role, username)
+  }
+
   async resetPassword(username: string, newPassword: string): Promise<void> {
     const passwordHash = await this.passwordProvider.hashPassword(newPassword)
     this.db

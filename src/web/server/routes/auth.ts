@@ -1,14 +1,7 @@
-import {
-  ChangePasswordArgsSchema,
-  CreateUserArgsSchema,
-  LoginArgsSchema,
-  ResetPasswordArgsSchema,
-  UsernameArgsSchema
-} from '../../../shared/api/schemas/auth'
+import { ChangePasswordArgsSchema, LoginArgsSchema } from '../../../shared/api/schemas/auth'
 import { PasswordPolicyError } from '../../auth/PostgresWebAuthService'
 import { recordAuthAudit } from '../audit'
 import { isPlatformIdentityEnabled } from '../platform-identity-config'
-import { requireAdmin } from './guards'
 import type { OverrideHandler } from './types'
 
 function platformMutationDenied(reply: { code: (statusCode: number) => unknown }): {
@@ -193,93 +186,6 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
           }
           throw err
         }
-      }
-    },
-    'auth:createUser': {
-      async handle(args, request, reply) {
-        if (isPlatformIdentityEnabled()) {
-          return platformMutationDenied(reply)
-        }
-        const admin = requireAdmin(request, reply)
-        if (admin === undefined) return { error: 'admin-required' }
-
-        const parsed = CreateUserArgsSchema.safeParse(args)
-        if (!parsed.success) {
-          reply.code(400)
-          return { error: 'invalid-user-payload' }
-        }
-        reply.code(501)
-        return {
-          error: 'multi-user-disabled',
-          message: 'Creating additional web users is disabled for this single-tenant release.'
-        }
-      }
-    },
-    'auth:listUsers': {
-      async handle(_args, request, reply, { authService }) {
-        const admin = requireAdmin(request, reply)
-        if (admin === undefined) return { error: 'admin-required' }
-        return await authService.listUsers()
-      }
-    },
-    'auth:deactivateUser': {
-      async handle(args, request, reply, deps) {
-        if (isPlatformIdentityEnabled()) {
-          return platformMutationDenied(reply)
-        }
-        const { authService } = deps
-        const admin = requireAdmin(request, reply)
-        if (admin === undefined) return { error: 'admin-required' }
-
-        const parsed = UsernameArgsSchema.safeParse(args)
-        if (!parsed.success) {
-          reply.code(400)
-          return { error: 'invalid-username' }
-        }
-        const [username] = parsed.data
-        if (username === admin.username) {
-          reply.code(400)
-          return { error: 'cannot-deactivate-self' }
-        }
-
-        await authService.deactivateUser(username)
-        await recordAuthAudit(deps, {
-          action_type: 'auth_user_deactivate',
-          username,
-          actor: admin.username,
-          success: true
-        })
-        return undefined
-      }
-    },
-    'auth:resetPassword': {
-      async handle(args, request, reply, deps) {
-        if (isPlatformIdentityEnabled()) {
-          return platformMutationDenied(reply)
-        }
-        const { authService } = deps
-        const admin = requireAdmin(request, reply)
-        if (admin === undefined) return { error: 'admin-required' }
-
-        const parsed = ResetPasswordArgsSchema.safeParse(args)
-        if (!parsed.success) {
-          reply.code(400)
-          return { error: 'invalid-reset-payload' }
-        }
-        const [username, newPassword] = parsed.data
-        if (username === admin.username) {
-          reply.code(400)
-          return { error: 'cannot-reset-self' }
-        }
-
-        await authService.resetPassword(username, newPassword)
-        await recordAuthAudit(deps, {
-          action_type: 'auth_password_reset',
-          username,
-          actor: admin.username,
-          success: true
-        })
-        return undefined
       }
     }
   }

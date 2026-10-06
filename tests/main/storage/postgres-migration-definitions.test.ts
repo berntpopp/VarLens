@@ -4,7 +4,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(16)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(17)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -21,7 +21,8 @@ describe('Postgres migration definitions', () => {
       '0013',
       '0014',
       '0015',
-      '0016'
+      '0016',
+      '0017'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -39,7 +40,8 @@ describe('Postgres migration definitions', () => {
       'central_audit_schema',
       'variant_transcripts_func',
       'import_visibility',
-      'platform_identity'
+      'platform_identity',
+      'multi_admin'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {

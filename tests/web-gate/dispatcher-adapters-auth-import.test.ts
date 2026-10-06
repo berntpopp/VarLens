@@ -251,6 +251,8 @@ describe('web dispatcher adapters: auth and import', () => {
       'auth:changePassword',
       'auth:createUser',
       'auth:deactivateUser',
+      'auth:reactivateUser',
+      'auth:setRole',
       'auth:resetPassword'
     ]) {
       const result = await overrides[action].handle([], request as never, reply as never, deps)
@@ -1139,8 +1141,8 @@ describe('web dispatcher adapters: auth and import', () => {
     expect(deps.authService.createUser).not.toHaveBeenCalled()
   })
 
-  test('auth.createUser is disabled for admins in single-tenant web mode', async () => {
-    const { deps, reply } = makeDeps()
+  test('auth.createUser creates the account for admins and audits the action', async () => {
+    const { deps, reply, writeExecute } = makeDeps()
     const { overrides } = buildDispatcher(deps)
     const request = { session: { user: { id: 1, username: 'admin', role: 'admin' } } }
 
@@ -1151,12 +1153,123 @@ describe('web dispatcher adapters: auth and import', () => {
       deps
     )
 
-    expect(reply.code).toHaveBeenCalledWith(501)
-    expect(result).toEqual({
-      error: 'multi-user-disabled',
-      message: 'Creating additional web users is disabled for this single-tenant release.'
+    expect(reply.code).not.toHaveBeenCalled()
+    expect(result).toBeUndefined()
+    expect(deps.authService.createUser).toHaveBeenCalledWith(
+      'analyst',
+      'Analyst',
+      'temporary-password',
+      'admin'
+    )
+    const audit = writeExecute.mock.calls.map(
+      ([task]) => task as { type: string; params: unknown[] }
+    )
+    expect(audit).toContainEqual(
+      expect.objectContaining({
+        type: 'audit:append',
+        params: [
+          expect.objectContaining({
+            action_type: 'api_write',
+            entity_type: 'user_account',
+            entity_key: 'analyst',
+            user_name: 'admin'
+          })
+        ]
+      })
+    )
+    expect(JSON.stringify(audit)).not.toContain('temporary-password')
+  })
+
+  test('auth.createUser maps a duplicate username to 409', async () => {
+    const { deps, reply } = makeDeps()
+    deps.authService.createUser = vi.fn(async () => {
+      throw Object.assign(new Error('duplicate key'), { code: '23505' })
     })
-    expect(deps.authService.createUser).not.toHaveBeenCalled()
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 1, username: 'admin', role: 'admin' } } }
+
+    const result = await overrides['auth:createUser'].handle(
+      ['admin', 'Dup', 'temporary-password'],
+      request as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(409)
+    expect(result).toMatchObject({ error: 'username-taken' })
+  })
+
+  test('auth.setRole changes another user role and refuses self-changes', async () => {
+    const { deps, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 1, username: 'admin', role: 'admin' } } }
+
+    await overrides['auth:setRole'].handle(
+      ['analyst', 'admin'],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(deps.authService.setRole).toHaveBeenCalledWith('analyst', 'admin')
+
+    const self = await overrides['auth:setRole'].handle(
+      ['admin', 'user'],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(self).toMatchObject({ error: 'cannot-change-own-role' })
+    expect(deps.authService.setRole).toHaveBeenCalledTimes(1)
+  })
+
+  test('auth.setRole rejects unknown roles and maps last-admin protection to 409', async () => {
+    const { deps, reply } = makeDeps()
+    const { UserAdminError } = await import('../../src/web/auth/postgres-user-admin')
+    deps.authService.setRole = vi.fn(async () => {
+      throw new UserAdminError('last-admin', 'Cannot demote the last active admin')
+    })
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 1, username: 'admin', role: 'admin' } } }
+
+    const invalid = await overrides['auth:setRole'].handle(
+      ['analyst', 'superuser'],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(invalid).toMatchObject({ error: 'invalid-role' })
+    expect(deps.authService.setRole).not.toHaveBeenCalled()
+
+    const lastAdmin = await overrides['auth:setRole'].handle(
+      ['other-admin', 'user'],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(reply.code).toHaveBeenLastCalledWith(409)
+    expect(lastAdmin).toMatchObject({ error: 'last-admin' })
+  })
+
+  test('auth.reactivateUser re-enables an account for admins only', async () => {
+    const { deps, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+
+    const denied = await overrides['auth:reactivateUser'].handle(
+      ['analyst'],
+      { session: { user: { id: 2, username: 'user', role: 'user' } } } as never,
+      reply as never,
+      deps
+    )
+    expect(denied).toEqual({ error: 'admin-required' })
+
+    await overrides['auth:reactivateUser'].handle(
+      ['analyst'],
+      { session: { user: { id: 1, username: 'admin', role: 'admin' } } } as never,
+      reply as never,
+      deps
+    )
+    expect(deps.authService.reactivateUser).toHaveBeenCalledWith('analyst')
   })
 
   test('auth.deactivateUser rejects self-deactivation before calling the auth service', async () => {
@@ -1172,7 +1285,7 @@ describe('web dispatcher adapters: auth and import', () => {
     )
 
     expect(reply.code).toHaveBeenCalledWith(400)
-    expect(result).toEqual({ error: 'cannot-deactivate-self' })
+    expect(result).toMatchObject({ error: 'cannot-deactivate-self' })
     expect(deps.authService.deactivateUser).not.toHaveBeenCalled()
   })
 
@@ -1189,7 +1302,7 @@ describe('web dispatcher adapters: auth and import', () => {
     )
 
     expect(reply.code).toHaveBeenCalledWith(400)
-    expect(result).toEqual({ error: 'cannot-reset-self' })
+    expect(result).toMatchObject({ error: 'cannot-reset-self' })
     expect(deps.authService.resetPassword).not.toHaveBeenCalled()
   })
 })

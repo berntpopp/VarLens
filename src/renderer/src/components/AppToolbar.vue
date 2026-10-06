@@ -163,15 +163,18 @@
         />
         <v-divider class="my-1" />
         <v-list-subheader class="danger-zone-subheader">Danger Zone</v-list-subheader>
-        <v-list-item @click="$emit('delete-all-cases')">
+        <v-list-item :disabled="deleteAllReason !== null" @click="$emit('delete-all-cases')">
           <template #prepend>
             <v-icon color="error" :icon="mdiDeleteSweep" />
           </template>
           <v-list-item-title>Delete All Cases</v-list-item-title>
-          <v-list-item-subtitle>Remove all cases from database</v-list-item-subtitle>
+          <v-list-item-subtitle>
+            {{ deleteAllReason ?? 'Remove all cases from database' }}
+          </v-list-item-subtitle>
         </v-list-item>
       </v-list>
     </v-menu>
+    <AccountMenu />
   </v-app-bar>
 </template>
 
@@ -180,11 +183,13 @@ import { computed, watch } from 'vue'
 import DatabasePicker from './DatabasePicker.vue'
 import CaseStatusIcons from './CaseStatusIcons.vue'
 import ImportStatusChip from './ImportStatusChip.vue'
+import AccountMenu from './account/AccountMenu.vue'
 import IconButton from './common/IconButton.vue'
 import { useAppState } from '../composables/useAppState'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
 import { isWebRuntime } from '../utils/runtime-mode'
+import { getCurrentUnsupportedReasonSync } from '../utils/backend-capabilities'
 import type { AffectedStatus, CaseSex } from '../../../shared/types/api'
 import {
   mdiAccount,
@@ -220,6 +225,8 @@ const {
 const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const isWebMode = isWebRuntime()
+// Capability-gated: disabled with the reason instead of failing after a click.
+const deleteAllReason = computed(() => getCurrentUnsupportedReasonSync('cases.deleteAll'))
 
 // Preload metadata when a case is selected so status/sex icons display immediately
 watch(

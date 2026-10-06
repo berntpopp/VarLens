@@ -22,6 +22,8 @@ const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
   'auth:createUser',
   'auth:deactivateUser',
   'auth:resetPassword',
+  'auth:setRole',
+  'auth:reactivateUser',
   'database:capabilities',
   'database:health',
   'database:info',
@@ -99,6 +101,30 @@ export async function recordAuthAudit(
         : {})
     },
     metadata: { source: 'web-auth' }
+  })
+}
+
+/**
+ * Audit admin user-management mutations that have no dedicated
+ * `auth_*` action type (create / role change / re-activate). Uses the
+ * generic `api_write` action on the `user_account` entity so no audit
+ * CHECK-constraint migration is needed; `method` disambiguates.
+ */
+export async function recordUserAdminAudit(
+  deps: DispatcherDeps,
+  params: { method: string; username: string; actor: string; role?: UserRole }
+): Promise<void> {
+  await appendWebAudit(deps, {
+    action_type: 'api_write',
+    entity_type: 'user_account',
+    entity_key: params.username,
+    user_name: params.actor,
+    new_value: {
+      success: true,
+      method: `auth:${params.method}`,
+      ...(params.role !== undefined ? { role: params.role } : {})
+    },
+    metadata: { source: 'web-auth-admin' }
   })
 }
 

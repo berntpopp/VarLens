@@ -1094,6 +1094,8 @@ export const mockApi: WindowAPI = {
     createUser: async () => {},
     listUsers: async () => [],
     deactivateUser: async () => {},
+    reactivateUser: async () => {},
+    setRole: async () => {},
     resetPassword: async () => {},
     changePassword: async () => {}
   },

@@ -160,6 +160,8 @@ const WEAK_ARGON2ID_HASH = '$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$dmFybGVucw'
 // user → COMMIT (4 queries instead of 5).
 function enqueueCreateFirstUserHappyPath(pool: FakePool, userId = '42'): void {
   pool.enqueueResponse({ rows: [], rowCount: 1 }) // BEGIN
+  pool.enqueueResponse({ rows: [], rowCount: 1 }) // advisory xact lock
+  pool.enqueueResponse({ rows: [], rowCount: 0 }) // no active admin yet
   pool.enqueueResponse({ rows: [], rowCount: 1 }) // UPSERT accounts_enabled
   pool.enqueueResponse({ rows: [{ id: userId }], rowCount: 1 }) // INSERT user
   pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
@@ -234,8 +236,24 @@ describe('PostgresWebAuthService — createFirstUser', () => {
     expect(pool.queries.length, 'no DB writes happen when policy fails').toBe(0)
   })
 
+  it('refuses a second bootstrap under the advisory lock when an admin exists', async () => {
+    pool.enqueueResponse({ rows: [], rowCount: 1 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 1 }) // advisory xact lock
+    pool.enqueueResponse({ rows: [{ '?column?': 1 }], rowCount: 1 }) // admin exists
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // ROLLBACK
+
+    await expect(svc.createFirstUser('alice', 'Alice', FIXTURE_PW)).rejects.toThrow(
+      /admin user already exists/i
+    )
+    expect(pool.queries[1].text).toMatch(/pg_advisory_xact_lock/)
+    expect(pool.queries.some((q) => /INSERT INTO[\s\S]+users/i.test(q.text))).toBe(false)
+    expect(pool.releasedCount).toBe(1)
+  })
+
   it('translates unique_violation (SQLSTATE 23505) into "Admin user already exists"', async () => {
     pool.enqueueResponse({ rows: [], rowCount: 1 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 1 }) // advisory xact lock
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // no active admin yet
     pool.enqueueResponse({ rows: [], rowCount: 1 }) // UPSERT accounts_enabled
     const uniqueViolation = Object.assign(new Error('duplicate key value'), { code: '23505' })
     pool.enqueueError(uniqueViolation) // INSERT user fails on partial unique idx
@@ -254,6 +272,8 @@ describe('PostgresWebAuthService — createFirstUser', () => {
 
   it('rolls back and releases the client when a non-unique error fires mid-transaction', async () => {
     pool.enqueueResponse({ rows: [], rowCount: 1 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 1 }) // advisory xact lock
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // no active admin yet
     pool.enqueueError(new Error('disk full')) // UPSERT accounts_enabled fails
     pool.enqueueResponse({ rows: [], rowCount: 0 }) // ROLLBACK
 
@@ -620,12 +640,53 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
   it('resetPassword clears lockout state and forces password change', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 }) // existence check
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.resetPassword('alice', FIXTURE_NEW_PW)
-    const upd = pool.queries[0]
+    const upd = pool.queries[1]
     expect(upd.text).toMatch(/must_change_password\s*=\s*TRUE/i)
     expect(upd.text).toMatch(/failed_login_count\s*=\s*0/i)
     expect(upd.text).toMatch(/locked_until\s*=\s*NULL/i)
+  })
+
+  it('resetPassword throws for an unknown user instead of silently succeeding', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 })
+    await expect(svc.resetPassword('ghost', FIXTURE_NEW_PW)).rejects.toThrow(/user not found/i)
+    expect(pool.queries).toHaveLength(1)
+  })
+
+  it('setRole promotes a user with a parameterised update', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [], rowCount: 1 })
+    await svc.setRole('bob', ROLE_ADMIN)
+    expect(pool.queries[1].text).toMatch(/UPDATE[\s\S]+SET role = \$1/i)
+    expect(pool.queries[1].values).toEqual([ROLE_ADMIN, 'bob'])
+  })
+
+  it('setRole refuses to demote the last active admin', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [{ role: ROLE_ADMIN }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [{ c: '0' }], rowCount: 1 })
+    await expect(svc.setRole('admin', ROLE_USER)).rejects.toThrow(/last active admin/i)
+    expect(pool.queries).toHaveLength(2)
+  })
+
+  it('reactivateUser re-enables and clears lockout; unknown users throw', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [{ role: ROLE_USER }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [], rowCount: 1 })
+    await svc.reactivateUser('bob')
+    expect(pool.queries[1].text).toMatch(/is_active = TRUE/i)
+    expect(pool.queries[1].text).toMatch(/locked_until = NULL/i)
+
+    pool.enqueueResponse({ rows: [], rowCount: 0 })
+    await expect(svc.reactivateUser('ghost')).rejects.toThrow(/user not found/i)
   })
 
   it('resetPassword rejects new passwords shorter than the policy minimum', async () => {
