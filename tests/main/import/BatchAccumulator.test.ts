@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { BatchAccumulator } from '../../../src/main/import/transforms/BatchAccumulator'
+import { setRecordBytes } from '../../../src/main/import/bounded-batcher'
 import { Writable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
@@ -107,5 +108,30 @@ describe('BatchAccumulator', () => {
     expect(flushFn).toHaveBeenCalledTimes(1)
     expect(flushFn).toHaveBeenCalledWith(42, [expect.objectContaining({ chr: '1', pos: 100 })])
     expect(accumulator.inserted).toBe(1)
+  })
+
+  it('flushes on the byte budget before the row limit is reached', async () => {
+    const flushed: number[] = []
+    const accumulator = new BatchAccumulator({
+      caseId: 1,
+      batchSize: 100,
+      maxBatchBytes: 25,
+      flushFn: (_caseId, batch) => flushed.push(batch.length),
+      onProgress: undefined,
+      startTime: Date.now()
+    })
+    const sink = new Writable({ objectMode: true, write: (_c, _e, cb) => cb() })
+
+    for (let pos = 1; pos <= 5; pos++) {
+      const variant = { chr: '1', pos, ref: 'A', alt: 'T' }
+      setRecordBytes(variant, 10)
+      accumulator.write(variant)
+    }
+    accumulator.end()
+    await pipeline(accumulator, sink)
+
+    // 10 bytes each against 25: every third record crosses the budget.
+    expect(flushed).toEqual([3, 2])
+    expect(accumulator.inserted).toBe(5)
   })
 })

@@ -30,12 +30,15 @@ import {
 import { quoteIdentifier } from '../storage/postgres/identifiers'
 import { classifyWorkerError } from '../storage/import-worker-errors'
 import { PostgresCohortSummaryRepository } from '../storage/postgres/PostgresCohortSummaryRepository'
+import { DATABASE_CONFIG } from '../../shared/config'
+import { createBoundedBatcher, getRecordBytes, resolveBatchSize } from '../import/bounded-batcher'
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
 import type { FormatInfo } from '../import/strategies/ImportStrategy'
 import { createMapperPipeline as defaultCreateMapperPipeline } from './import-pipeline'
 import type { VcfMappedVariant } from '../import/vcf/types'
 import { BedFilter } from '../import/vcf/bed-filter'
 import type { ImportFilters } from '../import/vcf/import-filters'
+import { splitVcfRows } from './postgres-vcf-batch'
 import { streamMappedVcfRows } from './postgres-vcf-stream'
 
 export { streamMappedVcfRows } from './postgres-vcf-stream'
@@ -80,6 +83,8 @@ export interface RunImportDeps {
   createMapperPipeline: (filePath: string, formatInfo: FormatInfo) => Promise<Readable>
   statFile: (filePath: string) => { size: number }
   isCancellationRequested?: () => boolean
+  /** Byte budget per batch; defaults to DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES. */
+  maxBatchBytes?: number
   /** VCF mapped-row producer for the PG worker's VCF branch. */
   createVcfMappedStream: (
     filePath: string,
@@ -228,10 +233,8 @@ export async function runImport(
 ): Promise<void> {
   cancelled = false // reset at entry; the parentPort handler also resets, this covers test/direct paths
   const startedAt = Date.now()
-  const batchSize =
-    start.batchSize !== undefined && start.batchSize > 0
-      ? start.batchSize
-      : POSTGRES_JSON_IMPORT_BATCH_SIZE
+  let batchSize = POSTGRES_JSON_IMPORT_BATCH_SIZE
+  const maxBatchBytes = deps.maxBatchBytes ?? DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES
   const client = deps.createClient(clientConfigFromMessage(start.client))
   let beganTransaction = false
   let provisionalImport: PostgresProvisionalImport | null = null
@@ -242,6 +245,7 @@ export async function runImport(
   }
 
   try {
+    batchSize = resolveBatchSize(start.batchSize, POSTGRES_JSON_IMPORT_BATCH_SIZE)
     await client.connect()
     profileStart(`${start.mode}:${start.caseName}`)
     // Phase 16.1: lift the per-statement / idle-in-transaction / lock
@@ -317,16 +321,9 @@ export async function runImport(
             }
           })
 
-          let variants: Array<Record<string, unknown>> = []
-          let transcripts: Array<Record<string, unknown> & { ordinal: number }> = []
-          let sv: Array<Record<string, unknown> & { ordinal: number }> = []
-          let cnv: Array<Record<string, unknown> & { ordinal: number }> = []
-          let str: Array<Record<string, unknown> & { ordinal: number }> = []
-          let ordinal = 0
           let totalInserted = 0
 
-          const flush = async (): Promise<void> => {
-            if (variants.length === 0) return
+          const writeBatch = async (rows: VcfMappedVariant[]): Promise<void> => {
             const request: PostgresVcfImportRequest = {
               mode: 'append',
               caseId,
@@ -338,11 +335,7 @@ export async function runImport(
               caller: null,
               annotationFormat: null,
               variantType: 'snv-indel',
-              variants,
-              transcripts,
-              sv,
-              cnv,
-              str
+              ...splitVcfRows(rows)
             }
             await client.query('BEGIN')
             beganTransaction = true
@@ -355,45 +348,24 @@ export async function runImport(
             profileCount('batch', 1)
             totalInserted += variantCount.variantCount
             post({ type: 'progress', phase: 'inserting', rowsProcessed: totalInserted, filePath })
-            variants = []
-            transcripts = []
-            sv = []
-            cnv = []
-            str = []
-            ordinal = 0
             if (typeof (globalThis as { gc?: () => void }).gc === 'function') {
               ;(globalThis as { gc?: () => void }).gc?.()
             }
           }
+          const batch = createBoundedBatcher<VcfMappedVariant, Promise<void>>({
+            maxRows: batchSize,
+            maxBytes: maxBatchBytes,
+            flush: writeBatch
+          })
 
           try {
             for await (const row of stream) {
               if (cancelled) {
                 throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
               }
-              const { _transcripts, _sv, _cnv, _str, ...base } = row
-              variants.push(base as unknown as Record<string, unknown>)
-              if (Array.isArray(_transcripts)) {
-                for (const t of _transcripts as unknown as Array<Record<string, unknown>>) {
-                  transcripts.push({ ordinal, ...t })
-                }
-              }
-              if (_sv !== undefined && _sv !== null) {
-                sv.push({ ordinal, ...(_sv as unknown as Record<string, unknown>) })
-              }
-              if (_cnv !== undefined && _cnv !== null) {
-                cnv.push({ ordinal, ...(_cnv as unknown as Record<string, unknown>) })
-              }
-              if (_str !== undefined && _str !== null) {
-                str.push({ ordinal, ...(_str as unknown as Record<string, unknown>) })
-              }
-              ordinal += 1
-
-              if (variants.length >= batchSize) {
-                await flush()
-              }
+              if (batch.add(row, getRecordBytes(row))) await batch.flush()
             }
-            await flush()
+            await batch.flush()
             if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
           } catch (error) {
             if (beganTransaction) {
@@ -492,17 +464,18 @@ export async function runImport(
       const writeVariants = async (session: PostgresJsonImportSession): Promise<void> => {
         if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
         const stream = await deps.createMapperPipeline(filePath, formatInfo)
-        let batch: Array<Record<string, unknown>> = []
-        const flush = async (): Promise<void> => {
-          if (batch.length === 0) return
-          await session.insertVariantBatch(batch)
-          totalInserted += batch.length
-          batch = []
-          post({ type: 'progress', phase: 'inserting', rowsProcessed: totalInserted, filePath })
-          if (typeof (globalThis as { gc?: () => void }).gc === 'function') {
-            ;(globalThis as { gc?: () => void }).gc?.()
+        const batch = createBoundedBatcher<Record<string, unknown>, Promise<void>>({
+          maxRows: batchSize,
+          maxBytes: maxBatchBytes,
+          flush: async (rows) => {
+            await session.insertVariantBatch(rows)
+            totalInserted += rows.length
+            post({ type: 'progress', phase: 'inserting', rowsProcessed: totalInserted, filePath })
+            if (typeof (globalThis as { gc?: () => void }).gc === 'function') {
+              ;(globalThis as { gc?: () => void }).gc?.()
+            }
           }
-        }
+        })
         try {
           for await (const chunk of stream) {
             if (cancelled) {
@@ -510,14 +483,13 @@ export async function runImport(
               throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             }
             if (chunk === null || chunk === undefined) continue
-            batch.push(chunk as Record<string, unknown>)
-            if (batch.length >= batchSize) {
-              await flush()
+            if (batch.add(chunk as Record<string, unknown>, getRecordBytes(chunk as object))) {
+              await batch.flush()
               if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             }
           }
           if (!cancelled) {
-            await flush()
+            await batch.flush()
           } else {
             throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
           }
@@ -682,15 +654,7 @@ export async function runImport(
               }
             })
 
-            let variants: Array<Record<string, unknown>> = []
-            let transcripts: Array<Record<string, unknown> & { ordinal: number }> = []
-            let sv: Array<Record<string, unknown> & { ordinal: number }> = []
-            let cnv: Array<Record<string, unknown> & { ordinal: number }> = []
-            let str: Array<Record<string, unknown> & { ordinal: number }> = []
-            let ordinal = 0
-
-            const flushBatch = async (): Promise<void> => {
-              if (variants.length === 0) return
+            const writeBatch = async (rows: VcfMappedVariant[]): Promise<void> => {
               const request: PostgresVcfImportRequest = {
                 mode: 'append',
                 caseId: fileCaseId,
@@ -702,11 +666,7 @@ export async function runImport(
                 caller: fileSpec.caller ?? null,
                 annotationFormat: fileSpec.annotationFormat ?? null,
                 variantType: fileSpec.variantType,
-                variants,
-                transcripts,
-                sv,
-                cnv,
-                str
+                ...splitVcfRows(rows)
               }
               await client.query('BEGIN')
               beganTransaction = true
@@ -724,44 +684,26 @@ export async function runImport(
                 rowsProcessed: totalVariantCount + fileVariantCount,
                 filePath: fileSpec.filePath
               })
-              variants = []
-              transcripts = []
-              sv = []
-              cnv = []
-              str = []
-              ordinal = 0
               if (typeof (globalThis as { gc?: () => void }).gc === 'function') {
                 ;(globalThis as { gc?: () => void }).gc?.()
               }
             }
+            const batch = createBoundedBatcher<VcfMappedVariant, Promise<void>>({
+              maxRows: batchSize,
+              maxBytes: maxBatchBytes,
+              flush: writeBatch
+            })
 
             for await (const row of stream) {
               if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
-              const { _transcripts, _sv, _cnv, _str, ...base } = row
-              variants.push(base as unknown as Record<string, unknown>)
-              if (Array.isArray(_transcripts)) {
-                for (const t of _transcripts as unknown as Array<Record<string, unknown>>) {
-                  transcripts.push({ ordinal, ...t })
-                }
-              }
-              if (_sv !== undefined && _sv !== null) {
-                sv.push({ ordinal, ...(_sv as unknown as Record<string, unknown>) })
-              }
-              if (_cnv !== undefined && _cnv !== null) {
-                cnv.push({ ordinal, ...(_cnv as unknown as Record<string, unknown>) })
-              }
-              if (_str !== undefined && _str !== null) {
-                str.push({ ordinal, ...(_str as unknown as Record<string, unknown>) })
-              }
-              ordinal += 1
-              if (variants.length >= batchSize) await flushBatch()
+              if (batch.add(row, getRecordBytes(row))) await batch.flush()
             }
 
             if (cancelled) {
               throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             }
 
-            await flushBatch()
+            await batch.flush()
             if (cancelled) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
             caseId = fileCaseId
             totalVariantCount += fileVariantCount

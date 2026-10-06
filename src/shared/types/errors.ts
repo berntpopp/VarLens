@@ -27,6 +27,8 @@ export enum ErrorCode {
   UNIQUE_CONSTRAINT = 'UNIQUE_CONSTRAINT',
   WRONG_PASSWORD = 'WRONG_PASSWORD',
   INVALID_PARAMETERS = 'INVALID_PARAMETERS',
+  /** The operation exceeded a memory or size budget (e.g. an import worker's heap limit). */
+  RESOURCE_LIMIT = 'RESOURCE_LIMIT',
   UNKNOWN = 'UNKNOWN'
 }
 

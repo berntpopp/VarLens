@@ -6,6 +6,7 @@ import { basename } from 'node:path'
 import type { WorkerMessage, MainMessage } from '../../shared/types/import-worker'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { detectFormat } from '../import/format-detection'
+import { resolveBatchSize } from '../import/bounded-batcher'
 import { MARK_STALE_SQL } from '../../shared/sql/cohort-summary-rebuild'
 import { openWorkerDatabase, rebuildFts, rebuildCohortSummary } from './worker-db'
 import {
@@ -44,6 +45,8 @@ export async function runImportSession(
   }
 
   try {
+    // Reject a bad batch size before the database is opened or touched.
+    const batchSize = resolveBatchSize(msg.batchSize, DATABASE_CONFIG.BATCH_INSERT_SIZE)
     db = openWorkerDatabase(msg.dbPath, msg.encryptionKey)
 
     const stmts = prepareStatements(db)
@@ -67,8 +70,14 @@ export async function runImportSession(
       )
     }
 
+    // Recovery: a previous worker died mid-file (heap limit) and could not
+    // run its own cleanup. Its frequencies were never counted, so the rows
+    // are simply removed; the session end rebuilds FTS and indexes.
+    for (const partialCaseId of msg.discardCaseIds ?? []) {
+      stmts.deleteCase.run(partialCaseId)
+    }
+
     const totalFiles = msg.files.length
-    const batchSize = msg.batchSize ?? DATABASE_CONFIG.BATCH_INSERT_SIZE
     const importedInBatch = new Set<string>()
     const results: Array<{
       filePath: string
@@ -146,6 +155,7 @@ export async function runImportSession(
           genomeBuild
         )
         const caseId = Number(caseResult.lastInsertRowid)
+        port.postMessage({ type: 'case-started', fileIndex, caseId })
 
         const startTime = Date.now()
         let variantCount = 0
@@ -305,12 +315,14 @@ export async function runImportSession(
   } catch (fatalError) {
     // Index/trigger recreation is handled unconditionally in the finally block below
 
+    const { code: errorCode, userMessage } = classifyWorkerError(fatalError)
     terminalMessage = {
       type: 'error',
       fileIndex: -1,
       error: fatalError instanceof Error ? fatalError.message : String(fatalError),
       phase: 'fatal',
-      stack: fatalError instanceof Error ? fatalError.stack : undefined
+      stack: fatalError instanceof Error ? fatalError.stack : undefined,
+      ...(errorCode !== undefined ? { errorCode, userMessage } : {})
     }
   } finally {
     postTerminalMessageAfterCleanup(

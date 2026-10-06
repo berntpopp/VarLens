@@ -30,7 +30,8 @@ export class ObjectStrategy implements ImportStrategy {
 
     // Create pipeline stages
     const batchSize = options.batchSize ?? 5000
-    const objectMapper = createObjectFormatMapper()
+    const recordBudget = createJsonRecordBudget({ trackRecordBytes: true })
+    const objectMapper = createObjectFormatMapper(recordBudget.takeRecordBytes)
     const batchAccumulator = createBatchAccumulator({
       caseId,
       batchSize,
@@ -55,7 +56,7 @@ export class ObjectStrategy implements ImportStrategy {
         createDecompressedStream(filePath),
         parser.asStream(),
         pick.asStream({ filter: `samples.${formatInfo.caseKey}.variants` }),
-        createJsonRecordBudget(),
+        recordBudget,
         streamArray.asStream(),
         objectMapper,
         batchAccumulator

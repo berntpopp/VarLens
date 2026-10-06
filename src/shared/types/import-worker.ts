@@ -106,6 +106,16 @@ export type WorkerMessage =
       skipped: number
     }
   | {
+      /**
+       * A case row now exists for this file. Until `file-complete` or a
+       * per-file `error` follows, the case is partial: if the worker dies
+       * here (heap limit), the client must have it discarded.
+       */
+      type: 'case-started'
+      fileIndex: number
+      caseId: number
+    }
+  | {
       type: 'file-complete'
       fileIndex: number
       result: {
@@ -144,6 +154,9 @@ export type WorkerMessage =
       error: string
       phase: string
       stack?: string
+      /** Envelope code of a fatal failure (e.g. RESOURCE_LIMIT, INVALID_PARAMETERS). */
+      errorCode?: string
+      userMessage?: string
     }
 
 /** Main -> Worker messages */
@@ -154,7 +167,14 @@ export type MainMessage =
       dbPath: string
       encryptionKey?: string
       throttleMs: number
+      /** Integer in 1..DATABASE_CONFIG.BATCH_INSERT_MAX_ROWS; the worker rejects anything else. */
       batchSize?: number
+      /**
+       * Partial cases left behind by a worker that died mid-file. They are
+       * deleted before any file is imported; with `files: []` the session is
+       * a pure recovery run (delete, rebuild FTS, recreate indexes).
+       */
+      discardCaseIds?: number[]
     }
   | {
       type: 'cancel'
