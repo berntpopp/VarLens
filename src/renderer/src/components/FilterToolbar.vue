@@ -665,9 +665,9 @@ const mergedActiveFiltersList = computed(() => [
 
 // Clear all: reset drawer filters + presets + DSL + notify parent to clear column filters
 function handleClearAll() {
-  handleDslClear() // Must be first — clears dslColumnFilters before filter watchers fire
   clearAllFilters()
   clearActivePresets()
+  handleDslClear() // last: emits once with the fully cleared state (one query per Clear)
   emit('clear-column-filters')
 }
 

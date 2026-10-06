@@ -138,7 +138,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, provide, onMounted, nextTick } from 'vue'
 import { useFilters } from '../../composables/useFilters'
-import { useDebounce } from '../../composables/useDebounce'
+import { useFilterEmitScheduler } from '../../composables/useFilterEmitScheduler'
 import { useFilterPresetStore } from '../../composables/useFilterPresetStore'
 import SlimFilterToolbar from '../SlimFilterToolbar.vue'
 import DslSearchBar from '../DslSearchBar.vue'
@@ -461,12 +461,12 @@ const searchGeneSymbols = async (query: string) => {
   }
 }
 
-// One shared debouncer: search + drawer edits in the same window coalesce.
-const { debouncedFn: emitFilterChange } = useDebounce(() => emit('filter-change'), 250)
-
-// Watch filter state changes (searchTerm lives outside `filters` — P0-4)
-const cohortFilterKey = computed(() => JSON.stringify(filters.value))
-watch([cohortFilterKey, searchTerm], () => emitFilterChange())
+const { emitNow: emitFilterChange, onStateChange } = useFilterEmitScheduler(() =>
+  emit('filter-change')
+)
+// searchTerm is outside `filters` (P0-4), DSL-debounced upstream; typed fields wait 250 ms
+const cohortFilterKey = computed(() => JSON.stringify({ ...filters.value, q: searchTerm.value }))
+watch(cohortFilterKey, onStateChange)
 watch(selectedImpactPresets, () => emitFilterChange())
 watch([selectedAfPreset, selectedCaddPreset], () => emitFilterChange())
 

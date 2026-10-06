@@ -11,6 +11,7 @@ import { ref, shallowRef, watch, computed, type Ref } from 'vue'
 import { useSettingsStore } from '../stores/settingsStore'
 import { APP_CONFIG } from '../../../shared/config'
 import { logService } from '../services/LogService'
+import { createPageCache, runWhenIdle } from './pageCache'
 
 export interface SortItem {
   key: string
@@ -80,10 +81,11 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   // Invalidated via resetCount() when filters change.
   let cachedTotalCount: number | null = null
 
-  // Pre-fetch cache: Map<cacheKey, Promise<result>>
-  // Keyed by `offset:sortKey` so stale entries are naturally ignored after
-  // sort/filter changes (which also call prefetchCache.clear()).
-  const prefetchCache = new Map<string, Promise<OffsetPageResult<T>>>()
+  // Page cache (LRU, reads do not evict): fetched and prefetched pages keyed
+  // by offset + page size + sort + filter key, so prev/next/back navigation
+  // within one filter set is served without a round trip. Cleared on any
+  // filter, sort or page-size change and on invalidateAndReload().
+  const pageCache = createPageCache<Promise<OffsetPageResult<T>>>(8)
 
   function buildPrefetchKey(offset: number): string {
     const sortKey = JSON.stringify(normalizeSortBy(sortBy.value))
@@ -91,50 +93,51 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     return `${offset}:${itemsPerPage.value}:${sortKey}:${fKey}`
   }
 
-  /** Fire-and-forget: pre-fetch the next page and store in cache. */
-  function prefetchNextPage(): void {
-    if (!settingsStore.prefetchEnabled) return
-    if (options.prefetchEnabled?.value === false) return
+  const prefetchAllowed = (): boolean =>
+    settingsStore.prefetchEnabled && options.prefetchEnabled?.value !== false
 
-    const nextOffset = page.value * itemsPerPage.value
-    if (nextOffset >= totalCount.value) return // no more pages
-
-    const key = buildPrefetchKey(nextOffset)
-    if (prefetchCache.has(key)) return // already pre-fetched
-
-    // Limit cache to 3 entries — evict oldest
-    if (prefetchCache.size >= 3) {
-      const oldestKey = prefetchCache.keys().next().value
-      if (oldestKey !== undefined) prefetchCache.delete(oldestKey)
-    }
-
+  /** Fire-and-forget: fetch one page (without COUNT) into the cache. */
+  function prefetchPage(offset: number): void {
+    if (offset < 0 || offset >= totalCount.value) return
+    const key = buildPrefetchKey(offset)
+    if (pageCache.has(key)) return
     const promise = options
       .fetchPage({
-        offset: nextOffset,
+        offset,
         limit: itemsPerPage.value,
         sortBy: normalizeSortBy(sortBy.value),
         skipCount: true
       })
       .catch((err) => {
-        // Delete failed entry so the normal fetch path runs when this page is requested
-        prefetchCache.delete(key)
+        // Drop failed entries so the normal fetch path runs when requested
+        pageCache.delete(key)
         throw err
       })
+    pageCache.set(key, promise)
+  }
 
-    prefetchCache.set(key, promise)
+  /** After a page settles, warm the next and previous pages when idle. */
+  function prefetchAdjacentPages(): void {
+    if (!prefetchAllowed()) return
+    runWhenIdle(() => {
+      if (!prefetchAllowed() || loading.value) return
+      const offset = (page.value - 1) * itemsPerPage.value
+      prefetchPage(offset + itemsPerPage.value)
+      prefetchPage(offset - itemsPerPage.value)
+    })
   }
 
   // Sync items-per-page to settings store and invalidate prefetch cache
   watch(itemsPerPage, (v) => {
     settingsStore.itemsPerPage = v
-    prefetchCache.clear()
+    pageCache.clear()
   })
 
   // Clear prefetch cache when filter key changes so stale pre-fetched results
   // are never served after a filter change.
   if (options.filterKey) {
     watch(options.filterKey, () => {
-      prefetchCache.clear()
+      pageCache.clear()
     })
   }
 
@@ -147,6 +150,8 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   let latestRequestId = 0
   // An identical request already in flight is joined instead of re-issued.
   let inFlight: { signature: string; promise: Promise<void> } | null = null
+  // Filter key of the most recently issued request (see reloadIfFiltersChanged).
+  let lastIssuedFilterKey: string | undefined
 
   /** Accept only finite, non-negative totals from the backend. */
   const isValidTotal = (value: unknown): value is number =>
@@ -168,18 +173,17 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     const isCurrent = (): boolean => requestId === latestRequestId
 
     try {
-      // Check pre-fetch cache first
-      const cached = prefetchCache.get(key)
+      // Serve from the page cache first (kept for later revisits)
+      const cached = pageCache.get(key)
       if (cached) {
-        prefetchCache.delete(key)
         try {
           const result = await cached
           if (!isCurrent()) return
-          // A pre-fetched result always used skipCount=true, so keep cached count
+          // Cached pages may lack a count, so keep the cached total
           items.value = result.data
           commitTotal(result.total_count, cachedTotalCount !== null)
           error.value = null
-          prefetchNextPage()
+          prefetchAdjacentPages()
           return
         } catch (e) {
           logService.warn(
@@ -206,7 +210,8 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
       items.value = result.data
       commitTotal(result.total_count, skipCount)
       error.value = null
-      prefetchNextPage()
+      pageCache.set(key, Promise.resolve(result))
+      prefetchAdjacentPages()
     } catch (err) {
       if (!isCurrent()) return
       // Keep the previous rows and total visible; surface the error instead.
@@ -228,6 +233,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     }
 
     const requestId = ++latestRequestId
+    lastIssuedFilterKey = options.filterKey?.value
     loading.value = true
     const promise = runRequest(requestId, offset).finally(() => {
       if (inFlight?.promise === promise) inFlight = null
@@ -242,7 +248,6 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
    */
   const resetCount = (): void => {
     cachedTotalCount = null
-    inFlight = null
   }
 
   /**
@@ -250,13 +255,23 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
    * Use when filters change or data needs a full refresh.
    */
   const invalidateAndReload = async (): Promise<void> => {
-    prefetchCache.clear()
+    pageCache.clear()
     resetCount()
     page.value = 1
     await loadPage()
   }
 
-  // Watch sort changes — reset page and clear pre-fetch cache.
+  /**
+   * Reload only when the filter key differs from the last issued request.
+   * Lets several filter-change sources (Clear, debounced chips, column
+   * filters) converge on one query. Without a filterKey it always reloads.
+   */
+  const reloadIfFiltersChanged = async (): Promise<void> => {
+    if (options.filterKey !== undefined && options.filterKey.value === lastIssuedFilterKey) return
+    await invalidateAndReload()
+  }
+
+  // Watch sort changes — reset page and clear the page cache.
   // Computed key avoids deep traversal of sortBy array objects.
   const sortKey = computed(() =>
     normalizeSortBy(sortBy.value)
@@ -266,7 +281,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   watch(sortKey, (serialized) => {
     if (serialized === prevSortSerialized) return
     prevSortSerialized = serialized
-    prefetchCache.clear()
+    pageCache.clear()
     page.value = 1
     options.onSortChange?.(sortBy.value.length > 0)
   })
@@ -286,7 +301,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     sortBy.value = []
     prevSortSerialized = ''
     cachedTotalCount = null
-    prefetchCache.clear()
+    pageCache.clear()
   }
 
   return {
@@ -305,6 +320,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     // Methods
     loadPage,
     invalidateAndReload,
+    reloadIfFiltersChanged,
     resetCount,
     resetSort,
     resetState

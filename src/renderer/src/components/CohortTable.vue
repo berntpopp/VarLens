@@ -27,13 +27,9 @@
          - The whole notice has a shimmer gradient sweeping left-to-right
            so the motion is where the user is looking, not tucked into a
            corner spinner (NN/g + Material M3 skeleton pattern).
-         - Elapsed seconds tick live from `rebuildElapsedSec`.
-         - If a previous rebuild's duration is cached in localStorage we
-           show it as a soft ETA ("~Ns last time"). Even an inaccurate
-           estimate is better than none (Apple HIG).
-         - No backend changes: rebuild-summary-worker is opaque
-           (one 'complete' event, no phase reporting), so all progress
-           signals are derived on the renderer side. -->
+         - Elapsed seconds tick live; a cached last duration gives a soft ETA.
+         - rebuild-summary-worker is opaque (one 'complete' event), so all
+           progress signals are derived on the renderer side. -->
     <div v-if="summaryStale" class="cohort-rebuild-notice" role="status" aria-live="polite">
       <v-icon :icon="mdiDatabaseSync" size="14" class="cohort-rebuild-notice__icon" />
       <span class="cohort-rebuild-notice__text">
@@ -334,7 +330,6 @@ const hasAnnotationBackedFilters = computed(
     filters.value.acmgClassifications.length > 0
 )
 
-// Shared offset pagination (same composable as case view)
 const {
   page,
   itemsPerPage,
@@ -345,6 +340,7 @@ const {
   error,
   loadPage,
   invalidateAndReload,
+  reloadIfFiltersChanged,
   resetSort
 } = useOffsetPagination<CohortVariant>({
   fetchPage: async ({ offset, limit, sortBy: sortItems, skipCount }) => {
@@ -381,7 +377,11 @@ const {
   onSortChange: (sorted) => {
     hasSort.value = sorted
   },
-  prefetchEnabled: isActive
+  prefetchEnabled: isActive,
+  // Scopes the page cache and lets every filter-change source converge on one query
+  filterKey: computed(() =>
+    JSON.stringify([buildCohortQueryParams(), genomeBuild.value, selectedVariantType.value])
+  )
 })
 
 // Reloads requested while KeepAlive-deactivated are replayed on activation (P0-3 parity).
@@ -501,14 +501,13 @@ const annotationActions = {
   getGlobalAcmgEvidence
 }
 
-// Event handlers
 const handleFilterChange = () => {
   if (import.meta.env.DEV) {
     if (activeFlowTraceId !== null) traceEnd(activeFlowTraceId, activeFlowBudget)
     activeFlowTraceId = traceStart('cohort-filter-apply')
     activeFlowBudget = 'FILTER_APPLY'
   }
-  invalidateAndReload()
+  void reloadIfFiltersChanged()
 }
 
 const handleClearAll = async () => {
@@ -519,13 +518,14 @@ const handleClearAll = async () => {
   }
   clearAllFilters()
   cohortDataTableRef.value?.clearAllColumnFilters()
+  cohortColumnFilters.value = undefined // don't wait for the debounced echo
   resetSort()
-  await invalidateAndReload()
+  await reloadIfFiltersChanged() // later echoes see the same key: one query per Clear
 }
 
 const handleClearFilter = async (filterId: string) => {
   clearFilter(filterId)
-  await invalidateAndReload()
+  await reloadIfFiltersChanged()
 }
 
 const handleRowClick = (variant: CohortVariant) => {
@@ -533,8 +533,7 @@ const handleRowClick = (variant: CohortVariant) => {
   emit('row-click', variant)
 }
 
-// Debounced reload when per-column filters change
-const { debouncedFn: debouncedColumnFilterReload } = useDebounce(invalidateAndReload, 300)
+const { debouncedFn: debouncedColumnFilterReload } = useDebounce(reloadIfFiltersChanged, 300)
 
 const handleColumnFiltersChange = (newFilters: ColumnFiltersParam | undefined): void => {
   cohortColumnFilters.value = newFilters

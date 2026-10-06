@@ -15,6 +15,13 @@ import { useSettingsStore } from '@renderer/stores/settingsStore'
 
 type MockItem = { id: number; name: string; nested: { value: number } }
 
+/** Let idle-scheduled prefetches (requestIdleCallback / setTimeout fallback) run. */
+async function flushIdle(): Promise<void> {
+  await flushPromises()
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  await flushPromises()
+}
+
 function makeFetchPage(items: MockItem[], total: number) {
   return vi
     .fn()
@@ -148,7 +155,7 @@ describe('predictive pre-fetch', () => {
     result.page.value = 1
 
     await result.loadPage()
-    await flushPromises()
+    await flushIdle()
 
     // fetchPage should have been called twice:
     // once for page 1 (offset 0) and once for the pre-fetch of page 2 (offset 10)
@@ -174,7 +181,7 @@ describe('predictive pre-fetch', () => {
     result.page.value = 1
 
     await result.loadPage()
-    await flushPromises()
+    await flushIdle()
 
     // Only the primary fetch — no pre-fetch
     expect(fetchPage).toHaveBeenCalledTimes(1)
@@ -196,7 +203,7 @@ describe('predictive pre-fetch', () => {
     result.page.value = 1
 
     await result.loadPage()
-    await flushPromises()
+    await flushIdle()
 
     expect(fetchPage).toHaveBeenCalledTimes(1)
   })
@@ -225,7 +232,7 @@ describe('predictive pre-fetch', () => {
     // Load page 1 — triggers pre-fetch of page 2
     result.page.value = 1
     await result.loadPage()
-    await flushPromises()
+    await flushIdle()
 
     // fetchPage called twice: page 1 + pre-fetch page 2
     expect(fetchPage).toHaveBeenCalledTimes(2)
@@ -233,7 +240,7 @@ describe('predictive pre-fetch', () => {
     // Navigate to page 2 — should use the cached pre-fetch
     result.page.value = 2
     await result.loadPage()
-    await flushPromises()
+    await flushIdle()
 
     // Still 2 calls — page 2 was served from cache
     // (page 3 pre-fetch would be a new call, but total = 20 so page 3 offset=20 >= total)
@@ -257,19 +264,19 @@ describe('predictive pre-fetch', () => {
 
     // Load page 1 — triggers pre-fetch of page 2
     await result.loadPage()
-    await flushPromises()
+    await flushIdle()
 
     const callsAfterFirstLoad = fetchPage.mock.calls.length // 2 (fetch + pre-fetch)
     expect(callsAfterFirstLoad).toBe(2)
 
     // Change sort — cache should be cleared
     result.sortBy.value = [{ key: 'name', order: 'asc' }]
-    await flushPromises()
+    await flushIdle()
 
     // Load page 1 again after sort change — must issue a fresh fetch (not use stale cache)
     result.page.value = 1
     await result.loadPage()
-    await flushPromises()
+    await flushIdle()
 
     // At least one new fetch should have occurred after the sort change
     expect(fetchPage.mock.calls.length).toBeGreaterThan(callsAfterFirstLoad)
@@ -299,7 +306,7 @@ describe('predictive pre-fetch', () => {
     result.page.value = 1
 
     await result.loadPage()
-    await flushPromises()
+    await flushIdle()
 
     // Only the primary fetch — no next page to pre-fetch
     expect(fetchPage).toHaveBeenCalledTimes(1)
@@ -460,5 +467,95 @@ describe('request ordering and resilience', () => {
 
     expect(fetchPage).toHaveBeenCalledTimes(1)
     expect(result.items.value.map((r) => r.id)).toEqual([1])
+  })
+})
+
+describe('page cache, adjacent prefetch and filter-change convergence', () => {
+  let app: { unmount: () => void }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    if (app) app.unmount()
+  })
+
+  const pageOf = (offset: number): OffsetPageResult<MockItem> => ({
+    data: [{ id: offset, name: `o${offset}`, nested: { value: offset } }],
+    total_count: 100
+  })
+
+  it('keeps pages after reading them: back/forward navigation costs no extra requests', async () => {
+    const fetchPage = vi
+      .fn()
+      .mockImplementation(({ offset }: { offset: number }) => Promise.resolve(pageOf(offset)))
+    const [result, appInstance] = withSetup(() => {
+      useSettingsStore().prefetchEnabled = true
+      return useOffsetPagination({ fetchPage })
+    })
+    app = appInstance
+    result.itemsPerPage.value = 10
+    await flushIdle()
+
+    await result.loadPage() // page 1 + idle prefetch of page 2
+    await flushIdle()
+    result.page.value = 2
+    await result.loadPage() // cached; idle prefetch of page 3 (page 1 already cached)
+    await flushIdle()
+    const afterForward = fetchPage.mock.calls.length
+    result.page.value = 1
+    await result.loadPage() // back: served from cache (not evicted on read)
+    result.page.value = 2
+    await result.loadPage()
+    await flushIdle()
+
+    expect(fetchPage.mock.calls.length).toBe(afterForward)
+    expect(result.items.value[0].id).toBe(10)
+    const offsets = fetchPage.mock.calls.map((c) => (c[0] as { offset: number }).offset)
+    expect(offsets).toEqual([0, 10, 20])
+  })
+
+  it('prefetches the previous page too when landing mid-range', async () => {
+    const fetchPage = vi
+      .fn()
+      .mockImplementation(({ offset }: { offset: number }) => Promise.resolve(pageOf(offset)))
+    const [result, appInstance] = withSetup(() => {
+      useSettingsStore().prefetchEnabled = true
+      return useOffsetPagination({ fetchPage })
+    })
+    app = appInstance
+    result.itemsPerPage.value = 10
+    await flushIdle()
+    result.page.value = 5
+    await result.loadPage()
+    await flushIdle()
+
+    const offsets = fetchPage.mock.calls.map((c) => (c[0] as { offset: number }).offset)
+    expect(offsets.sort((x, y) => x - y)).toEqual([30, 40, 50])
+  })
+
+  it('reloadIfFiltersChanged issues one request for several sources of the same change', async () => {
+    const filterKey = ref('{}')
+    const fetchPage = vi.fn().mockResolvedValue(pageOf(0))
+    const [result, appInstance] = withSetup(() => {
+      useSettingsStore().prefetchEnabled = false
+      return useOffsetPagination({ fetchPage, filterKey })
+    })
+    app = appInstance
+    await result.loadPage()
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+
+    // Clear: the direct call, the debounced filter emission and the column
+    // filter emission all converge on the same filter key.
+    filterKey.value = '{"cleared":true}'
+    await Promise.all([
+      result.reloadIfFiltersChanged(),
+      result.reloadIfFiltersChanged(),
+      result.loadPage()
+    ])
+    await result.reloadIfFiltersChanged()
+
+    expect(fetchPage).toHaveBeenCalledTimes(2)
   })
 })

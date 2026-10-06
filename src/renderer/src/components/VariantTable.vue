@@ -5,6 +5,7 @@
       <div ref="topScrollbarInnerRef" class="top-scrollbar-inner"></div>
     </div>
 
+    <TableLoadIndicator :active="showStale" :message="liveMessage" />
     <v-data-table-server
       ref="dataTableRef"
       v-model:page="page"
@@ -14,11 +15,14 @@
       :items="renderRows"
       item-value="id"
       :items-length="totalCount"
-      :loading="loading"
+      :loading="firstLoad"
       :items-per-page-options="itemsPerPageOptions"
+      :aria-busy="ariaBusy"
       density="compact"
+      fixed-header
       multi-sort
       class="elevation-1 variant-table--sticky"
+      :class="{ 'table--stale': showStale }"
       :row-props="getRowProps"
       @update:options="loadVariants"
       @click:row="handleRowClick"
@@ -221,9 +225,9 @@
         <span v-else class="text-grey">--</span>
       </template>
 
-      <!-- Loading skeleton: shown inside the table body to prevent layout shift -->
+      <!-- First-load skeleton only; refetches keep rows (stale-while-revalidate) -->
       <template #loading>
-        <v-skeleton-loader type="table-row@10" class="variant-table-skeleton" />
+        <TableSkeletonRows :rows="Math.min(itemsPerPage, 15)" />
       </template>
 
       <!-- Empty state when filters produce no results -->
@@ -287,6 +291,9 @@ import { useTableKeyboardNav } from '../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
 import VariantColumnHeader from './variant-table/VariantColumnHeader.vue'
 import AnnotationDialogs from './AnnotationDialogs.vue'
+import TableLoadIndicator from './table-state/TableLoadIndicator.vue'
+import TableSkeletonRows from './table-state/TableSkeletonRows.vue'
+import { useTableLoadingState } from '../composables/useTableLoadingState'
 import { useVariantColumns } from './variant-table/columns'
 import { useVariantData } from './variant-table/useVariantData'
 import { mdiFilterOff, mdiFilterOffOutline } from '@mdi/js'
@@ -424,6 +431,13 @@ const {
   onCountsUpdate: (counts) => emit('update:counts', counts),
   onSortUpdate: (hasSort) => emit('update:hasSort', hasSort)
 })
+
+// Loading presentation: skeleton on first load only, dim + bar on refetch
+const { firstLoad, showStale, ariaBusy, liveMessage, resetFirstLoad } = useTableLoadingState({
+  loading,
+  totalCount
+})
+watch(() => props.caseId, resetFirstLoad)
 
 // Column metadata map + filter modes (shared composable)
 const { columnMetaMap, columnFilterModes } = useColumnFilterMeta(columnMeta)
@@ -664,15 +678,6 @@ defineExpose({
 
 <style src="./data-table-shared.css"></style>
 <style scoped>
-/* Loading skeleton (VariantTable-specific) */
-.variant-table-skeleton {
-  padding: 16px;
-}
-
-.variant-table-skeleton :deep(.v-skeleton-loader__bone) {
-  margin-bottom: 8px;
-}
-
 /* Monospace data display */
 .variant-data-mono {
   font-family: 'Courier New', monospace;

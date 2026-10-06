@@ -4,6 +4,7 @@ import { useVariantLinks } from '../../composables/useVariantLinks'
 import { svHeaders } from './sv-columns'
 import { cnvHeaders } from './cnv-columns'
 import { strHeaders } from './str-columns'
+import { withFixedWidth } from './column-widths'
 
 export interface ColumnDef {
   title: string
@@ -118,10 +119,10 @@ export function useVariantColumns(
     return base
   })
 
-  /** Only columns visible per user preferences. */
-  const visibleHeaders = computed(() => {
-    return orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false)
-  })
+  /** Only columns visible per user preferences, with shared fixed widths (no jitter). */
+  const visibleHeaders = computed(() =>
+    orderedColumns.value.filter((h) => prefs.value.visibility[h.key] !== false).map(withFixedWidth)
+  )
 
   /** Filterable columns: sortable data columns (exclude annotations, actions, link columns). */
   const filterableColumns = computed(() =>

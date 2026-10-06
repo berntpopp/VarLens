@@ -1,5 +1,5 @@
 <template>
-  <div class="filter-toolbar-container">
+  <div ref="rootRef" class="filter-toolbar-container">
     <v-defaults-provider
       :defaults="{ VBtn: { size: 'small' }, VTextField: { density: 'compact' } }"
     >
@@ -38,7 +38,7 @@
           :disabled="!hasActiveFilters && !hasClearableState"
           :color="hasActiveFilters || hasClearableState ? 'error' : undefined"
           :variant="hasActiveFilters || hasClearableState ? 'tonal' : 'text'"
-          @click="emit('clear-all')"
+          @click="clearAll"
         >
           <v-icon start size="small" :icon="mdiFilterOff" />
           Clear
@@ -121,10 +121,17 @@
     <!-- Preset bar (optional, provided by consumer) -->
     <slot name="preset-bar" />
 
-    <!-- Applied Filters Summary Bar -->
-    <v-expand-transition>
-      <div v-if="activeFiltersList.length > 0" class="applied-filters-bar">
-        <v-icon size="small" class="text-medium-emphasis mr-1" :icon="mdiFilterCheck" />
+    <!-- Applied Filters Summary Bar. Always rendered at a reserved height so
+         applying/clearing a filter never pushes the table down or up. -->
+    <div
+      class="applied-filters-bar"
+      :class="{ 'applied-filters-bar--empty': activeFiltersList.length === 0 }"
+    >
+      <v-icon size="small" class="text-medium-emphasis mr-1" :icon="mdiFilterCheck" />
+      <span v-if="activeFiltersList.length === 0" class="text-caption text-medium-emphasis">
+        No filters applied
+      </span>
+      <template v-else>
         <v-chip
           v-for="filter in activeFiltersList"
           :key="filter.id"
@@ -138,17 +145,11 @@
           <strong>{{ filter.label }}</strong>
           <span class="ml-1">{{ filter.value }}</span>
         </v-chip>
-        <v-btn
-          variant="text"
-          size="x-small"
-          color="error"
-          class="ml-auto"
-          @click="emit('clear-all')"
-        >
+        <v-btn variant="text" size="x-small" color="error" class="ml-auto" @click="clearAll">
           Clear all
         </v-btn>
-      </div>
-    </v-expand-transition>
+      </template>
+    </div>
 
     <!-- Optional hint bar (e.g. annotation filter hint) -->
     <slot name="hints" />
@@ -159,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import {
   mdiDotsVertical,
@@ -225,6 +226,26 @@ const emit = defineEmits<{
   'open-columns-drawer': []
   export: []
 }>()
+
+const rootRef = ref<HTMLElement | null>(null)
+
+/**
+ * Clear, then keep keyboard focus inside the toolbar: the Clear buttons
+ * disable/unmount once nothing is left to clear, which would otherwise drop
+ * focus to <body>. Falls back to the first input (the search field).
+ */
+function clearAll(): void {
+  emit('clear-all')
+  void nextTick(() => {
+    const active = document.activeElement as HTMLElement | null
+    const lost =
+      active === null ||
+      active === document.body ||
+      !active.isConnected ||
+      active.hasAttribute('disabled')
+    if (lost) rootRef.value?.querySelector<HTMLInputElement>('input')?.focus()
+  })
+}
 </script>
 
 <style scoped>
@@ -261,8 +282,9 @@ const emit = defineEmits<{
   }
 }
 
-/* Applied filters summary bar */
+/* Applied filters summary bar (reserved height; see template) */
 .applied-filters-bar {
+  min-height: 37px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -271,6 +293,10 @@ const emit = defineEmits<{
   background: color-mix(in srgb, rgb(var(--v-theme-primary)) 6%, transparent);
   border-top: 1px solid rgba(var(--v-border-color), 0.08);
   border-bottom: 1px solid rgba(var(--v-border-color), 0.08);
+}
+
+.applied-filters-bar--empty {
+  background: transparent;
 }
 
 .applied-filters-bar .v-chip {

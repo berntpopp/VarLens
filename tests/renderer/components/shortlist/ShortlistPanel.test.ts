@@ -163,6 +163,23 @@ describe('ShortlistPanel', () => {
     expect(wrapper.findComponent({ name: 'ShortlistTable' }).exists()).toBe(true)
   })
 
+  it('keeps the current rows visible (no skeleton) while a refresh is loading', () => {
+    state.result.value = {
+      rows: [minimalRow()],
+      totalCandidates: 10,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    state.loading.value = true
+    const wrapper = mount(ShortlistPanel, {
+      props: { caseId: 1 },
+      global: { plugins: [vuetify] }
+    })
+    expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'ShortlistTable' }).exists()).toBe(true)
+    expect(wrapper.find('.shortlist-panel__body').attributes('aria-busy')).toBe('true')
+  })
+
   it('emits row-click when ShortlistTable emits row-click', async () => {
     state.result.value = {
       rows: [minimalRow()],

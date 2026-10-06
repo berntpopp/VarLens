@@ -25,13 +25,17 @@ export function useColumnFilters() {
     }
   }
 
+  // Clearing never assigns a new object when nothing changes: a fresh `{}`
+  // identity re-fires every watcher and costs an extra table query per Clear.
   function clearColumnFilter(columnKey: string): void {
+    if (!(columnKey in columnFilters.value)) return
     const next = { ...columnFilters.value }
     delete next[columnKey]
     columnFilters.value = next
   }
 
   function clearAllColumnFilters(): void {
+    if (Object.keys(columnFilters.value).length === 0) return
     columnFilters.value = {}
   }
 

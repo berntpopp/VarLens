@@ -63,8 +63,9 @@ export function useDslSearch(presetNames: () => string[]) {
     suggestions.value = getAutocompleteSuggestions(rawInput.value, presetNames())
   }
 
-  // Debounce parse (300ms) but update suggestions immediately
-  const debouncedParse = useDebounceFn(updateParse, 300)
+  // Debounce parse (250 ms — the only typing delay before a table query, see
+  // useFilterEmitScheduler) but update suggestions immediately
+  const debouncedParse = useDebounceFn(updateParse, 250)
 
   watch(rawInput, () => {
     updateSuggestions()

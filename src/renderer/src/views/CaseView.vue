@@ -90,9 +90,18 @@ const selectedVariantType = ref<VisibleTab>('snv')
  */
 const lastNonShortlistType = ref<PerTypeTab>('snv')
 
+/**
+ * The Shortlist panel mounts on first visit and then stays mounted (v-show),
+ * so switching tabs back to it shows its rows instantly instead of a fresh
+ * skeleton + query.
+ */
+const shortlistVisited = ref(false)
+
 watch(selectedVariantType, (next) => {
   if (next !== 'shortlist') {
     lastNonShortlistType.value = next
+  } else {
+    shortlistVisited.value = true
   }
 })
 
@@ -443,16 +452,14 @@ defineExpose({
     </div>
 
     <!--
-      Shortlist region. `v-if` (not `v-show`) so the panel is
-      mounted on demand — it owns its own query lifecycle via
-      `useShortlistQuery` and we don't want to pay that cost on cases
-      where the user never opens the tab. `ShortlistRow` extends
-      `ShortlistCandidate` extends `Variant` so the `row-click` payload
-      is structurally a `Variant` and `handleRowClick` accepts it with
-      zero coercion.
+      Shortlist region. Mounted on first visit (`v-if`, so cases where the
+      user never opens the tab pay nothing), then kept alive via `v-show`
+      so returning to it does not re-skeleton and re-query. `ShortlistRow`
+      extends `Variant`, so `row-click` feeds `handleRowClick` directly.
     -->
     <ShortlistPanel
-      v-if="selectedVariantType === 'shortlist' && selectedCaseId !== null"
+      v-if="shortlistVisited && selectedCaseId !== null"
+      v-show="selectedVariantType === 'shortlist'"
       :case-id="selectedCaseId"
       class="shortlist-region"
       @row-click="handleRowClick"

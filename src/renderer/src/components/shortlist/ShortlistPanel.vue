@@ -10,7 +10,8 @@
  *
  * Four visual states are routed from composable state:
  *
- *   loading  → v-progress-linear + skeleton rows
+ *   loading  → skeleton rows on the first load only; refreshes keep the
+ *              current rows (dimmed + thin progress bar, useTableLoadingState)
  *   error    → v-alert + Retry button
  *   empty    → "No variants matched the shortlist filters."
  *   success  → <ShortlistTable> with row-click / open-in-tab / toggle-star
@@ -24,9 +25,11 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { toRef } from 'vue'
+import { computed, toRef } from 'vue'
 import { mdiRefresh } from '@mdi/js'
 import ShortlistTable from './ShortlistTable.vue'
+import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
+import { useTableLoadingState } from '../../composables/useTableLoadingState'
 import { useShortlistQuery } from '../../composables/useShortlistQuery'
 import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
@@ -47,6 +50,13 @@ const { api } = useApiService()
 const caseIdRef = toRef(props, 'caseId')
 const { shortlistPresets, selectedPresetId, result, loading, error, refresh } =
   useShortlistQuery(caseIdRef)
+
+// Same loading presentation as the case/cohort tables (stale-while-revalidate)
+const { showStale, ariaBusy, liveMessage } = useTableLoadingState({
+  loading,
+  totalCount: computed(() => result.value?.rows.length ?? null)
+})
+const showSkeleton = computed(() => loading.value && result.value === null)
 
 /**
  * Toggle the star annotation for a row. Writes through
@@ -113,9 +123,13 @@ function dismissError(): void {
       </v-btn>
     </div>
 
-    <div class="shortlist-panel__body">
-      <div v-if="loading" data-testid="shortlist-loading" class="pa-3">
-        <v-progress-linear indeterminate class="mb-3" />
+    <div
+      class="shortlist-panel__body"
+      :class="{ 'shortlist-panel__body--stale': showStale }"
+      :aria-busy="ariaBusy"
+    >
+      <TableLoadIndicator :active="showStale" :message="liveMessage" />
+      <div v-if="showSkeleton" data-testid="shortlist-loading" class="pa-3">
         <v-skeleton-loader type="table-row@5" />
       </div>
 
@@ -177,10 +191,23 @@ function dismissError(): void {
  * container size correctly inside a flex parent.
  */
 .shortlist-panel__body {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+/* Refresh keeps rows visible, dimmed after a short delay (see useTableLoadingState) */
+.shortlist-panel__body :deep(tbody) {
+  transition: opacity 150ms ease-out;
+}
+.shortlist-panel__body--stale :deep(tbody) {
+  opacity: 0.6;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shortlist-panel__body :deep(tbody) {
+    transition: none;
+  }
 }
 </style>
