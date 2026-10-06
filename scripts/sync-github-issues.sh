@@ -2,7 +2,7 @@
 # Auto-generated script to sync VarLens audited issues to GitHub Issues via gh CLI
 set -euo pipefail
 
-TARGET_ID="${1:-all}"
+TARGET_ID="${1:-open}"
 
 # Ensure labels exist in repository
 ensure_labels() {
@@ -58,7 +58,14 @@ create_issue() {
   local labels="$4"
   local file="$5"
 
-  if [[ "$TARGET_ID" != "all" && "$TARGET_ID" != "$id" ]]; then
+  if [[ "$TARGET_ID" == "open" ]]; then
+    # Skip issues already resolved in branch fix/audit-integrity-and-correctness
+    case "$id" in
+      DATA-01|DATA-02|DATA-03|DATA-04|DATA-05|UI-01|UI-02|UI-03|PERF-01|DX-01)
+        return 0
+        ;;
+    esac
+  elif [[ "$TARGET_ID" != "all" && "$TARGET_ID" != "$id" ]]; then
     return 0
   fi
 
