@@ -109,8 +109,13 @@ export function prepareStatements(db: DatabaseType) {
   let insertDataInfoStmt: { run: (...args: unknown[]) => void } | null = null
   try {
     insertDataInfoStmt = db.prepare<unknown[]>(`
-      INSERT OR REPLACE INTO case_data_info (case_id, import_file_name, import_file_type)
-      VALUES (?, ?, ?)
+      INSERT INTO case_data_info
+        (case_id, import_file_name, import_file_type, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(case_id) DO UPDATE SET
+        import_file_name = excluded.import_file_name,
+        import_file_type = excluded.import_file_type,
+        updated_at = excluded.updated_at
     `)
   } catch (e) {
     console.warn(
@@ -260,7 +265,8 @@ export function prepareStatements(db: DatabaseType) {
     insertDataInfo: {
       run: (caseId: number, fileName: string, format: string) => {
         if (insertDataInfoStmt) {
-          insertDataInfoStmt.run(caseId, fileName, format)
+          const now = Date.now()
+          insertDataInfoStmt.run(caseId, fileName, format, now, now)
         }
       }
     },

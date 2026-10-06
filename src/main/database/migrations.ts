@@ -47,6 +47,8 @@ import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
  * - 30: end_pos on cohort_variant_summary for SV/CNV interval-overlap
  * - 31: projects registry
  * - 32: variant_transcripts.func — canonical transcript impact/SO model (D1)
+ * - 33, 34: reserved (33: chromosome natural order; 34: web/Postgres backend work)
+ * - 35: backfill case_data_info rows the worker import path failed to write
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1844,4 +1846,54 @@ export function runMigrations(db: Database.Database): void {
     `)
     db.exec('PRAGMA user_version = 32')
   }
+
+  // ── Migration v35: backfill missing case_data_info provenance rows ──
+  //
+  // From the worker-thread import pipeline (2026-03, b309d939) until this fix,
+  // the worker's INSERT omitted the NOT NULL created_at/updated_at columns, so
+  // every desktop import failed its provenance write (logged, then swallowed)
+  // and the case has no case_data_info row. Recreate the row exactly the way
+  // v9 seeded pre-existing cases: basename of cases.file_path, created_at from
+  // the case. import_file_type is only inferred when the extension is
+  // unambiguous (VCF); JSON object vs columnar cannot be recovered, so NULL.
+  // Existing rows (and their user-entered fields) are never touched.
+  //
+  // v33/v34 are reserved for parallel branches; keep this block after them.
+  if (currentVersion < 35) {
+    backfillMissingCaseDataInfo(db)
+    db.exec('PRAGMA user_version = 35')
+  }
+}
+
+function backfillMissingCaseDataInfo(db: Database.Database): void {
+  const hasTable =
+    db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'case_data_info'")
+      .get() !== undefined
+  if (!hasTable) return
+
+  const missing = db
+    .prepare(
+      `SELECT c.id, c.file_path, c.created_at FROM cases c
+        WHERE NOT EXISTS (SELECT 1 FROM case_data_info d WHERE d.case_id = c.id)`
+    )
+    .all() as Array<{ id: number; file_path: string | null; created_at: number | null }>
+  if (missing.length === 0) return
+
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO case_data_info
+       (case_id, import_file_name, import_file_type, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+  const now = Date.now()
+  db.transaction(() => {
+    for (const c of missing) {
+      const filePath = c.file_path ?? ''
+      const parts = filePath.split(/[/\\]/)
+      const fileName = parts[parts.length - 1] || filePath || null
+      const fileType = /\.vcf(\.b?gz)?$/i.test(filePath) ? 'vcf' : null
+      const createdAt = c.created_at !== null && c.created_at > 0 ? c.created_at : now
+      insert.run(c.id, fileName, fileType, createdAt, now)
+    }
+  })()
 }

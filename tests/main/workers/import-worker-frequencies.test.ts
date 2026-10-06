@@ -93,4 +93,21 @@ describe('import worker frequency upkeep', () => {
     expect(replaced.results.succeeded).toBe(1)
     expect(maxCaseCount()).toBe(2)
   }, 60_000)
+
+  it('writes the case_data_info provenance row for every imported case', async () => {
+    const done = await runImport(workerPath, db.getPath(), [
+      { filePath: VCF, caseName: 'prov', isDuplicate: false, duplicateStrategy: 'overwrite' }
+    ])
+    expect(done.results.succeeded).toBe(1)
+    const row = db.database
+      .prepare(
+        `SELECT d.import_file_name, d.import_file_type, d.created_at
+           FROM case_data_info d JOIN cases c ON c.id = d.case_id WHERE c.name = 'prov'`
+      )
+      .get() as { import_file_name: string; import_file_type: string; created_at: number }
+    expect(row).toBeDefined()
+    expect(row.import_file_name).toBe('single-sample.snpeff.vcf.gz')
+    expect(row.import_file_type).toBe('vcf')
+    expect(row.created_at).toBeGreaterThan(0)
+  }, 60_000)
 })
