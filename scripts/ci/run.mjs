@@ -1,7 +1,17 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { tmpdir } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { gateEnvironment, git, runCommand } from './process.mjs'
 import { fullSelection, resolveChanges } from './changes.mjs'
 import { selectStages, executeStages, stageEnvironment } from './stages.mjs'
@@ -30,6 +40,20 @@ import {
 import { expectedArtifacts } from '../release/artifact-manifest.mjs'
 import { verifyLatestYml } from '../release/verify-latest-yml.mjs'
 
+export function createWebTestState() {
+  const directory = mkdtempSync(join(tmpdir(), 'varlens-ci-web-'))
+  writeFileSync(join(directory, 'web-session-secret'), randomBytes(32), { mode: 0o600 })
+  return {
+    env: {
+      VARLENS_RECOVERY_KEY_DIR: directory,
+      VARLENS_METRICS_PORT: '0',
+      VARLENS_WEB_HOST: '127.0.0.1',
+      VARLENS_METRICS_HOST: '127.0.0.1'
+    },
+    close: () => rmSync(directory, { recursive: true, force: true })
+  }
+}
+
 export async function validateWorkflows({
   cwd = process.cwd(),
   env = gateEnvironment(),
@@ -53,6 +77,15 @@ export async function runPostgresTests({
   logFile
 } = {}) {
   if (!env.VARLENS_PG_URL) throw new Error('VARLENS_PG_URL is required for PostgreSQL tests')
+  if (!existsSync(join(cwd, 'out/web/server.cjs')))
+    throw new Error('Build the web bundle before PostgreSQL tests')
+  // COPY-path tests intentionally use the configured application schema. Apply
+  // the same migrations as web startup instead of depending on prior test order.
+  await runCommand(
+    process.execPath,
+    ['--eval', "require('./out/web/server.cjs').buildApp().then(app => app.close())"],
+    { cwd, env, signal, logFile }
+  )
   const files = []
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -148,7 +181,11 @@ async function executeGate(stage, context) {
       await command(process.execPath, ['scripts/native/assert-native-abi.mjs', 'node'])
       return
     case 'postgres':
-      context.postgres = await startPostgres({ ...options, env })
+      context.webState = createWebTestState()
+      context.postgres = await startPostgres({
+        ...options,
+        env: { ...env, ...context.webState.env }
+      })
       return
     case 'postgres-storage':
       return runPostgresTests({ ...options, cwd, env })
@@ -262,6 +299,7 @@ export async function runPreflight({
   const abort = () => controller.abort(new Error('Preflight aborted by signal'))
   process.once('SIGINT', abort)
   process.once('SIGTERM', abort)
+  process.once('SIGHUP', abort)
   let context
   try {
     releaseCommon = acquireLock(join(commonDir, 'varlens-ci-heavy.lock'))
@@ -301,6 +339,7 @@ export async function runPreflight({
       policy: await digestPaths(cwd, ['scripts/ci', 'Makefile', 'AGENTS.md', 'package-lock.json']),
       toolchain,
       dependencies,
+      generatedFixtures: snapshot.generatedFixtures,
       stages: stages.map((stage) => stage.id),
       requiredOutputs: stages.flatMap((stage) => stage.outputs ?? []),
       screenshotFingerprint: selection.docs ? fingerprint : null,
@@ -379,6 +418,8 @@ export async function runPreflight({
     try {
       await context?.postgres?.close()
     } finally {
+      context?.webState?.close()
+      process.removeListener('SIGHUP', abort)
       process.removeListener('SIGINT', abort)
       process.removeListener('SIGTERM', abort)
       releaseCommon?.()

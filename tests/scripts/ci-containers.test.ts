@@ -16,12 +16,32 @@ function fixture(fail?: (args: string[]) => boolean) {
   const directory = mkdtempSync(join(tmpdir(), 'varlens-containers-test-'))
   temporary.push(directory)
   const calls: Call[] = []
+  const images = new Map<
+    string,
+    { Id: string; Architecture: string; Os: string; Config: { Labels: Record<string, string> } }
+  >()
+  let generation = 0
   const signals = new EventEmitter()
   const now = new Date('2026-10-06T12:00:00Z')
   const run = async (command: string, args: string[], options: Record<string, unknown> = {}) => {
     calls.push({ command, args, options })
     if (fail?.(args)) throw new Error('simulated Docker failure')
     if (args[0] === 'buildx' && args[1] === 'build' && args.includes('--cache-to')) {
+      const labels: Record<string, string> = {}
+      args.forEach((arg, index) => {
+        if (arg === '--label') {
+          const [name, value] = args[index + 1].split('=')
+          labels[name] = value
+        }
+      })
+      const details = {
+        Id: generation++ === 0 ? 'sha256:abc' : `sha256:build-${generation}`,
+        Architecture: 'amd64',
+        Os: 'linux',
+        Config: { Labels: labels }
+      }
+      images.set(args[args.indexOf('--tag') + 1], details)
+      images.set(details.Id, details)
       const destination = args[args.indexOf('--cache-to') + 1].match(/dest=([^,]+)/)![1]
       await mkdir(destination, { recursive: true })
       await writeFile(
@@ -31,8 +51,21 @@ function fixture(fail?: (args: string[]) => boolean) {
     }
     if (args[0] === 'port') return { stdout: '127.0.0.1:49152\n' }
     if (args[0] === 'image' && args[1] === 'inspect') {
-      return { stdout: JSON.stringify([{ Id: 'sha256:abc', Architecture: 'amd64', Os: 'linux' }]) }
+      if (args[2].endsWith(':validated') && !images.has(args[2]))
+        throw Object.assign(new Error('No such image'), {
+          exitCode: 1,
+          stderr: Buffer.from('No such image')
+        })
+      return {
+        stdout: JSON.stringify([
+          images.get(args[2]) ?? { Id: 'sha256:abc', Architecture: 'amd64', Os: 'linux' }
+        ])
+      }
     }
+    if (args[0] === 'tag') images.set(args[2], images.get(args[1])!)
+    if (args[0] === 'image' && args[1] === 'rm') images.delete(args.at(-1)!)
+    if (args[0] === 'image' && args[1] === 'ls')
+      return { stdout: [...images.keys()].filter((key) => key.startsWith('sha256:')).join('\n') }
     if (args[0] === '--version') {
       return { stdout: JSON.stringify({ VulnerabilityDB: { UpdatedAt: now.toISOString() } }) }
     }
@@ -46,7 +79,7 @@ function fixture(fail?: (args: string[]) => boolean) {
     sleep: async () => {},
     fetch: async () => ({ ok: true, json: async () => ({ status: 'ok', db: { open: true } }) })
   })
-  return { services, calls, signals, now, directory }
+  return { services, calls, signals, now, directory, images }
 }
 
 describe('disposable CI containers', () => {
@@ -134,8 +167,57 @@ describe('disposable CI containers', () => {
     const { services, calls, directory } = fixture()
     const result = await services.buildAndSmokeContainer({ retainImage: true, cwd: directory })
     expect(result.imageId).toBe('sha256:abc')
-    expect(calls.some((call) => call.args[0] === 'image' && call.args[1] === 'rm')).toBe(false)
+    expect(result.image).toMatch(/:validated$/)
+    expect(
+      calls
+        .filter((call) => call.args[0] === 'image' && call.args[1] === 'rm')
+        .every((call) => call.args.at(-1) !== result.image)
+    ).toBe(true)
     expect(calls.some((call) => call.args[0] === 'buildx' && call.args[1] === 'rm')).toBe(true)
+  })
+
+  it('replaces only the previous image owned by this worktree', async () => {
+    const { services, calls, directory } = fixture()
+    const first = await services.buildAndSmokeContainer({ retainImage: true, cwd: directory })
+    const second = await services.buildAndSmokeContainer({ retainImage: true, cwd: directory })
+    expect(second.image).toBe(first.image)
+    expect(second.imageId).not.toBe(first.imageId)
+    expect(
+      calls.some(
+        (call) =>
+          call.args[0] === 'image' && call.args[1] === 'rm' && call.args.at(-1) === first.imageId
+      )
+    ).toBe(true)
+  })
+
+  it('refuses to replace a stable tag whose ownership labels changed', async () => {
+    const { services, directory, images } = fixture()
+    const first = await services.buildAndSmokeContainer({ retainImage: true, cwd: directory })
+    images.get(first.image)!.Config.Labels = {}
+    await expect(
+      services.buildAndSmokeContainer({ retainImage: true, cwd: directory })
+    ).rejects.toThrow(/owned/)
+    expect(images.get(first.image)!.Id).toBe(first.imageId)
+  })
+
+  it('removes a retained candidate if later builder cleanup fails', async () => {
+    const { services, directory, images } = fixture(
+      (args) => args[0] === 'buildx' && args[1] === 'rm'
+    )
+    await expect(
+      services.buildAndSmokeContainer({ retainImage: true, cwd: directory })
+    ).rejects.toThrow(/cleanup/)
+    expect([...images.keys()].some((name) => name.endsWith(':validated'))).toBe(false)
+  })
+
+  it('cleans idle services on SIGHUP and removes the handler', async () => {
+    const { services, calls, signals } = fixture()
+    const pg = await services.startPostgres({})
+    signals.emit('SIGHUP')
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(calls.some((call) => call.args[0] === 'rm')).toBe(true)
+    await pg.close()
+    expect(signals.listenerCount('SIGHUP')).toBe(0)
   })
 
   it('uses a bounded private builder and removes it on build failure', async () => {
@@ -172,6 +254,10 @@ describe('disposable CI containers', () => {
     const { services, calls } = fixture()
     const result = await services.smokeContainer('varlens-test:unique', {})
     expect(result.imageId).toBe('sha256:abc')
+    expect(calls.some((call) => call.args[0] === 'port')).toBe(false)
+    expect(
+      calls.some((call) => call.args[0] === 'exec' && call.args.join(' ').includes('/readyz'))
+    ).toBe(true)
     const probe = calls.find(
       (call) => call.args[0] === 'run' && call.args.includes('--entrypoint')
     )!

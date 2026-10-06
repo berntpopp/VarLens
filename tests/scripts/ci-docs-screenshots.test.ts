@@ -75,8 +75,11 @@ describe('capture artifacts are bound to their actual inputs', () => {
 
   test('docs preparation leaves tracked screenshots untouched', () => {
     const input = fixture()
+    mkdirSync(join(input.root, 'docs/.vitepress/cache'), { recursive: true })
+    writeFileSync(join(input.root, 'docs/.vitepress/cache/stale.js'), 'stale compiled config')
     recordScreenshots(input)
     const destination = prepareDocs(input)
+    expect(() => readFileSync(join(destination, '.vitepress/cache/stale.js'))).toThrow()
     expect(readFileSync(join(destination, 'public/screenshots/app.png'))).toEqual(
       readFileSync(join(input.directory, 'app.png'))
     )

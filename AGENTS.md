@@ -162,7 +162,9 @@ On hosts that require the existing Electron test sandbox opt-out, explicitly pas
 after hook setup. This option is confined to test launches and bound into the receipt.
 
 Pass receipts live under the worktree Git directory and bind clean commit/tree, merge-base,
-gate policy, tools, installed dependencies, and output bytes. Each push fetches the base and
+gate policy, tools, installed dependencies, and output bytes. Ignored source/build-input files
+(including local Git excludes) also block readiness; known generated fixture bytes are bound
+into the receipt. Each push fetches the base and
 refreshes outgoing-history secret scans and current container advisories. Receipts are local
 conveniences, not attestations. Report the exact command and outcome, including reused work
 and unavailable checks; other-OS packages, the hosted merge result, signing, and publication

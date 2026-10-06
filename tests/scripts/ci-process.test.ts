@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 // @ts-expect-error Repository CLI modules are tested directly.
 import { gateEnvironment, runCommand } from '../../scripts/ci/process.mjs'
 describe('isolated gate processes', () => {
@@ -47,6 +51,45 @@ describe('isolated gate processes', () => {
     setTimeout(() => controller.abort(), 50)
     await expect(pending).rejects.toThrow(/abort/i)
   })
+  it.skipIf(process.platform === 'win32')(
+    'kills a stubborn descendant after its group leader exits',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), 'varlens-process-group-'))
+      const heartbeat = join(directory, 'heartbeat')
+      const identity = join(directory, 'pid')
+      const controller = new AbortController()
+      const descendant = `const fs=require('node:fs');process.on('SIGTERM',()=>{});fs.writeFileSync(${JSON.stringify(identity)},String(process.pid));let count=0;setInterval(()=>fs.writeFileSync(${JSON.stringify(heartbeat)},String(++count)),10)`
+      const leader = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendant)}],{stdio:'ignore'});process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000)`
+      const pending = runCommand(process.execPath, ['-e', leader], {
+        signal: controller.signal,
+        quiet: true
+      })
+      // Install rejection handling before aborting, without masking the assertion.
+      const result = pending.catch((error: Error) => error)
+      try {
+        const deadline = Date.now() + 5000
+        while (!existsSync(heartbeat) && Date.now() < deadline) await delay(10)
+        expect(existsSync(heartbeat)).toBe(true)
+        controller.abort()
+        expect(await result).toMatchObject({ message: 'Preflight aborted' })
+        await delay(50)
+        const stopped = readFileSync(heartbeat, 'utf8')
+        await delay(80)
+        expect(readFileSync(heartbeat, 'utf8')).toBe(stopped)
+      } finally {
+        controller.abort()
+        if (existsSync(identity)) {
+          try {
+            process.kill(Number(readFileSync(identity, 'utf8')), 'SIGKILL')
+          } catch {
+            /* Already exited. */
+          }
+        }
+        await result
+        rmSync(directory, { recursive: true, force: true })
+      }
+    }
+  )
 })
 
 it('refuses a live shared lock and recovers a stale same-host owner', async () => {

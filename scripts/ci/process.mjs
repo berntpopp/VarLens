@@ -107,6 +107,9 @@ export function runCommand(
       reject(error)
     })
     child.on('close', (code, killed) => {
+      // The leader can exit before descendants which ignore SIGTERM. Finish
+      // killing its process group before clearing the escalation timer.
+      if (signal?.aborted) terminate(true)
       cleanup()
       if (signal?.aborted) reject(new Error('Preflight aborted'))
       else if (code !== 0) reject(new Error(`${command} failed (${killed ?? code})`))

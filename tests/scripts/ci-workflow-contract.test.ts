@@ -111,4 +111,25 @@ describe('hosted gate contracts', () => {
     expect(source).toContain('postgres-migrations')
     expect(read('.dockerignore')).toContain('\n**\n')
   })
+
+  test('runtime uses the independently installed and probed production dependency tree', () => {
+    const source = read('Dockerfile')
+    expect(source).not.toContain('npm prune')
+    const production = source.split(' AS production-deps\n')[1]?.split(' AS runtime\n')[0] ?? ''
+    expect(production).toContain('npm ci --omit=dev --ignore-scripts --no-audit --no-fund')
+    expect(production).toContain(
+      '/app/node_modules/better-sqlite3-multiple-ciphers/build/Release/better_sqlite3.node'
+    )
+    expect(production).toContain('COPY --from=builder /app/out/web ./out/web')
+    expect(production).toContain('/app/src/main/storage/postgres/migrations/sql')
+    expect(production).toContain('./postgres-migrations')
+    expect(production).toContain("require('./out/web/server.cjs')")
+    expect(production).toContain("require('./out/web/postgres-import-worker.cjs')")
+    expect(production).toContain("new Database(':memory:')")
+    expect(production).toContain('await argon2.hash')
+    const runtime = source.split(' AS runtime\n')[1] ?? ''
+    expect(runtime).toContain('COPY --from=production-deps /app/node_modules ./node_modules')
+    expect(runtime).not.toContain('COPY --from=builder /app/node_modules')
+    expect(runtime).toContain('COPY --from=builder /app/out/web ./out/web')
+  })
 })

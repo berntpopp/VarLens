@@ -9,6 +9,7 @@ import { containerScope } from './container-lifecycle.mjs'
 import { toolCommand } from './tool-command.mjs'
 import { gateEnvironment } from './process.mjs'
 import { dockerLayerCache } from './docker-cache.mjs'
+import { receiptImages } from './container-images.mjs'
 import { runTool as pinnedTool } from './tools.mjs'
 
 const uniqueName = (kind) => `varlens-ci-${kind}-${randomUUID()}`
@@ -32,10 +33,19 @@ export function createContainerServices(dependencies = {}) {
     runTool = pinnedTool,
     signals = process,
     sleep = (ms, signal) => delay(ms, undefined, { signal }),
-    fetch: request = globalThis.fetch,
     now = Date.now
   } = dependencies
-  const docker = (args, options = {}) => run('docker', args, options)
+  const docker = async (args, options = {}) => {
+    try {
+      return await run('docker', args, options)
+    } catch (error) {
+      const details = String(error.stderr ?? '')
+        .replace(/postgres(?:ql)?:\/\/[^@\s]+@/gi, 'postgresql://<redacted>@')
+        .replace(/POSTGRES_PASSWORD=\S+/g, 'POSTGRES_PASSWORD=<redacted>')
+      error.message = `Docker ${args[0]}: ${error.message}${details ? `\n${details.slice(-8000)}` : ''}`
+      throw error
+    }
+  }
   const remove = (args, options) =>
     docker(args, { cwd: options.cwd, env: options.env, timeout: 60_000 })
 
@@ -95,8 +105,7 @@ export function createContainerServices(dependencies = {}) {
           '2',
           '--tmpfs',
           '/var/lib/postgresql/data:rw,size=1073741824',
-          '--publish',
-          '127.0.0.1::5432',
+          ...(!options.network ? ['--publish', '127.0.0.1::5432'] : []),
           ...(options.network ? ['--network', options.network, '--network-alias', 'postgres'] : []),
           '--env',
           'POSTGRES_USER=varlens_ci',
@@ -119,12 +128,13 @@ export function createContainerServices(dependencies = {}) {
         scope.signal,
         'Disposable PostgreSQL'
       )
-      const port = await portOf(name, 5432, commandOptions)
+      const port = options.network ? '5432' : await portOf(name, 5432, commandOptions)
+      const host = options.network ? 'postgres' : '127.0.0.1'
       scope.ready()
       return {
         env: {
           ...options.env,
-          VARLENS_PG_URL: `postgresql://varlens_ci:${password}@127.0.0.1:${port}/varlens_ci`,
+          VARLENS_PG_URL: `postgresql://varlens_ci:${password}@${host}:${port}/varlens_ci`,
           VARLENS_PG_SSL_MODE: 'disable',
           VARLENS_PG_SCHEMA: 'varlens'
         },
@@ -200,8 +210,6 @@ export function createContainerServices(dependencies = {}) {
           '1g',
           '--cpus',
           '2',
-          '--publish',
-          '127.0.0.1::8080',
           '--env',
           `VARLENS_PG_URL=${pg.internalUrl}`,
           '--env',
@@ -216,15 +224,12 @@ export function createContainerServices(dependencies = {}) {
         ],
         commandOptions
       )
-      const port = await portOf(name, 8080, commandOptions)
+      const readinessProbe =
+        "fetch('http://127.0.0.1:8080/readyz').then(async (response) => { const data = await response.json(); if (!response.ok || data.db?.open !== true) throw new Error('not ready') }).catch(() => { process.exitCode = 1 })"
       await waitUntilReady(
         async () => {
-          const response = await request(`http://127.0.0.1:${port}/readyz`, {
-            signal: AbortSignal.any([scope.signal, AbortSignal.timeout(3000)])
-          })
-          if (!response.ok) return false
-          const status = await response.json()
-          return status.db?.open === true
+          await docker(['exec', name, 'node', '-e', readinessProbe], commandOptions)
+          return true
         },
         scope.signal,
         'Pruned web image with PostgreSQL'
@@ -308,6 +313,8 @@ export function createContainerServices(dependencies = {}) {
     await requireDocker(options)
     const scope = containerScope({ signal: options.signal, signals })
     const commandOptions = { ...options, signal: scope.signal }
+    const images = receiptImages(docker, commandOptions)
+    let retained
     try {
       const cache = await dockerLayerCache(
         resolve(options.cwd ?? process.cwd(), '.cache/docker/linux-amd64')
@@ -341,8 +348,7 @@ export function createContainerServices(dependencies = {}) {
         commandOptions
       )
       const image = `${uniqueName('web')}:local`
-      let retained = false
-      scope.defer(() => (retained ? undefined : remove(['image', 'rm', '--force', image], options)))
+      scope.defer(() => remove(['image', 'rm', image], options))
       await docker(
         [
           'buildx',
@@ -354,6 +360,7 @@ export function createContainerServices(dependencies = {}) {
           '--load',
           '--tag',
           image,
+          ...images.labelArgs,
           '--file',
           'Dockerfile',
           ...cache.args,
@@ -361,14 +368,16 @@ export function createContainerServices(dependencies = {}) {
         ],
         { ...commandOptions, timeout: 30 * 60_000 }
       )
+      // BuildKit cache is deterministic build input reuse, never a smoke/scan verdict.
+      await cache.publish()
       const smoke = await smokeContainer(image, commandOptions)
       const scan = options.scan ? await scanContainer(image, commandOptions) : undefined
       scope.signal.throwIfAborted()
-      await cache.publish()
-      retained = options.retainImage === true
+      if (options.retainImage) retained = await images.retain(smoke)
       await scope.close()
-      return { ...smoke, ...(scan ? { scan } : {}) }
+      return { ...(retained ?? smoke), ...(scan ? { scan } : {}) }
     } catch (error) {
+      if (retained) await images.discard(retained).catch(() => {})
       await scope.close().catch(() => {})
       throw error
     }

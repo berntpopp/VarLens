@@ -2,9 +2,10 @@
 # VarLens — web build container.
 #
 # Multi-stage:
-#   1. builder — installs deps, runs `npm run build:web` to produce
-#      out/web/server.cjs, then trims node_modules to production-only.
-#   2. runtime — minimal image carrying the bundle plus the production
+#   1. builder — installs build dependencies and produces the web bundle.
+#   2. production-deps — installs only production dependencies, reuses the
+#      builder's Node-ABI SQLite binary, and probes the final dependency tree.
+#   3. runtime — minimal image carrying the bundle plus the production
 #      modules that the bundle keeps external (fastify, pg,
 #      better-sqlite3-multiple-ciphers, @node-rs/argon2, nanoid).
 #
@@ -45,16 +46,32 @@ COPY vite.web.config.ts vite.web-renderer.config.ts tsconfig*.json ./
 RUN --mount=type=cache,id=varlens-precompress,target=/app/.cache/precompress,sharing=locked \
     VARLENS_WEB_BASE=/ npm run build:web
 
-# Reduce to production deps only.
-RUN npm prune --omit=dev --ignore-scripts
+# ---- Stage 2: production dependencies ------------------------------------
+FROM node:24.15.0-bookworm-slim AS production-deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+# A fresh tree avoids overlayfs copying up the large development dependency
+# layer just to remove it. Argon2's platform package includes its native binary;
+# SQLite needs only the binary already installed for this same Node base.
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+COPY --from=builder \
+    /app/node_modules/better-sqlite3-multiple-ciphers/build/Release/better_sqlite3.node \
+    ./node_modules/better-sqlite3-multiple-ciphers/build/Release/better_sqlite3.node
+COPY --from=builder /app/out/web ./out/web
+# Migration definitions read SQL during module evaluation. Match the runtime
+# layout so the bundle probe validates the same files without a source-tree fallback.
+COPY --from=builder \
+    /app/src/main/storage/postgres/migrations/sql \
+    ./postgres-migrations
 
 # Verify what actually ships: bundle resolves AND the native bindings
-# load AND actually invoke their hot path against the post-prune
+# load AND actually invoke their hot path against the production-only
 # node_modules tree. This is the same set the runtime stage will copy,
 # so a passing smoke here is binding. @node-rs/argon2 dispatches to
 # platform-specific .node files via optional dependencies — only an
-# actual `hash()` call exercises the dlopen path that prune could
-# theoretically misresolve.
+# actual `hash()` call exercises that dlopen path after the production install.
 RUN node -e "(async () => { \
     require('./out/web/server.cjs'); \
     require('node:fs').accessSync('./out/web/postgres-import-worker.cjs'); \
@@ -65,10 +82,10 @@ RUN node -e "(async () => { \
     new Database(':memory:').prepare('SELECT 1').get(); \
     const argon2 = require('@node-rs/argon2'); \
     await argon2.hash('smoke'); \
-    console.log('post-prune bundle + native bindings ok'); \
+    console.log('production bundle + native bindings ok'); \
   })().catch((e) => { console.error(e); process.exit(1); })"
 
-# ---- Stage 2: runtime -----------------------------------------------------
+# ---- Stage 3: runtime -----------------------------------------------------
 FROM node:24.15.0-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
@@ -112,7 +129,7 @@ RUN groupadd --system --gid 1001 varlens \
  && chown varlens:varlens /data
 
 COPY --from=builder /app/out/web ./out/web
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 # Postgres migration SQL files are read at runtime by
 # src/main/storage/postgres/migrations/definitions.ts. Vite bundles only

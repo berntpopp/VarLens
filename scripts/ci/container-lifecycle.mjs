@@ -14,12 +14,14 @@ export function containerScope({ signal, signals = process } = {}) {
   signal?.addEventListener('abort', interrupted, { once: true })
   signals.on('SIGINT', interrupted)
   signals.on('SIGTERM', interrupted)
+  signals.on('SIGHUP', interrupted)
 
   function close() {
     closing ??= (async () => {
       signal?.removeEventListener('abort', interrupted)
       signals.removeListener('SIGINT', interrupted)
       signals.removeListener('SIGTERM', interrupted)
+      signals.removeListener('SIGHUP', interrupted)
       const errors = []
       for (const remove of cleanup.reverse()) {
         try {

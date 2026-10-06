@@ -128,10 +128,13 @@ export function prepareDocs({
   rmSync(target, { recursive: true, force: true })
   cpSync(join(root, 'docs'), target, {
     recursive: true,
-    filter: (path) =>
-      !/(?:^|[/\\])(?:node_modules|\.cache|dist)(?:[/\\]|$)/.test(
-        relative(join(root, 'docs'), path)
+    filter: (path) => {
+      const sourcePath = relative(join(root, 'docs'), path)
+      return (
+        !/(?:^|[/\\])(?:node_modules|\.cache|dist)(?:[/\\]|$)/.test(sourcePath) &&
+        !/^\.vitepress[/\\]cache(?:[/\\]|$)/.test(sourcePath)
       )
+    }
   })
   const screenshots = join(target, 'public/screenshots')
   rmSync(screenshots, { recursive: true, force: true })

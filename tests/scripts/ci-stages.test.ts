@@ -86,3 +86,30 @@ it('scopes disposable PostgreSQL credentials to database and web UI checks', () 
   expect(ids.indexOf('ui-gates')).toBeLessThan(ids.indexOf('electron'))
   expect(ids.indexOf('interactions')).toBeGreaterThan(ids.indexOf('electron'))
 })
+
+it('creates disposable writable session state for web stages and removes it on close', async () => {
+  const { createWebTestState } = await import('../../scripts/ci/run.mjs')
+  const { existsSync, readFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const state = createWebTestState()
+  const directory = state.env.VARLENS_RECOVERY_KEY_DIR
+  try {
+    expect(directory).not.toBe('/data')
+    expect(state.env).toMatchObject({
+      VARLENS_METRICS_PORT: '0',
+      VARLENS_WEB_HOST: '127.0.0.1',
+      VARLENS_METRICS_HOST: '127.0.0.1'
+    })
+    expect(readFileSync(join(directory, 'web-session-secret'))).toHaveLength(32)
+    expect(
+      stageEnvironment(
+        { id: 'postgres-tests', environment: 'postgres' },
+        {},
+        { VARLENS_PG_URL: 'postgres://fixture', ...state.env }
+      ).VARLENS_RECOVERY_KEY_DIR
+    ).toBe(directory)
+  } finally {
+    state.close()
+  }
+  expect(existsSync(directory)).toBe(false)
+})
