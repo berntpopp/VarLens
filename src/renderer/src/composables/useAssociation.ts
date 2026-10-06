@@ -9,7 +9,8 @@ import { computed } from 'vue'
 import { useApiService } from './useApiService'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import { logService } from '../services/LogService'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { unwrapIpcResult } from '../../../shared/types/errors'
+import { formatError } from '../utils/ipc-result'
 
 interface CaseInfo {
   id: number
@@ -41,7 +42,7 @@ export function useAssociation() {
     if (!api || !capabilities.canUse('cohortAssociation')) return
     api.cohort.cancelAssociation().catch((e) => {
       logService.warn(
-        'Failed to cancel association: ' + (e instanceof Error ? e.message : String(e)),
+        'Failed to cancel association: ' + formatError(e, 'unknown error'),
         'association'
       )
     })
@@ -78,12 +79,7 @@ export function useAssociation() {
           }
         } catch (e) {
           logService.warn(
-            `Failed to load metadata for case ${c.id}: ` +
-              (e instanceof Error
-                ? e.message
-                : isIpcError(e)
-                  ? (e.userMessage ?? e.message)
-                  : String(e)),
+            `Failed to load metadata for case ${c.id}: ` + formatError(e, 'unknown error'),
             'association'
           )
           return { id: c.id, name: c.name, status: null, sex: null, cohortIds: [] }

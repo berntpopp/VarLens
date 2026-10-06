@@ -1,3 +1,4 @@
+import { ConflictError } from '../../ipc/errors'
 import { toSerializableError } from '../../ipc/serializable-error'
 import type { SerializableError } from '../../../shared/types/errors'
 import type { Job, JobKind } from './types'
@@ -107,7 +108,7 @@ export class JobRunner {
     handler: (ctx: JobContext, params: P) => Promise<R>
   ): JobHandle<R> {
     if (this.inFlight.has(kind)) {
-      throw new Error(SINGLE_FLIGHT_MESSAGES[kind])
+      throw new ConflictError(SINGLE_FLIGHT_MESSAGES[kind])
     }
     const id = generateId()
     const controller = new AbortController()

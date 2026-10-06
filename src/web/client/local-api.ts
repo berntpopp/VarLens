@@ -91,9 +91,10 @@ const batchImportApi: Partial<WindowAPI['batchImport']> = {
   selectZip: async () => {
     const filePath = await pickOne('.zip')
     if (filePath === null) return null
-    const probe = await httpInvoke('batch-import', 'testZipPassword', [filePath, ''])
-    if (isIpcError(probe)) return probe
-    return { filePath, isEncrypted: !(probe as { success: boolean }).success }
+    // Not testZipPassword(ref, ''): that is false for a plain ZIP too (P-08).
+    const inspected = await httpInvoke('batch-import', 'inspectZip', [filePath])
+    if (isIpcError(inspected)) return inspected
+    return { filePath, isEncrypted: (inspected as { isEncrypted: boolean }).isEncrypted }
   }
 }
 

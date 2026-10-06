@@ -24,7 +24,9 @@
           variant="outlined"
           density="compact"
           class="mb-3"
-          hide-details
+          :error-messages="importError ?? undefined"
+          :hide-details="importError === null"
+          @update:model-value="importError = null"
         />
         <v-text-field
           v-model="regionFileDescription"
@@ -69,6 +71,7 @@ import { ref, computed, watch } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { mdiClose, mdiFileUploadOutline } from '@mdi/js'
 import { logService } from '../../services/LogService'
+import { formatError } from '../../utils/ipc-result'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 
 interface RegionFileItem {
@@ -91,6 +94,8 @@ const regionFileName = ref('')
 const regionFileDescription = ref('')
 const selectedBedPath = ref('')
 const importingRegion = ref(false)
+/** Last create/import failure (e.g. a duplicate name), shown on the name field. */
+const importError = ref<string | null>(null)
 
 const selectedBedBasename = computed(() => {
   if (!selectedBedPath.value) return ''
@@ -108,6 +113,7 @@ watch(
     regionFileName.value = ''
     regionFileDescription.value = ''
     selectedBedPath.value = ''
+    importError.value = null
   }
 )
 
@@ -163,11 +169,8 @@ async function importRegionFile(): Promise<void> {
     emit('imported', { regionFileId: created.id, regionFiles: updatedFiles })
     emit('update:modelValue', false)
   } catch (e) {
-    logService.error(
-      'Failed to import region file: ' +
-        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
-      'region-import'
-    )
+    importError.value = formatError(e, 'The region file could not be imported.')
+    logService.error('Failed to import region file: ' + importError.value, 'region-import')
   } finally {
     importingRegion.value = false
   }

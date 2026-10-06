@@ -6,6 +6,8 @@ import type { AuditBuffer } from '../audit-buffer'
 import type { JobRunner } from '../../../main/services/jobs/JobRunner'
 import type { PostgresCaseDeleteJobs } from '../jobs/case-delete-jobs'
 import type { WebEventHub } from '../events'
+import type { WebJobRegistry } from '../jobs/web-job-registry'
+import type { SessionRevocations } from '../session-revocation'
 import type { AppMetrics } from '../metrics'
 
 export interface DispatcherDeps {
@@ -26,7 +28,11 @@ export interface DispatcherDeps {
   jobs?: {
     runner: JobRunner
     caseDelete: PostgresCaseDeleteJobs
+    /** Per-user view (ownership, visibility, owner-checked cancel). */
+    registry: WebJobRegistry
   }
+  /** Revoked browser-session ids (logout of a stateless cookie session). */
+  sessions?: SessionRevocations
 }
 
 export interface InvokeBodyPayload {

@@ -16,6 +16,8 @@ import {
   startSqliteCaseDeleteJob
 } from './cases-logic'
 import type { DeleteCallbacks } from './cases-logic'
+import { startPostgresCaseDeleteJob } from './cases-delete-postgres'
+import type { CaseDeleteTarget } from '../../../shared/types/case-delete-job'
 
 // Schema for batch delete IDs array
 const CaseIdArraySchema = z.array(z.number().int().positive()).min(1)
@@ -76,6 +78,23 @@ async function deleteSingleCaseForCurrentSession(
 }
 
 /**
+ * Start a bulk/all delete job on the active backend. Postgres workspaces use
+ * the session's write executor (cases-delete-postgres.ts); SQLite keeps the
+ * delete worker. Before PR-W9b, Postgres had these capabilities disabled
+ * because every caller went straight to the SQLite worker.
+ */
+function startCaseDeleteJobForCurrentSession(
+  target: CaseDeleteTarget,
+  getDb: HandlerDependencies['getDb'],
+  getDbManager: HandlerDependencies['getDbManager']
+) {
+  const session = getDbManager().getCurrentSession()
+  return session.capabilities.backend === 'postgres'
+    ? startPostgresCaseDeleteJob(target, session, deleteCallbacks)
+    : startSqliteCaseDeleteJob(target, getDb, deleteCallbacks)
+}
+
+/**
  * Cases IPC handlers
  * Channels: cases:list, cases:query, cases:delete, cases:deleteAll, cases:deleteBatch
  */
@@ -113,8 +132,12 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbManager }: HandlerDe
   })
 
   ipcMain.handle('cases:deleteAll', async () => {
-    return wrapHandler(() => {
+    return wrapHandler(async () => {
       assertCaseDeleteSupported('cases:deleteAll', getDbManager)
+      if (getDbManager().getCurrentSession().capabilities.backend === 'postgres') {
+        const handle = startCaseDeleteJobForCurrentSession({ mode: 'all' }, getDb, getDbManager)
+        return (await handle.result).deleted
+      }
       return deleteAllCases(getDb, deleteCallbacks)
     })
   })
@@ -126,16 +149,11 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbManager }: HandlerDe
         mainLogger.error(`Invalid cases:startDelete params: ${validated.error.message}`, 'cases')
         throw new Error('Invalid parameters')
       }
-      const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend !== 'sqlite') {
-        // The web/Postgres delete job is served by the web dispatcher.
-        throw new Error('cases:startDelete is only available for SQLite databases on desktop')
-      }
       assertCaseDeleteSupported(
         validated.data.mode === 'all' ? 'cases:deleteAll' : 'cases:deleteBatch',
         getDbManager
       )
-      const handle = startSqliteCaseDeleteJob(validated.data, getDb, deleteCallbacks)
+      const handle = startCaseDeleteJobForCurrentSession(validated.data, getDb, getDbManager)
       // Fire-and-forget: the outcome is reported via `jobs:changed`.
       handle.result.catch(() => undefined)
       return { jobId: handle.id }
@@ -150,6 +168,11 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbManager }: HandlerDe
         throw new Error('Invalid parameters')
       }
       assertCaseDeleteSupported('cases:deleteBatch', getDbManager)
+      if (getDbManager().getCurrentSession().capabilities.backend === 'postgres') {
+        const target = { mode: 'ids' as const, ids: validated.data }
+        return (await startCaseDeleteJobForCurrentSession(target, getDb, getDbManager).result)
+          .deleted
+      }
       return deleteBatchCases(validated.data, getDb, deleteCallbacks)
     })
   })

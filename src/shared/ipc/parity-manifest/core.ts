@@ -13,14 +13,6 @@ import {
   type DomainManifest
 } from '../parity-manifest-types'
 
-const P_B_CANCEL = {
-  tracking: 'P-B (PR-W6 cancel ownership, spec P-07)',
-  note: 'cancels every running import process-wide, not only the caller run'
-}
-const P_B_ZIP = {
-  tracking: 'P-B (PR-W9a batch-import ZIP, spec P-08)',
-  note: 'web ZIP probing re-implements the desktop logic'
-}
 const DB_FILES_UX = 'Hidden: the web version has one server-configured workspace (DatabasePicker).'
 const ENCRYPTION_UX = 'Hidden: encryption at rest is the server operator concern (disk / PG TDE).'
 const PG_PROFILE_UX = 'Hidden: the server owns its PostgreSQL connection (VARLENS_PG_URL).'
@@ -29,7 +21,8 @@ export const casesManifest = {
   list: sharedRead(),
   query: sharedRead(),
   delete: sharedWrite(),
-  deleteAll: sharedWrite(),
+  // Web: deleting every case is admin-only (startDelete mode 'all' is checked server-side).
+  deleteAll: sharedWrite({ authz: 'admin' }),
   deleteBatch: sharedWrite(),
   startDelete: sharedWrite(),
   availableBuilds: sharedRead()
@@ -59,7 +52,8 @@ export const importManifest = {
   vcfMultiPreview: sharedRead({
     degraded: { tracking: 'P-B (PR-W9a)', note: 'sibling BED discovery is empty for uploads' }
   }),
-  cancel: sharedRead({ degraded: P_B_CANCEL })
+  // Owner-checked (WebJobRegistry): 403 for another user's import.
+  cancel: sharedRead()
 } satisfies DomainManifest<'import'>
 
 export const systemManifest = {
@@ -116,12 +110,12 @@ export const batchImportManifest = {
   selectFolder: adapter('upload'),
   checkDuplicates: sharedRead(),
   start: sharedWrite(),
-  cancel: sharedRead({ degraded: P_B_CANCEL }),
+  cancel: sharedRead(),
   onProgress: adapter('sse'),
   onComplete: adapter('sse'),
   selectZip: adapter('upload'),
-  testZipPassword: sharedRead({ degraded: P_B_ZIP }),
-  extractZip: sharedRead({ degraded: P_B_ZIP }),
+  testZipPassword: sharedRead(),
+  extractZip: sharedRead(),
   cleanupZipTemp: sharedWrite()
 } satisfies DomainManifest<'batchImport'>
 

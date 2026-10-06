@@ -21,7 +21,9 @@ export type WebMethodResolution = 'override' | 'read-task' | 'write-task'
  * (spec P-18) were found.
  */
 export const SERVER_ONLY_DISPATCHER_KEYS: Readonly<Record<string, string>> = {
-  'database:health': 'operator health probe for the hosted workspace'
+  'database:health': 'operator health probe for the hosted workspace',
+  'batch-import:inspectZip':
+    'web half of batchImport.selectZip (adapter): encrypted-entry probe after the upload (P-08)'
 }
 
 const KEBAB_TO_CAMEL: Readonly<Record<string, string>> = Object.fromEntries(

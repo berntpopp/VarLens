@@ -11,11 +11,12 @@ import type { Pool } from 'pg'
 
 import { PostgresAuditLogRepository } from '../../main/storage/postgres/PostgresAuditLogRepository'
 import { PostgresCaseLifecycleRepository } from '../../main/storage/postgres/PostgresCaseLifecycleRepository'
-import { JobRunner } from '../../main/services/jobs/JobRunner'
-import { JOBS_CHANNELS } from '../../shared/ipc/domains/jobs'
+import type { JobRunner } from '../../main/services/jobs/JobRunner'
+import { jobRunner } from '../../main/services/jobs/runner'
 import { AuditBuffer, resolveAuditBufferSettings } from './audit-buffer'
 import type { WebEventHub } from './events'
 import { PostgresCaseDeleteJobs } from './jobs/case-delete-jobs'
+import { WebJobRegistry } from './jobs/web-job-registry'
 import { WEB_EVENT_COHORT_SUMMARY_REBUILT } from './web-event-types'
 
 export const CASE_DELETE_BATCH_SIZE_ENV = 'VARLENS_PG_DELETE_BATCH_SIZE'
@@ -29,7 +30,7 @@ export interface RuntimeLogger {
 
 export interface WebRuntimeServices {
   auditBuffer: AuditBuffer | undefined
-  jobs: { runner: JobRunner; caseDelete: PostgresCaseDeleteJobs }
+  jobs: { runner: JobRunner; caseDelete: PostgresCaseDeleteJobs; registry: WebJobRegistry }
   /** Re-queue work interrupted by a previous shutdown/crash (fire-and-forget). */
   resumeInterruptedWork: () => void
   close: () => Promise<void>
@@ -51,6 +52,8 @@ export function createWebRuntimeServices(options: {
   events: WebEventHub
   logger: RuntimeLogger
   env?: NodeJS.ProcessEnv
+  /** Defaults to the process-wide runner shared with import/export logic. */
+  runner?: JobRunner
 }): WebRuntimeServices {
   const env = options.env ?? process.env
   const settings = resolveAuditBufferSettings(env)
@@ -65,9 +68,12 @@ export function createWebRuntimeServices(options: {
           logger: options.logger
         })
 
-  // Process-local JobRunner: same class, Job shape and single-flight rules as
-  // the desktop main process (track 5a).
-  const runner = new JobRunner()
+  // The process-wide JobRunner: imports (PostgresImportExecutor), batch
+  // imports, exports and case deletes all enqueue on it, so `jobs:*` sees every
+  // job and single-flight rules match the desktop main process (track 5a).
+  // The registry adds owners, per-user visibility and `jobs:changed` pushes.
+  const runner = options.runner ?? jobRunner
+  const registry = new WebJobRegistry(runner, options.events)
   const staleAnnounced = new Set<string>()
   let resuming: Promise<void> = Promise.resolve()
   const caseDelete = new PostgresCaseDeleteJobs({
@@ -76,8 +82,8 @@ export function createWebRuntimeServices(options: {
     logger: options.logger,
     batchSize: resolveCaseDeleteBatchSize(env),
     onJobChanged: (job, ownerUserId) => {
+      // `jobs:changed` itself is pushed by the registry (owner + admins).
       if (ownerUserId === undefined) return
-      options.events.publish(ownerUserId, JOBS_CHANNELS.changed, job)
       // Cohort views refresh around a delete, as with the old synchronous path.
       if (job.status === 'running' && !staleAnnounced.has(job.id)) {
         staleAnnounced.add(job.id)
@@ -93,7 +99,7 @@ export function createWebRuntimeServices(options: {
 
   return {
     auditBuffer,
-    jobs: { runner, caseDelete },
+    jobs: { runner, caseDelete, registry },
     resumeInterruptedWork() {
       // Tracked so close() never ends the pool under an in-flight lookup.
       resuming = caseDelete.resumePending().then(
@@ -108,6 +114,7 @@ export function createWebRuntimeServices(options: {
     async close() {
       await resuming
       await caseDelete.close()
+      registry.close()
       await auditBuffer?.close()
     }
   }

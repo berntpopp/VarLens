@@ -555,22 +555,23 @@ describe('web client api', () => {
     expect(MockXMLHttpRequest.instances).toHaveLength(2)
   })
 
-  test('batchImport.selectZip returns the upload ref plus encrypted-state probe result', async () => {
+  test.each([
+    { isEncrypted: false, label: 'a plain ZIP is not reported as password-protected (P-08)' },
+    { isEncrypted: true, label: 'an encrypted ZIP is reported as password-protected' }
+  ])('batchImport.selectZip: $label', async ({ isEncrypted }) => {
     const zip = new File(['PK'], 'batch.zip')
     stubUploadPicker([zip])
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      expect(url).toBe('/api/batch-import/testZipPassword')
-      expect(init?.body).toBe(
-        JSON.stringify({ args: ['web-upload:upload-batch.zip/batch.zip', ''] })
-      )
-      return mockJsonResponse({ success: false })
+      expect(url).toBe('/api/batch-import/inspectZip')
+      expect(init?.body).toBe(JSON.stringify({ args: ['web-upload:upload-batch.zip/batch.zip'] }))
+      return mockJsonResponse({ isEncrypted })
     })
     vi.stubGlobal('fetch', fetchMock)
 
     const api = createApi() as unknown as TestApi
     await expect(api.batchImport.selectZip()).resolves.toEqual({
       filePath: 'web-upload:upload-batch.zip/batch.zip',
-      isEncrypted: true
+      isEncrypted
     })
   })
 

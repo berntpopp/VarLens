@@ -33,6 +33,25 @@ export function extractCaseName(fileName: string, stripText?: string): string {
 }
 
 /**
+ * The duplicate rule shared by every runtime (desktop SQLite, desktop/web
+ * Postgres): a file is a duplicate when its derived case name already exists.
+ */
+export function buildDuplicateReport(
+  files: ReadonlyArray<{ filePath: string; fileName: string }>,
+  existingNames: ReadonlySet<string>,
+  stripText?: string
+): { files: DuplicateCheckItem[]; duplicateCount: number } {
+  let duplicateCount = 0
+  const report = files.map(({ filePath, fileName }) => {
+    const caseName = extractCaseName(fileName, stripText)
+    const isDuplicate = existingNames.has(caseName)
+    if (isDuplicate) duplicateCount++
+    return { filePath, fileName, caseName, isDuplicate }
+  })
+  return { files: report, duplicateCount }
+}
+
+/**
  * Check which files have duplicate case names in the database.
  */
 export function checkDuplicates(
@@ -40,22 +59,10 @@ export function checkDuplicates(
   filePaths: string[],
   stripText?: string
 ): { files: DuplicateCheckItem[]; duplicateCount: number } {
-  // Extract all case names first
-  const fileInfos = filePaths.map((filePath) => {
-    const fileName = extractFileName(filePath)
-    const caseName = extractCaseName(fileName, stripText)
-    return { filePath, fileName, caseName }
-  })
-
+  const files = filePaths.map((filePath) => ({ filePath, fileName: extractFileName(filePath) }))
   // Single batched query instead of N individual lookups
-  const existingNames = db.cases.getExistingCaseNames(fileInfos.map((f) => f.caseName))
-
-  let duplicateCount = 0
-  const files: DuplicateCheckItem[] = fileInfos.map(({ filePath, fileName, caseName }) => {
-    const isDuplicate = existingNames.has(caseName)
-    if (isDuplicate) duplicateCount++
-    return { filePath, fileName, caseName, isDuplicate }
-  })
-
-  return { files, duplicateCount }
+  const existingNames = db.cases.getExistingCaseNames(
+    files.map((f) => extractCaseName(f.fileName, stripText))
+  )
+  return buildDuplicateReport(files, existingNames, stripText)
 }

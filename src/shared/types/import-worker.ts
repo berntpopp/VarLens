@@ -132,6 +132,9 @@ export type WorkerMessage =
           status: 'success' | 'failed' | 'skipped'
           variantCount?: number
           error?: string
+          /** Envelope code of a failure (e.g. CONFLICT for a duplicate case name). */
+          errorCode?: string
+          userMessage?: string
         }>
       }
     }

@@ -15,7 +15,7 @@ import {
   UniqueConstraintError,
   WrongPasswordError
 } from './errors'
-import { InvalidParametersError } from '../ipc/errors'
+import { AppError, ConflictError, ForbiddenError, InvalidParametersError } from '../ipc/errors'
 
 export interface EncodedWorkerError {
   name: string
@@ -33,7 +33,10 @@ const KNOWN_CLASSES: Record<string, { prototype: Error }> = {
   TransactionError,
   UniqueConstraintError,
   WrongPasswordError,
-  InvalidParametersError
+  InvalidParametersError,
+  AppError,
+  ConflictError,
+  ForbiddenError
 }
 
 export function encodeWorkerError(error: unknown): EncodedWorkerError {

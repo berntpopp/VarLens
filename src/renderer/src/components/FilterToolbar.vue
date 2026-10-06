@@ -130,6 +130,7 @@
       <PresetSaveDialog
         v-model="showSavePresetDialog"
         :saving="savingPreset"
+        :error="savePresetError"
         @save="handleSavePreset"
       />
       <PresetManageDialog
@@ -145,6 +146,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, provide, nextTick, toRaw } from 'vue'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import { useFilterState } from '../composables/useFilterState'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useFilterPresetStore } from '../composables/useFilterPresetStore'
@@ -395,6 +397,7 @@ const {
 const showSavePresetDialog = ref(false)
 const showManagePresetsDialog = ref(false)
 const savingPreset = ref(false)
+const savePresetError = ref<string | null>(null)
 let applyingPresets = false // guard to skip divergence check during applyActivePresets
 
 // Preset toggle handler — applies merged preset filters
@@ -445,6 +448,7 @@ watch(presetDivergenceKey, () => {
 async function handleSavePreset(data: { name: string; description: string | null }): Promise<void> {
   if (!(await canUseOrWarn('workflow.filterPresets'))) return
   savingPreset.value = true
+  savePresetError.value = null
   try {
     const plainFilters = stripVueProxies(filters.value)
     await savePreset({
@@ -454,10 +458,8 @@ async function handleSavePreset(data: { name: string; description: string | null
     })
     showSavePresetDialog.value = false
   } catch (e) {
-    logService.warn(
-      'Failed to save filter preset: ' + (e instanceof Error ? e.message : String(e)),
-      'filters'
-    )
+    savePresetError.value = formatError(e, 'The preset could not be saved.')
+    logService.warn('Failed to save filter preset: ' + savePresetError.value, 'filters')
   } finally {
     savingPreset.value = false
   }

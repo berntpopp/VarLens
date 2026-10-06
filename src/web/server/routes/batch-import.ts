@@ -1,40 +1,33 @@
 import { basename, isAbsolute } from 'node:path'
 
-import { cancelImport, startImport } from '../../../main/ipc/handlers/import-logic'
-import { jobRunner } from '../../../main/services/jobs/runner'
-import type { StorageWriteTask } from '../../../main/storage/write-executor'
+import { cancelImport } from '../../../main/ipc/handlers/import-logic'
 import {
   cleanupZipTemp,
   extractZip,
+  inspectZip,
   testZipPassword
 } from '../../../main/ipc/handlers/batch-import-logic'
-import { extractCaseName } from '../../../main/import/batch-utils'
+import {
+  checkSessionDuplicates,
+  startSessionBatchImport,
+  type SessionBatchCallbacks
+} from '../../../main/ipc/handlers/batch-import-session'
 import { ImportServerPathArgSchema } from '../../../shared/api/schemas/import'
 import { BatchImportRunIdSchema } from '../../../shared/ipc/domains/batch-import-schemas'
-import type { BatchResult, DuplicateChoice } from '../../../shared/types/api'
-import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import {
   WEB_EVENT_BATCH_IMPORT_COMPLETE,
   WEB_EVENT_BATCH_IMPORT_PROGRESS,
   WEB_EVENT_COHORT_SUMMARY_REBUILT
 } from '../web-event-types'
 import { serverPathImportDisabled, serverPathImportDisabledResponse } from './server-path-import'
-import type { OverrideHandler } from './types'
+import { jobViewerOf } from './jobs'
+import type { DispatcherDeps, OverrideHandler } from './types'
 import { isWebUploadRef, resolveWebUploadRef, stageExistingFileUpload } from './upload-staging'
-
-const DELETE_CASE_TASK_TYPE = ['cases', 'delete'].join(':')
 
 interface ResolvedBatchFile {
   inputPath: string
   storedPath: string
   fileName: string
-}
-
-interface WebBatchImportJobParams {
-  files: ResolvedBatchFile[]
-  duplicateStrategy: DuplicateChoice
-  stripText: string | undefined
-  runId: string
 }
 
 type BatchFileResolution =
@@ -61,24 +54,11 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
           return resolution.body
         }
 
-        const existingNames = new Set((await session.listCases()).map((item) => item.name))
-        let duplicateCount = 0
-        const files = resolution.files.map((file) => {
-          const caseName = extractCaseName(
-            file.fileName,
-            typeof stripText === 'string' ? stripText : undefined
-          )
-          const isDuplicate = existingNames.has(caseName)
-          if (isDuplicate) duplicateCount++
-          return {
-            filePath: file.inputPath,
-            fileName: file.fileName,
-            caseName,
-            isDuplicate
-          }
-        })
-
-        return { files, duplicateCount }
+        return await checkSessionDuplicates(
+          session,
+          resolution.files.map((file) => ({ filePath: file.inputPath, fileName: file.fileName })),
+          typeof stripText === 'string' ? stripText : undefined
+        )
       }
     },
 
@@ -105,37 +85,28 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
           return resolution.body
         }
 
-        const handle = jobRunner.enqueue<WebBatchImportJobParams, BatchResult>(
-          'import_batch',
-          {
-            files: resolution.files,
-            duplicateStrategy,
-            stripText: typeof stripText === 'string' ? stripText : undefined,
-            runId: parsedRunId.data
-          },
-          async (ctx, params) => {
-            ctx.registerCancel(cancelImport)
-            return await startWebBatchImport(
-              params.files,
-              params.duplicateStrategy,
-              params.stripText,
-              params.runId,
-              request.session.user?.id,
-              session,
-              events,
-              ctx.signal
-            )
-          }
-        )
-        return await handle.result
+        const userId = request.session.user?.id
+        const validRunId = parsedRunId.data
+        return await startSessionBatchImport({
+          files: resolution.files,
+          duplicateStrategy,
+          stripText: typeof stripText === 'string' ? stripText : undefined,
+          runId: validRunId,
+          session,
+          callbacks: webBatchCallbacks(events, userId, validRunId)
+        })
       }
     },
 
     'batch-import:cancel': {
-      async handle() {
-        const runningBatchJobs = jobRunner.list({ kind: 'import_batch', status: 'running' })
-        await Promise.all(runningBatchJobs.map((job) => jobRunner.cancel(job.id)))
-        cancelImport()
+      async handle(_args, request, _reply, { jobs }) {
+        // Owner-checked (see import:cancel): 403 for another user's batch.
+        if (jobs === undefined) return
+        const cancelled = await jobs.registry.cancelActive(jobViewerOf(request), [
+          'import_batch',
+          'import_single'
+        ])
+        if (cancelled > 0) cancelImport()
       }
     },
 
@@ -174,6 +145,25 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
           validatedZipPath.data,
           typeof password === 'string' ? password : undefined
         )
+      }
+    },
+
+    // Web half of desktop `selectZip`: the browser uploads the archive, then
+    // asks whether it is encrypted (shared inspectZip, P-08).
+    'batch-import:inspectZip': {
+      async handle(args, request, reply) {
+        const [zipRef] = args
+        const validated = ImportServerPathArgSchema.safeParse(zipRef)
+        if (!validated.success || !isWebUploadRef(validated.data)) {
+          reply.code(400)
+          return { error: 'invalid-zip-ref', message: 'zipRef must be an upload ref' }
+        }
+        const upload = resolveUploadedFile(validated.data, request.session.user?.id)
+        if (upload === null) {
+          reply.code(404)
+          return { error: 'upload-not-found', message: 'Uploaded ZIP file is no longer available' }
+        }
+        return await inspectZip(upload.storedPath)
       }
     },
 
@@ -305,107 +295,18 @@ function resolveBatchFiles(values: unknown[], userId: number | undefined): Batch
   return { ok: true, files: resolved }
 }
 
-async function startWebBatchImport(
-  files: ResolvedBatchFile[],
-  duplicateStrategy: DuplicateChoice,
-  stripText: string | undefined,
-  runId: string,
+/** Per-user SSE wiring for the shared session batch (runId lets the client match its run). */
+function webBatchCallbacks(
+  events: DispatcherDeps['events'],
   userId: number | undefined,
-  session: Parameters<OverrideHandler['handle']>[3]['session'],
-  events: Parameters<OverrideHandler['handle']>[3]['events'],
-  signal: AbortSignal
-): Promise<BatchResult> {
-  if (userId !== undefined) {
-    events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
+  runId: string
+): SessionBatchCallbacks {
+  if (userId === undefined) return {}
+  return {
+    onCohortStale: (data) => events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, data),
+    onProgress: (progress) =>
+      events.publish(userId, WEB_EVENT_BATCH_IMPORT_PROGRESS, { ...progress, runId }),
+    onComplete: (result) =>
+      events.publish(userId, WEB_EVENT_BATCH_IMPORT_COMPLETE, { ...result, runId })
   }
-
-  const existingCases = await session.listCases()
-  const existingCaseIdsByName = new Map(existingCases.map((item) => [item.name, item.id]))
-  const result: BatchResult = {
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    cancelled: false,
-    details: []
-  }
-
-  for (let index = 0; index < files.length; index++) {
-    if (signal.aborted) {
-      result.cancelled = true
-      break
-    }
-
-    const file = files[index]
-    const caseName = extractCaseName(file.fileName, stripText)
-    const existingCaseId = existingCaseIdsByName.get(caseName)
-
-    if (existingCaseId !== undefined && duplicateStrategy === 'skip') {
-      result.skipped++
-      result.details.push({
-        filePath: file.inputPath,
-        fileName: file.fileName,
-        caseName,
-        status: 'skipped'
-      })
-      continue
-    }
-
-    try {
-      if (existingCaseId !== undefined) {
-        await session
-          .getWriteExecutor()
-          .execute({ type: DELETE_CASE_TASK_TYPE, params: [existingCaseId] } as StorageWriteTask)
-        existingCaseIdsByName.delete(caseName)
-      }
-
-      const importResult = await startImport(file.storedPath, caseName, undefined, () => session, {
-        onProgress: (progress) => {
-          if (userId === undefined) return
-          events.publish(userId, WEB_EVENT_BATCH_IMPORT_PROGRESS, {
-            runId,
-            currentIndex: index,
-            totalFiles: files.length,
-            currentFileName: file.fileName,
-            overallPercent: Math.round(((index + 1) / files.length) * 100),
-            fileProgress: progress
-          })
-        }
-      })
-
-      result.succeeded++
-      result.details.push({
-        filePath: file.inputPath,
-        fileName: file.fileName,
-        caseName,
-        status: 'success',
-        variantCount: importResult.variantCount
-      })
-      existingCaseIdsByName.set(caseName, importResult.caseId)
-    } catch (error) {
-      if (signal.aborted) {
-        result.cancelled = true
-        break
-      }
-
-      result.failed++
-      result.details.push({
-        filePath: file.inputPath,
-        fileName: file.fileName,
-        caseName,
-        status: 'failed',
-        error: formatBatchError(error)
-      })
-    }
-  }
-
-  if (userId !== undefined) {
-    events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
-    events.publish(userId, WEB_EVENT_BATCH_IMPORT_COMPLETE, { ...result, runId })
-  }
-
-  return result
-}
-
-function formatBatchError(error: unknown): string {
-  return formatErrorMessage(error, 'Import failed')
 }

@@ -108,6 +108,7 @@
       <PresetSaveDialog
         v-model="showSavePresetDialog"
         :saving="savingPreset"
+        :error="savePresetError"
         @save="handleSavePreset"
       />
       <PresetManageDialog
@@ -147,6 +148,7 @@ import {
 } from '../../utils/filters'
 import { stripVueProxies } from '../../utils/stripVueProxies'
 import { logService } from '../../services/LogService'
+import { formatError } from '../../utils/ipc-result'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import { useApiService } from '../../composables/useApiService'
 import { getCurrentUnsupportedReason, type CapabilityPath } from '../../utils/backend-capabilities'
@@ -225,6 +227,7 @@ const {
 const showSavePresetDialog = ref(false)
 const showManagePresetsDialog = ref(false)
 const savingPreset = ref(false)
+const savePresetError = ref<string | null>(null)
 let applyingPresets = false
 
 // Preset toggle handler — applies merged preset filters
@@ -280,6 +283,7 @@ watch(presetDivergenceKey, () => {
 async function handleSavePreset(data: { name: string; description: string | null }): Promise<void> {
   if (!(await canUseOrWarn('workflow.filterPresets'))) return
   savingPreset.value = true
+  savePresetError.value = null
   try {
     const plainFilters = stripVueProxies(filters.value)
     await savePreset({
@@ -289,10 +293,8 @@ async function handleSavePreset(data: { name: string; description: string | null
     })
     showSavePresetDialog.value = false
   } catch (e) {
-    logService.warn(
-      'Failed to save cohort filter preset: ' + (e instanceof Error ? e.message : String(e)),
-      'filters'
-    )
+    savePresetError.value = formatError(e, 'The preset could not be saved.')
+    logService.warn('Failed to save cohort filter preset: ' + savePresetError.value, 'filters')
   } finally {
     savingPreset.value = false
   }

@@ -93,7 +93,8 @@ describe('web dispatcher: error responses never expose stack traces', () => {
       payload: { args: [{ name: 'x' }] }
     })
 
-    expect(res.statusCode).toBe(500)
+    // The legacy UNIQUE_CONSTRAINT code maps to 409 like CONFLICT.
+    expect(res.statusCode).toBe(409)
     expectJsonHeaders(res.headers)
     expectNoStack(res.body)
     expect(res.body).not.toContain('secret_table')
