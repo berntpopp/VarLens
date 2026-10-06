@@ -180,12 +180,19 @@
         <div v-else class="text-grey text-center mt-4">Select a variant to view details</div>
       </div>
 
-      <!-- Protein Visualization Modal -->
+      <!-- Protein Visualization Modal: mounted on first open only. Rendering it
+           closed still fetched its chunk and fired protein/ClinVar requests on
+           every variant change. -->
       <ProteinVisualizationModal
+        v-if="proteinViewerAvailable && proteinModalMounted"
         v-model="proteinModalOpen"
         :variant="variant"
         :case-id="caseId"
         :mode="mode"
+      />
+      <ProteinViewUnavailableDialog
+        v-else-if="!proteinViewerAvailable"
+        v-model="proteinModalOpen"
       />
     </v-card>
   </v-navigation-drawer>
@@ -231,12 +238,17 @@ const ProteinVisualizationModal = defineAsyncComponent({
   loader: () => import('./protein/ProteinVisualizationModal.vue'),
   ...asyncOpts
 })
+const ProteinViewUnavailableDialog = defineAsyncComponent(
+  () => import('./protein/ProteinViewUnavailableDialog.vue')
+)
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
+import { isProteinViewerAvailable } from '../utils/runtime-features'
+import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 
 interface Props {
   open: boolean
@@ -254,6 +266,8 @@ const emit = defineEmits<{
 
 // Protein visualization modal state
 const proteinModalOpen = ref(false)
+const proteinViewerAvailable = isProteinViewerAvailable()
+const proteinModalMounted = useMountOnFirstOpen(() => proteinModalOpen.value)
 
 function openProteinView(): void {
   proteinModalOpen.value = true

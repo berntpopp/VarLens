@@ -21,8 +21,10 @@
 const CSP_DIRECTIVES: readonly string[] = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  // No third-party fonts: monospace data uses the system mono stack
+  // (`--font-mono` in custom.css), so nothing loads from Google Fonts.
+  "font-src 'self'",
   "img-src 'self' data: blob:",
   "connect-src 'self' data: https://alphafold.ebi.ac.uk https://www.ebi.ac.uk " +
     'https://files.rcsb.org https://models.rcsb.org https://data.rcsb.org ' +

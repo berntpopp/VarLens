@@ -10,7 +10,7 @@
     @case-imported="handleVcfCaseImported"
   />
   <AppSnackbar ref="snackbarRef" />
-  <LogViewer v-model:open="logViewerOpen" />
+  <LogViewer v-if="logViewerMounted" v-model:open="logViewerOpen" />
   <DisclaimerDialog ref="disclaimerRef" @acknowledged="handleDisclaimerAcknowledged" />
   <FaqDialog v-if="faqMounted" ref="faqDialogRef" />
   <ExternalLinksSettings v-if="externalLinksMounted" ref="externalLinksSettingsRef" />
@@ -20,7 +20,7 @@
   <DeleteAllCasesDialog v-if="deleteAllMounted" ref="deleteAllCasesDialogRef" />
   <PanelManagerDialog v-if="panelManagerMounted" v-model="panelManagerOpen" />
   <CaseMetadataModal
-    v-if="selectedCaseId"
+    v-if="selectedCaseId && caseMetadataMounted"
     ref="caseMetadataModalRef"
     :case-id="selectedCaseId"
     :case-name="selectedCaseName"
@@ -34,9 +34,7 @@
 import { ref, defineAsyncComponent, onMounted, nextTick, watch } from 'vue'
 import ImportWizard from './import/ImportWizard.vue'
 import AppSnackbar from './AppSnackbar.vue'
-import LogViewer from './LogViewer.vue'
 import DisclaimerDialog from './DisclaimerDialog.vue'
-import CaseMetadataModal from './CaseMetadataModal.vue'
 
 // Lazy-load rarely-used dialogs to reduce initial render cost
 const FaqDialog = defineAsyncComponent(() => import('./FaqDialog.vue'))
@@ -47,7 +45,13 @@ const DatabaseOverviewDialog = defineAsyncComponent(() => import('./DatabaseOver
 const DeleteAllCasesDialog = defineAsyncComponent(() => import('./DeleteAllCasesDialog.vue'))
 const PanelManagerDialog = defineAsyncComponent(() => import('./panels/PanelManagerDialog.vue'))
 const VcfImportDialog = defineAsyncComponent(() => import('./import/VcfImportDialog.vue'))
+// Not needed for first paint (the disclaimer is): keep them out of this chunk
+// so the disclaimer renders sooner. LogViewer also polls memory every 5 s
+// while mounted, so it mounts on first open only.
+const LogViewer = defineAsyncComponent(() => import('./LogViewer.vue'))
+const CaseMetadataModal = defineAsyncComponent(() => import('./CaseMetadataModal.vue'))
 import { useAppState } from '../composables/useAppState'
+import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 import { useVersionGating } from '../composables/useVersionGating'
 import { logService } from '../services/LogService'
 
@@ -91,6 +95,8 @@ const panelManagerMounted = ref(false)
 const panelManagerOpen = ref(false)
 const vcfImportMounted = ref(false)
 const vcfImportOpen = ref(false)
+const logViewerMounted = useMountOnFirstOpen(() => logViewerOpen.value)
+const caseMetadataMounted = ref(false)
 
 /**
  * Wait for a lazy-loaded dialog ref to become available after setting its mount flag.
@@ -214,7 +220,12 @@ defineExpose({
     await nextTick()
     panelManagerOpen.value = true
   },
-  showCaseMetadata: () => caseMetadataModalRef.value?.show(),
+  showCaseMetadata: async () => {
+    if (selectedCaseId.value === null) return
+    caseMetadataMounted.value = true
+    const modal = await waitForRef(caseMetadataModalRef)
+    modal.show()
+  },
   showSnackbar: (message: string, type: 'success' | 'error') =>
     snackbarRef.value?.show(message, type),
   reopenImportDialog: () => importWizardRef.value?.reopen(),
