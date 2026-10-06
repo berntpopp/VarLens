@@ -115,7 +115,7 @@ export function registerAuthHandlers({ ipcMain, getDb }: HandlerDependencies): v
         mainLogger.error('Invalid auth:setRole params', 'auth')
         throw new Error('Invalid role change parameters')
       }
-      setRole(validatedUsername.data, validatedRole.data, getDb)
+      await setRole(validatedUsername.data, validatedRole.data, getDb)
     })
   })
 

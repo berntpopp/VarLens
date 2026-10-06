@@ -58,9 +58,14 @@
       "assignedTo": "runTransaction"
     },
     {
-      "file": "src/main/services/auth/AuthService.ts",
+      "file": "src/main/services/auth/auth-writes.ts",
       "callerFunction": "createFirstUser",
-      "assignedTo": "createUser"
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/services/auth/auth-writes.ts",
+      "callerFunction": "setRole",
+      "assignedTo": null
     },
     {
       "file": "src/main/workers/delete-operations.ts",

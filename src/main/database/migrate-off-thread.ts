@@ -64,7 +64,7 @@ export function migrateSqliteOffThread(
         finish({ ran: false, error: msg.error })
       }
     })
-    worker.once('error', (error) => finish({ ran: false, error: error.message }))
+    worker.once('error', (error: Error) => finish({ ran: false, error: error.message }))
     worker.once('exit', (code) =>
       finish({ ran: false, error: `migration worker exited with code ${code}` })
     )
