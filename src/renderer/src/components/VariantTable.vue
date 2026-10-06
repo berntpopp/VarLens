@@ -283,6 +283,7 @@ import type { ActiveFilter } from '../../../shared/types/filters'
 import { buildColumnFilterChips } from '../utils/filters/activeFilters'
 import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
 import { useAnnotations, annotationCache } from '../composables/useAnnotations'
+import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { useVariantRowViewModel } from './variant-table/useVariantRowViewModel'
 import { useVariantRenderRows } from './variant-table/useVariantRenderRows'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
@@ -368,18 +369,18 @@ let cleanupAnnotationChanged: (() => void) | null = null
 const {
   getAcmgEvidence,
   toggleStar,
-  setAcmgClassification,
-  setAcmgClassificationWithEvidence,
   getGlobalComment,
   getPerCaseComment,
   upsertGlobalComment,
   upsertPerCaseComment,
   getAnnotations,
   toggleGlobalStar,
-  setGlobalAcmgClassification,
-  setGlobalAcmgClassificationWithEvidence,
   getGlobalAcmgEvidence
 } = useAnnotations()
+// ACMG writes go through the undo-snackbar wrappers (same signatures)
+const acmg = useAcmgUndo()
+const { setAcmgClassification, setAcmgClassificationWithEvidence } = acmg
+const { setGlobalAcmgClassification, setGlobalAcmgClassificationWithEvidence } = acmg
 
 // Bundle annotation actions for dialog subcomponent
 const annotationActions = {
