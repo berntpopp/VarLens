@@ -1,0 +1,11 @@
+== dark-case-details-panel.json (passes 34)
+== dark-case-table.json (passes 34)
+== dark-cohort.json (passes 32)
+== dark-home.json (passes 29)
+  serious color-contrast 1 [".select-case-hint"]
+== dark-login.json (passes 20)
+== light-case-details-panel.json (passes 34)
+== light-case-table.json (passes 34)
+== light-cohort.json (passes 32)
+== light-home.json (passes 29)
+== light-login.json (passes 20)

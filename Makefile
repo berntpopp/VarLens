@@ -1,4 +1,4 @@
-.PHONY: help rebuild dev dev-postgres web-dev build build-web build-web-server build-web-renderer preview lint lint-check agent-check test test-watch test-coverage perf-build perf-build-compare web-ci web-gate web-gate-static web-gate-integration web-gate-postgres web-gate-parity web-parity-e2e web-smoke web-test-report web-data-gather web-data-prepare web-data-verify web-ipc-fixtures typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots pg-up pg-down pg-logs pg-psql pg-query-perf pg-seed-dev pg-hosted-smoke pg-reset
+.PHONY: help rebuild dev dev-postgres web-dev build build-web build-web-server build-web-renderer preview lint lint-check agent-check test test-watch test-coverage perf-build perf-build-compare web-ci ui-gates ui-gates-build ui-gates-axe ui-gates-lighthouse perf-interaction-gates web-gate web-gate-static web-gate-integration web-gate-postgres web-gate-parity web-parity-e2e web-smoke web-test-report web-data-gather web-data-prepare web-data-verify web-ipc-fixtures typecheck dist dist-linux dist-mac dist-win package package-linux package-mac package-win clean clean-all install reinstall all ci ci-full ci-build ci-checks ci-startup-smoke ci-package-linux ci-packaged-smoke-linux ci-actions docs docs-dev docs-preview docs-screenshots pg-up pg-down pg-logs pg-psql pg-query-perf pg-seed-dev pg-hosted-smoke pg-reset
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -244,6 +244,34 @@ web-gate: web-gate-static ## Run the Phase 1 gate fast tests (parity is opt-in v
 	@echo "Static web gate done. Run 'make web-gate-parity' to validate the desktop↔web parity path (opt-in)."
 
 web-ci: rebuild-node build-web web-gate-static web-gate-postgres ## Opt-in web readiness gate; requires VARLENS_PG_URL
+
+#---------------------------------------------------------------------------
+# UI quality gates (audit 2026-10-06 §9): axe + Lighthouse against out/web.
+# Boots the built server on UI_GATES_PORT (default 8870) with an isolated,
+# throwaway Postgres schema. VARLENS_PG_URL comes from the environment or,
+# locally, from .env.postgres.local. Run `make ui-gates-build` first.
+#---------------------------------------------------------------------------
+
+UI_GATES_PLAYWRIGHT = npx playwright test -c playwright.ui-gates.config.ts
+define ui_gates_pg_env
+	if [ -z "$$VARLENS_PG_URL" ] && [ -f .env.postgres.local ]; then set -a; . ./.env.postgres.local; set +a; fi; \
+	if [ -z "$$VARLENS_PG_URL" ]; then echo "VARLENS_PG_URL is required for the UI gates (or create .env.postgres.local)."; exit 2; fi;
+endef
+
+ui-gates-build: ## Build the root-mounted web bundle the UI gates run against
+	VARLENS_WEB_BASE=/ npm run build:web
+
+ui-gates: ## Run all UI quality gates (axe light/dark + Lighthouse budgets) against out/web
+	@$(ui_gates_pg_env) $(UI_GATES_PLAYWRIGHT)
+
+ui-gates-axe: ## Run the axe gate only (5 key states x light/dark, 0 serious/critical)
+	@$(ui_gates_pg_env) $(UI_GATES_PLAYWRIGHT) tests/ui-gates/a11y.gate.ts
+
+ui-gates-lighthouse: ## Run the Lighthouse gate only (desktop budgets gated, mobile recorded)
+	@$(ui_gates_pg_env) $(UI_GATES_PLAYWRIGHT) tests/ui-gates/lighthouse.gate.ts
+
+perf-interaction-gates: ## Electron table interaction gates: CLS/INP per interaction, 1 query per sort, no stale render (needs `make rebuild build`)
+	$(XVFB_RUN)npx playwright test tests/e2e/renderer-perf-phase1.e2e.ts -g "interaction quality" --workers=1
 
 #---------------------------------------------------------------------------
 # Web parity data gathering (opt-in; see .planning/web/completed/data/)
