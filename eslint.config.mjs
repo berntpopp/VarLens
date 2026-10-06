@@ -28,6 +28,8 @@ export default [
       '.agent/**',
       '.claude/**',
       '.github/skills/**',
+      '.understand-anything/**',
+      '.ua/**',
       '.impeccable/**',
       'coverage/**',
       // Third-party bundles shipped directly to the renderer's public

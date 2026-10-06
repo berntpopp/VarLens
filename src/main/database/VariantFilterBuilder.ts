@@ -370,18 +370,18 @@ export class VariantFilterBuilder {
     if (filter.panel_intervals && filter.panel_intervals.length > 0) {
       if (filter.panel_intervals.length < 50 || options?.forceOrChain === true) {
         // Small set (or forced for compiled queries): OR chain of chr + pos range conditions
-        const intervals = filter.panel_intervals
-        query = query.where(({ or, and, eb }) =>
+        query = query.where(({ or }) =>
           or(
-            intervals.map((iv) =>
-              and([eb('chr', '=', iv.chr), eb('pos', '>=', iv.start), eb('pos', '<=', iv.end)])
+            filter.panel_intervals!.map(
+              (iv) =>
+                sql<boolean>`(variants.chr = ${iv.chr} AND variants.pos <= ${iv.end} AND COALESCE(variants.end_pos, variants.pos) >= ${iv.start})`
             )
           )
         )
       } else {
         // Large set: use pre-populated temp table (preparePanelIntervals must be called first)
         query = query.where(
-          sql<boolean>`EXISTS (SELECT 1 FROM _panel_intervals pi WHERE variants.chr = pi.chr AND variants.pos BETWEEN pi.start_pos AND pi.end_pos)`
+          sql<boolean>`EXISTS (SELECT 1 FROM _panel_intervals pi WHERE variants.chr = pi.chr AND variants.pos <= pi.end_pos AND COALESCE(variants.end_pos, variants.pos) >= pi.start_pos)`
         )
       }
     }
@@ -745,17 +745,16 @@ export class VariantFilterBuilder {
    */
   setupPanelIntervalsTable(intervals: Array<{ chr: string; start: number; end: number }>): void {
     this.db.exec(
-      'CREATE TEMP TABLE IF NOT EXISTS _panel_intervals (chr TEXT, start_pos INTEGER, end_pos INTEGER)'
+      'CREATE TEMP TABLE IF NOT EXISTS _panel_intervals (chr TEXT, start_pos INTEGER, end_pos INTEGER); ' +
+        'CREATE INDEX IF NOT EXISTS _idx_panel_intervals ON _panel_intervals (chr, start_pos, end_pos); ' +
+        'DELETE FROM _panel_intervals'
     )
-    this.db.exec('DELETE FROM _panel_intervals')
     const insert = this.db.prepare(
       'INSERT INTO _panel_intervals (chr, start_pos, end_pos) VALUES (?, ?, ?)'
     )
     const insertMany = this.db.transaction(
       (items: Array<{ chr: string; start: number; end: number }>) => {
-        for (const iv of items) {
-          insert.run(iv.chr, iv.start, iv.end)
-        }
+        for (const iv of items) insert.run(iv.chr, iv.start, iv.end)
       }
     )
     insertMany(intervals)
@@ -765,7 +764,7 @@ export class VariantFilterBuilder {
    * Clean up the temp table after query execution.
    */
   cleanupPanelIntervalsTable(): void {
-    this.db.exec('DROP TABLE IF EXISTS _panel_intervals')
+    this.db.exec('DROP INDEX IF EXISTS _idx_panel_intervals; DROP TABLE IF EXISTS _panel_intervals')
   }
 
   /**

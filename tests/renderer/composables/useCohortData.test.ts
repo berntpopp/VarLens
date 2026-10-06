@@ -275,6 +275,19 @@ describe('useCohortData', () => {
     )
   })
 
+  it('preserves _count_needed: false in buildIpcParams', () => {
+    const [result, appInstance] = withSetup(() => useCohortData())
+    app = appInstance
+
+    const ipcParams = result.buildIpcParams({
+      limit: 25,
+      sort_order: 'asc',
+      _count_needed: false
+    })
+
+    expect(ipcParams._count_needed).toBe(false)
+  })
+
   it('handles window.api unavailable gracefully', async () => {
     // @ts-expect-error - Testing undefined case
     delete window.api

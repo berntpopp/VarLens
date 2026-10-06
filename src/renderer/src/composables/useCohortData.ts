@@ -338,6 +338,9 @@ export function useCohortData(): UseCohortDataReturn {
     if (effectiveVariantType !== undefined && effectiveVariantType !== '') {
       ipcParams.variant_type = effectiveVariantType
     }
+    if (params._count_needed !== undefined) {
+      ipcParams._count_needed = params._count_needed
+    }
 
     return ipcParams
   }

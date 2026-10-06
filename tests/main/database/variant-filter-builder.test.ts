@@ -39,11 +39,12 @@ function insertVariant(
     clinvar?: string
     gnomad_af?: number | null
     cadd?: number | null
+    end_pos?: number | null
   } = {}
 ): void {
   db.prepare(
-    `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, func, clinvar, gnomad_af, cadd)
-     VALUES (?, ?, ?, 'A', 'T', ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, func, clinvar, gnomad_af, cadd, end_pos)
+     VALUES (?, ?, ?, 'A', 'T', ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     caseId,
     chr,
@@ -53,7 +54,8 @@ function insertVariant(
     options.func ?? null,
     options.clinvar ?? null,
     options.gnomad_af ?? null,
-    options.cadd ?? null
+    options.cadd ?? null,
+    options.end_pos ?? null
   )
 }
 
@@ -264,10 +266,99 @@ describe('VariantFilterBuilder', () => {
       }
       const query = builder.build(filter)
       const compiled = query.compile()
-      // Verify the OR chain structure is present in the SQL
-      expect(compiled.sql).toContain('"chr" = ?')
-      expect(compiled.sql).toContain('"pos" >= ?')
-      expect(compiled.sql).toContain('"pos" <= ?')
+      // Verify the OR chain structure is present in the SQL with qualified column names and overlap logic
+      expect(compiled.sql).toContain('variants.chr = ?')
+      expect(compiled.sql).toContain('variants.pos <= ?')
+      expect(compiled.sql).toContain('COALESCE(variants.end_pos, variants.pos) >= ?')
+    })
+
+    it('creates and drops index on temp table cleanly', () => {
+      const intervals = Array.from({ length: 60 }, (_, i) => ({
+        chr: String((i % 22) + 1),
+        start: i * 10000,
+        end: i * 10000 + 5000
+      }))
+      builder.setupPanelIntervalsTable(intervals)
+      const indexRow = db
+        .prepare(
+          "SELECT name FROM sqlite_temp_master WHERE type='index' AND name='_idx_panel_intervals'"
+        )
+        .get()
+      expect(indexRow).toBeDefined()
+
+      builder.cleanupPanelIntervalsTable()
+      const indexRowAfter = db
+        .prepare(
+          "SELECT name FROM sqlite_temp_master WHERE type='index' AND name='_idx_panel_intervals'"
+        )
+        .get()
+      expect(indexRowAfter).toBeUndefined()
+    })
+
+    it('matches spanning structural variant with interval overlap (small set)', () => {
+      // Spanning SV: pos=100, end_pos=500 spans interval [200, 300]
+      insertVariant(db, caseId, '1', 100, {
+        gene_symbol: 'SPAN1',
+        consequence: 'HIGH',
+        end_pos: 500
+      })
+      // Non-overlapping: strictly before [200, 300]
+      insertVariant(db, caseId, '1', 50, {
+        gene_symbol: 'BEFORE1',
+        end_pos: 150
+      })
+      // Non-overlapping: strictly after [200, 300]
+      insertVariant(db, caseId, '1', 350, {
+        gene_symbol: 'AFTER1',
+        end_pos: 600
+      })
+      // Point SNV inside [200, 300] (end_pos null)
+      insertVariant(db, caseId, '1', 250, {
+        gene_symbol: 'INSIDE_SNV'
+      })
+
+      const results = executeQuery({
+        case_id: caseId,
+        panel_intervals: [{ chr: '1', start: 200, end: 300 }]
+      })
+
+      const matchedSymbols = results.map((r) => r.gene_symbol).sort()
+      expect(matchedSymbols).toEqual(['INSIDE_SNV', 'SPAN1'])
+
+      const spanRow = results.find((r) => r.gene_symbol === 'SPAN1')!
+      expect(spanRow.pos).toBe(100)
+      expect(spanRow.end_pos).toBe(500)
+    })
+
+    it('matches spanning structural variant with interval overlap (large set with temp table)', () => {
+      insertVariant(db, caseId, '1', 100, {
+        gene_symbol: 'SPAN_LARGE',
+        consequence: 'HIGH',
+        end_pos: 500
+      })
+      // 55 intervals; only chr 1: [200, 300] matches the spanning SV
+      const intervals = [
+        { chr: '1', start: 200, end: 300 },
+        ...Array.from({ length: 54 }, (_, i) => ({
+          chr: '2',
+          start: (i + 1) * 10000,
+          end: (i + 1) * 10000 + 500
+        }))
+      ]
+
+      const filter: VariantFilter = {
+        case_id: caseId,
+        panel_intervals: intervals
+      }
+
+      builder.preparePanelIntervals(filter)
+      const results = executeQuery(filter)
+      builder.cleanupPanelIntervalsTable()
+
+      const match = results.find((r) => r.gene_symbol === 'SPAN_LARGE')
+      expect(match).toBeDefined()
+      expect(match!.pos).toBe(100)
+      expect(match!.end_pos).toBe(500)
     })
   })
 

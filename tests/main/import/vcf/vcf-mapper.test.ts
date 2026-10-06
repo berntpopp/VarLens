@@ -399,4 +399,178 @@ describe('VcfMapper', () => {
       VcfResourceLimitError
     )
   })
+
+  it('skips a sample with GT=0/0 or 0|0 on an SV record', () => {
+    const svRecordSymbolic: VcfRawRecord = {
+      chrom: 'chr1',
+      pos: 1000,
+      id: null,
+      ref: 'N',
+      alt: ['<DEL>'],
+      qual: 60,
+      filter: 'PASS',
+      info: new Map([['SVTYPE', 'DEL']]),
+      format: ['GT'],
+      samples: new Map([['HG005', ['0/0']]])
+    }
+    const resultsSymbolic = mapVcfRecord(svRecordSymbolic, header, 'HG005', [])
+    expect(resultsSymbolic).toHaveLength(0)
+
+    const svRecordSequenceAlt: VcfRawRecord = {
+      chrom: 'chr1',
+      pos: 2000,
+      id: null,
+      ref: 'A',
+      alt: ['ACCCCCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAA'],
+      qual: 60,
+      filter: 'PASS',
+      info: new Map([
+        ['SVTYPE', 'INS'],
+        ['SVLEN', '39']
+      ]),
+      format: ['GT'],
+      samples: new Map([['HG005', ['0|0']]])
+    }
+    const resultsSequence = mapVcfRecord(svRecordSequenceAlt, header, 'HG005', [])
+    expect(resultsSequence).toHaveLength(0)
+  })
+
+  it('maps an SV record when sample genotype is missing or no-call (GT=./. or GT=.) with CN/support', () => {
+    // Case 1: GT=./. with CN
+    const cnvRecord: VcfRawRecord = {
+      chrom: 'chr1',
+      pos: 5000000,
+      id: null,
+      ref: 'N',
+      alt: ['<DEL>'],
+      qual: 30,
+      filter: 'PASS',
+      info: new Map([
+        ['SVTYPE', 'DEL'],
+        ['END', '5500000'],
+        ['CN', '1']
+      ]),
+      format: ['GT', 'CN'],
+      samples: new Map([['HG005', ['./.', '1']]])
+    }
+    const cnvResults = mapVcfRecord(cnvRecord, header, 'HG005', [], 'Spectre')
+    expect(cnvResults).toHaveLength(1)
+    expect(cnvResults[0].variant_type).toBe('cnv')
+    expect(cnvResults[0].gt_num).toBe('./.')
+    expect(cnvResults[0]._cnv?.copy_number).toBe(1)
+
+    // Case 2: GT=. with SUPPORT
+    const svRecord: VcfRawRecord = {
+      chrom: 'chr1',
+      pos: 1000000,
+      id: null,
+      ref: 'N',
+      alt: ['<DEL>'],
+      qual: 60,
+      filter: 'PASS',
+      info: new Map([
+        ['SVTYPE', 'DEL'],
+        ['END', '1005000'],
+        ['SVLEN', '-5000'],
+        ['SUPPORT', '15']
+      ]),
+      format: ['GT', 'SUPPORT'],
+      samples: new Map([['HG005', ['.', '15']]])
+    }
+    const svResults = mapVcfRecord(svRecord, header, 'HG005', [])
+    expect(svResults).toHaveLength(1)
+    expect(svResults[0].variant_type).toBe('sv')
+    expect(svResults[0].gt_num).toBe('.')
+    expect(svResults[0]._sv?.support).toBe(15)
+  })
+
+  it('skips symbolic non-variant alleles (<NON_REF> and <*>) even if sample GT is non-ref', () => {
+    // <NON_REF> with GT=0/1 and GT=0/0
+    const nonRefRecord: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 1000,
+      id: null,
+      ref: 'A',
+      alt: ['<NON_REF>'],
+      qual: 30,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'DP'],
+      samples: new Map([
+        ['HG005', ['0/1', '30']],
+        ['HG006', ['0/0', '30']]
+      ])
+    }
+    expect(mapVcfRecord(nonRefRecord, header, 'HG005', [])).toHaveLength(0)
+    expect(mapVcfRecord(nonRefRecord, header, 'HG006', [])).toHaveLength(0)
+
+    // <*> with GT=0/1 and GT=0/0
+    const starRecord: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 2000,
+      id: null,
+      ref: 'G',
+      alt: ['<*>'],
+      qual: 40,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'DP'],
+      samples: new Map([
+        ['HG005', ['0/1', '25']],
+        ['HG006', ['0/0', '25']]
+      ])
+    }
+    expect(mapVcfRecord(starRecord, header, 'HG005', [])).toHaveLength(0)
+    expect(mapVcfRecord(starRecord, header, 'HG006', [])).toHaveLength(0)
+
+    // Multi-allelic site with variant + <NON_REF>
+    const mixedRecord: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 3000,
+      id: null,
+      ref: 'C',
+      alt: ['T', '<NON_REF>'],
+      qual: 50,
+      filter: 'PASS',
+      info: new Map(),
+      format: ['GT', 'DP'],
+      samples: new Map([
+        ['HG005', ['0/1', '20']],
+        ['HG006', ['0/2', '20']]
+      ])
+    }
+    const hg005Results = mapVcfRecord(mixedRecord, header, 'HG005', [])
+    expect(hg005Results).toHaveLength(1)
+    expect(hg005Results[0].alt).toBe('T')
+
+    const hg006Results = mapVcfRecord(mixedRecord, header, 'HG006', [])
+    expect(hg006Results).toHaveLength(0)
+  })
+
+  it('skips allele 1 and maps allele 2 for a multi-allelic SV where sample is GT=0/2', () => {
+    const multiSvHeader: VcfHeader = {
+      ...header,
+      formatDefs: new Map([
+        ['GT', { id: 'GT', number: '1', type: 'String' as const, description: 'Genotype' }],
+        ['CN', { id: 'CN', number: '1', type: 'Integer' as const, description: 'Copy number' }]
+      ])
+    }
+    const multiSvRecord: VcfRawRecord = {
+      chrom: 'chr1',
+      pos: 5000000,
+      id: null,
+      ref: 'N',
+      alt: ['<DEL>', '<DUP>'],
+      qual: 50,
+      filter: 'PASS',
+      info: new Map([['SVTYPE', 'DEL']]),
+      format: ['GT', 'CN'],
+      samples: new Map([['HG005', ['0/2', '3']]])
+    }
+
+    const results = mapVcfRecord(multiSvRecord, multiSvHeader, 'HG005', [])
+    expect(results).toHaveLength(1)
+    expect(results[0].alt).toBe('<DUP>')
+    expect(results[0].gt_num).toBe('0/1')
+  })
 })

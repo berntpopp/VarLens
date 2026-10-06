@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createAppState } from '../../../src/renderer/src/composables/useAppState'
+import { useCarriers } from '../../../src/renderer/src/composables/useCarriers'
 
 describe('createAppState', () => {
   it('selects a case through an explicit shell action', () => {
@@ -119,8 +120,17 @@ describe('createAppState', () => {
     state.panelOpen.value = true
     state.selectedPanelVariant.value = { id: 'variant-1' } as never
 
+    const carriers = useCarriers()
+    carriers.carrierMap.value.set('chr1-100-A-T', [{ case_name: 'case1', gt_num: '0/1' }])
+    carriers.expandedRows.value = ['chr1-100-A-T']
+
+    expect(state.dataGeneration.value).toBe(0)
+
     state.resetForDatabaseSwitch()
 
+    expect(state.dataGeneration.value).toBe(1)
+    expect(carriers.carrierMap.value.size).toBe(0)
+    expect(carriers.expandedRows.value).toEqual([])
     expect(state.selectedCaseId.value).toBeNull()
     expect(state.selectedCaseName.value).toBe('')
     expect(state.selectedVariantCount.value).toBe(0)
