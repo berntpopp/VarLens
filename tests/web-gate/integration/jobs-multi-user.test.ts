@@ -145,6 +145,39 @@ describe.skipIf(!HAS_PG)('jobs across users (web/Postgres)', () => {
     }
   }, 60_000)
 
+  test('bulk delete works for users; deleting all cases is admin-only (PR-W9b)', async () => {
+    const driver = await startWebDriver()
+    const pool = new Pool({ connectionString: PG_URL, max: 2 })
+    try {
+      const dave = await userSession(driver, 'dave')
+      const a = await seedCase(pool, driver.schema, 'bulk-a')
+      const b = await seedCase(pool, driver.schema, 'bulk-b')
+      const keep = await seedCase(pool, driver.schema, 'bulk-keep')
+
+      const bulk = await call(driver, dave, 'cases/deleteBatch', [[a, b]])
+      expect(bulk.statusCode, bulk.body).toBe(200)
+      expect(bulk.json()).toBe(2)
+
+      const all = await call(driver, dave, 'cases/deleteAll')
+      expect(all.statusCode, all.body).toBe(403)
+      expect(all.json()).toMatchObject({
+        code: 'FORBIDDEN',
+        userMessage: 'Only administrators can delete all cases.'
+      })
+      const allJob = await call(driver, dave, 'cases/startDelete', [{ mode: 'all' }])
+      expect(allJob.statusCode, allJob.body).toBe(403)
+      const remaining = (await call(driver, dave, 'cases/list')).json() as Array<{ id: number }>
+      expect(remaining.map((c) => Number(c.id))).toEqual([keep])
+
+      const byAdmin = await driver.api('cases', 'deleteAll')
+      expect(byAdmin.statusCode, byAdmin.body).toBe(200)
+      expect(byAdmin.json()).toBe(1)
+    } finally {
+      await pool.end()
+      await driver.close()
+    }
+  }, 60_000)
+
   test('logout revokes the cookie: a copy captured before logout is rejected', async () => {
     const driver = await startWebDriver()
     try {

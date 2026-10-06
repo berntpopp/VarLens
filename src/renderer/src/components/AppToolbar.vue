@@ -189,6 +189,7 @@ import { useAppState } from '../composables/useAppState'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
 import { isWebRuntime } from '../utils/runtime-mode'
+import { useAuthStore } from '../stores/authStore'
 import { getCurrentUnsupportedReasonSync } from '../utils/backend-capabilities'
 import type { AffectedStatus, CaseSex } from '../../../shared/types/api'
 import {
@@ -226,8 +227,14 @@ const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const isWebMode = isWebRuntime()
 const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+O' : 'Alt+Shift+O'
+const authStore = useAuthStore()
 // Capability-gated: disabled with the reason instead of failing after a click.
-const deleteAllReason = computed(() => getCurrentUnsupportedReasonSync('cases.deleteAll'))
+// In web, deleting every case is admin-only (the server enforces it too).
+const deleteAllReason = computed(
+  () =>
+    getCurrentUnsupportedReasonSync('cases.deleteAll') ??
+    (isWebMode && !authStore.isAdmin ? 'Only administrators can delete all cases' : null)
+)
 
 // Preload metadata when a case is selected so status/sex icons display immediately
 watch(
