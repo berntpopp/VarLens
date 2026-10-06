@@ -12,6 +12,7 @@
  * (WCAG 1.4.13) and also appears on keyboard focus.
  */
 import { onBeforeUnmount, onMounted, ref, shallowRef, type Ref, type ShallowRef } from 'vue'
+import { findTruncatedCellText } from '../utils/truncated-cell-tooltip'
 
 export type TooltipLocation = 'top' | 'bottom' | 'start' | 'end'
 
@@ -24,11 +25,19 @@ export interface TooltipTarget {
   location: TooltipLocation
 }
 
-/** Resolve the nearest element that declares a tooltip, or null. */
+/**
+ * Resolve the nearest element that declares a tooltip, or null. A data-table
+ * cell whose value is cut off by an ellipsis gets its full text as an implicit
+ * tooltip, so truncated HGVS/transcript values stay readable.
+ */
 export function findTooltipTarget(node: EventTarget | null): TooltipTarget | null {
   if (!(node instanceof Element)) return null
   const element = node.closest<HTMLElement>('[data-tooltip]')
-  if (!element) return null
+  if (!element) {
+    const cellText = findTruncatedCellText(node)
+    const cell = node.closest<HTMLElement>('td')
+    return cellText !== null && cell ? { element: cell, text: cellText, location: 'top' } : null
+  }
   const text = element.dataset.tooltip?.trim() ?? ''
   if (text === '') return null
   const requested = element.dataset.tooltipLocation as TooltipLocation | undefined
