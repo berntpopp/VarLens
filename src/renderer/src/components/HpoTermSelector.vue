@@ -20,19 +20,8 @@
     </div>
     <div v-else class="text-muted text-body-medium mb-2">No phenotype terms assigned</div>
 
-    <!-- Web: hpo:search is not served (501) — say so instead of "No matching terms" -->
-    <div
-      v-if="hpoUnavailableReason !== null"
-      class="text-body-medium text-medium-emphasis"
-      role="note"
-      data-testid="hpo-search-unavailable"
-    >
-      {{ hpoUnavailableReason }}
-    </div>
-
     <!-- Autocomplete for adding new terms -->
     <v-autocomplete
-      v-else
       v-model="selectedTerm"
       v-model:search="searchQuery"
       :items="searchResults"
@@ -46,6 +35,8 @@
       clearable
       :disabled="disabled || !hpoApiAvailable"
       placeholder="Search HPO terms..."
+      aria-label="Search HPO terms"
+      data-testid="hpo-term-search"
       no-filter
       @update:model-value="handleTermSelected"
     >
@@ -78,7 +69,6 @@ import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { CaseHpoTerm } from '../../../shared/types/api'
-import { runtimeFeatureUnavailableReason } from '../utils/runtime-features'
 
 interface HpoSearchResult {
   id: string
@@ -101,17 +91,13 @@ const searchQuery = ref('')
 const searchResults = ref<HpoSearchResult[]>([])
 const loading = ref(false)
 const selectedTerm = ref<HpoSearchResult | null>(null)
-const hpoUnavailableReason = runtimeFeatureUnavailableReason('hpoSearch')
 const hpoApiAvailable = ref(false)
 /** Search failure (as opposed to "no matches") shown in the dropdown. */
 const searchError = ref('')
 
 onMounted(() => {
   hpoApiAvailable.value =
-    hpoUnavailableReason === null &&
-    api != null &&
-    typeof api.hpo !== 'undefined' &&
-    typeof api.hpo.search === 'function'
+    api != null && typeof api.hpo !== 'undefined' && typeof api.hpo.search === 'function'
 })
 
 // Search function for debouncing

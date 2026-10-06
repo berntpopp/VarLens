@@ -218,20 +218,6 @@ describe('web dispatcher adapters: read seams', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 
-  test('reference API fixture-backed methods fail explicitly when fixtures are disabled', async () => {
-    const { deps, reply } = makeDeps()
-    const { overrides } = buildDispatcher(deps)
-
-    const result = await overrides['hpo:search'].handle(['BRCA'], {} as never, reply as never, deps)
-
-    expect(reply.code).toHaveBeenCalledWith(501)
-    expect(result).toEqual({
-      error: 'unsupported-web-capability',
-      capability: 'hpo.search',
-      message: 'hpo.search is not available in web mode yet.'
-    })
-  })
-
   test('reference API fixture-backed methods reject invalid args as bad requests', async () => {
     const previousFixtureFlag = process.env.VARLENS_WEB_PARITY_FIXTURES
     const previousFixtureDir = process.env.VARLENS_API_FIXTURES_DIR
@@ -245,7 +231,7 @@ describe('web dispatcher adapters: read seams', () => {
           args: [123],
           expected: {
             error: 'invalid-hpo-search',
-            message: 'hpo.search query must be a string'
+            message: 'hpo.search query must be a 1-500 character string; maxResults 1-100'
           }
         },
         {
