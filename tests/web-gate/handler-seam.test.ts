@@ -3,6 +3,9 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { resolve } from 'path'
 import { Project, SyntaxKind } from 'ts-morph'
 
+import { getChannelPolicy } from '../../src/shared/ipc/parity-manifest'
+import { DOMAIN_CAMEL_TO_KEBAB } from '../../src/web/server/task-types'
+
 /**
  * Handler-seam gate.
  *
@@ -37,12 +40,13 @@ const ROUTE_OVERRIDE_LOGIC_EXCEPTIONS: Record<string, string> = {
   'database.ts': 'web-only database identity/capability adapters',
   'gene-lists.ts': 'thin storage-executor adapters with web-only argument validation',
   'gene-ref.ts': 'read-only adapters over the bundled gene_reference.db (no external fetches)',
-  'hpo.ts': 'web mode intentionally disables external reference fetches',
+  'hpo.ts': 'pending in the parity manifest (P-C reference services)',
   'import.ts': 'web upload pipeline with file-picker stubs and shared import-logic delegation',
   'jobs.ts': 'jobs: contract served from the web process JobRunner (desktop: main JobRunner)',
-  'protein.ts': 'web mode intentionally disables external reference fetches',
+  'protein.ts': 'pending in the parity manifest (P-C reference services)',
   'region-files.ts': 'web-only server-path guards and storage-executor adapters',
-  'vep.ts': 'web mode intentionally disables external reference fetches'
+  'system.ts': 'capability document built by the shared computeCapabilityDocument',
+  'vep.ts': 'pending in the parity manifest (P-C reference services)'
 }
 
 /**
@@ -73,6 +77,7 @@ const EXPECTED_ROUTE_OVERRIDE_MODULES = new Set([
   'panels.ts',
   'protein.ts',
   'region-files.ts',
+  'system.ts',
   'transcripts.ts',
   'variants.ts',
   'vep.ts'
@@ -316,6 +321,29 @@ describe('handler-seam gate', () => {
       }
     }
 
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
+  test('a 501 override is only allowed for a pending (or client-adapter) manifest method', () => {
+    // The parity manifest, not this gate, decides which gaps are acceptable:
+    // unsupportedWebCapability() is a passing verdict only while the method is
+    // `pending` (counted against scripts/parity-baseline.json) or served by a
+    // web-client adapter so the RPC is never used by the SPA.
+    const kebabToCamel = Object.fromEntries(
+      Object.entries(DOMAIN_CAMEL_TO_KEBAB).map(([camel, kebab]) => [kebab, camel])
+    )
+    const offenders: string[] = []
+    for (const file of listRouteOverrideModules()) {
+      const verdicts = analyzeOverrideKeys(`${WEB_ROUTES_DIR}/${file}`)
+      for (const [key, verdict] of Object.entries(verdicts)) {
+        if (verdict !== 'unsupported') continue
+        const [domain, method] = key.split(':')
+        const web = getChannelPolicy(kebabToCamel[domain] ?? domain, method)?.policy.web
+        if (web !== 'pending' && web !== 'adapter') {
+          offenders.push(`${file} → ${key} answers 501 but the manifest says ${web ?? 'nothing'}`)
+        }
+      }
+    }
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 

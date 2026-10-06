@@ -18,6 +18,10 @@ import { withSetup } from '../../utils/test-helpers'
 import { createMockApi } from '../../utils/mock-api'
 import { useVariantColumnMeta, cacheKeyFor } from '@renderer/composables/useVariantColumnMeta'
 import type { ColumnFilterMeta } from '../../../src/shared/types/column-filters'
+import { installCapabilities } from '../helpers/capabilities'
+
+// The capability store fails closed: install a desktop document.
+beforeEach(() => installCapabilities())
 
 function makeColumnMeta(overrides: Partial<ColumnFilterMeta> = {}): ColumnFilterMeta {
   return {

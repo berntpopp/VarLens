@@ -87,6 +87,7 @@ import {
   getClinVarCategory
 } from '../../../../shared/utils/protein-utils'
 import { useApiService } from '../../composables/useApiService'
+import { useCapabilityStore } from '../../stores/capabilityStore'
 import { logService } from '../../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 
@@ -113,7 +114,8 @@ const emit = defineEmits<{
   'toggle-case-variants': []
 }>()
 
-const { api } = useApiService()
+// protein.* / gnomad.* are gated on the proteinViewer capability (parity manifest).
+const api = useCapabilityStore().canUse('proteinViewer') ? useApiService().api : undefined
 
 // Exposed LollipopPlot methods
 const plotRef = ref<ComponentPublicInstance<{

@@ -7,6 +7,7 @@ import * as directives from 'vuetify/directives'
 
 import VariantDetailsPanel from '../../../src/renderer/src/components/VariantDetailsPanel.vue'
 import { createMockApi } from '../../utils/mock-api'
+import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -21,8 +22,9 @@ const variant = {
 
 type TestWindow = Window & { api?: unknown; __VARLENS_WEB__?: boolean }
 
-function mountPanel() {
+function mountPanel(runtime: 'desktop' | 'web' = 'desktop') {
   setActivePinia(createPinia())
+  installCapabilities({ runtime, role: 'user' })
   return shallowMount(VariantDetailsPanel, {
     props: { open: true, variant: variant as never, caseId: 1, mode: 'case' as const },
     global: {
@@ -70,7 +72,7 @@ describe('VariantDetailsPanel protein view mounting', () => {
 
   it('in web mode shows an explicit unavailable state and never calls protein endpoints', async () => {
     testWindow.__VARLENS_WEB__ = true
-    const wrapper = mountPanel()
+    const wrapper = mountPanel('web')
     wrapper.findComponent({ name: 'VariantIdentitySection' }).vm.$emit('open-protein-view')
     await flushPromises()
 

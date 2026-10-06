@@ -405,38 +405,7 @@ describe('web dispatcher adapters: annotations, assets, and exports', () => {
     expect(result).toEqual(['BRCA1', 'TP53'])
   })
 
-  test('browser-incompatible exports fail explicitly instead of returning row streams', async () => {
-    const { deps, execute, reply } = makeDeps()
-    const { overrides } = buildDispatcher(deps)
-
-    const result = await overrides['export:variants'].handle(
-      [{ case_id: 7 }],
-      {} as never,
-      reply as never,
-      deps
-    )
-
-    expect(reply.code).toHaveBeenCalledWith(501)
-    expect(result).toEqual({
-      error: 'unsupported-web-capability',
-      capability: 'export.variants',
-      message: 'export.variants is not available in web mode yet.'
-    })
-    expect(execute).not.toHaveBeenCalled()
-  })
-
-  test('browser-incompatible cohort exports fail explicitly instead of returning row streams', async () => {
-    const { deps, execute, reply } = makeDeps()
-    const { overrides } = buildDispatcher(deps)
-
-    const result = await overrides['export:cohort'].handle([{}], {} as never, reply as never, deps)
-
-    expect(reply.code).toHaveBeenCalledWith(501)
-    expect(result).toEqual({
-      error: 'unsupported-web-capability',
-      capability: 'export.cohort',
-      message: 'export.cohort is not available in web mode yet.'
-    })
-    expect(execute).not.toHaveBeenCalled()
-  })
+  // export.variants / export.cohort are `adapter: download` in the parity
+  // manifest: the SPA streams them through routes/export-download.ts, so the
+  // legacy fixture RPC's 501 is no longer pinned as desired behaviour.
 })

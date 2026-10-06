@@ -29,10 +29,10 @@ const READ_AUDIT_EXCLUDED_METHODS = new Set<string>([
   'auth:setRole',
   'auth:reactivateUser',
   'database:capabilities',
+  'system:getCapabilities',
   'database:health',
   'database:info',
   'database:getOverview',
-  'database:recentList',
   'database:overview',
   // Background-job status polls: ids and counters only, high frequency.
   'jobs:get',

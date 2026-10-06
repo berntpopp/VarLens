@@ -141,6 +141,7 @@ import { ref, computed, watch } from 'vue'
 import { mdiClose, mdiAlertCircleOutline, mdiDna } from '@mdi/js'
 import { useProteinData } from '../../composables/useProteinData'
 import { useApiService } from '../../composables/useApiService'
+import { useCapabilityStore } from '../../stores/capabilityStore'
 import LollipopPlotPanel from './LollipopPlotPanel.vue'
 import GeneStructurePanel from './GeneStructurePanel.vue'
 import ProteinStructure3DPanel from './ProteinStructure3DPanel.vue'
@@ -169,7 +170,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const { api } = useApiService()
+// protein.* / gnomad.* are gated on the proteinViewer capability (parity manifest).
+const api = useCapabilityStore().canUse('proteinViewer') ? useApiService().api : undefined
 
 const activeTab = ref('lollipop')
 

@@ -119,7 +119,7 @@
           @click="$emit('import-click')"
         />
         <v-list-item
-          v-if="!isWebMode"
+          v-if="multiFileImportAvailable"
           :prepend-icon="mdiFileDocumentMultiple"
           title="Import VCF Files"
           subtitle="Multi-file case (SNV + SV + CNV + STR)"
@@ -188,7 +188,7 @@ import IconButton from './common/IconButton.vue'
 import { useAppState } from '../composables/useAppState'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
-import { isWebRuntime } from '../utils/runtime-mode'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { getCurrentUnsupportedReasonSync } from '../utils/backend-capabilities'
 import type { AffectedStatus, CaseSex } from '../../../shared/types/api'
 import {
@@ -224,7 +224,7 @@ const {
 
 const { showModeToggleLabels, showContextIndicator } = useResponsiveLayout()
 const { getMetadata, loadMetadata } = useCaseMetadata()
-const isWebMode = isWebRuntime()
+const multiFileImportAvailable = useCapabilityStore().canUse('multiFileImport')
 const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+O' : 'Alt+Shift+O'
 // Capability-gated: disabled with the reason instead of failing after a click.
 const deleteAllReason = computed(() => getCurrentUnsupportedReasonSync('cases.deleteAll'))

@@ -100,6 +100,7 @@
 import { ref, computed, watch } from 'vue'
 import { mdiClose } from '@mdi/js'
 import { useApiService } from '../../composables/useApiService'
+import { useCapabilityStore } from '../../stores/capabilityStore'
 import { useGeneValidation } from '../../composables/useGeneValidation'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 
@@ -124,6 +125,7 @@ const emit = defineEmits<{
 }>()
 
 const { api } = useApiService()
+const { capabilityReason } = useCapabilityStore()
 const { parseGeneText } = useGeneValidation()
 
 // Input state
@@ -174,6 +176,12 @@ watch(
 
 async function doGenerate(): Promise<void> {
   if (!api || parsedGenes.value.length === 0) return
+  // STRING is an external lookup (parity manifest): explain instead of calling.
+  const unavailable = capabilityReason('stringDbPanels')
+  if (unavailable !== null) {
+    errorMessage.value = unavailable
+    return
+  }
 
   generating.value = true
   errorMessage.value = ''

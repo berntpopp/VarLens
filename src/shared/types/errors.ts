@@ -7,6 +7,10 @@ export enum ErrorCode {
   UNIQUE_CONSTRAINT = 'UNIQUE_CONSTRAINT',
   WRONG_PASSWORD = 'WRONG_PASSWORD',
   INVALID_PARAMETERS = 'INVALID_PARAMETERS',
+  /** The session's role may not call this method (web client / dispatcher). */
+  FORBIDDEN = 'FORBIDDEN',
+  /** The method is desktop-only or not yet served in this runtime (parity manifest). */
+  UNSUPPORTED_RUNTIME = 'UNSUPPORTED_RUNTIME',
   UNKNOWN = 'UNKNOWN'
 }
 

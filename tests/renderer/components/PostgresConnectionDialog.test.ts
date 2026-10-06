@@ -12,6 +12,7 @@ import type {
 } from '../../../src/shared/types/postgres-profile'
 import { ErrorCode } from '../../../src/shared/types/errors'
 import { createMockApi, type MockApi } from '../../utils/mock-api'
+import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -38,6 +39,7 @@ describe('PostgresConnectionDialog', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    installCapabilities()
     mockApi = createMockApi()
     window.api = mockApi as unknown as typeof window.api
   })

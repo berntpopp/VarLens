@@ -146,6 +146,7 @@
 import { ref, watch, onUnmounted } from 'vue'
 import { mdiClose, mdiMagnify } from '@mdi/js'
 import { useApiService } from '../../composables/useApiService'
+import { useCapabilityStore } from '../../stores/capabilityStore'
 import type { PanelAppSearchResult } from '../../../../shared/types/api'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 
@@ -159,6 +160,14 @@ const emit = defineEmits<{
 }>()
 
 const { api } = useApiService()
+const { capabilityReason } = useCapabilityStore()
+
+/** PanelApp is an external lookup (parity manifest): explain instead of calling. */
+function panelAppUnavailable(): boolean {
+  const reason = capabilityReason('panelAppImport')
+  if (reason !== null) errorMessage.value = reason
+  return reason !== null
+}
 
 // Search state
 const searchKeyword = ref('')
@@ -222,7 +231,7 @@ watch(
 )
 
 async function doSearch(keyword: string): Promise<void> {
-  if (!api) return
+  if (!api || panelAppUnavailable()) return
 
   searching.value = true
   errorMessage.value = ''
@@ -244,7 +253,7 @@ function selectPanel(panel: PanelAppSearchResult): void {
 }
 
 async function doImport(): Promise<void> {
-  if (!api || !selectedPanel.value) return
+  if (!api || !selectedPanel.value || panelAppUnavailable()) return
 
   importing.value = true
   errorMessage.value = ''
