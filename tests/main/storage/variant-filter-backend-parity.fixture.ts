@@ -113,7 +113,9 @@ export const B = {
 export const C = {
   inGrch37Gene: variant({ chr: '7', pos: 550_000, gene_symbol: 'PARITY1' }),
   /** Inside the GRCh38 coordinates only — must NOT match for a GRCh37 case. */
-  grch38Position: variant({ chr: '7', pos: 150_000, alt: 'C', gene_symbol: 'PARITY1' })
+  grch38Position: variant({ chr: '7', pos: 150_000, alt: 'C', gene_symbol: 'PARITY1' }),
+  /** Scores that ARE zero — a null check must not confuse them with "no value". */
+  zeroScores: variant({ chr: '9', pos: 500, gene_symbol: 'ZERO', gnomad_af: 0, cadd: 0 })
 }
 
 export const FIXTURE: ParityFixtureCase[] = [

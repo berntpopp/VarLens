@@ -7,6 +7,7 @@ import type {
   Variant,
   VariantFilter
 } from '../../../shared/types/database'
+import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
 import type { FilterOptions } from '../../../shared/types/api'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import { quoteIdentifier } from './identifiers'
@@ -292,7 +293,10 @@ function addPostgresColumnFilters(
     const sqlColumn = definition.sql
     const { operator, value } = filterDef
 
-    if (operator === 'in' && Array.isArray(value)) {
+    if (isNullCheckOperator(operator)) {
+      const numeric = definition.kind === 'numeric'
+      addWhere(buildNullCheckSql(sqlColumn, operator, numeric, 'postgres'))
+    } else if (operator === 'in' && Array.isArray(value)) {
       if (value.length === 0) continue
       addWhere(`${sqlColumn} IN (${value.map((item) => addParam(String(item))).join(', ')})`)
     } else if (operator === 'like' && typeof value === 'string') {

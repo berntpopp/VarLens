@@ -1,5 +1,6 @@
 import { sql } from 'kysely'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../../shared/filters/column-filter-validation'
+import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
 import type { Variant, VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
 import { SORTABLE_COLUMNS } from './sortable-columns'
@@ -70,6 +71,12 @@ function applyColumnFilter(
   numericColumn: boolean
 ): VariantQueryBuilder {
   const { operator, value } = filterDef
+  if (isNullCheckOperator(operator)) {
+    // `sqlColumn` comes from SORTABLE_COLUMNS (internal), so sql.raw is safe.
+    return query.where(
+      sql.raw<boolean>(buildNullCheckSql(sqlColumn, operator, numericColumn, 'sqlite'))
+    )
+  }
   if (operator === 'in' && Array.isArray(value)) return whereIn(query, sqlColumn, value)
   if (operator === 'like' && typeof value === 'string') return whereLike(query, sqlColumn, value)
   if ((operator === '=' || operator === '!=') && isComparable(value)) {

@@ -5,8 +5,53 @@ import {
   ColumnFilterValueError,
   NUMERIC_COLUMN_FILTER_KEYS
 } from '../../../src/shared/filters/column-filter-validation'
+import {
+  buildNullCheckSql,
+  isNullCheckOperator
+} from '../../../src/shared/filters/column-null-check'
+
+describe('null-check column filters', () => {
+  it('are recognised by operator and need no numeric value', () => {
+    expect(isNullCheckOperator('is_null')).toBe(true)
+    expect(isNullCheckOperator('not_null')).toBe(true)
+    expect(isNullCheckOperator('=')).toBe(false)
+    expect(() =>
+      assertValidColumnFilterValues({
+        cadd: { operator: 'is_null', value: '' },
+        pos: { operator: 'not_null', value: 'ignored' }
+      })
+    ).not.toThrow()
+  })
+
+  it('test NULL only on numeric columns and NULL-or-empty on text columns', () => {
+    expect(buildNullCheckSql('v.cadd', 'is_null', true, 'sqlite')).toBe('v.cadd IS NULL')
+    expect(buildNullCheckSql('v.cadd', 'not_null', true, 'postgres')).toBe('v.cadd IS NOT NULL')
+    expect(buildNullCheckSql('v.gene', 'is_null', false, 'sqlite')).toBe(
+      "(v.gene IS NULL OR v.gene = '')"
+    )
+    expect(buildNullCheckSql('v.gene', 'not_null', false, 'sqlite')).toBe(
+      "(v.gene IS NOT NULL AND v.gene <> '')"
+    )
+    // PostgreSQL cannot compare a non-text column (integer flag) with ''.
+    expect(buildNullCheckSql('sv.flag', 'is_null', false, 'postgres')).toBe(
+      "(sv.flag IS NULL OR sv.flag::text = '')"
+    )
+  })
+})
 
 describe('assertValidColumnFilterValues', () => {
+  it('rejects a blank string on a numeric column instead of reading it as zero', () => {
+    for (const value of ['', '  ']) {
+      expect(() => assertValidColumnFilterValues({ cadd: { operator: '=', value } })).toThrow(
+        ColumnFilterValueError
+      )
+    }
+    // Text columns may still be compared with the empty string.
+    expect(() =>
+      assertValidColumnFilterValues({ gene_symbol: { operator: '=', value: '' } })
+    ).not.toThrow()
+  })
+
   it('accepts absent filters and finite numeric values, including numeric strings', () => {
     expect(() => assertValidColumnFilterValues(undefined)).not.toThrow()
     expect(() =>
@@ -53,15 +98,6 @@ describe('assertValidColumnFilterValues', () => {
         not_a_column: { operator: '<', value: 'abc' },
         cadd: { operator: 'like', value: 'abc' }
       })
-    ).not.toThrow()
-  })
-
-  it('keeps the empty-string comparison both backends coerce to 0 (DSL is:null)', () => {
-    // dsl/translator.ts emits `{ operator: '=', value: '' }` for `is:null`.
-    // Both backends bind it as 0 today; rejecting it here would turn an
-    // existing (if imprecise) query into an error.
-    expect(() =>
-      assertValidColumnFilterValues({ cadd: { operator: '=', value: '' } })
     ).not.toThrow()
   })
 

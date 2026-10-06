@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg'
 import QueryStream from 'pg-query-stream'
 
+import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
 import type { ColumnFilter, ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type {
   CohortCarrier,
@@ -837,6 +838,9 @@ export class PostgresCohortRepository {
   ): string {
     const { operator, value } = filter
 
+    if (isNullCheckOperator(operator)) {
+      return buildNullCheckSql(expression, operator, definition.dataType === 'numeric', 'postgres')
+    }
     if (operator === 'in' && Array.isArray(value)) {
       if (value.length === 0) return ''
       return `${expression} IN (${value

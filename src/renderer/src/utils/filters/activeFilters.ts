@@ -47,6 +47,8 @@ function formatColumnFilterValue(operator: string, value: string | number | stri
   if (operator === 'like') {
     return `~ ${value}`
   }
+  if (operator === 'is_null') return 'is empty'
+  if (operator === 'not_null') return 'has a value'
   // Numeric operators: =, !=, <, >, <=, >=
   return `${operator} ${value}`
 }

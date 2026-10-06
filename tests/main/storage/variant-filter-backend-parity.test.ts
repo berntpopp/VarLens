@@ -565,6 +565,50 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     )
   }, 120_000)
 
+  // ── Null checks (DSL is:null / is:notnull) ────────────────────────────────
+
+  it('null-check column filters mean "no value", never zero, on every path', async () => {
+    const isNull = { operator: 'is_null' as const, value: '' }
+    const notNull = { operator: 'not_null' as const, value: '' }
+    const unscored = [C.inGrch37Gene, C.grch38Position]
+    const grch37 = { genome_build: 'GRCh37' }
+
+    await expectAll(casePaths(2, { column_filters: { cadd: isNull } }), ok(unscored))
+    await expectAll(casePaths(2, { column_filters: { cadd: notNull } }), ok([C.zeroScores]))
+    await expectAll(casePaths(2, { column_filters: { gnomad_af: isNull } }), ok(unscored))
+    await expectAll(
+      cohortPaths({ ...grch37, column_filters: { cadd_phred: isNull } }),
+      ok(unscored)
+    )
+    await expectAll(
+      cohortPaths({ ...grch37, column_filters: { cadd_phred: notNull } }),
+      ok([C.zeroScores])
+    )
+    await expectAll(cohortPaths({ ...grch37, column_filters: { gnomad_af: isNull } }), ok(unscored))
+
+    // Text column: every case-A variant without a gene symbol.
+    const noGene = A_ALL.filter((v) => v.gene_symbol === null)
+    const withGene = A_ALL.filter((v) => v.gene_symbol !== null)
+    await expectAll(casePaths(0, { column_filters: { gene_symbol: isNull } }), ok(noGene))
+    await expectAll(casePaths(0, { column_filters: { gene_symbol: notNull } }), ok(withGene))
+    await expectAll(
+      cohortPaths({ ...grch37, column_filters: { gene_symbol: notNull } }),
+      ok(Object.values(C))
+    )
+
+    // Extension column: no fixture variant has a variant_cnv row.
+    const cnvs = A_ALL.filter((v) => v.variant_type === 'cnv')
+    const cnvType = { variant_type: 'cnv' }
+    await expectAll(
+      casePaths(0, { ...cnvType, column_filters: { 'cnv.copy_number': isNull } }),
+      ok(cnvs)
+    )
+    await expectAll(
+      casePaths(0, { ...cnvType, column_filters: { 'cnv.copy_number': notNull } }),
+      ok([])
+    )
+  }, 120_000)
+
   // ── Invalid numeric filter value ──────────────────────────────────────────
 
   it('a non-numeric value on a numeric column is rejected identically everywhere', async () => {

@@ -235,6 +235,64 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     })
   })
 
+  describe('null-check column filters (DSL is:null / is:notnull)', () => {
+    let nullCase: number
+
+    beforeEach(() => {
+      nullCase = sqlite.cases.createCase('guard-null', '/tmp/guard-null.json', 0, 'GRCh36')
+      sqlite.variants.insertVariantsBatch(nullCase, [
+        variant('3', 100, { cadd: 0, gene_symbol: 'ZERO' }),
+        variant('3', 200, { cadd: 12.5, gene_symbol: 'SCORED' }),
+        variant('3', 300, { cadd: null, gene_symbol: null })
+      ])
+      sqlite.cohortSummary.rebuild()
+    })
+
+    const casePositions = (columnFilters: ColumnFiltersParam): number[] =>
+      sqlite.variants
+        .getVariants({ case_id: nullCase, column_filters: columnFilters }, 100, 0)
+        .data.map((row) => row.pos)
+        .sort((a, b) => a - b)
+    const cohortPositions = (columnFilters: ColumnFiltersParam): number[] =>
+      sqlite.cohort
+        .getCohortVariants({ genome_build: 'GRCh36', column_filters: columnFilters })
+        .data.map((row) => row.pos)
+        .sort((a, b) => a - b)
+
+    it('SQLite case view: a numeric null check means NULL, never zero', () => {
+      expect(casePositions({ cadd: { operator: 'is_null', value: '' } })).toEqual([300])
+      expect(casePositions({ cadd: { operator: 'not_null', value: '' } })).toEqual([100, 200])
+      expect(casePositions({ gene_symbol: { operator: 'is_null', value: '' } })).toEqual([300])
+      expect(casePositions({ gene_symbol: { operator: 'not_null', value: '' } })).toEqual([
+        100, 200
+      ])
+    })
+
+    it('SQLite cohort view applies the same null checks', () => {
+      expect(cohortPositions({ cadd_phred: { operator: 'is_null', value: '' } })).toEqual([300])
+      expect(cohortPositions({ cadd_phred: { operator: 'not_null', value: '' } })).toEqual([
+        100, 200
+      ])
+      expect(cohortPositions({ gene_symbol: { operator: 'is_null', value: '' } })).toEqual([300])
+    })
+
+    it('PostgreSQL builders emit IS NULL instead of a comparison with an empty string', () => {
+      const casePart = (columnFilters: ColumnFiltersParam): string =>
+        buildPostgresVariantQueryParts({ case_id: 1, column_filters: columnFilters }, '"public"')
+          .fromAndWhereSql
+      expect(casePart({ cadd: { operator: 'is_null', value: '' } })).toContain('v.cadd IS NULL')
+      expect(casePart({ gene_symbol: { operator: 'not_null', value: '' } })).toContain(
+        "(v.gene_symbol IS NOT NULL AND v.gene_symbol::text <> '')"
+      )
+      const summary = buildSummaryQueryParts(
+        { column_filters: { cadd_phred: { operator: 'is_null', value: '' } } },
+        4
+      )
+      expect(summary.parts.whereParts).toContain('cvs.cadd IS NULL')
+      expect(summary.parts.values).toEqual([])
+    })
+  })
+
   describe('numeric-looking value on a text column', () => {
     // better-sqlite3 binds JS numbers as REAL, and SQLite renders a REAL as
     // '7.0' before comparing it with a TEXT column — so the value must be

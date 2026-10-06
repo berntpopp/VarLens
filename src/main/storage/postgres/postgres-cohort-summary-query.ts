@@ -1,3 +1,4 @@
+import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
 import type { ColumnFilter } from '../../../shared/types/column-filters'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
@@ -190,6 +191,9 @@ function buildColumnFilterCondition(
   const { operator, value } = filter
   const isNumeric = NUMERIC_COLUMN_FILTERS.has(column)
 
+  if (isNullCheckOperator(operator)) {
+    return buildNullCheckSql(expression, operator, isNumeric, 'postgres')
+  }
   if (operator === 'in' && Array.isArray(value)) {
     if (value.length === 0) return ''
     return `${expression} IN (${value

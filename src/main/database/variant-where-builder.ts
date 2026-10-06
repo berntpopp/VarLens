@@ -1,5 +1,6 @@
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { isExtensionColumnKey } from './variant-extension-registry'
+import { buildNullCheckSql, isNullCheckOperator } from '../../shared/filters/column-null-check'
 import { BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import {
   assertValidColumnFilterValues,
@@ -195,6 +196,9 @@ function translateColumnFilter(
   const { operator, value, includeEmpty } = filter
   const nullBranch = includeEmpty !== false
 
+  if (isNullCheckOperator(operator)) {
+    return buildNullCheckSql(col, operator, NUMERIC_COLUMN_FILTER_KEYS.has(column), 'sqlite')
+  }
   if (operator === 'in' && Array.isArray(value)) {
     if (value.length === 0) return null
     const ph = value.map(() => '?').join(', ')
