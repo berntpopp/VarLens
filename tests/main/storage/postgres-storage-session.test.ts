@@ -127,7 +127,7 @@ describe('PostgresStorageSession', () => {
     })
   })
 
-  it('throws for sqlite-only compatibility methods', () => {
+  it('rejects sqlite-only compatibility methods', async () => {
     const session = new PostgresStorageSession({
       config: makeConfig(),
       pool: {
@@ -140,7 +140,7 @@ describe('PostgresStorageSession', () => {
     // getDatabaseService / getDbPool are off the StorageSession interface and
     // removed from PostgresStorageSession entirely. Only the SQLite-only method
     // that remains on the interface (rekey) is still asserted here.
-    expect(() => session.rekey('secret')).toThrow('SQLite rekey is not supported')
+    await expect(session.rekey('secret')).rejects.toThrow('SQLite rekey is not supported')
   })
 
   it('closes the underlying pool', async () => {

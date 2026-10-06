@@ -35,6 +35,7 @@ import type { AnalysisGroupRepository } from './AnalysisGroupRepository'
 import type { ShortlistService } from './ShortlistService'
 import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
 import { applyConnectionPragmas } from './connection-pragmas'
+import { rekeyConnection } from './journal-mode'
 
 /**
  * DatabaseService class
@@ -282,22 +283,36 @@ export class DatabaseService {
   }
 
   /**
-   * Change the encryption key for an encrypted database
+   * Change the encryption key of this connection's database file.
+   *
+   * Handles the WAL → DELETE → WAL round trip `PRAGMA rekey` needs, which only
+   * works while this is the ONLY open connection. Callers must go through
+   * `SqliteStorageSession.rekey()`, which stops the read pool and the writer
+   * thread first; calling this directly on a live session fails with
+   * SQLITE_BUSY and changes nothing.
+   *
+   * The key handed to worker connections (`getEncryptionKey()`) is updated
+   * only after the file has actually been re-keyed.
    */
   rekey(newPassword: string): void {
     assertNotHexLiteralKey(newPassword)
 
+    let walRestored: boolean
     try {
-      const safePassword = newPassword.split("'").join("''")
-      this.db.pragma(`rekey='${safePassword}'`)
-      // Keep the key handed to worker connections (writer, import, delete,
-      // export) in sync with the file's new key.
-      this._encryptionKey = newPassword
-      this.encrypted = newPassword !== ''
+      walRestored = rekeyConnection(this.db, newPassword).walRestored
     } catch (error) {
       throw new DatabaseError(
         'Failed to change database encryption key',
         error instanceof Error ? error : undefined
+      )
+    }
+
+    this._encryptionKey = newPassword
+    this.encrypted = newPassword !== ''
+    if (!walRestored) {
+      mainLogger.warn(
+        'Database was re-keyed but could not return to WAL mode; it is restored on next open',
+        'database'
       )
     }
   }

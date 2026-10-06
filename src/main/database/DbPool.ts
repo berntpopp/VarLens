@@ -9,6 +9,9 @@
  *   pool.init(dbPath, encryptionKey)
  *   const result = await pool.run<MyType>({ type: 'variants:query', params: [...] })
  *   await pool.destroy()
+ *
+ * An operation that needs the database file to itself (re-key) brackets its
+ * work with `await pool.suspend()` / `pool.resume(key)`.
  */
 
 import { resolve } from 'path'
@@ -49,16 +52,28 @@ function getPiscina(): PiscinaConstructor {
   return PiscinaClass!
 }
 
+interface Suspension {
+  released: Promise<void>
+  release: () => void
+}
+
 export class DbPool {
   private pool: PiscinaInstance | null = null
   private initOptions: DbPoolInitOptions | null = null
+  private suspension: Suspension | null = null
+  private readonly inFlight = new Set<Promise<unknown>>()
 
   /**
-   * Initialise the worker pool.
+   * Initialise the worker pool. Workers spawn lazily on the first `run()`.
+   *
+   * Calling it again replaces the configuration, as long as no worker from the
+   * previous one is alive — a worker keeps the `workerData` (path, key) it was
+   * spawned with, so a silent re-init would leave stale connections behind.
    *
    * @param dbPath        Absolute path to the SQLite database file.
    * @param encryptionKey Optional encryption key (passed via workerData).
    * @param options       Optional overrides (workerPath, execArgv, maxThreads, geneRefDbPath) for tests or config.
+   * @throws if workers are alive; `destroy()` (or `suspend()`) first.
    */
   init(
     dbPath: string,
@@ -71,7 +86,9 @@ export class DbPool {
       geneRefDbPath?: string
     }
   ): void {
-    if (this.initOptions !== null) return // already initialised
+    if (this.pool !== null) {
+      throw new Error('DbPool has live workers — call destroy() before init()')
+    }
 
     const filename = options?.workerPath ?? resolve(__dirname, 'db-worker.js')
     const maxThreads = options?.maxThreads ?? Math.max(1, os.cpus().length - 1)
@@ -94,9 +111,12 @@ export class DbPool {
   }
 
   /**
-   * Dispatch a read-only task to the pool.
+   * Dispatch a read-only task to the pool. While the pool is suspended the
+   * task waits for `resume()` rather than failing.
    */
   async run<T>(task: DbTask): Promise<T> {
+    while (this.suspension !== null) await this.suspension.released
+
     if (this.initOptions === null) throw new Error('DbPool not initialized — call init() first')
 
     if (this.pool === null) {
@@ -104,18 +124,62 @@ export class DbPool {
       this.pool = new Piscina(this.initOptions)
     }
 
-    return this.pool.run(task) as Promise<T>
+    const result = this.pool.run(task)
+    this.inFlight.add(result)
+    const forget = (): void => void this.inFlight.delete(result)
+    result.then(forget, forget)
+    return result as Promise<T>
+  }
+
+  /**
+   * Close every worker connection and hold new reads until `resume()`.
+   * Reads already running finish first. Keeps the configuration.
+   */
+  async suspend(): Promise<void> {
+    if (this.suspension === null) {
+      let release: () => void = () => undefined
+      const released = new Promise<void>((done) => {
+        release = done
+      })
+      this.suspension = { released, release }
+    }
+
+    await Promise.allSettled([...this.inFlight])
+    await this.destroyWorkers()
+  }
+
+  /**
+   * Release the reads held by `suspend()`. Workers respawn lazily and open
+   * the database with `encryptionKey`.
+   */
+  resume(encryptionKey: string | undefined): void {
+    if (this.initOptions !== null) {
+      this.initOptions = {
+        ...this.initOptions,
+        workerData: { ...this.initOptions.workerData, encryptionKey }
+      }
+    }
+    this.releaseSuspension()
   }
 
   /**
    * Destroy the pool and close all worker connections.
    */
   async destroy(): Promise<void> {
-    if (this.pool !== null) {
-      await this.pool.destroy()
-      this.pool = null
-    }
-
+    await this.destroyWorkers()
     this.initOptions = null
+    this.releaseSuspension()
+  }
+
+  private async destroyWorkers(): Promise<void> {
+    const pool = this.pool
+    this.pool = null
+    if (pool !== null) await pool.destroy()
+  }
+
+  private releaseSuspension(): void {
+    const suspension = this.suspension
+    this.suspension = null
+    suspension?.release()
   }
 }

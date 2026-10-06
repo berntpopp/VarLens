@@ -302,9 +302,8 @@ describe('SQLCipher Encryption', () => {
       const dbPath = tempDbPath()
       try {
         const db = new DatabaseService(dbPath, 'initial')
-        // Rekey requires DELETE journal mode (WAL not supported for rekey)
-        db.database.pragma('journal_mode = DELETE')
         db.rekey("new'password")
+        expect(db.getEncryptionKey()).toBe("new'password")
         db.close()
 
         const db2 = new DatabaseService(dbPath, "new'password")
@@ -442,11 +441,11 @@ describe('SQLCipher Encryption', () => {
       const service = new DatabaseService(dbPath, originalKey)
       service.cases.createCase('rekey-to-plain', '/path/to/file.vcf', 256)
 
-      // Switch to DELETE journal mode (WAL not supported for rekey)
-      service.database.pragma('journal_mode = DELETE')
-
-      // Rekey to empty string removes encryption
-      service.database.pragma("rekey=''")
+      // Rekey to empty string removes encryption. The connection is in WAL
+      // mode, exactly as in production; rekey() handles the journal switch.
+      service.rekey('')
+      expect(service.isEncrypted()).toBe(false)
+      expect(service.database.pragma('journal_mode', { simple: true })).toBe('wal')
       service.close()
 
       // Should now be openable without any key
@@ -465,12 +464,11 @@ describe('SQLCipher Encryption', () => {
       const service = new DatabaseService(dbPath)
       service.cases.createCase('rekey-to-encrypted', '/path/to/file.vcf', 256)
 
-      // Switch to DELETE journal mode (WAL not supported for rekey)
-      service.database.pragma('journal_mode = DELETE')
-
-      // Rekey to add encryption
-      const safeKey = newKey.split("'").join("''")
-      service.database.pragma(`rekey='${safeKey}'`)
+      // Rekey to add encryption (WAL connection, as in production)
+      service.rekey(newKey)
+      expect(service.isEncrypted()).toBe(true)
+      expect(service.getEncryptionKey()).toBe(newKey)
+      expect(service.database.pragma('journal_mode', { simple: true })).toBe('wal')
       service.close()
 
       // Should now require the key

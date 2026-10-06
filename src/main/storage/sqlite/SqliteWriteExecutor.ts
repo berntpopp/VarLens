@@ -78,9 +78,19 @@ export class SqliteWriteExecutor implements StorageWriteExecutor {
   }
 
   /**
-   * Stop the writer thread after the queued writes drain. The next write
-   * respawns it (re-reading the encryption key, e.g. after a re-key).
+   * Run `operation` in the write queue with the writer thread stopped: queued
+   * writes drain first, later ones wait behind it, and the writer's connection
+   * is closed for its duration. The next write respawns the thread, re-reading
+   * the encryption key (this is how a re-key reaches the writer).
    */
+  runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    return this.enqueue(async () => {
+      await this.worker?.close()
+      return operation()
+    })
+  }
+
+  /** Stop the writer thread after the queued writes drain. The next write respawns it. */
   async close(): Promise<void> {
     await this.writeTail
     await this.worker?.close()
