@@ -69,6 +69,7 @@ export function createWebRuntimeServices(options: {
   // the desktop main process (track 5a).
   const runner = new JobRunner()
   const staleAnnounced = new Set<string>()
+  let resuming: Promise<void> = Promise.resolve()
   const caseDelete = new PostgresCaseDeleteJobs({
     lifecycle: new PostgresCaseLifecycleRepository(options.pool, options.schema),
     runner,
@@ -94,14 +95,18 @@ export function createWebRuntimeServices(options: {
     auditBuffer,
     jobs: { runner, caseDelete },
     resumeInterruptedWork() {
-      caseDelete.resumePending().then(
-        (handle) => handle?.result.catch(() => undefined),
+      // Tracked so close() never ends the pool under an in-flight lookup.
+      resuming = caseDelete.resumePending().then(
+        (handle) => {
+          handle?.result.catch(() => undefined)
+        },
         (err: unknown) => {
           options.logger.error({ event: 'case-delete', action: 'resume-failed', err })
         }
       )
     },
     async close() {
+      await resuming
       await caseDelete.close()
       await auditBuffer?.close()
     }
