@@ -172,4 +172,39 @@ describe('SqliteStorageSession.rekey', () => {
     session = createSqliteStorageSession(dbPath, OLD_KEY, { dbWorkerPath })
     expect(session.getDatabaseService().cases.getAllCases()).toHaveLength(1)
   })
+
+  it('refuses an empty password: re-key never removes encryption', async () => {
+    const current = open()
+
+    await expect(current.rekey('')).rejects.toThrow(/password must not be empty/i)
+
+    expect(current.workspace.encrypted).toBe(true)
+    expect(current.getEncryptionKey()).toBe(OLD_KEY)
+    expect(await current.listCases()).toHaveLength(1)
+    await closeSession()
+    // Still encrypted with the old key on disk.
+    const plain = new Database(dbPath)
+    try {
+      expect(() => plain.prepare('SELECT count(*) FROM sqlite_master').get()).toThrow()
+    } finally {
+      plain.close()
+    }
+    session = createSqliteStorageSession(dbPath, OLD_KEY, { dbWorkerPath })
+    expect(session.getDatabaseService().cases.getAllCases()).toHaveLength(1)
+  })
+
+  it('reports the workspace as encrypted after a plaintext database is given a password', async () => {
+    session = createSqliteStorageSession(dbPath, undefined, { dbWorkerPath })
+    session.getDatabaseService().cases.createCase('case-a', '/path/a.vcf', 1)
+    expect(session.workspace.encrypted).toBe(false)
+
+    await session.rekey(NEW_KEY)
+
+    expect(session.workspace.encrypted).toBe(true)
+    expect(session.getDatabaseService().isEncrypted()).toBe(true)
+    await closeSession()
+    session = createSqliteStorageSession(dbPath, NEW_KEY, { dbWorkerPath })
+    expect(session.workspace.encrypted).toBe(true)
+    expect(session.getDatabaseService().cases.getAllCases()).toHaveLength(1)
+  })
 })
