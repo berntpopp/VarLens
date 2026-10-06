@@ -19,7 +19,8 @@ export interface StorageSession {
   // must use getReadExecutor() / getWriteExecutor().
   getEncryptionKey(): string | undefined
   needsStartupRebuild(): boolean
-  rekey(newPassword: string): void
+  /** Resolves once every connection of the session uses the new key; rejects with nothing changed. */
+  rekey(newPassword: string): Promise<void>
   close(): Promise<void>
   health(): Promise<StorageHealth>
 }
