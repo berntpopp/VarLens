@@ -59,7 +59,7 @@
             :variant-pos="variant.pos"
             :variant-ref="variant.ref"
             :variant-alt="variant.alt"
-            :fetch-vep="fetchVep"
+            :fetch-vep="vepFetchAvailable ? fetchVep : undefined"
             class="mb-4"
             @transcript-switched="emit('variant-updated')"
           />
@@ -256,7 +256,7 @@ import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
-import { isProteinViewerAvailable } from '../utils/runtime-features'
+import { isProteinViewerAvailable, isRuntimeFeatureAvailable } from '../utils/runtime-features'
 import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 
 interface Props {
@@ -280,6 +280,8 @@ usePanelFocus(() => props.open, headingRef)
 // Protein visualization modal state
 const proteinModalOpen = ref(false)
 const proteinViewerAvailable = isProteinViewerAvailable()
+// vep:fetch answers 501 in web: hide the on-demand button instead of failing.
+const vepFetchAvailable = isRuntimeFeatureAvailable('vepEnrichment')
 const proteinModalMounted = useMountOnFirstOpen(() => proteinModalOpen.value)
 
 function openProteinView(): void {

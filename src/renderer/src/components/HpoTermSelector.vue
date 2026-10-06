@@ -20,8 +20,19 @@
     </div>
     <div v-else class="text-muted text-body-medium mb-2">No phenotype terms assigned</div>
 
+    <!-- Web: hpo:search is not served (501) — say so instead of "No matching terms" -->
+    <div
+      v-if="hpoUnavailableReason !== null"
+      class="text-body-medium text-medium-emphasis"
+      role="note"
+      data-testid="hpo-search-unavailable"
+    >
+      {{ hpoUnavailableReason }}
+    </div>
+
     <!-- Autocomplete for adding new terms -->
     <v-autocomplete
+      v-else
       v-model="selectedTerm"
       v-model:search="searchQuery"
       :items="searchResults"
@@ -34,7 +45,7 @@
       hide-details
       clearable
       :disabled="disabled || !hpoApiAvailable"
-      :placeholder="hpoApiAvailable ? 'Search HPO terms...' : 'HPO search unavailable'"
+      placeholder="Search HPO terms..."
       no-filter
       @update:model-value="handleTermSelected"
     >
@@ -46,10 +57,8 @@
         </v-list-item>
       </template>
       <template #no-data>
-        <v-list-item v-if="!hpoApiAvailable">
-          <v-list-item-title class="text-muted"
-            >HPO search unavailable - complete Phase 21</v-list-item-title
-          >
+        <v-list-item v-if="searchError">
+          <v-list-item-title class="text-error">{{ searchError }}</v-list-item-title>
         </v-list-item>
         <v-list-item v-else-if="searchQuery && searchQuery.length >= 2 && !loading">
           <v-list-item-title class="text-muted">No matching HPO terms</v-list-item-title>
@@ -69,6 +78,7 @@ import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { CaseHpoTerm } from '../../../shared/types/api'
+import { runtimeFeatureUnavailableReason } from '../utils/runtime-features'
 
 interface HpoSearchResult {
   id: string
@@ -91,12 +101,17 @@ const searchQuery = ref('')
 const searchResults = ref<HpoSearchResult[]>([])
 const loading = ref(false)
 const selectedTerm = ref<HpoSearchResult | null>(null)
+const hpoUnavailableReason = runtimeFeatureUnavailableReason('hpoSearch')
 const hpoApiAvailable = ref(false)
+/** Search failure (as opposed to "no matches") shown in the dropdown. */
+const searchError = ref('')
 
-// Check if HPO API is available (Phase 21 complete)
 onMounted(() => {
   hpoApiAvailable.value =
-    api != null && typeof api.hpo !== 'undefined' && typeof api.hpo.search === 'function'
+    hpoUnavailableReason === null &&
+    api != null &&
+    typeof api.hpo !== 'undefined' &&
+    typeof api.hpo.search === 'function'
 })
 
 // Search function for debouncing
@@ -107,6 +122,7 @@ async function performSearch(query: string) {
   }
 
   loading.value = true
+  searchError.value = ''
   try {
     const result = unwrapIpcResult(await api!.hpo.search(query, 20))
     if (result.success) {
@@ -126,6 +142,7 @@ async function performSearch(query: string) {
             : String(error)),
       'hpo'
     )
+    searchError.value = 'HPO search failed. Try again later.'
     searchResults.value = []
   } finally {
     loading.value = false
