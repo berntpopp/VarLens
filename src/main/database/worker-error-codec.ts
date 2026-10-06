@@ -16,6 +16,8 @@ import {
   WrongPasswordError
 } from './errors'
 import { AppError, ConflictError, ForbiddenError, InvalidParametersError } from '../ipc/errors'
+import { ColumnFilterValueError } from '../../shared/filters/column-filter-validation'
+import { PanelRegionsUnavailableError } from '../../shared/filters/panel-intervals'
 
 export interface EncodedWorkerError {
   name: string
@@ -36,7 +38,9 @@ const KNOWN_CLASSES: Record<string, { prototype: Error }> = {
   InvalidParametersError,
   AppError,
   ConflictError,
-  ForbiddenError
+  ForbiddenError,
+  ColumnFilterValueError,
+  PanelRegionsUnavailableError
 }
 
 export function encodeWorkerError(error: unknown): EncodedWorkerError {
@@ -69,6 +73,33 @@ export function decodeWorkerError(encoded: EncodedWorkerError): Error {
   }
   if (encoded.causeMessage !== undefined) {
     Object.defineProperty(error, 'cause', { value: new Error(encoded.causeMessage) })
+  }
+  return error
+}
+
+function isEncodedWorkerError(value: unknown): value is EncodedWorkerError {
+  if (typeof value !== 'object' || value === null) return false
+  const record = value as Record<string, unknown>
+  return typeof record.name === 'string' && typeof record.message === 'string'
+}
+
+/**
+ * Wrap an error for a transport that only structured-clones the thrown value
+ * (the Piscina read pool). Structured clone keeps `message`, `stack` and
+ * `cause` of an `Error` but drops its class and custom fields, so the encoded
+ * form travels in `cause`.
+ */
+export function toTransportableWorkerError(error: unknown): unknown {
+  if (!(error instanceof Error)) return error
+  const plain = new Error(error.message, { cause: encodeWorkerError(error) })
+  plain.stack = error.stack
+  return plain
+}
+
+/** Inverse of {@link toTransportableWorkerError}; other values pass through. */
+export function fromTransportableWorkerError(error: unknown): unknown {
+  if (error instanceof Error && isEncodedWorkerError(error.cause)) {
+    return decodeWorkerError(error.cause)
   }
   return error
 }

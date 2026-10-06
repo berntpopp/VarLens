@@ -7,11 +7,23 @@
  * so the arithmetic lives here and neither backend re-implements it
  * (issue #447).
  *
+ * Resolution contract — the single definition, enforced for both backends by
+ * {@link resolvePanelGeneRegions}:
+ * - The active panel(s) contain NO genes → no regions, and the query runs
+ *   without a panel restriction (there is nothing to restrict on).
+ * - The active panel(s) contain genes but NONE has coordinates in the genome
+ *   build being queried → {@link PanelRegionsUnavailableError}. Returning "no
+ *   regions" here would show every variant while the user believes a panel is
+ *   active.
+ * - Some genes have coordinates → their regions; genes without coordinates in
+ *   that build are left out.
+ *
  * Matching a variant against a region is an OVERLAP test, written identically
  * in every query builder:
  *
  *   chr = region.chr AND pos <= region.end AND COALESCE(end_pos, pos) >= region.start
  */
+import { ErrorCode } from '../types/errors'
 import type { GenomicInterval } from '../types/panels'
 
 /** Padding applied around each panel gene when the filter does not carry one. */
@@ -79,4 +91,55 @@ export function buildPaddedPanelIntervals(
     })
   }
   return mergeOverlappingIntervals(intervals)
+}
+
+/**
+ * A gene panel is active and has genes, but none of them has coordinates in
+ * the genome build being queried, so the panel cannot restrict anything.
+ *
+ * Carries its own envelope `code` / `userMessage` so the IPC and web error
+ * mappers report it to the user verbatim instead of as an unexpected failure.
+ */
+export class PanelRegionsUnavailableError extends Error {
+  readonly code = ErrorCode.VALIDATION
+  readonly userMessage: string
+
+  constructor(
+    readonly geneCount: number,
+    readonly genomeBuild: string
+  ) {
+    super(
+      `Active gene panel resolves to no genomic regions: none of its ${geneCount} gene(s) has coordinates for genome build ${genomeBuild}`
+    )
+    this.name = 'PanelRegionsUnavailableError'
+    this.userMessage = `The active gene panel cannot be applied: none of its ${geneCount} gene(s) has coordinates for genome build ${genomeBuild}. Deactivate the panel or use one that covers this build.`
+  }
+}
+
+/** Looks up gene coordinates for ONE genome build, keyed by HGNC id. */
+export type PanelGeneCoordinateLookup = (
+  hgncIds: string[],
+  genomeBuild: string
+) => ReadonlyMap<string, PanelGeneCoordinates>
+
+/**
+ * Resolve the genes of the active panel(s) into padded, merged regions.
+ * Implements the resolution contract in the module comment; both backends
+ * call it so they cannot disagree.
+ *
+ * @param hgncIds Distinct HGNC ids of every gene in the active panel(s).
+ * @throws {PanelRegionsUnavailableError} when there are genes but no regions.
+ */
+export function resolvePanelGeneRegions(
+  hgncIds: readonly string[],
+  genomeBuild: string,
+  paddingBp: number,
+  chrPrefix: boolean,
+  getCoordinates: PanelGeneCoordinateLookup
+): GenomicInterval[] {
+  if (hgncIds.length === 0) return []
+  const coordinates = getCoordinates([...hgncIds], genomeBuild)
+  const intervals = buildPaddedPanelIntervals(coordinates.values(), paddingBp, chrPrefix)
+  if (intervals.length === 0) throw new PanelRegionsUnavailableError(hgncIds.length, genomeBuild)
+  return intervals
 }

@@ -17,6 +17,11 @@ import type { Repositories } from '../../../src/main/database/createRepositories
 import type { GeneReferenceDb } from '../../../src/main/database/GeneReferenceDb'
 import { prepareVariantExport } from '../../../src/main/ipc/handlers/export-logic'
 import { clearPanelIntervalCache } from '../../../src/main/ipc/handlers/panelIntervalHelper'
+import { buildVariantFilter } from '../../../src/main/ipc/handlers/variants-logic'
+import { toSerializableError } from '../../../src/main/ipc/serializable-error'
+import { fromTransportableWorkerError } from '../../../src/main/database/worker-error-codec'
+import { PanelRegionsUnavailableError } from '../../../src/shared/filters/panel-intervals'
+import { ErrorCode } from '../../../src/shared/types/errors'
 import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
 import { buildPostgresVariantQueryParts } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
 import { buildSummaryQueryParts } from '../../../src/main/storage/postgres/postgres-cohort-summary-query'
@@ -111,6 +116,67 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
       '7:202000:A:T',
       '7:90000:A:<DEL>'
     ])
+  })
+
+  describe('panel that resolves to no regions', () => {
+    const cohort = (params: Record<string, unknown>): Array<{ variant_key: string }> => {
+      const repos = (sqlite as unknown as { _repos: Repositories })._repos
+      const result = dispatchTask(
+        { db: sqlite.db, repos, geneRefDb: geneRef as unknown as GeneReferenceDb },
+        { type: 'cohort:variants', params: [{ limit: 100, offset: 0, ...params }] } as never
+      ) as { data: Array<{ variant_key: string }> }
+      return result.data
+    }
+    const MESSAGE =
+      'Active gene panel resolves to no genomic regions: none of its 1 gene(s) has coordinates for genome build GRCh37'
+
+    it('desktop case view, export and cohort refuse a panel whose genes have no coordinates', async () => {
+      // The gene reference mock only knows GRCh38 coordinates.
+      const grch37Case = sqlite.cases.createCase('guard-37b', '/tmp/guard-37b.json', 0, 'GRCh37')
+      sqlite.variants.insertVariantsBatch(grch37Case, [variant('7', 150_000, { alt: 'G' })])
+      const panel = { active_panel_ids: [panelId], panel_padding_bp: 5000 }
+
+      expect(() =>
+        buildVariantFilter(
+          grch37Case,
+          panel,
+          () => sqlite,
+          () => null
+        )
+      ).toThrow(PanelRegionsUnavailableError)
+      await expect(prepareVariantExport(() => sqlite, grch37Case, panel)).rejects.toThrow(MESSAGE)
+      expect(() => cohort({ ...panel, genome_build: 'GRCh37' })).toThrow(MESSAGE)
+    })
+
+    it('the error crosses the worker boundary and reaches the user as a validation error', () => {
+      let thrown: unknown
+      try {
+        cohort({ active_panel_ids: [panelId], genome_build: 'GRCh37' })
+      } catch (error) {
+        thrown = error
+      }
+      // What Piscina delivers to the main thread is a structured clone.
+      const restored = fromTransportableWorkerError(structuredClone(thrown))
+      expect(restored).toBeInstanceOf(PanelRegionsUnavailableError)
+      expect(toSerializableError(restored)).toEqual({
+        code: ErrorCode.VALIDATION,
+        message: MESSAGE,
+        userMessage:
+          'The active gene panel cannot be applied: none of its 1 gene(s) has coordinates for genome build GRCh37. Deactivate the panel or use one that covers this build.'
+      })
+    })
+
+    it('a panel without any genes applies no restriction', () => {
+      const emptyPanel = sqlite.panels.createPanel({ name: 'guard-empty', source: 'manual' }).id
+      const filter = buildVariantFilter(
+        grch38Case,
+        { active_panel_ids: [emptyPanel] },
+        () => sqlite,
+        () => null
+      )
+      expect(sqlite.variants.getVariants(filter, 100, 0).data).toHaveLength(4)
+      expect(cohort({ active_panel_ids: [emptyPanel], genome_build: 'GRCh38' })).toHaveLength(4)
+    })
   })
 
   describe('numeric-looking value on a text column', () => {

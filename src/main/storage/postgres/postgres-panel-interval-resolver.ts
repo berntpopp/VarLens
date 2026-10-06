@@ -12,10 +12,13 @@
  * single-case query (and therefore the shortlist, which queries through it),
  * the single-case export, the cohort query and the cohort export.
  *
- * Contract (same as `panelIntervalHelper.ts`):
+ * Contract (defined once in `shared/filters/panel-intervals.ts`, same as
+ * `panelIntervalHelper.ts`):
  * - No panel requested → the filter is returned without panel fields.
- * - Panel requested but it yields no regions (no genes, or no coordinates in
- *   that build) → no restriction, exactly as on SQLite.
+ * - Panel requested but the panel(s) contain no genes → no restriction,
+ *   exactly as on SQLite.
+ * - Panel has genes but none has coordinates in that build →
+ *   `PanelRegionsUnavailableError`, exactly as on SQLite.
  * - Resolution FAILS (gene reference unavailable, query error) → the error
  *   propagates. A failed resolution must never look like "no panel" (silently
  *   wider) or like "panel matched nothing" (silently narrower).
@@ -23,9 +26,9 @@
 import type { Pool } from 'pg'
 
 import {
-  buildPaddedPanelIntervals,
   DEFAULT_PANEL_GENOME_BUILD,
-  DEFAULT_PANEL_PADDING_BP
+  DEFAULT_PANEL_PADDING_BP,
+  resolvePanelGeneRegions
 } from '../../../shared/filters/panel-intervals'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
 import type { VariantFilter } from '../../../shared/types/database'
@@ -162,10 +165,12 @@ export class PostgresPanelIntervalResolver {
        WHERE panel_id = ANY($1::bigint[])`,
       [panelIds]
     )
-    const hgncIds = panelResult.rows.map((row) => row.hgnc_id)
-    if (hgncIds.length === 0) return []
-
-    const coordinates = getGeneReferenceDb().getCoordinatesForGenes(hgncIds, genomeBuild)
-    return buildPaddedPanelIntervals(coordinates.values(), paddingBp, chrPrefix)
+    return resolvePanelGeneRegions(
+      panelResult.rows.map((row) => row.hgnc_id),
+      genomeBuild,
+      paddingBp,
+      chrPrefix,
+      (hgncIds, build) => getGeneReferenceDb().getCoordinatesForGenes(hgncIds, build)
+    )
   }
 }

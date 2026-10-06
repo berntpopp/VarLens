@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { toSerializableError } from '../../../src/main/ipc/errorHandler'
 import { InvalidParametersError } from '../../../src/main/ipc/errors'
+import { ColumnFilterValueError } from '../../../src/shared/filters/column-filter-validation'
+import { PanelRegionsUnavailableError } from '../../../src/shared/filters/panel-intervals'
 import { ErrorCode } from '../../../src/shared/types/errors'
 
 describe('toSerializableError -> InvalidParametersError', () => {
@@ -26,5 +28,25 @@ describe('toSerializableError -> InvalidParametersError', () => {
     const result = toSerializableError(err)
 
     expect(result.code).toBe(ErrorCode.INVALID_PARAMETERS)
+  })
+})
+
+describe('toSerializableError -> refused filters', () => {
+  it('reports a panel without regions for the build with its own user message', () => {
+    const result = toSerializableError(new PanelRegionsUnavailableError(12, 'GRCh37'))
+
+    expect(result.code).toBe(ErrorCode.VALIDATION)
+    expect(result.userMessage).toBe(
+      'The active gene panel cannot be applied: none of its 12 gene(s) has coordinates for genome build GRCh37. Deactivate the panel or use one that covers this build.'
+    )
+  })
+
+  it('reports a non-numeric value on a numeric column as a validation error', () => {
+    const result = toSerializableError(new ColumnFilterValueError('cadd', 'abc'))
+
+    expect(result.code).toBe(ErrorCode.VALIDATION)
+    expect(result.userMessage).toBe(
+      'Invalid numeric value for column filter "cadd": "abc" is not a number'
+    )
   })
 })

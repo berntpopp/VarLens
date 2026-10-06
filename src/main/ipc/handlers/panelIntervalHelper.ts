@@ -45,9 +45,15 @@ export interface PanelIntervalParams {
  * @param caseId - Optional case ID for detecting chr prefix from variants.
  *                 If omitted, falls back to sampling any variant in the database.
  * @param source - Logging source identifier (e.g. 'variants', 'cohort')
- * @returns Array of genomic intervals. Empty when the active panel(s) have no
- *          genes/coordinates to restrict on — that is a legitimate "no
- *          restriction" result and callers may run the query unfiltered.
+ * @returns Array of genomic intervals. Empty ONLY when the active panel(s)
+ *          contain no genes at all — there is nothing to restrict on, so that
+ *          is a legitimate "no restriction" result and callers run the query
+ *          unfiltered. Identical on PostgreSQL (the rule lives in
+ *          `shared/filters/panel-intervals.ts`).
+ * @throws {PanelRegionsUnavailableError} when the panel(s) DO contain genes
+ *         but none has coordinates for `genome_build`. This is a typed,
+ *         user-facing error: an empty result would show every variant while
+ *         the user believes a panel is active.
  * @throws If the computation itself fails (e.g. the bundled gene reference
  *         DB cannot be opened, or the panel/gene lookup errors). Callers
  *         MUST let this propagate — a caught computation failure must never

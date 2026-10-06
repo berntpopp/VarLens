@@ -3,7 +3,7 @@ import type { Pool } from 'pg'
 import { DatabaseError, NotFoundError } from '../../database/errors'
 import {
   normalizeTieBreakerKey,
-  ShortlistQueryError,
+  throwShortlistQueryErrors,
   type GetShortlistParams
 } from '../../database/ShortlistService'
 import { ShortlistConfigSchema } from '../../../shared/types/ipc-schemas'
@@ -19,7 +19,6 @@ import type {
   VariantTypeKey
 } from '../../../shared/types/shortlist'
 import { compareScoredRows, scoreRow } from '../../services/scoring'
-import { mainLogger } from '../../services/MainLogger'
 import type { PostgresFilterPresetsRepository } from './PostgresFilterPresetsRepository'
 import type { PostgresVariantReadRepository } from './PostgresVariantReadRepository'
 import { quoteIdentifier } from './identifiers'
@@ -143,14 +142,7 @@ export class PostgresShortlistService {
       }
     }
 
-    if (queryErrors.length > 0) {
-      const detail = queryErrors.map((e) => `${e.type}: ${e.error.message}`).join('; ')
-      mainLogger.warn(`postgres shortlist query errors: ${detail}`, 'shortlist.service')
-      throw new ShortlistQueryError(
-        `Shortlist query failed for ${queryErrors.map((e) => e.type).join(', ')}`,
-        queryErrors
-      )
-    }
+    if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'postgres shortlist')
 
     const candidates = await this.hydrateCandidates(params.caseId, [...rowsById.values()])
     const scored: ScoredCandidate[] = candidates.map((row) => ({

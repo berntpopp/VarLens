@@ -372,10 +372,28 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     )
   }, 120_000)
 
-  it('a panel with no resolvable regions applies no restriction on every path', async () => {
+  it('a panel WITHOUT genes applies no restriction on every path', async () => {
     const emptyPanel = { active_panel_ids: [2], panel_padding_bp: 5000 }
     await expectAll(casePaths(1, emptyPanel), ok(Object.values(B)))
     await expectAll(cohortPaths({ ...emptyPanel, genome_build: 'GRCh37' }), ok(Object.values(C)))
+    // Together with a panel that does resolve, only the resolved regions restrict.
+    const both = { active_panel_ids: [1, 2], panel_padding_bp: 5000 }
+    await expectAll(casePaths(1, both), ok([B.sharedHom, B.padding]))
+  }, 120_000)
+
+  it('a panel whose genes have no coordinates for the build is refused on every path', async () => {
+    // No silent "no restriction": the user would see every variant while
+    // believing the panel is active.
+    geneRef.getCoordinatesForGenes.mockImplementation(() => new Map())
+    const refused = (build: string): { errorMatching: RegExp } => ({
+      errorMatching: new RegExp(
+        `^Active gene panel resolves to no genomic regions: none of its 1 gene\\(s\\) has coordinates for genome build ${build}$`
+      )
+    })
+    await expectAll(casePaths(0, PANEL), refused('GRCh38'))
+    await expectAll(casePaths(2, PANEL), refused('GRCh37'))
+    await expectAll(cohortPaths({ ...PANEL, genome_build: 'GRCh38' }), refused('GRCh38'))
+    await expectAll(cohortPaths({ ...PANEL, genome_build: 'GRCh37' }), refused('GRCh37'))
   }, 120_000)
 
   it('a failing region resolution fails every path instead of widening or narrowing', async () => {

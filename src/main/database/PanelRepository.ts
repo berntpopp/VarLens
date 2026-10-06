@@ -2,7 +2,7 @@ import { BaseRepository } from './BaseRepository'
 import type { GeneReferenceDb } from './GeneReferenceDb'
 import { sqlPlaceholders } from './sql-utils'
 import {
-  buildPaddedPanelIntervals,
+  resolvePanelGeneRegions,
   mergeOverlappingIntervals
 } from '../../shared/filters/panel-intervals'
 
@@ -198,15 +198,16 @@ export class PanelRepository extends BaseRepository {
       .prepare(`SELECT DISTINCT hgnc_id FROM panel_genes WHERE panel_id IN (${placeholders})`)
       .all(...panelIds) as Array<{ hgnc_id: string }>
 
-    const hgncIds = rows.map((r) => r.hgnc_id)
-    if (hgncIds.length === 0) return []
-
-    // Look up coordinates from gene reference DB
-    const coordsMap = geneRefDb.getCoordinatesForGenes(hgncIds, assembly)
-
-    // Padding, chr-prefix style and merging are shared with the PostgreSQL
-    // resolver so both backends derive identical regions (issue #447).
-    return buildPaddedPanelIntervals(coordsMap.values(), paddingBp, chrPrefix)
+    // Padding, chr-prefix style, merging and the "genes but no regions" error
+    // are shared with the PostgreSQL resolver so both backends derive
+    // identical regions and fail identically (issue #447).
+    return resolvePanelGeneRegions(
+      rows.map((r) => r.hgnc_id),
+      assembly,
+      paddingBp,
+      chrPrefix,
+      (hgncIds, build) => geneRefDb.getCoordinatesForGenes(hgncIds, build)
+    )
   }
 }
 

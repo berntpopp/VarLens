@@ -53,6 +53,8 @@ import type {
 } from '../../shared/types/shortlist'
 import type { FilterPreset } from '../../shared/types/filter-presets'
 import type { FilterState } from '../../shared/types/filters'
+import { ColumnFilterValueError } from '../../shared/filters/column-filter-validation'
+import { PanelRegionsUnavailableError } from '../../shared/filters/panel-intervals'
 
 /**
  * Discriminated union for the shortlist request. `presetId` is the
@@ -81,6 +83,32 @@ export class ShortlistQueryError extends DatabaseError {
     this.queryErrors = queryErrors
     Object.setPrototypeOf(this, ShortlistQueryError.prototype)
   }
+}
+
+/**
+ * Abort a shortlist whose Stage-1 queries failed (shared by both backends).
+ *
+ * A filter the backend refused to run — an active gene panel without regions
+ * for the case's build, or a non-numeric value on a numeric column — is
+ * rethrown as-is: it already carries the message meant for the user and fails
+ * every variant type identically. Anything else is aggregated into a
+ * {@link ShortlistQueryError}.
+ */
+export function throwShortlistQueryErrors(
+  queryErrors: Array<{ type: VariantTypeKey; error: Error }>,
+  logLabel: string
+): never {
+  const detail = queryErrors.map((e) => `${e.type}: ${e.error.message}`).join('; ')
+  mainLogger.warn(`${logLabel} query errors: ${detail}`, 'shortlist.service')
+  const refusedFilter = queryErrors.find(
+    ({ error }) =>
+      error instanceof PanelRegionsUnavailableError || error instanceof ColumnFilterValueError
+  )
+  if (refusedFilter !== undefined) throw refusedFilter.error
+  throw new ShortlistQueryError(
+    `Shortlist query failed for ${queryErrors.map((e) => e.type).join(', ')}`,
+    queryErrors
+  )
 }
 
 /** Narrow an unknown thrown value into a real `Error` instance. */
@@ -171,14 +199,7 @@ export class ShortlistService {
       }
     }
 
-    if (queryErrors.length > 0) {
-      const detail = queryErrors.map((e) => `${e.type}: ${e.error.message}`).join('; ')
-      mainLogger.warn(`shortlist query errors: ${detail}`, 'shortlist.service')
-      throw new ShortlistQueryError(
-        `Shortlist query failed for ${queryErrors.map((e) => e.type).join(', ')}`,
-        queryErrors
-      )
-    }
+    if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'shortlist')
 
     const totalCandidates = candidates.length
 

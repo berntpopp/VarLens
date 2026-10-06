@@ -16,6 +16,7 @@ import type { VariantFilters } from '../statistics/types'
 import type { VariantFilter } from '../database/types'
 import { convertBigInts } from '../utils/convertBigInts'
 import { mainLogger } from '../services/MainLogger'
+import { toTransportableWorkerError } from '../database/worker-error-codec'
 
 /** Dependencies injected by the caller (db-worker or tests) */
 export interface DispatchDependencies {
@@ -367,12 +368,8 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
         throw new Error(`Unknown db-worker task type: ${type}`)
     }
   } catch (error) {
-    // Convert any custom error classes to plain Error for structured clone transfer
-    if (error instanceof Error) {
-      const plain = new Error(error.message)
-      plain.stack = error.stack
-      throw plain
-    }
-    throw error
+    // Structured clone drops custom error classes; carry the class, `code`
+    // and `userMessage` in `cause` so DbPool can restore typed errors.
+    throw toTransportableWorkerError(error)
   }
 }

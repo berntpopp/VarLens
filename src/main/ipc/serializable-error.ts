@@ -7,6 +7,8 @@ import {
 } from '../database/errors'
 import { AppError, InvalidParametersError } from './errors'
 import { uniqueViolationFromDriverError } from './unique-violation'
+import { ColumnFilterValueError } from '../../shared/filters/column-filter-validation'
+import { PanelRegionsUnavailableError } from '../../shared/filters/panel-intervals'
 
 function capitalize(value: string): string {
   return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1)
@@ -26,6 +28,15 @@ function conflict(message: string, userMessage: string): SerializableError {
 export function toSerializableError(error: unknown): SerializableError {
   if (error instanceof AppError) {
     return { code: error.code, message: error.message, userMessage: error.userMessage }
+  }
+
+  // Filter requests the backend refuses to run. Both carry a message written
+  // for the user, so it is passed through instead of a generic fallback.
+  if (error instanceof PanelRegionsUnavailableError) {
+    return { code: ErrorCode.VALIDATION, message: error.message, userMessage: error.userMessage }
+  }
+  if (error instanceof ColumnFilterValueError) {
+    return { code: ErrorCode.VALIDATION, message: error.message, userMessage: error.message }
   }
 
   if (error instanceof WrongPasswordError) {
