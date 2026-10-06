@@ -22,13 +22,17 @@
  * authenticated for everything except the few public overrides
  * marked `public: true`.
  */
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 import type { StorageReadTask } from '../../main/storage/read-executor'
 import type { StorageWriteTask } from '../../main/storage/write-executor'
-import { ErrorCode, isIpcError, type SerializableError } from '../../shared/types/errors'
-import { toSerializableError } from '../../main/ipc/serializable-error'
+import { ErrorCode, type SerializableError } from '../../shared/types/errors'
+import {
+  applyJsonResponseHeaders,
+  safeIdentifier,
+  toSerializableWebError
+} from './dispatcher-errors'
 import { isReadTaskType, isWriteTaskType, toTaskDomain } from './task-types'
 import { buildAnalysisGroupOverrides } from './routes/analysis-groups'
 import { buildAnnotationOverrides } from './routes/annotations'
@@ -92,29 +96,8 @@ export const OPERATION_METRIC_KEYS: Record<string, OperationMetricName> = {
   'batch-import:start': 'batch-import'
 }
 
-function toSerializableWebError(error: unknown): SerializableError {
-  if (isIpcError(error)) return error
-  if (error instanceof Error) return toSerializableError(error)
-
-  const details =
-    error !== null && typeof error === 'object' ? (error as Record<string, unknown>) : undefined
-  const message =
-    details !== undefined && typeof details.message === 'string'
-      ? details.message
-      : details !== undefined && typeof details.error === 'string'
-        ? details.error
-        : String(error)
-
-  return {
-    code: ErrorCode.UNKNOWN,
-    message,
-    userMessage: message,
-    ...(details !== undefined ? { details } : {})
-  }
-}
-
 async function invokeAsIpcResult(
-  reply: { statusCode: number; code: (statusCode: number) => unknown },
+  reply: FastifyReply,
   invoke: () => Promise<unknown>
 ): Promise<unknown> {
   try {
@@ -125,6 +108,9 @@ async function invokeAsIpcResult(
     return result
   } catch (error) {
     reply.code(500)
+    // The stack goes to the server log only; the client gets the
+    // sanitised SerializableError built by toSerializableWebError.
+    reply.log.error({ err: error }, 'web dispatcher: handler threw')
     return toSerializableWebError(error)
   }
 }
@@ -314,6 +300,7 @@ export function registerDispatcher(
       }
     },
     async (request, reply) => {
+      applyJsonResponseHeaders(reply)
       await applyDevApiLatency()
 
       const { domain, method } = request.params
@@ -414,7 +401,7 @@ export function registerDispatcher(
         code: ErrorCode.NOT_FOUND,
         message: 'unknown method',
         userMessage: 'Unknown API method.',
-        details: { domain, method }
+        details: { domain: safeIdentifier(domain), method: safeIdentifier(method) }
       } satisfies SerializableError
     }
   )
