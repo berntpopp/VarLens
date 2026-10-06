@@ -41,9 +41,18 @@ export function buildViewTitle({ tab, caseName }: ViewTitleInput): ViewTitle {
   return { documentTitle: APP_NAME, heading: `${APP_NAME} — select a case` }
 }
 
-/** Reactive view title; also mirrors it into document.title. */
-export function useViewTitle(): ComputedRef<ViewTitle> {
-  const { activeTab, selectedCaseId, selectedCaseName } = useAppState()
+type ViewTitleState = Pick<
+  ReturnType<typeof useAppState>,
+  'activeTab' | 'selectedCaseId' | 'selectedCaseName'
+>
+
+/**
+ * Reactive view title; also mirrors it into document.title. App.vue passes
+ * the state it creates itself (it is the AppState provider, so it cannot
+ * inject it).
+ */
+export function useViewTitle(state?: ViewTitleState): ComputedRef<ViewTitle> {
+  const { activeTab, selectedCaseId, selectedCaseName } = state ?? useAppState()
   const title = computed(() =>
     buildViewTitle({
       tab: activeTab.value,

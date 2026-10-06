@@ -267,7 +267,6 @@ const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
 
 const props = defineProps<Props>()
 
-// Composables
 const { api } = useApiService()
 // Template refs (used in template via ref="...")
 // @ts-expect-error - These refs ARE used in template bindings
@@ -291,8 +290,7 @@ const {
   items: computed(() => props.variants),
   getItemId: (item: CohortVariant) => item.variant_key,
   onSelect: () => {
-    // onSelect intentionally empty — row-click is emitted by handleRowClick
-    // (mouse) and Enter handler (keyboard) separately.
+    // onSelect intentionally empty: row-click is emitted by mouse + Enter handlers.
   }
 })
 
@@ -341,12 +339,9 @@ const { firstLoad, showStale, ariaBusy, liveMessage } = useTableLoadingState({
   totalCount: toRef(props, 'totalCount')
 })
 
-// Stores
 const linksStore = useExternalLinksStore()
 
-// ============================================================================
-// External link resolution helpers (same as VariantTable.vue)
-// ============================================================================
+// --- External link resolution helpers (same as VariantTable.vue) ---
 
 const getVariantLinkData = (item: CohortVariant): VariantLinkData => ({
   chr: item.chr,
