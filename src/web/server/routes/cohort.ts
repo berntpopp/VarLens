@@ -46,12 +46,6 @@ export function buildCohortOverrides(): Record<string, OverrideHandler> {
       }
     },
 
-    'cohort:rebuildSummary': {
-      handle(_args, _request, reply) {
-        return unsupportedWebCapability(reply, 'cohort.rebuildSummary')
-      }
-    },
-
     'cohort:runAssociation': {
       handle(_args, _request, reply) {
         return unsupportedWebCapability(reply, 'cohort.runAssociation')

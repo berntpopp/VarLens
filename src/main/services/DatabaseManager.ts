@@ -223,6 +223,11 @@ export class DatabaseManager {
     }
   }
 
+  /** The open session, or null when no database is open (capability document). */
+  getCurrentSessionOrNull(): StorageSession | null {
+    return this.currentSession
+  }
+
   getCurrentSession(): StorageSession {
     if (this.currentSession === null) {
       throw new DatabaseError('No database is currently open')

@@ -25,6 +25,8 @@ export interface UpdaterAPI {
   onStatusChange: (callback: (status: UpdateStatus) => void) => () => void
 }
 
+import type { CapabilityDocument } from '../ipc/capability-document'
+
 // Import database and import types for reuse
 import type {
   Case,
@@ -260,6 +262,8 @@ export interface SystemAPI {
   setWorkerThreads: (count: number) => Promise<IpcResult<void>>
   getWorkerThreads: () => Promise<IpcResult<number>>
   getLogFilePath: () => Promise<IpcResult<string>>
+  /** Per-session capability document (src/shared/ipc/capability-document.ts). */
+  getCapabilities: () => Promise<IpcResult<CapabilityDocument>>
 }
 
 export interface ShellOpenExternalResult {

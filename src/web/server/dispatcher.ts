@@ -53,6 +53,7 @@ import { buildJobOverrides } from './routes/jobs'
 import { buildPanelOverrides } from './routes/panels'
 import { buildProteinOverrides } from './routes/protein'
 import { buildRegionFileOverrides } from './routes/region-files'
+import { buildSystemOverrides } from './routes/system'
 import { buildTranscriptOverrides } from './routes/transcripts'
 import { buildVepOverrides } from './routes/vep'
 import { buildVariantOverrides } from './routes/variants'
@@ -243,6 +244,7 @@ function buildOverrides(): Record<string, OverrideHandler> {
     ...buildPanelOverrides(),
     ...buildProteinOverrides(),
     ...buildRegionFileOverrides(),
+    ...buildSystemOverrides(),
     ...buildTranscriptOverrides(),
     ...buildVepOverrides(),
     ...buildVariantOverrides()

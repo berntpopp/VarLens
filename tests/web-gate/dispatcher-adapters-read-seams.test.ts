@@ -161,19 +161,12 @@ describe('web dispatcher adapters: read seams', () => {
     })
   })
 
-  test('database.recentList returns an empty desktop-file list in web mode', async () => {
-    const { deps, reply } = makeDeps()
+  test('desktop-only database methods are not served in web mode (parity manifest)', () => {
+    const { deps } = makeDeps()
     const { overrides } = buildDispatcher(deps)
 
-    const result = await overrides['database:recentList'].handle(
-      [],
-      {} as never,
-      reply as never,
-      deps
-    )
-
-    expect(reply.code).not.toHaveBeenCalled()
-    expect(result).toEqual([])
+    expect(overrides['database:recentList']).toBeUndefined()
+    expect(overrides['cohort:rebuildSummary']).toBeUndefined()
   })
 
   test('database.capabilities reports export as supported (served as browser downloads)', async () => {
@@ -198,39 +191,9 @@ describe('web dispatcher adapters: read seams', () => {
     })
   })
 
-  test('web-only unsupported cohort actions fail explicitly', async () => {
-    const { deps, execute, reply } = makeDeps()
-    const { overrides } = buildDispatcher(deps)
-
-    const result = await overrides['cohort:runAssociation'].handle(
-      [{}],
-      {} as never,
-      reply as never,
-      deps
-    )
-
-    expect(reply.code).toHaveBeenCalledWith(501)
-    expect(result).toEqual({
-      error: 'unsupported-web-capability',
-      capability: 'cohort.runAssociation',
-      message: 'cohort.runAssociation is not available in web mode yet.'
-    })
-    expect(execute).not.toHaveBeenCalled()
-  })
-
-  test('reference API fixture-backed methods fail explicitly when fixtures are disabled', async () => {
-    const { deps, reply } = makeDeps()
-    const { overrides } = buildDispatcher(deps)
-
-    const result = await overrides['hpo:search'].handle(['BRCA'], {} as never, reply as never, deps)
-
-    expect(reply.code).toHaveBeenCalledWith(501)
-    expect(result).toEqual({
-      error: 'unsupported-web-capability',
-      capability: 'hpo.search',
-      message: 'hpo.search is not available in web mode yet.'
-    })
-  })
+  // Unsupported reference/association methods are no longer pinned as 501s
+  // here: they are `pending` entries in src/shared/ipc/parity-manifest.ts and
+  // the typed web client refuses them before they reach the dispatcher.
 
   test('reference API fixture-backed methods reject invalid args as bad requests', async () => {
     const previousFixtureFlag = process.env.VARLENS_WEB_PARITY_FIXTURES

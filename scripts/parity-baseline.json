@@ -1,0 +1,4 @@
+{
+  "description": "Ratchet for src/shared/ipc/parity-manifest.ts: the number of `pending` web gaps. tests/shared/ipc/parity-manifest.test.ts fails when the manifest's pending count differs. A PR that serves a pending method flips its entry and lowers this number; it may never grow.",
+  "pending": 23
+}
