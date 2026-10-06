@@ -62,6 +62,8 @@ import { CohortDataKey, useCohortData } from '../composables/useCohortData'
 import { useAppState } from '../composables/useAppState'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import { logService } from '../services/LogService'
+import { useUrlParam } from '../composables/useUrlState'
+import { useFilterUrlParam } from '../composables/useViewUrlBindings'
 
 // Create and provide filter state for child components (CohortTable, CohortFilterBar)
 const filtersInstance = createFilters()
@@ -74,6 +76,21 @@ const cohortDataInstance = useCohortData()
 provide(CohortDataKey, cohortDataInstance)
 const { genomeBuild, selectedVariantType, availableBuilds, loadAvailableBuilds } =
   cohortDataInstance
+
+// URL state (cohort parity with the case view): filters `f`, variant type
+// `type`; search `q` and sort `sort` are bound by CohortFilterBar / CohortTable.
+useFilterUrlParam('cohort', filtersInstance.filters, filtersInstance.selectedImpactPresets)
+useUrlParam({
+  route: 'cohort',
+  key: 'type',
+  priority: 1,
+  history: 'replace',
+  read: () => (selectedVariantType.value === 'snv' ? undefined : selectedVariantType.value),
+  apply: (value) => {
+    const type = value === 'sv' || value === 'cnv' || value === 'str' ? value : 'snv'
+    selectedVariantType.value = type
+  }
+})
 
 const variantTypeOptions = [
   { value: 'snv', label: 'SNV/Indel' },

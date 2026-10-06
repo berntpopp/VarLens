@@ -138,6 +138,7 @@
           v-if="value && buildOmimEntryUrl(value)"
           :url="buildOmimEntryUrl(value)!"
           :label="value"
+          :aria-label="`OMIM ${value} (opens in a new tab)`"
           @click="openExternalLink"
         />
         <EmptyPlaceholder v-else />
@@ -222,6 +223,7 @@
           v-if="item.render.links[`_link_${link.id}`]"
           :url="item.render.links[`_link_${link.id}`]!"
           label="View"
+          :aria-label="`View in ${link.name} (opens in a new tab)`"
           @click="openExternalLink"
         />
         <span v-else class="text-muted">--</span>
@@ -281,6 +283,7 @@ import type { ActiveFilter } from '../../../shared/types/filters'
 import { buildColumnFilterChips } from '../utils/filters/activeFilters'
 import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
 import { useAnnotations, annotationCache } from '../composables/useAnnotations'
+import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { useVariantRowViewModel } from './variant-table/useVariantRowViewModel'
 import { useVariantRenderRows } from './variant-table/useVariantRenderRows'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
@@ -366,18 +369,18 @@ let cleanupAnnotationChanged: (() => void) | null = null
 const {
   getAcmgEvidence,
   toggleStar,
-  setAcmgClassification,
-  setAcmgClassificationWithEvidence,
   getGlobalComment,
   getPerCaseComment,
   upsertGlobalComment,
   upsertPerCaseComment,
   getAnnotations,
   toggleGlobalStar,
-  setGlobalAcmgClassification,
-  setGlobalAcmgClassificationWithEvidence,
   getGlobalAcmgEvidence
 } = useAnnotations()
+// ACMG writes go through the undo-snackbar wrappers (same signatures)
+const acmg = useAcmgUndo()
+const { setAcmgClassification, setAcmgClassificationWithEvidence } = acmg
+const { setGlobalAcmgClassification, setGlobalAcmgClassificationWithEvidence } = acmg
 
 // Bundle annotation actions for dialog subcomponent
 const annotationActions = {

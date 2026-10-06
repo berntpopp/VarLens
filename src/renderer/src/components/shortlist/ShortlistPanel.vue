@@ -26,7 +26,8 @@
  */
 
 import { computed, toRef } from 'vue'
-import { mdiRefresh } from '@mdi/js'
+import { mdiInformationOutline, mdiRefresh } from '@mdi/js'
+import IconButton from '../common/IconButton.vue'
 import ShortlistTable from './ShortlistTable.vue'
 import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
 import { useTableLoadingState } from '../../composables/useTableLoadingState'
@@ -57,6 +58,19 @@ const { showStale, ariaBusy, liveMessage } = useTableLoadingState({
   totalCount: computed(() => result.value?.rows.length ?? null)
 })
 const showSkeleton = computed(() => loading.value && result.value === null)
+
+// Plain-language explanation of the capped Stage-1 pre-selection (was the
+// developer-facing "Scored (capped): N → top M (Xms)" readout).
+const shortlistExplanation = computed(() => {
+  const r = result.value
+  if (r === null) return ''
+  return (
+    `To stay fast, VarLens first pre-selects up to ${r.totalCandidates} likely candidates ` +
+    `matching the preset, scores them, and shows the best ${r.rows.length}. ` +
+    `Variants outside the pre-selection are not ranked here; use the variant-type tabs ` +
+    `to browse everything. Ranked in ${r.elapsedMs} ms.`
+  )
+})
 
 /**
  * Toggle the star annotation for a row. Writes through
@@ -107,9 +121,19 @@ function dismissError(): void {
         variant="outlined"
         style="max-width: 320px"
       />
-      <div v-if="result" class="text-caption text-medium-emphasis">
-        Scored (capped): {{ result.totalCandidates }} → top {{ result.rows.length }}
-        <span class="ml-2">({{ result.elapsedMs }}ms)</span>
+      <div
+        v-if="result"
+        class="text-caption text-medium-emphasis d-flex align-center"
+        data-testid="shortlist-summary"
+      >
+        Top {{ result.rows.length }} of {{ result.totalCandidates }} pre-selected candidates
+        <IconButton
+          label="How the shortlist is built"
+          :tooltip="shortlistExplanation"
+          :icon="mdiInformationOutline"
+          size="x-small"
+          class="ml-1"
+        />
       </div>
       <v-spacer />
       <v-btn

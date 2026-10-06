@@ -1,0 +1,216 @@
+cases:list	override
+cases:query	read-task
+cases:delete	override
+cases:deleteAll	UNROUTED (404 in web)
+cases:deleteBatch	UNROUTED (404 in web)
+cases:availableBuilds	read-task
+variants:query	override
+variants:geneSymbols	read-task
+variants:getFilterOptions	override
+variants:search	override
+variants:typeCounts	read-task
+variants:columnMeta	override
+variants:typesPresent	read-task
+variants:shortlist	read-task
+variants:onAnnotationChanged	UNROUTED (404 in web) (event subscriber; client-side SSE bridge)
+import:selectFile	override
+import:selectFiles	override
+import:selectBedFile	override
+import:enrollDroppedFiles	UNROUTED (404 in web)
+import:start	override
+import:startMultiFile	override
+import:vcfPreview	override
+import:vcfMultiPreview	override
+import:onProgress	UNROUTED (404 in web) (event subscriber; client-side SSE bridge)
+import:cancel	override
+system:getVersion	UNROUTED (404 in web)
+system:getUserDataPath	UNROUTED (404 in web)
+system:getCpuCount	UNROUTED (404 in web)
+system:setWorkerThreads	UNROUTED (404 in web)
+system:getWorkerThreads	UNROUTED (404 in web)
+system:getLogFilePath	UNROUTED (404 in web)
+export:variants	override
+export:cohort	override
+export:revealInFolder	UNROUTED (404 in web)
+shell:openExternal	UNROUTED (404 in web)
+shell:updateDomains	UNROUTED (404 in web)
+database:selectFile	UNROUTED (404 in web)
+database:selectSaveLocation	UNROUTED (404 in web)
+database:open	UNROUTED (404 in web)
+database:create	UNROUTED (404 in web)
+database:rekey	UNROUTED (404 in web)
+database:migrateToEncrypted	UNROUTED (404 in web)
+database:deletePlaintextBackup	UNROUTED (404 in web)
+database:setRecoveryPassphrase	UNROUTED (404 in web)
+database:info	override
+database:capabilities	override
+database:postgresDiagnostics	UNROUTED (404 in web)
+database:postgresProfilesList	UNROUTED (404 in web)
+database:postgresProfileSave	UNROUTED (404 in web)
+database:postgresProfileRemove	UNROUTED (404 in web)
+database:postgresProfileTest	UNROUTED (404 in web)
+database:postgresProfileOpen	UNROUTED (404 in web)
+database:recentList	override
+database:getOverview	override
+database:removeRecent	UNROUTED (404 in web)
+database:deleteFile	UNROUTED (404 in web)
+database:showInFolder	UNROUTED (404 in web)
+batch-import:selectFiles	override
+batch-import:selectFolder	override
+batch-import:checkDuplicates	override
+batch-import:start	override
+batch-import:cancel	override
+batch-import:onProgress	UNROUTED (404 in web) (event subscriber; client-side SSE bridge)
+batch-import:onComplete	UNROUTED (404 in web) (event subscriber; client-side SSE bridge)
+batch-import:selectZip	override
+batch-import:testZipPassword	override
+batch-import:extractZip	override
+batch-import:cleanupZipTemp	override
+cohort:getVariants	override
+cohort:getSummary	override
+cohort:getCarriers	override
+cohort:getGeneBurden	override
+cohort:getColumnMeta	override
+cohort:getSummaryStatus	override
+cohort:rebuildSummary	override
+cohort:onSummaryRebuilt	UNROUTED (404 in web) (event subscriber; client-side SSE bridge)
+cohort:runAssociation	override
+cohort:cancelAssociation	override
+cohort:onAssociationProgress	UNROUTED (404 in web) (event subscriber; client-side SSE bridge)
+annotations:getGlobal	override
+annotations:upsertGlobal	override
+annotations:deleteGlobal	write-task
+annotations:getPerCase	read-task
+annotations:upsertPerCase	override
+annotations:deletePerCase	write-task
+annotations:getForVariant	override
+annotations:batchGet	read-task
+vep:fetch	override
+vep:cancel	override
+vep:clearCache	override
+vep:getCacheStats	override
+hpo:search	override
+hpo:clearCache	override
+myvariant:fetch	UNROUTED (404 in web)
+myvariant:clearCache	UNROUTED (404 in web)
+spliceai:fetch	UNROUTED (404 in web)
+spliceai:clearCache	UNROUTED (404 in web)
+case-metadata:get	read-task
+case-metadata:upsert	write-task
+case-metadata:getFullMetadata	read-task
+case-metadata:listCohorts	read-task
+case-metadata:createCohort	override
+case-metadata:updateCohort	write-task
+case-metadata:deleteCohort	write-task
+case-metadata:getCohortByName	read-task
+case-metadata:getCaseCohorts	read-task
+case-metadata:assignCohort	write-task
+case-metadata:removeCohort	write-task
+case-metadata:setCohorts	write-task
+case-metadata:getHpoTerms	read-task
+case-metadata:assignHpoTerm	write-task
+case-metadata:removeHpoTerm	write-task
+case-metadata:getDataInfo	read-task
+case-metadata:upsertDataInfo	write-task
+case-metadata:listExternalIds	read-task
+case-metadata:upsertExternalId	write-task
+case-metadata:deleteExternalId	write-task
+case-metadata:distinctHpoTerms	read-task
+case-metadata:distinctPlatforms	read-task
+case-metadata:distinctExternalIdTypes	read-task
+case-comments:list	read-task
+case-comments:create	write-task
+case-comments:update	write-task
+case-comments:delete	write-task
+case-metrics:listDefinitions	read-task
+case-metrics:createDefinition	write-task
+case-metrics:listForCase	read-task
+case-metrics:upsert	write-task
+case-metrics:delete	write-task
+transcripts:list	override
+transcripts:switch	override
+transcripts:insertAndSwitch	override
+tags:list	read-task
+tags:create	write-task
+tags:update	write-task
+tags:delete	write-task
+tags:getUsageCount	read-task
+tags:getVariantTags	read-task
+tags:assignVariantTag	write-task
+tags:removeVariantTag	write-task
+tags:setVariantTags	write-task
+logs:onMessage	UNROUTED (404 in web) (event subscriber; client-side SSE bridge)
+updater:checkForUpdate	UNROUTED (404 in web)
+updater:downloadUpdate	UNROUTED (404 in web)
+updater:installUpdate	UNROUTED (404 in web)
+updater:getStatus	UNROUTED (404 in web)
+updater:onStatusChange	UNROUTED (404 in web) (event subscriber; client-side SSE bridge)
+gene-lists:list	read-task
+gene-lists:create	write-task
+gene-lists:delete	write-task
+gene-lists:getGenes	read-task
+gene-lists:setGenes	override
+region-files:list	read-task
+region-files:create	write-task
+region-files:delete	write-task
+region-files:importBed	override
+panels:list	read-task
+panels:get	override
+panels:create	write-task
+panels:update	override
+panels:delete	write-task
+panels:duplicate	write-task
+panels:setGenes	write-task
+panels:getGenes	read-task
+panels:activate	write-task
+panels:deactivate	write-task
+panels:activeForCase	read-task
+panels:validateSymbols	UNROUTED (404 in web)
+panels:autocomplete	UNROUTED (404 in web)
+panels:searchPanelApp	UNROUTED (404 in web)
+panels:importPanelApp	UNROUTED (404 in web)
+panels:generateStringDb	UNROUTED (404 in web)
+panels:exportBed	UNROUTED (404 in web)
+gene-ref:info	override
+gene-ref:assemblies	override
+gene-ref:checkUpdates	UNROUTED (404 in web)
+gene-ref:update	UNROUTED (404 in web)
+audit:getByEntity	override
+audit:query	override
+auth:login	override
+auth:logout	override
+auth:currentUser	override
+auth:isAccountsEnabled	override
+auth:createUser	override
+auth:listUsers	override
+auth:deactivateUser	override
+auth:resetPassword	override
+auth:changePassword	override
+presets:list	read-task
+presets:create	write-task
+presets:update	write-task
+presets:delete	write-task
+presets:reorder	write-task
+analysis-groups:list	read-task
+analysis-groups:get	read-task
+analysis-groups:create	override
+analysis-groups:update	write-task
+analysis-groups:delete	write-task
+analysis-groups:addMember	override
+analysis-groups:removeMember	write-task
+analysis-groups:getForCase	read-task
+protein:getMapping	override
+protein:getDomains	override
+protein:getStructure	override
+protein:getGeneStructure	override
+gnomad:getVariants	UNROUTED (404 in web)
+gnomad:getClinVarVariants	UNROUTED (404 in web)
+perf:reportInteractive	UNROUTED (404 in web)
+perf:getSnapshot	UNROUTED (404 in web)
+perf:resetSnapshot	UNROUTED (404 in web)
+perf:isEnabled	UNROUTED (404 in web)
+debug:queryCountersGet	UNROUTED (404 in web)
+debug:queryCountersReset	UNROUTED (404 in web)
+jobs:list	UNROUTED (404 in web)
+jobs:get	UNROUTED (404 in web)
+jobs:progress	UNROUTED (404 in web)

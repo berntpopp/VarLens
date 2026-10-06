@@ -11,6 +11,8 @@ export function createAuthApi(): AuthDomainContract {
       ipcRenderer.invoke('auth:createUser', username, displayName, tempPassword),
     listUsers: () => ipcRenderer.invoke('auth:listUsers'),
     deactivateUser: (username) => ipcRenderer.invoke('auth:deactivateUser', username),
+    reactivateUser: (username) => ipcRenderer.invoke('auth:reactivateUser', username),
+    setRole: (username, role) => ipcRenderer.invoke('auth:setRole', username, role),
     resetPassword: (username, newPassword) =>
       ipcRenderer.invoke('auth:resetPassword', username, newPassword),
     changePassword: (oldPassword, newPassword) =>

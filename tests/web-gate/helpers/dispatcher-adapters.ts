@@ -33,6 +33,8 @@ export function makeDeps(): {
   const listUsers = vi.fn(async () => [{ id: 1, username: 'admin', role: 'admin' }])
   const deactivateUser = vi.fn(async () => undefined)
   const resetPassword = vi.fn(async () => undefined)
+  const setRole = vi.fn(async () => undefined)
+  const reactivateUser = vi.fn(async () => undefined)
   const publish = vi.fn()
   const deps = {
     session: {
@@ -49,7 +51,9 @@ export function makeDeps(): {
       listUsers,
       deactivateUser,
       resetPassword,
-      invalidateUser: vi.fn()
+      invalidateUser: vi.fn(),
+      setRole,
+      reactivateUser
     },
     events: {
       publish

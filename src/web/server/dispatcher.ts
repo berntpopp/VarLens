@@ -38,6 +38,7 @@ import { buildAnalysisGroupOverrides } from './routes/analysis-groups'
 import { buildAnnotationOverrides } from './routes/annotations'
 import { buildAuditLogOverrides } from './routes/audit-log'
 import { buildAuthOverrides } from './routes/auth'
+import { buildAuthAdminOverrides } from './routes/auth-admin'
 import { buildBatchImportOverrides } from './routes/batch-import'
 import { buildCaseMetadataOverrides } from './routes/case-metadata'
 import { buildCasesOverrides } from './routes/cases'
@@ -224,6 +225,7 @@ export type { DispatcherDeps, InvokeBody, OverrideHandler } from './routes/types
 function buildOverrides(): Record<string, OverrideHandler> {
   return {
     ...buildAuthOverrides(),
+    ...buildAuthAdminOverrides(),
     ...buildAnalysisGroupOverrides(),
     ...buildAnnotationOverrides(),
     ...buildAuditLogOverrides(),

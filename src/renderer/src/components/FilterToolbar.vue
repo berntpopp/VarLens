@@ -366,6 +366,7 @@ const {
   handleDslClear,
   applySuggestion
 } = useDslFilterIntegration({
+  urlRoute: 'case',
   columnFiltersRef: dslColumnFiltersRef,
   presetNames: () => allPresets.value.map((p) => p.name.toLowerCase().replace(/\s+/g, '_')),
   searchQueryRef: computed({

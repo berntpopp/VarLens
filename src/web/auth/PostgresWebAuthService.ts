@@ -30,6 +30,7 @@ import {
   WEB_MIN_PASSWORD_LENGTH,
   type UserRole
 } from '../../shared/auth/auth-constants'
+import { assertUserExists, reactivateUser, setUserRole } from './postgres-user-admin'
 
 /**
  * Minimum length for any new password set on the web track. Picked at
@@ -312,13 +313,13 @@ export class PostgresWebAuthService {
     mustChangePassword: boolean = true
   ): Promise<{ id: number; username: string; role: UserRole }> {
     const sch = this.schemaQuoted
-    // Race-safety: the SELECT-outside-transaction pattern in earlier
-    // revisions of this method allowed two concurrent first-user calls
-    // to both observe "no admin" and both proceed. The partial unique
-    // index `users_only_one_active_admin` guarantees at most one active admin
-    // row per schema; the second concurrent INSERT trips unique_violation
-    // (SQLSTATE 23505) and we translate it into the same friendly error a
-    // serial caller would see.
+    // Race-safety: a per-schema transaction-scoped advisory lock serialises
+    // concurrent first-user calls, and the "active admin exists?" check runs
+    // under that lock, so exactly one bootstrap wins. (Migration 0017 dropped
+    // the old `users_only_one_active_admin` partial unique index that used to
+    // provide this guarantee, because it also made a second admin impossible.)
+    // A unique_violation (SQLSTATE 23505, e.g. duplicate username or a
+    // not-yet-migrated schema) still maps to the same friendly error.
     //
     // The bootstrapped admin defaults to must_change_password=TRUE so the
     // first login forces a rotation before any session-bearing request can
@@ -330,6 +331,14 @@ export class PostgresWebAuthService {
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${sch}:first-admin-bootstrap`
+      ])
+      const existingAdmin = await client.query(
+        `SELECT 1 FROM ${sch}."users" WHERE role = $1 AND is_active = TRUE LIMIT 1`,
+        [ROLE_ADMIN]
+      )
+      if ((existingAdmin.rowCount ?? 0) > 0) throw new AdminAlreadyExistsError()
       await client.query(
         `INSERT INTO ${sch}."database_settings" (key, value) VALUES ('accounts_enabled', 'true')
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`
@@ -508,9 +517,18 @@ export class PostgresWebAuthService {
     }
   }
 
+  async setRole(username: string, role: UserRole): Promise<void> {
+    await setUserRole(this.pool, this.schemaQuoted, username, role)
+  }
+
+  async reactivateUser(username: string): Promise<void> {
+    await reactivateUser(this.pool, this.schemaQuoted, username)
+  }
+
   async resetPassword(username: string, newPassword: string): Promise<void> {
     const sch = this.schemaQuoted
     assertPasswordMinLength(newPassword, 'New password')
+    await assertUserExists(this.pool, sch, username)
     const passwordHash = await this.passwordProvider.hashPassword(newPassword)
     await this.pool.query(
       `UPDATE ${sch}."users"

@@ -437,6 +437,8 @@ export function createMockApi(): MockApi {
       createUser: vi.fn().mockResolvedValue(undefined),
       listUsers: vi.fn().mockResolvedValue([]),
       deactivateUser: vi.fn().mockResolvedValue(undefined),
+      reactivateUser: vi.fn().mockResolvedValue(undefined),
+      setRole: vi.fn().mockResolvedValue(undefined),
       resetPassword: vi.fn().mockResolvedValue(undefined),
       changePassword: vi.fn().mockResolvedValue(undefined)
     },

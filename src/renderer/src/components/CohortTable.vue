@@ -140,6 +140,7 @@ import { useCohortData } from '../composables/useCohortData'
 import { useFilters } from '../composables/useFilters'
 import { useCarriers } from '../composables/useCarriers'
 import { useAnnotations } from '../composables/useAnnotations'
+import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
@@ -208,11 +209,10 @@ const {
   getGlobalComment,
   loadGlobalAnnotationsBatch,
   toggleGlobalStar,
-  setGlobalAcmgClassification,
-  setGlobalAcmgClassificationWithEvidence,
   upsertGlobalComment,
   getAnnotations
 } = useAnnotations()
+const { setGlobalAcmgClassification, setGlobalAcmgClassificationWithEvidence } = useAcmgUndo()
 const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
   useColumnPreferences('cohort-table')
 const { orderedColumns, visibleHeaders, isVisible: isColumnShown } = useCohortColumns(prefs)
@@ -343,6 +343,7 @@ const {
   reloadIfFiltersChanged,
   resetSort
 } = useOffsetPagination<CohortVariant>({
+  urlSortRoute: 'cohort',
   fetchPage: async ({ offset, limit, sortBy: sortItems, skipCount }) => {
     if (!api || !isActive.value) {
       return { data: [], total_count: 0 }

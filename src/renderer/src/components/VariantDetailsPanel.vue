@@ -59,7 +59,7 @@
             :variant-pos="variant.pos"
             :variant-ref="variant.ref"
             :variant-alt="variant.alt"
-            :fetch-vep="fetchVep"
+            :fetch-vep="vepFetchAvailable ? fetchVep : undefined"
             class="mb-4"
             @transcript-switched="emit('variant-updated')"
           />
@@ -128,7 +128,7 @@
                 <v-expansion-panel-title class="text-body-2 pa-2">
                   <v-icon size="small" class="mr-1" :icon="mdiClipboardCheckOutline" />
                   Evidence editor
-                  <span v-if="currentAcmgEvidence" class="text-caption text-medium-emphasis ml-1">
+                  <span v-if="hasAcmgEvidence" class="text-caption text-medium-emphasis ml-1">
                     (has evidence)
                   </span>
                 </v-expansion-panel-title>
@@ -211,6 +211,8 @@ import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { clampDetailPanelWidth } from '../utils/responsive-layout'
 import { useAnnotations } from '../composables/useAnnotations'
+import { useAcmgUndo } from '../composables/useAcmgUndo'
+import { hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
 import IconButton from './common/IconButton.vue'
@@ -257,7 +259,7 @@ import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
-import { isProteinViewerAvailable } from '../utils/runtime-features'
+import { isProteinViewerAvailable, isRuntimeFeatureAvailable } from '../utils/runtime-features'
 import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 
 interface Props {
@@ -281,6 +283,8 @@ usePanelFocus(() => props.open, headingRef)
 // Protein visualization modal state
 const proteinModalOpen = ref(false)
 const proteinViewerAvailable = isProteinViewerAvailable()
+// vep:fetch answers 501 in web: hide the on-demand button instead of failing.
+const vepFetchAvailable = isRuntimeFeatureAvailable('vepEnrichment')
 const proteinModalMounted = useMountOnFirstOpen(() => proteinModalOpen.value)
 
 function openProteinView(): void {
@@ -310,12 +314,15 @@ const {
   getAcmgClassification,
   getGlobalAcmgClassification,
   getAcmgEvidence,
-  getGlobalAcmgEvidence,
+  getGlobalAcmgEvidence
+} = useAnnotations()
+// ACMG writes go through the undo-snackbar wrappers (same signatures)
+const {
   setAcmgClassification,
   setAcmgClassificationWithEvidence,
   setGlobalAcmgClassification,
   setGlobalAcmgClassificationWithEvidence
-} = useAnnotations()
+} = useAcmgUndo()
 
 // Use VEP enrichment composable (fetches VEP, myvariant.info, and SpliceAI in parallel)
 const {
@@ -378,6 +385,9 @@ const currentAcmgEvidence = computed(() => {
     props.variant.alt
   )
 })
+// Stored evidence with every criterion removed is still a JSON blob; only
+// say "(has evidence)" when criteria, notes or an override remain.
+const hasAcmgEvidence = computed(() => hasMeaningfulAcmgEvidence(currentAcmgEvidence.value))
 
 // Variant annotation data for auto-suggestions
 const currentVariantData = computed(() => {
