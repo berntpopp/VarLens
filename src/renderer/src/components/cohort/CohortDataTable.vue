@@ -11,14 +11,14 @@
       v-model:page="page"
       v-model:items-per-page="itemsPerPage"
       v-model:sort-by="sortBy"
-      v-model:expanded="expandedRows"
+      v-model:expanded="expandedKeys"
       :headers="headers"
       :items="renderRows"
       :items-length="totalCount"
       :loading="firstLoad"
       :items-per-page-options="itemsPerPageOptions"
       :aria-busy="ariaBusy"
-      item-value="variant_key"
+      :item-value="rowKey"
       density="compact"
       fixed-header
       show-expand
@@ -171,6 +171,7 @@
         />
       </template>
     </v-data-table-server>
+    <AcmgQuickMenu :state="acmgQuickMenu" />
   </div>
 </template>
 
@@ -201,6 +202,9 @@ import {
   ExternalLinkCell
 } from '../table-cells'
 import CarrierExpandedRow from './CarrierExpandedRow.vue'
+import AcmgQuickMenu from '../table-cells/AcmgQuickMenu.vue'
+import { provideAcmgQuickMenu } from '../table-cells/acmg-quick-menu'
+import { useResultSetKeys } from '../table-state/useResultSetKeys'
 import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
 import TableSkeletonRows from '../table-state/TableSkeletonRows.vue'
 import { useTableLoadingState } from '../../composables/useTableLoadingState'
@@ -268,6 +272,7 @@ const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
 const props = defineProps<Props>()
 
 const { api } = useApiService()
+const acmgQuickMenu = provideAcmgQuickMenu() // one shared ACMG menu, not one per row
 // Template refs (used in template via ref="...")
 // @ts-expect-error - These refs ARE used in template bindings
 const { topScrollbarRef, topScrollbarInnerRef, initScrollSync } = useTableScroll()
@@ -276,6 +281,12 @@ const { getRowProps } = useTableRowProps<CohortVariant>({
   getItemId: (item: CohortVariant) => item.variant_key
 })
 const { expandedRows, getCarriers, hasCarriers, clearCache: clearCarrierCache } = useCarriers()
+// Fresh <tr>s per result set (moved rows are layout shifts); expanded stays by variant_key
+const { rowKey, keyedModel } = useResultSetKeys(
+  () => props.variants,
+  (v) => v.variant_key
+)
+const expandedKeys = keyedModel(expandedRows)
 
 // Keyboard navigation
 const {
@@ -536,28 +547,20 @@ watch(selectedIndex, async (newIndex) => {
   pendingScrollBehavior.value = 'smooth'
 })
 
-/**
- * Watch for expanded rows - emit load-carriers event for parent orchestration
- *
- * This component doesn't load carriers directly - it asks the parent orchestrator
- * to handle the IPC call. The parent will then update the carrier cache via useCarriers.
- */
+// Expanded rows: ask the parent orchestrator to load carriers (it owns the IPC
+// call and updates the carrier cache via useCarriers).
 watch(expandedRows, (newExpandedKeys) => {
   for (const key of newExpandedKeys) {
     if (!hasCarriers(key)) {
-      // Find the variant from props
       const variant = props.variants.find((v) => v.variant_key === key)
       if (variant) {
-        // Emit to parent for orchestration
         emit('load-carriers', variant)
       }
     }
   }
 })
 
-/**
- * Initialize scroll sync after component mounts
- */
+// Initialize scroll sync after component mounts
 onMounted(async () => {
   await nextTick()
   const tableEl = dataTableRef.value?.$el as HTMLElement | undefined
@@ -601,9 +604,7 @@ const columnActiveFilters = computed<ActiveFilter[]>(() => {
   ).filter((f) => f.id.startsWith('col:'))
 })
 
-/**
- * Expose refresh method and column filter state for parent to call
- */
+// Expose refresh method and column filter state for parent to call
 const refresh = (): void => {
   clearCarrierCache()
 }

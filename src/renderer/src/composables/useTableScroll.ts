@@ -194,15 +194,18 @@ export function useTableScroll(): UseTableScrollReturn {
       tableWrapper.removeEventListener('auxclick', handleAuxClick)
     })
 
-    // Register ResizeObserver to keep scrollbar width in sync with table content
+    // Keep the scrollbar width in sync with the wrapper and the table inside it
+    // (content width changes when rows or columns change). The observer's
+    // initial notification performs the first sync after layout; reading
+    // scrollWidth synchronously here forced an extra layout of the whole page
+    // in the middle of the table's mount task.
     const resizeObserver = new ResizeObserver(() => {
       updateScrollbarWidth()
     })
     resizeObserver.observe(tableWrapper)
+    const table = tableWrapper.querySelector('table')
+    if (table) resizeObserver.observe(table)
     cleanupFns.push(() => resizeObserver.disconnect())
-
-    // Initial width sync
-    updateScrollbarWidth()
   }
 
   // AUTO CLEANUP on unmount - prevents memory leaks

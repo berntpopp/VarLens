@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
-import HgvsCell from '../../../../src/renderer/src/components/table-cells/HgvsCell.vue'
+import { HgvsCell } from '../../../../src/renderer/src/components/table-cells'
 
 const vuetify = createVuetify({ components, directives })
 

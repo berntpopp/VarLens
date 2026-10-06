@@ -13,7 +13,7 @@
       v-model:sort-by="sortBy"
       :headers="visibleHeaders"
       :items="renderRows"
-      item-value="id"
+      :item-value="rowKey"
       :items-length="totalCount"
       :loading="firstLoad"
       :items-per-page-options="itemsPerPageOptions"
@@ -156,14 +156,14 @@
 
       <!-- Func (handle null) with human-readable formatting -->
       <template #[`item.func`]="{ value }">
-        <v-tooltip v-if="value" location="top">
-          <template #activator="{ props: tooltipProps }">
-            <span v-bind="tooltipProps" class="consequence-cell">
-              {{ formatConsequence(value) }}
-            </span>
-          </template>
-          <span class="text-body-small">{{ value }}</span>
-        </v-tooltip>
+        <span
+          v-if="value"
+          class="consequence-cell"
+          :data-tooltip="value"
+          data-tooltip-location="top"
+        >
+          {{ formatConsequence(value) }}
+        </span>
         <EmptyPlaceholder v-else />
       </template>
 
@@ -177,14 +177,13 @@
 
       <!-- Transcript (handle null, truncate long IDs) -->
       <template #[`item.transcript`]="{ value }">
-        <v-tooltip v-if="value" location="top">
-          <template #activator="{ props: tipProps }">
-            <span v-bind="tipProps" class="variant-data-mono transcript-truncated">{{
-              value
-            }}</span>
-          </template>
-          {{ value }}
-        </v-tooltip>
+        <span
+          v-if="value"
+          class="variant-data-mono transcript-truncated"
+          :data-tooltip="value"
+          data-tooltip-location="top"
+          >{{ value }}</span
+        >
         <EmptyPlaceholder v-else />
       </template>
 
@@ -252,6 +251,7 @@
       </template>
     </v-data-table-server>
 
+    <AcmgQuickMenu :state="acmgQuickMenu" />
     <AnnotationDialogs
       ref="annotationDialogsRef"
       :case-id="caseId"
@@ -316,6 +316,9 @@ import {
   EmptyPlaceholder,
   HgvsCell
 } from './table-cells'
+import AcmgQuickMenu from './table-cells/AcmgQuickMenu.vue'
+import { provideAcmgQuickMenu } from './table-cells/acmg-quick-menu'
+import { useResultSetKeys } from './table-state/useResultSetKeys'
 
 interface Props {
   caseId: number
@@ -352,6 +355,8 @@ const emit = defineEmits<{
 }>()
 
 const viewActive = ref(true)
+// One shared ACMG quick-classify menu for all rows (not a v-menu per row)
+const acmgQuickMenu = provideAcmgQuickMenu()
 const tableWorkActive = computed(() => props.interactive && viewActive.value)
 const { api } = useApiService()
 let appState: ReturnType<typeof useAppState> | null = null
@@ -477,6 +482,11 @@ const linkConfig = computed<
 // Precomputed row view models: annotation + link state per variant key
 const { rowViewModels } = useVariantRowViewModel(variants, annotationCache, linkConfig)
 const { renderRows } = useVariantRenderRows(variants, rowViewModels)
+// Fresh <tr>s per result set: moved rows are layout shifts (see useResultSetKeys)
+const { rowKey } = useResultSetKeys(
+  () => renderRows.value,
+  (row) => row.id
+)
 
 const hasAnnotationBackedFilters = computed(
   () =>

@@ -9,7 +9,9 @@
   >
     <!-- Left-edge resize handle -->
     <div class="filter-drawer-resize-handle" @mousedown="startResize" @dblclick="resetWidth" />
-    <v-card flat class="h-100 d-flex flex-column">
+    <!-- Content mounts on first open: closed, it is off-canvas but would
+         otherwise mount every filter panel alongside the variant table. -->
+    <v-card v-if="contentMounted" flat class="h-100 d-flex flex-column">
       <!-- Header -->
       <v-toolbar color="transparent" density="compact" flat>
         <v-toolbar-title class="text-body-large font-weight-medium"> All Filters </v-toolbar-title>
@@ -74,6 +76,7 @@
 import { computed, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { usePanelResize } from '../../composables/usePanelResize'
+import { useMountOnFirstOpen } from '../../composables/useMountOnFirstOpen'
 import { mdiClose, mdiFilterOff, mdiUnfoldLessHorizontal, mdiUnfoldMoreHorizontal } from '@mdi/js'
 
 const { width: viewportWidth } = useDisplay()
@@ -106,6 +109,8 @@ const emit = defineEmits<{
   'update:expandedPanels': [value: string[]]
   'clear-all': []
 }>()
+
+const contentMounted = useMountOnFirstOpen(() => props.open)
 
 const allExpanded = computed(
   () =>
