@@ -115,6 +115,63 @@ describe('useCohortData', () => {
     expect(calls[1]).toMatchObject({ offset: 10, cursor: 'c1', _count_needed: false })
   })
 
+  it('queryPage pages by cursor without touching the reactive state', async () => {
+    window.api.cohort.getVariants = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [{ variant_key: 'a' }], total_count: 100, next_cursor: 'c1' })
+      .mockResolvedValue({ data: [{ variant_key: 'b' }], total_count: 100 })
+    const [result, appInstance] = withSetup(() => useCohortData())
+    app = appInstance
+
+    const first = await result.queryPage({ limit: 10, sort_order: 'desc', _count_needed: true })
+    const second = await result.queryPage({
+      limit: 10,
+      offset: 10,
+      sort_order: 'desc',
+      _count_needed: false
+    })
+
+    const calls = vi.mocked(window.api.cohort.getVariants).mock.calls.map((c) => c[0])
+    expect(calls[0]).not.toHaveProperty('cursor')
+    expect(calls[1]).toMatchObject({ offset: 10, cursor: 'c1', _count_needed: false })
+    expect(first).toEqual({ data: [{ variant_key: 'a' }], total_count: 100 })
+    expect(second).toEqual({ data: [{ variant_key: 'b' }], total_count: 100 })
+    // The table's pager owns rows, total and loading state.
+    expect(result.variants.value).toEqual([])
+    expect(result.totalCount.value).toBe(0)
+    expect(result.isLoading.value).toBe(false)
+  })
+
+  it('queryPage and fetchVariants share one cursor chain', async () => {
+    window.api.cohort.getVariants = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], total_count: 100, next_cursor: 'c1' })
+      .mockResolvedValue({ data: [], total_count: 100 })
+    const [result, appInstance] = withSetup(() => useCohortData())
+    app = appInstance
+
+    await result.queryPage({ limit: 10, sort_order: 'desc' })
+    await result.fetchVariants({ limit: 10, offset: 10, sort_order: 'desc' })
+
+    const calls = vi.mocked(window.api.cohort.getVariants).mock.calls.map((c) => c[0])
+    expect(calls[1]).toMatchObject({ offset: 10, cursor: 'c1' })
+  })
+
+  it('reset forgets the cursors of the previous database', async () => {
+    window.api.cohort.getVariants = vi
+      .fn()
+      .mockResolvedValue({ data: [], total_count: 100, next_cursor: 'c1' })
+    const [result, appInstance] = withSetup(() => useCohortData())
+    app = appInstance
+
+    await result.queryPage({ limit: 10, sort_order: 'desc' })
+    result.reset()
+    await result.queryPage({ limit: 10, offset: 10, sort_order: 'desc' })
+
+    const calls = vi.mocked(window.api.cohort.getVariants).mock.calls.map((c) => c[0])
+    expect(calls[1]).not.toHaveProperty('cursor')
+  })
+
   it('sets isLoading during fetch', async () => {
     // Use a promise we can control to verify loading state
     let resolvePromise: (value: unknown) => void

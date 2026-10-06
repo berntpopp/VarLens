@@ -195,7 +195,7 @@ const {
   selectedVariantType,
   fetchSummary,
   fetchColumnMeta,
-  buildIpcParams,
+  queryPage,
   cleanupListeners,
   isActive,
   activate,
@@ -337,13 +337,8 @@ const {
       _count_needed: skipCount !== true
     }
 
-    const plainParams = buildIpcParams(params)
-    const result = unwrapIpcResult(await api.cohort.getVariants(plainParams))
-
-    return {
-      data: result.data ?? [],
-      total_count: result.total_count ?? 0
-    }
+    // Cursor-aware: keyset-pages the default sort instead of OFFSET.
+    return queryPage(params)
   },
   onSortChange: (sorted) => {
     hasSort.value = sorted

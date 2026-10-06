@@ -115,6 +115,8 @@ export interface UseCohortDataReturn {
   loadAvailableBuilds: () => Promise<void>
   /** Build IPC-safe params from query parameters */
   buildIpcParams: (params: CohortQueryParams) => Record<string, unknown>
+  /** Query one page (keyset cursor aware) without touching reactive state */
+  queryPage: (params: CohortQueryParams) => Promise<CohortQueryResult>
   /** Fetch variants and update reactive state */
   fetchVariants: (params: CohortQueryParams) => Promise<void>
   /** Fetch cohort summary */
@@ -371,14 +373,50 @@ export function useCohortData(): UseCohortDataReturn {
     }
   }
 
+  // Keyset cursors by query scope + offset: the cursor a page returned is the
+  // way into the page that directly follows it.
+  const pageCursors = new Map<string, string>()
+  const MAX_PAGE_CURSORS = 64
+
+  /**
+   * Query one page, keyset-paged where the backend supports it (default
+   * carrier-count sort): the cursor the previous page returned for this
+   * offset + query scope is sent along, and the cursor this page returns is
+   * kept for the next one. Touches no reactive state, so any pager (the
+   * table's offset pagination and its prefetch, `fetchVariants`) can use it.
+   * A stale or unsupported cursor is ignored by the backend (OFFSET fallback).
+   */
+  const queryPage = async (params: CohortQueryParams): Promise<CohortQueryResult> => {
+    if (!api) return { data: [], total_count: 0 }
+
+    const ipcParams = buildIpcParams(params)
+    const offset = params.offset ?? 0
+    // `_count_needed` is a per-request hint, not part of the query scope: a
+    // caller that only counts on page 1 must still hit the page-2 cursor.
+    const cursorScope = JSON.stringify({
+      ...ipcParams,
+      offset: undefined,
+      _count_needed: undefined
+    })
+    const cursor = pageCursors.get(`${cursorScope}@${offset}`)
+    if (cursor !== undefined) ipcParams.cursor = cursor
+
+    // No structuredClone — buildIpcParams already strips Vue Proxies via spread
+    const result = unwrapIpcResult(await api.cohort.getVariants(ipcParams))
+
+    const nextCursor = (result as { next_cursor?: string }).next_cursor
+    if (nextCursor !== undefined) {
+      if (pageCursors.size >= MAX_PAGE_CURSORS) pageCursors.clear()
+      pageCursors.set(`${cursorScope}@${offset + params.limit}`, nextCursor)
+    }
+    return { data: result.data ?? [], total_count: result.total_count ?? 0 }
+  }
+
   /**
    * Fetch variants and update reactive state.
    * Uses generation counter to discard stale responses and count caching
    * to skip COUNT queries on pagination/sort changes.
    */
-  const pageCursors = new Map<string, string>()
-  const MAX_PAGE_CURSORS = 64
-
   const fetchVariants = async (params: CohortQueryParams): Promise<void> => {
     if (!api) {
       logService.warn('API not available - running outside Electron', 'cohort')
@@ -414,37 +452,15 @@ export function useCohortData(): UseCohortDataReturn {
       })
       const filtersChanged = filterHash !== cachedFilterHash
 
-      const ipcParams = buildIpcParams(params)
-      // Keyset paging (default carrier-count sort, both backends): reuse the
-      // cursor the previous page returned for this offset + query scope.
-      const offset = params.offset ?? 0
-      // `_count_needed` is a per-request hint, not part of the query scope: a
-      // caller that only counts on page 1 must still hit the page-2 cursor.
-      const cursorScope = JSON.stringify({
-        ...ipcParams,
-        offset: undefined,
-        _count_needed: undefined
-      })
-      const cursor = pageCursors.get(`${cursorScope}@${offset}`)
-      if (cursor !== undefined) ipcParams.cursor = cursor
-      if (!filtersChanged) {
-        ipcParams._count_needed = false
-      }
-
-      // No structuredClone — buildIpcParams already strips Vue Proxies via spread
-      const result = unwrapIpcResult(await api.cohort.getVariants(ipcParams))
+      // Skip the COUNT when the filters are the ones already counted.
+      const result = await queryPage(filtersChanged ? params : { ...params, _count_needed: false })
 
       // Discard stale responses from superseded requests
       if (thisGeneration !== requestGeneration) return
-      const nextCursor = (result as { next_cursor?: string }).next_cursor
-      if (nextCursor !== undefined) {
-        if (pageCursors.size >= MAX_PAGE_CURSORS) pageCursors.clear()
-        pageCursors.set(`${cursorScope}@${offset + params.limit}`, nextCursor)
-      }
 
-      variants.value = markRaw(result.data ?? [])
+      variants.value = markRaw(result.data)
       if (filtersChanged) {
-        totalCount.value = result.total_count ?? 0
+        totalCount.value = result.total_count
         cachedFilterHash = filterHash
       }
     } catch (err) {
@@ -529,6 +545,8 @@ export function useCohortData(): UseCohortDataReturn {
     selectedVariantType.value = 'snv'
     cachedFilterHash = ''
     requestGeneration = 0
+    // Cursors belong to the database they were issued by.
+    pageCursors.clear()
   }
 
   return {
@@ -548,6 +566,7 @@ export function useCohortData(): UseCohortDataReturn {
     availableBuilds,
     loadAvailableBuilds,
     buildIpcParams,
+    queryPage,
     fetchVariants,
     fetchSummary,
     fetchColumnMeta,
