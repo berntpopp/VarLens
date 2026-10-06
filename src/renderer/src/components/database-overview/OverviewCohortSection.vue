@@ -34,6 +34,7 @@
                 {{ group.member_count === 1 ? 'member' : 'members' }}
               </v-chip>
               <v-btn
+                aria-label="Edit cohort"
                 :icon="mdiPencil"
                 size="x-small"
                 variant="text"
@@ -41,6 +42,7 @@
                 @click.stop="startEditCohort(group)"
               />
               <v-btn
+                aria-label="Delete cohort"
                 :icon="mdiDelete"
                 size="x-small"
                 variant="text"

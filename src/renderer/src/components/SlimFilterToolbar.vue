@@ -7,6 +7,7 @@
         density="compact"
         flat
         class="filter-toolbar px-2"
+        tag="div"
         role="toolbar"
         aria-label="Variant filters"
       >
@@ -95,7 +96,7 @@
         <!-- At narrow widths: overflow menu -->
         <v-menu v-else>
           <template #activator="{ props: menuProps }">
-            <v-btn v-bind="menuProps" icon size="small" variant="text">
+            <v-btn aria-label="More actions" v-bind="menuProps" icon size="small" variant="text">
               <v-icon :icon="mdiDotsVertical" />
               <v-tooltip activator="parent" location="bottom">More actions</v-tooltip>
             </v-btn>

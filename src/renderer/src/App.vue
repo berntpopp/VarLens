@@ -3,6 +3,7 @@
        new view mounts; animating v-main's padding there shifted the incoming
        view sideways (CLS ~0.3). Collapse instantly instead. -->
   <v-app :class="{ 'shell--instant-layout': transitioning }">
+    <A11yShell />
     <AppToolbar
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
       @show-database-overview="dialogHostRef?.showDatabaseOverview()"
@@ -42,7 +43,7 @@
       />
     </v-navigation-drawer>
 
-    <v-main>
+    <v-main id="main-content" tabindex="-1">
       <router-view v-slot="{ Component }">
         <keep-alive :max="2">
           <component :is="Component" />
@@ -89,6 +90,7 @@ import { useDisplay } from 'vuetify'
 import AppToolbar from './components/AppToolbar.vue'
 import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
+import A11yShell from './components/common/A11yShell.vue'
 import AppFooter from './components/AppFooter.vue'
 import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'

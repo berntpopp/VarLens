@@ -24,7 +24,7 @@
     />
     <v-btn
       v-if="operator !== undefined || value !== undefined"
-      icon="mdi-close"
+      :icon="mdiClose"
       size="x-small"
       variant="text"
       density="compact"
@@ -54,6 +54,7 @@
  *   - `str.repeat_count` >= 5
  */
 import { computed } from 'vue'
+import { mdiClose } from '@mdi/js'
 import type {
   ColumnFilter,
   ColumnFilterMeta,

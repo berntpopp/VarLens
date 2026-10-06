@@ -11,6 +11,7 @@
       clearable
       :error="hasErrors"
       class="dsl-search-bar"
+      aria-label="Search variants (text or filter DSL)"
       :class="{ 'dsl-mode': isDslMode, 'fts-mode': !isDslMode && localInput !== '' }"
       @update:model-value="onInput"
       @click:clear="onClear"
@@ -33,6 +34,7 @@
     <v-menu
       v-model="showMenu"
       :activator="textFieldRef?.$el"
+      :activator-props="MENU_ACTIVATOR_ARIA_RESET"
       :close-on-content-click="false"
       :open-on-click="false"
       max-height="400"
@@ -40,7 +42,12 @@
       offset="4"
       location="bottom start"
     >
-      <v-list v-if="suggestions.length > 0" density="compact" class="dsl-suggestion-list">
+      <v-list
+        v-if="suggestions.length > 0"
+        :id="suggestionsId"
+        density="compact"
+        class="dsl-suggestion-list"
+      >
         <template v-for="(item, idx) in groupedSuggestions" :key="idx">
           <!-- Category header -->
           <v-list-subheader v-if="item.isHeader" class="text-overline">
@@ -88,10 +95,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, useId } from 'vue'
 import type { VTextField } from 'vuetify/components'
 import type { Suggestion } from '../dsl/autocomplete'
 import { mdiMagnify } from '@mdi/js'
+
+// The suggestion menu is anchored to the field wrapper <div>; VMenu would put
+// menu-button ARIA (aria-haspopup/expanded/owns) on it, which a div may not
+// carry (axe: aria-allowed-attr). The input itself is named via aria-label.
+const MENU_ACTIVATOR_ARIA_RESET = {
+  'aria-haspopup': null,
+  'aria-expanded': null,
+  'aria-controls': null,
+  'aria-owns': null
+}
+const suggestionsId = `dsl-suggestions-${useId()}`
 
 interface Props {
   rawInput: string

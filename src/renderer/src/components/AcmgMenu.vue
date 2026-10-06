@@ -22,7 +22,7 @@
       <!-- Clear option -->
       <v-divider />
       <v-list-item @click="handleSelect(null)">
-        <v-list-item-title class="text-grey">Clear classification</v-list-item-title>
+        <v-list-item-title class="text-muted">Clear classification</v-list-item-title>
       </v-list-item>
     </v-list>
   </v-menu>

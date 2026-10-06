@@ -2,7 +2,7 @@
   <div class="activity-log-panel">
     <div class="text-title-small mb-2">Activity Log</div>
 
-    <div v-if="restricted" class="text-body-2 text-grey py-2">
+    <div v-if="restricted" class="text-body-2 text-muted py-2">
       Activity log entries are restricted to administrators.
     </div>
 
@@ -10,7 +10,7 @@
       <v-progress-circular indeterminate size="24" />
     </div>
 
-    <div v-else-if="entries.length === 0" class="text-body-2 text-grey py-2">
+    <div v-else-if="entries.length === 0" class="text-body-2 text-muted py-2">
       No activity recorded yet.
     </div>
 
@@ -23,9 +23,9 @@
       >
         <div class="text-body-2">
           <span class="font-weight-medium">{{ formatAction(entry.action_type) }}</span>
-          <span v-if="entry.user_name" class="text-grey ml-1">by {{ entry.user_name }}</span>
+          <span v-if="entry.user_name" class="text-muted ml-1">by {{ entry.user_name }}</span>
         </div>
-        <div class="text-body-small text-grey">
+        <div class="text-body-small text-muted">
           {{ formatTimestamp(entry.timestamp) }}
         </div>
         <div v-if="getChangeDescription(entry)" class="text-body-small mt-1">

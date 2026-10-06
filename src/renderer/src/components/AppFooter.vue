@@ -42,6 +42,7 @@
           <v-tooltip text="Checking for updates...">
             <template #activator="{ props: tooltipProps }">
               <v-btn
+                aria-label="Checking for updates..."
                 v-bind="tooltipProps"
                 icon
                 size="x-small"
@@ -61,6 +62,7 @@
           >
             <template #activator="{ props: tooltipProps }">
               <v-btn
+                :aria-label="`Update${updateStatus.version ? ` v${updateStatus.version}` : ''} available — download`"
                 v-bind="tooltipProps"
                 icon
                 size="x-small"
@@ -81,6 +83,7 @@
           >
             <template #activator="{ props: tooltipProps }">
               <v-btn
+                :aria-label="`Downloading update ${Math.round(updateStatus.progress?.percent ?? 0)}%`"
                 v-bind="tooltipProps"
                 icon
                 size="x-small"
@@ -98,6 +101,7 @@
           <v-tooltip text="Update ready — click to restart">
             <template #activator="{ props: tooltipProps }">
               <v-btn
+                aria-label="Update ready — click to restart"
                 v-bind="tooltipProps"
                 icon
                 size="x-small"
@@ -118,6 +122,7 @@
           <v-tooltip :text="`Update error: ${updateStatus.error ?? 'Unknown'} — click to retry`">
             <template #activator="{ props: tooltipProps }">
               <v-btn
+                :aria-label="`Update error: ${updateStatus.error ?? 'Unknown'} — retry`"
                 v-bind="tooltipProps"
                 icon
                 size="x-small"
@@ -397,8 +402,14 @@ const openLicense = async (): Promise<void> => {
 
 <style scoped>
 .app-footer {
-  background-color: #dfe4ea !important;
-  border-top: 1px solid #c8cfd8 !important;
+  /* Theme-derived tint (≈ #DBE1E9 light, #1D242D dark) instead of a fixed hex */
+  background-color: color-mix(
+    in srgb,
+    rgb(var(--v-theme-primary)) 10%,
+    rgb(var(--v-theme-background))
+  ) !important;
+  border-top: 1px solid
+    color-mix(in srgb, rgb(var(--v-theme-primary)) 22%, rgb(var(--v-theme-background))) !important;
 }
 
 .footer-actions {

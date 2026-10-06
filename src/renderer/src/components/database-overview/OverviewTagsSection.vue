@@ -24,6 +24,7 @@
                 {{ tag.usage_count }} {{ tag.usage_count === 1 ? 'use' : 'uses' }}
               </v-chip>
               <v-btn
+                aria-label="Edit tag"
                 :icon="mdiPencil"
                 size="x-small"
                 variant="text"
@@ -31,6 +32,7 @@
                 @click.stop="startEditTag(tag)"
               />
               <v-btn
+                aria-label="Delete tag"
                 :icon="mdiDelete"
                 size="x-small"
                 variant="text"

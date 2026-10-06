@@ -10,6 +10,7 @@
         <v-spacer />
         <v-btn
           v-if="phase !== 'importing'"
+          aria-label="Close"
           :icon="mdiClose"
           size="small"
           variant="text"

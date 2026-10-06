@@ -1,6 +1,6 @@
 <template>
   <div class="annotation-scores-section">
-    <div class="text-title-small mb-2">Annotation Scores</div>
+    <h3 class="text-title-small mb-2">Annotation Scores</h3>
 
     <!-- Database scores (CADD, gnomAD) -->
     <div v-if="isFullVariant" class="d-flex flex-wrap ga-1 mb-2">
@@ -22,7 +22,7 @@
     </div>
 
     <!-- API enrichment scores -->
-    <div v-if="isLoading" class="text-body-small text-grey">
+    <div v-if="isLoading" class="text-body-small text-muted">
       <v-progress-circular indeterminate size="16" width="2" class="mr-1" />
       Loading enrichment data...
     </div>
@@ -87,12 +87,12 @@
     <!-- No scores available message -->
     <div
       v-if="!isLoading && !isOffline && !hasAnyScore && isFullVariant"
-      class="text-body-small text-grey mt-1"
+      class="text-body-small text-muted mt-1"
     >
       No additional scores available for this variant
     </div>
 
-    <div v-if="!isFullVariant && !isLoading" class="text-body-small text-grey">
+    <div v-if="!isFullVariant && !isLoading" class="text-body-small text-muted">
       Scores available in Case Analysis mode
     </div>
   </div>

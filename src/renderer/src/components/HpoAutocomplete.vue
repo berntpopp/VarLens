@@ -28,12 +28,12 @@
     </template>
     <template #no-data>
       <v-list-item v-if="searchQuery.length < 2">
-        <v-list-item-title class="text-body-small text-grey">
+        <v-list-item-title class="text-body-small text-muted">
           Type at least 2 characters to search
         </v-list-item-title>
       </v-list-item>
       <v-list-item v-else-if="isSearching">
-        <v-list-item-title class="text-body-small text-grey"> Searching... </v-list-item-title>
+        <v-list-item-title class="text-body-small text-muted"> Searching... </v-list-item-title>
       </v-list-item>
       <v-list-item v-else-if="loadError">
         <v-list-item-title class="text-body-small text-error">
@@ -41,7 +41,7 @@
         </v-list-item-title>
       </v-list-item>
       <v-list-item v-else>
-        <v-list-item-title class="text-body-small text-grey">
+        <v-list-item-title class="text-body-small text-muted">
           No matching HPO terms
         </v-list-item-title>
       </v-list-item>

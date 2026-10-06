@@ -2,7 +2,7 @@
   <div class="inline-editable">
     <!-- Display mode -->
     <div v-if="!isEditing" class="editable-text d-flex align-center" @click="startEdit">
-      <span :class="{ 'text-grey': !modelValue }">
+      <span :class="{ 'text-muted': !modelValue }">
         {{ modelValue || placeholder }}
       </span>
       <v-icon size="x-small" class="edit-icon ml-1" :icon="mdiPencil" />

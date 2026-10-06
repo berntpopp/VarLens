@@ -269,6 +269,7 @@ onKeyStroke(
 
     <template #[`item.is_starred`]="{ item }">
       <v-btn
+        :aria-label="item.is_starred ? 'Unstar variant' : 'Star variant'"
         icon
         variant="text"
         size="x-small"
@@ -286,6 +287,7 @@ onKeyStroke(
       <v-menu>
         <template #activator="{ props: actProps }">
           <v-btn
+            aria-label="Variant actions"
             icon
             variant="text"
             size="x-small"

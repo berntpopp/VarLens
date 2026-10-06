@@ -8,7 +8,13 @@
       <v-card-title class="d-flex align-center">
         <span class="text-h6">Manage Presets</span>
         <v-spacer />
-        <v-btn icon size="small" variant="text" @click="emit('update:modelValue', false)">
+        <v-btn
+          aria-label="Close"
+          icon
+          size="small"
+          variant="text"
+          @click="emit('update:modelValue', false)"
+        >
           <v-icon :icon="mdiClose" />
         </v-btn>
       </v-card-title>
@@ -34,6 +40,7 @@
           <template #append>
             <!-- Toggle visibility -->
             <v-btn
+              :aria-label="preset.isVisible ? 'Hide preset' : 'Show preset'"
               icon
               size="x-small"
               variant="text"
@@ -48,6 +55,7 @@
             <!-- Delete (user presets only) -->
             <v-btn
               v-if="!preset.isBuiltIn"
+              aria-label="Delete preset"
               icon
               size="x-small"
               variant="text"

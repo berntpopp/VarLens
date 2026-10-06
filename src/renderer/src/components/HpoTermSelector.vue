@@ -18,7 +18,7 @@
         </v-tooltip>
       </v-chip>
     </div>
-    <div v-else class="text-grey text-body-medium mb-2">No phenotype terms assigned</div>
+    <div v-else class="text-muted text-body-medium mb-2">No phenotype terms assigned</div>
 
     <!-- Autocomplete for adding new terms -->
     <v-autocomplete
@@ -47,15 +47,15 @@
       </template>
       <template #no-data>
         <v-list-item v-if="!hpoApiAvailable">
-          <v-list-item-title class="text-grey"
+          <v-list-item-title class="text-muted"
             >HPO search unavailable - complete Phase 21</v-list-item-title
           >
         </v-list-item>
         <v-list-item v-else-if="searchQuery && searchQuery.length >= 2 && !loading">
-          <v-list-item-title class="text-grey">No matching HPO terms</v-list-item-title>
+          <v-list-item-title class="text-muted">No matching HPO terms</v-list-item-title>
         </v-list-item>
         <v-list-item v-else-if="searchQuery && searchQuery.length < 2">
-          <v-list-item-title class="text-grey">Type at least 2 characters</v-list-item-title>
+          <v-list-item-title class="text-muted">Type at least 2 characters</v-list-item-title>
         </v-list-item>
       </template>
     </v-autocomplete>

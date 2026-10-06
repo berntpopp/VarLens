@@ -113,6 +113,7 @@
       </div>
       <v-btn
         v-if="filters.bedPath !== undefined && filters.bedPath !== ''"
+        aria-label="Remove BED filter"
         icon
         size="x-small"
         variant="text"

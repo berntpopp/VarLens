@@ -9,7 +9,7 @@
       <v-card-title class="d-flex align-center">
         <span>Generate from StringDB</span>
         <v-spacer />
-        <v-btn :icon="mdiClose" variant="text" size="small" @click="close" />
+        <v-btn aria-label="Close" :icon="mdiClose" variant="text" size="small" @click="close" />
       </v-card-title>
 
       <v-card-text>

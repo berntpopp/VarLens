@@ -14,7 +14,13 @@
           Columns
         </v-toolbar-title>
         <v-spacer />
-        <v-btn :icon="mdiClose" size="small" variant="text" @click="emit('update:open', false)" />
+        <v-btn
+          aria-label="Close columns panel"
+          :icon="mdiClose"
+          size="small"
+          variant="text"
+          @click="emit('update:open', false)"
+        />
       </v-toolbar>
       <v-divider />
 

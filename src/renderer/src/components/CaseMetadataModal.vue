@@ -3,7 +3,13 @@
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
         <span>{{ caseName }}</span>
-        <v-btn :icon="mdiClose" variant="text" size="small" @click="open = false" />
+        <v-btn
+          aria-label="Close"
+          :icon="mdiClose"
+          variant="text"
+          size="small"
+          @click="open = false"
+        />
       </v-card-title>
 
       <v-divider />

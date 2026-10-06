@@ -46,6 +46,7 @@
           @update:model-value="onGeneListChange($event)"
         />
         <v-btn
+          aria-label="Edit gene list"
           :icon="mdiPlaylistEdit"
           size="x-small"
           variant="text"
@@ -72,6 +73,7 @@
           @update:model-value="onRegionFileChange($event)"
         />
         <v-btn
+          aria-label="Import region file"
           :icon="mdiFileUploadOutline"
           size="x-small"
           variant="text"

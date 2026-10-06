@@ -5,7 +5,7 @@
         <v-icon :icon="mdiTagMultiple" class="mr-2" />
         Custom Tags
         <v-spacer />
-        <v-btn icon variant="text" size="small" @click="isOpen = false">
+        <v-btn aria-label="Close" icon variant="text" size="small" @click="isOpen = false">
           <v-icon :icon="mdiClose" />
         </v-btn>
       </v-card-title>
@@ -23,8 +23,15 @@
               <v-list-item-title>{{ tag.name }}</v-list-item-title>
 
               <template #append>
-                <v-btn :icon="mdiPencil" size="x-small" variant="text" @click="startEditTag(tag)" />
                 <v-btn
+                  :aria-label="`Edit tag ${tag.name}`"
+                  :icon="mdiPencil"
+                  size="x-small"
+                  variant="text"
+                  @click="startEditTag(tag)"
+                />
+                <v-btn
+                  :aria-label="`Delete tag ${tag.name}`"
                   :icon="mdiDelete"
                   size="x-small"
                   variant="text"

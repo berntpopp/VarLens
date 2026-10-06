@@ -52,7 +52,17 @@ const warmLight: ThemeDefinition = {
     'on-error': '#FFFFFF',
     'on-info': '#FFFFFF',
     'on-success': '#FFFFFF',
-    'on-warning': '#FFFFFF'
+    'on-warning': '#FFFFFF',
+    // Secondary/placeholder text. Replaces Material grey (#9E9E9E, 2.6:1) —
+    // 5.8:1 on surface, 5.5:1 on background, 5.2:1 on grey-lighten-3 (AA).
+    muted: '#5C6370',
+    // Filled star (amber). Material amber is 1.6:1 on surface; this keeps the
+    // hue at 4.1:1 so the starred state meets 3:1 non-text contrast (1.4.11).
+    star: '#B26A00'
+  },
+  variables: {
+    // Vuetify's light default (0.60) renders on-surface at 4.4:1 — just under AA.
+    'medium-emphasis-opacity': 0.7
   }
 }
 
@@ -78,7 +88,9 @@ const warmDark: ThemeDefinition = {
     'on-error': '#12141A',
     'on-info': '#12141A',
     'on-success': '#12141A',
-    'on-warning': '#12141A'
+    'on-warning': '#12141A',
+    muted: '#A0A8B4', // 7.0:1 on surface (AA)
+    star: '#FFC107' // 10.4:1 on surface
   }
 }
 
@@ -103,6 +115,8 @@ export default createVuetify({
       density: 'compact',
       ripple: false
     },
+    // Buttons keep compact density for toolbar rhythm; a11y.css floors the
+    // x-small/small sizes so they never collapse below the 24px WCAG 2.5.8 target.
     VBtn: {
       density: 'compact',
       ripple: false
@@ -151,6 +165,9 @@ export default createVuetify({
       elevation: 0
     },
     VTooltip: {
+      // Vuetify 4 defaults tooltips to eager, which renders a hidden, empty
+      // role="tooltip" node per instance (hundreds in the variant table).
+      eager: false,
       openDelay: 400,
       closeDelay: 0,
       transition: 'fade-transition',

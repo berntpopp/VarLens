@@ -9,6 +9,7 @@ import {
   type UnifiedTranscriptRow
 } from '../utils/mergeTranscripts'
 import { EMPTY_VALUE_PLACEHOLDER } from '../utils/formatters'
+import IconButton from './common/IconButton.vue'
 import {
   mdiCheckAll,
   mdiChevronDown,
@@ -180,14 +181,14 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
 <template>
   <v-card variant="outlined" class="mb-4">
     <v-card-title class="d-flex align-center text-body-large py-2 px-4">
-      Transcripts
+      <h3 class="section-heading">Transcripts</h3>
       <v-chip v-if="hasTranscripts" size="x-small" class="ml-2" color="secondary">
         {{ mergedRows.length }}
       </v-chip>
       <v-spacer />
       <v-btn
         v-if="canFetchVep"
-        size="x-small"
+        size="small"
         variant="tonal"
         color="deep-purple"
         :prepend-icon="mdiCloudDownload"
@@ -203,11 +204,12 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
       >
         VEP loaded
       </v-chip>
-      <v-btn
+      <IconButton
         v-if="hasTranscripts"
-        size="x-small"
-        variant="text"
+        :label="tableExpanded ? 'Collapse transcript table' : 'Expand transcript table'"
         :icon="tableExpanded ? mdiChevronUp : mdiChevronDown"
+        :aria-expanded="tableExpanded"
+        size="x-small"
         class="ml-1"
         @click="tableExpanded = !tableExpanded"
       />
@@ -224,6 +226,9 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
     <div
       v-if="hasTranscripts"
       class="transcript-scroll-wrapper"
+      role="region"
+      aria-label="Transcript annotations"
+      tabindex="0"
       :style="{ maxHeight: tableExpanded ? 'none' : '280px', overflowY: 'auto' }"
     >
       <v-data-table
@@ -304,6 +309,11 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
 </template>
 
 <style scoped>
+.section-heading {
+  font: inherit;
+  margin: 0;
+}
+
 .transcript-table :deep(th) {
   font-size: 0.75rem !important;
 }

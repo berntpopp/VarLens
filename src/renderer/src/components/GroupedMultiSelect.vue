@@ -88,6 +88,7 @@
             </v-list-item-title>
             <template #append>
               <v-btn
+                :aria-label="expandedGroups.includes(group.id) ? 'Collapse group' : 'Expand group'"
                 :icon="expandedGroups.includes(group.id) ? mdiChevronUp : mdiChevronDown"
                 size="x-small"
                 variant="text"

@@ -130,10 +130,14 @@ export function useVariantData(options: UseVariantDataOptions) {
   const getRowProps = ({ item, index }: { item: Variant; index: number }) => {
     let className = ''
     if (index % 2 === 1) className = 'variant-row--striped'
-    if (item.id === selectedVariantId.value) {
+    const selected = item.id === selectedVariantId.value
+    if (selected) {
       className = className ? className + ' variant-row--selected' : 'variant-row--selected'
     }
-    return { class: className }
+    // a11y: expose the selected row and make it the focus-return target
+    return selected
+      ? { class: className, 'aria-current': 'true', tabindex: 0 }
+      : { class: className }
   }
 
   // Update counts when variants load. Watch both totals: a case switch can land

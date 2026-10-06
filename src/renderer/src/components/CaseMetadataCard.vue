@@ -7,7 +7,7 @@
       <template v-else>
         <!-- Status row -->
         <div class="d-flex align-center mb-3">
-          <span class="text-body-medium text-grey mr-2" style="min-width: 60px">Status</span>
+          <span class="text-body-medium text-muted mr-2" style="min-width: 60px">Status</span>
           <StatusSelector
             :model-value="currentStatus"
             style="max-width: 180px"
@@ -17,7 +17,7 @@
 
         <!-- Sex row -->
         <div class="d-flex align-center mb-3">
-          <span class="text-body-medium text-grey mr-2" style="min-width: 60px">Sex</span>
+          <span class="text-body-medium text-muted mr-2" style="min-width: 60px">Sex</span>
           <v-select
             :model-value="currentSex"
             :items="sexOptions"
@@ -34,7 +34,7 @@
 
         <!-- Age row -->
         <div class="d-flex align-center mb-3">
-          <span class="text-body-medium text-grey mr-2" style="min-width: 60px">Age</span>
+          <span class="text-body-medium text-muted mr-2" style="min-width: 60px">Age</span>
           <v-text-field
             :model-value="currentAge"
             type="number"
@@ -45,7 +45,7 @@
             placeholder="Years"
             @update:model-value="handleAgeChange"
           />
-          <span class="text-body-medium text-grey mx-2">DOB</span>
+          <span class="text-body-medium text-muted mx-2">DOB</span>
           <v-text-field
             :model-value="currentDob"
             type="date"
@@ -59,7 +59,7 @@
 
         <!-- Cohorts row -->
         <div class="d-flex align-start mb-3">
-          <span class="text-body-medium text-grey mr-2 mt-2" style="min-width: 60px">Cohorts</span>
+          <span class="text-body-medium text-muted mr-2 mt-2" style="min-width: 60px">Cohorts</span>
           <div class="flex-grow-1">
             <CohortCombobox
               :model-value="currentCohorts"
@@ -72,7 +72,7 @@
 
         <!-- HPO Terms row -->
         <div class="d-flex align-start">
-          <span class="text-body-medium text-grey mr-2 mt-2" style="min-width: 60px"
+          <span class="text-body-medium text-muted mr-2 mt-2" style="min-width: 60px"
             >Phenotypes</span
           >
           <div class="flex-grow-1">

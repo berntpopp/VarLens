@@ -1,23 +1,16 @@
 <template>
   <div class="variant-identity-section">
     <div class="d-flex align-center mb-2">
-      <div class="text-title-large">{{ variant.gene_symbol ?? 'Unknown Gene' }}</div>
-      <v-tooltip v-if="variant.gene_symbol" location="top">
-        <template #activator="{ props: tooltipProps }">
-          <v-btn
-            v-bind="tooltipProps"
-            icon
-            size="x-small"
-            variant="text"
-            class="ml-1"
-            aria-label="Open protein view"
-            @click="emit('open-protein-view')"
-          >
-            <v-icon size="small" :icon="mdiDna" />
-          </v-btn>
-        </template>
-        Protein View
-      </v-tooltip>
+      <h3 class="text-title-large">{{ variant.gene_symbol ?? 'Unknown Gene' }}</h3>
+      <IconButton
+        v-if="variant.gene_symbol"
+        label="Open protein view"
+        :icon="mdiDna"
+        size="x-small"
+        tooltip-location="top"
+        class="ml-1"
+        @click="emit('open-protein-view')"
+      />
     </div>
 
     <!-- Transcript + cDNA + protein change -->
@@ -26,48 +19,52 @@
       class="d-flex align-center mb-1"
     >
       <span class="hgvs-notation">
-        <span v-if="isFullVariant && (variant as Variant).transcript" class="text-grey">
+        <span v-if="isFullVariant && (variant as Variant).transcript" class="text-muted">
           {{ (variant as Variant).transcript }}<template v-if="variant.cdna">:</template>
         </span>
         <template v-if="variant.cdna">{{ variant.cdna }}</template>
         <template v-if="variant.aa_change"> {{ ' ' }}{{ variant.aa_change }} </template>
       </span>
-      <v-btn v-if="variant.cdna" icon size="x-small" variant="text" class="ml-2" @click="copyHgvs">
-        <v-icon size="small" :icon="hgvsCopied ? mdiCheck : mdiContentCopy" />
-      </v-btn>
+      <IconButton
+        v-if="variant.cdna"
+        :label="hgvsCopied ? 'HGVS copied' : 'Copy HGVS notation'"
+        :icon="hgvsCopied ? mdiCheck : mdiContentCopy"
+        size="x-small"
+        tooltip-location="top"
+        class="ml-2"
+        @click="copyHgvs"
+      />
     </div>
 
     <!-- Genomic position + alleles -->
     <div class="d-flex align-center">
       <span class="genomic-coordinate">{{ variant.chr }}:{{ formatPosition(variant.pos) }}</span>
       <span class="variant-data-mono ml-1">{{ variant.ref }} &gt; {{ variant.alt }}</span>
-      <v-tooltip location="top">
-        <template #activator="{ props: tooltipProps }">
-          <v-btn
-            v-bind="tooltipProps"
-            icon
-            size="x-small"
-            variant="text"
-            class="ml-2"
-            @click="copyVariant"
-          >
-            <v-icon size="small" :icon="variantCopied ? mdiCheck : mdiContentCopy" />
-          </v-btn>
-        </template>
-        Copy chr:pos:ref:alt
-      </v-tooltip>
+      <IconButton
+        :label="variantCopied ? 'Variant copied' : 'Copy chr:pos:ref:alt'"
+        :icon="variantCopied ? mdiCheck : mdiContentCopy"
+        size="x-small"
+        tooltip-location="top"
+        class="ml-2"
+        @click="copyVariant"
+      />
     </div>
 
     <!-- rsID - From VEP colocated_variants -->
     <div class="d-flex align-center mt-2">
-      <span class="text-body-small text-grey">rsID:</span>
+      <span class="text-body-small text-muted">rsID:</span>
       <template v-if="rsId">
         <span class="ml-1 variant-data-mono">{{ rsId }}</span>
-        <v-btn icon size="x-small" variant="text" class="ml-2" @click="copyRsId">
-          <v-icon size="small" :icon="rsIdCopied ? mdiCheck : mdiContentCopy" />
-        </v-btn>
+        <IconButton
+          :label="rsIdCopied ? 'rsID copied' : 'Copy rsID'"
+          :icon="rsIdCopied ? mdiCheck : mdiContentCopy"
+          size="x-small"
+          tooltip-location="top"
+          class="ml-2"
+          @click="copyRsId"
+        />
       </template>
-      <span v-else class="ml-1 text-grey">N/A</span>
+      <span v-else class="ml-1 text-muted">N/A</span>
     </div>
   </div>
 </template>
@@ -79,6 +76,7 @@ import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import type { VepColocatedVariant } from '../../../shared/types/vep'
 import { mdiCheck, mdiContentCopy, mdiDna } from '@mdi/js'
+import IconButton from './common/IconButton.vue'
 
 interface Props {
   variant: Variant | CohortVariant

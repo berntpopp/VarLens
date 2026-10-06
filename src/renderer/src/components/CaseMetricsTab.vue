@@ -168,6 +168,7 @@
               </td>
               <td style="width: 40px">
                 <v-btn
+                  aria-label="Delete metric"
                   :icon="mdiDeleteOutline"
                   size="x-small"
                   variant="text"
