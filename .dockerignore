@@ -61,3 +61,8 @@ npm-debug.log*
 # Local databases
 *.db
 *.db-journal
+
+# Exception: the web server reads the HGNC gene reference (gene panels,
+# symbol validation) and the runtime stage copies it from the builder.
+# Must stay after `resources/` and `*.db` (the last matching rule wins).
+!resources/gene_reference.db
