@@ -11,6 +11,7 @@ import { isNotADatabaseError } from '../database/sqlite-error'
 import { RecentDatabasesService, type RecentDatabase } from './RecentDatabasesService'
 import { mainLogger } from './MainLogger'
 import { createSqliteStorageSession } from '../storage/sqlite/createSqliteStorageSession'
+import { migrateSqliteOffThread } from '../database/migrate-off-thread'
 import type { StorageSession } from '../storage/session'
 
 /**
@@ -328,6 +329,16 @@ export class DatabaseManager {
   }
 
   private async createSqliteSession(dbPath: string, key?: string): Promise<StorageSession> {
+    // Schema + migrations run in a worker first (main stays responsive); the
+    // constructor's own pass is then a no-op. On worker failure the main-thread
+    // pass below runs as before and raises the canonical error.
+    const migration = await migrateSqliteOffThread(dbPath, key)
+    if (migration.error !== undefined && !/not a database/i.test(migration.error)) {
+      mainLogger.warn(
+        `Off-thread migration failed, migrating on main instead: ${migration.error}`,
+        'DatabaseManager'
+      )
+    }
     return createSqliteStorageSession(dbPath, key)
   }
 }
