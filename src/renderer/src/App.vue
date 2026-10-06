@@ -98,6 +98,7 @@ import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
 import A11yShell from './components/common/A11yShell.vue'
 import { useViewTitle } from './composables/useViewTitle'
+import { useThemePreference } from './composables/useThemePreference'
 import AppFooter from './components/AppFooter.vue'
 import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'
@@ -146,6 +147,7 @@ const variantColumnMeta = useVariantColumnMeta()
 const appState = createAppState()
 provide(AppStateKey, appState)
 const viewTitle = useViewTitle(appState)
+useThemePreference()
 
 const {
   selectedCaseId,

@@ -6,8 +6,14 @@
 import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { logService } from '../services/LogService'
+import {
+  DEFAULT_THEME_PREFERENCE,
+  SETTINGS_STORAGE_KEY,
+  isThemePreference,
+  type ThemePreference
+} from '../utils/theme-preference'
 
-const STORAGE_KEY = 'varlens_user_settings_v1'
+const STORAGE_KEY = SETTINGS_STORAGE_KEY
 
 /**
  * Which tab should be active by default when a CaseView mounts on a
@@ -34,6 +40,8 @@ interface PersistedSettings {
   workerThreads: number // 0 = auto (cpus - 1)
   prefetchEnabled: boolean
   defaultCaseTab: DefaultCaseTab
+  /** 'system' follows prefers-color-scheme (see utils/theme-preference.ts). */
+  themePreference: ThemePreference
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -41,7 +49,8 @@ const DEFAULTS: PersistedSettings = {
   userName: '',
   workerThreads: 0,
   prefetchEnabled: true,
-  defaultCaseTab: 'shortlist'
+  defaultCaseTab: 'shortlist',
+  themePreference: DEFAULT_THEME_PREFERENCE
 }
 
 function load(): PersistedSettings {
@@ -49,7 +58,11 @@ function load(): PersistedSettings {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw !== null && raw !== '') {
       const parsed = JSON.parse(raw) as Partial<PersistedSettings>
-      return { ...DEFAULTS, ...parsed }
+      const merged = { ...DEFAULTS, ...parsed }
+      if (!isThemePreference(merged.themePreference)) {
+        merged.themePreference = DEFAULT_THEME_PREFERENCE
+      }
+      return merged
     }
   } catch (e) {
     logService.warn(
@@ -72,23 +85,29 @@ export const useSettingsStore = defineStore('settings', () => {
   const workerThreads = ref(persisted.workerThreads)
   const prefetchEnabled = ref(persisted.prefetchEnabled)
   const defaultCaseTab = ref<DefaultCaseTab>(persisted.defaultCaseTab)
+  const themePreference = ref<ThemePreference>(persisted.themePreference)
 
   // Auto-persist on change
-  watch([itemsPerPage, userName, workerThreads, prefetchEnabled, defaultCaseTab], () => {
-    save({
-      itemsPerPage: itemsPerPage.value,
-      userName: userName.value,
-      workerThreads: workerThreads.value,
-      prefetchEnabled: prefetchEnabled.value,
-      defaultCaseTab: defaultCaseTab.value
-    })
-  })
+  watch(
+    [itemsPerPage, userName, workerThreads, prefetchEnabled, defaultCaseTab, themePreference],
+    () => {
+      save({
+        itemsPerPage: itemsPerPage.value,
+        userName: userName.value,
+        workerThreads: workerThreads.value,
+        prefetchEnabled: prefetchEnabled.value,
+        defaultCaseTab: defaultCaseTab.value,
+        themePreference: themePreference.value
+      })
+    }
+  )
 
   return {
     itemsPerPage,
     userName,
     workerThreads,
     prefetchEnabled,
-    defaultCaseTab
+    defaultCaseTab,
+    themePreference
   }
 })
