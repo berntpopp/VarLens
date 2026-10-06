@@ -174,12 +174,21 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web export downloads (PostgreSQL)', () 
   test('exports are audited as api_read events', async () => {
     const pool = new Pool({ connectionString: PG_URL, max: 1 })
     try {
-      const audit = await pool.query<{ entity_key: string; user_name: string }>(
-        `SELECT entity_key, user_name FROM varlens_audit.audit_log
-          WHERE project_schema = $1 AND action_type = 'api_read'
-            AND entity_key IN ('export:variants', 'export:cohort')`,
-        [driver.schema]
-      )
+      const readAudit = () =>
+        pool.query<{ entity_key: string; user_name: string }>(
+          `SELECT entity_key, user_name FROM varlens_audit.audit_log
+            WHERE project_schema = $1 AND action_type = 'api_read'
+              AND entity_key IN ('export:variants', 'export:cohort')`,
+          [driver.schema]
+        )
+      // Read audits are batched (audit-buffer.ts flushes every 250 ms), so
+      // poll briefly instead of expecting the rows synchronously.
+      let audit = await readAudit()
+      const seenBoth = (): boolean => new Set(audit.rows.map((row) => row.entity_key)).size === 2
+      for (let i = 0; i < 30 && !seenBoth(); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        audit = await readAudit()
+      }
       const keys = new Set(audit.rows.map((row) => row.entity_key))
       expect(keys).toEqual(new Set(['export:variants', 'export:cohort']))
       expect(audit.rows.every((row) => row.user_name === 'web-gate-admin')).toBe(true)
