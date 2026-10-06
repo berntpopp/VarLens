@@ -20,8 +20,9 @@ import type { OverrideHandler } from '../../src/web/server/routes/types'
 import { makeDeps } from './helpers/dispatcher-adapters'
 
 const USERS: Record<string, { id: number; username: string; role: string }> = {
-  alice: { id: 1, username: 'alice', role: 'user' },
-  bob: { id: 2, username: 'bob', role: 'user' },
+  alice: { id: 1, username: 'alice', role: 'analyst' },
+  bob: { id: 2, username: 'bob', role: 'analyst' },
+  vera: { id: 4, username: 'vera', role: 'viewer' },
   root: { id: 3, username: 'root', role: 'admin' }
 }
 
@@ -70,9 +71,11 @@ function setup() {
     const user = USERS[String(request.headers['x-test-user'])]
     request.session = { user: { ...user, passwordChangedAt: null } } as never
   })
+  // Stands in for `import:start` so the call runs under that key's security
+  // policy (analyst write): secure() refuses keys without a policy.
   registerDispatcher(app, deps, {
     ...buildDispatcher(deps).overrides,
-    'test:startJob': startJobOverride(runner)
+    'import:start': startJobOverride(runner)
   })
 
   const call = async (user: string, domain: string, method: string, ...args: unknown[]) => {
@@ -91,7 +94,7 @@ function setup() {
 describe('job ownership over HTTP (two users + admin)', () => {
   test("user B cannot cancel user A's import; A can", async () => {
     const { runner, call } = setup()
-    const started = await call('alice', 'test', 'startJob', 'import_single')
+    const started = await call('alice', 'import', 'start', 'import_single')
     const jobId = String(started.body?.jobId)
 
     const denied = await call('bob', 'import', 'cancel')
@@ -111,7 +114,7 @@ describe('job ownership over HTTP (two users + admin)', () => {
 
   test("user B cannot cancel user A's batch import; an admin can", async () => {
     const { runner, call } = setup()
-    const started = await call('alice', 'test', 'startJob', 'import_batch')
+    const started = await call('alice', 'import', 'start', 'import_batch')
     const jobId = String(started.body?.jobId)
 
     expect((await call('bob', 'batch-import', 'cancel')).status).toBe(403)
@@ -124,7 +127,7 @@ describe('job ownership over HTTP (two users + admin)', () => {
 
   test('jobs are visible to their owner and admins only', async () => {
     const { call } = setup()
-    const started = await call('alice', 'test', 'startJob', 'export')
+    const started = await call('alice', 'import', 'start', 'export')
     const jobId = String(started.body?.jobId)
 
     const aliceList = (await call('alice', 'jobs', 'list')).body as unknown as Job[]
@@ -138,6 +141,18 @@ describe('job ownership over HTTP (two users + admin)', () => {
     const adminList = (await call('root', 'jobs', 'list')).body as unknown as Job[]
     expect(adminList.map((job) => job.id)).toEqual([jobId])
     expect((await call('root', 'jobs', 'cancel', jobId)).body).toEqual({ requested: true })
+  })
+
+  test('a viewer cannot cancel at all: role >= analyst AND owner (or admin)', async () => {
+    const { runner, call } = setup()
+    const started = await call('alice', 'import', 'start', 'import_single')
+    const jobId = String(started.body?.jobId)
+
+    const denied = await call('vera', 'import', 'cancel')
+    expect(denied.status).toBe(403)
+    expect(denied.body).toMatchObject({ code: 'FORBIDDEN', details: { error: 'role-required' } })
+    expect((await call('vera', 'jobs', 'cancel', jobId)).status).toBe(403)
+    expect(runner.get(jobId)?.status).toBe('running')
   })
 
   test('cancel with nothing running is a no-op for everyone', async () => {

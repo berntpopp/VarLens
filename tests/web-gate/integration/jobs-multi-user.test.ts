@@ -43,7 +43,8 @@ async function userSession(driver: WebDriver, username: string): Promise<string>
   const pool = new Pool({ connectionString: PG_URL, max: 1 })
   try {
     const auth = new PostgresWebAuthService({ pool, schema: driver.schema })
-    await auth.createUser(username, username, temp, 'web-gate-admin')
+    // Analysts: the jobs below are role-gated writes (viewer is the default).
+    await auth.createUser(username, username, temp, 'web-gate-admin', 'analyst')
   } finally {
     await pool.end()
   }
@@ -118,7 +119,7 @@ describe.skipIf(!HAS_PG)('jobs across users (web/Postgres)', () => {
 
       // Alice's running import, enqueued the way PostgresImportExecutor does it.
       const me = (await call(driver, alice, 'auth/currentUser')).json() as { id: number }
-      const handle = runAsJobActor({ userId: me.id, username: 'alice2', role: 'user' }, () =>
+      const handle = runAsJobActor({ userId: me.id, username: 'alice2', role: 'analyst' }, () =>
         jobRunner.enqueue('import_single', { caseName: 'HG005' }, (ctx) => {
           return new Promise((_resolve, reject) => {
             ctx.signal.addEventListener('abort', () => {
@@ -162,7 +163,7 @@ describe.skipIf(!HAS_PG)('jobs across users (web/Postgres)', () => {
       expect(all.statusCode, all.body).toBe(403)
       expect(all.json()).toMatchObject({
         code: 'FORBIDDEN',
-        userMessage: 'Only administrators can delete all cases.'
+        details: { error: 'role-required', requiredRole: 'admin' }
       })
       const allJob = await call(driver, dave, 'cases/startDelete', [{ mode: 'all' }])
       expect(allJob.statusCode, allJob.body).toBe(403)

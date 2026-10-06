@@ -109,7 +109,13 @@ async function invokeAsIpcResult(
   try {
     const result = await invoke()
     if (reply.statusCode >= 400) {
-      return toSerializableWebError(result)
+      const serialized = toSerializableWebError(result)
+      // Handler-level role refusals (`{ error: 'admin-required' }` + 403)
+      // share the security map's code, so the client sees ONE FORBIDDEN.
+      if (reply.statusCode === 403 && serialized.code === ErrorCode.UNKNOWN) {
+        serialized.code = ErrorCode.FORBIDDEN
+      }
+      return serialized
     }
     return result
   } catch (error) {

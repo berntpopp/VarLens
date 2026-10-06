@@ -54,7 +54,7 @@ export function authorizeOperation(key: string, request: FastifyRequest): Author
       ok: false,
       status: 401,
       body: {
-        code: ErrorCode.UNKNOWN,
+        code: ErrorCode.UNAUTHENTICATED,
         message: 'authentication required',
         userMessage: 'Please log in to continue.'
       }
@@ -65,7 +65,7 @@ export function authorizeOperation(key: string, request: FastifyRequest): Author
       ok: false,
       status: 403,
       body: {
-        code: ErrorCode.UNKNOWN,
+        code: ErrorCode.FORBIDDEN,
         message: 'role-required',
         userMessage: `Your role does not allow this action (requires ${policy.minRole}).`,
         details: { error: 'role-required', requiredRole: policy.minRole }

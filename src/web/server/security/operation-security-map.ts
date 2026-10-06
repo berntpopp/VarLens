@@ -162,6 +162,8 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'batch-import:extractZip': write(),
   'batch-import:cleanupZipTemp': write(),
   'batch-import:testZipPassword': read('analyst'),
+  // Encrypted-entry probe on the caller's own uploaded ZIP (P-08).
+  'batch-import:inspectZip': read('analyst'),
   'batch-import:checkDuplicates': read('analyst'),
 
   // ── jobs ────────────────────────────────────────────────────────────────
