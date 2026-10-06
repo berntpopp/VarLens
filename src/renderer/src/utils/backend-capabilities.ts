@@ -76,41 +76,47 @@ export function getUnsupportedReason(
   return `${LABELS[path]} is not available for ${backendLabel} yet.`
 }
 
+/**
+ * Storage-backend capability reads. Flags come from the capability document
+ * (`capabilityStore`, via `databaseStore.capabilities`). FAIL-CLOSED: while the
+ * document is missing (not loaded yet, failed, or no Pinia) every path reads as
+ * unavailable and a reason is returned (spec §4.3, gap P-11).
+ */
+function notLoadedReason(path: CapabilityPath): string {
+  return `${LABELS[path]} is unavailable until feature availability has loaded.`
+}
+
 export async function getCurrentUnsupportedReason(path: CapabilityPath): Promise<string | null> {
   if (getActivePinia() === undefined) {
-    return null
+    return notLoadedReason(path)
   }
 
   const databaseStore = useDatabaseStore()
   if (databaseStore.capabilities === null) {
-    try {
-      await databaseStore.loadCapabilities()
-    } catch {
-      return null
-    }
+    await databaseStore.loadCapabilities()
   }
 
   return databaseStore.capabilities === null
-    ? null
+    ? notLoadedReason(path)
     : getUnsupportedReason(databaseStore.capabilities, path)
 }
 
 export function currentCanUseFeature(path: CapabilityPath): boolean {
   if (getActivePinia() === undefined) {
-    return true
+    return false
   }
 
   const databaseStore = useDatabaseStore()
-  return databaseStore.capabilities === null || canUseFeature(databaseStore.capabilities, path)
+  return databaseStore.capabilities !== null && canUseFeature(databaseStore.capabilities, path)
 }
 
 export function getCurrentUnsupportedReasonSync(path: CapabilityPath): string | null {
   if (getActivePinia() === undefined) {
-    return null
+    return notLoadedReason(path)
   }
 
   const databaseStore = useDatabaseStore()
   return databaseStore.capabilities === null
-    ? null
+    ? notLoadedReason(path)
     : getUnsupportedReason(databaseStore.capabilities, path)
 }

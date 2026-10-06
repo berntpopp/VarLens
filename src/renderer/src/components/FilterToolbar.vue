@@ -169,6 +169,7 @@ import { stripVueProxies } from '../utils/stripVueProxies'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { usePermissions } from '../composables/usePermissions'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import { useAutoHiddenColumns, useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useApiService } from '../composables/useApiService'
 import {
@@ -218,6 +219,7 @@ interface Emits {
 const emit = defineEmits<Emits>()
 
 const { api } = useApiService()
+const { canUse } = useCapabilityStore()
 
 function warnUnsupported(reason: string): void {
   logService.warn(reason, 'backend-capabilities')
@@ -584,9 +586,9 @@ const exportToExcel = async (format?: ExportFormat) => {
   } else if (result.success && result.filePath !== undefined && result.filePath !== '') {
     const filePath = result.filePath
     // Web exports land in the browser's downloads; there is no folder to reveal.
-    const action = isWebRuntime()
-      ? undefined
-      : { text: 'Open folder', callback: () => api?.export.revealInFolder(filePath) }
+    const action = canUse('revealInFolder')
+      ? { text: 'Open folder', callback: () => api?.export.revealInFolder(filePath) }
+      : undefined
     emit('export-success', { filePath, action })
   }
 }

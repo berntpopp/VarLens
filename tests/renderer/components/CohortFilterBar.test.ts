@@ -7,6 +7,10 @@ import * as directives from 'vuetify/directives'
 import CohortFilterBar from '../../../src/renderer/src/components/cohort/CohortFilterBar.vue'
 import { createMockApi } from '../../utils/mock-api'
 import { FiltersKey, createFilters } from '../../../src/renderer/src/composables/useFilters'
+import { installCapabilities } from '../helpers/capabilities'
+
+// The capability store fails closed: install a desktop document.
+beforeEach(() => installCapabilities())
 
 const vuetify = createVuetify({
   components,

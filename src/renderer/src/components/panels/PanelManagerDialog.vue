@@ -42,7 +42,7 @@
           New Panel
         </v-btn>
         <v-btn
-          v-if="webOnlyNote === null"
+          v-if="canImportPanelApp"
           color="primary"
           variant="outlined"
           density="comfortable"
@@ -54,7 +54,7 @@
           Import PanelApp
         </v-btn>
         <v-btn
-          v-if="webOnlyNote === null"
+          v-if="canGenerateStringDb"
           color="primary"
           variant="outlined"
           density="comfortable"
@@ -135,12 +135,12 @@
                     <v-tooltip activator="parent" location="top">Copy</v-tooltip>
                   </v-btn>
                   <v-btn
-                    aria-label="Export BED"
+                    v-if="canExportBed"
+                    aria-label="Export"
                     size="small"
                     variant="text"
                     color="info"
                     :icon="mdiExport"
-                    :disabled="!canWrite"
                     @click="exportBed(panel)"
                   >
                     <v-icon :icon="mdiExport" />
@@ -175,7 +175,7 @@
           {{ formatDate(geneRefInfo.builtAt * 1000) }}
         </span>
         <v-btn
-          v-if="webOnlyNote === null"
+          v-if="canUpdateGeneRef"
           size="x-small"
           variant="text"
           color="primary"
@@ -260,7 +260,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { logService } from '../../services/LogService'
-import { isRuntimeFeatureAvailable } from '../../utils/runtime-features'
+import { useCapabilityStore } from '../../stores/capabilityStore'
 import PanelEditorDialog from './PanelEditorDialog.vue'
 import PanelAppImportDialog from './PanelAppImportDialog.vue'
 import StringDbGenerateDialog from './StringDbGenerateDialog.vue'
@@ -281,7 +281,6 @@ import {
   mdiShareVariant
 } from '@mdi/js'
 import type { GeneRefInfo } from '../../../../shared/types/api'
-import { usePermissions } from '../../composables/usePermissions'
 
 const props = defineProps<{
   modelValue: boolean
@@ -304,14 +303,20 @@ const panelAppImportOpen = ref(false)
 const stringDbGenerateOpen = ref(false)
 const geneRefInfo = ref<GeneRefInfo | null>(null)
 const geneRefUpdating = ref(false)
-// PanelApp / StringDB / gene-reference update have no web routes (outbound
-// APIs): hide them with one note. BED export is a signed browser download in
-// web (analysts and admins).
-const webOnlyNote = isRuntimeFeatureAvailable('panelAppImport')
-  ? null
-  : 'PanelApp import, StringDB generation and gene-reference updates are ' +
-    'available in the desktop app only for now.'
-const { canWrite } = usePermissions()
+// PanelApp / StringDB / BED export / gene-reference update are gated per
+// capability (parity manifest); unavailable ones are hidden and explained.
+const { canUse, capabilityReason } = useCapabilityStore()
+const canImportPanelApp = canUse('panelAppImport')
+const canGenerateStringDb = canUse('stringDbPanels')
+const canExportBed = canUse('panelBedExport')
+const canUpdateGeneRef = canUse('geneRefUpdate')
+const unavailableReasons = [
+  capabilityReason('panelAppImport'),
+  capabilityReason('stringDbPanels'),
+  capabilityReason('panelBedExport'),
+  capabilityReason('geneRefUpdate')
+].filter((reason): reason is string => reason !== null)
+const webOnlyNote = unavailableReasons.length > 0 ? unavailableReasons.join(' ') : null
 const errorSnackbar = ref(false)
 const errorSnackbarText = ref('')
 const exportAssemblyDialogOpen = ref(false)
@@ -419,7 +424,7 @@ function onExternalImport(): void {
 }
 
 async function updateGeneRef(): Promise<void> {
-  if (!api) return
+  if (!api || !canUpdateGeneRef) return
   geneRefUpdating.value = true
   try {
     const result = unwrapIpcResult(await api.geneRef.update())
@@ -446,7 +451,7 @@ function exportBed(panel: PanelListItem): void {
 }
 
 async function doExportBed(): Promise<void> {
-  if (!exportingPanel.value || !api) return
+  if (!exportingPanel.value || !api || !canExportBed) return
   try {
     unwrapIpcResult(
       await api.panels.exportBed(exportingPanel.value.id, exportAssembly.value, exportPadding.value)

@@ -93,7 +93,8 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       getCpuCount: () => ipcRenderer.invoke('system:getCpuCount'),
       setWorkerThreads: (count) => ipcRenderer.invoke('system:setWorkerThreads', count),
       getWorkerThreads: () => ipcRenderer.invoke('system:getWorkerThreads'),
-      getLogFilePath: () => ipcRenderer.invoke('system:logFilePath')
+      getLogFilePath: () => ipcRenderer.invoke('system:logFilePath'),
+      getCapabilities: () => ipcRenderer.invoke('system:capabilities')
     },
 
     export: {

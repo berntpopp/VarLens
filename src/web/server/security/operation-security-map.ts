@@ -26,11 +26,8 @@ import {
 } from './operation-policy'
 
 const POLL = 'High-frequency status poll; ids and counters only, no clinical data.'
-const PICKER =
-  'Web file-picker shim; returns no stored data (uploads go through http:import:upload).'
 const SELF_SESSION = 'Reads only the caller’s own session identity.'
 const CAPABILITY = 'Backend capability/health probe; no clinical data.'
-const VALIDATION = 'Pure validation against the bundled reference DB; touches no stored data.'
 const CANCEL_LOOKUP = 'Aborts the caller’s own in-flight request; changes no stored data.'
 
 /** Methods the dispatcher serves (overrides and read/write autoroutes). */
@@ -59,11 +56,10 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
 
   // ── database / capabilities ─────────────────────────────────────────────
   'database:capabilities': readExempt(CAPABILITY),
+  'system:getCapabilities': readExempt(CAPABILITY),
   'database:health': readExempt(CAPABILITY),
   'database:info': readExempt(CAPABILITY),
   'database:getOverview': readExempt('Aggregate counts for the overview page; no row data.'),
-  'database:overview': readExempt('Aggregate counts for the overview page; no row data.'),
-  'database:recentList': readExempt('Web returns the single hosted workspace entry.'),
 
   // ── cases ───────────────────────────────────────────────────────────────
   'cases:list': read(),
@@ -116,24 +112,17 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'variants:geneSymbols': read(),
   'variants:search': read(),
   'variants:query': read(),
-  'variants:filterOptions': read(),
   'variants:getFilterOptions': read(),
   'variants:shortlist': read(),
   'variants:columnMeta': read(),
 
   // ── cohort ──────────────────────────────────────────────────────────────
-  'cohort:query': read(),
   'cohort:getVariants': read(),
-  'cohort:summary': read(),
   'cohort:getSummary': read(),
-  'cohort:getSummaryStatus': readExempt(POLL),
-  'cohort:columnMeta': read(),
+  'cohort:getSummaryStatus': read(),
   'cohort:getColumnMeta': read(),
-  'cohort:carriers': read(),
   'cohort:getCarriers': read(),
-  'cohort:geneBurden': read(),
   'cohort:getGeneBurden': read(),
-  'cohort:rebuildSummary': write(),
   'cohort:runAssociation': write(),
   'cohort:cancelAssociation': write(),
 
@@ -168,18 +157,12 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'import:cancel': write(),
   'import:vcfPreview': read('analyst'),
   'import:vcfMultiPreview': read('analyst'),
-  'import:selectFile': readExempt(PICKER, 'analyst'),
-  'import:selectFiles': readExempt(PICKER, 'analyst'),
-  'import:selectBedFile': readExempt(PICKER, 'analyst'),
   'batch-import:start': write(),
   'batch-import:cancel': write(),
   'batch-import:extractZip': write(),
   'batch-import:cleanupZipTemp': write(),
   'batch-import:testZipPassword': read('analyst'),
   'batch-import:checkDuplicates': read('analyst'),
-  'batch-import:selectFiles': readExempt(PICKER, 'analyst'),
-  'batch-import:selectFolder': readExempt(PICKER, 'analyst'),
-  'batch-import:selectZip': readExempt(PICKER, 'analyst'),
 
   // ── jobs ────────────────────────────────────────────────────────────────
   'jobs:get': readExempt(POLL),
@@ -192,8 +175,8 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'panels:get': read(),
   'panels:getGenes': read(),
   'panels:activeForCase': read(),
-  'panels:validateSymbols': readExempt(VALIDATION),
-  'panels:autocomplete': readExempt(VALIDATION),
+  'panels:validateSymbols': read(),
+  'panels:autocomplete': read(),
   'panels:create': write(),
   'panels:update': write(),
   'panels:delete': write(),
@@ -210,8 +193,8 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'region-files:create': write(),
   'region-files:delete': write(),
   'region-files:importBed': write(),
-  'gene-ref:info': readExempt('Bundled reference DB version string.'),
-  'gene-ref:assemblies': readExempt('Bundled reference DB assembly list.'),
+  'gene-ref:info': read(),
+  'gene-ref:assemblies': read(),
 
   // ── presets / analysis groups / transcripts ─────────────────────────────
   'presets:list': read(),

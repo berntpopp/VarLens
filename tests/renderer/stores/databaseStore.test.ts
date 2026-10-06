@@ -8,6 +8,8 @@ import type {
   PostgresConnectionProfileSaveInput
 } from '../../../src/shared/types/postgres-profile'
 import type { StorageCapabilities } from '../../../src/shared/types/storage-capabilities'
+import { computeCapabilityDocument } from '../../../src/shared/ipc/capability-document'
+import { installCapabilities } from '../helpers/capabilities'
 
 const POSTGRES_PROFILE: PostgresConnectionProfilePublic = {
   id: 'profile-1',
@@ -120,6 +122,16 @@ describe('databaseStore.fetchInfo', () => {
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: {
+        // Desktop capability document: storage flags follow the open session.
+        system: {
+          getCapabilities: vi.fn().mockResolvedValue(
+            computeCapabilityDocument({
+              runtime: 'desktop',
+              role: 'admin',
+              storage: POSTGRES_CAPABILITIES
+            })
+          )
+        },
         database: {
           info: vi.fn().mockResolvedValue(null),
           recentList: vi.fn().mockResolvedValue([]),
@@ -146,6 +158,7 @@ describe('databaseStore.fetchInfo', () => {
         }
       }
     })
+    installCapabilities({ storage: POSTGRES_CAPABILITIES })
   })
 
   it('clears stale sqlite metadata when database:info returns null', async () => {

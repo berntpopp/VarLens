@@ -1,52 +1,56 @@
 import type { StorageReadTask } from '../../../main/storage/read-executor'
-import type { AuditLogEntry } from '../../../shared/types/database'
+import type { AuditEntityType, AuditLogEntry } from '../../../shared/types/database'
 import { requireAdmin } from './guards'
 import type { OverrideHandler } from './types'
 
 /**
- * Entity types that make up the clinical change history of shared data
- * (who classified / starred / commented a variant). Everyone who can see the
- * variant may see its history.
+ * Entity types a non-admin may read through `audit:getByEntity`: the clinical
+ * change history of a variant or case variant (ACMG, stars, comments, tags).
+ * Account and API-access rows (`user_account`, `api_call`) record employee
+ * activity and stay administrator-only (spec P-16, role policy).
  */
-const CLINICAL_ENTITY_TYPES = new Set<string>(['variant_annotation', 'case_variant_annotation'])
+const CLINICAL_AUDIT_ENTITY_TYPES: ReadonlySet<AuditEntityType> = new Set<AuditEntityType>([
+  'variant_annotation',
+  'case_variant_annotation'
+])
+
+export function clinicalAuditRows(rows: readonly AuditLogEntry[]): AuditLogEntry[] {
+  return rows.filter((row) => CLINICAL_AUDIT_ENTITY_TYPES.has(row.entity_type))
+}
 
 /**
- * Audit-trail reads in web mode (roles in security/operation-security-map.ts):
+ * Audit-log reads in web mode.
  *
- *   - `audit:query` browses the whole trail, which includes employee activity
- *     (logins, API access): admin only.
- *   - `audit:getByEntity` serves the Activity panel of one variant: every
- *     role, but non-admins only get clinical entity rows, so a viewer cannot
- *     read login history by asking for a username as the entity key.
+ *   audit:getByEntity  every signed-in user (shared data, role-gated writes);
+ *                      non-admins see only clinical change rows
+ *   audit:query        administrator only: the full trail includes logins and
+ *                      API access (employee activity)
  *
- * The dispatcher read-audits both — reading the trail is itself an access.
+ * The dispatcher still read-audits both calls: reading the audit log is itself
+ * an auditable access. Read audits are buffered, so the trail is flushed first
+ * to include every access up to this request.
  */
 export function buildAuditLogOverrides(): Record<string, OverrideHandler> {
+  const read = (type: 'audit:getByEntity' | 'audit:query', args: unknown[], deps: Deps) =>
+    deps.session.getReadExecutor().execute({ type, params: args } as StorageReadTask)
+
   return {
     'audit:getByEntity': {
       async handle(args, request, _reply, deps) {
         await deps.auditBuffer?.flush()
-        const rows = (await deps.session.getReadExecutor().execute({
-          type: 'audit:getByEntity',
-          params: args
-        } as StorageReadTask)) as AuditLogEntry[]
-        if (request.session?.user?.role === 'admin') return rows
-        return Array.isArray(rows)
-          ? rows.filter((row) => CLINICAL_ENTITY_TYPES.has(row.entity_type))
-          : []
+        const rows = (await read('audit:getByEntity', args, deps)) as AuditLogEntry[]
+        return request.session?.user?.role === 'admin' ? rows : clinicalAuditRows(rows)
       }
     },
     'audit:query': {
       async handle(args, request, reply, deps) {
         const admin = requireAdmin(request, reply)
         if (admin === undefined) return { error: 'admin-required' }
-        // Read audits are buffered; drain them first so an admin's view of the
-        // trail includes every access up to this request.
         await deps.auditBuffer?.flush()
-        return deps.session
-          .getReadExecutor()
-          .execute({ type: 'audit:query', params: args } as StorageReadTask)
+        return await read('audit:query', args, deps)
       }
     }
   }
 }
+
+type Deps = Parameters<OverrideHandler['handle']>[3]

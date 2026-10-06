@@ -8,6 +8,7 @@
 
 import type { WindowAPI, CommentCategory } from '../../../shared/types/api'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
+import { computeCapabilityDocument } from '../../../shared/ipc/capability-document'
 import { mockCases } from './fixtures/cases'
 import { mockVariants, mockFilterOptions } from './fixtures/variants'
 
@@ -18,7 +19,7 @@ const variants = [...mockVariants]
 const removeCases = (match: (id: number) => boolean): number =>
   cases.length - (cases = cases.filter((c) => !match(c.id))).length
 
-const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
+export const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
   backend: 'sqlite',
   workspace: {
     localFileLifecycle: true,
@@ -278,7 +279,13 @@ export const mockApi: WindowAPI = {
     getCpuCount: async () => 4,
     setWorkerThreads: async () => {},
     getWorkerThreads: async () => 0,
-    getLogFilePath: async () => '/mock/logs/main.log'
+    getLogFilePath: async () => '/mock/logs/main.log',
+    getCapabilities: async () =>
+      computeCapabilityDocument({
+        runtime: 'desktop',
+        role: 'admin',
+        storage: MOCK_SQLITE_CAPABILITIES
+      })
   },
   export: {
     variants: async () => ({ success: true, filePath: '/mock/export.xlsx' }),

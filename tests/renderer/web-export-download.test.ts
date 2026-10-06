@@ -1,20 +1,10 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-import { buildExportApi, buildPanelsApi } from '../../src/web/client/export-download'
+import { createApi } from '../../src/web/client/api'
+import { prepareAndDownload } from '../../src/web/client/export-download'
+import { ErrorCode } from '../../src/shared/types/errors'
 
-interface ExportApi {
-  variants: (
-    caseId: number,
-    filters: unknown,
-    caseName: string,
-    options?: { format?: 'csv' | 'xlsx' }
-  ) => Promise<unknown>
-  cohort: (params: unknown, options?: { format?: 'csv' | 'xlsx' }) => Promise<unknown>
-  revealInFolder: (filePath: string) => Promise<unknown>
-  cancel: () => Promise<unknown>
-  onProgress: (callback: (progress: unknown) => void) => () => void
-  other: unknown
-}
+const PREPARED = { downloadPath: 'download/abc123abc123abc123ab.1700000000000.sig', expiresAt: 1 }
 
 function captureAnchorClicks(): { clicks: HTMLAnchorElement[] } {
   const clicks: HTMLAnchorElement[] = []
@@ -26,30 +16,38 @@ function captureAnchorClicks(): { clicks: HTMLAnchorElement[] } {
   return { clicks }
 }
 
-const PREPARED = { downloadPath: 'download/abc123abc123abc123ab.1700000000000.sig', expiresAt: 1 }
+/** fetch stub answering POST /api/export/prepareDownload with `body`. */
+function stubPrepare(body: unknown, status = 200): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status }))
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+function sentRequest(fetchMock: ReturnType<typeof vi.fn>): { url: string; args: unknown[] } {
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+  return { url, args: (JSON.parse(String(init.body)) as { args: unknown[] }).args }
+}
 
 describe('web export download (window.api.export in web mode)', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   test('variant export prepares a grant over RPC, then downloads it by navigation', async () => {
-    const prepareDownload = vi.fn().mockResolvedValue(PREPARED)
-    const api = buildExportApi({ prepareDownload }) as ExportApi
+    const fetchMock = stubPrepare(PREPARED)
     const { clicks } = captureAnchorClicks()
 
+    // Large filters travel in the POST body: no URL-length limit any more.
     const filters = { consequences: ['HIGH'], gene_symbol: 'G'.repeat(20_000) }
-    const result = await api.variants(12, filters, 'Case A/1')
+    const result = await createApi().export.variants(12, filters as never, 'Case A/1')
 
     expect(result).toEqual({ success: true, filePath: 'Case_A_1_variants.csv' })
-    // Filters travel in the POST body: no URL-length limit any more.
-    expect(prepareDownload).toHaveBeenCalledWith({
-      kind: 'variants',
-      format: 'csv',
-      caseId: 12,
-      caseName: 'Case A/1',
-      filters
-    })
+    const sent = sentRequest(fetchMock)
+    expect(sent.url).toBe('/api/export/prepareDownload')
+    expect(sent.args).toEqual([
+      { kind: 'variants', format: 'csv', caseId: 12, caseName: 'Case A/1', filters }
+    ])
     expect(clicks).toHaveLength(1)
     expect(clicks[0].download).toBe('Case_A_1_variants.csv')
     expect(new URL(clicks[0].href, 'http://localhost').pathname).toBe(
@@ -59,71 +57,68 @@ describe('web export download (window.api.export in web mode)', () => {
   })
 
   test('cohort export honours the xlsx format option', async () => {
-    const prepareDownload = vi.fn().mockResolvedValue(PREPARED)
-    const api = buildExportApi({ prepareDownload }) as ExportApi
+    const fetchMock = stubPrepare(PREPARED)
     const { clicks } = captureAnchorClicks()
-
     const params = { gene_symbol: 'TP53' }
-    const result = (await api.cohort(params, { format: 'xlsx' })) as { filePath: string }
+
+    const result = (await createApi().export.cohort(params as never, { format: 'xlsx' })) as {
+      filePath: string
+    }
 
     expect(result.filePath).toMatch(/^cohort_variants_\d{4}-\d{2}-\d{2}\.xlsx$/)
-    expect(prepareDownload).toHaveBeenCalledWith({ kind: 'cohort', format: 'xlsx', params })
+    expect(sentRequest(fetchMock).args).toEqual([{ kind: 'cohort', format: 'xlsx', params }])
     expect(clicks).toHaveLength(1)
   })
 
-  test('a refused prepare (e.g. viewer role) returns the IPC error and starts no download', async () => {
+  test('a refused prepare (viewer role) returns the IPC error and starts no download', async () => {
     const refusal = {
       code: 'UNKNOWN',
       message: 'role-required',
       userMessage: 'Your role does not allow this action (requires analyst).'
     }
-    const api = buildExportApi({ prepareDownload: vi.fn().mockResolvedValue(refusal) }) as ExportApi
+    stubPrepare(refusal, 403)
     const { clicks } = captureAnchorClicks()
 
-    await expect(api.variants(1, {}, 'x')).resolves.toEqual(refusal)
+    await expect(createApi().export.variants(1, {} as never, 'x')).resolves.toEqual(refusal)
     expect(clicks).toHaveLength(0)
   })
 
-  test('panels.exportBed downloads the BED artifact and other panel methods use RPC', async () => {
-    const prepareDownload = vi.fn().mockResolvedValue(PREPARED)
-    const list = vi.fn()
-    const panels = buildPanelsApi({ list }, { prepareDownload }) as {
-      exportBed: (id: number, assembly: string, padding: number) => Promise<unknown>
-      list: unknown
-    }
+  test('panels.exportBed downloads the BED artifact', async () => {
+    const fetchMock = stubPrepare(PREPARED)
     const { clicks } = captureAnchorClicks()
 
-    await expect(panels.exportBed(4, 'GRCh38', 50)).resolves.toEqual({
+    await expect(createApi().panels.exportBed(4, 'GRCh38', 50)).resolves.toEqual({
       success: true,
       path: 'panel_4_GRCh38.bed'
     })
-    expect(prepareDownload).toHaveBeenCalledWith({
-      kind: 'panel-bed',
-      panelId: 4,
-      assembly: 'GRCh38',
-      paddingBp: 50
-    })
+    expect(sentRequest(fetchMock).args).toEqual([
+      { kind: 'panel-bed', panelId: 4, assembly: 'GRCh38', paddingBp: 50 }
+    ])
     expect(clicks).toHaveLength(1)
-    expect(panels.list).toBe(list)
   })
 
-  test('onProgress subscribes to the export:progress push event', () => {
-    const unsubscribe = vi.fn()
-    const subscribe = vi.fn().mockReturnValue(unsubscribe)
-    const api = buildExportApi({}, subscribe) as ExportApi
-    const callback = vi.fn()
-
-    expect(api.onProgress(callback)).toBe(unsubscribe)
-    expect(subscribe).toHaveBeenCalledWith('export:progress', callback)
+  test('a malformed prepare answer is reported, not downloaded', async () => {
+    const invoke = vi.fn(async () => ({ downloadPath: '../../etc/passwd' }))
+    const { clicks } = captureAnchorClicks()
+    await expect(prepareAndDownload({ kind: 'cohort' }, 'x.csv', invoke)).resolves.toMatchObject({
+      success: false
+    })
+    expect(clicks).toHaveLength(0)
   })
 
-  test('revealInFolder and cancel are local no-ops; other methods fall through to RPC', async () => {
-    const other = vi.fn()
-    const cancel = vi.fn()
-    const api = buildExportApi({ other, cancel }) as ExportApi
-    await expect(api.revealInFolder('x.csv')).resolves.toEqual({ success: false })
-    await expect(api.cancel()).resolves.toEqual({ cancelled: false })
-    expect(cancel).not.toHaveBeenCalled()
-    expect(api.other).toBe(other)
+  test('revealInFolder is desktop-only: refused locally without a request', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(createApi().export.revealInFolder('x.csv')).resolves.toMatchObject({
+      code: ErrorCode.UNSUPPORTED_RUNTIME
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  test('cancel is a local no-op: the browser download manager owns the stream', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(createApi().export.cancel()).resolves.toEqual({ cancelled: false })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

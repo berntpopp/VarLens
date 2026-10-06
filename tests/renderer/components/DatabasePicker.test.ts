@@ -9,6 +9,7 @@ import DatabasePicker from '../../../src/renderer/src/components/DatabasePicker.
 import { useDatabaseStore } from '../../../src/renderer/src/stores/databaseStore'
 import type { PostgresConnectionProfilePublic } from '../../../src/shared/types/postgres-profile'
 import { createMockApi, type MockApi } from '../../utils/mock-api'
+import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -35,6 +36,7 @@ describe('DatabasePicker', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    installCapabilities()
     mockApi = createMockApi()
     mockApi.database.deleteFile = vi.fn().mockResolvedValue({ success: true })
     window.api = mockApi as unknown as typeof window.api
@@ -149,6 +151,7 @@ describe('DatabasePicker', () => {
 
   it('hides desktop database actions in web mode', async () => {
     window.__VARLENS_WEB__ = true
+    installCapabilities({ runtime: 'web', role: 'user', storage: null })
     const store = useDatabaseStore()
     store.currentName = 'VarLens Web'
     store.currentPath = 'web:postgres'
