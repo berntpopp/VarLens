@@ -4,6 +4,7 @@ import App from './App.vue'
 import { useCapabilityStore } from './stores/capabilityStore'
 import vuetify from './plugins/vuetify'
 import router from './router'
+import { installOverlayEscapeGuard } from './utils/overlay-escape-guard'
 import './assets/styles/main.scss'
 import type { WindowAPI } from '../../shared/types/api'
 
@@ -31,6 +32,9 @@ async function bootstrap(): Promise<void> {
   await useCapabilityStore(pinia).load()
   app.use(router)
   app.use(vuetify)
+  // Before the first overlay can open: Escape must never race Vuetify's
+  // overlay-stack timer (every v-menu / v-dialog; see the guard's header).
+  installOverlayEscapeGuard()
   app.mount('#app')
 }
 
