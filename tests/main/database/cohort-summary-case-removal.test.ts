@@ -47,7 +47,12 @@ describe('incremental case removal equals a full cohort-summary rebuild', () => 
 
   const db = (): DatabaseService['database'] => service.database
 
-  function seed(next: () => number, caseCount: number): number[] {
+  /**
+   * `uniform`: annotations derive from the coordinate (like one VEP run across
+   * a cohort) with an occasional per-case deviation, which drives the
+   * decrement-only path; random annotations drive the per-key recompute path.
+   */
+  function seed(next: () => number, caseCount: number, uniform = false): number[] {
     const insertCase = db().prepare(
       `INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build)
        VALUES (?, '/tmp/x.json', 1, 0, 0, ?)`
@@ -65,19 +70,21 @@ describe('incremental case removal equals a full cohort-summary rebuild', () => 
       const rows = 5 + Math.floor(next() * 30)
       for (let v = 0; v < rows; v++) {
         const pos = 100 + Math.floor(next() * 25) * 10
+        const fixed = uniform && next() < 0.9
+        const slot = pos / 10
         insertVariant.run(
           id,
           next() < 0.8 ? '1' : 'X',
           pos,
           'A',
           next() < 0.7 ? 'G' : 'T',
-          GENES[Math.floor(next() * GENES.length)],
-          next() < 0.5 ? 'HIGH' : 'MODERATE',
-          next() < 0.5 ? 'missense_variant' : 'stop_gained',
+          fixed ? GENES[slot % GENES.length] : GENES[Math.floor(next() * GENES.length)],
+          fixed ? 'HIGH' : next() < 0.5 ? 'HIGH' : 'MODERATE',
+          fixed ? 'stop_gained' : next() < 0.5 ? 'missense_variant' : 'stop_gained',
           GTS[Math.floor(next() * GTS.length)],
-          Math.round(next() * 400) / 10,
-          next() < 0.3 ? null : Math.round(next() * 1000) / 100000,
-          next() < 0.2 ? `${600000 + Math.floor(next() * 5)}` : null,
+          fixed ? slot : Math.round(next() * 400) / 10,
+          fixed ? null : next() < 0.3 ? null : Math.round(next() * 1000) / 100000,
+          fixed ? null : next() < 0.2 ? `${600000 + Math.floor(next() * 5)}` : null,
           next() < 0.9 ? 'snv' : 'sv'
         )
       }
@@ -129,9 +136,10 @@ describe('incremental case removal equals a full cohort-summary rebuild', () => 
   }
 
   for (const seedValue of [1, 2, 3, 4, 5, 6, 7, 8]) {
-    it(`seed ${seedValue}: every single-case delete matches the full rebuild`, async () => {
+    const uniform = seedValue % 2 === 0
+    it(`seed ${seedValue}${uniform ? ' (uniform annotations)' : ''}: every single-case delete matches the full rebuild`, async () => {
       const next = rng(seedValue)
-      const ids = seed(next, 6)
+      const ids = seed(next, 6, uniform)
       rebuildCohortSummary(db())
       expect(isCohortSummaryStale(db())).toBe(false)
 

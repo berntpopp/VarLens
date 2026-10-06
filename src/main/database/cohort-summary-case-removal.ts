@@ -2,51 +2,49 @@
  * Incremental cohort-summary upkeep for a deleted case (audit 05, D-1).
  *
  * Deleting one case used to rebuild `cohort_variant_summary` and
- * `gene_burden_summary` from every remaining variant (~35 s at 5M rows).
- * This removes only the deleted case's contribution:
+ * `gene_burden_summary` from every remaining variant. This removes only the
+ * deleted case's contribution, inside the case's delete transaction:
  *
- *  1. before the delete, record the case's coordinates and genes in temp tables;
- *  2. after the delete (same transaction), drop the summary rows for exactly
- *     those coordinates/genes and recompute them from the remaining variants
- *     with the same INSERT-SELECT the full rebuild uses, restricted by key;
- *  3. refresh `cohort_frequency` for the case's genome build (its denominator,
- *     the build's case count, just changed).
+ * Before the delete, the case's own per-coordinate contribution (its deduped
+ * MAX values and het/hom flag — the same per-case dedupe the rebuild does) and
+ * its per-gene row counts/coordinates are copied into temp tables.
+ *
+ * After the delete:
+ *  - variant summary: a row keeps its MAX-aggregated annotation columns when
+ *    the case's value was below the stored maximum (or NULL), or when some
+ *    remaining carrier row still holds every value the case provided — then
+ *    only carrier/het/hom counts are decremented (rows reaching 0 carriers are
+ *    dropped). Otherwise the coordinate is recomputed from the remaining
+ *    variants with the full rebuild's own INSERT-SELECT, restricted by key.
+ *    `cohort_frequency` is refreshed for the case's genome build because its
+ *    denominator (the build's case count) changed.
+ *  - gene burden: variant_count -= the case's rows, affected_case_count -= 1,
+ *    unique_variant_count -= the case's coordinates no remaining variant of
+ *    the same gene and build carries; rows reaching 0 are dropped.
  *
  * Every column therefore equals what a full rebuild would produce (asserted by
- * `tests/main/database/cohort-summary-case-removal.test.ts`). The helper is
- * only valid when the summary is current beforehand; {@link openCaseSummaryRemoval}
- * returns null for a stale or missing summary and the caller falls back to a
- * full rebuild.
+ * `tests/main/database/cohort-summary-case-removal.test.ts`, excluding the
+ * gene `updated_at` timestamp). Only valid when the summary is current
+ * beforehand: {@link openCaseSummaryRemoval} returns null for a stale or
+ * missing summary and the caller falls back to a full rebuild.
  *
  * Runs inside worker threads: no MainLogger / Electron imports.
  */
-import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
+import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import {
   CHECK_TABLE_EXISTS_SQL,
-  geneBurdenInsertSql,
   variantSummaryInsertSql
 } from '../../shared/sql/cohort-summary-rebuild'
-
-const CREATE_TEMP_TABLES_SQL = `
-  CREATE TEMP TABLE IF NOT EXISTS removed_case_keys (
-    chr TEXT NOT NULL, pos INTEGER NOT NULL, ref TEXT NOT NULL, alt TEXT NOT NULL,
-    PRIMARY KEY (chr, pos, ref, alt)
-  ) WITHOUT ROWID;
-  CREATE TEMP TABLE IF NOT EXISTS removed_case_genes (
-    gene_symbol TEXT PRIMARY KEY
-  ) WITHOUT ROWID;
-`
-
-const KEY_FILTER = `
-      WHERE (v.chr, v.pos, v.ref, v.alt) IN (SELECT chr, pos, ref, alt FROM temp.removed_case_keys)`
-
-const GENE_FILTER = `
-    AND v.gene_symbol IN (SELECT gene_symbol FROM temp.removed_case_genes)`
+import {
+  CASE_REMOVAL_TEMP_TABLES_SQL,
+  CLEAR_TEMP_TABLES_SQL,
+  prepareRemovalStatements
+} from './cohort-summary-case-removal-sql'
 
 export interface CaseSummaryRemoval {
-  /** Capture the case's coordinates/genes. Call inside the delete transaction, before the delete. */
+  /** Capture the case's contribution. Call inside the delete transaction, before the delete. */
   beforeDelete(caseId: number): void
-  /** Recompute the captured keys. Call inside the same transaction, after the delete. */
+  /** Remove the captured contribution. Call inside the same transaction, after the delete. */
   afterDelete(): void
 }
 
@@ -66,72 +64,30 @@ export function openCaseSummaryRemoval(db: DatabaseType): CaseSummaryRemoval | n
   const exists = db.prepare(CHECK_TABLE_EXISTS_SQL).get() as { c: number }
   if (exists.c === 0 || isCohortSummaryStale(db)) return null
 
-  db.exec(CREATE_TEMP_TABLES_SQL)
-  const statements = prepareStatements(db)
+  db.exec(CASE_REMOVAL_TEMP_TABLES_SQL)
+  const s = prepareRemovalStatements(db, variantSummaryInsertSql)
   let genomeBuild: string | null = null
 
   return {
     beforeDelete(caseId) {
-      statements.clearKeys.run()
-      statements.clearGenes.run()
-      statements.captureKeys.run(caseId)
-      statements.captureGenes.run(caseId)
-      const row = statements.caseBuild.get(caseId) as { genome_build: string | null } | undefined
+      db.exec(CLEAR_TEMP_TABLES_SQL)
+      const row = s.caseBuild.get(caseId) as { genome_build: string | null } | undefined
       genomeBuild = row?.genome_build ?? null
+      s.captureRows.run(caseId)
+      s.captureGeneRows.run(caseId)
+      s.captureGeneCoords.run(caseId)
     },
     afterDelete() {
-      statements.deleteSummaryRows.run()
-      statements.insertSummaryRows.run()
-      statements.refreshFrequency.run(genomeBuild)
-      statements.deleteGeneRows.run()
-      statements.insertGeneRows.run()
+      s.markRecompute.run()
+      s.deleteRecomputeRows.run()
+      s.decrementRows.run()
+      s.dropEmptyRows.run()
+      s.insertRecomputeRows.run()
+      const cases = (s.buildCaseCount.get(genomeBuild) as { n: number }).n
+      s.refreshFrequency.run({ cases, build: genomeBuild })
+      s.countLostGeneCoords.run({ build: genomeBuild })
+      s.decrementGenes.run({ build: genomeBuild })
+      s.dropEmptyGenes.run()
     }
-  }
-}
-
-interface RemovalStatements {
-  clearKeys: Statement
-  clearGenes: Statement
-  captureKeys: Statement
-  captureGenes: Statement
-  caseBuild: Statement
-  deleteSummaryRows: Statement
-  insertSummaryRows: Statement
-  refreshFrequency: Statement
-  deleteGeneRows: Statement
-  insertGeneRows: Statement
-}
-
-function prepareStatements(db: DatabaseType): RemovalStatements {
-  return {
-    clearKeys: db.prepare('DELETE FROM temp.removed_case_keys'),
-    clearGenes: db.prepare('DELETE FROM temp.removed_case_genes'),
-    captureKeys: db.prepare(
-      `INSERT OR IGNORE INTO temp.removed_case_keys (chr, pos, ref, alt)
-       SELECT chr, pos, ref, alt FROM variants WHERE case_id = ?`
-    ),
-    captureGenes: db.prepare(
-      `INSERT OR IGNORE INTO temp.removed_case_genes (gene_symbol)
-       SELECT gene_symbol FROM variants
-       WHERE case_id = ? AND gene_symbol IS NOT NULL AND gene_symbol != ''`
-    ),
-    caseBuild: db.prepare('SELECT genome_build FROM cases WHERE id = ?'),
-    deleteSummaryRows: db.prepare(
-      `DELETE FROM cohort_variant_summary
-       WHERE (chr, pos, ref, alt) IN (SELECT chr, pos, ref, alt FROM temp.removed_case_keys)`
-    ),
-    insertSummaryRows: db.prepare(variantSummaryInsertSql(KEY_FILTER)),
-    // Same expression as the full rebuild's cohort_frequency column.
-    refreshFrequency: db.prepare(
-      `UPDATE cohort_variant_summary
-       SET cohort_frequency = CAST(carrier_count AS REAL) /
-         (SELECT COUNT(*) FROM cases WHERE genome_build = cohort_variant_summary.genome_build)
-       WHERE genome_build IS ?`
-    ),
-    deleteGeneRows: db.prepare(
-      `DELETE FROM gene_burden_summary
-       WHERE gene_symbol IN (SELECT gene_symbol FROM temp.removed_case_genes)`
-    ),
-    insertGeneRows: db.prepare(geneBurdenInsertSql(GENE_FILTER))
   }
 }
