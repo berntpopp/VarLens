@@ -377,6 +377,9 @@ export function useCohortData(): UseCohortDataReturn {
    * Uses generation counter to discard stale responses and count caching
    * to skip COUNT queries on pagination/sort changes.
    */
+  const pageCursors = new Map<string, string>()
+  const MAX_PAGE_CURSORS = 64
+
   const fetchVariants = async (params: CohortQueryParams): Promise<void> => {
     if (!api) {
       logService.warn('API not available - running outside Electron', 'cohort')
@@ -413,6 +416,12 @@ export function useCohortData(): UseCohortDataReturn {
       const filtersChanged = filterHash !== cachedFilterHash
 
       const ipcParams = buildIpcParams(params)
+      // Keyset paging (default carrier-count sort, both backends): reuse the
+      // cursor the previous page returned for this offset + query scope.
+      const offset = params.offset ?? 0
+      const cursorScope = JSON.stringify({ ...ipcParams, offset: undefined })
+      const cursor = pageCursors.get(`${cursorScope}@${offset}`)
+      if (cursor !== undefined) ipcParams.cursor = cursor
       if (!filtersChanged) {
         ipcParams._count_needed = false
       }
@@ -422,6 +431,10 @@ export function useCohortData(): UseCohortDataReturn {
 
       // Discard stale responses from superseded requests
       if (thisGeneration !== requestGeneration) return
+      if (result.next_cursor !== undefined) {
+        if (pageCursors.size >= MAX_PAGE_CURSORS) pageCursors.clear()
+        pageCursors.set(`${cursorScope}@${offset + params.limit}`, result.next_cursor)
+      }
 
       variants.value = markRaw(result.data ?? [])
       if (filtersChanged) {

@@ -36,8 +36,8 @@ describe('Migration v35: case_data_info backfill', () => {
     runMigrations(db)
   }
 
-  it('lands at schema version 35', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+  it('lands at the latest schema version (36)', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(36)
   })
 
   it('inserts a provenance row for every case without one', () => {

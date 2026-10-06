@@ -10,6 +10,7 @@ import { CLINICAL_METRICS } from './clinical-metrics'
 import { BUILT_IN_PRESETS } from './built-in-presets'
 import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
 import { createChrRankIndexes } from './chr-rank-indexes'
+import { migrateCohortKeysetIndex } from './cohort-keyset-index'
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -51,6 +52,7 @@ import { createChrRankIndexes } from './chr-rank-indexes'
  * - 33: chr-rank expression indexes for natural chromosome order (chr-rank-indexes.ts)
  * - 34: reserved (unused)
  * - 35: backfill case_data_info rows the worker import path failed to write
+ * - 36: cohort keyset index idx_cvs_carrier_keyset (cohort-keyset-index.ts)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1872,6 +1874,12 @@ export function runMigrations(db: Database.Database): void {
   if (currentVersion < 35) {
     backfillMissingCaseDataInfo(db)
     db.exec('PRAGMA user_version = 35')
+  }
+
+  // v36: keyset-able cohort default order (mirrors PG 0020).
+  if (currentVersion < 36) {
+    migrateCohortKeysetIndex(db)
+    db.exec('PRAGMA user_version = 36')
   }
 }
 

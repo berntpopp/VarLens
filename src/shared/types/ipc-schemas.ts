@@ -158,7 +158,10 @@ export const CohortSearchParamsSchema = z.object({
   variant_type: nullishString(),
 
   // Count optimization flag
-  _count_needed: z.boolean().optional()
+  _count_needed: z.boolean().optional(),
+
+  // Opaque keyset cursor (default carrier-count sort); ignored when stale
+  cursor: z.string().max(2048).optional()
 })
 
 /**
