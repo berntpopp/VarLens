@@ -55,7 +55,7 @@ create_issue() {
   local id="$1"
   local priority="$2"
   local title="$3"
-  local labels="$4"
+  local issue_labels="$4"
   local file="$5"
 
   if [[ "$TARGET_ID" == "open" ]]; then
@@ -69,7 +69,7 @@ create_issue() {
     return 0
   fi
 
-  local full_labels="${priority},${labels}"
+  local full_labels="${priority},${issue_labels}"
   local full_title="[$id] $title"
 
   # Check if issue already exists
