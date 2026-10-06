@@ -17,12 +17,17 @@
  * `as const satisfies` against the executor unions, so the
  * autoroute mapping cannot drift silently.
  *
+ * Every resolved method then runs through `secure()` (security/secure.ts),
+ * which applies the ONE security map (security/operation-security-map.ts):
+ * role-gated authorization, the request context carrying the actor, and the
+ * method's audit rule. A method without a policy is refused.
+ *
  * Sessions / auth are wired separately as a Fastify preHandler in
  * server/auth.ts; this dispatcher assumes the caller is already
  * authenticated for everything except the few public overrides
  * marked `public: true`.
  */
-import type { FastifyInstance, FastifyReply } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 import type { StorageReadTask } from '../../main/storage/read-executor'
@@ -57,12 +62,7 @@ import { buildTranscriptOverrides } from './routes/transcripts'
 import { buildVepOverrides } from './routes/vep'
 import { buildVariantOverrides } from './routes/variants'
 import type { DispatcherDeps, InvokeBody, OverrideHandler } from './routes/types'
-import {
-  recordApiReadAudit,
-  recordApiWriteAudit,
-  shouldAuditApiRead,
-  shouldAuditOverrideWrite
-} from './audit'
+import { secure } from './security/secure'
 import {
   DispatcherErrorResponseSchema,
   DispatcherInvokeBodySchema,
@@ -269,6 +269,34 @@ export function buildDispatcher(_deps: DispatcherDeps): {
 }
 
 /**
+ * Resolve `<domain>:<method>` to the function that serves it: a per-domain
+ * override first, then the read / write executor autoroutes. Undefined means
+ * the method does not exist (404). Authorization and audit are NOT decided
+ * here — `secure()` applies the security map to whatever this returns.
+ */
+function resolveInvocation(
+  key: string,
+  args: unknown[],
+  request: FastifyRequest,
+  reply: FastifyReply,
+  deps: DispatcherDeps,
+  override: OverrideHandler | undefined
+): (() => Promise<unknown>) | undefined {
+  if (override !== undefined) {
+    return async () => override.handle(args, request, reply, deps)
+  }
+  if (isReadTaskType(key)) {
+    const task = { type: key, params: args } as StorageReadTask
+    return () => deps.session.getReadExecutor().execute(task)
+  }
+  if (isWriteTaskType(key)) {
+    const task = { type: key, params: args } as StorageWriteTask
+    return () => deps.session.getWriteExecutor().execute(task)
+  }
+  return undefined
+}
+
+/**
  * Register the single dispatcher route. All `POST /api/<domain>/<method>`
  * traffic from the browser lands here.
  */
@@ -336,77 +364,27 @@ export function registerDispatcher(
         } satisfies SerializableError
       }
 
-      if (override !== undefined) {
-        const result = await invokeAsIpcResult(reply, async () =>
-          override.handle(args, request, reply, deps)
-        )
-        recordDispatcherOperationMetrics({
-          metrics: deps.metrics,
-          key,
-          statusCode: reply.statusCode,
-          result
-        })
-        if (reply.statusCode < 400 && (isWriteTaskType(key) || shouldAuditOverrideWrite(key))) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        } else if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiReadAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        }
-        return result
+      const invoke = resolveInvocation(key, args, request, reply, deps, override)
+      if (invoke === undefined) {
+        reply.code(404)
+        return {
+          code: ErrorCode.NOT_FOUND,
+          message: 'unknown method',
+          userMessage: 'Unknown API method.',
+          details: { domain: safeIdentifier(domain), method: safeIdentifier(method) }
+        } satisfies SerializableError
       }
 
-      if (isReadTaskType(key)) {
-        const task = { type: key, params: args } as StorageReadTask
-        const result = await invokeAsIpcResult(reply, () =>
-          deps.session.getReadExecutor().execute(task)
-        )
-        recordDispatcherOperationMetrics({
-          metrics: deps.metrics,
-          key,
-          statusCode: reply.statusCode,
-          result
-        })
-        if (reply.statusCode < 400 && shouldAuditApiRead(key)) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiReadAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        }
-        return result
-      }
-
-      if (isWriteTaskType(key)) {
-        const task = { type: key, params: args } as StorageWriteTask
-        const result = await invokeAsIpcResult(reply, () =>
-          deps.session.getWriteExecutor().execute(task)
-        )
-        recordDispatcherOperationMetrics({
-          metrics: deps.metrics,
-          key,
-          statusCode: reply.statusCode,
-          result
-        })
-        if (reply.statusCode < 400) {
-          const auditResult = await invokeAsIpcResult(reply, () =>
-            recordApiWriteAudit(deps, { key, username: request.session?.user?.username })
-          )
-          if (reply.statusCode >= 400) return auditResult
-        }
-        return result
-      }
-
-      reply.code(404)
-      return {
-        code: ErrorCode.NOT_FOUND,
-        message: 'unknown method',
-        userMessage: 'Unknown API method.',
-        details: { domain: safeIdentifier(domain), method: safeIdentifier(method) }
-      } satisfies SerializableError
+      // One wrapper for every method: role check from the security map,
+      // request context (actor) for the handler, then the audit rule.
+      const result = await secure(key, request, reply, deps, invoke, invokeAsIpcResult)
+      recordDispatcherOperationMetrics({
+        metrics: deps.metrics,
+        key,
+        statusCode: reply.statusCode,
+        result
+      })
+      return result
     }
   )
 }

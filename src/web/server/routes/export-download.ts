@@ -33,6 +33,7 @@ import {
 } from '../../../shared/api/schemas/export'
 import { ErrorCode, type SerializableError } from '../../../shared/types/errors'
 import { recordApiReadAudit } from '../audit'
+import { requireOperation } from '../security/secure'
 import type { DispatcherDeps } from './types'
 
 export const VARIANT_EXPORT_DOWNLOAD_PATH = '/api/export/variants/download'
@@ -80,6 +81,8 @@ function requireExportSession(request: FastifyRequest, reply: FastifyReply): str
     })
     return undefined
   }
+  // Exporting is an analyst action (security/operation-security-map.ts).
+  if (requireOperation('http:export:download', request, reply) === undefined) return undefined
   if (request.session.mustChangePassword === true) {
     void reply.code(403).send({
       code: ErrorCode.UNKNOWN,
