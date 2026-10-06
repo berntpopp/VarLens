@@ -5,7 +5,7 @@
 -- Each index is built on the shared chr-rank expression. The expression below
 -- MUST stay byte-identical to chrRankSql('chr') in
 -- src/shared/sql/chromosome-order.ts (locked by
--- tests/main/storage/postgres-chr-rank-migration.test.ts). The query sinks emit
+-- tests/main/storage/postgres-chr-rank-order.test.ts). The query sinks emit
 -- it through that function, so ORDER BY matches these indexes.
 --
 -- idx_variants_case_chr_rank: case view default order. Built on variants_all
