@@ -44,7 +44,7 @@ Merged or being merged, in this order: the parity spec, **P-A**, **P-B**, `main`
 | L2 `perf/backend-leftovers` | Case delete is incremental, so it no longer rebuilds the search index and cohort summary (5M rows: 42 s → 13 s). The full rebuild runs per chromosome and can be cancelled. Cohort keyset paging covers the carrier-count sort. SQLite migrations run in a worker (main-thread block 1357 → 41 ms). Desktop auth writes go through the writer thread. |
 | L1 `feat/ui-followups-leftovers` | One compact **Links** column (case, cohort and shortlist), so ClinVar is visible at 1366. Default column order changed: ClinVar, gnomAD AF and CADD now come after Gene. rem column widths. The app bar is 3rem tall. "Auto (fit)" page size. |
 
-Migration numbering is assigned by the integrator. Check `git log` on the branch for the final numbers. Expected: PG 0020 roles, 0021 cohort keyset; SQLite v36 roles, v37 cohort keyset. A test enforces unique and contiguous PG migration numbers.
+Migration numbering (final, set at integration): PG `0020_user_roles` (P-D roles) and `0021_cohort_keyset_index` (L2); SQLite v36 roles and v37 cohort keyset (`LATEST_SQLITE_SCHEMA_VERSION = 37`). P-B and P-C added no migrations. The next free numbers are PG 0022 and SQLite v38. A test enforces unique and contiguous PG migration numbers; the reserved-gap allowance is gone.
 
 If PR 2 is not merged when you start: push `integration/parity-2026-10`, open the PR, merge when CI is green, then follow the release procedure in §6.
 
