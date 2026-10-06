@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { chrRankSql } from '../../../src/shared/sql/chromosome-order'
 
 import {
   buildPostgresVariantQueryParts,
@@ -317,9 +318,11 @@ describe('PostgresVariantReadRepository', () => {
     expect(orderBySql).not.toContain('DROP TABLE')
   })
 
-  it('defaults to chromosome-then-position ordering when no sort is given (cohort/SQLite parity)', () => {
+  it('defaults to natural chromosome-then-position ordering when no sort is given (cohort/SQLite parity)', () => {
     const { orderBySql } = buildPostgresVariantQueryParts({ case_id: 1 }, '"public"', [])
-    expect(orderBySql).toBe('ORDER BY v.chr ASC, v.pos ASC NULLS LAST, v.id ASC')
+    expect(orderBySql).toBe(
+      `ORDER BY ${chrRankSql('v.chr')} ASC, v.chr COLLATE "C" ASC, v.pos ASC, v.id ASC`
+    )
   })
 
   it('rejects unsupported postgres column filter keys instead of ignoring them', async () => {

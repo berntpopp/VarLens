@@ -21,6 +21,7 @@ import { tokenize, parse } from '../../shared/utils/boolean-search'
 import { emitCohortSearch } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
+import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 
 /**
  * Sortable columns for cohort queries
@@ -224,8 +225,13 @@ export class CohortService {
     // Normalize at the sink rather than trusting sortOrder's upstream
     // 'asc' | 'desc' type — this is the cohort-view sink, so this ternary
     // also satisfies the cohort-parity requirement for S7.
-    const direction = sortOrder === 'asc' ? 'ASC' : 'DESC'
-    const orderByClause = `ORDER BY ${sortBy} ${direction} NULLS LAST, chr ASC, pos ASC, ref ASC, alt ASC`
+    // Natural chromosome order in the tiebreaker (and for sort_by=chr) —
+    // shared with both PostgreSQL cohort paths; see chromosome-order.ts.
+    const orderByClause = cohortOrderByClause(
+      validatedSortKey,
+      sortBy,
+      sortOrder === 'asc' ? 'asc' : 'desc'
+    )
 
     // Data query — no window function, LIMIT benefits from early termination
     const sql = `

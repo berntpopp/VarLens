@@ -24,6 +24,10 @@ import { runNamed, runNamedDynamic } from './named-query'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import type { PostgresVariantColumnDefinition } from './postgres-variant-columns'
 import { addPostgresClinicalVariantFilters } from './postgres-variant-clinical-filter-sql'
+import {
+  buildVariantOrderTerms,
+  type ResolvedVariantSort
+} from '../../../shared/sql/chromosome-order'
 
 const POSTGRES_BASE_SORT_COLUMNS = Object.fromEntries(
   Object.entries(BASE_SORTABLE_COLUMNS).map(([key, column]) => [key, `v.${column}`])
@@ -306,23 +310,16 @@ function normalizePostgresColumnFilterValue(value: string | number): string | nu
 }
 
 function buildPostgresVariantOrderBy(sortBy?: SortItem[]): string {
-  const orderParts: string[] = []
+  const resolvedSorts: ResolvedVariantSort[] = []
   for (const sort of sortBy ?? []) {
-    const sqlColumn = POSTGRES_BASE_SORT_COLUMNS[sort.key]
-    if (sqlColumn !== undefined) {
-      // Normalize at the sink rather than trusting sort.order's upstream
-      // 'asc' | 'desc' type (S7).
-      orderParts.push(`${sqlColumn} ${sort.order === 'asc' ? 'ASC' : 'DESC'} NULLS LAST`)
-    }
+    const column = POSTGRES_BASE_SORT_COLUMNS[sort.key]
+    if (column !== undefined) resolvedSorts.push({ key: sort.key, column, order: sort.order })
   }
-
-  if (orderParts.length === 0) {
-    // Genomic default order (chr, then pos) — mirrors the SQLite case path
-    // (VariantFilterBuilder.applySort) and the cohort ORDER BY tiebreaker.
-    orderParts.push('v.chr ASC', 'v.pos ASC NULLS LAST')
-  }
-  orderParts.push('v.id ASC')
-  return `ORDER BY ${orderParts.join(', ')}`
+  // Shared with the SQLite sink (VariantFilterBuilder.applySort): natural
+  // chromosome order (1..22, X, Y, MT) via the chr-rank expression; the
+  // default (chr, pos) order is served by idx_variants_case_chr_rank (0017).
+  // Direction is normalised at the sink inside buildVariantOrderTerms (S7).
+  return `ORDER BY ${[...buildVariantOrderTerms(resolvedSorts, 'v', 'postgres'), 'v.id ASC'].join(', ')}`
 }
 
 export class PostgresVariantReadRepository {

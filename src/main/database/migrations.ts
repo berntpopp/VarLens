@@ -9,6 +9,7 @@ import type Database from 'better-sqlite3-multiple-ciphers'
 import { CLINICAL_METRICS } from './clinical-metrics'
 import { BUILT_IN_PRESETS } from './built-in-presets'
 import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
+import { createChrRankIndexes } from './chr-rank-indexes'
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -47,6 +48,7 @@ import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
  * - 30: end_pos on cohort_variant_summary for SV/CNV interval-overlap
  * - 31: projects registry
  * - 32: variant_transcripts.func — canonical transcript impact/SO model (D1)
+ * - 33: chr-rank expression indexes for natural chromosome order (chr-rank-indexes.ts)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1843,5 +1845,13 @@ export function runMigrations(db: Database.Database): void {
          AND vt.consequence NOT IN ('HIGH', 'MODERATE', 'LOW', 'MODIFIER')
     `)
     db.exec('PRAGMA user_version = 32')
+  }
+
+  // Migration v33: natural chromosome order (1..22, X, Y, MT). Expression
+  // indexes on the shared chr-rank expression so ORDER BY rank, chr, pos can
+  // walk an index on the case and cohort views. Mirrors PG 0017.
+  if (currentVersion < 33) {
+    createChrRankIndexes(db)
+    db.exec('PRAGMA user_version = 33')
   }
 }
