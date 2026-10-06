@@ -2851,7 +2851,15 @@ exports[`useAnnotations characterization > load batch > scope global > first-cac
         "global": {
           "starred": 1,
         },
-        "perCase": null,
+        "perCase": {
+          "acmg_classification": "Likely benign",
+          "acmg_evidence": "{"BS1":true}",
+          "case_id": 1,
+          "id": 6,
+          "per_case_comment": "old case",
+          "starred": 1,
+          "variant_id": 11,
+        },
       },
     ],
     [

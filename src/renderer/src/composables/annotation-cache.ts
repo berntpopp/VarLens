@@ -19,6 +19,8 @@ export interface AnnotationCache {
   perCase: CaseVariantAnnotation | null
 }
 
+export type AnnotationSlot = keyof AnnotationCache
+
 export interface VariantCoords {
   chr: string
   pos: number
@@ -63,8 +65,10 @@ export function variantKey({ chr, pos, ref, alt }: VariantCoords): string {
  * only one triggerRef flush, reducing reactivity churn during batch loads.
  */
 let pendingCacheTrigger = false
-export function cacheSet(key: string, value: AnnotationCache): void {
+export function cacheSet(key: string, value: AnnotationCache, unloaded?: AnnotationSlot): void {
   annotationCache.value.set(key, value)
+  if (unloaded === undefined) unloadedSlots.delete(key)
+  else rememberUnloadedSlot(key, unloaded)
   if (!pendingCacheTrigger) {
     pendingCacheTrigger = true
     Promise.resolve().then(() => {
@@ -79,9 +83,52 @@ export function triggerAnnotationCache(): void {
   triggerRef(annotationCache)
 }
 
+// The cohort table (global scope) and the case table (per-case scope) share
+// this cache. An entry is not always filled for both: a global load or write
+// knows nothing about the per-case slot, and a per-case write on a row that
+// was never loaded knows nothing about the global one. The slot that was never
+// fetched holds `null` like a real "no annotation", so it is tracked here —
+// otherwise the other table would take the entry as loaded and never ask.
+// Entries without a mark (including ones set directly on the map) are complete.
+const unloadedSlots = new Map<string, AnnotationSlot>()
+// Keys whose in-flight request will only bring the global slot.
+const globalOnlyLoading = new Set<string>()
+
+function rememberUnloadedSlot(key: string, slot: AnnotationSlot): void {
+  // Marks of entries the LRU evicted are dead weight; shed them now and then.
+  if (unloadedSlots.size >= MAX_CACHE_SIZE * 2) {
+    for (const stale of [...unloadedSlots.keys()]) {
+      if (!annotationCache.value.has(stale)) unloadedSlots.delete(stale)
+    }
+  }
+  unloadedSlots.set(key, slot)
+}
+
+/** The slot of a cached entry that was never fetched, if any. */
+export function unloadedSlotOf(key: string): AnnotationSlot | undefined {
+  return annotationCache.value.has(key) ? unloadedSlots.get(key) : undefined
+}
+
+/**
+ * Store the result of a global load. It only knows the global slot, so a
+ * per-case slot the cache already holds is kept.
+ */
+export function cacheSetGlobalSlot(key: string, global: VariantAnnotation | null): void {
+  const cache = annotationCache.value
+  const existing = cache.has(key) ? cache.get(key) : undefined
+  const perCaseKnown = existing !== undefined && unloadedSlots.get(key) !== 'perCase'
+  cacheSet(
+    key,
+    { global, perCase: existing?.perCase ?? null },
+    perCaseKnown ? undefined : 'perCase'
+  )
+}
+
 /** Set loading state and trigger shallowRef reactivity. */
-export function setLoading(key: string, value: boolean): void {
+export function setLoading(key: string, value: boolean, kind: AnnotationBatchKind = 'case'): void {
   loadingStates.value.set(key, value)
+  if (value && kind === 'global') globalOnlyLoading.add(key)
+  else globalOnlyLoading.delete(key)
   triggerRef(loadingStates)
 }
 
@@ -89,9 +136,18 @@ export function isKeyLoading(key: string): boolean {
   return loadingStates.value.get(key) ?? false
 }
 
-/** True when a load for this key would be redundant (cached or in flight). */
-export function isCachedOrLoading(key: string): boolean {
-  return annotationCache.value.has(key) || loadingStates.value.get(key) === true
+/**
+ * True when a load of `kind` has to fetch this key: it is neither in flight
+ * nor cached with everything that kind of load provides. A per-case load
+ * returns both slots; a global load only the global one.
+ */
+export function needsLoad(key: string, kind: AnnotationBatchKind): boolean {
+  const inFlight = loadingStates.value.get(key) === true
+  if (inFlight && (kind === 'global' || !globalOnlyLoading.has(key))) return false
+  if (!annotationCache.value.has(key)) return true
+  const unloaded = unloadedSlots.get(key)
+  if (unloaded === undefined) return false
+  return kind === 'case' || unloaded === 'global'
 }
 
 export function invalidateAnnotationGeneration(kind: AnnotationBatchKind): void {
@@ -133,6 +189,8 @@ function clearEntries(): void {
   cacheEpoch++
   annotationCache.value.clear()
   loadingStates.value.clear()
+  unloadedSlots.clear()
+  globalOnlyLoading.clear()
   awaitedKeys.case.clear()
   awaitedKeys.global.clear()
   triggerRef(annotationCache)

@@ -28,19 +28,22 @@ import {
   annotationCache,
   beginAnnotationRequest,
   cacheSet,
+  cacheSetGlobalSlot,
   dropCacheOfClosedDatabase,
   getAnnotationCacheEpoch,
   getAnnotationGeneration,
   hasDbSwitchedSince,
-  isCachedOrLoading,
   isKeyLoading,
   isTrackedCase,
   markAwaited,
+  needsLoad,
   setLoading,
   takeAwaited,
   triggerAnnotationCache,
+  unloadedSlotOf,
   variantKey,
   type AnnotationCache,
+  type AnnotationSlot,
   type VariantCoords
 } from './annotation-cache'
 
@@ -100,6 +103,14 @@ function leftScope(scope: AnnotationWriteScope, requestDbPath: string | null): b
   if (!isResponseStale(scope, requestDbPath)) return false
   dropCacheOfClosedDatabase()
   return true
+}
+
+function slotOf(scope: AnnotationLoadScope): AnnotationSlot {
+  return scope.kind === 'case' ? 'perCase' : 'global'
+}
+
+function otherSlot(slot: AnnotationSlot): AnnotationSlot {
+  return slot === 'perCase' ? 'global' : 'perCase'
 }
 
 function readSlot(entry: AnnotationCache, scope: AnnotationLoadScope): SlotValue | null {
@@ -248,7 +259,14 @@ async function mutate(
     // update the entry the new scope loaded, and never recreate one from it.
     const live = annotationCache.value.get(key)
     if (epoch !== getAnnotationCacheEpoch() && !live) return
-    cacheSet(key, mergeServerSlot(live, scope, updated))
+    // The write confirms its own slot; the other one stays as (un)loaded as it was.
+    const written = slotOf(scope)
+    const unloaded = live ? unloadedSlotOf(key) : otherSlot(written)
+    cacheSet(
+      key,
+      mergeServerSlot(live, scope, updated),
+      unloaded === written ? undefined : unloaded
+    )
   } catch (error) {
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
     if (leftScope(scope, dbPath)) return
@@ -271,6 +289,12 @@ async function fetchEntry(
   return { global, perCase: null }
 }
 
+/** Cache a load result: a per-case load fills both slots, a global load only its own. */
+function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationCache): void {
+  if (scope.kind === 'case') cacheSet(key, entry)
+  else cacheSetGlobalSlot(key, entry.global)
+}
+
 /** Load annotations for one variant (call on row visible or expand). */
 async function load(
   api: WindowAPI | undefined,
@@ -280,13 +304,13 @@ async function load(
   if (!api) return
   const dbPath = beginAnnotationRequest(scopeCaseId(scope))
   const key = variantKey(coords)
-  if (isCachedOrLoading(key)) return
+  if (!needsLoad(key, scope.kind)) return
 
-  setLoading(key, true)
+  setLoading(key, true, scope.kind)
   try {
     const entry = await fetchEntry(api, scope, coords)
     if (isResponseStale(scope, dbPath)) return
-    cacheSet(key, entry)
+    storeLoaded(key, scope, entry)
   } catch (error) {
     logService.error(
       `Failed to load ${scopeQualifier(scope)}annotations: ` + getTransportErrorMessage(error),
@@ -327,16 +351,15 @@ async function loadBatch(
   const uncached: BatchAnnotationKey[] = []
   for (const v of variants) {
     const key = variantKey(v)
-    if (annotationCache.value.has(key)) continue
+    if (needsLoad(key, scope.kind)) uncached.push(batchKey(scope, v))
     // Already in flight: rely on that request, even if its batch is later
     // found to belong to a previous page.
-    if (isKeyLoading(key)) markAwaited(scope.kind, key)
-    else uncached.push(batchKey(scope, v))
+    else if (isKeyLoading(key)) markAwaited(scope.kind, key)
   }
   if (uncached.length === 0) return
 
   // Mark all keys as in-flight before the IPC call
-  for (const vk of uncached) setLoading(variantKey(vk), true)
+  for (const vk of uncached) setLoading(variantKey(vk), true, scope.kind)
 
   try {
     const results = unwrapIpcResult(await api.annotations.batchGet(scopeCaseId(scope), uncached))
@@ -347,7 +370,7 @@ async function loadBatch(
     for (const [key, value] of Object.entries(results)) {
       const awaited = takeAwaited(scope.kind, key)
       if (fromPriorPage && !awaited) continue
-      cacheSet(key, value as AnnotationCache)
+      storeLoaded(key, scope, value as AnnotationCache)
     }
   } catch (error) {
     logService.warn(
