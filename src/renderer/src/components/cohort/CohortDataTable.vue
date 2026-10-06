@@ -1,5 +1,5 @@
 <template>
-  <div class="table-container">
+  <div ref="tableContainerRef" class="table-container">
     <!-- Top scrollbar (synced with table) -->
     <div ref="topScrollbarRef" class="top-scrollbar-container">
       <div ref="topScrollbarInnerRef" class="top-scrollbar-inner"></div>
@@ -9,14 +9,14 @@
     <v-data-table-server
       ref="dataTableRef"
       v-model:page="page"
-      v-model:items-per-page="itemsPerPage"
+      v-model:items-per-page="tableItemsPerPage"
       v-model:sort-by="sortBy"
       v-model:expanded="expandedKeys"
       :headers="headers"
       :items="renderRows"
       :items-length="totalCount"
       :loading="firstLoad"
-      :items-per-page-options="itemsPerPageOptions"
+      :items-per-page-options="pageSizeOptions"
       :aria-busy="ariaBusy"
       :item-value="rowKey"
       density="compact"
@@ -224,6 +224,7 @@ import type { ActiveFilter } from '../../../../shared/types/filters'
 import { buildActiveFiltersList } from '../../utils/filters/activeFilters'
 import { useDebounce } from '../../composables/useDebounce'
 import { useLinkResolvers } from '../../composables/useLinkResolvers'
+import { useAutoPageSize } from '../../composables/useAutoPageSize'
 import { useVariantLinks } from '../../composables/useVariantLinks'
 import { APP_CONFIG } from '../../../../shared/config'
 import { LINKS_COLUMN_KEY } from '../../utils/link-outs'
@@ -272,9 +273,17 @@ const page = defineModel<number>('page', { default: 1 })
 const itemsPerPage = defineModel<number>('itemsPerPage', { default: 10 })
 const sortBy = defineModel<SortItem[]>('sortBy', { default: () => [] })
 
-const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
-
 const props = defineProps<Props>()
+
+// Page size incl. "Auto (fit)" (parity with the case table)
+const tableContainerRef = ref<HTMLElement | null>(null)
+const { tableItemsPerPage, pageSizeOptions } = useAutoPageSize({
+  itemsPerPage,
+  page,
+  fixedOptions: APP_CONFIG.ITEMS_PER_PAGE_OPTIONS,
+  container: tableContainerRef,
+  rowCount: computed(() => props.variants.length)
+})
 
 const acmgQuickMenu = provideAcmgQuickMenu() // one shared ACMG menu, not one per row
 // Template refs (used in template via ref="...")

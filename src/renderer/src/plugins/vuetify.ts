@@ -1,6 +1,7 @@
 import { createVuetify, ThemeDefinition } from 'vuetify'
 import 'vuetify/styles'
 import { aliases, mdi } from 'vuetify/iconsets/mdi-svg'
+import { en } from 'vuetify/locale'
 import { h, type Component } from 'vue'
 import type { IconSet, IconProps } from 'vuetify'
 import DnaIcon from '../components/icons/DnaIcon.vue'
@@ -104,6 +105,10 @@ export default createVuetify({
       warmLight,
       warmDark
     }
+  },
+  locale: {
+    // Footer label of the "Auto (fit)" page size (composables/useAutoPageSize.ts)
+    messages: { en: { ...en, dataFooter: { ...en.dataFooter, itemsPerPageAuto: 'Auto (fit)' } } }
   },
   icons: {
     defaultSet: 'mdi',

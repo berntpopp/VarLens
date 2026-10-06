@@ -1,5 +1,5 @@
 <template>
-  <div class="table-container">
+  <div ref="tableContainerRef" class="table-container">
     <!-- Top scrollbar (synced with table) -->
     <div ref="topScrollbarRef" class="top-scrollbar-container">
       <div ref="topScrollbarInnerRef" class="top-scrollbar-inner"></div>
@@ -9,14 +9,14 @@
     <v-data-table-server
       ref="dataTableRef"
       v-model:page="page"
-      v-model:items-per-page="itemsPerPage"
+      v-model:items-per-page="tableItemsPerPage"
       v-model:sort-by="sortBy"
       :headers="visibleHeaders"
       :items="renderRows"
       :item-value="rowKey"
       :items-length="totalCount"
       :loading="firstLoad"
-      :items-per-page-options="itemsPerPageOptions"
+      :items-per-page-options="pageSizeOptions"
       :aria-busy="ariaBusy"
       density="compact"
       fixed-header
@@ -278,6 +278,7 @@ import { useVariantRenderRows } from './variant-table/useVariantRenderRows'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useVariantLinks } from '../composables/useVariantLinks'
 import { useLinkResolvers } from '../composables/useLinkResolvers'
+import { useAutoPageSize } from '../composables/useAutoPageSize'
 import { formatConsequence } from '../utils/formatters'
 import { getAdaptiveRowScrollBehavior } from '../utils/adaptiveRowScroll'
 import { useTableScroll } from '../composables/useTableScroll'
@@ -431,6 +432,16 @@ const {
   columnMeta: computed(() => props.columnMeta ?? []),
   onCountsUpdate: (counts) => emit('update:counts', counts),
   onSortUpdate: (hasSort) => emit('update:hasSort', hasSort)
+})
+
+// Page size incl. "Auto (fit)": as many rows as fit the visible table body
+const tableContainerRef = ref<HTMLElement | null>(null)
+const { tableItemsPerPage, pageSizeOptions } = useAutoPageSize({
+  itemsPerPage,
+  page,
+  fixedOptions: itemsPerPageOptions,
+  container: tableContainerRef,
+  rowCount: computed(() => variants.value.length)
 })
 
 // Loading presentation: skeleton on first load only, dim + bar on refetch

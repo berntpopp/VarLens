@@ -116,6 +116,13 @@ vi.mock('../../../../src/renderer/src/composables/useVariantLinks', () => ({
   })
 }))
 
+vi.mock('../../../../src/renderer/src/composables/useAutoPageSize', () => ({
+  useAutoPageSize: () => ({
+    tableItemsPerPage: ref(25),
+    pageSizeOptions: computed(() => [25])
+  })
+}))
+
 vi.mock('../../../../src/renderer/src/composables/useLinkResolvers', () => ({
   useLinkResolvers: () => ({
     resolvers: computed(() => ({})),
