@@ -2,7 +2,12 @@
   <!-- During a Case/Cohort switch the sidebar collapses in the same tick the
        new view mounts; animating v-main's padding there shifted the incoming
        view sideways (CLS ~0.3). Collapse instantly instead. -->
-  <v-app :class="{ 'shell--instant-layout': transitioning }">
+  <v-app
+    :class="{
+      'shell--instant-layout': transitioning,
+      'shell--instant-main': dockedPanelInstantLayout
+    }"
+  >
     <A11yShell />
     <AppToolbar
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
@@ -112,6 +117,7 @@ import { useColumnPreferences } from './composables/useColumnPreferences'
 import { useFilterPreferences } from './composables/useFilterPreferences'
 import { useResponsiveLayout } from './composables/useResponsiveLayout'
 import { useMountOnFirstOpen } from './composables/useMountOnFirstOpen'
+import { useDockedPanelInstantLayout } from './composables/useDockedPanelInstantLayout'
 import { logService } from './services/LogService'
 import { AppStateKey, createAppState } from './composables/useAppState'
 import { useShellNavigation } from './composables/useShellNavigation'
@@ -182,7 +188,9 @@ const showKeyboardHelp = ref(false)
 const transitioning = ref(false)
 
 // Responsive layout
-const { tier } = useResponsiveLayout()
+const { tier, detailPanelDocked } = useResponsiveLayout()
+// The docked details panel resizes v-main/footer in one frame (no animated reflow).
+const dockedPanelInstantLayout = useDockedPanelInstantLayout(panelOpen, detailPanelDocked)
 // Same signal the sidebar's `mobile-breakpoint="md"` uses to switch to a
 // temporary overlay (below 840 px; Vuetify's default would be `lg`, 1145 px).
 const { smAndDown: sidebarIsOverlay } = useDisplay()
@@ -430,6 +438,14 @@ onUnmounted(() => {
 <style scoped>
 .shell--instant-layout :deep(.v-main),
 .shell--instant-layout :deep(.v-navigation-drawer) {
+  transition: none !important;
+}
+
+/* Docked details panel: shrink the main area in a single frame. Animating its
+   padding slid every right-aligned control (pagination, toolbar) across ~12
+   frames of layout shift. The panel itself keeps its transform slide-in, and
+   the app footer spans beneath it (layout `order`), so the footer never moves. */
+.shell--instant-main :deep(.v-main) {
   transition: none !important;
 }
 
