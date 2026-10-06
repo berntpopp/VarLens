@@ -48,6 +48,7 @@ export async function installedFingerprint(cwd, cacheFile) {
 }
 export async function ensureDependencies({ cwd, stateDir, env, execute, clean = false }) {
   const expected = {
+    setupVersion: 1,
     inputs: await digestPaths(cwd, [
       'package.json',
       'package-lock.json',
@@ -73,6 +74,12 @@ export async function ensureDependencies({ cwd, stateDir, env, execute, clean = 
     if (fingerprint === prior?.fingerprint) return fingerprint
   }
   await execute('npm', ['ci'], { cwd, env: { ...env, VARLENS_NATIVE_RUNTIME: 'node' } })
+  // Electron 43 downloads its runtime lazily. Materialize it before recording
+  // the installed tree so later tests cannot change the dependency fingerprint.
+  await execute(process.execPath, ['-e', "require('node:fs').accessSync(require('electron'))"], {
+    cwd,
+    env
+  })
   fingerprint = await installedFingerprint(cwd, cache)
   writeReceipt(marker, { expected, fingerprint })
   return fingerprint

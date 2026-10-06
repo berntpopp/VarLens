@@ -83,6 +83,51 @@ describe('receipt readiness boundaries', () => {
     ).toThrow(/changed/)
     expect(() => assertUnchanged({ status: '' }, { status: ' M source.ts' })).toThrow(/clean/)
   })
+  it('materializes lazy Electron before fingerprinting and detects binary tampering', async () => {
+    const { mkdirSync } = await import('node:fs')
+    const { ensureDependencies } = await import('../../scripts/ci/dependencies.mjs')
+    const cwd = mkdtempSync(join(tmpdir(), 'varlens-electron-install-'))
+    temporary.push(cwd)
+    mkdirSync(join(cwd, 'scripts/native'), { recursive: true })
+    for (const path of [
+      'package.json',
+      'package-lock.json',
+      '.nvmrc',
+      'scripts/native/rebuild-native.mjs'
+    ]) {
+      writeFileSync(join(cwd, path), 'fixture')
+    }
+    const commands: string[] = []
+    const execute = async (command: string, args: string[]) => {
+      if (args[0] === '--version') return { stdout: '11.12.1' }
+      if (args[0] === 'ci') {
+        commands.push('install')
+        mkdirSync(join(cwd, 'node_modules/electron'), { recursive: true })
+        writeFileSync(join(cwd, 'node_modules/electron/index.js'), 'lazy runtime fixture')
+      } else {
+        expect(command).toBe(process.execPath)
+        expect(args).toEqual(['-e', "require('node:fs').accessSync(require('electron'))"])
+        commands.push('materialize')
+        mkdirSync(join(cwd, 'node_modules/electron/dist'), { recursive: true })
+        writeFileSync(join(cwd, 'node_modules/electron/dist/electron'), 'verified runtime')
+        writeFileSync(join(cwd, 'node_modules/electron/path.txt'), 'electron')
+      }
+      return { stdout: '' }
+    }
+    const stateDir = join(cwd, 'state')
+    const options = { cwd, stateDir, env: {}, execute }
+    await ensureDependencies(options)
+    expect(commands).toEqual(['install', 'materialize'])
+    expect(readReceipt(join(stateDir, 'dependency-digests.json')).files).toHaveProperty(
+      'electron/dist/electron'
+    )
+    await ensureDependencies(options)
+    expect(commands).toEqual(['install', 'materialize'])
+    writeFileSync(join(cwd, 'node_modules/electron/dist/electron'), 'tampered runtime')
+    await ensureDependencies(options)
+    expect(commands).toEqual(['install', 'materialize', 'install', 'materialize'])
+  })
+
   it('repairs a changed installed tree exactly once, while ignoring generated caches', async () => {
     const { mkdirSync } = await import('node:fs')
     const { ensureDependencies } = await import('../../scripts/ci/dependencies.mjs')
@@ -99,6 +144,7 @@ describe('receipt readiness boundaries', () => {
     let installs = 0
     const execute = async (_command: string, args: string[]) => {
       if (args[0] === '--version') return { stdout: '11.11.0' }
+      if (args[0] !== 'ci') return { stdout: '' }
       installs++
       mkdirSync(join(cwd, 'node_modules/example'), { recursive: true })
       writeFileSync(join(cwd, 'node_modules/example/index.js'), 'good')
