@@ -11,7 +11,7 @@
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
 
 /** Columns the rebuild aggregates with MAX() across carriers (see variantSummaryInsertSql). */
-const MAX_COLUMNS = [
+export const MAX_COLUMNS = [
   'gene_symbol',
   'cdna',
   'aa_change',

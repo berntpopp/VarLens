@@ -7,7 +7,7 @@ import type { WorkerMessage, MainMessage } from '../../shared/types/import-worke
 import { DATABASE_CONFIG } from '../../shared/config'
 import { detectFormat } from '../import/format-detection'
 import { resolveBatchSize } from '../import/bounded-batcher'
-import { MARK_STALE_SQL } from '../../shared/sql/cohort-summary-rebuild'
+import { openImportSummarySession } from '../database/cohort-summary-case-add'
 import { openWorkerDatabase, rebuildFts, rebuildCohortSummary } from './worker-db'
 import {
   finalizeInterruptedImportFts,
@@ -60,22 +60,23 @@ export async function runImportSession(
     ftsFinalizationState.ftsTriggersDropped = true
     db.exec(DROP_INDEXES)
 
-    // Mark cohort summary as stale before import
-    try {
-      db.exec(MARK_STALE_SQL)
-    } catch (e) {
-      console.warn(
-        '[import-worker] Failed to mark cohort summary as stale (table may not exist yet):',
-        e instanceof Error ? e.message : String(e)
-      )
-    }
-
     // Recovery: a previous worker died mid-file (heap limit) and could not
     // run its own cleanup. Its frequencies were never counted, so the rows
     // are simply removed; the session end rebuilds FTS and indexes.
     for (const partialCaseId of msg.discardCaseIds ?? []) {
       stmts.deleteCase.run(partialCaseId)
     }
+
+    // The cohort summary stays exact after every file instead of going stale
+    // for the session (cohort-summary-case-add.ts). A crashed worker may have
+    // committed a file's contribution before dying, so a recovery session
+    // rebuilds once first.
+    const workerDb = db
+    const summary = openImportSummarySession(workerDb, {
+      forceRebuild: (msg.discardCaseIds ?? []).length > 0,
+      rebuild: () => rebuildCohortSummary(workerDb),
+      onWarning: (warning) => console.warn(`[import-worker] ${warning}`)
+    })
 
     const totalFiles = msg.files.length
     const importedInBatch = new Set<string>()
@@ -140,7 +141,7 @@ export async function runImportSession(
             // Replacing a case: drop its contribution to the shared
             // frequency table before its variants disappear.
             frequencies.decrementFrequencies(existing.id)
-            stmts.deleteCase.run(existing.id)
+            summary.replaceCase(existing.id, () => stmts.deleteCase.run(existing.id))
           }
         }
 
@@ -261,6 +262,10 @@ export async function runImportSession(
             )
           }
 
+          // The file's rows are committed and it was not cancelled: merge it
+          // into the cohort summary before anyone is told the file is done.
+          summary.addCase(caseId)
+
           const elapsed = Date.now() - startTime
 
           results.push({
@@ -320,7 +325,7 @@ export async function runImportSession(
     sendProgress(port, totalFiles, totalFiles, '', 99, 'finalizing', 0, 0)
     rebuildFts(db)
     ftsFinalizationState.ftsRebuilt = true
-    rebuildCohortSummary(db)
+    summary.finish()
 
     const completeMsg: WorkerMessage = {
       type: 'complete',

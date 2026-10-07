@@ -50,7 +50,13 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/^CREATE INDEX/i, 'index_recreate'],
   [/TRIGGER/i, 'fts_triggers'],
 
-  [/^INSERT INTO cohort_variant_summary/i, 'cohort_incremental_add'],
+  // Per-file exact summary upkeep (src/main/database/cohort-summary-case-add-sql.ts).
+  [/^UPDATE cohort_variant_summary SET carrier_count/i, 'cohort_add_counts'],
+  [/^INSERT INTO cohort_variant_summary/i, 'cohort_add_upsert'],
+  [/^UPDATE cohort_variant_summary/i, 'cohort_add_flags'],
+  [/^INSERT INTO temp\.added_case_gene_coords/i, 'gene_add_capture'],
+  [/^UPDATE temp\.added_case_gene_coords/i, 'gene_add_resolve'],
+  [/^INSERT INTO gene_burden_summary/i, 'gene_add_upsert'],
   [/cohort_summary_meta/i, 'summary_meta'],
   [/^wal_checkpoint/i, 'wal_checkpoint'],
   [/^DELETE FROM cases/i, 'delete_case'],
