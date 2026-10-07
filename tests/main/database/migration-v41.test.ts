@@ -53,7 +53,9 @@ const RANK_COLUMNS = [
 ]
 
 const ranks = (db: Database.Database): unknown[] =>
-  db.prepare('SELECT consequence, clinvar, impact_rank, clinvar_rank FROM variants ORDER BY pos').all()
+  db
+    .prepare('SELECT consequence, clinvar, impact_rank, clinvar_rank FROM variants ORDER BY pos')
+    .all()
 
 /** Take a current database back to what v40 looked like. */
 function rollBackToV40(db: Database.Database): void {

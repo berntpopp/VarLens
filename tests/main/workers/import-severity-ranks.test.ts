@@ -105,9 +105,7 @@ describe('SQLite import stores severity ranks (#469)', () => {
     )
     const done = messages.find((message) => message.type === 'complete')
     if (done?.type !== 'complete') throw new Error('session did not complete')
-    expect(done.results.details.map((detail) => detail.status)).toEqual(
-      files.map(() => 'success')
-    )
+    expect(done.results.details.map((detail) => detail.status)).toEqual(files.map(() => 'success'))
   }
 
   const vcf = (filePath: string, caseName: string): Partial<FileRequest> => ({

@@ -259,9 +259,9 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
       is_selected: 0
     })
 
-    expect(
-      db().prepare('SELECT impact_rank FROM variants WHERE id = ?').get(variantId)
-    ).toEqual({ impact_rank: 1 })
+    expect(db().prepare('SELECT impact_rank FROM variants WHERE id = ?').get(variantId)).toEqual({
+      impact_rank: 1
+    })
     // The LOW carrier is now the most severe one.
     expect(row()).toMatchObject({ ...MODIFIER, consequence: 'LOW', impact_rank: 2 })
     expectExact()

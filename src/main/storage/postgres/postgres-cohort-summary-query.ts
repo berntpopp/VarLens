@@ -297,10 +297,7 @@ function emptyParts(): SummaryQueryParts {
   }
 }
 
-function normalizeColumnFilterValue(
-  value: string | number,
-  isNumeric: boolean
-): string | number {
+function normalizeColumnFilterValue(value: string | number, isNumeric: boolean): string | number {
   if (!isNumeric || typeof value === 'number') return value
   const numericValue = Number(value)
   return Number.isFinite(numericValue) ? numericValue : value

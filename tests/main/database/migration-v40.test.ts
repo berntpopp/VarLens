@@ -142,7 +142,9 @@ describe('Migration v40: cases.import_status', () => {
       const reopened = new DatabaseService(path, KEY)
       try {
         expect(reopened.isEncrypted()).toBe(true)
-        expect(reopened.database.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
+        expect(reopened.database.pragma('user_version', { simple: true })).toBe(
+          LATEST_SQLITE_SCHEMA_VERSION
+        )
         expect(statuses(reopened.database)).toEqual([{ name: 'old', import_status: 'ready' }])
         expect(indexColumns(reopened.database)).toEqual(['import_status', 'genome_build'])
         // A reader that filters on the new column works on it.

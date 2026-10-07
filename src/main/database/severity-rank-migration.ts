@@ -113,7 +113,6 @@ export function migrateSeverityRanks(db: Database.Database): void {
   }
   if (!hasTable(db, 'cohort_variant_summary')) return
   addRankColumns(db, 'cohort_variant_summary')
-  const populated =
-    db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get() !== undefined
+  const populated = db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get() !== undefined
   if (populated && hasTable(db, 'cohort_summary_meta')) db.exec(MARK_STALE_SQL)
 }
