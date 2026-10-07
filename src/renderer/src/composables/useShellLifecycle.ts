@@ -24,7 +24,7 @@ interface UseShellLifecycleOptions {
   currentDatabasePath: Ref<string | null>
   currentDatabaseName: Ref<string>
   incrementDataGeneration: () => void
-  resetForDatabaseSwitch: () => void
+  resetForDatabaseSwitch: (options?: { keepView?: boolean }) => void
   clearMetadataCache: () => void
   selectCase: (input: SelectedCaseInput) => void
   caseListRef: Ref<CaseListActions | null>
@@ -61,8 +61,13 @@ export function useShellLifecycle({
     void caseListRef.value?.softRefreshCases?.()
   }, LIVE_REFRESH_INTERVAL_MS)
 
+  // The path is unknown (null) until the database info has loaded, so its
+  // first value is the startup database being reported, not a switch away from
+  // one: keep the view the URL asked for (deep link / reload of `/cohort`).
+  let databasePathSeen = currentDatabasePath.value !== null
   watch(currentDatabasePath, () => {
-    resetForDatabaseSwitch()
+    resetForDatabaseSwitch({ keepView: !databasePathSeen })
+    databasePathSeen = true
   })
 
   const handleDatabaseSwitched = async (): Promise<void> => {
