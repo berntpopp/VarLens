@@ -30,11 +30,10 @@
             <v-btn color="primary" size="large" :prepend-icon="mdiUpload" @click="$emit('import')">
               Import Variants
             </v-btn>
-            <p class="text-body-small text-muted mt-4">Supports .json and .json.gz files</p>
-            <div class="mt-4">
-              <v-icon size="small" class="mr-1" :icon="mdiTrayArrowDown" />
-              <span class="text-body-small text-muted">or drag and drop files here</span>
-            </div>
+            <p class="text-body-small text-muted mt-4">
+              Supports VCF and JSON files (.vcf, .vcf.gz, .json, .json.gz), whole folders and ZIP
+              archives
+            </p>
           </template>
           <template v-else-if="casesLoaded">
             <p class="text-body-medium text-muted">No cases are available in this workspace yet.</p>
@@ -47,7 +46,7 @@
 
 <script setup lang="ts">
 import { computed, inject } from 'vue'
-import { mdiArrowLeft, mdiTrayArrowDown, mdiUpload } from '@mdi/js'
+import { mdiArrowLeft, mdiUpload } from '@mdi/js'
 import { AppStateKey } from '../composables/useAppState'
 withDefaults(
   defineProps<{
@@ -69,7 +68,8 @@ const casesLoaded = computed(() => appState?.casesLoaded.value ?? true)
 </script>
 
 <style scoped>
-/* Height of the tallest variant (import CTA: hint + large button + 2 notes). */
+/* Reserved height for the tallest variant (import CTA: hint + large button +
+   a format note that may wrap to two lines on narrow columns). */
 .empty-state__cta {
   min-height: 172px;
 }
