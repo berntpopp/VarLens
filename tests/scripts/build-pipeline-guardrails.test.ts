@@ -206,12 +206,23 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
     expect(releaseKeys.length, 'release.yml must not declare any native- cache key').toBe(0)
   })
 
-  test('release.yml no longer builds or packages the app', () => {
+  test('release.yml never rebuilds the app', () => {
+    // Promotion is the rule: release.yml ships what build.yml built for the
+    // tagged SHA. The one sanctioned exception is the Windows signing re-wrap
+    // (scripts/release/rewrap-windows.mjs), which runs electron-builder with
+    // `--prepackaged` over build.yml's own app directory — it wraps new
+    // installers around signed copies of the same files and never compiles or
+    // packs. Any other electron-builder or electron-vite call here is a rebuild.
     const yaml = readWorkflow('release.yml')
-    expect(yaml, 'release.yml must promote build.yml artifacts, not rebuild').not.toContain(
-      'electron-builder'
+    expect(yaml, 'release.yml must promote build.yml artifacts, not rebuild').not.toMatch(
+      /^\s*(run:|-)?\s*(npx |npm exec )?electron-builder\b/m
     )
+    expect(yaml).not.toContain('npx electron-builder')
     expect(yaml).not.toContain('electron-vite build')
+    expect(yaml).not.toContain('npm run dist')
+    expect(yaml).not.toContain('make dist')
+    const rewrap = readFileSync(resolve(ROOT, 'scripts/release/rewrap-windows.mjs'), 'utf8')
+    expect(rewrap).toContain("'--prepackaged'")
   })
 
   test('release.yml grants actions:read so it can read another run’s artifacts', () => {

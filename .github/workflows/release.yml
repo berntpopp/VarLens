@@ -248,7 +248,7 @@ jobs:
             promoted/mac/latest-mac.yml
 
   sign-windows:
-    name: Sign Windows installer
+    name: Sign Windows executables
     needs: [create-release, secrets-scan]
     runs-on: windows-latest
     environment: release
@@ -259,6 +259,11 @@ jobs:
       # 'true' only when the eSigner steps ran; consumed by publish-release so
       # the publishing job's summary states the signing status too.
       signed: ${{ steps.signing-status.outputs.signed }}
+    env:
+      VERSION: ${{ needs.create-release.outputs.version }}
+      # The signing hook is the only signer; electron-builder must not go
+      # looking for a certificate of its own.
+      CSC_IDENTITY_AUTO_DISCOVERY: false
 
     steps:
       - name: Checkout code
@@ -277,31 +282,78 @@ jobs:
           run-id: ${{ needs.create-release.outputs.build_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Verifies build.yml's unsigned output. Signing happens below and
-      # rewrites the .exe bytes, so this has to run first — checking the
-      # signed bytes against a checksum manifest that describes the
-      # unsigned ones would always fail.
+      # Verifies build.yml's unsigned output — including the zip that carries
+      # the unpacked app directory the signed installers are re-wrapped around.
+      # Has to run before signing: nothing downstream is trusted until the
+      # promoted bytes match the manifest build.yml wrote for this exact SHA.
       - name: Verify promoted artifacts
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/release/verify-promoted-artifacts.mjs promoted/win win \
-            "${{ needs.create-release.outputs.version }}" "$GITHUB_SHA"
+          node scripts/release/verify-promoted-artifacts.mjs promoted/win win "$VERSION" "$GITHUB_SHA"
 
-      # --- SSL.com eSigner Code Signing (Windows) ---
-      # Uses CodeSignTool v1.3.2 jar directly (not the buggy GitHub Action).
-      # batch_sign signs all files with a single OTP, avoiding TOTP replay.
-      # Gated on ESIGNER_ENABLED variable to conserve signing quota (20/month).
+      # --- Sign every Windows executable (issue #365) -----------------------
+      # Design and signature budget:
+      # .planning/specs/2026-10-06-windows-sign-all-executables.md
+      #
+      # Signing only the two outer installers left the app executable, the
+      # elevate helper and the uninstaller they install unsigned. Each layer
+      # embeds the previous one, so the layers are signed inside-out and the
+      # installers are re-wrapped (`electron-builder --prepackaged` — no
+      # rebuild, no pack step, fuses untouched) around the signed app.
+      # scripts/release/rewrap-windows.mjs owns the sequence and proves the
+      # result. Cost: 5 signatures per release from the 20/month eSigner quota.
+      #
+      # Every step is gated on ESIGNER_ENABLED: the kill switch. With it off,
+      # build.yml's installers are published exactly as built (see "Stage
+      # unsigned installers").
 
-      - name: Log signing quota usage
+      # --ignore-scripts: the re-wrap needs electron-builder, not a compiled
+      # native module or an Electron download, and no dependency lifecycle
+      # script should run in the job that holds the signing credentials.
+      - name: Install packaging dependencies
+        if: vars.ESIGNER_ENABLED == 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Create a throwaway certificate for the signing rehearsal
         if: vars.ESIGNER_ENABLED == 'true'
         shell: pwsh
         run: |
-          $version = "${{ needs.create-release.outputs.version }}"
-          $filesToSign = @("Varlens-Setup-${version}.exe", "Varlens-Portable-${version}.exe")
-          $found = ($filesToSign | Where-Object { Test-Path (Join-Path "promoted/win" $_) }).Count
-          Write-Host "::notice::Code signing: will sign $found of $($filesToSign.Count) files (monthly quota: 20 operations)"
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert `
+            -Subject 'CN=VarLens signing rehearsal (NOT A RELEASE)' `
+            -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
+          "VARLENS_SELFSIGN_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
 
+      # The whole pipeline, on this runner, on this release's bytes, with a
+      # certificate that costs nothing: extraction, the hook's call sequence,
+      # the NSIS re-wrap, latest.yml, and every verification below. A paid
+      # signature is only spent once all of that has been seen to work. The
+      # rehearsal output never leaves RUNNER_TEMP.
+      - name: Rehearse signing and re-wrap (no quota)
+        if: vars.ESIGNER_ENABLED == 'true'
+        shell: bash
+        env:
+          VARLENS_WINDOWS_SIGNING: selfsigned
+        run: |
+          set -euo pipefail
+          node scripts/release/rewrap-windows.mjs --promoted promoted/win --version "$VERSION" \
+            --out "$RUNNER_TEMP/rehearsal/out" --work "$RUNNER_TEMP/rehearsal/work" \
+            --report "$RUNNER_TEMP/rehearsal/executables.json"
+
+      - name: Rehearse the Authenticode assertion
+        if: vars.ESIGNER_ENABLED == 'true'
+        shell: pwsh
+        run: ./scripts/release/assert-authenticode.ps1 -Report "$env:RUNNER_TEMP/rehearsal/executables.json" -Rehearsal
+
+      - name: Discard the rehearsal certificate
+        if: always() && vars.ESIGNER_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          if ($env:VARLENS_SELFSIGN_THUMBPRINT) {
+            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$env:VARLENS_SELFSIGN_THUMBPRINT" -DeleteKey -ErrorAction SilentlyContinue
+          }
+
+      # Uses CodeSignTool v1.3.2 jar directly (not the buggy GitHub Action).
       - name: Setup Java for CodeSignTool
         if: vars.ESIGNER_ENABLED == 'true'
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # actions/setup-java@v6.0.1
@@ -337,108 +389,71 @@ jobs:
           echo "CST_DIR=$cstDir" >> $env:GITHUB_ENV
           echo "CST_JAR=$($jarFile.FullName)" >> $env:GITHUB_ENV
 
-      - name: Sign Windows installer with CodeSignTool
+      # The only step that spends eSigner quota: 5 signatures (app executable,
+      # elevate helper, uninstaller, installer, portable), one CodeSignTool
+      # `sign` call each. `batch_sign` cannot be used — the files do not exist
+      # at the same time — so the calls are spaced one TOTP step apart instead
+      # (a one-time password cannot be replayed). Credentials reach the script
+      # through the environment and are redacted from any tool output.
+      - name: Sign every Windows executable and re-wrap the installers
         if: vars.ESIGNER_ENABLED == 'true'
-        shell: pwsh
+        shell: bash
+        env:
+          VARLENS_WINDOWS_SIGNING: esigner
+          ES_USERNAME: ${{ secrets.ES_USERNAME }}
+          ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
+          ES_CREDENTIAL_ID: ${{ secrets.ES_CREDENTIAL_ID }}
+          ES_TOTP_SECRET: ${{ secrets.ES_TOTP_SECRET }}
         run: |
-          $version = "${{ needs.create-release.outputs.version }}"
-          $cstDir = $env:CST_DIR
-          $jarPath = $env:CST_JAR
-          $username = "${{ secrets.ES_USERNAME }}".Trim()
-          $password = "${{ secrets.ES_PASSWORD }}".Trim()
-          $credId = "${{ secrets.ES_CREDENTIAL_ID }}".Trim()
-          $totpSecret = "${{ secrets.ES_TOTP_SECRET }}".Trim()
-          $workspace = $env:GITHUB_WORKSPACE
+          set -euo pipefail
+          node scripts/release/rewrap-windows.mjs --promoted promoted/win --version "$VERSION" \
+            --out publish/win --work "$RUNNER_TEMP/signing/work"
 
-          Write-Host "Jar: $jarPath"
-          Write-Host "CWD: $cstDir"
-          Write-Host "Conf exists: $(Test-Path (Join-Path $cstDir 'conf/code_sign_tool.properties'))"
-
-          # Sign both installer and portable exe files
-          $filesToSign = @(
-            "Varlens-Setup-${version}.exe",
-            "Varlens-Portable-${version}.exe"
-          )
-
-          # CodeSignTool reads ./conf/code_sign_tool.properties relative to CWD
-          Push-Location $cstDir
-          foreach ($fileName in $filesToSign) {
-            $filePath = Join-Path $workspace "promoted/win" $fileName
-            if (-not (Test-Path $filePath)) {
-              # A missing file here means signing was requested (this step is
-              # gated on ESIGNER_ENABLED) but the expected artifact isn't on
-              # disk — e.g. a package.json artifactName rename or a path typo.
-              # Warn-and-continue would leave the file unsigned while the run
-              # stays green; that is the exact failure this gate exists to
-              # catch, so it must be fatal, not a warning.
-              throw "$fileName not found at $filePath — cannot sign a file that isn't there"
-            }
-            Write-Host "Signing $fileName ..."
-            java -jar $jarPath sign `
-              -username="$username" `
-              -password="$password" `
-              -credential_id="$credId" `
-              -totp_secret="$totpSecret" `
-              -input_file_path="$filePath" `
-              -override
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "::warning::First attempt failed, retrying after 31s..."
-              Start-Sleep -Seconds 31
-              java -jar $jarPath sign `
-                -username="$username" `
-                -password="$password" `
-                -credential_id="$credId" `
-                -totp_secret="$totpSecret" `
-                -input_file_path="$filePath" `
-                -override
-              if ($LASTEXITCODE -ne 0) { throw "Code signing failed for $fileName after retry" }
-            }
-            Write-Host "Successfully signed $fileName"
-
-            # CodeSignTool can exit 0 without actually attaching a signature
-            # (e.g. a silently-ignored API response). Assert a signature is
-            # physically present rather than trusting the exit code alone.
-            # `-ne 'NotSigned'` (not `-eq 'Valid'`) deliberately: 'Valid' also
-            # requires full chain validation on this runner, and a
-            # timestamping or intermediate-cert hiccup can return
-            # 'UnknownError' on a binary that is genuinely signed, which would
-            # block a legitimate release. 'NotSigned' is the unambiguous
-            # signal for the actual failure mode this guards against. Log the
-            # real status either way so a degraded-but-signed case is visible.
-            $sig = Get-AuthenticodeSignature $filePath
-            Write-Host "$fileName signature status: $($sig.Status)"
-            if ($sig.Status -eq 'NotSigned') {
-              throw "$fileName has no Authenticode signature after signing — refusing to ship an unsigned installer"
-            }
-          }
-          Pop-Location
-
-      - name: Regenerate latest.yml with signed artifact hashes
-        if: vars.ESIGNER_ENABLED == 'true'
-        shell: pwsh
+      # Kill-switch path: pure promotion, byte for byte what build.yml built.
+      - name: Stage unsigned installers
+        if: vars.ESIGNER_ENABLED != 'true'
+        shell: bash
         run: |
-          $yml = Get-Content promoted/win/latest.yml -Raw
-          foreach ($exe in Get-ChildItem promoted/win/*.exe) {
-            $hash = (Get-FileHash $exe.FullName -Algorithm SHA512).Hash.ToLower()
-            $b64 = [Convert]::ToBase64String([byte[]] -split ($hash -replace '..', '0x$& '))
-            $size = $exe.Length
-            $name = $exe.Name
-            # Update per-file entries in the files array (use "url:" key)
-            $yml = $yml -replace "(?<=url: $([regex]::Escape($name))\s*\n\s*sha512: )\S+", $b64
-            $yml = $yml -replace "(?<=url: $([regex]::Escape($name))\s*\n\s*sha512: \S+\s*\n\s*size: )\d+", $size
-            # Update top-level entry (uses "path:" key)
-            $yml = $yml -replace "(?<=path: $([regex]::Escape($name))\s*\n\s*sha512: )\S+", $b64
-            $yml = $yml -replace "(?<=path: $([regex]::Escape($name))\s*\n\s*sha512: \S+\s*\n\s*size: )\d+", $size
-          }
-          Set-Content promoted/win/latest.yml $yml -NoNewline
+          set -euo pipefail
+          mkdir -p publish/win
+          cp "promoted/win/Varlens-Setup-${VERSION}.exe" "promoted/win/Varlens-Portable-${VERSION}.exe" \
+            promoted/win/latest.yml publish/win/
 
-      # Runs unconditionally: latest.yml must describe the shipped bytes whether
-      # or not signing ran. This is the check the -replace regexes never had.
+      # Runs unconditionally, on what will be uploaded: latest.yml must
+      # describe the shipped bytes whether or not signing ran. On the signing
+      # path electron-builder wrote it after the installer's last byte change;
+      # this proves it.
       - name: Verify auto-update metadata matches the shipped binaries
         shell: bash
-        run: node scripts/release/verify-latest-yml.mjs promoted/win/latest.yml promoted/win
+        run: node scripts/release/verify-latest-yml.mjs publish/win/latest.yml publish/win
 
-      # Visibility only (issue #365, gap 1). The ESIGNER_ENABLED gate above is
+      # Independent of the signing step: re-opens the staged files from
+      # scratch — each installer, then the app archive inside it — and lists
+      # every executable. With signing enabled an unsigned executable anywhere
+      # is fatal; with it disabled this only produces the report. Either way
+      # each installer's payload must be the promoted build's app, file for file.
+      - name: Inspect every executable in every Windows artifact
+        shell: bash
+        env:
+          REQUIRE_SIGNED: ${{ vars.ESIGNER_ENABLED == 'true' }}
+        run: |
+          set -euo pipefail
+          ARGS=(--dir publish/win --version "$VERSION" --work "$RUNNER_TEMP/inspect"
+            --transport "promoted/win/Varlens-Setup-${VERSION}.zip"
+            --report "$RUNNER_TEMP/windows-executables.json"
+            --markdown "$RUNNER_TEMP/windows-executables.md")
+          if [ "$REQUIRE_SIGNED" = "true" ]; then ARGS+=(--require-signed); fi
+          node scripts/release/verify-windows-signatures.mjs "${ARGS[@]}"
+
+      # The Windows-native check, on every executable the step above found —
+      # the installers and everything inside them. `-ne 'NotSigned'` rather
+      # than `-eq 'Valid'`: see scripts/release/assert-authenticode.ps1.
+      - name: Assert an Authenticode signature on every shipped executable
+        if: vars.ESIGNER_ENABLED == 'true'
+        shell: pwsh
+        run: ./scripts/release/assert-authenticode.ps1 -Report "$env:RUNNER_TEMP/windows-executables.json"
+
+      # Visibility (issue #365, gap 1). The ESIGNER_ENABLED gate above is
       # deliberate — it conserves the 20/month eSigner quota — but skipping it
       # used to be silent: a fully green run published unsigned installers that
       # were indistinguishable from signed ones. This step never fails the job
@@ -450,40 +465,39 @@ jobs:
         shell: bash
         env:
           SIGNING_RAN: ${{ vars.ESIGNER_ENABLED == 'true' }}
-          VERSION: ${{ needs.create-release.outputs.version }}
         run: |
           set -euo pipefail
           echo "signed=${SIGNING_RAN}" >> "$GITHUB_OUTPUT"
+          TABLE=$(cat "$RUNNER_TEMP/windows-executables.md")
           if [ "$SIGNING_RAN" = "true" ]; then
             {
               echo "### Windows code signing: signed"
               echo
-              echo "Signed with SSL.com eSigner and checked for an Authenticode signature:"
+              echo "Every executable in every Windows artifact was signed with SSL.com eSigner (5 signatures) and checked for an Authenticode signature:"
               echo
-              echo "- \`Varlens-Setup-${VERSION}.exe\`"
-              echo "- \`Varlens-Portable-${VERSION}.exe\`"
-              echo
-              echo "Not signed: \`Varlens-Setup-${VERSION}.zip\` — the \`Varlens.exe\` inside the archive is the pre-signing build output (issue #365, gap 2)."
+              echo "$TABLE"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           shopt -s nullglob
-          cd promoted/win
-          UNSIGNED=(*.exe *.zip)
+          UNSIGNED=(publish/win/*.exe)
+          UNSIGNED=("${UNSIGNED[@]##*/}")
           echo "::warning title=Unsigned Windows release::${GITHUB_REF_NAME} ships UNSIGNED Windows artifacts (${UNSIGNED[*]}): code signing was skipped because the ESIGNER_ENABLED repository variable is not 'true'."
           {
             echo "### :warning: Windows code signing: SKIPPED — unsigned artifacts"
             echo
             echo "The \`ESIGNER_ENABLED\` repository variable is not \`true\`, so every eSigner step was skipped."
-            echo "These Windows artifacts of \`${GITHUB_REF_NAME}\` are **not code-signed** and are published as-is:"
+            echo "These Windows artifacts of \`${GITHUB_REF_NAME}\` are **not code-signed** and are published as build.yml built them:"
             echo
-            for f in "${UNSIGNED[@]}"; do
-              echo "- \`${f}\`"
-            done
+            echo "$TABLE"
             echo
             echo "Users will see SmartScreen / unknown-publisher warnings. To ship a signed build, set \`ESIGNER_ENABLED\` to \`true\` and release a new tag."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The promoted zip is build.yml's transport for the unpacked app
+      # directory, not a release asset: nothing consumes a Windows zip (the
+      # updater uses the installer, the docs list installer and portable), and
+      # publishing it is what shipped an unsigned Varlens.exe (issue #365, gap 2).
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # actions/upload-artifact@v7.0.1
         with:
@@ -491,9 +505,8 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           path: |
-            promoted/win/*.exe
-            promoted/win/*.zip
-            promoted/win/latest.yml
+            publish/win/*.exe
+            publish/win/latest.yml
 
   publish-release:
     name: Publish Release
@@ -558,26 +571,20 @@ jobs:
             {
               echo "### Published ${GITHUB_REF_NAME}"
               echo
-              echo "Windows installers are code-signed:"
+              echo "Windows installers are code-signed, and so is every executable inside them (app, elevate helper, uninstaller):"
               echo
               for f in Varlens-Setup-*.exe Varlens-Portable-*.exe; do
-                echo "- \`${f}\`"
-              done
-              echo
-              echo "Not signed (issue #365, gap 2 — the archive contains the pre-signing \`Varlens.exe\`):"
-              echo
-              for f in Varlens-Setup-*.zip; do
                 echo "- \`${f}\`"
               done
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          UNSIGNED=(Varlens-Setup-*.exe Varlens-Portable-*.exe Varlens-Setup-*.zip)
+          UNSIGNED=(Varlens-Setup-*.exe Varlens-Portable-*.exe)
           echo "::warning title=Unsigned Windows release published::${GITHUB_REF_NAME} was published with UNSIGNED Windows artifacts (${UNSIGNED[*]}): the ESIGNER_ENABLED repository variable is not 'true'."
           {
             echo "### :warning: Published ${GITHUB_REF_NAME} with UNSIGNED Windows artifacts"
             echo
-            echo "Code signing was skipped (\`ESIGNER_ENABLED\` is not \`true\`). These published release assets are **not code-signed**:"
+            echo "Code signing was skipped (\`ESIGNER_ENABLED\` is not \`true\`). These published release assets, and the executables inside them, are **not code-signed**:"
             echo
             for f in "${UNSIGNED[@]}"; do
               echo "- \`${f}\`"
