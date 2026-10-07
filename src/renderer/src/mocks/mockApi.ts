@@ -9,6 +9,7 @@
 import type { WindowAPI, CommentCategory } from '../../../shared/types/api'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import { mockReferenceServicesApi } from './referenceServicesMock'
+import { mockPanelResolutionStatus } from './panelResolutionMock'
 import { computeCapabilityDocument } from '../../../shared/ipc/capability-document'
 import { mockCases } from './fixtures/cases'
 import { mockVariants, mockFilterOptions } from './fixtures/variants'
@@ -1039,6 +1040,7 @@ export const mockApi: WindowAPI = {
     activate: async () => ({ success: true }),
     deactivate: async () => ({ success: true }),
     activeForCase: async () => [],
+    resolutionStatus: mockPanelResolutionStatus,
     validateSymbols: async () => [],
     autocomplete: async () => [],
     searchPanelApp: async () => [],

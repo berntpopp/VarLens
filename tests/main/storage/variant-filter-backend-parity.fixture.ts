@@ -35,6 +35,39 @@ export const GENE_COORDINATES: Record<
   GRCh37: { chromosome: '7', start_pos: 500_000, end_pos: 600_000 }
 }
 
+/**
+ * Genes of the PARTIALLY resolvable panel (logical panel id 3): the mapped
+ * panel gene, one gene that only GRCh38 knows, and two genes without
+ * coordinates in any build. Deliberately not in symbol order.
+ */
+const ONLY_GRCH38_GENE = { hgncId: 'HGNC:90004', symbol: 'ONLY38' }
+const UNMAPPED_Z = { hgncId: 'HGNC:90003', symbol: 'ZUNMAPPED' }
+const UNMAPPED_A = { hgncId: 'HGNC:90002', symbol: 'AUNMAPPED' }
+export const PARTIAL_PANEL_GENES = [PANEL_GENE, ONLY_GRCH38_GENE, UNMAPPED_Z, UNMAPPED_A]
+
+/** Expected `unmappedGenes` of the partial panel per build (symbol order). */
+export const PARTIAL_PANEL_UNMAPPED: Record<string, Array<{ hgncId: string; symbol: string }>> = {
+  GRCh38: [UNMAPPED_A, UNMAPPED_Z],
+  GRCh37: [UNMAPPED_A, ONLY_GRCH38_GENE, UNMAPPED_Z]
+}
+
+/** The fixture's gene reference: coordinates per build, keyed by HGNC id. */
+export function fixtureGeneCoordinates(
+  hgncIds: string[],
+  assembly: string
+): Map<string, { chromosome: string; start_pos: number; end_pos: number }> {
+  const found = new Map<string, { chromosome: string; start_pos: number; end_pos: number }>()
+  const panelGene = GENE_COORDINATES[assembly]
+  if (panelGene !== undefined && hgncIds.includes(PANEL_GENE.hgncId)) {
+    found.set(PANEL_GENE.hgncId, panelGene)
+  }
+  // No fixture variant lies on chr11, so this gene never changes a result set.
+  if (assembly === 'GRCh38' && hgncIds.includes(ONLY_GRCH38_GENE.hgncId)) {
+    found.set(ONLY_GRCH38_GENE.hgncId, { chromosome: '11', start_pos: 1_000, end_pos: 2_000 })
+  }
+  return found
+}
+
 function variant(
   over: Partial<ParityFixtureVariant> & Pick<ParityFixtureVariant, 'chr' | 'pos'>
 ): ParityFixtureVariant {

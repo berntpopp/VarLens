@@ -178,6 +178,7 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'panels:get': read(),
   'panels:getGenes': read(),
   'panels:activeForCase': read(),
+  'panels:resolutionStatus': read(),
   'panels:validateSymbols': read(),
   'panels:autocomplete': read(),
   'panels:create': write(),

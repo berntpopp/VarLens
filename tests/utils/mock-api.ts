@@ -351,6 +351,12 @@ export function createMockApi(): MockApi {
       activate: vi.fn().mockResolvedValue(undefined),
       deactivate: vi.fn().mockResolvedValue(undefined),
       activeForCase: vi.fn().mockResolvedValue([]),
+      resolutionStatus: vi.fn().mockResolvedValue({
+        genomeBuild: 'GRCh38',
+        totalGenes: 0,
+        unmappedCount: 0,
+        unmappedGenes: []
+      }),
       validateSymbols: vi.fn().mockResolvedValue([]),
       autocomplete: vi.fn().mockResolvedValue([]),
       exportBed: vi.fn().mockResolvedValue({ success: true })

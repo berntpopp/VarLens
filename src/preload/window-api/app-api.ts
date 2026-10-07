@@ -138,6 +138,7 @@ export function createAppApi(domains: PreloadDomainApis): AppWindowApi {
       activate: (caseId, panelId, paddingBp) => panelsDomain.activate(caseId, panelId, paddingBp),
       deactivate: (caseId, panelId) => panelsDomain.deactivate(caseId, panelId),
       activeForCase: (caseId) => panelsDomain.activeForCase(caseId),
+      resolutionStatus: (request) => panelsDomain.resolutionStatus(request),
       validateSymbols: (symbols) => panelsDomain.validateSymbols(symbols),
       autocomplete: (query, limit) => panelsDomain.autocomplete(query, limit),
       searchPanelApp: (keyword, region) => panelsDomain.searchPanelApp(keyword, region),

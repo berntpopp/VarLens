@@ -9,6 +9,7 @@ function workflowRepositories() {
     annotations: {} as never,
     commentsMetrics: {} as never,
     panels: {} as never,
+    panelStatus: {} as never,
     filterPresets: {} as never,
     shortlist: {} as never,
     analysisGroups: {} as never,
@@ -381,5 +382,17 @@ describe('PostgresReadExecutor', () => {
 
     expect(audit.getByEntityKey).toHaveBeenCalledWith('case:1:variant:2')
     expect(audit.query).toHaveBeenCalledWith({ action_type: 'star' })
+  })
+
+  it('dispatches panels:resolutionStatus to the panel interval resolver', async () => {
+    const expected = { genomeBuild: 'GRCh38', totalGenes: 2, unmappedCount: 0, unmappedGenes: [] }
+    const panelStatus = { getResolutionStatus: vi.fn().mockResolvedValue(expected) }
+    const executor = new PostgresReadExecutor({ ...workflowRepositories(), panelStatus } as never)
+    const request = { panelIds: [3], caseId: 1 }
+
+    await expect(
+      executor.execute({ type: 'panels:resolutionStatus', params: [request] })
+    ).resolves.toBe(expected)
+    expect(panelStatus.getResolutionStatus).toHaveBeenCalledWith(request)
   })
 })

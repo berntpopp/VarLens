@@ -96,6 +96,7 @@ export const panelsManifest = {
   activate: sharedWrite(),
   deactivate: sharedWrite(),
   activeForCase: sharedRead(),
+  resolutionStatus: sharedRead(),
   validateSymbols: sharedRead(),
   autocomplete: sharedRead(),
   searchPanelApp: sharedExempt(EGRESS_AUDITED, { capability: 'panelAppImport' }),

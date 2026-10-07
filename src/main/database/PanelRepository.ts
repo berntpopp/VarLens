@@ -3,6 +3,7 @@ import type { GeneReferenceDb } from './GeneReferenceDb'
 import { sqlPlaceholders } from './sql-utils'
 import {
   resolvePanelGeneRegions,
+  resolvePanelGeneStatus,
   mergeOverlappingIntervals
 } from '../../shared/filters/panel-intervals'
 
@@ -10,6 +11,7 @@ import {
 
 import type {
   GenomicInterval,
+  PanelResolutionStatus,
   CreatePanelInput,
   PanelRow,
   PanelWithCount,
@@ -207,6 +209,30 @@ export class PanelRepository extends BaseRepository {
       paddingBp,
       chrPrefix,
       (hgncIds, build) => geneRefDb.getCoordinatesForGenes(hgncIds, build)
+    )
+  }
+
+  /**
+   * Which genes of the given panels have no coordinates in `assembly` and are
+   * therefore left out by {@link computeIntervals}. Same panel-gene set, same
+   * coordinate lookup; shared with PostgreSQL through `resolvePanelGeneStatus`.
+   */
+  getResolutionStatus(
+    panelIds: number[],
+    assembly: string,
+    geneRefDb: Pick<GeneReferenceDb, 'getCoordinatesForGenes'>
+  ): PanelResolutionStatus {
+    const rows =
+      panelIds.length === 0
+        ? []
+        : (this.db
+            .prepare(
+              `SELECT DISTINCT hgnc_id, symbol FROM panel_genes
+               WHERE panel_id IN (${sqlPlaceholders(panelIds.length)})`
+            )
+            .all(...panelIds) as Array<{ hgnc_id: string; symbol: string }>)
+    return resolvePanelGeneStatus(rows, assembly, (hgncIds, build) =>
+      geneRefDb.getCoordinatesForGenes(hgncIds, build)
     )
   }
 }

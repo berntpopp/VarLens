@@ -3,7 +3,9 @@ import type {
   PanelRow,
   PanelGeneRow,
   ActivePanelRow,
-  PanelAppSearchResult
+  PanelAppSearchResult,
+  PanelResolutionRequest,
+  PanelResolutionStatus
 } from '../../types/panels'
 import type { GeneValidationResult, GeneAutocompleteResult } from '../../types/gene-reference'
 import type { IpcResult } from '../../types/errors'
@@ -39,6 +41,13 @@ export interface PanelsDomainContract {
   ) => Promise<IpcResult<{ success: boolean }>>
   deactivate: (caseId: number, panelId: number) => Promise<IpcResult<{ success: boolean }>>
   activeForCase: (caseId: number) => Promise<IpcResult<ActivePanelRow[]>>
+  /**
+   * Which genes of the given active panel(s) have no coordinates for the
+   * genome build and are therefore NOT applied by the panel filter. Cheap and
+   * side-effect free; the answer depends only on the request and the panels'
+   * gene lists, so callers may cache it per request.
+   */
+  resolutionStatus: (request: PanelResolutionRequest) => Promise<IpcResult<PanelResolutionStatus>>
   validateSymbols: (symbols: string[]) => Promise<IpcResult<GeneValidationResult[]>>
   autocomplete: (query: string, limit?: number) => Promise<IpcResult<GeneAutocompleteResult[]>>
   searchPanelApp: (

@@ -40,15 +40,18 @@ import { prepareVariantExport } from '../../../src/main/ipc/handlers/export-logi
 import { clearPanelIntervalCache } from '../../../src/main/ipc/handlers/panelIntervalHelper'
 import { buildVariantFilter } from '../../../src/main/ipc/handlers/variants-logic'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
+import { PostgresPanelIntervalResolver } from '../../../src/main/storage/postgres/postgres-panel-interval-resolver'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 import { PostgresExportRepository } from '../../../src/main/storage/postgres/PostgresExportRepository'
 import { PostgresShortlistService } from '../../../src/main/storage/postgres/PostgresShortlistService'
 import { PostgresVariantReadRepository } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
+import { SqliteReadExecutor } from '../../../src/main/storage/sqlite/SqliteReadExecutor'
 import { dispatchTask } from '../../../src/main/workers/db-worker-dispatch'
 import type { CohortSearchParams } from '../../../src/shared/types/cohort'
 import type { VariantFilter } from '../../../src/shared/types/database'
+import type { PanelResolutionRequest } from '../../../src/shared/types/panels'
 import type { FilterState } from '../../../src/shared/types/filters'
 import type { ShortlistConfig } from '../../../src/shared/types/shortlist'
 import {
@@ -56,8 +59,10 @@ import {
   B,
   C,
   FIXTURE,
-  GENE_COORDINATES,
   PANEL_GENE,
+  PARTIAL_PANEL_GENES,
+  PARTIAL_PANEL_UNMAPPED,
+  fixtureGeneCoordinates,
   keyOf,
   keysOf,
   type ParityFixtureVariant
@@ -86,12 +91,14 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
   let sqliteCaseIds: number[]
   let sqlitePanelId: number
   let sqliteEmptyPanelId: number
+  let sqlitePartialPanelId: number
 
   let schema: string
   let pool: Pool
   let pgCaseIds: number[]
   let pgPanelId: number
   let pgEmptyPanelId: number
+  let pgPartialPanelId: number
 
   const summaryRepo = new PostgresCohortSummaryRepository()
 
@@ -162,10 +169,16 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     pgEmptyPanelId = await panel('parity-empty-panel')
     // Deliberately NOT inserted into case_active_panels: the filter carries the
     // panel ids itself, exactly as on SQLite.
-    await pool.query(
-      `INSERT INTO "${schema}".panel_genes (panel_id, hgnc_id, symbol) VALUES ($1, $2, $3)`,
-      [pgPanelId, PANEL_GENE.hgncId, PANEL_GENE.symbol]
-    )
+    pgPartialPanelId = await panel('parity-partial-panel')
+    for (const [panelId, gene] of [
+      [pgPanelId, PANEL_GENE] as const,
+      ...PARTIAL_PANEL_GENES.map((partialGene) => [pgPartialPanelId, partialGene] as const)
+    ]) {
+      await pool.query(
+        `INSERT INTO "${schema}".panel_genes (panel_id, hgnc_id, symbol) VALUES ($1, $2, $3)`,
+        [panelId, gene.hgncId, gene.symbol]
+      )
+    }
   }
 
   function seedSqlite(): void {
@@ -197,6 +210,11 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
       source: 'manual'
     }).id
     sqlite.panels.setGenes(sqlitePanelId, [PANEL_GENE])
+    sqlitePartialPanelId = sqlite.panels.createPanel({
+      name: 'parity-partial-panel',
+      source: 'manual'
+    }).id
+    sqlite.panels.setGenes(sqlitePartialPanelId, PARTIAL_PANEL_GENES)
   }
 
   beforeAll(async () => {
@@ -227,36 +245,25 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
   beforeEach(() => {
     clearPanelIntervalCache()
     geneRef.getCoordinatesForGenes.mockReset()
-    geneRef.getCoordinatesForGenes.mockImplementation((hgncIds: string[], assembly: string) => {
-      const coordinates = GENE_COORDINATES[assembly]
-      return new Map(
-        coordinates !== undefined && hgncIds.includes(PANEL_GENE.hgncId)
-          ? [[PANEL_GENE.hgncId, coordinates]]
-          : []
-      )
-    })
+    geneRef.getCoordinatesForGenes.mockImplementation(fixtureGeneCoordinates)
   })
 
   // ── Path runners ──────────────────────────────────────────────────────────
 
+  /** Backend panel ids by logical id: 1 = panel, 2 = empty, 3 = partial. */
+  const sqlitePanels = (): number[] => [sqlitePanelId, sqliteEmptyPanelId, sqlitePartialPanelId]
+  const pgPanels = (): number[] => [pgPanelId, pgEmptyPanelId, pgPartialPanelId]
+
   /** Substitute the backend-specific panel ids for the logical ones. */
-  function withPanels<T extends { active_panel_ids?: number[] }>(
-    filter: T,
-    panelId: number,
-    emptyPanelId: number
-  ): T {
+  function withPanels<T extends { active_panel_ids?: number[] }>(filter: T, ids: number[]): T {
     if (filter.active_panel_ids === undefined) return { ...filter }
-    return {
-      ...filter,
-      active_panel_ids: filter.active_panel_ids.map((id) => (id === 1 ? panelId : emptyPanelId))
-    }
+    return { ...filter, active_panel_ids: filter.active_panel_ids.map((id) => ids[id - 1]) }
   }
 
   function casePaths(caseIndex: number, filter: CaseFilter): Record<string, Promise<Outcome>> {
-    const sqliteFilter = (): CaseFilter =>
-      structuredClone(withPanels(filter, sqlitePanelId, sqliteEmptyPanelId))
+    const sqliteFilter = (): CaseFilter => structuredClone(withPanels(filter, sqlitePanels()))
     const pgFilter = (): VariantFilter => ({
-      ...structuredClone(withPanels(filter, pgPanelId, pgEmptyPanelId)),
+      ...structuredClone(withPanels(filter, pgPanels())),
       case_id: pgCaseIds[caseIndex]
     })
     const sqliteCaseId = sqliteCaseIds[caseIndex]
@@ -297,8 +304,7 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
 
   function cohortPaths(params: CohortSearchParams): Record<string, Promise<Outcome>> {
     const base = { limit: 1000, offset: 0, ...params }
-    const pgParams = (): CohortSearchParams =>
-      structuredClone(withPanels(base, pgPanelId, pgEmptyPanelId))
+    const pgParams = (): CohortSearchParams => structuredClone(withPanels(base, pgPanels()))
     return {
       'desktop cohort': outcome(() => {
         const repos = (sqlite as unknown as { _repos: Repositories })._repos
@@ -306,7 +312,7 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
           { db: sqlite.db, repos, geneRefDb: geneRef as unknown as GeneReferenceDb },
           {
             type: 'cohort:variants',
-            params: [structuredClone(withPanels(base, sqlitePanelId, sqliteEmptyPanelId))]
+            params: [structuredClone(withPanels(base, sqlitePanels()))]
           } as never
         ) as { data: Array<{ variant_key: string }> }
         return result.data.map((row) => row.variant_key)
@@ -331,16 +337,12 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     caseIndex: number,
     baseFilters: Partial<FilterState>
   ): Record<string, Promise<Outcome>> {
-    const configFor = (panelId: number, emptyPanelId: number): ShortlistConfig => ({
+    const configFor = (ids: number[]): ShortlistConfig => ({
       variantTypeScope: ['snv', 'cnv'],
       baseFilters: {
         ...baseFilters,
         ...(baseFilters.activePanelIds !== undefined
-          ? {
-              activePanelIds: baseFilters.activePanelIds.map((id) =>
-                id === 1 ? panelId : emptyPanelId
-              )
-            }
+          ? { activePanelIds: baseFilters.activePanelIds.map((id) => ids[id - 1]) }
           : {})
       },
       topN: 100,
@@ -355,7 +357,7 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
           .getShortlist(
             {
               caseId: sqliteCaseIds[caseIndex],
-              adHocConfig: configFor(sqlitePanelId, sqliteEmptyPanelId)
+              adHocConfig: configFor(sqlitePanels())
             },
             () => geneRef as unknown as GeneReferenceDb
           )
@@ -370,7 +372,7 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
         })
         const result = await service.getShortlist({
           caseId: pgCaseIds[caseIndex],
-          adHocConfig: configFor(pgPanelId, pgEmptyPanelId)
+          adHocConfig: configFor(pgPanels())
         })
         return result.rows.map(keyOf)
       })
@@ -434,6 +436,49 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     const both = { active_panel_ids: [1, 2], panel_padding_bp: 5000 }
     await expectAll(casePaths(1, both), ok([B.sharedHom, B.padding]))
   }, 120_000)
+
+  it('a panel with SOME unmapped genes still filters, and both backends name the same unmapped genes', async () => {
+    const PARTIAL = { active_panel_ids: [3], panel_padding_bp: 5000 }
+    await expectAll(casePaths(0, PARTIAL), ok(PANEL_A))
+    await expectAll(casePaths(2, PARTIAL), ok([C.inGrch37Gene]))
+    await expectAll(
+      cohortPaths({ ...PARTIAL, genome_build: 'GRCh38' }),
+      ok([...PANEL_A, B.padding])
+    )
+
+    /** `panels:resolutionStatus` on both backends; `scope` is a case index or a build. */
+    const status = async (logicalIds: number[], scope: number | string): Promise<unknown[]> => {
+      const request = (ids: number[], caseIds: number[]): PanelResolutionRequest => ({
+        panelIds: logicalIds.map((id) => ids[id - 1]),
+        ...(typeof scope === 'number' ? { caseId: caseIds[scope] } : { genomeBuild: scope })
+      })
+      return [
+        await new SqliteReadExecutor(sqlite, null).execute({
+          type: 'panels:resolutionStatus',
+          params: [request(sqlitePanels(), sqliteCaseIds)]
+        }),
+        await new PostgresPanelIntervalResolver(pool, schema).getResolutionStatus(
+          request(pgPanels(), pgCaseIds)
+        )
+      ]
+    }
+    const partial = (build: string, totalGenes = 4): unknown => ({
+      genomeBuild: build,
+      totalGenes,
+      unmappedCount: PARTIAL_PANEL_UNMAPPED[build].length,
+      unmappedGenes: PARTIAL_PANEL_UNMAPPED[build]
+    })
+    const none = { genomeBuild: 'GRCh38', unmappedCount: 0, unmappedGenes: [] }
+
+    // The build comes from the case (case view) or from the request (cohort view).
+    expect(await status([3], 0)).toEqual([partial('GRCh38'), partial('GRCh38')])
+    expect(await status([3], 2)).toEqual([partial('GRCh37'), partial('GRCh37')])
+    expect(await status([3], 'GRCh37')).toEqual([partial('GRCh37'), partial('GRCh37')])
+    // A gene shared by two active panels is counted once.
+    expect(await status([1, 3], 'GRCh38')).toEqual([partial('GRCh38'), partial('GRCh38')])
+    expect(await status([1], 0)).toEqual(Array(2).fill({ ...none, totalGenes: 1 }))
+    expect(await status([2], 0)).toEqual(Array(2).fill({ ...none, totalGenes: 0 }))
+  })
 
   it('a panel whose genes have no coordinates for the build is refused on every path', async () => {
     // No silent "no restriction": the user would see every variant while

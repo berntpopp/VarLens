@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest'
 import { join } from 'path'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
@@ -190,6 +190,59 @@ describe('PanelRepository.computeIntervals', () => {
     const intervals = repo.computeIntervals([panel1.id, panel2.id], 'GRCh38', 0, geneRefDb)
     // Should still be just 1 interval (DISTINCT hgnc_id in SQL)
     expect(intervals).toHaveLength(1)
+  })
+
+  // ── Resolution status (which genes computeIntervals leaves out) ──────────
+
+  describe('getResolutionStatus', () => {
+    const UNKNOWN_Z = { hgncId: 'HGNC:99999902', symbol: 'ZZFAKE2' }
+    const UNKNOWN_A = { hgncId: 'HGNC:99999901', symbol: 'AAFAKE1' }
+
+    it('names the panel genes without coordinates, sorted by symbol', () => {
+      const panel = repo.createPanel({ name: 'Partial', source: 'manual' })
+      repo.setGenes(panel.id, [UNKNOWN_Z, { hgncId: 'HGNC:1100', symbol: 'BRCA1' }, UNKNOWN_A])
+
+      expect(repo.getResolutionStatus([panel.id], 'GRCh38', geneRefDb)).toEqual({
+        genomeBuild: 'GRCh38',
+        totalGenes: 3,
+        unmappedCount: 2,
+        unmappedGenes: [UNKNOWN_A, UNKNOWN_Z]
+      })
+      // The mapped gene still restricts the query: partial coverage is not an error.
+      expect(repo.computeIntervals([panel.id], 'GRCh38', 0, geneRefDb)).toHaveLength(1)
+    })
+
+    it('counts a gene shared by two panels once and reports nothing for mapped panels', () => {
+      const first = repo.createPanel({ name: 'First', source: 'manual' })
+      const second = repo.createPanel({ name: 'Second', source: 'manual' })
+      repo.setGenes(first.id, [{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }])
+      repo.setGenes(second.id, [
+        { hgncId: 'HGNC:1100', symbol: 'BRCA1' },
+        { hgncId: 'HGNC:11998', symbol: 'TP53' }
+      ])
+
+      expect(repo.getResolutionStatus([first.id, second.id], 'GRCh38', geneRefDb)).toEqual({
+        genomeBuild: 'GRCh38',
+        totalGenes: 2,
+        unmappedCount: 0,
+        unmappedGenes: []
+      })
+    })
+
+    it('reports every gene as unmapped for a build the reference does not know', () => {
+      const panel = repo.createPanel({ name: 'Unknown build', source: 'manual' })
+      repo.setGenes(panel.id, [{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }])
+
+      const status = repo.getResolutionStatus([panel.id], 'NoSuchBuild', geneRefDb)
+      expect(status.unmappedGenes).toEqual([{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }])
+      expect(status.totalGenes).toBe(1)
+    })
+
+    it('answers without touching the gene reference when no panel is requested', () => {
+      const lookup = { getCoordinatesForGenes: vi.fn() }
+      expect(repo.getResolutionStatus([], 'GRCh38', lookup).totalGenes).toBe(0)
+      expect(lookup.getCoordinatesForGenes).not.toHaveBeenCalled()
+    })
   })
 })
 
