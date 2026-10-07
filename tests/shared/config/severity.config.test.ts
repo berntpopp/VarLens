@@ -270,8 +270,13 @@ describe('annotationSeverityRanks', () => {
 describe('filter values of the severity columns', () => {
   it('selects by category for known values and by text for unknown ones', () => {
     expect(
-      severityFilterParts('clinvar', ['Pathogenic', 'pathogenic', 'Likely_pathogenic', 'odd text'])
-    ).toEqual({ ranks: [15, 13], raw: ['odd text'] })
+      severityFilterParts('clinvar', [
+        'Uncertain_significance',
+        'vus',
+        'Benign/Likely_benign',
+        'odd text'
+      ])
+    ).toEqual({ ranks: [11, 3], raw: ['odd text'] })
     expect(severityFilterParts('consequence', ['HIGH', 'high', 'custom'])).toEqual({
       ranks: [4],
       raw: ['custom']
@@ -315,10 +320,9 @@ describe('filter values of the severity columns', () => {
 
   it('every offered label selects its own category', () => {
     for (const category of CLINVAR_CATEGORIES) {
-      expect(severityFilterParts('clinvar', [category.label])).toEqual({
-        ranks: [category.rank],
-        raw: []
-      })
+      const parts = severityFilterParts('clinvar', [category.label])
+      expect(parts.ranks).toContain(category.rank)
+      expect(parts.raw).toEqual([])
     }
   })
 
@@ -367,5 +371,44 @@ describe('clinvarDisplayText', () => {
       'Pathogenic/Likely pathogenic|risk factor'
     )
     expect(clinvarDisplayText('Likely pathogenic')).toBe('Likely pathogenic')
+  })
+})
+
+describe('a selected category also selects the aggregates that contain it', () => {
+  it.each([
+    [['Pathogenic'], [15, 14]],
+    [['Likely pathogenic'], [14, 13]],
+    [['Benign'], [3, 2]],
+    [['Likely_benign'], [4, 3]],
+    // the aggregates themselves select only the aggregate
+    [['Pathogenic/Likely pathogenic'], [14]],
+    [['Benign/Likely_benign'], [3]],
+    // categories no aggregate contains
+    [['Uncertain_significance'], [11]],
+    [['Conflicting classifications of pathogenicity'], [12]],
+    // the built-in pathogenic preset: never fewer categories than before
+    [
+      ['Pathogenic', 'Likely_pathogenic', 'Pathogenic/Likely_pathogenic'],
+      [15, 14, 13]
+    ]
+  ])('%j selects ranks %j', (values, ranks) => {
+    expect(severityFilterParts('clinvar', values).ranks).toEqual(ranks)
+  })
+
+  it('is declared by the aggregate categories of the configuration', () => {
+    const components = Object.fromEntries(
+      CLINVAR_CATEGORIES.filter((category) => category.components.length > 0).map((category) => [
+        category.id,
+        [...category.components]
+      ])
+    )
+    expect(components).toEqual({
+      pathogenic_likely_pathogenic: ['pathogenic', 'likely_pathogenic'],
+      benign_likely_benign: ['likely_benign', 'benign']
+    })
+  })
+
+  it('does not apply to impact', () => {
+    expect(severityFilterParts('consequence', ['HIGH']).ranks).toEqual([4])
   })
 })

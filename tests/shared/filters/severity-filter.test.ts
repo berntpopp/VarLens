@@ -25,7 +25,7 @@ describe('severityFilterSql', () => {
   it('matches the categories of the values by rank, and the values themselves by text', () => {
     const t = target()
     expect(severityFilterSql('clinvar', ['Pathogenic', 'Likely_pathogenic'], t)).toBe(
-      '(v.clinvar_rank IN (15, 13) OR v.clinvar IN ($1, $2))'
+      '(v.clinvar_rank IN (15, 14, 13) OR v.clinvar IN ($1, $2))'
     )
     expect(t.bound).toEqual(['Pathogenic', 'Likely_pathogenic'])
   })
@@ -38,7 +38,7 @@ describe('severityFilterSql', () => {
 
   it('negates without selecting rows that have no value', () => {
     expect(severityFilterSql('clinvar', ['Benign'], target(), true)).toBe(
-      '(v.clinvar IS NOT NULL AND NOT (v.clinvar_rank IN (2) OR v.clinvar IN ($1)))'
+      '(v.clinvar IS NOT NULL AND NOT (v.clinvar_rank IN (3, 2) OR v.clinvar IN ($1)))'
     )
   })
 

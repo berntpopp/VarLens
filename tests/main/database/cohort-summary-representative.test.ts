@@ -455,14 +455,17 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
 
     for (const view of [caseView, cohortView]) {
       // As text, 'Pathogenic' matched position 1 only.
-      expect(view({ clinvars: ['Pathogenic'] })).toEqual([1, 2, 3, 6])
+      // ... and the P/LP aggregate at position 5, which contains Pathogenic.
+      expect(view({ clinvars: ['Pathogenic'] })).toEqual([1, 2, 3, 5, 6])
+      expect(view({ clinvars: ['Likely pathogenic'] })).toEqual([4, 5])
+      expect(view({ clinvars: ['Pathogenic/Likely pathogenic'] })).toEqual([5])
       expect(view({ clinvars: PRESET })).toEqual([1, 2, 3, 4, 5, 6])
       expect(view({ clinvars: ['reviewed: fine'] })).toEqual([7])
       expect(view({ consequences: ['HIGH'] })).toEqual([1, 2])
       expect(view({ consequences: ['HIGH', 'custom_level'] })).toEqual([1, 2, 7])
-      expect(view(column('clinvar', 'in', ['Pathogenic']))).toEqual([1, 2, 3, 6])
-      expect(view(column('clinvar', '=', 'Likely pathogenic'))).toEqual([4])
-      expect(view(column('clinvar', '!=', 'Pathogenic'))).toEqual([4, 5, 7])
+      expect(view(column('clinvar', 'in', ['Pathogenic']))).toEqual([1, 2, 3, 5, 6])
+      expect(view(column('clinvar', '=', 'Likely pathogenic'))).toEqual([4, 5])
+      expect(view(column('clinvar', '!=', 'Pathogenic'))).toEqual([4, 7])
       expect(view(column('consequence', 'in', ['MODERATE', 'LOW']))).toEqual([3, 4, 5])
     }
 

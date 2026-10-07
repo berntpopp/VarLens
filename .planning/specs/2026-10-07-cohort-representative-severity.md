@@ -184,6 +184,14 @@ The PostgreSQL live aggregation (coordinate-only grouping, `MAX()` per column,
 filter builder (`src/shared/filters/severity-filter.ts`) and one sort builder
 (`src/shared/sql/severity-sort.ts`), so the four sinks cannot drift.
 
+Aggregates in filters (owner decision): each aggregate category declares its components in the
+configuration (`Pathogenic/Likely pathogenic` = pathogenic + likely pathogenic, `Benign/Likely
+benign` = benign + likely benign). Selecting a component selects that category and every
+aggregate that contains it, because ClinVar reports the aggregate when submitters are split
+between the two; selecting the aggregate selects only the aggregate. The built-in presets
+"ClinVar P/LP" and "Rare Pathogenic" list all three pathogenic values and select the same
+three categories as before. The values offered stay the categories that occur in the data.
+
 The text match is kept next to the rank match on purpose: a row whose rank was not written by
 the import pipeline is still found by its own text, so the change is a superset of the old
 filter.

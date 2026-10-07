@@ -104,6 +104,11 @@ export function acmgLabelCaseSql(rankExpression: string): string {
  * 6 drug response, 7 histocompatibility, 255 other). The two aggregate
  * categories and `conflicting` can also be derived from components.
  *
+ * `components`: an aggregate category names the categories it is made of
+ * (ClinVar reports `Pathogenic/Likely pathogenic` when submitters are split
+ * between the two). A filter on a component also selects the aggregate, see
+ * {@link severityFilterParts}; a filter on the aggregate selects only it.
+ *
  * `color` is the chip colour token of the category in both views (grey =
  * neutral), so every spelling of a category looks the same.
  *
@@ -114,6 +119,7 @@ export function acmgLabelCaseSql(rankExpression: string): string {
 export const CLINVAR_CATEGORIES = [
   {
     id: 'pathogenic',
+    components: [],
     color: 'error',
     label: 'Pathogenic',
     rank: 15,
@@ -122,6 +128,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'pathogenic_likely_pathogenic',
+    components: ['pathogenic', 'likely_pathogenic'],
     color: 'orange',
     label: 'Pathogenic/Likely pathogenic',
     rank: 14,
@@ -130,6 +137,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'likely_pathogenic',
+    components: [],
     color: 'orange',
     label: 'Likely pathogenic',
     rank: 13,
@@ -138,6 +146,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'conflicting',
+    components: [],
     color: 'deep-purple',
     label: 'Conflicting classifications of pathogenicity',
     rank: 12,
@@ -154,6 +163,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'uncertain_significance',
+    components: [],
     color: 'warning',
     label: 'Uncertain significance',
     rank: 11,
@@ -173,6 +183,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'risk_factor',
+    components: [],
     color: 'grey',
     label: 'Risk factor',
     rank: 10,
@@ -181,15 +192,25 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'association',
+    components: [],
     color: 'grey',
     label: 'Association',
     rank: 9,
     axis: 'other',
     terms: ['association']
   },
-  { id: 'affects', color: 'grey', label: 'Affects', rank: 8, axis: 'other', terms: ['affects'] },
+  {
+    id: 'affects',
+    components: [],
+    color: 'grey',
+    label: 'Affects',
+    rank: 8,
+    axis: 'other',
+    terms: ['affects']
+  },
   {
     id: 'drug_response',
+    components: [],
     color: 'grey',
     label: 'Drug response',
     rank: 7,
@@ -198,6 +219,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'other',
+    components: [],
     color: 'grey',
     label: 'Other',
     rank: 6,
@@ -218,6 +240,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'protective',
+    components: [],
     color: 'grey',
     label: 'Protective',
     rank: 5,
@@ -226,6 +249,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'likely_benign',
+    components: [],
     color: 'light-green',
     label: 'Likely benign',
     rank: 4,
@@ -234,6 +258,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'benign_likely_benign',
+    components: ['likely_benign', 'benign'],
     color: 'light-green',
     label: 'Benign/Likely benign',
     rank: 3,
@@ -242,6 +267,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'benign',
+    components: [],
     color: 'success',
     label: 'Benign',
     rank: 2,
@@ -250,6 +276,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'not_provided',
+    components: [],
     color: 'grey',
     label: 'Not provided',
     rank: 1,
@@ -458,11 +485,26 @@ const LABEL_BY_RANK: Readonly<Record<SeverityKey, ReadonlyMap<number, string>>> 
   clinvar: new Map(CLINVAR_CATEGORIES.map(({ label, rank }) => [rank, label]))
 }
 
+/** Rank of a ClinVar category → ranks of the aggregate categories that contain it. */
+const AGGREGATE_RANKS: ReadonlyMap<number, number[]> = (() => {
+  const containing = new Map<number, number[]>()
+  for (const aggregate of CLINVAR_CATEGORIES) {
+    for (const component of aggregate.components as readonly string[]) {
+      const rank = RANK_BY_CATEGORY[component]
+      containing.set(rank, [...(containing.get(rank) ?? []), aggregate.rank])
+    }
+  }
+  return containing
+})()
+
 /**
  * What filter values for a severity column select: every row of the ranks
  * (categories) the values belong to, and, for values that are no known
  * category, the rows with exactly that text. `Pathogenic` therefore also
- * selects `pathogenic` and `Pathogenic|drug_response`.
+ * selects `pathogenic` and `Pathogenic|drug_response`. A ClinVar category
+ * also selects the aggregates that contain it (`Pathogenic` and `Likely
+ * pathogenic` each include `Pathogenic/Likely pathogenic`), as the
+ * configuration declares; an aggregate selects only itself.
  */
 export function severityFilterParts(
   key: SeverityKey,
@@ -475,6 +517,8 @@ export function severityFilterParts(
     const rank = severityRank(key, text)
     if (rank === UNKNOWN_SEVERITY_RANK) raw.add(text)
     else ranks.add(rank)
+    if (key === 'clinvar')
+      for (const aggregate of AGGREGATE_RANKS.get(rank) ?? []) ranks.add(aggregate)
   }
   return { ranks: [...ranks].sort((a, b) => b - a), raw: [...raw] }
 }
@@ -487,8 +531,19 @@ export function severityFilterParts(
  */
 export function offeredFilterValues(key: string, distinctValues: string[]): string[] {
   if (!isSeverityKey(key)) return distinctValues
-  const { ranks, raw } = severityFilterParts(key, distinctValues)
-  return [...ranks.map((rank) => LABEL_BY_RANK[key].get(rank) as string), ...raw.sort()]
+  // The categories that occur themselves: an aggregate is offered only when
+  // some stored value is that aggregate.
+  const ranks = new Set<number>()
+  const raw = new Set<string>()
+  for (const value of distinctValues) {
+    const rank = severityRank(key, value)
+    if (rank === UNKNOWN_SEVERITY_RANK) raw.add(value)
+    else ranks.add(rank)
+  }
+  return [
+    ...[...ranks].sort((a, b) => b - a).map((rank) => LABEL_BY_RANK[key].get(rank) as string),
+    ...[...raw].sort()
+  ]
 }
 
 /** A column's filter metadata with its distinct values replaced by the values to offer. */

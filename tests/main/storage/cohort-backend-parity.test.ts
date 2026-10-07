@@ -943,13 +943,15 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     })
 
     const expected: Array<[Record<string, unknown>, number[]]> = [
-      [{ clinvars: ['Pathogenic'] }, [1, 2, 3, 6]], // as text: position 1 only
+      [{ clinvars: ['Pathogenic'] }, [1, 2, 3, 5, 6]], // as text: position 1 only; 5 is the P/LP aggregate
+      [{ clinvars: ['Likely pathogenic'] }, [4, 5]],
+      [{ clinvars: ['Pathogenic/Likely pathogenic'] }, [5]], // the aggregate alone
       [{ clinvars: PRESET }, [1, 2, 3, 4, 5, 6]],
       [{ clinvars: ['reviewed: fine'] }, [7]],
       [{ consequences: ['HIGH'] }, [1, 2]],
-      [column('clinvar', 'in', ['Pathogenic']), [1, 2, 3, 6]],
-      [column('clinvar', '=', 'Likely pathogenic'), [4]],
-      [column('clinvar', '!=', 'Pathogenic'), [4, 5, 7]],
+      [column('clinvar', 'in', ['Pathogenic']), [1, 2, 3, 5, 6]],
+      [column('clinvar', '=', 'Likely pathogenic'), [4, 5]],
+      [column('clinvar', '!=', 'Pathogenic'), [4, 7]],
       [column('consequence', 'in', ['MODERATE', 'LOW']), [3, 4, 5]]
     ]
     for (const [filter, positions] of expected) {
