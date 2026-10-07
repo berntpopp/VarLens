@@ -12,6 +12,7 @@ import { withSetup, flushPromises } from '../../utils/test-helpers'
 import { useOffsetPagination } from '@renderer/composables/useOffsetPagination'
 import type { OffsetPageResult } from '@renderer/composables/useOffsetPagination'
 import { useSettingsStore } from '@renderer/stores/settingsStore'
+import { logService } from '@renderer/services/LogService'
 
 type MockItem = { id: number; name: string; nested: { value: number } }
 
@@ -399,6 +400,68 @@ describe('request ordering and resilience', () => {
     expect(result.error.value?.message).toBe('boom')
     expect(result.items.value.map((r) => r.id)).toEqual([1, 2])
     expect(result.totalCount.value).toBe(2)
+  })
+
+  it('turns a thrown SerializableError into a readable message, never "[object Object]"', async () => {
+    // unwrapIpcResult throws the plain SerializableError object, not an Error.
+    const ipcError = {
+      code: 'DATABASE_ERROR',
+      message: 'relation "cohort_variant_summary" does not exist',
+      userMessage: 'The cohort index is not available yet.'
+    }
+    const fetchPage = vi.fn().mockRejectedValue(ipcError)
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    await result.loadPage()
+
+    expect(result.error.value).toBeInstanceOf(Error)
+    expect(result.error.value?.message).toBe('The cohort index is not available yet.')
+  })
+
+  it('falls back to a generic message for an opaque thrown object', async () => {
+    const fetchPage = vi.fn().mockRejectedValue({ unexpected: true })
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    await result.loadPage()
+
+    expect(result.error.value?.message).toBe('Failed to load data.')
+  })
+
+  it('logs a readable reason when a prefetched page fails with a SerializableError', async () => {
+    const warn = vi.spyOn(logService, 'warn').mockImplementation(() => {})
+    let rejectPrefetch: (reason: unknown) => void = () => {}
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [row(1)], total_count: 5000 })
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectPrefetch = reject
+          })
+      )
+      .mockResolvedValue({ data: [row(2)], total_count: 5000 })
+    const [result, appInstance] = withSetup(() => {
+      useSettingsStore().prefetchEnabled = true
+      return useOffsetPagination({ fetchPage })
+    })
+    app = appInstance
+    result.itemsPerPage.value = 10
+
+    await result.loadPage()
+    await flushIdle() // next page is now being prefetched
+    result.page.value = 2
+    const pending = result.loadPage()
+    rejectPrefetch({ code: 'DATABASE_ERROR', message: 'raw', userMessage: 'Query timed out.' })
+    await pending
+
+    expect(warn).toHaveBeenCalledWith(
+      'Prefetch failed, falling back to normal fetch: Query timed out.',
+      'pagination'
+    )
+    expect(result.items.value.map((r) => r.id)).toEqual([2])
+    warn.mockRestore()
   })
 
   it('never exposes NaN/undefined totals: missing count keeps the last known total', async () => {

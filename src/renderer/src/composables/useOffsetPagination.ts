@@ -11,6 +11,7 @@ import { ref, shallowRef, watch, computed, type Ref } from 'vue'
 import { useSettingsStore } from '../stores/settingsStore'
 import { APP_CONFIG } from '../../../shared/config'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import { createPageCache, runWhenIdle } from './pageCache'
 import type { ViewRoute } from './useUrlState'
 import { useSortUrlParam } from './useViewUrlBindings'
@@ -192,8 +193,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
           return
         } catch (e) {
           logService.warn(
-            'Prefetch failed, falling back to normal fetch: ' +
-              (e instanceof Error ? e.message : String(e)),
+            'Prefetch failed, falling back to normal fetch: ' + formatError(e, 'unknown error'),
             'pagination'
           )
           if (!isCurrent()) return
@@ -220,7 +220,9 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     } catch (err) {
       if (!isCurrent()) return
       // Keep the previous rows and total visible; surface the error instead.
-      error.value = err instanceof Error ? err : new Error(String(err))
+      // unwrapIpcResult throws a plain SerializableError, so String(err)
+      // would surface "[object Object]" in the table's error banner.
+      error.value = err instanceof Error ? err : new Error(formatError(err, 'Failed to load data.'))
     } finally {
       if (isCurrent()) loading.value = false
     }

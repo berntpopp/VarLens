@@ -704,10 +704,11 @@ defineExpose({ refresh })
 }
 
 /* Prevent alerts/indicators from growing — only the data table gets the
-   remaining flex space. */
+   remaining flex space. Vuetify sets `.v-alert { flex: 1 1 }`, so the grow
+   factor must be reset too or the error banner fills the whole column. */
 .cohort-table-container > .v-alert,
 .cohort-table-container > .cohort-rebuild-notice {
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 /* Rebuild notice: plain styled div, total height ~26 px.
