@@ -74,7 +74,15 @@ export const REBUILD_VARIANT_SUMMARY_SQL = `
   DELETE FROM cohort_variant_summary;
 ${variantSummaryInsertSql()}`
 
-export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = `
+/**
+ * Folds per-case stars / comments / ACMG calls (case_variant_annotations) into
+ * the summary flags, on top of the variant_annotations base the INSERT-SELECT
+ * above writes. `variantFilter` is appended after the `JOIN variants v` (e.g.
+ * a `WHERE v.chr = @chr ...` restriction for one recomputed coordinate); the
+ * empty string covers every annotated coordinate.
+ */
+export function perCaseAnnotationFlagsSql(variantFilter = ''): string {
+  return `
   UPDATE cohort_variant_summary SET
     has_star = CASE WHEN cohort_variant_summary.has_star = 1 THEN 1 WHEN pca.has_star = 1 THEN 1 ELSE 0 END,
     has_comment = CASE WHEN cohort_variant_summary.has_comment = 1 THEN 1 WHEN pca.has_comment = 1 THEN 1 ELSE 0 END,
@@ -104,7 +112,7 @@ export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = `
         WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
         WHEN 'Benign' THEN 1 ELSE 0 END) AS acmg_rank
     FROM case_variant_annotations cva
-    JOIN variants v ON cva.variant_id = v.id
+    JOIN variants v ON cva.variant_id = v.id${variantFilter}
     GROUP BY v.chr, v.pos, v.ref, v.alt
   ) pca
   WHERE cohort_variant_summary.chr = pca.chr
@@ -112,6 +120,9 @@ export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = `
     AND cohort_variant_summary.ref = pca.ref
     AND cohort_variant_summary.alt = pca.alt;
 `
+}
+
+export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = perCaseAnnotationFlagsSql()
 
 /**
  * INSERT-SELECT for gene_burden_summary. `geneFilter` is appended to the

@@ -1,4 +1,5 @@
 import { BaseRepository } from './BaseRepository'
+import { applyVariantAnnotationChange } from './cohort-summary-coordinate-recompute'
 import {
   canonicalizeTranscriptSemantics,
   type TranscriptAnnotation,
@@ -110,9 +111,28 @@ export class TranscriptRepository extends BaseRepository {
         moi: transcript.moi
       }
 
+      const before = this.execFirst<{
+        chr: string
+        pos: number
+        ref: string
+        alt: string
+        gene_symbol: string | null
+      }>(
+        this.kysely
+          .selectFrom('variants')
+          .select(['chr', 'pos', 'ref', 'alt', 'gene_symbol'])
+          .where('id', '=', variantId)
+      )
+
       this.execRun(
         this.kysely.updateTable('variants').set(denormalized).where('id', '=', variantId)
       )
+
+      // The cohort summary holds a representative copy of these columns per
+      // coordinate and counts per gene: keep both exact in this transaction.
+      if (before !== undefined) {
+        applyVariantAnnotationChange(this.db, before, before.gene_symbol, denormalized.gene_symbol)
+      }
     })
   }
 
