@@ -172,7 +172,9 @@
       <template #expanded-row="{ columns, item }">
         <CarrierExpandedRow
           :carriers="getCarriers(item.variant_key) ?? []"
+          :error="hasCarrierError(item.variant_key)"
           :colspan="columns.length"
+          @retry="emit('load-carriers', item)"
           @navigate-to-case="(caseId) => emit('navigate-to-case', { caseId, item })"
         />
       </template>
@@ -296,7 +298,13 @@ const { getRowProps } = useTableRowProps<CohortVariant>({
   selectedId: ref(props.selectedVariantKey),
   getItemId: (item: CohortVariant) => item.variant_key
 })
-const { expandedRows, getCarriers, hasCarriers, clearCache: clearCarrierCache } = useCarriers()
+const {
+  expandedRows,
+  getCarriers,
+  hasCarriers,
+  hasCarrierError,
+  clearCache: clearCarrierCache
+} = useCarriers()
 // Fresh <tr>s per result set (moved rows are layout shifts); expanded stays by variant_key
 const { rowKey, keyedModel } = useResultSetKeys(() => props.variants, 'variant_key')
 const expandedKeys = keyedModel(expandedRows)

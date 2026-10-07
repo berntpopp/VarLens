@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { Ref } from 'vue'
 import { createAppState } from '../../../src/renderer/src/composables/useAppState'
 import { useCarriers } from '../../../src/renderer/src/composables/useCarriers'
+import { useTags } from '../../../src/renderer/src/composables/useTags'
+import { useVariantColumnMeta } from '../../../src/renderer/src/composables/useVariantColumnMeta'
+import { createMockApi } from '../../utils/mock-api'
 
 describe('createAppState', () => {
   it('selects a case through an explicit shell action', () => {
@@ -157,5 +161,32 @@ describe('createAppState', () => {
     expect(state.activeTab.value).toBe('case')
     expect(state.panelOpen.value).toBe(false)
     expect(state.selectedPanelVariant.value).toBeNull()
+  })
+
+  it('drops database-scoped caches on a database switch', async () => {
+    // Case and variant ids restart per database, so every cache keyed by them
+    // would otherwise serve the previous database's data.
+    const api = createMockApi()
+    api.tags.list = vi.fn().mockResolvedValue([{ id: 1, name: 'Review', color: '#F44336' }])
+    api.tags.getVariantTags = vi
+      .fn()
+      .mockResolvedValue([{ id: 1, name: 'Review', color: '#F44336' }])
+    window.api = api
+
+    const tags = useTags()
+    await tags.loadTags()
+    await tags.loadVariantTags(1, 10)
+    const columnMeta = useVariantColumnMeta()
+    ;(columnMeta.variantTypesPresent as Ref<Record<string, Set<string>>>).value = {
+      'case:1': new Set(['sv'])
+    }
+    const epochBefore = columnMeta.cacheEpoch.value
+
+    createAppState().resetForDatabaseSwitch()
+
+    expect(tags.getTags()).toEqual([])
+    expect(tags.getVariantTags(1, 10)).toEqual([])
+    expect(columnMeta.variantTypesPresent.value).toEqual({})
+    expect(columnMeta.cacheEpoch.value).toBe(epochBefore + 1)
   })
 })

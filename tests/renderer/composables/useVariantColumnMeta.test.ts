@@ -351,5 +351,63 @@ describe('useVariantColumnMeta', () => {
       await result.getColumnMeta({ caseIds: [3, 4] }, 'sv.support')
       expect(columnMetaFn).toHaveBeenCalledTimes(6)
     })
+
+    it('bumps the cache epoch so consumers can drop their local copies', () => {
+      installMockApi()
+      const [result, appInstance] = withSetup(() => useVariantColumnMeta())
+      app = appInstance
+
+      const before = result.cacheEpoch.value
+      result.invalidateAll()
+      expect(result.cacheEpoch.value).toBe(before + 1)
+    })
+
+    it('does not cache column meta that settles after the invalidation', async () => {
+      let settle!: (meta: ColumnFilterMeta) => void
+      const { columnMetaFn } = installMockApi({
+        columnMeta: () =>
+          new Promise<ColumnFilterMeta>((resolve) => {
+            settle = resolve
+          })
+      })
+      const [result, appInstance] = withSetup(() => useVariantColumnMeta())
+      app = appInstance
+
+      const pending = result.getColumnMeta({ caseId: 1 }, 'sv.support')
+      result.invalidateAll()
+      settle(makeColumnMeta({ max: 999 }))
+      await pending
+
+      expect(result.extensionColumnMeta.value[cacheKeyFor({ caseId: 1 })]).toBeUndefined()
+
+      columnMetaFn.mockImplementation(async () => makeColumnMeta({ max: 5 }))
+      const fresh = await result.getColumnMeta({ caseId: 1 }, 'sv.support')
+      expect(fresh.max).toBe(5)
+      expect(columnMetaFn).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not cache variant types that settle after the invalidation', async () => {
+      let settle!: (types: string[]) => void
+      const { typesPresentFn } = installMockApi({
+        typesPresent: () =>
+          new Promise<string[]>((resolve) => {
+            settle = resolve
+          })
+      })
+      const [result, appInstance] = withSetup(() => useVariantColumnMeta())
+      app = appInstance
+
+      const pending = result.ensureTypesPresent({ caseId: 1 })
+      result.invalidateAll()
+      settle(['sv'])
+      await pending
+
+      expect(result.variantTypesPresent.value[cacheKeyFor({ caseId: 1 })]).toBeUndefined()
+
+      typesPresentFn.mockImplementation(async () => ['cnv'])
+      const fresh = await result.ensureTypesPresent({ caseId: 1 })
+      expect([...fresh]).toEqual(['cnv'])
+      expect(typesPresentFn).toHaveBeenCalledTimes(2)
+    })
   })
 })

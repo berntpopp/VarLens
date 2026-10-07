@@ -202,7 +202,7 @@ const {
   deactivate
 } = useCohortData()
 const { filters, searchTerm, selectedImpactPresets, clearAllFilters, clearFilter } = useFilters()
-const { loadCarriers } = useCarriers()
+const { loadCarriers, reloadExpanded: reloadExpandedCarriers } = useCarriers()
 const {
   isGlobalStarred,
   getGlobalAcmgClassification,
@@ -660,6 +660,7 @@ watch(
       // and metadata.
       stopRebuildTimer(true)
       void requestReload()
+      void reloadExpandedCarriers(variants.value)
       void fetchSupportedCohortSummary()
       void fetchSupportedCohortColumnMeta()
     }
@@ -698,6 +699,8 @@ const refresh = async () => {
     fetchSupportedCohortColumnMeta(),
     invalidateAndReload()
   ])
+  // The case set may have changed: cached carrier lists can name deleted cases.
+  await reloadExpandedCarriers(variants.value)
 }
 defineExpose({ refresh, softRefresh })
 </script>

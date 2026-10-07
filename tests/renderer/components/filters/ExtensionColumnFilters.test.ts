@@ -7,8 +7,9 @@
  * directly so each test can control what types/metadata the component sees.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { ref } from 'vue'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -21,6 +22,8 @@ const columnMetaResponses = new Map<string, ColumnFilterMeta>()
 // it — used to exercise the failure-path branch of the eager watch.
 const columnMetaFailureKeys = new Set<string>()
 const columnMetaCallCounts = new Map<string, number>()
+// Stands in for the composable's invalidation counter.
+const cacheEpoch = ref(0)
 
 // Mock LogService because the eager-watch failure branch calls
 // `logService.warn`, which instantiates the pinia-backed log store. The
@@ -36,12 +39,18 @@ vi.mock('../../../../src/renderer/src/services/LogService', () => ({
 }))
 
 vi.mock('../../../../src/renderer/src/composables/useVariantColumnMeta', () => ({
+  cacheKeyFor: (scope: { caseId?: number; caseIds?: number[] }): string =>
+    scope.caseId !== undefined
+      ? `case:${scope.caseId}`
+      : `cases:${[...(scope.caseIds ?? [])].sort((a, b) => a - b).join(',')}`,
   useVariantColumnMeta: (): {
     getColumnMeta: (scope: unknown, key: string) => Promise<ColumnFilterMeta>
     ensureTypesPresent: (scope: unknown) => Promise<Set<string>>
     invalidate: () => void
     invalidateAll: () => void
+    cacheEpoch: typeof cacheEpoch
   } => ({
+    cacheEpoch,
     getColumnMeta: vi.fn(async (_scope, key: string) => {
       columnMetaCallCounts.set(key, (columnMetaCallCounts.get(key) ?? 0) + 1)
       if (columnMetaFailureKeys.has(key)) {
@@ -68,6 +77,8 @@ vi.mock('../../../../src/renderer/src/composables/useVariantColumnMeta', () => (
 import ExtensionColumnFilters from '../../../../src/renderer/src/components/filters/ExtensionColumnFilters.vue'
 
 const vuetify = createVuetify({ components, directives })
+// Unmounted after each test: every instance watches the shared `cacheEpoch`.
+const mounted: Array<ReturnType<typeof mount>> = []
 
 async function mountComponent(
   props: {
@@ -83,6 +94,7 @@ async function mountComponent(
       modelValue: (props.modelValue ?? {}) as any
     }
   })
+  mounted.push(wrapper)
   // Wait for the immediate watch + async ensureTypesPresent to resolve.
   await flushPromises()
   return wrapper
@@ -95,6 +107,10 @@ describe('ExtensionColumnFilters', () => {
     columnMetaFailureKeys.clear()
     columnMetaCallCounts.clear()
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    for (const wrapper of mounted.splice(0)) wrapper.unmount()
   })
 
   it('renders empty-state message when no extension types are present', async () => {
@@ -240,5 +256,79 @@ describe('ExtensionColumnFilters', () => {
     // Call count must stay at exactly 1 — no retry loop.
     expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
     expect(vm.metaMap['cnv.copy_number']).toBeUndefined()
+  })
+
+  it('reloads column metadata when the scope switches to another case', async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    columnMetaResponses.set('cnv.copy_number', {
+      key: 'cnv.copy_number',
+      dataType: 'numeric',
+      distinctCount: 3,
+      min: 0,
+      max: 4
+    })
+    const wrapper = await mountComponent({ scope: { caseId: 1 } })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const vm = wrapper.vm as any
+    expect(vm.metaMap['cnv.copy_number'].max).toBe(4)
+
+    columnMetaResponses.set('cnv.copy_number', {
+      key: 'cnv.copy_number',
+      dataType: 'numeric',
+      distinctCount: 9,
+      min: 0,
+      max: 12
+    })
+    await wrapper.setProps({ scope: { caseId: 2 } })
+    await flushPromises()
+
+    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(2)
+    expect(vm.metaMap['cnv.copy_number'].max).toBe(12)
+  })
+
+  it('retries a previously failed column once the scope changes', async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    columnMetaFailureKeys.add('cnv.copy_number')
+    const wrapper = await mountComponent({ scope: { caseId: 1 } })
+    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
+
+    columnMetaFailureKeys.clear()
+    await wrapper.setProps({ scope: { caseId: 2 } })
+    await flushPromises()
+
+    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(2)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((wrapper.vm as any).metaMap['cnv.copy_number']).toBeDefined()
+  })
+
+  it('reloads column metadata for the same scope after the cache is invalidated', async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    const wrapper = await mountComponent({ scope: { caseId: 1 } })
+    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
+
+    columnMetaResponses.set('cnv.copy_number', {
+      key: 'cnv.copy_number',
+      dataType: 'numeric',
+      distinctCount: 9,
+      min: 0,
+      max: 12
+    })
+    cacheEpoch.value++
+    await flushPromises()
+
+    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(2)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((wrapper.vm as any).metaMap['cnv.copy_number'].max).toBe(12)
+  })
+
+  it('does not refetch when an equal scope object is passed again', async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    const wrapper = await mountComponent({ scope: { caseIds: [1, 2] } })
+    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
+
+    await wrapper.setProps({ scope: { caseIds: [2, 1] } })
+    await flushPromises()
+
+    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
   })
 })

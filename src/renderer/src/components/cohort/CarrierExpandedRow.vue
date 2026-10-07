@@ -10,6 +10,20 @@
           </tr>
         </thead>
         <tbody>
+          <tr v-if="error" data-testid="carrier-load-error">
+            <td colspan="3" class="text-error">
+              Carriers could not be loaded.
+              <v-btn
+                size="small"
+                variant="text"
+                class="ml-2"
+                data-testid="carrier-load-retry"
+                @click="emit('retry')"
+              >
+                Retry
+              </v-btn>
+            </td>
+          </tr>
           <tr v-for="carrier in carriers" :key="carrier.case_id">
             <td>{{ carrier.case_name }}</td>
             <td>
@@ -45,10 +59,13 @@ import { mdiOpenInApp } from '@mdi/js'
 interface Props {
   carriers: CohortCarrier[]
   colspan: number
+  /** The carrier load failed; `carriers` is empty for that reason, not because there are none. */
+  error?: boolean
 }
 
 interface Emits {
   (e: 'navigate-to-case', caseId: number): void
+  (e: 'retry'): void
 }
 
 defineProps<Props>()
