@@ -36,6 +36,11 @@ import {
 } from './cohort-gene-summary-sql'
 import { getCohortSummaryState, markCohortSummaryStale } from './cohort-summary-state-sql'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
+import {
+  maxSelectList,
+  mergeMaxAssignments,
+  removeCaseFromSummary
+} from './cohort-summary-representative-sql'
 
 interface ScopedClient {
   schema: string
@@ -90,17 +95,7 @@ const META_DISTINCT_THRESHOLD = 50
 export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvisional = false) => `
   WITH deduped AS (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
-           MAX(v.end_pos) AS end_pos,
-           MAX(v.gene_symbol) AS gene_symbol,
-           MAX(v.cdna) AS cdna,
-           MAX(v.aa_change) AS aa_change,
-           MAX(v.consequence) AS consequence,
-           MAX(v.func) AS func,
-           MAX(v.clinvar) AS clinvar,
-           MAX(v.gnomad_af) AS gnomad_af,
-           MAX(v.cadd) AS cadd,
-           MAX(v.transcript) AS transcript,
-           MAX(v.omim_mim_number) AS omim_mim_number,
+           ${maxSelectList('v')},
            MAX(v.gt_num) AS gt_num
     FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
     JOIN ${tbl(includeProvisional ? 'cases_all' : 'cases')} c ON c.id = v.case_id
@@ -109,17 +104,7 @@ export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvis
   ),
   per_case AS (
     SELECT chr, pos, ref, alt, variant_type, genome_build,
-           MAX(end_pos) AS end_pos,
-           MAX(gene_symbol) AS gene_symbol,
-           MAX(cdna) AS cdna,
-           MAX(aa_change) AS aa_change,
-           MAX(consequence) AS consequence,
-           MAX(func) AS func,
-           MAX(clinvar) AS clinvar,
-           MAX(gnomad_af) AS gnomad_af,
-           MAX(cadd) AS cadd,
-           MAX(transcript) AS transcript,
-           MAX(omim_mim_number) AS omim_mim_number,
+           ${maxSelectList('deduped')},
            COUNT(*) AS carrier_delta,
            SUM(CASE WHEN gt_num IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END) AS het_delta,
            SUM(CASE WHEN gt_num IN ('1/1','1|1') THEN 1 ELSE 0 END) AS hom_delta
@@ -148,35 +133,15 @@ export class PostgresCohortSummaryRepository {
          has_star, has_comment, acmg_best, cohort_frequency)
       WITH deduped AS (
         SELECT v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build,
-               MAX(v.end_pos) AS end_pos,
-               MAX(v.gene_symbol) AS gene_symbol,
-               MAX(v.cdna) AS cdna,
-               MAX(v.aa_change) AS aa_change,
-               MAX(v.consequence) AS consequence,
-               MAX(v.func) AS func,
-               MAX(v.clinvar) AS clinvar,
-               MAX(v.gnomad_af) AS gnomad_af,
-               MAX(v.cadd) AS cadd,
-               MAX(v.transcript) AS transcript,
-               MAX(v.omim_mim_number) AS omim_mim_number,
+               ${maxSelectList('v')},
                MAX(v.gt_num) AS gt_num
         FROM ${tbl('variants')} v
         JOIN ${tbl('cases')} c ON c.id = v.case_id
         GROUP BY v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build
       ),
       agg AS (
-        SELECT d.chr, d.pos, MAX(d.end_pos) AS end_pos, d.ref, d.alt,
-               d.variant_type, d.genome_build,
-               MAX(d.gene_symbol) AS gene_symbol,
-               MAX(d.cdna) AS cdna,
-               MAX(d.aa_change) AS aa_change,
-               MAX(d.consequence) AS consequence,
-               MAX(d.func) AS func,
-               MAX(d.clinvar) AS clinvar,
-               MAX(d.gnomad_af) AS gnomad_af,
-               MAX(d.cadd) AS cadd,
-               MAX(d.transcript) AS transcript,
-               MAX(d.omim_mim_number) AS omim_mim_number,
+        SELECT d.chr, d.pos, d.ref, d.alt, d.variant_type, d.genome_build,
+               ${maxSelectList('d')},
                COUNT(*) AS carrier_count,
                SUM(CASE WHEN d.gt_num IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END) AS het_count,
                SUM(CASE WHEN d.gt_num IN ('1/1','1|1') THEN 1 ELSE 0 END) AS hom_count
@@ -288,6 +253,8 @@ export class PostgresCohortSummaryRepository {
         carrier_count = cohort_variant_summary.carrier_count + EXCLUDED.carrier_count,
         het_count = cohort_variant_summary.het_count + EXCLUDED.het_count,
         hom_count = cohort_variant_summary.hom_count + EXCLUDED.hom_count,
+        -- Representative annotation: MAX per column, as rebuild() computes it.
+        ${mergeMaxAssignments('cohort_variant_summary')},
         -- Adds never clear annotation flags (OR semantics).
         has_star = cohort_variant_summary.has_star OR EXCLUDED.has_star,
         has_comment = cohort_variant_summary.has_comment OR EXCLUDED.has_comment;
@@ -304,11 +271,10 @@ export class PostgresCohortSummaryRepository {
   }
 
   /**
-   * Remove one case's variants from the summary. UPDATE-from-CTE subtracting all
-   * three counters simultaneously (Pass-6 MED #3), then a sibling DELETE of any
-   * row that dropped to zero carriers (Pass-2 verdict #1 — separate statement,
-   * not a sibling CTE). Mirrors SQLite INCREMENTAL_REMOVE_SQL +
-   * CLEANUP_ZERO_CARRIERS_SQL.
+   * Remove one case's variants from the summary: recompute the representative
+   * annotation it held, subtract all three counters simultaneously (Pass-6
+   * MED #3), then DELETE any row that dropped to zero carriers (Pass-2 verdict
+   * #1 — separate statement). See cohort-summary-representative-sql.ts.
    */
   async incrementalRemove({
     schema,
@@ -317,23 +283,12 @@ export class PostgresCohortSummaryRepository {
   }: ScopedClient & { caseId: number }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
-    await client.query(
-      `
-      ${SCOPED_DEDUPED_AGG_SQL(tbl)}
-      UPDATE ${tbl('cohort_variant_summary')} cvs
-      SET carrier_count = cvs.carrier_count - per_case.carrier_delta,
-          het_count = cvs.het_count - per_case.het_delta,
-          hom_count = cvs.hom_count - per_case.hom_delta
-      FROM per_case
-      WHERE cvs.chr = per_case.chr AND cvs.pos = per_case.pos
-        AND cvs.ref = per_case.ref AND cvs.alt = per_case.alt
-        AND cvs.variant_type = per_case.variant_type
-        AND cvs.genome_build = per_case.genome_build;
-    `,
-      [caseId]
-    )
-
-    await client.query(`DELETE FROM ${tbl('cohort_variant_summary')} WHERE carrier_count <= 0`)
+    await removeCaseFromSummary({
+      schema,
+      client,
+      caseId,
+      aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl)
+    })
     await removeCaseFromGeneSummary({ schema, client, caseId })
 
     // C1 lifecycle: incremental maintenance records its time but never touches

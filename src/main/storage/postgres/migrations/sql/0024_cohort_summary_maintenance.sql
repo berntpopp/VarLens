@@ -23,3 +23,21 @@
 ALTER TABLE "__schema__"."variant_frequency" SET (fillfactor = 85);
 ALTER TABLE "__schema__"."cohort_gene_variant_summary" SET (fillfactor = 85);
 ALTER TABLE "__schema__"."cohort_gene_summary" SET (fillfactor = 50);
+
+-- Representative annotation of a summary row (#461).
+--
+-- A summary row stores one value per annotation column for all carriers of a
+-- coordinate. The rule is now the same on every path: the NULL-ignoring MAX()
+-- per column, text compared bytewise (COLLATE "C"), as SQLite does. Rows
+-- written before this migration kept the first imported case's annotation
+-- (incremental add) or a MAX() under the database collation (rebuild), and
+-- were not updated by a transcript switch. They are valid apart from those
+-- columns, so the summary is flagged stale rather than rebuilt here: readers
+-- keep being served the current rows while a background rebuild replaces
+-- them (cohort-read-freshness.ts). An empty summary has nothing to correct.
+UPDATE "__schema__"."cohort_summary_state"
+   SET is_stale = true,
+       stale_reason = 'migration_0024_representative_annotation',
+       stale_at = now()
+ WHERE id = 1
+   AND EXISTS (SELECT 1 FROM "__schema__"."cohort_variant_summary");

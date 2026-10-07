@@ -125,6 +125,29 @@ describe.skipIf(!RUN)('cohort_summary migration — Sprint A C1', () => {
     expect(Number(flushed.rows[0].n_tup_hot_upd)).toBeGreaterThan(1900)
   }, 60_000)
 
+  it('flags an existing summary for a rebuild under the MAX-per-column rule (0024, #461)', async () => {
+    const before0024 = POSTGRES_MIGRATIONS.filter((migration) => migration.version < '0024')
+    await new PostgresMigrationRunner(pool, schema, before0024).migrate()
+    await probe.query(
+      `UPDATE "${schema}".cohort_summary_state SET is_stale = false, stale_reason = NULL WHERE id = 1`
+    )
+    await probe.query(
+      `INSERT INTO "${schema}".cohort_variant_summary
+         (chr, pos, ref, alt, variant_type, genome_build, carrier_count, het_count, hom_count, variant_key)
+       VALUES ('1', 100, 'A', 'T', 'snv', 'GRCh38', 1, 1, 0, '1:100:A:T')`
+    )
+
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+
+    const res = await probe.query<{ is_stale: boolean; stale_reason: string | null }>(
+      `SELECT is_stale, stale_reason FROM "${schema}".cohort_summary_state WHERE id = 1`
+    )
+    expect(res.rows[0]).toEqual({
+      is_stale: true,
+      stale_reason: 'migration_0024_representative_annotation'
+    })
+  }, 60_000)
+
   it('seeds cohort_summary_state with is_stale=false on a fresh schema (no variants)', async () => {
     await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
 

@@ -7,6 +7,7 @@ import {
 } from '../../../shared/types/transcript'
 import { addVariantToGeneSummary, beginVariantGeneChange } from './cohort-gene-summary-sql'
 import { lockSummaryForWrite } from './cohort-summary-lock'
+import { recomputeSummaryForVariant } from './cohort-summary-representative-sql'
 import { quoteIdentifier } from './identifiers'
 
 type QueryablePool = Pick<Pool, 'query'> & Partial<Pick<Pool, 'connect'>>
@@ -153,13 +154,23 @@ export class PostgresTranscriptsRepository {
       (transcript.consequence as string | null | undefined) ?? null,
       (transcript.func as string | null | undefined) ?? null
     )
-    // The per-gene cohort aggregates count this row under its gene: move it
-    // when the selected transcript belongs to another gene.
+    // The cohort summary keeps one representative annotation per coordinate
+    // (MAX per column over its carriers) and the per-gene aggregates count this
+    // row under its gene. Both change with the selected transcript, so they are
+    // maintained here, in the transaction of the variant update and under the
+    // summary write lock. An import publishes within seconds: wait for it
+    // rather than fail.
     const geneScope = { schema: this.schema, client, variantId }
     const geneChanges = await beginVariantGeneChange(
       { ...geneScope, nextGeneSymbol: (transcript.gene_symbol as string | null) ?? null },
       lockSummaryForWrite
     )
+
+    if (!geneChanges) {
+      // A gene change already took the lock; the summary row needs it too.
+      await client.query('SET LOCAL lock_timeout = 0')
+      await lockSummaryForWrite(client, this.schema)
+    }
 
     await client.query(
       `UPDATE ${this.schemaName}.variants
@@ -185,6 +196,7 @@ export class PostgresTranscriptsRepository {
       ]
     )
     if (geneChanges) await addVariantToGeneSummary(geneScope)
+    await recomputeSummaryForVariant(geneScope)
   }
 
   private async connect(): Promise<PoolClient> {

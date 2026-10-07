@@ -150,7 +150,13 @@ describe('PostgresTranscriptsRepository', () => {
       expect.stringContaining('INSERT INTO "case_schema"."cohort_gene_summary"'),
       [9]
     )
-    expect(query).toHaveBeenNthCalledWith(11, 'COMMIT')
+    // The coordinate's cohort summary row takes the new representative annotation.
+    expect(query).toHaveBeenNthCalledWith(
+      11,
+      expect.stringContaining('UPDATE "case_schema"."cohort_variant_summary"'),
+      [9]
+    )
+    expect(query).toHaveBeenNthCalledWith(12, 'COMMIT')
     expect(release).toHaveBeenCalledOnce()
   })
 
@@ -175,18 +181,17 @@ describe('PostgresTranscriptsRepository', () => {
         ]
       })
       .mockResolvedValueOnce({ rows: [{ changes: false }] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValue({ rows: [] })
     const pool = { connect: vi.fn(async () => ({ query, release })) }
     const repository = new PostgresTranscriptsRepository(pool as never, 'case_schema')
 
     await repository.switchSelectedTranscript(9, 'NM_LEGACY.1')
 
-    const updateSql = query.mock.calls[4][0] as string
+    const updateSql = query.mock.calls[6][0] as string
     expect(updateSql).toContain('consequence = $4')
     expect(updateSql).not.toContain('COALESCE($4, consequence)')
     expect(query).toHaveBeenNthCalledWith(
-      5,
+      7,
       expect.stringContaining('UPDATE "case_schema".variants'),
       [9, 'NM_LEGACY.1', 'LEGACY', null, 'stop_gained', null, null, null, null]
     )
@@ -225,8 +230,7 @@ describe('PostgresTranscriptsRepository', () => {
         ]
       })
       .mockResolvedValueOnce({ rows: [{ changes: false }] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValue({ rows: [] })
     const pool = {
       connect: vi.fn(async () => ({ query, release }))
     }
@@ -256,12 +260,25 @@ describe('PostgresTranscriptsRepository', () => {
       9,
       'BRCA2'
     ])
+    // The summary row is still maintained, under the summary write lock (#461).
+    expect(query).toHaveBeenNthCalledWith(6, 'SET LOCAL lock_timeout = 0')
+    expect(query).toHaveBeenNthCalledWith(7, expect.stringContaining('pg_try_advisory_xact_lock'), [
+      'case_schema'
+    ])
     expect(query).toHaveBeenNthCalledWith(
-      6,
+      8,
       expect.stringContaining('UPDATE "case_schema".variants'),
       [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'missense_variant', 'c.1A>G', 'p.M1V', 0.8, 'AD']
     )
-    expect(query).toHaveBeenNthCalledWith(7, 'COMMIT')
+    expect(query).toHaveBeenNthCalledWith(
+      9,
+      expect.stringContaining('UPDATE "case_schema"."cohort_variant_summary"'),
+      [9]
+    )
+    expect(query).toHaveBeenNthCalledWith(10, 'COMMIT')
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('"cohort_gene_summary"'))).toBe(
+      false
+    )
     expect(release).toHaveBeenCalledOnce()
   })
 })

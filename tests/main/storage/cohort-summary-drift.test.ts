@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
+import { PostgresTranscriptsRepository } from '../../../src/main/storage/postgres/PostgresTranscriptsRepository'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -110,8 +111,8 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
    * orders by the full natural key so two snapshots are directly comparable.
    * Counts are coerced to numbers because node-pg returns BIGINT as strings.
    */
-  async function snapshotSummary(): Promise<unknown[]> {
-    const res = await probe.query<{
+  async function snapshotSummary(reader: Pick<Client, 'query'> = probe): Promise<unknown[]> {
+    const res = await reader.query<{
       chr: string
       pos: string
       end_pos: string | null
@@ -175,13 +176,26 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     }))
   }
 
+  /** What a full rebuild would store in the gene tables; nothing is kept. */
+  async function rebuiltGeneTables(): Promise<unknown> {
+    return withClient(async (client) => {
+      await client.query('BEGIN')
+      try {
+        await repo.rebuild({ schema, client: client as never })
+        return await snapshotGeneTables(client)
+      } finally {
+        await client.query('ROLLBACK')
+      }
+    })
+  }
+
   /** The per-gene aggregates maintained alongside the summary (0023). */
-  async function snapshotGeneTables(): Promise<unknown> {
-    const genes = await probe.query(
+  async function snapshotGeneTables(reader: Pick<Client, 'query'> = probe): Promise<unknown> {
+    const genes = await reader.query(
       `SELECT gene_symbol, variant_count::int, unique_variant_count::int, affected_case_count::int
          FROM "${schema}".cohort_gene_summary ORDER BY gene_symbol`
     )
-    const pairs = await probe.query(
+    const pairs = await reader.query(
       `SELECT gene_symbol, chr, pos, ref, alt, carrier_count::int
          FROM "${schema}".cohort_gene_variant_summary
         ORDER BY gene_symbol, chr, pos, ref, alt`
@@ -190,6 +204,152 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
   }
 
   const repo = new PostgresCohortSummaryRepository()
+
+  /** What a full rebuild would store right now; the maintained rows are left untouched. */
+  async function rebuiltSummary(): Promise<unknown[]> {
+    return withClient(async (client) => {
+      await client.query('BEGIN')
+      try {
+        await repo.rebuild({ schema, client: client as never })
+        return await snapshotSummary(client)
+      } finally {
+        await client.query('ROLLBACK')
+      }
+    })
+  }
+
+  async function inTransaction(fn: (client: Client) => Promise<void>): Promise<void> {
+    await withClient(async (client) => {
+      await client.query('BEGIN')
+      try {
+        await fn(client)
+        await client.query('COMMIT')
+      } catch (err) {
+        await client.query('ROLLBACK')
+        throw err
+      }
+    })
+  }
+
+  async function seedAnnotated(
+    caseId: number,
+    annotation: Record<string, string | number | null>
+  ): Promise<number> {
+    const columns = Object.keys(annotation)
+    const res = await probe.query<{ id: number }>(
+      `INSERT INTO "${schema}".variants
+         (case_id, chr, pos, ref, alt, variant_type, gt_num${columns.map((c) => `, ${c}`).join('')})
+         VALUES ($1, '1', 100, 'A', 'T', 'snv', '0/1'${columns.map((_, i) => `, $${i + 2}`).join('')})
+         RETURNING id`,
+      [caseId, ...Object.values(annotation)]
+    )
+    return res.rows[0].id
+  }
+
+  async function rowAt100(): Promise<Record<string, unknown>> {
+    const res = await probe.query(
+      `SELECT gene_symbol, consequence, func, clinvar, cadd, transcript, cdna, carrier_count::int
+         FROM "${schema}".cohort_variant_summary WHERE chr = '1' AND pos = 100`
+    )
+    return res.rows[0]
+  }
+
+  it('a differing annotation, a transcript switch and a removal keep the maintained summary equal to a rebuild (#461)', async () => {
+    const add = (caseId: number): Promise<void> =>
+      inTransaction((client) => repo.incrementalAdd({ schema, client: client as never, caseId }))
+
+    // Two carriers of 1:100:A:T that agree, plus an unrelated coordinate.
+    const first = await seedCase('rep-a')
+    const second = await seedCase('rep-b')
+    const agreed = {
+      gene_symbol: 'BRCA1',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      clinvar: 'Pathogenic',
+      cadd: 32.5
+    }
+    await seedAnnotated(first, agreed)
+    await seedAnnotated(second, agreed)
+    await seedVariant({ caseId: second, chr: '2', pos: 5, ref: 'C', alt: 'G', geneSymbol: 'TP53' })
+    await add(first)
+    await add(second)
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+
+    // 1. A third carrier annotated differently: every column takes the larger
+    //    value, NULLs are ignored, text compares bytewise ('a…' > 'Z…' > 'B…').
+    const third = await seedCase('rep-c')
+    const thirdVariant = await seedAnnotated(third, {
+      gene_symbol: 'BRCA1-AS1',
+      consequence: 'MODIFIER',
+      func: 'intron_variant',
+      clinvar: null,
+      cadd: 40,
+      cdna: 'c.1A>T'
+    })
+    const fourth = await seedCase('rep-d')
+    await seedAnnotated(fourth, { gene_symbol: 'aBRCA', cdna: 'Z.9', cadd: 1 })
+    await add(third)
+    await add(fourth)
+    expect(await rowAt100()).toMatchObject({
+      gene_symbol: 'aBRCA',
+      consequence: 'MODIFIER',
+      func: 'stop_gained',
+      clinvar: 'Pathogenic',
+      cadd: 40,
+      cdna: 'c.1A>T',
+      carrier_count: 4
+    })
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+
+    // 2. Transcript switch on the third carrier: it stops holding the
+    //    consequence and cdna maxima, which fall back to the other carriers.
+    const transcripts = new PostgresTranscriptsRepository(pool, schema)
+    await transcripts.insertTranscriptAndSwitch(thirdVariant, {
+      transcript_id: 'ENST00000000001',
+      gene_symbol: 'AAAS',
+      consequence: 'HIGH',
+      func: 'frameshift_variant',
+      cdna: 'c.1del',
+      aa_change: 'p.M1fs',
+      hpo_sim_score: null,
+      moi: null,
+      is_selected: 0
+    } as never)
+    expect(await rowAt100()).toMatchObject({
+      gene_symbol: 'aBRCA',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      transcript: 'ENST00000000001',
+      cdna: 'c.1del',
+      cadd: 40
+    })
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    expect(await snapshotGeneTables()).toEqual(await rebuiltGeneTables())
+
+    // 3. Removing carriers that hold maxima: the row falls back to what the
+    //    remaining carriers supply; removing one that holds none changes nothing.
+    const remove = (caseId: number): Promise<void> =>
+      inTransaction(async (client) => {
+        await repo.incrementalRemove({ schema, client: client as never, caseId })
+        await client.query(`DELETE FROM "${schema}".cases WHERE id = $1`, [caseId])
+      })
+    await remove(third)
+    expect(await rowAt100()).toMatchObject({
+      gene_symbol: 'aBRCA',
+      cadd: 32.5,
+      transcript: null,
+      cdna: 'Z.9',
+      carrier_count: 3
+    })
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    await remove(fourth)
+    expect(await rowAt100()).toMatchObject({ gene_symbol: 'BRCA1', cdna: null, carrier_count: 2 })
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    await remove(first)
+    expect(await rowAt100()).toMatchObject({ ...agreed, carrier_count: 1 })
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    expect(await snapshotGeneTables()).toEqual(await rebuiltGeneTables())
+  }, 120_000)
 
   it('rebuild + N incremental ops + rebuild = byte-identical', async () => {
     // 1. Seed N cases + variants. Mix of shared/distinct coordinates, het/hom
