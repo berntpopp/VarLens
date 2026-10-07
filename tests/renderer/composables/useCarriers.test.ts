@@ -21,6 +21,19 @@ vi.mock('../../../src/renderer/src/services/LogService', () => ({
   }
 }))
 
+const mockVariant: CohortVariant = {
+  chr: 'chr1',
+  pos: 12345,
+  ref: 'A',
+  alt: 'G',
+  variant_key: 'chr1-12345-A-G',
+  gene_symbol: 'BRCA1',
+  consequence: 'missense_variant',
+  impact: 'MODERATE',
+  carrier_count: 1,
+  total_cases: 10
+}
+
 describe('useCarriers', () => {
   let app: { unmount: () => void }
 
@@ -242,36 +255,86 @@ describe('useCarriers', () => {
     expect(result.hasCarriers('chr2-67890-C-T')).toBe(true)
   })
 
-  it('handles errors gracefully with empty array', async () => {
-    window.api.cohort.getCarriers = vi.fn().mockRejectedValue(new Error('IPC error'))
+  it('does not cache a failed load and lets a later load retry', async () => {
+    const carriers: CohortCarrier[] = [{ case_id: 1, case_name: 'Case A', gt_num: '0/1' }]
+    const getCarriers = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('IPC error'))
+      .mockResolvedValueOnce(carriers)
+    window.api.cohort.getCarriers = getCarriers
 
     const [result, appInstance] = withSetup(() => useCarriers())
     app = appInstance
 
-    const mockVariant: CohortVariant = {
-      chr: 'chr1',
-      pos: 12345,
-      ref: 'A',
-      alt: 'G',
-      variant_key: 'chr1-12345-A-G',
-      gene_symbol: 'BRCA1',
-      consequence: 'missense_variant',
-      impact: 'MODERATE',
-      carrier_count: 1,
-      total_cases: 10
-    }
-
     await result.loadCarriers(mockVariant)
 
-    // Error logged via logService
     expect(logService.error).toHaveBeenCalledWith(
       expect.stringContaining('Failed to load carriers:'),
       'carriers'
     )
+    // A failure is not "no carriers": nothing is cached, and the key is flagged.
+    expect(result.hasCarriers(mockVariant.variant_key)).toBe(false)
+    expect(result.getCarriers(mockVariant.variant_key)).toBeUndefined()
+    expect(result.hasCarrierError(mockVariant.variant_key)).toBe(true)
 
-    // Empty array cached to prevent retry loops
-    expect(result.hasCarriers('chr1-12345-A-G')).toBe(true)
-    expect(result.getCarriers('chr1-12345-A-G')).toEqual([])
+    await result.loadCarriers(mockVariant)
+
+    expect(getCarriers).toHaveBeenCalledTimes(2)
+    expect(result.getCarriers(mockVariant.variant_key)).toEqual(carriers)
+    expect(result.hasCarrierError(mockVariant.variant_key)).toBe(false)
+  })
+
+  it('joins concurrent loads for the same variant', async () => {
+    const getCarriers = vi.fn().mockResolvedValue([])
+    window.api.cohort.getCarriers = getCarriers
+
+    const [result, appInstance] = withSetup(() => useCarriers())
+    app = appInstance
+
+    await Promise.all([result.loadCarriers(mockVariant), result.loadCarriers(mockVariant)])
+
+    expect(getCarriers).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a response that settles after the cache was cleared', async () => {
+    let settle!: (carriers: CohortCarrier[]) => void
+    window.api.cohort.getCarriers = vi.fn().mockReturnValue(
+      new Promise<CohortCarrier[]>((resolve) => {
+        settle = resolve
+      })
+    )
+
+    const [result, appInstance] = withSetup(() => useCarriers())
+    app = appInstance
+
+    const pending = result.loadCarriers(mockVariant)
+    result.clearCache()
+    settle([{ case_id: 9, case_name: 'Deleted case', gt_num: '1/1' }])
+    await pending
+
+    expect(result.hasCarriers(mockVariant.variant_key)).toBe(false)
+  })
+
+  it('reloadExpanded refetches carriers for the expanded rows only', async () => {
+    const other: CohortVariant = { ...mockVariant, pos: 999, variant_key: 'chr1-999-A-G' }
+    const stale: CohortCarrier[] = [{ case_id: 1, case_name: 'Deleted case', gt_num: '0/1' }]
+    const fresh: CohortCarrier[] = [{ case_id: 2, case_name: 'Case B', gt_num: '1/1' }]
+    const getCarriers = vi.fn().mockResolvedValue(fresh)
+    window.api.cohort.getCarriers = getCarriers
+
+    const [result, appInstance] = withSetup(() => useCarriers())
+    app = appInstance
+    result.carrierMap.value.set(mockVariant.variant_key, stale)
+    result.carrierMap.value.set(other.variant_key, stale)
+    result.expandedRows.value = [mockVariant.variant_key]
+
+    await result.reloadExpanded([mockVariant, other])
+
+    expect(getCarriers).toHaveBeenCalledTimes(1)
+    expect(result.getCarriers(mockVariant.variant_key)).toEqual(fresh)
+    // Collapsed rows are dropped and load again when next expanded.
+    expect(result.hasCarriers(other.variant_key)).toBe(false)
+    expect(result.expandedRows.value).toEqual([mockVariant.variant_key])
   })
 
   it('clearCache clears carrier map but keeps expandedRows', () => {
