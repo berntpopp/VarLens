@@ -1,13 +1,20 @@
 // @vitest-environment node
 /**
- * Issue #469 on SQLite: the cohort summary shows, per variant, the annotation
- * of its most severe carrier row (impact rank, then ClinVar rank, then a
- * bytewise tie-break), and every annotation column comes from that one row.
+ * Issue #469 on SQLite: what a cohort summary row shows for a variant whose
+ * carriers are annotated differently.
+ *
+ *  - Transcript-level columns (impact, func, gene, cdna, aa_change, transcript,
+ *    OMIM) come together from ONE carrier row, the most severe by impact rank
+ *    with a bytewise tie-break: never a mix of two transcripts.
+ *  - Variant-level facts are aggregated over ALL carriers, each on its own:
+ *    ClinVar = the most severe significance, gnomAD = the lowest frequency,
+ *    CADD = the highest score. A fact one carrier has is never lost because
+ *    another carrier supplies the transcript.
  *
  * The old rule was a bytewise MAX() per column: impact HIGH < LOW < MODERATE <
  * MODIFIER, so one MODIFIER carrier turned a HIGH variant into MODIFIER and
  * the cohort filter impact = HIGH hid it; ClinVar 'Uncertain significance'
- * beat 'Pathogenic'; and a row mixed columns of different carriers.
+ * beat 'Pathogenic'; and a row mixed columns of different transcripts.
  *
  * Every maintenance path must arrive at the same row: full rebuild (main
  * thread and both worker variants), per-file add, removal, transcript switch.
@@ -53,6 +60,15 @@ const MODIFIER: Annotation = {
   gnomad_af: 0.5,
   cadd: 40
 }
+
+/** The transcript-level columns of an annotation. */
+const transcriptOf = (annotation: Annotation): Annotation => ({
+  gene_symbol: annotation.gene_symbol,
+  consequence: annotation.consequence,
+  func: annotation.func,
+  cdna: annotation.cdna,
+  transcript: annotation.transcript
+})
 
 describe('cohort summary representative: the most severe carrier row (#469)', () => {
   let service: DatabaseService
@@ -125,45 +141,95 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
     addCarrier('c', MODIFIER)
     service.cohortSummary.rebuild()
 
-    expect(row()).toEqual({ ...HIGH, impact_rank: 4, clinvar_rank: 15, carrier_count: 3 })
+    expect(row()).toEqual({
+      ...transcriptOf(HIGH),
+      impact_rank: 4,
+      clinvar: 'Pathogenic',
+      clinvar_rank: 15,
+      gnomad_af: 0.0001, // the lowest any carrier has
+      cadd: 40, // the highest any carrier has
+      carrier_count: 3
+    })
     const filtered = service.cohort.getCohortVariants({ consequences: ['HIGH'] })
     expect(filtered.data.map((v) => v.variant_key)).toEqual(['1:100:A:T'])
     expect(service.cohort.getCohortVariants({ consequences: ['MODIFIER'] }).data).toEqual([])
   })
 
-  it('takes every column from the chosen carrier: no chimera', () => {
+  it('takes the transcript-level columns from one carrier: no chimera', () => {
     addCarrier('a', HIGH)
     addCarrier('c', MODIFIER)
     service.cohortSummary.rebuild()
 
-    // Not MODIFIER's larger CADD / gnomAD / gene, although each is a per-column maximum.
-    expect(row()).toMatchObject(HIGH)
+    // Not MODIFIER's gene or transcript, although each is a bytewise maximum.
+    expect(row()).toMatchObject(transcriptOf(HIGH))
   })
 
-  it('ranks ClinVar pathogenic above uncertain significance at equal impact', () => {
-    const base = { gene_symbol: 'GENE', consequence: 'MODERATE', func: 'missense_variant' }
-    addCarrier('a', { ...base, clinvar: 'Uncertain_significance', cadd: 30 })
-    addCarrier('b', { ...base, clinvar: 'Pathogenic/Likely_pathogenic', cadd: 3 })
-    addCarrier('c', { ...base, clinvar: 'not_provided', cadd: 20 })
+  it('a ClinVar value of another carrier is not lost behind the chosen transcript', () => {
+    // The review's scenario: A is MODERATE and Pathogenic, B is HIGH on another
+    // transcript and has no ClinVar value. B supplies the transcript; the
+    // variant is still Pathogenic, and the ClinVar filter must find it.
+    addCarrier('a', {
+      gene_symbol: 'GENEA',
+      consequence: 'MODERATE',
+      func: 'missense_variant',
+      clinvar: 'Pathogenic'
+    })
+    addCarrier('b', {
+      gene_symbol: 'GENEB',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      clinvar: null
+    })
     service.cohortSummary.rebuild()
 
     expect(row()).toMatchObject({
-      clinvar: 'Pathogenic/Likely_pathogenic',
-      clinvar_rank: 14,
-      cadd: 3,
-      carrier_count: 3
+      gene_symbol: 'GENEB',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      impact_rank: 4,
+      clinvar: 'Pathogenic',
+      clinvar_rank: 15
     })
-    const filtered = service.cohort.getCohortVariants({
-      clinvars: ['Pathogenic/Likely_pathogenic']
-    })
-    expect(filtered.data.map((v) => v.variant_key)).toEqual(['1:100:A:T'])
+    for (const filter of [{ clinvars: ['Pathogenic'] }, { consequences: ['HIGH'] }]) {
+      expect(service.cohort.getCohortVariants(filter).data.map((v) => v.variant_key)).toEqual([
+        '1:100:A:T'
+      ])
+    }
   })
 
-  it('impact outranks ClinVar', () => {
-    addCarrier('a', { consequence: 'HIGH', clinvar: 'Benign', gene_symbol: 'A' })
-    addCarrier('b', { consequence: 'LOW', clinvar: 'Pathogenic', gene_symbol: 'B' })
+  it('ranks ClinVar by significance over all carriers, ties by the text', () => {
+    const base = { gene_symbol: 'GENE', consequence: 'MODERATE', func: 'missense_variant' }
+    addCarrier('a', { ...base, clinvar: 'Uncertain_significance' })
+    addCarrier('b', { ...base, clinvar: 'Pathogenic/Likely_pathogenic' })
+    addCarrier('c', { ...base, clinvar: 'not_provided' })
+    addCarrier('d', { ...base, clinvar: 'pathogenic&likely_pathogenic' })
     service.cohortSummary.rebuild()
-    expect(row()).toMatchObject({ consequence: 'HIGH', clinvar: 'Benign', gene_symbol: 'A' })
+
+    // Bytewise, 'Uncertain…' and 'not_provided' sort above 'Pathogenic/…'. The
+    // two spellings of the same category tie on rank: 'p' (0x70) > 'P' (0x50).
+    expect(row()).toMatchObject({
+      clinvar: 'pathogenic&likely_pathogenic',
+      clinvar_rank: 14,
+      carrier_count: 4
+    })
+  })
+
+  it('gnomAD and CADD come from any carrier that has them', () => {
+    const transcript = { gene_symbol: 'GENE', func: 'stop_gained' }
+    // The carrier that supplies the transcript has neither value.
+    addCarrier('a', { ...transcript, consequence: 'HIGH', gnomad_af: null, cadd: null })
+    addCarrier('b', { ...transcript, consequence: 'LOW', gnomad_af: 0.5, cadd: 12 })
+    service.cohortSummary.rebuild()
+    expect(row()).toMatchObject({ consequence: 'HIGH', gnomad_af: 0.5, cadd: 12 })
+
+    // Differing values (another annotation release): the lowest frequency and
+    // the highest score, so neither filter hides the variant.
+    addCarrier('c', { ...transcript, consequence: 'LOW', gnomad_af: 0.001, cadd: 30 })
+    service.cohortSummary.rebuild()
+    expect(row()).toMatchObject({ consequence: 'HIGH', gnomad_af: 0.001, cadd: 30 })
+    expect(
+      service.cohort.getCohortVariants({ gnomad_af_max: 0.01, cadd_min: 20 }).data
+    ).toHaveLength(1)
   })
 
   it('breaks ties bytewise and identically whatever the insertion order', () => {
@@ -200,16 +266,23 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
       service = new DatabaseService(':memory:')
       service.cohortSummary.rebuild()
       addIncrementally(order.map((annotation, index) => [`case-${index}`, annotation]))
-      expect(row()).toMatchObject({ ...HIGH, carrier_count: 3 })
+      expect(row()).toMatchObject({
+        ...transcriptOf(HIGH),
+        clinvar: 'Pathogenic',
+        gnomad_af: 0.0001,
+        cadd: 40,
+        carrier_count: 3
+      })
       expectExact()
     }
   })
 
-  it('removal recomputes only when the removed case supplied the representative', async () => {
+  it('removal gives back what the removed case supplied, transcript and facts', async () => {
     service.cohortSummary.rebuild()
+    const MID = { ...MODIFIER, consequence: 'MODERATE', gene_symbol: 'MID', cadd: 38 }
     const [high, moderate, modifier] = addIncrementally([
       ['high', HIGH],
-      ['moderate', { ...MODIFIER, consequence: 'MODERATE', gene_symbol: 'MID' }],
+      ['moderate', MID],
       ['modifier', MODIFIER]
     ])
     const remove = (caseId: number): Promise<unknown> =>
@@ -219,17 +292,28 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
         onProgress: () => undefined,
         summary: openCaseSummaryRemoval(db())
       })
+    expect(row()).toMatchObject({ ...transcriptOf(HIGH), cadd: 40, gnomad_af: 0.0001 })
 
+    // MODIFIER held the CADD maximum; the transcript and ClinVar are HIGH's.
     await remove(modifier)
-    expect(row()).toMatchObject({ ...HIGH, carrier_count: 2 })
+    expect(row()).toMatchObject({
+      ...transcriptOf(HIGH),
+      clinvar: 'Pathogenic',
+      cadd: 38,
+      gnomad_af: 0.0001,
+      carrier_count: 2
+    })
     expectExact()
 
+    // HIGH supplied the transcript, the ClinVar value and the gnomAD minimum.
     await remove(high)
     expect(row()).toMatchObject({
-      ...MODIFIER,
-      consequence: 'MODERATE',
-      gene_symbol: 'MID',
+      ...transcriptOf(MID),
       impact_rank: 3,
+      clinvar: null,
+      clinvar_rank: 0,
+      cadd: 38,
+      gnomad_af: 0.5,
       carrier_count: 1
     })
     expectExact()
@@ -262,8 +346,14 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
     expect(db().prepare('SELECT impact_rank FROM variants WHERE id = ?').get(variantId)).toEqual({
       impact_rank: 1
     })
-    // The LOW carrier is now the most severe one.
-    expect(row()).toMatchObject({ ...MODIFIER, consequence: 'LOW', impact_rank: 2 })
+    // The LOW carrier is now the most severe one; the facts are unchanged.
+    expect(row()).toMatchObject({
+      ...transcriptOf(MODIFIER),
+      consequence: 'LOW',
+      impact_rank: 2,
+      clinvar: 'Pathogenic',
+      cadd: 40
+    })
     expectExact()
   })
 
@@ -343,6 +433,6 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
       } as never
     ])
     service.cohortSummary.rebuild()
-    expect(row()).toMatchObject({ ...HIGH, carrier_count: 1 })
+    expect(row()).toMatchObject({ ...transcriptOf(HIGH), cadd: 40, carrier_count: 1 })
   })
 })

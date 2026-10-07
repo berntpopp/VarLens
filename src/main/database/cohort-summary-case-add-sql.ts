@@ -9,9 +9,13 @@
 import { IMPORT_SESSION_OPEN_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import {
   REPRESENTATIVE_COLUMNS,
-  precedesRepresentative,
+  SUMMARY_TRANSCRIPT_COLUMNS,
+  contributionChangesSummary,
+  mergeFactAssignments,
+  precedesTranscript,
   representativeColumnList,
-  representativeOrderBy
+  summaryColumnsOverWindow,
+  transcriptOrderBy
 } from '../../shared/sql/cohort-representative'
 
 export { IMPORT_SESSION_OPEN_KEY }
@@ -144,8 +148,8 @@ export const UPSERT_GENE_BURDEN_SQL = `
 
 /**
  * The rebuild's per-case step for the added case, computed ONCE: per
- * coordinate and type its best row by the representative order (#469) and its
- * genotype, together with the rowid of the summary row it lands on (NULL: no
+ * coordinate and type its most severe transcript row, its variant-level facts
+ * (#469) and its genotype, together with the rowid of the summary row it lands on (NULL: no
  * case had this variant yet). All three merge statements below are driven by
  * it, so the case's variants are ranked once and the summary's primary key is
  * probed once per coordinate.
@@ -161,9 +165,9 @@ export const CAPTURE_CASE_COORDS_SQL = `
     s.rowid
   FROM (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type,
-      ${representativeColumnList('v')},
+      ${summaryColumnsOverWindow('v', 'case_key', 'sqlite')},
       MAX(v.gt_num) OVER case_key AS gt_num,
-      ROW_NUMBER() OVER (case_key ORDER BY ${representativeOrderBy('v', 'sqlite')}) AS rn
+      ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS rn
     FROM variants v
     WHERE v.case_id = @caseId
     WINDOW case_key AS (PARTITION BY v.chr, v.pos, v.ref, v.alt, v.variant_type)
@@ -189,16 +193,25 @@ export const INCREMENT_CARRIERS_SQL = `
   FROM temp.added_case_coords d
   WHERE cohort_variant_summary.rowid = d.summary_rowid`
 
+const SUMMARY = 'cohort_variant_summary'
+
 /**
- * Step 2: the case's row replaces the stored representative, in every column
- * at once, only where it precedes it in the representative order.
+ * Step 2, only on the rows the case changes: its transcript-level columns
+ * replace the stored ones, together, where its row is more severe; each
+ * variant-level fact is replaced where the case's value wins.
  */
 export const MERGE_REPRESENTATIVE_SQL = `
-  UPDATE cohort_variant_summary SET
-    ${REPRESENTATIVE_COLUMNS.map((col) => `${col} = d.${col}`).join(',\n    ')}
+  UPDATE ${SUMMARY} SET
+    ${[
+      ...SUMMARY_TRANSCRIPT_COLUMNS.map(
+        (col) =>
+          `${col} = CASE WHEN ${precedesTranscript('d', SUMMARY, 'sqlite')} THEN d.${col} ELSE ${SUMMARY}.${col} END`
+      ),
+      ...mergeFactAssignments('d', SUMMARY, 'sqlite')
+    ].join(',\n    ')}
   FROM temp.added_case_coords d
-  WHERE cohort_variant_summary.rowid = d.summary_rowid
-    AND ${precedesRepresentative('d', 'cohort_variant_summary', 'sqlite')}`
+  WHERE ${SUMMARY}.rowid = d.summary_rowid
+    AND (${contributionChangesSummary('d', SUMMARY, 'sqlite')})`
 
 /**
  * Step 3: the variants no case had yet become new rows — 1 carrier, flags

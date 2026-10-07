@@ -531,8 +531,16 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
 
     // 1. A carrier annotated MODIFIER (the issue: HIGH, HIGH, MODIFIER). The old
     //    rule, a bytewise MAX() per column, stored consequence = 'MODIFIER' with
-    //    func = 'stop_gained', gene 'BRCA1-AS1' and CADD 40: no carrier's row,
-    //    and hidden from the filter impact = HIGH. Now nothing changes.
+    //    func = 'stop_gained' and gene 'BRCA1-AS1': no carrier's transcript, and
+    //    hidden from the filter impact = HIGH. Now the transcript-level columns
+    //    stay; only CADD, a fact of the variant, takes the higher value.
+    const agreedTranscript = {
+      gene_symbol: 'BRCA1',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      cdna: null,
+      transcript: null
+    }
     const third = await seedCase('rep-c')
     const thirdVariant = await seedAnnotated(third, {
       gene_symbol: 'BRCA1-AS1',
@@ -543,44 +551,47 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
       cdna: 'c.1A>T'
     })
     await add(third)
-    expect(await rowAt100()).toMatchObject({ ...agreed, cdna: null, carrier_count: 3 })
+    expect(await rowAt100()).toMatchObject({
+      ...agreedTranscript,
+      clinvar: 'Pathogenic',
+      cadd: 40,
+      carrier_count: 3
+    })
     const cohort = new PostgresCohortRepository(pool, schema)
     expect(
       (await cohort.queryVariants({ consequences: ['HIGH'] })).data.map((v) => v.variant_key)
     ).toEqual(['1:100:A:T'])
     await expectExact()
 
-    // 2. A carrier that ties on both ranks: the tie-break is bytewise
-    //    ('a…' > 'B…', unlike a linguistic collation) and takes the whole row,
-    //    CADD 1 included although other carriers have 32.5 and 40.
+    // 2. A carrier that ties on impact: the tie-break is bytewise
+    //    ('a…' > 'B…', unlike a linguistic collation) and takes the whole
+    //    transcript row (its cdna); its lower CADD does not replace the fact.
     const fourth = await seedCase('rep-d')
     const tied = { ...agreed, gene_symbol: 'aBRCA', cdna: 'Z.9', cadd: 1 }
+    const tiedTranscript = { ...agreedTranscript, gene_symbol: 'aBRCA', cdna: 'Z.9' }
     const fourthVariant = await seedAnnotated(fourth, tied)
     await add(fourth)
-    expect(await rowAt100()).toMatchObject({ ...tied, transcript: null, carrier_count: 4 })
+    expect(await rowAt100()).toMatchObject({ ...tiedTranscript, cadd: 40, carrier_count: 4 })
     await expectExact()
 
-    // 3. Transcript switches. The MODIFIER carrier becomes HIGH but has no
-    //    ClinVar value, so the Pathogenic rows stay more severe ...
+    // 3. Transcript switches. The MODIFIER carrier becomes HIGH frameshift and
+    //    loses the tie-break on func ...
     const transcripts = new PostgresTranscriptsRepository(pool, schema)
-    const switchedThird = {
+    await transcripts.insertTranscriptAndSwitch(thirdVariant, {
       transcript_id: 'ENST00000000001',
       gene_symbol: 'AAAS',
       consequence: 'HIGH',
       func: 'frameshift_variant',
       cdna: 'c.1del',
-      aa_change: 'p.M1fs'
-    }
-    await transcripts.insertTranscriptAndSwitch(thirdVariant, {
-      ...switchedThird,
+      aa_change: 'p.M1fs',
       hpo_sim_score: null,
       moi: null,
       is_selected: 0
     } as never)
-    expect(await rowAt100()).toMatchObject({ ...tied, transcript: null, carrier_count: 4 })
+    expect(await rowAt100()).toMatchObject({ ...tiedTranscript, cadd: 40, carrier_count: 4 })
     await expectExact()
-    //    ... and the representative itself drops to MODERATE: the row goes back
-    //    to the carriers that agree.
+    //    ... and the carrier that supplies the transcript drops to MODERATE: the
+    //    row goes back to the carriers that agree.
     await transcripts.insertTranscriptAndSwitch(fourthVariant, {
       transcript_id: 'ENST00000000004',
       gene_symbol: 'MMM',
@@ -592,29 +603,31 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
       moi: null,
       is_selected: 0
     } as never)
-    expect(await rowAt100()).toMatchObject({ ...agreed, cdna: null, transcript: null })
+    expect(await rowAt100()).toMatchObject({ ...agreedTranscript, cadd: 40 })
     await expectExact()
     expect(await snapshotGeneTables()).toEqual(await rebuiltGeneTables())
 
     // 4. Removal. A carrier whose row another carrier also has changes nothing;
-    //    the last such carrier hands the row to the next most severe one, whole.
+    //    the last such carrier hands the transcript to the next most severe row.
     const remove = (caseId: number): Promise<void> =>
       inTransaction(async (client) => {
         await repo.incrementalRemove({ schema, client: client as never, caseId })
         await client.query(`DELETE FROM "${schema}".cases WHERE id = $1`, [caseId])
       })
     await remove(first)
-    expect(await rowAt100()).toMatchObject({ ...agreed, cdna: null, carrier_count: 3 })
+    expect(await rowAt100()).toMatchObject({ ...agreedTranscript, cadd: 40, carrier_count: 3 })
     await expectExact()
     await new PostgresCaseLifecycleRepository(pool, schema, repo).deleteCase(second)
     expect(await rowAt100()).toMatchObject({
       gene_symbol: 'AAAS',
       consequence: 'HIGH',
       func: 'frameshift_variant',
-      clinvar: null, // not the Pathogenic of the remaining MODERATE carrier
-      cadd: 40,
       cdna: 'c.1del',
       transcript: 'ENST00000000001',
+      // Facts of the variant, whoever supplies the transcript: the remaining
+      // MODERATE carrier is still ClinVar Pathogenic.
+      clinvar: 'Pathogenic',
+      cadd: 40,
       carrier_count: 2
     })
     await expectExact()
@@ -630,6 +643,57 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     })
     await expectExact()
     expect(await snapshotGeneTables()).toEqual(await rebuiltGeneTables())
+  }, 120_000)
+
+  it('a ClinVar value of another carrier is not lost behind the chosen transcript (#469 review)', async () => {
+    const add = (caseId: number): Promise<void> =>
+      inTransaction((client) => repo.incrementalAdd({ schema, client: client as never, caseId }))
+    // A is MODERATE and Pathogenic, B is HIGH on another transcript without a
+    // ClinVar value, C has the gnomAD frequency the others lack.
+    const a = await seedCase('fact-a')
+    await seedAnnotated(a, {
+      gene_symbol: 'GENEA',
+      consequence: 'MODERATE',
+      func: 'missense_variant',
+      clinvar: 'Pathogenic'
+    })
+    const b = await seedCase('fact-b')
+    await seedAnnotated(b, { gene_symbol: 'GENEB', consequence: 'HIGH', func: 'stop_gained' })
+    const c = await seedCase('fact-c')
+    await seedAnnotated(c, { gene_symbol: 'GENEC', consequence: 'LOW', gnomad_af: 0.5 })
+    for (const caseId of [a, b, c]) await add(caseId)
+
+    const expected = {
+      gene_symbol: 'GENEB',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      clinvar: 'Pathogenic',
+      carrier_count: 3
+    }
+    expect(await rowAt100()).toMatchObject(expected)
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    const cohort = new PostgresCohortRepository(pool, schema)
+    for (const filter of [{ clinvars: ['Pathogenic'] }, { consequences: ['HIGH'] }]) {
+      const page = await cohort.queryVariants(filter)
+      expect(page.data).toEqual([
+        expect.objectContaining({ variant_key: '1:100:A:T', gnomad_af: 0.5, clinvar: 'Pathogenic' })
+      ])
+    }
+
+    // Removing A takes the ClinVar value with it; removing C the frequency.
+    const remove = (caseId: number): Promise<void> =>
+      inTransaction(async (client) => {
+        await repo.incrementalRemove({ schema, client: client as never, caseId })
+        await client.query(`DELETE FROM "${schema}".cases WHERE id = $1`, [caseId])
+      })
+    await remove(a)
+    expect(await rowAt100()).toMatchObject({ ...expected, clinvar: null, carrier_count: 2 })
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    await remove(c)
+    expect((await cohort.queryVariants({})).data).toEqual([
+      expect.objectContaining({ gene_symbol: 'GENEB', gnomad_af: null })
+    ])
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
   }, 120_000)
 
   it('ClinVar significance decides between carriers of equal impact (#469)', async () => {
@@ -652,7 +716,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
 
     expect(await rowAt100()).toMatchObject({
       clinvar: 'Pathogenic/Likely_pathogenic',
-      cadd: 3,
+      cadd: 30, // the highest any carrier has
       carrier_count: 3
     })
     expect(await snapshotSummary()).toEqual(await rebuiltSummary())
@@ -664,7 +728,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
   it('page, extension-filtered page and export show the same representative row (#469)', async () => {
     // One SV carried by two cases that annotate it differently, each with an
     // extension row. The extension filter and the export used to aggregate the
-    // carriers live (MAX per column, MIN(gnomad_af), coordinate-only grouping).
+    // carriers live (MAX per text column, coordinate-only grouping).
     const carriers = [
       { name: 'ext-a', consequence: 'HIGH', gene: 'BRCA1', gnomad: 0.2, support: 12 },
       { name: 'ext-b', consequence: 'MODIFIER', gene: 'ZZZ', gnomad: 0.01, support: 3 }
@@ -698,7 +762,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
       variant_key: '7:1000:N:<DEL>',
       gene_symbol: 'BRCA1',
       consequence: 'HIGH',
-      gnomad_af: 0.2, // the HIGH carrier's value, not the minimum
+      gnomad_af: 0.01, // the lowest frequency any carrier has
       carrier_count: 2
     }
 

@@ -288,14 +288,15 @@ describe('import worker: per-file cohort summary upkeep', () => {
         const s = r as { pos: number; genome_build: string }
         return s.pos === pos && s.genome_build === build
       })
-    // S1's row represents the variant (ClinVar Pathogenic is the most severe,
-    // #469) and every annotation column is S1's: its gnomAD value is NULL, not
-    // the 0.5 another carrier has.
+    // All four carriers are MODERATE missense, so the transcript-level columns
+    // come from the bytewise tie-break (gene 'BBB' > 'AAA'). The variant-level
+    // facts are aggregated over all carriers (#469): the most severe ClinVar
+    // value, the lowest gnomAD frequency (0.1, not S2's 0.5) and the highest CADD.
     expect(row(100)).toMatchObject({
       carrier_count: 4,
       gene_symbol: 'BBB',
       cadd: 20,
-      gnomad_af: null,
+      gnomad_af: 0.1,
       clinvar: 'Pathogenic',
       impact_rank: 3,
       clinvar_rank: 15,
@@ -396,11 +397,11 @@ describe('import worker: per-file cohort summary upkeep', () => {
          FROM cohort_variant_summary WHERE pos = 100`
       )
       .get()
-    // Both switched rows are HIGH; S1's is also ClinVar Pathogenic (S0's is
-    // Benign), so S1 represents the variant (#469), not the bytewise maximum.
+    // Both switched rows are HIGH stop_gained: the bytewise tie-break on the
+    // gene picks S0's transcript ('ZZZ' > 'AAB'), whole.
     expect(row).toEqual({
-      gene_symbol: 'AAB',
-      transcript: 'NM_1',
+      gene_symbol: 'ZZZ',
+      transcript: 'NM_2',
       carrier_count: 3,
       has_star: 1,
       acmg_best: 'Pathogenic'

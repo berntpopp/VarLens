@@ -162,11 +162,11 @@ const FIXTURE: FixtureCase[] = [
 /**
  * A third case that annotates shared variants differently (#469):
  *  - 1:100 (carried HIGH / Pathogenic by parity-a and parity-b) as MODIFIER with
- *    another gene, a higher CADD and no ClinVar value: it must NOT become the
- *    representative, in any column;
+ *    another gene, a higher CADD and no ClinVar value: it must NOT supply any
+ *    transcript-level column, only the CADD maximum;
  *  - 3:300 (carried LOW / Likely benign by parity-b) as MODERATE with another
- *    gene: it becomes the representative, whole, and its removal must give the
- *    row back to parity-b.
+ *    gene: it supplies the transcript, whole, while ClinVar and CADD stay
+ *    parity-b's, and its removal must give the transcript back to parity-b.
  */
 const DIFFERING: FixtureCase = {
   name: 'parity-c',
@@ -624,9 +624,10 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       ).id
 
     // Differing annotation, merged by the import worker's per-file path. The
-    // representative is the most severe carrier row, whole. The old rule (a
+    // transcript-level columns come from the most severe carrier row, whole;
+    // variant-level facts are aggregated over all carriers. The old rule (a
     // bytewise MAX() per column) gave 1:100 consequence = 'MODIFIER' with
-    // func = 'stop_gained', gene 'BRCA1-AS1' and CADD 40: a row no carrier has,
+    // func = 'stop_gained' and gene 'BRCA1-AS1': a transcript no carrier has,
     // hidden from the cohort filter impact = HIGH (#469).
     const upkeep = openImportSummarySession(sqlite.database, {
       forceRebuild: false,
@@ -638,21 +639,26 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     const third = seedSqliteCase(DIFFERING)
     upkeep.addCase(third)
     upkeep.finish()
-    const highCarrier = {
+    const highTranscript = {
       gene_symbol: 'BRCA1',
       consequence: 'HIGH',
       func: 'stop_gained',
-      clinvar: 'Pathogenic',
-      cadd: 32.5,
       transcript: null
     }
-    expect(at(100)).toMatchObject({ ...highCarrier, carrier_count: 3 })
+    // CADD is a fact of the variant: the highest any carrier has (40).
+    expect(at(100)).toMatchObject({
+      ...highTranscript,
+      clinvar: 'Pathogenic',
+      cadd: 40,
+      carrier_count: 3
+    })
+    // The new carrier supplies the transcript; ClinVar and CADD are parity-b's.
     expect(at(300)).toMatchObject({
       gene_symbol: 'MYH7B',
       consequence: 'MODERATE',
       func: 'missense_variant',
-      clinvar: null,
-      cadd: 1,
+      clinvar: 'Likely benign',
+      cadd: 5,
       carrier_count: 2
     })
     expect(snapshot()).toEqual(rebuilt())
@@ -662,11 +668,11 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       sqlite.cohort.getCohortVariants({ consequences: ['HIGH'] }).data.map((v) => v.variant_key)
     ).toEqual(['1:100:A:T'])
 
-    // Transcript switches on the new carrier. At 1:100 it becomes HIGH too, but
-    // the ClinVar Pathogenic carriers stay more severe; at 3:300 it is the
-    // representative already and the row follows its new annotation.
+    // Transcript switches on the new carrier. At 1:100 it becomes HIGH too and
+    // loses the bytewise tie-break on func; at 3:300 it supplies the transcript
+    // already and the row follows its new annotation.
     sqlite.transcripts.insertTranscriptAndSwitch(variantOf(third, 100), SWITCH_AT_100)
-    expect(at(100)).toMatchObject({ ...highCarrier, carrier_count: 3 })
+    expect(at(100)).toMatchObject({ ...highTranscript, cadd: 40, carrier_count: 3 })
     expect(snapshot()).toEqual(rebuilt())
     sqlite.transcripts.insertTranscriptAndSwitch(variantOf(third, 300), SWITCH_AT_300)
     expect(at(300)).toMatchObject({
@@ -674,18 +680,25 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       consequence: 'HIGH',
       func: 'stop_gained',
       transcript: 'ENST00000000003',
-      cadd: 1
+      clinvar: 'Likely benign',
+      cadd: 5
     })
     expect(snapshot()).toEqual(rebuilt())
 
-    // Removing the carrier that supplies the representative of 3:300.
+    // Removing the carrier that supplies the transcript of 3:300 and the CADD
+    // maximum of 1:100.
     await deleteCasesIncrementally(sqlite.database, [third], {
       deletingAll: false,
       isCancelled: () => false,
       onProgress: () => undefined,
       summary: openCaseSummaryRemoval(sqlite.database)
     })
-    expect(at(100)).toMatchObject({ ...highCarrier, carrier_count: 2 })
+    expect(at(100)).toMatchObject({
+      ...highTranscript,
+      clinvar: 'Pathogenic',
+      cadd: 32.5,
+      carrier_count: 2
+    })
     expect(at(300)).toMatchObject({
       gene_symbol: 'MYH7',
       consequence: 'LOW',
@@ -784,7 +797,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
         consequence: 'HIGH',
         func: 'stop_gained',
         clinvar: 'Pathogenic',
-        cadd: 32.5,
+        cadd: 40, // a fact of the variant: the highest any carrier has
         impact_rank: 4,
         clinvar_rank: 15
       }

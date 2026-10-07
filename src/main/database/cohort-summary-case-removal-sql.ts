@@ -11,9 +11,11 @@
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
 import {
   REPRESENTATIVE_COLUMNS,
+  remainingRowCovers,
+  removalAffectsSummary,
   representativeColumnList,
-  representativeOrderBy,
-  sameRepresentative
+  summaryColumnsOverWindow,
+  transcriptOrderBy
 } from '../../shared/sql/cohort-representative'
 import { perCaseAnnotationFlagsSql } from '../../shared/sql/cohort-summary-rebuild'
 
@@ -59,9 +61,9 @@ const CAPTURE_ROWS_SQL = `
     CASE WHEN d.gt_num IN ${HOM} THEN 1 ELSE 0 END
   FROM (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
-      ${representativeColumnList('v')},
+      ${summaryColumnsOverWindow('v', 'case_key', 'sqlite')},
       MAX(v.gt_num) OVER case_key AS gt_num,
-      ROW_NUMBER() OVER (case_key ORDER BY ${representativeOrderBy('v', 'sqlite')}) AS rn
+      ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS rn
     FROM variants v
     JOIN cases c ON c.id = v.case_id
     WHERE v.case_id = ?
@@ -73,9 +75,10 @@ const SUMMARY_KEY_JOIN = `s.chr = k.chr AND s.pos = k.pos AND s.ref = k.ref AND 
     AND s.variant_type = k.variant_type AND s.genome_build IS k.genome_build`
 
 /**
- * Coordinates whose representative may change: the case's best row IS the
- * stored representative and no remaining carrier row of the same key equals
- * it. Keys losing their last carrier are simply dropped (no recompute).
+ * Coordinates whose annotation may change: the case supplies the transcript
+ * or holds a variant-level fact, and no single remaining carrier row of the
+ * same key supplies all of that. Keys losing their last carrier are simply
+ * dropped (no recompute).
  */
 const MARK_RECOMPUTE_SQL = `
   INSERT OR IGNORE INTO temp.removed_case_recompute (chr, pos, ref, alt)
@@ -83,12 +86,12 @@ const MARK_RECOMPUTE_SQL = `
   FROM temp.removed_case_rows k
   JOIN cohort_variant_summary s ON ${SUMMARY_KEY_JOIN}
   WHERE s.carrier_count > 1
-    AND ${sameRepresentative('k', 's', 'sqlite')}
+    AND (${removalAffectsSummary('k', 's', 'sqlite')})
     AND NOT EXISTS (
       SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id AND rc.import_status = 'ready'
       WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
         AND r.variant_type = k.variant_type AND rc.genome_build IS k.genome_build
-        AND ${sameRepresentative('r', 's', 'sqlite')}
+        AND ${remainingRowCovers('r', 'k', 's', 'sqlite')}
     )`
 
 const RECOMPUTE_FILTER = `

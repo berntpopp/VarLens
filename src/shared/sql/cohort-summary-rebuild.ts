@@ -8,7 +8,8 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../config/severity.config'
 import {
   REPRESENTATIVE_COLUMNS,
   representativeColumnList,
-  representativeOrderBy
+  summaryColumnsOverWindow,
+  transcriptOrderBy
 } from './cohort-representative'
 
 const HET = "('0/1','1/0','0|1','1|0')"
@@ -22,10 +23,10 @@ const SUMMARY_KEY = ['chr', 'pos', 'ref', 'alt', 'variant_type', 'genome_build']
  * empty string recomputes every coordinate. One template for the full
  * rebuild and the per-coordinate incremental path keeps the two in lockstep.
  *
- * Per summary key the annotation columns and the two severity ranks are those
- * of ONE carrier row, the first in the representative order (#469,
+ * Per summary key the transcript-level columns are those of ONE carrier row
+ * and the variant-level facts are aggregated over all carrier rows (#469,
  * cohort-representative.ts). A case counts once per key whatever number of
- * rows it has there: `case_rows` keeps its best row and its genotype.
+ * rows it has there: `case_rows` reduces it to one row first.
  *
  * `cohort_frequency` is deliberately not written (it stays NULL): readers
  * derive it from carrier_count and the build's case count — see
@@ -50,9 +51,9 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
   FROM (
     WITH case_rows AS (
       SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build, v.case_id,
-        ${representativeColumnList('v')},
+        ${summaryColumnsOverWindow('v', 'case_key', 'sqlite')},
         MAX(v.gt_num) OVER case_key AS gt_num,
-        ROW_NUMBER() OVER (case_key ORDER BY ${representativeOrderBy('v', 'sqlite')}) AS case_rn
+        ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS case_rn
       FROM variants v
       JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'${variantFilter}
       WINDOW case_key AS (
@@ -60,11 +61,12 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
       )
     ),
     key_rows AS (
-      SELECT r.*,
+      SELECT ${SUMMARY_KEY.map((column) => `r.${column}`).join(', ')},
+        ${summaryColumnsOverWindow('r', 'summary_key', 'sqlite')},
         COUNT(*) OVER summary_key AS carrier_count,
         SUM(CASE WHEN r.gt_num IN ${HET} THEN 1 ELSE 0 END) OVER summary_key AS het_count,
         SUM(CASE WHEN r.gt_num IN ${HOM} THEN 1 ELSE 0 END) OVER summary_key AS hom_count,
-        ROW_NUMBER() OVER (summary_key ORDER BY ${representativeOrderBy('r', 'sqlite')}) AS key_rn
+        ROW_NUMBER() OVER (summary_key ORDER BY ${transcriptOrderBy('r', 'sqlite')}) AS key_rn
       FROM case_rows r
       WHERE r.case_rn = 1
       WINDOW summary_key AS (PARTITION BY ${SUMMARY_KEY.map((column) => `r.${column}`).join(', ')})
@@ -213,9 +215,9 @@ export const INCREMENTAL_ADD_SQL = `
     d.variant_type, d.genome_build
   FROM (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
-      ${representativeColumnList('v')},
+      ${summaryColumnsOverWindow('v', 'case_key', 'sqlite')},
       MAX(v.gt_num) OVER case_key AS gt_num,
-      ROW_NUMBER() OVER (case_key ORDER BY ${representativeOrderBy('v', 'sqlite')}) AS rn
+      ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS rn
     FROM variants v
     JOIN cases c ON c.id = v.case_id
     WHERE v.case_id = ?
