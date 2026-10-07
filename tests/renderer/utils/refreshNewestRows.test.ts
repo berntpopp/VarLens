@@ -109,6 +109,31 @@ describe('refreshNewestRows', () => {
     expect(ids).toEqual(descending(120, 1))
   })
 
+  it('leaves no gap and no deleted row when cases are deleted while others are added', async () => {
+    // 50 of 100 loaded. Then 60 are added and 20 deleted (10 of them on screen):
+    // the total grew by 40 only, which says nothing about how far to page.
+    const before = descending(100, 1)
+    const existing = before.slice(0, 50).map((id) => ({ id }))
+    const after = [...descending(160, 101), ...descending(90, 21), ...descending(10, 1)]
+    const list = server(after)
+    const result = await refresh(existing, 100, list)
+
+    const ids = result.rows.map((row) => row.id)
+    // A gap-free prefix of the server list: the offset of the next page is right.
+    expect(ids).toEqual(after.slice(0, ids.length))
+    expect(ids.slice(0, 60)).toEqual(descending(160, 101))
+    expect(ids).not.toContain(95)
+    expect(ids).toContain(51)
+    expect(result.total).toBe(140)
+  })
+
+  it('does not page through the whole list when nothing was loaded before', async () => {
+    const list = server(descending(500, 1))
+    const result = await refresh([], 0, list)
+    expect(list.calls).toEqual([0])
+    expect(result.rows).toHaveLength(50)
+  })
+
   it('handles an empty server list', async () => {
     const result = await refresh([{ id: 1 }], 1, server([]))
     expect(result).toEqual({ rows: [{ id: 1 }], total: 0 })
