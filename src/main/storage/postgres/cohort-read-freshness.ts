@@ -31,6 +31,10 @@
 import type { Pool, PoolClient } from 'pg'
 
 import { mainLogger } from '../../services/MainLogger'
+import {
+  COHORT_EXPORT_REFRESH_WAIT_MS,
+  CohortSummaryRefreshingError
+} from '../../../shared/errors/cohort-summary-refreshing'
 import { PostgresCohortSummaryRepository } from './PostgresCohortSummaryRepository'
 import { lockSummaryForWrite, tryLockSummaryForWrite } from './cohort-summary-lock'
 import { getCohortSummaryState, summaryIsStaleSql } from './cohort-summary-state-sql'
@@ -251,6 +255,32 @@ export async function prepareCohortRead(
   // and refresh in the background.
   scheduleBackgroundRebuild(scope)
   return { warnings: { staleSummary: true } }
+}
+
+/**
+ * For a read whose result is written to a file (the cohort export): the
+ * summary must be current. Reconciles like {@link prepareCohortRead}; when the
+ * summary is being rebuilt in the background it waits for that rebuild, at
+ * most `waitMs`, and throws CohortSummaryRefreshingError when the summary is
+ * still stale then. A page read can show a "refreshing" hint; a file cannot.
+ */
+export async function requireCurrentCohortSummary(
+  scope: ScopedPool,
+  waitMs: number = COHORT_EXPORT_REFRESH_WAIT_MS
+): Promise<void> {
+  const deadline = Date.now() + waitMs
+  for (;;) {
+    const { warnings } = await prepareCohortRead(scope)
+    if (warnings?.staleSummary !== true) return
+    const left = deadline - Date.now()
+    if (left <= 0) throw new CohortSummaryRefreshingError()
+    const pause = new Promise<void>((resolve) => setTimeout(resolve, Math.min(left, 250)))
+    const rebuild = backgroundRebuilds.get(scope.schema)
+    // A rebuild that fails is logged by its scheduler; here it only ends the wait.
+    await (rebuild === undefined
+      ? pause
+      : Promise.race([rebuild, new Promise<void>((resolve) => setTimeout(resolve, left))]))
+  }
 }
 
 /**

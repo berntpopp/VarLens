@@ -22,6 +22,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
 import { annotationSeverityRanks } from '../../../src/shared/config/severity.config'
+import { CohortSummaryRefreshingError } from '../../../src/shared/errors/cohort-summary-refreshing'
 import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 import {
@@ -884,6 +885,55 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     // Per chromosome: three shared positions on two builds, three private ones.
     expect(oneRows as unknown[]).toHaveLength(4 * (3 * 2 + 3))
     expect(manyRows).toEqual(oneRows)
+  }, 120_000)
+
+  it('an export never reads a stale summary: it waits for the rebuild, or fails typed (#469 review)', async () => {
+    const caseId = await seedCase('export-a')
+    await seedAnnotated(caseId, { gene_symbol: 'FRESH', consequence: 'HIGH' })
+    await inTransaction((client) =>
+      repo.incrementalAdd({ schema, client: client as never, caseId })
+    )
+    // The summary holds an outdated value and is flagged stale, as after
+    // migration 0025; the cohort is "large", so a read does not rebuild inline.
+    await probe.query(`UPDATE "${schema}".cohort_variant_summary SET gene_symbol = 'OUTDATED'`)
+    await inTransaction((client) =>
+      repo.markStale({ schema, client: client as never, reason: 'test_export_while_stale' })
+    )
+    const previous = process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES
+    process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES = '0'
+    const cohort = new PostgresCohortRepository(pool, schema)
+    const exported = async (refreshWaitMs: number): Promise<Array<Record<string, unknown>>> => {
+      const rows: Array<Record<string, unknown>> = []
+      for await (const row of cohort.streamCohortRows({}, { refreshWaitMs })) rows.push(row)
+      return rows
+    }
+    // Somebody holds the summary write lock, so the background rebuild waits.
+    const holder = new Client({ connectionString: PG_URL })
+    await holder.connect()
+    await holder.query('BEGIN')
+    await lockSummaryForWrite(holder, schema)
+    try {
+      // The page is served the stale rows, with the hint ...
+      const page = await cohort.queryVariantsWithStaleness({})
+      expect(page.warnings).toEqual({ staleSummary: true })
+      expect(page.data[0].gene_symbol).toBe('OUTDATED')
+      // ... the export is not written.
+      const failure = await exported(300).catch((error: unknown) => error)
+      expect(failure).toBeInstanceOf(CohortSummaryRefreshingError)
+      expect(failure).toMatchObject({ code: 'CONFLICT' })
+    } finally {
+      await holder.query('ROLLBACK')
+      await holder.end()
+    }
+    try {
+      // With the lock free the export waits for the rebuild and gets current rows.
+      expect((await exported(30_000)).map((row) => row.gene_symbol)).toEqual(['FRESH'])
+      expect((await readCohortSummaryStatus({ pool, schema })).is_stale).toBe(false)
+    } finally {
+      await awaitBackgroundRebuild(schema)
+      if (previous === undefined) delete process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES
+      else process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES = previous
+    }
   }, 120_000)
 
   it('rebuild + N incremental ops + rebuild = byte-identical', async () => {

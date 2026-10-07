@@ -14,6 +14,7 @@ import { cohortVariantTotalsSql, geneBurdenSql } from './cohort-gene-summary-sql
 import {
   prepareCohortRead,
   readCohortSummaryStatus,
+  requireCurrentCohortSummary,
   type CohortReadWarnings
 } from './cohort-read-freshness'
 import { quoteIdentifier } from './identifiers'
@@ -352,13 +353,21 @@ export class PostgresCohortRepository {
 
   /**
    * Rows for the cohort export: the same rows, annotation and order as the
-   * cohort page (#469), read from the summary after the same staleness
-   * reconciliation, streamed with a cursor.
+   * cohort page (#469), read from the summary, streamed with a cursor. Never
+   * from a stale summary: see requireCurrentCohortSummary.
    */
-  async *streamCohortRows(params: CohortSearchParams): AsyncGenerator<Record<string, unknown>> {
+  async *streamCohortRows(
+    params: CohortSearchParams,
+    options: { refreshWaitMs?: number } = {}
+  ): AsyncGenerator<Record<string, unknown>> {
     const resolvedParams = await this.panelIntervals.resolveCohortParams(params)
     this.assertSupportedColumnFilters(resolvedParams)
-    await prepareCohortRead({ pool: this.pool, schema: this.schema })
+    // A file cannot carry the page's "refreshing" hint: wait for a pending
+    // rebuild, bounded, or fail with CohortSummaryRefreshingError.
+    await requireCurrentCohortSummary(
+      { pool: this.pool, schema: this.schema },
+      options.refreshWaitMs
+    )
     const totalCases = await this.getTotalCases(this.pool, resolvedParams)
     const { parts } = buildSummaryQueryParts(resolvedParams, totalCases, this.schema)
     const values = [...parts.values]

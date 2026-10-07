@@ -11,6 +11,8 @@ import { writeFileSync } from 'node:fs'
 import * as XLSX from 'xlsx'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { CohortService } from '../database/cohort'
+import { isCohortSummaryStale } from '../database/cohort-summary-case-removal'
+import { CohortSummaryRefreshingError } from '../../shared/errors/cohort-summary-refreshing'
 import type { CohortSearchParams, CohortVariant } from '../../shared/types/cohort'
 import type { ExportColumn } from './export-pipeline'
 
@@ -95,6 +97,9 @@ export function runCohortExport(
   outputFilePath: string,
   onProgress: (current: number, total: number) => void
 ): CohortExportResult {
+  // The summary is what gets exported: never write a file from a stale one.
+  // The main process waited for a pending refresh before starting this job.
+  if (isCohortSummaryStale(db)) throw new CohortSummaryRefreshingError()
   const cohortService = new CohortService(db)
   onProgress(0, 0)
   const variants = cohortService.getCohortVariants({
