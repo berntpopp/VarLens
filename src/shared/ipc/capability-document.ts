@@ -35,6 +35,12 @@ export interface CapabilityDocument {
   readonly storage: StorageCapabilities | null
   readonly features: Readonly<Record<CapabilityFeature, FeatureState>>
   /**
+   * The data can change without this client being told (other users of a
+   * shared workspace): refetch what is shown when the window is looked at
+   * again or the network comes back. Off where one user owns the data.
+   */
+  readonly refetchOnFocus: boolean
+  /**
    * `<domain>.<method>` keys this session must not call: web desktop-only and
    * pending methods plus methods whose authz the role does not meet. The web
    * client refuses these before sending them.
@@ -110,6 +116,7 @@ export function computeCapabilityDocument(inputs: CapabilityInputs): CapabilityD
     role: inputs.role,
     storage: inputs.storage,
     features,
+    refetchOnFocus: inputs.runtime === 'web',
     blockedMethods
   }
 }

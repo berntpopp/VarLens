@@ -40,6 +40,8 @@ export const useCapabilityStore = defineStore('capabilities', () => {
   const storage = computed(() => document.value?.storage ?? null)
   const role = computed(() => document.value?.role ?? null)
   const runtime = computed(() => document.value?.runtime ?? null)
+  /** Whether shown data is refetched on window focus and reconnect (web). */
+  const refetchOnFocus = computed(() => document.value?.refetchOnFocus ?? false)
 
   async function fetchDocument(): Promise<void> {
     try {
@@ -94,6 +96,7 @@ export const useCapabilityStore = defineStore('capabilities', () => {
     storage,
     role,
     runtime,
+    refetchOnFocus,
     load,
     canUse,
     capabilityReason,
