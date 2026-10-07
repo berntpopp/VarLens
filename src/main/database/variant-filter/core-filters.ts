@@ -17,6 +17,8 @@ export function countCasesForInternalAf(
   const compiled = kysely
     .selectFrom('cases')
     .select(kysely.fn.countAll<number>().as('cnt'))
+    // Same denominator as the internal_af column (base-query-and-joins.ts).
+    .where('import_status', '=', 'ready')
     .compile()
   const countResult = db.prepare(compiled.sql).get(...compiled.parameters) as
     { cnt: number } | undefined

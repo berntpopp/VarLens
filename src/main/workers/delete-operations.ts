@@ -76,7 +76,11 @@ export async function deleteCasesIncrementally(
   const frequencies = new VariantFrequencyService(db)
   const deleteCase = db.prepare('DELETE FROM cases WHERE id = ?')
   const summary = options.summary ?? null
+  const isUnpublished = db.prepare("SELECT 1 FROM cases WHERE id = ? AND import_status != 'ready'")
   const deleteOne = db.transaction((caseId: number): number => {
+    // A case that was never published is in no frequency count and no
+    // summary row (import-worker.ts publishCase): only its rows go.
+    if (isUnpublished.get(caseId) !== undefined) return deleteCase.run(caseId).changes
     if (!options.deletingAll) frequencies.decrementFrequencies(caseId, false)
     summary?.beforeDelete(caseId)
     const changes = deleteCase.run(caseId).changes
