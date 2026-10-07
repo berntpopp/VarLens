@@ -12,6 +12,7 @@ import type {
   GeneBurden
 } from '../../../shared/types/cohort'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
+import { cohortVariantTotalsSql, geneBurdenSql } from './cohort-gene-summary-sql'
 import {
   prepareCohortRead,
   readCohortSummaryStatus,
@@ -330,23 +331,16 @@ export class PostgresCohortRepository {
   }
 
   async getSummary(): Promise<CohortSummary> {
+    // The variant figures come from maintained aggregates, so reconcile them
+    // first, like any other read of the cohort summary.
+    await prepareCohortRead({ pool: this.pool, schema: this.schema })
+    const totals = cohortVariantTotalsSql((table) => this.tbl(table))
     const result = await this.pool.query(
       `SELECT
          (SELECT COUNT(*)::bigint FROM ${this.schemaName}."cases") AS total_cases,
-         (SELECT COUNT(*)::bigint FROM ${this.schemaName}."variants") AS total_variants,
-         (
-           SELECT COUNT(*)::bigint
-           FROM (
-             SELECT 1
-             FROM ${this.schemaName}."variants" v
-             GROUP BY v.chr, v.pos, v.ref, v.alt
-           ) unique_variants
-         ) AS unique_variants,
-         (
-           SELECT COUNT(DISTINCT v.gene_symbol)::bigint
-           FROM ${this.schemaName}."variants" v
-           WHERE v.gene_symbol IS NOT NULL
-         ) AS genes_with_variants,
+         (${totals.totalVariants}) AS total_variants,
+         (${totals.uniqueVariants}) AS unique_variants,
+         (${totals.genesWithVariants}) AS genes_with_variants,
          (
            SELECT COUNT(*)::bigint
            FROM ${this.schemaName}."variant_annotations" va
@@ -430,18 +424,8 @@ export class PostgresCohortRepository {
   }
 
   async getGeneBurden(): Promise<GeneBurden[]> {
-    const result = await this.pool.query(
-      `SELECT
-         v.gene_symbol,
-         COUNT(*)::bigint AS variant_count,
-         COUNT(DISTINCT (v.chr, v.pos, v.ref, v.alt))::bigint AS unique_variant_count,
-         COUNT(DISTINCT v.case_id)::bigint AS affected_case_count,
-         (SELECT COUNT(*)::bigint FROM ${this.schemaName}."cases") AS total_cases
-       FROM ${this.schemaName}."variants" v
-       WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol <> ''
-       GROUP BY v.gene_symbol
-       ORDER BY affected_case_count DESC, variant_count DESC`
-    )
+    await prepareCohortRead({ pool: this.pool, schema: this.schema })
+    const result = await this.pool.query(geneBurdenSql((table) => this.tbl(table)))
 
     return (result.rows as Array<Record<string, unknown>>).map((row) => ({
       gene_symbol: String(row.gene_symbol ?? ''),

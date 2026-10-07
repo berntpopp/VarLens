@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg'
 
 import { InvalidParametersError } from '../../ipc/errors'
 import { applyAnnotationFlagsOnCaseDelete } from './cohort-annotation-flags-sql'
+import { removeCaseFromGeneSummary } from './cohort-gene-summary-sql'
 import { quoteIdentifier } from './identifiers'
 import {
   PostgresCohortSummaryRepository,
@@ -288,6 +289,9 @@ export class PostgresCaseLifecycleRepository {
           AND cvs.carrier_count <= 0`,
       [caseId]
     )
+
+    // Per-gene aggregates: subtract the case while its rows are still visible.
+    await removeCaseFromGeneSummary({ schema: this.schema, client, caseId })
 
     // variant_frequency: symmetric decrement of rebuildVariantFrequencyForCase
     // (one count per distinct coordinate per case) — replaces TRUNCATE+rebuild.

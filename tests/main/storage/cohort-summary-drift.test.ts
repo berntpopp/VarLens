@@ -175,6 +175,20 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     }))
   }
 
+  /** The per-gene aggregates maintained alongside the summary (0023). */
+  async function snapshotGeneTables(): Promise<unknown> {
+    const genes = await probe.query(
+      `SELECT gene_symbol, variant_count::int, unique_variant_count::int, affected_case_count::int
+         FROM "${schema}".cohort_gene_summary ORDER BY gene_symbol`
+    )
+    const pairs = await probe.query(
+      `SELECT gene_symbol, chr, pos, ref, alt, carrier_count::int
+         FROM "${schema}".cohort_gene_variant_summary
+        ORDER BY gene_symbol, chr, pos, ref, alt`
+    )
+    return { genes: genes.rows, pairs: pairs.rows }
+  }
+
   const repo = new PostgresCohortSummaryRepository()
 
   it('rebuild + N incremental ops + rebuild = byte-identical', async () => {
@@ -250,6 +264,8 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     // 2. Full rebuild, then snapshot.
     await withClient((client) => repo.rebuild({ schema, client: client as never }))
     const firstSnapshot = await snapshotSummary()
+    const firstGeneSnapshot = await snapshotGeneTables()
+    expect((firstGeneSnapshot as { genes: unknown[] }).genes.length).toBeGreaterThan(0)
     // Sanity: the seeding actually produced rows, otherwise the equality below
     // would be a vacuous pass.
     expect(firstSnapshot.length).toBeGreaterThan(0)
@@ -294,6 +310,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     //    frequency recompute, leftover zero-carrier row) shows up here — a later
     //    full rebuild would silently correct it, so it must be checked first.
     const postIncrementalSnapshot = await snapshotSummary()
+    expect(await snapshotGeneTables()).toEqual(firstGeneSnapshot)
     expect(postIncrementalSnapshot).toEqual(firstSnapshot)
 
     // 5. Secondary determinism check: a second full rebuild from the unchanged
@@ -301,6 +318,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     //    rebuild path's own reproducibility independent of the incremental path.
     await withClient((client) => repo.rebuild({ schema, client: client as never }))
     const secondSnapshot = await snapshotSummary()
+    expect(await snapshotGeneTables()).toEqual(firstGeneSnapshot)
     expect(secondSnapshot).toEqual(firstSnapshot)
   }, 120_000)
 })

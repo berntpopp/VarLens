@@ -113,6 +113,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0022',
     name: 'cohort_frequency_read_time',
     fileName: '0022_cohort_frequency_read_time.sql'
+  },
+  {
+    version: '0023',
+    name: 'cohort_gene_summary',
+    fileName: '0023_cohort_gene_summary.sql'
   }
 ]
 

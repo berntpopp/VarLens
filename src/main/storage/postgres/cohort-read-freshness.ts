@@ -9,7 +9,8 @@
  *     write path either updates it or marks it stale in the same transaction.
  *   - Bootstrap-on-existing-data (Pass-9 #5): when variants exist but the
  *     summary table is empty, or a never-rebuilt summary is flagged stale (the
- *     0010 seed for databases that already held variants), rebuild regardless
+ *     0010 seed for databases that already held variants), or the per-gene
+ *     aggregates are empty although the summary has genes, rebuild regardless
  *     of the case-count threshold — otherwise the first read of a migrated
  *     dataset would serve an empty cohort.
  *   - Stale below SYNC_REBUILD_MAX_CASES: rebuild synchronously, then serve
@@ -81,6 +82,7 @@ interface FreshnessProbe {
   never_rebuilt: boolean
   variants_present: boolean
   summary_present: boolean
+  gene_summary_missing: boolean
   is_stale: boolean
   total_cases: number
 }
@@ -91,6 +93,7 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
     never_rebuilt: boolean
     variants_present: boolean
     summary_present: boolean
+    gene_summary_missing: boolean
     is_stale: boolean
     total_cases: string
   }>(
@@ -98,6 +101,9 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
        (s.last_rebuilt_at IS NULL) AS never_rebuilt,
        EXISTS (SELECT 1 FROM ${tbl('variants')} LIMIT 1) AS variants_present,
        EXISTS (SELECT 1 FROM ${tbl('cohort_variant_summary')} LIMIT 1) AS summary_present,
+       (NOT EXISTS (SELECT 1 FROM ${tbl('cohort_gene_summary')} LIMIT 1)
+        AND EXISTS (SELECT 1 FROM ${tbl('cohort_variant_summary')}
+                     WHERE gene_symbol IS NOT NULL LIMIT 1)) AS gene_summary_missing,
        s.is_stale,
        (SELECT COUNT(*)::bigint FROM ${tbl('cases')}) AS total_cases
      FROM ${tbl('cohort_summary_state')} s
@@ -108,6 +114,7 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
     never_rebuilt: row.never_rebuilt,
     variants_present: row.variants_present,
     summary_present: row.summary_present,
+    gene_summary_missing: row.gene_summary_missing,
     is_stale: row.is_stale,
     total_cases: Number(row.total_cases)
   }
@@ -184,8 +191,13 @@ export async function prepareCohortRead(
   // case-count threshold so the first read never serves an empty/missing
   // summary for a populated dataset. A summary that was only ever maintained
   // incrementally (never rebuilt, not stale) is valid and is served as-is.
+  // The per-gene aggregates (cohort-gene-summary-sql.ts) are part of the same
+  // summary: variants with a gene but no gene rows means they were never
+  // filled (migration 0023 fills them; this covers a partial restore).
   const needsBootstrap =
-    (probe.variants_present && !probe.summary_present) || (probe.never_rebuilt && probe.is_stale)
+    (probe.variants_present && !probe.summary_present) ||
+    (probe.never_rebuilt && probe.is_stale) ||
+    probe.gene_summary_missing
   const needsRebuild = needsBootstrap || probe.is_stale
   if (!needsRebuild) return {}
 

@@ -9,13 +9,17 @@ describe('PostgresOverviewRepository', () => {
       if (sql.includes('COUNT(*)::int AS total_cases')) {
         return { rows: [{ total_cases: '2' }] }
       }
-      if (sql.includes('COUNT(*)::int AS total_variants')) {
+      if (sql.includes('SUM(variant_count), 0)::bigint FROM "public"."cases") AS total_variants')) {
         return { rows: [{ total_variants: '10' }] }
       }
-      if (sql.includes('COUNT(DISTINCT (chr, pos, ref, alt))::int AS unique_variants')) {
+      if (
+        /cohort_variant_summary" GROUP BY chr, pos, ref, alt\s*\) unique_coordinates\) AS unique_variants/.test(
+          sql
+        )
+      ) {
         return { rows: [{ unique_variants: '8' }] }
       }
-      if (sql.includes('COUNT(DISTINCT gene_symbol)::int AS genes_with_variants')) {
+      if (sql.includes('"cohort_gene_summary") AS genes_with_variants')) {
         return { rows: [{ genes_with_variants: '4' }] }
       }
       if (sql.includes('FROM "public"."cases" c')) {

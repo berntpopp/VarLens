@@ -96,6 +96,13 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     expect(subtract).toBeGreaterThan(flags)
     expect(vfDecrement).toBeGreaterThan(subtract)
     expect(flip).toBeGreaterThan(vfDecrement)
+    // The per-gene aggregates lose the case in the same transaction, from the
+    // case's own rows and while those rows are still visible.
+    const geneSubtract = idx('variant_count = s.variant_count - g.row_count')
+    expect(geneSubtract).toBeGreaterThan(subtract)
+    expect(flip).toBeGreaterThan(geneSubtract)
+    expect(sql[geneSubtract]).toMatch(/FROM "public"\."variants" v\s+WHERE v\.case_id = \$1/)
+    expect(sql[geneSubtract]).toContain('DELETE FROM "public"."cohort_gene_variant_summary"')
     // Zero-carrier cleanup is scoped to the case's coordinates.
     expect(sql[idx('cvs.carrier_count <= 0')]).toContain('WHERE case_id = $1')
     expect(summary.removeColumnMetas).toHaveBeenCalledWith(

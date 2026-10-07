@@ -519,6 +519,20 @@ describe('PostgresCohortRepository', () => {
         benign: 5
       }
     })
+
+    // The variant tiles read maintained aggregates (after the freshness
+    // probe) and never scan the variants.
+    const sql = normalizeSql(query.mock.calls[1][0] as string)
+    expect(sql).toContain(
+      '(SELECT COALESCE(SUM(variant_count), 0)::bigint FROM "public"."cases") AS total_variants'
+    )
+    expect(sql).toContain(
+      'FROM "public"."cohort_variant_summary" GROUP BY chr, pos, ref, alt ) unique_coordinates) AS unique_variants'
+    )
+    expect(sql).toContain(
+      '(SELECT COUNT(*)::bigint FROM "public"."cohort_gene_summary") AS genes_with_variants'
+    )
+    expect(sql).not.toContain('"variants"')
   })
 
   it('maps carriers with numeric case IDs and preserves gq and dp when present', async () => {
@@ -562,9 +576,11 @@ describe('PostgresCohortRepository', () => {
         total_cases: 10
       }
     ])
-    expect(normalizeSql(query.mock.calls[0][0] as string)).toContain(
-      "WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol <> ''"
-    )
+    // Served from the maintained per-gene table (after the freshness probe),
+    // never from a scan of the variants; the empty symbol is not a gene.
+    const sql = normalizeSql(query.mock.calls[1][0] as string)
+    expect(sql).toContain('FROM "public"."cohort_gene_summary" g WHERE g.gene_symbol <> \'\'')
+    expect(sql).not.toContain('"variants"')
   })
 
   it('returns usable cohort column metadata', async () => {

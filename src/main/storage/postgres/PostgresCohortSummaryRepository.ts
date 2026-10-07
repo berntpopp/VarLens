@@ -28,6 +28,11 @@ import {
   annotationFlagCtes,
   annotationFlagJoins
 } from './cohort-summary-flags-sql'
+import {
+  addCaseToGeneSummary,
+  rebuildGeneSummary,
+  removeCaseFromGeneSummary
+} from './cohort-gene-summary-sql'
 import { getCohortSummaryState, markCohortSummaryStale } from './cohort-summary-state-sql'
 
 interface ScopedClient {
@@ -190,6 +195,9 @@ export class PostgresCohortSummaryRepository {
       ${annotationFlagJoins('a')};
     `)
 
+    // The per-gene aggregates share this table's lifecycle: same rebuild.
+    await rebuildGeneSummary({ schema, client })
+
     // C1 lifecycle (Pass-7 MED #4): a completed rebuild clears the staleness
     // flags and records the rebuild time. last_rebuilt_at maps back to epoch ms
     // via getState's EXTRACT(EPOCH) (Pass-9 #6).
@@ -249,6 +257,7 @@ export class PostgresCohortSummaryRepository {
     `,
       [caseId]
     )
+    await addCaseToGeneSummary({ schema, client, caseId, includeProvisional })
 
     // C1 lifecycle: incremental maintenance records its time but never touches
     // is_stale — the summary stays valid (Pass-7 MED #4).
@@ -288,6 +297,7 @@ export class PostgresCohortSummaryRepository {
     )
 
     await client.query(`DELETE FROM ${tbl('cohort_variant_summary')} WHERE carrier_count <= 0`)
+    await removeCaseFromGeneSummary({ schema, client, caseId })
 
     // C1 lifecycle: incremental maintenance records its time but never touches
     // is_stale — the summary stays valid (Pass-7 MED #4).

@@ -1,6 +1,7 @@
 /**
  * Write lock for the derived cohort tables of one workspace schema
- * (`cohort_variant_summary`, `variant_frequency`).
+ * (`cohort_variant_summary`, `cohort_gene_summary`,
+ * `cohort_gene_variant_summary`, `variant_frequency`).
  *
  * Every writer of those tables takes it for the duration of its transaction:
  * an import's publication step, hiding a case for deletion, and a full
