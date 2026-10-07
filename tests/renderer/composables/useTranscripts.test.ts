@@ -78,6 +78,23 @@ describe('useTranscripts', () => {
     expect(list).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the previous list, flagged as loading, until the next variant has loaded', async () => {
+    let resolveSecond: (value: TranscriptAnnotation[]) => void = () => {}
+    const { transcripts, loading, variantId } = mountTranscripts()
+    await flushPromises()
+    list.mockImplementationOnce(() => new Promise((resolve) => (resolveSecond = resolve)))
+
+    variantId.value = 20
+    await flushPromises()
+    expect(transcripts.value).toEqual([transcript(10)])
+    expect(loading.value).toBe(true)
+
+    resolveSecond([transcript(20)])
+    await flushPromises()
+    expect(transcripts.value).toEqual([transcript(20)])
+    expect(loading.value).toBe(false)
+  })
+
   it('never shows the previous variant when its response arrives last', async () => {
     let resolveFirst: (value: TranscriptAnnotation[]) => void = () => {}
     list.mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)))

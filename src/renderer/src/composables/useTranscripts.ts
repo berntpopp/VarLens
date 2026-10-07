@@ -16,10 +16,20 @@ import { formatError } from '../utils/ipc-result'
  * been refetched.
  */
 export function useTranscripts(variantId: Ref<number | null>) {
-  const { data, asyncStatus, error: loadError } = useQuery(() => transcriptsQuery(variantId.value))
-  const transcripts = computed<TranscriptAnnotation[]>(() => data.value ?? [])
-  /** True only until a variant's first result: a refresh keeps the list shown. */
-  const loading = computed(() => asyncStatus.value === 'loading' && data.value === undefined)
+  // While another variant loads, the previous list stays in place (flagged as
+  // loading) so the details panel does not collapse and grow again.
+  const {
+    data,
+    asyncStatus,
+    error: loadError
+  } = useQuery(() => ({
+    ...transcriptsQuery(variantId.value),
+    placeholderData: (previous: TranscriptAnnotation[] | undefined) => previous
+  }))
+  const transcripts = computed<TranscriptAnnotation[]>(() =>
+    variantId.value === null ? [] : (data.value ?? [])
+  )
+  const loading = computed(() => asyncStatus.value === 'loading')
 
   const writeError = ref<string | null>(null)
   watch(variantId, () => (writeError.value = null))
