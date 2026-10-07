@@ -59,8 +59,8 @@ export async function runImportSession(
     db = openWorkerDatabase(msg.dbPath, msg.encryptionKey)
 
     // Opened below, once the leftovers of a dead worker are gone.
-    let summarySession: ImportSummarySession | undefined
-    const stmts = prepareStatements(db, () => summarySession?.keepSessionOpen())
+    const summaryRef: { session?: ImportSummarySession } = {}
+    const stmts = prepareStatements(db, () => summaryRef.session?.keepSessionOpen())
     // Internal allele-frequency upkeep runs here, on the worker connection
     // that already holds the write lock, instead of on the Electron main
     // thread after the worker finishes (audit 05 finding M-1).
@@ -101,7 +101,7 @@ export async function runImportSession(
         }
       }
     })
-    summarySession = summary
+    summaryRef.session = summary
 
     const totalFiles = msg.files.length
     const importedInBatch = new Set<string>()
