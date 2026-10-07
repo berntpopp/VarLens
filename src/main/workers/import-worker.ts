@@ -175,6 +175,9 @@ export async function runImportSession(
         const startTime = Date.now()
         let variantCount = 0
         const skipTracker = new ImportSkipTracker()
+        // What the case has contributed outside its own rows so far.
+        let frequenciesCounted = false
+        let merged = false
 
         try {
           // Emit parsing phase progress
@@ -269,6 +272,7 @@ export async function runImportSession(
 
           try {
             frequencies.updateFrequencies(caseId)
+            frequenciesCounted = true
           } catch (e) {
             console.warn(
               '[import-worker] Failed to update variant frequencies:',
@@ -278,20 +282,11 @@ export async function runImportSession(
 
           // The file's rows are committed and it was not cancelled: merge it
           // into the cohort summary before anyone is told the file is done.
+          merged = true
           summary.addCase(caseId, totalFiles - fileIndex - 1)
           checkpointBetweenFiles(db)
 
           const elapsed = Date.now() - startTime
-
-          results.push({
-            filePath: file.filePath,
-            fileName,
-            caseName: file.caseName,
-            status: 'success',
-            variantCount
-          })
-          succeeded++
-          importedInBatch.add(file.caseName)
 
           const fileCompleteMsg: WorkerMessage = {
             type: 'file-complete',
@@ -306,8 +301,32 @@ export async function runImportSession(
             }
           }
           port.postMessage(fileCompleteMsg)
+
+          // Only a file the main process was told about counts as imported.
+          results.push({
+            filePath: file.filePath,
+            fileName,
+            caseName: file.caseName,
+            status: 'success',
+            variantCount
+          })
+          succeeded++
+          importedInBatch.add(file.caseName)
         } catch (importError) {
-          summary.discardCase(() => stmts.deleteCase.run(caseId))
+          // The case goes, and with it everything it already contributed.
+          if (frequenciesCounted) {
+            try {
+              frequencies.decrementFrequencies(caseId)
+            } catch (e) {
+              console.warn(
+                '[import-worker] Failed to revert variant frequencies:',
+                e instanceof Error ? e.message : String(e)
+              )
+            }
+          }
+          const deleteCase = (): void => void stmts.deleteCase.run(caseId)
+          if (merged) summary.replaceCase(caseId, deleteCase)
+          else summary.discardCase(deleteCase)
           throw importError
         }
       } catch (error) {

@@ -99,6 +99,27 @@ describe('import worker: cohort summary recovery', () => {
     })
   })
 
+  it('takes a merged case out of the summary again when reporting it fails', async () => {
+    await h.run([h.file('A', [variantAt(100, 'AAA'), variantAt(200, 'AAA')])])
+    const frequencies = (): unknown[] =>
+      h.db.prepare('SELECT * FROM variant_frequency ORDER BY chr, pos, ref, alt').all()
+    const before = { summary: snapshotSummary(h.db), frequencies: frequencies() }
+
+    // B is inserted and merged; then telling the main process throws.
+    const messages = await h.run([h.file('B', [variantAt(100, 'AAA'), variantAt(300, 'BBB')])], {
+      onMessage: (m) => {
+        if (m.type === 'file-complete') throw new Error('port closed')
+      }
+    })
+
+    expect(sessionStatuses(messages)).toEqual(['B:failed'])
+    expect(h.db.prepare("SELECT 1 FROM cases WHERE name = 'B'").get()).toBeUndefined()
+    expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
+    expect(snapshotSummary(h.db)).toEqual(before.summary)
+    expect(frequencies()).toEqual(before.frequencies)
+    expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+  })
+
   it('keeps its marker when a full rebuild runs while a file is being inserted', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA')])])
     const markerAfterBatch: Array<string | undefined> = []
