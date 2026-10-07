@@ -18,8 +18,9 @@ const COLUMN_LABELS: Record<string, string> = {
   gene_symbol: 'Gene',
   cdna: 'cDNA',
   aa_change: 'AA Change',
-  consequence: 'Consequence',
-  func: 'Function',
+  // VEP terms: `consequence` holds the IMPACT level, `func` the SO consequence term
+  consequence: 'Impact',
+  func: 'Consequence',
   clinvar: 'ClinVar',
   gnomad_af: 'gnomAD AF',
   cadd_phred: 'CADD',
@@ -94,7 +95,7 @@ export function buildActiveFiltersList(
 
   // Array filters
   if (filters.funcs.length > 0) {
-    list.push({ id: 'funcs', label: 'Function', value: `${filters.funcs.length} selected` })
+    list.push({ id: 'funcs', label: 'Consequence', value: `${filters.funcs.length} selected` })
   }
   if (filters.clinvars.length > 0) {
     list.push({ id: 'clinvars', label: 'ClinVar', value: `${filters.clinvars.length} selected` })

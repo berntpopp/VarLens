@@ -191,8 +191,16 @@ describe('buildActiveFiltersList', () => {
       const result = buildActiveFiltersList(makeDefaultFilters(), [], columnFilters)
       const chip = result.find((f) => f.id === 'col:consequence')
       expect(chip).toBeDefined()
-      expect(chip!.label).toBe('Consequence')
+      expect(chip!.label).toBe('Impact')
       expect(chip!.value).toBe('3 selected')
+    })
+
+    it('labels the SO-term column and drawer filter "Consequence"', () => {
+      const result = buildActiveFiltersList(makeDefaultFilters({ funcs: ['stop_gained'] }), [], {
+        func: { operator: 'in', value: ['missense_variant'] }
+      })
+      expect(result.find((f) => f.id === 'col:func')!.label).toBe('Consequence')
+      expect(result.find((f) => f.id === 'funcs')!.label).toBe('Consequence')
     })
 
     it('adds chip for text column filter with like operator', () => {

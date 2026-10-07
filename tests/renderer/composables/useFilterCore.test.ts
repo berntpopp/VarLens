@@ -146,7 +146,7 @@ describe('useFilterCore', () => {
 
       expect(list).toHaveLength(1)
       expect(list[0].id).toBe('funcs')
-      expect(list[0].label).toBe('Function')
+      expect(list[0].label).toBe('Consequence')
     })
 
     it('generates a chip for clinvars with correct id and label', () => {
