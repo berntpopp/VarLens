@@ -90,7 +90,8 @@
       @metadata-changed="handleMetadataChanged"
     />
 
-    <!-- Progress + cancel for exports, deletes and imports in every view. -->
+    <!-- Progress + cancel for exports, deletes and imports in every view.
+         Collapsed by default; AppFooter's BackgroundJobsToggle opens it. -->
     <BackgroundJobsPanel />
 
     <KeyboardShortcutsDialog v-if="keyboardHelpMounted" v-model="showKeyboardHelp" />
