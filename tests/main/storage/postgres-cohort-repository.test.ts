@@ -597,15 +597,17 @@ describe('PostgresCohortRepository', () => {
       max_cadd_phred: '10',
       cnt_transcript: '2'
     }
+    const valueRows = {
+      rows: [
+        { col_key: 'chr', value: '1' },
+        { col_key: 'gene_symbol', value: 'BRCA1' }
+      ]
+    }
     const query = vi
       .fn()
+      .mockResolvedValueOnce({ rows: [{ version: 'v1' }] })
       .mockResolvedValueOnce({ rows: [aggregateRow] })
-      .mockResolvedValueOnce({
-        rows: [
-          { col_key: 'chr', value: '1' },
-          { col_key: 'gene_symbol', value: 'BRCA1' }
-        ]
-      })
+      .mockResolvedValueOnce(valueRows)
     const repository = new PostgresCohortRepository({ query } as never, 'public')
 
     const meta = await repository.getColumnMeta()
@@ -634,17 +636,32 @@ describe('PostgresCohortRepository', () => {
     expect(byKey.get('pos')?.max).toBe(10)
     expect(byKey.get('gene_symbol')?.dataType).toBe('text')
     expect(byKey.get('chr')?.distinctValues).toEqual(['1'])
-    // C4 Step 2: read directly from the deduped summary table — no total_cases
-    // query, no live GROUP BY subquery.
-    expect(query).toHaveBeenCalledTimes(2)
-    const aggSql = normalizeSql(callText(query.mock.calls[0]))
+    // C4 Step 2: read directly from the deduped summary table — no live
+    // GROUP BY subquery. One cheap version probe precedes the two scans.
+    expect(query).toHaveBeenCalledTimes(3)
+    expect(normalizeSql(callText(query.mock.calls[0]))).toContain('"cohort_summary_state"')
+    const aggSql = normalizeSql(callText(query.mock.calls[1]))
     expect(aggSql).toContain('COUNT(DISTINCT chr)')
     expect(aggSql).toContain('FROM "public"."cohort_variant_summary"')
     expect(aggSql).not.toContain('ARRAY_AGG')
-    const valuesSql = normalizeSql(callText(query.mock.calls[1]))
+    const valuesSql = normalizeSql(callText(query.mock.calls[2]))
     expect(valuesSql).toContain('UNION ALL')
     expect(valuesSql).toContain('FROM "public"."cohort_variant_summary"')
     expect(valuesSql).not.toContain('GROUP BY v.chr')
+
+    // Unchanged summary: the cached metadata is served after the probe alone.
+    query.mockResolvedValueOnce({ rows: [{ version: 'v1' }] })
+    expect(await repository.getColumnMeta()).toBe(meta)
+    expect(query).toHaveBeenCalledTimes(4)
+
+    // An import or deletion moved the summary on: the metadata is recomputed.
+    query
+      .mockResolvedValueOnce({ rows: [{ version: 'v2' }] })
+      .mockResolvedValueOnce({ rows: [{ ...aggregateRow, cnt_gene_symbol: '3' }] })
+      .mockResolvedValueOnce(valueRows)
+    const refreshed = await repository.getColumnMeta()
+    expect(refreshed.find((entry) => entry.key === 'gene_symbol')?.distinctCount).toBe(3)
+    expect(query).toHaveBeenCalledTimes(7)
   })
 
   it('streams cohort rows through pg-query-stream and releases the client', async () => {

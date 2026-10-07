@@ -198,7 +198,8 @@ export class PostgresCohortRepository {
   private readonly schema: string
   private readonly schemaName: string
   private readonly panelIntervals: PostgresPanelIntervalResolver
-  private columnMetaCache: ColumnFilterMeta[] | null = null
+  /** Column metadata of the summary as it was at `version` (see summaryVersion). */
+  private columnMetaCache: { version: string; meta: ColumnFilterMeta[] } | null = null
 
   constructor(
     private readonly pool: CohortPool,
@@ -214,6 +215,21 @@ export class PostgresCohortRepository {
 
   private tbl(table: string): string {
     return `${this.schemaName}."${table}"`
+  }
+
+  /**
+   * Changes whenever the summary or the set of visible cases does: every
+   * import, deletion and rebuild stamps cohort_summary_state, and the case
+   * count is the frequency denominator. Lets a long-lived process cache
+   * derived metadata without serving it stale.
+   */
+  private async summaryVersion(): Promise<string> {
+    const result = await this.pool.query<{ version: string }>(
+      `SELECT concat_ws('|', s.last_incremental_at, s.last_rebuilt_at,
+                        (SELECT COUNT(*) FROM ${this.tbl('cases')})) AS version
+         FROM ${this.tbl('cohort_summary_state')} s WHERE s.id = 1`
+    )
+    return result.rows[0]?.version ?? ''
   }
 
   /** The summary table as `cvs`, with the per-build case totals the frequency needs. */
@@ -444,7 +460,8 @@ export class PostgresCohortRepository {
    * cohort path reads the summary table, not the per-case meta cache.
    */
   async getColumnMeta(): Promise<ColumnFilterMeta[]> {
-    if (this.columnMetaCache !== null) return this.columnMetaCache
+    const version = await this.summaryVersion()
+    if (this.columnMetaCache?.version === version) return this.columnMetaCache.meta
 
     const meta: ColumnFilterMeta[] = []
     const selectParts = COLUMN_META_KEYS.flatMap((key) => {
@@ -515,7 +532,7 @@ export class PostgresCohortRepository {
       }
     }
 
-    this.columnMetaCache = meta
+    this.columnMetaCache = { version, meta }
     return meta
   }
 
