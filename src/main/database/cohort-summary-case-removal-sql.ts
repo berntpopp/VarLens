@@ -9,6 +9,7 @@
  *   removed_case_gene_lost   — per gene, coordinates no remaining variant keeps
  */
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
+import { perCaseAnnotationFlagsSql } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Columns the rebuild aggregates with MAX() across carriers (see variantSummaryInsertSql). */
 export const MAX_COLUMNS = [
@@ -109,6 +110,7 @@ export interface RemovalStatements {
   decrementRows: Statement
   dropEmptyRows: Statement
   insertRecomputeRows: Statement
+  applyRecomputedPerCaseFlags: Statement
   countLostGeneCoords: Statement
   decrementGenes: Statement
   dropEmptyGenes: Statement
@@ -147,6 +149,9 @@ export function prepareRemovalStatements(
     ),
     dropEmptyRows: db.prepare('DELETE FROM cohort_variant_summary WHERE carrier_count <= 0'),
     insertRecomputeRows: db.prepare(variantSummaryInsertSql(RECOMPUTE_FILTER)),
+    // The recompute writes flags from variant_annotations only; the remaining
+    // cases' per-case stars / comments / ACMG calls are folded in like the rebuild does.
+    applyRecomputedPerCaseFlags: db.prepare(perCaseAnnotationFlagsSql(RECOMPUTE_FILTER)),
     countLostGeneCoords: db.prepare(
       `INSERT INTO temp.removed_case_gene_lost (gene_symbol, lost)
        SELECT k.gene_symbol, COUNT(*) FROM temp.removed_case_gene_coords k

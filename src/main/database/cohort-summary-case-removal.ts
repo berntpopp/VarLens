@@ -15,7 +15,8 @@
  *    remaining carrier row still holds every value the case provided — then
  *    only carrier/het/hom counts are decremented (rows reaching 0 carriers are
  *    dropped). Otherwise the coordinate is recomputed from the remaining
- *    variants with the full rebuild's own INSERT-SELECT, restricted by key.
+ *    variants with the full rebuild's own INSERT-SELECT, restricted by key,
+ *    followed by the rebuild's per-case annotation flag step for those keys.
  *    The cohort frequency needs no upkeep although its denominator (the
  *    build's case count) changed: readers derive it (cohort-frequency-sql.ts).
  *  - gene burden: variant_count -= the case's rows, affected_case_count -= 1,
@@ -83,6 +84,7 @@ export function openCaseSummaryRemoval(db: DatabaseType): CaseSummaryRemoval | n
       s.decrementRows.run()
       s.dropEmptyRows.run()
       s.insertRecomputeRows.run()
+      s.applyRecomputedPerCaseFlags.run()
       s.countLostGeneCoords.run({ build: genomeBuild })
       s.decrementGenes.run({ build: genomeBuild })
       s.dropEmptyGenes.run()
