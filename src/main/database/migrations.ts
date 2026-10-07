@@ -12,9 +12,10 @@ import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
 import { createChrRankIndexes } from './chr-rank-indexes'
 import { migrateUserRoles } from './user-roles-migration'
 import { migrateCohortKeysetIndex } from './cohort-keyset-index'
+import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 38
+export const LATEST_SQLITE_SCHEMA_VERSION = 39
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -59,6 +60,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 38
  * - 36: viewer / analyst / admin roles (users table rebuild; `user` → `analyst`)
  * - 37: cohort keyset index idx_cvs_carrier_keyset (cohort-keyset-index.ts)
  * - 38: drop idx_cvs_cohort_freq — cohort frequency is derived at read time
+ * - 39: cohort_summary_meta.unique_variant_count — exact counter for the cohort tile (#460)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1900,6 +1902,19 @@ export function runMigrations(db: Database.Database): void {
   if (currentVersion < 38) {
     db.exec('DROP INDEX IF EXISTS idx_cvs_cohort_freq')
     db.exec('PRAGMA user_version = 38')
+  }
+
+  // v39: exact maintained unique-variant counter for the cohort tile (#460,
+  // cohort-unique-variant-count.ts), filled from the summary as it stands.
+  if (currentVersion < 39) {
+    const hasSummaryMeta =
+      db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cohort_summary_meta'"
+        )
+        .get() !== undefined
+    if (hasSummaryMeta) db.exec(RECOUNT_UNIQUE_VARIANTS_SQL)
+    db.exec('PRAGMA user_version = 39')
   }
 }
 

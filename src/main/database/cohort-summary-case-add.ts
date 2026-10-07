@@ -42,6 +42,7 @@ import {
   type CaseSummaryRemoval
 } from './cohort-summary-case-removal'
 import * as sql from './cohort-summary-case-add-sql'
+import { countAddedCaseUniqueVariants } from './cohort-unique-variant-count'
 
 export interface ImportSummarySession {
   /** False once incremental upkeep was abandoned; `finish` then rebuilds. */
@@ -164,6 +165,7 @@ export function openImportSummarySession(
           s.upsertGeneBurden.run({ build: params.build })
           db.exec('DELETE FROM temp.added_case_coords')
           s.captureCaseCoords.run(params)
+          countAddedCaseUniqueVariants(db) // before the new rows exist
           s.incrementCarriers.run()
           s.mergeVariantMaxima.run()
           s.insertNewVariantSummary.run({ build: params.build })

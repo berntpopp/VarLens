@@ -152,10 +152,23 @@ export const REBUILD_GENE_BURDEN_SQL = `
   DELETE FROM gene_burden_summary;
 ${geneBurdenInsertSql()}`
 
+/** Meta key of the maintained unique-variant counter (cohort-unique-variant-count.ts). */
+export const UNIQUE_VARIANT_COUNT_KEY = 'unique_variant_count'
+
+/** Distinct (chr, pos, ref, alt) in the summary: its key also has type and build. */
+export const COUNT_UNIQUE_VARIANTS_SQL = `
+  SELECT COUNT(*) AS c FROM (SELECT DISTINCT chr, pos, ref, alt FROM cohort_variant_summary)`
+
+export const RECOUNT_UNIQUE_VARIANTS_SQL = `
+  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
+  VALUES ('${UNIQUE_VARIANT_COUNT_KEY}', CAST((${COUNT_UNIQUE_VARIANTS_SQL}) AS TEXT));
+`
+
+/** Last step of every full rebuild, in its transaction. */
 export const UPDATE_META_SQL = `
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('last_rebuilt_at', CAST(strftime('%s', 'now') AS TEXT));
-  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
+${RECOUNT_UNIQUE_VARIANTS_SQL}  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('is_stale', '0');
 `
 

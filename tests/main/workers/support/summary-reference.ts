@@ -14,6 +14,8 @@ import {
 export interface SummarySnapshot {
   variants: unknown[]
   genes: unknown[]
+  /** The maintained unique-variant counter (cohort_summary_meta), null when absent. */
+  uniqueVariants: number | null
 }
 
 /** Every column except the derived-at-read `cohort_frequency` and the gene `updated_at` clock. */
@@ -33,8 +35,22 @@ export function snapshotSummary(db: DatabaseType): SummarySnapshot {
         `SELECT gene_symbol, genome_build, variant_count, unique_variant_count, affected_case_count
          FROM gene_burden_summary ORDER BY gene_symbol, genome_build`
       )
-      .all()
+      .all(),
+    uniqueVariants: storedUniqueVariants(db)
   }
+}
+
+function storedUniqueVariants(db: DatabaseType): number | null {
+  const value = summaryMeta(db, 'unique_variant_count')
+  return value === undefined ? null : Number(value)
+}
+
+/** Distinct coordinates counted from `variants`, independent of the summary. */
+function uniqueVariantsFromVariants(db: DatabaseType): number {
+  const row = db
+    .prepare('SELECT COUNT(*) AS c FROM (SELECT DISTINCT chr, pos, ref, alt FROM variants)')
+    .get() as { c: number }
+  return row.c
 }
 
 export function referenceSummary(db: DatabaseType): SummarySnapshot {
@@ -43,7 +59,7 @@ export function referenceSummary(db: DatabaseType): SummarySnapshot {
     db.exec(REBUILD_VARIANT_SUMMARY_SQL)
     db.exec(UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL)
     db.exec(REBUILD_GENE_BURDEN_SQL)
-    return snapshotSummary(db)
+    return { ...snapshotSummary(db), uniqueVariants: uniqueVariantsFromVariants(db) }
   } finally {
     db.exec('ROLLBACK TO summary_reference')
     db.exec('RELEASE summary_reference')

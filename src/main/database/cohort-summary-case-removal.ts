@@ -41,6 +41,7 @@ import {
   CLEAR_TEMP_TABLES_SQL,
   prepareRemovalStatements
 } from './cohort-summary-case-removal-sql'
+import { countRemovedCaseUniqueVariants } from './cohort-unique-variant-count'
 
 export interface CaseSummaryRemoval {
   /** Capture the case's contribution. Call inside the delete transaction, before the delete. */
@@ -88,6 +89,7 @@ export function openCaseSummaryRemoval(db: DatabaseType): CaseSummaryRemoval | n
       s.countLostGeneCoords.run({ build: genomeBuild })
       s.decrementGenes.run({ build: genomeBuild })
       s.dropEmptyGenes.run()
+      countRemovedCaseUniqueVariants(db)
     }
   }
 }

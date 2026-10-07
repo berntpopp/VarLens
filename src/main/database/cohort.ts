@@ -23,6 +23,7 @@ import { emitCohortSearch } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
+import { readUniqueVariantCount } from './cohort-unique-variant-count'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
 import {
   COHORT_BUILD_TOTALS_JOIN,
@@ -367,11 +368,8 @@ export class CohortService {
     }
     const totalVariants = totalVariantsResult.count
 
-    // Unique variants — read from pre-computed summary
-    const uniqueVariantsResult = this.db
-      .prepare('SELECT COUNT(*) as count FROM cohort_variant_summary')
-      .get() as { count: number }
-    const uniqueVariants = uniqueVariantsResult.count
+    // Unique variants: distinct (chr, pos, ref, alt), from the maintained exact counter.
+    const uniqueVariants = readUniqueVariantCount(this.db)
 
     // Genes with variants — read from pre-computed summary
     const genesResult = this.db
