@@ -72,10 +72,30 @@ function rowPairsCte(tbl: Tbl): string {
   )`
 }
 
-const PER_GENE = `(
-    SELECT gene_symbol, SUM(row_count)::bigint AS row_count, MAX(case_delta) AS case_delta
-    FROM per_pair GROUP BY gene_symbol
+/**
+ * Per-gene deltas: row and case counts from `per_pair`, plus the number of
+ * pairs in `pairEvents` (pairs that appeared or disappeared).
+ *
+ * Deliberately one aggregate over a UNION ALL and not a join of two
+ * aggregates: a case that was just imported has no planner statistics, so
+ * PostgreSQL estimates one row for it and picks a nested loop that rescans
+ * the second aggregate once per gene. That turned a 0.6 s statement into
+ * several seconds per import. An aggregate has no join to get wrong.
+ */
+function perGeneSql(pairEvents: string): string {
+  return `(
+    SELECT gene_symbol,
+           SUM(row_count)::bigint AS row_count,
+           SUM(pair_count)::bigint AS pair_count,
+           MAX(case_delta) AS case_delta
+    FROM (
+      SELECT gene_symbol, row_count, 0::bigint AS pair_count, case_delta FROM per_pair
+      UNION ALL
+      SELECT gene_symbol, 0::bigint, 1::bigint, 0 FROM ${pairEvents}
+    ) deltas
+    GROUP BY gene_symbol
   )`
+}
 
 function addSql(tbl: Tbl, perPairCte: string): string {
   const pairs = tbl('cohort_gene_variant_summary')
@@ -91,15 +111,12 @@ function addSql(tbl: Tbl, perPairCte: string): string {
   fresh AS (
     -- A pair that now has exactly one carrier did not exist before: rows are
     -- deleted when their last carrier goes, so an existing one had at least 1.
-    SELECT gene_symbol, COUNT(*)::bigint AS pair_count
-    FROM pair_upsert WHERE carrier_count = 1
-    GROUP BY gene_symbol
+    SELECT gene_symbol FROM pair_upsert WHERE carrier_count = 1
   )
   INSERT INTO ${tbl('cohort_gene_summary')} AS s
     (gene_symbol, variant_count, unique_variant_count, affected_case_count)
-  SELECT g.gene_symbol, g.row_count, COALESCE(f.pair_count, 0), g.case_delta
-  FROM ${PER_GENE} g
-  LEFT JOIN fresh f ON f.gene_symbol = g.gene_symbol
+  SELECT g.gene_symbol, g.row_count, g.pair_count, g.case_delta
+  FROM ${perGeneSql('fresh')} g
   ON CONFLICT (gene_symbol) DO UPDATE SET
     variant_count = s.variant_count + EXCLUDED.variant_count,
     unique_variant_count = s.unique_variant_count + EXCLUDED.unique_variant_count,
@@ -119,16 +136,12 @@ function removeSql(tbl: Tbl, perPairCte: string): string {
     UPDATE ${pairs} e SET carrier_count = e.carrier_count - p.carrier_delta
     FROM per_pair p
     WHERE ${pairMatch('e', 'p')} AND p.carrier_delta > 0 AND e.carrier_count > p.carrier_delta
-  ),
-  gone AS (
-    SELECT gene_symbol, COUNT(*)::bigint AS pair_count FROM pair_gone GROUP BY gene_symbol
   )
   UPDATE ${tbl('cohort_gene_summary')} s
   SET variant_count = s.variant_count - g.row_count,
-      unique_variant_count = s.unique_variant_count - COALESCE(gone.pair_count, 0),
+      unique_variant_count = s.unique_variant_count - g.pair_count,
       affected_case_count = s.affected_case_count - g.case_delta
-  FROM ${PER_GENE} g
-  LEFT JOIN gone ON gone.gene_symbol = g.gene_symbol
+  FROM ${perGeneSql('pair_gone')} g
   WHERE s.gene_symbol = g.gene_symbol`
 }
 

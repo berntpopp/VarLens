@@ -125,6 +125,9 @@ export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvis
     GROUP BY chr, pos, ref, alt, variant_type, genome_build
   )`
 
+/** Session-local scratch table holding one case's per-coordinate aggregate. */
+const CASE_AGG_TABLE = '"_varlens_case_summary_delta"'
+
 export class PostgresCohortSummaryRepository {
   async rebuild({ schema, client }: ScopedClient): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
@@ -226,6 +229,20 @@ export class PostgresCohortSummaryRepository {
   }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
+    // The case's per-coordinate aggregate goes into a temporary table that is
+    // ANALYZEd before use. A case that was just imported has no planner
+    // statistics: PostgreSQL would estimate one row for it and join the
+    // annotation flags with a nested loop that rescans them per variant.
+    // With real statistics the upsert below is planned for what it is.
+    await client.query(`DROP TABLE IF EXISTS pg_temp.${CASE_AGG_TABLE}`)
+    await client.query(
+      `CREATE TEMP TABLE ${CASE_AGG_TABLE} AS
+       ${SCOPED_DEDUPED_AGG_SQL(tbl, includeProvisional)}
+       SELECT * FROM per_case`,
+      [caseId]
+    )
+    await client.query(`ANALYZE pg_temp.${CASE_AGG_TABLE}`)
+
     await client.query(
       `
       INSERT INTO ${tbl('cohort_variant_summary')}
@@ -234,8 +251,7 @@ export class PostgresCohortSummaryRepository {
          gnomad_af, cadd, transcript, omim_mim_number,
          carrier_count, het_count, hom_count, variant_key,
          has_star, has_comment, acmg_best, cohort_frequency)
-      ${SCOPED_DEDUPED_AGG_SQL(tbl, includeProvisional)},
-      ${annotationFlagCtes(tbl)}
+      WITH ${annotationFlagCtes(tbl)}
       SELECT
         pc.chr, pc.pos, pc.end_pos, pc.ref, pc.alt, pc.variant_type, pc.genome_build,
         pc.gene_symbol, pc.cdna, pc.aa_change, pc.consequence, pc.func, pc.clinvar,
@@ -245,7 +261,7 @@ export class PostgresCohortSummaryRepository {
         -- Pass-9 #8: brand-new rows derive flags from current annotation tables.
         ${ANNOTATION_FLAG_COLUMNS},
         NULL AS cohort_frequency  -- unused: frequency is derived at read time
-      FROM per_case pc
+      FROM pg_temp.${CASE_AGG_TABLE} pc
       ${annotationFlagJoins('pc')}
       ON CONFLICT (chr, pos, ref, alt, variant_type, genome_build) DO UPDATE SET
         carrier_count = cohort_variant_summary.carrier_count + EXCLUDED.carrier_count,
@@ -254,9 +270,9 @@ export class PostgresCohortSummaryRepository {
         -- Adds never clear annotation flags (OR semantics).
         has_star = cohort_variant_summary.has_star OR EXCLUDED.has_star,
         has_comment = cohort_variant_summary.has_comment OR EXCLUDED.has_comment;
-    `,
-      [caseId]
+    `
     )
+    await client.query(`DROP TABLE pg_temp.${CASE_AGG_TABLE}`)
     await addCaseToGeneSummary({ schema, client, caseId, includeProvisional })
 
     // C1 lifecycle: incremental maintenance records its time but never touches

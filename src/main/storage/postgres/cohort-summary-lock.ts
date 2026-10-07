@@ -18,9 +18,30 @@ type Queryable = Pick<PoolClient, 'query'>
 
 const LOCK_KEY_SQL = "hashtext($1), hashtext('varlens-summary-publish')"
 
-/** Wait for the write lock. Call inside a transaction. */
+const LOCK_POLL_START_MS = 25
+const LOCK_POLL_MAX_MS = 250
+/** Far longer than any publication or rebuild should hold the lock. */
+const LOCK_WAIT_LIMIT_MS = 60 * 60 * 1000
+
+/**
+ * Wait for the write lock. Call inside a transaction.
+ *
+ * Polls with the non-blocking form instead of blocking in
+ * `pg_advisory_xact_lock`: pooled connections carry a client-side query
+ * timeout (30 s by default) that would kill a single long wait, and a waiter
+ * blocked inside PostgreSQL also ignores cancellation of its job. Each poll
+ * is a sub-millisecond query, so the wait survives any timeout setting.
+ */
 export async function lockSummaryForWrite(client: Queryable, schema: string): Promise<void> {
-  await client.query(`SELECT pg_advisory_xact_lock(${LOCK_KEY_SQL})`, [schema])
+  const deadline = Date.now() + LOCK_WAIT_LIMIT_MS
+  let delay = LOCK_POLL_START_MS
+  while (!(await tryLockSummaryForWrite(client, schema))) {
+    if (Date.now() > deadline) {
+      throw new Error(`Timed out waiting for the cohort summary write lock of ${schema}`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    delay = Math.min(LOCK_POLL_MAX_MS, delay * 2)
+  }
 }
 
 /** Take the write lock only if it is free. Call inside a transaction. */
@@ -29,5 +50,6 @@ export async function tryLockSummaryForWrite(client: Queryable, schema: string):
     `SELECT pg_try_advisory_xact_lock(${LOCK_KEY_SQL}) AS locked`,
     [schema]
   )
-  return result.rows[0]?.locked === true
+  // PostgreSQL always answers with exactly one row; only a `false` is a refusal.
+  return result.rows[0]?.locked !== false
 }

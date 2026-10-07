@@ -131,7 +131,7 @@ describe('PostgresTranscriptsRepository', () => {
       'BRCA2'
     ])
     expect(query).toHaveBeenNthCalledWith(5, 'SET LOCAL lock_timeout = 0')
-    expect(query).toHaveBeenNthCalledWith(6, expect.stringContaining('pg_advisory_xact_lock'), [
+    expect(query).toHaveBeenNthCalledWith(6, expect.stringContaining('pg_try_advisory_xact_lock'), [
       'case_schema'
     ])
     // Subtract the row under its old gene, update it, add it under the new one.
