@@ -584,52 +584,7 @@ describe('PostgresCohortRepository', () => {
   })
 
   it('returns usable cohort column metadata', async () => {
-    const aggregateRow = {
-      cnt_chr: '2',
-      cnt_pos: '2',
-      min_pos: '1',
-      max_pos: '10',
-      cnt_gene_symbol: '2',
-      cnt_carrier_count: '2',
-      min_carrier_count: '1',
-      max_carrier_count: '10',
-      cnt_cohort_frequency: '2',
-      min_cohort_frequency: '1',
-      max_cohort_frequency: '10',
-      cnt_het_count: '2',
-      min_het_count: '1',
-      max_het_count: '10',
-      cnt_hom_count: '2',
-      min_hom_count: '1',
-      max_hom_count: '10',
-      cnt_consequence: '2',
-      cnt_func: '2',
-      cnt_clinvar: '2',
-      cnt_gnomad_af: '2',
-      min_gnomad_af: '1',
-      max_gnomad_af: '10',
-      cnt_cadd_phred: '2',
-      min_cadd_phred: '1',
-      max_cadd_phred: '10',
-      cnt_transcript: '2'
-    }
-    const valueRows = {
-      rows: [
-        { col_key: 'chr', value: '1' },
-        { col_key: 'gene_symbol', value: 'BRCA1' }
-      ]
-    }
-    const query = vi
-      .fn()
-      .mockResolvedValueOnce({ rows: [{ version: 'v1' }] })
-      .mockResolvedValueOnce({ rows: [aggregateRow] })
-      .mockResolvedValueOnce(valueRows)
-    const repository = new PostgresCohortRepository({ query } as never, 'public')
-
-    const meta = await repository.getColumnMeta()
-
-    const byKey = new Map(meta.map((entry) => [entry.key, entry]))
-    for (const key of [
+    const keys = [
       'chr',
       'pos',
       'gene_symbol',
@@ -643,27 +598,89 @@ describe('PostgresCohortRepository', () => {
       'gnomad_af',
       'cadd_phred',
       'transcript'
-    ]) {
-      expect(byKey.has(key)).toBe(true)
-      expect(byKey.get(key)?.distinctCount).toBe(2)
-    }
-    expect(byKey.get('pos')?.dataType).toBe('numeric')
-    expect(byKey.get('pos')?.min).toBe(1)
-    expect(byKey.get('pos')?.max).toBe(10)
-    expect(byKey.get('gene_symbol')?.dataType).toBe('text')
-    expect(byKey.get('chr')?.distinctValues).toEqual(['1'])
-    // C4 Step 2: read directly from the deduped summary table — no live
-    // GROUP BY subquery. One cheap version probe precedes the two scans.
+    ]
+    // The probe proves `pos` and `transcript` high-cardinality; the rest are
+    // counted exactly, where `gene_symbol` turns out to be above the limit too.
+    const probeRow = Object.fromEntries(
+      keys.map((key) => [`cnt_${key}`, key === 'pos' || key === 'transcript' ? 900 : 2])
+    )
+    const bounds = Object.fromEntries(
+      [
+        'pos',
+        'carrier_count',
+        'cohort_frequency',
+        'het_count',
+        'hom_count',
+        'gnomad_af',
+        'cadd_phred'
+      ].flatMap((key) => [
+        [`min_${key}`, '1'],
+        [`max_${key}`, '10']
+      ])
+    )
+    const exactRows = (geneCount: number): { rows: unknown[] } => ({
+      rows: [
+        { col_key: '', cnt: 0, vals: null, ...bounds },
+        ...keys
+          .filter((key) => key !== 'pos' && key !== 'transcript')
+          .map((key) =>
+            key === 'gene_symbol'
+              ? { col_key: key, cnt: geneCount, vals: geneCount > 50 ? null : ['TP53', 'BRCA1'] }
+              : { col_key: key, cnt: 2, vals: ['b', 'a'] }
+          )
+      ]
+    })
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ version: 'v1' }] })
+      .mockResolvedValueOnce({ rows: [probeRow] })
+      .mockResolvedValueOnce(exactRows(73))
+    const repository = new PostgresCohortRepository({ query } as never, 'public')
+
+    const meta = await repository.getColumnMeta()
+
+    expect(meta.map((entry) => entry.key)).toEqual(keys)
+    const byKey = new Map(meta.map((entry) => [entry.key, entry]))
+    // Exact while small, with the sorted values for dropdowns.
+    expect(byKey.get('chr')).toEqual({
+      key: 'chr',
+      dataType: 'text',
+      distinctCount: 2,
+      distinctValues: ['a', 'b']
+    })
+    expect(byKey.get('consequence')?.distinctValues).toEqual(['a', 'b'])
+    // Above the limit: "more than 50", no value list — whether the probe or
+    // the exact count found out.
+    expect(byKey.get('pos')?.distinctCount).toBe(51)
+    expect(byKey.get('transcript')).toEqual({
+      key: 'transcript',
+      dataType: 'text',
+      distinctCount: 51
+    })
+    expect(byKey.get('gene_symbol')).toEqual({
+      key: 'gene_symbol',
+      dataType: 'text',
+      distinctCount: 51
+    })
+    // Slider bounds stay exact for every numeric column, probed out or not.
+    expect(byKey.get('pos')).toMatchObject({ dataType: 'numeric', min: 1, max: 10 })
+    expect(byKey.get('cohort_frequency')).toMatchObject({ dataType: 'numeric', min: 1, max: 10 })
+
+    // One cheap version probe, a bounded prefix probe, one scan of the summary.
     expect(query).toHaveBeenCalledTimes(3)
     expect(normalizeSql(callText(query.mock.calls[0]))).toContain('"cohort_summary_state"')
-    const aggSql = normalizeSql(callText(query.mock.calls[1]))
-    expect(aggSql).toContain('COUNT(DISTINCT chr)')
-    expect(aggSql).toContain('FROM "public"."cohort_variant_summary"')
-    expect(aggSql).not.toContain('ARRAY_AGG')
-    const valuesSql = normalizeSql(callText(query.mock.calls[2]))
-    expect(valuesSql).toContain('UNION ALL')
-    expect(valuesSql).toContain('FROM "public"."cohort_variant_summary"')
-    expect(valuesSql).not.toContain('GROUP BY v.chr')
+    const probeSql = normalizeSql(callText(query.mock.calls[1]))
+    expect(probeSql).toContain('FROM "public"."cohort_variant_summary"')
+    expect(probeSql).toContain('LIMIT 20000')
+    const exactSql = normalizeSql(callText(query.mock.calls[2]))
+    expect(exactSql).toContain('FROM "public"."cohort_variant_summary"')
+    expect(exactSql).toContain('GROUPING SETS ((), (k_chr), (k_gene_symbol)')
+    // High-cardinality columns are not grouped, and nothing is sorted per column.
+    const groupingSets = /GROUPING SETS \((.*?)\) \)/.exec(exactSql)?.[1] ?? exactSql
+    expect(groupingSets).not.toContain('k_pos')
+    expect(groupingSets).not.toContain('k_transcript')
+    expect(exactSql).not.toContain('COUNT(DISTINCT')
+    expect(exactSql).toContain('MIN(k_pos)')
 
     // Unchanged summary: the cached metadata is served after the probe alone.
     query.mockResolvedValueOnce({ rows: [{ version: 'v1' }] })
@@ -673,10 +690,13 @@ describe('PostgresCohortRepository', () => {
     // An import or deletion moved the summary on: the metadata is recomputed.
     query
       .mockResolvedValueOnce({ rows: [{ version: 'v2' }] })
-      .mockResolvedValueOnce({ rows: [{ ...aggregateRow, cnt_gene_symbol: '3' }] })
-      .mockResolvedValueOnce(valueRows)
+      .mockResolvedValueOnce({ rows: [probeRow] })
+      .mockResolvedValueOnce(exactRows(2))
     const refreshed = await repository.getColumnMeta()
-    expect(refreshed.find((entry) => entry.key === 'gene_symbol')?.distinctCount).toBe(3)
+    expect(refreshed.find((entry) => entry.key === 'gene_symbol')).toMatchObject({
+      distinctCount: 2,
+      distinctValues: ['BRCA1', 'TP53']
+    })
     expect(query).toHaveBeenCalledTimes(7)
   })
 

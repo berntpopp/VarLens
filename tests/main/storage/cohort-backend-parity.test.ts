@@ -372,6 +372,50 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     }
   }, 120_000)
 
+  it('(c2) more than 50 distinct values are reported as 51 by both backends, bounds stay exact', async () => {
+    // 60 genes / positions / CADD scores, 3 consequences: one high-cardinality
+    // text column, two numeric ones, and a low-cardinality column next to them.
+    const wide: FixtureCase = {
+      name: 'parity-wide',
+      genomeBuild: 'GRCh38',
+      variants: Array.from({ length: 60 }, (_, index) =>
+        baseVariant({
+          chr: '7',
+          pos: 1000 + index,
+          gene_symbol: `GENE${String(index).padStart(2, '0')}`,
+          consequence: ['HIGH', 'MODERATE', 'LOW'][index % 3],
+          cadd: index / 2
+        })
+      )
+    }
+    seedSqliteCase(wide)
+    sqlite.cohortSummary.rebuild()
+    sqlite.cohort.invalidateColumnMetaCache()
+    await seedPgCase(wide)
+
+    const sqliteMeta = metaByKey(sqlite.cohort.getColumnMeta())
+    const pgMeta = metaByKey(await new PostgresCohortRepository(pool, schema).getColumnMeta())
+
+    for (const key of ['gene_symbol', 'pos', 'cadd_phred']) {
+      expect(pgMeta.get(key)?.distinctCount, key).toBe(51)
+      expect(sqliteMeta.get(key)?.distinctCount, key).toBe(51)
+      expect(pgMeta.get(key)?.distinctValues, key).toBeUndefined()
+      expect(sqliteMeta.get(key)?.distinctValues, key).toBeUndefined()
+    }
+    for (const key of ['pos', 'cadd_phred']) {
+      expect(pgMeta.get(key)?.min, key).toBe(sqliteMeta.get(key)?.min)
+      expect(pgMeta.get(key)?.max, key).toBe(sqliteMeta.get(key)?.max)
+    }
+    expect(pgMeta.get('pos')).toMatchObject({ min: 100, max: 1059 })
+    expect(pgMeta.get('consequence')?.distinctCount).toBe(
+      sqliteMeta.get('consequence')?.distinctCount
+    )
+    expect(pgMeta.get('consequence')?.distinctValues).toEqual(
+      sqliteMeta.get('consequence')?.distinctValues
+    )
+    expect(pgMeta.get('consequence')?.distinctValues).toEqual(['HIGH', 'LOW', 'MODERATE'])
+  }, 120_000)
+
   it('(d) cohort_frequency values match after every add/remove path', async () => {
     // Already added both cases in beforeEach. Compare frequencies after add.
     const afterAddSqlite = sortCohort(sqliteCohortRows({})).map(normalizeCohort)

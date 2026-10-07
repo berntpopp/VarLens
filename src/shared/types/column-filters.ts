@@ -41,13 +41,33 @@ export type ColumnFiltersParam = Record<string, ColumnFilter>
 /** Filter mode auto-detected or overridden from config */
 export type ColumnFilterMode = 'numeric' | 'categorical' | 'text-suggest'
 
+/** A column with at most this many distinct values gets them listed in `distinctValues`. */
+export const COHORT_DISTINCT_VALUES_LIMIT = 50
+
+/**
+ * Cohort-view metadata reports a distinct count above
+ * {@link COHORT_DISTINCT_VALUES_LIMIT} as this value ("more than the limit"):
+ * the filter UI only compares the count with a threshold at or below the
+ * limit, and counting a high-cardinality column exactly costs a full sort of
+ * the cohort summary. Both backends report it the same way.
+ */
+export const COHORT_DISTINCT_COUNT_CAP = COHORT_DISTINCT_VALUES_LIMIT + 1
+
+/** A cohort-view distinct count as both backends report it. */
+export function capCohortDistinctCount(count: number): number {
+  return Math.min(count, COHORT_DISTINCT_COUNT_CAP)
+}
+
 /** Per-column metadata returned by the backend for filter UI auto-detection */
 export interface ColumnFilterMeta {
   /** Column key matching SORTABLE_COLUMNS (e.g. 'cadd') */
   key: string
   /** Inferred from SQLite type affinity */
   dataType: 'numeric' | 'text'
-  /** Count of unique non-null values in the current case */
+  /**
+   * Count of unique non-null values in the current case. The cohort view
+   * reports counts above COHORT_DISTINCT_VALUES_LIMIT as COHORT_DISTINCT_COUNT_CAP.
+   */
   distinctCount: number
   /** Populated only if distinctCount <= threshold */
   distinctValues?: string[]

@@ -17,6 +17,7 @@ import type {
   CohortPaginatedResult
 } from '../../shared/types/cohort'
 import type { ColumnFilterMeta, ColumnFiltersParam } from '../../shared/types/column-filters'
+import { capCohortDistinctCount } from '../../shared/types/column-filters'
 import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
 import { tokenize, parse } from '../../shared/utils/boolean-search'
 import { emitCohortSearch } from './search/cohort-search-emitter'
@@ -520,7 +521,8 @@ export class CohortService {
 
     for (const [key, sqlCol] of entries) {
       const isNumeric = NUMERIC_COLUMNS.has(key)
-      const distinctCount = (aggRow[`cnt_${key}`] as number) ?? 0
+      // Capped above the low-cardinality limit, as on PostgreSQL.
+      const distinctCount = capCohortDistinctCount((aggRow[`cnt_${key}`] as number) ?? 0)
 
       const entry: ColumnFilterMeta = {
         key,
