@@ -147,7 +147,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'conflicting',
     components: [],
-    color: 'deep-purple',
+    color: 'clinvar-conflicting',
     label: 'Conflicting classifications of pathogenicity',
     rank: 12,
     axis: 'pathogenicity',
