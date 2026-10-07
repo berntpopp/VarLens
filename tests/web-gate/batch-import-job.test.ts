@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { jobRunner } from '../../src/main/services/jobs/runner'
 import { BatchImportRuns, SETTLED_RUN_TTL_MS } from '../../src/web/server/batch-import-runs'
 import { buildDispatcher } from '../../src/web/server/dispatcher'
+import { DISPATCHER_SECURITY_MAP } from '../../src/web/server/security/operation-security-map'
 import { stageExistingFileUpload } from '../../src/web/server/routes/upload-staging'
 import { makeDeps } from './helpers/dispatcher-adapters'
 
@@ -208,6 +209,17 @@ describe('batch-import:start as a job', () => {
 
     expect(await start(alice, runId)).toMatchObject({ error: 'invalid-run-id' })
     expect(reply.code).toHaveBeenCalledWith(400)
+  })
+})
+
+describe('batch-import:status security policy', () => {
+  test('is a poll: role-gated and owner-scoped, but not audited per tick', () => {
+    const policy = DISPATCHER_SECURITY_MAP['batch-import:status']
+    // A client polls it every 15 s for the whole batch; the start is the audited write.
+    expect(policy).toMatchObject({ kind: 'read', minRole: 'analyst' })
+    expect(policy.audit).toMatchObject({ mode: 'exempt' })
+    expect(DISPATCHER_SECURITY_MAP['jobs:get'].audit).toMatchObject({ mode: 'exempt' })
+    expect(DISPATCHER_SECURITY_MAP['batch-import:start'].kind).toBe('write')
   })
 })
 
