@@ -167,11 +167,13 @@ const tabs: Array<{ value: MetadataTab; label: string; icon: string }> = [
   { value: 'data', label: 'Data Info', icon: mdiDatabaseOutline }
 ]
 
-const { getComments } = useCaseComments()
-const { getMetrics } = useCaseMetrics()
+// The tab badges read the tabs' own queries, while the modal is open.
+const openCaseId = (): number => (open.value ? props.caseId : 0)
+const { comments } = useCaseComments(openCaseId)
+const { metrics } = useCaseMetrics(openCaseId)
 
-const commentCount = computed(() => getComments(props.caseId).length)
-const metricCount = computed(() => getMetrics(props.caseId).length)
+const commentCount = computed(() => comments.value.length)
+const metricCount = computed(() => metrics.value.length)
 const currentTab = computed<MetadataTab>(() => {
   const value = Array.isArray(activeTab.value) ? activeTab.value[0] : activeTab.value
   return metadataTabs.has(value) ? value : 'overview'

@@ -11,7 +11,7 @@
  *   collect once released. Safe to call more than once per switch.
  */
 import { nextTick, toValue } from 'vue'
-import { useQueryCache, type QueryCache } from '@pinia/colada'
+import { useQueryCache, type EntryKey, type QueryCache } from '@pinia/colada'
 
 import { queryKeys } from './keys'
 
@@ -30,6 +30,16 @@ export async function invalidateServerData(event: ServerDataEvent): Promise<void
     cache.cancel(entry)
     if (!entry.active) cache.remove(entry)
   }
+}
+
+/**
+ * Refetch one key after a write to it has succeeded. A refetch that fails is
+ * logged by the cache and shown by its query; it must not fail the write.
+ */
+export async function refetchAfterWrite(key: EntryKey): Promise<void> {
+  await useQueryCache()
+    .invalidateQueries({ key, exact: true })
+    .catch(() => undefined)
 }
 
 /**

@@ -23,10 +23,7 @@ import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
-// The catch branch calls `logService.warn`, which lazily instantiates the
-// pinia-backed log store (see LogService.ts `getStore()`). This component
-// test mounts without a Pinia plugin, so stub the module — same pattern as
-// tests/renderer/components/filters/ExtensionColumnFilters.test.ts.
+// Stubbed so the warnings a failed load or write logs can be asserted.
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: {
     debug: vi.fn(),
@@ -38,6 +35,8 @@ vi.mock('../../../src/renderer/src/services/LogService', () => ({
 
 import CaseDataInfoTab from '../../../src/renderer/src/components/CaseDataInfoTab.vue'
 import { logService } from '../../../src/renderer/src/services/LogService'
+import { invalidateServerData } from '../../../src/renderer/src/queries/invalidation'
+import { createQueryPinia, queryPlugins } from '../helpers/with-queries'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -165,7 +164,7 @@ function installMockApi(
 
 function mountTab(): ReturnType<typeof mount> {
   return mount(CaseDataInfoTab, {
-    global: { plugins: [vuetify] },
+    global: { plugins: [vuetify, ...queryPlugins(createQueryPinia())] },
     props: { caseId: 1 }
   })
 }
@@ -259,6 +258,47 @@ describe('CaseDataInfoTab loader', () => {
   })
 })
 
+describe('CaseDataInfoTab form and refetches', () => {
+  it('keeps what the user typed when the data is refetched', async () => {
+    const mocks = installMockApi(fakeDataInfo)
+    const wrapper = mountTab()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as CaseDataInfoTabVm
+
+    const notes = wrapper.findAll('textarea').find((t) => t.element.value === 'test notes')
+    await notes!.setValue('typed, not saved yet')
+    await invalidateServerData('data-changed')
+    await flushPromises()
+
+    await vm.save()
+    expect(mocks.upsertDataInfo).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ data_notes: 'typed, not saved yet' })
+    )
+  })
+
+  it('starts from the database again when the case is reopened after a save', async () => {
+    const mocks = installMockApi(fakeDataInfo)
+    const wrapper = mountTab()
+    await flushPromises()
+    const saved = { ...fakeDataInfo, platform: 'Genome' }
+    window.api.caseMetadata.getDataInfo = vi.fn((caseId) =>
+      Promise.resolve(caseId === 1 ? saved : fakeDataInfo)
+    )
+
+    await wrapper.setProps({ caseId: 2 })
+    await flushPromises()
+    await wrapper.setProps({ caseId: 1 })
+    await flushPromises()
+
+    await (wrapper.vm as unknown as CaseDataInfoTabVm).save()
+    expect(mocks.upsertDataInfo).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ platform: 'Genome' })
+    )
+  })
+})
+
 const fakeSerializableErrorWithMessage = {
   code: 'DB_ERROR',
   message: 'save failed',
@@ -324,23 +364,25 @@ describe('CaseDataInfoTab addExternalId()', () => {
   })
 
   it('refreshes the list on success', async () => {
-    installMockApi(fakeDataInfo)
+    const mocks = installMockApi(fakeDataInfo)
 
     const wrapper = mountTab()
     await flushPromises()
     vi.mocked(logService.warn).mockClear()
 
     const vm = wrapper.vm as unknown as CaseDataInfoTabVm
-    await vm.addExternalId('MRN', '99999')
+    const added = [...fakeExternalIds, { id_type: 'LAB', id_value: '99999' }]
+    mocks.listExternalIds.mockResolvedValue(added)
+    await vm.addExternalId('LAB', '99999')
 
     expect(logService.warn).not.toHaveBeenCalled()
-    expect(vm.externalIds).toEqual(fakeExternalIds)
+    expect(vm.externalIds).toEqual(added)
   })
 })
 
 describe('CaseDataInfoTab deleteExternalId()', () => {
   it('removes the row on success', async () => {
-    installMockApi(fakeDataInfo)
+    const mocks = installMockApi(fakeDataInfo)
 
     const wrapper = mountTab()
     await flushPromises()
@@ -348,6 +390,7 @@ describe('CaseDataInfoTab deleteExternalId()', () => {
     const vm = wrapper.vm as unknown as CaseDataInfoTabVm
     expect(vm.externalIds).toEqual(fakeExternalIds)
 
+    mocks.listExternalIds.mockResolvedValue([])
     await vm.deleteExternalId('MRN')
 
     expect(vm.externalIds).toEqual([])

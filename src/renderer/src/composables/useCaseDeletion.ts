@@ -3,9 +3,9 @@
  * follow them.
  *
  * Deleting a case cascades its rows away in the database, but the renderer's
- * per-case caches (metadata, comments, metrics) would otherwise keep the
- * deleted id until the next database switch, and query-cache data that spans
- * cases (cohort scope, column metadata) would still count it. Every delete
+ * metadata cache would otherwise keep the deleted id until the next database
+ * switch, and the query cache would still hold the case's own data (comments,
+ * metrics) and data that spans cases (cohort scope, column metadata). Every delete
  * here evicts and invalidates once the IPC call *settles*:
  *   - success → the case is gone, nothing may still hold its id;
  *   - failure → callers roll the case back into the list, so its entries are

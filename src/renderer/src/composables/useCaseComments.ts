@@ -1,15 +1,19 @@
 /**
- * Composable for case comment state management
+ * The comments of one case, and creating, editing and deleting them.
  *
- * Provides reactive comment state per case with IPC-backed persistence.
- * Used by CaseCommentsTab for comment CRUD.
+ * Reads come from the query cache (`queries/case-comments.ts`) and follow the
+ * case passed in; a case id of 0 reads nothing. A write resolves once the
+ * list has been refetched.
  */
 
+import { computed, toValue, type MaybeRefOrGetter } from 'vue'
+import { useQuery } from '@pinia/colada'
 import type { CaseComment, CommentCategory } from '../../../shared/types/api'
-import { useApiService } from './useApiService'
-import { logService } from '../services/LogService'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
-import { createPerCaseCache } from './per-case-cache'
+import { unwrapIpcResult } from '../../../shared/types/errors'
+import { caseCommentsQuery } from '../queries/case-comments'
+import { queryApi } from '../queries/gate'
+import { refetchAfterWrite } from '../queries/invalidation'
+import { queryKeys } from '../queries/keys'
 import {
   mdiCalendarCheck,
   mdiFamilyTree,
@@ -18,9 +22,6 @@ import {
   mdiPill,
   mdiStethoscope
 } from '@mdi/js'
-
-// Comments by caseId — bounded LRU. Lists are replaced, never mutated in place.
-const commentsCache = createPerCaseCache<CaseComment[]>()
 
 export const COMMENT_CATEGORIES: CommentCategory[] = [
   'Clinical Note',
@@ -49,97 +50,36 @@ export const COMMENT_CATEGORY_COLORS: Record<CommentCategory, string> = {
   Treatment: 'teal'
 }
 
-export function useCaseComments() {
-  const { api } = useApiService()
+export function useCaseComments(caseId: MaybeRefOrGetter<number>) {
+  const { data, isPending } = useQuery(() => caseCommentsQuery(toValue(caseId)))
+  const comments = computed<CaseComment[]>(() => data.value ?? [])
 
-  async function loadComments(caseId: number): Promise<void> {
-    if (!api) return
-    try {
-      await commentsCache.load(caseId, async () =>
-        unwrapIpcResult(await api.caseComments.list(caseId))
-      )
-    } catch (error) {
-      logService.error(
-        'Failed to load comments: ' +
-          (error instanceof Error
-            ? error.message
-            : isIpcError(error)
-              ? (error.userMessage ?? error.message)
-              : String(error)),
-        'comments'
-      )
-    }
+  /** Run a write for the current case, then refetch that case's comments. */
+  async function write<T>(run: () => Promise<T>): Promise<T> {
+    const key = queryKeys.caseComments(toValue(caseId))
+    const result = await run()
+    await refetchAfterWrite(key)
+    return result
   }
 
-  function getComments(caseId: number): CaseComment[] {
-    return commentsCache.get(caseId) ?? []
+  function createComment(category: CommentCategory, content: string): Promise<CaseComment> {
+    const id = toValue(caseId)
+    return write(async () =>
+      unwrapIpcResult(await queryApi().caseComments.create(id, category, content))
+    )
   }
 
-  function isLoading(caseId: number): boolean {
-    return commentsCache.isLoading(caseId)
+  function updateComment(commentId: number, content: string): Promise<CaseComment> {
+    return write(async () =>
+      unwrapIpcResult(await queryApi().caseComments.update(commentId, content))
+    )
   }
 
-  async function createComment(
-    caseId: number,
-    category: CommentCategory,
-    content: string
-  ): Promise<CaseComment | null> {
-    if (!api) return null
-    const comment = unwrapIpcResult(await api.caseComments.create(caseId, category, content))
-
-    // Add to cache (newest first)
-    commentsCache.set(caseId, [comment, ...(commentsCache.get(caseId) ?? [])])
-
-    return comment
+  function deleteComment(commentId: number): Promise<void> {
+    return write(async () => {
+      unwrapIpcResult(await queryApi().caseComments.delete(commentId))
+    })
   }
 
-  async function updateComment(caseId: number, commentId: number, content: string): Promise<void> {
-    if (!api) return
-    const updated = unwrapIpcResult(await api.caseComments.update(commentId, content))
-
-    // Update in cache
-    const cached = commentsCache.get(caseId)
-    if (cached) {
-      const index = cached.findIndex((c) => c.id === commentId)
-      if (index !== -1) {
-        const updatedList = [...cached]
-        updatedList[index] = updated
-        commentsCache.set(caseId, updatedList)
-      }
-    }
-  }
-
-  async function deleteComment(caseId: number, commentId: number): Promise<void> {
-    if (!api) return
-    unwrapIpcResult(await api.caseComments.delete(commentId))
-
-    // Remove from cache
-    const cached = commentsCache.get(caseId)
-    if (cached) {
-      commentsCache.set(
-        caseId,
-        cached.filter((c) => c.id !== commentId)
-      )
-    }
-  }
-
-  function clearCache(): void {
-    commentsCache.clear()
-  }
-
-  /** Drop one case's comments (e.g. after the case is deleted). */
-  function invalidateCase(caseId: number): void {
-    commentsCache.invalidate(caseId)
-  }
-
-  return {
-    loadComments,
-    getComments,
-    isLoading,
-    createComment,
-    updateComment,
-    deleteComment,
-    clearCache,
-    invalidateCase
-  }
+  return { comments, isLoading: isPending, createComment, updateComment, deleteComment }
 }

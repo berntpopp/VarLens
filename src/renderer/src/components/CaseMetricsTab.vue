@@ -185,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useCaseMetrics } from '../composables/useCaseMetrics'
 import type { MetricDefinition, CaseMetricWithDefinition } from '../../../shared/types/api'
 
@@ -204,15 +204,13 @@ const props = defineProps<{
 }>()
 
 const {
-  definitionsCache,
-  loadDefinitions,
-  loadMetrics,
-  getMetrics,
-  isLoading,
+  definitions,
+  metrics,
+  isLoading: loading,
   upsertMetric,
   deleteMetric,
   createDefinition
-} = useCaseMetrics()
+} = useCaseMetrics(() => props.caseId)
 
 // Add metric form state
 const selectedDefinition = ref<MetricDefinition | null>(null)
@@ -229,14 +227,10 @@ const customValueType = ref<'numeric' | 'text' | 'date'>('numeric')
 const customUnit = ref('')
 const customCategory = ref('Custom')
 
-// Computed
-const loading = computed(() => isLoading(props.caseId))
-const metrics = computed(() => getMetrics(props.caseId))
-
 // Filter out already-assigned metric definitions
 const assignedMetricIds = computed(() => new Set(metrics.value.map((m) => m.metric_id)))
 const availableDefinitions = computed(() =>
-  definitionsCache.value.filter((d) => !assignedMetricIds.value.has(d.id))
+  definitions.value.filter((d) => !assignedMetricIds.value.has(d.id))
 )
 
 // Group metrics by category for display
@@ -264,17 +258,6 @@ const hasValidInput = computed(() => {
   }
 })
 
-// Load on mount
-watch(
-  () => props.caseId,
-  async (id) => {
-    if (id) {
-      await Promise.all([loadDefinitions(), loadMetrics(id)])
-    }
-  },
-  { immediate: true }
-)
-
 async function handleSave(): Promise<void> {
   if (!selectedDefinition.value || !hasValidInput.value) return
 
@@ -287,7 +270,7 @@ async function handleSave(): Promise<void> {
           ? { text_value: textInput.value.trim() }
           : { date_value: dateInput.value }
 
-    await upsertMetric(props.caseId, selectedDefinition.value.id, value)
+    await upsertMetric(selectedDefinition.value.id, value)
 
     // Reset form
     selectedDefinition.value = null
@@ -311,7 +294,7 @@ async function handleSave(): Promise<void> {
 
 async function handleDelete(metricId: number): Promise<void> {
   try {
-    await deleteMetric(props.caseId, metricId)
+    await deleteMetric(metricId)
   } catch (error) {
     logService.error(
       'Failed to delete metric: ' +

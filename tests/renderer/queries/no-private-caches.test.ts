@@ -14,13 +14,19 @@ const MIGRATED = [
   'composables/useFilterOptionsCache.ts',
   'composables/useTags.ts',
   'composables/useVariantTags.ts',
+  'composables/useCaseComments.ts',
+  'composables/useCaseMetrics.ts',
   'queries/column-meta.ts',
   'queries/filter-options.ts',
   'queries/filter-presets.ts',
   'queries/tags.ts',
   'queries/cases.ts',
+  'queries/case-comments.ts',
+  'queries/case-metrics.ts',
+  'queries/case-data-info.ts',
   'components/filters/ExtensionColumnFilters.vue',
-  'components/filters/ExtensionColumnControl.vue'
+  'components/filters/ExtensionColumnControl.vue',
+  'components/CaseDataInfoTab.vue'
 ]
 
 /** Module-level state (column 0): a ref, a collection, or anything reassigned. */
@@ -39,7 +45,7 @@ describe('migrated modules hold no cache of their own', () => {
     const source = readFileSync(resolve(RENDERER, file), 'utf8')
     // In a .vue file column 0 is component setup, which is per instance.
     if (file.endsWith('.ts')) expect(source).not.toMatch(MODULE_STATE)
-    expect(source).not.toMatch(/cacheEpoch|inflight|inFlight|LruMap/)
+    expect(source).not.toMatch(/cacheEpoch|inflight|inFlight|LruMap|[gG]eneration/)
   })
 
   it('keeps only the active-preset UI state at module level in the preset store', () => {
