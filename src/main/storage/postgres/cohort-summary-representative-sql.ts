@@ -21,8 +21,10 @@
 import type { PoolClient } from 'pg'
 
 import {
+  NUMERIC_FACTS,
   REPRESENTATIVE_COLUMNS,
   SUMMARY_TRANSCRIPT_COLUMNS,
+  TRANSCRIPT_COLUMNS,
   mergeFactAssignments,
   precedesTranscript,
   remainingRowCovers,
@@ -47,14 +49,6 @@ const keyMatch = (a: string, b: string): string =>
 const HET = "('0/1','1/0','0|1','1|0')"
 const HOM = "('1/1','1|1')"
 
-/**
- * PARTITION BY list for one summary key over variant alias `v` and case alias
- * `c`. `pos` leads and text is compared bytewise, so the sort behind the
- * window decides most comparisons on an integer.
- */
-const KEY_PARTITION = (v: string, c: string): string =>
-  `${v}.pos, ${v}.chr COLLATE "C", ${v}.ref COLLATE "C", ${v}.alt COLLATE "C", ${v}.variant_type COLLATE "C", ${c}.genome_build COLLATE "C"`
-
 /** The ClinVar rank of variant row `alias` from the `clinvar_severity` lookup (0 = unknown). */
 export function clinvarLookupRankSql(alias: string, lookupTable: string): string {
   return `COALESCE((SELECT cs.rank FROM ${lookupTable} cs WHERE cs.raw = ${alias}.clinvar), 0)`
@@ -74,32 +68,99 @@ export function carrierRanks(alias: string, tbl: Tbl): CarrierRanks {
   }
 }
 
+/*
+ * Aggregate form of the rule, for the two statements that read many variant
+ * rows (a case's contribution, the rebuild). The shared module states the rule
+ * as an order (ROW_NUMBER over a window); a window needs a sort of the wide
+ * rows and a pass per partition, which cost a third more than the hash
+ * aggregate it replaced. The same order as one aggregate per key:
+ *
+ *   transcript row   MAX() of a text array, compared bytewise: the impact rank
+ *                    as one character, then per transcript-level column a
+ *                    '1'/'0' presence flag and the value. Arrays compare
+ *                    element by element, so this is impact rank DESC, then
+ *                    each column DESC with NULL last: transcriptOrderBy().
+ *   ClinVar          MAX() of the rank character followed by the string
+ *   numeric facts    MIN() / MAX() as configured
+ *
+ * The recompute of single keys keeps the window form; the drift and parity
+ * tests hold both forms, and SQLite, to the same rows.
+ */
+
+/** Ranks are single characters from '@' (0) upwards; they stay far below 60. */
+const rankCharacter = (rank: string): string => `chr(64 + ${rank})`
+
+/** The array whose bytewise maximum is the transcript row of `alias`. */
+function transcriptKeySql(alias: string, ranks: CarrierRanks): string {
+  const elements = TRANSCRIPT_COLUMNS.map(
+    (column) =>
+      `CASE WHEN ${alias}.${column} IS NULL THEN '0' ELSE '1' END, COALESCE(${alias}.${column}, '')`
+  )
+  return `ARRAY[${rankCharacter(ranks.impact)}, ${elements.join(', ')}] COLLATE "C"`
+}
+
+/** Aggregates over the variant rows `alias` of one group: transcript key and facts. */
+function carrierAggregates(alias: string, ranks: CarrierRanks): string {
+  return [
+    `MAX(${transcriptKeySql(alias, ranks)}) AS transcript_key`,
+    `MAX((${rankCharacter(ranks.clinvar)} || ${alias}.clinvar) COLLATE "C") AS clinvar_key`,
+    `MAX(${ranks.clinvar}) AS clinvar_rank`,
+    ...NUMERIC_FACTS.map(
+      (fact) => `${fact.keep === 'min' ? 'MIN' : 'MAX'}(${alias}.${fact.name}) AS ${fact.name}`
+    )
+  ].join(',\n           ')
+}
+
+/** The same aggregates over rows `alias` that are themselves such aggregates. */
+function mergedAggregates(alias: string): string {
+  return [
+    `MAX(${alias}.transcript_key COLLATE "C") AS transcript_key`,
+    `MAX(${alias}.clinvar_key COLLATE "C") AS clinvar_key`,
+    `MAX(${alias}.clinvar_rank) AS clinvar_rank`,
+    ...NUMERIC_FACTS.map(
+      (fact) => `${fact.keep === 'min' ? 'MIN' : 'MAX'}(${alias}.${fact.name}) AS ${fact.name}`
+    )
+  ].join(',\n               ')
+}
+
+/** Every annotation column of the summary, decoded from an aggregated row `alias`. */
+function decodedSummaryColumns(alias: string): string {
+  const key = `${alias}.transcript_key`
+  return [
+    ...TRANSCRIPT_COLUMNS.map(
+      (column, index) =>
+        `CASE WHEN ${key}[${2 + 2 * index}] = '1' THEN ${key}[${3 + 2 * index}] END AS ${column}`
+    ),
+    `(ascii(${key}[1]) - 64)::smallint AS impact_rank`,
+    `substr(${alias}.clinvar_key, 2) AS clinvar`,
+    `${alias}.clinvar_rank::smallint AS clinvar_rank`,
+    ...NUMERIC_FACTS.map((fact) => `${alias}.${fact.name}`)
+  ].join(',\n           ')
+}
+
 /**
  * CTEs ending in `per_case`: one case's contribution per summary key, i.e. its
  * most severe transcript row, its variant-level facts and its genotype
  * (`$1 = caseId`).
  */
 export function caseContributionCte(tbl: Tbl, includeProvisional = false): string {
-  const ranks = carrierRanks('v', tbl)
   return `
-  WITH ranked AS (
+  WITH grouped AS (
     SELECT ${keyList('v').replace('v.genome_build', 'c.genome_build')},
-           ${summaryColumnsOverWindow('v', 'key_rows', 'postgres', ranks)},
-           MAX(v.gt_num) OVER key_rows AS gt_num,
-           ROW_NUMBER() OVER (key_rows ORDER BY ${transcriptOrderBy('v', 'postgres', ranks)}) AS rn
+           ${carrierAggregates('v', carrierRanks('v', tbl))},
+           MAX(v.gt_num) AS gt_num
     FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
     JOIN ${tbl(includeProvisional ? 'cases_all' : 'cases')} c ON c.id = v.case_id
     WHERE v.case_id = $1
-    WINDOW key_rows AS (PARTITION BY ${KEY_PARTITION('v', 'c')})
+    GROUP BY ${keyList('v').replace('v.genome_build', 'c.genome_build')}
   ),
   per_case AS (
-    SELECT ${KEY.join(', ')},
-           ${REPRESENTATIVE_COLUMNS.join(', ')},
+    SELECT ${keyList('g')},
+           ${decodedSummaryColumns('g')},
            1 AS carrier_delta,
-           CASE WHEN gt_num IN ${HET} THEN 1 ELSE 0 END AS het_delta,
-           CASE WHEN gt_num IN ${HOM} THEN 1 ELSE 0 END AS hom_delta
-    FROM ranked
-    WHERE rn = 1
+           CASE WHEN g.gt_num IN ${HET} THEN 1 ELSE 0 END AS het_delta,
+           CASE WHEN g.gt_num IN ${HOM} THEN 1 ELSE 0 END AS hom_delta
+    FROM grouped g
   )`
 }
 
@@ -110,30 +171,32 @@ export function caseContributionCte(tbl: Tbl, includeProvisional = false): strin
  * it has there.
  */
 export function summaryRowsCte(tbl: Tbl, variantFilter = ''): string {
-  const ranks = carrierRanks('v', tbl)
+  const caseKey = `${keyList('v').replace('v.genome_build', 'c.genome_build')}, v.case_id`
   return `
       WITH case_rows AS (
-        SELECT ${keyList('v').replace('v.genome_build', 'c.genome_build')}, v.case_id,
-               ${summaryColumnsOverWindow('v', 'case_key', 'postgres', ranks)},
-               MAX(v.gt_num) OVER case_key AS gt_num,
-               ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'postgres', ranks)}) AS case_rn
+        SELECT ${caseKey},
+               ${carrierAggregates('v', carrierRanks('v', tbl))},
+               MAX(v.gt_num) AS gt_num
         FROM ${tbl('variants')} v
         JOIN ${tbl('cases')} c ON c.id = v.case_id
         ${variantFilter === '' ? '' : `WHERE ${variantFilter}`}
-        WINDOW case_key AS (PARTITION BY ${KEY_PARTITION('v', 'c')}, v.case_id)
+        GROUP BY ${caseKey}
       ),
       key_rows AS (
         SELECT ${keyList('d')},
-               ${summaryColumnsOverWindow('d', 'summary_key', 'postgres')},
-               COUNT(*) OVER summary_key AS carrier_count,
-               SUM(CASE WHEN d.gt_num IN ${HET} THEN 1 ELSE 0 END) OVER summary_key AS het_count,
-               SUM(CASE WHEN d.gt_num IN ${HOM} THEN 1 ELSE 0 END) OVER summary_key AS hom_count,
-               ROW_NUMBER() OVER (summary_key ORDER BY ${transcriptOrderBy('d', 'postgres')}) AS key_rn
+               ${mergedAggregates('d')},
+               COUNT(*) AS carrier_count,
+               SUM(CASE WHEN d.gt_num IN ${HET} THEN 1 ELSE 0 END) AS het_count,
+               SUM(CASE WHEN d.gt_num IN ${HOM} THEN 1 ELSE 0 END) AS hom_count
         FROM case_rows d
-        WHERE d.case_rn = 1
-        WINDOW summary_key AS (PARTITION BY ${KEY_PARTITION('d', 'd')})
+        GROUP BY ${keyList('d')}
       ),
-      agg AS (SELECT * FROM key_rows WHERE key_rn = 1)`
+      agg AS (
+        SELECT ${keyList('k')},
+               ${decodedSummaryColumns('k')},
+               k.carrier_count, k.het_count, k.hom_count
+        FROM key_rows k
+      )`
 }
 
 /**
