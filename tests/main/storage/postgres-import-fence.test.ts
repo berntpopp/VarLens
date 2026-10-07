@@ -137,7 +137,7 @@ describe('withExclusiveImportFence', () => {
       "SELECT set_config('lock_timeout', $1, true)",
       "SELECT pg_advisory_lock(hashtext('varlens-import-fence'), n.oid::int4) AS locked FROM pg_namespace n WHERE n.nspname = $1",
       'COMMIT',
-      `INSERT INTO "ws"."database_settings" AS s (key, value) VALUES ('import_generation', '1') ON CONFLICT (key) DO UPDATE SET value = (s.value::bigint + 1)::text RETURNING value AS generation`,
+      `INSERT INTO "ws"."database_settings" AS s (key, value) VALUES ('import_generation', '1') ON CONFLICT (key) DO UPDATE SET value = (s.value::bigint + 1)::text WHERE s.value ~ '^[0-9]{1,15}$' RETURNING value AS generation`,
       "SELECT pg_advisory_unlock(hashtext('varlens-import-fence'), n.oid::int4) AS locked FROM pg_namespace n WHERE n.nspname = $1"
     ])
     expect(client.query.mock.calls[1][1]).toEqual(['30000ms'])
@@ -227,6 +227,36 @@ describe('withExclusiveImportFence', () => {
     expect(texts.some((text) => text.includes('ON CONFLICT (key)'))).toBe(false)
     expect(texts.filter((text) => text.includes('pg_terminate_backend'))).toHaveLength(1)
     expect(texts.some((text) => text.includes('pg_advisory_unlock'))).toBe(false)
+  })
+})
+
+describe('import generation value', () => {
+  it('advances only a numeric value; the statement cannot fail on a damaged one', async () => {
+    const { client, texts } = recordingClient(healthyFence(4))
+
+    await withExclusiveImportFence(client, 'ws', async () => undefined)
+
+    const advance = texts.find((text) => text.includes('ON CONFLICT (key)')) ?? ''
+    expect(advance).toContain("WHERE s.value ~ '^[0-9]{1,15}$'")
+  })
+
+  it('fails recovery with a typed, actionable error when the stored value is not a number', async () => {
+    // The guarded statement changes no row and returns none.
+    const { client, texts } = recordingClient((text) =>
+      text.includes('ON CONFLICT (key)') ? { rows: [] } : healthyFence(4)(text, undefined)
+    )
+    const operation = vi.fn()
+
+    await expect(withExclusiveImportFence(client, 'ws', operation)).rejects.toMatchObject({
+      name: 'ImportGenerationInvalidError',
+      code: 'CONFLICT',
+      userMessage: expect.stringMatching(/import_generation.*database_settings/)
+    })
+
+    expect(operation).not.toHaveBeenCalled()
+    // Nothing is left held on the connection.
+    const lockAt = texts.findIndex((text) => text.includes('pg_advisory_lock('))
+    if (lockAt !== -1) expect(texts.at(-1)).toContain('pg_advisory_unlock')
   })
 })
 

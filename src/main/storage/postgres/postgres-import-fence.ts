@@ -76,6 +76,28 @@ export const IMPORT_FENCE_BUSY_MESSAGE =
 const SUPERSEDED_USER_MESSAGE =
   'This import was replaced by a newer import operation. Nothing from it was kept.'
 
+/**
+ * The stored import generation is not a number (it was edited by hand).
+ * Recovery fails instead of repairing it: a new value would have to differ
+ * from the generation of every worker that is still alive, and that cannot
+ * be known once the value is lost — a wrong guess would re-admit a
+ * superseded worker. Until an administrator sets it, no import runs and no
+ * worker transaction is accepted; nothing else in the workspace is affected.
+ */
+export class ImportGenerationInvalidError extends AppError {
+  constructor(schema: string) {
+    super(
+      ErrorCode.CONFLICT,
+      `Import generation of ${schema} is not a number`,
+      'Imports are blocked: the setting "import_generation" in this workspace\'s ' +
+        'database_settings table is not a number. While no import is running, an ' +
+        'administrator must set it to a number higher than any value it had before ' +
+        '(for example the current Unix time).'
+    )
+    this.name = 'ImportGenerationInvalidError'
+  }
+}
+
 /** A worker transaction was refused: its operation is no longer the current one. */
 export class ImportSupersededError extends AppError {
   constructor(message: string) {
@@ -147,17 +169,23 @@ export async function readImportGeneration(client: Queryable, schema: string): P
   return (await readGenerationAndIsolation(client, schema)).generation
 }
 
-/** Recovery only, under the exclusive fence: start the next generation. */
+/**
+ * Recovery only, under the exclusive fence: start the next generation. The
+ * update is guarded, so a damaged value changes no row (and raises nothing
+ * inside PostgreSQL); that case is reported as
+ * {@link ImportGenerationInvalidError}.
+ */
 async function advanceImportGeneration(client: Queryable, schema: string): Promise<number> {
   const result = await client.query(
     `INSERT INTO ${settingsTable(schema)} AS s (key, value) VALUES ('${GENERATION_KEY}', '1')
      ON CONFLICT (key) DO UPDATE SET value = (s.value::bigint + 1)::text
+       WHERE s.value ~ '^[0-9]{1,15}$'
      RETURNING value AS generation`
   )
   const generation = toGeneration(
     (result.rows[0] as { generation?: unknown } | undefined)?.generation
   )
-  if (Number.isNaN(generation)) throw new Error('Could not advance the import generation')
+  if (Number.isNaN(generation)) throw new ImportGenerationInvalidError(schema)
   return generation
 }
 

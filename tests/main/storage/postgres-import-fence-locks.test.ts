@@ -292,6 +292,32 @@ describe.skipIf(!RUN)('import recovery fence — locks on a real instance', () =
     await holder.query('COMMIT')
   }, 60_000)
 
+  it('a damaged generation value fails recovery with a typed error and does not poison the session', async () => {
+    const repo = new PostgresVcfImportRepository(schema)
+    const owner = await connect()
+    const generation = await repo.recoverInterruptedImports(owner as never)
+    await probe.query(
+      `UPDATE "${schema}"."database_settings" SET value = 'not-a-number' WHERE key = 'import_generation'`
+    )
+    try {
+      await expect(repo.recoverInterruptedImports(owner as never)).rejects.toMatchObject({
+        name: 'ImportGenerationInvalidError',
+        code: 'CONFLICT'
+      })
+      // No worker can run on a generation nobody can read.
+      await expect(
+        beginFencedImportTransaction(owner, { schema, generation })
+      ).rejects.toMatchObject(SUPERSEDED)
+    } finally {
+      await probe.query(
+        `UPDATE "${schema}"."database_settings" SET value = $1 WHERE key = 'import_generation'`,
+        [String(generation)]
+      )
+    }
+    // Repaired by hand: the same connection recovers again.
+    expect(await repo.recoverInterruptedImports(owner as never)).toBe(generation + 1)
+  }, 60_000)
+
   it('schedule 6: no connection keeps the session-level fence after recovery, whether it succeeds or fails', async () => {
     const repo = new PostgresVcfImportRepository(schema)
     const pool = new Pool({ connectionString: PG_URL, max: 1 })
