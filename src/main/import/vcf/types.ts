@@ -115,6 +115,11 @@ export interface AnnotationResult {
   gnomadAf: number | null
   cadd: number | null
   clinvar: string | null
+  /**
+   * Raw VEP CSQ `CLIN_SIG` of the selected transcript. Fallback source for
+   * `clinvar`; the mapper gates it on allele specificity (see vep-clin-sig.ts).
+   */
+  vepClinSig?: string | null
 
   /** All transcripts for variant_transcripts table */
   transcripts: TranscriptInsertRow[]

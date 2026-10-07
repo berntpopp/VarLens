@@ -100,7 +100,7 @@ export function useFilterCore() {
       })
     }
     if (funcs.value.length > 0) {
-      list.push({ id: 'funcs', label: 'Function', value: `${funcs.value.length} selected` })
+      list.push({ id: 'funcs', label: 'Consequence', value: `${funcs.value.length} selected` })
     }
     if (clinvars.value.length > 0) {
       list.push({ id: 'clinvars', label: 'ClinVar', value: `${clinvars.value.length} selected` })

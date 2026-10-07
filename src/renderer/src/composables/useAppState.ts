@@ -70,7 +70,7 @@ export interface AppStateReturn {
   clearSelectedCase: () => void
   resetCaseFilters: () => void
   resetCaseContext: () => void
-  resetForDatabaseSwitch: () => void
+  resetForDatabaseSwitch: (options?: { keepView?: boolean }) => void
   returnToCaseHome: () => void
   selectCase: (input: SelectedCaseInput) => void
 
@@ -204,11 +204,16 @@ export function createAppState(): AppStateReturn {
     totalCount.value = 0
   }
 
-  function resetForDatabaseSwitch(): void {
+  /**
+   * `keepView` leaves the active view alone. It is for the first time the
+   * database path becomes known after startup, which is not a switch: forcing
+   * the case tab there turned a direct load of `/cohort` into `/case`.
+   */
+  function resetForDatabaseSwitch(options: { keepView?: boolean } = {}): void {
     void invalidateServerData('database-switch')
     incrementDataGeneration()
     resetCaseContext()
-    setActiveTab('case')
+    if (options.keepView !== true) setActiveTab('case')
     panelOpen.value = false
     selectedPanelVariant.value = null
   }

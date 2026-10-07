@@ -17,8 +17,8 @@ The table includes the following columns by default:
 | GT | Genotype (0/1 het, 1/1 hom) |
 | Gene | Gene symbol |
 | OMIM | OMIM disease number |
-| Func | Functional class (exonic, splicing, intronic, etc.) |
-| Consequence | Variant consequence with color coding |
+| Consequence | Sequence Ontology consequence term (`missense_variant`, `stop_gained`, …); for JSON imports the functional class (exonic, splicing, intronic, etc.) |
+| Impact | Impact level (HIGH, MODERATE, LOW, MODIFIER) with color coding |
 | Transcript | Selected transcript ID |
 | cDNA | HGVS coding DNA change |
 | AA Change | HGVS protein change |

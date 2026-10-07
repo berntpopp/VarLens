@@ -98,7 +98,7 @@ const headers = computed(() => {
     { title: 'Source', key: 'source', sortable: false, width: '90px' },
     { title: 'Transcript', key: 'transcript_id', sortable: false },
     { title: 'Gene', key: 'gene_symbol', sortable: false },
-    { title: 'Consequence', key: 'consequence', sortable: false },
+    { title: 'Impact', key: 'consequence', sortable: false },
     { title: 'cDNA', key: 'cdna', sortable: false },
     { title: 'Protein', key: 'aa_change', sortable: false },
     { title: 'Status', key: 'status', sortable: false, width: '220px' }

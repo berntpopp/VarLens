@@ -39,7 +39,7 @@ export const cnvHeaders: ColumnDef[] = [
     align: 'end',
     value: (item) => (item as { _cnv_ho_alt?: number | null })._cnv_ho_alt ?? null
   },
-  { title: 'Consequence', key: 'consequence', sortable: true },
+  { title: 'Impact', key: 'consequence', sortable: true },
   { title: 'GT', key: 'gt_num', sortable: true },
   {
     title: 'CN Quality',

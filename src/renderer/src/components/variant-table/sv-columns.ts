@@ -21,7 +21,7 @@ export const svHeaders: ColumnDef[] = [
   { title: 'SV Type', key: 'sv_type', sortable: true },
   { title: 'Length', key: 'sv_length', sortable: true, align: 'end' },
   { title: 'Gene', key: 'gene_symbol', sortable: true },
-  { title: 'Consequence', key: 'consequence', sortable: true },
+  { title: 'Impact', key: 'consequence', sortable: true },
   {
     title: 'Support',
     key: 'sv.support',

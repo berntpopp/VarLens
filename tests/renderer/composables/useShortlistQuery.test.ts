@@ -29,7 +29,7 @@ let mockVisiblePresets: Ref<FilterPreset[]>
 const mockLoadPresets = vi.fn().mockResolvedValue(undefined)
 vi.mock('../../../src/renderer/src/composables/useFilterPresetStore', () => ({
   useFilterPresetStore: () => ({
-    visiblePresets: mockVisiblePresets,
+    visibleShortlistPresets: mockVisiblePresets,
     loadPresets: mockLoadPresets
   })
 }))

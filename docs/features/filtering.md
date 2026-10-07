@@ -69,7 +69,7 @@ Each column header has a filter icon. Click it to open a type-aware filter popup
 - Toggle "Include missing values" for NULL-inclusive behavior
 - The data range in the current case is shown at the bottom
 
-### Categorical Columns (Consequence, ClinVar, Function)
+### Categorical Columns (Impact, ClinVar, Consequence)
 
 ![Categorical per-column filter with checkboxes](/screenshots/filter-column-categorical.png)
 

@@ -246,6 +246,7 @@ function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
     gnomadAf: gnomadAfStr != null && gnomadAfStr !== '' ? parseFloat(gnomadAfStr) : null,
     cadd: caddStr != null && caddStr !== '' ? parseFloat(caddStr) : null,
     clinvar: clinvarStr ?? null,
+    vepClinSig: best?.fields.get('CLIN_SIG') ?? null,
     transcripts
   }
 }
