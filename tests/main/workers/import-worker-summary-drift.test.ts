@@ -275,6 +275,71 @@ describe('import worker: per-file cohort summary upkeep', () => {
     expect(summaryMeta(db, 'is_stale')).toBe('0')
   })
 
+  it('stays exact when a transcript switch lands between imports (#461)', async () => {
+    await seedAnnotatedCohort()
+    await runSession([request('S1')])
+
+    // pos 100 is carried by S0 (AAA), OLD (AAA) and S1 (BBB): move S1 off the
+    // gene maximum, then S0 above it, through the app's own write path.
+    const service = new DatabaseService(dbPath)
+    try {
+      const variantAt100 = (caseName: string): number =>
+        (
+          db
+            .prepare(
+              `SELECT v.id FROM variants v JOIN cases c ON c.id = v.case_id
+               WHERE c.name = ? AND v.pos = 100`
+            )
+            .get(caseName) as { id: number }
+        ).id
+      const transcript = (id: string, gene: string) => ({
+        transcript_id: id,
+        gene_symbol: gene,
+        consequence: 'HIGH',
+        func: 'stop_gained',
+        cdna: `c.${id}`,
+        aa_change: null,
+        hpo_sim_score: null,
+        moi: null,
+        is_selected: 0
+      })
+      service.transcripts.insertTranscriptAndSwitch(variantAt100('S1'), transcript('NM_1', 'AAB'))
+      expect(snapshotSummary(db)).toEqual(referenceSummary(db))
+      service.transcripts.insertTranscriptAndSwitch(variantAt100('S0'), transcript('NM_2', 'ZZZ'))
+      expect(snapshotSummary(db)).toEqual(referenceSummary(db))
+    } finally {
+      service.close()
+    }
+    const row = db
+      .prepare(
+        `SELECT gene_symbol, transcript, carrier_count, has_star, acmg_best
+         FROM cohort_variant_summary WHERE pos = 100`
+      )
+      .get()
+    expect(row).toEqual({
+      gene_symbol: 'ZZZ',
+      transcript: 'NM_2',
+      carrier_count: 3,
+      has_star: 1,
+      acmg_best: 'Pathogenic'
+    })
+    expect(
+      db.prepare("SELECT 1 FROM gene_burden_summary WHERE gene_symbol = 'BBB'").get()
+    ).toBeUndefined()
+
+    // The next files merge onto the switched annotation, and an overwrite of
+    // the case holding the new maximum falls back to the remaining carriers.
+    await runSession([
+      request('S2'),
+      request('OLD_V2', 'S0', { isDuplicate: true, duplicateStrategy: 'overwrite' })
+    ])
+    const summary = snapshotSummary(db)
+    expect(summary).toEqual(referenceSummary(db))
+    expect(summary.variants).toContainEqual(
+      expect.objectContaining({ pos: 100, gene_symbol: 'AAB', carrier_count: 4 })
+    )
+  })
+
   it('rebuilds a stale summary once at session start, then continues incrementally', async () => {
     await runSession([request('S0')])
     db.exec('DELETE FROM cohort_variant_summary; DELETE FROM gene_burden_summary;')
