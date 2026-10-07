@@ -10,10 +10,15 @@ import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/s
  *
  * Mirrors `PostgresCohortRepository.buildQueryParts`, but maps every predicate
  * to alias `cvs` for the materialised `cohort_variant_summary` table. Because
- * carrier_count / het_count / hom_count / cohort_frequency are stored columns
- * on `cohort_variant_summary`, the predicates that the live builder pushes into
+ * carrier_count / het_count / hom_count are stored columns on
+ * `cohort_variant_summary`, the predicates that the live builder pushes into
  * `HAVING` (over a `GROUP BY`) become plain `WHERE` predicates here — there is
  * no grouping in the summary path.
+ *
+ * Cohort frequency is NOT stored: it is carriers over the number of visible
+ * cases of the row's genome build, derived at read time (see
+ * `SUMMARY_FREQUENCY_SQL`). Storing it meant rewriting every summary row on
+ * every import and every case deletion.
  *
  * Extension-table predicates (any `variant_extensions` column, keyed `sv.*`,
  * `cnv.*`, `str.*`) are not materialised into the summary in Sprint A, so the
@@ -28,6 +33,22 @@ export interface SummaryQueryParts {
   values: unknown[]
   /** True when `orderBy` is the keyset order (default carrier-count sort). */
   keyset: boolean
+  /** True when a WHERE predicate uses the frequency, so the count needs the build totals. */
+  needsBuildTotals: boolean
+}
+
+/** Cohort frequency of a summary row; needs `summaryBuildTotalsJoin` in the FROM clause. */
+export const SUMMARY_FREQUENCY_SQL = '(cvs.carrier_count::double precision / NULLIF(bt.total, 0))'
+
+/**
+ * Join giving every summary row the number of visible cases of its genome
+ * build as `bt.total`. `casesRelation` is the schema-qualified `cases` view,
+ * which hides cases that are still importing or being deleted.
+ */
+export function summaryBuildTotalsJoin(casesRelation: string): string {
+  return `LEFT JOIN (
+        SELECT genome_build, COUNT(*) AS total FROM ${casesRelation} GROUP BY genome_build
+      ) bt ON bt.genome_build = cvs.genome_build`
 }
 
 /** `WHERE ...` clause (or empty string) for a summary-page query. */
@@ -36,9 +57,14 @@ function summaryWhereClause(whereParts: string[]): string {
 }
 
 /** COUNT(*) SQL for the materialised cohort_variant_summary page. */
-export function buildSummaryCountSql(qualifiedTable: string, whereParts: string[]): string {
+export function buildSummaryCountSql(
+  qualifiedTable: string,
+  whereParts: string[],
+  buildTotalsJoin = ''
+): string {
   return `SELECT COUNT(*)::bigint AS total_count
       FROM ${qualifiedTable} cvs
+      ${buildTotalsJoin}
       ${summaryWhereClause(whereParts)}`
 }
 
@@ -55,7 +81,8 @@ export function buildSummaryPageSql(
   orderBy: string,
   totalCases: number,
   limitParamIndex: number,
-  offsetParamIndex: number
+  offsetParamIndex: number,
+  buildTotalsJoin: string
 ): string {
   return `SELECT
       cvs.chr,
@@ -67,7 +94,7 @@ export function buildSummaryPageSql(
       cvs.aa_change,
       cvs.carrier_count,
       ${totalCases}::bigint AS total_cases,
-      cvs.cohort_frequency,
+      ${SUMMARY_FREQUENCY_SQL} AS cohort_frequency,
       cvs.het_count,
       cvs.hom_count,
       cvs.variant_key,
@@ -81,6 +108,7 @@ export function buildSummaryPageSql(
       cvs.variant_type AS _keyset_variant_type,
       cvs.genome_build AS _keyset_genome_build
     FROM ${qualifiedTable} cvs
+    ${buildTotalsJoin}
     ${summaryWhereClause(whereParts)}
     ${orderBy}
     LIMIT $${limitParamIndex}
@@ -97,7 +125,8 @@ export interface BuildSummaryResult {
 /**
  * Sort key → direct `cvs` column. Aggregate sorts in the live builder
  * (e.g. `ORDER BY carrier_count`) become direct column sorts on `cvs`.
- * `cadd_phred` maps to the stored `cadd` column.
+ * `cadd_phred` maps to the stored `cadd` column; `cohort_frequency` is the
+ * read-time expression.
  */
 const SUMMARY_SORT_COLUMNS: Record<string, string> = {
   chr: 'cvs.chr',
@@ -106,7 +135,7 @@ const SUMMARY_SORT_COLUMNS: Record<string, string> = {
   cdna: 'cvs.cdna',
   aa_change: 'cvs.aa_change',
   carrier_count: 'cvs.carrier_count',
-  cohort_frequency: 'cvs.cohort_frequency',
+  cohort_frequency: SUMMARY_FREQUENCY_SQL,
   het_count: 'cvs.het_count',
   hom_count: 'cvs.hom_count',
   consequence: 'cvs.consequence',
@@ -119,9 +148,10 @@ const SUMMARY_SORT_COLUMNS: Record<string, string> = {
 
 /**
  * Column-filter key → stored `cvs` column expression. Covers the base columns
- * the live builder filters in `addColumnFilters`; aggregate columns
- * (carrier_count, cohort_frequency, het_count, hom_count) are stored columns
- * here, so they map to plain columns rather than aggregate expressions.
+ * the live builder filters in `addColumnFilters`; the counts (carrier_count,
+ * het_count, hom_count) are stored columns here, so they map to plain columns
+ * rather than aggregate expressions, and cohort_frequency to the read-time
+ * expression over them.
  */
 const SUMMARY_COLUMN_FILTER_SQL: Record<string, string> = {
   chr: 'cvs.chr',
@@ -134,7 +164,7 @@ const SUMMARY_COLUMN_FILTER_SQL: Record<string, string> = {
   cadd_phred: 'cvs.cadd',
   transcript: 'cvs.transcript',
   carrier_count: 'cvs.carrier_count',
-  cohort_frequency: 'cvs.cohort_frequency',
+  cohort_frequency: SUMMARY_FREQUENCY_SQL,
   het_count: 'cvs.het_count',
   hom_count: 'cvs.hom_count'
 }
@@ -173,7 +203,14 @@ function hasExtensionPredicate(params: CohortSearchParams): boolean {
 }
 
 function emptyParts(): SummaryQueryParts {
-  return { joins: '', whereParts: [], orderBy: '', values: [], keyset: false }
+  return {
+    joins: '',
+    whereParts: [],
+    orderBy: '',
+    values: [],
+    keyset: false,
+    needsBuildTotals: false
+  }
 }
 
 function normalizeColumnFilterValue(column: string, value: string | number): string | number {
@@ -235,7 +272,7 @@ export function buildSummaryQueryParts(
   params: CohortSearchParams,
   totalCases: number
 ): BuildSummaryResult {
-  void totalCases // cohort_frequency is a stored column; total cases is not needed here.
+  void totalCases // The frequency denominator is per genome build, joined in as `bt.total`.
 
   if (hasExtensionPredicate(params)) {
     return { parts: emptyParts(), unavailable: true, unavailableReason: 'extension_predicate' }
@@ -243,6 +280,7 @@ export function buildSummaryQueryParts(
 
   const whereParts: string[] = []
   const values: unknown[] = []
+  let needsBuildTotals = false
   const addParam = (value: unknown): string => {
     values.push(value)
     return `$${values.length}`
@@ -338,17 +376,20 @@ export function buildSummaryQueryParts(
       const expression = SUMMARY_COLUMN_FILTER_SQL[column]
       if (expression === undefined) continue
       const condition = buildColumnFilterCondition(column, expression, filter, addParam)
-      if (condition !== '') whereParts.push(condition)
+      if (condition === '') continue
+      whereParts.push(condition)
+      if (column === 'cohort_frequency') needsBuildTotals = true
     }
   }
 
-  // Aggregate predicates (HAVING → WHERE on stored columns).
-  // 0 means "no frequency filter" and rows without a stored frequency are
-  // kept — the same contract as the case view and the SQLite cohort listing.
+  // Aggregate predicates (HAVING → WHERE over stored counts).
+  // 0 means "no frequency filter" and rows without a frequency are kept — the
+  // same contract as the case view and the SQLite cohort listing.
   if (params.max_internal_af !== undefined && params.max_internal_af > 0) {
     whereParts.push(
-      `(cvs.cohort_frequency IS NULL OR cvs.cohort_frequency <= ${addParam(params.max_internal_af)})`
+      `(${SUMMARY_FREQUENCY_SQL} IS NULL OR ${SUMMARY_FREQUENCY_SQL} <= ${addParam(params.max_internal_af)})`
     )
+    needsBuildTotals = true
   }
 
   if (params.carrier_count_min !== undefined) {
@@ -362,9 +403,19 @@ export function buildSummaryQueryParts(
   const direction = params.sort_order === 'asc' ? 'asc' : 'desc'
   // Default carrier-count sort → all-ascending keyset order (idx_cvs_carrier_keyset).
   const keyset = isCohortKeysetSort(sortKey, direction)
+  // One genome build means one denominator, so the indexed carrier count
+  // orders the rows exactly as the frequency would.
+  const singleBuild = params.genome_build !== undefined && params.genome_build !== ''
+  const sortColumn =
+    sortKey === 'cohort_frequency' && singleBuild
+      ? 'cvs.carrier_count'
+      : SUMMARY_SORT_COLUMNS[sortKey]
   const orderBy = keyset
     ? cohortKeysetOrderByClause('cvs', 'postgres')
-    : cohortOrderByClause(sortKey, SUMMARY_SORT_COLUMNS[sortKey], direction, 'cvs', 'postgres')
+    : cohortOrderByClause(sortKey, sortColumn, direction, 'cvs', 'postgres')
 
-  return { parts: { joins: '', whereParts, orderBy, values, keyset }, unavailable: false }
+  return {
+    parts: { joins: '', whereParts, orderBy, values, keyset, needsBuildTotals },
+    unavailable: false
+  }
 }

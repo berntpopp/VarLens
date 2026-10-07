@@ -23,6 +23,7 @@ import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migr
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 import { rebuildVariantFrequencyForCase } from '../../../src/main/storage/postgres/PostgresJsonImportRepository'
+import { COHORT_FREQUENCY_SELECT, summaryWithFrequencyFrom } from './helpers/cohort-read-frequency'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -124,8 +125,8 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository.deleteCase — Sprint A C
       hom_count: string
       cohort_frequency: number | null
     }>(
-      `SELECT carrier_count, het_count, hom_count, cohort_frequency
-         FROM "${schema}".cohort_variant_summary WHERE chr = '1'`
+      `SELECT cvs.carrier_count, cvs.het_count, cvs.hom_count, ${COHORT_FREQUENCY_SELECT}
+         FROM ${summaryWithFrequencyFrom(schema)} WHERE cvs.chr = '1'`
     )
     expect(shared.rows).toHaveLength(1)
     expect(Number(shared.rows[0].carrier_count)).toBe(1)
@@ -183,8 +184,8 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository.deleteCase — Sprint A C
       hom_count: string
       cohort_frequency: number | null
     }>(
-      `SELECT carrier_count, het_count, hom_count, cohort_frequency
-         FROM "${schema}".cohort_variant_summary WHERE chr = '1'`
+      `SELECT cvs.carrier_count, cvs.het_count, cvs.hom_count, ${COHORT_FREQUENCY_SELECT}
+         FROM ${summaryWithFrequencyFrom(schema)} WHERE cvs.chr = '1'`
     )
     expect(after.rows).toHaveLength(1)
     expect(Number(after.rows[0].carrier_count)).toBe(1)

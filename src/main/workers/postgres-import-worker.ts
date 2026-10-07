@@ -148,34 +148,17 @@ async function updateCohortSummaryAfterImport(args: {
   client: Pick<Client, 'query'>
   schema: string
   caseId: number
-  genomeBuild: string
 }): Promise<boolean> {
-  const { client, schema, caseId, genomeBuild } = args
+  const { client, schema, caseId } = args
   const summary = new PostgresCohortSummaryRepository()
   const scoped = client as unknown as Parameters<
     PostgresCohortSummaryRepository['incrementalAdd']
   >[0]['client']
   try {
     await client.query('SAVEPOINT cohort_summary')
-    await summary.incrementalAdd({
-      schema,
-      client: scoped,
-      caseId,
-      genomeBuild,
-      includeProvisional: true
-    })
-    await summary.recomputeCohortFrequency({
-      schema,
-      client: scoped,
-      affectedBuilds: [genomeBuild],
-      includeProvisional: true
-    })
-    await summary.refreshColumnMetas({
-      schema,
-      client: scoped,
-      caseId,
-      includeProvisional: true
-    })
+    const scope = { schema, client: scoped, includeProvisional: true }
+    await profilePhase('pub-summary-add', () => summary.incrementalAdd({ ...scope, caseId }))
+    await profilePhase('pub-column-meta', () => summary.refreshColumnMetas({ ...scope, caseId }))
     await client.query('RELEASE SAVEPOINT cohort_summary')
     return true
   } catch (savepointErr) {
@@ -389,11 +372,13 @@ export async function runImport(
             [totalInserted, caseId]
           )
           if (totalInserted > 0) {
-            await rebuildVariantFrequencyForCase(
-              client as unknown as Pick<PoolClient, 'query'>,
-              start.schema,
-              caseId,
-              true
+            await profilePhase('pub-variant-frequency', () =>
+              rebuildVariantFrequencyForCase(
+                client as unknown as Pick<PoolClient, 'query'>,
+                start.schema,
+                caseId,
+                true
+              )
             )
             // C3: incremental cohort-summary update inside this txn (SAVEPOINT-
             // wrapped). On failure it rolls back only the summary savepoint
@@ -401,8 +386,7 @@ export async function runImport(
             const stillOwnsTxn = await updateCohortSummaryAfterImport({
               client,
               schema: start.schema,
-              caseId,
-              genomeBuild
+              caseId
             })
             void stillOwnsTxn
           }
@@ -415,7 +399,7 @@ export async function runImport(
           )
           throwIfCancelled()
           publicationCommitAttempted = true
-          await client.query('COMMIT')
+          await profilePhase('pub-commit', () => client.query('COMMIT'))
           beganTransaction = false
           provisionalImport = null
           publicationCommitAttempted = false
@@ -533,8 +517,7 @@ export async function runImport(
         const stillOwnsTxn = await updateCohortSummaryAfterImport({
           client,
           schema: start.schema,
-          caseId,
-          genomeBuild: start.vcfOptions?.genomeBuild ?? 'GRCh38'
+          caseId
         })
         if (stillOwnsTxn) await client.query('COMMIT')
       }
@@ -780,11 +763,13 @@ export async function runImport(
               `UPDATE ${quoteIdentifier(start.schema)}."cases_all" SET variant_count = $1 WHERE id = $2`,
               [totalVariantCount, caseId]
             )
-            await rebuildVariantFrequencyForCase(
-              client as unknown as Pick<PoolClient, 'query'>,
-              start.schema,
-              caseId,
-              true
+            await profilePhase('pub-variant-frequency', () =>
+              rebuildVariantFrequencyForCase(
+                client as unknown as Pick<PoolClient, 'query'>,
+                start.schema,
+                caseId,
+                true
+              )
             )
             // C3: incremental cohort-summary update inside this txn (SAVEPOINT-
             // wrapped). On failure it records staleness without publishing a
@@ -792,8 +777,7 @@ export async function runImport(
             const stillOwnsTxn = await updateCohortSummaryAfterImport({
               client,
               schema: start.schema,
-              caseId,
-              genomeBuild
+              caseId
             })
             void stillOwnsTxn
             throwIfCancelled()

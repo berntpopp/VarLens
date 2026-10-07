@@ -71,13 +71,14 @@ describe.skipIf(!RUN)('cohort_summary migration — Sprint A C1', () => {
     for (const expected of [
       'idx_cvs_carrier',
       'idx_cvs_filters',
-      'idx_cvs_cohort_freq',
       'idx_cvs_covering_common',
       'idx_cvs_gene_covering',
       'idx_cvs_type_build'
     ]) {
       expect(indexNames, `index ${expected} must exist`).toContain(expected)
     }
+    // 0022: cohort frequency is derived at read time, so nothing indexes it.
+    expect(indexNames).not.toContain('idx_cvs_cohort_freq')
   }, 60_000)
 
   it('seeds cohort_summary_state with is_stale=false on a fresh schema (no variants)', async () => {

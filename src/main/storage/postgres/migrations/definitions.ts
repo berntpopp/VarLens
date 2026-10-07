@@ -108,6 +108,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0021',
     name: 'cohort_keyset_index',
     fileName: '0021_cohort_keyset_index.sql'
+  },
+  {
+    version: '0022',
+    name: 'cohort_frequency_read_time',
+    fileName: '0022_cohort_frequency_read_time.sql'
   }
 ]
 

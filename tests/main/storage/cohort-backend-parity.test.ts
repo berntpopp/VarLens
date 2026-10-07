@@ -246,8 +246,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       await summaryRepo.incrementalAdd({
         schema,
         client: client as never,
-        caseId,
-        genomeBuild: fixture.genomeBuild
+        caseId
       })
       await summaryRepo.refreshColumnMetas({ schema, client: client as never, caseId })
       await client.query('COMMIT')
@@ -529,8 +528,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       await summaryRepo.incrementalAdd({
         schema,
         client: client as never,
-        caseId: spanCasePg,
-        genomeBuild: 'GRCh38'
+        caseId: spanCasePg
       })
       await client.query('COMMIT')
     })

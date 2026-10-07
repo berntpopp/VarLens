@@ -9,8 +9,10 @@
  *     per-case rows count once). has_star/has_comment/acmg_best are derived
  *     from variant_annotations + case_variant_annotations at insertion time
  *     (Pass-9 #8 — otherwise every rebuild would reset the flags to false).
- *     cohort_frequency is recomputed in-place as the final rebuild step
- *     (C2a / Pass-3 HIGH #2) via recomputeCohortFrequency().
+ *     cohort_frequency is not maintained here: readers derive it from
+ *     carrier_count and the visible cases of the row's genome build (see
+ *     postgres-cohort-summary-query.ts), so no import or deletion has to
+ *     rewrite rows it did not touch.
  *
  * Note on column names: the Postgres workflow schema names the comment columns
  * global_comment / per_case_comment and the ACMG column acmg_classification
@@ -239,14 +241,9 @@ export class PostgresCohortSummaryRepository {
           WHEN 1 THEN 'Benign'
           ELSE NULL
         END) AS acmg_best,
-        NULL AS cohort_frequency  -- overwritten by the recompute below (C2a)
+        NULL AS cohort_frequency  -- unused: frequency is derived at read time
       FROM agg a;
     `)
-
-    // C2a: recompute cohort_frequency for all builds as the final rebuild step,
-    // inside the same transaction. Mirrors SQLite's RECOMPUTE_ALL_FREQUENCIES_SQL
-    // (CohortSummaryService.rebuild). The NULL written above is overwritten here.
-    await this.recomputeCohortFrequency({ schema, client })
 
     // C1 lifecycle (Pass-7 MED #4): a completed rebuild clears the staleness
     // flags and records the rebuild time. last_rebuilt_at maps back to epoch ms
@@ -256,45 +253,6 @@ export class PostgresCohortSummaryRepository {
        SET is_stale = false, stale_reason = NULL, stale_at = NULL, last_rebuilt_at = now()
        WHERE id = 1`
     )
-  }
-
-  /**
-   * C2a (Pass-3 HIGH #2): recompute cohort_frequency = carrier_count / total
-   * cases-for-build. Mirrors SQLite's RECOMPUTE_ALL_FREQUENCIES_SQL, run in the
-   * same transaction after rebuild / incrementalAdd / incrementalRemove. When
-   * `affectedBuilds` is provided the recompute is scoped to those genome_builds
-   * (the incremental paths pass the case's build); when omitted the full table
-   * is recomputed (the rebuild path).
-   */
-  async recomputeCohortFrequency({
-    schema,
-    client,
-    affectedBuilds,
-    includeProvisional = false
-  }: ScopedClient & { affectedBuilds?: string[]; includeProvisional?: boolean }): Promise<void> {
-    const tbl = (t: string): string => `"${schema}"."${t}"`
-    // Provisional (importing) cases count toward the denominator during import
-    // publication; cases being deleted in the background never do.
-    const casesTable = includeProvisional
-      ? `(SELECT genome_build FROM ${tbl('cases_all')} WHERE import_status <> 'deleting') provisional_cases`
-      : tbl('cases')
-    if (affectedBuilds && affectedBuilds.length > 0) {
-      await client.query(
-        `UPDATE ${tbl('cohort_variant_summary')} cvs
-         SET cohort_frequency = cvs.carrier_count::float / NULLIF(c.total, 0)
-         FROM (SELECT genome_build, COUNT(*) AS total FROM ${casesTable} GROUP BY genome_build) c
-         WHERE cvs.genome_build = c.genome_build
-           AND cvs.genome_build = ANY($1::text[])`,
-        [affectedBuilds]
-      )
-    } else {
-      await client.query(
-        `UPDATE ${tbl('cohort_variant_summary')} cvs
-         SET cohort_frequency = cvs.carrier_count::float / NULLIF(c.total, 0)
-         FROM (SELECT genome_build, COUNT(*) AS total FROM ${casesTable} GROUP BY genome_build) c
-         WHERE cvs.genome_build = c.genome_build`
-      )
-    }
   }
 
   /**
@@ -308,11 +266,9 @@ export class PostgresCohortSummaryRepository {
     schema,
     client,
     caseId,
-    genomeBuild,
     includeProvisional = false
   }: ScopedClient & {
     caseId: number
-    genomeBuild?: string
     includeProvisional?: boolean
   }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
@@ -383,7 +339,7 @@ export class PostgresCohortSummaryRepository {
           WHEN 1 THEN 'Benign'
           ELSE NULL
         END) AS acmg_best,
-        NULL AS cohort_frequency  -- overwritten by the recompute below (C2a)
+        NULL AS cohort_frequency  -- unused: frequency is derived at read time
       FROM per_case pc
       ON CONFLICT (chr, pos, ref, alt, variant_type, genome_build) DO UPDATE SET
         carrier_count = cohort_variant_summary.carrier_count + EXCLUDED.carrier_count,
@@ -395,16 +351,6 @@ export class PostgresCohortSummaryRepository {
     `,
       [caseId]
     )
-
-    // C2a: recompute cohort_frequency in the same transaction, scoped to the
-    // case's genome_build when supplied by the caller (mirrors SQLite's
-    // RECOMPUTE_ALL_FREQUENCIES_SQL after INCREMENTAL_ADD_SQL).
-    await this.recomputeCohortFrequency({
-      schema,
-      client,
-      affectedBuilds: genomeBuild !== undefined ? [genomeBuild] : undefined,
-      includeProvisional
-    })
 
     // C1 lifecycle: incremental maintenance records its time but never touches
     // is_stale — the summary stays valid (Pass-7 MED #4).
@@ -423,9 +369,8 @@ export class PostgresCohortSummaryRepository {
   async incrementalRemove({
     schema,
     client,
-    caseId,
-    genomeBuild
-  }: ScopedClient & { caseId: number; genomeBuild?: string }): Promise<void> {
+    caseId
+  }: ScopedClient & { caseId: number }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
     await client.query(
@@ -445,16 +390,6 @@ export class PostgresCohortSummaryRepository {
     )
 
     await client.query(`DELETE FROM ${tbl('cohort_variant_summary')} WHERE carrier_count <= 0`)
-
-    // C2a: recompute cohort_frequency in the same transaction, scoped to the
-    // case's genome_build when supplied (mirrors SQLite's
-    // RECOMPUTE_ALL_FREQUENCIES_SQL after INCREMENTAL_REMOVE_SQL +
-    // CLEANUP_ZERO_CARRIERS_SQL).
-    await this.recomputeCohortFrequency({
-      schema,
-      client,
-      affectedBuilds: genomeBuild !== undefined ? [genomeBuild] : undefined
-    })
 
     // C1 lifecycle: incremental maintenance records its time but never touches
     // is_stale — the summary stays valid (Pass-7 MED #4).

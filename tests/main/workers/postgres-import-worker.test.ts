@@ -19,17 +19,15 @@ vi.mock('../../../src/main/storage/postgres/postgres-bulk-write', () => ({
 }))
 
 // C3: spy on the cohort summary repo so the import-wiring tests can assert the
-// post-loop SAVEPOINT block calls incrementalAdd / recomputeCohortFrequency /
+// post-loop SAVEPOINT block calls incrementalAdd /
 // refreshColumnMetas without standing up a real Postgres. Each test overrides
 // the mock implementations via the exported spies below.
 const incrementalAddSpy = vi.fn(async () => undefined)
-const recomputeCohortFrequencySpy = vi.fn(async () => undefined)
 const refreshColumnMetasSpy = vi.fn(async () => undefined)
 const markStaleSpy = vi.fn(async () => undefined)
 vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', () => ({
   PostgresCohortSummaryRepository: class {
     incrementalAdd = incrementalAddSpy
-    recomputeCohortFrequency = recomputeCohortFrequencySpy
     refreshColumnMetas = refreshColumnMetasSpy
     markStale = markStaleSpy
   }
@@ -765,7 +763,6 @@ describe('postgres-import-worker runImport', () => {
 describe('postgres-import-worker — C3 import wiring', () => {
   beforeEach(() => {
     incrementalAddSpy.mockReset().mockResolvedValue(undefined)
-    recomputeCohortFrequencySpy.mockReset().mockResolvedValue(undefined)
     refreshColumnMetasSpy.mockReset().mockResolvedValue(undefined)
     markStaleSpy.mockReset().mockResolvedValue(undefined)
   })
@@ -872,11 +869,11 @@ describe('postgres-import-worker — C3 import wiring', () => {
 
     expect(incrementalAddSpy).toHaveBeenCalledTimes(1)
     expect(incrementalAddSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ schema: 'public', caseId: 13, genomeBuild: 'GRCh38' })
+      expect.objectContaining({ schema: 'public', caseId: 13 })
     )
-    expect(recomputeCohortFrequencySpy).toHaveBeenCalledWith(
-      expect.objectContaining({ schema: 'public', affectedBuilds: ['GRCh38'] })
-    )
+    // Publication touches only this case's rows: cohort frequency is derived
+    // at read time, so no statement rewrites the rest of the summary.
+    expect(queries.some((q) => q.includes('cohort_frequency ='))).toBe(false)
     expect(refreshColumnMetasSpy).toHaveBeenCalledWith(
       expect.objectContaining({ schema: 'public', caseId: 13 })
     )

@@ -21,6 +21,7 @@ import { quoteIdentifier } from './identifiers'
 import { runNamed, runNamedDynamic } from './named-query'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { querySummaryPage } from './postgres-cohort-summary-page'
+import { SUMMARY_FREQUENCY_SQL, summaryBuildTotalsJoin } from './postgres-cohort-summary-query'
 import {
   PostgresPanelIntervalResolver,
   type PanelIntervalLookup
@@ -82,8 +83,9 @@ const COLUMN_META_KEYS = [
 ]
 
 /**
- * Filter-UI key → stored column on `cohort_variant_summary`. Every key is a
- * physical column on the summary table; `cadd_phred` is the only rename
+ * Filter-UI key → expression over `cohort_variant_summary`. Every key is a
+ * physical column on the summary table except `cohort_frequency`, which is
+ * derived from carrier_count at read time; `cadd_phred` is the only rename
  * (stored as `cadd`). Used by the cohort-view getColumnMeta read (C4 Step 2) so
  * COUNT(DISTINCT)/MIN/MAX run against the already-deduped summary rows rather
  * than a live GROUP BY (Pass-3 HIGH #3 — SUM across cohort_column_meta would
@@ -94,7 +96,7 @@ const COLUMN_META_SUMMARY_COLUMNS: Record<string, string> = {
   pos: 'pos',
   gene_symbol: 'gene_symbol',
   carrier_count: 'carrier_count',
-  cohort_frequency: 'cohort_frequency',
+  cohort_frequency: SUMMARY_FREQUENCY_SQL,
   het_count: 'het_count',
   hom_count: 'hom_count',
   consequence: 'consequence',
@@ -214,6 +216,11 @@ export class PostgresCohortRepository {
     return `${this.schemaName}."${table}"`
   }
 
+  /** The summary table as `cvs`, with the per-build case totals the frequency needs. */
+  private summaryWithBuildTotals(): string {
+    return `${this.tbl('cohort_variant_summary')} cvs ${summaryBuildTotalsJoin(this.tbl('cases'))}`
+  }
+
   async queryVariants(params: CohortSearchParams): Promise<CohortPaginatedResult> {
     const resolvedParams = await this.panelIntervals.resolveCohortParams(params)
     this.assertSupportedColumnFilters(resolvedParams)
@@ -259,6 +266,7 @@ export class PostgresCohortRepository {
         pool: this.pool as Pool,
         schema: this.schema,
         table: this.tbl('cohort_variant_summary'),
+        casesTable: this.tbl('cases'),
         toVariant: (row) => this.toCohortVariant(row, totalCases)
       },
       params,
@@ -448,8 +456,8 @@ export class PostgresCohortRepository {
       return parts
     })
     const aggregateResult = await runNamed<Record<string, unknown>>(this.pool as Pool, {
-      name: 'cohort:column_meta_agg:v1',
-      text: `SELECT ${selectParts.join(', ')} FROM ${this.tbl('cohort_variant_summary')}`,
+      name: 'cohort:column_meta_agg:v2',
+      text: `SELECT ${selectParts.join(', ')} FROM ${this.summaryWithBuildTotals()}`,
       values: [],
       schema: this.schema
     })
@@ -481,7 +489,7 @@ export class PostgresCohortRepository {
         .map(
           ({ key, sqlColumn }) =>
             `SELECT '${key}' AS col_key, ${sqlColumn}::text AS value
-             FROM ${this.tbl('cohort_variant_summary')}
+             FROM ${this.summaryWithBuildTotals()}
              WHERE ${sqlColumn} IS NOT NULL
              GROUP BY ${sqlColumn}`
         )

@@ -25,7 +25,6 @@ function fakeLifecycle(overrides: Partial<CaseDeletionLifecycle> = {}) {
     completeHiddenDeletion: vi.fn(
       async (caseId: number, _hidden: unknown, options: CaseDeletionOptions = {}) => {
         calls.push(`purge:${caseId}`)
-        options.onProgress?.({ phase: 'recomputing', done: 0, total: null })
         options.onProgress?.({ phase: 'purging', done: 10, total: 10 })
         options.onProgress?.({ phase: 'finalizing', done: 10, total: 10 })
       }
@@ -71,9 +70,9 @@ describe('PostgresCaseDeleteJobs (shared case_delete contract)', () => {
     const owned = changes.filter((c) => c.owner === 42)
     expect(owned.length).toBeGreaterThan(0)
     const phases = owned.map((c) => c.job.progress?.message).filter(Boolean)
-    expect(new Set(phases)).toEqual(
-      new Set(['deleting', 'rebuilding-cohort-summary', 'finalizing'])
-    )
+    // PostgreSQL deletion has no cohort-summary rebuild phase: the summary is
+    // decremented in the hide step and frequency is derived at read time.
+    expect(new Set(phases)).toEqual(new Set(['deleting', 'finalizing']))
     expect(owned.at(-1)?.job.status).toBe('completed')
   })
 

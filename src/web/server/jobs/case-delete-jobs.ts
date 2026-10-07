@@ -69,7 +69,6 @@ class CaseDeleteCancelledError extends Error {
 
 const PHASE_MAP: Record<CaseDeletionPhase, CaseDeletePhase> = {
   hiding: 'deleting',
-  recomputing: 'rebuilding-cohort-summary',
   purging: 'deleting',
   finalizing: 'finalizing'
 }

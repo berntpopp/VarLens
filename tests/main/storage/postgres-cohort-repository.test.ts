@@ -128,7 +128,9 @@ describe('PostgresCohortRepository', () => {
     const dataParams = callParams(query.mock.calls[2])
 
     expect(dataSql).toContain('FROM "tenant""schema"."cohort_variant_summary" cvs')
-    expect(dataSql).not.toContain('GROUP BY')
+    // No per-variant grouping: the only GROUP BY is the tiny cases-per-build
+    // subquery that supplies the frequency denominator.
+    expect(dataSql).not.toMatch(/GROUP BY (?!genome_build)/)
     expect(dataSql).not.toContain('HAVING')
     expect(dataSql).toContain('cvs.carrier_count')
     expect(countSql).toContain('SELECT COUNT(*)::bigint AS total_count')
@@ -316,7 +318,8 @@ describe('PostgresCohortRepository', () => {
     // Aggregate columns are stored columns on the summary table — plain
     // comparisons, no COUNT(DISTINCT)/HAVING.
     expect(dataSql).toContain('cvs.carrier_count >= $')
-    expect(dataSql).toContain('cvs.cohort_frequency <= $')
+    expect(dataSql).toContain('(cvs.carrier_count::double precision / NULLIF(bt.total, 0)) <= $')
+    expect(dataSql).not.toContain('cvs.cohort_frequency')
     expect(dataSql).toContain('cvs.cadd > $')
     expect(dataSql).toContain('cvs.gnomad_af <= $')
     expect(dataSql).toContain('cvs.clinvar IN ($')
@@ -436,9 +439,10 @@ describe('PostgresCohortRepository', () => {
     expect(normalizeSql(query.mock.calls[0][0] as string)).toContain('WHERE genome_build = $1')
     expect(query.mock.calls[0][1]).toEqual(['GRCh38'])
     const dataSql = normalizeSql(callText(query.mock.calls[2]))
-    // cohort_frequency is a stored column on the summary table.
+    // cohort_frequency is carriers over the visible cases of the row's build.
     expect(dataSql).toContain('cvs.genome_build = $')
-    expect(dataSql).toContain('cvs.cohort_frequency <= $')
+    expect(dataSql).toContain('(cvs.carrier_count::double precision / NULLIF(bt.total, 0)) <= $')
+    expect(dataSql).toContain('FROM "public"."cases" GROUP BY genome_build')
   })
 
   it('reads C5a-maintained annotation flags from the summary table', async () => {
