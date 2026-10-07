@@ -27,7 +27,7 @@ import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
 import { DROP_FTS_TRIGGERS } from './worker-db'
 export { DROP_FTS_TRIGGERS }
 
-export { DROP_INDEXES, RECREATE_INDEXES } from './import-index-sql'
+export { DROP_INDEXES, RECREATE_INDEXES, keepsIndexesForSession } from './import-index-sql'
 
 import { createMapperPipeline } from './import-mapper-pipeline'
 export { createMapperPipeline, parseHeader } from './import-mapper-pipeline'

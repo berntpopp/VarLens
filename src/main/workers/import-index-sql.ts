@@ -32,3 +32,18 @@ export const RECREATE_INDEXES = `
   CREATE INDEX IF NOT EXISTS idx_variants_gene_notnull ON variants(gene_symbol) WHERE gene_symbol IS NOT NULL;
   ${chrRank.CREATE_CHR_RANK_VARIANTS_INDEX_SQL};
 `
+
+/**
+ * Dropping the indexes above and rebuilding them at the end pays off for a
+ * bulk load, not for a few files into a large database: the rebuild reads
+ * every variant there is. Measured, files into 20 exomes (1.2M variants):
+ * 1 file 10.8 s dropped / 6.2 s kept, 5 files 25.8 / 19.2 s, 10 files
+ * 34.3 / 34.7 s (break-even at +50 %); with nothing to import at all into
+ * 100 exomes, 52.9 s / 15.5 s. Keep them while the session adds at most a
+ * quarter to the cases already stored.
+ */
+export const KEEP_INDEXES_MIN_CASES_PER_FILE = 4
+
+export function keepsIndexesForSession(existingCases: number, files: number): boolean {
+  return existingCases >= KEEP_INDEXES_MIN_CASES_PER_FILE * files
+}

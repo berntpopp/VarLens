@@ -1,8 +1,8 @@
 // @vitest-environment node
 /**
- * Session end of the SQLite import worker: the planner statistics must cover
- * the indexes the session dropped for the bulk insert, and the write-ahead log
- * must not be left to grow with every file.
+ * Session-level housekeeping of the SQLite import worker: which indexes a
+ * session drops for its inserts, planner statistics that cover them afterwards,
+ * and a write-ahead log that does not grow with every file.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
@@ -30,7 +30,7 @@ const SESSION_INDEXES = [
   'idx_variants_case_chr_rank'
 ]
 
-describe('import worker: session end', () => {
+describe('import worker: session housekeeping', () => {
   let dir: string
   let dbPath: string
   let db: DatabaseType
@@ -96,6 +96,44 @@ describe('import worker: session end', () => {
       ).map((r) => r.idx)
     )
     for (const index of SESSION_INDEXES) expect(analysed, index).toContain(index)
+  })
+
+  it('keeps the indexes for a few files into a larger cohort, drops them for a bulk load', async () => {
+    const hasGeneIndex = (): boolean =>
+      db.prepare(`SELECT 1 FROM sqlite_master WHERE name = 'idx_variants_gene'`).get() !== undefined
+    const seen: boolean[] = []
+    const names = ['A', 'B', 'C', 'D']
+
+    // Bulk load into an empty database: dropped while the files are inserted.
+    await runSession(
+      names.map((name) => ({
+        filePath: fileFor(name, 50),
+        caseName: name
+      })) as StartMessage['files'],
+      () => seen.push(hasGeneIndex())
+    )
+    expect(seen).toEqual([false, false, false, false])
+    expect(hasGeneIndex()).toBe(true)
+
+    // One file into four cases: left in place.
+    seen.length = 0
+    await runSession([{ filePath: fileFor('E', 50), caseName: 'E' }] as StartMessage['files'], () =>
+      seen.push(hasGeneIndex())
+    )
+    expect(seen).toEqual([true])
+
+    // Two files into five cases: a bulk load again.
+    seen.length = 0
+    await runSession(
+      ['F', 'G'].map((name) => ({
+        filePath: fileFor(name, 50),
+        caseName: name
+      })) as StartMessage['files'],
+      () => seen.push(hasGeneIndex())
+    )
+    expect(seen).toEqual([false, false])
+    expect(hasGeneIndex()).toBe(true)
+    expect(db.prepare('SELECT COUNT(*) AS c FROM variants').get()).toEqual({ c: 350 })
   })
 
   it('checkpoints between files so the WAL stays bounded', async () => {

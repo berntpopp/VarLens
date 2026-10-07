@@ -23,6 +23,7 @@ import {
   DROP_FTS_TRIGGERS,
   DROP_INDEXES,
   RECREATE_INDEXES,
+  keepsIndexesForSession,
   prepareStatements,
   streamInsertJson,
   streamInsertVcf
@@ -60,10 +61,12 @@ export async function runImportSession(
     // thread after the worker finishes (audit 05 finding M-1).
     const frequencies = new VariantFrequencyService(db)
 
-    // Drop FTS triggers and non-essential indexes at start (batch optimization)
+    // Drop FTS triggers at start, and the non-essential indexes when the
+    // session is a bulk load relative to what is stored (import-index-sql.ts).
     db.exec(DROP_FTS_TRIGGERS)
     ftsFinalizationState.ftsTriggersDropped = true
-    db.exec(DROP_INDEXES)
+    const storedCases = (db.prepare('SELECT COUNT(*) AS c FROM cases').get() as { c: number }).c
+    if (!keepsIndexesForSession(storedCases, msg.files.length)) db.exec(DROP_INDEXES)
 
     // Recovery: a previous worker died mid-file (heap limit) and could not
     // run its own cleanup. Its frequencies were never counted, so the rows
