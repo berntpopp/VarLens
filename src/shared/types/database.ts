@@ -109,6 +109,10 @@ export interface Variant {
   cadd: number | null
   /** ClinVar classification, nullable */
   clinvar: string | null
+  /** Severity rank of `consequence` (impact), 0 = unknown (shared/config/severity.config.ts) */
+  impact_rank?: number
+  /** Severity rank of `clinvar`, 0 = unknown (shared/config/severity.config.ts) */
+  clinvar_rank?: number
   /** Genotype (e.g., "0/1", "1/1"), nullable */
   gt_num: string | null
   /** Functional annotation, nullable */

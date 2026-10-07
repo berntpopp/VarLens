@@ -126,6 +126,8 @@ export type WorkerMessage =
         /** Representative reasons, capped at MAX_IMPORT_SKIP_REASONS. */
         skipReasons: string[]
         elapsed: number
+        /** ClinVar values the severity configuration does not know (ranked as unknown). */
+        unrankedClinvar?: string[]
       }
     }
   | {
@@ -153,6 +155,8 @@ export type WorkerMessage =
           /** Envelope code of a failure (e.g. CONFLICT for a duplicate case name). */
           errorCode?: string
           userMessage?: string
+          /** ClinVar values the severity configuration does not know (ranked as unknown). */
+          unrankedClinvar?: string[]
         }>
       }
     }

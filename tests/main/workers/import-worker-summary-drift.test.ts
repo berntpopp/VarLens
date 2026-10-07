@@ -40,7 +40,8 @@ const v = (pos: number, gene: string | null, extra: Variant = {}): Variant => ({
 /**
  * Samples share coordinates but disagree on annotation: pos 100 changes gene
  * and CADD between samples (incl. NULL), pos 300 carries two genes inside one
- * case (the summary's MAX gene then differs from a later case's gene), pos 400
+ * case (the summary's representative gene then differs from a later case's
+ * gene), pos 400
  * is duplicated within a case.
  */
 const SAMPLES: Record<string, Variant[]> = {
@@ -287,12 +288,18 @@ describe('import worker: per-file cohort summary upkeep', () => {
         const s = r as { pos: number; genome_build: string }
         return s.pos === pos && s.genome_build === build
       })
+    // All four carriers are MODERATE missense, so the transcript-level columns
+    // come from the bytewise tie-break (gene 'BBB' > 'AAA'). The variant-level
+    // facts are aggregated over all carriers (#469): the most severe ClinVar
+    // value, the lowest gnomAD frequency (0.1, not S2's 0.5) and the highest CADD.
     expect(row(100)).toMatchObject({
       carrier_count: 4,
       gene_symbol: 'BBB',
       cadd: 20,
-      gnomad_af: 0.5,
+      gnomad_af: 0.1,
       clinvar: 'Pathogenic',
+      impact_rank: 3,
+      clinvar_rank: 15,
       has_star: 1,
       has_comment: 1,
       acmg_best: 'Pathogenic'
@@ -353,8 +360,8 @@ describe('import worker: per-file cohort summary upkeep', () => {
     await seedAnnotatedCohort()
     await runSession([request('S1')])
 
-    // pos 100 is carried by S0 (AAA), OLD (AAA) and S1 (BBB): move S1 off the
-    // gene maximum, then S0 above it, through the app's own write path.
+    // pos 100 is carried by S0 (AAA), OLD (AAA) and S1 (BBB): raise S1's impact,
+    // then S0's, through the app's own write path.
     const service = new DatabaseService(dbPath)
     try {
       const variantAt100 = (caseName: string): number =>
@@ -390,6 +397,8 @@ describe('import worker: per-file cohort summary upkeep', () => {
          FROM cohort_variant_summary WHERE pos = 100`
       )
       .get()
+    // Both switched rows are HIGH stop_gained: the bytewise tie-break on the
+    // gene picks S0's transcript ('ZZZ' > 'AAB'), whole.
     expect(row).toEqual({
       gene_symbol: 'ZZZ',
       transcript: 'NM_2',
@@ -402,7 +411,7 @@ describe('import worker: per-file cohort summary upkeep', () => {
     ).toBeUndefined()
 
     // The next files merge onto the switched annotation, and an overwrite of
-    // the case holding the new maximum falls back to the remaining carriers.
+    // a switched case falls back to the remaining carriers.
     await runSession([
       request('S2'),
       request('OLD_V2', 'S0', { isDuplicate: true, duplicateStrategy: 'overwrite' })

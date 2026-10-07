@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import { logUnrankedClinvar } from '../utils/unranked-clinvar'
 
 export type ImportPhase =
   'idle' | 'uploading' | 'importing' | 'finalizing' | 'complete' | 'error' | 'cancelled'
@@ -11,6 +12,7 @@ export interface ImportFileDetail {
   status: 'pending' | 'importing' | 'success' | 'failed' | 'skipped'
   variantCount?: number
   error?: string
+  unrankedClinvar?: string[]
 }
 
 export const useImportStatusStore = defineStore('importStatus', () => {
@@ -29,6 +31,9 @@ export const useImportStatusStore = defineStore('importStatus', () => {
   const uploadLoadedBytes = ref(0)
   const uploadTotalBytes = ref<number | null>(null)
   const activeBatchRunId = ref<string | null>(null)
+  // The dialog and the shell's completion event both report a finished
+  // batch: its unrecognised ClinVar values go into the log once per import.
+  let unrankedLogged = false
 
   const isActive = computed(
     () => phase.value === 'uploading' || phase.value === 'importing' || phase.value === 'finalizing'
@@ -51,6 +56,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     uploadLoadedBytes.value = 0
     uploadTotalBytes.value = null
     activeBatchRunId.value = batchRunId ?? null
+    unrankedLogged = false
   }
 
   function startUpload(files: number): void {
@@ -122,6 +128,15 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     details.value.push(detail)
   }
 
+  function logUnrankedOnce(
+    finished: ReadonlyArray<{ caseName?: string; unrankedClinvar?: string[] }>
+  ): void {
+    const affected = finished.some((detail) => (detail.unrankedClinvar?.length ?? 0) > 0)
+    if (unrankedLogged || !affected) return
+    unrankedLogged = true
+    logUnrankedClinvar(finished)
+  }
+
   function importComplete(result: {
     succeeded: number
     failed: number
@@ -131,6 +146,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
   }): void {
     phase.value = result.cancelled ? 'cancelled' : 'complete'
     details.value = result.details
+    logUnrankedOnce(result.details)
     overallPercent.value = 100
   }
 
@@ -183,6 +199,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     updateProgress,
     fileComplete,
     importComplete,
+    logUnrankedOnce,
     importError,
     reset
   }

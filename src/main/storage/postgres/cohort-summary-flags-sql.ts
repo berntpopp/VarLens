@@ -15,14 +15,10 @@
  * chr/pos/ref/alt/variant_type, and select `ANNOTATION_FLAG_COLUMNS`.
  */
 
-/** ACMG rank ladder, mirroring src/shared/sql/cohort-summary-rebuild.ts. Higher wins. */
-const ACMG_RANK_SQL = (col: string): string => `CASE ${col}
-  WHEN 'Pathogenic' THEN 5
-  WHEN 'Likely pathogenic' THEN 4
-  WHEN 'Uncertain significance' THEN 3
-  WHEN 'Likely benign' THEN 2
-  WHEN 'Benign' THEN 1
-  ELSE 0 END`
+import { acmgLabelCaseSql, acmgRankCaseSql } from '../../../shared/config/severity.config'
+
+/** ACMG rank of a class expression, from the shared severity configuration. Higher wins. */
+const ACMG_RANK_SQL = acmgRankCaseSql
 
 /** `va_flags` and `cva_flags` CTEs (without the leading WITH or comma). */
 export function annotationFlagCtes(tbl: (table: string) => string): string {
@@ -59,11 +55,4 @@ export function annotationFlagJoins(alias: string): string {
 /** has_star, has_comment, acmg_best in that order, for a select list. */
 export const ANNOTATION_FLAG_COLUMNS = `(COALESCE(vaf.star, false) OR COALESCE(cvf.star, false)) AS has_star,
         (COALESCE(vaf.has_comment, false) OR COALESCE(cvf.has_comment, false)) AS has_comment,
-        (CASE GREATEST(COALESCE(vaf.acmg_rank, 0), COALESCE(cvf.acmg_rank, 0))
-          WHEN 5 THEN 'Pathogenic'
-          WHEN 4 THEN 'Likely pathogenic'
-          WHEN 3 THEN 'Uncertain significance'
-          WHEN 2 THEN 'Likely benign'
-          WHEN 1 THEN 'Benign'
-          ELSE NULL
-        END) AS acmg_best`
+        (${acmgLabelCaseSql('GREATEST(COALESCE(vaf.acmg_rank, 0), COALESCE(cvf.acmg_rank, 0))')}) AS acmg_best`

@@ -25,6 +25,8 @@
  */
 import type { Pool } from 'pg'
 
+import { offeredFilterValues } from '../../../shared/config/severity.config'
+
 import {
   COHORT_DISTINCT_COUNT_CAP,
   COHORT_DISTINCT_VALUES_LIMIT,
@@ -136,7 +138,7 @@ export async function readCohortColumnMeta(
       if (max !== null) entry.max = max
     }
     if (row !== undefined && Array.isArray(row.vals) && row.vals.length > 0) {
-      entry.distinctValues = row.vals.map((value) => String(value)).sort()
+      entry.distinctValues = offeredFilterValues(key, row.vals.map((value) => String(value)).sort())
     }
     return entry
   })

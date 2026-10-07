@@ -32,6 +32,8 @@ export interface ImportResult {
   skipped: number
   errors: string[] // Summary error messages
   elapsed: number // Total time in ms
+  /** ClinVar values of this import that the severity configuration does not know (ranked as unknown). */
+  unrankedClinvar?: string[]
 }
 
 // Field mapping definition

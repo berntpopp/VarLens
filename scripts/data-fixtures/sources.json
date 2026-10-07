@@ -11,8 +11,8 @@
         "kind": "local",
         "path": "tests/test-data/vcf/synthetic-unit-test.vcf",
         "licenseOrTerms": "repo test fixture",
-        "sha256": "e198476423cf2b9e842ff46dfef9bc51d072a9ab4f07ff60934e2682f3727ac4",
-        "sizeBytes": 7768
+        "sha256": "e24b319b63a026d2cf9af7733198807c1f227c36b34280d666752cabff0840b5",
+        "sizeBytes": 7765
       },
       "sourceType": {
         "container": "vcf",
@@ -25,8 +25,8 @@
           "id": "copy",
           "type": "copy",
           "output": "tests/.cache/public-data/generated/vcf/synthetic-unit-test.vcf",
-          "sha256": "e198476423cf2b9e842ff46dfef9bc51d072a9ab4f07ff60934e2682f3727ac4",
-          "sizeBytes": 7768
+          "sha256": "e24b319b63a026d2cf9af7733198807c1f227c36b34280d666752cabff0840b5",
+          "sizeBytes": 7765
         },
         {
           "id": "to-json",
@@ -38,16 +38,16 @@
           },
           "outputChecksums": {
             "simple": {
-              "sha256": "4a1dfdec9c21c09bcdebb52dc5c75025fd59c1cda3365f419b912b987d963bfe",
-              "sizeBytes": 8104
+              "sha256": "afe72225704be74d9641c984fb560772501068819782039cf9a2f6043c289d6a",
+              "sizeBytes": 8113
             },
             "object": {
-              "sha256": "89bc386020fa1ec0f33883579e7fac386e559e0904c48851b32f4a8c892ae446",
-              "sizeBytes": 9596
+              "sha256": "4da4a3e685c99bc9a807726fec9c619561ab5b932ae047aa0323ca48c12e2e23",
+              "sizeBytes": 9605
             },
             "columnar": {
-              "sha256": "27a1585c4555676a3183fa07a52301c87b2e1c1192b0c3ae849bf359ece86b56",
-              "sizeBytes": 5508
+              "sha256": "64e831dc592b871025cb00f46f3374d6d4c924018983c067b23b67d335a89235",
+              "sizeBytes": 5517
             }
           }
         }
@@ -311,8 +311,8 @@
         "kind": "local",
         "path": "tests/test-data/vcf/synthetic-unit-test.vcf",
         "licenseOrTerms": "repo test fixture",
-        "sha256": "e198476423cf2b9e842ff46dfef9bc51d072a9ab4f07ff60934e2682f3727ac4",
-        "sizeBytes": 7768
+        "sha256": "e24b319b63a026d2cf9af7733198807c1f227c36b34280d666752cabff0840b5",
+        "sizeBytes": 7765
       },
       "sourceType": {
         "container": "vcf",
@@ -370,8 +370,8 @@
             "id": "snp",
             "path": "tests/test-data/vcf/synthetic-unit-test.vcf",
             "container": "vcf",
-            "sha256": "e198476423cf2b9e842ff46dfef9bc51d072a9ab4f07ff60934e2682f3727ac4",
-            "sizeBytes": 7768
+            "sha256": "e24b319b63a026d2cf9af7733198807c1f227c36b34280d666752cabff0840b5",
+            "sizeBytes": 7765
           },
           {
             "id": "sv",
@@ -412,8 +412,8 @@
               "input": "tests/test-data/vcf/synthetic-unit-test.vcf",
               "output": "tests/.cache/public-data/generated/longread/DEMO.wf_snp.vcf",
               "container": "vcf",
-              "sha256": "e198476423cf2b9e842ff46dfef9bc51d072a9ab4f07ff60934e2682f3727ac4",
-              "sizeBytes": 7768
+              "sha256": "e24b319b63a026d2cf9af7733198807c1f227c36b34280d666752cabff0840b5",
+              "sizeBytes": 7765
             },
             {
               "id": "sv",

@@ -627,4 +627,32 @@ describe('CohortTableRow', () => {
       expect(wrapper.text()).not.toContain('...')
     })
   })
+
+  describe('ClinVar chip (#469)', () => {
+    const chip = (clinvar: string) =>
+      mount(CohortTableRow, {
+        props: {
+          item: { ...mockVariant, clinvar },
+          column: 'clinvar',
+          value: clinvar,
+          isStarred: false,
+          acmgClassification: null,
+          hasComment: false
+        },
+        global: { plugins: [vuetify] }
+      }).findComponent({ name: 'VChip' })
+
+    it('colours an abbreviation like its category', () => {
+      expect(chip('LB').props('color')).toBe(chip('Likely benign').props('color'))
+      expect(chip('LB').props('color')).toBe('light-green')
+      expect(chip('B').props('color')).toBe('success')
+      expect(chip('P').props('color')).toBe('error')
+    })
+
+    it('keeps an unknown value neutral and shows it like the case view does', () => {
+      const unknown = chip('totally_made_up_term')
+      expect(unknown.props('color')).toBe('grey')
+      expect(unknown.text()).toBe('totally made up term')
+    })
+  })
 })

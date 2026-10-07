@@ -7,7 +7,16 @@
  * other `variants` indexes dropped.
  */
 import { IMPORT_SESSION_OPEN_KEY } from '../../shared/sql/cohort-summary-rebuild'
-import { MAX_COLUMNS } from './cohort-summary-case-removal-sql'
+import {
+  REPRESENTATIVE_COLUMNS,
+  SUMMARY_TRANSCRIPT_COLUMNS,
+  contributionChangesSummary,
+  mergeFactAssignments,
+  precedesTranscript,
+  representativeColumnList,
+  summaryColumnsOverWindow,
+  transcriptOrderBy
+} from '../../shared/sql/cohort-representative'
 
 export { IMPORT_SESSION_OPEN_KEY }
 
@@ -35,10 +44,10 @@ export const IS_IMPORT_SESSION_OPEN_SQL = `
 
 /**
  * cohort_variant_summary's declared column types: the staged values must carry
- * the same affinity as the stored ones for the MAX comparison to be the one
- * the full rebuild makes.
+ * the same affinity as the stored ones for the comparison with the stored
+ * representative to be the one the full rebuild makes.
  */
-const MAX_COLUMN_TYPES: Record<(typeof MAX_COLUMNS)[number], string> = {
+const REPRESENTATIVE_COLUMN_TYPES: Record<string, string> = {
   gene_symbol: 'TEXT',
   cdna: 'TEXT',
   aa_change: 'TEXT',
@@ -49,7 +58,9 @@ const MAX_COLUMN_TYPES: Record<(typeof MAX_COLUMNS)[number], string> = {
   cadd: 'REAL',
   transcript: 'TEXT',
   omim_mim_number: 'TEXT',
-  end_pos: 'INTEGER'
+  end_pos: 'INTEGER',
+  impact_rank: 'INTEGER NOT NULL',
+  clinvar_rank: 'INTEGER NOT NULL'
 }
 
 export const CASE_ADD_TEMP_TABLES_SQL = `
@@ -61,7 +72,7 @@ export const CASE_ADD_TEMP_TABLES_SQL = `
   CREATE TEMP TABLE IF NOT EXISTS added_case_coords (
     chr TEXT NOT NULL, pos INTEGER NOT NULL, ref TEXT NOT NULL, alt TEXT NOT NULL,
     variant_type TEXT NOT NULL,
-    ${MAX_COLUMNS.map((col) => `${col} ${MAX_COLUMN_TYPES[col]}`).join(', ')},
+    ${REPRESENTATIVE_COLUMNS.map((col) => `${col} ${REPRESENTATIVE_COLUMN_TYPES[col]}`).join(', ')},
     het INTEGER NOT NULL, hom INTEGER NOT NULL, summary_rowid INTEGER
   );
   CREATE TEMP TABLE IF NOT EXISTS replaced_case_flag_coords (
@@ -86,9 +97,10 @@ const SUMMARY_HAS_COORD = `SELECT 1 FROM cohort_variant_summary s
  * their variants —
  *  - no summary row at the coordinate (in this build): nobody else carries it,
  *    so it is a new unique variant for the gene;
- *  - a summary row whose gene_symbol (MAX over all carrier rows) equals the
- *    gene: some other row has this gene at this coordinate, so it is known;
- *  - otherwise the coordinate exists under a different MAX gene and only the
+ *  - a summary row whose gene_symbol (that of its representative carrier row)
+ *    equals the gene: some other row has this gene at this coordinate, so it
+ *    is known;
+ *  - otherwise the coordinate's representative has a different gene and only the
  *    variants themselves can tell (resolved by RESOLVE_GENE_COORDS_SQL).
  */
 export const CAPTURE_GENE_COORDS_SQL = `
@@ -134,51 +146,44 @@ export const UPSERT_GENE_BURDEN_SQL = `
     affected_case_count = affected_case_count + 1,
     updated_at = excluded.updated_at`
 
-/** NULL-safe MAX merge: aggregate MAX() ignores NULL, scalar max() does not. */
-const mergeMax = (col: string): string =>
-  `${col} = CASE
-      WHEN d.${col} IS NULL THEN cohort_variant_summary.${col}
-      WHEN cohort_variant_summary.${col} IS NULL
-        OR d.${col} > cohort_variant_summary.${col} THEN d.${col}
-      ELSE cohort_variant_summary.${col} END`
-
-const raisesMax = (col: string): string =>
-  `(d.${col} IS NOT NULL AND (cohort_variant_summary.${col} IS NULL
-      OR d.${col} > cohort_variant_summary.${col}))`
-
 /**
- * The rebuild's per-case dedupe (MAX of every annotation column and of gt_num
- * per coordinate and type) for the added case, computed ONCE, together with
- * the rowid of the summary row it lands on (NULL: no case had this variant
- * yet). All three merge statements below are driven by it, so the case's
- * variants are grouped once and the summary's primary key is probed once per
- * coordinate.
+ * The rebuild's per-case step for the added case, computed ONCE: per
+ * coordinate and type its most severe transcript row, its variant-level facts
+ * (#469) and its genotype, together with the rowid of the summary row it lands on (NULL: no
+ * case had this variant yet). All three merge statements below are driven by
+ * it, so the case's variants are ranked once and the summary's primary key is
+ * probed once per coordinate.
  */
 export const CAPTURE_CASE_COORDS_SQL = `
   INSERT INTO temp.added_case_coords (
-    chr, pos, ref, alt, variant_type, ${MAX_COLUMNS.join(', ')}, het, hom, summary_rowid
+    chr, pos, ref, alt, variant_type, ${REPRESENTATIVE_COLUMNS.join(', ')}, het, hom, summary_rowid
   )
   SELECT d.chr, d.pos, d.ref, d.alt, d.variant_type,
-    ${MAX_COLUMNS.map((col) => `d.${col}`).join(', ')}, d.het, d.hom, s.rowid
+    ${representativeColumnList('d')},
+    CASE WHEN d.gt_num IN ${HET} THEN 1 ELSE 0 END,
+    CASE WHEN d.gt_num IN ${HOM} THEN 1 ELSE 0 END,
+    s.rowid
   FROM (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type,
-      ${MAX_COLUMNS.map((col) => `MAX(v.${col}) AS ${col}`).join(', ')},
-      CASE WHEN MAX(v.gt_num) IN ${HET} THEN 1 ELSE 0 END AS het,
-      CASE WHEN MAX(v.gt_num) IN ${HOM} THEN 1 ELSE 0 END AS hom
+      ${summaryColumnsOverWindow('v', 'case_key', 'sqlite')},
+      MAX(v.gt_num) OVER case_key AS gt_num,
+      ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS rn
     FROM variants v
     WHERE v.case_id = @caseId
-    GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type
+    WINDOW case_key AS (PARTITION BY v.chr, v.pos, v.ref, v.alt, v.variant_type)
   ) d
   LEFT JOIN cohort_variant_summary s
     ON s.chr = d.chr AND s.pos = d.pos AND s.ref = d.ref AND s.alt = d.alt
-    AND s.variant_type = d.variant_type AND s.genome_build = @build`
+    AND s.variant_type = d.variant_type AND s.genome_build = @build
+  WHERE d.rn = 1`
 
 /**
- * Step 1 of the merge: carrier/het/hom += the case's deduped contribution on
- * the rows that already exist. Kept apart from the MAX merge because SQLite
+ * Step 1 of the merge: carrier/het/hom += the case's contribution on the rows
+ * that already exist. Kept apart from the representative merge because SQLite
  * rewrites every index that covers a column in the SET list whether or not
- * the value changes — most carriers of a known variant raise no maximum, and
- * this way they only touch the indexes that contain carrier_count.
+ * the value changes — most carriers of a known variant are not more severe
+ * than the stored row, and this way they only touch the indexes that contain
+ * carrier_count.
  */
 export const INCREMENT_CARRIERS_SQL = `
   UPDATE cohort_variant_summary SET
@@ -188,13 +193,25 @@ export const INCREMENT_CARRIERS_SQL = `
   FROM temp.added_case_coords d
   WHERE cohort_variant_summary.rowid = d.summary_rowid`
 
-/** Step 2: a NULL-safe MAX merge, only on the rows where the case raises one. */
-export const MERGE_VARIANT_MAXIMA_SQL = `
-  UPDATE cohort_variant_summary SET
-    ${MAX_COLUMNS.map(mergeMax).join(',\n    ')}
+const SUMMARY = 'cohort_variant_summary'
+
+/**
+ * Step 2, only on the rows the case changes: its transcript-level columns
+ * replace the stored ones, together, where its row is more severe; each
+ * variant-level fact is replaced where the case's value wins.
+ */
+export const MERGE_REPRESENTATIVE_SQL = `
+  UPDATE ${SUMMARY} SET
+    ${[
+      ...SUMMARY_TRANSCRIPT_COLUMNS.map(
+        (col) =>
+          `${col} = CASE WHEN ${precedesTranscript('d', SUMMARY, 'sqlite')} THEN d.${col} ELSE ${SUMMARY}.${col} END`
+      ),
+      ...mergeFactAssignments('d', SUMMARY, 'sqlite')
+    ].join(',\n    ')}
   FROM temp.added_case_coords d
-  WHERE cohort_variant_summary.rowid = d.summary_rowid
-    AND (${MAX_COLUMNS.map(raisesMax).join('\n    OR ')})`
+  WHERE ${SUMMARY}.rowid = d.summary_rowid
+    AND (${contributionChangesSummary('d', SUMMARY, 'sqlite')})`
 
 /**
  * Step 3: the variants no case had yet become new rows — 1 carrier, flags
@@ -203,12 +220,12 @@ export const MERGE_VARIANT_MAXIMA_SQL = `
 export const INSERT_NEW_VARIANT_SUMMARY_SQL = `
   INSERT INTO cohort_variant_summary (
     chr, pos, ref, alt, variant_type, genome_build, variant_key,
-    ${MAX_COLUMNS.join(', ')},
+    ${REPRESENTATIVE_COLUMNS.join(', ')},
     carrier_count, het_count, hom_count, has_star, has_comment, acmg_best
   )
   SELECT d.chr, d.pos, d.ref, d.alt, d.variant_type, @build,
     d.chr || ':' || d.pos || ':' || d.ref || ':' || d.alt,
-    ${MAX_COLUMNS.map((col) => `d.${col}`).join(', ')},
+    ${representativeColumnList('d')},
     1, d.het, d.hom,
     CASE WHEN va.starred = 1 THEN 1 ELSE 0 END,
     CASE WHEN va.global_comment IS NOT NULL AND va.global_comment != '' THEN 1 ELSE 0 END,

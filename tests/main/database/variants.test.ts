@@ -1515,7 +1515,8 @@ describe('Variant Operations', () => {
       // Top-level arrays
       expect(opts.consequences.sort()).toEqual(['missense_variant', 'stop_gained'])
       expect(opts.funcs.sort()).toEqual(['exonic', 'splicing'])
-      expect(opts.clinvars.sort()).toEqual(['likely_pathogenic', 'pathogenic'])
+      // Offered as the configured ClinVar categories, not as stored spellings (#469).
+      expect(opts.clinvars).toEqual(['Pathogenic', 'Likely pathogenic'])
 
       // Numeric ranges
       expect(opts.minCadd).toBe(25.5)

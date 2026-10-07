@@ -13,6 +13,7 @@
  * (`startMultiFileImportSqlite`).
  */
 import { mainLogger } from '../../services/MainLogger'
+import { mergeUnrankedClinvar } from '../../import/unranked-clinvar'
 import { ConflictError } from '../errors'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
@@ -90,6 +91,8 @@ export interface ImportResult {
   skipped: number
   errors: string[]
   elapsed: number
+  /** ClinVar values of this import that the severity configuration does not know. */
+  unrankedClinvar?: string[]
 }
 
 /** Options for VCF import. */
@@ -206,6 +209,8 @@ export interface MultiFileImportResult {
   totalSkipped: number
   files: MultiFileImportFileResult[]
   elapsed: number
+  /** ClinVar values of all files that the severity configuration does not know. */
+  unrankedClinvar?: string[]
 }
 
 /**
@@ -334,6 +339,7 @@ async function startMultiFileImportSqlite(
   })
 
   let totalVariants = firstResult.variantCount
+  const unrankedLists: Array<string[] | undefined> = [firstResult.unrankedClinvar]
   let totalSkipped = firstResult.skipped
 
   // Resolve the case-level locked genome build. Prefer the wizard-supplied
@@ -406,6 +412,7 @@ async function startMultiFileImportSqlite(
 
         totalVariants += result.variantCount
         totalSkipped += result.skipped
+        unrankedLists.push(result.unrankedClinvar)
 
         fileResults.push({
           filePath: spec.filePath,
@@ -484,12 +491,14 @@ async function startMultiFileImportSqlite(
     await settleAfterWorkerImport(getDb, callbacks.onCohortStale, stale)
   }
 
+  const unrankedClinvar = mergeUnrankedClinvar(unrankedLists)
   return {
     caseId,
     totalVariants,
     totalSkipped,
     files: fileResults,
-    elapsed: Date.now() - startTime
+    elapsed: Date.now() - startTime,
+    ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {})
   }
 }
 
@@ -547,7 +556,10 @@ export async function startMultiFileImport(
           totalVariants: result.variantCount,
           totalSkipped: result.skipped,
           files: result.files,
-          elapsed: result.elapsed
+          elapsed: result.elapsed,
+          ...(result.unrankedClinvar !== undefined
+            ? { unrankedClinvar: result.unrankedClinvar }
+            : {})
         }
       }
 

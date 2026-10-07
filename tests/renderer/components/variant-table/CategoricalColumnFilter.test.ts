@@ -5,6 +5,8 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import CategoricalColumnFilter from '../../../../src/renderer/src/components/variant-table/CategoricalColumnFilter.vue'
 
+import { clinvarDisplayText } from '../../../../src/shared/config/severity.config'
+
 const vuetify = createVuetify({ components, directives })
 
 const sampleValues = ['missense', 'nonsense', 'synonymous', 'frameshift', 'splice']
@@ -97,6 +99,37 @@ describe('CategoricalColumnFilter', () => {
       const wrapper = mountFilter()
       const scrollable = wrapper.find('.checkbox-list')
       expect(scrollable.exists()).toBe(true)
+    })
+  })
+
+  describe('display formatter (#469)', () => {
+    const raw = ['Pathogenic', 'totally_made_up_term']
+    const mountClinvar = () =>
+      mountFilter({ columnTitle: 'ClinVar', values: raw, formatValue: clinvarDisplayText })
+
+    it('labels an option the way the table cell shows the value', () => {
+      const labels = mountClinvar()
+        .findAllComponents({ name: 'VCheckbox' })
+        .map((checkbox) => checkbox.props('label'))
+      expect(labels).toEqual(['Pathogenic', 'totally made up term'])
+    })
+
+    it('still filters by the stored value', async () => {
+      const wrapper = mountClinvar()
+      await wrapper.findAllComponents({ name: 'VCheckbox' })[1].setValue(true)
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'OK')!
+        .trigger('click')
+      expect(wrapper.emitted('apply')?.[0]).toEqual([
+        { operator: 'in', value: ['totally_made_up_term'] }
+      ])
+    })
+
+    it('searches what is displayed', async () => {
+      const wrapper = mountClinvar()
+      await wrapper.findComponent({ name: 'VTextField' }).setValue('made up')
+      expect(wrapper.findAllComponents({ name: 'VCheckbox' })).toHaveLength(1)
     })
   })
 })

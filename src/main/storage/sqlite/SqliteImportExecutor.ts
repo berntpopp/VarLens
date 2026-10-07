@@ -139,6 +139,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       let capturedElapsed = 0
       let capturedSkipped = 0
       let capturedSkipReasons: string[] = []
+      let capturedUnrankedClinvar: string[] | undefined
 
       try {
         worker.start({
@@ -171,6 +172,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
             capturedElapsed = msg.result.elapsed
             capturedSkipped = msg.result.skipped ?? 0
             capturedSkipReasons = msg.result.skipReasons ?? []
+            capturedUnrankedClinvar = msg.result.unrankedClinvar
             this.invalidateCohortMetadata()
           },
           onSummaryStale: () => onSummaryStale?.(),
@@ -205,7 +207,10 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                 variantCount: detail.variantCount ?? 0,
                 skipped: capturedSkipped,
                 errors: capturedSkipReasons,
-                elapsed: capturedElapsed
+                elapsed: capturedElapsed,
+                ...(capturedUnrankedClinvar !== undefined
+                  ? { unrankedClinvar: capturedUnrankedClinvar }
+                  : {})
               })
             } else {
               reject(
@@ -319,7 +324,8 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       // per-file errors are surfaced in `result.files[].error` by startMultiFileImport,
       // not at the top level. The PG path (Task 11) follows the same convention.
       errors: [],
-      elapsed: result.elapsed > 0 ? result.elapsed : Date.now() - startedAt
+      elapsed: result.elapsed > 0 ? result.elapsed : Date.now() - startedAt,
+      ...(result.unrankedClinvar !== undefined ? { unrankedClinvar: result.unrankedClinvar } : {})
     }
   }
 

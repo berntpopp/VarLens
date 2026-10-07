@@ -21,6 +21,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
+import { annotationSeverityRanks } from '../../../src/shared/config/severity.config'
+import { CohortSummaryRefreshingError } from '../../../src/shared/errors/cohort-summary-refreshing'
+import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 import {
   awaitBackgroundRebuild,
@@ -138,6 +141,8 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
       cadd: number | null
       transcript: string | null
       omim_mim_number: string | null
+      impact_rank: number
+      clinvar_rank: number
       carrier_count: string
       het_count: string
       hom_count: string
@@ -149,7 +154,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     }>(
       `SELECT chr, pos, end_pos, ref, alt, variant_type, genome_build,
               gene_symbol, cdna, aa_change, consequence, func, clinvar,
-              gnomad_af, cadd, transcript, omim_mim_number,
+              gnomad_af, cadd, transcript, omim_mim_number, impact_rank, clinvar_rank,
               carrier_count, het_count, hom_count, variant_key,
               has_star, has_comment, acmg_best, cohort_frequency
          FROM "${schema}".cohort_variant_summary
@@ -173,6 +178,8 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
       cadd: r.cadd,
       transcript: r.transcript,
       omim_mim_number: r.omim_mim_number,
+      impact_rank: r.impact_rank,
+      clinvar_rank: r.clinvar_rank,
       carrier_count: Number(r.carrier_count),
       het_count: Number(r.het_count),
       hom_count: Number(r.hom_count),
@@ -239,17 +246,19 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     })
   }
 
+  /** A carrier of 1:100:A:T, with the ranks the import pipeline stores (#469). */
   async function seedAnnotated(
     caseId: number,
     annotation: Record<string, string | number | null>
   ): Promise<number> {
-    const columns = Object.keys(annotation)
+    const row = { ...annotation, ...annotationSeverityRanks(annotation) }
+    const columns = Object.keys(row)
     const res = await probe.query<{ id: number }>(
       `INSERT INTO "${schema}".variants
          (case_id, chr, pos, ref, alt, variant_type, gt_num${columns.map((c) => `, ${c}`).join('')})
          VALUES ($1, '1', 100, 'A', 'T', 'snv', '0/1'${columns.map((_, i) => `, $${i + 2}`).join('')})
          RETURNING id`,
-      [caseId, ...Object.values(annotation)]
+      [caseId, ...Object.values(row)]
     )
     return res.rows[0].id
   }
@@ -335,7 +344,8 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     const first = await seedCase('busy-a')
     const second = await seedCase('busy-b')
     const hidden = await seedCase('busy-hidden')
-    const annotation = { gene_symbol: 'BRCA1', consequence: 'HIGH', func: 'stop_gained' }
+    // LOW carriers, so the switched (HIGH) row is the one the rebuild must show (#469).
+    const annotation = { gene_symbol: 'BRCA1', consequence: 'LOW', func: 'synonymous_variant' }
     const firstVariant = await seedAnnotated(first, annotation)
     await seedAnnotated(second, annotation)
     const hiddenVariant = await seedAnnotated(hidden, annotation)
@@ -349,8 +359,8 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     const transcript = {
       transcript_id: 'ENST00000000009',
       gene_symbol: 'ZZZ9',
-      consequence: 'MODIFIER',
-      func: 'intron_variant',
+      consequence: 'HIGH',
+      func: 'stop_gained',
       cdna: 'c.9A>T',
       aa_change: null,
       hpo_sim_score: null,
@@ -387,7 +397,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
       )
       expect(variant.rows[0]).toEqual({
         gene_symbol: 'ZZZ9',
-        consequence: 'MODIFIER',
+        consequence: 'HIGH',
         transcript: 'ENST00000000009'
       })
       // … which is left as it was and flagged for a rebuild.
@@ -402,7 +412,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     await prepareCohortRead({ pool, schema })
     await awaitBackgroundRebuild(schema)
     expect(await isStale()).toBe(false)
-    expect(await rowAt100()).toMatchObject({ gene_symbol: 'ZZZ9', consequence: 'MODIFIER' })
+    expect(await rowAt100()).toMatchObject({ gene_symbol: 'ZZZ9', consequence: 'HIGH' })
     expect(await snapshotSummary()).toEqual(await rebuiltSummary())
     expect(await snapshotGeneTables()).toEqual(await rebuiltGeneTables())
 
@@ -497,9 +507,11 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     return res.rows[0]
   }
 
-  it('a differing annotation, a transcript switch and a removal keep the maintained summary equal to a rebuild (#461)', async () => {
+  it('the most severe carrier row represents a variant through add, transcript switch and removal (#469, #461)', async () => {
     const add = (caseId: number): Promise<void> =>
       inTransaction((client) => repo.incrementalAdd({ schema, client: client as never, caseId }))
+    const expectExact = async (): Promise<void> =>
+      expect(await snapshotSummary()).toEqual(await rebuiltSummary())
 
     // Two carriers of 1:100:A:T that agree, plus an unrelated coordinate.
     const first = await seedCase('rep-a')
@@ -516,10 +528,20 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     await seedVariant({ caseId: second, chr: '2', pos: 5, ref: 'C', alt: 'G', geneSymbol: 'TP53' })
     await add(first)
     await add(second)
-    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    await expectExact()
 
-    // 1. A third carrier annotated differently: every column takes the larger
-    //    value, NULLs are ignored, text compares bytewise ('a…' > 'Z…' > 'B…').
+    // 1. A carrier annotated MODIFIER (the issue: HIGH, HIGH, MODIFIER). The old
+    //    rule, a bytewise MAX() per column, stored consequence = 'MODIFIER' with
+    //    func = 'stop_gained' and gene 'BRCA1-AS1': no carrier's transcript, and
+    //    hidden from the filter impact = HIGH. Now the transcript-level columns
+    //    stay; only CADD, a fact of the variant, takes the higher value.
+    const agreedTranscript = {
+      gene_symbol: 'BRCA1',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      cdna: null,
+      transcript: null
+    }
     const third = await seedCase('rep-c')
     const thirdVariant = await seedAnnotated(third, {
       gene_symbol: 'BRCA1-AS1',
@@ -529,23 +551,32 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
       cadd: 40,
       cdna: 'c.1A>T'
     })
-    const fourth = await seedCase('rep-d')
-    await seedAnnotated(fourth, { gene_symbol: 'aBRCA', cdna: 'Z.9', cadd: 1 })
     await add(third)
-    await add(fourth)
     expect(await rowAt100()).toMatchObject({
-      gene_symbol: 'aBRCA',
-      consequence: 'MODIFIER',
-      func: 'stop_gained',
+      ...agreedTranscript,
       clinvar: 'Pathogenic',
       cadd: 40,
-      cdna: 'c.1A>T',
-      carrier_count: 4
+      carrier_count: 3
     })
-    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    const cohort = new PostgresCohortRepository(pool, schema)
+    expect(
+      (await cohort.queryVariants({ consequences: ['HIGH'] })).data.map((v) => v.variant_key)
+    ).toEqual(['1:100:A:T'])
+    await expectExact()
 
-    // 2. Transcript switch on the third carrier: it stops holding the
-    //    consequence and cdna maxima, which fall back to the other carriers.
+    // 2. A carrier that ties on impact: the tie-break is bytewise
+    //    ('a…' > 'B…', unlike a linguistic collation) and takes the whole
+    //    transcript row (its cdna); its lower CADD does not replace the fact.
+    const fourth = await seedCase('rep-d')
+    const tied = { ...agreed, gene_symbol: 'aBRCA', cdna: 'Z.9', cadd: 1 }
+    const tiedTranscript = { ...agreedTranscript, gene_symbol: 'aBRCA', cdna: 'Z.9' }
+    const fourthVariant = await seedAnnotated(fourth, tied)
+    await add(fourth)
+    expect(await rowAt100()).toMatchObject({ ...tiedTranscript, cadd: 40, carrier_count: 4 })
+    await expectExact()
+
+    // 3. Transcript switches. The MODIFIER carrier becomes HIGH frameshift and
+    //    loses the tie-break on func ...
     const transcripts = new PostgresTranscriptsRepository(pool, schema)
     await transcripts.insertTranscriptAndSwitch(thirdVariant, {
       transcript_id: 'ENST00000000001',
@@ -558,40 +589,351 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
       moi: null,
       is_selected: 0
     } as never)
-    expect(await rowAt100()).toMatchObject({
-      gene_symbol: 'aBRCA',
-      consequence: 'HIGH',
-      func: 'stop_gained',
-      transcript: 'ENST00000000001',
-      cdna: 'c.1del',
-      cadd: 40
-    })
-    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    expect(await rowAt100()).toMatchObject({ ...tiedTranscript, cadd: 40, carrier_count: 4 })
+    await expectExact()
+    //    ... and the carrier that supplies the transcript drops to MODERATE: the
+    //    row goes back to the carriers that agree.
+    await transcripts.insertTranscriptAndSwitch(fourthVariant, {
+      transcript_id: 'ENST00000000004',
+      gene_symbol: 'MMM',
+      consequence: 'MODERATE',
+      func: 'missense_variant',
+      cdna: 'c.4A>C',
+      aa_change: 'p.K2T',
+      hpo_sim_score: null,
+      moi: null,
+      is_selected: 0
+    } as never)
+    expect(await rowAt100()).toMatchObject({ ...agreedTranscript, cadd: 40 })
+    await expectExact()
     expect(await snapshotGeneTables()).toEqual(await rebuiltGeneTables())
 
-    // 3. Removing carriers that hold maxima: the row falls back to what the
-    //    remaining carriers supply; removing one that holds none changes nothing.
+    // 4. Removal. A carrier whose row another carrier also has changes nothing;
+    //    the last such carrier hands the transcript to the next most severe row.
     const remove = (caseId: number): Promise<void> =>
       inTransaction(async (client) => {
         await repo.incrementalRemove({ schema, client: client as never, caseId })
         await client.query(`DELETE FROM "${schema}".cases WHERE id = $1`, [caseId])
       })
-    await new PostgresCaseLifecycleRepository(pool, schema, repo).deleteCase(third)
+    await remove(first)
+    expect(await rowAt100()).toMatchObject({ ...agreedTranscript, cadd: 40, carrier_count: 3 })
+    await expectExact()
+    await new PostgresCaseLifecycleRepository(pool, schema, repo).deleteCase(second)
     expect(await rowAt100()).toMatchObject({
-      gene_symbol: 'aBRCA',
-      cadd: 32.5,
-      transcript: null,
-      cdna: 'Z.9',
+      gene_symbol: 'AAAS',
+      consequence: 'HIGH',
+      func: 'frameshift_variant',
+      cdna: 'c.1del',
+      transcript: 'ENST00000000001',
+      // Facts of the variant, whoever supplies the transcript: the remaining
+      // MODERATE carrier is still ClinVar Pathogenic.
+      clinvar: 'Pathogenic',
+      cadd: 40,
+      carrier_count: 2
+    })
+    await expectExact()
+    await remove(third)
+    expect(await rowAt100()).toMatchObject({
+      gene_symbol: 'MMM',
+      consequence: 'MODERATE',
+      func: 'missense_variant',
+      clinvar: 'Pathogenic',
+      cadd: 1,
+      transcript: 'ENST00000000004',
+      carrier_count: 1
+    })
+    await expectExact()
+    expect(await snapshotGeneTables()).toEqual(await rebuiltGeneTables())
+  }, 120_000)
+
+  it('a ClinVar value of another carrier is not lost behind the chosen transcript (#469 review)', async () => {
+    const add = (caseId: number): Promise<void> =>
+      inTransaction((client) => repo.incrementalAdd({ schema, client: client as never, caseId }))
+    // A is MODERATE and Pathogenic, B is HIGH on another transcript without a
+    // ClinVar value, C has the gnomAD frequency the others lack.
+    const a = await seedCase('fact-a')
+    await seedAnnotated(a, {
+      gene_symbol: 'GENEA',
+      consequence: 'MODERATE',
+      func: 'missense_variant',
+      clinvar: 'Pathogenic'
+    })
+    const b = await seedCase('fact-b')
+    await seedAnnotated(b, { gene_symbol: 'GENEB', consequence: 'HIGH', func: 'stop_gained' })
+    const c = await seedCase('fact-c')
+    await seedAnnotated(c, { gene_symbol: 'GENEC', consequence: 'LOW', gnomad_af: 0.5 })
+    for (const caseId of [a, b, c]) await add(caseId)
+
+    const expected = {
+      gene_symbol: 'GENEB',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      clinvar: 'Pathogenic',
+      carrier_count: 3
+    }
+    expect(await rowAt100()).toMatchObject(expected)
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    const cohort = new PostgresCohortRepository(pool, schema)
+    for (const filter of [{ clinvars: ['Pathogenic'] }, { consequences: ['HIGH'] }]) {
+      const page = await cohort.queryVariants(filter)
+      expect(page.data).toEqual([
+        expect.objectContaining({ variant_key: '1:100:A:T', gnomad_af: 0.5, clinvar: 'Pathogenic' })
+      ])
+    }
+
+    // Removing A takes the ClinVar value with it; removing C the frequency.
+    const remove = (caseId: number): Promise<void> =>
+      inTransaction(async (client) => {
+        await repo.incrementalRemove({ schema, client: client as never, caseId })
+        await client.query(`DELETE FROM "${schema}".cases WHERE id = $1`, [caseId])
+      })
+    await remove(a)
+    expect(await rowAt100()).toMatchObject({ ...expected, clinvar: null, carrier_count: 2 })
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    await remove(c)
+    expect((await cohort.queryVariants({})).data).toEqual([
+      expect.objectContaining({ gene_symbol: 'GENEB', gnomad_af: null })
+    ])
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+  }, 120_000)
+
+  it('ClinVar significance decides between carriers of equal impact (#469)', async () => {
+    const add = (caseId: number): Promise<void> =>
+      inTransaction((client) => repo.incrementalAdd({ schema, client: client as never, caseId }))
+    const carrier = { gene_symbol: 'GENE', consequence: 'MODERATE', func: 'missense_variant' }
+
+    // Bytewise, 'Uncertain_significance' and 'not_provided' sort above 'Pathogenic/…'.
+    const uncertain = await seedCase('clin-a')
+    await seedAnnotated(uncertain, { ...carrier, clinvar: 'Uncertain_significance', cadd: 9 })
+    const pathogenic = await seedCase('clin-b')
+    await seedAnnotated(pathogenic, {
+      ...carrier,
+      clinvar: 'Pathogenic/Likely_pathogenic',
+      cadd: 3
+    })
+    const unprovided = await seedCase('clin-c')
+    await seedAnnotated(unprovided, { ...carrier, clinvar: 'not_provided', cadd: 30 })
+    for (const caseId of [uncertain, pathogenic, unprovided]) await add(caseId)
+
+    expect(await rowAt100()).toMatchObject({
+      clinvar: 'Pathogenic/Likely_pathogenic',
+      cadd: 30, // the highest any carrier has
       carrier_count: 3
     })
     expect(await snapshotSummary()).toEqual(await rebuiltSummary())
-    await remove(fourth)
-    expect(await rowAt100()).toMatchObject({ gene_symbol: 'BRCA1', cdna: null, carrier_count: 2 })
-    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
-    await remove(first)
-    expect(await rowAt100()).toMatchObject({ ...agreed, carrier_count: 1 })
-    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
-    expect(await snapshotGeneTables()).toEqual(await rebuiltGeneTables())
+    const cohort = new PostgresCohortRepository(pool, schema)
+    const filtered = await cohort.queryVariants({ clinvars: ['Pathogenic/Likely_pathogenic'] })
+    expect(filtered.data.map((v) => v.variant_key)).toEqual(['1:100:A:T'])
+  }, 120_000)
+
+  it('page, extension-filtered page and export show the same representative row (#469)', async () => {
+    // One SV carried by two cases that annotate it differently, each with an
+    // extension row. The extension filter and the export used to aggregate the
+    // carriers live (MAX per text column, coordinate-only grouping).
+    const carriers = [
+      { name: 'ext-a', consequence: 'HIGH', gene: 'BRCA1', gnomad: 0.2, support: 12 },
+      { name: 'ext-b', consequence: 'MODIFIER', gene: 'ZZZ', gnomad: 0.01, support: 3 }
+    ]
+    for (const carrier of carriers) {
+      const caseId = await seedCase(carrier.name)
+      const variant = await probe.query<{ id: number }>(
+        `INSERT INTO "${schema}".variants
+           (case_id, chr, pos, end_pos, ref, alt, variant_type, gt_num, gene_symbol, consequence,
+            gnomad_af, impact_rank, clinvar_rank)
+         VALUES ($1, '7', 1000, 5000, 'N', '<DEL>', 'sv', '0/1', $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [
+          caseId,
+          carrier.gene,
+          carrier.consequence,
+          carrier.gnomad,
+          ...Object.values(annotationSeverityRanks({ consequence: carrier.consequence }))
+        ]
+      )
+      await probe.query(
+        `INSERT INTO "${schema}".variant_sv (variant_id, support) VALUES ($1, $2)`,
+        [variant.rows[0].id, carrier.support]
+      )
+      await inTransaction((client) =>
+        repo.incrementalAdd({ schema, client: client as never, caseId })
+      )
+    }
+    const cohort = new PostgresCohortRepository(pool, schema)
+    const representative = {
+      variant_key: '7:1000:N:<DEL>',
+      gene_symbol: 'BRCA1',
+      consequence: 'HIGH',
+      gnomad_af: 0.01, // the lowest frequency any carrier has
+      carrier_count: 2
+    }
+
+    const page = await cohort.queryVariants({})
+    expect(page.data).toEqual([expect.objectContaining(representative)])
+
+    // Only the MODIFIER carrier has support < 5: the variant matches through
+    // it, and is still shown, and counted, as the cohort row.
+    const filtered = await cohort.queryVariants({
+      column_filters: { 'sv.support': { operator: '<', value: 5 } }
+    })
+    expect(filtered.data).toEqual(page.data)
+    expect(filtered.total_count).toBe(1)
+    const none = await cohort.queryVariants({
+      column_filters: { 'sv.support': { operator: '>', value: 100 } }
+    })
+    expect(none.data).toEqual([])
+
+    for (const params of [{}, { column_filters: { 'sv.support': { operator: '<', value: 5 } } }]) {
+      const exported: Array<Record<string, unknown>> = []
+      for await (const row of cohort.streamCohortRows(params as never)) exported.push(row)
+      expect(exported).toEqual([
+        expect.objectContaining({ ...representative, total_cases: '2', cohort_frequency: 1 })
+      ])
+    }
+    // The annotation filter applies to the representative on every path.
+    const modifier = { consequences: ['MODIFIER'] }
+    expect((await cohort.queryVariants(modifier)).data).toEqual([])
+    const exportedModifier: unknown[] = []
+    for await (const row of cohort.streamCohortRows(modifier)) exportedModifier.push(row)
+    expect(exportedModifier).toEqual([])
+  }, 120_000)
+
+  it('an extension filter stays inside the genome build of the summary row (#469 review)', async () => {
+    // One coordinate carried on GRCh38 (support 20) and on GRCh37 (support 2):
+    // two summary rows. The carrier probe used to match on the coordinate only.
+    for (const [name, build, support] of [
+      ['build-38', 'GRCh38', 20],
+      ['build-37', 'GRCh37', 2]
+    ] as const) {
+      const caseId = await seedCase(name, build)
+      const variantId = await seedVariant({
+        caseId,
+        chr: '7',
+        pos: 1000,
+        ref: 'N',
+        alt: '<DEL>',
+        variantType: 'sv',
+        geneSymbol: name,
+        gtNum: '0/1'
+      })
+      await probe.query(
+        `INSERT INTO "${schema}".variant_sv (variant_id, support) VALUES ($1, $2)`,
+        [variantId, support]
+      )
+      await inTransaction((client) =>
+        repo.incrementalAdd({ schema, client: client as never, caseId })
+      )
+    }
+    const cohort = new PostgresCohortRepository(pool, schema)
+    const genes = async (operator: '>' | '<', value: number): Promise<Array<string | null>> =>
+      (await cohort.queryVariants({ column_filters: { 'sv.support': { operator, value } } })).data
+        .map((variant) => variant.gene_symbol)
+        .sort()
+
+    expect((await cohort.queryVariants({})).data).toHaveLength(2)
+    expect(await genes('>', 10)).toEqual(['build-38'])
+    expect(await genes('<', 10)).toEqual(['build-37'])
+    expect(await genes('>', 100)).toEqual([])
+  }, 120_000)
+
+  it('a rebuild in many small chunks gives the rows of a rebuild in one per chromosome (#469 review)', async () => {
+    // Variants on several chromosomes and positions, shared and not, two builds.
+    const cases = [
+      await seedCase('chunk-a'),
+      await seedCase('chunk-b'),
+      await seedCase('c37', 'GRCh37')
+    ]
+    for (const [index, caseId] of cases.entries()) {
+      for (const chr of ['1', '2', 'X', 'chrUn_KI270742v1']) {
+        for (const pos of [10, 20_000, 3_000_000 + index, 250_000_000]) {
+          await seedVariant({
+            caseId,
+            chr,
+            pos,
+            ref: 'A',
+            alt: 'T',
+            geneSymbol: `G${chr}`,
+            gtNum: '0/1'
+          })
+        }
+      }
+    }
+    await probe.query(`UPDATE "${schema}".cases_all SET variant_count = 16`)
+    const rebuiltWith = (rowsPerChunk?: number): Promise<unknown[]> =>
+      withClient(async (client) => {
+        await client.query('BEGIN')
+        try {
+          const statements: string[] = []
+          const query = client.query.bind(client)
+          const counting = {
+            query: (text: string, values?: unknown[]) => {
+              if (/INSERT INTO "[^"]+"\."cohort_variant_summary"/.test(text)) statements.push(text)
+              return query(text, values as never)
+            }
+          }
+          await repo.rebuild({ schema, client: counting as never, rowsPerChunk })
+          const rows = await snapshotSummary(client)
+          return [statements.length, rows]
+        } finally {
+          await client.query('ROLLBACK')
+        }
+      })
+
+    const [oneStatements, oneRows] = await rebuiltWith()
+    const [manyStatements, manyRows] = await rebuiltWith(1)
+    expect(oneStatements).toBe(4) // one per chromosome
+    expect(manyStatements).toBeGreaterThan(40)
+    // Per chromosome: three shared positions on two builds, three private ones.
+    expect(oneRows as unknown[]).toHaveLength(4 * (3 * 2 + 3))
+    expect(manyRows).toEqual(oneRows)
+  }, 120_000)
+
+  it('an export never reads a stale summary: it waits for the rebuild, or fails typed (#469 review)', async () => {
+    const caseId = await seedCase('export-a')
+    await seedAnnotated(caseId, { gene_symbol: 'FRESH', consequence: 'HIGH' })
+    await inTransaction((client) =>
+      repo.incrementalAdd({ schema, client: client as never, caseId })
+    )
+    // The summary holds an outdated value and is flagged stale, as after
+    // migration 0025; the cohort is "large", so a read does not rebuild inline.
+    await probe.query(`UPDATE "${schema}".cohort_variant_summary SET gene_symbol = 'OUTDATED'`)
+    await inTransaction((client) =>
+      repo.markStale({ schema, client: client as never, reason: 'test_export_while_stale' })
+    )
+    const previous = process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES
+    process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES = '0'
+    const cohort = new PostgresCohortRepository(pool, schema)
+    const exported = async (refreshWaitMs: number): Promise<Array<Record<string, unknown>>> => {
+      const rows: Array<Record<string, unknown>> = []
+      for await (const row of cohort.streamCohortRows({}, { refreshWaitMs })) rows.push(row)
+      return rows
+    }
+    // Somebody holds the summary write lock, so the background rebuild waits.
+    const holder = new Client({ connectionString: PG_URL })
+    await holder.connect()
+    await holder.query('BEGIN')
+    await lockSummaryForWrite(holder, schema)
+    try {
+      // The page is served the stale rows, with the hint ...
+      const page = await cohort.queryVariantsWithStaleness({})
+      expect(page.warnings).toEqual({ staleSummary: true })
+      expect(page.data[0].gene_symbol).toBe('OUTDATED')
+      // ... the export is not written.
+      const failure = await exported(300).catch((error: unknown) => error)
+      expect(failure).toBeInstanceOf(CohortSummaryRefreshingError)
+      expect(failure).toMatchObject({ code: 'CONFLICT' })
+    } finally {
+      await holder.query('ROLLBACK')
+      await holder.end()
+    }
+    try {
+      // With the lock free the export waits for the rebuild and gets current rows.
+      expect((await exported(30_000)).map((row) => row.gene_symbol)).toEqual(['FRESH'])
+      expect((await readCohortSummaryStatus({ pool, schema })).is_stale).toBe(false)
+    } finally {
+      await awaitBackgroundRebuild(schema)
+      if (previous === undefined) delete process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES
+      else process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES = previous
+    }
   }, 120_000)
 
   it('rebuild + N incremental ops + rebuild = byte-identical', async () => {

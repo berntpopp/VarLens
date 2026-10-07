@@ -107,8 +107,8 @@
 
     <!-- ClinVar with color coding -->
     <div v-else-if="column === 'clinvar'">
-      <v-chip v-if="value" :color="getClinvarColor(value as string)" size="x-small" label>
-        {{ value }}
+      <v-chip v-if="value" :color="clinvarColorToken(value as string)" size="x-small" label>
+        {{ clinvarDisplayText(value as string) }}
       </v-chip>
       <span v-else class="text-medium-emphasis">--</span>
     </div>
@@ -174,6 +174,7 @@
 
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
+import { clinvarColorToken, clinvarDisplayText } from '../../../../shared/config/severity.config'
 import AcmgMenu from '../AcmgMenu.vue'
 import { ACMG_COLORS, ACMG_ABBREV } from '../../composables/useAnnotations'
 import { mdiComment, mdiCommentOutline, mdiStar, mdiStarOutline, mdiTagOutline } from '@mdi/js'
@@ -225,16 +226,6 @@ const getImpactColor = (impact: string): string => {
     default:
       return 'grey'
   }
-}
-
-const getClinvarColor = (clinvar: string): string => {
-  const lower = clinvar.toLowerCase()
-  if (lower.includes('pathogenic') && !lower.includes('benign')) return 'error'
-  if (lower.includes('likely pathogenic')) return 'orange'
-  if (lower.includes('uncertain') || lower.includes('vus')) return 'warning'
-  if (lower.includes('likely benign')) return 'light-green'
-  if (lower.includes('benign')) return 'success'
-  return 'grey'
 }
 
 const getCaddColor = (cadd: number): string => {

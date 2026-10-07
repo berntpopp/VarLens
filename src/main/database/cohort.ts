@@ -5,6 +5,7 @@
  * Summary tables are populated by CohortSummaryService.rebuild() after import/delete.
  */
 
+import { offeredFilterValues } from '../../shared/config/severity.config'
 import type Database from 'better-sqlite3-multiple-ciphers'
 import type { Statement } from 'better-sqlite3-multiple-ciphers'
 import { mainLogger } from '../services/MainLogger'
@@ -568,7 +569,7 @@ export class CohortService {
       for (const entry of meta) {
         const values = valuesByKey.get(entry.key)
         if (values !== undefined) {
-          entry.distinctValues = values.sort()
+          entry.distinctValues = offeredFilterValues(entry.key, values.sort())
         }
       }
     }

@@ -305,6 +305,7 @@ const startImport = async (
 
     summary.value = result
     phase.value = 'summary'
+    importStore.logUnrankedOnce(result.details)
     importStore.importComplete({
       succeeded: result.succeeded,
       failed: result.failed,

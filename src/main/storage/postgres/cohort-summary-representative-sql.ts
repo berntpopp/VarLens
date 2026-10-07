@@ -1,110 +1,258 @@
 /**
- * The representative annotation of a `cohort_variant_summary` row.
+ * The annotation columns of a `cohort_variant_summary` row on PostgreSQL.
  *
- * A summary row stands for every carrier of one (chr, pos, ref, alt,
- * variant_type, genome_build), but cases can annotate the same coordinate
- * differently (another transcript, another annotation release). The row
- * stores one value per annotation column, and the rule is the same on every
- * path and on both backends (#461):
+ * Transcript-level columns come together from the most severe carrier row;
+ * variant-level facts (ClinVar, gnomAD, CADD, end) are aggregated over all
+ * carriers (#469). The rule, the column lists and the comparison SQL are
+ * shared with SQLite: src/shared/sql/cohort-representative.ts.
  *
- *   the NULL-ignoring MAX() of the column over all visible carrier rows,
- *   text compared bytewise (COLLATE "C", which is how SQLite compares)
+ * rebuild() computes that per key. The maintained paths must arrive at it too:
  *
- * rebuild() aggregates it. The maintained paths must arrive at the same row:
- *
- *   add      merge with GREATEST() on conflict (NULL-ignoring, like MAX)
- *   remove   recompute the rows where the removed case held a stored maximum
- *            and no remaining carrier row holds all of those maxima
+ *   add      the added case's transcript row replaces the stored one when it
+ *            is more severe, and each fact where the case's value wins
+ *            (ON CONFLICT DO UPDATE)
+ *   remove   recompute the rows where the removed case supplied the transcript
+ *            or held a fact and no remaining carrier row supplies all of it
  *   switch   recompute the row of a variant whose selected transcript changed
  *
- * Every statement here needs the summary write lock (./cohort-summary-lock).
+ * Every statement that writes the summary needs its write lock
+ * (./cohort-summary-lock).
  */
 import type { PoolClient } from 'pg'
 
+import {
+  NUMERIC_FACTS,
+  REPRESENTATIVE_COLUMNS,
+  SUMMARY_TRANSCRIPT_COLUMNS,
+  TRANSCRIPT_COLUMNS,
+  mergeFactAssignments,
+  precedesTranscript,
+  remainingRowCovers,
+  removalAffectsSummary,
+  sameSummaryColumns,
+  summaryColumnsOverWindow,
+  transcriptOrderBy,
+  type CarrierRanks
+} from '../../../shared/sql/cohort-representative'
+import { impactRankCaseSql } from '../../../shared/config/severity.config'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 import { dropEmptySummaryRows } from './cohort-unique-variants-sql'
 
 type QueryClient = Pick<PoolClient, 'query'>
 type Tbl = (table: string) => string
 
-/** Annotation columns of the summary, in table order; `text` ones compare bytewise. */
-export const SUMMARY_MAX_COLUMNS = [
-  { name: 'end_pos', text: false },
-  { name: 'gene_symbol', text: true },
-  { name: 'cdna', text: true },
-  { name: 'aa_change', text: true },
-  { name: 'consequence', text: true },
-  { name: 'func', text: true },
-  { name: 'clinvar', text: true },
-  { name: 'gnomad_af', text: false },
-  { name: 'cadd', text: false },
-  { name: 'transcript', text: true },
-  { name: 'omim_mim_number', text: true }
-] as const
-
-type MaxColumn = (typeof SUMMARY_MAX_COLUMNS)[number]
-
 const KEY = ['chr', 'pos', 'ref', 'alt', 'variant_type', 'genome_build'] as const
 const keyList = (alias: string): string => KEY.map((column) => `${alias}.${column}`).join(', ')
 const keyMatch = (a: string, b: string): string =>
   KEY.map((column) => `${a}.${column} = ${b}.${column}`).join(' AND ')
 
-/** A column reference that compares the way the rule says. */
-const comparable = (column: MaxColumn, alias: string): string =>
-  column.text ? `${alias}.${column.name} COLLATE "C"` : `${alias}.${column.name}`
+const HET = "('0/1','1/0','0|1','1|0')"
+const HOM = "('1/1','1|1')"
 
-/** `MAX(<alias>.col) AS col, ...` for every annotation column. */
-export function maxSelectList(alias: string): string {
-  return SUMMARY_MAX_COLUMNS.map(
-    (column) => `MAX(${comparable(column, alias)}) AS ${column.name}`
-  ).join(',\n           ')
-}
-
-/** SET list merging an added case into an existing row (ON CONFLICT DO UPDATE). */
-export function mergeMaxAssignments(existing: string): string {
-  return SUMMARY_MAX_COLUMNS.map(
-    (column) =>
-      `${column.name} = GREATEST(${comparable(column, existing)}, ${comparable(column, 'EXCLUDED')})`
-  ).join(',\n        ')
+/** The ClinVar rank of variant row `alias` from the `clinvar_severity` lookup (0 = unknown). */
+export function clinvarLookupRankSql(alias: string, lookupTable: string): string {
+  return `COALESCE((SELECT cs.rank FROM ${lookupTable} cs WHERE cs.raw = ${alias}.clinvar), 0)`
 }
 
 /**
- * The row's maxima over its visible carriers, for the keys in `keys`
- * (alias `m`). `extraFilter` restricts the carrier rows `v`.
+ * The severity ranks of variant row `alias`: the stored rank, or, for a row
+ * the background backfill has not reached yet (migration 0025 adds the
+ * columns as NULL), the same rank computed on the fly. Every reader of a
+ * variant row's rank goes through this, so results do not depend on how far
+ * the backfill is.
+ */
+export function carrierRanks(alias: string, tbl: Tbl): CarrierRanks {
+  return {
+    impact: `COALESCE(${alias}.impact_rank, ${impactRankCaseSql(`${alias}.consequence`)})`,
+    clinvar: `COALESCE(${alias}.clinvar_rank, ${clinvarLookupRankSql(alias, tbl('clinvar_severity'))})`
+  }
+}
+
+/*
+ * Aggregate form of the rule, for the two statements that read many variant
+ * rows (a case's contribution, the rebuild). The shared module states the rule
+ * as an order (ROW_NUMBER over a window); a window needs a sort of the wide
+ * rows and a pass per partition, which cost a third more than the hash
+ * aggregate it replaced. The same order as one aggregate per key:
+ *
+ *   transcript row   MAX() of a text array, compared bytewise: the impact rank
+ *                    as one character, then per transcript-level column a
+ *                    '1'/'0' presence flag and the value. Arrays compare
+ *                    element by element, so this is impact rank DESC, then
+ *                    each column DESC with NULL last: transcriptOrderBy().
+ *   ClinVar          MAX() of the rank character followed by the string
+ *   numeric facts    MIN() / MAX() as configured
+ *
+ * The recompute of single keys keeps the window form; the drift and parity
+ * tests hold both forms, and SQLite, to the same rows.
+ */
+
+/** Ranks are single characters from '@' (0) upwards; they stay far below 60. */
+const rankCharacter = (rank: string): string => `chr(64 + ${rank})`
+
+/** The array whose bytewise maximum is the transcript row of `alias`. */
+function transcriptKeySql(alias: string, ranks: CarrierRanks): string {
+  const elements = TRANSCRIPT_COLUMNS.map(
+    (column) =>
+      `CASE WHEN ${alias}.${column} IS NULL THEN '0' ELSE '1' END, COALESCE(${alias}.${column}, '')`
+  )
+  return `ARRAY[${rankCharacter(ranks.impact)}, ${elements.join(', ')}] COLLATE "C"`
+}
+
+/** Aggregates over the variant rows `alias` of one group: transcript key and facts. */
+function carrierAggregates(alias: string, ranks: CarrierRanks): string {
+  return [
+    `MAX(${transcriptKeySql(alias, ranks)}) AS transcript_key`,
+    `MAX((${rankCharacter(ranks.clinvar)} || ${alias}.clinvar) COLLATE "C") AS clinvar_key`,
+    `MAX(${ranks.clinvar}) AS clinvar_rank`,
+    ...NUMERIC_FACTS.map(
+      (fact) => `${fact.keep === 'min' ? 'MIN' : 'MAX'}(${alias}.${fact.name}) AS ${fact.name}`
+    )
+  ].join(',\n           ')
+}
+
+/** The same aggregates over rows `alias` that are themselves such aggregates. */
+function mergedAggregates(alias: string): string {
+  return [
+    `MAX(${alias}.transcript_key COLLATE "C") AS transcript_key`,
+    `MAX(${alias}.clinvar_key COLLATE "C") AS clinvar_key`,
+    `MAX(${alias}.clinvar_rank) AS clinvar_rank`,
+    ...NUMERIC_FACTS.map(
+      (fact) => `${fact.keep === 'min' ? 'MIN' : 'MAX'}(${alias}.${fact.name}) AS ${fact.name}`
+    )
+  ].join(',\n               ')
+}
+
+/** Every annotation column of the summary, decoded from an aggregated row `alias`. */
+function decodedSummaryColumns(alias: string): string {
+  const key = `${alias}.transcript_key`
+  return [
+    ...TRANSCRIPT_COLUMNS.map(
+      (column, index) =>
+        `CASE WHEN ${key}[${2 + 2 * index}] = '1' THEN ${key}[${3 + 2 * index}] END AS ${column}`
+    ),
+    `(ascii(${key}[1]) - 64)::smallint AS impact_rank`,
+    `substr(${alias}.clinvar_key, 2) AS clinvar`,
+    `${alias}.clinvar_rank::smallint AS clinvar_rank`,
+    ...NUMERIC_FACTS.map((fact) => `${alias}.${fact.name}`)
+  ].join(',\n           ')
+}
+
+/**
+ * CTEs ending in `per_case`: one case's contribution per summary key, i.e. its
+ * most severe transcript row, its variant-level facts and its genotype
+ * (`$1 = caseId`).
+ */
+export function caseContributionCte(tbl: Tbl, includeProvisional = false): string {
+  return `
+  WITH grouped AS (
+    SELECT ${keyList('v').replace('v.genome_build', 'c.genome_build')},
+           ${carrierAggregates('v', carrierRanks('v', tbl))},
+           MAX(v.gt_num) AS gt_num
+    FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
+    JOIN ${tbl(includeProvisional ? 'cases_all' : 'cases')} c ON c.id = v.case_id
+    WHERE v.case_id = $1
+    GROUP BY ${keyList('v').replace('v.genome_build', 'c.genome_build')}
+  ),
+  per_case AS (
+    SELECT ${keyList('g')},
+           ${decodedSummaryColumns('g')},
+           1 AS carrier_delta,
+           CASE WHEN g.gt_num IN ${HET} THEN 1 ELSE 0 END AS het_delta,
+           CASE WHEN g.gt_num IN ${HOM} THEN 1 ELSE 0 END AS hom_delta
+    FROM grouped g
+  )`
+}
+
+/**
+ * CTEs ending in `agg`: every summary key of the visible variants matching
+ * `variantFilter` (a predicate on `v`, or empty) with its annotation columns
+ * and its carrier counts. A case counts once per key whatever number of rows
+ * it has there.
+ */
+export function summaryRowsCte(tbl: Tbl, variantFilter = ''): string {
+  const caseKey = `${keyList('v').replace('v.genome_build', 'c.genome_build')}, v.case_id`
+  return `
+      WITH case_rows AS (
+        SELECT ${caseKey},
+               ${carrierAggregates('v', carrierRanks('v', tbl))},
+               MAX(v.gt_num) AS gt_num
+        FROM ${tbl('variants')} v
+        JOIN ${tbl('cases')} c ON c.id = v.case_id
+        ${variantFilter === '' ? '' : `WHERE ${variantFilter}`}
+        GROUP BY ${caseKey}
+      ),
+      key_rows AS (
+        SELECT ${keyList('d')},
+               ${mergedAggregates('d')},
+               COUNT(*) AS carrier_count,
+               SUM(CASE WHEN d.gt_num IN ${HET} THEN 1 ELSE 0 END) AS het_count,
+               SUM(CASE WHEN d.gt_num IN ${HOM} THEN 1 ELSE 0 END) AS hom_count
+        FROM case_rows d
+        GROUP BY ${keyList('d')}
+      ),
+      agg AS (
+        SELECT ${keyList('k')},
+               ${decodedSummaryColumns('k')},
+               k.carrier_count, k.het_count, k.hom_count
+        FROM key_rows k
+      )`
+}
+
+/**
+ * SET assignments for `INSERT ... AS <existing> ... ON CONFLICT DO UPDATE`.
+ * The added case's transcript-level columns replace the stored ones, all at
+ * once, when its row is more severe; the comparison runs once per row
+ * (OFFSET 0 keeps the planner from inlining it into every column). Each
+ * variant-level fact is replaced where the case's value wins.
+ */
+export function mergeRepresentativeAssignment(existing: string): string {
+  return `(${SUMMARY_TRANSCRIPT_COLUMNS.join(', ')}) = (
+          SELECT ${SUMMARY_TRANSCRIPT_COLUMNS.map(
+            (column) =>
+              `CASE WHEN w.replaces THEN EXCLUDED.${column} ELSE ${existing}.${column} END`
+          ).join(',\n                 ')}
+          FROM (SELECT ${precedesTranscript('EXCLUDED', existing, 'postgres')} AS replaces OFFSET 0) w
+        ),
+        ${mergeFactAssignments('EXCLUDED', existing, 'postgres').join(',\n        ')}`
+}
+
+/**
+ * Set the annotation columns of the keys in `keys` (alias `m`) from their
+ * visible carrier rows. `extraFilter` restricts the carrier rows `v`.
  */
 function recomputeSql(tbl: Tbl, keysCte: string, extraFilter: string): string {
+  const ranks = carrierRanks('v', tbl)
   return `
     WITH ${keysCte},
-    agg AS (
-      SELECT ${keyList('m')},
-             ${maxSelectList('v')}
-      FROM keys m
-      JOIN ${tbl('variants')} v
-        ON v.chr = m.chr AND v.pos = m.pos AND v.ref = m.ref AND v.alt = m.alt
-       AND v.variant_type = m.variant_type ${extraFilter}
-      JOIN ${tbl('cases')} c ON c.id = v.case_id AND c.genome_build = m.genome_build
-      GROUP BY ${keyList('m')}
+    best AS (
+      SELECT * FROM (
+        SELECT ${keyList('m')},
+               ${summaryColumnsOverWindow('v', 'key_rows', 'postgres', ranks)},
+               ROW_NUMBER() OVER (key_rows ORDER BY ${transcriptOrderBy('v', 'postgres', ranks)}) AS rn
+        FROM keys m
+        JOIN ${tbl('variants')} v
+          ON v.chr = m.chr AND v.pos = m.pos AND v.ref = m.ref AND v.alt = m.alt
+         AND v.variant_type = m.variant_type ${extraFilter}
+        JOIN ${tbl('cases')} c ON c.id = v.case_id AND c.genome_build = m.genome_build
+        WINDOW key_rows AS (PARTITION BY ${keyList('m')})
+      ) ranked
+      WHERE rn = 1
     )
     UPDATE ${tbl('cohort_variant_summary')} s
-    SET ${SUMMARY_MAX_COLUMNS.map((column) => `${column.name} = agg.${column.name}`).join(', ')}
-    FROM agg
-    WHERE ${keyMatch('s', 'agg')}
-      AND (${SUMMARY_MAX_COLUMNS.map(
-        (column) => `${comparable(column, 's')} IS DISTINCT FROM ${comparable(column, 'agg')}`
-      ).join(' OR ')})`
+    SET ${REPRESENTATIVE_COLUMNS.map((column) => `${column} = best.${column}`).join(', ')}
+    FROM best
+    WHERE ${keyMatch('s', 'best')}
+      AND NOT (${sameSummaryColumns('s', 'best', 'postgres')})`
 }
 
-/** The case's value `k` cannot have been the stored maximum `s`. */
-const unaffected = (column: MaxColumn): string =>
-  `(k.${column.name} IS NULL OR ${comparable(column, 'k')} < ${comparable(column, 's')})`
-
 /**
- * Keys whose representative may change when case `$1` goes: other carriers
- * remain, the case holds at least one stored maximum, and no single remaining
- * carrier row holds all the maxima it holds. The last check is an index probe
- * that stops at the first such row, so a cohort that annotates a coordinate
- * uniformly (the normal case) costs one probe per coordinate and recomputes
- * nothing.
+ * Keys whose annotation may change when case `$1` goes: other carriers
+ * remain, the case supplies the transcript or holds a variant-level fact, and
+ * no single remaining carrier row supplies all of that. The last check is an
+ * index probe that stops at the first such row, so a cohort that annotates a
+ * variant uniformly (the normal case) costs one probe per variant and
+ * recomputes nothing.
  */
 function removalKeysCte(tbl: Tbl): string {
   return `keys AS MATERIALIZED (
@@ -112,7 +260,7 @@ function removalKeysCte(tbl: Tbl): string {
       FROM pg_temp.${CASE_AGG_TABLE} k
       JOIN ${tbl('cohort_variant_summary')} s ON ${keyMatch('s', 'k')}
       WHERE s.carrier_count > k.carrier_delta
-        AND NOT (${SUMMARY_MAX_COLUMNS.map(unaffected).join(' AND ')})
+        AND (${removalAffectsSummary('k', 's', 'postgres')})
         AND NOT EXISTS (
           SELECT 1
           FROM ${tbl('variants')} r
@@ -120,10 +268,7 @@ function removalKeysCte(tbl: Tbl): string {
           WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
             AND r.variant_type = k.variant_type AND rc.genome_build = k.genome_build
             AND r.case_id <> $1
-            AND ${SUMMARY_MAX_COLUMNS.map(
-              (column) =>
-                `(${unaffected(column)} OR ${comparable(column, 'r')} = ${comparable(column, 'k')})`
-            ).join('\n            AND ')}
+            AND ${remainingRowCovers('r', 'k', 's', 'postgres')}
         )
     )`
 }

@@ -60,7 +60,10 @@ const warmLight: ThemeDefinition = {
     muted: '#5C6370',
     // Filled star (amber). Material amber is 1.6:1 on surface; this keeps the
     // hue at 4.1:1 so the starred state meets 3:1 non-text contrast (1.4.11).
-    star: '#B26A00'
+    star: '#B26A00',
+    // ClinVar "conflicting" chip. Material deep-purple is one colour in both
+    // themes (2.0:1 on the dark surface); this pair is 7.4:1 light, 7.2:1 dark.
+    'clinvar-conflicting': '#5E35B1'
   },
   variables: {
     // Vuetify's light default (0.60) renders on-surface at 4.4:1 — just under AA.
@@ -92,7 +95,8 @@ const warmDark: ThemeDefinition = {
     'on-success': '#12141A',
     'on-warning': '#12141A',
     muted: '#A0A8B4', // 7.0:1 on surface (AA)
-    star: '#FFC107' // 10.4:1 on surface
+    star: '#FFC107', // 10.4:1 on surface
+    'clinvar-conflicting': '#B39DDB'
   }
 }
 

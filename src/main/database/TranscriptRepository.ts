@@ -1,5 +1,6 @@
 import { BaseRepository } from './BaseRepository'
 import { applyVariantAnnotationChange } from './cohort-summary-coordinate-recompute'
+import { impactRank } from '../../shared/config/severity.config'
 import {
   canonicalizeTranscriptSemantics,
   type TranscriptAnnotation,
@@ -113,6 +114,8 @@ export class TranscriptRepository extends BaseRepository {
         transcript: transcriptId,
         gene_symbol: transcript.gene_symbol,
         consequence: semantics.consequence,
+        // The stored rank must describe the stored impact (#469).
+        impact_rank: impactRank(semantics.consequence),
         func: semantics.func,
         cdna: transcript.cdna,
         aa_change: transcript.aa_change,

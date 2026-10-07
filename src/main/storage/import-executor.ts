@@ -40,6 +40,8 @@ export interface StorageImportSingleFileResult {
   skipped: number
   errors: string[]
   elapsed: number
+  /** ClinVar values of this import that the severity configuration does not know. */
+  unrankedClinvar?: string[]
 }
 
 /**
@@ -93,6 +95,8 @@ export interface StorageImportMultiFileResult {
    */
   errors: string[]
   elapsed: number
+  /** ClinVar values of all files that the severity configuration does not know. */
+  unrankedClinvar?: string[]
 }
 
 /**

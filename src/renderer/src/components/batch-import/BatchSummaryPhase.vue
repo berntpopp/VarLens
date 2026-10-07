@@ -19,6 +19,21 @@
       Import was cancelled. {{ summary.succeeded }} files were imported before cancellation.
     </v-alert>
 
+    <!-- ClinVar values the severity configuration does not know: imported and
+         shown as they are, but ranked as unknown (#469). Tonal alert: its
+         background derives from the theme's warning colour in light and dark. -->
+    <v-alert
+      v-for="notice in unrankedNotices"
+      :key="notice.caseName"
+      type="warning"
+      variant="tonal"
+      density="compact"
+      class="mb-2 text-body-small"
+      data-testid="unranked-clinvar"
+    >
+      <strong>{{ notice.caseName }}:</strong> {{ notice.summary }}
+    </v-alert>
+
     <v-expansion-panels v-if="summary.details.length > 0" variant="accordion">
       <v-expansion-panel v-for="(detail, i) in summary.details" :key="i">
         <v-expansion-panel-title>
@@ -58,10 +73,21 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { BatchResult } from '../../../../shared/types/api'
+import { unrankedClinvarSummary } from '../../utils/unranked-clinvar'
 import { mdiAlertCircle, mdiCheckCircle, mdiSkipNext } from '@mdi/js'
 
-defineProps<{
+const props = defineProps<{
   summary: BatchResult
 }>()
+
+/** One compact warning per file that had ClinVar values the configuration does not know. */
+const unrankedNotices = computed(() =>
+  props.summary.details.flatMap((detail) =>
+    detail.unrankedClinvar !== undefined && detail.unrankedClinvar.length > 0
+      ? [{ caseName: detail.caseName, summary: unrankedClinvarSummary(detail.unrankedClinvar) }]
+      : []
+  )
+)
 </script>

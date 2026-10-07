@@ -370,19 +370,27 @@ describe('PostgresCohortRepository', () => {
       }
     })
 
-    const dataSql = normalizeSql(query.mock.calls[2][0] as string)
-    const dataParams = query.mock.calls[2][1] as unknown[]
+    const dataSql = normalizeSql(callText(query.mock.calls[2]))
+    const dataParams = callParams(query.mock.calls[2])
 
+    // Served from the summary: the row keeps its representative annotation and
+    // the extension predicates probe its carrier rows (#469).
+    expect(dataSql).toContain('FROM "public"."cohort_variant_summary" cvs')
+    expect(dataSql).not.toContain('GROUP BY v.chr')
     expect(dataSql).toContain('JOIN "public"."variant_sv" sv ON sv.variant_id = ext_v.id')
     expect(dataSql).toContain('JOIN "public"."variant_cnv" cnv ON cnv.variant_id = ext_v.id')
     expect(dataSql).toContain(
       'JOIN "public"."variant_str" str_ext ON str_ext.variant_id = ext_v.id'
     )
-    expect(dataSql).toContain('ext_v.chr = v.chr')
-    expect(dataSql).toContain('sv.support > $')
-    expect(dataSql).toContain('cnv.copy_number >= $')
-    expect(dataSql).toContain('str_ext.repeat_id ILIKE $')
-    expect(dataParams).toEqual([3, '%HTT%', 5, 50, 0])
+    expect(dataSql).toContain('ext_v.chr = cvs.chr')
+    expect(dataSql).toContain('ext_v.variant_type = cvs.variant_type')
+    // Extension range filters exclude rows without a value by default.
+    expect(dataSql).toContain('AND sv.support > $1')
+    expect(dataSql).toContain('AND cnv.copy_number >= $2')
+    expect(dataSql).toContain('str_ext.repeat_id ILIKE $3')
+    // Three extension tables: no single variant type to narrow to.
+    expect(dataSql).not.toContain("cvs.variant_type = '")
+    expect(dataParams).toEqual([5, 3, '%HTT%', 50, 0])
   })
 
   it('combines same-extension cohort column filters in one exists predicate', async () => {
@@ -400,7 +408,8 @@ describe('PostgresCohortRepository', () => {
       }
     })
 
-    const dataSql = normalizeSql(query.mock.calls[2][0] as string)
+    const dataSql = normalizeSql(callText(query.mock.calls[2]))
+    expect(dataSql).toContain("cvs.variant_type = 'cnv'")
     expect(dataSql.match(/JOIN "public"."variant_cnv" cnv/g)).toHaveLength(1)
     expect(dataSql).toContain('cnv.copy_number >= $')
     expect(dataSql).toContain('cnv.copy_number_quality >= $')
@@ -421,10 +430,12 @@ describe('PostgresCohortRepository', () => {
       }
     })
 
-    const dataSql = normalizeSql(query.mock.calls[2][0] as string)
+    const dataSql = normalizeSql(callText(query.mock.calls[2]))
     expect(dataSql).not.toContain('ILIKE')
     expect(dataSql).not.toContain('variant_str')
-    expect(query.mock.calls[2][1]).toEqual([50, 0])
+    // A blank extension filter does not narrow the variant type either.
+    expect(dataSql).not.toContain("cvs.variant_type = '")
+    expect(callParams(query.mock.calls[2])).toEqual([50, 0])
   })
 
   it('uses genome-build scoped total cases for cohort frequency filters', async () => {
@@ -768,8 +779,10 @@ describe('PostgresCohortRepository', () => {
       'SELECT COUNT(*)::bigint AS total_cases FROM "public"."cases"'
     )
     const streamArg = query.mock.calls[0][0] as { cursor?: { text?: string; values?: unknown[] } }
-    expect(streamArg.cursor?.text).toContain('FROM "public"."variants" v')
-    expect(streamArg.cursor?.text).toContain('GROUP BY v.chr, v.pos, v.ref, v.alt')
+    // The export reads the summary, like the page: same representative row (#469).
+    expect(streamArg.cursor?.text).toContain('FROM "public"."cohort_variant_summary" cvs')
+    expect(streamArg.cursor?.text).not.toContain('GROUP BY v.chr')
+    expect(streamArg.cursor?.text).toContain('cvs.gene_symbol = $1')
     expect(streamArg.cursor?.text).not.toContain('LIMIT')
     expect(streamArg.cursor?.text).not.toContain('OFFSET')
     expect(streamArg.cursor?.values).toEqual(['MYH7'])

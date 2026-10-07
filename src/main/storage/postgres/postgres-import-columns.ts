@@ -13,6 +13,7 @@
 // must omit it.
 // ---------------------------------------------------------------------------
 
+import { annotationSeverityRanks } from '../../../shared/config/severity.config'
 import { encodeText, encodeInteger, encodeFloat, type CopyColumnEncoder } from './copy-text-encoder'
 
 export const VARIANT_BASE_COLUMNS = [
@@ -47,8 +48,21 @@ export const VARIANT_BASE_COLUMNS = [
   'end_pos',
   'sv_type',
   'sv_length',
-  'caller'
+  'caller',
+  // Severity ranks of `consequence` (impact) and `clinvar`, see setSeverityRanks.
+  'impact_rank',
+  'clinvar_rank'
 ] as const
+
+/**
+ * Set `impact_rank` / `clinvar_rank` on a variant row about to be written,
+ * from its `consequence` (impact) and `clinvar` values and the shared severity
+ * configuration (#469). Every writer of a variant row calls this, so the
+ * stored ranks always describe the stored strings.
+ */
+export function setSeverityRanks<T extends Record<string, unknown>>(row: T): T {
+  return Object.assign(row, annotationSeverityRanks(row))
+}
 
 export const VARIANT_TRANSCRIPT_COLUMNS = [
   'variant_id',
@@ -197,6 +211,8 @@ export const VARIANT_COLUMN_ENCODERS: Record<string, CopyColumnEncoder> = {
   sv_type: encodeText,
   sv_length: encodeInteger,
   caller: encodeText,
+  impact_rank: encodeInteger,
+  clinvar_rank: encodeInteger,
   // variant_transcripts
   variant_id: encodeInteger,
   transcript_id: encodeText,

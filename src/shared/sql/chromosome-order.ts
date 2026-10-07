@@ -19,6 +19,7 @@
  * Changing the expression means a new migration on both backends that rebuilds
  * those indexes; otherwise ORDER BY no longer matches them and falls back to a sort.
  */
+import { severitySortTerms, type SeverityRankSql } from './severity-sort'
 
 /** Rank shared by every contig that is not 1..22, X, Y or MT. */
 export const OTHER_CONTIG_RANK = 100
@@ -129,16 +130,21 @@ export interface ResolvedVariantSort {
  * same order:
  * - no sorts → `genomicVariantOrderTerms(alias)`;
  * - `chr` → natural chromosome order, then `pos ASC` unless pos is sorted too;
+ * - `consequence` (impact) / `clinvar` → the stored severity rank, then the
+ *   text (severity-sort.ts);
  * - anything else → `column DIR NULLS LAST`.
  */
 export function buildVariantOrderTerms(
   sorts: ResolvedVariantSort[],
   alias: string,
-  dialect: SqlDialect = 'sqlite'
+  dialect: SqlDialect = 'sqlite',
+  ranks?: SeverityRankSql
 ): string[] {
   if (sorts.length === 0) return genomicVariantOrderTerms(alias, dialect)
   const hasPosSort = sorts.some((s) => s.key === 'pos')
   return sorts.flatMap((s) => {
+    const bySeverity = severitySortTerms(s.key, alias, s.column, s.order, ranks)
+    if (bySeverity !== null) return bySeverity
     if (s.key !== 'chr') return [`${s.column} ${s.order === 'desc' ? 'DESC' : 'ASC'} NULLS LAST`]
     const terms = chromosomeOrderTerms(s.column, s.order, dialect)
     return hasPosSort ? terms : [...terms, `${qualify(alias, 'pos')} ASC`]
@@ -150,6 +156,8 @@ export function buildVariantOrderTerms(
  *
  * - `sortKey === 'chr'`: natural chromosome order in `direction`, then
  *   pos/ref/alt ascending within each chromosome.
+ * - `consequence` (impact) / `clinvar`: the stored severity rank, then the
+ *   text (severity-sort.ts), then the genomic tiebreaker;
  * - any other key: `sortColumn direction NULLS LAST`, then the natural
  *   genomic tiebreaker (rank, chr, pos, ref, alt).
  *
@@ -170,7 +178,9 @@ export function cohortOrderByClause(
     sortKey === 'chr'
       ? [...chromosomeOrderTerms(chr, direction, dialect), ...withinChromosome]
       : [
-          `${sortColumn} ${direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST`,
+          ...(severitySortTerms(sortKey, alias, sortColumn, direction) ?? [
+            `${sortColumn} ${direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST`
+          ]),
           ...chromosomeOrderTerms(chr, 'asc', dialect),
           ...withinChromosome
         ]

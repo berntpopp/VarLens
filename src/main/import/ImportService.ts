@@ -1,6 +1,11 @@
 import { statSync, existsSync } from 'node:fs'
 import { DatabaseService } from '../database/DatabaseService'
 import { mainLogger } from '../services/MainLogger'
+import {
+  resetUnrankedClinvar,
+  takeUnrankedClinvar,
+  unrankedClinvarLogLine
+} from './unranked-clinvar'
 import type { ImportOptions, ImportResult } from './types'
 import { importRegistry } from './strategies'
 import type { StrategyContext } from './strategies'
@@ -63,7 +68,16 @@ export class ImportService {
       }
 
       // Execute import via strategy
+      resetUnrankedClinvar()
       const result = await strategy.import(filePath, options, context)
+      const unrankedClinvar = takeUnrankedClinvar()
+      if (unrankedClinvar !== undefined) {
+        result.unrankedClinvar = unrankedClinvar
+        mainLogger.warn(
+          unrankedClinvarLogLine(options.caseName ?? filePath, unrankedClinvar),
+          'import'
+        )
+      }
 
       // Auto-populate data info with import provenance
       try {

@@ -32,7 +32,7 @@ interface VariantExtensionFields {
   _str?: StrExtensionRow
 }
 
-import { DATABASE_CONFIG } from '../../shared/config'
+import { DATABASE_CONFIG, annotationSeverityRanks, withOfferedValues } from '../../shared/config'
 import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import { VariantSearchService } from './VariantSearchService'
 import { VariantFrequencyService } from './VariantFrequencyService'
@@ -117,7 +117,8 @@ export class VariantRepository extends BaseRepository {
               end_pos: v.end_pos ?? null,
               sv_type: v.sv_type ?? null,
               sv_length: v.sv_length ?? null,
-              caller: v.caller ?? null
+              caller: v.caller ?? null,
+              ...annotationSeverityRanks(v)
             })
           )
 
@@ -525,7 +526,7 @@ export class VariantRepository extends BaseRepository {
       }
     }
 
-    return meta
+    return meta.map(withOfferedValues)
   }
 
   // ── Scope-aware single-column metadata (base + extension) ────
@@ -612,7 +613,7 @@ export class VariantRepository extends BaseRepository {
       entry.distinctValues = valRows.map((r) => r.v)
     }
 
-    return entry
+    return withOfferedValues(entry)
   }
 
   /**

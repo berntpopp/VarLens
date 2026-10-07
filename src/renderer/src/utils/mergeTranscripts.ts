@@ -5,6 +5,7 @@
 
 import { isTranscriptImpact, type TranscriptAnnotation } from '../../../shared/types/transcript'
 import type { VepTranscriptConsequence } from '../../../shared/types/vep'
+import { IMPACT_RANK_BY_LEVEL, MAX_IMPACT_RANK } from '../../../shared/config/severity.config'
 
 /** Where a transcript row came from */
 export type TranscriptSource = 'imported' | 'vep' | 'both'
@@ -36,12 +37,11 @@ export interface UnifiedTranscriptRow {
   _vepRow: VepTranscriptConsequence | null
 }
 
-/** Impact severity for sorting (lower = more severe) */
-const IMPACT_ORDER: Record<string, number> = {
-  HIGH: 0,
-  MODERATE: 1,
-  LOW: 2,
-  MODIFIER: 3
+/** Sort position of an impact level: most severe first, unknown and null last. */
+const UNKNOWN_IMPACT_POSITION = 99
+function impactSortPosition(impact: string | null): number {
+  const rank = impact !== null ? IMPACT_RANK_BY_LEVEL[impact] : undefined
+  return rank === undefined ? UNKNOWN_IMPACT_POSITION : MAX_IMPACT_RANK - rank
 }
 
 /**
@@ -160,8 +160,8 @@ export function mergeTranscripts(
     if (aCanon !== bCanon) return bCanon - aCanon
 
     // Impact severity (HIGH < MODERATE < LOW < MODIFIER < null)
-    const aImpact = a.impact !== null ? (IMPACT_ORDER[a.impact] ?? 99) : 99
-    const bImpact = b.impact !== null ? (IMPACT_ORDER[b.impact] ?? 99) : 99
+    const aImpact = impactSortPosition(a.impact)
+    const bImpact = impactSortPosition(b.impact)
     if (aImpact !== bImpact) return aImpact - bImpact
 
     // Alphabetical by transcript_id

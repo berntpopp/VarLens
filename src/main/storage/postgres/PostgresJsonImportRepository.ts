@@ -4,6 +4,7 @@ import { UniqueConstraintError } from '../../database/errors'
 import { quoteIdentifier } from './identifiers'
 import {
   VARIANT_BASE_COLUMNS,
+  setSeverityRanks,
   VARIANT_CNV_COLUMNS,
   VARIANT_STR_COLUMNS,
   VARIANT_SV_COLUMNS,
@@ -50,7 +51,9 @@ const VARIANT_BATCH_RECORDSET_TYPES: Record<string, string> = {
   end_pos: 'bigint',
   sv_type: 'text',
   sv_length: 'bigint',
-  caller: 'text'
+  caller: 'text',
+  impact_rank: 'smallint',
+  clinvar_rank: 'smallint'
 }
 
 const TRANSCRIPT_RECORDSET_TYPES: Record<string, string> = {
@@ -379,7 +382,7 @@ export class PostgresJsonImportRepository {
       .join(', ')
 
     const payload = rows.map((row) => {
-      const picked = pickColumns(row, batchCols as readonly string[])
+      const picked = setSeverityRanks(pickColumns(row, batchCols as readonly string[]))
       // Default variant_type to 'snv' when not provided.
       if (picked.variant_type === null) {
         picked.variant_type = 'snv'
@@ -413,7 +416,7 @@ export class PostgresJsonImportRepository {
       .join(', ')
 
     const picked = normalizeRecordsetPayload(
-      pickColumns(row, batchCols as readonly string[]),
+      setSeverityRanks(pickColumns(row, batchCols as readonly string[])),
       VARIANT_BATCH_RECORDSET_TYPES
     )
     if (picked.variant_type === null) picked.variant_type = 'snv'

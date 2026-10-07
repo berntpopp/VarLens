@@ -12,6 +12,7 @@
  * quoteIdentifier). The `applyAnnotationFlags*(client, args)` executors run the
  * statement through runNamed inside the caller's transaction (no BEGIN/COMMIT).
  */
+import { acmgLabelCaseSql, acmgRankCaseSql } from '../../../shared/config/severity.config'
 import type { Pool } from 'pg'
 
 import { InvalidParametersError } from '../../ipc/errors'
@@ -21,25 +22,8 @@ import { runNamed } from './named-query'
 /** runNamed only needs `query`; accept any pool/client that provides it. */
 type RunNamedCapable = Pick<Pool, 'query'>
 
-/**
- * ACMG rank ladder mirroring PostgresCohortSummaryRepository (and the SQLite
- * source of truth in src/shared/sql/cohort-summary-rebuild.ts). Higher rank
- * wins; the textual label is reconstructed from the winning rank.
- */
-const ACMG_RANK_SQL = (col: string): string => `CASE ${col}
-  WHEN 'Pathogenic' THEN 5
-  WHEN 'Likely pathogenic' THEN 4
-  WHEN 'Uncertain significance' THEN 3
-  WHEN 'Likely benign' THEN 2
-  WHEN 'Benign' THEN 1
-  ELSE 0 END`
-
-const ACMG_LABEL_FROM_RANK_SQL = `WHEN 5 THEN 'Pathogenic'
-  WHEN 4 THEN 'Likely pathogenic'
-  WHEN 3 THEN 'Uncertain significance'
-  WHEN 2 THEN 'Likely benign'
-  WHEN 1 THEN 'Benign'
-  ELSE NULL`
+/** ACMG rank of a class expression, from the shared severity configuration. Higher wins. */
+const ACMG_RANK_SQL = acmgRankCaseSql
 
 /**
  * SQL `SET` fragment that recomputes the three annotation flag columns of a
@@ -81,7 +65,7 @@ function flagRecomputeSql(schemaName: string, caseFilter: string): string {
         AND v.variant_type = cvs.variant_type
         AND cva.per_case_comment IS NOT NULL AND cva.per_case_comment <> ''${caseFilter}
     )),
-    acmg_best = (CASE (
+    acmg_best = (${acmgLabelCaseSql(`(
       SELECT MAX(rank) FROM (
         SELECT ${ACMG_RANK_SQL('va.acmg_classification')} AS rank
         FROM ${schemaName}."variant_annotations" va
@@ -97,9 +81,7 @@ function flagRecomputeSql(schemaName: string, caseFilter: string): string {
           AND v.variant_type = cvs.variant_type
           AND cva.acmg_classification IS NOT NULL${caseFilter}
       ) ranked
-    )
-      ${ACMG_LABEL_FROM_RANK_SQL}
-    END)`
+    )`)})`
 }
 
 /**

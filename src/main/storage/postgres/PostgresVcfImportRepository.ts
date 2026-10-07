@@ -7,6 +7,7 @@ import {
   VARIANT_CNV_COPY_COLUMNS,
   VARIANT_COLUMN_ENCODERS,
   VARIANT_COPY_COLUMNS,
+  setSeverityRanks,
   VARIANT_STR_COPY_COLUMNS,
   VARIANT_SV_COPY_COLUMNS,
   VARIANT_TRANSCRIPT_COPY_COLUMNS,
@@ -464,7 +465,7 @@ export class PostgresVcfImportRepository {
     // pickColumns projects to exactly the COPY column list and sets nulls for
     // missing keys; we then add the pre-reserved id and the resolved case_id.
     const variantsRowsWithIds = variants.map((row, i) => {
-      const picked = pickColumns(row, VARIANT_COPY_COLUMNS as readonly string[])
+      const picked = setSeverityRanks(pickColumns(row, VARIANT_COPY_COLUMNS as readonly string[]))
       if (picked.variant_type === null) picked.variant_type = 'snv'
       picked.id = variantIds[i]
       picked.case_id = caseId

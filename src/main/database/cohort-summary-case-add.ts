@@ -8,7 +8,8 @@
  *
  *  - add: one transaction per case, driven only by that case's rows
  *    (cohort-summary-case-add-sql.ts) — carrier/het/hom += the case's deduped
- *    contribution, MAX columns merged NULL-safely, new rows flagged from
+ *    contribution, the representative replaced where the case is more severe,
+ *    new rows flagged from
  *    variant_annotations, per-case annotation flags re-applied; gene burden
  *    += the case's rows, 1 case, and the coordinates no other case has for
  *    that gene and build.
@@ -321,7 +322,7 @@ export function openImportSummarySession(
             s.captureCaseCoords.run(params)
             countAddedCaseUniqueVariants(db) // before the new rows exist
             s.incrementCarriers.run()
-            s.mergeVariantMaxima.run()
+            s.mergeRepresentative.run()
             s.insertNewVariantSummary.run({ build: params.build })
             applyPerCaseFlags()
             s.markCaseReady.run(caseId)
@@ -378,7 +379,7 @@ function prepareAddStatements(db: DatabaseType) {
     upsertGeneBurden: db.prepare(sql.UPSERT_GENE_BURDEN_SQL),
     incrementCarriers: db.prepare(sql.INCREMENT_CARRIERS_SQL),
     captureCaseCoords: db.prepare(sql.CAPTURE_CASE_COORDS_SQL),
-    mergeVariantMaxima: db.prepare(sql.MERGE_VARIANT_MAXIMA_SQL),
+    mergeRepresentative: db.prepare(sql.MERGE_REPRESENTATIVE_SQL),
     insertNewVariantSummary: db.prepare(sql.INSERT_NEW_VARIANT_SUMMARY_SQL),
     captureReplacedFlagCoords: db.prepare(sql.CAPTURE_REPLACED_FLAG_COORDS_SQL),
     resetReplacedFlags: db.prepare(sql.RESET_REPLACED_FLAGS_SQL),

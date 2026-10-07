@@ -1,3 +1,4 @@
+import { offeredFilterValues } from '../../../shared/config/severity.config'
 import type { FilterOptions } from '../../../shared/types/api'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 
@@ -104,7 +105,10 @@ export function columnMetaRowToFilterMeta(
     if (max !== undefined) entry.max = max
   }
   if (Array.isArray(row.distinct_values)) {
-    entry.distinctValues = row.distinct_values.map((value) => String(value))
+    entry.distinctValues = offeredFilterValues(
+      entry.key,
+      row.distinct_values.map((value) => String(value))
+    )
   }
   return entry
 }

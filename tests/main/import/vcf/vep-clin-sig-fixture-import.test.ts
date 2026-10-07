@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { DatabaseService } from '../../../../src/main/database/DatabaseService'
 import { VcfStrategy } from '../../../../src/main/import/vcf/VcfStrategy'
+import {
+  resetUnrankedClinvar,
+  takeUnrankedClinvar
+} from '../../../../src/main/import/unranked-clinvar'
+import { clinvarRank } from '../../../../src/shared/config/severity.config'
 
 /**
  * End to end through the real VCF pipeline on SQLite. The repository's VEP
@@ -99,6 +104,32 @@ describe('VEP CLIN_SIG fallback through the real import pipeline', () => {
     expect(valueAt(30020105)).toBe('Uncertain_significance')
     // chr22:29671939 C>T — CLIN_SIG=benign&benign/likely_benign (multi-valued)
     expect(valueAt(29671939)).toBe('Benign|Benign/Likely_benign')
+  })
+
+  it('ranks every CLIN_SIG value of the fixture and reports none as unrecognised (#469)', async () => {
+    resetUnrankedClinvar()
+    await importVcf(VEP_FIXTURE, SAMPLE)
+    const unranked = takeUnrankedClinvar()
+    const ranks = db.database
+      .prepare(
+        `SELECT clinvar, clinvar_rank AS rank, COUNT(*) AS n FROM variants
+         WHERE clinvar IS NOT NULL AND clinvar != '' GROUP BY clinvar, clinvar_rank ORDER BY n DESC, clinvar`
+      )
+      .all() as Array<{ clinvar: string; rank: number; n: number }>
+
+    expect(ranks).toEqual([
+      { clinvar: 'Benign', rank: clinvarRank('Benign'), n: 42 },
+      { clinvar: 'Uncertain_significance', rank: clinvarRank('Uncertain_significance'), n: 2 },
+      // multi-valued: the most severe component (the Benign/Likely_benign aggregate) decides
+      {
+        clinvar: 'Benign|Benign/Likely_benign',
+        rank: clinvarRank('Benign|Benign/Likely_benign'),
+        n: 1
+      }
+    ])
+    expect(ranks.every((row) => row.rank > 0)).toBe(true)
+    expect(ranks.map((row) => row.rank)).toEqual([2, 11, 3])
+    expect(unranked).toBeUndefined()
   })
 
   it('leaves a ClinVar_CLNSIG value untouched when CLIN_SIG is present too', async () => {

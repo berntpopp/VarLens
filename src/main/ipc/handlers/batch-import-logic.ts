@@ -105,6 +105,7 @@ export interface BatchImportResult {
     caseName?: string
     variantCount?: number
     error?: string
+    unrankedClinvar?: string[]
   }>
 }
 
@@ -259,7 +260,8 @@ function runBatchWorker(
               status: d.status,
               caseName: d.caseName,
               variantCount: d.variantCount,
-              error: d.error
+              error: d.error,
+              unrankedClinvar: d.unrankedClinvar
             }))
           })
         )

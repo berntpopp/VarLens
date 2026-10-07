@@ -7,6 +7,7 @@
  */
 import { once } from 'node:events'
 import { createWriteStream } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import type { JobContext } from '../../services/jobs/JobRunner'
@@ -16,6 +17,10 @@ import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
 import type { VariantFilter } from '../../database/types'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
+import {
+  CohortSummaryRefreshingError,
+  waitForCurrentCohortSummary
+} from '../../../shared/errors/cohort-summary-refreshing'
 import type { ExportFilterSummary } from '../../../shared/types/export-worker'
 import { EXPORT_COLUMNS, type ExportColumn } from '../../workers/export-pipeline'
 import { csvEscape, formatCellValue } from '../../workers/export-renderer'
@@ -250,8 +255,12 @@ async function exportRowsToCsv(
     return { success: true, filePath: outputFilePath }
   } catch (error) {
     stream.destroy()
+    // A file with a header and some of the rows must not be left behind.
+    await rm(outputFilePath, { force: true }).catch(() => undefined)
     const message = error instanceof Error ? error.message : String(error)
     mainLogger.error(`${label} error: ${message}`, 'export')
+    // Typed, user-facing: reported as it is rather than as a failed export.
+    if (error instanceof CohortSummaryRefreshingError) throw error
     return { success: false, error: message }
   }
 }
@@ -309,13 +318,21 @@ export function prepareCohortExportParams(
  * workbook build run in the export worker; progress is relayed and the job
  * can be cancelled.
  */
-export function exportCohort(
+export async function exportCohort(
   getDb: () => DatabaseService,
   requestedParams: CohortSearchParams,
   outputFilePath: string,
-  callbacks: ExportCallbacks = {}
+  callbacks: ExportCallbacks = {},
+  options: { refreshWaitMs?: number } = {}
 ): Promise<ExportResult> {
   const db = getDb()
+  // The export reads the cohort summary. While it is being refreshed the file
+  // would silently carry outdated values: wait a bounded time, else fail with
+  // CohortSummaryRefreshingError.
+  await waitForCurrentCohortSummary(
+    () => db.cohortSummary.getStatus().is_stale,
+    options.refreshWaitMs
+  )
   const params = prepareCohortExportParams(getDb, requestedParams)
   return runExportJob('cohort', (ctx) =>
     runWorkerExport(ctx, callbacks, (client, hooks) =>

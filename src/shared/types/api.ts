@@ -252,6 +252,8 @@ export interface MultiFileImportResult {
   totalSkipped: number
   files: MultiFileImportFileResult[]
   elapsed: number
+  /** ClinVar values of this import that the severity configuration does not know (ranked as unknown). */
+  unrankedClinvar?: string[]
 }
 
 export interface ImportAPI extends ImportDomainContract {
@@ -312,6 +314,8 @@ export interface BatchFileDetail {
   caseName?: string
   variantCount?: number
   error?: string
+  /** ClinVar values of this file that the severity configuration does not know (ranked as unknown). */
+  unrankedClinvar?: string[]
 }
 
 export interface BatchProgress {
@@ -346,6 +350,8 @@ export interface BatchFileComplete {
   caseId?: number
   variantCount?: number
   error?: string
+  /** ClinVar values of this import that the severity configuration does not know (ranked as unknown). */
+  unrankedClinvar?: string[]
 }
 
 export interface BatchResult {

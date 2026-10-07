@@ -6,6 +6,7 @@
  */
 
 import type { VcfHeader, AnnotationResult } from './types'
+import { IMPACT_RANK_BY_LEVEL } from '../../../shared/config/severity.config'
 import {
   canonicalizeTranscriptSemantics,
   type TranscriptInsertRow
@@ -19,13 +20,6 @@ import {
   VcfResourceLimitError
 } from './vcf-resource-limits'
 
-/** Impact severity order for transcript selection */
-const IMPACT_ORDER: Record<string, number> = {
-  HIGH: 4,
-  MODERATE: 3,
-  LOW: 2,
-  MODIFIER: 1
-}
 const MAX_VCF_TOTAL_ANNOTATION_MATCHES = 100_000
 
 /**
@@ -491,7 +485,7 @@ function selectBestTranscript(transcripts: CsqTranscript[]): number {
     if (canonical === 'YES') score += 100
 
     const impact = t.fields.get('IMPACT') ?? 'MODIFIER'
-    score += (IMPACT_ORDER[impact] ?? 0) * 10
+    score += (IMPACT_RANK_BY_LEVEL[impact] ?? 0) * 10
 
     const biotype = t.fields.get('BIOTYPE')
     if (biotype === 'protein_coding') score += 5
@@ -520,7 +514,7 @@ function selectBestTranscriptAnn(transcripts: AnnTranscript[]): number {
     let score = 0
 
     const impact = t.parts[ANN_IMPACT] ?? 'MODIFIER'
-    score += (IMPACT_ORDER[impact] ?? 0) * 10
+    score += (IMPACT_RANK_BY_LEVEL[impact] ?? 0) * 10
 
     const biotype = t.parts[ANN_BIOTYPE] ?? ''
     if (biotype === 'protein_coding') score += 5

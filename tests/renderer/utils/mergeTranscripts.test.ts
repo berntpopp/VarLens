@@ -251,6 +251,21 @@ describe('mergeTranscripts', () => {
       expect(result.map((r) => r.impact)).toEqual(['HIGH', 'MODERATE', 'LOW', 'MODIFIER'])
     })
 
+    it('sorts an unrecognised impact after MODIFIER (shared severity config, #469)', () => {
+      const vep = [
+        makeVepRow({ transcript_id: 'ENST00000111111.1', impact: 'modifier' }),
+        makeVepRow({ transcript_id: 'ENST00000222222.2', impact: 'MODIFIER' }),
+        makeVepRow({ transcript_id: 'ENST00000333333.3', impact: 'LOW' })
+      ]
+      const result = mergeTranscripts([], vep)
+
+      expect(result.map((r) => r.transcript_id)).toEqual([
+        'ENST00000333333',
+        'ENST00000222222',
+        'ENST00000111111'
+      ])
+    })
+
     it('sorts DB-only rows by their canonical consequence impact', () => {
       const db = [
         makeDbRow({ id: 1, transcript_id: 'A_MODERATE', consequence: 'MODERATE' }),
