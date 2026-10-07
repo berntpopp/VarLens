@@ -8,7 +8,9 @@
  *   - `batch-import:failed` for this run id (the error envelope)
  *   - a `batch-import:status` poll: once whenever the event stream reports it
  *     could not replay what was missed, and on a slow timer in case the
- *     stream died quietly
+ *     stream died quietly. A poll that is refused (signed out, role removed)
+ *     settles the promise with that error, and so do five failed polls in a
+ *     row: the caller is never left waiting forever.
  *
  * A reload loses this promise but not the batch: the job keeps running, shows
  * up in the jobs list, can be cancelled there, and its result stays readable
@@ -50,6 +52,32 @@ const LOST_RUN: SerializableError = {
     'The server no longer knows this import (it may have restarted). Check the case list and import the missing files again.'
 }
 
+/** The batch itself is not affected by any of these; only this page stopped following it. */
+const STILL_RUNNING =
+  'The import may still be running on the server: check the background tasks and the case list.'
+
+const UNREADABLE_RUN: SerializableError = {
+  code: ErrorCode.UNKNOWN,
+  message: 'batch import status could not be read',
+  userMessage: `The state of this import could not be read from the server. ${STILL_RUNNING}`
+}
+
+const AUTH_CODES = new Set<string>([ErrorCode.UNAUTHENTICATED, ErrorCode.FORBIDDEN])
+/** Consecutive failed status polls after which the promise settles with an error. */
+export const MAX_FAILED_POLLS = 5
+
+/** A 401/403 that came back without an error envelope (the transport throws those). */
+function authErrorFromTransport(error: unknown): SerializableError | null {
+  const status = /: (401|403) /.exec(error instanceof Error ? error.message : '')?.[1]
+  if (status === undefined) return null
+  const signedOut = status === '401'
+  return {
+    code: signedOut ? ErrorCode.UNAUTHENTICATED : ErrorCode.FORBIDDEN,
+    message: `batch import status refused with HTTP ${status}`,
+    userMessage: `${signedOut ? 'You were signed out' : 'You are no longer allowed to follow this import'}. ${STILL_RUNNING}`
+  }
+}
+
 export async function startBatchImportRun(
   args: [string[], DuplicateChoice, string | undefined, string],
   deps: { invoke: Invoke; subscribe: Subscribe; pollMs?: number }
@@ -78,17 +106,32 @@ export async function startBatchImportRun(
   ]
 
   let polling = false
+  let failedPolls = 0
+  const pollFailed = (): void => {
+    failedPolls++
+    if (failedPolls >= MAX_FAILED_POLLS) settle(UNREADABLE_RUN)
+  }
   const poll = async (): Promise<void> => {
     if (polling) return
     polling = true
     try {
       const status = (await deps.invoke('batch-import', 'status', [runId])) as RunStatus
-      if (isIpcError(status)) return
+      if (isIpcError(status)) {
+        // Signed out or demoted while the batch runs: no later poll can succeed.
+        if (AUTH_CODES.has(status.code)) settle(status)
+        else pollFailed()
+        return
+      }
+      failedPolls = 0
       if (status.state === 'completed' && status.result !== undefined) settle(status.result)
       else if (status.state === 'failed') settle(status.error ?? LOST_RUN)
       else if (status.state === 'unknown') settle(LOST_RUN)
-    } catch {
-      // Offline or the server is restarting: the next poll or event decides.
+    } catch (error) {
+      const denied = authErrorFromTransport(error)
+      if (denied !== null) settle(denied)
+      // Offline or the server is restarting: later polls or an event decide,
+      // but not forever.
+      else pollFailed()
     } finally {
       polling = false
     }

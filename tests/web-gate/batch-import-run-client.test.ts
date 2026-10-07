@@ -153,4 +153,76 @@ describe('startBatchImportRun', () => {
       userMessage: expect.stringContaining('no longer knows this import')
     })
   })
+  describe('a status poll that fails', () => {
+    function pollingWith(answer: () => unknown): {
+      pending: ReturnType<typeof startBatchImportRun>
+      invoke: ReturnType<typeof vi.fn>
+    } {
+      const h = harness()
+      h.invoke.mockImplementation(async (_domain: string, method: string) => {
+        if (method === 'start') return { accepted: true, jobId: 'job-1', runId: 'run-1' }
+        return answer()
+      })
+      return { pending: startBatchImportRun(ARGS, { ...h, pollMs: 1000 }), invoke: h.invoke }
+    }
+
+    test.each([
+      ['an expired session (error envelope)', ErrorCode.UNAUTHENTICATED],
+      ['a role that no longer allows it (error envelope)', ErrorCode.FORBIDDEN]
+    ])('settles at once on %s', async (_, code) => {
+      const denied = { code, message: 'denied', userMessage: 'Please sign in again.' }
+      const { pending, invoke } = pollingWith(() => denied)
+      await vi.advanceTimersByTimeAsync(1000)
+      await expect(pending).resolves.toEqual(denied)
+      // Settled: the wizard is not left spinning and nothing polls on.
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(invoke).toHaveBeenCalledTimes(2)
+    })
+
+    test.each([401, 403])('settles at once on a bare HTTP %i', async (status) => {
+      const { pending } = pollingWith(() => {
+        throw new Error(`web rpc batch-import.status: ${status} Denied: `)
+      })
+      await vi.advanceTimersByTimeAsync(1000)
+      await expect(pending).resolves.toMatchObject({
+        code: status === 401 ? ErrorCode.UNAUTHENTICATED : ErrorCode.FORBIDDEN,
+        userMessage: expect.stringContaining('may still be running')
+      })
+    })
+
+    test('gives up after five consecutive failures of any other kind', async () => {
+      let calls = 0
+      const { pending, invoke } = pollingWith(() => {
+        calls++
+        if (calls % 2 === 0) throw new Error('network down')
+        return { code: ErrorCode.UNKNOWN, message: 'boom', userMessage: 'Server error.' }
+      })
+      await vi.advanceTimersByTimeAsync(4000)
+      let settled = false
+      void pending.then(() => {
+        settled = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(settled).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      await expect(pending).resolves.toMatchObject({
+        code: ErrorCode.UNKNOWN,
+        userMessage: expect.stringContaining('could not be read')
+      })
+      expect(invoke).toHaveBeenCalledTimes(6)
+    })
+
+    test('a successful poll resets the failure count', async () => {
+      let calls = 0
+      const { pending } = pollingWith(() => {
+        calls++
+        if (calls === 4) return { state: 'running', jobId: 'job-1' }
+        if (calls === 9) return { state: 'completed', jobId: 'job-1', result: RESULT }
+        throw new Error('network down')
+      })
+      await vi.advanceTimersByTimeAsync(9000)
+      await expect(pending).resolves.toEqual(RESULT)
+    })
+  })
 })
