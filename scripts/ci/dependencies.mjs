@@ -5,10 +5,14 @@ import { hashValue, readReceipt, writeReceipt, digestPaths } from './receipt.mjs
 
 // Native build output changes deliberately between the serialized Node/Electron
 // lanes. Its bytes are checked by assert-native-abi, independently of this tree.
+// A cold compile (no cached binary for the ABI, e.g. right after `npm ci`) also
+// writes @electron/rebuild's per-ABI copy under `bin/` and node-gyp's Python
+// bytecode caches; neither is dependency content, and counting them failed the
+// first preflight after every reinstall.
 const excluded = (path) =>
   path === 'vitest/dist/tsconfig.tmp.tsbuildinfo' ||
-  /(^|\/)(\.cache|\.vite|\.vitest|\.vite-temp)(\/|$)/.test(path) ||
-  /^better-sqlite3-multiple-ciphers\/(build|\.forge-meta)(\/|$)/.test(path)
+  /(^|\/)(\.cache|\.vite|\.vitest|\.vite-temp|__pycache__)(\/|$)/.test(path) ||
+  /^better-sqlite3-multiple-ciphers\/(build|bin|\.forge-meta)(\/|$)/.test(path)
 export async function installedFingerprint(cwd, cacheFile) {
   const root = join(cwd, 'node_modules')
   if (!existsSync(root)) throw new Error('node_modules is missing')
