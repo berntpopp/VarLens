@@ -136,6 +136,9 @@
             </template>
           </v-tooltip>
         </template>
+
+        <!-- Background jobs (export, delete, import): compact entry that opens the job list. -->
+        <BackgroundJobsToggle />
       </div>
 
       <!-- Right section: Action buttons -->
@@ -249,6 +252,7 @@ import { APP_CONFIG } from '../../../shared/config/app.config'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
 import { isWebRuntime } from '../utils/runtime-mode'
+import BackgroundJobsToggle from './jobs/BackgroundJobsToggle.vue'
 import {
   mdiAlertCircle,
   mdiArrowUpCircle,

@@ -579,15 +579,30 @@ describe('web dispatcher adapters: auth and import', () => {
         currentIndex: 0,
         totalFiles: 1,
         currentFileName: 'Case B.json',
-        overallPercent: 100,
+        // The only file is still running: nothing is finished yet.
+        overallPercent: 0,
+        completedFiles: 0,
+        inFlight: [{ index: 0, fileName: 'Case B.json', phase: 'parsing', count: 1 }],
         fileProgress: { phase: 'parsing', count: 1, elapsed: 3, skipped: 0 }
       })
-      expect(deps.events.publish).toHaveBeenCalledWith(7, 'cohort:summaryRebuilt', {
-        is_stale: true
-      })
-      expect(deps.events.publish).toHaveBeenCalledWith(7, 'cohort:summaryRebuilt', {
-        is_stale: false
-      })
+      // A batch keeps the cohort summary valid file by file, so it never
+      // announces a stale summary; each finished file is announced instead.
+      expect(deps.events.publish).not.toHaveBeenCalledWith(
+        7,
+        'cohort:summaryRebuilt',
+        expect.anything()
+      )
+      expect(deps.events.publish).toHaveBeenCalledWith(
+        7,
+        'batch-import:fileComplete',
+        expect.objectContaining({
+          runId: 'web-run-1',
+          index: 0,
+          totalFiles: 1,
+          fileName: 'Case B.json',
+          status: 'success'
+        })
+      )
       expect(deps.events.publish).toHaveBeenCalledWith(7, 'batch-import:complete', {
         ...result,
         runId: 'web-run-1'

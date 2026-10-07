@@ -11,6 +11,10 @@
  * step (e.g. a `WHERE (v.chr, v.pos, v.ref, v.alt) IN (...)` restriction);
  * the empty string recomputes every coordinate. One template for the full
  * rebuild and the per-coordinate incremental path keeps the two in lockstep.
+ *
+ * `cohort_frequency` is deliberately not written (it stays NULL): readers
+ * derive it from carrier_count and the build's case count — see
+ * src/main/database/cohort-frequency-sql.ts.
  */
 export function variantSummaryInsertSql(variantFilter = ''): string {
   return `
@@ -19,7 +23,7 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
     consequence, func, clinvar, gnomad_af, cadd,
     transcript, omim_mim_number,
     carrier_count, het_count, hom_count,
-    cohort_frequency, has_star, has_comment, acmg_best,
+    has_star, has_comment, acmg_best,
     variant_key, variant_type, genome_build
   )
   SELECT
@@ -28,7 +32,6 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
     d.consequence, d.func, d.clinvar, d.gnomad_af, d.cadd,
     d.transcript, d.omim_mim_number,
     d.carrier_count, d.het_count, d.hom_count,
-    CAST(d.carrier_count AS REAL) / (SELECT COUNT(*) FROM cases WHERE genome_build = d.genome_build),
     CASE WHEN va.starred = 1 THEN 1 ELSE 0 END,
     CASE WHEN va.global_comment IS NOT NULL AND va.global_comment != '' THEN 1 ELSE 0 END,
     va.acmg_classification,
@@ -46,7 +49,7 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
         MAX(v.gt_num) AS gt_num,
         MAX(v.end_pos) AS end_pos
       FROM variants v
-      JOIN cases c ON c.id = v.case_id${variantFilter}
+      JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'${variantFilter}
       GROUP BY v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build
     )
     SELECT chr, pos, ref, alt, variant_type, genome_build,
@@ -71,7 +74,15 @@ export const REBUILD_VARIANT_SUMMARY_SQL = `
   DELETE FROM cohort_variant_summary;
 ${variantSummaryInsertSql()}`
 
-export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = `
+/**
+ * Folds per-case stars / comments / ACMG calls (case_variant_annotations) into
+ * the summary flags, on top of the variant_annotations base the INSERT-SELECT
+ * above writes. `variantFilter` is appended after the `JOIN variants v` (e.g.
+ * a `WHERE v.chr = @chr ...` restriction for one recomputed coordinate); the
+ * empty string covers every annotated coordinate.
+ */
+export function perCaseAnnotationFlagsSql(variantFilter = ''): string {
+  return `
   UPDATE cohort_variant_summary SET
     has_star = CASE WHEN cohort_variant_summary.has_star = 1 THEN 1 WHEN pca.has_star = 1 THEN 1 ELSE 0 END,
     has_comment = CASE WHEN cohort_variant_summary.has_comment = 1 THEN 1 WHEN pca.has_comment = 1 THEN 1 ELSE 0 END,
@@ -101,7 +112,7 @@ export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = `
         WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
         WHEN 'Benign' THEN 1 ELSE 0 END) AS acmg_rank
     FROM case_variant_annotations cva
-    JOIN variants v ON cva.variant_id = v.id
+    JOIN variants v ON cva.variant_id = v.id${variantFilter}
     GROUP BY v.chr, v.pos, v.ref, v.alt
   ) pca
   WHERE cohort_variant_summary.chr = pca.chr
@@ -109,6 +120,9 @@ export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = `
     AND cohort_variant_summary.ref = pca.ref
     AND cohort_variant_summary.alt = pca.alt;
 `
+}
+
+export const UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL = perCaseAnnotationFlagsSql()
 
 /**
  * INSERT-SELECT for gene_burden_summary. `geneFilter` is appended to the
@@ -128,7 +142,7 @@ export function geneBurdenInsertSql(geneFilter = ''): string {
     CAST(strftime('%s', 'now') AS INTEGER),
     c.genome_build
   FROM variants v
-  JOIN cases c ON c.id = v.case_id
+  JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'
   WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol != ''${geneFilter}
   GROUP BY v.gene_symbol, c.genome_build;
 `
@@ -138,10 +152,23 @@ export const REBUILD_GENE_BURDEN_SQL = `
   DELETE FROM gene_burden_summary;
 ${geneBurdenInsertSql()}`
 
+/** Meta key of the maintained unique-variant counter (cohort-unique-variant-count.ts). */
+export const UNIQUE_VARIANT_COUNT_KEY = 'unique_variant_count'
+
+/** Distinct (chr, pos, ref, alt) in the summary: its key also has type and build. */
+export const COUNT_UNIQUE_VARIANTS_SQL = `
+  SELECT COUNT(*) AS c FROM (SELECT DISTINCT chr, pos, ref, alt FROM cohort_variant_summary)`
+
+export const RECOUNT_UNIQUE_VARIANTS_SQL = `
+  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
+  VALUES ('${UNIQUE_VARIANT_COUNT_KEY}', CAST((${COUNT_UNIQUE_VARIANTS_SQL}) AS TEXT));
+`
+
+/** Last step of every full rebuild, in its transaction. */
 export const UPDATE_META_SQL = `
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('last_rebuilt_at', CAST(strftime('%s', 'now') AS TEXT));
-  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
+${RECOUNT_UNIQUE_VARIANTS_SQL}  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('is_stale', '0');
 `
 
@@ -160,7 +187,7 @@ export const INCREMENTAL_ADD_SQL = `
     consequence, func, clinvar, gnomad_af, cadd,
     transcript, omim_mim_number,
     carrier_count, het_count, hom_count,
-    cohort_frequency, has_star, has_comment, acmg_best,
+    has_star, has_comment, acmg_best,
     variant_key, variant_type, genome_build
   )
   SELECT
@@ -171,7 +198,7 @@ export const INCREMENTAL_ADD_SQL = `
     1,
     CASE WHEN MAX(v.gt_num) IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END,
     CASE WHEN MAX(v.gt_num) IN ('1/1','1|1') THEN 1 ELSE 0 END,
-    0.0, 0, 0, NULL,
+    0, 0, NULL,
     v.chr || ':' || v.pos || ':' || v.ref || ':' || v.alt,
     v.variant_type, c.genome_build
   FROM variants v
@@ -208,10 +235,4 @@ export const INCREMENTAL_REMOVE_SQL = `
 
 export const CLEANUP_ZERO_CARRIERS_SQL = `
   DELETE FROM cohort_variant_summary WHERE carrier_count <= 0;
-`
-
-export const RECOMPUTE_ALL_FREQUENCIES_SQL = `
-  UPDATE cohort_variant_summary
-  SET cohort_frequency = CAST(carrier_count AS REAL) /
-    (SELECT COUNT(*) FROM cases WHERE genome_build = cohort_variant_summary.genome_build);
 `

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { renameSync } from 'node:fs'
 import { GeneCatalog } from './catalog'
 import { deriveSeed, DeterministicRandom } from './random'
-import { createSharedVariantPool, generateSampleVariants } from './generator'
+import { createCohortSharedPool, generateSampleVariants } from './generator'
 import { writeSimpleJson } from './writers/simple-json-writer'
 import { writeColumnarJson } from './writers/columnar-json-writer'
 import { writeVcf } from './writers/vcf-writer'
@@ -143,7 +143,7 @@ async function runWorker(): Promise<void> {
     }
 
     const poolSeed = deriveSeed(masterSeed, 0, 'shared-pool')
-    const sharedPool = createSharedVariantPool(catalog, 500, poolSeed)
+    const sharedPool = createCohortSharedPool(catalog, options, poolSeed)
 
     for (let idx = startIdx; idx < endIdx; idx++) {
       const result = await processSample(idx, masterSeed, options, catalog, sharedPool)

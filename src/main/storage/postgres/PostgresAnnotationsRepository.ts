@@ -19,21 +19,18 @@ import { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
 type QueryablePool = Pick<Pool, 'query'>
 type TransactionCapablePool = QueryablePool & { connect: () => Promise<PoolClient> }
 
+// prettier-ignore
 type GlobalAnnotationUpdates = Partial<
-  Omit<
-    Pick<VariantAnnotation, 'global_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'>,
-    'starred'
-  > & { starred: number | boolean }
+  Omit<Pick<VariantAnnotation, 'global_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'>, 'starred'> & {
+    starred: number | boolean
+  }
 >
 
+// prettier-ignore
 type PerCaseAnnotationUpdates = Partial<
-  Omit<
-    Pick<
-      CaseVariantAnnotation,
-      'per_case_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'
-    >,
-    'starred'
-  > & { starred: number | boolean }
+  Omit<Pick<CaseVariantAnnotation, 'per_case_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'>, 'starred'> & {
+    starred: number | boolean
+  }
 >
 
 type VariantKey = { chr: string; pos: number; ref: string; alt: string }
@@ -42,9 +39,8 @@ const nowExpression = '(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint'
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number') return value
-  if (typeof value === 'bigint') return Number(value)
+  if (typeof value === 'bigint' || typeof value === 'string') return Number(value)
   if (typeof value === 'boolean') return value ? 1 : 0
-  if (typeof value === 'string') return Number(value)
   return 0
 }
 

@@ -52,7 +52,6 @@ function makePool(
 
 function makeSummary() {
   return {
-    recomputeCohortFrequency: vi.fn(async () => undefined),
     removeColumnMetas: vi.fn(async () => undefined)
   }
 }
@@ -97,6 +96,13 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     expect(subtract).toBeGreaterThan(flags)
     expect(vfDecrement).toBeGreaterThan(subtract)
     expect(flip).toBeGreaterThan(vfDecrement)
+    // The per-gene aggregates lose the case in the same transaction, from the
+    // case's own rows and while those rows are still visible.
+    const geneSubtract = idx('variant_count = s.variant_count - g.row_count')
+    expect(geneSubtract).toBeGreaterThan(subtract)
+    expect(flip).toBeGreaterThan(geneSubtract)
+    expect(sql[geneSubtract]).toMatch(/FROM "public"\."variants" v\s+WHERE v\.case_id = \$1/)
+    expect(sql[geneSubtract]).toContain('DELETE FROM "public"."cohort_gene_variant_summary"')
     // Zero-carrier cleanup is scoped to the case's coordinates.
     expect(sql[idx('cvs.carrier_count <= 0')]).toContain('WHERE case_id = $1')
     expect(summary.removeColumnMetas).toHaveBeenCalledWith(
@@ -135,9 +141,7 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     await repo.deleteCase(7)
 
     expect(clientSql(client).some((sql) => sql.includes('per_case.carrier_delta'))).toBe(false)
-    expect(summary.recomputeCohortFrequency).toHaveBeenCalledWith(
-      expect.objectContaining({ affectedBuilds: ['GRCh37'] })
-    )
+    expect(clientSql(client).some((sql) => sql.includes('cohort_frequency'))).toBe(false)
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining('DELETE FROM "public"."cases_all" WHERE id = $1'),
       [7]
@@ -150,7 +154,7 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     const repo = new PostgresCaseLifecycleRepository(pool as never, 'public', summary as never)
 
     await expect(repo.deleteCase(999)).resolves.toBeUndefined()
-    expect(summary.recomputeCohortFrequency).not.toHaveBeenCalled()
+    expect(summary.removeColumnMetas).not.toHaveBeenCalled()
     expect(pool.query).not.toHaveBeenCalled()
   })
 
@@ -195,15 +199,10 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     expect(pool.query).toHaveBeenCalledTimes(1)
   })
 
-  it('runs recompute, purge and finalize in order and only deletes rows still marked deleting', async () => {
+  it('runs purge then finalize and only deletes rows still marked deleting', async () => {
     const { pool } = makePool(undefined, [3])
     const order: string[] = []
-    const summary = {
-      recomputeCohortFrequency: vi.fn(async () => {
-        order.push('recompute')
-      }),
-      removeColumnMetas: vi.fn(async () => undefined)
-    }
+    const summary = makeSummary()
     pool.query.mockImplementation(async (arg: unknown) => {
       const sql = sqlText(arg)
       if (sql.includes('"variants_all"')) order.push('purge')
@@ -217,7 +216,7 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
 
     await repo.deleteCase(7)
 
-    expect(order).toEqual(['recompute', 'purge', 'finalize'])
+    expect(order).toEqual(['purge', 'finalize'])
   })
 
   it('preserves the original error when rollback fails during hide', async () => {

@@ -175,13 +175,15 @@ describe('batch-import preload domain behavior', () => {
       }
     })
     const exposeInMainWorld = vi.fn()
+    const on = vi.fn()
+    const removeListener = vi.fn()
 
     vi.doMock('electron', () => ({
       contextBridge: { exposeInMainWorld },
       ipcRenderer: {
         invoke,
-        on: vi.fn(),
-        removeListener: vi.fn(),
+        on,
+        removeListener,
         send: vi.fn()
       }
     }))
@@ -198,6 +200,7 @@ describe('batch-import preload domain behavior', () => {
         selectZip: () => Promise<unknown>
         testZipPassword: (zipPath: string, password: string) => Promise<unknown>
         cleanupZipTemp: (extractionId: string) => Promise<unknown>
+        onFileComplete: (callback: (event: unknown) => void) => () => void
       }
     }
 
@@ -219,6 +222,16 @@ describe('batch-import preload domain behavior', () => {
     await expect(
       api.batchImport.cleanupZipTemp('11111111-1111-4111-8111-111111111111')
     ).resolves.toBeUndefined()
+
+    const onFileComplete = vi.fn()
+    const unsubscribe = api.batchImport.onFileComplete(onFileComplete)
+    const fileCompleteListener = on.mock.calls.find(
+      ([channel]) => channel === 'batch-import:fileComplete'
+    )?.[1] as (event: unknown, payload: unknown) => void
+    fileCompleteListener({}, { runId: 'run-1', index: 0, status: 'success' })
+    expect(onFileComplete).toHaveBeenCalledWith({ runId: 'run-1', index: 0, status: 'success' })
+    unsubscribe()
+    expect(removeListener).toHaveBeenCalledWith('batch-import:fileComplete', fileCompleteListener)
 
     expect(invoke).toHaveBeenCalledWith('batch-import:selectFiles')
     expect(invoke).toHaveBeenCalledWith('batch-import:selectFolder')

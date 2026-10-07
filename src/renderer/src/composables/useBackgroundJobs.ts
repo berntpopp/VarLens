@@ -34,11 +34,25 @@ export const JOB_KIND_LABELS: Record<JobKind, string> = {
   association: 'Association analysis'
 }
 
+/**
+ * Human labels for the phase a job reports as its progress message: the
+ * import phases (`ImportProgress['phase']`, src/shared/types/import.ts) and
+ * the case-delete phases (`CaseDeletePhase`). Batch imports report the
+ * current file name instead, which is shown as is.
+ */
 const PHASE_LABELS: Record<string, string> = {
+  reading: 'Reading file',
+  parsing: 'Parsing variants',
+  inserting: 'Importing variants',
   deleting: 'Deleting',
   'rebuilding-search-index': 'Rebuilding search index',
   'rebuilding-cohort-summary': 'Rebuilding cohort summary',
   finalizing: 'Finalizing'
+}
+
+/** Human label for an import phase key; unknown keys are shown as is. */
+export function importPhaseLabel(phase: string): string {
+  return PHASE_LABELS[phase] ?? phase
 }
 
 export function isActiveJob(job: Pick<Job, 'status'>): boolean {
@@ -59,7 +73,7 @@ export function describeJob(job: Job): string {
   if (job.status === 'failed') return `Failed: ${formatError(job.error, 'unknown error')}`
   if (job.status === 'queued' || job.progress === null) return 'Starting…'
   const { current, total, message } = job.progress
-  const phase = message === undefined ? undefined : (PHASE_LABELS[message] ?? message)
+  const phase = message === undefined ? undefined : importPhaseLabel(message)
   const unit = job.kind === 'case_delete' ? ' cases' : job.kind === 'import_batch' ? ' files' : ''
   const count =
     total > 0
@@ -70,10 +84,32 @@ export function describeJob(job: Job): string {
   return [phase, count].filter((part) => part !== undefined).join(' · ') || 'Working…'
 }
 
+/** Short text for the collapsed footer toggle: what is running, or how it ended. */
+export function summarizeJobs(list: readonly Job[]): string {
+  const active = list.filter(isActiveJob)
+  if (active.length === 1) {
+    const [only] = active
+    const percent = jobPercent(only)
+    const label = JOB_KIND_LABELS[only.kind] ?? only.kind
+    return percent === null ? label : `${label} · ${percent}%`
+  }
+  if (active.length > 1) return `${active.length} tasks running`
+  const failed = list.filter((job) => job.status === 'failed').length
+  if (failed > 0) return failed === 1 ? '1 task failed' : `${failed} tasks failed`
+  return list.length === 1 ? 'Task finished' : `${list.length} tasks finished`
+}
+
 const jobs = ref<Job[]>([])
 const dismissed = new Set<string>()
 const cancelErrors = ref<Record<string, string>>({})
 const cancelling = ref<Record<string, boolean>>({})
+/** Cancel accepted by the backend, job not yet terminal (the worker is still stopping). */
+const cancelRequested = ref<Record<string, boolean>>({})
+/**
+ * The job list is collapsed to the footer toggle by default so it does not
+ * cover the data table's pagination footer; the user (or a failure) expands it.
+ */
+const panelExpanded = ref(false)
 let started = false
 let unsubscribeChanged: (() => void) | null = null
 const onResync = (): void => void refresh()
@@ -93,7 +129,20 @@ function dismiss(jobId: string): void {
   const timer = dismissTimers.get(jobId)
   if (timer !== undefined) clearTimeout(timer)
   dismissTimers.delete(jobId)
+  clearCancelRequested(jobId)
   jobs.value = jobs.value.filter((job) => job.id !== jobId)
+  if (jobs.value.length === 0) panelExpanded.value = false
+}
+
+function clearCancelRequested(jobId: string): void {
+  if (cancelRequested.value[jobId] === undefined) return
+  const remaining = { ...cancelRequested.value }
+  delete remaining[jobId]
+  cancelRequested.value = remaining
+}
+
+function setPanelExpanded(expanded: boolean): void {
+  panelExpanded.value = expanded
 }
 
 /**
@@ -107,8 +156,13 @@ function upsert(job: Job): void {
   const next = [...jobs.value]
   if (index === -1) next.push(job)
   else next[index] = job
+  // A failure must not go unnoticed behind the collapsed toggle.
+  if (job.status === 'failed' && jobs.value[index]?.status !== 'failed') panelExpanded.value = true
   jobs.value = next
-  if (!isActiveJob(job)) scheduleDismiss(job.id)
+  if (!isActiveJob(job)) {
+    clearCancelRequested(job.id)
+    scheduleDismiss(job.id)
+  }
   syncPolling()
 }
 
@@ -151,7 +205,12 @@ async function cancel(jobId: string): Promise<void> {
   delete remaining[jobId]
   cancelErrors.value = remaining
   try {
-    unwrapIpcResult(await api.jobs.cancel(jobId))
+    const { requested } = unwrapIpcResult(await api.jobs.cancel(jobId))
+    // Cancellation is cooperative: the job stays `running` until its worker
+    // stops, so remember the request and show it until a terminal status.
+    const stillActive = jobs.value.some((job) => job.id === jobId && isActiveJob(job))
+    if (requested && stillActive)
+      cancelRequested.value = { ...cancelRequested.value, [jobId]: true }
   } catch (error) {
     // e.g. 403: the job belongs to another user.
     cancelErrors.value = { ...cancelErrors.value, [jobId]: formatError(error) }
@@ -166,6 +225,8 @@ export function resetBackgroundJobsForTesting(): void {
   dismissed.clear()
   cancelErrors.value = {}
   cancelling.value = {}
+  cancelRequested.value = {}
+  panelExpanded.value = false
   started = false
   unsubscribeChanged?.()
   unsubscribeChanged = null
@@ -187,6 +248,9 @@ export function useBackgroundJobs(options: { kinds?: readonly JobKind[] } = {}) 
     jobs: visibleJobs,
     cancelErrors,
     cancelling,
+    cancelRequested,
+    panelExpanded,
+    setPanelExpanded,
     cancel,
     dismiss,
     refresh,

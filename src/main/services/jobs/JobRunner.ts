@@ -146,7 +146,10 @@ export class JobRunner {
 
     const resultPromise = handler(ctx, params)
       .then((r) => {
-        job.status = 'completed'
+        // Cooperative handlers (batch import, export) stop on abort and
+        // RESOLVE with a partial result instead of throwing. That is still a
+        // cancelled job; the value is delivered to `handle.result` unchanged.
+        job.status = controller.signal.aborted ? 'cancelled' : 'completed'
         job.finishedAt = Date.now()
         this.fireLifecycle(job)
         return r

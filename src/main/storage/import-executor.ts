@@ -89,8 +89,27 @@ export interface StorageImportMultiFileResult {
   elapsed: number
 }
 
+/**
+ * An open batch: one exclusive import operation on the workspace whose files
+ * may be imported concurrently. Each file still becomes visible atomically,
+ * on its own, as soon as it is done.
+ */
+export interface StorageImportBatch {
+  importFile(params: StorageImportSingleFileParams): Promise<StorageImportSingleFileResult>
+  /** Ask every file in flight to stop. Their `importFile` promises reject. */
+  cancelAll(): void
+  /** Wait for nothing: call once every `importFile` promise has settled. Cleans up and releases the workspace. */
+  close(): Promise<void>
+}
+
 export interface StorageImportExecutor {
   importSingleFile(params: StorageImportSingleFileParams): Promise<StorageImportSingleFileResult>
   importMultiFile(params: StorageImportMultiFileParams): Promise<StorageImportMultiFileResult>
   cancel(): void
+  /**
+   * Open a batch for concurrent file imports. Absent on backends that write
+   * through a single connection; callers then import the files one by one.
+   * Rejects with a conflict when another import already holds the workspace.
+   */
+  openBatch?(): Promise<StorageImportBatch>
 }

@@ -2,23 +2,22 @@ import type { Pool, PoolClient } from 'pg'
 
 import { InvalidParametersError } from '../../ipc/errors'
 import { applyAnnotationFlagsOnCaseDelete } from './cohort-annotation-flags-sql'
+import { removeCaseFromGeneSummary } from './cohort-gene-summary-sql'
 import { quoteIdentifier } from './identifiers'
 import {
   PostgresCohortSummaryRepository,
   SCOPED_DEDUPED_AGG_SQL
 } from './PostgresCohortSummaryRepository'
+import { lockSummaryForWrite } from './cohort-summary-lock'
 
 /** The subset of PostgresCohortSummaryRepository this repo drives (test seam). */
-type CohortSummaryMaintenance = Pick<
-  PostgresCohortSummaryRepository,
-  'recomputeCohortFrequency' | 'removeColumnMetas'
->
+type CohortSummaryMaintenance = Pick<PostgresCohortSummaryRepository, 'removeColumnMetas'>
 
 type LifecyclePool = Pick<Pool, 'connect' | 'query'>
 
 export const DEFAULT_CASE_DELETE_BATCH_SIZE = 5000
 
-export type CaseDeletionPhase = 'hiding' | 'recomputing' | 'purging' | 'finalizing'
+export type CaseDeletionPhase = 'hiding' | 'purging' | 'finalizing'
 
 export interface CaseDeletionProgress {
   phase: CaseDeletionPhase
@@ -81,14 +80,14 @@ const DELETING_NAME_PREFIX = '__deleting__:'
  *      reader at commit. Doing the summary maths in the same transaction as
  *      the flip keeps a concurrent full summary rebuild (which reads the
  *      views) from double-counting the subtraction.
- *   2. `recomputeCohortFrequency` for the case's build in its own
- *      transaction (denominator now excludes the hidden case).
- *   3. `purgeCaseVariants` — DELETE variants_all in `batchSize` chunks, each
+ *      Cohort frequency needs no maintenance: readers divide by the visible
+ *      cases of the build, which no longer include this one.
+ *   2. `purgeCaseVariants` — DELETE variants_all in `batchSize` chunks, each
  *      its own short transaction; FK cascades remove transcripts / SV / CNV /
  *      STR / per-case annotation rows per chunk.
- *   4. `finalizeCaseDeletion` — delete the (now small) cases_all row.
+ *   3. `finalizeCaseDeletion` — delete the (now small) cases_all row.
  *
- * Steps 2-4 are idempotent, so a crash after step 1 is resumed by
+ * Steps 2-3 are idempotent, so a crash after step 1 is resumed by
  * `listPendingDeletions()` + `deleteCase()` at the next start.
  */
 export class PostgresCaseLifecycleRepository {
@@ -112,14 +111,12 @@ export class PostgresCaseLifecycleRepository {
     await this.completeHiddenDeletion(caseId, hidden, options)
   }
 
-  /** Steps 2-4 for a case already flipped to 'deleting'. */
+  /** Steps 2-3 for a case already flipped to 'deleting'. */
   async completeHiddenDeletion(
     caseId: number,
     hidden: Pick<HideCaseResult, 'genomeBuild' | 'variantCount'>,
     options: CaseDeletionOptions = {}
   ): Promise<void> {
-    options.onProgress?.({ phase: 'recomputing', done: 0, total: null })
-    await this.recomputeFrequencyForBuild(hidden.genomeBuild)
     const total = hidden.variantCount > 0 ? hidden.variantCount : null
     options.onProgress?.({ phase: 'purging', done: 0, total })
     const purged = await this.purgeCaseVariants(caseId, options, total)
@@ -167,6 +164,10 @@ export class PostgresCaseLifecycleRepository {
         )
       }
 
+      // One writer of the derived cohort tables at a time; an import that is
+      // publishing finishes within seconds, so wait for it rather than fail.
+      await client.query('SET LOCAL lock_timeout = 0')
+      await lockSummaryForWrite(client, this.schema)
       await this.applyCaseScopedMaintenance(client, caseId)
       await client.query(
         `UPDATE ${this.tbl('cases_all')}
@@ -289,6 +290,9 @@ export class PostgresCaseLifecycleRepository {
       [caseId]
     )
 
+    // Per-gene aggregates: subtract the case while its rows are still visible.
+    await removeCaseFromGeneSummary({ schema: this.schema, client, caseId })
+
     // variant_frequency: symmetric decrement of rebuildVariantFrequencyForCase
     // (one count per distinct coordinate per case) — replaces TRUNCATE+rebuild.
     const caseCoords = `SELECT DISTINCT coord_hash FROM ${tbl('variants_all')} WHERE case_id = $1`
@@ -311,24 +315,6 @@ export class PostgresCaseLifecycleRepository {
       client: client as unknown as PoolClient,
       caseId
     })
-  }
-
-  private async recomputeFrequencyForBuild(genomeBuild: string | undefined): Promise<void> {
-    const client = await this.pool.connect()
-    try {
-      await client.query('BEGIN')
-      await this.summary.recomputeCohortFrequency({
-        schema: this.schema,
-        client: client as unknown as PoolClient,
-        affectedBuilds: genomeBuild !== undefined ? [genomeBuild] : undefined
-      })
-      await client.query('COMMIT')
-    } catch (error) {
-      await rollbackQuietly(client)
-      throw error
-    } finally {
-      client.release()
-    }
   }
 
   private tbl(table: string): string {

@@ -16,6 +16,7 @@ import { ImportServerPathArgSchema } from '../../../shared/api/schemas/import'
 import { BatchImportRunIdSchema } from '../../../shared/ipc/domains/batch-import-schemas'
 import {
   WEB_EVENT_BATCH_IMPORT_COMPLETE,
+  WEB_EVENT_BATCH_IMPORT_FILE_COMPLETE,
   WEB_EVENT_BATCH_IMPORT_PROGRESS,
   WEB_EVENT_COHORT_SUMMARY_REBUILT
 } from '../web-event-types'
@@ -306,6 +307,8 @@ function webBatchCallbacks(
     onCohortStale: (data) => events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, data),
     onProgress: (progress) =>
       events.publish(userId, WEB_EVENT_BATCH_IMPORT_PROGRESS, { ...progress, runId }),
+    onFileComplete: (event) =>
+      events.publish(userId, WEB_EVENT_BATCH_IMPORT_FILE_COMPLETE, { ...event, runId }),
     onComplete: (result) =>
       events.publish(userId, WEB_EVENT_BATCH_IMPORT_COMPLETE, { ...result, runId })
   }

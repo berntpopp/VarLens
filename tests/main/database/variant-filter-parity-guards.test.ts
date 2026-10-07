@@ -439,11 +439,10 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
 
   it('PostgreSQL cohort frequency filter keeps rows without a frequency and treats 0 as off', () => {
     const active = buildSummaryQueryParts({ max_internal_af: 0.2 }, 4)
-    expect(active.parts.whereParts).toContain(
-      '(cvs.cohort_frequency IS NULL OR cvs.cohort_frequency <= $1)'
-    )
+    const frequency = '(cvs.carrier_count::double precision / NULLIF(bt.total, 0))'
+    expect(active.parts.whereParts).toContain(`(${frequency} IS NULL OR ${frequency} <= $1)`)
     const off = buildSummaryQueryParts({ max_internal_af: 0 }, 4)
-    expect(off.parts.whereParts.join(' ')).not.toContain('cohort_frequency')
+    expect(off.parts.whereParts.join(' ')).not.toContain('bt.total')
     expect(off.parts.values).toEqual([])
   })
 })

@@ -34,6 +34,10 @@ import {
   startSessionBatchImport
 } from './batch-import-session'
 import type { BatchImportCallbacks } from './batch-import-logic'
+import {
+  IMPORTABLE_VARIANT_EXTENSIONS,
+  isImportableVariantFileName
+} from '../../../shared/utils/importable-file'
 
 function throwUnallowedBatchPath(channel: string, filePath: string, label = 'filePath'): never {
   throw new InvalidParametersError(
@@ -45,6 +49,7 @@ function throwUnallowedBatchPath(channel: string, filePath: string, label = 'fil
 function createBatchImportCallbacks(runId: string): BatchImportCallbacks {
   return {
     onProgress: (data) => safeEmit('batch-import:progress', { ...data, runId }),
+    onFileComplete: (data) => safeEmit('batch-import:fileComplete', { ...data, runId }),
     onComplete: (data) => safeEmit('batch-import:complete', { ...data, runId }),
     onCohortStale: (data) => safeEmit('cohort:summaryRebuilt', data)
   }
@@ -64,7 +69,7 @@ export function registerBatchImportHandlers({
         defaultPath: settings.lastImportDirectory,
         properties: ['openFile', 'multiSelections'],
         filters: [
-          { name: 'Variant Files', extensions: ['gz', 'json.gz', 'json', 'vcf', 'vcf.gz'] },
+          { name: 'Variant Files', extensions: [...IMPORTABLE_VARIANT_EXTENSIONS] },
           { name: 'ZIP Archives', extensions: ['zip'] },
           { name: 'All Files', extensions: ['*'] }
         ]
@@ -112,15 +117,7 @@ export function registerBatchImportHandlers({
       })
 
       const files = entries
-        .filter((entry) => {
-          if (entry.isFile() === false) return false
-          const name = entry.name.toLowerCase()
-          return (
-            name.endsWith('.json') === true ||
-            name.endsWith('.json.gz') === true ||
-            name.endsWith('.gz') === true
-          )
-        })
+        .filter((entry) => entry.isFile() === true && isImportableVariantFileName(entry.name))
         .map((entry) => join(folderPath, entry.name))
 
       // The folder dialog grants authority to the discovered files, not to

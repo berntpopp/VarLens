@@ -128,6 +128,7 @@ vi.mock('../../../src/renderer/src/services/LogService', () => ({
 // Import AFTER mocks so the hoisted `vi.mock` factories take effect.
 import CaseView from '../../../src/renderer/src/views/CaseView.vue'
 import { AppStateKey, createAppState } from '../../../src/renderer/src/composables/useAppState'
+import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -514,5 +515,42 @@ describe('CaseView — Shortlist tab integration', () => {
     expect((wrapper.vm as unknown as { selectedVariantType: string }).selectedVariantType).toBe(
       'sv'
     )
+  })
+})
+
+describe('CaseView — welcome screen import', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+  })
+
+  function mountWelcome(role: string) {
+    installCapabilities({ role })
+    const mounted = mountCaseView(null)
+    const openImport = vi.fn()
+    mounted.state.setImportHandler(openImport)
+    mounted.state.setCaseCount(0)
+    return { ...mounted, openImport }
+  }
+
+  it('opens the import dialog even when the sidebar is already open', async () => {
+    const { wrapper, state, openImport } = mountWelcome('analyst')
+    state.sidebarOpen.value = true
+    await flushPromises()
+
+    const button = wrapper.findAll('button').find((b) => b.text().includes('Import Variants'))
+    expect(button).toBeDefined()
+    await button?.trigger('click')
+
+    expect(openImport).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no import button to a read-only viewer', async () => {
+    const { wrapper, openImport } = mountWelcome('viewer')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Import Variants')
+    expect(wrapper.text()).toContain('No cases are available in this workspace yet.')
+    expect(openImport).not.toHaveBeenCalled()
   })
 })

@@ -6,6 +6,7 @@ import {
   assertValidColumnFilterValues,
   NUMERIC_COLUMN_FILTER_KEYS
 } from '../../shared/filters/column-filter-validation'
+import { COHORT_FREQUENCY_KEY, COHORT_FREQUENCY_SQL } from './cohort-frequency-sql'
 
 export interface BuildBaseWhereContext {
   /** SQL alias for base columns: 'v' for variants-backed paths, 'cvs' for cohort listing. */
@@ -35,6 +36,11 @@ export interface BaseFilterInput {
 export interface BuildBaseWhereResult {
   sql: string
   params: (string | number)[]
+  /**
+   * True when a predicate uses the read-time cohort frequency: the query must
+   * then include `COHORT_BUILD_TOTALS_JOIN` (cohort-listing scope only).
+   */
+  needsBuildTotals: boolean
 }
 
 export function buildBaseWhere(
@@ -46,6 +52,7 @@ export function buildBaseWhere(
   const conditions: string[] = []
   const params: (string | number)[] = []
   const { baseAlias, scope } = ctx
+  let needsBuildTotals = false
   const q = (col: string) => `${baseAlias}.${col}`
 
   // Scope-specific invariants
@@ -69,8 +76,8 @@ export function buildBaseWhere(
     params.push(filters.genome_build)
   }
 
-  // Cohort-summary-only fields (cohort_frequency, carrier_count, has_star,
-  // has_comment, acmg_best) live on cohort_variant_summary, not on the
+  // Cohort-summary-only fields (the derived cohort frequency, carrier_count,
+  // has_star, has_comment, acmg_best) live on cohort_variant_summary, not on the
   // base variants table. They must be silently dropped for scopes that
   // query variants directly (case, cohort-burden) to avoid emitting
   // SQL that references non-existent columns. Callers needing these
@@ -92,8 +99,10 @@ export function buildBaseWhere(
     filters.max_internal_af !== undefined &&
     filters.max_internal_af > 0
   ) {
-    conditions.push(`(${q('cohort_frequency')} IS NULL OR ${q('cohort_frequency')} <= ?)`)
+    // 0 means "no frequency filter"; a row without a frequency is kept.
+    conditions.push(`(${COHORT_FREQUENCY_SQL} IS NULL OR ${COHORT_FREQUENCY_SQL} <= ?)`)
     params.push(filters.max_internal_af)
+    needsBuildTotals = true
   }
   if (
     isCohortSummaryScope &&
@@ -151,11 +160,13 @@ export function buildBaseWhere(
     for (const [key, filter] of Object.entries(filters.column_filters)) {
       if (isExtensionColumnKey(key)) continue
       const clause = translateColumnFilter(key, filter, baseAlias, params, scope)
-      if (clause !== null) conditions.push(clause)
+      if (clause === null) continue
+      conditions.push(clause)
+      if (isCohortSummaryScope && key === COHORT_FREQUENCY_KEY) needsBuildTotals = true
     }
   }
 
-  return { sql: conditions.join(' AND '), params }
+  return { sql: conditions.join(' AND '), params, needsBuildTotals }
 }
 
 const IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
@@ -192,7 +203,11 @@ function translateColumnFilter(
   ) {
     return null
   }
-  const col = `${baseAlias}.${column}`
+  // The cohort frequency is not a stored column: it is derived at read time.
+  const col =
+    scope === 'cohort-listing' && column === COHORT_FREQUENCY_KEY
+      ? COHORT_FREQUENCY_SQL
+      : `${baseAlias}.${column}`
   const { operator, value, includeEmpty } = filter
   const nullBranch = includeEmpty !== false
 

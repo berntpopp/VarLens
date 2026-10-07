@@ -239,6 +239,14 @@ describe('batch-import IPC handlers', () => {
         currentFileName: 'case1.json',
         overallPercent: 50
       })
+      callbacks?.onFileComplete?.({
+        index: 0,
+        totalFiles: 1,
+        fileName: 'case1.json',
+        caseName: 'case1',
+        status: 'success',
+        caseId: 4
+      })
       callbacks?.onComplete?.({
         succeeded: 1,
         failed: 0,
@@ -249,6 +257,10 @@ describe('batch-import IPC handlers', () => {
       expect(safeEmit).toHaveBeenCalledWith(
         'batch-import:progress',
         expect.objectContaining({ runId: 'run-1' })
+      )
+      expect(safeEmit).toHaveBeenCalledWith(
+        'batch-import:fileComplete',
+        expect.objectContaining({ runId: 'run-1', caseId: 4, status: 'success' })
       )
       expect(safeEmit).toHaveBeenCalledWith(
         'batch-import:complete',
@@ -408,6 +420,53 @@ describe('batch-import IPC handlers', () => {
 
       expect(isIpcError(result)).toBe(true)
       expect(result).not.toEqual([])
+    })
+
+    it('enrolls plain and compressed VCF and JSON files from a scanned folder, skipping index files', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+      const folder = join(EXTERNAL_ROOT, 'mixed')
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({
+        canceled: false,
+        filePaths: [folder]
+      } as never)
+      const file = (name: string): unknown => ({ name, isFile: () => true })
+      vi.mocked(readdir).mockResolvedValueOnce([
+        file('a.vcf'),
+        file('B.VCF'),
+        file('c.vcf.gz'),
+        file('d.json'),
+        file('e.json.gz'),
+        file('c.vcf.gz.tbi'),
+        file('c.vcf.gz.csi'),
+        file('notes.txt'),
+        { name: 'nested.vcf', isFile: () => false }
+      ] as never)
+
+      const result = await invokeHandler(ipcMain, 'batch-import:selectFolder')
+
+      expect(result).toEqual(
+        ['a.vcf', 'B.VCF', 'c.vcf.gz', 'd.json', 'e.json.gz'].map((name) => join(folder, name))
+      )
+    })
+
+    it('offers the folder-scan extensions in the file picker', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({
+        canceled: true,
+        filePaths: []
+      } as never)
+
+      await invokeHandler(ipcMain, 'batch-import:selectFiles')
+
+      const options = vi.mocked(dialog.showOpenDialog).mock.calls.at(-1)?.[0] as unknown as {
+        filters: Array<{ name: string; extensions: string[] }>
+      }
+      expect(options.filters[0]).toEqual({
+        name: 'Variant Files',
+        extensions: ['vcf', 'json', 'gz']
+      })
     })
 
     it('preserves cancellation and a genuinely empty folder as empty selections', async () => {

@@ -54,12 +54,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, provide, onActivated, onMounted, watch } from 'vue'
+import { ref, provide, onActivated, onDeactivated, onMounted, watch } from 'vue'
 import CohortTable from './CohortTable.vue'
 import GeneBurdenView from './association/GeneBurdenView.vue'
 import { FiltersKey, createFilters } from '../composables/useFilters'
 import { CohortDataKey, useCohortData } from '../composables/useCohortData'
 import { useAppState } from '../composables/useAppState'
+import { useLiveDataSignal } from '../composables/useLiveDataSignal'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import { logService } from '../services/LogService'
 import { useUrlParam } from '../composables/useUrlState'
@@ -178,9 +179,40 @@ watch([genomeBuild, selectedVariantType], async () => {
   }
 })
 
+// Cases added while the view is on screen (a batch import finishing files):
+// refresh the table page, the summary and the genome-build counts in place,
+// from the same signal that refreshes the case list, so the header numbers
+// agree. A hidden view catches up when it is shown again.
+const { liveDataGeneration } = useLiveDataSignal()
+const lastSeenLiveGeneration = ref(liveDataGeneration.value)
+const viewActive = ref(true)
+
+const softRefresh = async (): Promise<void> => {
+  lastSeenLiveGeneration.value = liveDataGeneration.value
+  try {
+    await Promise.all([loadAvailableBuilds(), cohortTableRef.value?.softRefresh()])
+  } catch (error) {
+    logService.error(
+      'Failed to refresh cohort view after an import: ' +
+        (error instanceof Error ? error.message : String(error)),
+      'cohort'
+    )
+  }
+}
+
+watch(liveDataGeneration, () => {
+  if (viewActive.value) void softRefresh()
+})
+
+onDeactivated(() => {
+  viewActive.value = false
+})
+
 onActivated(async () => {
+  viewActive.value = true
   if (dataGeneration.value !== lastSeenGeneration.value) {
     lastSeenGeneration.value = dataGeneration.value
+    lastSeenLiveGeneration.value = liveDataGeneration.value
     try {
       await refresh()
     } catch (error) {
@@ -190,6 +222,8 @@ onActivated(async () => {
         'cohort'
       )
     }
+  } else if (liveDataGeneration.value !== lastSeenLiveGeneration.value) {
+    await softRefresh()
   }
 })
 

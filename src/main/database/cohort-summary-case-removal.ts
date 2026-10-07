@@ -15,9 +15,10 @@
  *    remaining carrier row still holds every value the case provided — then
  *    only carrier/het/hom counts are decremented (rows reaching 0 carriers are
  *    dropped). Otherwise the coordinate is recomputed from the remaining
- *    variants with the full rebuild's own INSERT-SELECT, restricted by key.
- *    `cohort_frequency` is refreshed for the case's genome build because its
- *    denominator (the build's case count) changed.
+ *    variants with the full rebuild's own INSERT-SELECT, restricted by key,
+ *    followed by the rebuild's per-case annotation flag step for those keys.
+ *    The cohort frequency needs no upkeep although its denominator (the
+ *    build's case count) changed: readers derive it (cohort-frequency-sql.ts).
  *  - gene burden: variant_count -= the case's rows, affected_case_count -= 1,
  *    unique_variant_count -= the case's coordinates no remaining variant of
  *    the same gene and build carries; rows reaching 0 are dropped.
@@ -40,6 +41,7 @@ import {
   CLEAR_TEMP_TABLES_SQL,
   prepareRemovalStatements
 } from './cohort-summary-case-removal-sql'
+import { countRemovedCaseUniqueVariants } from './cohort-unique-variant-count'
 
 export interface CaseSummaryRemoval {
   /** Capture the case's contribution. Call inside the delete transaction, before the delete. */
@@ -83,11 +85,11 @@ export function openCaseSummaryRemoval(db: DatabaseType): CaseSummaryRemoval | n
       s.decrementRows.run()
       s.dropEmptyRows.run()
       s.insertRecomputeRows.run()
-      const cases = (s.buildCaseCount.get(genomeBuild) as { n: number }).n
-      s.refreshFrequency.run({ cases, build: genomeBuild })
+      s.applyRecomputedPerCaseFlags.run()
       s.countLostGeneCoords.run({ build: genomeBuild })
       s.decrementGenes.run({ build: genomeBuild })
       s.dropEmptyGenes.run()
+      countRemovedCaseUniqueVariants(db)
     }
   }
 }

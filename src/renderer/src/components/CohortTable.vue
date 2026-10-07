@@ -310,6 +310,7 @@ const {
   error,
   loadPage,
   invalidateAndReload,
+  reloadCurrentPage,
   reloadIfFiltersChanged,
   resetSort
 } = useOffsetPagination<CohortVariant>({
@@ -352,6 +353,17 @@ const {
 
 // Reloads requested while KeepAlive-deactivated are replayed on activation (P0-3 parity).
 const { requestReload } = useDeferredReload(isActive, invalidateAndReload)
+
+// Cases were added while the table is on screen (batch import): refetch the
+// current page, the summary tiles and the column metadata in one go, keeping
+// the page, sort and filters. Deferred like any reload while hidden.
+const { requestReload: softRefresh } = useDeferredReload(isActive, async () => {
+  await Promise.all([
+    fetchSupportedCohortSummary(),
+    fetchSupportedCohortColumnMeta(),
+    reloadCurrentPage()
+  ])
+})
 
 // Local state
 const selectedVariantKey = ref<string | null>(null)
@@ -690,7 +702,7 @@ const refresh = async () => {
   // The case set may have changed: cached carrier lists can name deleted cases.
   await reloadExpandedCarriers(variants.value)
 }
-defineExpose({ refresh })
+defineExpose({ refresh, softRefresh })
 </script>
 
 <style scoped>
@@ -707,10 +719,11 @@ defineExpose({ refresh })
 }
 
 /* Prevent alerts/indicators from growing — only the data table gets the
-   remaining flex space. */
+   remaining flex space. Vuetify sets `.v-alert { flex: 1 1 }`, so the grow
+   factor must be reset too or the error banner fills the whole column. */
 .cohort-table-container > .v-alert,
 .cohort-table-container > .cohort-rebuild-notice {
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 /* Rebuild notice: plain styled div, total height ~26 px.

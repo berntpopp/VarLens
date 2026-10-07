@@ -74,8 +74,7 @@ describe.skipIf(!RUN)('cohort keyset paging — PostgreSQL', () => {
       await new PostgresCohortSummaryRepository().incrementalAdd({
         schema,
         client: client as never,
-        caseId: id,
-        genomeBuild: 'GRCh38'
+        caseId: id
       })
       await client.query('COMMIT')
     } finally {

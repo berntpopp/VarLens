@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { COHORT_FREQUENCY_SQL } from '../../../src/main/database/cohort-frequency-sql'
 import { buildBaseWhere } from '../../../src/main/database/variant-where-builder'
 import type { ColumnFilter } from '../../../src/shared/types/column-filters'
 
@@ -186,8 +187,31 @@ describe('cohort-summary-only field gating', () => {
       { max_internal_af: 0.05 },
       { baseAlias: 'cvs', scope: 'cohort-listing' }
     )
-    expect(result.sql).toContain('cvs.cohort_frequency')
+    // Derived at read time: carriers over the build's case total, NULL kept.
+    expect(result.sql).toBe(`(${COHORT_FREQUENCY_SQL} IS NULL OR ${COHORT_FREQUENCY_SQL} <= ?)`)
+    expect(result.sql).not.toContain('cohort_frequency')
+    expect(result.needsBuildTotals).toBe(true)
     expect(result.params).toEqual([0.05])
+  })
+
+  it('max_internal_af = 0 means no frequency filter (and no build-totals join)', () => {
+    const result = buildBaseWhere(
+      { max_internal_af: 0 },
+      { baseAlias: 'cvs', scope: 'cohort-listing' }
+    )
+    expect(result).toEqual({ sql: '', params: [], needsBuildTotals: false })
+  })
+
+  it('a cohort_frequency column filter uses the read-time expression in cohort-listing scope', () => {
+    const result = buildBaseWhere(
+      { column_filters: { cohort_frequency: { operator: '>=', value: 0.5, includeEmpty: false } } },
+      { baseAlias: 'cvs', scope: 'cohort-listing' }
+    )
+    expect(result).toEqual({
+      sql: `${COHORT_FREQUENCY_SQL} >= ?`,
+      params: [0.5],
+      needsBuildTotals: true
+    })
   })
 
   it('drops carrier_count_min for case + cohort-burden scopes', () => {

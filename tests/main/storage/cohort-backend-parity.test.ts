@@ -26,6 +26,14 @@ import { Client, Pool } from 'pg'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { DatabaseService, type Variant } from '../../../src/main/database'
+import { openImportSummarySession } from '../../../src/main/database/cohort-summary-case-add'
+import { openCaseSummaryRemoval } from '../../../src/main/database/cohort-summary-case-removal'
+import { deleteCasesIncrementally } from '../../../src/main/workers/delete-operations'
+import {
+  referenceSummary,
+  snapshotSummary,
+  type SummarySnapshot
+} from '../workers/support/summary-reference'
 import type { ColumnFilterMeta } from '../../../src/shared/types/column-filters'
 import type { CohortSearchParams, CohortVariant } from '../../../src/shared/types/cohort'
 import {
@@ -246,8 +254,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       await summaryRepo.incrementalAdd({
         schema,
         client: client as never,
-        caseId,
-        genomeBuild: fixture.genomeBuild
+        caseId
       })
       await summaryRepo.refreshColumnMetas({ schema, client: client as never, caseId })
       await client.query('COMMIT')
@@ -371,10 +378,9 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     const afterAddPg = sortCohort(await pgCohortRows({})).map(normalizeCohort)
     expect(afterAddPg).toEqual(afterAddSqlite)
 
-    // Remove the second case on both backends. PG's deleteCase recomputes
-    // cohort_frequency against the surviving cases in the same transaction; the
-    // SQLite path removes the case row then rebuilds the summary so its
-    // frequency denominator likewise excludes the deleted case.
+    // Remove the second case on both backends. Both derive the frequency at
+    // read time, so its denominator excludes the deleted case without any
+    // rewrite; the SQLite rebuild here only refreshes the carrier counts.
     sqlite.cases.deleteCase(sqliteCaseIds[1])
     sqlite.cohortSummary.rebuild()
     sqlite.cohort.invalidateColumnMetaCache()
@@ -494,6 +500,106 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     expect(await pgFlags()).toEqual(sqliteFlags())
   }, 120_000)
 
+  it('(f) SQLite: a case with a differing annotation, a transcript switch and its removal keep the maintained summary equal to a fresh rebuild (#461, #460)', async () => {
+    const snapshot = (): SummarySnapshot => snapshotSummary(sqlite.database)
+    const rebuilt = (): SummarySnapshot => referenceSummary(sqlite.database)
+    const at100 = (): Record<string, unknown> =>
+      sqlite.database
+        .prepare(
+          `SELECT gene_symbol, consequence, func, clinvar, cadd, transcript, carrier_count
+           FROM cohort_variant_summary WHERE chr = '1' AND pos = 100`
+        )
+        .get() as Record<string, unknown>
+
+    // Differing annotation: a third carrier of 1:100:A:T annotated with another
+    // gene, a lower impact string, a higher CADD and no ClinVar value, merged
+    // by the import worker's per-file path. Representative = MAX() per column.
+    const upkeep = openImportSummarySession(sqlite.database, {
+      forceRebuild: false,
+      rebuild: () => sqlite.cohortSummary.rebuild(),
+      onWarning: (warning) => {
+        throw new Error(warning)
+      }
+    })
+    const third = seedSqliteCase({
+      name: 'parity-c',
+      genomeBuild: 'GRCh38',
+      variants: [
+        baseVariant({
+          chr: '1',
+          pos: 100,
+          gene_symbol: 'BRCA1-AS1',
+          consequence: 'MODIFIER',
+          func: 'intron_variant',
+          clinvar: null,
+          cadd: 40
+        })
+      ]
+    })
+    upkeep.addCase(third)
+    upkeep.finish()
+    expect(at100()).toMatchObject({
+      gene_symbol: 'BRCA1-AS1',
+      consequence: 'MODIFIER',
+      func: 'stop_gained',
+      clinvar: 'Pathogenic',
+      cadd: 40,
+      carrier_count: 3
+    })
+    expect(snapshot()).toEqual(rebuilt())
+    expect(sqlite.cohort.getCohortSummary().unique_variants).toBe(3)
+
+    // Transcript switch on the new carrier: it stops holding the gene and
+    // consequence maxima, which fall back to the other carriers' values.
+    const switched = (
+      sqlite.database.prepare('SELECT id FROM variants WHERE case_id = ?').get(third) as {
+        id: number
+      }
+    ).id
+    sqlite.transcripts.insertTranscriptAndSwitch(switched, {
+      transcript_id: 'ENST00000000001',
+      gene_symbol: 'AAAS',
+      consequence: 'HIGH',
+      func: 'frameshift_variant',
+      cdna: 'c.1del',
+      aa_change: 'p.M1fs',
+      hpo_sim_score: null,
+      moi: null,
+      is_selected: 0
+    })
+    expect(at100()).toMatchObject({
+      gene_symbol: 'BRCA1',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      transcript: 'ENST00000000001',
+      cadd: 40
+    })
+    expect(snapshot()).toEqual(rebuilt())
+
+    // Removing the carrier that holds the CADD and transcript maxima.
+    await deleteCasesIncrementally(sqlite.database, [third], {
+      deletingAll: false,
+      isCancelled: () => false,
+      onProgress: () => undefined,
+      summary: openCaseSummaryRemoval(sqlite.database)
+    })
+    expect(at100()).toMatchObject({ gene_symbol: 'BRCA1', cadd: 32.5, transcript: null })
+    expect(snapshot()).toEqual(rebuilt())
+    expect(sqlite.cohort.getCohortSummary().unique_variants).toBe(3)
+  }, 120_000)
+
+  // Cross-backend half of (f), to enable once PostgreSQL maintains the summary
+  // on a transcript switch and merges with MAX() on its incremental add (#461):
+  // run the same three steps through PostgresCohortSummaryRepository /
+  // PostgresTranscriptsRepository / PostgresCaseLifecycleRepository and assert,
+  // after EACH step, that PG's cohort_variant_summary rows — gene_symbol, cdna,
+  // aa_change, consequence, func, clinvar, gnomad_af, cadd, transcript,
+  // omim_mim_number, end_pos, carrier/het/hom counts, flags — equal SQLite's
+  // (which equal a fresh rebuild on either backend), and that both
+  // getSummary().unique_variants agree (#460). Text maxima compare bytewise on
+  // SQLite (BINARY), so PG must aggregate them under COLLATE "C".
+  it.todo('(f) PG: the same sequence leaves PG summary rows equal to SQLite’s after every step')
+
   it('panel-interval with spanning SV/CNV: spanning row is included on both backends (Pass-9 #7)', async () => {
     // Insert a CNV with pos=1000, end_pos=5000 on both backends.
     const spanningCaseSqlite = sqlite.cases.createCase('span-sqlite', '/tmp/span.json', 0, 'GRCh38')
@@ -529,8 +635,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       await summaryRepo.incrementalAdd({
         schema,
         client: client as never,
-        caseId: spanCasePg,
-        genomeBuild: 'GRCh38'
+        caseId: spanCasePg
       })
       await client.query('COMMIT')
     })

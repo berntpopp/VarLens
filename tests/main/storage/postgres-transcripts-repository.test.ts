@@ -109,8 +109,9 @@ describe('PostgresTranscriptsRepository', () => {
           }
         ]
       })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
+      // The row's gene changes: it is moved in the per-gene cohort aggregates.
+      .mockResolvedValueOnce({ rows: [{ changes: true }] })
+      .mockResolvedValue({ rows: [] })
     const pool = {
       connect: vi.fn(async () => ({ query, release }))
     }
@@ -125,12 +126,31 @@ describe('PostgresTranscriptsRepository', () => {
       9,
       'NM_000059.4'
     ])
+    expect(query).toHaveBeenNthCalledWith(4, expect.stringContaining('IS DISTINCT FROM'), [
+      9,
+      'BRCA2'
+    ])
+    expect(query).toHaveBeenNthCalledWith(5, 'SET LOCAL lock_timeout = 0')
+    expect(query).toHaveBeenNthCalledWith(6, expect.stringContaining('pg_try_advisory_xact_lock'), [
+      'case_schema'
+    ])
+    // Subtract the row under its old gene, update it, add it under the new one.
     expect(query).toHaveBeenNthCalledWith(
-      4,
+      7,
+      expect.stringContaining('UPDATE "case_schema"."cohort_gene_summary"'),
+      [9]
+    )
+    expect(query).toHaveBeenNthCalledWith(
+      9,
       expect.stringContaining('UPDATE "case_schema".variants'),
       [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'stop_gained', 'c.1A>G', 'p.M1V', 0.8, 'AD']
     )
-    expect(query).toHaveBeenNthCalledWith(5, 'COMMIT')
+    expect(query).toHaveBeenNthCalledWith(
+      10,
+      expect.stringContaining('INSERT INTO "case_schema"."cohort_gene_summary"'),
+      [9]
+    )
+    expect(query).toHaveBeenNthCalledWith(11, 'COMMIT')
     expect(release).toHaveBeenCalledOnce()
   })
 
@@ -154,6 +174,7 @@ describe('PostgresTranscriptsRepository', () => {
           }
         ]
       })
+      .mockResolvedValueOnce({ rows: [{ changes: false }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
     const pool = { connect: vi.fn(async () => ({ query, release })) }
@@ -161,11 +182,11 @@ describe('PostgresTranscriptsRepository', () => {
 
     await repository.switchSelectedTranscript(9, 'NM_LEGACY.1')
 
-    const updateSql = query.mock.calls[3][0] as string
+    const updateSql = query.mock.calls[4][0] as string
     expect(updateSql).toContain('consequence = $4')
     expect(updateSql).not.toContain('COALESCE($4, consequence)')
     expect(query).toHaveBeenNthCalledWith(
-      4,
+      5,
       expect.stringContaining('UPDATE "case_schema".variants'),
       [9, 'NM_LEGACY.1', 'LEGACY', null, 'stop_gained', null, null, null, null]
     )
@@ -203,6 +224,7 @@ describe('PostgresTranscriptsRepository', () => {
           }
         ]
       })
+      .mockResolvedValueOnce({ rows: [{ changes: false }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
     const pool = {
@@ -229,12 +251,17 @@ describe('PostgresTranscriptsRepository', () => {
       9,
       'NM_000059.4'
     ])
+    // The gene does not change, so the per-gene aggregates are left alone.
+    expect(query).toHaveBeenNthCalledWith(5, expect.stringContaining('IS DISTINCT FROM'), [
+      9,
+      'BRCA2'
+    ])
     expect(query).toHaveBeenNthCalledWith(
-      5,
+      6,
       expect.stringContaining('UPDATE "case_schema".variants'),
       [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'missense_variant', 'c.1A>G', 'p.M1V', 0.8, 'AD']
     )
-    expect(query).toHaveBeenNthCalledWith(6, 'COMMIT')
+    expect(query).toHaveBeenNthCalledWith(7, 'COMMIT')
     expect(release).toHaveBeenCalledOnce()
   })
 })

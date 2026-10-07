@@ -25,7 +25,9 @@ export function createBaseVariantQuery(
         .onRef('vf.alt', '=', 'variants.alt')
     )
     .select(
-      sql<number | null>`CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases), 0)`.as(
+      sql<
+        number | null
+      >`CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0)`.as(
         'internal_af'
       )
     )

@@ -16,6 +16,7 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import {
   CHECK_TABLE_EXISTS_SQL,
   REBUILD_GENE_BURDEN_SQL,
+  UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL,
   UPDATE_META_SQL,
   variantSummaryInsertSql
 } from '../../shared/sql/cohort-summary-rebuild'
@@ -54,6 +55,8 @@ export async function rebuildCohortSummaryCancellable(
         return 'cancelled'
       }
     }
+    // Per-case stars/comments/ACMG calls, as CohortSummaryService.rebuild() does.
+    db.exec(UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL)
     db.exec(REBUILD_GENE_BURDEN_SQL)
     db.exec(UPDATE_META_SQL)
     db.exec('COMMIT')

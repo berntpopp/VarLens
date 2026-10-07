@@ -12,6 +12,7 @@ import type {
   GeneBurden
 } from '../../../shared/types/cohort'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
+import { cohortVariantTotalsSql, geneBurdenSql } from './cohort-gene-summary-sql'
 import {
   prepareCohortRead,
   readCohortSummaryStatus,
@@ -21,6 +22,7 @@ import { quoteIdentifier } from './identifiers'
 import { runNamed, runNamedDynamic } from './named-query'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { querySummaryPage } from './postgres-cohort-summary-page'
+import { SUMMARY_FREQUENCY_SQL, summaryBuildTotalsJoin } from './postgres-cohort-summary-query'
 import {
   PostgresPanelIntervalResolver,
   type PanelIntervalLookup
@@ -82,8 +84,9 @@ const COLUMN_META_KEYS = [
 ]
 
 /**
- * Filter-UI key → stored column on `cohort_variant_summary`. Every key is a
- * physical column on the summary table; `cadd_phred` is the only rename
+ * Filter-UI key → expression over `cohort_variant_summary`. Every key is a
+ * physical column on the summary table except `cohort_frequency`, which is
+ * derived from carrier_count at read time; `cadd_phred` is the only rename
  * (stored as `cadd`). Used by the cohort-view getColumnMeta read (C4 Step 2) so
  * COUNT(DISTINCT)/MIN/MAX run against the already-deduped summary rows rather
  * than a live GROUP BY (Pass-3 HIGH #3 — SUM across cohort_column_meta would
@@ -94,7 +97,7 @@ const COLUMN_META_SUMMARY_COLUMNS: Record<string, string> = {
   pos: 'pos',
   gene_symbol: 'gene_symbol',
   carrier_count: 'carrier_count',
-  cohort_frequency: 'cohort_frequency',
+  cohort_frequency: SUMMARY_FREQUENCY_SQL,
   het_count: 'het_count',
   hom_count: 'hom_count',
   consequence: 'consequence',
@@ -196,7 +199,8 @@ export class PostgresCohortRepository {
   private readonly schema: string
   private readonly schemaName: string
   private readonly panelIntervals: PostgresPanelIntervalResolver
-  private columnMetaCache: ColumnFilterMeta[] | null = null
+  /** Column metadata of the summary as it was at `version` (see summaryVersion). */
+  private columnMetaCache: { version: string; meta: ColumnFilterMeta[] } | null = null
 
   constructor(
     private readonly pool: CohortPool,
@@ -212,6 +216,26 @@ export class PostgresCohortRepository {
 
   private tbl(table: string): string {
     return `${this.schemaName}."${table}"`
+  }
+
+  /**
+   * Changes whenever the summary or the set of visible cases does: every
+   * import, deletion and rebuild stamps cohort_summary_state, and the case
+   * count is the frequency denominator. Lets a long-lived process cache
+   * derived metadata without serving it stale.
+   */
+  private async summaryVersion(): Promise<string> {
+    const result = await this.pool.query<{ version: string }>(
+      `SELECT concat_ws('|', s.last_incremental_at, s.last_rebuilt_at,
+                        (SELECT COUNT(*) FROM ${this.tbl('cases')})) AS version
+         FROM ${this.tbl('cohort_summary_state')} s WHERE s.id = 1`
+    )
+    return result.rows[0]?.version ?? ''
+  }
+
+  /** The summary table as `cvs`, with the per-build case totals the frequency needs. */
+  private summaryWithBuildTotals(): string {
+    return `${this.tbl('cohort_variant_summary')} cvs ${summaryBuildTotalsJoin(this.tbl('cases'))}`
   }
 
   async queryVariants(params: CohortSearchParams): Promise<CohortPaginatedResult> {
@@ -259,6 +283,7 @@ export class PostgresCohortRepository {
         pool: this.pool as Pool,
         schema: this.schema,
         table: this.tbl('cohort_variant_summary'),
+        casesTable: this.tbl('cases'),
         toVariant: (row) => this.toCohortVariant(row, totalCases)
       },
       params,
@@ -306,23 +331,16 @@ export class PostgresCohortRepository {
   }
 
   async getSummary(): Promise<CohortSummary> {
+    // The variant figures come from maintained aggregates, so reconcile them
+    // first, like any other read of the cohort summary.
+    await prepareCohortRead({ pool: this.pool, schema: this.schema })
+    const totals = cohortVariantTotalsSql((table) => this.tbl(table))
     const result = await this.pool.query(
       `SELECT
          (SELECT COUNT(*)::bigint FROM ${this.schemaName}."cases") AS total_cases,
-         (SELECT COUNT(*)::bigint FROM ${this.schemaName}."variants") AS total_variants,
-         (
-           SELECT COUNT(*)::bigint
-           FROM (
-             SELECT 1
-             FROM ${this.schemaName}."variants" v
-             GROUP BY v.chr, v.pos, v.ref, v.alt
-           ) unique_variants
-         ) AS unique_variants,
-         (
-           SELECT COUNT(DISTINCT v.gene_symbol)::bigint
-           FROM ${this.schemaName}."variants" v
-           WHERE v.gene_symbol IS NOT NULL
-         ) AS genes_with_variants,
+         (${totals.totalVariants}) AS total_variants,
+         (${totals.uniqueVariants}) AS unique_variants,
+         (${totals.genesWithVariants}) AS genes_with_variants,
          (
            SELECT COUNT(*)::bigint
            FROM ${this.schemaName}."variant_annotations" va
@@ -406,18 +424,8 @@ export class PostgresCohortRepository {
   }
 
   async getGeneBurden(): Promise<GeneBurden[]> {
-    const result = await this.pool.query(
-      `SELECT
-         v.gene_symbol,
-         COUNT(*)::bigint AS variant_count,
-         COUNT(DISTINCT (v.chr, v.pos, v.ref, v.alt))::bigint AS unique_variant_count,
-         COUNT(DISTINCT v.case_id)::bigint AS affected_case_count,
-         (SELECT COUNT(*)::bigint FROM ${this.schemaName}."cases") AS total_cases
-       FROM ${this.schemaName}."variants" v
-       WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol <> ''
-       GROUP BY v.gene_symbol
-       ORDER BY affected_case_count DESC, variant_count DESC`
-    )
+    await prepareCohortRead({ pool: this.pool, schema: this.schema })
+    const result = await this.pool.query(geneBurdenSql((table) => this.tbl(table)))
 
     return (result.rows as Array<Record<string, unknown>>).map((row) => ({
       gene_symbol: String(row.gene_symbol ?? ''),
@@ -436,7 +444,8 @@ export class PostgresCohortRepository {
    * cohort path reads the summary table, not the per-case meta cache.
    */
   async getColumnMeta(): Promise<ColumnFilterMeta[]> {
-    if (this.columnMetaCache !== null) return this.columnMetaCache
+    const version = await this.summaryVersion()
+    if (this.columnMetaCache?.version === version) return this.columnMetaCache.meta
 
     const meta: ColumnFilterMeta[] = []
     const selectParts = COLUMN_META_KEYS.flatMap((key) => {
@@ -448,8 +457,8 @@ export class PostgresCohortRepository {
       return parts
     })
     const aggregateResult = await runNamed<Record<string, unknown>>(this.pool as Pool, {
-      name: 'cohort:column_meta_agg:v1',
-      text: `SELECT ${selectParts.join(', ')} FROM ${this.tbl('cohort_variant_summary')}`,
+      name: 'cohort:column_meta_agg:v2',
+      text: `SELECT ${selectParts.join(', ')} FROM ${this.summaryWithBuildTotals()}`,
       values: [],
       schema: this.schema
     })
@@ -481,7 +490,7 @@ export class PostgresCohortRepository {
         .map(
           ({ key, sqlColumn }) =>
             `SELECT '${key}' AS col_key, ${sqlColumn}::text AS value
-             FROM ${this.tbl('cohort_variant_summary')}
+             FROM ${this.summaryWithBuildTotals()}
              WHERE ${sqlColumn} IS NOT NULL
              GROUP BY ${sqlColumn}`
         )
@@ -507,7 +516,7 @@ export class PostgresCohortRepository {
       }
     }
 
-    this.columnMetaCache = meta
+    this.columnMetaCache = { version, meta }
     return meta
   }
 

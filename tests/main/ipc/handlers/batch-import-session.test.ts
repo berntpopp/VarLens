@@ -6,6 +6,7 @@ import {
   type SessionBatchFile
 } from '../../../../src/main/ipc/handlers/batch-import-session'
 import type { StorageSession } from '../../../../src/main/storage/session'
+import type { BatchFileComplete } from '../../../../src/shared/types/api'
 
 /**
  * Shared batch-import loop (PR-W9a; used by web and desktop-on-Postgres).
@@ -33,11 +34,15 @@ describe('runSessionBatchImport', () => {
   it('skips duplicates, imports new cases and reports failures per file', async () => {
     const { session, importSingleFile } = fakeSession([{ id: 1, name: 'HG001' }])
     const stale: boolean[] = []
+    const completed: BatchFileComplete[] = []
     const result = await runSessionBatchImport({
       files: [file('HG001.json'), file('HG002.json'), file('broken.json')],
       duplicateStrategy: 'skip',
       session,
-      callbacks: { onCohortStale: (d) => stale.push(d.is_stale) },
+      callbacks: {
+        onCohortStale: (d) => stale.push(d.is_stale),
+        onFileComplete: (event) => completed.push(event)
+      },
       signal: new AbortController().signal
     })
 
@@ -49,7 +54,15 @@ describe('runSessionBatchImport', () => {
     ])
     expect(result.details[0].filePath).toBe('ref:HG001.json')
     expect(importSingleFile).toHaveBeenCalledTimes(2)
-    expect(stale).toEqual([true, false])
+    // Each case is visible, and the cohort summary valid, as soon as its own
+    // file finishes: a batch never flags the summary stale.
+    expect(stale).toEqual([])
+    expect(completed.map((event) => [event.index, event.caseName, event.status])).toEqual([
+      [0, 'HG001', 'skipped'],
+      [1, 'HG002', 'success'],
+      [2, 'broken', 'failed']
+    ])
+    expect(completed.every((event) => event.totalFiles === 3)).toBe(true)
   })
 
   it('overwrite deletes the existing case before importing it again', async () => {
@@ -62,6 +75,52 @@ describe('runSessionBatchImport', () => {
       signal: new AbortController().signal
     })
     expect(writeExecute).toHaveBeenCalledWith({ type: 'cases:delete', params: [5] })
+    expect(result.succeeded).toBe(1)
+  })
+
+  it('names VCF cases without the inner extension', async () => {
+    const { session, importSingleFile } = fakeSession([])
+    const result = await runSessionBatchImport({
+      files: [file('SIM-0001.vcf.gz'), file('SIM-0002.vcf')],
+      duplicateStrategy: 'skip',
+      session,
+      callbacks: {},
+      signal: new AbortController().signal
+    })
+    expect(result.details.map((d) => d.caseName)).toEqual(['SIM-0001', 'SIM-0002'])
+    expect(importSingleFile.mock.calls.map(([params]) => params.caseName)).toEqual([
+      'SIM-0001',
+      'SIM-0002'
+    ])
+  })
+
+  it('skips a file whose case was imported before ".vcf" was stripped from names', async () => {
+    const { session, importSingleFile } = fakeSession([{ id: 7, name: 'SIM-0001.vcf' }])
+    const result = await runSessionBatchImport({
+      files: [file('SIM-0001.vcf.gz')],
+      duplicateStrategy: 'skip',
+      session,
+      callbacks: {},
+      signal: new AbortController().signal
+    })
+    expect(result).toMatchObject({ succeeded: 0, skipped: 1 })
+    expect(result.details[0]).toMatchObject({ caseName: 'SIM-0001.vcf', status: 'skipped' })
+    expect(importSingleFile).not.toHaveBeenCalled()
+  })
+
+  it('overwrite replaces such a legacy-named case in place instead of adding a twin', async () => {
+    const { session, writeExecute, importSingleFile } = fakeSession([
+      { id: 7, name: 'SIM-0001.vcf' }
+    ])
+    const result = await runSessionBatchImport({
+      files: [file('SIM-0001.vcf.gz')],
+      duplicateStrategy: 'overwrite',
+      session,
+      callbacks: {},
+      signal: new AbortController().signal
+    })
+    expect(writeExecute).toHaveBeenCalledWith({ type: 'cases:delete', params: [7] })
+    expect(importSingleFile.mock.calls.map(([params]) => params.caseName)).toEqual(['SIM-0001.vcf'])
     expect(result.succeeded).toBe(1)
   })
 
@@ -99,5 +158,22 @@ describe('buildDuplicateReport', () => {
       ],
       duplicateCount: 1
     })
+  })
+
+  it('detects a case imported before ".vcf" was stripped as a duplicate of the same file', () => {
+    const report = buildDuplicateReport(
+      [
+        { filePath: '/a/X.vcf.gz', fileName: 'X.vcf.gz' },
+        { filePath: '/a/Y.vcf.gz', fileName: 'Y.vcf.gz' },
+        { filePath: '/a/Z.vcf', fileName: 'Z.vcf' }
+      ],
+      new Set(['X.vcf', 'Z'])
+    )
+    expect(report.duplicateCount).toBe(2)
+    expect(report.files.map((f) => [f.caseName, f.isDuplicate])).toEqual([
+      ['X.vcf', true],
+      ['Y', false],
+      ['Z', true]
+    ])
   })
 })

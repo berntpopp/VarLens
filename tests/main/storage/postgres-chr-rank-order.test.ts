@@ -89,8 +89,7 @@ describe.skipIf(!RUN)('natural chromosome order — PostgreSQL', () => {
       await new PostgresCohortSummaryRepository().incrementalAdd({
         schema,
         client: client as never,
-        caseId: id,
-        genomeBuild: 'GRCh38'
+        caseId: id
       })
       await client.query('COMMIT')
     } finally {

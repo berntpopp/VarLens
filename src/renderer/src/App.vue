@@ -90,7 +90,8 @@
       @metadata-changed="handleMetadataChanged"
     />
 
-    <!-- Progress + cancel for exports, deletes and imports in every view. -->
+    <!-- Progress + cancel for exports, deletes and imports in every view.
+         Collapsed by default; AppFooter's BackgroundJobsToggle opens it. -->
     <BackgroundJobsPanel />
 
     <KeyboardShortcutsDialog v-if="keyboardHelpMounted" v-model="showKeyboardHelp" />
@@ -349,6 +350,12 @@ appState.setCaseMetadataHandler(() => {
   dialogHostRef.value?.showCaseMetadata()
 })
 
+/** Open the import wizard. Viewers are read-only, so for them it does nothing. */
+function openImportDialog(): void {
+  if (permissions.canWrite.value) dialogHostRef.value?.showImportDialog()
+}
+appState.setImportHandler(openImportDialog)
+
 const handleDialogBatchImportComplete = async (): Promise<void> => {
   if (!isWebRuntime()) return
   await handleBatchImportComplete()
@@ -389,10 +396,8 @@ useKeyboardShortcuts({
     showKeyboardHelp.value = true
   },
   onClearAllFilters: () => filterToolbarRef.value?.handleClearAll(),
-  onImport: () => {
-    // Viewers are read-only: the shortcut does nothing (the menu item is disabled).
-    if (permissions.canWrite.value) dialogHostRef.value?.showImportDialog()
-  }
+  // Viewers are read-only: the shortcut does nothing (the menu item is disabled).
+  onImport: openImportDialog
 })
 
 const perfModeEnabled = api?.perf?.isEnabled?.() === true

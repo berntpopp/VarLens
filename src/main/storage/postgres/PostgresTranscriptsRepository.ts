@@ -5,6 +5,8 @@ import {
   type TranscriptAnnotation,
   type TranscriptInsertRow
 } from '../../../shared/types/transcript'
+import { addVariantToGeneSummary, beginVariantGeneChange } from './cohort-gene-summary-sql'
+import { lockSummaryForWrite } from './cohort-summary-lock'
 import { quoteIdentifier } from './identifiers'
 
 type QueryablePool = Pick<Pool, 'query'> & Partial<Pick<Pool, 'connect'>>
@@ -42,7 +44,7 @@ export class PostgresTranscriptsRepository {
 
   constructor(
     private readonly pool: QueryablePool,
-    schema: string
+    private readonly schema: string
   ) {
     this.schemaName = quoteIdentifier(schema)
   }
@@ -151,6 +153,13 @@ export class PostgresTranscriptsRepository {
       (transcript.consequence as string | null | undefined) ?? null,
       (transcript.func as string | null | undefined) ?? null
     )
+    // The per-gene cohort aggregates count this row under its gene: move it
+    // when the selected transcript belongs to another gene.
+    const geneScope = { schema: this.schema, client, variantId }
+    const geneChanges = await beginVariantGeneChange(
+      { ...geneScope, nextGeneSymbol: (transcript.gene_symbol as string | null) ?? null },
+      lockSummaryForWrite
+    )
 
     await client.query(
       `UPDATE ${this.schemaName}.variants
@@ -175,6 +184,7 @@ export class PostgresTranscriptsRepository {
         transcript.moi
       ]
     )
+    if (geneChanges) await addVariantToGeneSummary(geneScope)
   }
 
   private async connect(): Promise<PoolClient> {

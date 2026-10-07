@@ -77,6 +77,11 @@ export interface SimulatorOptions {
   workers?: number
   /** Preconfigured workload profile */
   preset?: SimulatorPreset
+  /**
+   * Share of each sample drawn from sites other samples can carry too
+   * (0..1, default 0.9). Real exomes share most of their variants.
+   */
+  sharedFraction?: number
   /** Optional list of gene symbols to restrict variant generation to */
   geneFilter?: string[]
   /** Cancellation signal */

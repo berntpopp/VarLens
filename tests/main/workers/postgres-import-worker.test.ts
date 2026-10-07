@@ -19,17 +19,15 @@ vi.mock('../../../src/main/storage/postgres/postgres-bulk-write', () => ({
 }))
 
 // C3: spy on the cohort summary repo so the import-wiring tests can assert the
-// post-loop SAVEPOINT block calls incrementalAdd / recomputeCohortFrequency /
+// post-loop SAVEPOINT block calls incrementalAdd /
 // refreshColumnMetas without standing up a real Postgres. Each test overrides
 // the mock implementations via the exported spies below.
 const incrementalAddSpy = vi.fn(async () => undefined)
-const recomputeCohortFrequencySpy = vi.fn(async () => undefined)
 const refreshColumnMetasSpy = vi.fn(async () => undefined)
 const markStaleSpy = vi.fn(async () => undefined)
 vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', () => ({
   PostgresCohortSummaryRepository: class {
     incrementalAdd = incrementalAddSpy
-    recomputeCohortFrequency = recomputeCohortFrequencySpy
     refreshColumnMetas = refreshColumnMetasSpy
     markStale = markStaleSpy
   }
@@ -83,6 +81,77 @@ describe('postgres-import-worker runImport', () => {
         message: expect.stringMatching(/already in progress/)
       })
     )
+  })
+
+  describe('batch lease', () => {
+    // In a batch, the coordinator's control connection owns the workspace
+    // import lock and runs interrupted-import recovery once. A worker that
+    // took the lock or ran recovery itself would block or wipe its siblings.
+    function leaseClient(holderHasLock: boolean) {
+      const texts: string[] = []
+      const client = {
+        connect: vi.fn(async () => undefined),
+        query: vi.fn(async (sql: string | { text: string }, values?: unknown[]) => {
+          const text = typeof sql === 'string' ? sql : sql.text
+          texts.push(text)
+          if (text.includes('pg_locks')) {
+            expect(values).toEqual([4242, 'public'])
+            return { rows: holderHasLock ? [{ held: true }] : [] }
+          }
+          return { rows: [] }
+        }),
+        end: vi.fn(async () => undefined)
+      }
+      return { client, texts }
+    }
+
+    async function runLeased(holderHasLock: boolean) {
+      const { client, texts } = leaseClient(holderHasLock)
+      const messages: unknown[] = []
+      const detectFormat = vi.fn(async () => {
+        throw new Error('stop after the lease check')
+      })
+      await runImport(
+        {
+          createClient: () => client as never,
+          detectFormat: detectFormat as never,
+          createVcfMappedStream: async () => Readable.from([]) as never,
+          createMapperPipeline: async () => Readable.from([]),
+          statFile: () => ({ size: 0 })
+        },
+        {
+          type: 'start',
+          client: { connectionString: 'postgres://x' },
+          schema: 'public',
+          mode: 'single-file',
+          caseName: 'leased',
+          filePath: '/tmp/a.vcf',
+          lease: { holderPid: 4242 }
+        },
+        (message) => messages.push(message)
+      )
+      return { texts, messages, detectFormat }
+    }
+
+    it('neither takes the workspace lock nor runs recovery when the coordinator holds the lease', async () => {
+      const { texts, detectFormat } = await runLeased(true)
+
+      expect(detectFormat).toHaveBeenCalled()
+      expect(texts.some((text) => text.includes('pg_try_advisory_lock'))).toBe(false)
+      expect(texts.some((text) => text.includes("import_status = 'importing'"))).toBe(false)
+    })
+
+    it('refuses to import when the named coordinator does not hold the workspace lock', async () => {
+      const { messages, detectFormat } = await runLeased(false)
+
+      expect(detectFormat).not.toHaveBeenCalled()
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          type: 'error',
+          message: expect.stringMatching(/lease/i)
+        })
+      )
+    })
   })
 
   it('fails closed when PostgreSQL does not confirm advisory-lock ownership', async () => {
@@ -765,7 +834,6 @@ describe('postgres-import-worker runImport', () => {
 describe('postgres-import-worker — C3 import wiring', () => {
   beforeEach(() => {
     incrementalAddSpy.mockReset().mockResolvedValue(undefined)
-    recomputeCohortFrequencySpy.mockReset().mockResolvedValue(undefined)
     refreshColumnMetasSpy.mockReset().mockResolvedValue(undefined)
     markStaleSpy.mockReset().mockResolvedValue(undefined)
   })
@@ -872,11 +940,11 @@ describe('postgres-import-worker — C3 import wiring', () => {
 
     expect(incrementalAddSpy).toHaveBeenCalledTimes(1)
     expect(incrementalAddSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ schema: 'public', caseId: 13, genomeBuild: 'GRCh38' })
+      expect.objectContaining({ schema: 'public', caseId: 13 })
     )
-    expect(recomputeCohortFrequencySpy).toHaveBeenCalledWith(
-      expect.objectContaining({ schema: 'public', affectedBuilds: ['GRCh38'] })
-    )
+    // Publication touches only this case's rows: cohort frequency is derived
+    // at read time, so no statement rewrites the rest of the summary.
+    expect(queries.some((q) => q.includes('cohort_frequency ='))).toBe(false)
     expect(refreshColumnMetasSpy).toHaveBeenCalledWith(
       expect.objectContaining({ schema: 'public', caseId: 13 })
     )

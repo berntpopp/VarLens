@@ -15,7 +15,6 @@ vi.mock('../../../src/main/storage/postgres/postgres-bulk-write', () => ({
 vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', () => ({
   PostgresCohortSummaryRepository: class {
     incrementalAdd = vi.fn(async () => undefined)
-    recomputeCohortFrequency = vi.fn(async () => undefined)
     refreshColumnMetas = vi.fn(async () => undefined)
     markStale = vi.fn(async () => undefined)
   }

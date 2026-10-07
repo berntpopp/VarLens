@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
 import type { CohortSearchParams } from '../../../src/shared/types/cohort'
-import { buildSummaryQueryParts } from '../../../src/main/storage/postgres/postgres-cohort-summary-query'
+import {
+  buildSummaryCountSql,
+  buildSummaryPageSql,
+  buildSummaryQueryParts,
+  summaryBuildTotalsJoin
+} from '../../../src/main/storage/postgres/postgres-cohort-summary-query'
 
 const TOTAL_CASES = 10
+/** Frequency is derived at read time: carriers over the cases of the row's genome build. */
+const FREQUENCY = '(cvs.carrier_count::double precision / NULLIF(bt.total, 0))'
 
 describe('buildSummaryQueryParts', () => {
   it('returns no predicates and an empty join for an empty query', () => {
@@ -68,7 +75,7 @@ describe('buildSummaryQueryParts', () => {
     expect(result.parts.values).toContain('GRCh37')
   })
 
-  it('moves aggregate predicates from HAVING to WHERE on stored columns', () => {
+  it('moves aggregate predicates from HAVING to WHERE without grouping', () => {
     const params: CohortSearchParams = {
       carrier_count_min: 3,
       max_internal_af: 0.2
@@ -79,7 +86,9 @@ describe('buildSummaryQueryParts', () => {
 
     expect(result.unavailable).toBe(false)
     expect(where).toContain('cvs.carrier_count >=')
-    expect(where).toContain('cvs.cohort_frequency <=')
+    expect(where).toContain(`${FREQUENCY} <=`)
+    expect(where).not.toContain('cvs.cohort_frequency')
+    expect(result.parts.needsBuildTotals).toBe(true)
     // No GROUP BY / HAVING aggregate expression leaks through.
     expect(where).not.toContain('COUNT(')
     // Mirrors live builder ordering: max_internal_af before carrier_count_min.
@@ -101,7 +110,9 @@ describe('buildSummaryQueryParts', () => {
 
     expect(result.unavailable).toBe(false)
     expect(where).toContain('cvs.carrier_count')
-    expect(where).toContain('cvs.cohort_frequency')
+    expect(where).toContain(`${FREQUENCY} <`)
+    expect(where).not.toContain('cvs.cohort_frequency')
+    expect(result.parts.needsBuildTotals).toBe(true)
     expect(where).toContain('cvs.het_count')
     expect(where).toContain('cvs.hom_count')
     expect(where).not.toContain('COUNT(')
@@ -216,7 +227,16 @@ describe('buildSummaryQueryParts', () => {
       { sort_by: 'cohort_frequency', sort_order: 'desc' },
       TOTAL_CASES
     )
-    expect(freq.parts.orderBy).toContain('cvs.cohort_frequency DESC')
+    expect(freq.parts.orderBy).toContain(`${FREQUENCY} DESC`)
+
+    // Within one genome build the denominator is constant, so the indexed
+    // carrier count gives the same order.
+    const freqOneBuild = buildSummaryQueryParts(
+      { sort_by: 'cohort_frequency', sort_order: 'desc', genome_build: 'GRCh38' },
+      TOTAL_CASES
+    )
+    expect(freqOneBuild.parts.orderBy).toContain('cvs.carrier_count DESC')
+    expect(freqOneBuild.parts.orderBy).not.toContain('bt.total')
 
     const cadd = buildSummaryQueryParts({ sort_by: 'cadd_phred' }, TOTAL_CASES)
     expect(cadd.parts.orderBy).toContain('cvs.cadd DESC')
@@ -241,5 +261,35 @@ describe('buildSummaryQueryParts', () => {
     expect(where).toContain('$1')
     expect(where).toContain('$2')
     expect(result.parts.values).toEqual(['TP53', 2])
+  })
+})
+
+describe('summary SQL with read-time cohort frequency', () => {
+  const TABLE = '"s"."cohort_variant_summary"'
+  const JOIN = summaryBuildTotalsJoin('"s"."cases"')
+
+  it('never reads the stored cohort_frequency column', () => {
+    const page = buildSummaryPageSql(TABLE, [], 'ORDER BY cvs.pos', TOTAL_CASES, 1, 2, JOIN)
+    expect(page).toContain(`${FREQUENCY} AS cohort_frequency`)
+    expect(page).not.toContain('cvs.cohort_frequency')
+  })
+
+  it('counts cases per genome build from the visible cases only', () => {
+    expect(JOIN).toContain('FROM "s"."cases"')
+    expect(JOIN).toContain('GROUP BY genome_build')
+    expect(JOIN).toContain('bt.genome_build = cvs.genome_build')
+  })
+
+  it('does not need build totals when no predicate uses the frequency', () => {
+    const result = buildSummaryQueryParts({ gene_symbol: 'BRCA1' }, TOTAL_CASES)
+    expect(result.parts.needsBuildTotals).toBe(false)
+    expect(buildSummaryCountSql(TABLE, result.parts.whereParts)).not.toContain('bt.')
+  })
+
+  it('joins build totals into the count when a predicate uses the frequency', () => {
+    const result = buildSummaryQueryParts({ max_internal_af: 0.1 }, TOTAL_CASES)
+    const count = buildSummaryCountSql(TABLE, result.parts.whereParts, JOIN)
+    expect(count).toContain(JOIN)
+    expect(count.indexOf(JOIN)).toBeLessThan(count.indexOf('WHERE'))
   })
 })

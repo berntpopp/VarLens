@@ -121,7 +121,9 @@ function enrollTrustedSiblingBeds(
 
 /** Shared callbacks that wire logic-layer events to renderer via safeEmit. */
 const importCallbacks: ImportCallbacks = {
-  onProgress: (data) => safeEmit('import:progress', data)
+  onProgress: (data) => safeEmit('import:progress', data),
+  // Only a multi-file append rebuilds the cohort summary; see import-logic.ts.
+  onCohortStale: (data) => safeEmit('cohort:summaryRebuilt', data)
 }
 
 export function registerImportHandlers({

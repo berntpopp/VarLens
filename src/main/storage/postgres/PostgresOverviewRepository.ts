@@ -6,6 +6,8 @@ import type {
   OverviewCohortGroup,
   OverviewPhenotype
 } from '../../../shared/types/database-overview'
+import { cohortVariantTotalsSql } from './cohort-gene-summary-sql'
+import { prepareCohortRead } from './cohort-read-freshness'
 import { quoteIdentifier } from './identifiers'
 import { runNamed } from './named-query'
 
@@ -33,6 +35,14 @@ export class PostgresOverviewRepository {
   }
 
   async getOverview(): Promise<DatabaseOverview> {
+    if (typeof (this.pool as unknown as { connect?: unknown }).connect === 'function') {
+      await prepareCohortRead({
+        pool: this.pool as unknown as Pick<Pool, 'query' | 'connect'>,
+        schema: this.schema
+      })
+    }
+    // Maintained aggregates: none of the three reads a variant row.
+    const totals = cohortVariantTotalsSql((table) => this.table(table))
     const [
       totalCasesResult,
       totalVariantsResult,
@@ -49,24 +59,20 @@ export class PostgresOverviewRepository {
         schema: this.schema
       }),
       runNamed<Row>(this.pool as Pool, {
-        name: 'overview:total_variants:v1',
-        text: `SELECT COUNT(*)::int AS total_variants FROM ${this.table('variants')}`,
+        name: 'overview:total_variants:v2',
+        text: `SELECT (${totals.totalVariants}) AS total_variants`,
         values: [],
         schema: this.schema
       }),
       runNamed<Row>(this.pool as Pool, {
-        name: 'overview:unique_variants:v1',
-        text: `SELECT COUNT(DISTINCT (chr, pos, ref, alt))::int AS unique_variants FROM ${this.table('variants')}`,
+        name: 'overview:unique_variants:v2',
+        text: `SELECT (${totals.uniqueVariants}) AS unique_variants`,
         values: [],
         schema: this.schema
       }),
       runNamed<Row>(this.pool as Pool, {
-        name: 'overview:genes_with_variants:v1',
-        text: `
-          SELECT COUNT(DISTINCT gene_symbol)::int AS genes_with_variants
-          FROM ${this.table('variants')}
-          WHERE gene_symbol IS NOT NULL
-        `,
+        name: 'overview:genes_with_variants:v2',
+        text: `SELECT (${totals.genesWithVariants}) AS genes_with_variants`,
         values: [],
         schema: this.schema
       }),

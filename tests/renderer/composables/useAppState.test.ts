@@ -26,6 +26,21 @@ describe('createAppState', () => {
     expect(state.activeTab.value).toBe('case')
   })
 
+  it('opens the import dialog through the handler the shell registered', () => {
+    const state = createAppState()
+    let opened = 0
+
+    // No handler yet (shell not mounted): a no-op, never a throw.
+    expect(() => state.openImport()).not.toThrow()
+
+    state.setImportHandler(() => {
+      opened++
+    })
+    state.openImport()
+
+    expect(opened).toBe(1)
+  })
+
   it('switches tabs through an explicit shell action', () => {
     const state = createAppState()
 

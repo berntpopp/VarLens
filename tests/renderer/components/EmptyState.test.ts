@@ -50,4 +50,25 @@ describe('EmptyState first impression', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('Import Variants')
   })
+
+  it('names every format the import wizard accepts and promises no drag and drop', async () => {
+    const { wrapper, appState } = mountWithState(false)
+    appState.setCaseCount(0)
+    await wrapper.vm.$nextTick()
+    const text = wrapper.text()
+    for (const extension of ['.vcf', '.vcf.gz', '.json', '.json.gz']) {
+      expect(text).toContain(extension)
+    }
+    expect(text).toContain('ZIP')
+    // No drop handler exists on the case view or app shell.
+    expect(text.toLowerCase()).not.toContain('drag')
+  })
+
+  it('emits "import" when the CTA is clicked', async () => {
+    const { wrapper, appState } = mountWithState(false)
+    appState.setCaseCount(0)
+    await wrapper.vm.$nextTick()
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.emitted('import')).toHaveLength(1)
+  })
 })

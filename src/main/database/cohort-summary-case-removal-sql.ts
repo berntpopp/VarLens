@@ -9,9 +9,10 @@
  *   removed_case_gene_lost   — per gene, coordinates no remaining variant keeps
  */
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
+import { perCaseAnnotationFlagsSql } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Columns the rebuild aggregates with MAX() across carriers (see variantSummaryInsertSql). */
-const MAX_COLUMNS = [
+export const MAX_COLUMNS = [
   'gene_symbol',
   'cdna',
   'aa_change',
@@ -89,7 +90,7 @@ const MARK_RECOMPUTE_SQL = `
   WHERE s.carrier_count > 1
     AND NOT (${MAX_COLUMNS.map(unaffected).join(' AND ')})
     AND NOT EXISTS (
-      SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id
+      SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id AND rc.import_status = 'ready'
       WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
         AND r.variant_type = k.variant_type AND rc.genome_build IS k.genome_build
         AND ${MAX_COLUMNS.map((col) => `(${unaffected(col)} OR r.${col} = k.${col})`).join('\n        AND ')}
@@ -109,8 +110,7 @@ export interface RemovalStatements {
   decrementRows: Statement
   dropEmptyRows: Statement
   insertRecomputeRows: Statement
-  buildCaseCount: Statement
-  refreshFrequency: Statement
+  applyRecomputedPerCaseFlags: Statement
   countLostGeneCoords: Statement
   decrementGenes: Statement
   dropEmptyGenes: Statement
@@ -149,20 +149,14 @@ export function prepareRemovalStatements(
     ),
     dropEmptyRows: db.prepare('DELETE FROM cohort_variant_summary WHERE carrier_count <= 0'),
     insertRecomputeRows: db.prepare(variantSummaryInsertSql(RECOMPUTE_FILTER)),
-    // The rebuild's cohort_frequency expression with its per-row
-    // `(SELECT COUNT(*) FROM cases WHERE genome_build = …)` hoisted into one
-    // bound value (@cases; 0 → x / 0 → NULL, as in the rebuild).
-    buildCaseCount: db.prepare('SELECT COUNT(*) AS n FROM cases WHERE genome_build = ?'),
-    refreshFrequency: db.prepare(
-      `UPDATE cohort_variant_summary
-       SET cohort_frequency = CAST(carrier_count AS REAL) / @cases
-       WHERE genome_build IS @build`
-    ),
+    // The recompute writes flags from variant_annotations only; the remaining
+    // cases' per-case stars / comments / ACMG calls are folded in like the rebuild does.
+    applyRecomputedPerCaseFlags: db.prepare(perCaseAnnotationFlagsSql(RECOMPUTE_FILTER)),
     countLostGeneCoords: db.prepare(
       `INSERT INTO temp.removed_case_gene_lost (gene_symbol, lost)
        SELECT k.gene_symbol, COUNT(*) FROM temp.removed_case_gene_coords k
        WHERE NOT EXISTS (
-         SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id
+         SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id AND rc.import_status = 'ready'
          WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
            AND r.gene_symbol = k.gene_symbol AND rc.genome_build IS @build
        )

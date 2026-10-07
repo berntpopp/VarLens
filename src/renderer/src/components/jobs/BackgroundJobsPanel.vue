@@ -5,14 +5,28 @@
       {{ announcement }}
     </div>
 
+    <!-- Collapsed by default: the footer's BackgroundJobsToggle opens this card,
+         so it only covers the table's pagination footer while the user wants it. -->
     <v-card
-      v-if="jobs.length > 0"
+      v-if="jobs.length > 0 && panelExpanded"
+      :id="BACKGROUND_JOBS_PANEL_ID"
       class="background-jobs__card"
       elevation="6"
       role="region"
       aria-labelledby="background-jobs-title"
+      tabindex="-1"
+      @keydown.esc.stop="collapse"
     >
-      <div id="background-jobs-title" class="text-subtitle-2 px-4 pt-3 pb-1">Background tasks</div>
+      <div class="d-flex align-center pl-4 pr-2 pt-2 pb-1">
+        <div id="background-jobs-title" class="text-subtitle-2">Background tasks</div>
+        <v-spacer />
+        <IconButton
+          label="Collapse background tasks"
+          :icon="mdiChevronDown"
+          size="small"
+          @click="collapse"
+        />
+      </div>
       <ul class="background-jobs__list">
         <li
           v-for="job in jobs"
@@ -31,8 +45,9 @@
               variant="text"
               color="error"
               :loading="cancelling[job.id] === true"
+              :disabled="cancelRequested[job.id] === true"
               :aria-label="`Cancel ${labelOf(job)}`"
-              @click="cancel(job.id)"
+              @click="requestCancel(job)"
             >
               Cancel
             </v-btn>
@@ -56,7 +71,7 @@
             class="my-1"
           />
           <div class="text-caption" :class="statusClass(job)">
-            {{ describeJob(job) }}
+            {{ statusText(job) }}
             <template v-if="ownerNote(job)"> · {{ ownerNote(job) }}</template>
           </div>
           <div v-if="cancelErrors[job.id]" class="text-caption text-error" role="alert">
@@ -75,8 +90,8 @@
  * the case view, the cohort view and the case list, on desktop and in web.
  * `kinds` narrows it to a subset when embedded in a specific context.
  */
-import { ref, watch } from 'vue'
-import { mdiClose } from '@mdi/js'
+import { nextTick, ref, watch } from 'vue'
+import { mdiChevronDown, mdiClose } from '@mdi/js'
 
 import type { Job, JobKind } from '../../../../shared/types/jobs'
 import {
@@ -87,15 +102,24 @@ import {
   useBackgroundJobs
 } from '../../composables/useBackgroundJobs'
 import { useAuthStore } from '../../stores/authStore'
+import IconButton from '../common/IconButton.vue'
+import { BACKGROUND_JOBS_PANEL_ID, BACKGROUND_JOBS_TOGGLE_ID } from './background-jobs-ids'
 
 const props = defineProps<{
   /** Only show these job kinds (default: all). */
   kinds?: readonly JobKind[]
 }>()
 
-const { jobs, cancel, dismiss, cancelErrors, cancelling } = useBackgroundJobs({
-  kinds: props.kinds
-})
+const {
+  jobs,
+  cancel,
+  dismiss,
+  cancelErrors,
+  cancelling,
+  cancelRequested,
+  panelExpanded,
+  setPanelExpanded
+} = useBackgroundJobs({ kinds: props.kinds })
 const authStore = useAuthStore()
 
 function labelOf(job: Job): string {
@@ -115,7 +139,26 @@ function statusClass(job: Job): string {
   return 'text-medium-emphasis'
 }
 
+/** Cancellation is cooperative: say so until the worker has actually stopped. */
+function statusText(job: Job): string {
+  return isActiveJob(job) && cancelRequested.value[job.id] === true
+    ? 'Cancelling…'
+    : describeJob(job)
+}
+
 const announcement = ref('')
+
+async function requestCancel(job: Job): Promise<void> {
+  await cancel(job.id)
+  if (cancelRequested.value[job.id] === true) announcement.value = `${labelOf(job)}: cancelling.`
+}
+
+/** Collapse back to the footer toggle and hand focus back to it. */
+async function collapse(): Promise<void> {
+  setPanelExpanded(false)
+  await nextTick()
+  document.getElementById(BACKGROUND_JOBS_TOGGLE_ID)?.focus()
+}
 const announced = new Map<string, string>()
 
 function milestone(job: Job): string {
@@ -153,6 +196,11 @@ watch(
   width: min(360px, calc(100vw - 32px));
   max-height: 50vh;
   overflow-y: auto;
+}
+
+/* Focused programmatically when expanded from the footer toggle. */
+.background-jobs__card:focus {
+  outline: none;
 }
 
 .background-jobs__list {

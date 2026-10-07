@@ -128,7 +128,9 @@ describe('PostgresCohortRepository', () => {
     const dataParams = callParams(query.mock.calls[2])
 
     expect(dataSql).toContain('FROM "tenant""schema"."cohort_variant_summary" cvs')
-    expect(dataSql).not.toContain('GROUP BY')
+    // No per-variant grouping: the only GROUP BY is the tiny cases-per-build
+    // subquery that supplies the frequency denominator.
+    expect(dataSql).not.toMatch(/GROUP BY (?!genome_build)/)
     expect(dataSql).not.toContain('HAVING')
     expect(dataSql).toContain('cvs.carrier_count')
     expect(countSql).toContain('SELECT COUNT(*)::bigint AS total_count')
@@ -316,7 +318,8 @@ describe('PostgresCohortRepository', () => {
     // Aggregate columns are stored columns on the summary table — plain
     // comparisons, no COUNT(DISTINCT)/HAVING.
     expect(dataSql).toContain('cvs.carrier_count >= $')
-    expect(dataSql).toContain('cvs.cohort_frequency <= $')
+    expect(dataSql).toContain('(cvs.carrier_count::double precision / NULLIF(bt.total, 0)) <= $')
+    expect(dataSql).not.toContain('cvs.cohort_frequency')
     expect(dataSql).toContain('cvs.cadd > $')
     expect(dataSql).toContain('cvs.gnomad_af <= $')
     expect(dataSql).toContain('cvs.clinvar IN ($')
@@ -436,9 +439,10 @@ describe('PostgresCohortRepository', () => {
     expect(normalizeSql(query.mock.calls[0][0] as string)).toContain('WHERE genome_build = $1')
     expect(query.mock.calls[0][1]).toEqual(['GRCh38'])
     const dataSql = normalizeSql(callText(query.mock.calls[2]))
-    // cohort_frequency is a stored column on the summary table.
+    // cohort_frequency is carriers over the visible cases of the row's build.
     expect(dataSql).toContain('cvs.genome_build = $')
-    expect(dataSql).toContain('cvs.cohort_frequency <= $')
+    expect(dataSql).toContain('(cvs.carrier_count::double precision / NULLIF(bt.total, 0)) <= $')
+    expect(dataSql).toContain('FROM "public"."cases" GROUP BY genome_build')
   })
 
   it('reads C5a-maintained annotation flags from the summary table', async () => {
@@ -515,6 +519,20 @@ describe('PostgresCohortRepository', () => {
         benign: 5
       }
     })
+
+    // The variant tiles read maintained aggregates (after the freshness
+    // probe) and never scan the variants.
+    const sql = normalizeSql(query.mock.calls[1][0] as string)
+    expect(sql).toContain(
+      '(SELECT COALESCE(SUM(variant_count), 0)::bigint FROM "public"."cases") AS total_variants'
+    )
+    expect(sql).toContain(
+      'FROM "public"."cohort_variant_summary" GROUP BY chr, pos, ref, alt ) unique_coordinates) AS unique_variants'
+    )
+    expect(sql).toContain(
+      '(SELECT COUNT(*)::bigint FROM "public"."cohort_gene_summary") AS genes_with_variants'
+    )
+    expect(sql).not.toContain('"variants"')
   })
 
   it('maps carriers with numeric case IDs and preserves gq and dp when present', async () => {
@@ -558,9 +576,11 @@ describe('PostgresCohortRepository', () => {
         total_cases: 10
       }
     ])
-    expect(normalizeSql(query.mock.calls[0][0] as string)).toContain(
-      "WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol <> ''"
-    )
+    // Served from the maintained per-gene table (after the freshness probe),
+    // never from a scan of the variants; the empty symbol is not a gene.
+    const sql = normalizeSql(query.mock.calls[1][0] as string)
+    expect(sql).toContain('FROM "public"."cohort_gene_summary" g WHERE g.gene_symbol <> \'\'')
+    expect(sql).not.toContain('"variants"')
   })
 
   it('returns usable cohort column metadata', async () => {
@@ -593,15 +613,17 @@ describe('PostgresCohortRepository', () => {
       max_cadd_phred: '10',
       cnt_transcript: '2'
     }
+    const valueRows = {
+      rows: [
+        { col_key: 'chr', value: '1' },
+        { col_key: 'gene_symbol', value: 'BRCA1' }
+      ]
+    }
     const query = vi
       .fn()
+      .mockResolvedValueOnce({ rows: [{ version: 'v1' }] })
       .mockResolvedValueOnce({ rows: [aggregateRow] })
-      .mockResolvedValueOnce({
-        rows: [
-          { col_key: 'chr', value: '1' },
-          { col_key: 'gene_symbol', value: 'BRCA1' }
-        ]
-      })
+      .mockResolvedValueOnce(valueRows)
     const repository = new PostgresCohortRepository({ query } as never, 'public')
 
     const meta = await repository.getColumnMeta()
@@ -630,17 +652,32 @@ describe('PostgresCohortRepository', () => {
     expect(byKey.get('pos')?.max).toBe(10)
     expect(byKey.get('gene_symbol')?.dataType).toBe('text')
     expect(byKey.get('chr')?.distinctValues).toEqual(['1'])
-    // C4 Step 2: read directly from the deduped summary table — no total_cases
-    // query, no live GROUP BY subquery.
-    expect(query).toHaveBeenCalledTimes(2)
-    const aggSql = normalizeSql(callText(query.mock.calls[0]))
+    // C4 Step 2: read directly from the deduped summary table — no live
+    // GROUP BY subquery. One cheap version probe precedes the two scans.
+    expect(query).toHaveBeenCalledTimes(3)
+    expect(normalizeSql(callText(query.mock.calls[0]))).toContain('"cohort_summary_state"')
+    const aggSql = normalizeSql(callText(query.mock.calls[1]))
     expect(aggSql).toContain('COUNT(DISTINCT chr)')
     expect(aggSql).toContain('FROM "public"."cohort_variant_summary"')
     expect(aggSql).not.toContain('ARRAY_AGG')
-    const valuesSql = normalizeSql(callText(query.mock.calls[1]))
+    const valuesSql = normalizeSql(callText(query.mock.calls[2]))
     expect(valuesSql).toContain('UNION ALL')
     expect(valuesSql).toContain('FROM "public"."cohort_variant_summary"')
     expect(valuesSql).not.toContain('GROUP BY v.chr')
+
+    // Unchanged summary: the cached metadata is served after the probe alone.
+    query.mockResolvedValueOnce({ rows: [{ version: 'v1' }] })
+    expect(await repository.getColumnMeta()).toBe(meta)
+    expect(query).toHaveBeenCalledTimes(4)
+
+    // An import or deletion moved the summary on: the metadata is recomputed.
+    query
+      .mockResolvedValueOnce({ rows: [{ version: 'v2' }] })
+      .mockResolvedValueOnce({ rows: [{ ...aggregateRow, cnt_gene_symbol: '3' }] })
+      .mockResolvedValueOnce(valueRows)
+    const refreshed = await repository.getColumnMeta()
+    expect(refreshed.find((entry) => entry.key === 'gene_symbol')?.distinctCount).toBe(3)
+    expect(query).toHaveBeenCalledTimes(7)
   })
 
   it('streams cohort rows through pg-query-stream and releases the client', async () => {

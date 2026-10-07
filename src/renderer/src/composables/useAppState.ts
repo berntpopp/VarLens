@@ -86,6 +86,10 @@ export interface AppStateReturn {
   // Case metadata dialog
   setCaseMetadataHandler: (fn: () => void) => void
   openCaseMetadata: () => void
+
+  // Import dialog (owned by the shell's dialog host; views request it here)
+  setImportHandler: (fn: () => void) => void
+  openImport: () => void
 }
 
 /** Injection key for the shared app state. */
@@ -149,6 +153,14 @@ export function createAppState(): AppStateReturn {
   }
   function openCaseMetadata(): void {
     _caseMetadataHandler?.()
+  }
+
+  let _importHandler: (() => void) | null = null
+  function setImportHandler(fn: () => void): void {
+    _importHandler = fn
+  }
+  function openImport(): void {
+    _importHandler?.()
   }
 
   function clearSelectedCase(): void {
@@ -280,7 +292,11 @@ export function createAppState(): AppStateReturn {
 
     // Case metadata dialog
     setCaseMetadataHandler,
-    openCaseMetadata
+    openCaseMetadata,
+
+    // Import dialog
+    setImportHandler,
+    openImport
   }
 }
 

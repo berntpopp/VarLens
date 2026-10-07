@@ -566,23 +566,25 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     await expectAll(cohortPaths({ ...params, max_internal_af: 0.6 }), ok(rare))
     await expectAll(cohortPaths({ ...params, max_internal_af: 0 }), ok(grch38))
 
-    // The stored summary frequency is nullable on both backends. With the
-    // value missing, both summary-backed listings must keep the row. (The live
-    // PostgreSQL path recomputes the frequency and never sees a NULL.)
+    // Both backends derive the frequency from carrier_count and the build's
+    // case count on every read, so the stored column is irrelevant: neither a
+    // blanked value nor a wrong one (0.01 would pass the filter) changes what
+    // any path returns.
     const where = `chr = '${A.inGene.chr}' AND pos = ${A.inGene.pos} AND genome_build = 'GRCh38'`
-    sqlite.db.exec(`UPDATE cohort_variant_summary SET cohort_frequency = NULL WHERE ${where}`)
-    await pool.query(
-      `UPDATE "${schema}".cohort_variant_summary SET cohort_frequency = NULL WHERE ${where}`
-    )
-    try {
-      const paths = cohortPaths({ ...params, max_internal_af: 0.6 })
-      expect(await paths['desktop cohort']).toEqual(ok(grch38))
-      expect(await paths['web cohort']).toEqual(ok(grch38))
-    } finally {
-      sqlite.db.exec(`UPDATE cohort_variant_summary SET cohort_frequency = 1.0 WHERE ${where}`)
+    const setStored = async (value: string): Promise<void> => {
+      sqlite.db.exec(`UPDATE cohort_variant_summary SET cohort_frequency = ${value} WHERE ${where}`)
       await pool.query(
-        `UPDATE "${schema}".cohort_variant_summary SET cohort_frequency = 1.0 WHERE ${where}`
+        `UPDATE "${schema}".cohort_variant_summary SET cohort_frequency = ${value} WHERE ${where}`
       )
+    }
+    try {
+      for (const stored of ['NULL', '0.01']) {
+        await setStored(stored)
+        await expectAll(cohortPaths({ ...params, max_internal_af: 0.6 }), ok(rare))
+        await expectAll(cohortPaths({ ...params, max_internal_af: 0 }), ok(grch38))
+      }
+    } finally {
+      await setStored('NULL')
     }
   }, 120_000)
 

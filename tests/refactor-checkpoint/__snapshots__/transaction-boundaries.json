@@ -8,6 +8,16 @@
       "assignedTo": "transactionFn"
     },
     {
+      "file": "src/main/database/cohort-summary-case-add.ts",
+      "callerFunction": "addCase",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/database/cohort-summary-case-add.ts",
+      "callerFunction": "replaceCase",
+      "assignedTo": null
+    },
+    {
       "file": "src/main/database/CohortSummaryService.ts",
       "callerFunction": "incrementalAdd",
       "assignedTo": "addTransaction"

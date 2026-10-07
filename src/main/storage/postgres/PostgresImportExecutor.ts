@@ -10,6 +10,7 @@ import { mainLogger } from '../../services/MainLogger'
 import { jobRunner } from '../../services/jobs/runner'
 import { withImportJobProgress } from '../import-job-progress'
 import type {
+  StorageImportBatch,
   StorageImportExecutor,
   StorageImportSingleFileParams,
   StorageImportSingleFileResult,
@@ -23,11 +24,20 @@ import type {
   PostgresClientConfig
 } from '../../../shared/types/postgres-import-worker'
 import { workerErrorToError } from '../import-worker-errors'
+import { ConflictError } from '../../ipc/errors'
+import {
+  openImportLease,
+  WORKSPACE_IMPORT_BUSY_MESSAGE,
+  type ImportLeaseClient
+} from './postgres-import-lease'
+import { Client } from 'pg'
 
 export interface PostgresImportExecutorOptions {
   schema: string
   clientConfig: PostgresClientConfig
   workerClientFactory?: () => PostgresImportWorkerClient
+  /** Connection that holds the workspace lock for a parallel batch. Default: a pg Client. */
+  controlClientFactory?: () => ImportLeaseClient
 }
 
 export class PostgresImportExecutor implements StorageImportExecutor {
@@ -61,28 +71,125 @@ export class PostgresImportExecutor implements StorageImportExecutor {
   private async _performImport(
     params: StorageImportSingleFileParams
   ): Promise<StorageImportSingleFileResult> {
-    const startedAt = Date.now()
     try {
-      const start: PostgresImportWorkerStartMessage = {
-        type: 'start',
-        client: this.options.clientConfig,
-        schema: this.options.schema,
-        mode: 'single-file',
-        caseName: params.caseName,
-        vcfOptions: params.vcfOptions,
-        filePath: params.filePath,
-        throttleMs: params.throttleMs
-      }
-      const result = await this.runWorker(start, params.onProgress, startedAt)
-      return {
-        caseId: result.caseId,
-        variantCount: result.variantCount,
-        skipped: result.skipped,
-        errors: result.errors,
-        elapsed: result.elapsed
-      }
+      return await this.runSingleFile(params, undefined, (client) => {
+        this.currentClient = client
+      })
     } finally {
       this.currentClient = null
+    }
+  }
+
+  /**
+   * Open a batch whose files import concurrently, each in its own worker.
+   * A control connection owns the workspace import lock for the whole batch
+   * and runs interrupted-import recovery before the first worker and after
+   * the last, so workers neither block nor clean up one another.
+   */
+  async openBatch(): Promise<StorageImportBatch> {
+    const control = this.options.controlClientFactory?.() ?? this.createControlClient()
+    const inFlight = new Set<PostgresImportWorkerClient>()
+    let controlError: Error | null = null
+
+    const onControlError = (err: Error): void => {
+      controlError = err
+      for (const client of inFlight) client.cancel()
+    }
+    const emitter = control as unknown as {
+      on?: (event: string, fn: (err: Error) => void) => void
+      off?: (event: string, fn: (err: Error) => void) => void
+      removeListener?: (event: string, fn: (err: Error) => void) => void
+    }
+    if (typeof emitter.on === 'function') {
+      emitter.on('error', onControlError)
+    }
+
+    const lease = await openImportLease(control, this.options.schema).catch((error: unknown) => {
+      if (typeof emitter.off === 'function') {
+        emitter.off('error', onControlError)
+      } else if (typeof emitter.removeListener === 'function') {
+        emitter.removeListener('error', onControlError)
+      }
+      if (error instanceof Error && error.message === WORKSPACE_IMPORT_BUSY_MESSAGE) {
+        throw new ConflictError(error.message)
+      }
+      throw error
+    })
+
+    return {
+      importFile: async (params) => {
+        if (controlError !== null) {
+          throw new Error(
+            `Import batch control connection lost: ${(controlError as Error).message}`
+          )
+        }
+        let worker: PostgresImportWorkerClient | null = null
+        try {
+          return await this.runSingleFile(params, { holderPid: lease.holderPid }, (client) => {
+            worker = client
+            inFlight.add(client)
+          })
+        } finally {
+          if (worker !== null) inFlight.delete(worker)
+        }
+      },
+      cancelAll: () => {
+        for (const client of inFlight) client.cancel()
+      },
+      close: async () => {
+        try {
+          if (controlError === null) {
+            await lease.close()
+          }
+        } finally {
+          if (typeof emitter.off === 'function') {
+            emitter.off('error', onControlError)
+          } else if (typeof emitter.removeListener === 'function') {
+            emitter.removeListener('error', onControlError)
+          }
+        }
+      }
+    }
+  }
+
+  private createControlClient(): ImportLeaseClient {
+    const config = this.options.clientConfig
+    return new Client({
+      connectionString: config.connectionString,
+      application_name: config.application_name,
+      connectionTimeoutMillis: config.connectionTimeoutMillis,
+      keepAlive: config.keepAlive,
+      ssl:
+        config.ssl?.mode === 'require'
+          ? { rejectUnauthorized: config.ssl.rejectUnauthorized }
+          : undefined
+    }) as unknown as ImportLeaseClient
+  }
+
+  private async runSingleFile(
+    params: StorageImportSingleFileParams,
+    lease: PostgresImportWorkerStartMessage['lease'],
+    onClient: (client: PostgresImportWorkerClient) => void
+  ): Promise<StorageImportSingleFileResult> {
+    const startedAt = Date.now()
+    const start: PostgresImportWorkerStartMessage = {
+      type: 'start',
+      client: this.options.clientConfig,
+      schema: this.options.schema,
+      mode: 'single-file',
+      caseName: params.caseName,
+      vcfOptions: params.vcfOptions,
+      filePath: params.filePath,
+      throttleMs: params.throttleMs,
+      ...(lease !== undefined ? { lease } : {})
+    }
+    const result = await this.runWorker(start, params.onProgress, startedAt, undefined, onClient)
+    return {
+      caseId: result.caseId,
+      variantCount: result.variantCount,
+      skipped: result.skipped,
+      errors: result.errors,
+      elapsed: result.elapsed
     }
   }
 
@@ -155,7 +262,10 @@ export class PostgresImportExecutor implements StorageImportExecutor {
     start: PostgresImportWorkerStartMessage,
     onProgress: StorageImportSingleFileParams['onProgress'],
     startedAt: number,
-    onFileComplete?: StorageImportMultiFileParams['onFileComplete']
+    onFileComplete?: StorageImportMultiFileParams['onFileComplete'],
+    onClient: (client: PostgresImportWorkerClient) => void = (client) => {
+      this.currentClient = client
+    }
   ): Promise<{
     caseId: number
     variantCount: number
@@ -166,7 +276,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
   }> {
     const factory = this.options.workerClientFactory ?? (() => new PostgresImportWorkerClient())
     const client = factory()
-    this.currentClient = client
+    onClient(client)
     return new Promise((resolvePromise, reject) => {
       const callbacks: PostgresImportWorkerCallbacks = {
         onProgress: (msg) => {

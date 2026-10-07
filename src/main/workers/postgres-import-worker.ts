@@ -30,6 +30,11 @@ import {
 import { quoteIdentifier } from '../storage/postgres/identifiers'
 import { classifyWorkerError } from '../storage/import-worker-errors'
 import { PostgresCohortSummaryRepository } from '../storage/postgres/PostgresCohortSummaryRepository'
+import { lockSummaryForWrite } from '../storage/postgres/cohort-summary-lock'
+import {
+  acquireWorkspaceImportLock,
+  assertImportLeaseHeld
+} from '../storage/postgres/postgres-import-lease'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createBoundedBatcher, getRecordBytes, resolveBatchSize } from '../import/bounded-batcher'
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
@@ -148,34 +153,17 @@ async function updateCohortSummaryAfterImport(args: {
   client: Pick<Client, 'query'>
   schema: string
   caseId: number
-  genomeBuild: string
 }): Promise<boolean> {
-  const { client, schema, caseId, genomeBuild } = args
+  const { client, schema, caseId } = args
   const summary = new PostgresCohortSummaryRepository()
   const scoped = client as unknown as Parameters<
     PostgresCohortSummaryRepository['incrementalAdd']
   >[0]['client']
   try {
     await client.query('SAVEPOINT cohort_summary')
-    await summary.incrementalAdd({
-      schema,
-      client: scoped,
-      caseId,
-      genomeBuild,
-      includeProvisional: true
-    })
-    await summary.recomputeCohortFrequency({
-      schema,
-      client: scoped,
-      affectedBuilds: [genomeBuild],
-      includeProvisional: true
-    })
-    await summary.refreshColumnMetas({
-      schema,
-      client: scoped,
-      caseId,
-      includeProvisional: true
-    })
+    const scope = { schema, client: scoped, includeProvisional: true }
+    await profilePhase('pub-summary-add', () => summary.incrementalAdd({ ...scope, caseId }))
+    await profilePhase('pub-column-meta', () => summary.refreshColumnMetas({ ...scope, caseId }))
     await client.query('RELEASE SAVEPOINT cohort_summary')
     return true
   } catch (savepointErr) {
@@ -215,7 +203,10 @@ function clientConfigFromMessage(message: PostgresClientConfig): ClientConfig {
     application_name: message.application_name,
     connectionTimeoutMillis: message.connectionTimeoutMillis,
     statement_timeout: message.statement_timeout,
-    query_timeout: message.query_timeout,
+    // No client-side query timeout: publication steps and the wait for the
+    // summary write lock are legitimately long, and the server-side limits
+    // are lifted for this session anyway (relaxImportSessionLimits).
+    query_timeout: 0,
     lock_timeout: message.lock_timeout,
     idle_in_transaction_session_timeout: message.idle_in_transaction_session_timeout,
     keepAlive: message.keepAlive,
@@ -254,16 +245,14 @@ export async function runImport(
     // renderer-default 30 s statement_timeout. Auto-commit (no BEGIN
     // required) and per-session, so it does not leak to other connections.
     await profilePhase('relax-session-limits', () => relaxImportSessionLimits(client))
-    const lockResult = await client.query(
-      `SELECT pg_try_advisory_lock(hashtext($1), hashtext('varlens-import')) AS locked`,
-      [start.schema]
-    )
-    if ((lockResult.rows[0] as { locked?: boolean } | undefined)?.locked !== true) {
-      throw new Error('An import operation is already in progress for this PostgreSQL workspace')
+    if (start.lease !== undefined) {
+      await assertImportLeaseHeld(client, start.schema, start.lease.holderPid)
+    } else {
+      await acquireWorkspaceImportLock(client, start.schema)
+      await new PostgresVcfImportRepository(start.schema).recoverInterruptedImports(
+        client as unknown as Pick<PoolClient, 'query'>
+      )
     }
-    await new PostgresVcfImportRepository(start.schema).recoverInterruptedImports(
-      client as unknown as Pick<PoolClient, 'query'>
-    )
 
     if (start.mode === 'single-file') {
       const filePath = start.filePath
@@ -389,11 +378,20 @@ export async function runImport(
             [totalInserted, caseId]
           )
           if (totalInserted > 0) {
-            await rebuildVariantFrequencyForCase(
-              client as unknown as Pick<PoolClient, 'query'>,
-              start.schema,
-              caseId,
-              true
+            await profilePhase('pub-lock-wait', () =>
+              lockSummaryForWrite(
+                client as unknown as Pick<PoolClient, 'query'>,
+                start.schema,
+                isCancelled
+              )
+            )
+            await profilePhase('pub-variant-frequency', () =>
+              rebuildVariantFrequencyForCase(
+                client as unknown as Pick<PoolClient, 'query'>,
+                start.schema,
+                caseId,
+                true
+              )
             )
             // C3: incremental cohort-summary update inside this txn (SAVEPOINT-
             // wrapped). On failure it rolls back only the summary savepoint
@@ -401,8 +399,7 @@ export async function runImport(
             const stillOwnsTxn = await updateCohortSummaryAfterImport({
               client,
               schema: start.schema,
-              caseId,
-              genomeBuild
+              caseId
             })
             void stillOwnsTxn
           }
@@ -415,7 +412,7 @@ export async function runImport(
           )
           throwIfCancelled()
           publicationCommitAttempted = true
-          await client.query('COMMIT')
+          await profilePhase('pub-commit', () => client.query('COMMIT'))
           beganTransaction = false
           provisionalImport = null
           publicationCommitAttempted = false
@@ -523,6 +520,13 @@ export async function runImport(
         writeVariants
       )
 
+      await profilePhase('pub-lock-wait', () =>
+        lockSummaryForWrite(
+          client as unknown as Pick<PoolClient, 'query'>,
+          start.schema,
+          isCancelled
+        )
+      )
       await rebuildVariantFrequencyForCase(
         client as unknown as Pick<PoolClient, 'query'>,
         start.schema,
@@ -533,8 +537,7 @@ export async function runImport(
         const stillOwnsTxn = await updateCohortSummaryAfterImport({
           client,
           schema: start.schema,
-          caseId,
-          genomeBuild: start.vcfOptions?.genomeBuild ?? 'GRCh38'
+          caseId
         })
         if (stillOwnsTxn) await client.query('COMMIT')
       }
@@ -780,11 +783,20 @@ export async function runImport(
               `UPDATE ${quoteIdentifier(start.schema)}."cases_all" SET variant_count = $1 WHERE id = $2`,
               [totalVariantCount, caseId]
             )
-            await rebuildVariantFrequencyForCase(
-              client as unknown as Pick<PoolClient, 'query'>,
-              start.schema,
-              caseId,
-              true
+            await profilePhase('pub-lock-wait', () =>
+              lockSummaryForWrite(
+                client as unknown as Pick<PoolClient, 'query'>,
+                start.schema,
+                isCancelled
+              )
+            )
+            await profilePhase('pub-variant-frequency', () =>
+              rebuildVariantFrequencyForCase(
+                client as unknown as Pick<PoolClient, 'query'>,
+                start.schema,
+                caseId,
+                true
+              )
             )
             // C3: incremental cohort-summary update inside this txn (SAVEPOINT-
             // wrapped). On failure it records staleness without publishing a
@@ -792,8 +804,7 @@ export async function runImport(
             const stillOwnsTxn = await updateCohortSummaryAfterImport({
               client,
               schema: start.schema,
-              caseId,
-              genomeBuild
+              caseId
             })
             void stillOwnsTxn
             throwIfCancelled()

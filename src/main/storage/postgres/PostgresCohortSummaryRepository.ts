@@ -5,12 +5,14 @@
  * Mirrors the SQLite source of truth in src/shared/sql/cohort-summary-rebuild.ts
  * and src/main/database/CohortSummaryService.ts:
  *
- *   - rebuild(): TRUNCATE + INSERT from the deduped CTE (Pass-2 #4 — duplicate
+ *   - rebuild(): DELETE + INSERT from the deduped CTE (Pass-2 #4 — duplicate
  *     per-case rows count once). has_star/has_comment/acmg_best are derived
  *     from variant_annotations + case_variant_annotations at insertion time
  *     (Pass-9 #8 — otherwise every rebuild would reset the flags to false).
- *     cohort_frequency is recomputed in-place as the final rebuild step
- *     (C2a / Pass-3 HIGH #2) via recomputeCohortFrequency().
+ *     cohort_frequency is not maintained here: readers derive it from
+ *     carrier_count and the visible cases of the row's genome build (see
+ *     postgres-cohort-summary-query.ts), so no import or deletion has to
+ *     rewrite rows it did not touch.
  *
  * Note on column names: the Postgres workflow schema names the comment columns
  * global_comment / per_case_comment and the ACMG column acmg_classification
@@ -21,18 +23,24 @@
  * The remaining methods are stubbed for the subsequent Sprint A tasks.
  */
 import type { PoolClient } from 'pg'
+import {
+  ANNOTATION_FLAG_COLUMNS,
+  annotationFlagCtes,
+  annotationFlagJoins
+} from './cohort-summary-flags-sql'
+import {
+  addCaseToGeneSummary,
+  rebuildGeneSummary,
+  removeCaseFromGeneSummary
+} from './cohort-gene-summary-sql'
 import { getCohortSummaryState, markCohortSummaryStale } from './cohort-summary-state-sql'
+import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 
 interface ScopedClient {
   schema: string
   client: PoolClient
 }
 
-/**
- * ACMG rank ladder mirroring the SQLite CASE expression in
- * src/shared/sql/cohort-summary-rebuild.ts. Higher rank wins; the textual
- * label is reconstructed from the winning rank.
- */
 /**
  * Filterable base columns mirrored verbatim from the SQLite source of truth
  * BASE_SORTABLE_COLUMNS (src/main/database/VariantFilterBuilder.ts) — the exact
@@ -76,14 +84,6 @@ const META_NUMERIC_COLUMNS = new Set<string>(['pos', 'gnomad_af', 'cadd', 'qual'
  * or below this distinct count get their distinct_values array materialised.
  */
 const META_DISTINCT_THRESHOLD = 50
-
-const ACMG_RANK_SQL = (col: string) => `CASE ${col}
-  WHEN 'Pathogenic' THEN 5
-  WHEN 'Likely pathogenic' THEN 4
-  WHEN 'Uncertain significance' THEN 3
-  WHEN 'Likely benign' THEN 2
-  WHEN 'Benign' THEN 1
-  ELSE 0 END`
 
 /** Deduped per-coordinate aggregate for one case, shared by add/remove. */
 export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvisional = false) => `
@@ -130,7 +130,10 @@ export class PostgresCohortSummaryRepository {
   async rebuild({ schema, client }: ScopedClient): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
-    await client.query(`TRUNCATE ${tbl('cohort_variant_summary')}`)
+    // DELETE, not TRUNCATE: TRUNCATE takes ACCESS EXCLUSIVE and blocks every
+    // cohort reader until the rebuild commits. With DELETE, readers keep the
+    // previous rows (MVCC) and autovacuum reclaims the old versions.
+    await client.query(`DELETE FROM ${tbl('cohort_variant_summary')}`)
 
     // Deduped CTE + flag-bearing projection. Mirrors SQLite
     // src/main/database/CohortSummaryService.ts and the deduped pattern in
@@ -178,7 +181,8 @@ export class PostgresCohortSummaryRepository {
                SUM(CASE WHEN d.gt_num IN ('1/1','1|1') THEN 1 ELSE 0 END) AS hom_count
         FROM deduped d
         GROUP BY d.chr, d.pos, d.ref, d.alt, d.variant_type, d.genome_build
-      )
+      ),
+      ${annotationFlagCtes(tbl)}
       SELECT
         a.chr, a.pos, a.end_pos, a.ref, a.alt, a.variant_type, a.genome_build,
         a.gene_symbol, a.cdna, a.aa_change, a.consequence, a.func, a.clinvar,
@@ -186,67 +190,14 @@ export class PostgresCohortSummaryRepository {
         a.carrier_count, a.het_count, a.hom_count,
         a.chr || ':' || a.pos || ':' || a.ref || ':' || a.alt AS variant_key,
         -- Pass-9 #8: derive flag columns from current annotation tables.
-        (EXISTS (
-          SELECT 1 FROM ${tbl('variant_annotations')} va
-          WHERE va.chr = a.chr AND va.pos = a.pos
-            AND va.ref = a.ref AND va.alt = a.alt
-            AND va.starred = 1
-        ) OR EXISTS (
-          SELECT 1 FROM ${tbl('case_variant_annotations')} cva
-          JOIN ${tbl('variants')} v ON cva.variant_id = v.id
-          WHERE v.chr = a.chr AND v.pos = a.pos
-            AND v.ref = a.ref AND v.alt = a.alt
-            AND v.variant_type = a.variant_type
-            AND cva.starred = 1
-        )) AS has_star,
-        (EXISTS (
-          SELECT 1 FROM ${tbl('variant_annotations')} va
-          WHERE va.chr = a.chr AND va.pos = a.pos
-            AND va.ref = a.ref AND va.alt = a.alt
-            AND va.global_comment IS NOT NULL AND va.global_comment <> ''
-        ) OR EXISTS (
-          SELECT 1 FROM ${tbl('case_variant_annotations')} cva
-          JOIN ${tbl('variants')} v ON cva.variant_id = v.id
-          WHERE v.chr = a.chr AND v.pos = a.pos
-            AND v.ref = a.ref AND v.alt = a.alt
-            AND v.variant_type = a.variant_type
-            AND cva.per_case_comment IS NOT NULL AND cva.per_case_comment <> ''
-        )) AS has_comment,
-        -- acmg_best: highest-ranked classification across global + per-case
-        -- annotations, reconstructed from the winning rank (mirrors the SQLite
-        -- CASE ladder in src/shared/sql/cohort-summary-rebuild.ts).
-        (CASE (
-          SELECT MAX(rank) FROM (
-            SELECT ${ACMG_RANK_SQL('va.acmg_classification')} AS rank
-            FROM ${tbl('variant_annotations')} va
-            WHERE va.chr = a.chr AND va.pos = a.pos
-              AND va.ref = a.ref AND va.alt = a.alt
-              AND va.acmg_classification IS NOT NULL
-            UNION ALL
-            SELECT ${ACMG_RANK_SQL('cva.acmg_classification')} AS rank
-            FROM ${tbl('case_variant_annotations')} cva
-            JOIN ${tbl('variants')} v ON cva.variant_id = v.id
-            WHERE v.chr = a.chr AND v.pos = a.pos
-              AND v.ref = a.ref AND v.alt = a.alt
-              AND v.variant_type = a.variant_type
-              AND cva.acmg_classification IS NOT NULL
-          ) ranked
-        )
-          WHEN 5 THEN 'Pathogenic'
-          WHEN 4 THEN 'Likely pathogenic'
-          WHEN 3 THEN 'Uncertain significance'
-          WHEN 2 THEN 'Likely benign'
-          WHEN 1 THEN 'Benign'
-          ELSE NULL
-        END) AS acmg_best,
-        NULL AS cohort_frequency  -- overwritten by the recompute below (C2a)
-      FROM agg a;
+        ${ANNOTATION_FLAG_COLUMNS},
+        NULL AS cohort_frequency  -- unused: frequency is derived at read time
+      FROM agg a
+      ${annotationFlagJoins('a')};
     `)
 
-    // C2a: recompute cohort_frequency for all builds as the final rebuild step,
-    // inside the same transaction. Mirrors SQLite's RECOMPUTE_ALL_FREQUENCIES_SQL
-    // (CohortSummaryService.rebuild). The NULL written above is overwritten here.
-    await this.recomputeCohortFrequency({ schema, client })
+    // The per-gene aggregates share this table's lifecycle: same rebuild.
+    await rebuildGeneSummary({ schema, client })
 
     // C1 lifecycle (Pass-7 MED #4): a completed rebuild clears the staleness
     // flags and records the rebuild time. last_rebuilt_at maps back to epoch ms
@@ -256,45 +207,6 @@ export class PostgresCohortSummaryRepository {
        SET is_stale = false, stale_reason = NULL, stale_at = NULL, last_rebuilt_at = now()
        WHERE id = 1`
     )
-  }
-
-  /**
-   * C2a (Pass-3 HIGH #2): recompute cohort_frequency = carrier_count / total
-   * cases-for-build. Mirrors SQLite's RECOMPUTE_ALL_FREQUENCIES_SQL, run in the
-   * same transaction after rebuild / incrementalAdd / incrementalRemove. When
-   * `affectedBuilds` is provided the recompute is scoped to those genome_builds
-   * (the incremental paths pass the case's build); when omitted the full table
-   * is recomputed (the rebuild path).
-   */
-  async recomputeCohortFrequency({
-    schema,
-    client,
-    affectedBuilds,
-    includeProvisional = false
-  }: ScopedClient & { affectedBuilds?: string[]; includeProvisional?: boolean }): Promise<void> {
-    const tbl = (t: string): string => `"${schema}"."${t}"`
-    // Provisional (importing) cases count toward the denominator during import
-    // publication; cases being deleted in the background never do.
-    const casesTable = includeProvisional
-      ? `(SELECT genome_build FROM ${tbl('cases_all')} WHERE import_status <> 'deleting') provisional_cases`
-      : tbl('cases')
-    if (affectedBuilds && affectedBuilds.length > 0) {
-      await client.query(
-        `UPDATE ${tbl('cohort_variant_summary')} cvs
-         SET cohort_frequency = cvs.carrier_count::float / NULLIF(c.total, 0)
-         FROM (SELECT genome_build, COUNT(*) AS total FROM ${casesTable} GROUP BY genome_build) c
-         WHERE cvs.genome_build = c.genome_build
-           AND cvs.genome_build = ANY($1::text[])`,
-        [affectedBuilds]
-      )
-    } else {
-      await client.query(
-        `UPDATE ${tbl('cohort_variant_summary')} cvs
-         SET cohort_frequency = cvs.carrier_count::float / NULLIF(c.total, 0)
-         FROM (SELECT genome_build, COUNT(*) AS total FROM ${casesTable} GROUP BY genome_build) c
-         WHERE cvs.genome_build = c.genome_build`
-      )
-    }
   }
 
   /**
@@ -308,14 +220,20 @@ export class PostgresCohortSummaryRepository {
     schema,
     client,
     caseId,
-    genomeBuild,
     includeProvisional = false
   }: ScopedClient & {
     caseId: number
-    genomeBuild?: string
     includeProvisional?: boolean
   }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
+
+    // Staged and ANALYZEd first so the upsert is planned with real row counts
+    // (cohort-case-aggregate-sql.ts).
+    await stageCaseAggregate({
+      client,
+      aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl, includeProvisional),
+      caseId
+    })
 
     await client.query(
       `
@@ -325,7 +243,7 @@ export class PostgresCohortSummaryRepository {
          gnomad_af, cadd, transcript, omim_mim_number,
          carrier_count, het_count, hom_count, variant_key,
          has_star, has_comment, acmg_best, cohort_frequency)
-      ${SCOPED_DEDUPED_AGG_SQL(tbl, includeProvisional)}
+      WITH ${annotationFlagCtes(tbl)}
       SELECT
         pc.chr, pc.pos, pc.end_pos, pc.ref, pc.alt, pc.variant_type, pc.genome_build,
         pc.gene_symbol, pc.cdna, pc.aa_change, pc.consequence, pc.func, pc.clinvar,
@@ -333,58 +251,10 @@ export class PostgresCohortSummaryRepository {
         pc.carrier_delta, pc.het_delta, pc.hom_delta,
         pc.chr || ':' || pc.pos || ':' || pc.ref || ':' || pc.alt AS variant_key,
         -- Pass-9 #8: brand-new rows derive flags from current annotation tables.
-        (EXISTS (
-          SELECT 1 FROM ${tbl('variant_annotations')} va
-          WHERE va.chr = pc.chr AND va.pos = pc.pos
-            AND va.ref = pc.ref AND va.alt = pc.alt
-            AND va.starred = 1
-        ) OR EXISTS (
-          SELECT 1 FROM ${tbl('case_variant_annotations')} cva
-          JOIN ${tbl('variants')} v ON cva.variant_id = v.id
-          WHERE v.chr = pc.chr AND v.pos = pc.pos
-            AND v.ref = pc.ref AND v.alt = pc.alt
-            AND v.variant_type = pc.variant_type
-            AND cva.starred = 1
-        )) AS has_star,
-        (EXISTS (
-          SELECT 1 FROM ${tbl('variant_annotations')} va
-          WHERE va.chr = pc.chr AND va.pos = pc.pos
-            AND va.ref = pc.ref AND va.alt = pc.alt
-            AND va.global_comment IS NOT NULL AND va.global_comment <> ''
-        ) OR EXISTS (
-          SELECT 1 FROM ${tbl('case_variant_annotations')} cva
-          JOIN ${tbl('variants')} v ON cva.variant_id = v.id
-          WHERE v.chr = pc.chr AND v.pos = pc.pos
-            AND v.ref = pc.ref AND v.alt = pc.alt
-            AND v.variant_type = pc.variant_type
-            AND cva.per_case_comment IS NOT NULL AND cva.per_case_comment <> ''
-        )) AS has_comment,
-        (CASE (
-          SELECT MAX(rank) FROM (
-            SELECT ${ACMG_RANK_SQL('va.acmg_classification')} AS rank
-            FROM ${tbl('variant_annotations')} va
-            WHERE va.chr = pc.chr AND va.pos = pc.pos
-              AND va.ref = pc.ref AND va.alt = pc.alt
-              AND va.acmg_classification IS NOT NULL
-            UNION ALL
-            SELECT ${ACMG_RANK_SQL('cva.acmg_classification')} AS rank
-            FROM ${tbl('case_variant_annotations')} cva
-            JOIN ${tbl('variants')} v ON cva.variant_id = v.id
-            WHERE v.chr = pc.chr AND v.pos = pc.pos
-              AND v.ref = pc.ref AND v.alt = pc.alt
-              AND v.variant_type = pc.variant_type
-              AND cva.acmg_classification IS NOT NULL
-          ) ranked
-        )
-          WHEN 5 THEN 'Pathogenic'
-          WHEN 4 THEN 'Likely pathogenic'
-          WHEN 3 THEN 'Uncertain significance'
-          WHEN 2 THEN 'Likely benign'
-          WHEN 1 THEN 'Benign'
-          ELSE NULL
-        END) AS acmg_best,
-        NULL AS cohort_frequency  -- overwritten by the recompute below (C2a)
-      FROM per_case pc
+        ${ANNOTATION_FLAG_COLUMNS},
+        NULL AS cohort_frequency  -- unused: frequency is derived at read time
+      FROM pg_temp.${CASE_AGG_TABLE} pc
+      ${annotationFlagJoins('pc')}
       ON CONFLICT (chr, pos, ref, alt, variant_type, genome_build) DO UPDATE SET
         carrier_count = cohort_variant_summary.carrier_count + EXCLUDED.carrier_count,
         het_count = cohort_variant_summary.het_count + EXCLUDED.het_count,
@@ -392,19 +262,10 @@ export class PostgresCohortSummaryRepository {
         -- Adds never clear annotation flags (OR semantics).
         has_star = cohort_variant_summary.has_star OR EXCLUDED.has_star,
         has_comment = cohort_variant_summary.has_comment OR EXCLUDED.has_comment;
-    `,
-      [caseId]
+    `
     )
-
-    // C2a: recompute cohort_frequency in the same transaction, scoped to the
-    // case's genome_build when supplied by the caller (mirrors SQLite's
-    // RECOMPUTE_ALL_FREQUENCIES_SQL after INCREMENTAL_ADD_SQL).
-    await this.recomputeCohortFrequency({
-      schema,
-      client,
-      affectedBuilds: genomeBuild !== undefined ? [genomeBuild] : undefined,
-      includeProvisional
-    })
+    await dropCaseAggregate(client)
+    await addCaseToGeneSummary({ schema, client, caseId, includeProvisional })
 
     // C1 lifecycle: incremental maintenance records its time but never touches
     // is_stale — the summary stays valid (Pass-7 MED #4).
@@ -423,9 +284,8 @@ export class PostgresCohortSummaryRepository {
   async incrementalRemove({
     schema,
     client,
-    caseId,
-    genomeBuild
-  }: ScopedClient & { caseId: number; genomeBuild?: string }): Promise<void> {
+    caseId
+  }: ScopedClient & { caseId: number }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
     await client.query(
@@ -445,16 +305,7 @@ export class PostgresCohortSummaryRepository {
     )
 
     await client.query(`DELETE FROM ${tbl('cohort_variant_summary')} WHERE carrier_count <= 0`)
-
-    // C2a: recompute cohort_frequency in the same transaction, scoped to the
-    // case's genome_build when supplied (mirrors SQLite's
-    // RECOMPUTE_ALL_FREQUENCIES_SQL after INCREMENTAL_REMOVE_SQL +
-    // CLEANUP_ZERO_CARRIERS_SQL).
-    await this.recomputeCohortFrequency({
-      schema,
-      client,
-      affectedBuilds: genomeBuild !== undefined ? [genomeBuild] : undefined
-    })
+    await removeCaseFromGeneSummary({ schema, client, caseId })
 
     // C1 lifecycle: incremental maintenance records its time but never touches
     // is_stale — the summary stays valid (Pass-7 MED #4).

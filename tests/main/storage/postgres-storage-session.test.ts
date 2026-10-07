@@ -379,9 +379,15 @@ describe('PostgresStorageSession', () => {
       }
     })
 
-    expect(pool.query).toHaveBeenCalledTimes(1)
-    expect(pool.query.mock.calls[0][0]).toContain('"phase8_cohort"."cases"')
-    expect(pool.query.mock.calls[0][0]).toContain('"phase8_cohort"."variants"')
+    // Freshness probe, then the tiles from the maintained aggregates.
+    expect(pool.query).toHaveBeenCalledTimes(2)
+    const summarySql = pool.query.mock.calls[1][0] as string
+    expect(summarySql).toContain('SUM(variant_count), 0)::bigint FROM "phase8_cohort"."cases"')
+    expect(summarySql).toContain(
+      '"phase8_cohort"."cohort_variant_summary" GROUP BY chr, pos, ref, alt'
+    )
+    expect(summarySql).toContain('"phase8_cohort"."cohort_gene_summary"')
+    expect(summarySql).not.toContain('"phase8_cohort"."variants"')
   })
 
   it('routes audit reads and writes through session-owned postgres executors', async () => {

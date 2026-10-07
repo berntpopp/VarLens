@@ -89,6 +89,7 @@ const importApi: Partial<WindowAPI['import']> = {
 const batchImportApi: Partial<WindowAPI['batchImport']> = {
   onProgress: (callback) => subscribeWebEvent('batch-import:progress', callback),
   onComplete: (callback) => subscribeWebEvent('batch-import:complete', callback),
+  onFileComplete: (callback) => subscribeWebEvent('batch-import:fileComplete', callback),
   selectFiles: () => pickAndUploadFiles({ multiple: true, accept: IMPORT_ACCEPT }),
   selectFolder: () =>
     pickAndUploadFiles({ multiple: true, directory: true, accept: IMPORT_ACCEPT }),

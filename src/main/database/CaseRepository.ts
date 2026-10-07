@@ -117,6 +117,7 @@ export class CaseRepository extends BaseRepository {
             COALESCE(genome_build, 'GRCh38') AS build,
             COUNT(*) AS caseCount
           FROM cases
+          WHERE import_status = 'ready'
           GROUP BY build
           ORDER BY caseCount DESC
         `
@@ -236,7 +237,7 @@ export class CaseRepository extends BaseRepository {
     const countNeeded = params._count_needed !== false
 
     // Build WHERE clauses and parameters
-    const whereClauses: string[] = []
+    const whereClauses: string[] = ["c.import_status = 'ready'"]
     const whereParams: (string | number)[] = []
 
     // Search filter (LIKE on case name)

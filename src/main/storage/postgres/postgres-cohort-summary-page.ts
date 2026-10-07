@@ -21,7 +21,8 @@ import { runNamedDynamic } from './named-query'
 import {
   buildSummaryCountSql,
   buildSummaryPageSql,
-  buildSummaryQueryParts
+  buildSummaryQueryParts,
+  summaryBuildTotalsJoin
 } from './postgres-cohort-summary-query'
 
 export interface SummaryPageContext {
@@ -29,6 +30,8 @@ export interface SummaryPageContext {
   schema: string
   /** Schema-qualified `cohort_variant_summary`. */
   table: string
+  /** Schema-qualified `cases` view (visible cases only), the frequency denominator. */
+  casesTable: string
   toVariant: (row: Record<string, unknown>) => CohortVariant
 }
 
@@ -45,13 +48,14 @@ export async function querySummaryPage(
 ): Promise<CohortPaginatedResult | null> {
   const summary = buildSummaryQueryParts(params, totalCases)
   if (summary.unavailable) return null
-  const { whereParts, orderBy, values, keyset } = summary.parts
+  const { whereParts, orderBy, values, keyset, needsBuildTotals } = summary.parts
+  const buildTotalsJoin = summaryBuildTotalsJoin(ctx.casesTable)
 
   let totalCount = 0
   if (params._count_needed !== false) {
     const countResult = await runNamedDynamic<{ total_count?: unknown }>(ctx.pool, {
       baseName: 'cohort:summary_count',
-      text: buildSummaryCountSql(ctx.table, whereParts),
+      text: buildSummaryCountSql(ctx.table, whereParts, needsBuildTotals ? buildTotalsJoin : ''),
       values,
       schema: ctx.schema
     })
@@ -81,7 +85,8 @@ export async function querySummaryPage(
       orderBy,
       totalCases,
       dataValues.length - 1,
-      dataValues.length
+      dataValues.length,
+      buildTotalsJoin
     ),
     values: dataValues,
     schema: ctx.schema
