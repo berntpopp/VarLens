@@ -11,6 +11,8 @@
  */
 import { invalidateFilterPresets } from './useFilterPresetStore'
 import { useCarriers } from './useCarriers'
+import { resetTagCaches } from './useTags'
+import { invalidateAllVariantColumnMeta } from './useVariantColumnMeta'
 import { ref, computed, inject } from 'vue'
 import type { Ref, ComputedRef, InjectionKey } from 'vue'
 import type { VariantFilter, Variant } from '../../../shared/types/api'
@@ -197,6 +199,9 @@ export function createAppState(): AppStateReturn {
     // Presets live in the workspace database; the cached list is now stale.
     invalidateFilterPresets()
     useCarriers().reset()
+    // Keyed by case and variant ids, which restart in every database.
+    invalidateAllVariantColumnMeta()
+    resetTagCaches()
     incrementDataGeneration()
     resetCaseContext()
     setActiveTab('case')

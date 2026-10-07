@@ -23,6 +23,22 @@ const variantTagsCache = ref<Map<string, Tag[]>>(new Map())
 // Loading states per variant key
 const variantTagsLoading = ref<Map<string, boolean>>(new Map())
 
+// Bumped by `resetTagCaches`; a load started before a reset must not write
+// its result, or its loading flag, afterwards.
+let cacheEpoch = 0
+
+/**
+ * Empty every tag cache. Tags and the case/variant ids the per-variant cache
+ * is keyed by belong to one database, so call this on a database switch.
+ */
+export function resetTagCaches(): void {
+  cacheEpoch++
+  tagsCache.value = []
+  isLoadingTags.value = false
+  variantTagsCache.value.clear()
+  variantTagsLoading.value.clear()
+}
+
 export function useTags() {
   const { api } = useApiService()
 
@@ -42,10 +58,11 @@ export function useTags() {
     if (!api) return
     if (isLoadingTags.value) return
 
+    const epoch = cacheEpoch
     isLoadingTags.value = true
     try {
       const tags = unwrapIpcResult(await api.tags.list())
-      tagsCache.value = tags
+      if (epoch === cacheEpoch) tagsCache.value = tags
     } catch (error) {
       logService.error(
         'Failed to load tags: ' +
@@ -57,7 +74,7 @@ export function useTags() {
         'tags'
       )
     } finally {
-      isLoadingTags.value = false
+      if (epoch === cacheEpoch) isLoadingTags.value = false
     }
   }
 
@@ -153,10 +170,11 @@ export function useTags() {
     // Skip if already loading
     if (variantTagsLoading.value.get(key) === true) return
 
+    const epoch = cacheEpoch
     variantTagsLoading.value.set(key, true)
     try {
       const tags = unwrapIpcResult(await api.tags.getVariantTags(caseId, variantId))
-      variantTagsCache.value.set(key, tags)
+      if (epoch === cacheEpoch) variantTagsCache.value.set(key, tags)
     } catch (error) {
       logService.error(
         'Failed to load variant tags: ' +
@@ -168,7 +186,7 @@ export function useTags() {
         'tags'
       )
     } finally {
-      variantTagsLoading.value.set(key, false)
+      if (epoch === cacheEpoch) variantTagsLoading.value.set(key, false)
     }
   }
 
@@ -351,25 +369,6 @@ export function useTags() {
     await Promise.all(uncachedIds.map((id) => loadVariantTags(caseId, id)))
   }
 
-  // ============================================================
-  // Cache Management
-  // ============================================================
-
-  /**
-   * Clear all caches (call on case switch)
-   */
-  function clearCache(): void {
-    variantTagsCache.value.clear()
-    variantTagsLoading.value.clear()
-  }
-
-  /**
-   * Clear tags list cache (call to force reload)
-   */
-  function clearTagsCache(): void {
-    tagsCache.value = []
-  }
-
   return {
     // Tag list operations
     loadTags,
@@ -389,11 +388,7 @@ export function useTags() {
     removeVariantTag,
     toggleVariantTag,
     setVariantTags,
-    loadVariantTagsBatch,
-
-    // Cache management
-    clearCache,
-    clearTagsCache
+    loadVariantTagsBatch
   }
 }
 

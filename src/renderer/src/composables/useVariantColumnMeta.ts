@@ -46,25 +46,31 @@ export function cacheKeyFor(scope: VariantColumnMetaScope): string {
 
 // Module-scoped caches — shared across all useVariantColumnMeta() callers.
 //
-// INVALIDATION POLICY (intentional deferral):
+// INVALIDATION POLICY:
 //
-// These caches are currently unbounded by design for the Electron desktop
-// use case. Sessions load a bounded set of cases into a bounded set of
-// extension columns (~30 dotted keys × ~N visited scopes), so the memory
-// ceiling is low in practice. `invalidate(scope)` and `invalidateAll()` are
-// already exposed on the composable return value, but no runtime consumer
-// currently calls them — VarLens has no generic "case/import-changed" event
-// bus that matches how `useFilterOptionsCache.invalidateFilterOptionsCache`
-// is (also) currently unused.
+// Entries are keyed by case ids only. Ids restart in every database, so the
+// caches are dropped on a database switch (`useAppState.resetForDatabaseSwitch`);
+// the web runtime also drops them after imports and case deletes. Within one
+// database a case's variants never change after import and ids are never
+// reused, so entries are otherwise kept for the session.
 //
-// When such an event bus is added, wire `invalidateAll()` to the same
-// import-complete / case-delete triggers as the filter-options cache so
-// stale min/max/distinct bounds don't survive a data mutation. Mirror the
-// pattern used by `useFilterOptionsCache` for consistency.
+// `cacheEpoch` counts invalidations. A request that started before one must
+// not write its result afterwards, and consumers holding their own copy of a
+// result (ExtensionColumnFilters) watch it to drop that copy.
 const extensionColumnMetaCache = ref<Record<string, Record<string, ColumnFilterMeta>>>({})
 const variantTypesPresentCache = ref<Record<string, Set<string>>>({})
 const inflightColumnMeta = new Map<string, Promise<ColumnFilterMeta>>()
 const inflightTypes = new Map<string, Promise<Set<string>>>()
+const cacheEpoch = ref(0)
+
+/** Clear all caches and drop any inflight promises. */
+export function invalidateAllVariantColumnMeta(): void {
+  extensionColumnMetaCache.value = {}
+  variantTypesPresentCache.value = {}
+  inflightColumnMeta.clear()
+  inflightTypes.clear()
+  cacheEpoch.value++
+}
 
 /**
  * Composable exposing cached extension column metadata and variant-type
@@ -77,6 +83,7 @@ export function useVariantColumnMeta(): {
   ensureTypesPresent: (scope: VariantColumnMetaScope) => Promise<Set<string>>
   invalidate: (scope: VariantColumnMetaScope) => void
   invalidateAll: () => void
+  cacheEpoch: Readonly<Ref<number>>
   extensionColumnMeta: Readonly<Ref<Record<string, Record<string, ColumnFilterMeta>>>>
   variantTypesPresent: Readonly<Ref<Record<string, Set<string>>>>
 } {
@@ -109,6 +116,7 @@ export function useVariantColumnMeta(): {
       throw new Error(reason)
     }
 
+    const epoch = cacheEpoch.value
     const promise = (async () => {
       const result = await api.variants.columnMeta({
         caseId: scope.caseId,
@@ -117,12 +125,14 @@ export function useVariantColumnMeta(): {
       })
 
       const meta = unwrapIpcResult(result)
-      const bucket = extensionColumnMetaCache.value[key] ?? {}
-      bucket[columnKey] = meta
-      extensionColumnMetaCache.value[key] = bucket
+      if (epoch === cacheEpoch.value) {
+        const bucket = extensionColumnMetaCache.value[key] ?? {}
+        bucket[columnKey] = meta
+        extensionColumnMetaCache.value[key] = bucket
+      }
       return meta
     })().finally(() => {
-      inflightColumnMeta.delete(inflightKey)
+      if (inflightColumnMeta.get(inflightKey) === promise) inflightColumnMeta.delete(inflightKey)
     })
 
     inflightColumnMeta.set(inflightKey, promise)
@@ -145,18 +155,16 @@ export function useVariantColumnMeta(): {
       throw new Error('window.api not available (running outside Electron?)')
     }
 
-    const promise = api.variants
+    const epoch = cacheEpoch.value
+    const promise: Promise<Set<string>> = api.variants
       .typesPresent({ caseId: scope.caseId, caseIds: scope.caseIds })
       .then((result) => {
-        const types = unwrapIpcResult(result)
-        const set = new Set(types)
-        variantTypesPresentCache.value[key] = set
-        inflightTypes.delete(key)
+        const set = new Set(unwrapIpcResult(result))
+        if (epoch === cacheEpoch.value) variantTypesPresentCache.value[key] = set
         return set
       })
-      .catch((err: unknown) => {
-        inflightTypes.delete(key)
-        throw err
+      .finally(() => {
+        if (inflightTypes.get(key) === promise) inflightTypes.delete(key)
       })
 
     inflightTypes.set(key, promise)
@@ -168,21 +176,19 @@ export function useVariantColumnMeta(): {
     const key = cacheKeyFor(scope)
     delete extensionColumnMetaCache.value[key]
     delete variantTypesPresentCache.value[key]
-  }
-
-  /** Clear all caches and drop any inflight promises. */
-  function invalidateAll(): void {
-    extensionColumnMetaCache.value = {}
-    variantTypesPresentCache.value = {}
-    inflightColumnMeta.clear()
-    inflightTypes.clear()
+    inflightTypes.delete(key)
+    for (const inflightKey of inflightColumnMeta.keys()) {
+      if (inflightKey.startsWith(`${key}::`)) inflightColumnMeta.delete(inflightKey)
+    }
+    cacheEpoch.value++
   }
 
   return {
     getColumnMeta,
     ensureTypesPresent,
     invalidate,
-    invalidateAll,
+    invalidateAll: invalidateAllVariantColumnMeta,
+    cacheEpoch,
     extensionColumnMeta: extensionColumnMetaCache as Readonly<
       Ref<Record<string, Record<string, ColumnFilterMeta>>>
     >,
