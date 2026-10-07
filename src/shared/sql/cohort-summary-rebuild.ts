@@ -4,6 +4,7 @@
  * Used by CohortSummaryService (main thread), import-worker, delete-worker,
  * and rebuild-summary-worker. Single source of truth to avoid SQL drift.
  */
+import { acmgLabelCaseSql, acmgRankCaseSql } from '../config/severity.config'
 import {
   REPRESENTATIVE_COLUMNS,
   representativeColumnList,
@@ -92,10 +93,7 @@ export function perCaseAnnotationFlagsSql(variantFilter = ''): string {
     has_star = CASE WHEN cohort_variant_summary.has_star = 1 THEN 1 WHEN pca.has_star = 1 THEN 1 ELSE 0 END,
     has_comment = CASE WHEN cohort_variant_summary.has_comment = 1 THEN 1 WHEN pca.has_comment = 1 THEN 1 ELSE 0 END,
     acmg_best = CASE
-      WHEN pca.acmg_rank > CASE cohort_variant_summary.acmg_best
-        WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-        WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-        WHEN 'Benign' THEN 1 ELSE 0 END
+      WHEN pca.acmg_rank > ${acmgRankCaseSql('cohort_variant_summary.acmg_best')}
       THEN pca.acmg_best
       ELSE cohort_variant_summary.acmg_best
     END
@@ -104,18 +102,8 @@ export function perCaseAnnotationFlagsSql(variantFilter = ''): string {
       MAX(cva.starred) AS has_star,
       MAX(CASE WHEN cva.per_case_comment IS NOT NULL AND cva.per_case_comment != ''
         THEN 1 ELSE 0 END) AS has_comment,
-      CASE MAX(CASE cva.acmg_classification
-        WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-        WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-        WHEN 'Benign' THEN 1 ELSE 0 END)
-        WHEN 5 THEN 'Pathogenic' WHEN 4 THEN 'Likely pathogenic'
-        WHEN 3 THEN 'Uncertain significance' WHEN 2 THEN 'Likely benign'
-        WHEN 1 THEN 'Benign' ELSE NULL
-      END AS acmg_best,
-      MAX(CASE cva.acmg_classification
-        WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-        WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-        WHEN 'Benign' THEN 1 ELSE 0 END) AS acmg_rank
+      ${acmgLabelCaseSql(`MAX(${acmgRankCaseSql('cva.acmg_classification')})`)} AS acmg_best,
+      MAX(${acmgRankCaseSql('cva.acmg_classification')}) AS acmg_rank
     FROM case_variant_annotations cva
     JOIN variants v ON cva.variant_id = v.id${variantFilter}
     GROUP BY v.chr, v.pos, v.ref, v.alt

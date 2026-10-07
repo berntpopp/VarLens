@@ -20,6 +20,8 @@
  * Pure data and string functions: safe in main, workers, preload and renderer.
  */
 
+import { ACMG_CLASSIFICATIONS, type AcmgClassification } from './domain.config'
+
 /** Rank of a missing or unrecognised value on either scale. */
 export const UNKNOWN_SEVERITY_RANK = 0
 
@@ -62,6 +64,34 @@ function asciiUpperTrimmed(value: string): string {
 export function impactRankCaseSql(expression: string): string {
   const whens = IMPACT_LEVELS.map(({ level, rank }) => `WHEN '${level}' THEN ${rank}`).join(' ')
   return `CASE upper(trim(${expression})) ${whens} ELSE ${UNKNOWN_SEVERITY_RANK} END`
+}
+
+/**
+ * ACMG/AMP classification of a variant by the user (`acmg_classification`),
+ * most severe first. The labels are the canonical ones of domain.config.ts;
+ * the summary's `acmg_best` is the highest-ranked class any annotation gives.
+ */
+export const ACMG_RANKS: ReadonlyArray<{ label: AcmgClassification; rank: number }> =
+  ACMG_CLASSIFICATIONS.map((label, index) => ({
+    label,
+    rank: ACMG_CLASSIFICATIONS.length - index
+  }))
+
+/** Rank of an ACMG class label (exact, as stored), 0 when unknown or NULL. */
+export function acmgRank(label: string | null | undefined): number {
+  return ACMG_RANKS.find((entry) => entry.label === label)?.rank ?? UNKNOWN_SEVERITY_RANK
+}
+
+/** SQL `CASE` giving the rank of an ACMG class expression (0 when unknown). */
+export function acmgRankCaseSql(expression: string): string {
+  const whens = ACMG_RANKS.map(({ label, rank }) => `WHEN '${label}' THEN ${rank}`).join(' ')
+  return `CASE ${expression} ${whens} ELSE ${UNKNOWN_SEVERITY_RANK} END`
+}
+
+/** SQL `CASE` giving the ACMG class label of a rank expression (NULL for 0). */
+export function acmgLabelCaseSql(rankExpression: string): string {
+  const whens = ACMG_RANKS.map(({ label, rank }) => `WHEN ${rank} THEN '${label}'`).join(' ')
+  return `CASE ${rankExpression} ${whens} ELSE NULL END`
 }
 
 /**

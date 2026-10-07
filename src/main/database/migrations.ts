@@ -13,6 +13,7 @@ import { createChrRankIndexes } from './chr-rank-indexes'
 import { migrateUserRoles } from './user-roles-migration'
 import { migrateCohortKeysetIndex } from './cohort-keyset-index'
 import { migrateSeverityRanks } from './severity-rank-migration'
+import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.config'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
@@ -739,22 +740,14 @@ export function runMigrations(db: Database.Database): void {
             ) THEN 1 ELSE 0 END
           ),
           acmg_best = (
-            SELECT CASE MAX(rank) WHEN 5 THEN 'Pathogenic' WHEN 4 THEN 'Likely pathogenic'
-              WHEN 3 THEN 'Uncertain significance' WHEN 2 THEN 'Likely benign'
-              WHEN 1 THEN 'Benign' ELSE NULL END
+            SELECT ${acmgLabelCaseSql('MAX(rank)')}
             FROM (
-              SELECT CASE va.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END AS rank
+              SELECT ${acmgRankCaseSql('va.acmg_classification')} AS rank
               FROM variant_annotations va
               WHERE va.chr = NEW.chr AND va.pos = NEW.pos AND va.ref = NEW.ref AND va.alt = NEW.alt
               AND va.acmg_classification IS NOT NULL
               UNION ALL
-              SELECT CASE cva.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END
+              SELECT ${acmgRankCaseSql('cva.acmg_classification')}
               FROM case_variant_annotations cva
               JOIN variants v ON cva.variant_id = v.id
               WHERE v.chr = NEW.chr AND v.pos = NEW.pos AND v.ref = NEW.ref AND v.alt = NEW.alt
@@ -797,22 +790,14 @@ export function runMigrations(db: Database.Database): void {
             ) THEN 1 ELSE 0 END
           ),
           acmg_best = (
-            SELECT CASE MAX(rank) WHEN 5 THEN 'Pathogenic' WHEN 4 THEN 'Likely pathogenic'
-              WHEN 3 THEN 'Uncertain significance' WHEN 2 THEN 'Likely benign'
-              WHEN 1 THEN 'Benign' ELSE NULL END
+            SELECT ${acmgLabelCaseSql('MAX(rank)')}
             FROM (
-              SELECT CASE va.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END AS rank
+              SELECT ${acmgRankCaseSql('va.acmg_classification')} AS rank
               FROM variant_annotations va
               WHERE va.chr = NEW.chr AND va.pos = NEW.pos AND va.ref = NEW.ref AND va.alt = NEW.alt
               AND va.acmg_classification IS NOT NULL
               UNION ALL
-              SELECT CASE cva.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END
+              SELECT ${acmgRankCaseSql('cva.acmg_classification')}
               FROM case_variant_annotations cva
               JOIN variants v ON cva.variant_id = v.id
               WHERE v.chr = NEW.chr AND v.pos = NEW.pos AND v.ref = NEW.ref AND v.alt = NEW.alt
@@ -852,22 +837,14 @@ export function runMigrations(db: Database.Database): void {
             ) THEN 1 ELSE 0 END
           ),
           acmg_best = (
-            SELECT CASE MAX(rank) WHEN 5 THEN 'Pathogenic' WHEN 4 THEN 'Likely pathogenic'
-              WHEN 3 THEN 'Uncertain significance' WHEN 2 THEN 'Likely benign'
-              WHEN 1 THEN 'Benign' ELSE NULL END
+            SELECT ${acmgLabelCaseSql('MAX(rank)')}
             FROM (
-              SELECT CASE va.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END AS rank
+              SELECT ${acmgRankCaseSql('va.acmg_classification')} AS rank
               FROM variant_annotations va
               WHERE va.chr = OLD.chr AND va.pos = OLD.pos AND va.ref = OLD.ref AND va.alt = OLD.alt
               AND va.acmg_classification IS NOT NULL
               UNION ALL
-              SELECT CASE cva.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END
+              SELECT ${acmgRankCaseSql('cva.acmg_classification')}
               FROM case_variant_annotations cva
               JOIN variants v ON cva.variant_id = v.id
               WHERE v.chr = OLD.chr AND v.pos = OLD.pos AND v.ref = OLD.ref AND v.alt = OLD.alt
@@ -913,23 +890,15 @@ export function runMigrations(db: Database.Database): void {
             ) THEN 1 ELSE 0 END
           ),
           acmg_best = (
-            SELECT CASE MAX(rank) WHEN 5 THEN 'Pathogenic' WHEN 4 THEN 'Likely pathogenic'
-              WHEN 3 THEN 'Uncertain significance' WHEN 2 THEN 'Likely benign'
-              WHEN 1 THEN 'Benign' ELSE NULL END
+            SELECT ${acmgLabelCaseSql('MAX(rank)')}
             FROM (
-              SELECT CASE va.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END AS rank
+              SELECT ${acmgRankCaseSql('va.acmg_classification')} AS rank
               FROM variant_annotations va
               WHERE va.chr = cohort_variant_summary.chr AND va.pos = cohort_variant_summary.pos
               AND va.ref = cohort_variant_summary.ref AND va.alt = cohort_variant_summary.alt
               AND va.acmg_classification IS NOT NULL
               UNION ALL
-              SELECT CASE cva.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END
+              SELECT ${acmgRankCaseSql('cva.acmg_classification')}
               FROM case_variant_annotations cva
               JOIN variants v ON cva.variant_id = v.id
               WHERE v.chr = cohort_variant_summary.chr AND v.pos = cohort_variant_summary.pos
@@ -979,23 +948,15 @@ export function runMigrations(db: Database.Database): void {
             ) THEN 1 ELSE 0 END
           ),
           acmg_best = (
-            SELECT CASE MAX(rank) WHEN 5 THEN 'Pathogenic' WHEN 4 THEN 'Likely pathogenic'
-              WHEN 3 THEN 'Uncertain significance' WHEN 2 THEN 'Likely benign'
-              WHEN 1 THEN 'Benign' ELSE NULL END
+            SELECT ${acmgLabelCaseSql('MAX(rank)')}
             FROM (
-              SELECT CASE va.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END AS rank
+              SELECT ${acmgRankCaseSql('va.acmg_classification')} AS rank
               FROM variant_annotations va
               WHERE va.chr = cohort_variant_summary.chr AND va.pos = cohort_variant_summary.pos
               AND va.ref = cohort_variant_summary.ref AND va.alt = cohort_variant_summary.alt
               AND va.acmg_classification IS NOT NULL
               UNION ALL
-              SELECT CASE cva.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END
+              SELECT ${acmgRankCaseSql('cva.acmg_classification')}
               FROM case_variant_annotations cva
               JOIN variants v ON cva.variant_id = v.id
               WHERE v.chr = cohort_variant_summary.chr AND v.pos = cohort_variant_summary.pos
@@ -1042,23 +1003,15 @@ export function runMigrations(db: Database.Database): void {
             ) THEN 1 ELSE 0 END
           ),
           acmg_best = (
-            SELECT CASE MAX(rank) WHEN 5 THEN 'Pathogenic' WHEN 4 THEN 'Likely pathogenic'
-              WHEN 3 THEN 'Uncertain significance' WHEN 2 THEN 'Likely benign'
-              WHEN 1 THEN 'Benign' ELSE NULL END
+            SELECT ${acmgLabelCaseSql('MAX(rank)')}
             FROM (
-              SELECT CASE va.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END AS rank
+              SELECT ${acmgRankCaseSql('va.acmg_classification')} AS rank
               FROM variant_annotations va
               WHERE va.chr = cohort_variant_summary.chr AND va.pos = cohort_variant_summary.pos
               AND va.ref = cohort_variant_summary.ref AND va.alt = cohort_variant_summary.alt
               AND va.acmg_classification IS NOT NULL
               UNION ALL
-              SELECT CASE cva.acmg_classification
-                WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-                WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-                WHEN 'Benign' THEN 1 ELSE 0 END
+              SELECT ${acmgRankCaseSql('cva.acmg_classification')}
               FROM case_variant_annotations cva
               JOIN variants v ON cva.variant_id = v.id
               WHERE v.chr = cohort_variant_summary.chr AND v.pos = cohort_variant_summary.pos
@@ -1390,15 +1343,9 @@ export function runMigrations(db: Database.Database): void {
     if (hasSummary != null) {
       db.exec(`
         UPDATE cohort_variant_summary SET acmg_best = (
-          SELECT CASE MAX(rank)
-            WHEN 5 THEN 'Pathogenic' WHEN 4 THEN 'Likely pathogenic'
-            WHEN 3 THEN 'Uncertain significance' WHEN 2 THEN 'Likely benign'
-            WHEN 1 THEN 'Benign' ELSE NULL END
+          SELECT ${acmgLabelCaseSql('MAX(rank)')}
           FROM (
-            SELECT CASE va.acmg_classification
-              WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-              WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-              WHEN 'Benign' THEN 1 ELSE 0 END AS rank
+            SELECT ${acmgRankCaseSql('va.acmg_classification')} AS rank
             FROM variant_annotations va
             WHERE va.chr = cohort_variant_summary.chr
               AND va.pos = cohort_variant_summary.pos
@@ -1406,10 +1353,7 @@ export function runMigrations(db: Database.Database): void {
               AND va.alt = cohort_variant_summary.alt
               AND va.acmg_classification IS NOT NULL
             UNION ALL
-            SELECT CASE cva.acmg_classification
-              WHEN 'Pathogenic' THEN 5 WHEN 'Likely pathogenic' THEN 4
-              WHEN 'Uncertain significance' THEN 3 WHEN 'Likely benign' THEN 2
-              WHEN 'Benign' THEN 1 ELSE 0 END AS rank
+            SELECT ${acmgRankCaseSql('cva.acmg_classification')} AS rank
             FROM case_variant_annotations cva
             JOIN variants v ON v.id = cva.variant_id
             WHERE v.chr = cohort_variant_summary.chr
