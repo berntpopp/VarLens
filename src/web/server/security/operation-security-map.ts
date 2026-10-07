@@ -26,6 +26,8 @@ import {
 } from './operation-policy'
 
 const POLL = 'High-frequency status poll; ids and counters only, no clinical data.'
+const BATCH_POLL =
+  'Status poll of the caller’s own batch import; the start of the batch is the audited write.'
 const SELF_SESSION = 'Reads only the caller’s own session identity.'
 const CAPABILITY = 'Backend capability/health probe; no clinical data.'
 const EGRESS_AUDIT = 'api_read reference lookup (egress audit, allowed or blocked)'
@@ -166,6 +168,8 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   // Encrypted-entry probe on the caller's own uploaded ZIP (P-08).
   'batch-import:inspectZip': read('analyst'),
   'batch-import:checkDuplicates': read('analyst'),
+  // Polled every 15 s for the whole batch; owner-checked in the run registry.
+  'batch-import:status': readExempt(BATCH_POLL, 'analyst'),
 
   // ── jobs ────────────────────────────────────────────────────────────────
   'jobs:get': readExempt(POLL),

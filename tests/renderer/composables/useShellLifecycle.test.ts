@@ -310,4 +310,136 @@ describe('useShellLifecycle', () => {
       expect(ctx.softRefreshCases).toHaveBeenCalledTimes(1)
     })
   })
+  // A browser reload mid-batch loses the page's run id, not the batch: the job
+  // keeps running on the server. Its job snapshots keep the views current.
+  describe('a batch import this page did not start', () => {
+    type JobEvent = {
+      id: string
+      kind: string
+      status: string
+      params?: { runId?: string }
+      progress?: { current: number; total: number }
+    }
+
+    function setup(ownRunId: string | null = null) {
+      let emitJob: (job: JobEvent) => void = () => {}
+      let emitComplete: (event: { runId: string } & Record<string, unknown>) => void = () => {}
+      const incrementDataGeneration = vi.fn()
+      const refreshCases = vi.fn()
+      const softRefreshCases = vi.fn()
+      let currentRun = ownRunId
+      const lifecycle = useShellLifecycle({
+        api: {
+          batchImport: {
+            onFileComplete: () => vi.fn(),
+            onComplete: (callback: typeof emitComplete) => {
+              emitComplete = callback
+              return vi.fn()
+            }
+          },
+          jobs: {
+            onChanged: (callback: typeof emitJob) => {
+              emitJob = callback
+              return vi.fn()
+            }
+          }
+        } as never,
+        currentDatabasePath: ref(null),
+        currentDatabaseName: ref('VarLens'),
+        incrementDataGeneration,
+        resetForDatabaseSwitch: vi.fn(),
+        clearMetadataCache: vi.fn(),
+        selectCase: vi.fn(),
+        caseListRef: ref({ refreshCases, softRefreshCases, selectCase: vi.fn() }),
+        dialogHostRef: ref(null),
+        importStore: {
+          importComplete: vi.fn(),
+          clearBatchRun: vi.fn(() => {
+            currentRun = null
+          }),
+          isCurrentBatchRun: vi.fn((runId: string) => runId === currentRun)
+        } as never
+      })
+      lifecycle.setupBatchImportCompletionListener()
+      lifecycle.setupBatchJobFollower()
+      return { emitJob, emitComplete, incrementDataGeneration, refreshCases, softRefreshCases }
+    }
+
+    const job = (overrides: Partial<JobEvent> = {}): JobEvent => ({
+      id: 'job-1',
+      kind: 'import_batch',
+      status: 'running',
+      params: { runId: 'run-before-reload' },
+      progress: { current: 0, total: 100 },
+      ...overrides
+    })
+
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+
+    it('refreshes in place as its files finish and reloads once when it ends', () => {
+      const ctx = setup()
+      ctx.emitJob(job())
+      expect(ctx.softRefreshCases).not.toHaveBeenCalled()
+
+      ctx.emitJob(job({ progress: { current: 1, total: 100 } }))
+      expect(ctx.softRefreshCases).toHaveBeenCalledTimes(1)
+      // Progress without a newly finished file is not a reason to refresh.
+      ctx.emitJob(job({ progress: { current: 1, total: 100 } }))
+      vi.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS)
+      expect(ctx.softRefreshCases).toHaveBeenCalledTimes(1)
+
+      ctx.emitJob(job({ progress: { current: 60, total: 100 } }))
+      expect(ctx.softRefreshCases).toHaveBeenCalledTimes(2)
+      expect(ctx.refreshCases).not.toHaveBeenCalled()
+
+      ctx.emitJob(job({ status: 'completed', progress: { current: 100, total: 100 } }))
+      expect(ctx.refreshCases).toHaveBeenCalledTimes(1)
+      expect(ctx.incrementDataGeneration).toHaveBeenCalledTimes(1)
+    })
+
+    it('reloads when the followed batch is cancelled or fails', () => {
+      const ctx = setup()
+      ctx.emitJob(job({ status: 'cancelled' }))
+      ctx.emitJob(job({ id: 'job-2', status: 'failed' }))
+      expect(ctx.refreshCases).toHaveBeenCalledTimes(2)
+    })
+
+    it('leaves a batch this page started to its own events, also after it finished', () => {
+      const ctx = setup('run-1')
+      ctx.emitJob(job({ params: { runId: 'run-1' }, progress: { current: 3, total: 8 } }))
+      expect(ctx.softRefreshCases).not.toHaveBeenCalled()
+
+      ctx.emitComplete({ runId: 'run-1', succeeded: 8, failed: 0, skipped: 0, details: [] })
+      expect(ctx.refreshCases).toHaveBeenCalledTimes(1)
+      // The job snapshot of the same batch arrives after the completion event.
+      ctx.emitJob(job({ params: { runId: 'run-1' }, status: 'completed' }))
+      expect(ctx.refreshCases).toHaveBeenCalledTimes(1)
+    })
+
+    it('reloads from the job snapshot when the completion event of its own batch is lost', () => {
+      // The web adapter then settles the wizard's promise by polling, but the
+      // shell only hears about the end through the job.
+      const ctx = setup('run-1')
+      ctx.emitJob(job({ params: { runId: 'run-1' }, progress: { current: 8, total: 8 } }))
+      expect(ctx.refreshCases).not.toHaveBeenCalled()
+
+      ctx.emitJob(job({ params: { runId: 'run-1' }, status: 'completed' }))
+      expect(ctx.refreshCases).toHaveBeenCalledTimes(1)
+      expect(ctx.incrementDataGeneration).toHaveBeenCalledTimes(1)
+
+      // A completion event that arrives late after all does not reload again.
+      ctx.emitComplete({ runId: 'run-1', succeeded: 8, failed: 0, skipped: 0, details: [] })
+      ctx.emitJob(job({ params: { runId: 'run-1' }, status: 'completed' }))
+      expect(ctx.refreshCases).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores other kinds of jobs', () => {
+      const ctx = setup()
+      ctx.emitJob(job({ kind: 'case_delete', status: 'completed' }))
+      ctx.emitJob(job({ kind: 'import_single', progress: { current: 5, total: 9 } }))
+      expect(ctx.refreshCases).not.toHaveBeenCalled()
+      expect(ctx.softRefreshCases).not.toHaveBeenCalled()
+    })
+  })
 })

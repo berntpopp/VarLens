@@ -33,7 +33,7 @@ import type { Pool, PoolClient } from 'pg'
 import { mainLogger } from '../../services/MainLogger'
 import { PostgresCohortSummaryRepository } from './PostgresCohortSummaryRepository'
 import { lockSummaryForWrite, tryLockSummaryForWrite } from './cohort-summary-lock'
-import { getCohortSummaryState } from './cohort-summary-state-sql'
+import { getCohortSummaryState, summaryIsStaleSql } from './cohort-summary-state-sql'
 
 const DEFAULT_SYNC_REBUILD_MAX_CASES = 50
 /** A background rebuild of a large cohort may legitimately run this long. */
@@ -87,7 +87,17 @@ interface FreshnessProbe {
   total_cases: number
 }
 
-async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessProbe> {
+/** The summary must be rebuilt before it can be trusted (see prepareCohortRead). */
+function needsBootstrap(probe: FreshnessProbe): boolean {
+  return (
+    (probe.variants_present && !probe.summary_present) ||
+    (probe.never_rebuilt && probe.is_stale) ||
+    probe.gene_summary_missing
+  )
+}
+
+/** Null when the schema has no summary state row (nothing to reconcile against). */
+async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessProbe | null> {
   const tbl = (t: string): string => `"${schema}"."${t}"`
   const result = await pool.query<{
     never_rebuilt: boolean
@@ -104,12 +114,13 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
        (NOT EXISTS (SELECT 1 FROM ${tbl('cohort_gene_summary')} LIMIT 1)
         AND EXISTS (SELECT 1 FROM ${tbl('cohort_variant_summary')}
                      WHERE gene_symbol IS NOT NULL LIMIT 1)) AS gene_summary_missing,
-       s.is_stale,
+       ${summaryIsStaleSql(tbl, 's')} AS is_stale,
        (SELECT COUNT(*)::bigint FROM ${tbl('cases')}) AS total_cases
      FROM ${tbl('cohort_summary_state')} s
      WHERE s.id = 1`
   )
   const row = result.rows[0]
+  if (row === undefined) return null
   return {
     never_rebuilt: row.never_rebuilt,
     variants_present: row.variants_present,
@@ -162,14 +173,38 @@ async function runRebuild({ pool, schema }: ScopedPool, wait: boolean): Promise<
  */
 const backgroundRebuilds = new Map<string, Promise<void>>()
 
+/** Wait after a failed background rebuild; doubles per consecutive failure. */
+export const REBUILD_RETRY_BASE_MS = 5 * 60 * 1000
+const REBUILD_RETRY_MAX_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Failed background rebuilds per schema. A rebuild that cannot finish (a
+ * cohort too large for its statement timeout, a broken table) fails the same
+ * way every time, and each attempt holds the summary write lock for its
+ * whole duration. Without a pause every stale read would start the next one
+ * as soon as the previous failed.
+ */
+const rebuildFailures = new Map<string, { count: number; retryAt: number }>()
+
 function scheduleBackgroundRebuild(scope: ScopedPool): void {
   if (backgroundRebuilds.has(scope.schema)) return
+  const failed = rebuildFailures.get(scope.schema)
+  if (failed !== undefined && Date.now() < failed.retryAt) return
 
   const task = runRebuild(scope, true)
-    .then(() => undefined)
+    .then(() => {
+      rebuildFailures.delete(scope.schema)
+    })
     .catch((error: unknown) => {
+      const count = (rebuildFailures.get(scope.schema)?.count ?? 0) + 1
+      const wait = Math.min(REBUILD_RETRY_MAX_MS, REBUILD_RETRY_BASE_MS * 2 ** (count - 1))
+      rebuildFailures.set(scope.schema, { count, retryAt: Date.now() + wait })
       const message = error instanceof Error ? error.message : String(error)
-      mainLogger.warn(`Background cohort summary rebuild failed: ${message}`, 'cohort')
+      mainLogger.error(
+        `Background cohort summary rebuild of ${scope.schema} failed (attempt ${count}): ` +
+          `${message}. The summary stays stale; next attempt in ${Math.round(wait / 60000)} min.`,
+        'cohort'
+      )
     })
     .finally(() => {
       backgroundRebuilds.delete(scope.schema)
@@ -186,6 +221,9 @@ export async function prepareCohortRead(
   scope: ScopedPool
 ): Promise<{ warnings?: CohortReadWarnings }> {
   const probe = await probeFreshness(scope)
+  if (probe === null) {
+    throw new Error(`Cohort summary state of ${scope.schema} is missing; re-run the migrations`)
+  }
 
   // Pass-9 #5: bootstrap-on-existing-data — rebuild irrespective of the
   // case-count threshold so the first read never serves an empty/missing
@@ -194,18 +232,43 @@ export async function prepareCohortRead(
   // The per-gene aggregates (cohort-gene-summary-sql.ts) are part of the same
   // summary: variants with a gene but no gene rows means they were never
   // filled (migration 0023 fills them; this covers a partial restore).
-  const needsBootstrap =
-    (probe.variants_present && !probe.summary_present) ||
-    (probe.never_rebuilt && probe.is_stale) ||
-    probe.gene_summary_missing
-  const needsRebuild = needsBootstrap || probe.is_stale
+  const bootstrap = needsBootstrap(probe)
+  const needsRebuild = bootstrap || probe.is_stale
   if (!needsRebuild) return {}
 
-  const rebuildNow = needsBootstrap || probe.total_cases < syncRebuildMaxCases()
+  const rebuildNow = bootstrap || probe.total_cases < syncRebuildMaxCases()
   if (rebuildNow && (await runRebuild(scope, false))) return {}
 
   // Large cohort, or an import is publishing right now: serve what is there
   // and refresh in the background.
+  scheduleBackgroundRebuild(scope)
+  return { warnings: { staleSummary: true } }
+}
+
+/**
+ * Freshness check for reads that must never wait or fail because of the
+ * summary: the database overview (the landing page) shows a few figures from
+ * the maintained aggregates next to data that has nothing to do with them.
+ *
+ * Unlike {@link prepareCohortRead} it never rebuilds on the calling request,
+ * however small the cohort, and never throws: a summary that needs a rebuild
+ * is served as it is with `staleSummary`, and one single-flight background
+ * rebuild is scheduled. A schema whose summary state cannot be read at all
+ * gets no warning; there is nothing this read could do about it.
+ */
+export async function checkCohortReadFreshness(
+  scope: ScopedPool
+): Promise<{ warnings?: CohortReadWarnings }> {
+  let probe: FreshnessProbe | null
+  try {
+    probe = await probeFreshness(scope)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`Cohort summary freshness check failed: ${message}`, 'cohort')
+    return {}
+  }
+  if (probe === null) return {}
+  if (!needsBootstrap(probe) && !probe.is_stale) return {}
   scheduleBackgroundRebuild(scope)
   return { warnings: { staleSummary: true } }
 }

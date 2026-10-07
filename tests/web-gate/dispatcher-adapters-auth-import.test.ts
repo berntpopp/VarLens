@@ -10,7 +10,7 @@ import { PasswordPolicyError } from '../../src/web/auth/PostgresWebAuthService'
 import { buildDispatcher } from '../../src/web/server/dispatcher'
 import { AppMetrics } from '../../src/web/server/metrics'
 import { stageExistingFileUpload } from '../../src/web/server/routes/upload-staging'
-import { makeDeps } from './helpers/dispatcher-adapters'
+import { makeDeps, startBatchAndAwaitResult } from './helpers/dispatcher-adapters'
 
 const ZIP_WITH_ONE_JSON_BASE64 =
   'UEsDBBQAAAgIAJRRwVwz5c4EEQAAAA8AAAARAAAAd2ViLXppcC1jYXNlLmpzb26rVkpOLE5Vsl' +
@@ -541,12 +541,15 @@ describe('web dispatcher adapters: auth and import', () => {
       const { overrides } = buildDispatcher(deps)
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
-      const result = (await overrides['batch-import:start'].handle(
+      const { accepted, result: batchResult } = await startBatchAndAwaitResult(
+        overrides,
         [[upload.ref], 'skip', undefined, 'web-run-1'],
-        request as never,
-        reply as never,
+        request,
+        reply,
         deps
-      )) as {
+      )
+      expect(accepted).toMatchObject({ accepted: true, runId: 'web-run-1' })
+      const result = batchResult as {
         succeeded: number
         failed: number
         skipped: number
@@ -655,12 +658,15 @@ describe('web dispatcher adapters: auth and import', () => {
       const { overrides } = buildDispatcher(deps)
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
-      const result = (await overrides['batch-import:start'].handle(
+      const { accepted, result: batchResult } = await startBatchAndAwaitResult(
+        overrides,
         [[upload.ref], 'overwrite', undefined, 'web-error-run'],
-        request as never,
-        reply as never,
+        request,
+        reply,
         deps
-      )) as {
+      )
+      expect(accepted).toMatchObject({ accepted: true, runId: 'web-error-run' })
+      const result = batchResult as {
         succeeded: number
         failed: number
         details: Array<{ status: string; error?: string }>
@@ -721,12 +727,14 @@ describe('web dispatcher adapters: auth and import', () => {
       const { overrides } = buildDispatcher(deps)
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
-      const result = (await overrides['batch-import:start'].handle(
+      const { result: batchResult } = await startBatchAndAwaitResult(
+        overrides,
         [[firstUpload.ref, secondUpload.ref], 'skip', undefined, 'web-dupe-run'],
-        request as never,
-        reply as never,
+        request,
+        reply,
         deps
-      )) as {
+      )
+      const result = batchResult as {
         succeeded: number
         failed: number
         skipped: number

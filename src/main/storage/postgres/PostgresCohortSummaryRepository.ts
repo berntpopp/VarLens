@@ -29,12 +29,27 @@ import {
   annotationFlagJoins
 } from './cohort-summary-flags-sql'
 import {
-  addCaseToGeneSummary,
+  addPreparedCaseToGeneSummary,
+  prepareCaseGenePairs,
   rebuildGeneSummary,
   removeCaseFromGeneSummary
 } from './cohort-gene-summary-sql'
-import { getCohortSummaryState, markCohortSummaryStale } from './cohort-summary-state-sql'
+import {
+  consumeSummaryRebuildRequests,
+  getCohortSummaryState,
+  markCohortSummaryStale
+} from './cohort-summary-state-sql'
+import {
+  countAddedCoordinatesSql,
+  recountUniqueVariants,
+  UPSERT_RETURNING_SQL
+} from './cohort-unique-variants-sql'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
+import {
+  maxSelectList,
+  mergeMaxAssignments,
+  removeCaseFromSummary
+} from './cohort-summary-representative-sql'
 
 interface ScopedClient {
   schema: string
@@ -89,17 +104,7 @@ const META_DISTINCT_THRESHOLD = 50
 export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvisional = false) => `
   WITH deduped AS (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
-           MAX(v.end_pos) AS end_pos,
-           MAX(v.gene_symbol) AS gene_symbol,
-           MAX(v.cdna) AS cdna,
-           MAX(v.aa_change) AS aa_change,
-           MAX(v.consequence) AS consequence,
-           MAX(v.func) AS func,
-           MAX(v.clinvar) AS clinvar,
-           MAX(v.gnomad_af) AS gnomad_af,
-           MAX(v.cadd) AS cadd,
-           MAX(v.transcript) AS transcript,
-           MAX(v.omim_mim_number) AS omim_mim_number,
+           ${maxSelectList('v')},
            MAX(v.gt_num) AS gt_num
     FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
     JOIN ${tbl(includeProvisional ? 'cases_all' : 'cases')} c ON c.id = v.case_id
@@ -108,17 +113,7 @@ export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvis
   ),
   per_case AS (
     SELECT chr, pos, ref, alt, variant_type, genome_build,
-           MAX(end_pos) AS end_pos,
-           MAX(gene_symbol) AS gene_symbol,
-           MAX(cdna) AS cdna,
-           MAX(aa_change) AS aa_change,
-           MAX(consequence) AS consequence,
-           MAX(func) AS func,
-           MAX(clinvar) AS clinvar,
-           MAX(gnomad_af) AS gnomad_af,
-           MAX(cadd) AS cadd,
-           MAX(transcript) AS transcript,
-           MAX(omim_mim_number) AS omim_mim_number,
+           ${maxSelectList('deduped')},
            COUNT(*) AS carrier_delta,
            SUM(CASE WHEN gt_num IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END) AS het_delta,
            SUM(CASE WHEN gt_num IN ('1/1','1|1') THEN 1 ELSE 0 END) AS hom_delta
@@ -129,6 +124,10 @@ export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvis
 export class PostgresCohortSummaryRepository {
   async rebuild({ schema, client }: ScopedClient): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
+
+    // Requests left by writers that could not get the lock: this rebuild
+    // serves the ones it can see (before it reads the variants).
+    await consumeSummaryRebuildRequests({ schema, client })
 
     // DELETE, not TRUNCATE: TRUNCATE takes ACCESS EXCLUSIVE and blocks every
     // cohort reader until the rebuild commits. With DELETE, readers keep the
@@ -147,35 +146,15 @@ export class PostgresCohortSummaryRepository {
          has_star, has_comment, acmg_best, cohort_frequency)
       WITH deduped AS (
         SELECT v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build,
-               MAX(v.end_pos) AS end_pos,
-               MAX(v.gene_symbol) AS gene_symbol,
-               MAX(v.cdna) AS cdna,
-               MAX(v.aa_change) AS aa_change,
-               MAX(v.consequence) AS consequence,
-               MAX(v.func) AS func,
-               MAX(v.clinvar) AS clinvar,
-               MAX(v.gnomad_af) AS gnomad_af,
-               MAX(v.cadd) AS cadd,
-               MAX(v.transcript) AS transcript,
-               MAX(v.omim_mim_number) AS omim_mim_number,
+               ${maxSelectList('v')},
                MAX(v.gt_num) AS gt_num
         FROM ${tbl('variants')} v
         JOIN ${tbl('cases')} c ON c.id = v.case_id
         GROUP BY v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build
       ),
       agg AS (
-        SELECT d.chr, d.pos, MAX(d.end_pos) AS end_pos, d.ref, d.alt,
-               d.variant_type, d.genome_build,
-               MAX(d.gene_symbol) AS gene_symbol,
-               MAX(d.cdna) AS cdna,
-               MAX(d.aa_change) AS aa_change,
-               MAX(d.consequence) AS consequence,
-               MAX(d.func) AS func,
-               MAX(d.clinvar) AS clinvar,
-               MAX(d.gnomad_af) AS gnomad_af,
-               MAX(d.cadd) AS cadd,
-               MAX(d.transcript) AS transcript,
-               MAX(d.omim_mim_number) AS omim_mim_number,
+        SELECT d.chr, d.pos, d.ref, d.alt, d.variant_type, d.genome_build,
+               ${maxSelectList('d')},
                COUNT(*) AS carrier_count,
                SUM(CASE WHEN d.gt_num IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END) AS het_count,
                SUM(CASE WHEN d.gt_num IN ('1/1','1|1') THEN 1 ELSE 0 END) AS hom_count
@@ -198,6 +177,7 @@ export class PostgresCohortSummaryRepository {
 
     // The per-gene aggregates share this table's lifecycle: same rebuild.
     await rebuildGeneSummary({ schema, client })
+    await recountUniqueVariants({ schema, client })
 
     // C1 lifecycle (Pass-7 MED #4): a completed rebuild clears the staleness
     // flags and records the rebuild time. last_rebuilt_at maps back to epoch ms
@@ -210,23 +190,24 @@ export class PostgresCohortSummaryRepository {
   }
 
   /**
-   * Add one case's variants to the summary. INSERT … SELECT from the deduped
-   * per-case CTE, ON CONFLICT bumping all three counters simultaneously
-   * (Pass-6 MED #3). Flags use OR semantics so an add never clears an existing
-   * annotation flag; on the INSERT (brand-new row) path the flags come from the
-   * same EXISTS expressions as rebuild().
+   * Compute one case's contribution to the summary and the gene aggregates
+   * into session-local temporary tables. Reads only the case's own rows and
+   * writes no shared table, so it needs no summary write lock: an import runs
+   * it before queueing for the lock and serialises only the upserts
+   * (`incrementalAdd` with `prepared: true`).
+   *
+   * The tables are ANALYZEd before use. A case that was just imported has no
+   * planner statistics: PostgreSQL would estimate one row for it and join the
+   * annotation flags with a nested loop that rescans them per variant. With
+   * real statistics the upserts are planned for what they are.
    */
-  async incrementalAdd({
+  async prepareAdd({
     schema,
     client,
     caseId,
     includeProvisional = false
-  }: ScopedClient & {
-    caseId: number
-    includeProvisional?: boolean
-  }): Promise<void> {
+  }: ScopedClient & { caseId: number; includeProvisional?: boolean }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
-
     // Staged and ANALYZEd first so the upsert is planned with real row counts
     // (cohort-case-aggregate-sql.ts).
     await stageCaseAggregate({
@@ -234,9 +215,39 @@ export class PostgresCohortSummaryRepository {
       aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl, includeProvisional),
       caseId
     })
+    await prepareCaseGenePairs({ schema, client, caseId, includeProvisional })
+  }
 
+  /**
+   * Add one case's variants to the summary. INSERT … SELECT from the prepared
+   * per-case aggregate, ON CONFLICT bumping all three counters simultaneously
+   * (Pass-6 MED #3). Flags use OR semantics so an add never clears an existing
+   * annotation flag; on the INSERT (brand-new row) path the flags come from the
+   * same EXISTS expressions as rebuild().
+   *
+   * Call inside a transaction that holds the summary write lock. With
+   * `prepared: true` the caller already ran `prepareAdd` on this connection
+   * (outside the lock); otherwise it runs here.
+   */
+  async incrementalAdd({
+    schema,
+    client,
+    caseId,
+    includeProvisional = false,
+    prepared = false
+  }: ScopedClient & {
+    caseId: number
+    includeProvisional?: boolean
+    prepared?: boolean
+  }): Promise<void> {
+    const tbl = (t: string): string => `"${schema}"."${t}"`
+    if (!prepared) await this.prepareAdd({ schema, client, caseId, includeProvisional })
+
+    // One statement: the upsert, and from what it inserted the unique-variant
+    // counter (#460) plus the maintenance timestamp.
     await client.query(
       `
+      WITH upserted AS (
       INSERT INTO ${tbl('cohort_variant_summary')}
         (chr, pos, end_pos, ref, alt, variant_type, genome_build,
          gene_symbol, cdna, aa_change, consequence, func, clinvar,
@@ -259,27 +270,25 @@ export class PostgresCohortSummaryRepository {
         carrier_count = cohort_variant_summary.carrier_count + EXCLUDED.carrier_count,
         het_count = cohort_variant_summary.het_count + EXCLUDED.het_count,
         hom_count = cohort_variant_summary.hom_count + EXCLUDED.hom_count,
+        -- Representative annotation: MAX per column, as rebuild() computes it.
+        ${mergeMaxAssignments('cohort_variant_summary')},
         -- Adds never clear annotation flags (OR semantics).
         has_star = cohort_variant_summary.has_star OR EXCLUDED.has_star,
-        has_comment = cohort_variant_summary.has_comment OR EXCLUDED.has_comment;
+        has_comment = cohort_variant_summary.has_comment OR EXCLUDED.has_comment
+      ${UPSERT_RETURNING_SQL}
+      )
+      ${countAddedCoordinatesSql(tbl)}
     `
     )
     await dropCaseAggregate(client)
-    await addCaseToGeneSummary({ schema, client, caseId, includeProvisional })
-
-    // C1 lifecycle: incremental maintenance records its time but never touches
-    // is_stale — the summary stays valid (Pass-7 MED #4).
-    await client.query(
-      `UPDATE ${tbl('cohort_summary_state')} SET last_incremental_at = now() WHERE id = 1`
-    )
+    await addPreparedCaseToGeneSummary({ schema, client })
   }
 
   /**
-   * Remove one case's variants from the summary. UPDATE-from-CTE subtracting all
-   * three counters simultaneously (Pass-6 MED #3), then a sibling DELETE of any
-   * row that dropped to zero carriers (Pass-2 verdict #1 — separate statement,
-   * not a sibling CTE). Mirrors SQLite INCREMENTAL_REMOVE_SQL +
-   * CLEANUP_ZERO_CARRIERS_SQL.
+   * Remove one case's variants from the summary: recompute the representative
+   * annotation it held, subtract all three counters simultaneously (Pass-6
+   * MED #3), then DELETE any row that dropped to zero carriers (Pass-2 verdict
+   * #1 — separate statement). See cohort-summary-representative-sql.ts.
    */
   async incrementalRemove({
     schema,
@@ -288,23 +297,12 @@ export class PostgresCohortSummaryRepository {
   }: ScopedClient & { caseId: number }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
-    await client.query(
-      `
-      ${SCOPED_DEDUPED_AGG_SQL(tbl)}
-      UPDATE ${tbl('cohort_variant_summary')} cvs
-      SET carrier_count = cvs.carrier_count - per_case.carrier_delta,
-          het_count = cvs.het_count - per_case.het_delta,
-          hom_count = cvs.hom_count - per_case.hom_delta
-      FROM per_case
-      WHERE cvs.chr = per_case.chr AND cvs.pos = per_case.pos
-        AND cvs.ref = per_case.ref AND cvs.alt = per_case.alt
-        AND cvs.variant_type = per_case.variant_type
-        AND cvs.genome_build = per_case.genome_build;
-    `,
-      [caseId]
-    )
-
-    await client.query(`DELETE FROM ${tbl('cohort_variant_summary')} WHERE carrier_count <= 0`)
+    await removeCaseFromSummary({
+      schema,
+      client,
+      caseId,
+      aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl)
+    })
     await removeCaseFromGeneSummary({ schema, client, caseId })
 
     // C1 lifecycle: incremental maintenance records its time but never touches

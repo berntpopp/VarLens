@@ -13,7 +13,6 @@ import {
 } from '../../shared/types/postgres-import-worker'
 import {
   PostgresJsonImportRepository,
-  rebuildVariantFrequencyForCase,
   type PostgresJsonImportSession
 } from '../storage/postgres/PostgresJsonImportRepository'
 import {
@@ -29,8 +28,8 @@ import {
 } from '../storage/postgres/postgres-import-profile'
 import { quoteIdentifier } from '../storage/postgres/identifiers'
 import { classifyWorkerError } from '../storage/import-worker-errors'
-import { PostgresCohortSummaryRepository } from '../storage/postgres/PostgresCohortSummaryRepository'
 import { lockSummaryForWrite } from '../storage/postgres/cohort-summary-lock'
+import { publishDerivedDataForImport } from './postgres-import-publication'
 import {
   acquireWorkspaceImportLock,
   assertImportLeaseHeld
@@ -131,70 +130,6 @@ export async function relaxImportSessionLimits(client: Pick<Client, 'query'>): P
   await client.query('SET statement_timeout = 0')
   await client.query('SET idle_in_transaction_session_timeout = 0')
   await client.query('SET lock_timeout = 0')
-}
-
-/**
- * C3 (Pass-2 #5 + Pass-3 HIGH #1 + Pass-4 HIGH #2 + Pass-5 HIGH #2): incremental
- * cohort-summary update for ONE imported case, run ONCE after the batch loop and
- * the bookkeeping rows (variant_count UPDATE + rebuildVariantFrequencyForCase),
- * still INSIDE the post-loop transaction the caller owns.
- *
- * The summary update is wrapped in a SAVEPOINT so a failure here cannot lose the
- * bookkeeping. On failure it rolls back to the savepoint (keeping count and
- * frequency work) and marks the summary stale inside the same publication
- * transaction. Staleness is not surfaced on ImportResult; the next cohort read
- * detects it and rebuilds.
- *
- * Returns `true` while preserving the historical caller contract. The caller
- * always retains the final publication transaction, including on stale-marking
- * fallback, so visibility cannot split across commits.
- */
-async function updateCohortSummaryAfterImport(args: {
-  client: Pick<Client, 'query'>
-  schema: string
-  caseId: number
-}): Promise<boolean> {
-  const { client, schema, caseId } = args
-  const summary = new PostgresCohortSummaryRepository()
-  const scoped = client as unknown as Parameters<
-    PostgresCohortSummaryRepository['incrementalAdd']
-  >[0]['client']
-  try {
-    await client.query('SAVEPOINT cohort_summary')
-    const scope = { schema, client: scoped, includeProvisional: true }
-    await profilePhase('pub-summary-add', () => summary.incrementalAdd({ ...scope, caseId }))
-    await profilePhase('pub-column-meta', () => summary.refreshColumnMetas({ ...scope, caseId }))
-    await client.query('RELEASE SAVEPOINT cohort_summary')
-    return true
-  } catch (savepointErr) {
-    await client.query('ROLLBACK TO SAVEPOINT cohort_summary')
-    // Keep stale marking in the caller's final bookkeeping transaction.  The
-    // case is still hidden at this point, so committing here would create a
-    // crash window in which derived rows exist without a recoverable
-    // publication marker.
-    try {
-      await summary.markStale({
-        schema,
-        client: scoped,
-        reason: `post_import_summary_failed_case_${caseId}`
-      })
-    } catch (markErr) {
-      const summaryMessage =
-        savepointErr instanceof Error ? savepointErr.message : String(savepointErr)
-      const staleMessage = markErr instanceof Error ? markErr.message : String(markErr)
-      throw Object.assign(
-        new Error(
-          `Cohort summary update failed (${summaryMessage}) and stale marking failed (${staleMessage})`
-        ),
-        { cause: markErr }
-      )
-    }
-    console.warn(
-      `[postgres-import-worker] Cohort summary update failed for case ${caseId}; marked stale:`,
-      savepointErr instanceof Error ? savepointErr.message : String(savepointErr)
-    )
-    return true
-  }
 }
 
 function clientConfigFromMessage(message: PostgresClientConfig): ClientConfig {
@@ -387,26 +322,15 @@ export async function runImport(
             [totalInserted, caseId]
           )
           if (totalInserted > 0) {
-            await profilePhase('pub-lock-wait', () =>
-              lockSummary(client as unknown as Pick<PoolClient, 'query'>)
-            )
-            await profilePhase('pub-variant-frequency', () =>
-              rebuildVariantFrequencyForCase(
-                client as unknown as Pick<PoolClient, 'query'>,
-                start.schema,
-                caseId,
-                true
-              )
-            )
-            // C3: incremental cohort-summary update inside this txn (SAVEPOINT-
-            // wrapped). On failure it rolls back only the summary savepoint
-            // and records staleness in this same publication transaction.
-            const stillOwnsTxn = await updateCohortSummaryAfterImport({
+            // Derived data: prepared without the summary write lock, upserted
+            // under it, all inside this publication transaction.
+            await publishDerivedDataForImport({
               client,
               schema: start.schema,
-              caseId
+              caseId,
+              frequencyIncludesProvisional: true,
+              lockSummary
             })
-            void stillOwnsTxn
           }
           throwIfCancelled()
           await repo.finishProvisionalImport(
@@ -525,23 +449,14 @@ export async function runImport(
         writeVariants
       )
 
-      await profilePhase('pub-lock-wait', () =>
-        lockSummary(client as unknown as Pick<PoolClient, 'query'>)
-      )
-      await rebuildVariantFrequencyForCase(
-        client as unknown as Pick<PoolClient, 'query'>,
-        start.schema,
-        caseId
-      )
-      // C3: incremental cohort-summary update inside this txn (SAVEPOINT-wrapped).
-      {
-        const stillOwnsTxn = await updateCohortSummaryAfterImport({
-          client,
-          schema: start.schema,
-          caseId
-        })
-        if (stillOwnsTxn) await client.query('COMMIT')
-      }
+      await publishDerivedDataForImport({
+        client,
+        schema: start.schema,
+        caseId,
+        frequencyIncludesProvisional: false,
+        lockSummary
+      })
+      await client.query('COMMIT')
       post({
         type: 'complete',
         mode: 'single-file',
@@ -784,26 +699,13 @@ export async function runImport(
               `UPDATE ${quoteIdentifier(start.schema)}."cases_all" SET variant_count = $1 WHERE id = $2`,
               [totalVariantCount, caseId]
             )
-            await profilePhase('pub-lock-wait', () =>
-              lockSummary(client as unknown as Pick<PoolClient, 'query'>)
-            )
-            await profilePhase('pub-variant-frequency', () =>
-              rebuildVariantFrequencyForCase(
-                client as unknown as Pick<PoolClient, 'query'>,
-                start.schema,
-                caseId,
-                true
-              )
-            )
-            // C3: incremental cohort-summary update inside this txn (SAVEPOINT-
-            // wrapped). On failure it records staleness without publishing a
-            // partially updated derived snapshot.
-            const stillOwnsTxn = await updateCohortSummaryAfterImport({
+            await publishDerivedDataForImport({
               client,
               schema: start.schema,
-              caseId
+              caseId,
+              frequencyIncludesProvisional: true,
+              lockSummary
             })
-            void stillOwnsTxn
             throwIfCancelled()
             await repo.finishProvisionalImport(
               client as unknown as Pick<PoolClient, 'query'>,

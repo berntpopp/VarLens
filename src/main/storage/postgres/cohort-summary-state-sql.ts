@@ -26,7 +26,7 @@ export async function getCohortSummaryState({
 }: ScopedClient): Promise<{ is_stale: boolean; last_rebuilt_at: number }> {
   const tbl = (t: string): string => `"${schema}"."${t}"`
   const r = await client.query<{ is_stale: boolean; last_rebuilt_at: string }>(
-    `SELECT is_stale,
+    `SELECT ${summaryIsStaleSql(tbl, 'cohort_summary_state')} AS is_stale,
             COALESCE(EXTRACT(EPOCH FROM last_rebuilt_at) * 1000, 0)::bigint AS last_rebuilt_at
      FROM ${tbl('cohort_summary_state')}
      WHERE id = 1`
@@ -52,4 +52,44 @@ export async function markCohortSummaryStale({
      WHERE id = 1`,
     [reason]
   )
+}
+
+/**
+ * Whether the summary needs a rebuild: flagged stale on its state row, or a
+ * writer that could not get the summary write lock left a rebuild request
+ * (see {@link requestSummaryRebuild}). `stateAlias` names the state row.
+ */
+export function summaryIsStaleSql(tbl: (t: string) => string, stateAlias: string): string {
+  return `(${stateAlias}.is_stale OR EXISTS (SELECT 1 FROM ${tbl('cohort_summary_rebuild_requests')}))`
+}
+
+/**
+ * Ask for a rebuild without the summary write lock. The state row cannot be
+ * used for this: the lock holder updates it, so marking it stale would wait
+ * for that holder to commit. An inserted request row waits for nobody.
+ * `rebuild()` consumes the requests it can see; one that commits later
+ * survives and triggers another rebuild, so no change is ever missed.
+ *
+ * Only a visible variant has summary rows: for any other this is a no-op.
+ */
+export async function requestSummaryRebuildForVariant(args: {
+  schema: string
+  client: Pick<PoolClient, 'query'>
+  variantId: number
+  reason: string
+}): Promise<void> {
+  const tbl = (t: string): string => `"${args.schema}"."${t}"`
+  await args.client.query(
+    `INSERT INTO ${tbl('cohort_summary_rebuild_requests')} (reason)
+     SELECT $2 WHERE EXISTS (SELECT 1 FROM ${tbl('variants')} WHERE id = $1)`,
+    [args.variantId, args.reason]
+  )
+}
+
+/** Called by rebuild() before it reads the variants. */
+export async function consumeSummaryRebuildRequests(args: {
+  schema: string
+  client: Pick<PoolClient, 'query'>
+}): Promise<void> {
+  await args.client.query(`DELETE FROM "${args.schema}"."cohort_summary_rebuild_requests"`)
 }

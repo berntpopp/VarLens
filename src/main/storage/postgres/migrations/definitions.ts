@@ -118,6 +118,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0023',
     name: 'cohort_gene_summary',
     fileName: '0023_cohort_gene_summary.sql'
+  },
+  {
+    version: '0024',
+    name: 'cohort_summary_maintenance',
+    fileName: '0024_cohort_summary_maintenance.sql'
   }
 ]
 

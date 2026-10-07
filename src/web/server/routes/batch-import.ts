@@ -9,13 +9,16 @@ import {
 } from '../../../main/ipc/handlers/batch-import-logic'
 import {
   checkSessionDuplicates,
-  startSessionBatchImport,
+  enqueueSessionBatchImport,
   type SessionBatchCallbacks
 } from '../../../main/ipc/handlers/batch-import-session'
 import { ImportServerPathArgSchema } from '../../../shared/api/schemas/import'
 import { BatchImportRunIdSchema } from '../../../shared/ipc/domains/batch-import-schemas'
+import { batchImportRuns, type BatchImportAccepted } from '../batch-import-runs'
+import { toSerializableWebError } from '../dispatcher-errors'
 import {
   WEB_EVENT_BATCH_IMPORT_COMPLETE,
+  WEB_EVENT_BATCH_IMPORT_FAILED,
   WEB_EVENT_BATCH_IMPORT_FILE_COMPLETE,
   WEB_EVENT_BATCH_IMPORT_PROGRESS,
   WEB_EVENT_COHORT_SUMMARY_REBUILT
@@ -88,13 +91,58 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
 
         const userId = request.session.user?.id
         const validRunId = parsedRunId.data
-        return await startSessionBatchImport({
+        // Only the caller's own runs count: a refusal never reveals that
+        // somebody else uses the id.
+        if (userId === undefined || batchImportRuns.has(validRunId, userId)) {
+          reply.code(400)
+          return { error: 'invalid-run-id', message: 'runId is invalid' }
+        }
+        // Not awaited: the request ends here, the job runs on. A refusal to
+        // enqueue (an import is already running) still throws synchronously
+        // and is answered as an error.
+        const job = enqueueSessionBatchImport({
           files: resolution.files,
           duplicateStrategy,
           stripText: typeof stripText === 'string' ? stripText : undefined,
           runId: validRunId,
           session,
           callbacks: webBatchCallbacks(events, userId, validRunId)
+        })
+        batchImportRuns.start(validRunId, userId, job.jobId)
+        void job.result.then(
+          (result) => batchImportRuns.complete(validRunId, userId, result),
+          (error: unknown) => {
+            const serialized = toSerializableWebError(error)
+            batchImportRuns.fail(validRunId, userId, serialized)
+            events.publish(userId, WEB_EVENT_BATCH_IMPORT_FAILED, {
+              runId: validRunId,
+              jobId: job.jobId,
+              error: serialized
+            })
+          }
+        )
+        const accepted: BatchImportAccepted = {
+          accepted: true,
+          jobId: job.jobId,
+          runId: validRunId
+        }
+        return accepted
+      }
+    },
+
+    // Web only: where a run stands, for a client that reconnected, reloaded
+    // or missed the completion event. Owner-checked inside the registry.
+    'batch-import:status': {
+      handle(args, request, reply) {
+        const parsedRunId = BatchImportRunIdSchema.safeParse(args[0])
+        const user = request.session.user
+        if (!parsedRunId.success || user === undefined) {
+          reply.code(400)
+          return { error: 'invalid-run-id', message: 'runId is invalid' }
+        }
+        return batchImportRuns.status(parsedRunId.data, {
+          userId: user.id,
+          isAdmin: user.role === 'admin'
         })
       }
     },

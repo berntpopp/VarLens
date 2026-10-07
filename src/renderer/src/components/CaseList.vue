@@ -153,7 +153,7 @@ import type { CaseWithCohorts, CaseSex, AffectedStatus } from '../../../shared/t
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
-import { mergeFirstPage } from '../utils/mergeFirstPage'
+import { refreshNewestRows } from '../utils/refreshNewestRows'
 
 const VALID_AFFECTED: Set<string> = new Set(['affected', 'unaffected', 'unknown'])
 const VALID_SEX: Set<string> = new Set(['unknown', 'male', 'female', 'other'])
@@ -581,18 +581,24 @@ const refreshCases = async (): Promise<void> => {
 }
 
 // Cases were added while the list is on screen (a batch import is running):
-// merge the newest page in place, keeping the scroll position and loaded rows.
+// merge every newly visible case in place (however many finished since the
+// last refresh), keeping the scroll position and loaded rows.
 const softRefreshCases = async (): Promise<void> => {
   // A page load or a reset in progress already brings current rows.
   if (!api || loading.value) return
   const generation = scrollKey.value
   try {
-    const result = await fetchCasePage(0)
+    const result = await refreshNewestRows({
+      existing: cases.value,
+      previousTotal: totalCaseCount.value,
+      pageSize: PAGE_SIZE,
+      fetchPage: fetchCasePage
+    })
     if (generation !== scrollKey.value || loading.value) return
-    cases.value = markRaw(mergeFirstPage(cases.value, result.data))
+    cases.value = markRaw(result.rows)
     currentOffset.value = cases.value.length
-    totalCaseCount.value = result.total_count
-    emit('cases-loaded', result.total_count)
+    totalCaseCount.value = result.total
+    emit('cases-loaded', result.total)
   } catch (e) {
     logService.warn(
       'Failed to refresh cases: ' + formatErrorMessage(e, 'Unknown error'),

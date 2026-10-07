@@ -162,7 +162,8 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
       '0020',
       '0021',
       '0022',
-      '0023'
+      '0023',
+      '0024'
     ])
 
     const migratedTranscript = await probeClient.query<{ consequence: string; func: string }>(
