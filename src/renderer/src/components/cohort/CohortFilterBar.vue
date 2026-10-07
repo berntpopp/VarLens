@@ -130,6 +130,8 @@ import { ref, computed, watch, provide, onMounted, nextTick } from 'vue'
 import { useFilters } from '../../composables/useFilters'
 import { useFilterEmitScheduler } from '../../composables/useFilterEmitScheduler'
 import { useFilterPresetStore } from '../../composables/useFilterPresetStore'
+import { useQuery } from '@pinia/colada'
+import { caseIdsQuery } from '../../queries/cases'
 import SlimFilterToolbar from '../SlimFilterToolbar.vue'
 import DslSearchBar from '../DslSearchBar.vue'
 import { useDslFilterIntegration } from '../../composables/useDslFilterIntegration'
@@ -152,7 +154,7 @@ import {
 import { stripVueProxies } from '../../utils/stripVueProxies'
 import { logService } from '../../services/LogService'
 import { formatError } from '../../utils/ipc-result'
-import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
+import { unwrapIpcResult } from '../../../../shared/types/errors'
 import { useApiService } from '../../composables/useApiService'
 import { getCurrentUnsupportedReason, type CapabilityPath } from '../../utils/backend-capabilities'
 import { isWebRuntime } from '../../utils/runtime-mode'
@@ -503,25 +505,11 @@ function handleClearTypeFilter(typeKey: string): void {
   filters.value.columnFilters = next
 }
 
-// Reactive list of all case IDs in the database — used as the scope for
-// extension column metadata and type-presence queries in the cohort drawer.
-// Loaded on mount via loadCohortCaseIds() in onMounted.
-const cohortCaseIds = ref<number[]>([])
-
-async function loadCohortCaseIds(): Promise<void> {
-  if (api == null) return
-  try {
-    const caseList = unwrapIpcResult(await api.cases.list())
-    cohortCaseIds.value = caseList.map((c) => c.id)
-  } catch (e) {
-    logService.warn(
-      'Failed to load cohort case IDs: ' +
-        (e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)),
-      'filters'
-    )
-    cohortCaseIds.value = []
-  }
-}
+// Every case id in the database: the scope of the extension column metadata
+// and type-presence queries in the cohort drawer. A query, so it is refetched
+// with them when cases are imported or deleted.
+const { data: caseIds } = useQuery(caseIdsQuery)
+const cohortCaseIds = computed(() => caseIds.value ?? [])
 
 // Provide shared filter state for CohortFilterDrawer (via provide/inject)
 provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
@@ -615,16 +603,15 @@ const handleExport = (format?: ExportFormat) => {
   emit('export', format)
 }
 
-// Load presets + cohort case IDs on mount
+// Load presets on mount
 onMounted(async () => {
   const presetReason = await getCurrentUnsupportedReason('workflow.filterPresets')
   if (presetReason !== null) {
     warnUnsupported(presetReason)
-    await loadCohortCaseIds()
     return
   }
 
-  await Promise.all([loadPresets(), loadCohortCaseIds()])
+  await loadPresets()
 })
 
 // Expose DSL column filters for CohortTable to merge into query

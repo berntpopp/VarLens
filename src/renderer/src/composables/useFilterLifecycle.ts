@@ -30,7 +30,7 @@ export interface UseFilterLifecycleOptions {
   /** Callback when case switches */
   onCaseSwitch?: () => void
   /** Load filter options for a case */
-  loadFilterOptions: (caseId: number) => Promise<void>
+  loadFilterOptions: () => Promise<void>
   /**
    * Optional visibility gate (Sprint A A3 / Pass-9 #3). When provided and
    * `false`, the case-switch watcher resets filter state but does NOT fire
@@ -99,7 +99,7 @@ export function useFilterLifecycle(options: UseFilterLifecycleOptions): UseFilte
       // Reload filter options for the new case — gated on visibility so a
       // hidden/deferred toolbar does not fire the IPC until it is shown.
       if (visibleRef === undefined || visibleRef.value) {
-        await loadFilterOptions(newCaseId)
+        await loadFilterOptions()
       }
     }
   })

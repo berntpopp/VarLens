@@ -10,7 +10,7 @@
  * 3. FilterTypeNarrowingChip is mounted unconditionally, and
  *    ExtensionColumnFilters is mounted only when either group has cases.
  *
- * `useVariantColumnMeta` is mocked because ExtensionColumnFilters calls
+ * `window.api.variants` is mocked because ExtensionColumnFilters calls
  * `ensureTypesPresent`/`getColumnMeta` at mount, which would otherwise hit
  * window.api IPC that isn't available in a Vitest unit test environment.
  */
@@ -20,30 +20,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
-import type { ColumnFilterMeta } from '../../../../src/shared/types/column-filters'
-
-vi.mock('../../../../src/renderer/src/composables/useVariantColumnMeta', () => ({
-  cacheKeyFor: (scope: { caseId?: number; caseIds?: number[] }): string => JSON.stringify(scope),
-  useVariantColumnMeta: (): {
-    getColumnMeta: (scope: unknown, key: string) => Promise<ColumnFilterMeta>
-    ensureTypesPresent: (scope: unknown) => Promise<Set<string>>
-    invalidate: () => void
-    invalidateAll: () => void
-    cacheEpoch: { value: number }
-  } => ({
-    cacheEpoch: { value: 0 },
-    getColumnMeta: vi.fn(async (_scope, key: string) => ({
-      key,
-      dataType: 'numeric',
-      distinctCount: 0,
-      min: 0,
-      max: 100
-    })),
-    ensureTypesPresent: vi.fn(async () => new Set<string>()),
-    invalidate: vi.fn(),
-    invalidateAll: vi.fn()
-  })
-}))
+import { createQueryPinia, queryPlugins } from '../../helpers/with-queries'
 
 import AssociationConfigPanel from '../../../../src/renderer/src/components/association/AssociationConfigPanel.vue'
 
@@ -83,7 +60,7 @@ function mountPanel(
   } = {}
 ): ReturnType<typeof mount> {
   return mount(AssociationConfigPanel, {
-    global: { plugins: [vuetify] },
+    global: { plugins: [vuetify, ...queryPlugins(createQueryPinia())] },
     props: {
       allCases: props.allCases ?? [],
       cohortGroups: props.cohortGroups ?? [],
@@ -96,6 +73,10 @@ function mountPanel(
 describe('AssociationConfigPanel (post-migration to shared FilterState)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // ExtensionColumnFilters asks which variant types the scope has.
+    Object.assign(window, {
+      api: { variants: { typesPresent: vi.fn().mockResolvedValue([]), columnMeta: vi.fn() } }
+    })
   })
 
   it('mounts without errors', () => {

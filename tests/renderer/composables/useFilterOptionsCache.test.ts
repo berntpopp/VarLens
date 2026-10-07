@@ -1,19 +1,21 @@
 /**
- * Unit tests for useFilterOptionsCache composable
- *
- * Tests LRU cache behavior, API loading, invalidation,
- * parallel loading, and undefined API handling.
+ * useFilterOptionsCache: the current case's filter options, read from the
+ * query cache.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { withSetup } from '../../utils/test-helpers'
+import { ref } from 'vue'
+import type { Pinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
 import { useFilterOptionsCache } from '@renderer/composables/useFilterOptionsCache'
-import type { WindowAPI, FilterOptions } from '../../../src/shared/types/api'
+import type { FilterOptions } from '../../../src/shared/types/api'
 import { ErrorCode } from '../../../src/shared/types/errors'
+import { invalidateServerData } from '../../../src/renderer/src/queries/invalidation'
+import { useCapabilityStore } from '../../../src/renderer/src/stores/capabilityStore'
+import { useDatabaseStore } from '../../../src/renderer/src/stores/databaseStore'
+import { logService } from '../../../src/renderer/src/services/LogService'
+import { createQueryPinia, withQueries } from '../helpers/with-queries'
 import { installCapabilities } from '../helpers/capabilities'
-
-// The capability store fails closed: install a desktop document.
-beforeEach(() => installCapabilities())
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }
@@ -33,200 +35,130 @@ function makeFilterOptions(overrides: Partial<FilterOptions> = {}): FilterOption
   }
 }
 
-function makeMockApi(
-  getFilterOptionsFn?: (...args: unknown[]) => Promise<FilterOptions>
-): WindowAPI {
-  return {
-    variants: {
-      getFilterOptions: getFilterOptionsFn ?? vi.fn().mockResolvedValue(makeFilterOptions()),
-      query: vi.fn(),
-      search: vi.fn(),
-      geneSymbols: vi.fn()
-    }
-  } as unknown as WindowAPI
-}
+/** Options whose `consequences` name the case they were loaded for. */
+const optionsOf = (caseId: number): FilterOptions =>
+  makeFilterOptions({ consequences: [`case-${caseId}`] })
 
 describe('useFilterOptionsCache', () => {
-  let app: { unmount: () => void }
+  const getFilterOptions = vi.fn()
+  const hosts: Array<{ unmount: () => void }> = []
+  let pinia: Pinia
 
-  afterEach(() => {
-    if (app) app.unmount()
-  })
+  function mountCache(caseId = ref(1)) {
+    const host = withQueries(() => useFilterOptionsCache(caseId), pinia)
+    hosts.push(host)
+    return { ...host.result, caseId }
+  }
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    getFilterOptions.mockReset().mockImplementation(async (caseId: number) => optionsOf(caseId))
+    Object.assign(window, { api: { variants: { getFilterOptions } } })
+    pinia = createQueryPinia()
   })
 
-  it('initializes with empty filter options', () => {
-    const [result, appInstance] = withSetup(() => useFilterOptionsCache(undefined))
-    app = appInstance
+  afterEach(() => hosts.splice(0).forEach((host) => host.unmount()))
 
-    expect(result.filterOptions.value.consequences).toEqual([])
-    expect(result.filterOptions.value.funcs).toEqual([])
-    expect(result.filterOptions.value.clinvars).toEqual([])
-    expect(result.filterOptions.value.minCadd).toBeNull()
+  it('starts with empty filter options', () => {
+    const { filterOptions } = mountCache()
+    expect(filterOptions.value.consequences).toEqual([])
+    expect(filterOptions.value.minCadd).toBeNull()
   })
 
-  it('loads filter options from API on cache miss', async () => {
-    const opts = makeFilterOptions()
-    const getFilterOptionsFn = vi.fn().mockResolvedValue(opts)
-    const api = makeMockApi(getFilterOptionsFn)
+  it('loads the options of the current case', async () => {
+    const { filterOptions, loadFilterOptions } = mountCache(ref(7))
+    await loadFilterOptions()
 
-    const [result, appInstance] = withSetup(() => useFilterOptionsCache(api))
-    app = appInstance
-
-    await result.loadFilterOptions(1)
-
-    expect(getFilterOptionsFn).toHaveBeenCalledWith(1)
-    expect(result.filterOptions.value).toEqual(opts)
+    expect(getFilterOptions).toHaveBeenCalledWith(7)
+    expect(filterOptions.value).toEqual(optionsOf(7))
   })
 
-  it('returns cached options on cache hit (skips API)', async () => {
-    const getFilterOptionsFn = vi.fn().mockResolvedValue(makeFilterOptions())
-    const api = makeMockApi(getFilterOptionsFn)
+  it('asks once however many consumers and loads there are', async () => {
+    const first = mountCache()
+    const second = mountCache()
+    await Promise.all([first.loadFilterOptions(), second.loadFilterOptions()])
+    await first.loadFilterOptions()
 
-    const [result, appInstance] = withSetup(() => useFilterOptionsCache(api))
-    app = appInstance
-
-    await result.loadFilterOptions(1)
-    expect(getFilterOptionsFn).toHaveBeenCalledTimes(1)
-
-    // Second call should use cache
-    await result.loadFilterOptions(1)
-    expect(getFilterOptionsFn).toHaveBeenCalledTimes(1)
+    expect(getFilterOptions).toHaveBeenCalledTimes(1)
+    expect(second.filterOptions.value).toEqual(optionsOf(1))
   })
 
-  it('caches different cases separately', async () => {
-    const opts1 = makeFilterOptions({ consequences: ['HIGH'] })
-    const opts2 = makeFilterOptions({ consequences: ['LOW'] })
-    const getFilterOptionsFn = vi.fn().mockResolvedValueOnce(opts1).mockResolvedValueOnce(opts2)
-    const api = makeMockApi(getFilterOptionsFn)
+  it('follows the case and keeps each case cached', async () => {
+    const { filterOptions, caseId } = mountCache()
+    await flushPromises()
 
-    const [result, appInstance] = withSetup(() => useFilterOptionsCache(api))
-    app = appInstance
+    caseId.value = 2
+    await flushPromises()
+    expect(filterOptions.value).toEqual(optionsOf(2))
 
-    await result.loadFilterOptions(1)
-    expect(result.filterOptions.value.consequences).toEqual(['HIGH'])
-
-    await result.loadFilterOptions(2)
-    expect(result.filterOptions.value.consequences).toEqual(['LOW'])
-
-    // Go back to case 1 - should be cached
-    await result.loadFilterOptions(1)
-    expect(result.filterOptions.value.consequences).toEqual(['HIGH'])
-    expect(getFilterOptionsFn).toHaveBeenCalledTimes(2)
+    caseId.value = 1
+    await flushPromises()
+    expect(filterOptions.value).toEqual(optionsOf(1))
+    expect(getFilterOptions).toHaveBeenCalledTimes(2)
   })
 
-  it('invalidateFilterOptionsCache forces reload', async () => {
-    const getFilterOptionsFn = vi.fn().mockResolvedValue(makeFilterOptions())
-    const api = makeMockApi(getFilterOptionsFn)
-
-    const [result, appInstance] = withSetup(() => useFilterOptionsCache(api))
-    app = appInstance
-
-    await result.loadFilterOptions(1)
-    expect(getFilterOptionsFn).toHaveBeenCalledTimes(1)
-
-    result.invalidateFilterOptionsCache()
-
-    await result.loadFilterOptions(1)
-    expect(getFilterOptionsFn).toHaveBeenCalledTimes(2)
-  })
-
-  it('handles undefined API gracefully (returns without error)', async () => {
-    const [result, appInstance] = withSetup(() => useFilterOptionsCache(undefined))
-    app = appInstance
-
-    // Should return early without throwing
-    await result.loadFilterOptions(1)
-
-    expect(result.filterOptions.value.consequences).toEqual([])
-  })
-
-  it('handles API errors gracefully', async () => {
-    const { logService } = await import('../../../src/renderer/src/services/LogService')
-    const api = makeMockApi(() => Promise.reject(new Error('DB error')))
-
-    const [result, appInstance] = withSetup(() => useFilterOptionsCache(api))
-    app = appInstance
-
-    await result.loadFilterOptions(1)
-
-    expect(logService.error).toHaveBeenCalledWith(expect.stringContaining('DB error'), 'filters')
-  })
-
-  it('handles SerializableError filter option responses gracefully', async () => {
-    const { logService } = await import('../../../src/renderer/src/services/LogService')
-    const api = makeMockApi(
-      async () =>
-        ({
-          code: ErrorCode.DB_ERROR,
-          message: 'filterOptions failed',
-          userMessage: 'Could not load filter options'
-        }) as unknown as FilterOptions
+  it('never shows the previous case when its response arrives last', async () => {
+    let resolveFirst: (value: FilterOptions) => void = () => {}
+    getFilterOptions.mockImplementationOnce(
+      () => new Promise<FilterOptions>((resolve) => (resolveFirst = resolve))
     )
+    const { filterOptions, caseId } = mountCache()
+    await flushPromises()
 
-    const [result, appInstance] = withSetup(() => useFilterOptionsCache(api))
-    app = appInstance
+    caseId.value = 2
+    await flushPromises()
+    resolveFirst(optionsOf(1))
+    await flushPromises()
 
-    await result.loadFilterOptions(1)
-
-    expect(logService.error).toHaveBeenCalledWith(
-      expect.stringContaining('Could not load filter options'),
-      'filters'
-    )
-    expect(result.filterOptions.value.consequences).toEqual([])
+    expect(filterOptions.value).toEqual(optionsOf(2))
   })
 
-  describe('loadFilterOptionsAndTags', () => {
-    it('loads options and tags in parallel on cache miss', async () => {
-      const opts = makeFilterOptions()
-      const getFilterOptionsFn = vi.fn().mockResolvedValue(opts)
-      const api = makeMockApi(getFilterOptionsFn)
-      const loadTags = vi.fn().mockResolvedValue(undefined)
+  it("does not show another database's options for the same case id", async () => {
+    const { filterOptions } = mountCache()
+    await flushPromises()
+    getFilterOptions.mockResolvedValue(makeFilterOptions({ consequences: ['other database'] }))
 
-      const [result, appInstance] = withSetup(() => useFilterOptionsCache(api))
-      app = appInstance
+    useDatabaseStore().revision++
+    await invalidateServerData('database-switch')
+    expect(filterOptions.value.consequences).toEqual([])
 
-      await result.loadFilterOptionsAndTags(1, loadTags)
+    await flushPromises()
+    expect(filterOptions.value.consequences).toEqual(['other database'])
+  })
 
-      expect(getFilterOptionsFn).toHaveBeenCalledWith(1)
-      expect(loadTags).toHaveBeenCalled()
-      expect(result.filterOptions.value).toEqual(opts)
+  it('refetches after an import or delete', async () => {
+    mountCache()
+    await flushPromises()
+
+    await invalidateServerData('data-changed')
+    expect(getFilterOptions).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['an Error', new Error('IPC failure')],
+    [
+      'a SerializableError',
+      { code: ErrorCode.DB_ERROR, message: 'db', userMessage: 'Database error' }
+    ]
+  ])('logs %s, keeps the empty options and does not throw', async (_label, failure) => {
+    getFilterOptions.mockImplementation(async () => {
+      throw failure
     })
+    const { filterOptions, loadFilterOptions } = mountCache()
 
-    it('only loads tags on cache hit (skips API for options)', async () => {
-      const getFilterOptionsFn = vi.fn().mockResolvedValue(makeFilterOptions())
-      const api = makeMockApi(getFilterOptionsFn)
-      const loadTags = vi.fn().mockResolvedValue(undefined)
+    await expect(loadFilterOptions()).resolves.toBeUndefined()
+    expect(filterOptions.value.consequences).toEqual([])
+    expect(logService.warn).toHaveBeenCalled()
+  })
 
-      const [result, appInstance] = withSetup(() => useFilterOptionsCache(api))
-      app = appInstance
+  it('does not call the API while the capability document is missing', async () => {
+    useCapabilityStore(pinia).setDocument(null)
+    const { loadFilterOptions } = mountCache()
+    await loadFilterOptions()
+    await flushPromises()
+    expect(getFilterOptions).not.toHaveBeenCalled()
 
-      // Prime the cache
-      await result.loadFilterOptions(1)
-      expect(getFilterOptionsFn).toHaveBeenCalledTimes(1)
-
-      // Now loadFilterOptionsAndTags should skip the API call
-      await result.loadFilterOptionsAndTags(1, loadTags)
-      expect(getFilterOptionsFn).toHaveBeenCalledTimes(1) // Not called again
-      expect(loadTags).toHaveBeenCalled()
-    })
-
-    it('handles undefined API in loadFilterOptionsAndTags', async () => {
-      const { logService } = await import('../../../src/renderer/src/services/LogService')
-      const loadTags = vi.fn().mockResolvedValue(undefined)
-
-      const [result, appInstance] = withSetup(() => useFilterOptionsCache(undefined))
-      app = appInstance
-
-      await result.loadFilterOptionsAndTags(1, loadTags)
-
-      expect(logService.warn).toHaveBeenCalledWith(
-        expect.stringContaining('API not available'),
-        'filters'
-      )
-      expect(loadTags).not.toHaveBeenCalled()
-    })
+    installCapabilities()
+    await flushPromises()
+    expect(getFilterOptions).toHaveBeenCalledTimes(1)
   })
 })

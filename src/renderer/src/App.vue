@@ -133,7 +133,6 @@ import { useShellLifecycle } from './composables/useShellLifecycle'
 import { useApiService } from './composables/useApiService'
 import { useImportStatusStore } from './stores/importStatusStore'
 import { isWebRuntime } from './utils/runtime-mode'
-import { useVariantColumnMeta } from './composables/useVariantColumnMeta'
 import {
   resetRendererLongTaskObserver,
   startRendererLongTaskObserver,
@@ -161,7 +160,6 @@ const router = useRouter()
 const { api } = useApiService()
 const permissions = usePermissions()
 const importStore = useImportStatusStore()
-const variantColumnMeta = useVariantColumnMeta()
 
 // Create and provide shared app state for child components
 const appState = createAppState()
@@ -314,7 +312,6 @@ const handleCasesLoaded = (count: number): void => {
 }
 const handleCaseDeleted = (caseId: number): void => {
   if (selectedCaseId.value === caseId) clearSelectedCase()
-  if (isWebRuntime()) variantColumnMeta.invalidateAll()
   incrementDataGeneration()
 }
 

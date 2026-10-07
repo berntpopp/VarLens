@@ -137,7 +137,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { OverviewTag } from '../../../../shared/types/database-overview'
-import { useApiService } from '../../composables/useApiService'
+import { useTags } from '../../composables/useTags'
 import {
   mdiAlert,
   mdiChevronDown,
@@ -157,7 +157,8 @@ const emit = defineEmits<{
   refresh: []
 }>()
 
-const { api } = useApiService()
+// Writes go through useTags so every view showing tags is refreshed.
+const { updateTag, deleteTag } = useTags()
 
 const expanded = ref(true)
 
@@ -213,7 +214,7 @@ async function saveTagEdit(): Promise<void> {
 
   tagSaving.value = true
   try {
-    await api!.tags.update(editingTag.value.id, {
+    await updateTag(editingTag.value.id, {
       name: tagEditForm.value.name.trim(),
       color: tagEditForm.value.color.trim()
     })
@@ -241,7 +242,7 @@ async function executeDeleteTag(): Promise<void> {
 
   tagDeleting.value = true
   try {
-    await api!.tags.delete(tagToDelete.value.id)
+    await deleteTag(tagToDelete.value.id)
 
     // If we're editing the deleted tag, close the edit form
     if (editingTag.value?.id === tagToDelete.value.id) {

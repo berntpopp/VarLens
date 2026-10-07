@@ -9,10 +9,8 @@
  * - In App.vue (root): call `createAppState()` and `provide(AppStateKey, ...)`
  * - In child components: call `useAppState()` which injects from the provider
  */
-import { invalidateFilterPresets } from './useFilterPresetStore'
 import { useCarriers } from './useCarriers'
-import { resetTagCaches } from './useTags'
-import { invalidateAllVariantColumnMeta } from './useVariantColumnMeta'
+import { invalidateServerData } from '../queries/invalidation'
 import { ref, computed, inject } from 'vue'
 import type { Ref, ComputedRef, InjectionKey } from 'vue'
 import type { VariantFilter, Variant } from '../../../shared/types/api'
@@ -208,12 +206,8 @@ export function createAppState(): AppStateReturn {
   }
 
   function resetForDatabaseSwitch(): void {
-    // Presets live in the workspace database; the cached list is now stale.
-    invalidateFilterPresets()
+    void invalidateServerData('database-switch')
     useCarriers().reset()
-    // Keyed by case and variant ids, which restart in every database.
-    invalidateAllVariantColumnMeta()
-    resetTagCaches()
     incrementDataGeneration()
     resetCaseContext()
     setActiveTab('case')

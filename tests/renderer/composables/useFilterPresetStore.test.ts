@@ -1,9 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { Pinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
 import {
-  useFilterPresetStore,
+  useFilterPresetStore as useStore,
   __resetFilterPresetStoreForTest,
-  invalidateFilterPresets
+  type PresetScope
 } from '../../../src/renderer/src/composables/useFilterPresetStore'
+import { invalidateServerData } from '../../../src/renderer/src/queries/invalidation'
+import { useDatabaseStore } from '../../../src/renderer/src/stores/databaseStore'
+import { createQueryPinia, withQueries } from '../helpers/with-queries'
 import type { FilterPreset } from '../../../src/shared/types/filter-presets'
 
 const mockPresets: FilterPreset[] = [
@@ -52,16 +57,28 @@ const mockApi = {
   reorder: vi.fn().mockResolvedValue(undefined)
 }
 
-vi.stubGlobal('window', { api: { presets: mockApi } })
+Object.assign(window, { api: { presets: mockApi } })
 
 describe('useFilterPresetStore', () => {
+  let pinia: Pinia
+  const hosts: Array<{ unmount: () => void }> = []
+
+  /** A consumer of the store, mounted like FilterToolbar or CohortFilterBar. */
+  function useFilterPresetStore(scope?: PresetScope): ReturnType<typeof useStore> {
+    const host = withQueries(() => useStore(scope), pinia)
+    hosts.push(host)
+    return host.result
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
-    // The store is now a module-level singleton so callers share state.
-    // Reset shared refs before every test to preserve the original
-    // "fresh store per test" contract these tests were written against.
+    mockApi.list.mockResolvedValue(mockPresets)
+    pinia = createQueryPinia()
+    // Active presets are module-level UI state shared by every consumer.
     __resetFilterPresetStoreForTest()
   })
+
+  afterEach(() => hosts.splice(0).forEach((host) => host.unmount()))
 
   it('loads presets on init', async () => {
     const { presets, loadPresets } = useFilterPresetStore()
@@ -81,15 +98,50 @@ describe('useFilterPresetStore', () => {
     expect(a.presets.value).toHaveLength(2)
   })
 
-  it('refetches after a mutation and after invalidation (database switch)', async () => {
+  it('refetches after a mutation', async () => {
     const store = useFilterPresetStore()
     await store.loadPresets()
     await store.savePreset({ name: 'Mine', filterJson: {} } as never)
     expect(mockApi.list).toHaveBeenCalledTimes(2)
+  })
 
-    invalidateFilterPresets()
+  it("shows the new database's presets after a switch, never the old ones", async () => {
+    const store = useFilterPresetStore()
     await store.loadPresets()
-    expect(mockApi.list).toHaveBeenCalledTimes(3)
+    mockApi.list.mockResolvedValue([mockPresets[1]])
+
+    useDatabaseStore().revision++
+    await invalidateServerData('database-switch')
+    expect(store.presets.value).toEqual([])
+
+    await flushPromises()
+    expect(store.presets.value).toEqual([mockPresets[1]])
+  })
+
+  it('ignores a preset list that arrives from the previous database', async () => {
+    let resolveOld: (value: FilterPreset[]) => void = () => {}
+    mockApi.list.mockImplementationOnce(
+      () => new Promise<FilterPreset[]>((resolve) => (resolveOld = resolve))
+    )
+    const store = useFilterPresetStore()
+    await flushPromises()
+    mockApi.list.mockResolvedValue([mockPresets[1]])
+
+    useDatabaseStore().revision++
+    await invalidateServerData('database-switch')
+    await flushPromises()
+    resolveOld(mockPresets)
+    await flushPromises()
+
+    expect(store.presets.value).toEqual([mockPresets[1]])
+  })
+
+  it('refetches after an import or delete', async () => {
+    const store = useFilterPresetStore()
+    await store.loadPresets()
+
+    await invalidateServerData('data-changed')
+    expect(mockApi.list).toHaveBeenCalledTimes(2)
   })
 
   it('retries on the next call when a load fails', async () => {
@@ -162,9 +214,10 @@ describe('useFilterPresetStore', () => {
     }
   )
 
-  it('keeps active presets separate for the case and cohort views (P0-3 isolation)', () => {
+  it('keeps active presets separate for the case and cohort views (P0-3 isolation)', async () => {
     const caseStore = useFilterPresetStore('case')
     const cohortStore = useFilterPresetStore('cohort')
+    await flushPromises()
 
     caseStore.togglePreset(7)
 
@@ -172,6 +225,6 @@ describe('useFilterPresetStore', () => {
     expect(cohortStore.isPresetActive(7)).toBe(false)
     expect(cohortStore.activePresetIds.value.size).toBe(0)
     // The preset list itself stays shared.
-    expect(cohortStore.presets).toBe(caseStore.presets)
+    expect(cohortStore.presets.value).toBe(caseStore.presets.value)
   })
 })

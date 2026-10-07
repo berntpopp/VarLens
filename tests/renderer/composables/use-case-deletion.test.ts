@@ -25,11 +25,16 @@ import { useCaseMetadata } from '@renderer/composables/useCaseMetadata'
 import { useCaseComments } from '@renderer/composables/useCaseComments'
 import { useCaseMetrics } from '@renderer/composables/useCaseMetrics'
 import { PER_CASE_CACHE_LIMIT } from '@renderer/composables/per-case-cache'
+import { invalidateServerData } from '../../../src/renderer/src/queries/invalidation'
 import type {
   CaseComment,
   CaseMetricWithDefinition,
   FullCaseMetadata
 } from '../../../src/shared/types/api'
+
+vi.mock('../../../src/renderer/src/queries/invalidation', () => ({
+  invalidateServerData: vi.fn().mockResolvedValue(undefined)
+}))
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: {
@@ -163,10 +168,14 @@ describe('case deletion evicts per-case caches (#443)', () => {
       const request = ctx.deletion.deleteCase(1)
       await flushPromises()
       expectCached(ctx, 1, true)
+      // The list drops the row before the delete runs; a refetch now would
+      // read the case back and keep it until the next invalidation.
+      expect(invalidateServerData).not.toHaveBeenCalled()
 
       pending.resolve()
       await request
       expectCached(ctx, 1, false)
+      expect(invalidateServerData).toHaveBeenCalledExactlyOnceWith('data-changed')
     })
 
     it('rejects on a resolved SerializableError and reloads instead of trusting the cache', async () => {
@@ -175,6 +184,8 @@ describe('case deletion evicts per-case caches (#443)', () => {
       await warm(ctx, 1)
 
       await expect(ctx.deletion.deleteCase(1)).rejects.toMatchObject({ code: 'DB_ERROR' })
+      // A failed delete may have run partially, so the query cache refetches too.
+      expect(invalidateServerData).toHaveBeenCalledExactlyOnceWith('data-changed')
 
       // The rolled-back case has no trusted entries left ...
       expectCached(ctx, 1, false)
@@ -231,6 +242,7 @@ describe('case deletion evicts per-case caches (#443)', () => {
       await warm(ctx, 3)
 
       await expect(ctx.deletion.deleteCases([1, 2])).resolves.toBe(2)
+      expect(invalidateServerData).toHaveBeenCalledExactlyOnceWith('data-changed')
 
       expect(window.api.cases.deleteBatch).toHaveBeenCalledWith([1, 2])
       expectCached(ctx, 1, false)
@@ -266,6 +278,7 @@ describe('case deletion evicts per-case caches (#443)', () => {
       await Promise.all([ctx.metrics.loadDefinitions(), ctx.metadata.loadCohortGroups()])
 
       await expect(ctx.deletion.deleteAllCases()).resolves.toBe(2)
+      expect(invalidateServerData).toHaveBeenCalledExactlyOnceWith('data-changed')
 
       expectCached(ctx, 1, false)
       expectCached(ctx, 2, false)

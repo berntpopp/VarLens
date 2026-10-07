@@ -39,6 +39,12 @@ export const useDatabaseStore = defineStore('database', () => {
   const { requireCapability } = capabilityStore
 
   // State
+  /**
+   * Identity of the open database for the query cache: bumped every time a
+   * database is published or goes away. Paths cannot serve, since a database
+   * can be recreated at the same path and the web workspace has none.
+   */
+  const revision = ref(0)
   const currentPath = ref<string | null>(null)
   const currentName = ref<string>('')
   const isEncrypted = ref<boolean>(false)
@@ -64,6 +70,7 @@ export const useDatabaseStore = defineStore('database', () => {
 
   /** Applies a `DatabaseInfo` snapshot to the current-database state refs. */
   function applyInfo(info: DatabaseInfo): void {
+    revision.value++
     currentPath.value = info.path
     currentName.value = info.name
     isEncrypted.value = info.encrypted
@@ -76,6 +83,7 @@ export const useDatabaseStore = defineStore('database', () => {
     if (info) {
       applyInfo(info)
     } else {
+      revision.value++
       currentPath.value = null
       currentName.value = ''
       isEncrypted.value = false
@@ -255,6 +263,7 @@ export const useDatabaseStore = defineStore('database', () => {
   }
 
   return {
+    revision,
     currentPath,
     currentName,
     isEncrypted,

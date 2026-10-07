@@ -1,93 +1,69 @@
 /**
- * Tests for ExtensionColumnFilters.vue
+ * Tests for ExtensionColumnFilters.vue and the per-column control it renders.
  *
- * The component depends on `useVariantColumnMeta`, which calls window.api
- * IPC under the hood. Rather than plumb a mock api through (the mock-api
- * helper predates the Task 8 IPC channels), we mock the composable module
- * directly so each test can control what types/metadata the component sees.
+ * The component reads which variant types a scope has and each column's
+ * metadata from the query cache, so these tests mock `window.api` and mount
+ * with Pinia and the query cache installed, like the app does.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
-import { ref } from 'vue'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
+import type { Pinia } from 'pinia'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import type { ColumnFilterMeta } from '../../../../src/shared/types/column-filters'
-
-// Mock state that individual tests can mutate before mounting.
-const typesPresentResponse = { current: new Set<string>() }
-const columnMetaResponses = new Map<string, ColumnFilterMeta>()
-// When a dotted key is in this set, the mocked getColumnMeta will reject for
-// it — used to exercise the failure-path branch of the eager watch.
-const columnMetaFailureKeys = new Set<string>()
-const columnMetaCallCounts = new Map<string, number>()
-// Stands in for the composable's invalidation counter.
-const cacheEpoch = ref(0)
-
-// Mock LogService because the eager-watch failure branch calls
-// `logService.warn`, which instantiates the pinia-backed log store. The
-// component tests mount without a Pinia plugin, so use a stub that swallows
-// all log calls.
-vi.mock('../../../../src/renderer/src/services/LogService', () => ({
-  logService: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn()
-  }
-}))
-
-vi.mock('../../../../src/renderer/src/composables/useVariantColumnMeta', () => ({
-  cacheKeyFor: (scope: { caseId?: number; caseIds?: number[] }): string =>
-    scope.caseId !== undefined
-      ? `case:${scope.caseId}`
-      : `cases:${[...(scope.caseIds ?? [])].sort((a, b) => a - b).join(',')}`,
-  useVariantColumnMeta: (): {
-    getColumnMeta: (scope: unknown, key: string) => Promise<ColumnFilterMeta>
-    ensureTypesPresent: (scope: unknown) => Promise<Set<string>>
-    invalidate: () => void
-    invalidateAll: () => void
-    cacheEpoch: typeof cacheEpoch
-  } => ({
-    cacheEpoch,
-    getColumnMeta: vi.fn(async (_scope, key: string) => {
-      columnMetaCallCounts.set(key, (columnMetaCallCounts.get(key) ?? 0) + 1)
-      if (columnMetaFailureKeys.has(key)) {
-        throw new Error(`simulated IPC failure for ${key}`)
-      }
-      const existing = columnMetaResponses.get(key)
-      if (existing !== undefined) return existing
-      // Default: return a numeric meta so controls render without errors.
-      const fallback: ColumnFilterMeta = {
-        key,
-        dataType: 'numeric',
-        distinctCount: 5,
-        min: 0,
-        max: 100
-      }
-      return fallback
-    }),
-    ensureTypesPresent: vi.fn(async () => typesPresentResponse.current),
-    invalidate: vi.fn(),
-    invalidateAll: vi.fn()
-  })
-}))
-
 import ExtensionColumnFilters from '../../../../src/renderer/src/components/filters/ExtensionColumnFilters.vue'
+import { invalidateServerData } from '../../../../src/renderer/src/queries/invalidation'
+import { useDatabaseStore } from '../../../../src/renderer/src/stores/databaseStore'
+import { createQueryPinia, queryPlugins } from '../../helpers/with-queries'
+
+vi.mock('../../../../src/renderer/src/services/LogService', () => ({
+  logService: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+}))
+
+interface Scope {
+  caseId?: number
+  caseIds?: number[]
+}
+
+// What the mocked API answers; individual tests change these before mounting.
+const typesPresentResponse = { current: new Set<string>() }
+const columnMetaFailureKeys = new Set<string>()
+const typesPresent = vi.fn<(scope: Scope) => Promise<string[]>>(async () => [
+  ...typesPresentResponse.current
+])
+/** Metadata whose `max` names the case it was loaded for. */
+const columnMeta = vi.fn(
+  async (params: Scope & { columnKey: string }): Promise<ColumnFilterMeta> => {
+    if (columnMetaFailureKeys.has(params.columnKey)) {
+      throw new Error(`simulated IPC failure for ${params.columnKey}`)
+    }
+    return {
+      key: params.columnKey,
+      dataType: 'numeric',
+      distinctCount: 5,
+      min: 0,
+      max: params.caseId ?? 100
+    }
+  }
+)
+
+const callsFor = (columnKey: string): number =>
+  columnMeta.mock.calls.filter(([params]) => params.columnKey === columnKey).length
 
 const vuetify = createVuetify({ components, directives })
-// Unmounted after each test: every instance watches the shared `cacheEpoch`.
-const mounted: Array<ReturnType<typeof mount>> = []
+const mounted: VueWrapper[] = []
+let pinia: Pinia
 
 async function mountComponent(
   props: {
-    scope?: { caseId?: number; caseIds?: number[] }
+    scope?: Scope
     modelValue?: Record<string, { operator: string; value: unknown; includeEmpty?: boolean }>
   } = {}
-): Promise<ReturnType<typeof mount>> {
+): Promise<VueWrapper> {
   const wrapper = mount(ExtensionColumnFilters, {
-    global: { plugins: [vuetify] },
+    global: { plugins: [vuetify, ...queryPlugins(pinia)] },
     props: {
       scope: props.scope ?? { caseId: 1 },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -95,18 +71,26 @@ async function mountComponent(
     }
   })
   mounted.push(wrapper)
-  // Wait for the immediate watch + async ensureTypesPresent to resolve.
   await flushPromises()
   return wrapper
 }
 
+/** Open the first section so its column controls mount and load. */
+async function openFirstSection(wrapper: VueWrapper): Promise<void> {
+  await wrapper.findComponent({ name: 'VExpansionPanelTitle' }).trigger('click')
+  await flushPromises()
+}
+
+const firstControlMeta = (wrapper: VueWrapper): ColumnFilterMeta | undefined =>
+  wrapper.findComponent({ name: 'NumericRangeControl' }).props('meta')
+
 describe('ExtensionColumnFilters', () => {
   beforeEach(() => {
     typesPresentResponse.current = new Set()
-    columnMetaResponses.clear()
     columnMetaFailureKeys.clear()
-    columnMetaCallCounts.clear()
     vi.clearAllMocks()
+    Object.assign(window, { api: { variants: { typesPresent, columnMeta } } })
+    pinia = createQueryPinia()
   })
 
   afterEach(() => {
@@ -169,11 +153,7 @@ describe('ExtensionColumnFilters', () => {
       scope: { caseId: 42 },
       modelValue: {}
     })
-    // Open the CNV accordion panel so its contents mount in the DOM.
-    const panel = wrapper.findComponent({ name: 'VExpansionPanel' })
-    const panelTitle = panel.findComponent({ name: 'VExpansionPanelTitle' })
-    await panelTitle.trigger('click')
-    await flushPromises()
+    await openFirstSection(wrapper)
 
     // Grab the first NumericRangeControl and simulate an update.
     const numericControl = wrapper.findComponent({ name: 'NumericRangeControl' })
@@ -204,10 +184,7 @@ describe('ExtensionColumnFilters', () => {
         'cnv.copy_number': { operator: '>=', value: 3, includeEmpty: false }
       }
     })
-    const panel = wrapper.findComponent({ name: 'VExpansionPanel' })
-    const panelTitle = panel.findComponent({ name: 'VExpansionPanelTitle' })
-    await panelTitle.trigger('click')
-    await flushPromises()
+    await openFirstSection(wrapper)
 
     const numericControl = wrapper.findComponent({ name: 'NumericRangeControl' })
     expect(numericControl.exists()).toBe(true)
@@ -219,32 +196,45 @@ describe('ExtensionColumnFilters', () => {
     expect(latest).toEqual({})
   })
 
-  it('does not re-fire IPC when a column-meta fetch previously failed', async () => {
-    // Regression test for the template-side-effect render loop: previously,
-    // `getMeta()` was called from the template on every render, and on
-    // failure it stayed undefined forever, triggering an unbounded IPC
-    // retry loop. Now the eager watch tracks failed keys in a `failedKeys`
-    // ref so a subsequent re-render is a no-op for the failing key.
+  it('asks for no metadata while the scope is empty', async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    await mountComponent({ scope: { caseIds: [] } })
+
+    expect(typesPresent).not.toHaveBeenCalled()
+    expect(columnMeta).not.toHaveBeenCalled()
+  })
+
+  it('forwards a cohort scope as case ids', async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    const wrapper = await mountComponent({ scope: { caseIds: [3, 1, 2] } })
+    await openFirstSection(wrapper)
+
+    expect(typesPresent).toHaveBeenCalledWith({ caseId: undefined, caseIds: [3, 1, 2] })
+    expect(columnMeta).toHaveBeenCalledWith(
+      expect.objectContaining({ caseIds: [3, 1, 2], columnKey: 'cnv.copy_number' })
+    )
+  })
+
+  it('loads each column once, shared by every drawer showing the same scope', async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    const first = await mountComponent({ scope: { caseId: 42 } })
+    const second = await mountComponent({ scope: { caseId: 42 } })
+    await openFirstSection(first)
+    await openFirstSection(second)
+
+    expect(typesPresent).toHaveBeenCalledTimes(1)
+    expect(callsFor('cnv.copy_number')).toBe(1)
+    expect(firstControlMeta(second)?.max).toBe(42)
+  })
+
+  it('does not ask again for a column whose metadata failed to load', async () => {
+    // Regression: a failed load used to be retried on every render.
     typesPresentResponse.current = new Set(['cnv'])
     columnMetaFailureKeys.add('cnv.copy_number')
     const wrapper = await mountComponent({ scope: { caseId: 42 } })
-    // Allow the eager watch (immediate: true) to fire once.
-    await flushPromises()
+    await openFirstSection(wrapper)
+    expect(callsFor('cnv.copy_number')).toBe(1)
 
-    // After the first run, the failing key has been attempted exactly once
-    // and metaMap stays undefined for it.
-    const failingCallCount = columnMetaCallCounts.get('cnv.copy_number') ?? 0
-    expect(failingCallCount).toBe(1)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const vm = wrapper.vm as any
-    expect(vm.metaMap['cnv.copy_number']).toBeUndefined()
-    // The failedKeys set is populated
-    expect(vm.failedKeys.has('cnv.copy_number')).toBe(true)
-
-    // Force several re-renders by updating the modelValue prop (which
-    // triggers the template to re-evaluate `getMeta()` bindings). The
-    // watch should NOT re-fire the failing fetch because the key is in
-    // failedKeys.
     for (let i = 0; i < 3; i++) {
       await wrapper.setProps({
         scope: { caseId: 42 },
@@ -253,82 +243,93 @@ describe('ExtensionColumnFilters', () => {
       await flushPromises()
     }
 
-    // Call count must stay at exactly 1 — no retry loop.
-    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
-    expect(vm.metaMap['cnv.copy_number']).toBeUndefined()
+    expect(callsFor('cnv.copy_number')).toBe(1)
+    expect(firstControlMeta(wrapper)).toBeUndefined()
   })
 
-  it('reloads column metadata when the scope switches to another case', async () => {
+  it("shows only the new scope's metadata after switching to another case", async () => {
     typesPresentResponse.current = new Set(['cnv'])
-    columnMetaResponses.set('cnv.copy_number', {
-      key: 'cnv.copy_number',
-      dataType: 'numeric',
-      distinctCount: 3,
-      min: 0,
-      max: 4
-    })
     const wrapper = await mountComponent({ scope: { caseId: 1 } })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const vm = wrapper.vm as any
-    expect(vm.metaMap['cnv.copy_number'].max).toBe(4)
+    await openFirstSection(wrapper)
+    expect(firstControlMeta(wrapper)?.max).toBe(1)
 
-    columnMetaResponses.set('cnv.copy_number', {
-      key: 'cnv.copy_number',
-      dataType: 'numeric',
-      distinctCount: 9,
-      min: 0,
-      max: 12
-    })
+    await wrapper.setProps({ scope: { caseId: 2 } })
+    expect(firstControlMeta(wrapper)).toBeUndefined()
+
+    await flushPromises()
+    expect(firstControlMeta(wrapper)?.max).toBe(2)
+  })
+
+  it('never shows the previous scope when its response arrives last', async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    const wrapper = await mountComponent({ scope: { caseId: 1 } })
+    let resolveSlow: (meta: ColumnFilterMeta) => void = () => {}
+    columnMeta.mockImplementationOnce(
+      () => new Promise<ColumnFilterMeta>((resolve) => (resolveSlow = resolve))
+    )
+    await openFirstSection(wrapper)
+
     await wrapper.setProps({ scope: { caseId: 2 } })
     await flushPromises()
+    resolveSlow({ key: 'cnv.copy_number', dataType: 'numeric', distinctCount: 1, min: 0, max: 1 })
+    await flushPromises()
 
-    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(2)
-    expect(vm.metaMap['cnv.copy_number'].max).toBe(12)
+    expect(firstControlMeta(wrapper)?.max).toBe(2)
   })
 
-  it('retries a previously failed column once the scope changes', async () => {
+  it('asks again for a failed column once the scope changes', async () => {
     typesPresentResponse.current = new Set(['cnv'])
     columnMetaFailureKeys.add('cnv.copy_number')
     const wrapper = await mountComponent({ scope: { caseId: 1 } })
-    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
+    await openFirstSection(wrapper)
 
-    columnMetaFailureKeys.clear()
     await wrapper.setProps({ scope: { caseId: 2 } })
     await flushPromises()
 
-    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(2)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((wrapper.vm as any).metaMap['cnv.copy_number']).toBeDefined()
-  })
-
-  it('reloads column metadata for the same scope after the cache is invalidated', async () => {
-    typesPresentResponse.current = new Set(['cnv'])
-    const wrapper = await mountComponent({ scope: { caseId: 1 } })
-    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
-
-    columnMetaResponses.set('cnv.copy_number', {
-      key: 'cnv.copy_number',
-      dataType: 'numeric',
-      distinctCount: 9,
-      min: 0,
-      max: 12
-    })
-    cacheEpoch.value++
-    await flushPromises()
-
-    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(2)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((wrapper.vm as any).metaMap['cnv.copy_number'].max).toBe(12)
+    expect(callsFor('cnv.copy_number')).toBe(2)
   })
 
   it('does not refetch when an equal scope object is passed again', async () => {
     typesPresentResponse.current = new Set(['cnv'])
-    const wrapper = await mountComponent({ scope: { caseIds: [1, 2] } })
-    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
+    const wrapper = await mountComponent({ scope: { caseId: 1 } })
+    await openFirstSection(wrapper)
+    const calls = columnMeta.mock.calls.length
 
-    await wrapper.setProps({ scope: { caseIds: [2, 1] } })
+    await wrapper.setProps({ scope: { caseId: 1 } })
     await flushPromises()
 
-    expect(columnMetaCallCounts.get('cnv.copy_number')).toBe(1)
+    expect(columnMeta).toHaveBeenCalledTimes(calls)
+    expect(typesPresent).toHaveBeenCalledTimes(1)
+  })
+
+  it('reloads the metadata after an import or delete', async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    const wrapper = await mountComponent({ scope: { caseId: 1 } })
+    await openFirstSection(wrapper)
+
+    await invalidateServerData('data-changed')
+    await flushPromises()
+
+    expect(callsFor('cnv.copy_number')).toBe(2)
+    expect(typesPresent).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not show another database's metadata for the same case id", async () => {
+    typesPresentResponse.current = new Set(['cnv'])
+    const wrapper = await mountComponent({ scope: { caseId: 1 } })
+    await openFirstSection(wrapper)
+    columnMeta.mockImplementation(async ({ columnKey }) => ({
+      key: columnKey,
+      dataType: 'numeric',
+      distinctCount: 1,
+      min: 0,
+      max: 999
+    }))
+
+    useDatabaseStore().revision++
+    await invalidateServerData('database-switch')
+    await flushPromises()
+
+    expect(firstControlMeta(wrapper)?.max).toBe(999)
   })
 })

@@ -7,11 +7,13 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
-import { setActivePinia, createPinia } from 'pinia'
-import { withSetup, flushPromises } from '../../utils/test-helpers'
+import { setActivePinia, createPinia, getActivePinia } from 'pinia'
+import { flushPromises } from '../../utils/test-helpers'
 import { createMockApi } from '../../utils/mock-api'
 import { useFilterState } from '@renderer/composables/useFilterState'
 import { installCapabilities } from '../helpers/capabilities'
+import { withQueries } from '../helpers/with-queries'
+import { invalidateServerData } from '../../../src/renderer/src/queries/invalidation'
 
 // Mock useTags — avoid real API calls for tags
 vi.mock('@renderer/composables/useTags', () => ({
@@ -50,10 +52,12 @@ describe('useFilterState', () => {
     const onFiltersUpdate = vi.fn()
     const onResetSort = vi.fn()
 
-    const [result, appInstance] = withSetup(() =>
-      useFilterState(caseIdRef, { onFiltersUpdate, onResetSort })
+    const host = withQueries(
+      () => useFilterState(caseIdRef, { onFiltersUpdate, onResetSort }),
+      getActivePinia()
     )
-    app = appInstance
+    const result = host.result
+    app = host
 
     return { result, caseIdRef, onFiltersUpdate, onResetSort }
   }
@@ -674,8 +678,8 @@ describe('useFilterState', () => {
   // -------------------------------------------------------------------------
 
   describe('loadFilterOptions', () => {
-    it('calls API getFilterOptions with the given caseId', async () => {
-      const { result } = createState()
+    it('calls API getFilterOptions with the current caseId', async () => {
+      const { result } = createState(42)
       const mockGetFilterOptions = (window.api as Record<string, Record<string, unknown>>).variants
         .getFilterOptions as ReturnType<typeof vi.fn>
 
@@ -690,13 +694,12 @@ describe('useFilterState', () => {
         columnMeta: []
       })
 
-      await result.loadFilterOptions(42)
+      await result.loadFilterOptions()
 
       expect(mockGetFilterOptions).toHaveBeenCalledWith(42)
     })
 
     it('populates filterOptions from API response', async () => {
-      const { result } = createState()
       const mockGetFilterOptions = (window.api as Record<string, Record<string, unknown>>).variants
         .getFilterOptions as ReturnType<typeof vi.fn>
 
@@ -711,7 +714,8 @@ describe('useFilterState', () => {
         columnMeta: []
       })
 
-      await result.loadFilterOptions(42)
+      const { result } = createState()
+      await result.loadFilterOptions()
 
       expect(result.filterOptions.value.consequences).toEqual([
         'missense_variant',
@@ -735,13 +739,13 @@ describe('useFilterState', () => {
         columnMeta: []
       })
 
-      await result.loadFilterOptions(10)
-      await result.loadFilterOptions(10) // second call — should use cache
+      await result.loadFilterOptions()
+      await result.loadFilterOptions() // second call — should use cache
 
       expect(mockGetFilterOptions).toHaveBeenCalledTimes(1)
     })
 
-    it('invalidateFilterOptionsCache causes next load to re-fetch from API', async () => {
+    it('refetches after the data changed (import or delete)', async () => {
       const { result } = createState()
       const mockGetFilterOptions = (window.api as Record<string, Record<string, unknown>>).variants
         .getFilterOptions as ReturnType<typeof vi.fn>
@@ -757,9 +761,8 @@ describe('useFilterState', () => {
         columnMeta: []
       })
 
-      await result.loadFilterOptions(10)
-      result.invalidateFilterOptionsCache()
-      await result.loadFilterOptions(10) // cache was cleared — must hit API again
+      await result.loadFilterOptions()
+      await invalidateServerData('data-changed')
 
       expect(mockGetFilterOptions).toHaveBeenCalledTimes(2)
     })

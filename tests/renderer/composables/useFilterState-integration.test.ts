@@ -93,7 +93,6 @@ describe('useFilterState (integration)', () => {
     expect(typeof result.searchGeneSymbols).toBe('function')
     expect(typeof result.emitFilters).toBe('function')
     expect(typeof result.loadFilterOptions).toBe('function')
-    expect(typeof result.invalidateFilterOptionsCache).toBe('function')
     expect(typeof result.resetForCaseSwitch).toBe('function')
     expect(typeof result.setInitialSearch).toBe('function')
     expect(typeof result.exportToExcel).toBe('function')
@@ -123,7 +122,6 @@ describe('useFilterState (integration)', () => {
       'searchGeneSymbols',
       'emitFilters',
       'loadFilterOptions',
-      'invalidateFilterOptionsCache',
       'resetForCaseSwitch',
       'setInitialSearch',
       'exportToExcel'

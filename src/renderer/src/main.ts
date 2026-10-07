@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import { useCapabilityStore } from './stores/capabilityStore'
+import { installQueryCache } from './queries/client'
 import vuetify from './plugins/vuetify'
 import router from './router'
 import { installOverlayEscapeGuard } from './utils/overlay-escape-guard'
@@ -27,6 +28,7 @@ async function bootstrap(): Promise<void> {
   // Register Pinia first so stores work in components and services
   const pinia = createPinia()
   app.use(pinia)
+  installQueryCache(app, pinia)
   // Load the per-session capability document before the shell renders: the
   // store fails closed, so gated UI never flashes an action it then refuses.
   await useCapabilityStore(pinia).load()
