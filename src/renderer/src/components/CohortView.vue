@@ -64,6 +64,7 @@ import type { CohortVariant } from '../../../shared/types/cohort'
 import { logService } from '../services/LogService'
 import { useUrlParam } from '../composables/useUrlState'
 import { useFilterUrlParam } from '../composables/useViewUrlBindings'
+import { providePanelResolutionStatus } from '../composables/usePanelResolutionStatus'
 
 // Create and provide filter state for child components (CohortTable, CohortFilterBar)
 const filtersInstance = createFilters()
@@ -76,6 +77,13 @@ const cohortDataInstance = useCohortData()
 provide(CohortDataKey, cohortDataInstance)
 const { genomeBuild, selectedVariantType, availableBuilds, loadAvailableBuilds } =
   cohortDataInstance
+
+// Warn (in the filter bar) when genes of the active panel have no coordinates
+// for the selected genome build — same warning as the case view.
+providePanelResolutionStatus({
+  panelIds: () => filtersInstance.filters.value.activePanelIds,
+  genomeBuild
+})
 
 // URL state (cohort parity with the case view): filters `f`, variant type
 // `type`; search `q` and sort `sort` are bound by CohortFilterBar / CohortTable.

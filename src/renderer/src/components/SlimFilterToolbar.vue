@@ -186,10 +186,20 @@
           <strong>{{ filter.label }}</strong>
           <span class="ml-1">{{ filter.value }}</span>
         </v-chip>
-        <v-btn variant="text" size="x-small" color="error" class="ml-auto" @click="clearAll">
-          Clear all
-        </v-btn>
       </template>
+      <!-- Active gene panel has genes without coordinates for the build
+           (case and cohort view alike; see usePanelResolutionStatus). -->
+      <PanelUnmappedGenesWarning />
+      <v-btn
+        v-if="activeFiltersList.length > 0"
+        variant="text"
+        size="x-small"
+        color="error"
+        class="ml-auto"
+        @click="clearAll"
+      >
+        Clear all
+      </v-btn>
     </div>
 
     <!-- Optional hint bar (e.g. annotation filter hint) -->
@@ -203,6 +213,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
+import PanelUnmappedGenesWarning from './panels/PanelUnmappedGenesWarning.vue'
 import {
   mdiDotsVertical,
   mdiFilterCheck,

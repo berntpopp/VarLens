@@ -18,6 +18,7 @@ import { logService } from '../services/LogService'
 import { useApiService } from '../composables/useApiService'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useCaseTabUrlParam } from '../composables/useViewUrlBindings'
+import { providePanelResolutionStatus } from '../composables/usePanelResolutionStatus'
 
 const {
   selectedCaseId,
@@ -253,6 +254,13 @@ const effectiveFilters = computed<Omit<VariantFilter, 'case_id'>>(() => ({
   ...currentFilters.value,
   variant_type: variantTableType.value
 }))
+
+// Warn (in the filter toolbar) when genes of the applied panel have no
+// coordinates for this case's genome build and are therefore not applied.
+providePanelResolutionStatus({
+  panelIds: () => currentFilters.value.active_panel_ids,
+  caseId: selectedCaseId
+})
 
 // Refresh type counts when data changes (import, delete)
 watch(dataGeneration, () => {
