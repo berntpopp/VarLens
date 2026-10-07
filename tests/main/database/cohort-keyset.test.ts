@@ -155,21 +155,18 @@ describe('SQLite cohort keyset paging', () => {
     expect(details(0)).toContain(`SCAN cvs USING INDEX ${COHORT_KEYSET_INDEX}`)
     expect(details(0).filter((d) => d.includes('TEMP B-TREE'))).toEqual([])
 
-    // The plan holds exactly one temp b-tree, and not for this query's rows.
-    // Since the cohort frequency is derived at read time
-    // (cohort-frequency-sql.ts), the page query joins `bt`, the per-build case
-    // totals: `SELECT genome_build, COUNT(*) FROM cases GROUP BY genome_build`.
-    // `cases` has no index on genome_build, so that GROUP BY sorts through a
-    // temp b-tree. It is materialized once per query, reads one row per CASE
-    // (not per variant or summary row) and yields one row per genome build —
-    // its cost does not grow with the summary or with the page offset.
-    // Removing it would take an index on cases(genome_build), i.e. a
-    // migration, to save a sort of at most a few thousand short rows.
+    // No temp b-tree anywhere in the plan. Since the cohort frequency is
+    // derived at read time (cohort-frequency-sql.ts), the page query joins
+    // `bt`, the per-build totals of published cases: `SELECT genome_build,
+    // COUNT(*) FROM cases WHERE import_status = 'ready' GROUP BY genome_build`.
+    // Migration v40's idx_cases_import_status (import_status, genome_build)
+    // covers it and delivers the rows in group order, so the GROUP BY needs
+    // no sort either (before v40 it scanned `cases` through a temp b-tree).
     const totals = planRows.find((r) => /^(MATERIALIZE|CO-ROUTINE) bt$/.test(r.detail))
     expect(totals).toBeDefined()
-    expect(details(totals!.id)).toEqual(['SCAN cases', 'USE TEMP B-TREE FOR GROUP BY'])
-    expect(planRows.filter((r) => r.detail.includes('TEMP B-TREE')).map((r) => r.parent)).toEqual([
-      totals!.id
+    expect(details(totals!.id)).toEqual([
+      'SEARCH cases USING COVERING INDEX idx_cases_import_status (import_status=?)'
     ])
+    expect(planRows.filter((r) => r.detail.includes('TEMP B-TREE'))).toEqual([])
   })
 })
