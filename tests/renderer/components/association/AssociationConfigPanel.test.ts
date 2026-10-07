@@ -23,12 +23,15 @@ import * as directives from 'vuetify/directives'
 import type { ColumnFilterMeta } from '../../../../src/shared/types/column-filters'
 
 vi.mock('../../../../src/renderer/src/composables/useVariantColumnMeta', () => ({
+  cacheKeyFor: (scope: { caseId?: number; caseIds?: number[] }): string => JSON.stringify(scope),
   useVariantColumnMeta: (): {
     getColumnMeta: (scope: unknown, key: string) => Promise<ColumnFilterMeta>
     ensureTypesPresent: (scope: unknown) => Promise<Set<string>>
     invalidate: () => void
     invalidateAll: () => void
+    cacheEpoch: { value: number }
   } => ({
+    cacheEpoch: { value: 0 },
     getColumnMeta: vi.fn(async (_scope, key: string) => ({
       key,
       dataType: 'numeric',
