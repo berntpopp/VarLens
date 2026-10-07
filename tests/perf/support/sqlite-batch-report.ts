@@ -8,13 +8,16 @@ import { createHash } from 'node:crypto'
 import { existsSync, statSync } from 'node:fs'
 import { performance } from 'node:perf_hooks'
 
+import {
+  COHORT_FREQUENCY_SQL,
+  COHORT_SUMMARY_WITH_FREQUENCY_FROM
+} from '../../../src/main/database/cohort-frequency-sql'
 import { RECREATE_INDEXES } from '../../../src/main/workers/import-index-sql'
 import { openWorkerDatabase } from '../../../src/main/workers/worker-db'
 import {
   INCREMENTAL_ADD_SQL,
   REBUILD_GENE_BURDEN_SQL,
-  REBUILD_VARIANT_SUMMARY_SQL,
-  RECOMPUTE_ALL_FREQUENCIES_SQL
+  REBUILD_VARIANT_SUMMARY_SQL
 } from '../../../src/shared/sql/cohort-summary-rebuild'
 import type { PhaseSnapshot } from './sql-phase-profiler'
 
@@ -24,7 +27,7 @@ export interface BatchFingerprint {
   sums: Record<string, number>
   /** sha256 over key + carrier/het/hom counts, ordered by key. */
   carrierHash: string
-  /** sha256 over key + stored `cohort_frequency` (what cohort readers select). */
+  /** sha256 over key + the read-time cohort frequency (what cohort readers select). */
   cohortFrequencyHash: string
   geneBurdenHash: string
   variantFrequencyHash: string
@@ -66,8 +69,8 @@ export function fingerprintDatabase(dbPath: string): BatchFingerprint {
     const sums = db
       .prepare(
         `SELECT SUM(carrier_count) AS carrier, SUM(het_count) AS het, SUM(hom_count) AS hom,
-                ROUND(SUM(cohort_frequency), 6) AS cohortFrequency
-         FROM cohort_variant_summary`
+                ROUND(SUM(${COHORT_FREQUENCY_SQL}), 6) AS cohortFrequency
+         FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM}`
       )
       .get() as Record<string, number>
     return {
@@ -80,7 +83,7 @@ export function fingerprintDatabase(dbPath: string): BatchFingerprint {
       ),
       cohortFrequencyHash: hashRows(
         db,
-        `SELECT ${key}, printf('%.9f', cohort_frequency) FROM cohort_variant_summary ORDER BY ${key}`
+        `SELECT ${key}, printf('%.9f', ${COHORT_FREQUENCY_SQL}) FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM} ORDER BY ${key}`
       ),
       geneBurdenHash: hashRows(
         db,
@@ -144,9 +147,6 @@ export function runStatementDiagnostics(copyPath: string): DiagnosticRow[] {
 
     const lastCase = db.prepare('SELECT MAX(id) AS id FROM cases').get() as { id: number | null }
     db.exec('BEGIN')
-    time('incrementalAdd: RECOMPUTE_ALL_FREQUENCIES_SQL (full-table rewrite)', () =>
-      db.exec(RECOMPUTE_ALL_FREQUENCIES_SQL)
-    )
     if (lastCase.id !== null) {
       const add = db.prepare(INCREMENTAL_ADD_SQL)
       time('incrementalAdd: INCREMENTAL_ADD_SQL (last case, replayed)', () => add.run(lastCase.id))

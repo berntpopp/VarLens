@@ -10,6 +10,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import {
+  COHORT_FREQUENCY_SQL,
+  COHORT_SUMMARY_WITH_FREQUENCY_FROM
+} from '../../../src/main/database/cohort-frequency-sql'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
@@ -200,7 +204,7 @@ describe('Incremental updates', () => {
 
     const shared = db
       .prepare(
-        "SELECT carrier_count, cohort_frequency FROM cohort_variant_summary WHERE chr = '1' AND pos = 100"
+        `SELECT carrier_count, ${COHORT_FREQUENCY_SQL} AS cohort_frequency FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM} WHERE chr = '1' AND pos = 100`
       )
       .get() as { carrier_count: number; cohort_frequency: number }
     expect(shared.carrier_count).toBe(2)
@@ -208,7 +212,7 @@ describe('Incremental updates', () => {
 
     const case1Only = db
       .prepare(
-        "SELECT carrier_count, cohort_frequency FROM cohort_variant_summary WHERE chr = '1' AND pos = 200"
+        `SELECT carrier_count, ${COHORT_FREQUENCY_SQL} AS cohort_frequency FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM} WHERE chr = '1' AND pos = 200`
       )
       .get() as { carrier_count: number; cohort_frequency: number }
     expect(case1Only.cohort_frequency).toBeCloseTo(0.5) // 1 carrier / 2 cases
@@ -238,13 +242,14 @@ describe('Incremental updates', () => {
 
     const shared = db
       .prepare(
-        "SELECT carrier_count, cohort_frequency FROM cohort_variant_summary WHERE chr = '1' AND pos = 100"
+        `SELECT carrier_count, ${COHORT_FREQUENCY_SQL} AS cohort_frequency FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM} WHERE chr = '1' AND pos = 100`
       )
       .get() as { carrier_count: number; cohort_frequency: number }
     expect(shared.carrier_count).toBe(1)
-    // Frequency recomputed during incrementalRemove (before case delete) uses 2 cases
-    // After case delete, stored frequency is stale (marked stale for full rebuild)
-    expect(shared.cohort_frequency).toBeCloseTo(0.5) // 1 carrier / 2 cases (pre-delete count)
+    // Derived at read time from the cases that remain: 1 carrier / 1 case.
+    // (The stored value used to be 0.5 here — computed before the case was
+    // deleted, so stale until the next full rebuild.)
+    expect(shared.cohort_frequency).toBeCloseTo(1.0)
 
     // Variant at 200 should be unchanged
     const unchanged = db
@@ -321,7 +326,7 @@ describe('Rebuild with annotation flags', () => {
 
     const starred = db
       .prepare(
-        "SELECT has_star, has_comment, cohort_frequency FROM cohort_variant_summary WHERE chr = '1' AND pos = 100"
+        `SELECT has_star, has_comment, ${COHORT_FREQUENCY_SQL} AS cohort_frequency FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM} WHERE chr = '1' AND pos = 100`
       )
       .get() as { has_star: number; has_comment: number; cohort_frequency: number }
 
@@ -331,12 +336,20 @@ describe('Rebuild with annotation flags', () => {
 
     const unstarred = db
       .prepare(
-        "SELECT has_star, has_comment, cohort_frequency FROM cohort_variant_summary WHERE chr = '1' AND pos = 200"
+        `SELECT has_star, has_comment, ${COHORT_FREQUENCY_SQL} AS cohort_frequency FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM} WHERE chr = '1' AND pos = 200`
       )
       .get() as { has_star: number; has_comment: number; cohort_frequency: number }
 
     expect(unstarred.has_star).toBe(0)
     expect(unstarred.has_comment).toBe(0)
     expect(unstarred.cohort_frequency).toBeCloseTo(1.0)
+
+    // The frequency is derived by readers: the rebuild no longer stores it.
+    const stored = db
+      .prepare(
+        'SELECT COUNT(*) AS n FROM cohort_variant_summary WHERE cohort_frequency IS NOT NULL'
+      )
+      .get() as { n: number }
+    expect(stored.n).toBe(0)
   })
 })

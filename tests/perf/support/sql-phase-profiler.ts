@@ -49,7 +49,7 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/^DROP INDEX/i, 'index_drop'],
   [/^CREATE INDEX/i, 'index_recreate'],
   [/TRIGGER/i, 'fts_triggers'],
-  [/^UPDATE cohort_variant_summary SET cohort_frequency/i, 'frequency_recompute'],
+
   [/^INSERT INTO cohort_variant_summary/i, 'cohort_incremental_add'],
   [/cohort_summary_meta/i, 'summary_meta'],
   [/^wal_checkpoint/i, 'wal_checkpoint'],

@@ -109,8 +109,6 @@ export interface RemovalStatements {
   decrementRows: Statement
   dropEmptyRows: Statement
   insertRecomputeRows: Statement
-  buildCaseCount: Statement
-  refreshFrequency: Statement
   countLostGeneCoords: Statement
   decrementGenes: Statement
   dropEmptyGenes: Statement
@@ -149,15 +147,6 @@ export function prepareRemovalStatements(
     ),
     dropEmptyRows: db.prepare('DELETE FROM cohort_variant_summary WHERE carrier_count <= 0'),
     insertRecomputeRows: db.prepare(variantSummaryInsertSql(RECOMPUTE_FILTER)),
-    // The rebuild's cohort_frequency expression with its per-row
-    // `(SELECT COUNT(*) FROM cases WHERE genome_build = …)` hoisted into one
-    // bound value (@cases; 0 → x / 0 → NULL, as in the rebuild).
-    buildCaseCount: db.prepare('SELECT COUNT(*) AS n FROM cases WHERE genome_build = ?'),
-    refreshFrequency: db.prepare(
-      `UPDATE cohort_variant_summary
-       SET cohort_frequency = CAST(carrier_count AS REAL) / @cases
-       WHERE genome_build IS @build`
-    ),
     countLostGeneCoords: db.prepare(
       `INSERT INTO temp.removed_case_gene_lost (gene_symbol, lost)
        SELECT k.gene_symbol, COUNT(*) FROM temp.removed_case_gene_coords k

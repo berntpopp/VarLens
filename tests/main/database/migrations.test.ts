@@ -790,14 +790,15 @@ describe('Schema Migrations', () => {
       const hasStar = columns.find((c) => c.name === 'has_star')!
       expect(hasStar.notnull).toBe(1)
 
-      // Verify cohort_frequency index exists
+      // v14 created an index on cohort_frequency; v38 drops it again because
+      // the frequency is derived at read time and the column is never written.
       const indexes = db
         .prepare(
           "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='cohort_variant_summary'"
         )
         .all() as { name: string }[]
       const indexNames = indexes.map((i) => i.name)
-      expect(indexNames).toContain('idx_cvs_cohort_freq')
+      expect(indexNames).not.toContain('idx_cvs_cohort_freq')
 
       // Verify user_version = latest (v15 + v16 + v17 + v18 + … + v28 + v29 all run)
       const version = db.pragma('user_version', { simple: true }) as number

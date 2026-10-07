@@ -11,6 +11,10 @@
  * step (e.g. a `WHERE (v.chr, v.pos, v.ref, v.alt) IN (...)` restriction);
  * the empty string recomputes every coordinate. One template for the full
  * rebuild and the per-coordinate incremental path keeps the two in lockstep.
+ *
+ * `cohort_frequency` is deliberately not written (it stays NULL): readers
+ * derive it from carrier_count and the build's case count — see
+ * src/main/database/cohort-frequency-sql.ts.
  */
 export function variantSummaryInsertSql(variantFilter = ''): string {
   return `
@@ -19,7 +23,7 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
     consequence, func, clinvar, gnomad_af, cadd,
     transcript, omim_mim_number,
     carrier_count, het_count, hom_count,
-    cohort_frequency, has_star, has_comment, acmg_best,
+    has_star, has_comment, acmg_best,
     variant_key, variant_type, genome_build
   )
   SELECT
@@ -28,7 +32,6 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
     d.consequence, d.func, d.clinvar, d.gnomad_af, d.cadd,
     d.transcript, d.omim_mim_number,
     d.carrier_count, d.het_count, d.hom_count,
-    CAST(d.carrier_count AS REAL) / (SELECT COUNT(*) FROM cases WHERE genome_build = d.genome_build),
     CASE WHEN va.starred = 1 THEN 1 ELSE 0 END,
     CASE WHEN va.global_comment IS NOT NULL AND va.global_comment != '' THEN 1 ELSE 0 END,
     va.acmg_classification,
@@ -160,7 +163,7 @@ export const INCREMENTAL_ADD_SQL = `
     consequence, func, clinvar, gnomad_af, cadd,
     transcript, omim_mim_number,
     carrier_count, het_count, hom_count,
-    cohort_frequency, has_star, has_comment, acmg_best,
+    has_star, has_comment, acmg_best,
     variant_key, variant_type, genome_build
   )
   SELECT
@@ -171,7 +174,7 @@ export const INCREMENTAL_ADD_SQL = `
     1,
     CASE WHEN MAX(v.gt_num) IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END,
     CASE WHEN MAX(v.gt_num) IN ('1/1','1|1') THEN 1 ELSE 0 END,
-    0.0, 0, 0, NULL,
+    0, 0, NULL,
     v.chr || ':' || v.pos || ':' || v.ref || ':' || v.alt,
     v.variant_type, c.genome_build
   FROM variants v
@@ -208,10 +211,4 @@ export const INCREMENTAL_REMOVE_SQL = `
 
 export const CLEANUP_ZERO_CARRIERS_SQL = `
   DELETE FROM cohort_variant_summary WHERE carrier_count <= 0;
-`
-
-export const RECOMPUTE_ALL_FREQUENCIES_SQL = `
-  UPDATE cohort_variant_summary
-  SET cohort_frequency = CAST(carrier_count AS REAL) /
-    (SELECT COUNT(*) FROM cases WHERE genome_build = cohort_variant_summary.genome_build);
 `

@@ -155,6 +155,9 @@ describe('SQLite cohort keyset paging', () => {
       .map((r) => r.detail)
       .join('\n')
     expect(plan).toContain(COHORT_KEYSET_INDEX)
-    expect(plan).not.toContain('TEMP B-TREE')
+    // The summary is read in index order. The only temp b-tree allowed is the
+    // GROUP BY of the per-build case totals (one row per case, not per variant).
+    expect(plan).not.toContain('TEMP B-TREE FOR ORDER BY')
+    expect(plan).toMatch(/SCAN cvs USING INDEX idx_cvs_carrier_keyset/)
   })
 })

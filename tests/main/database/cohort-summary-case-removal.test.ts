@@ -10,6 +10,10 @@
  * and the external-content FTS index must pass its integrity check.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  COHORT_FREQUENCY_SQL,
+  COHORT_SUMMARY_WITH_FREQUENCY_FROM
+} from '../../../src/main/database/cohort-frequency-sql'
 
 import { DatabaseService } from '../../../src/main/database'
 import {
@@ -109,7 +113,9 @@ describe('incremental case removal equals a full cohort-summary rebuild', () => 
     return {
       variants: db()
         .prepare(
-          `SELECT * FROM cohort_variant_summary
+          // read_frequency: what readers show (the stored column is never written).
+          `SELECT cvs.*, ${COHORT_FREQUENCY_SQL} AS read_frequency
+           FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM}
            ORDER BY chr, pos, ref, alt, variant_type, genome_build`
         )
         .all(),

@@ -370,10 +370,9 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     const afterAddPg = sortCohort(await pgCohortRows({})).map(normalizeCohort)
     expect(afterAddPg).toEqual(afterAddSqlite)
 
-    // Remove the second case on both backends. PG's deleteCase recomputes
-    // cohort_frequency against the surviving cases in the same transaction; the
-    // SQLite path removes the case row then rebuilds the summary so its
-    // frequency denominator likewise excludes the deleted case.
+    // Remove the second case on both backends. Both derive the frequency at
+    // read time, so its denominator excludes the deleted case without any
+    // rewrite; the SQLite rebuild here only refreshes the carrier counts.
     sqlite.cases.deleteCase(sqliteCaseIds[1])
     sqlite.cohortSummary.rebuild()
     sqlite.cohort.invalidateColumnMetaCache()

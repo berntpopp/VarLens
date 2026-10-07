@@ -14,7 +14,7 @@ import { migrateUserRoles } from './user-roles-migration'
 import { migrateCohortKeysetIndex } from './cohort-keyset-index'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 37
+export const LATEST_SQLITE_SCHEMA_VERSION = 38
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -58,6 +58,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 37
  * - 35: backfill case_data_info rows the worker import path failed to write
  * - 36: viewer / analyst / admin roles (users table rebuild; `user` → `analyst`)
  * - 37: cohort keyset index idx_cvs_carrier_keyset (cohort-keyset-index.ts)
+ * - 38: drop idx_cvs_cohort_freq — cohort frequency is derived at read time
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1891,6 +1892,14 @@ export function runMigrations(db: Database.Database): void {
   if (currentVersion < 37) {
     migrateCohortKeysetIndex(db)
     db.exec('PRAGMA user_version = 37')
+  }
+
+  // v38: cohort frequency is derived at read time (cohort-frequency-sql.ts,
+  // mirrors PG 0022), so nothing maintains or reads the stored column. Drop
+  // its index; the column itself stays so older code keeps working.
+  if (currentVersion < 38) {
+    db.exec('DROP INDEX IF EXISTS idx_cvs_cohort_freq')
+    db.exec('PRAGMA user_version = 38')
   }
 }
 

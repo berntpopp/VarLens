@@ -24,11 +24,14 @@ import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
+import {
+  COHORT_BUILD_TOTALS_JOIN,
+  COHORT_FREQUENCY_SQL,
+  COHORT_SUMMARY_WITH_FREQUENCY_FROM,
+  cohortSortExpression
+} from './cohort-frequency-sql'
 
-/**
- * Sortable columns for cohort queries
- * Maps column keys to SQL column names on cohort_variant_summary
- */
+/** Sortable/filterable column keys → SQL column names on cohort_variant_summary. */
 const SORTABLE_COLUMNS: Record<string, string> = {
   chr: 'chr',
   pos: 'pos',
@@ -91,6 +94,7 @@ export class CohortService {
   private buildWhereClause(params: CohortSearchParams): {
     whereClause: string
     paramsArray: (string | number)[]
+    needsBuildTotals: boolean
   } {
     const whereConditions: string[] = []
     const paramsArray: (string | number)[] = []
@@ -187,7 +191,7 @@ export class CohortService {
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
-    return { whereClause, paramsArray }
+    return { whereClause, paramsArray, needsBuildTotals: base.needsBuildTotals }
   }
 
   /**
@@ -200,10 +204,14 @@ export class CohortService {
       params.sort_by !== undefined && SORTABLE_COLUMNS[params.sort_by] !== undefined
         ? params.sort_by
         : 'carrier_count'
-    const sortBy = SORTABLE_COLUMNS[validatedSortKey]
+    const sortBy = cohortSortExpression(
+      validatedSortKey,
+      SORTABLE_COLUMNS[validatedSortKey],
+      params.genome_build
+    )
     const sortOrder = params.sort_order ?? 'desc'
 
-    // Get total case count (used for cohort_frequency calculation)
+    // Total case count across builds (the `total_cases` column of every row)
     const totalCasesResult = this.db.prepare('SELECT COUNT(*) as count FROM cases').get() as {
       count: number
     }
@@ -213,7 +221,7 @@ export class CohortService {
       return { data: [], total_count: 0 }
     }
 
-    const { whereClause, paramsArray } = this.buildWhereClause(params)
+    const { whereClause, paramsArray, needsBuildTotals } = this.buildWhereClause(params)
 
     // Count query (only when filters change, not on page/sort change)
     let totalCount = 0
@@ -221,6 +229,7 @@ export class CohortService {
       const countSql = `
         SELECT COUNT(*) as count
         FROM cohort_variant_summary cvs
+        ${needsBuildTotals ? COHORT_BUILD_TOTALS_JOIN : ''}
         ${whereClause}
       `
       const countResult = this.db.prepare(countSql).get(...paramsArray) as { count: number }
@@ -255,7 +264,7 @@ export class CohortService {
         cvs.aa_change,
         cvs.carrier_count,
         ${totalCases} AS total_cases,
-        cvs.cohort_frequency,
+        ${COHORT_FREQUENCY_SQL} AS cohort_frequency,
         cvs.het_count,
         cvs.hom_count,
         cvs.variant_key,
@@ -271,7 +280,7 @@ export class CohortService {
         ${SQLITE_KEYSET_EXTRA_COLUMNS}`
             : ''
         }
-      FROM cohort_variant_summary cvs
+      FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM}
       ${whereClause}
       ${seekCondition}
       ${orderByClause}
@@ -498,7 +507,11 @@ export class CohortService {
     if (this._columnMetaCache !== null) return this._columnMetaCache
 
     const DISTINCT_THRESHOLD = 50
-    const entries = Object.entries(SORTABLE_COLUMNS)
+    // The frequency is derived, so the metadata reads through the build totals.
+    const entries = Object.entries(SORTABLE_COLUMNS).map(([key, sqlCol]): [string, string] => [
+      key,
+      cohortSortExpression(key, sqlCol)
+    ])
 
     // Single-pass aggregate: compute COUNT(DISTINCT), MIN, MAX for all columns at once
     const selectParts = entries.map(([key, sqlCol]) => {
@@ -510,7 +523,7 @@ export class CohortService {
       return parts.join(', ')
     })
     const aggRow = this.db
-      .prepare(`SELECT ${selectParts.join(', ')} FROM cohort_variant_summary`)
+      .prepare(`SELECT ${selectParts.join(', ')} FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM}`)
       .get() as Record<string, number | null>
 
     // Build metadata from aggregate results
@@ -544,7 +557,7 @@ export class CohortService {
     if (lowCardColumns.length > 0) {
       const unionParts = lowCardColumns.map(
         ({ key, sqlCol }) =>
-          `SELECT '${key}' AS col_key, CAST(${sqlCol} AS TEXT) AS val FROM cohort_variant_summary WHERE ${sqlCol} IS NOT NULL GROUP BY ${sqlCol}`
+          `SELECT '${key}' AS col_key, CAST(${sqlCol} AS TEXT) AS val FROM ${COHORT_SUMMARY_WITH_FREQUENCY_FROM} WHERE ${sqlCol} IS NOT NULL GROUP BY ${sqlCol}`
       )
       const rows = this.db.prepare(unionParts.join(' UNION ALL ')).all() as Array<{
         col_key: string
