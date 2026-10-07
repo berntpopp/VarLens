@@ -442,3 +442,15 @@ describe('VEP CLIN_SIG values rank like ClinVar_CLNSIG values (#469)', () => {
     expect(takeUnrankedClinvarStrings()).toEqual([])
   })
 })
+
+describe('impactRank on hostile input', () => {
+  it('trims spaces like SQL trim and stays linear on long runs of spaces', () => {
+    expect(impactRank('  high  ')).toBe(impactRank('HIGH'))
+    expect(impactRank('\tHIGH')).toBe(0) // only U+0020 is trimmed, as in SQL trim(x)
+    const spaces = ' '.repeat(400_000)
+    const started = performance.now()
+    expect(impactRank(`${spaces}x${spaces}y`)).toBe(0)
+    expect(impactRank(`${spaces}MODERATE${spaces}`)).toBe(impactRank('MODERATE'))
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+})

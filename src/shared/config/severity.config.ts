@@ -54,7 +54,20 @@ export function impactRank(value: string | null | undefined): number {
 
 /** What SQL `upper(trim(x))` yields on both backends for the level names: ASCII only. */
 function asciiUpperTrimmed(value: string): string {
-  return value.replace(/^ +| +$/g, '').replace(/[a-z]/g, (letter) => letter.toUpperCase())
+  return trimSpaces(value).replace(/[a-z]/g, (letter) => letter.toUpperCase())
+}
+
+/**
+ * Strip leading and trailing U+0020, as SQL `trim(x)` does. Written as index
+ * scans because the value comes from imported files: a trailing-space regular
+ * expression backtracks quadratically on a long run of spaces.
+ */
+function trimSpaces(value: string): string {
+  let start = 0
+  let end = value.length
+  while (start < end && value.charCodeAt(start) === 32) start++
+  while (end > start && value.charCodeAt(end - 1) === 32) end--
+  return value.slice(start, end)
 }
 
 /**
