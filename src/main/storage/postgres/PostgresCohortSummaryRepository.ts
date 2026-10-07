@@ -46,9 +46,10 @@ import {
 } from './cohort-unique-variants-sql'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 import {
-  maxSelectList,
-  mergeMaxAssignments,
-  removeCaseFromSummary
+  caseContributionCte,
+  mergeRepresentativeAssignment,
+  removeCaseFromSummary,
+  summaryRowsCte
 } from './cohort-summary-representative-sql'
 
 interface ScopedClient {
@@ -100,26 +101,9 @@ const META_NUMERIC_COLUMNS = new Set<string>(['pos', 'gnomad_af', 'cadd', 'qual'
  */
 const META_DISTINCT_THRESHOLD = 50
 
-/** Deduped per-coordinate aggregate for one case, shared by add/remove. */
-export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvisional = false) => `
-  WITH deduped AS (
-    SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
-           ${maxSelectList('v')},
-           MAX(v.gt_num) AS gt_num
-    FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
-    JOIN ${tbl(includeProvisional ? 'cases_all' : 'cases')} c ON c.id = v.case_id
-    WHERE v.case_id = $1
-    GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build
-  ),
-  per_case AS (
-    SELECT chr, pos, ref, alt, variant_type, genome_build,
-           ${maxSelectList('deduped')},
-           COUNT(*) AS carrier_delta,
-           SUM(CASE WHEN gt_num IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END) AS het_delta,
-           SUM(CASE WHEN gt_num IN ('1/1','1|1') THEN 1 ELSE 0 END) AS hom_delta
-    FROM deduped
-    GROUP BY chr, pos, ref, alt, variant_type, genome_build
-  )`
+/** One case's contribution per summary key (`per_case`), shared by add/remove. */
+export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvisional = false) =>
+  caseContributionCte(tbl, includeProvisional)
 
 export class PostgresCohortSummaryRepository {
   async rebuild({ schema, client }: ScopedClient): Promise<void> {
@@ -141,31 +125,15 @@ export class PostgresCohortSummaryRepository {
       INSERT INTO ${tbl('cohort_variant_summary')}
         (chr, pos, end_pos, ref, alt, variant_type, genome_build,
          gene_symbol, cdna, aa_change, consequence, func, clinvar,
-         gnomad_af, cadd, transcript, omim_mim_number,
+         gnomad_af, cadd, transcript, omim_mim_number, impact_rank, clinvar_rank,
          carrier_count, het_count, hom_count, variant_key,
          has_star, has_comment, acmg_best, cohort_frequency)
-      WITH deduped AS (
-        SELECT v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build,
-               ${maxSelectList('v')},
-               MAX(v.gt_num) AS gt_num
-        FROM ${tbl('variants')} v
-        JOIN ${tbl('cases')} c ON c.id = v.case_id
-        GROUP BY v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build
-      ),
-      agg AS (
-        SELECT d.chr, d.pos, d.ref, d.alt, d.variant_type, d.genome_build,
-               ${maxSelectList('d')},
-               COUNT(*) AS carrier_count,
-               SUM(CASE WHEN d.gt_num IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END) AS het_count,
-               SUM(CASE WHEN d.gt_num IN ('1/1','1|1') THEN 1 ELSE 0 END) AS hom_count
-        FROM deduped d
-        GROUP BY d.chr, d.pos, d.ref, d.alt, d.variant_type, d.genome_build
-      ),
+      ${summaryRowsCte(tbl)},
       ${annotationFlagCtes(tbl)}
       SELECT
         a.chr, a.pos, a.end_pos, a.ref, a.alt, a.variant_type, a.genome_build,
         a.gene_symbol, a.cdna, a.aa_change, a.consequence, a.func, a.clinvar,
-        a.gnomad_af, a.cadd, a.transcript, a.omim_mim_number,
+        a.gnomad_af, a.cadd, a.transcript, a.omim_mim_number, a.impact_rank, a.clinvar_rank,
         a.carrier_count, a.het_count, a.hom_count,
         a.chr || ':' || a.pos || ':' || a.ref || ':' || a.alt AS variant_key,
         -- Pass-9 #8: derive flag columns from current annotation tables.
@@ -248,10 +216,10 @@ export class PostgresCohortSummaryRepository {
     await client.query(
       `
       WITH upserted AS (
-      INSERT INTO ${tbl('cohort_variant_summary')}
+      INSERT INTO ${tbl('cohort_variant_summary')} AS s
         (chr, pos, end_pos, ref, alt, variant_type, genome_build,
          gene_symbol, cdna, aa_change, consequence, func, clinvar,
-         gnomad_af, cadd, transcript, omim_mim_number,
+         gnomad_af, cadd, transcript, omim_mim_number, impact_rank, clinvar_rank,
          carrier_count, het_count, hom_count, variant_key,
          has_star, has_comment, acmg_best, cohort_frequency)
       WITH ${annotationFlagCtes(tbl)}
@@ -259,6 +227,7 @@ export class PostgresCohortSummaryRepository {
         pc.chr, pc.pos, pc.end_pos, pc.ref, pc.alt, pc.variant_type, pc.genome_build,
         pc.gene_symbol, pc.cdna, pc.aa_change, pc.consequence, pc.func, pc.clinvar,
         pc.gnomad_af, pc.cadd, pc.transcript, pc.omim_mim_number,
+        pc.impact_rank, pc.clinvar_rank,
         pc.carrier_delta, pc.het_delta, pc.hom_delta,
         pc.chr || ':' || pc.pos || ':' || pc.ref || ':' || pc.alt AS variant_key,
         -- Pass-9 #8: brand-new rows derive flags from current annotation tables.
@@ -267,14 +236,14 @@ export class PostgresCohortSummaryRepository {
       FROM pg_temp.${CASE_AGG_TABLE} pc
       ${annotationFlagJoins('pc')}
       ON CONFLICT (chr, pos, ref, alt, variant_type, genome_build) DO UPDATE SET
-        carrier_count = cohort_variant_summary.carrier_count + EXCLUDED.carrier_count,
-        het_count = cohort_variant_summary.het_count + EXCLUDED.het_count,
-        hom_count = cohort_variant_summary.hom_count + EXCLUDED.hom_count,
-        -- Representative annotation: MAX per column, as rebuild() computes it.
-        ${mergeMaxAssignments('cohort_variant_summary')},
+        carrier_count = s.carrier_count + EXCLUDED.carrier_count,
+        het_count = s.het_count + EXCLUDED.het_count,
+        hom_count = s.hom_count + EXCLUDED.hom_count,
+        -- Representative annotation: the more severe row, whole (#469).
+        ${mergeRepresentativeAssignment('s')},
         -- Adds never clear annotation flags (OR semantics).
-        has_star = cohort_variant_summary.has_star OR EXCLUDED.has_star,
-        has_comment = cohort_variant_summary.has_comment OR EXCLUDED.has_comment
+        has_star = s.has_star OR EXCLUDED.has_star,
+        has_comment = s.has_comment OR EXCLUDED.has_comment
       ${UPSERT_RETURNING_SQL}
       )
       ${countAddedCoordinatesSql(tbl)}

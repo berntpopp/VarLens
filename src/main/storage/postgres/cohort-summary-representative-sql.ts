@@ -1,110 +1,161 @@
 /**
- * The representative annotation of a `cohort_variant_summary` row.
+ * The representative annotation of a `cohort_variant_summary` row on PostgreSQL.
  *
- * A summary row stands for every carrier of one (chr, pos, ref, alt,
- * variant_type, genome_build), but cases can annotate the same coordinate
- * differently (another transcript, another annotation release). The row
- * stores one value per annotation column, and the rule is the same on every
- * path and on both backends (#461):
+ * A summary row shows the annotation of ONE carrier row: the most severe by
+ * the stored severity ranks, with a bytewise tie-break (#469). The rule, the
+ * column list and the comparison SQL are shared with SQLite:
+ * src/shared/sql/cohort-representative.ts.
  *
- *   the NULL-ignoring MAX() of the column over all visible carrier rows,
- *   text compared bytewise (COLLATE "C", which is how SQLite compares)
+ * rebuild() picks that row per key. The maintained paths must arrive at it too:
  *
- * rebuild() aggregates it. The maintained paths must arrive at the same row:
- *
- *   add      merge with GREATEST() on conflict (NULL-ignoring, like MAX)
- *   remove   recompute the rows where the removed case held a stored maximum
- *            and no remaining carrier row holds all of those maxima
+ *   add      the added case's best row replaces the stored one when it comes
+ *            strictly before it in the order (ON CONFLICT DO UPDATE)
+ *   remove   recompute the rows whose stored representative the removed case
+ *            supplied and no remaining carrier row equals
  *   switch   recompute the row of a variant whose selected transcript changed
  *
- * Every statement here needs the summary write lock (./cohort-summary-lock).
+ * Every statement that writes the summary needs its write lock
+ * (./cohort-summary-lock).
  */
 import type { PoolClient } from 'pg'
 
+import {
+  REPRESENTATIVE_COLUMNS,
+  precedesRepresentative,
+  representativeColumnList,
+  representativeOrderBy,
+  sameRepresentative
+} from '../../../shared/sql/cohort-representative'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 import { dropEmptySummaryRows } from './cohort-unique-variants-sql'
 
 type QueryClient = Pick<PoolClient, 'query'>
 type Tbl = (table: string) => string
 
-/** Annotation columns of the summary, in table order; `text` ones compare bytewise. */
-export const SUMMARY_MAX_COLUMNS = [
-  { name: 'end_pos', text: false },
-  { name: 'gene_symbol', text: true },
-  { name: 'cdna', text: true },
-  { name: 'aa_change', text: true },
-  { name: 'consequence', text: true },
-  { name: 'func', text: true },
-  { name: 'clinvar', text: true },
-  { name: 'gnomad_af', text: false },
-  { name: 'cadd', text: false },
-  { name: 'transcript', text: true },
-  { name: 'omim_mim_number', text: true }
-] as const
-
-type MaxColumn = (typeof SUMMARY_MAX_COLUMNS)[number]
-
 const KEY = ['chr', 'pos', 'ref', 'alt', 'variant_type', 'genome_build'] as const
 const keyList = (alias: string): string => KEY.map((column) => `${alias}.${column}`).join(', ')
 const keyMatch = (a: string, b: string): string =>
   KEY.map((column) => `${a}.${column} = ${b}.${column}`).join(' AND ')
 
-/** A column reference that compares the way the rule says. */
-const comparable = (column: MaxColumn, alias: string): string =>
-  column.text ? `${alias}.${column.name} COLLATE "C"` : `${alias}.${column.name}`
+const HET = "('0/1','1/0','0|1','1|0')"
+const HOM = "('1/1','1|1')"
 
-/** `MAX(<alias>.col) AS col, ...` for every annotation column. */
-export function maxSelectList(alias: string): string {
-  return SUMMARY_MAX_COLUMNS.map(
-    (column) => `MAX(${comparable(column, alias)}) AS ${column.name}`
-  ).join(',\n           ')
-}
+/**
+ * PARTITION BY list for one summary key over variant alias `v` and case alias
+ * `c`. `pos` leads and text is compared bytewise, so the sort behind the
+ * window decides most comparisons on an integer.
+ */
+const KEY_PARTITION = (v: string, c: string): string =>
+  `${v}.pos, ${v}.chr COLLATE "C", ${v}.ref COLLATE "C", ${v}.alt COLLATE "C", ${v}.variant_type COLLATE "C", ${c}.genome_build COLLATE "C"`
 
-/** SET list merging an added case into an existing row (ON CONFLICT DO UPDATE). */
-export function mergeMaxAssignments(existing: string): string {
-  return SUMMARY_MAX_COLUMNS.map(
-    (column) =>
-      `${column.name} = GREATEST(${comparable(column, existing)}, ${comparable(column, 'EXCLUDED')})`
-  ).join(',\n        ')
+/**
+ * CTEs ending in `per_case`: one case's contribution per summary key, i.e. its
+ * best row by the representative order and its genotype (`$1 = caseId`).
+ */
+export function caseContributionCte(tbl: Tbl, includeProvisional = false): string {
+  return `
+  WITH ranked AS (
+    SELECT ${keyList('v').replace('v.genome_build', 'c.genome_build')},
+           ${representativeColumnList('v')},
+           MAX(v.gt_num) OVER key_rows AS gt_num,
+           ROW_NUMBER() OVER (key_rows ORDER BY ${representativeOrderBy('v', 'postgres')}) AS rn
+    FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
+    JOIN ${tbl(includeProvisional ? 'cases_all' : 'cases')} c ON c.id = v.case_id
+    WHERE v.case_id = $1
+    WINDOW key_rows AS (PARTITION BY ${KEY_PARTITION('v', 'c')})
+  ),
+  per_case AS (
+    SELECT ${KEY.join(', ')},
+           ${REPRESENTATIVE_COLUMNS.join(', ')},
+           1 AS carrier_delta,
+           CASE WHEN gt_num IN ${HET} THEN 1 ELSE 0 END AS het_delta,
+           CASE WHEN gt_num IN ${HOM} THEN 1 ELSE 0 END AS hom_delta
+    FROM ranked
+    WHERE rn = 1
+  )`
 }
 
 /**
- * The row's maxima over its visible carriers, for the keys in `keys`
- * (alias `m`). `extraFilter` restricts the carrier rows `v`.
+ * CTEs ending in `agg`: every summary key of the visible variants with its
+ * representative row and its carrier counts. A case counts once per key
+ * whatever number of rows it has there.
+ */
+export function summaryRowsCte(tbl: Tbl): string {
+  return `
+      WITH case_rows AS (
+        SELECT ${keyList('v').replace('v.genome_build', 'c.genome_build')}, v.case_id,
+               ${representativeColumnList('v')},
+               MAX(v.gt_num) OVER case_key AS gt_num,
+               ROW_NUMBER() OVER (case_key ORDER BY ${representativeOrderBy('v', 'postgres')}) AS case_rn
+        FROM ${tbl('variants')} v
+        JOIN ${tbl('cases')} c ON c.id = v.case_id
+        WINDOW case_key AS (PARTITION BY ${KEY_PARTITION('v', 'c')}, v.case_id)
+      ),
+      key_rows AS (
+        SELECT d.*,
+               COUNT(*) OVER summary_key AS carrier_count,
+               SUM(CASE WHEN d.gt_num IN ${HET} THEN 1 ELSE 0 END) OVER summary_key AS het_count,
+               SUM(CASE WHEN d.gt_num IN ${HOM} THEN 1 ELSE 0 END) OVER summary_key AS hom_count,
+               ROW_NUMBER() OVER (summary_key ORDER BY ${representativeOrderBy('d', 'postgres')}) AS key_rn
+        FROM case_rows d
+        WHERE d.case_rn = 1
+        WINDOW summary_key AS (PARTITION BY ${KEY_PARTITION('d', 'd')})
+      ),
+      agg AS (SELECT * FROM key_rows WHERE key_rn = 1)`
+}
+
+/**
+ * SET assignment for `INSERT ... AS <existing> ... ON CONFLICT DO UPDATE`: the
+ * added case's row replaces the stored representative, in every column at
+ * once, when it precedes it. The comparison runs once per row (OFFSET 0 keeps
+ * the planner from inlining it into every column).
+ */
+export function mergeRepresentativeAssignment(existing: string): string {
+  return `(${REPRESENTATIVE_COLUMNS.join(', ')}) = (
+          SELECT ${REPRESENTATIVE_COLUMNS.map(
+            (column) =>
+              `CASE WHEN w.replaces THEN EXCLUDED.${column} ELSE ${existing}.${column} END`
+          ).join(',\n                 ')}
+          FROM (SELECT ${precedesRepresentative('EXCLUDED', existing, 'postgres')} AS replaces OFFSET 0) w
+        )`
+}
+
+/**
+ * Set the representative of the keys in `keys` (alias `m`) to the best of
+ * their visible carrier rows. `extraFilter` restricts the carrier rows `v`.
  */
 function recomputeSql(tbl: Tbl, keysCte: string, extraFilter: string): string {
   return `
     WITH ${keysCte},
-    agg AS (
-      SELECT ${keyList('m')},
-             ${maxSelectList('v')}
-      FROM keys m
-      JOIN ${tbl('variants')} v
-        ON v.chr = m.chr AND v.pos = m.pos AND v.ref = m.ref AND v.alt = m.alt
-       AND v.variant_type = m.variant_type ${extraFilter}
-      JOIN ${tbl('cases')} c ON c.id = v.case_id AND c.genome_build = m.genome_build
-      GROUP BY ${keyList('m')}
+    best AS (
+      SELECT * FROM (
+        SELECT ${keyList('m')},
+               ${representativeColumnList('v')},
+               ROW_NUMBER() OVER (
+                 PARTITION BY ${keyList('m')}
+                 ORDER BY ${representativeOrderBy('v', 'postgres')}
+               ) AS rn
+        FROM keys m
+        JOIN ${tbl('variants')} v
+          ON v.chr = m.chr AND v.pos = m.pos AND v.ref = m.ref AND v.alt = m.alt
+         AND v.variant_type = m.variant_type ${extraFilter}
+        JOIN ${tbl('cases')} c ON c.id = v.case_id AND c.genome_build = m.genome_build
+      ) ranked
+      WHERE rn = 1
     )
     UPDATE ${tbl('cohort_variant_summary')} s
-    SET ${SUMMARY_MAX_COLUMNS.map((column) => `${column.name} = agg.${column.name}`).join(', ')}
-    FROM agg
-    WHERE ${keyMatch('s', 'agg')}
-      AND (${SUMMARY_MAX_COLUMNS.map(
-        (column) => `${comparable(column, 's')} IS DISTINCT FROM ${comparable(column, 'agg')}`
-      ).join(' OR ')})`
+    SET ${REPRESENTATIVE_COLUMNS.map((column) => `${column} = best.${column}`).join(', ')}
+    FROM best
+    WHERE ${keyMatch('s', 'best')}
+      AND NOT (${sameRepresentative('s', 'best', 'postgres')})`
 }
-
-/** The case's value `k` cannot have been the stored maximum `s`. */
-const unaffected = (column: MaxColumn): string =>
-  `(k.${column.name} IS NULL OR ${comparable(column, 'k')} < ${comparable(column, 's')})`
 
 /**
  * Keys whose representative may change when case `$1` goes: other carriers
- * remain, the case holds at least one stored maximum, and no single remaining
- * carrier row holds all the maxima it holds. The last check is an index probe
- * that stops at the first such row, so a cohort that annotates a coordinate
- * uniformly (the normal case) costs one probe per coordinate and recomputes
- * nothing.
+ * remain, the case's best row IS the stored representative, and no remaining
+ * carrier row equals it. The last check is an index probe that stops at the
+ * first such row, so a cohort that annotates a variant uniformly (the normal
+ * case) costs one probe per variant and recomputes nothing.
  */
 function removalKeysCte(tbl: Tbl): string {
   return `keys AS MATERIALIZED (
@@ -112,7 +163,7 @@ function removalKeysCte(tbl: Tbl): string {
       FROM pg_temp.${CASE_AGG_TABLE} k
       JOIN ${tbl('cohort_variant_summary')} s ON ${keyMatch('s', 'k')}
       WHERE s.carrier_count > k.carrier_delta
-        AND NOT (${SUMMARY_MAX_COLUMNS.map(unaffected).join(' AND ')})
+        AND ${sameRepresentative('k', 's', 'postgres')}
         AND NOT EXISTS (
           SELECT 1
           FROM ${tbl('variants')} r
@@ -120,10 +171,7 @@ function removalKeysCte(tbl: Tbl): string {
           WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
             AND r.variant_type = k.variant_type AND rc.genome_build = k.genome_build
             AND r.case_id <> $1
-            AND ${SUMMARY_MAX_COLUMNS.map(
-              (column) =>
-                `(${unaffected(column)} OR ${comparable(column, 'r')} = ${comparable(column, 'k')})`
-            ).join('\n            AND ')}
+            AND ${sameRepresentative('r', 's', 'postgres')}
         )
     )`
 }
