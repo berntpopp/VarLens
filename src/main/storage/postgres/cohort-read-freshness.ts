@@ -173,14 +173,38 @@ async function runRebuild({ pool, schema }: ScopedPool, wait: boolean): Promise<
  */
 const backgroundRebuilds = new Map<string, Promise<void>>()
 
+/** Wait after a failed background rebuild; doubles per consecutive failure. */
+export const REBUILD_RETRY_BASE_MS = 5 * 60 * 1000
+const REBUILD_RETRY_MAX_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Failed background rebuilds per schema. A rebuild that cannot finish (a
+ * cohort too large for its statement timeout, a broken table) fails the same
+ * way every time, and each attempt holds the summary write lock for its
+ * whole duration. Without a pause every stale read would start the next one
+ * as soon as the previous failed.
+ */
+const rebuildFailures = new Map<string, { count: number; retryAt: number }>()
+
 function scheduleBackgroundRebuild(scope: ScopedPool): void {
   if (backgroundRebuilds.has(scope.schema)) return
+  const failed = rebuildFailures.get(scope.schema)
+  if (failed !== undefined && Date.now() < failed.retryAt) return
 
   const task = runRebuild(scope, true)
-    .then(() => undefined)
+    .then(() => {
+      rebuildFailures.delete(scope.schema)
+    })
     .catch((error: unknown) => {
+      const count = (rebuildFailures.get(scope.schema)?.count ?? 0) + 1
+      const wait = Math.min(REBUILD_RETRY_MAX_MS, REBUILD_RETRY_BASE_MS * 2 ** (count - 1))
+      rebuildFailures.set(scope.schema, { count, retryAt: Date.now() + wait })
       const message = error instanceof Error ? error.message : String(error)
-      mainLogger.warn(`Background cohort summary rebuild failed: ${message}`, 'cohort')
+      mainLogger.error(
+        `Background cohort summary rebuild of ${scope.schema} failed (attempt ${count}): ` +
+          `${message}. The summary stays stale; next attempt in ${Math.round(wait / 60000)} min.`,
+        'cohort'
+      )
     })
     .finally(() => {
       backgroundRebuilds.delete(scope.schema)

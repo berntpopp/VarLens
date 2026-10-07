@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { awaitBackgroundRebuild } from '../../../src/main/storage/postgres/cohort-read-freshness'
+import { mainLogger } from '../../../src/main/services/MainLogger'
+import {
+  awaitBackgroundRebuild,
+  REBUILD_RETRY_BASE_MS
+} from '../../../src/main/storage/postgres/cohort-read-freshness'
 import { PostgresOverviewRepository } from '../../../src/main/storage/postgres/PostgresOverviewRepository'
 
 describe('PostgresOverviewRepository', () => {
@@ -203,6 +207,59 @@ describe('PostgresOverviewRepository', () => {
 
       releaseRebuild()
       await awaitBackgroundRebuild(schema)
+    })
+    it('backs off after a failed background rebuild instead of retrying on every read', async () => {
+      const schema = `ov_backoff_${Math.random().toString(36).slice(2)}`
+      const errorLog = vi.spyOn(mainLogger, 'error').mockImplementation(() => undefined)
+      vi.useFakeTimers({ toFake: ['Date'] })
+      try {
+        const query = vi.fn(async (config: string | { text: string }) => {
+          const sql = typeof config === 'string' ? config : config.text
+          return sql.includes('"cohort_summary_state" s')
+            ? { rows: [{ ...fresh, is_stale: true }] }
+            : { rows: [] }
+        })
+        // Every attempt fails the way an over-long rebuild does.
+        const connect = vi.fn(async () => {
+          throw new Error('canceling statement due to statement timeout')
+        })
+        const repo = new PostgresOverviewRepository({ query, connect } as never, schema)
+
+        expect((await repo.getOverview()).warnings).toEqual({ staleSummary: true })
+        await awaitBackgroundRebuild(schema)
+        expect(connect).toHaveBeenCalledTimes(1)
+        // Visible at error level, with the reason and when it will be retried.
+        expect(errorLog).toHaveBeenCalledWith(
+          expect.stringMatching(
+            /rebuild of .*ov_backoff.* failed \(attempt 1\): canceling statement due to statement timeout.*next attempt/
+          ),
+          'cohort'
+        )
+
+        // Reads keep being served (and flagged) but do not start another attempt …
+        for (let read = 0; read < 5; read++) {
+          expect((await repo.getOverview()).warnings).toEqual({ staleSummary: true })
+        }
+        await awaitBackgroundRebuild(schema)
+        expect(connect).toHaveBeenCalledTimes(1)
+
+        // … until the backoff has passed; a second failure waits longer.
+        vi.setSystemTime(Date.now() + REBUILD_RETRY_BASE_MS + 1)
+        await repo.getOverview()
+        await awaitBackgroundRebuild(schema)
+        expect(connect).toHaveBeenCalledTimes(2)
+        vi.setSystemTime(Date.now() + REBUILD_RETRY_BASE_MS + 1)
+        await repo.getOverview()
+        await awaitBackgroundRebuild(schema)
+        expect(connect).toHaveBeenCalledTimes(2)
+        vi.setSystemTime(Date.now() + REBUILD_RETRY_BASE_MS + 1)
+        await repo.getOverview()
+        await awaitBackgroundRebuild(schema)
+        expect(connect).toHaveBeenCalledTimes(3)
+      } finally {
+        vi.useRealTimers()
+        errorLog.mockRestore()
+      }
     })
   })
 })
