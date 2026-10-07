@@ -13,22 +13,17 @@
 -- The import pipeline writes them from now on; existing rows are backfilled
 -- by this migration's afterApply step (migrations/severity-rank-backfill.ts),
 -- because the ClinVar category of a multi-valued string cannot be derived in
--- plain SQL. Adding the columns is a catalogue change, not a table rewrite.
+-- plain SQL. Adding the columns here is a catalogue change; the backfill then
+-- rewrites the table once.
 -- "__schema__" is the migration-runner template placeholder.
 
 ALTER TABLE "__schema__"."variants_all"
   ADD COLUMN IF NOT EXISTS impact_rank SMALLINT NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS clinvar_rank SMALLINT NOT NULL DEFAULT 0;
 
--- The "variants" view (0015) was created as SELECT v.*, which is expanded
--- when the view is defined: it has to be redefined to expose new columns.
--- They come last, so CREATE OR REPLACE is allowed and no dependent breaks.
-CREATE OR REPLACE VIEW "__schema__"."variants" AS
-  SELECT v.* FROM "__schema__"."variants_all" v
-  WHERE EXISTS (
-    SELECT 1 FROM "__schema__"."cases_all" c
-    WHERE c.id = v.case_id AND c.import_status = 'ready'
-  );
+-- The "variants" view (0015) is redefined by the afterApply step, after the
+-- backfill: the backfill rewrites the table through the new columns, which is
+-- only allowed while no view uses them.
 
 -- The summary stores the ranks of its representative row, so an import can
 -- compare a new carrier with the stored row without reading other carriers.

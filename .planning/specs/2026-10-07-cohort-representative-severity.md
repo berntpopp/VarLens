@@ -92,7 +92,12 @@ ClinVar VCF `CLNSIG` (`/` in aggregates, `|` between classification types, `_` f
 - Backfill: PostgreSQL migration `0025`, SQLite schema version `41`. Impact uses a `CASE`
   generated from the config. ClinVar cannot be tokenised in portable SQL, so the migration
   reads the distinct stored strings, ranks each with the config's normaliser and applies the
-  resulting raw-string to rank table in one `UPDATE`. Both are idempotent.
+  result (PostgreSQL: a `CASE` over the ranked strings; SQLite: a lookup table). PostgreSQL
+  writes the ranks by rewriting `variants_all` once (`ALTER COLUMN ... USING`) instead of an
+  `UPDATE`, which would write a second copy of every row and a new entry in each of its twelve
+  indexes (measured on 1.26 million variants: 77 s against 9 s); the `variants` view is
+  redefined afterwards. SQLite updates in place with the full-text update trigger suspended.
+  Running either again changes nothing.
 - The same migrations add `impact_rank`, `clinvar_rank` to `cohort_variant_summary` and flag a
   populated summary stale, so the existing background rebuild replaces the old rows.
 

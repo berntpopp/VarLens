@@ -109,19 +109,56 @@ describe.skipIf(!RUN)('migration 0025: annotation severity ranks (#469)', () => 
     ])
   }, 60_000)
 
-  it('is idempotent: a second backfill updates no row', async () => {
+  it('run again it updates no row, and corrects a row whose rank is wrong', async () => {
     await seedLegacy()
     await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
     const versions = async (): Promise<unknown[]> =>
       (await probe.query(`SELECT id, xmin::text FROM "${schema}".variants_all ORDER BY id`)).rows
     const before = await versions()
+    const rerun = async (): Promise<void> => {
+      await probe.query('BEGIN')
+      await backfillSeverityRanks(probe, schema)
+      await probe.query('COMMIT')
+    }
 
-    await probe.query('BEGIN')
-    await backfillSeverityRanks(probe, schema)
-    await probe.query('COMMIT')
-
+    await rerun()
     expect(await versions()).toEqual(before)
     expect(await ranks()).toEqual(expectedRanks)
+
+    await probe.query(
+      `UPDATE "${schema}".variants_all SET impact_rank = 0, clinvar_rank = 9 WHERE pos = 100`
+    )
+    await rerun()
+    expect(await ranks()).toEqual(expectedRanks)
+  }, 60_000)
+
+  it('keeps every row, index and generated column through the rewrite', async () => {
+    await seedLegacy()
+    const snapshot = async (): Promise<unknown> => ({
+      rows: (
+        await probe.query(
+          `SELECT id, case_id, chr, pos, ref, alt, consequence, clinvar, gt_num, coord_hash,
+                  search_document::text AS search_document
+             FROM "${schema}".variants_all ORDER BY id`
+        )
+      ).rows,
+      indexes: (
+        await probe.query(
+          `SELECT indexname, indexdef FROM pg_indexes
+            WHERE schemaname = $1 AND tablename = 'variants_all' ORDER BY indexname`,
+          [schema]
+        )
+      ).rows
+    })
+    const before = await snapshot()
+
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+
+    expect(await snapshot()).toEqual(before)
+    // A case that is still importing stays hidden behind the redefined view.
+    await probe.query(`UPDATE "${schema}".cases_all SET import_status = 'importing'`)
+    expect(await ranks('variants')).toEqual([])
+    expect(await ranks('variants_all')).toEqual(expectedRanks)
   }, 60_000)
 
   it('adds NOT NULL rank columns defaulting to 0 to variants and the summary', async () => {
