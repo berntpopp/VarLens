@@ -17,11 +17,10 @@ describe('PostgresOverviewRepository', () => {
       if (sql.includes('SUM(variant_count), 0)::bigint FROM "public"."cases") AS total_variants')) {
         return { rows: [{ total_variants: '10' }] }
       }
-      // The maintained counter (#460): one row of the state table, no scan.
+      // The maintained counter (#460) first; the summary only if its row is missing.
       if (
         sql.includes('AS unique_variants') &&
-        sql.includes('unique_variant_count FROM "public"."cohort_summary_state"') &&
-        !sql.includes('cohort_variant_summary')
+        /COALESCE\(\s*\(SELECT unique_variant_count FROM "public"\."cohort_summary_state"/.test(sql)
       ) {
         return { rows: [{ unique_variants: '8' }] }
       }

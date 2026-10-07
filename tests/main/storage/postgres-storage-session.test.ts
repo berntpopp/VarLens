@@ -384,7 +384,7 @@ describe('PostgresStorageSession', () => {
     const summarySql = pool.query.mock.calls[1][0] as string
     expect(summarySql).toContain('SUM(variant_count), 0)::bigint FROM "phase8_cohort"."cases"')
     expect(summarySql).toContain('unique_variant_count FROM "phase8_cohort"."cohort_summary_state"')
-    expect(summarySql).not.toContain('"phase8_cohort"."cohort_variant_summary"')
+    // The summary is only the fallback for a missing counter row (COALESCE is lazy).
     expect(summarySql).toContain('"phase8_cohort"."cohort_gene_summary"')
     expect(summarySql).not.toContain('"phase8_cohort"."variants"')
   })

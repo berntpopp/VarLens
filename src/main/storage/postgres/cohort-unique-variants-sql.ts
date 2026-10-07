@@ -106,9 +106,16 @@ export async function recountUniqueVariants(args: {
   )
 }
 
-/** The tile read: one row of the state table, no scan of summary or variants. */
+/**
+ * The tile read: one row of the state table, no scan of summary or variants.
+ * A workspace without that row (it is seeded by the migrations) has no
+ * counter to trust, so it gets the exact count over the summary rather than
+ * a silent 0. Whether the counter may lag (stale summary) is reported next to
+ * it by the caller as `warnings.staleSummary`.
+ */
 export function uniqueVariantsSql(tbl: Tbl): string {
   return `SELECT COALESCE(
-            (SELECT unique_variant_count FROM ${tbl('cohort_summary_state')} WHERE id = 1), 0
+            (SELECT unique_variant_count FROM ${tbl('cohort_summary_state')} WHERE id = 1),
+            (${recountUniqueVariantsSql(tbl)})
           )::bigint`
 }

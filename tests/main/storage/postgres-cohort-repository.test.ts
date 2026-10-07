@@ -10,6 +10,7 @@ vi.mock('../../../src/main/database/geneReferenceLoader', () => ({
   })
 }))
 
+import { uniqueVariantsSql } from '../../../src/main/storage/postgres/cohort-unique-variants-sql'
 import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
 
 function normalizeSql(sql: string): string {
@@ -484,6 +485,48 @@ describe('PostgresCohortRepository', () => {
     expect(callParams(query.mock.calls[2])).toEqual([50, 0])
   })
 
+  it('returns the cohort tiles with the stale flag while the summary is being rebuilt', async () => {
+    // A stale summary of a large cohort is served as it is; its unique-variant
+    // counter must not be presented as exact.
+    const query = vi.fn(async (config: string | { text: string }) => {
+      const sql = typeof config === 'string' ? config : config.text
+      if (sql.includes('"cohort_summary_state" s')) {
+        return {
+          rows: [
+            {
+              never_rebuilt: false,
+              variants_present: true,
+              summary_present: true,
+              gene_summary_missing: false,
+              is_stale: true,
+              total_cases: '5000'
+            }
+          ]
+        }
+      }
+      return { rows: [{ total_cases: '5000', unique_variants: '7' }] }
+    })
+    const connect = vi.fn(() => new Promise<never>(() => undefined))
+    const repository = new PostgresCohortRepository({ query, connect } as never, 'stale_tiles')
+
+    const summary = await repository.getSummary()
+    expect(summary.unique_variants).toBe(7)
+    expect(summary.warnings).toEqual({ staleSummary: true })
+  })
+
+  it('reads the unique-variant tile from the summary itself when the counter row is missing', () => {
+    const sql = normalizeSql(uniqueVariantsSql((table) => `"public"."${table}"`))
+    // One row of the state table normally; a workspace without that row gets
+    // the exact count instead of a silent 0.
+    expect(sql).toContain(
+      'SELECT unique_variant_count FROM "public"."cohort_summary_state" WHERE id = 1'
+    )
+    expect(sql).toMatch(
+      /COALESCE\( \(SELECT unique_variant_count .*\), \(SELECT COUNT\(\*\).*"cohort_variant_summary" GROUP BY chr, pos, ref, alt/
+    )
+    expect(sql).not.toMatch(/, 0 \)/)
+  })
+
   it('maps cohort summary statistics and ACMG counts from numeric strings', async () => {
     const query = vi.fn().mockResolvedValue({
       rows: [
@@ -529,7 +572,7 @@ describe('PostgresCohortRepository', () => {
     // #460: the maintained counter, not a scan of the summary.
     expect(sql).toContain('SELECT unique_variant_count FROM "public"."cohort_summary_state"')
     expect(sql).toContain(')::bigint) AS unique_variants')
-    expect(sql).not.toContain('"cohort_variant_summary"')
+    // The summary is read only as the fallback for a missing counter row.
     expect(sql).toContain(
       '(SELECT COUNT(*)::bigint FROM "public"."cohort_gene_summary") AS genes_with_variants'
     )

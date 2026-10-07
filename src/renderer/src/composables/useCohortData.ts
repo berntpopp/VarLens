@@ -15,8 +15,9 @@
  * SOL-02: Centralized cohort data management for CohortTable.vue.
  */
 
-import { ref, shallowRef, markRaw, inject } from 'vue'
+import { ref, shallowRef, markRaw, inject, watch } from 'vue'
 import type { Ref, ShallowRef, InjectionKey } from 'vue'
+import { watchSummaryFreshness } from './useSummaryFreshness'
 import type { CohortVariant, CohortSummary } from '../../../shared/types/cohort'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { ColumnFiltersParam } from '../../../shared/types/column-filters'
@@ -250,6 +251,21 @@ export function useCohortData(): UseCohortDataReturn {
       })
   }
 
+  // PostgreSQL rebuilds in the background without an event: ask while stale,
+  // and reload the summary figures once the rebuild is through.
+  const freshness = api
+    ? watchSummaryFreshness({ cohortApi: api.cohort, onFresh: () => undefined })
+    : null
+  watch(summaryStale, (stale, was) => {
+    if (stale) freshness?.markStale()
+    else if (was) void fetchSummary()
+  })
+  if (freshness !== null) {
+    watch(freshness.stale, (stale) => {
+      if (!stale) summaryStale.value = false
+    })
+  }
+
   function activate(): void {
     isActive.value = true
     registerSummaryListener()
@@ -258,6 +274,7 @@ export function useCohortData(): UseCohortDataReturn {
   function deactivate(): void {
     isActive.value = false
     unregisterSummaryListener()
+    freshness?.stop()
   }
 
   const cleanupListeners = (): void => {

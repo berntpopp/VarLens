@@ -2,6 +2,7 @@
   <SlimFilterToolbar
     :filtered-count="totalCount ?? 0"
     :total-count="cohortSummary?.unique_variants ?? null"
+    :total-count-stale="summaryStale"
     :has-active-filters="mergedHasActiveFilters"
     :has-clearable-state="props.hasSort"
     :active-filter-count="activeFilterCount"
@@ -161,6 +162,8 @@ import type { ExportFormat } from '../../../../shared/ipc/domains/export'
 interface Props {
   totalCount: number | null
   cohortSummary: { total_cases: number; unique_variants: number } | null
+  /** The summary behind the total is being rebuilt. */
+  summaryStale?: boolean
   columns: Array<{ key: string; title: string }>
   visibleColumns: string[]
   exporting: boolean

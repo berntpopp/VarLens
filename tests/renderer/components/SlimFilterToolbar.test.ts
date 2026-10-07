@@ -63,3 +63,22 @@ describe('SlimFilterToolbar loading stability', () => {
     wrapper.unmount()
   })
 })
+
+describe('SlimFilterToolbar total while the summary is rebuilt', () => {
+  it('marks the total as being refreshed, in text for assistive technology too', () => {
+    const wrapper = mountToolbar({ ...baseProps, totalCountStale: true })
+    const mark = wrapper.find('[data-testid="total-refreshing"]')
+    expect(mark.exists()).toBe(true)
+    expect(wrapper.find('.results-chip').attributes('aria-label')).toBe(
+      '10 of 100 variants shown; the total is being refreshed'
+    )
+    wrapper.unmount()
+  })
+
+  it('shows the plain total otherwise (the case view never passes the flag)', () => {
+    const wrapper = mountToolbar()
+    expect(wrapper.find('[data-testid="total-refreshing"]').exists()).toBe(false)
+    expect(wrapper.find('.results-chip').attributes('aria-label')).toBe('10 of 100 variants shown')
+    wrapper.unmount()
+  })
+})

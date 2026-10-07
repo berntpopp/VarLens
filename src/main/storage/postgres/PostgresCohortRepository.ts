@@ -333,7 +333,7 @@ export class PostgresCohortRepository {
   async getSummary(): Promise<CohortSummary> {
     // The variant figures come from maintained aggregates, so reconcile them
     // first, like any other read of the cohort summary.
-    await prepareCohortRead({ pool: this.pool, schema: this.schema })
+    const { warnings } = await prepareCohortRead({ pool: this.pool, schema: this.schema })
     const totals = cohortVariantTotalsSql((table) => this.tbl(table))
     const result = await this.pool.query(
       `SELECT
@@ -389,7 +389,10 @@ export class PostgresCohortRepository {
         vus: toNumber(row.vus),
         likely_benign: toNumber(row.likely_benign),
         benign: toNumber(row.benign)
-      }
+      },
+      // The maintained figures (unique variants, genes) lag while the summary
+      // is being rebuilt: say so instead of presenting them as exact.
+      ...(warnings !== undefined ? { warnings } : {})
     }
   }
 

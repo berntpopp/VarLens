@@ -28,6 +28,7 @@ import {
   readCohortSummaryStatus
 } from '../../../src/main/storage/postgres/cohort-read-freshness'
 import { lockSummaryForWrite } from '../../../src/main/storage/postgres/cohort-summary-lock'
+import { PostgresOverviewRepository } from '../../../src/main/storage/postgres/PostgresOverviewRepository'
 import { PostgresTranscriptsRepository } from '../../../src/main/storage/postgres/PostgresTranscriptsRepository'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
@@ -449,6 +450,43 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     await awaitBackgroundRebuild(schema)
     await expectUniqueVariants(3)
     expect((await readCohortSummaryStatus({ pool, schema })).is_stale).toBe(false)
+  }, 120_000)
+
+  it('the overview tile is exact without a counter row, and flagged while the summary is stale (#460)', async () => {
+    const caseId = await seedCase('tile-a')
+    await seedVariant({ caseId, chr: '1', pos: 100, ref: 'A', alt: 'T' })
+    await seedVariant({ caseId, chr: '1', pos: 100, ref: 'A', alt: 'T', variantType: 'sv' })
+    await seedVariant({ caseId, chr: '2', pos: 200, ref: 'C', alt: 'G' })
+    await inTransaction((client) =>
+      repo.incrementalAdd({ schema, client: client as never, caseId })
+    )
+    const overview = new PostgresOverviewRepository(pool, schema)
+    const current = await overview.getOverview()
+    expect(current.summary.unique_variants).toBe(2)
+    expect(current.warnings).toBeUndefined()
+
+    // A rebuild request (a transcript switch that could not get the lock)
+    // marks the tiles; the figure is not passed off as exact.
+    await probe.query(
+      `INSERT INTO "${schema}".cohort_summary_rebuild_requests (reason) VALUES ('test')`
+    )
+    const holder = new Client({ connectionString: PG_URL })
+    await holder.connect()
+    await holder.query('BEGIN')
+    await lockSummaryForWrite(holder, schema)
+    try {
+      expect((await overview.getOverview()).warnings).toEqual({ staleSummary: true })
+    } finally {
+      await holder.query('ROLLBACK')
+      await holder.end()
+    }
+    await awaitBackgroundRebuild(schema)
+    expect((await overview.getOverview()).warnings).toBeUndefined()
+
+    // No state row at all: the exact count, not 0, and no failure.
+    await probe.query(`DELETE FROM "${schema}".cohort_summary_state`)
+    const withoutRow = await overview.getOverview()
+    expect(withoutRow.summary.unique_variants).toBe(2)
   }, 120_000)
 
   async function rowAt100(): Promise<Record<string, unknown>> {
