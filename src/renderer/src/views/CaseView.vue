@@ -18,6 +18,7 @@ import { logService } from '../services/LogService'
 import { useApiService } from '../composables/useApiService'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useCaseTabUrlParam } from '../composables/useViewUrlBindings'
+import { usePermissions } from '../composables/usePermissions'
 import { providePanelResolutionStatus } from '../composables/usePanelResolutionStatus'
 
 const {
@@ -29,15 +30,18 @@ const {
   hasSort,
   initialSearch,
   caseCount,
-  sidebarOpen,
   filterToolbarRef,
   variantTableRef,
   panelOpen,
   selectedPanelVariant,
   showSnack,
   dataGeneration,
-  openCaseMetadata
+  openCaseMetadata,
+  openImport
 } = useAppState()
+
+// Import is an analyst action; viewers never get the welcome-screen button.
+const { canWrite } = usePermissions()
 
 const { api } = useApiService()
 const settingsStore = useSettingsStore()
@@ -297,9 +301,8 @@ const columnMeta = computed<ColumnFilterMeta[]>(
 )
 
 function handleImportClick(): void {
-  // Delegate to parent App.vue via event bus or direct ref
-  // For now, emit - App.vue will handle
-  sidebarOpen.value = true
+  // The import wizard lives in the shell's dialog host (App.vue registers it).
+  openImport()
 }
 
 function handleFiltersUpdate(filters: Omit<VariantFilter, 'case_id'>): void {
@@ -374,7 +377,7 @@ defineExpose({
   <EmptyState
     v-if="!selectedCaseId"
     :has-cases="hasCases"
-    :allow-import="true"
+    :allow-import="canWrite"
     @import="handleImportClick"
   />
   <div v-else class="case-content">
