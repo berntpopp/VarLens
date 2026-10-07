@@ -12,10 +12,11 @@ import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
 import { createChrRankIndexes } from './chr-rank-indexes'
 import { migrateUserRoles } from './user-roles-migration'
 import { migrateCohortKeysetIndex } from './cohort-keyset-index'
+import { migrateSeverityRanks } from './severity-rank-migration'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 40
+export const LATEST_SQLITE_SCHEMA_VERSION = 41
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -61,6 +62,8 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 40
  * - 37: cohort keyset index idx_cvs_carrier_keyset (cohort-keyset-index.ts)
  * - 38: drop idx_cvs_cohort_freq — cohort frequency is derived at read time
  * - 39: cohort_summary_meta.unique_variant_count — exact counter for the cohort tile (#460)
+ * - 40: cases.import_status
+ * - 41: impact_rank / clinvar_rank on variants and the cohort summary (#469)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1938,6 +1941,12 @@ export function runMigrations(db: Database.Database): void {
       }
     }
     db.exec('PRAGMA user_version = 40')
+  }
+
+  // v41: stored impact / ClinVar severity ranks (#469, mirrors PG 0025).
+  if (currentVersion < 41) {
+    migrateSeverityRanks(db)
+    db.exec('PRAGMA user_version = 41')
   }
 }
 

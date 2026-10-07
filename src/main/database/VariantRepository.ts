@@ -19,6 +19,7 @@ import {
   type TriggerSnapshot
 } from './fts-trigger-management'
 import { mainLogger } from '../services/MainLogger'
+import { annotationSeverityRanks } from '../../shared/config/severity.config'
 
 /** Extended variant fields for multi-type import (SV/CNV/STR) */
 interface VariantExtensionFields {
@@ -117,7 +118,8 @@ export class VariantRepository extends BaseRepository {
               end_pos: v.end_pos ?? null,
               sv_type: v.sv_type ?? null,
               sv_length: v.sv_length ?? null,
-              caller: v.caller ?? null
+              caller: v.caller ?? null,
+              ...annotationSeverityRanks(v)
             })
           )
 

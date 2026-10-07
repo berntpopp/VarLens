@@ -55,9 +55,9 @@ describe('Migration v40: cases.import_status', () => {
     db.close()
   })
 
-  it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(40)
-    expect(db.pragma('user_version', { simple: true })).toBe(40)
+  it('is part of the latest schema version', () => {
+    expect(LATEST_SQLITE_SCHEMA_VERSION).toBeGreaterThanOrEqual(40)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
   it('a new database has the NOT NULL column defaulting to ready, and the index', () => {
@@ -72,7 +72,7 @@ describe('Migration v40: cases.import_status', () => {
 
     runMigrations(db)
 
-    expect(db.pragma('user_version', { simple: true })).toBe(40)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
     expect(statuses(db)).toEqual([{ name: 'old', import_status: 'ready' }])
     expect(indexColumns(db)).toEqual(['import_status', 'genome_build'])
   })
@@ -86,7 +86,7 @@ describe('Migration v40: cases.import_status', () => {
     db.pragma('user_version = 39')
     runMigrations(db)
 
-    expect(db.pragma('user_version', { simple: true })).toBe(40)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
     // An interrupted import stays what it is; recovery discards it, not v40.
     expect(statuses(db)).toEqual([{ name: 'old', import_status: 'provisional' }])
     expect(indexColumns(db)).toEqual(['import_status', 'genome_build'])
@@ -101,7 +101,7 @@ describe('Migration v40: cases.import_status', () => {
 
       runMigrations(legacy)
 
-      expect(legacy.pragma('user_version', { simple: true })).toBe(40)
+      expect(legacy.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
       expect(statuses(legacy)).toEqual([{ name: 'old', import_status: 'ready' }])
       expect(indexColumns(legacy)).toEqual(['import_status'])
     } finally {
@@ -114,7 +114,7 @@ describe('Migration v40: cases.import_status', () => {
     try {
       empty.pragma('user_version = 39')
       expect(() => runMigrations(empty)).not.toThrow()
-      expect(empty.pragma('user_version', { simple: true })).toBe(40)
+      expect(empty.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
     } finally {
       empty.close()
     }
@@ -142,7 +142,7 @@ describe('Migration v40: cases.import_status', () => {
       const reopened = new DatabaseService(path, KEY)
       try {
         expect(reopened.isEncrypted()).toBe(true)
-        expect(reopened.database.pragma('user_version', { simple: true })).toBe(40)
+        expect(reopened.database.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
         expect(statuses(reopened.database)).toEqual([{ name: 'old', import_status: 'ready' }])
         expect(indexColumns(reopened.database)).toEqual(['import_status', 'genome_build'])
         // A reader that filters on the new column works on it.

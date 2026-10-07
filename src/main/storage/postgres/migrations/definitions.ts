@@ -8,6 +8,7 @@ import { BUILT_IN_PRESETS } from '../../../database/built-in-presets'
 import { BUILT_IN_SHORTLIST_PRESETS } from '../../../database/built-in-shortlist-presets'
 import { CLINICAL_METRICS } from '../../../database/clinical-metrics'
 import { quoteIdentifier } from '../identifiers'
+import { backfillSeverityRanks } from './severity-rank-backfill'
 
 interface MigrationFile {
   version: string
@@ -123,8 +124,19 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0024',
     name: 'cohort_summary_maintenance',
     fileName: '0024_cohort_summary_maintenance.sql'
+  },
+  {
+    version: '0025',
+    name: 'annotation_severity_ranks',
+    fileName: '0025_annotation_severity_ranks.sql'
   }
 ]
+
+/** Steps that need code, run in the migration's transaction after its SQL. */
+const AFTER_APPLY: Record<string, PostgresMigration['afterApply']> = {
+  '0005': seedWorkflowDefaults,
+  '0025': backfillSeverityRanks
+}
 
 const SOURCE_SQL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'sql')
 
@@ -138,7 +150,7 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigration[] = MIGRATION_FILES
       name,
       sql,
       checksum: createHash('sha256').update(sql).digest('hex'),
-      afterApply: version === '0005' ? seedWorkflowDefaults : undefined
+      afterApply: AFTER_APPLY[version]
     }
   }
 )

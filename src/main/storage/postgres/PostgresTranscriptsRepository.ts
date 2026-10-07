@@ -5,6 +5,7 @@ import {
   type TranscriptAnnotation,
   type TranscriptInsertRow
 } from '../../../shared/types/transcript'
+import { impactRank } from '../../../shared/config/severity.config'
 import { addVariantToGeneSummary, beginVariantGeneChange } from './cohort-gene-summary-sql'
 import { lockSummaryForWrite, lockSummaryForWriteWithin } from './cohort-summary-lock'
 import { recomputeSummaryForVariant } from './cohort-summary-representative-sql'
@@ -172,7 +173,7 @@ export class PostgresTranscriptsRepository {
     summaryLocked: boolean
   ): Promise<void> {
     // The cohort summary keeps one representative annotation per coordinate
-    // (MAX per column over its carriers) and the per-gene aggregates count this
+    // (its most severe carrier row) and the per-gene aggregates count this
     // row under its gene. Both change with the selected transcript. With the
     // summary write lock they are maintained here, in the transaction of the
     // variant update. Without it (somebody holds it for longer than a user
@@ -217,7 +218,8 @@ export class PostgresTranscriptsRepository {
               cdna = $6,
               aa_change = $7,
               hpo_sim_score = $8,
-              moi = $9
+              moi = $9,
+              impact_rank = $10
         WHERE id = $1`,
       [
         variantId,
@@ -228,7 +230,9 @@ export class PostgresTranscriptsRepository {
         transcript.cdna,
         transcript.aa_change,
         transcript.hpo_sim_score,
-        transcript.moi
+        transcript.moi,
+        // The stored rank must describe the stored impact (#469).
+        impactRank(semantics.consequence)
       ]
     )
   }

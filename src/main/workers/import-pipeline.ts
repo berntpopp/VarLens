@@ -8,6 +8,7 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { createInterface } from 'node:readline'
 
 import { DATABASE_CONFIG } from '../../shared/config'
+import { clinvarRank, impactRank } from '../../shared/config/severity.config'
 import { createBoundedBatcher, getRecordBytes } from '../import/bounded-batcher'
 import type { FormatInfo } from '../import/strategies/ImportStrategy'
 import { createCappedLineStream } from '../import/stream-utils'
@@ -42,9 +43,9 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
       consequence, gnomad_af, cadd, clinvar, gt_num, func, qual,
       hpo_sim_score, transcript, cdna, aa_change, moi,
       gq, dp, ad_ref, ad_alt, ab, filter, info_json, source_format,
-      variant_type, end_pos, sv_type, sv_length, caller)
+      variant_type, end_pos, sv_type, sv_length, caller, impact_rank, clinvar_rank)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const insertSvStmt = db.prepare(`
@@ -157,7 +158,10 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
         v.end_pos ?? null,
         v.sv_type ?? null,
         v.sv_length ?? null,
-        v.caller ?? null
+        v.caller ?? null,
+        // Stored severity ranks of the impact and ClinVar strings (#469).
+        impactRank(typeof v.consequence === 'string' ? v.consequence : null),
+        clinvarRank(typeof v.clinvar === 'string' ? v.clinvar : null)
       )
 
       const variantId = result.lastInsertRowid

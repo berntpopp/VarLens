@@ -59,6 +59,10 @@ export interface VariantsTable {
   sv_type: string | null
   sv_length: number | null
   caller: string | null
+  /** Severity rank of `consequence` (impact), see shared/config/severity.config.ts. */
+  impact_rank: Generated<number>
+  /** Severity rank of `clinvar`, see shared/config/severity.config.ts. */
+  clinvar_rank: Generated<number>
 }
 
 // ── Variant Transcripts ────────────────────────────────────

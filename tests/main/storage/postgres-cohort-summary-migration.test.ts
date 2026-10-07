@@ -194,7 +194,10 @@ describe.skipIf(!RUN)('cohort_summary migration — Sprint A C1', () => {
        VALUES ('1', 100, 'A', 'T', 'snv', 'GRCh38', 1, 1, 0, '1:100:A:T')`
     )
 
-    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+    // Up to 0024 only: 0025 flags the summary again, with its own reason
+    // (postgres-severity-rank-migration.test.ts).
+    const through0024 = POSTGRES_MIGRATIONS.filter((migration) => migration.version <= '0024')
+    await new PostgresMigrationRunner(pool, schema, through0024).migrate()
 
     const res = await probe.query<{
       is_stale: boolean
