@@ -321,8 +321,10 @@ export async function runImportSession(
       }
     }
 
-    // FTS rebuild + ANALYZE + optimize
+    // Indexes first: rebuildFts runs the global ANALYZE, and sqlite_stat1 only
+    // gets rows for indexes that exist at that moment.
     sendProgress(port, totalFiles, totalFiles, '', 99, 'finalizing', 0, 0)
+    recreateSessionIndexes(db)
     rebuildFts(db)
     ftsFinalizationState.ftsRebuilt = true
     summary.finish()
@@ -333,7 +335,7 @@ export async function runImportSession(
     }
     terminalMessage = completeMsg
   } catch (fatalError) {
-    // Index/trigger recreation is handled unconditionally in the finally block below
+    // Index/trigger recreation is repeated unconditionally in the finally block below
 
     const { code: errorCode, userMessage } = classifyWorkerError(fatalError)
     terminalMessage = {
@@ -349,15 +351,10 @@ export async function runImportSession(
       terminalMessage,
       () => {
         if (db) {
+          // Safety net for error/cancel paths: a no-op after an orderly end.
+          // Before the FTS finalizer, whose ANALYZE must see the indexes.
+          recreateSessionIndexes(db)
           finalizeInterruptedImportFts(db, ftsFinalizationState)
-          try {
-            db.exec(RECREATE_INDEXES)
-          } catch (e) {
-            console.warn(
-              '[import-worker] Failed to recreate indexes (will be recreated on next app start):',
-              e instanceof Error ? e.message : String(e)
-            )
-          }
           try {
             db.pragma('wal_checkpoint(TRUNCATE)')
           } catch (e) {
@@ -404,6 +401,18 @@ if (parentPort) {
       await runImportSession(msg, port, () => cancelled)
     }
   })
+}
+
+/** Recreate the indexes dropped for the bulk insert (idempotent, best-effort). */
+function recreateSessionIndexes(db: DatabaseType): void {
+  try {
+    db.exec(RECREATE_INDEXES)
+  } catch (e) {
+    console.warn(
+      '[import-worker] Failed to recreate indexes (will be recreated on next app start):',
+      e instanceof Error ? e.message : String(e)
+    )
+  }
 }
 
 function sendProgress(
