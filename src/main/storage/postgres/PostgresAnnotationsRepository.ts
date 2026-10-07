@@ -19,17 +19,13 @@ import { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
 type QueryablePool = Pick<Pool, 'query'>
 type TransactionCapablePool = QueryablePool & { connect: () => Promise<PoolClient> }
 
-type GlobalAnnotationUpdates = Partial<
-  Omit<Pick<VariantAnnotation, 'global_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'>, 'starred'> & {
+type AnnotationUpdates<T, K extends keyof T> = Partial<
+  Omit<Pick<T, K | 'starred' | 'acmg_classification' | 'acmg_evidence'>, 'starred'> & {
     starred: number | boolean
   }
 >
-
-type PerCaseAnnotationUpdates = Partial<
-  Omit<Pick<CaseVariantAnnotation, 'per_case_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'>, 'starred'> & {
-    starred: number | boolean
-  }
->
+type GlobalAnnotationUpdates = AnnotationUpdates<VariantAnnotation, 'global_comment'>
+type PerCaseAnnotationUpdates = AnnotationUpdates<CaseVariantAnnotation, 'per_case_comment'>
 
 type VariantKey = { chr: string; pos: number; ref: string; alt: string }
 

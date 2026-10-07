@@ -1925,7 +1925,9 @@ export function runMigrations(db: Database.Database): void {
     if (!hasColumn) {
       db.exec("ALTER TABLE cases ADD COLUMN import_status TEXT NOT NULL DEFAULT 'ready'")
     }
-    db.exec('CREATE INDEX IF NOT EXISTS idx_cases_import_status ON cases(import_status, genome_build)')
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_cases_import_status ON cases(import_status, genome_build)'
+    )
     db.exec('PRAGMA user_version = 40')
   }
 }

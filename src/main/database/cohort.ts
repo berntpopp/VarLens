@@ -32,35 +32,16 @@ import {
   cohortSortExpression
 } from './cohort-frequency-sql'
 
-/** Sortable/filterable column keys → SQL column names on cohort_variant_summary. */
+// prettier-ignore
 const SORTABLE_COLUMNS: Record<string, string> = {
-  chr: 'chr',
-  pos: 'pos',
-  gene_symbol: 'gene_symbol',
-  cdna: 'cdna',
-  aa_change: 'aa_change',
-  carrier_count: 'carrier_count',
-  cohort_frequency: 'cohort_frequency',
-  het_count: 'het_count',
-  hom_count: 'hom_count',
-  consequence: 'consequence',
-  func: 'func',
-  clinvar: 'clinvar',
-  gnomad_af: 'gnomad_af',
-  cadd_phred: 'cadd',
-  transcript: 'transcript'
+  chr: 'chr', pos: 'pos', gene_symbol: 'gene_symbol', cdna: 'cdna', aa_change: 'aa_change',
+  carrier_count: 'carrier_count', cohort_frequency: 'cohort_frequency', het_count: 'het_count',
+  hom_count: 'hom_count', consequence: 'consequence', func: 'func', clinvar: 'clinvar',
+  gnomad_af: 'gnomad_af', cadd_phred: 'cadd', transcript: 'transcript'
 }
 
-/** Numeric columns for column metadata auto-detection (data type inference) */
-const NUMERIC_COLUMNS = new Set([
-  'pos',
-  'carrier_count',
-  'cohort_frequency',
-  'het_count',
-  'hom_count',
-  'gnomad_af',
-  'cadd_phred'
-])
+// prettier-ignore
+const NUMERIC_COLUMNS = new Set(['pos', 'carrier_count', 'cohort_frequency', 'het_count', 'hom_count', 'gnomad_af', 'cadd_phred'])
 
 /**
  * CohortService class
@@ -214,7 +195,9 @@ export class CohortService {
 
     // Total case count across builds (the `total_cases` column of every row)
     const totalCases = (
-      this.db.prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'").get() as {
+      this.db
+        .prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'")
+        .get() as {
         count: number
       }
     ).count
@@ -359,7 +342,9 @@ export class CohortService {
   getCohortSummary(): CohortSummary {
     // Total cases
     const totalCases = (
-      this.db.prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'").get() as {
+      this.db
+        .prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'")
+        .get() as {
         count: number
       }
     ).count

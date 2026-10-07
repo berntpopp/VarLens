@@ -119,7 +119,9 @@ export class PostgresImportExecutor implements StorageImportExecutor {
     return {
       importFile: async (params) => {
         if (controlError !== null) {
-          throw new Error(`Import batch control connection lost: ${(controlError as Error).message}`)
+          throw new Error(
+            `Import batch control connection lost: ${(controlError as Error).message}`
+          )
         }
         let worker: PostgresImportWorkerClient | null = null
         try {
