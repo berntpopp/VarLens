@@ -37,6 +37,7 @@ import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
 import { applyConnectionPragmas } from './connection-pragmas'
 import { rekeyConnection } from './journal-mode'
 import { isImportSessionOpen } from './cohort-summary-case-add'
+import { hasInterruptedImports } from '../workers/import-recovery'
 
 /**
  * DatabaseService class
@@ -246,6 +247,23 @@ export class DatabaseService {
     } catch (e) {
       mainLogger.warn(
         'Failed to check startup rebuild status: ' + (e instanceof Error ? e.message : String(e)),
+        'database'
+      )
+      return false
+    }
+  }
+
+  /**
+   * True when an import was cut off before its case was published: the case
+   * is still 'provisional' (workers/import-recovery.ts). Only meaningful
+   * while no import is running.
+   */
+  hasInterruptedImports(): boolean {
+    try {
+      return hasInterruptedImports(this.db)
+    } catch (e) {
+      mainLogger.warn(
+        'Failed to check for interrupted imports: ' + (e instanceof Error ? e.message : String(e)),
         'database'
       )
       return false
