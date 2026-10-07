@@ -412,3 +412,33 @@ describe('a selected category also selects the aggregates that contain it', () =
     expect(severityFilterParts('consequence', ['HIGH']).ranks).toEqual([4])
   })
 })
+
+describe('VEP CLIN_SIG values rank like ClinVar_CLNSIG values (#469)', () => {
+  it.each([
+    ['Benign|Benign/Likely_benign', 3],
+    ['benign&benign/likely_benign', 3],
+    ['Benign&Likely_benign', 3],
+    ['uncertain_significance', 11],
+    ['Uncertain_significance|Likely_benign', 11],
+    ['Conflicting_interpretations_of_pathogenicity', 12],
+    ['conflicting_classifications_of_pathogenicity', 12],
+    ['Conflicting_interpretations_of_pathogenicity&Benign', 12],
+    ['pathogenic&likely_pathogenic', 14],
+    ['Pathogenic/Likely_pathogenic|drug_response', 14],
+    ['likely_pathogenic&risk_factor', 13],
+    ['Pathogenic,_low_penetrance', 15],
+    ['pathogenic|_low_penetrance', 15],
+    ['likely_benign&other', 4],
+    ['not_provided', 1]
+  ])('%s ranks %i', (raw, rank) => {
+    expect(clinvarRank(raw)).toBe(rank)
+  })
+
+  it('reports none of them as unrecognised', () => {
+    takeUnrankedClinvarStrings()
+    for (const raw of ['Benign|Benign/Likely_benign', 'benign&benign/likely_benign']) {
+      clinvarRankForImport(raw)
+    }
+    expect(takeUnrankedClinvarStrings()).toEqual([])
+  })
+})
