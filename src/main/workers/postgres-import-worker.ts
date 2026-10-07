@@ -29,6 +29,7 @@ import {
 import { quoteIdentifier } from '../storage/postgres/identifiers'
 import { classifyWorkerError } from '../storage/import-worker-errors'
 import { lockSummaryForWrite } from '../storage/postgres/cohort-summary-lock'
+import { resetUnrankedClinvar, unrankedClinvarMessage } from '../import/unranked-clinvar'
 import { publishDerivedDataForImport } from './postgres-import-publication'
 import {
   acquireWorkspaceImportLock,
@@ -162,9 +163,19 @@ function clientConfigFromMessage(message: PostgresClientConfig): ClientConfig {
 export async function runImport(
   deps: RunImportDeps,
   start: PostgresImportWorkerStartMessage,
-  post: (msg: PostgresImportWorkerOutboundMessage) => void
+  postMessage: (msg: PostgresImportWorkerOutboundMessage) => void
 ): Promise<void> {
   cancelled = false // reset at entry; the parentPort handler also resets, this covers test/direct paths
+  resetUnrankedClinvar()
+  // The worker is terminated when its final message arrives, so ClinVar
+  // strings the import could not rank are reported just before it is sent.
+  const post = (msg: PostgresImportWorkerOutboundMessage): void => {
+    if (msg.type === 'complete') {
+      const unranked = unrankedClinvarMessage(start.caseName ?? start.filePath ?? 'import')
+      if (unranked !== null) console.warn(`[postgres-import-worker] ${unranked}`)
+    }
+    postMessage(msg)
+  }
   const startedAt = Date.now()
   let batchSize = POSTGRES_JSON_IMPORT_BATCH_SIZE
   const maxBatchBytes = deps.maxBatchBytes ?? DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES

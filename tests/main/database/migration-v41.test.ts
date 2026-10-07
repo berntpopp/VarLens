@@ -116,7 +116,7 @@ describe('Migration v41: annotation severity ranks', () => {
       expect.objectContaining({ impact_rank: 3, clinvar_rank: 14 }),
       expect.objectContaining({ impact_rank: 2, clinvar_rank: 12 }),
       expect.objectContaining({ impact_rank: 1, clinvar_rank: 11 }),
-      expect.objectContaining({ impact_rank: 4, clinvar_rank: 6 })
+      expect.objectContaining({ impact_rank: 4, clinvar_rank: 3 })
     ])
   })
 

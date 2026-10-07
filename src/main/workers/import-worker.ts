@@ -1,3 +1,4 @@
+import { resetUnrankedClinvar, unrankedClinvarMessage } from '../import/unranked-clinvar'
 import { parentPort } from 'worker_threads'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { statSync } from 'node:fs'
@@ -143,6 +144,7 @@ export async function runImportSession(
       }
 
       const file = msg.files[fileIndex]
+      resetUnrankedClinvar()
       const fileName = basename(file.filePath)
 
       try {
@@ -296,6 +298,9 @@ export async function runImportSession(
           )
           published = true
           checkpointBetweenFiles(db)
+          // Worker thread: no structured logger (documented console exception).
+          const unranked = unrankedClinvarMessage(file.caseName)
+          if (unranked !== null) console.warn(`[import-worker] ${unranked}`)
 
           const elapsed = Date.now() - startTime
 

@@ -6,7 +6,7 @@
  * main-thread path. The ranks are what the cohort summary picks its
  * representative row by, so a row imported without them would never win.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -162,6 +162,42 @@ describe('SQLite import stores severity ranks (#469)', () => {
       { consequence: 'MODERATE', clinvar: 'Benign', impact_rank: 3, clinvar_rank: 2 },
       { consequence: null, clinvar: null, impact_rank: 0, clinvar_rank: 0 }
     ])
+  })
+
+  it('reports the ClinVar strings it could not rank, once per file', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const file = join(dir, 'odd.json')
+      const odd = ['Pathogenic', 'P', 'reviewed: fine', 'reviewed: fine', 'see notes']
+      writeFileSync(
+        file,
+        JSON.stringify({
+          variants: odd.map((clinvar, index) => ({
+            ...JSON_VARIANTS[0],
+            pos: 500 + index,
+            clinvar
+          }))
+        })
+      )
+      const ranked = join(dir, 'ranked.json')
+      writeFileSync(ranked, JSON.stringify({ variants: JSON_VARIANTS }))
+      await importFiles([
+        { filePath: file, caseName: 'odd' },
+        { filePath: ranked, caseName: 'ranked' }
+      ])
+
+      const reports = warn.mock.calls
+        .map((call) => String(call[0]))
+        .filter((m) => /ClinVar/.test(m))
+      expect(reports).toEqual([
+        '[import-worker] Import "odd": 2 ClinVar significance value(s) are not in the severity ' +
+          'configuration and rank as unknown: "reviewed: fine", "see notes"'
+      ])
+      // Unknown is rank 0: stored, displayed, never guessed.
+      expect(rowsOf(db, 'odd').map((row) => row.clinvar_rank)).toEqual([15, 15, 0, 0, 0])
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('main-thread path: VcfStrategy through VariantRepository', async () => {

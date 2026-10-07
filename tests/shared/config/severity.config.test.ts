@@ -13,7 +13,8 @@ import {
   clinvarCategory,
   clinvarRank,
   impactRank,
-  impactRankCaseSql
+  impactRankCaseSql,
+  takeUnrankedClinvarStrings
 } from '../../../src/shared/config/severity.config'
 
 const rankOf = (id: string): number => CLINVAR_CATEGORIES.find((c) => c.id === id)!.rank
@@ -129,10 +130,13 @@ describe('ClinVar categories', () => {
   it.each([
     // most severe component wins, across every separator
     ['Pathogenic|risk_factor', 'pathogenic'],
-    ['benign&pathogenic', 'pathogenic'],
     ['uncertain_significance&likely_benign', 'uncertain_significance'],
-    ['Benign/Likely_benign|other', 'other'],
-    ['Likely_benign|drug_response|other', 'drug_response'],
+    // a classification on the pathogenicity axis is not outranked by a term of
+    // another kind attached to it (ClinVar: `|` separates classification types)
+    ['Benign/Likely_benign|other', 'benign_likely_benign'],
+    ['Likely_benign|drug_response|other', 'likely_benign'],
+    ['Benign|risk_factor', 'benign'],
+    ['drug_response|other', 'drug_response'],
     ['likely_pathogenic; uncertain_significance', 'likely_pathogenic'],
     ['benign, likely_benign, uncertain_significance', 'uncertain_significance'],
     ['not_provided&benign', 'benign'],
@@ -152,11 +156,79 @@ describe('ClinVar categories', () => {
     expect(clinvarCategory(raw)).toBe(category)
   })
 
-  it('never derives conflicting from disagreeing components', () => {
-    expect(clinvarCategory('pathogenic&benign')).toBe('pathogenic')
+  it.each([
+    // VEP CLIN_SIG lists every record of the co-located variant, without
+    // ClinVar's own aggregate: pathogenic next to benign is a conflict.
+    ['pathogenic&benign', 'conflicting'],
+    ['benign&pathogenic', 'conflicting'],
+    ['likely_benign,likely_pathogenic', 'conflicting'],
+    ['Pathogenic(1)|Benign(3)', 'conflicting'],
+    ['Pathogenic/Likely_pathogenic&Benign/Likely_benign', 'conflicting'],
+    // not a conflict of the two sides: the most severe wins
+    ['pathogenic&uncertain_significance', 'pathogenic'],
+    ['uncertain_significance&benign', 'uncertain_significance']
+  ])('derives a conflict only from a pathogenic and a benign side: %j is %s', (raw, category) => {
+    expect(clinvarCategory(raw)).toBe(category)
   })
 
-  it.each([null, undefined, '', '   ', 'something else', 'low_penetrance', '&&', '/'])(
+  it.each([
+    // abbreviations
+    ['P', 'pathogenic'],
+    ['LP', 'likely_pathogenic'],
+    ['P/LP', 'pathogenic_likely_pathogenic'],
+    ['VUS', 'uncertain_significance'],
+    ['LB', 'likely_benign'],
+    ['B', 'benign'],
+    ['B/LB', 'benign_likely_benign'],
+    // hyphen and space forms, synonyms
+    ['likely-pathogenic', 'likely_pathogenic'],
+    ['Likely-Benign', 'likely_benign'],
+    ['probable-pathogenic', 'likely_pathogenic'],
+    ['probably pathogenic', 'likely_pathogenic'],
+    ['probable pathogenic', 'likely_pathogenic'],
+    ['uncertain-significance', 'uncertain_significance'],
+    ['VUS-high', 'uncertain_significance'],
+    // CLNSIGCONF counts and other parenthesised suffixes
+    ['Pathogenic(1)', 'pathogenic'],
+    ['Uncertain_significance(2)|Likely_benign(1)', 'uncertain_significance'],
+    ['Likely pathogenic (2 submitters)', 'likely_pathogenic'],
+    // numeric codes of the legacy ClinVar VCF
+    ['5', 'pathogenic'],
+    ['4', 'likely_pathogenic'],
+    ['3', 'likely_benign'],
+    ['2', 'benign'],
+    ['1', 'not_provided'],
+    ['0', 'uncertain_significance'],
+    ['6', 'drug_response'],
+    ['7', 'other'],
+    ['255', 'other'],
+    ['5|255', 'pathogenic'],
+    // placeholders
+    ['.', 'not_provided'],
+    ['-', 'not_provided']
+  ])('recognises the real-world spelling %j as %s', (raw, category) => {
+    expect(clinvarCategory(raw)).toBe(category)
+  })
+
+  it('ranks the abbreviation P above VUS (a JSON import must not invert them)', () => {
+    expect(clinvarRank('P')).toBeGreaterThan(clinvarRank('VUS'))
+    expect(clinvarRank('LP')).toBeGreaterThan(clinvarRank('VUS'))
+    expect(clinvarRank('VUS')).toBeGreaterThan(clinvarRank('LB'))
+  })
+
+  it('collects the distinct strings it could not rank, once', () => {
+    takeUnrankedClinvarStrings()
+    for (const raw of ['Pathogenic', 'weird value', 'weird value', null, '', '  ', 'another one']) {
+      clinvarRank(raw)
+    }
+    expect(takeUnrankedClinvarStrings()).toEqual(['weird value', 'another one'])
+    expect(takeUnrankedClinvarStrings()).toEqual([])
+    // A string seen before is reported again by the next import.
+    clinvarRank('weird value')
+    expect(takeUnrankedClinvarStrings()).toEqual(['weird value'])
+  })
+
+  it.each([null, undefined, '', '   ', 'something else', 'low_penetrance', '&&', '/', '9', '(1)'])(
     'ranks %j as unknown',
     (raw) => {
       expect(clinvarCategory(raw)).toBeNull()
