@@ -12,7 +12,9 @@ import { DeterministicRandom, deriveSeed } from '../../../src/main/simulator/ran
 import { GeneCatalog } from '../../../src/main/simulator/catalog'
 import {
   generateSampleVariants,
-  compareGenomicPositions
+  compareGenomicPositions,
+  createSharedVariantPool,
+  sharedPoolSizeFor
 } from '../../../src/main/simulator/generator'
 import { writeSimpleJson } from '../../../src/main/simulator/writers/simple-json-writer'
 import { writeColumnarJson } from '../../../src/main/simulator/writers/columnar-json-writer'
@@ -94,6 +96,51 @@ describe('Canonical Variant Generator', () => {
     const catalog = GeneCatalog.load()
     const variants = generateSampleVariants(sample, 50, 42, catalog)
     expect(variants).toHaveLength(50)
+  })
+
+  describe('cohort sharing', () => {
+    const TARGET = 4000
+    const keyOf = (v: { chr: string; pos: number; ref: string; alt: string }): string =>
+      `${v.chr}:${v.pos}:${v.ref}:${v.alt}`
+    const sharedFractionBetween = (fraction: number): number => {
+      const catalog = GeneCatalog.load()
+      const pool = createSharedVariantPool(catalog, sharedPoolSizeFor(TARGET, fraction), 7)
+      const first = new Set(generateSampleVariants(sample, TARGET, 1, catalog, pool).map(keyOf))
+      const second = generateSampleVariants(sample, TARGET, 2, catalog, pool)
+      return second.filter((v) => first.has(keyOf(v))).length / TARGET
+    }
+
+    it('draws most of a sample from sites other samples can carry', () => {
+      const catalog = GeneCatalog.load()
+      const pool = createSharedVariantPool(catalog, sharedPoolSizeFor(TARGET, 0.9), 7)
+      const poolKeys = new Set(pool.map(keyOf))
+      const variants = generateSampleVariants(sample, TARGET, 1, catalog, pool)
+      const fromPool = variants.filter((v) => poolKeys.has(keyOf(v))).length / TARGET
+      expect(fromPool).toBeGreaterThan(0.8)
+      expect(fromPool).toBeLessThan(0.97)
+    })
+
+    it('makes two samples overlap substantially at the default sharing level', () => {
+      // Each site is carried with its own allele frequency, so the pairwise
+      // overlap is lower than the pooled fraction but far above zero.
+      expect(sharedFractionBetween(0.9)).toBeGreaterThan(0.15)
+    })
+
+    it('produces a pool without duplicate sites', () => {
+      const catalog = GeneCatalog.load()
+      const pool = createSharedVariantPool(catalog, 5000, 7)
+      expect(new Set(pool.map(keyOf)).size).toBe(pool.length)
+    })
+
+    it('shares nothing when the shared fraction is zero', () => {
+      expect(sharedPoolSizeFor(TARGET, 0)).toBe(0)
+      expect(sharedFractionBetween(0)).toBeLessThan(0.01)
+    })
+
+    it('rejects a shared fraction outside 0..1', () => {
+      expect(() => sharedPoolSizeFor(TARGET, 1.5)).toThrow(/between 0 and 1/)
+      expect(() => sharedPoolSizeFor(TARGET, -0.1)).toThrow(/between 0 and 1/)
+    })
   })
 
   it('sorts variants naturally by chromosome and position', () => {

@@ -4,7 +4,7 @@
  * Produces biologically plausible, deterministically reproducible variants
  * grounded in real human gene coordinates and empirical clinical distributions.
  */
-import type { CanonicalVariant, GenotypeString, SampleMetadata } from './types'
+import type { CanonicalVariant, GenotypeString, SampleMetadata, SimulatorOptions } from './types'
 import { DeterministicRandom } from './random'
 import { GeneCatalog, type GeneModel } from './catalog'
 import {
@@ -66,8 +66,55 @@ export interface GeneratorConfig {
   commonPoolSize?: number
 }
 
+/** Share of a sample drawn from sites that other samples can carry too. */
+export const DEFAULT_SHARED_FRACTION = 0.9
+
+/** Allele-frequency range of shared sites; a sample carries each site with this probability. */
+const SHARED_SITE_AF_MIN = 0.01
+const SHARED_SITE_AF_MAX = 0.45
+const SHARED_SITE_MEAN_AF = (SHARED_SITE_AF_MIN + SHARED_SITE_AF_MAX) / 2
+
+/**
+ * Number of shared sites needed so that a sample of `targetCount` variants
+ * takes about `sharedFraction` of them from the pool. Real exomes share most
+ * of their variants, and cohort tables behave very differently when they do.
+ */
+export function sharedPoolSizeFor(
+  targetCount: number,
+  sharedFraction: number = DEFAULT_SHARED_FRACTION
+): number {
+  if (!Number.isFinite(sharedFraction) || sharedFraction < 0 || sharedFraction > 1) {
+    throw new Error(`sharedFraction must be between 0 and 1, got ${sharedFraction}`)
+  }
+  return Math.round((targetCount * sharedFraction) / SHARED_SITE_MEAN_AF)
+}
+
+/** Typical per-sample variant count for the options, used to size the shared pool. */
+export function nominalVariantCount(
+  options: Pick<SimulatorOptions, 'variantsPerSample' | 'variantsMin' | 'variantsMax' | 'preset'>
+): number {
+  if (options.variantsPerSample !== undefined) return options.variantsPerSample
+  if (options.variantsMin !== undefined && options.variantsMax !== undefined) {
+    return Math.round((options.variantsMin + options.variantsMax) / 2)
+  }
+  if (options.preset === 'exome') return 30000
+  if (options.preset === 'smoke') return 100
+  return 3700
+}
+
+/** The shared pool every sample of one cohort run draws from. */
+export function createCohortSharedPool(
+  catalog: GeneCatalog,
+  options: SimulatorOptions,
+  poolSeed: number
+): CanonicalVariant[] {
+  const size = sharedPoolSizeFor(nominalVariantCount(options), options.sharedFraction)
+  return createSharedVariantPool(catalog, size, poolSeed)
+}
+
 /**
  * Pre-computes a pool of shared polymorphic variants for cohort consistency.
+ * Sites are unique, so one sample never carries the same variant twice.
  */
 export function createSharedVariantPool(
   catalog: GeneCatalog,
@@ -76,11 +123,15 @@ export function createSharedVariantPool(
 ): CanonicalVariant[] {
   const rng = new DeterministicRandom(poolSeed)
   const pool: CanonicalVariant[] = []
+  const seen = new Set<string>()
   const genes = catalog.getAll()
 
-  for (let i = 0; i < poolSize; i++) {
-    const gene = rng.pickOne(genes)
-    pool.push(synthesizeSingleVariant(gene, rng, true))
+  while (pool.length < poolSize) {
+    const variant = synthesizeSingleVariant(rng.pickOne(genes), rng, true)
+    const key = `${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    pool.push(variant)
   }
   return pool
 }
@@ -107,7 +158,9 @@ function synthesizeSingleVariant(
 
   const caddRaw = rng.gaussian(profile.caddMean, profile.caddStdDev)
   const cadd = Math.max(0.1, Number(caddRaw.toFixed(1)))
-  const gnomadAf = isCommon ? rng.floatBetween(0.01, 0.45) : rng.sampleGnomadAf()
+  const gnomadAf = isCommon
+    ? rng.floatBetween(SHARED_SITE_AF_MIN, SHARED_SITE_AF_MAX)
+    : rng.sampleGnomadAf()
   const clinvar = sampleClinvar(profile.consequence, cadd, rng)
   const gtNum: GenotypeString = sampleGenotype(gene.chromosome, rng)
 

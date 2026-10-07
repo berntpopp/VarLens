@@ -7,7 +7,7 @@ import { availableParallelism } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { GeneCatalog } from './catalog'
-import { createSharedVariantPool, generateSampleVariants } from './generator'
+import { createCohortSharedPool, generateSampleVariants } from './generator'
 import { deriveSeed, DeterministicRandom } from './random'
 import type {
   CanonicalVariant,
@@ -136,7 +136,7 @@ export async function simulateCohort(options: SimulatorOptions): Promise<CohortM
   }
 
   const sharedPoolSeed = deriveSeed(masterSeed, 0, 'shared-pool')
-  const sharedPool = createSharedVariantPool(catalog, 500, sharedPoolSeed)
+  const sharedPool = createCohortSharedPool(catalog, options, sharedPoolSeed)
 
   const numWorkers = Math.min(
     options.workers ?? (totalSamples > 4 ? Math.min(availableParallelism(), 8) : 1),

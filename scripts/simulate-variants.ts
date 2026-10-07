@@ -36,6 +36,7 @@ Options:
   -f, --formats <list>        Comma-separated formats: 'simple-json', 'columnar-json', 'vcf', 'xlsx' (default: 'simple-json')
   -o, --out <dir>             Output directory (default: 'tests/.cache/simulated-cohort')
   -s, --seed <number>         Deterministic master PRNG seed (default: 20261006)
+      --shared-fraction <0..1>  Share of each sample drawn from cohort-shared sites (default: 0.9)
   -w, --workers <count>       Worker thread count (default: auto)
       --no-gzip               Do not gzip JSON and VCF files
   -h, --help                  Show this help message
@@ -52,6 +53,7 @@ function parseCliArgs(args: string[]): SimulatorOptions {
   let outDir = 'tests/.cache/simulated-cohort'
   let seed = 20261006
   let workers: number | undefined
+  let sharedFraction: number | undefined
   let gzip = true
 
   for (let i = 0; i < args.length; i++) {
@@ -75,6 +77,8 @@ function parseCliArgs(args: string[]): SimulatorOptions {
       outDir = args[++i]
     } else if (arg === '-s' || arg === '--seed') {
       seed = parseInt(args[++i], 10)
+    } else if (arg === '--shared-fraction') {
+      sharedFraction = parseFloat(args[++i])
     } else if (arg === '-w' || arg === '--workers') {
       workers = parseInt(args[++i], 10)
     } else if (arg === '--no-gzip') {
@@ -92,6 +96,7 @@ function parseCliArgs(args: string[]): SimulatorOptions {
     outDir: resolve(process.cwd(), outDir),
     seed,
     workers,
+    sharedFraction,
     gzip
   }
 }
