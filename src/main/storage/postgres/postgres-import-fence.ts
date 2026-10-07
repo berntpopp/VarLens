@@ -11,16 +11,17 @@
  *  - an advisory lock. Every transaction of an import worker that changes
  *    import state takes it SHARED (transaction-level). Recovery takes it
  *    EXCLUSIVE (session-level, because recovery commits several transactions)
- *    for its whole duration. Recovery therefore waits for worker transactions
- *    in flight, and none can start while it runs.
- *  - a generation. Recovery advances it while it holds the fence. A worker
- *    carries the generation its operation started under; each of its
- *    transactions compares it after taking the fence and aborts on a
- *    mismatch, before writing anything.
+ *    for its whole cleanup. Recovery therefore waits for worker transactions
+ *    in flight, and none can start while it cleans up.
+ *  - a generation. Recovery advances it first, before it waits for the
+ *    fence. A worker carries the generation its operation started under;
+ *    each of its transactions compares it after taking the fence and aborts
+ *    on a mismatch, before writing anything.
  *
  * So a worker of a superseded operation has either committed a transaction
- * completely before recovery began (a published case is complete, counted
- * and `ready`, and recovery leaves it alone) or can never commit one again.
+ * completely before recovery began to clean up (a published case is
+ * complete, counted and `ready`, and recovery leaves it alone) or can never
+ * commit one again.
  *
  * The generation is the `import_generation` row of the workspace's
  * `database_settings` (the existing key/value state of a workspace), written
@@ -33,13 +34,24 @@
  * fence → cohort summary write lock (transaction) → rows.
  *
  * Waits:
- *  - a worker never waits for the fence. If it is held or requested
- *    exclusively, the worker's operation is being superseded: the transaction
- *    is refused at once with {@link ImportSupersededError}.
- *  - recovery waits `waitMs` per attempt. A holder that outlives an attempt
- *    is a worker of a lost operation (or a cancelled worker whose backend is
- *    still busy); its backend is terminated and the next attempt follows.
- *    After `attempts` the caller gets a `CONFLICT` and nothing was changed.
+ *  - a worker never waits for the fence. If it cannot have it at once, or
+ *    the generation has moved, the transaction is refused with
+ *    {@link ImportSupersededError}.
+ *  - recovery waits `waitMs` per attempt. Import backends of this workspace
+ *    that still hold the fence after an attempt are terminated (workers of a
+ *    lost operation, or cancelled workers whose backend is still busy), and
+ *    the next attempt follows. After `attempts` the caller gets a `CONFLICT`.
+ *
+ * What a recovery that does not finish leaves behind. Nothing here is rolled
+ * back, and nothing needs to be:
+ *  - it gave up with the CONFLICT: older operations are superseded (the
+ *    generation was advanced, their later transactions were refused) and up
+ *    to `attempts - 1` rounds of termination have run; no row was deleted.
+ *  - its cleanup failed, or its connection was lost: the same, and some
+ *    `importing` cases may already be deleted, others not.
+ * In both cases the remaining `importing` cases stay hidden and without any
+ * cohort contribution, so the case list and the cohort counts stay
+ * consistent, and the next recovery removes them.
  *
  * SQLite needs none of this: one process, one writer.
  */
@@ -70,11 +82,18 @@ export interface ExclusiveFenceOptions {
 export const IMPORT_FENCE_WAIT_MS = 30_000
 export const IMPORT_FENCE_ATTEMPTS = 3
 
+/**
+ * Recovery gave up. By then the older operation can no longer write (it was
+ * superseded and, where permitted, its backends were terminated); what it
+ * left is hidden and is removed by the next import that gets the fence.
+ */
 export const IMPORT_FENCE_BUSY_MESSAGE =
-  'A previous import operation is still finishing in this PostgreSQL workspace'
+  'A previous import of this PostgreSQL workspace was stopped but has not finished ' +
+  'closing; nothing of it is visible. Try the import again shortly.'
 
 const SUPERSEDED_USER_MESSAGE =
-  'This import was replaced by a newer import operation. Nothing from it was kept.'
+  'This import was stopped because a newer import operation took over the workspace. ' +
+  'Files it had not finished were not imported.'
 
 /**
  * The stored import generation is not a number (it was edited by hand).
@@ -317,13 +336,15 @@ async function terminateFenceHolders(client: Queryable, schema: string): Promise
 }
 
 /**
- * Take the fence exclusively, advance the import generation, run `operation`
- * and release the fence — also when `operation` fails.
+ * Recovery's frame: supersede older operations (advance the generation),
+ * take the fence exclusively, run `operation` (the cleanup) and release the
+ * fence — also when `operation` fails. See the file header for what stays
+ * behind when this does not finish; the generation is never moved back.
  *
  * `client` must be a connection the caller owns for the whole call (the
  * import worker's or the batch coordinator's): the lock is session-level.
- * It is released before this function returns; if that release fails, the
- * error is thrown and the caller must end the connection.
+ * It is released before this function returns; if the connection is broken,
+ * the caller ends it, which releases the lock.
  */
 export async function withExclusiveImportFence<T>(
   client: Queryable,

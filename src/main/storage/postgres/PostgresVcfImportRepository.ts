@@ -284,10 +284,14 @@ export class PostgresVcfImportRepository {
    * import generation is advanced, so a worker of an older operation that is
    * still running can no longer write. Returns the new generation.
    *
-   * Holds the import fence exclusively (a session-level lock) for the whole
-   * pass. `client` must therefore be a connection the caller owns: the import
-   * worker's or the batch coordinator's. The fence is released before this
-   * returns; on an error the caller ends the connection.
+   * Holds the import fence exclusively (a session-level lock) while it
+   * deletes. `client` must therefore be a connection the caller owns: the
+   * import worker's or the batch coordinator's. The fence is released before
+   * this returns; on an error the caller ends the connection.
+   *
+   * A pass that fails is not undone: older operations stay superseded, and
+   * `importing` cases it did not reach stay hidden until the next pass
+   * (postgres-import-fence.ts, "What a recovery that does not finish ...").
    */
   async recoverInterruptedImports(
     client: Pick<PoolClient, 'query'>,
