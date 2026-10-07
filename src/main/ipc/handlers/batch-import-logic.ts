@@ -20,13 +20,15 @@ import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { API_CONFIG } from '../../../shared/config'
 import type { FileImportRequest } from '../../../shared/types/import-worker'
 import type { DatabaseService } from '../../database/DatabaseService'
-import type { BatchProgress, DuplicateChoice } from '../../../shared/types/api'
+import type { BatchFileComplete, BatchProgress, DuplicateChoice } from '../../../shared/types/api'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 
 /** Callbacks for emitting events to the renderer during batch import. */
 export interface BatchImportCallbacks {
   onProgress?: (data: BatchProgress) => void
   onComplete?: (data: BatchImportResult) => void
+  /** One file imported; its case is committed and visible. */
+  onFileComplete?: (data: BatchFileComplete) => void
   onCohortStale?: (data: { is_stale: boolean }) => void
 }
 
@@ -197,8 +199,18 @@ function runBatchWorker(
         }
         callbacks.onProgress?.(progress)
       },
-      onFileComplete: () => {
-        // File complete -- progress already sent via onProgress
+      onFileComplete: (msg) => {
+        // The worker reports imported files only; skipped and failed ones
+        // surface in the final result.
+        callbacks.onFileComplete?.({
+          index: msg.fileIndex,
+          totalFiles: files.length,
+          fileName: basename(files[msg.fileIndex]?.filePath ?? '') || 'unknown',
+          caseName: msg.result.caseName,
+          status: 'success',
+          caseId: msg.result.caseId,
+          variantCount: msg.result.variantCount
+        })
       },
       onComplete: (msg) => {
         // Internal variant frequency counts are maintained inside the import

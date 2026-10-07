@@ -45,6 +45,7 @@ function throwUnallowedBatchPath(channel: string, filePath: string, label = 'fil
 function createBatchImportCallbacks(runId: string): BatchImportCallbacks {
   return {
     onProgress: (data) => safeEmit('batch-import:progress', { ...data, runId }),
+    onFileComplete: (data) => safeEmit('batch-import:fileComplete', { ...data, runId }),
     onComplete: (data) => safeEmit('batch-import:complete', { ...data, runId }),
     onCohortStale: (data) => safeEmit('cohort:summaryRebuilt', data)
   }

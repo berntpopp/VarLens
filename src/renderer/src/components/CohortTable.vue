@@ -310,6 +310,7 @@ const {
   error,
   loadPage,
   invalidateAndReload,
+  reloadCurrentPage,
   reloadIfFiltersChanged,
   resetSort
 } = useOffsetPagination<CohortVariant>({
@@ -352,6 +353,17 @@ const {
 
 // Reloads requested while KeepAlive-deactivated are replayed on activation (P0-3 parity).
 const { requestReload } = useDeferredReload(isActive, invalidateAndReload)
+
+// Cases were added while the table is on screen (batch import): refetch the
+// current page, the summary tiles and the column metadata in one go, keeping
+// the page, sort and filters. Deferred like any reload while hidden.
+const { requestReload: softRefresh } = useDeferredReload(isActive, async () => {
+  await Promise.all([
+    fetchSupportedCohortSummary(),
+    fetchSupportedCohortColumnMeta(),
+    reloadCurrentPage()
+  ])
+})
 
 // Local state
 const selectedVariantKey = ref<string | null>(null)
@@ -687,7 +699,7 @@ const refresh = async () => {
     invalidateAndReload()
   ])
 }
-defineExpose({ refresh })
+defineExpose({ refresh, softRefresh })
 </script>
 
 <style scoped>

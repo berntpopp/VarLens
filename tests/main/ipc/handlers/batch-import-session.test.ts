@@ -6,6 +6,7 @@ import {
   type SessionBatchFile
 } from '../../../../src/main/ipc/handlers/batch-import-session'
 import type { StorageSession } from '../../../../src/main/storage/session'
+import type { BatchFileComplete } from '../../../../src/shared/types/api'
 
 /**
  * Shared batch-import loop (PR-W9a; used by web and desktop-on-Postgres).
@@ -33,11 +34,15 @@ describe('runSessionBatchImport', () => {
   it('skips duplicates, imports new cases and reports failures per file', async () => {
     const { session, importSingleFile } = fakeSession([{ id: 1, name: 'HG001' }])
     const stale: boolean[] = []
+    const completed: BatchFileComplete[] = []
     const result = await runSessionBatchImport({
       files: [file('HG001.json'), file('HG002.json'), file('broken.json')],
       duplicateStrategy: 'skip',
       session,
-      callbacks: { onCohortStale: (d) => stale.push(d.is_stale) },
+      callbacks: {
+        onCohortStale: (d) => stale.push(d.is_stale),
+        onFileComplete: (event) => completed.push(event)
+      },
       signal: new AbortController().signal
     })
 
@@ -49,7 +54,15 @@ describe('runSessionBatchImport', () => {
     ])
     expect(result.details[0].filePath).toBe('ref:HG001.json')
     expect(importSingleFile).toHaveBeenCalledTimes(2)
-    expect(stale).toEqual([true, false])
+    // Each case is visible, and the cohort summary valid, as soon as its own
+    // file finishes: a batch never flags the summary stale.
+    expect(stale).toEqual([])
+    expect(completed.map((event) => [event.index, event.caseName, event.status])).toEqual([
+      [0, 'HG001', 'skipped'],
+      [1, 'HG002', 'success'],
+      [2, 'broken', 'failed']
+    ])
+    expect(completed.every((event) => event.totalFiles === 3)).toBe(true)
   })
 
   it('overwrite deletes the existing case before importing it again', async () => {

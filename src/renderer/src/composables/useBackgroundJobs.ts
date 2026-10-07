@@ -50,6 +50,11 @@ const PHASE_LABELS: Record<string, string> = {
   finalizing: 'Finalizing'
 }
 
+/** Human label for an import phase key; unknown keys are shown as is. */
+export function importPhaseLabel(phase: string): string {
+  return PHASE_LABELS[phase] ?? phase
+}
+
 export function isActiveJob(job: Pick<Job, 'status'>): boolean {
   return ACTIVE.has(job.status)
 }
@@ -68,7 +73,7 @@ export function describeJob(job: Job): string {
   if (job.status === 'failed') return `Failed: ${formatError(job.error, 'unknown error')}`
   if (job.status === 'queued' || job.progress === null) return 'Starting…'
   const { current, total, message } = job.progress
-  const phase = message === undefined ? undefined : (PHASE_LABELS[message] ?? message)
+  const phase = message === undefined ? undefined : importPhaseLabel(message)
   const unit = job.kind === 'case_delete' ? ' cases' : job.kind === 'import_batch' ? ' files' : ''
   const count =
     total > 0

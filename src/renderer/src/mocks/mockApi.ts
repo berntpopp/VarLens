@@ -366,6 +366,7 @@ export const mockApi: WindowAPI = {
     cancel: async () => {},
     onProgress: () => () => {},
     onComplete: () => () => {},
+    onFileComplete: () => () => {},
     selectZip: async () => null,
     testZipPassword: async () => ({ success: false }),
     extractZip: async () => ({ files: [], errors: [], extractionId: 'mock-extraction-id' }),

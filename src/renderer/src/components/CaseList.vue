@@ -153,6 +153,7 @@ import type { CaseWithCohorts, CaseSex, AffectedStatus } from '../../../shared/t
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
+import { mergeFirstPage } from '../utils/mergeFirstPage'
 
 const VALID_AFFECTED: Set<string> = new Set(['affected', 'unaffected', 'unknown'])
 const VALID_SEX: Set<string> = new Set(['unknown', 'male', 'female', 'other'])
@@ -262,6 +263,21 @@ const emptyText = computed(() => {
   return 'All cases loaded'
 })
 
+// One page of the list under the current search and filters, newest first
+const fetchCasePage = async (offset: number) =>
+  unwrapIpcResult(
+    await api!.cases.query({
+      limit: PAGE_SIZE,
+      offset,
+      search_term: searchTerm.value || undefined,
+      cohort_ids: selectedCohortIds.value.length > 0 ? [...selectedCohortIds.value] : undefined,
+      hpo_ids: selectedHpoIds.value.length > 0 ? [...selectedHpoIds.value] : undefined,
+      sort_by: 'created_at',
+      sort_order: 'desc',
+      _count_needed: offset === 0
+    })
+  )
+
 // Infinite scroll load handler
 const onLoad = async ({
   done
@@ -276,18 +292,7 @@ const onLoad = async ({
 
   loading.value = true
   try {
-    const result = unwrapIpcResult(
-      await api.cases.query({
-        limit: PAGE_SIZE,
-        offset: currentOffset.value,
-        search_term: searchTerm.value || undefined,
-        cohort_ids: selectedCohortIds.value.length > 0 ? [...selectedCohortIds.value] : undefined,
-        hpo_ids: selectedHpoIds.value.length > 0 ? [...selectedHpoIds.value] : undefined,
-        sort_by: 'created_at',
-        sort_order: 'desc',
-        _count_needed: currentOffset.value === 0
-      })
-    )
+    const result = await fetchCasePage(currentOffset.value)
 
     cases.value = markRaw([...cases.value, ...result.data])
 
@@ -575,11 +580,32 @@ const refreshCases = async (): Promise<void> => {
   resetList()
 }
 
+// Cases were added while the list is on screen (a batch import is running):
+// merge the newest page in place, keeping the scroll position and loaded rows.
+const softRefreshCases = async (): Promise<void> => {
+  // A page load or a reset in progress already brings current rows.
+  if (!api || loading.value) return
+  const generation = scrollKey.value
+  try {
+    const result = await fetchCasePage(0)
+    if (generation !== scrollKey.value || loading.value) return
+    cases.value = markRaw(mergeFirstPage(cases.value, result.data))
+    currentOffset.value = cases.value.length
+    totalCaseCount.value = result.total_count
+    emit('cases-loaded', result.total_count)
+  } catch (e) {
+    logService.warn(
+      'Failed to refresh cases: ' + formatErrorMessage(e, 'Unknown error'),
+      'case-list'
+    )
+  }
+}
+
 const selectCase = (caseId: number): void => {
   selected.value = [caseId]
 }
 
-defineExpose({ refreshCases, selectCase })
+defineExpose({ refreshCases, softRefreshCases, selectCase })
 
 // Load filter dropdown data on mount
 loadCohortGroups()

@@ -269,6 +269,17 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   }
 
   /**
+   * Refetch the page the user is on after the underlying data changed (for
+   * example a case was imported). Keeps the page number, and the rows stay on
+   * screen until the fresh ones arrive.
+   */
+  const reloadCurrentPage = async (): Promise<void> => {
+    pageCache.clear()
+    resetCount()
+    await loadPage()
+  }
+
+  /**
    * Reload only when the filter key differs from the last issued request.
    * Lets several filter-change sources (Clear, debounced chips, column
    * filters) converge on one query. Without a filterKey it always reloads.
@@ -327,6 +338,7 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
     // Methods
     loadPage,
     invalidateAndReload,
+    reloadCurrentPage,
     reloadIfFiltersChanged,
     resetCount,
     resetSort,

@@ -292,6 +292,48 @@ describe('startBatchImport — Sprint A D3 (iii) / Gate 12', () => {
     ])
   })
 
+  it('(d) onFileComplete: announces each imported file as soon as the worker reports it', async () => {
+    const db = makeDb()
+    const files: unknown[] = []
+    const promise = startBatchImport(
+      () => db,
+      ['/data/a.json', '/data/b.json'],
+      'skip',
+      undefined,
+      { onFileComplete: (data) => files.push(data) }
+    )
+    await new Promise((r) => queueMicrotask(r as () => void))
+
+    const w = FakeImportWorkerClient.instances[0]
+    w.emit({
+      type: 'file-complete',
+      fileIndex: 1,
+      result: {
+        caseId: 12,
+        caseName: 'b',
+        variantCount: 340,
+        skipped: 0,
+        skipReasons: [],
+        elapsed: 5
+      }
+    })
+    // Announced before the batch as a whole is done.
+    expect(files).toEqual([
+      {
+        index: 1,
+        totalFiles: 2,
+        fileName: 'b.json',
+        caseName: 'b',
+        status: 'success',
+        caseId: 12,
+        variantCount: 340
+      }
+    ])
+
+    w.emit(COMPLETE_MSG)
+    await promise
+  })
+
   it('(d) onComplete: emits the final batch result to callbacks.onComplete', async () => {
     const db = makeDb()
     let completed: unknown = null

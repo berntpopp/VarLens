@@ -22,6 +22,7 @@ interface TestApi {
   batchImport: {
     onProgress: (callback: (progress: unknown) => void) => () => void
     onComplete: (callback: (result: unknown) => void) => () => void
+    onFileComplete: (callback: (event: unknown) => void) => () => void
     selectFiles: () => Promise<string[]>
     selectFolder: () => Promise<string[]>
     selectZip: () => Promise<unknown>
@@ -397,7 +398,12 @@ describe('web client api', () => {
 
     const unsubscribeProgress = api.batchImport.onProgress(onProgress)
     const unsubscribeComplete = api.batchImport.onComplete(onComplete)
+    const onFileComplete = vi.fn()
+    const unsubscribeFileComplete = api.batchImport.onFileComplete(onFileComplete)
     MockEventSource.instances[0].emit('batch-import:progress', { currentIndex: 0 })
+    MockEventSource.instances[0].emit('batch-import:fileComplete', { index: 0, caseId: 3 })
+    unsubscribeFileComplete()
+    expect(onFileComplete).toHaveBeenCalledWith({ index: 0, caseId: 3 })
     MockEventSource.instances[0].emit('batch-import:complete', { succeeded: 1 })
     unsubscribeProgress()
     expect(MockEventSource.instances[0].close).not.toHaveBeenCalled()

@@ -239,6 +239,14 @@ describe('batch-import IPC handlers', () => {
         currentFileName: 'case1.json',
         overallPercent: 50
       })
+      callbacks?.onFileComplete?.({
+        index: 0,
+        totalFiles: 1,
+        fileName: 'case1.json',
+        caseName: 'case1',
+        status: 'success',
+        caseId: 4
+      })
       callbacks?.onComplete?.({
         succeeded: 1,
         failed: 0,
@@ -249,6 +257,10 @@ describe('batch-import IPC handlers', () => {
       expect(safeEmit).toHaveBeenCalledWith(
         'batch-import:progress',
         expect.objectContaining({ runId: 'run-1' })
+      )
+      expect(safeEmit).toHaveBeenCalledWith(
+        'batch-import:fileComplete',
+        expect.objectContaining({ runId: 'run-1', caseId: 4, status: 'success' })
       )
       expect(safeEmit).toHaveBeenCalledWith(
         'batch-import:complete',

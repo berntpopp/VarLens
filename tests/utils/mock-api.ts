@@ -254,7 +254,8 @@ export function createMockApi(): MockApi {
       }),
       cleanupZipTemp: vi.fn().mockResolvedValue(undefined),
       onProgress: vi.fn(() => vi.fn()), // Returns cleanup function
-      onComplete: vi.fn(() => vi.fn()) // Returns cleanup function
+      onComplete: vi.fn(() => vi.fn()), // Returns cleanup function
+      onFileComplete: vi.fn(() => vi.fn()) // Returns cleanup function
     },
 
     cohort: {

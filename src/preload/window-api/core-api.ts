@@ -148,7 +148,8 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       extractZip: (zipPath, password) => batchImportDomain.extractZip(zipPath, password),
       cleanupZipTemp: (extractionId) => batchImportDomain.cleanupZipTemp(extractionId),
       onProgress: (callback) => subscribeToIpcEvent('batch-import:progress', callback),
-      onComplete: (callback) => subscribeToIpcEvent('batch-import:complete', callback)
+      onComplete: (callback) => subscribeToIpcEvent('batch-import:complete', callback),
+      onFileComplete: (callback) => subscribeToIpcEvent('batch-import:fileComplete', callback)
     } as WindowAPI['batchImport'],
 
     cohort: {

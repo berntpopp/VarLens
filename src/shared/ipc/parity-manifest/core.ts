@@ -116,6 +116,7 @@ export const batchImportManifest = {
   cancel: sharedWrite(),
   onProgress: adapter('sse'),
   onComplete: adapter('sse'),
+  onFileComplete: adapter('sse'),
   selectZip: adapter('upload', { authz: 'analyst' }),
   testZipPassword: sharedRead({ authz: 'analyst' }),
   extractZip: sharedWrite(),

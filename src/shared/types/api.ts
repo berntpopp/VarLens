@@ -364,6 +364,10 @@ export interface BatchCompleteEvent extends BatchResult {
   runId: string
 }
 
+export interface BatchFileCompleteEvent extends BatchFileComplete {
+  runId: string
+}
+
 export type DuplicateChoice = 'skip' | 'overwrite'
 
 export interface DuplicateCheckItem {
@@ -394,6 +398,8 @@ export interface BatchImportAPI {
   cancel: () => Promise<IpcResult<void>>
   onProgress: (callback: (progress: BatchProgressEvent) => void) => () => void
   onComplete: (callback: (result: BatchCompleteEvent) => void) => () => void
+  /** Fires as soon as one file of the running batch is done. */
+  onFileComplete: (callback: (event: BatchFileCompleteEvent) => void) => () => void
   selectZip: () => Promise<IpcResult<{ filePath: string; isEncrypted: boolean } | null>>
   testZipPassword: (zipPath: string, password: string) => Promise<IpcResult<{ success: boolean }>>
   extractZip: (

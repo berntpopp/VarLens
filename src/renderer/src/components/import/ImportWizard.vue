@@ -121,6 +121,8 @@
           :total-files="totalFiles"
           :overall-percent="overallPercent"
           :variant-count="variantCount"
+          :completed-files="liveProgress.completedFiles"
+          :in-flight="liveProgress.inFlight"
         />
       </v-card-text>
 
@@ -303,6 +305,7 @@ const totalFiles = ref(0)
 const currentFileName = ref('')
 const overallPercent = ref(0)
 const variantCount = ref(0)
+const liveProgress = ref<Partial<BatchProgressEvent>>({}) // parallel batches: done count + running files
 
 const summary = ref<BatchResult>({
   succeeded: 0,
@@ -614,6 +617,7 @@ async function startImport(): Promise<void> {
   currentIndex.value = 0
   overallPercent.value = 0
   variantCount.value = 0
+  liveProgress.value = {}
 
   importStore.startImport(fileCount.value, runId)
   importStore.dialogOpen = true
@@ -749,6 +753,7 @@ function resetState(): void {
   currentFileName.value = ''
   overallPercent.value = 0
   variantCount.value = 0
+  liveProgress.value = {}
   summary.value = { succeeded: 0, failed: 0, skipped: 0, cancelled: false, details: [] }
 }
 
@@ -814,6 +819,7 @@ onMounted(() => {
       currentFileName.value = progress.currentFileName
       overallPercent.value = progress.overallPercent
       variantCount.value = progress.fileProgress?.count ?? 0
+      liveProgress.value = progress
 
       if (importStore.isActive) {
         importStore.updateProgress({

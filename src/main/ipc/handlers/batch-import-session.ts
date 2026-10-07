@@ -114,7 +114,6 @@ export async function runSessionBatchImport(params: {
   concurrency?: number
 }): Promise<BatchResult> {
   const { files, session, callbacks, signal } = params
-  callbacks.onCohortStale?.({ is_stale: true })
 
   const existingIds = new Map((await session.listCases()).map((item) => [item.name, item.id]))
   // A case imported before `.vcf` was stripped resolves to its existing name.
@@ -200,27 +199,23 @@ export async function runSessionBatchImport(params: {
   const concurrency = params.concurrency ?? resolveImportConcurrency()
   const parallel = concurrency > 1 && files.length > 1 && executor.openBatch !== undefined
 
-  try {
-    if (parallel) {
-      await runFilesInParallel({
-        openBatch: () => executor.openBatch!(),
-        chains: groupIntoChains(caseNames),
-        concurrency,
-        processFile,
-        shouldStop: () => signal.aborted
-      })
-      if (signal.aborted) result.cancelled = true
-    } else {
-      const importOne: ImportOneFile = (file, caseName, onProgress) =>
-        startImport(file.storedPath, caseName, undefined, () => session, { onProgress })
-      for (let index = 0; index < files.length && !result.cancelled; index++) {
-        await processFile(index, importOne)
-      }
+  if (parallel) {
+    await runFilesInParallel({
+      openBatch: () => executor.openBatch!(),
+      chains: groupIntoChains(caseNames),
+      concurrency,
+      processFile,
+      shouldStop: () => signal.aborted
+    })
+    if (signal.aborted) result.cancelled = true
+  } else {
+    const importOne: ImportOneFile = (file, caseName, onProgress) =>
+      startImport(file.storedPath, caseName, undefined, () => session, { onProgress })
+    for (let index = 0; index < files.length && !result.cancelled; index++) {
+      await processFile(index, importOne)
     }
-    if (!result.cancelled) params.ctx?.reportProgress(files.length, files.length)
-  } finally {
-    callbacks.onCohortStale?.({ is_stale: false })
   }
+  if (!result.cancelled) params.ctx?.reportProgress(files.length, files.length)
   result.details = details.filter((detail) => detail !== undefined)
   callbacks.onComplete?.(result)
   return result

@@ -40,6 +40,7 @@
 import { describe, it, expectTypeOf } from 'vitest'
 import type {
   WindowAPI,
+  BatchFileComplete,
   Case,
   CaseDataInfo,
   CaseMetadata,
@@ -136,6 +137,17 @@ describe('batch-import and system domains — C1 renderer unwrap guards', () => 
     >()
     expectTypeOf<Awaited<ReturnType<WindowAPI['batchImport']['selectFolder']>>>().toEqualTypeOf<
       IpcResult<string[]>
+    >()
+  })
+
+  it('compile-time check: batch-import per-file completion is a runId-tagged subscription', () => {
+    type FileCompleteEvent = Parameters<
+      Parameters<WindowAPI['batchImport']['onFileComplete']>[0]
+    >[0]
+    expectTypeOf<FileCompleteEvent['runId']>().toEqualTypeOf<string>()
+    expectTypeOf<Omit<FileCompleteEvent, 'runId'>>().toEqualTypeOf<BatchFileComplete>()
+    expectTypeOf<ReturnType<WindowAPI['batchImport']['onFileComplete']>>().toEqualTypeOf<
+      () => void
     >()
   })
 

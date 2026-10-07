@@ -114,6 +114,37 @@ describe('useOffsetPagination', () => {
     expect(fetchPage).toHaveBeenCalled()
   })
 
+  it('reloadCurrentPage refetches the page the user is on, with a fresh count', async () => {
+    let total = 100
+    const fetchPage = vi.fn(async ({ offset }: { offset: number }) => ({
+      data: [{ id: offset + 1 }, { id: offset + 2 }],
+      total_count: total
+    }))
+    const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
+    app = appInstance
+
+    result.itemsPerPage.value = 25
+    result.page.value = 3
+    await result.loadPage()
+    expect(result.totalCount.value).toBe(100)
+    fetchPage.mockClear()
+
+    total = 140
+    const reload = result.reloadCurrentPage()
+    // The rows on screen stay until the fresh ones arrive.
+    expect(result.items.value.map((row) => row.id)).toEqual([51, 52])
+    await reload
+
+    expect(result.page.value).toBe(3)
+    expect(fetchPage).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 50, limit: 25, skipCount: false })
+    )
+    // Only the current page is re-queried with a count; page 1 is not loaded.
+    expect(fetchPage.mock.calls.filter(([params]) => params.offset === 0)).toEqual([])
+    expect(result.totalCount.value).toBe(140)
+    expect(result.items.value.map((row) => row.id)).toEqual([51, 52])
+  })
+
   it('sets error ref when fetchPage rejects', async () => {
     const fetchPage = vi.fn().mockRejectedValue(new Error('network error'))
     const [result, appInstance] = withSetup(() => useOffsetPagination({ fetchPage }))
