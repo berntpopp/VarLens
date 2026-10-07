@@ -18,8 +18,10 @@ import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
 import { VariantFrequencyService } from '../../database/VariantFrequencyService'
 import {
+  createCohortStaleAnnouncer,
   markCohortSummaryStaleBeforeAppend,
   rebuildCohortSummaryAfterAppend,
+  settleAfterWorkerImport,
   type EmitCohortStale
 } from './cohort-summary-settle'
 import type { ImportFilters } from '../../import/vcf/import-filters'
@@ -73,7 +75,11 @@ export interface ImportCallbacks {
     filePath?: string
     fileName?: string
   }) => void
-  /** A multi-file append rebuilds the cohort summary: stale, progress, current. */
+  /**
+   * The cohort summary is out of date, being rebuilt, current again: when the
+   * import worker stops keeping it current mid-import, and around the rebuild
+   * that follows a multi-file append.
+   */
   onCohortStale?: EmitCohortStale
 }
 
@@ -123,27 +129,38 @@ export async function withActiveImportOperation<T>(
  * Start a single-file import through the active storage session's executor.
  *
  * The session abstracts SQLite vs PostgreSQL. Cancellation is routed back
- * into the same executor via `cancelImport`.
+ * into the same executor via `cancelImport`. `getDb`: the SQLite database of
+ * the session; leave it out for a PostgreSQL session.
  */
 export async function startImport(
   filePath: string,
   caseName: string,
   vcfOptions: VcfImportOptions | undefined,
   getSession: () => StorageSession,
-  callbacks: ImportCallbacks
+  callbacks: ImportCallbacks,
+  getDb?: () => DatabaseService
 ): Promise<ImportResult> {
   const session = getSession()
   const executor = session.getImportExecutor()
+  // SQLite (`getDb` given): when the worker stops keeping the cohort summary
+  // current, the renderer hears it at once, and again when it is current.
+  const stale = createCohortStaleAnnouncer(callbacks.onCohortStale)
   return withActiveImportOperation(
     () => executor.cancel(),
     async () => {
-      return executor.importSingleFile({
-        filePath,
-        caseName,
-        vcfOptions,
-        throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
-        onProgress: callbacks.onProgress
-      })
+      try {
+        return await executor.importSingleFile({
+          filePath,
+          caseName,
+          vcfOptions,
+          throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
+          onProgress: callbacks.onProgress,
+          onSummaryStale: () => stale.announce()
+        })
+      } finally {
+        if (getDb !== undefined)
+          await settleAfterWorkerImport(getDb, callbacks.onCohortStale, stale)
+      }
     }
   )
 }
@@ -261,15 +278,24 @@ async function startMultiFileImportSqlite(
   // Import first file — creates the case
   const firstFile = files[0]
   const firstCallbacks = wrapCallbacksForFile(firstFile, 0)
-  const firstResult = await getSession().getImportExecutor().importSingleFile({
-    filePath: firstFile.filePath,
-    caseName,
-    vcfOptions,
-    throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
-    onProgress: firstCallbacks.onProgress
-  })
+  const stale = createCohortStaleAnnouncer(callbacks.onCohortStale)
+  const firstResult = await getSession()
+    .getImportExecutor()
+    .importSingleFile({
+      filePath: firstFile.filePath,
+      caseName,
+      vcfOptions,
+      throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
+      onProgress: firstCallbacks.onProgress,
+      onSummaryStale: () => stale.announce()
+    })
+    .catch(async (error: unknown) => {
+      await settleAfterWorkerImport(getDb, callbacks.onCohortStale, stale)
+      throw error
+    })
 
   if (firstResult.caseId === 0) {
+    await settleAfterWorkerImport(getDb, callbacks.onCohortStale, stale)
     throw new Error(
       `Failed to create case from first file: ${
         firstResult.errors.length > 0 ? firstResult.errors.join(', ') : 'unknown error'
@@ -453,6 +479,9 @@ async function startMultiFileImportSqlite(
   // import is reported done.
   if (files.length > 1) {
     await rebuildCohortSummaryAfterAppend(db, callbacks.onCohortStale)
+  } else {
+    // One file is a single-file import: only the worker touched the summary.
+    await settleAfterWorkerImport(getDb, callbacks.onCohortStale, stale)
   }
 
   return {

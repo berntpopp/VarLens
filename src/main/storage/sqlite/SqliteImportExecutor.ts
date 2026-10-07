@@ -132,7 +132,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
     const worker = this.createWorkerClient()
     this.workerClient = worker
 
-    const { filePath, caseName, vcfOptions, throttleMs, onProgress } = params
+    const { filePath, caseName, vcfOptions, throttleMs, onProgress, onSummaryStale } = params
 
     return new Promise<StorageImportSingleFileResult>((resolve, reject) => {
       let capturedCaseId = 0
@@ -173,6 +173,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
             capturedSkipReasons = msg.result.skipReasons ?? []
             this.invalidateCohortMetadata()
           },
+          onSummaryStale: () => onSummaryStale?.(),
           onComplete: (msg) => {
             this.workerClient = null
 

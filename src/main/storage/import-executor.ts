@@ -26,6 +26,12 @@ export interface StorageImportSingleFileParams {
   vcfOptions?: StorageImportVcfOptions
   throttleMs: number
   onProgress?: (data: StorageImportProgress) => void
+  /**
+   * SQLite: the import worker stopped keeping the cohort summary current. The
+   * summary is flagged stale from here until a rebuild — the worker's own at
+   * the end of the import, or the caller's afterwards. At most once.
+   */
+  onSummaryStale?: () => void
 }
 
 export interface StorageImportSingleFileResult {

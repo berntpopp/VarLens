@@ -4,7 +4,8 @@
  *
  * The import worker keeps `cohort_variant_summary` / `gene_burden_summary`
  * exact after every file (cohort-summary-case-add.ts), so an import no longer
- * flags the cohort stale. Two things remain for the main process:
+ * flags the cohort stale. This holds for batch and single-file imports alike.
+ * What remains for the main process:
  *
  *  - metadata it cached from the summary must be dropped whenever a file's
  *    contribution lands;
@@ -141,6 +142,26 @@ export async function settleCohortSummaryAfterImport(
     await rebuildCohortSummaryAndNotify(db, notify, rebuild)
   } else if (announcer?.announced() === true) {
     emit?.({ is_stale: false })
+  }
+}
+
+/**
+ * End of an import the SQLite worker ran alone (single file) — also a failed
+ * or cancelled one: {@link settleCohortSummaryAfterImport}, best effort. A
+ * database that was closed meanwhile must not replace the import's outcome.
+ */
+export async function settleAfterWorkerImport(
+  getDb: () => DatabaseService,
+  emit: EmitCohortStale | undefined,
+  announcer: CohortStaleAnnouncer
+): Promise<void> {
+  try {
+    await settleCohortSummaryAfterImport(getDb(), emit, undefined, announcer)
+  } catch (e) {
+    mainLogger.warn(
+      `Failed to settle the cohort summary after import: ${formatErrorMessage(e, 'unknown error')}`,
+      'cohort'
+    )
   }
 }
 
