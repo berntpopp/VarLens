@@ -1,3 +1,10 @@
+import { isSeverityKey } from '../../shared/config/severity.config'
+import {
+  SEVERITY_RANK_COLUMN,
+  severityFilterOperands,
+  severityFilterSql,
+  type SeverityFilterTarget
+} from '../../shared/filters/severity-filter'
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { isExtensionColumnKey } from './variant-extension-registry'
 import { buildNullCheckSql, isNullCheckOperator } from '../../shared/filters/column-null-check'
@@ -113,21 +120,18 @@ export function buildBaseWhere(
     params.push(filters.carrier_count_min)
   }
 
-  if (filters.consequences !== undefined && filters.consequences.length > 0) {
-    const ph = filters.consequences.map(() => '?').join(', ')
-    conditions.push(`${q('consequence')} IN (${ph})`)
-    params.push(...filters.consequences)
+  // Impact and ClinVar match by normalised category (severity-filter.ts).
+  const bySeverity = (key: 'consequence' | 'clinvar', values?: string[]): void => {
+    const clause = severityFilterSql(key, values ?? [], severityTarget(key, baseAlias, params))
+    if (clause !== null) conditions.push(clause)
   }
+  bySeverity('consequence', filters.consequences)
   if (filters.funcs !== undefined && filters.funcs.length > 0) {
     const ph = filters.funcs.map(() => '?').join(', ')
     conditions.push(`${q('func')} IN (${ph})`)
     params.push(...filters.funcs)
   }
-  if (filters.clinvars !== undefined && filters.clinvars.length > 0) {
-    const ph = filters.clinvars.map(() => '?').join(', ')
-    conditions.push(`${q('clinvar')} IN (${ph})`)
-    params.push(...filters.clinvars)
-  }
+  bySeverity('clinvar', filters.clinvars)
   if (
     isCohortSummaryScope &&
     filters.acmg_classifications !== undefined &&
@@ -171,6 +175,22 @@ export function buildBaseWhere(
 
 const IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
 
+/** Where a severity filter looks on `baseAlias` (variants or the cohort summary). */
+function severityTarget(
+  key: 'consequence' | 'clinvar',
+  baseAlias: string,
+  params: (string | number)[]
+): SeverityFilterTarget {
+  return {
+    column: `${baseAlias}.${key}`,
+    rank: `${baseAlias}.${SEVERITY_RANK_COLUMN[key]}`,
+    bind: (value) => {
+      params.push(value)
+      return '?'
+    }
+  }
+}
+
 /**
  * SQL column names on the `variants` table that VariantFilterBuilder already
  * treats as sortable/filterable for its own column_filters path. `case` and
@@ -213,6 +233,11 @@ function translateColumnFilter(
 
   if (isNullCheckOperator(operator)) {
     return buildNullCheckSql(col, operator, NUMERIC_COLUMN_FILTER_KEYS.has(column), 'sqlite')
+  }
+  const severity = isSeverityKey(column) ? severityFilterOperands(operator, value) : null
+  if (isSeverityKey(column) && severity !== null) {
+    const target = severityTarget(column, baseAlias, params)
+    return severityFilterSql(column, severity.values, target, severity.negate)
   }
   if (operator === 'in' && Array.isArray(value)) {
     if (value.length === 0) return null

@@ -1,3 +1,6 @@
+import { isSeverityKey } from '../../../shared/config/severity.config'
+import { severityFilterOperands } from '../../../shared/filters/severity-filter'
+import { whereSeverity } from './severity-filter'
 import { sql } from 'kysely'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../../shared/filters/column-filter-validation'
 import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
@@ -116,6 +119,14 @@ export function applyBareColumnFilters(
   for (const [column, filterDef] of Object.entries(filter.column_filters)) {
     const baseColumn = SORTABLE_COLUMNS[column]
     if (baseColumn === undefined) continue
+    // Impact and ClinVar match by normalised category, like the cohort view.
+    const severity = isSeverityKey(column)
+      ? severityFilterOperands(filterDef.operator, filterDef.value)
+      : null
+    if (isSeverityKey(column) && severity !== null) {
+      filtered = whereSeverity(filtered, column, severity.values, severity.negate)
+      continue
+    }
     // Always table-qualified: the `variant_frequency` join in the base query
     // also exposes `chr` / `pos`, so a bare reference is ambiguous in SQLite.
     filtered = applyColumnFilter(

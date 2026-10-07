@@ -419,6 +419,69 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
     }
   })
 
+  it('both views filter impact and ClinVar by category, whatever the spelling', () => {
+    // One case; every variant is its own cohort row.
+    const spellings: Array<[number, string | null, string | null]> = [
+      [1, 'HIGH', 'Pathogenic'],
+      [2, 'high', 'pathogenic'],
+      [3, 'MODERATE', 'Pathogenic|drug_response'],
+      [4, 'MODERATE', 'Likely_pathogenic'],
+      [5, 'LOW', 'Pathogenic/Likely_pathogenic'],
+      [6, 'MODIFIER', 'P'],
+      [7, 'custom_level', 'reviewed: fine'],
+      [8, null, null]
+    ]
+    const caseId = service.cases.createCase('spelled', '/tmp/spelled.json', 0, 'GRCh38')
+    service.variants.insertVariantsBatch(
+      caseId,
+      spellings.map(
+        ([pos, consequence, clinvar]) =>
+          ({ chr: '1', pos, ref: 'A', alt: 'T', gt_num: '0/1', consequence, clinvar }) as never
+      )
+    )
+    service.cohortSummary.rebuild()
+    const caseView = (filter: Record<string, unknown>): number[] =>
+      service.variants
+        .getVariants({ case_id: caseId, ...filter }, 50, 0, [{ key: 'pos', order: 'asc' }])
+        .data.map((variant) => variant.pos)
+    const cohortView = (filter: Record<string, unknown>): number[] =>
+      service.cohort
+        .getCohortVariants({ ...filter, sort_by: 'pos', sort_order: 'asc' })
+        .data.map((variant) => variant.pos)
+    const column = (key: string, operator: string, value: unknown): Record<string, unknown> => ({
+      column_filters: { [key]: { operator, value } }
+    })
+    const PRESET = ['Pathogenic', 'Likely_pathogenic', 'Pathogenic/Likely_pathogenic']
+
+    for (const view of [caseView, cohortView]) {
+      // As text, 'Pathogenic' matched position 1 only.
+      expect(view({ clinvars: ['Pathogenic'] })).toEqual([1, 2, 3, 6])
+      expect(view({ clinvars: PRESET })).toEqual([1, 2, 3, 4, 5, 6])
+      expect(view({ clinvars: ['reviewed: fine'] })).toEqual([7])
+      expect(view({ consequences: ['HIGH'] })).toEqual([1, 2])
+      expect(view({ consequences: ['HIGH', 'custom_level'] })).toEqual([1, 2, 7])
+      expect(view(column('clinvar', 'in', ['Pathogenic']))).toEqual([1, 2, 3, 6])
+      expect(view(column('clinvar', '=', 'Likely pathogenic'))).toEqual([4])
+      expect(view(column('clinvar', '!=', 'Pathogenic'))).toEqual([4, 5, 7])
+      expect(view(column('consequence', 'in', ['MODERATE', 'LOW']))).toEqual([3, 4, 5])
+    }
+
+    // The values offered are the categories present, not every spelling.
+    const offeredClinvar = [
+      'Pathogenic',
+      'Pathogenic/Likely pathogenic',
+      'Likely pathogenic',
+      'reviewed: fine'
+    ]
+    const offeredImpact = ['HIGH', 'MODERATE', 'LOW', 'MODIFIER', 'custom_level']
+    const options = service.variants.getFilterOptions(caseId)
+    expect(options.clinvars).toEqual(offeredClinvar)
+    expect(options.consequences).toEqual(offeredImpact)
+    const cohortMeta = new Map(service.cohort.getColumnMeta().map((meta) => [meta.key, meta]))
+    expect(cohortMeta.get('clinvar')?.distinctValues).toEqual(offeredClinvar)
+    expect(cohortMeta.get('consequence')?.distinctValues).toEqual(offeredImpact)
+  })
+
   it('a case with several rows at one variant counts once and offers its best row', () => {
     const caseId = addCarrier('multi', MODIFIER)
     service.variants.insertVariantsBatch(caseId, [

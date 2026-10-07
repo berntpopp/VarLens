@@ -12,6 +12,9 @@ import {
   annotationSeverityRanks,
   clinvarCategory,
   clinvarRank,
+  clinvarRankForImport,
+  offeredFilterValues,
+  severityFilterParts,
   impactRank,
   impactRankCaseSql,
   takeUnrankedClinvarStrings
@@ -219,12 +222,14 @@ describe('ClinVar categories', () => {
   it('collects the distinct strings it could not rank, once', () => {
     takeUnrankedClinvarStrings()
     for (const raw of ['Pathogenic', 'weird value', 'weird value', null, '', '  ', 'another one']) {
-      clinvarRank(raw)
+      clinvarRankForImport(raw)
     }
+    // Ranking a string for a filter or a migration is not an import.
+    clinvarRank('asked by a filter')
     expect(takeUnrankedClinvarStrings()).toEqual(['weird value', 'another one'])
     expect(takeUnrankedClinvarStrings()).toEqual([])
     // A string seen before is reported again by the next import.
-    clinvarRank('weird value')
+    clinvarRankForImport('weird value')
     expect(takeUnrankedClinvarStrings()).toEqual(['weird value'])
   })
 
@@ -257,5 +262,65 @@ describe('annotationSeverityRanks', () => {
       impact_rank: 0,
       clinvar_rank: 0
     })
+  })
+})
+
+describe('filter values of the severity columns', () => {
+  it('selects by category for known values and by text for unknown ones', () => {
+    expect(
+      severityFilterParts('clinvar', ['Pathogenic', 'pathogenic', 'Likely_pathogenic', 'odd text'])
+    ).toEqual({ ranks: [15, 13], raw: ['odd text'] })
+    expect(severityFilterParts('consequence', ['HIGH', 'high', 'custom'])).toEqual({
+      ranks: [4],
+      raw: ['custom']
+    })
+  })
+
+  it('maps the values of the built-in pathogenic preset to three categories', () => {
+    expect(
+      severityFilterParts('clinvar', [
+        'Pathogenic',
+        'Likely_pathogenic',
+        'Pathogenic/Likely_pathogenic'
+      ])
+    ).toEqual({ ranks: [15, 14, 13], raw: [] })
+  })
+
+  it('offers the configured categories present in the data, most severe first', () => {
+    expect(
+      offeredFilterValues('clinvar', [
+        'Benign',
+        'Pathogenic|drug_response',
+        'pathogenic',
+        'zzz custom',
+        'Likely_pathogenic',
+        'Pathogenic/Likely_pathogenic',
+        'aaa custom'
+      ])
+    ).toEqual([
+      'Pathogenic',
+      'Pathogenic/Likely pathogenic',
+      'Likely pathogenic',
+      'Benign',
+      'aaa custom',
+      'zzz custom'
+    ])
+    expect(offeredFilterValues('consequence', ['MODIFIER', 'high', 'HIGH'])).toEqual([
+      'HIGH',
+      'MODIFIER'
+    ])
+  })
+
+  it('every offered label selects its own category', () => {
+    for (const category of CLINVAR_CATEGORIES) {
+      expect(severityFilterParts('clinvar', [category.label])).toEqual({
+        ranks: [category.rank],
+        raw: []
+      })
+    }
+  })
+
+  it('leaves other columns alone', () => {
+    expect(offeredFilterValues('func', ['b', 'a'])).toEqual(['b', 'a'])
   })
 })

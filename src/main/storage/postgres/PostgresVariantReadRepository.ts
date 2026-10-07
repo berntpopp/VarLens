@@ -1,3 +1,10 @@
+import { isSeverityKey } from '../../../shared/config/severity.config'
+import {
+  severityFilterOperands,
+  severityFilterSql,
+  type SeverityFilterTarget
+} from '../../../shared/filters/severity-filter'
+import type { CarrierRanks } from '../../../shared/sql/cohort-representative'
 import { carrierRanks } from './cohort-summary-representative-sql'
 import type { Pool } from 'pg'
 
@@ -142,8 +149,17 @@ export function buildPostgresVariantQueryParts(
     addWhere(`v.gene_symbol ILIKE ${addParam(`%${filter.gene_symbol}%`)}`)
   }
 
+  // Impact and ClinVar match by normalised category (severity-filter.ts).
+  const ranks = carrierRanks('v', (table) => `${schemaName}."${table}"`)
+  const severityTarget = (key: 'consequence' | 'clinvar'): SeverityFilterTarget => ({
+    column: `v.${key}`,
+    rank: key === 'clinvar' ? ranks.clinvar : ranks.impact,
+    bind: (value) => addParam(value)
+  })
   if (isNonEmptyArray(filter.consequences)) {
-    addWhere(`v.consequence IN (${filter.consequences.map((value) => addParam(value)).join(', ')})`)
+    addWhere(
+      severityFilterSql('consequence', filter.consequences, severityTarget('consequence')) as string
+    )
   } else if (filter.consequence !== undefined && filter.consequence !== '') {
     addWhere(`v.consequence = ${addParam(filter.consequence)}`)
   }
@@ -153,7 +169,7 @@ export function buildPostgresVariantQueryParts(
   }
 
   if (isNonEmptyArray(filter.clinvars)) {
-    addWhere(`v.clinvar IN (${filter.clinvars.map((value) => addParam(value)).join(', ')})`)
+    addWhere(severityFilterSql('clinvar', filter.clinvars, severityTarget('clinvar')) as string)
   }
 
   if (filter.gnomad_af_max !== undefined) {
@@ -253,15 +269,11 @@ export function buildPostgresVariantQueryParts(
   }
 
   addPostgresClinicalVariantFilters(filter, { schemaName, addParam, addWhere })
-  addPostgresColumnFilters(filter, addParam, addWhere)
+  addPostgresColumnFilters(filter, addParam, addWhere, ranks)
 
   // Impact and ClinVar sort by severity rank; a row the 0025 backfill has not
   // reached yet gets its rank computed on the fly (carrierRanks).
-  const orderTerms = buildPostgresVariantOrderTerms(
-    sortBy,
-    POSTGRES_BASE_SORT_COLUMNS,
-    carrierRanks('v', (table) => `${schemaName}."${table}"`)
-  )
+  const orderTerms = buildPostgresVariantOrderTerms(sortBy, POSTGRES_BASE_SORT_COLUMNS, ranks)
   return {
     fromAndWhereSql: `FROM ${schemaName}."variants" v
       ${joins.join('\n')}
@@ -283,7 +295,8 @@ function assertSupportedPostgresVariantFilter(filter: VariantFilter): void {
 function addPostgresColumnFilters(
   filter: VariantFilter,
   addParam: (value: unknown) => string,
-  addWhere: (sql: string) => void
+  addWhere: (sql: string) => void,
+  ranks: CarrierRanks
 ): void {
   if (filter.column_filters === undefined) return
 
@@ -299,9 +312,22 @@ function addPostgresColumnFilters(
     const sqlColumn = definition.sql
     const { operator, value } = filterDef
 
+    const severity = isSeverityKey(column) ? severityFilterOperands(operator, value) : null
     if (isNullCheckOperator(operator)) {
       const numeric = definition.kind === 'numeric'
       addWhere(buildNullCheckSql(sqlColumn, operator, numeric, 'postgres'))
+    } else if (isSeverityKey(column) && severity !== null) {
+      const clause = severityFilterSql(
+        column,
+        severity.values,
+        {
+          column: sqlColumn,
+          rank: column === 'clinvar' ? ranks.clinvar : ranks.impact,
+          bind: (item) => addParam(item)
+        },
+        severity.negate
+      )
+      if (clause !== null) addWhere(clause)
     } else if (operator === 'in' && Array.isArray(value)) {
       if (value.length === 0) continue
       addWhere(`${sqlColumn} IN (${value.map((item) => addParam(String(item))).join(', ')})`)

@@ -1,3 +1,4 @@
+import { whereSeverity } from './severity-filter'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { sql, type Kysely } from 'kysely'
 import type { VarlensDatabase } from '../../../shared/types/database-schema'
@@ -37,7 +38,7 @@ export function applyAnnotationValueFilters(
       )
       // consequence vs consequences — mutually exclusive
       .$if((filter.consequences?.length ?? 0) > 0, (qb) =>
-        qb.where('consequence', 'in', filter.consequences!)
+        whereSeverity(qb, 'consequence', filter.consequences!)
       )
       .$if(
         (filter.consequences === undefined || filter.consequences.length === 0) &&
@@ -46,7 +47,9 @@ export function applyAnnotationValueFilters(
         (qb) => qb.where('consequence', '=', filter.consequence!)
       )
       .$if((filter.funcs?.length ?? 0) > 0, (qb) => qb.where('func', 'in', filter.funcs!))
-      .$if((filter.clinvars?.length ?? 0) > 0, (qb) => qb.where('clinvar', 'in', filter.clinvars!))
+      .$if((filter.clinvars?.length ?? 0) > 0, (qb) =>
+        whereSeverity(qb, 'clinvar', filter.clinvars!)
+      )
   )
 }
 

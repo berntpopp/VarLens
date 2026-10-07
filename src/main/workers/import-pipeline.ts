@@ -8,7 +8,7 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { createInterface } from 'node:readline'
 
 import { DATABASE_CONFIG } from '../../shared/config'
-import { clinvarRank, impactRank } from '../../shared/config/severity.config'
+import { clinvarRankForImport, impactRank } from '../../shared/config/severity.config'
 import { createBoundedBatcher, getRecordBytes } from '../import/bounded-batcher'
 import type { FormatInfo } from '../import/strategies/ImportStrategy'
 import { createCappedLineStream } from '../import/stream-utils'
@@ -161,7 +161,7 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
         v.caller ?? null,
         // Stored severity ranks of the impact and ClinVar strings (#469).
         impactRank(typeof v.consequence === 'string' ? v.consequence : null),
-        clinvarRank(typeof v.clinvar === 'string' ? v.clinvar : null)
+        clinvarRankForImport(typeof v.clinvar === 'string' ? v.clinvar : null)
       )
 
       const variantId = result.lastInsertRowid

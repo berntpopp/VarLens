@@ -1,3 +1,10 @@
+import { isSeverityKey, type SeverityKey } from '../../../shared/config/severity.config'
+import {
+  SEVERITY_RANK_COLUMN,
+  severityFilterOperands,
+  severityFilterSql,
+  type SeverityFilterTarget
+} from '../../../shared/filters/severity-filter'
 import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
 import type { ColumnFilter } from '../../../shared/types/column-filters'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
@@ -300,6 +307,18 @@ function emptyParts(): SummaryQueryParts {
   }
 }
 
+/** Where a severity filter looks on a summary row. */
+function summarySeverity(
+  key: SeverityKey,
+  addParam: (value: unknown) => string
+): SeverityFilterTarget {
+  return {
+    column: `cvs.${key}`,
+    rank: `cvs.${SEVERITY_RANK_COLUMN[key]}`,
+    bind: (value) => addParam(value)
+  }
+}
+
 function normalizeColumnFilterValue(value: string | number, isNumeric: boolean): string | number {
   if (!isNumeric || typeof value === 'number') return value
   const numericValue = Number(value)
@@ -317,6 +336,11 @@ function buildColumnFilterCondition(
 
   if (isNullCheckOperator(operator)) {
     return buildNullCheckSql(expression, operator, isNumeric, 'postgres')
+  }
+  const severity = isSeverityKey(column) ? severityFilterOperands(operator, value) : null
+  if (isSeverityKey(column) && severity !== null) {
+    const target = summarySeverity(column, addParam)
+    return severityFilterSql(column, severity.values, target, severity.negate) ?? ''
   }
   if (operator === 'in' && Array.isArray(value)) {
     if (value.length === 0) return ''
@@ -405,9 +429,14 @@ export function buildSummaryQueryParts(
     whereParts.push(`cvs.gene_symbol = ${addParam(params.gene_symbol)}`)
   }
 
+  // Impact and ClinVar match by normalised category (severity-filter.ts).
   if (isNonEmptyArray(params.consequences)) {
     whereParts.push(
-      `cvs.consequence IN (${params.consequences.map((value) => addParam(value)).join(', ')})`
+      severityFilterSql(
+        'consequence',
+        params.consequences,
+        summarySeverity('consequence', addParam)
+      ) as string
     )
   }
 
@@ -417,7 +446,7 @@ export function buildSummaryQueryParts(
 
   if (isNonEmptyArray(params.clinvars)) {
     whereParts.push(
-      `cvs.clinvar IN (${params.clinvars.map((value) => addParam(value)).join(', ')})`
+      severityFilterSql('clinvar', params.clinvars, summarySeverity('clinvar', addParam)) as string
     )
   }
 

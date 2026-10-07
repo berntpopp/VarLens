@@ -912,6 +912,91 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     }
   }, 120_000)
 
+  it('(h) impact and ClinVar filter by category on both backends, in both views (#469 review)', async () => {
+    const spellings: Array<[number, string | null, string | null]> = [
+      [1, 'HIGH', 'Pathogenic'],
+      [2, 'high', 'pathogenic'],
+      [3, 'MODERATE', 'Pathogenic|drug_response'],
+      [4, 'MODERATE', 'Likely_pathogenic'],
+      [5, 'LOW', 'Pathogenic/Likely_pathogenic'],
+      [6, 'MODIFIER', 'P'],
+      [7, 'custom_level', 'reviewed: fine'],
+      [8, null, null]
+    ]
+    const spelled: FixtureCase = {
+      name: 'parity-spelled',
+      genomeBuild: 'GRCh38',
+      variants: spellings.map(([pos, consequence, clinvar]) =>
+        baseVariant({ chr: '8', pos, consequence, clinvar })
+      )
+    }
+    const sqliteCase = seedSqliteCase(spelled)
+    sqlite.cohortSummary.rebuild()
+    sqlite.cohort.invalidateColumnMetaCache()
+    const pgCase = await seedPgCase(spelled)
+    const pgVariants = new PostgresVariantReadRepository(pool, schema)
+    const onChr8 = { chr: { operator: '=' as const, value: '8' } }
+    const byPos = [{ key: 'pos', order: 'asc' as const }]
+    const PRESET = ['Pathogenic', 'Likely_pathogenic', 'Pathogenic/Likely_pathogenic']
+    const column = (key: string, operator: string, value: unknown): Record<string, unknown> => ({
+      column_filters: { [key]: { operator, value } }
+    })
+
+    const expected: Array<[Record<string, unknown>, number[]]> = [
+      [{ clinvars: ['Pathogenic'] }, [1, 2, 3, 6]], // as text: position 1 only
+      [{ clinvars: PRESET }, [1, 2, 3, 4, 5, 6]],
+      [{ clinvars: ['reviewed: fine'] }, [7]],
+      [{ consequences: ['HIGH'] }, [1, 2]],
+      [column('clinvar', 'in', ['Pathogenic']), [1, 2, 3, 6]],
+      [column('clinvar', '=', 'Likely pathogenic'), [4]],
+      [column('clinvar', '!=', 'Pathogenic'), [4, 5, 7]],
+      [column('consequence', 'in', ['MODERATE', 'LOW']), [3, 4, 5]]
+    ]
+    for (const [filter, positions] of expected) {
+      const label = JSON.stringify(filter)
+      const cohortFilter = {
+        ...filter,
+        column_filters: { ...onChr8, ...(filter.column_filters as object | undefined) },
+        sort_by: 'pos',
+        sort_order: 'asc' as const
+      }
+      expect(
+        sqliteCohortRows(cohortFilter as never).map((v) => v.pos),
+        `SQLite cohort ${label}`
+      ).toEqual(positions)
+      expect(
+        (await pgCohortRows(cohortFilter as never)).map((v) => v.pos),
+        `PostgreSQL cohort ${label}`
+      ).toEqual(positions)
+      expect(
+        sqlite.variants
+          .getVariants({ case_id: sqliteCase, ...filter } as never, 50, 0, byPos)
+          .data.map((v) => v.pos),
+        `SQLite case view ${label}`
+      ).toEqual(positions)
+      const pgPage = await pgVariants.queryVariants(
+        { case_id: pgCase, ...filter } as never,
+        50,
+        0,
+        byPos
+      )
+      expect(
+        pgPage.data.map((v) => Number(v.pos)),
+        `PostgreSQL case view ${label}`
+      ).toEqual(positions)
+    }
+
+    // Both backends offer the same values for the case: the categories present.
+    const offered = [
+      'Pathogenic',
+      'Pathogenic/Likely pathogenic',
+      'Likely pathogenic',
+      'reviewed: fine'
+    ]
+    expect(sqlite.variants.getFilterOptions(sqliteCase).clinvars).toEqual(offered)
+    expect((await pgVariants.getFilterOptions(pgCase)).clinvars).toEqual(offered)
+  }, 120_000)
+
   it('panel-interval with spanning SV/CNV: spanning row is included on both backends (Pass-9 #7)', async () => {
     // Insert a CNV with pos=1000, end_pos=5000 on both backends.
     const spanningCaseSqlite = sqlite.cases.createCase('span-sqlite', '/tmp/span.json', 0, 'GRCh38')

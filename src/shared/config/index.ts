@@ -6,5 +6,7 @@ export {
   annotationSeverityRanks,
   clinvarRank,
   impactRank,
-  takeUnrankedClinvarStrings
+  offeredFilterValues,
+  takeUnrankedClinvarStrings,
+  withOfferedValues
 } from './severity.config'

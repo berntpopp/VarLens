@@ -366,7 +366,7 @@ function noteUnranked(raw: string): void {
 const CLINVAR_RANK_CACHE_LIMIT = 10_000
 const clinvarRankCache = new Map<string, number>()
 
-/** Stored rank of a raw ClinVar significance string, 0 when unknown. */
+/** Rank of a raw ClinVar significance string, 0 when unknown. */
 export function clinvarRank(raw: string | null | undefined): number {
   if (raw === null || raw === undefined) return UNKNOWN_SEVERITY_RANK
   let rank = clinvarRankCache.get(raw)
@@ -377,7 +377,17 @@ export function clinvarRank(raw: string | null | undefined): number {
     if (clinvarRankCache.size >= CLINVAR_RANK_CACHE_LIMIT) clinvarRankCache.clear()
     clinvarRankCache.set(raw, rank)
   }
-  if (rank === UNKNOWN_SEVERITY_RANK) noteUnranked(raw)
+  return rank
+}
+
+/**
+ * The rank an import stores for a ClinVar string. Like {@link clinvarRank},
+ * and a string that cannot be ranked is remembered for the import's report
+ * ({@link takeUnrankedClinvarStrings}).
+ */
+export function clinvarRankForImport(raw: string | null | undefined): number {
+  const rank = clinvarRank(raw)
+  if (rank === UNKNOWN_SEVERITY_RANK && typeof raw === 'string') noteUnranked(raw)
   return rank
 }
 
@@ -387,13 +397,69 @@ export interface AnnotationSeverityRanks {
   clinvar_rank: number
 }
 
-/** Ranks for the `consequence` (impact) and `clinvar` values of a variant row. */
+/** Ranks an import stores for the `consequence` (impact) and `clinvar` values of a variant row. */
 export function annotationSeverityRanks(row: {
   consequence?: unknown
   clinvar?: unknown
 }): AnnotationSeverityRanks {
   return {
     impact_rank: impactRank(typeof row.consequence === 'string' ? row.consequence : null),
-    clinvar_rank: clinvarRank(typeof row.clinvar === 'string' ? row.clinvar : null)
+    clinvar_rank: clinvarRankForImport(typeof row.clinvar === 'string' ? row.clinvar : null)
   }
+}
+
+/** Filter and sort keys that are matched by severity category, not by text. */
+export type SeverityKey = 'consequence' | 'clinvar'
+
+export function isSeverityKey(key: string): key is SeverityKey {
+  return key === 'consequence' || key === 'clinvar'
+}
+
+const severityRank = (key: SeverityKey, value: string): number =>
+  key === 'clinvar' ? clinvarRank(value) : impactRank(value)
+
+const LABEL_BY_RANK: Readonly<Record<SeverityKey, ReadonlyMap<number, string>>> = {
+  consequence: new Map(IMPACT_LEVELS.map(({ level, rank }) => [rank, level])),
+  clinvar: new Map(CLINVAR_CATEGORIES.map(({ label, rank }) => [rank, label]))
+}
+
+/**
+ * What filter values for a severity column select: every row of the ranks
+ * (categories) the values belong to, and, for values that are no known
+ * category, the rows with exactly that text. `Pathogenic` therefore also
+ * selects `pathogenic` and `Pathogenic|drug_response`.
+ */
+export function severityFilterParts(
+  key: SeverityKey,
+  values: readonly unknown[]
+): { ranks: number[]; raw: string[] } {
+  const ranks = new Set<number>()
+  const raw = new Set<string>()
+  for (const value of values) {
+    const text = String(value)
+    const rank = severityRank(key, text)
+    if (rank === UNKNOWN_SEVERITY_RANK) raw.add(text)
+    else ranks.add(rank)
+  }
+  return { ranks: [...ranks].sort((a, b) => b - a), raw: [...raw] }
+}
+
+/**
+ * The filter values to offer for a column, given the distinct stored values:
+ * for a severity column the configured categories that occur, most severe
+ * first, then the stored strings that are no known category; any other column
+ * unchanged. The stored strings themselves stay what is displayed.
+ */
+export function offeredFilterValues(key: string, distinctValues: string[]): string[] {
+  if (!isSeverityKey(key)) return distinctValues
+  const { ranks, raw } = severityFilterParts(key, distinctValues)
+  return [...ranks.map((rank) => LABEL_BY_RANK[key].get(rank) as string), ...raw.sort()]
+}
+
+/** A column's filter metadata with its distinct values replaced by the values to offer. */
+export function withOfferedValues<T extends { key: string; distinctValues?: string[] }>(
+  meta: T
+): T {
+  if (meta.distinctValues === undefined || !isSeverityKey(meta.key)) return meta
+  return { ...meta, distinctValues: offeredFilterValues(meta.key, meta.distinctValues) }
 }
