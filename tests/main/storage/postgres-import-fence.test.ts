@@ -133,14 +133,14 @@ describe('withExclusiveImportFence', () => {
     await expect(withExclusiveImportFence(client, 'ws', operation)).resolves.toBe('ran under 12')
 
     expect(texts.map((text) => text.replace(/\s+/g, ' ').trim())).toEqual([
+      `INSERT INTO "ws"."database_settings" AS s (key, value) VALUES ('import_generation', '1') ON CONFLICT (key) DO UPDATE SET value = (s.value::bigint + 1)::text WHERE s.value ~ '^[0-9]{1,15}$' RETURNING value AS generation`,
       'BEGIN',
       "SELECT set_config('lock_timeout', $1, true)",
       "SELECT pg_advisory_lock(hashtext('varlens-import-fence'), n.oid::int4) AS locked FROM pg_namespace n WHERE n.nspname = $1",
       'COMMIT',
-      `INSERT INTO "ws"."database_settings" AS s (key, value) VALUES ('import_generation', '1') ON CONFLICT (key) DO UPDATE SET value = (s.value::bigint + 1)::text WHERE s.value ~ '^[0-9]{1,15}$' RETURNING value AS generation`,
       "SELECT pg_advisory_unlock(hashtext('varlens-import-fence'), n.oid::int4) AS locked FROM pg_namespace n WHERE n.nspname = $1"
     ])
-    expect(client.query.mock.calls[1][1]).toEqual(['30000ms'])
+    expect(client.query.mock.calls[2][1]).toEqual(['30000ms'])
   })
 
   it('releases the fence when the operation fails, and keeps that failure', async () => {
@@ -202,7 +202,7 @@ describe('withExclusiveImportFence', () => {
       if (text.includes('pg_terminate_backend')) {
         throw Object.assign(new Error('permission denied to terminate process'), { code: '42501' })
       }
-      return undefined
+      return healthyFence(5)(text, undefined)
     })
 
     await expect(
@@ -213,9 +213,44 @@ describe('withExclusiveImportFence', () => {
     expect(texts.filter((text) => text.includes('pg_terminate_backend'))).toHaveLength(2)
   })
 
-  it('gives up with a busy conflict after the last attempt and changes nothing', async () => {
+  it('supersedes older operations before it waits, so none of their transactions can start between attempts', async () => {
+    const { client, texts } = recordingClient(healthyFence(5))
+
+    await withExclusiveImportFence(client, 'ws', async () => undefined)
+
+    const index = (part: string): number => texts.findIndex((text) => text.includes(part))
+    expect(index('ON CONFLICT (key)')).toBe(0)
+    expect(index('pg_advisory_lock(')).toBeGreaterThan(index('ON CONFLICT (key)'))
+  })
+
+  it('all three attempts fail: two rounds of termination, a busy conflict, cleanup not run', async () => {
     const { client, texts } = recordingClient((text) =>
-      text.includes('pg_advisory_lock(') ? lockTimeout() : undefined
+      text.includes('pg_advisory_lock(') ? lockTimeout() : healthyFence(5)(text, undefined)
+    )
+    const operation = vi.fn()
+
+    await expect(
+      withExclusiveImportFence(client, 'ws', operation, { waitMs: 50 })
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: IMPORT_FENCE_BUSY_MESSAGE })
+
+    const kinds = texts.flatMap((text) =>
+      text.includes('ON CONFLICT (key)')
+        ? ['supersede']
+        : text.includes('pg_advisory_lock(')
+          ? ['wait']
+          : text.includes('pg_terminate_backend')
+            ? ['terminate']
+            : text.includes('pg_advisory_unlock')
+              ? ['unlock']
+              : []
+    )
+    expect(kinds).toEqual(['supersede', 'wait', 'terminate', 'wait', 'terminate', 'wait'])
+    expect(operation).not.toHaveBeenCalled()
+  })
+
+  it('gives up with a busy conflict after the last attempt, without running the cleanup', async () => {
+    const { client, texts } = recordingClient((text) =>
+      text.includes('pg_advisory_lock(') ? lockTimeout() : healthyFence(5)(text, undefined)
     )
     const operation = vi.fn()
 
@@ -224,7 +259,6 @@ describe('withExclusiveImportFence', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT', message: IMPORT_FENCE_BUSY_MESSAGE })
 
     expect(operation).not.toHaveBeenCalled()
-    expect(texts.some((text) => text.includes('ON CONFLICT (key)'))).toBe(false)
     expect(texts.filter((text) => text.includes('pg_terminate_backend'))).toHaveLength(1)
     expect(texts.some((text) => text.includes('pg_advisory_unlock'))).toBe(false)
   })
@@ -275,8 +309,8 @@ describe('PostgresVcfImportRepository under the fence', () => {
 
     expect(generation).toBe(21)
     const index = (part: string): number => texts.findIndex((text) => text.includes(part))
-    expect(index('pg_advisory_lock(')).toBeLessThan(index('ON CONFLICT (key)'))
-    expect(index('ON CONFLICT (key)')).toBeLessThan(index("import_status = 'importing'"))
+    expect(index('ON CONFLICT (key)')).toBeLessThan(index('pg_advisory_lock('))
+    expect(index('pg_advisory_lock(')).toBeLessThan(index("import_status = 'importing'"))
     expect(index('DELETE FROM "ws"."cases_all"')).toBeLessThan(index('pg_advisory_unlock'))
     // Recovery owns the fence exclusively; its own transactions do not take it shared.
     expect(index('pg_try_advisory_xact_lock_shared')).toBe(-1)

@@ -276,6 +276,50 @@ describe.skipIf(!RUN)('import recovery fence — locks on a real instance', () =
     }
   }, 60_000)
 
+  it('all three attempts fail against a holder that may not be terminated; a worker transaction starting between attempts is refused', async () => {
+    const repo = new PostgresVcfImportRepository(schema)
+    const owner = await connect()
+    const generation = await repo.recoverInterruptedImports(owner as never)
+    const fence = { schema, generation }
+    // Not an import connection: every termination round leaves it alone.
+    const holder = await connect()
+    await beginFencedImportTransaction(holder, fence)
+    const stuck = await repo.beginProvisionalImport(holder as never, {
+      caseName: 'kept-by-holder',
+      filePath: '/tmp/a.vcf.gz',
+      fileSize: 1,
+      genomeBuild: 'GRCh38'
+    })
+    const lateWorker = await connect()
+
+    const recovery = repo
+      .recoverInterruptedImports(owner as never, { waitMs: 300, attempts: 3 })
+      .then(
+        () => null,
+        (error: unknown) => error
+      )
+    // From the moment older operations are superseded — before the first
+    // wait, so also between attempts — none of their transactions starts.
+    await until(async () => (await readImportGeneration(probe, schema)) === generation + 1)
+    await expect(beginFencedImportTransaction(lateWorker, fence)).rejects.toMatchObject(SUPERSEDED)
+
+    expect(await recovery).toMatchObject({ code: 'CONFLICT', message: IMPORT_FENCE_BUSY_MESSAGE })
+    await expect(beginFencedImportTransaction(lateWorker, fence)).rejects.toMatchObject(SUPERSEDED)
+
+    // The transaction in flight may still commit: its case stays `importing`
+    // (hidden, no cohort contribution) and the next recovery removes it.
+    await holder.query('COMMIT')
+    const listed = await probe.query(`SELECT id FROM "${schema}"."cases" WHERE id = $1`, [
+      stuck.caseId
+    ])
+    expect(listed.rows).toEqual([])
+    expect(await repo.recoverInterruptedImports(owner as never)).toBe(generation + 2)
+    const left = await probe.query(`SELECT id FROM "${schema}"."cases_all" WHERE id = $1`, [
+      stuck.caseId
+    ])
+    expect(left.rows).toEqual([])
+  }, 60_000)
+
   it('gives up with a busy conflict when the fence cannot be taken, and holds nothing afterwards', async () => {
     const repo = new PostgresVcfImportRepository(schema)
     const owner = await connect()
@@ -287,7 +331,8 @@ describe.skipIf(!RUN)('import recovery fence — locks on a real instance', () =
     await expect(
       repo.recoverInterruptedImports(owner as never, { waitMs: 100, attempts: 1 })
     ).rejects.toMatchObject({ code: 'CONFLICT', message: IMPORT_FENCE_BUSY_MESSAGE })
-    expect(await readImportGeneration(probe, schema)).toBe(generation)
+    // Older operations were superseded before the wait; nothing was cleaned.
+    expect(await readImportGeneration(probe, schema)).toBe(generation + 1)
     expect((await fenceLocks()).map((lock) => lock.mode)).toEqual(['ShareLock'])
     await holder.query('COMMIT')
   }, 60_000)

@@ -170,7 +170,7 @@ export async function readImportGeneration(client: Queryable, schema: string): P
 }
 
 /**
- * Recovery only, under the exclusive fence: start the next generation. The
+ * Recovery only, before it waits for the fence: start the next generation. The
  * update is guarded, so a damaged value changes no row (and raises nothing
  * inside PostgreSQL); that case is reported as
  * {@link ImportGenerationInvalidError}.
@@ -334,6 +334,10 @@ export async function withExclusiveImportFence<T>(
   const waitMs = options.waitMs ?? IMPORT_FENCE_WAIT_MS
   const attempts = options.attempts ?? IMPORT_FENCE_ATTEMPTS
   const release = (): Promise<unknown> => client.query(fenceLockSql('pg_advisory_unlock'), [schema])
+  // Supersede first: from this commit on no transaction of an older
+  // operation can start, during the waits and between the attempts alike.
+  // Those already in flight hold the fence and are waited for below.
+  const generation = await advanceImportGeneration(client, schema)
   let held = false
   try {
     for (let attempt = 1; attempt <= attempts && !held; attempt += 1) {
@@ -353,7 +357,7 @@ export async function withExclusiveImportFence<T>(
 
   let result: T
   try {
-    result = await operation(await advanceImportGeneration(client, schema))
+    result = await operation(generation)
   } catch (error) {
     // Keep the operation's failure; a failed release means a broken
     // connection, which the caller ends (and that frees the lock).
