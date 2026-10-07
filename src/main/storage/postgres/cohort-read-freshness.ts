@@ -87,7 +87,17 @@ interface FreshnessProbe {
   total_cases: number
 }
 
-async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessProbe> {
+/** The summary must be rebuilt before it can be trusted (see prepareCohortRead). */
+function needsBootstrap(probe: FreshnessProbe): boolean {
+  return (
+    (probe.variants_present && !probe.summary_present) ||
+    (probe.never_rebuilt && probe.is_stale) ||
+    probe.gene_summary_missing
+  )
+}
+
+/** Null when the schema has no summary state row (nothing to reconcile against). */
+async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessProbe | null> {
   const tbl = (t: string): string => `"${schema}"."${t}"`
   const result = await pool.query<{
     never_rebuilt: boolean
@@ -110,6 +120,7 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
      WHERE s.id = 1`
   )
   const row = result.rows[0]
+  if (row === undefined) return null
   return {
     never_rebuilt: row.never_rebuilt,
     variants_present: row.variants_present,
@@ -186,6 +197,9 @@ export async function prepareCohortRead(
   scope: ScopedPool
 ): Promise<{ warnings?: CohortReadWarnings }> {
   const probe = await probeFreshness(scope)
+  if (probe === null) {
+    throw new Error(`Cohort summary state of ${scope.schema} is missing; re-run the migrations`)
+  }
 
   // Pass-9 #5: bootstrap-on-existing-data — rebuild irrespective of the
   // case-count threshold so the first read never serves an empty/missing
@@ -194,18 +208,43 @@ export async function prepareCohortRead(
   // The per-gene aggregates (cohort-gene-summary-sql.ts) are part of the same
   // summary: variants with a gene but no gene rows means they were never
   // filled (migration 0023 fills them; this covers a partial restore).
-  const needsBootstrap =
-    (probe.variants_present && !probe.summary_present) ||
-    (probe.never_rebuilt && probe.is_stale) ||
-    probe.gene_summary_missing
-  const needsRebuild = needsBootstrap || probe.is_stale
+  const bootstrap = needsBootstrap(probe)
+  const needsRebuild = bootstrap || probe.is_stale
   if (!needsRebuild) return {}
 
-  const rebuildNow = needsBootstrap || probe.total_cases < syncRebuildMaxCases()
+  const rebuildNow = bootstrap || probe.total_cases < syncRebuildMaxCases()
   if (rebuildNow && (await runRebuild(scope, false))) return {}
 
   // Large cohort, or an import is publishing right now: serve what is there
   // and refresh in the background.
+  scheduleBackgroundRebuild(scope)
+  return { warnings: { staleSummary: true } }
+}
+
+/**
+ * Freshness check for reads that must never wait or fail because of the
+ * summary: the database overview (the landing page) shows a few figures from
+ * the maintained aggregates next to data that has nothing to do with them.
+ *
+ * Unlike {@link prepareCohortRead} it never rebuilds on the calling request,
+ * however small the cohort, and never throws: a summary that needs a rebuild
+ * is served as it is with `staleSummary`, and one single-flight background
+ * rebuild is scheduled. A schema whose summary state cannot be read at all
+ * gets no warning; there is nothing this read could do about it.
+ */
+export async function checkCohortReadFreshness(
+  scope: ScopedPool
+): Promise<{ warnings?: CohortReadWarnings }> {
+  let probe: FreshnessProbe | null
+  try {
+    probe = await probeFreshness(scope)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`Cohort summary freshness check failed: ${message}`, 'cohort')
+    return {}
+  }
+  if (probe === null) return {}
+  if (!needsBootstrap(probe) && !probe.is_stale) return {}
   scheduleBackgroundRebuild(scope)
   return { warnings: { staleSummary: true } }
 }

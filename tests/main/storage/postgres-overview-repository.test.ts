@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { awaitBackgroundRebuild } from '../../../src/main/storage/postgres/cohort-read-freshness'
 import { PostgresOverviewRepository } from '../../../src/main/storage/postgres/PostgresOverviewRepository'
 
 describe('PostgresOverviewRepository', () => {
@@ -108,6 +109,100 @@ describe('PostgresOverviewRepository', () => {
       ],
       tags: [],
       topPhenotypes: [{ hpo_id: 'HP:0001250', hpo_label: 'Seizure', case_count: 2 }]
+    })
+  })
+  // The overview is the landing page: it must come up whatever state the
+  // cohort summary is in, and say when its figures are being refreshed.
+  describe('summary freshness', () => {
+    interface ProbeRow {
+      never_rebuilt: boolean
+      variants_present: boolean
+      summary_present: boolean
+      gene_summary_missing: boolean
+      is_stale: boolean
+      total_cases: string
+    }
+    const fresh: ProbeRow = {
+      never_rebuilt: false,
+      variants_present: true,
+      summary_present: true,
+      gene_summary_missing: false,
+      is_stale: false,
+      total_cases: '2'
+    }
+
+    function makePool(probeRows: ProbeRow[] | Error): {
+      pool: { query: ReturnType<typeof vi.fn>; connect: ReturnType<typeof vi.fn> }
+      releaseRebuild: () => void
+    } {
+      let releaseRebuild: () => void = () => undefined
+      const rebuildGate = new Promise<void>((resolve) => {
+        releaseRebuild = resolve
+      })
+      const query = vi.fn(async (config: string | { text: string }) => {
+        const sql = typeof config === 'string' ? config : config.text
+        if (sql.includes('"cohort_summary_state" s')) {
+          if (probeRows instanceof Error) throw probeRows
+          return { rows: probeRows }
+        }
+        return { rows: [] }
+      })
+      // A rebuild that would hold a request for as long as the test lets it.
+      const connect = vi.fn(async () => {
+        await rebuildGate
+        return { query: vi.fn(async () => ({ rows: [] })), release: vi.fn() }
+      })
+      return { pool: { query, connect }, releaseRebuild }
+    }
+
+    it('does not throw when the summary state row is missing', async () => {
+      const { pool } = makePool([])
+      const overview = await new PostgresOverviewRepository(
+        pool as never,
+        'ov_missing'
+      ).getOverview()
+      expect(overview.summary.total_cases).toBe(0)
+      expect(overview.warnings).toBeUndefined()
+      expect(pool.connect).not.toHaveBeenCalled()
+    })
+
+    it('does not throw when the freshness probe itself fails', async () => {
+      const { pool } = makePool(new Error('relation "cohort_summary_state" does not exist'))
+      const overview = await new PostgresOverviewRepository(
+        pool as never,
+        'ov_broken'
+      ).getOverview()
+      expect(overview.cases).toEqual([])
+      expect(overview.warnings).toBeUndefined()
+    })
+
+    it('serves a fresh summary without a warning or a rebuild', async () => {
+      const { pool } = makePool([fresh])
+      const overview = await new PostgresOverviewRepository(pool as never, 'ov_fresh').getOverview()
+      expect(overview.warnings).toBeUndefined()
+      expect(pool.connect).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['a stale summary', { ...fresh, is_stale: true }],
+      ['a summary that was never built for existing data', { ...fresh, summary_present: false }],
+      ['a stale summary of a small cohort', { ...fresh, is_stale: true, total_cases: '1' }]
+    ])('answers at once for %s, flags it stale and rebuilds in the background', async (_, row) => {
+      const schema = `ov_stale_${Math.random().toString(36).slice(2)}`
+      const { pool, releaseRebuild } = makePool([row])
+      const repo = new PostgresOverviewRepository(pool as never, schema)
+
+      // Resolves although the rebuild cannot even get a connection yet.
+      const overview = await repo.getOverview()
+      expect(overview.warnings).toEqual({ staleSummary: true })
+      expect(pool.connect).toHaveBeenCalledTimes(1)
+
+      // A second read while that rebuild runs does not start another one.
+      expect((await repo.getOverview()).warnings).toEqual({ staleSummary: true })
+      expect(pool.connect).toHaveBeenCalledTimes(1)
+
+      releaseRebuild()
+      await awaitBackgroundRebuild(schema)
     })
   })
 })
