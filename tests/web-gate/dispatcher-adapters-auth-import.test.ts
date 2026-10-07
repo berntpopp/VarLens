@@ -579,7 +579,10 @@ describe('web dispatcher adapters: auth and import', () => {
         currentIndex: 0,
         totalFiles: 1,
         currentFileName: 'Case B.json',
-        overallPercent: 100,
+        // The only file is still running: nothing is finished yet.
+        overallPercent: 0,
+        completedFiles: 0,
+        inFlight: [{ index: 0, fileName: 'Case B.json', phase: 'parsing', count: 1 }],
         fileProgress: { phase: 'parsing', count: 1, elapsed: 3, skipped: 0 }
       })
       expect(deps.events.publish).toHaveBeenCalledWith(7, 'cohort:summaryRebuilt', {

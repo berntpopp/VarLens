@@ -31,6 +31,10 @@ import { quoteIdentifier } from '../storage/postgres/identifiers'
 import { classifyWorkerError } from '../storage/import-worker-errors'
 import { PostgresCohortSummaryRepository } from '../storage/postgres/PostgresCohortSummaryRepository'
 import { lockSummaryForWrite } from '../storage/postgres/cohort-summary-lock'
+import {
+  acquireWorkspaceImportLock,
+  assertImportLeaseHeld
+} from '../storage/postgres/postgres-import-lease'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createBoundedBatcher, getRecordBytes, resolveBatchSize } from '../import/bounded-batcher'
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
@@ -241,16 +245,14 @@ export async function runImport(
     // renderer-default 30 s statement_timeout. Auto-commit (no BEGIN
     // required) and per-session, so it does not leak to other connections.
     await profilePhase('relax-session-limits', () => relaxImportSessionLimits(client))
-    const lockResult = await client.query(
-      `SELECT pg_try_advisory_lock(hashtext($1), hashtext('varlens-import')) AS locked`,
-      [start.schema]
-    )
-    if ((lockResult.rows[0] as { locked?: boolean } | undefined)?.locked !== true) {
-      throw new Error('An import operation is already in progress for this PostgreSQL workspace')
+    if (start.lease !== undefined) {
+      await assertImportLeaseHeld(client, start.schema, start.lease.holderPid)
+    } else {
+      await acquireWorkspaceImportLock(client, start.schema)
+      await new PostgresVcfImportRepository(start.schema).recoverInterruptedImports(
+        client as unknown as Pick<PoolClient, 'query'>
+      )
     }
-    await new PostgresVcfImportRepository(start.schema).recoverInterruptedImports(
-      client as unknown as Pick<PoolClient, 'query'>
-    )
 
     if (start.mode === 'single-file') {
       const filePath = start.filePath

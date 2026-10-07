@@ -72,6 +72,14 @@ export interface PostgresImportWorkerStartMessage {
   }
   batchSize?: number
   throttleMs?: number
+  /**
+   * Set for a file of a parallel batch. The batch coordinator's control
+   * connection (backend `holderPid`) owns the workspace import lock and has
+   * already recovered interrupted imports, so the worker does neither: taking
+   * the lock would fail, and recovery would delete its siblings' in-flight
+   * provisional cases. The worker only verifies that the lock is really held.
+   */
+  lease?: { holderPid: number }
 }
 
 export interface PostgresImportWorkerCancelMessage {

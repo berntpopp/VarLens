@@ -83,6 +83,77 @@ describe('postgres-import-worker runImport', () => {
     )
   })
 
+  describe('batch lease', () => {
+    // In a batch, the coordinator's control connection owns the workspace
+    // import lock and runs interrupted-import recovery once. A worker that
+    // took the lock or ran recovery itself would block or wipe its siblings.
+    function leaseClient(holderHasLock: boolean) {
+      const texts: string[] = []
+      const client = {
+        connect: vi.fn(async () => undefined),
+        query: vi.fn(async (sql: string | { text: string }, values?: unknown[]) => {
+          const text = typeof sql === 'string' ? sql : sql.text
+          texts.push(text)
+          if (text.includes('pg_locks')) {
+            expect(values).toEqual([4242, 'public'])
+            return { rows: holderHasLock ? [{ held: true }] : [] }
+          }
+          return { rows: [] }
+        }),
+        end: vi.fn(async () => undefined)
+      }
+      return { client, texts }
+    }
+
+    async function runLeased(holderHasLock: boolean) {
+      const { client, texts } = leaseClient(holderHasLock)
+      const messages: unknown[] = []
+      const detectFormat = vi.fn(async () => {
+        throw new Error('stop after the lease check')
+      })
+      await runImport(
+        {
+          createClient: () => client as never,
+          detectFormat: detectFormat as never,
+          createVcfMappedStream: async () => Readable.from([]) as never,
+          createMapperPipeline: async () => Readable.from([]),
+          statFile: () => ({ size: 0 })
+        },
+        {
+          type: 'start',
+          client: { connectionString: 'postgres://x' },
+          schema: 'public',
+          mode: 'single-file',
+          caseName: 'leased',
+          filePath: '/tmp/a.vcf',
+          lease: { holderPid: 4242 }
+        },
+        (message) => messages.push(message)
+      )
+      return { texts, messages, detectFormat }
+    }
+
+    it('neither takes the workspace lock nor runs recovery when the coordinator holds the lease', async () => {
+      const { texts, detectFormat } = await runLeased(true)
+
+      expect(detectFormat).toHaveBeenCalled()
+      expect(texts.some((text) => text.includes('pg_try_advisory_lock'))).toBe(false)
+      expect(texts.some((text) => text.includes("import_status = 'importing'"))).toBe(false)
+    })
+
+    it('refuses to import when the named coordinator does not hold the workspace lock', async () => {
+      const { messages, detectFormat } = await runLeased(false)
+
+      expect(detectFormat).not.toHaveBeenCalled()
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          type: 'error',
+          message: expect.stringMatching(/lease/i)
+        })
+      )
+    })
+  })
+
   it('fails closed when PostgreSQL does not confirm advisory-lock ownership', async () => {
     const messages: unknown[] = []
     const detectFormat = vi.fn()

@@ -319,7 +319,33 @@ export interface BatchProgress {
   totalFiles: number // Total files in batch
   currentFileName: string // Name of file being processed
   fileProgress?: Omit<ProgressUpdate, 'phase'> & { phase: string }
-  overallPercent: number // 0-100 overall percentage
+  overallPercent: number // 0-100: share of files finished (imported, skipped or failed)
+  /** Files finished so far. Absent from producers that predate parallel batches. */
+  completedFiles?: number
+  /** Every file being imported right now, in file order. */
+  inFlight?: BatchFileInFlight[]
+}
+
+/** One file of a batch that is currently being imported. */
+export interface BatchFileInFlight {
+  index: number
+  fileName: string
+  phase: string
+  /** Variants processed so far. */
+  count: number
+}
+
+/** Outcome of one file of a batch, reported as soon as that file is done. */
+export interface BatchFileComplete {
+  index: number
+  totalFiles: number
+  fileName: string
+  caseName: string
+  status: Extract<BatchFileStatus, 'success' | 'failed' | 'skipped'>
+  /** The case that is now visible; set when `status` is `success`. */
+  caseId?: number
+  variantCount?: number
+  error?: string
 }
 
 export interface BatchResult {
