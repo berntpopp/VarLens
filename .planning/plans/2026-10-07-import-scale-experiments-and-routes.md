@@ -1,10 +1,109 @@
 # Import scale: experiments and implementation routes (2026-10-07)
 
-Status: revision 2. Reconciles the Codex review, the independent Opus review, the survey and
-the source-code check of other tools (section 6). Supersedes the "Remaining work" list in
-`2026-10-07-web-import-scale-handover.md` and stage 4 of the original plan. Goes to Codex and
-Opus for a second adversarial pass before anything beyond section 5 and Phase 1 (section 7.2)
-is implemented.
+Status: revision 3. Section 0 records what the second adversarial pass (Codex and a fresh
+Opus reviewer) changed and takes precedence over sections 6–7. Phase 1 may start in the
+order of section 0.4; Phase 2 is not approved until the additions of section 0.3 exist in
+writing and have been reviewed. Supersedes the "Remaining work" list in
+`2026-10-07-web-import-scale-handover.md` and stage 4 of the original plan.
+
+## 0. Revision 3: what the second adversarial pass changed
+
+Both second-pass reviewers (Codex `gpt-6-astra` xhigh; a fresh Opus reviewer, xhigh) returned
+the same decision: **Phase 1 may start, narrowed and reordered; Phase 2 is not approved as
+written.** Where this section and sections 6–7 differ, this section wins; sections 6–7 are
+kept as the record of revision 2.
+
+### 0.1 Claims withdrawn
+
+- "10,000 exomes in roughly 1–1.5 hours" is unsupported. It hinges on one counter
+  measurement (0.78 s per 60,000 rows at 100 samples) staying flat on a table of 6–60 million
+  rows and on fold cost per case falling quickly with queue length.
+- Group publication cannot meet "≤ 50% at K = 4 and ≤ 25% at K = 16". The simulator's
+  allele-frequency spectrum (234,783 shared sites at AF 0.01–0.45 plus 6,000 private sites
+  per sample) reproduces the two measured WAL reductions exactly and predicts 68% and 32%.
+  Per-case counter cost by group size: 0.78 s (1), 0.53 s (4), 0.37 s (8), 0.25 s (16),
+  0.17 s (32), before gene aggregates, reference counts and flags. Reaching the throughput
+  target needs groups of at least seven and a fold transaction of about 2.7 s, which misses
+  the 2 s visibility target.
+- "5–10 million distinct sites at 10,000 samples" contradicts the simulator (6,000 private
+  sites per sample gives 60 million). The real figure depends on the cohort's spectrum and
+  must be measured on real data.
+- "Cohort page and count ≤ 300 ms for any combination" is unattainable for exact counts: 89 ms
+  per 847,000 unindexed rows extrapolates to 0.6–1.0 s at 6–10 million. New target: page
+  ≤ 300 ms; exact count delivered asynchronously within 2 s.
+- Trio and compound-het joins do not use the coordinate hash; they are unaffected.
+- Correctness item C3 was misdescribed: flags are already evaluated under the lock; the race
+  is with annotation writers that do not take it (C2).
+- `extra jsonb` filter columns are a new feature, not part of this work. Removed.
+- Online conversion (M3) is removed: the owner's decision is a maintenance-step conversion,
+  and no workspace above 100 samples exists. Partitioning is not "operability only" (it
+  forces `case_id` into the primary key and every child foreign key) and needs its own case.
+- Experiment X1 is answered by the first screening run (rows win); not repeated.
+
+### 0.2 A defect found by the review, independent of this plan
+
+The cohort's representative annotation is a bytewise `MAX()` per column. For impact that
+orders `HIGH < LOW < MODERATE < MODIFIER`, so one carrier with a `MODIFIER` annotation makes
+the cohort row `MODIFIER`, and a cohort filter `impact = HIGH` does not return the variant;
+ClinVar strings behave the same way. Filed as #469. The oracle decision of section 4 now
+includes it: severity-ranked values, or any-carrier filter semantics. No summary redesign
+proceeds before the owner has chosen.
+
+### 0.3 Additions required before Phase 2 can be approved
+
+1. **Publication state machine** (one table: state, transition, who performs it, what is
+   durable, what a crash at that point leaves and who repairs it). It must cover: prepared
+   data that another session can read (today's per-case aggregates are session-local
+   temporary tables, and workers hold case-row locks while they wait); claiming queue rows
+   (sequence order is not commit order); a poison case in a group; cancel, delete and
+   overwrite of a queued case; transcript switch and annotation edits during a fold; folder
+   election, death and restart; an uncertain commit; two workspaces; hiding a deleted case in
+   the same transaction that subtracts its counts (as today); dictionary garbage collection.
+2. **Read and index contract**: every existing filter, sort direction, deep page, search,
+   export, column-metadata and cross-case path, with the structure that serves it in the
+   target design and its measured cost. Known gaps to close: carriers-of-a-variant (today an
+   index scan on the coordinate index, 499,993 scans in the dev schema; the per-case arrays
+   cannot serve it), the representative and flag recomputes that use the same index, gene
+   substring search (loses its trigram index), internal-frequency filter and sort (60,000
+   count lookups per case), search with a large id set (a selective term was 7× slower without
+   a `(case_id, variant_id)` index), cohort annotation filters that run against the carrier
+   order once counters are split.
+3. **Derived-structure inventory**: flags (per-site reference counts in the fold; "changes
+   only when a site gains or loses a distinct annotation" is wrong, a deleted case's star must
+   clear), carriers, gene aggregates with distinct carriers, `variant_frequency` (four-part
+   key, all-build denominator), unique-variant tile (four-part key), column metadata (2.8 s at
+   100 samples today and recomputed per fold).
+4. **Id resolution protocol**: the payload column list (per-call INFO and per-case transcript
+   fields such as `hpo_sim_score` and `moi` must not be in it), a 128-bit lookup key, a
+   separate autocommit resolve with an anti-join insert (a blind `ON CONFLICT DO NOTHING`
+   burns 60,000 sequence values per file), retry for rows another importer has not committed
+   yet, and a budget. The only measured implementation costs 1.5–2.3 s per sample, more than
+   the whole row-writing target.
+5. **Operating budget**: WAL bytes per sample and per hour against `max_wal_size`, vacuum and
+   dead-tuple limits on the counter table, snapshot-age monitoring (a long reader pins the
+   horizon), memory for dictionaries against `shared_buffers`.
+6. **SQLite design of its own**: single writer, so fold inline at file end with a bounded
+   visibility delay; no array type; search maintenance must gate readiness; checkpoint
+   behaviour; SQLCipher cost; a numeric gate.
+
+### 0.4 Phase 1, narrowed and reordered
+
+| Order | Item | Gate |
+|---|---|---|
+| 1 | **P1 benchmark**, with: WAL bytes and buffer counts as primary metrics (timing spread on the shared host is ±21%); absolute floors on ratio gates ("≤ 2× or ≤ 10 ms"); real annotated exomes; 4, 8 and 16 importers; readers running during import; a soak with a long-lived reader; a late-cohort write test (200 real files imported on top of the 10,000-sample read-scale schema); the diff harness must assert expected success, not just equal outcomes | Baseline reproduced within the measured spread |
+| 2 | **K1 fold-scaling curve**: fold duration T(K) for K = 1…32 on real-spectrum data against a counter table of 6 million and 60 million rows, at the target arrival rate, with a bounded queue. This is the experiment that kills the folder design fastest | T(K) ≤ 1 s at the K the arrival rate requires, queue age ≤ 2 s sustained; otherwise the base-plus-delta design is the route |
+| 3 | **K2 id-resolution microbenchmark**: natural key to integer id for 60,000 calls, mostly known, at 1, 4 and 16 concurrent importers | ≤ 150 ms per file at 16 importers; otherwise integer ids are resolved differently or not at all |
+| 4 | **Oracle** (experiment 0b, extended to flags, key parts, frequency numerator and the MAX ordering) and the owner's decision, including #469 | Written rule; failing examples become tests |
+| 5 | **Correctness PRs** C1, C2, C4–C10 | Each with a failing test first |
+| 6 | **P3 counter split**, gated on the 10,000-sample read-scale schema, including the anti-correlated filter-against-sort case and the keyset tiebreak | Page ≤ 300 ms; exact count within 2 s; summary step per the K1 result |
+| 7 | **One shared queue implementation** (replaces P2 and the publication half of M2; built once), only after items 2, 4 and the state machine | State machine tests; sustained-load gate from item 2 |
+| 8 | **P4 and P5** (index removal with a replacement named for every reader; one bulk load per file; JSON path). They give no end-to-end gain while publication bounds throughput, so they come after it | Row-writing WAL and time; read contract intact |
+| 9 | **X3 sub-cohorts**, with case sets up to 5,000, page plus sort, maintenance cost, and three arms: per-case arrays, block bitmaps with delta arrays, and a columnar per-case sidecar | ≤ 1 s for an arbitrary set at 10,000 samples |
+
+Alternatives, per the reviewers: fold-then-ready stays the first choice because no read
+changes; K1 decides whether base-plus-delta replaces it. A columnar sidecar stays rejected
+for the import path but is a live candidate for sub-cohorts, where rows are already ruled
+out and arrays are predicted to stop being interactive above roughly 150 cases.
 
 ## 1. Goal and priorities
 
