@@ -379,7 +379,7 @@ export async function runImport(
           )
           if (totalInserted > 0) {
             await profilePhase('pub-lock-wait', () =>
-              lockSummaryForWrite(client as unknown as Pick<PoolClient, 'query'>, start.schema)
+              lockSummaryForWrite(client as unknown as Pick<PoolClient, 'query'>, start.schema, isCancelled)
             )
             await profilePhase('pub-variant-frequency', () =>
               rebuildVariantFrequencyForCase(
@@ -517,7 +517,7 @@ export async function runImport(
       )
 
       await profilePhase('pub-lock-wait', () =>
-        lockSummaryForWrite(client as unknown as Pick<PoolClient, 'query'>, start.schema)
+        lockSummaryForWrite(client as unknown as Pick<PoolClient, 'query'>, start.schema, isCancelled)
       )
       await rebuildVariantFrequencyForCase(
         client as unknown as Pick<PoolClient, 'query'>,
@@ -776,7 +776,7 @@ export async function runImport(
               [totalVariantCount, caseId]
             )
             await profilePhase('pub-lock-wait', () =>
-              lockSummaryForWrite(client as unknown as Pick<PoolClient, 'query'>, start.schema)
+              lockSummaryForWrite(client as unknown as Pick<PoolClient, 'query'>, start.schema, isCancelled)
             )
             await profilePhase('pub-variant-frequency', () =>
               rebuildVariantFrequencyForCase(

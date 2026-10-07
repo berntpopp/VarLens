@@ -49,7 +49,7 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
         MAX(v.gt_num) AS gt_num,
         MAX(v.end_pos) AS end_pos
       FROM variants v
-      JOIN cases c ON c.id = v.case_id${variantFilter}
+      JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'${variantFilter}
       GROUP BY v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build
     )
     SELECT chr, pos, ref, alt, variant_type, genome_build,
@@ -142,7 +142,7 @@ export function geneBurdenInsertSql(geneFilter = ''): string {
     CAST(strftime('%s', 'now') AS INTEGER),
     c.genome_build
   FROM variants v
-  JOIN cases c ON c.id = v.case_id
+  JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'
   WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol != ''${geneFilter}
   GROUP BY v.gene_symbol, c.genome_build;
 `

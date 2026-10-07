@@ -13,7 +13,7 @@ import { openImportSummarySession } from '../../../src/main/database/cohort-summ
 import { openCaseSummaryRemoval } from '../../../src/main/database/cohort-summary-case-removal'
 import { readUniqueVariantCount } from '../../../src/main/database/cohort-unique-variant-count'
 import { initializeSchema } from '../../../src/main/database/schema'
-import { runMigrations } from '../../../src/main/database/migrations'
+import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { deleteCasesIncrementally } from '../../../src/main/workers/delete-operations'
 import { rebuildCohortSummary } from '../../../src/main/workers/worker-db'
 import { MARK_STALE_SQL } from '../../../src/shared/sql/cohort-summary-rebuild'
@@ -161,7 +161,7 @@ describe('exact unique-variant counter (#460)', () => {
 
       runMigrations(raw)
 
-      expect(raw.pragma('user_version', { simple: true })).toBe(39)
+      expect(raw.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
       expect(summaryMeta(raw, 'unique_variant_count')).toBe('2')
     } finally {
       raw.close()

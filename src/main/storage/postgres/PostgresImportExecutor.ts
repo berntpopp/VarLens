@@ -88,15 +88,39 @@ export class PostgresImportExecutor implements StorageImportExecutor {
    */
   async openBatch(): Promise<StorageImportBatch> {
     const control = this.options.controlClientFactory?.() ?? this.createControlClient()
+    const inFlight = new Set<PostgresImportWorkerClient>()
+    let controlError: Error | null = null
+
+    const onControlError = (err: Error): void => {
+      controlError = err
+      for (const client of inFlight) client.cancel()
+    }
+    const emitter = control as unknown as {
+      on?: (event: string, fn: (err: Error) => void) => void
+      off?: (event: string, fn: (err: Error) => void) => void
+      removeListener?: (event: string, fn: (err: Error) => void) => void
+    }
+    if (typeof emitter.on === 'function') {
+      emitter.on('error', onControlError)
+    }
+
     const lease = await openImportLease(control, this.options.schema).catch((error: unknown) => {
+      if (typeof emitter.off === 'function') {
+        emitter.off('error', onControlError)
+      } else if (typeof emitter.removeListener === 'function') {
+        emitter.removeListener('error', onControlError)
+      }
       if (error instanceof Error && error.message === WORKSPACE_IMPORT_BUSY_MESSAGE) {
         throw new ConflictError(error.message)
       }
       throw error
     })
-    const inFlight = new Set<PostgresImportWorkerClient>()
+
     return {
       importFile: async (params) => {
+        if (controlError !== null) {
+          throw new Error(`Import batch control connection lost: ${(controlError as Error).message}`)
+        }
         let worker: PostgresImportWorkerClient | null = null
         try {
           return await this.runSingleFile(params, { holderPid: lease.holderPid }, (client) => {
@@ -110,7 +134,19 @@ export class PostgresImportExecutor implements StorageImportExecutor {
       cancelAll: () => {
         for (const client of inFlight) client.cancel()
       },
-      close: () => lease.close()
+      close: async () => {
+        try {
+          if (controlError === null) {
+            await lease.close()
+          }
+        } finally {
+          if (typeof emitter.off === 'function') {
+            emitter.off('error', onControlError)
+          } else if (typeof emitter.removeListener === 'function') {
+            emitter.removeListener('error', onControlError)
+          }
+        }
+      }
     }
   }
 

@@ -147,7 +147,10 @@ export function openImportSummarySession(
     },
 
     addCase(caseId) {
-      if (!exact || !stmts) return
+      if (!exact || !stmts) {
+        db.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?").run(caseId)
+        return
+      }
       const s = stmts
       try {
         db.transaction(() => {
@@ -170,6 +173,7 @@ export function openImportSummarySession(
           s.mergeVariantMaxima.run()
           s.insertNewVariantSummary.run({ build: params.build })
           applyPerCaseFlags()
+          s.markCaseReady.run(caseId)
         })()
       } catch (e) {
         degrade('add case', e)
@@ -194,6 +198,7 @@ export function openImportSummarySession(
 function prepareAddStatements(db: DatabaseType) {
   return {
     caseBuild: db.prepare('SELECT genome_build FROM cases WHERE id = ?'),
+    markCaseReady: db.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?"),
     captureGeneCoords: db.prepare(sql.CAPTURE_GENE_COORDS_SQL),
     countUnresolved: db.prepare(sql.COUNT_UNRESOLVED_GENE_COORDS_SQL),
     resolveGeneCoords: db.prepare(sql.RESOLVE_GENE_COORDS_SQL),

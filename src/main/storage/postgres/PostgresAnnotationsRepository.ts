@@ -12,6 +12,7 @@ import {
   applyAnnotationFlagsOnCaseDelete,
   applyAnnotationFlagsPerCase
 } from './cohort-annotation-flags-sql'
+import { lockSummaryForWrite } from './cohort-summary-lock'
 import { quoteIdentifier } from './identifiers'
 import { runNamed } from './named-query'
 import { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
@@ -131,6 +132,7 @@ export class PostgresAnnotationsRepository {
     const client = await this.connect()
     try {
       await client.query('BEGIN')
+      await lockSummaryForWrite(client, this.schema)
       const result = await this._upsertGlobalAnnotationOn(client, chr, pos, ref, alt, updates)
       await applyAnnotationFlagsGlobal(client, { schema: this.schema, chr, pos, ref, alt })
       await client.query('COMMIT')
@@ -227,6 +229,7 @@ export class PostgresAnnotationsRepository {
     const client = await this.connect()
     try {
       await client.query('BEGIN')
+      await lockSummaryForWrite(client, this.schema)
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
       const audit = new PostgresAuditLogRepository(client, this.schema)
       const oldAnnotation = await annotations.getGlobalAnnotation(chr, pos, ref, alt)
@@ -253,6 +256,7 @@ export class PostgresAnnotationsRepository {
     const client = await this.connect()
     try {
       await client.query('BEGIN')
+      await lockSummaryForWrite(client, this.schema)
       await this._deleteGlobalAnnotationOn(client, chr, pos, ref, alt)
       await applyAnnotationFlagsGlobal(client, { schema: this.schema, chr, pos, ref, alt })
       await client.query('COMMIT')
@@ -311,6 +315,7 @@ export class PostgresAnnotationsRepository {
     const client = await this.connect()
     try {
       await client.query('BEGIN')
+      await lockSummaryForWrite(client, this.schema)
       const result = await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
       await applyAnnotationFlagsPerCase(client, { schema: this.schema, caseId, variantId })
       await client.query('COMMIT')
@@ -397,6 +402,7 @@ export class PostgresAnnotationsRepository {
     const client = await this.connect()
     try {
       await client.query('BEGIN')
+      await lockSummaryForWrite(client, this.schema)
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
       const audit = new PostgresAuditLogRepository(client, this.schema)
       const oldAnnotation = await annotations.getPerCaseAnnotation(caseId, variantId)
@@ -424,6 +430,7 @@ export class PostgresAnnotationsRepository {
     const client = await this.connect()
     try {
       await client.query('BEGIN')
+      await lockSummaryForWrite(client, this.schema)
       await this._deletePerCaseAnnotationOn(client, caseId, variantId)
       await applyAnnotationFlagsPerCase(client, { schema: this.schema, caseId, variantId })
       await client.query('COMMIT')

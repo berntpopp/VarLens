@@ -90,7 +90,7 @@ const MARK_RECOMPUTE_SQL = `
   WHERE s.carrier_count > 1
     AND NOT (${MAX_COLUMNS.map(unaffected).join(' AND ')})
     AND NOT EXISTS (
-      SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id
+      SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id AND rc.import_status = 'ready'
       WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
         AND r.variant_type = k.variant_type AND rc.genome_build IS k.genome_build
         AND ${MAX_COLUMNS.map((col) => `(${unaffected(col)} OR r.${col} = k.${col})`).join('\n        AND ')}
@@ -156,7 +156,7 @@ export function prepareRemovalStatements(
       `INSERT INTO temp.removed_case_gene_lost (gene_symbol, lost)
        SELECT k.gene_symbol, COUNT(*) FROM temp.removed_case_gene_coords k
        WHERE NOT EXISTS (
-         SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id
+         SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id AND rc.import_status = 'ready'
          WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
            AND r.gene_symbol = k.gene_symbol AND rc.genome_build IS @build
        )

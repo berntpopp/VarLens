@@ -31,7 +31,7 @@ export const COHORT_FREQUENCY_SQL = `CAST(CAST(${COHORT_SUMMARY_ALIAS}.carrier_c
  * names (`genome_build` in the keyset order, …) stay unambiguous.
  */
 export const COHORT_BUILD_TOTALS_JOIN = `LEFT JOIN (
-        SELECT genome_build AS build, COUNT(*) AS total FROM cases GROUP BY genome_build
+        SELECT genome_build AS build, COUNT(*) AS total FROM cases WHERE import_status = 'ready' GROUP BY genome_build
       ) bt ON bt.build = ${COHORT_SUMMARY_ALIAS}.genome_build`
 
 /** `FROM` body: the summary as `cvs` joined to the per-build case totals. */

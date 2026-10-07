@@ -15,7 +15,7 @@ import { migrateCohortKeysetIndex } from './cohort-keyset-index'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 39
+export const LATEST_SQLITE_SCHEMA_VERSION = 40
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -1915,6 +1915,18 @@ export function runMigrations(db: Database.Database): void {
         .get() !== undefined
     if (hasSummaryMeta) db.exec(RECOUNT_UNIQUE_VARIANTS_SQL)
     db.exec('PRAGMA user_version = 39')
+  }
+
+  // v40: add import_status to cases to support atomic publication and safe concurrent cohort reads (#460, #461)
+  if (currentVersion < 40) {
+    const hasColumn = (
+      db.prepare("PRAGMA table_info('cases')").all() as Array<{ name: string }>
+    ).some((col) => col.name === 'import_status')
+    if (!hasColumn) {
+      db.exec("ALTER TABLE cases ADD COLUMN import_status TEXT NOT NULL DEFAULT 'ready'")
+    }
+    db.exec('CREATE INDEX IF NOT EXISTS idx_cases_import_status ON cases(import_status, genome_build)')
+    db.exec('PRAGMA user_version = 40')
   }
 }
 

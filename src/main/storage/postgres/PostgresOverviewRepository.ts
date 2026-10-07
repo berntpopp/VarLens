@@ -7,6 +7,7 @@ import type {
   OverviewPhenotype
 } from '../../../shared/types/database-overview'
 import { cohortVariantTotalsSql } from './cohort-gene-summary-sql'
+import { prepareCohortRead } from './cohort-read-freshness'
 import { quoteIdentifier } from './identifiers'
 import { runNamed } from './named-query'
 
@@ -34,6 +35,12 @@ export class PostgresOverviewRepository {
   }
 
   async getOverview(): Promise<DatabaseOverview> {
+    if (typeof (this.pool as unknown as { connect?: unknown }).connect === 'function') {
+      await prepareCohortRead({
+        pool: this.pool as unknown as Pick<Pool, 'query' | 'connect'>,
+        schema: this.schema
+      })
+    }
     // Maintained aggregates: none of the three reads a variant row.
     const totals = cohortVariantTotalsSql((table) => this.table(table))
     const [

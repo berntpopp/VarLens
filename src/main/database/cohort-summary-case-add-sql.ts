@@ -102,7 +102,7 @@ export const COUNT_UNRESOLVED_GENE_COORDS_SQL = `
 /** Needs idx_variants_chr_pos_ref_alt; the caller ensures it exists first. */
 export const RESOLVE_GENE_COORDS_SQL = `
   UPDATE temp.added_case_gene_coords SET state = CASE WHEN EXISTS (
-      SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id
+      SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id AND rc.import_status = 'ready'
       WHERE r.chr = added_case_gene_coords.chr AND r.pos = added_case_gene_coords.pos
         AND r.ref = added_case_gene_coords.ref AND r.alt = added_case_gene_coords.alt
         AND r.gene_symbol = added_case_gene_coords.gene_symbol

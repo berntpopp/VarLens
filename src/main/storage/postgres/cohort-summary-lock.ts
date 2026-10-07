@@ -32,14 +32,28 @@ const LOCK_WAIT_LIMIT_MS = 60 * 60 * 1000
  * blocked inside PostgreSQL also ignores cancellation of its job. Each poll
  * is a sub-millisecond query, so the wait survives any timeout setting.
  */
-export async function lockSummaryForWrite(client: Queryable, schema: string): Promise<void> {
+export async function lockSummaryForWrite(
+  client: Queryable,
+  schema: string,
+  signalOrCancelled?: AbortSignal | (() => boolean)
+): Promise<void> {
+  const isCancelled =
+    typeof signalOrCancelled === 'function'
+      ? signalOrCancelled
+      : () => signalOrCancelled?.aborted === true
   const deadline = Date.now() + LOCK_WAIT_LIMIT_MS
   let delay = LOCK_POLL_START_MS
   while (!(await tryLockSummaryForWrite(client, schema))) {
+    if (isCancelled()) {
+      throw new Error(`Cancelled while waiting for cohort summary write lock of ${schema}`)
+    }
     if (Date.now() > deadline) {
       throw new Error(`Timed out waiting for the cohort summary write lock of ${schema}`)
     }
     await new Promise((resolve) => setTimeout(resolve, delay))
+    if (isCancelled()) {
+      throw new Error(`Cancelled while waiting for cohort summary write lock of ${schema}`)
+    }
     delay = Math.min(LOCK_POLL_MAX_MS, delay * 2)
   }
 }

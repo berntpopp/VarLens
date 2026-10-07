@@ -7,6 +7,7 @@ import {
 } from '../../shared/types/transcript'
 
 export class TranscriptRepository extends BaseRepository {
+  public onSummaryChanged?: () => void
   getVariantTranscripts(variantId: number): TranscriptAnnotation[] {
     const rows = this.execAll<{
       id: number
@@ -133,6 +134,7 @@ export class TranscriptRepository extends BaseRepository {
       if (before !== undefined) {
         applyVariantAnnotationChange(this.db, before, before.gene_symbol, denormalized.gene_symbol)
       }
+      this.onSummaryChanged?.()
     })
   }
 

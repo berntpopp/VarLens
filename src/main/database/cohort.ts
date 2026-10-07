@@ -213,7 +213,9 @@ export class CohortService {
     const sortOrder = params.sort_order ?? 'desc'
 
     // Total case count across builds (the `total_cases` column of every row)
-    const totalCasesResult = this.db.prepare('SELECT COUNT(*) as count FROM cases').get() as {
+    const totalCasesResult = this.db
+      .prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'")
+      .get() as {
       count: number
     }
     const totalCases = totalCasesResult.count
@@ -357,13 +359,19 @@ export class CohortService {
    */
   getCohortSummary(): CohortSummary {
     // Total cases
-    const totalCasesResult = this.db.prepare('SELECT COUNT(*) as count FROM cases').get() as {
+    const totalCasesResult = this.db
+      .prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'")
+      .get() as {
       count: number
     }
     const totalCases = totalCasesResult.count
 
-    // Total variant observations
-    const totalVariantsResult = this.db.prepare('SELECT COUNT(*) as count FROM variants').get() as {
+    // Total variant observations of ready cases
+    const totalVariantsResult = this.db
+      .prepare(
+        "SELECT COUNT(*) as count FROM variants v JOIN cases c ON c.id = v.case_id WHERE c.import_status = 'ready'"
+      )
+      .get() as {
       count: number
     }
     const totalVariants = totalVariantsResult.count
@@ -462,7 +470,7 @@ export class CohortService {
         MAX(v.gt_num) as gt_num
       FROM variants v
       JOIN cases c ON v.case_id = c.id
-      WHERE v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?
+      WHERE c.import_status = 'ready' AND v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?
       GROUP BY v.case_id, c.name
       ORDER BY c.name
     `
@@ -478,7 +486,7 @@ export class CohortService {
     const sql = `
       SELECT gene_symbol, variant_count, unique_variant_count,
         affected_case_count,
-        (SELECT COUNT(*) FROM cases) AS total_cases
+        (SELECT COUNT(*) FROM cases WHERE import_status = 'ready') AS total_cases
       FROM gene_burden_summary
       ORDER BY affected_case_count DESC, variant_count DESC
     `

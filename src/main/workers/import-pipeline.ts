@@ -66,7 +66,7 @@ export function prepareStatements(db: DatabaseType) {
   )
 
   const insertCaseStmt = db.prepare(
-    'INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build) VALUES (?, ?, ?, 0, ?, ?)'
+    "INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build, import_status) VALUES (?, ?, ?, 0, ?, ?, 'provisional')"
   )
 
   // Child deletion statements for atomic case cleanup when foreign_keys = OFF (F01)
