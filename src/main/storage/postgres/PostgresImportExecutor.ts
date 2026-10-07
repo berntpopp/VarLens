@@ -116,19 +116,29 @@ export class PostgresImportExecutor implements StorageImportExecutor {
       throw error
     })
 
+    const failIfControlLost = (): void => {
+      // Read through a function: TypeScript cannot see the listener's write.
+      const lost = controlError as Error | null
+      if (lost !== null) throw new Error(`Import batch control connection lost: ${lost.message}`)
+    }
+
     return {
       importFile: async (params) => {
-        if (controlError !== null) {
-          throw new Error(
-            `Import batch control connection lost: ${(controlError as Error).message}`
-          )
-        }
+        failIfControlLost()
         let worker: PostgresImportWorkerClient | null = null
         try {
-          return await this.runSingleFile(params, { holderPid: lease.holderPid }, (client) => {
-            worker = client
-            inFlight.add(client)
-          })
+          const result = await this.runSingleFile(
+            params,
+            { holderPid: lease.holderPid },
+            (client) => {
+              worker = client
+              inFlight.add(client)
+            }
+          )
+          // A lost control connection cancels the workers in flight, and a
+          // cancelled worker resolves (case 0): that is no imported file.
+          failIfControlLost()
+          return result
         } finally {
           if (worker !== null) inFlight.delete(worker)
         }
@@ -140,6 +150,12 @@ export class PostgresImportExecutor implements StorageImportExecutor {
         try {
           if (controlError === null) {
             await lease.close()
+          } else {
+            // No recovery over a broken connection (the next import runs it),
+            // but the client is still ended: if only the client side failed,
+            // the session — and its workspace lock — would outlive the batch.
+            // The listener stays for this: pg may report one loss twice.
+            await control.end().catch(() => undefined)
           }
         } finally {
           if (typeof emitter.off === 'function') {
