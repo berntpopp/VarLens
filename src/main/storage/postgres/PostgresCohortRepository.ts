@@ -1,8 +1,7 @@
 import type { Pool, PoolClient } from 'pg'
 import QueryStream from 'pg-query-stream'
 
-import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
-import type { ColumnFilter, ColumnFilterMeta } from '../../../shared/types/column-filters'
+import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type {
   CohortCarrier,
   CohortPaginatedResult,
@@ -11,7 +10,6 @@ import type {
   CohortVariant,
   GeneBurden
 } from '../../../shared/types/cohort'
-import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
 import { cohortVariantTotalsSql, geneBurdenSql } from './cohort-gene-summary-sql'
 import {
   prepareCohortRead,
@@ -22,7 +20,12 @@ import { quoteIdentifier } from './identifiers'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { readCohortColumnMeta } from './postgres-cohort-column-meta'
 import { querySummaryPage } from './postgres-cohort-summary-page'
-import { SUMMARY_FREQUENCY_SQL, summaryBuildTotalsJoin } from './postgres-cohort-summary-query'
+import {
+  SUMMARY_FREQUENCY_SQL,
+  buildSummaryExportSql,
+  buildSummaryQueryParts,
+  summaryBuildTotalsJoin
+} from './postgres-cohort-summary-query'
 import {
   PostgresPanelIntervalResolver,
   type PanelIntervalLookup
@@ -37,24 +40,6 @@ type Queryable = Pick<Pool, 'query'>
 type CohortCarrierWithDepth = CohortCarrier & {
   gq?: number | null
   dp?: number | null
-}
-
-const SORTABLE_COLUMNS: Record<string, string> = {
-  chr: 'chr',
-  pos: 'pos',
-  gene_symbol: 'gene_symbol',
-  cdna: 'cdna',
-  aa_change: 'aa_change',
-  carrier_count: 'carrier_count',
-  cohort_frequency: 'cohort_frequency',
-  het_count: 'het_count',
-  hom_count: 'hom_count',
-  consequence: 'consequence',
-  func: 'func',
-  clinvar: 'clinvar',
-  gnomad_af: 'gnomad_af',
-  cadd_phred: 'cadd_phred',
-  transcript: 'transcript'
 }
 
 const NUMERIC_COLUMNS = new Set([
@@ -108,62 +93,8 @@ const COLUMN_META_SUMMARY_COLUMNS: Record<string, string> = {
   transcript: 'transcript'
 }
 
-type CohortColumnFilterLocation = 'where' | 'having'
-
-interface CohortColumnFilterDefinition {
-  sql: string
-  dataType: 'numeric' | 'text'
-  location: CohortColumnFilterLocation
-  extensionPrefix?: 'sv.' | 'cnv.' | 'str.'
-}
-
-const HET_COUNT_SQL =
-  "COUNT(DISTINCT v.case_id) FILTER (WHERE v.gt_num IN ('0/1', '1/0', '0|1', '1|0'))"
-const HOM_COUNT_SQL = "COUNT(DISTINCT v.case_id) FILTER (WHERE v.gt_num IN ('1/1', '1|1'))"
-
-const COHORT_COLUMN_FILTER_DEFINITIONS: Record<string, CohortColumnFilterDefinition> = {
-  chr: { sql: 'v.chr', dataType: 'text', location: 'where' },
-  pos: { sql: 'v.pos', dataType: 'numeric', location: 'where' },
-  gene_symbol: { sql: 'v.gene_symbol', dataType: 'text', location: 'where' },
-  consequence: { sql: 'v.consequence', dataType: 'text', location: 'where' },
-  func: { sql: 'v.func', dataType: 'text', location: 'where' },
-  clinvar: { sql: 'v.clinvar', dataType: 'text', location: 'where' },
-  gnomad_af: { sql: 'v.gnomad_af', dataType: 'numeric', location: 'where' },
-  cadd_phred: { sql: 'v.cadd', dataType: 'numeric', location: 'where' },
-  transcript: { sql: 'v.transcript', dataType: 'text', location: 'where' },
-  carrier_count: {
-    sql: 'COUNT(DISTINCT v.case_id)',
-    dataType: 'numeric',
-    location: 'having'
-  },
-  cohort_frequency: {
-    sql: '',
-    dataType: 'numeric',
-    location: 'having'
-  },
-  het_count: {
-    sql: HET_COUNT_SQL,
-    dataType: 'numeric',
-    location: 'having'
-  },
-  hom_count: {
-    sql: HOM_COUNT_SQL,
-    dataType: 'numeric',
-    location: 'having'
-  }
-}
-
-for (const [key, definition] of Object.entries(POSTGRES_VARIANT_COLUMN_DEFINITIONS)) {
-  if (!key.includes('.')) continue
-  COHORT_COLUMN_FILTER_DEFINITIONS[key] = {
-    sql: definition.sql,
-    dataType: definition.kind === 'numeric' ? 'numeric' : 'text',
-    location: 'where',
-    extensionPrefix: key.startsWith('sv.') ? 'sv.' : key.startsWith('cnv.') ? 'cnv.' : 'str.'
-  }
-}
-
-const COHORT_COLUMN_FILTER_ORDER = [
+/** Column-filter keys the cohort view accepts: summary columns and extension columns. */
+const SUPPORTED_COLUMN_FILTERS = new Set<string>([
   'chr',
   'pos',
   'gene_symbol',
@@ -176,8 +107,9 @@ const COHORT_COLUMN_FILTER_ORDER = [
   'carrier_count',
   'cohort_frequency',
   'het_count',
-  'hom_count'
-]
+  'hom_count',
+  ...Object.keys(POSTGRES_VARIANT_COLUMN_DEFINITIONS).filter((key) => key.includes('.'))
+])
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number') return value
@@ -189,10 +121,6 @@ function toNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
   const numberValue = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(numberValue) ? numberValue : null
-}
-
-function isNonEmptyArray(value: unknown): value is unknown[] {
-  return Array.isArray(value) && value.length > 0
 }
 
 export class PostgresCohortRepository {
@@ -243,13 +171,14 @@ export class PostgresCohortRepository {
     this.assertSupportedColumnFilters(resolvedParams)
     const totalCases = await this.getTotalCases(this.pool, resolvedParams)
 
-    // C4: prefer the materialised cohort_variant_summary page query. Falls back
-    // to live aggregation when buildSummaryQueryParts reports the predicate set
-    // is not materialisable (extension-table filters — Sprint B).
+    // Every cohort read is served from cohort_variant_summary, so the page, an
+    // extension-filtered page and the export show the same representative
+    // annotation (#469). Extension predicates are EXISTS probes on the carriers.
     const summaryResult = await this.querySummaryPage(resolvedParams, totalCases)
-    if (summaryResult !== null) return summaryResult
-
-    return this.queryLivePage(resolvedParams, totalCases)
+    if (summaryResult === null) {
+      throw new Error('Cohort query cannot be served from the cohort summary')
+    }
+    return summaryResult
   }
 
   /**
@@ -273,7 +202,7 @@ export class PostgresCohortRepository {
     return readCohortSummaryStatus({ pool: this.pool, schema: this.schema })
   }
 
-  /** C4 summary-page read (+ keyset paging); null → live-aggregation fallback. */
+  /** C4 summary-page read (+ keyset paging). */
   private async querySummaryPage(
     params: CohortSearchParams,
     totalCases: number
@@ -289,45 +218,6 @@ export class PostgresCohortRepository {
       params,
       totalCases
     )
-  }
-
-  /** Live-aggregation page query (fallback path when the summary is unavailable). */
-  private async queryLivePage(
-    resolvedParams: CohortSearchParams,
-    totalCases: number
-  ): Promise<CohortPaginatedResult> {
-    const queryParts = this.buildQueryParts(resolvedParams, totalCases)
-
-    let totalCount = 0
-    if (resolvedParams._count_needed !== false) {
-      const countResult = await this.pool.query(
-        `SELECT COUNT(*)::bigint AS total_count FROM (
-           ${this.buildGroupedSelect(queryParts, totalCases, false)}
-         ) grouped_variants`,
-        queryParts.params
-      )
-      totalCount = toNumber(
-        (countResult.rows[0] as { total_count?: unknown } | undefined)?.total_count
-      )
-    }
-
-    const limit = resolvedParams.limit ?? 50
-    const offset = resolvedParams.offset ?? 0
-    const dataParams = [...queryParts.params, limit, offset]
-    const dataResult = await this.pool.query(
-      `${this.buildGroupedSelect(queryParts, totalCases, true)}
-       ${this.buildOrderBy(resolvedParams)}
-       LIMIT $${dataParams.length - 1}
-       OFFSET $${dataParams.length}`,
-      dataParams
-    )
-
-    return {
-      data: (dataResult.rows as Array<Record<string, unknown>>).map((row) =>
-        this.toCohortVariant(row, totalCases)
-      ),
-      total_count: totalCount
-    }
   }
 
   async getSummary(): Promise<CohortSummary> {
@@ -460,19 +350,39 @@ export class PostgresCohortRepository {
     return meta
   }
 
+  /**
+   * Rows for the cohort export: the same rows, annotation and order as the
+   * cohort page (#469), read from the summary after the same staleness
+   * reconciliation, streamed with a cursor.
+   */
   async *streamCohortRows(params: CohortSearchParams): AsyncGenerator<Record<string, unknown>> {
     const resolvedParams = await this.panelIntervals.resolveCohortParams(params)
     this.assertSupportedColumnFilters(resolvedParams)
+    await prepareCohortRead({ pool: this.pool, schema: this.schema })
     const totalCases = await this.getTotalCases(this.pool, resolvedParams)
-    const queryParts = this.buildQueryParts(resolvedParams, totalCases)
-    const limitOffset = this.buildOptionalLimitOffset(resolvedParams, queryParts.params)
+    const { parts } = buildSummaryQueryParts(resolvedParams, totalCases, this.schema)
+    const values = [...parts.values]
+    const limitOffset: string[] = []
+    if (resolvedParams.limit !== undefined) {
+      values.push(resolvedParams.limit)
+      limitOffset.push(`LIMIT $${values.length}`)
+    }
+    if (resolvedParams.offset !== undefined) {
+      values.push(resolvedParams.offset)
+      limitOffset.push(`OFFSET $${values.length}`)
+    }
     const client: CohortClient = await this.pool.connect()
     const stream = client.query(
       new QueryStream(
-        `${this.buildGroupedSelect(queryParts, totalCases, true)}
-         ${this.buildOrderBy(resolvedParams)}
-         ${limitOffset.sql}`,
-        limitOffset.params
+        buildSummaryExportSql(
+          this.tbl('cohort_variant_summary'),
+          parts.whereParts,
+          parts.orderBy,
+          totalCases,
+          summaryBuildTotalsJoin(this.tbl('cases')),
+          limitOffset.join('\n    ')
+        ),
+        values
       )
     ) as AsyncIterable<Record<string, unknown>>
 
@@ -502,361 +412,18 @@ export class PostgresCohortRepository {
     return toNumber((result.rows[0] as { total_cases?: unknown } | undefined)?.total_cases)
   }
 
-  private buildQueryParts(
-    params: CohortSearchParams,
-    totalCases: number | string
-  ): {
-    whereParts: string[]
-    havingParts: string[]
-    joins: string[]
-    params: unknown[]
-  } {
-    const whereParts: string[] = []
-    const havingParts: string[] = []
-    const joins: string[] = []
-    const values: unknown[] = []
-    const addParam = (value: unknown): string => {
-      values.push(value)
-      return `$${values.length}`
-    }
-
-    if (params.search_term !== undefined && params.search_term.trim() !== '') {
-      const term = params.search_term.trim()
-      const genomicMatch = term.match(/^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i)
-      if (genomicMatch !== null) {
-        whereParts.push(
-          `(v.chr = ${addParam(genomicMatch[1])} AND v.pos = ${addParam(Number(genomicMatch[2]))})`
-        )
-      } else {
-        const searchPattern = `%${term}%`
-        whereParts.push(`(
-          v.gene_symbol ILIKE ${addParam(searchPattern)}
-          OR v.consequence ILIKE ${addParam(searchPattern)}
-          OR v.omim_mim_number ILIKE ${addParam(searchPattern)}
-        )`)
-      }
-    }
-
-    if (isNonEmptyArray(params.panel_intervals)) {
-      const intervalParts = params.panel_intervals.map(
-        (interval) =>
-          `(v.chr = ${addParam(interval.chr)} AND v.pos <= ${addParam(interval.end)} AND COALESCE(v.end_pos, v.pos) >= ${addParam(interval.start)})`
-      )
-      whereParts.push(`(${intervalParts.join(' OR ')})`)
-    }
-
-    if (params.gene_symbol !== undefined && params.gene_symbol !== '') {
-      whereParts.push(`v.gene_symbol = ${addParam(params.gene_symbol)}`)
-    }
-
-    if (isNonEmptyArray(params.consequences)) {
-      whereParts.push(
-        `v.consequence IN (${params.consequences.map((value) => addParam(value)).join(', ')})`
-      )
-    }
-
-    if (isNonEmptyArray(params.funcs)) {
-      whereParts.push(`v.func IN (${params.funcs.map((value) => addParam(value)).join(', ')})`)
-    }
-
-    if (isNonEmptyArray(params.clinvars)) {
-      whereParts.push(
-        `v.clinvar IN (${params.clinvars.map((value) => addParam(value)).join(', ')})`
-      )
-    }
-
-    if (params.gnomad_af_max !== undefined) {
-      whereParts.push(`(v.gnomad_af IS NULL OR v.gnomad_af <= ${addParam(params.gnomad_af_max)})`)
-    }
-
-    if (params.cadd_min !== undefined) {
-      whereParts.push(`(v.cadd IS NULL OR v.cadd >= ${addParam(params.cadd_min)})`)
-    }
-
-    if (params.genome_build !== undefined && params.genome_build !== '') {
-      whereParts.push(`EXISTS (
-        SELECT 1
-        FROM ${this.schemaName}."cases" c_filter
-        WHERE c_filter.id = v.case_id
-          AND c_filter.genome_build = ${addParam(params.genome_build)}
-      )`)
-    }
-
-    if (params.variant_type === 'snv') {
-      whereParts.push("v.variant_type IN ('snv', 'indel')")
-    } else if (params.variant_type !== undefined && params.variant_type !== '') {
-      whereParts.push(`v.variant_type = ${addParam(params.variant_type)}`)
-    }
-
-    if (params.starred_only === true) {
-      havingParts.push(
-        this.buildAnnotationExists(
-          "cva.starred::text IN ('1', 'true', 't')",
-          "va.starred::text IN ('1', 'true', 't')"
-        )
-      )
-    }
-
-    if (params.has_comment === true) {
-      havingParts.push(
-        this.buildAnnotationExists(
-          "NULLIF(cva.per_case_comment, '') IS NOT NULL",
-          "NULLIF(va.global_comment, '') IS NOT NULL"
-        )
-      )
-    }
-
-    if (isNonEmptyArray(params.acmg_classifications)) {
-      const acmgValues = params.acmg_classifications.map((value) => addParam(value)).join(', ')
-      havingParts.push(
-        this.buildAnnotationExists(
-          `cva.acmg_classification IN (${acmgValues})`,
-          `va.acmg_classification IN (${acmgValues})`
-        )
-      )
-    }
-
-    this.addColumnFilters(params, whereParts, havingParts, addParam, totalCases)
-
-    // 0 means "no frequency filter" and rows without a frequency are kept —
-    // the same contract as the case view and the SQLite cohort listing.
-    if (params.max_internal_af !== undefined && params.max_internal_af > 0) {
-      const frequency = this.cohortFrequencyExpression(totalCases)
-      havingParts.push(
-        `(${frequency} IS NULL OR ${frequency} <= ${addParam(params.max_internal_af)})`
-      )
-    }
-
-    if (params.carrier_count_min !== undefined) {
-      havingParts.push(`COUNT(DISTINCT v.case_id) >= ${addParam(params.carrier_count_min)}`)
-    }
-
-    return { whereParts, havingParts, joins, params: values }
-  }
-
-  private buildGroupedSelect(
-    queryParts: { whereParts: string[]; havingParts: string[]; joins: string[] },
-    totalCases: number | string,
-    includeVariantKey: boolean
-  ): string {
-    const whereSql =
-      queryParts.whereParts.length > 0
-        ? `WHERE ${queryParts.whereParts.join('\n         AND ')}`
-        : ''
-    const havingSql =
-      queryParts.havingParts.length > 0
-        ? `HAVING ${queryParts.havingParts.join('\n          AND ')}`
-        : ''
-    const totalCasesSql = `${totalCases}`
-
-    return `SELECT
-        v.chr,
-        v.pos,
-        v.ref,
-        v.alt,
-        MAX(v.gene_symbol) AS gene_symbol,
-        MAX(v.cdna) AS cdna,
-        MAX(v.aa_change) AS aa_change,
-        COUNT(DISTINCT v.case_id)::bigint AS carrier_count,
-        ${totalCasesSql}::bigint AS total_cases,
-        COUNT(DISTINCT v.case_id)::double precision / NULLIF(${totalCasesSql}, 0) AS cohort_frequency,
-        ${HET_COUNT_SQL}::bigint AS het_count,
-        ${HOM_COUNT_SQL}::bigint AS hom_count,
-        ${includeVariantKey ? `v.chr || ':' || v.pos::text || ':' || v.ref || ':' || v.alt AS variant_key,` : ''}
-        MAX(v.consequence) AS consequence,
-        MAX(v.func) AS func,
-        MAX(v.clinvar) AS clinvar,
-        MIN(v.gnomad_af) AS gnomad_af,
-        MAX(v.cadd) AS cadd_phred,
-        MAX(v.transcript) AS transcript,
-        MAX(v.omim_mim_number) AS omim_id
-      FROM ${this.schemaName}."variants" v
-      ${queryParts.joins.join('\n      ')}
-      ${whereSql}
-      GROUP BY v.chr, v.pos, v.ref, v.alt
-      ${havingSql}`
-  }
-
-  private buildOrderBy(params: CohortSearchParams): string {
-    const known = SORTABLE_COLUMNS[params.sort_by ?? ''] !== undefined
-    const sortKey = known ? (params.sort_by as string) : 'carrier_count' // 'v' alias: GROUP BY v.chr
-    const dir = params.sort_order ?? 'desc'
-    return cohortOrderByClause(sortKey, SORTABLE_COLUMNS[sortKey], dir, 'v', 'postgres')
-  }
-
-  private buildOptionalLimitOffset(
-    params: CohortSearchParams,
-    baseParams: unknown[]
-  ): { sql: string; params: unknown[] } {
-    const values = [...baseParams]
-    const parts: string[] = []
-    if (params.limit !== undefined) {
-      values.push(params.limit)
-      parts.push(`LIMIT $${values.length}`)
-    }
-    if (params.offset !== undefined) {
-      values.push(params.offset)
-      parts.push(`OFFSET $${values.length}`)
-    }
-    return { sql: parts.join('\n'), params: values }
-  }
-
-  private buildAnnotationExists(casePredicateSql: string, globalPredicateSql: string): string {
-    return `(EXISTS (
-      SELECT 1
-      FROM ${this.schemaName}."case_variant_annotations" cva
-      JOIN ${this.schemaName}."variants" annotated_v ON annotated_v.id = cva.variant_id
-      WHERE annotated_v.chr = v.chr
-        AND annotated_v.pos = v.pos
-        AND annotated_v.ref = v.ref
-        AND annotated_v.alt = v.alt
-        AND ${casePredicateSql}
-    ) OR EXISTS (
-      SELECT 1
-      FROM ${this.schemaName}."variant_annotations" va
-      WHERE va.chr = v.chr
-        AND va.pos = v.pos
-        AND va.ref = v.ref
-        AND va.alt = v.alt
-        AND ${globalPredicateSql}
-    ))`
-  }
-
-  private addColumnFilters(
-    params: CohortSearchParams,
-    whereParts: string[],
-    havingParts: string[],
-    addParam: (value: unknown) => string,
-    totalCases: number | string
-  ): void {
-    if (params.column_filters === undefined) return
-
-    const orderedColumns = [
-      ...COHORT_COLUMN_FILTER_ORDER,
-      ...Object.keys(params.column_filters)
-        .filter((column) => !COHORT_COLUMN_FILTER_ORDER.includes(column))
-        .sort()
-    ]
-    const extensionConditions = new Map<'sv.' | 'cnv.' | 'str.', string[]>()
-
-    for (const column of orderedColumns) {
-      const filter = params.column_filters[column]
-      if (filter === undefined) continue
-      const definition = COHORT_COLUMN_FILTER_DEFINITIONS[column]
-      const expression =
-        column === 'cohort_frequency' ? this.cohortFrequencyExpression(totalCases) : definition.sql
-      const condition = this.buildColumnFilterCondition(expression, definition, filter, addParam)
-      if (condition === '') continue
-      if (definition.extensionPrefix !== undefined) {
-        const conditions = extensionConditions.get(definition.extensionPrefix) ?? []
-        conditions.push(condition)
-        extensionConditions.set(definition.extensionPrefix, conditions)
-        continue
-      }
-      if (definition.location === 'where') {
-        whereParts.push(condition)
-      } else {
-        havingParts.push(condition)
-      }
-    }
-
-    for (const [prefix, conditions] of extensionConditions) {
-      havingParts.push(this.buildExtensionFilterExists(prefix, conditions))
-    }
-  }
-
   private assertSupportedColumnFilters(params: CohortSearchParams): void {
     if (params.column_filters === undefined) return
     assertValidColumnFilterValues(params.column_filters)
 
     const unsupportedColumns = Object.keys(params.column_filters).filter(
-      (column) => COHORT_COLUMN_FILTER_DEFINITIONS[column] === undefined
+      (column) => !SUPPORTED_COLUMN_FILTERS.has(column)
     )
     if (unsupportedColumns.length > 0) {
       throw new Error(
         `Unsupported PostgreSQL cohort column filter(s): ${unsupportedColumns.join(', ')}`
       )
     }
-  }
-
-  private buildColumnFilterCondition(
-    expression: string,
-    definition: CohortColumnFilterDefinition,
-    filter: ColumnFilter,
-    addParam: (value: unknown) => string
-  ): string {
-    const { operator, value } = filter
-
-    if (isNullCheckOperator(operator)) {
-      return buildNullCheckSql(expression, operator, definition.dataType === 'numeric', 'postgres')
-    }
-    if (operator === 'in' && Array.isArray(value)) {
-      if (value.length === 0) return ''
-      return `${expression} IN (${value
-        .map((item) => addParam(this.normalizeColumnFilterValue(item, definition)))
-        .join(', ')})`
-    }
-
-    if (operator === 'like' && typeof value === 'string') {
-      if (value.trim() === '') return ''
-      const pattern = `%${value}%`
-      if (definition.dataType === 'numeric') {
-        return `${expression}::text ILIKE ${addParam(pattern)}`
-      }
-      return `${expression} ILIKE ${addParam(pattern)}`
-    }
-
-    if (
-      (operator === '=' || operator === '!=') &&
-      (typeof value === 'string' || typeof value === 'number')
-    ) {
-      return `${expression} ${operator} ${addParam(this.normalizeColumnFilterValue(value, definition))}`
-    }
-
-    if (
-      (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
-      (typeof value === 'string' || typeof value === 'number')
-    ) {
-      const comparison = `${expression} ${operator} ${addParam(this.normalizeColumnFilterValue(value, definition))}`
-      const includeEmpty =
-        filter.includeEmpty ??
-        (definition.location === 'where' && definition.extensionPrefix === undefined)
-      return includeEmpty ? `(${expression} IS NULL OR ${comparison})` : comparison
-    }
-
-    return ''
-  }
-
-  private cohortFrequencyExpression(totalCases: number | string): string {
-    return `COUNT(DISTINCT v.case_id)::double precision / NULLIF(${totalCases}, 0)`
-  }
-
-  private buildExtensionFilterExists(
-    prefix: 'sv.' | 'cnv.' | 'str.',
-    conditions: string[]
-  ): string {
-    const table =
-      prefix === 'sv.' ? 'variant_sv' : prefix === 'cnv.' ? 'variant_cnv' : 'variant_str'
-    const alias = prefix === 'sv.' ? 'sv' : prefix === 'cnv.' ? 'cnv' : 'str_ext'
-    return `EXISTS (
-      SELECT 1
-      FROM ${this.schemaName}."variants" ext_v
-      JOIN ${this.schemaName}."${table}" ${alias} ON ${alias}.variant_id = ext_v.id
-      WHERE ext_v.chr = v.chr
-        AND ext_v.pos = v.pos
-        AND ext_v.ref = v.ref
-        AND ext_v.alt = v.alt
-        AND ${conditions.join('\n        AND ')}
-    )`
-  }
-
-  private normalizeColumnFilterValue(
-    value: string | number,
-    definition: CohortColumnFilterDefinition
-  ): string | number {
-    if (definition.dataType === 'text' || typeof value === 'number') return value
-    const numericValue = Number(value)
-    return Number.isFinite(numericValue) ? numericValue : value
   }
 
   private toCohortVariant(row: Record<string, unknown>, fallbackTotalCases: number): CohortVariant {

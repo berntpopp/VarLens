@@ -20,10 +20,13 @@ import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/s
  * `SUMMARY_FREQUENCY_SQL`). Storing it meant rewriting every summary row on
  * every import and every case deletion.
  *
- * Extension-table predicates (any `variant_extensions` column, keyed `sv.*`,
- * `cnv.*`, `str.*`) are not materialised into the summary in Sprint A, so the
- * builder returns `{ unavailable: true }` and the caller falls back to the live
- * `buildQueryParts` path.
+ * Extension-table predicates (`sv.*`, `cnv.*`, `str.*`) are not stored in the
+ * summary: they are an `EXISTS` over the visible carrier rows of the summary
+ * row and their extension table, as on SQLite (`buildExtensionExistsClauses`).
+ * The annotation shown and filtered is the summary row's representative in
+ * every case (#469), so the page, the extension-filtered page and the export
+ * agree. The builder needs the schema for that; without one it reports the
+ * predicate set as unavailable.
  */
 
 export interface SummaryQueryParts {
@@ -69,23 +72,12 @@ export function buildSummaryCountSql(
 }
 
 /**
- * Page SQL for the materialised cohort_variant_summary read. Aliases the stored
- * `cadd` / `omim_mim_number` columns to the CohortVariant field names
- * (`cadd_phred`, `omim_id`) so toCohortVariant maps them unchanged. `totalCases`
- * is interpolated (it is a number, never user input) to surface total_cases per
- * row the same way the live path does.
+ * Select list of a cohort row read from the summary. Aliases the stored `cadd`
+ * / `omim_mim_number` columns to the CohortVariant field names (`cadd_phred`,
+ * `omim_id`). `totalCases` is interpolated (a number, never user input).
  */
-export function buildSummaryPageSql(
-  qualifiedTable: string,
-  whereParts: string[],
-  orderBy: string,
-  totalCases: number,
-  limitParamIndex: number,
-  offsetParamIndex: number,
-  buildTotalsJoin: string
-): string {
-  return `SELECT
-      cvs.chr,
+function summarySelectList(totalCases: number): string {
+  return `cvs.chr,
       cvs.pos,
       cvs.ref,
       cvs.alt,
@@ -104,7 +96,21 @@ export function buildSummaryPageSql(
       cvs.gnomad_af,
       cvs.cadd AS cadd_phred,
       cvs.transcript,
-      cvs.omim_mim_number AS omim_id,
+      cvs.omim_mim_number AS omim_id`
+}
+
+/** Page SQL for the materialised cohort_variant_summary read. */
+export function buildSummaryPageSql(
+  qualifiedTable: string,
+  whereParts: string[],
+  orderBy: string,
+  totalCases: number,
+  limitParamIndex: number,
+  offsetParamIndex: number,
+  buildTotalsJoin: string
+): string {
+  return `SELECT
+      ${summarySelectList(totalCases)},
       cvs.variant_type AS _keyset_variant_type,
       cvs.genome_build AS _keyset_genome_build
     FROM ${qualifiedTable} cvs
@@ -115,9 +121,30 @@ export function buildSummaryPageSql(
     OFFSET $${offsetParamIndex}`
 }
 
+/**
+ * Export SQL: the same rows as the page, in the same order, without paging
+ * columns. `limitOffsetSql` is `LIMIT $n OFFSET $m`, either part optional.
+ */
+export function buildSummaryExportSql(
+  qualifiedTable: string,
+  whereParts: string[],
+  orderBy: string,
+  totalCases: number,
+  buildTotalsJoin: string,
+  limitOffsetSql: string
+): string {
+  return `SELECT
+      ${summarySelectList(totalCases)}
+    FROM ${qualifiedTable} cvs
+    ${buildTotalsJoin}
+    ${summaryWhereClause(whereParts)}
+    ${orderBy}
+    ${limitOffsetSql}`
+}
+
 export interface BuildSummaryResult {
   parts: SummaryQueryParts
-  /** true → caller falls back to the live `buildQueryParts` path. */
+  /** true → extension predicates were asked for without a schema to resolve them in. */
   unavailable: boolean
   unavailableReason?: string
 }
@@ -188,18 +215,75 @@ function isNonEmptyArray(value: unknown): value is unknown[] {
   return Array.isArray(value) && value.length > 0
 }
 
-/**
- * True iff any column filter targets a `variant_extensions` column. Sprint A
- * does not materialise extension aggregates into the summary, so such queries
- * fall through to the live builder.
- */
-function hasExtensionPredicate(params: CohortSearchParams): boolean {
-  if (params.column_filters === undefined) return false
-  for (const column of Object.keys(params.column_filters)) {
-    if (params.column_filters[column] === undefined) continue
-    if (EXTENSION_COLUMN_KEYS.has(column)) return true
+type ExtensionPrefix = 'sv' | 'cnv' | 'str'
+
+/** Extension table, the alias its column SQL uses, and the variant type it belongs to. */
+const EXTENSION_TABLES: Record<ExtensionPrefix, { table: string; alias: string }> = {
+  sv: { table: 'variant_sv', alias: 'sv' },
+  cnv: { table: 'variant_cnv', alias: 'cnv' },
+  str: { table: 'variant_str', alias: 'str_ext' }
+}
+
+/** The extension column filters of a request, grouped by extension table. */
+function extensionFilters(
+  params: CohortSearchParams
+): Map<ExtensionPrefix, Array<{ column: string; filter: ColumnFilter }>> {
+  const byType = new Map<ExtensionPrefix, Array<{ column: string; filter: ColumnFilter }>>()
+  for (const [column, filter] of Object.entries(params.column_filters ?? {})) {
+    if (filter === undefined || !EXTENSION_COLUMN_KEYS.has(column)) continue
+    const prefix = column.slice(0, column.indexOf('.')) as ExtensionPrefix
+    byType.set(prefix, [...(byType.get(prefix) ?? []), { column, filter }])
   }
-  return false
+  return byType
+}
+
+/**
+ * WHERE fragments for the extension column filters: per extension table one
+ * `EXISTS` over the visible carrier rows of the summary row, plus the variant
+ * type itself when only one table is filtered (it lets the planner use the
+ * type index). Range filters exclude rows without a value unless the filter
+ * asks for them — a missing extension row means "not of this type".
+ */
+function extensionExistsConditions(
+  params: CohortSearchParams,
+  schema: string,
+  addParam: (value: unknown) => string
+): string[] {
+  const byType = extensionFilters(params)
+  const tbl = (table: string): string => `"${schema.replace(/"/g, '""')}"."${table}"`
+  const conditions: string[] = []
+  const filtered: ExtensionPrefix[] = []
+  for (const [prefix, filters] of byType) {
+    const { table, alias } = EXTENSION_TABLES[prefix]
+    const inner = filters
+      .map(({ column, filter }) => {
+        const definition = POSTGRES_VARIANT_COLUMN_DEFINITIONS[column]
+        return buildColumnFilterCondition(
+          column,
+          definition.sql,
+          { ...filter, includeEmpty: filter.includeEmpty ?? false },
+          addParam,
+          definition.kind === 'numeric'
+        )
+      })
+      .filter((condition) => condition !== '')
+    if (inner.length === 0) continue
+    conditions.push(`EXISTS (
+        SELECT 1
+        FROM ${tbl('variants')} ext_v
+        JOIN ${tbl(table)} ${alias} ON ${alias}.variant_id = ext_v.id
+        WHERE ext_v.chr = cvs.chr
+          AND ext_v.pos = cvs.pos
+          AND ext_v.ref = cvs.ref
+          AND ext_v.alt = cvs.alt
+          AND ext_v.variant_type = cvs.variant_type
+          AND ${inner.join('\n          AND ')}
+      )`)
+    filtered.push(prefix)
+  }
+  // A blank filter adds no predicate and must not narrow the type either.
+  if (filtered.length === 1) conditions.unshift(`cvs.variant_type = '${filtered[0]}'`)
+  return conditions
 }
 
 function emptyParts(): SummaryQueryParts {
@@ -213,8 +297,11 @@ function emptyParts(): SummaryQueryParts {
   }
 }
 
-function normalizeColumnFilterValue(column: string, value: string | number): string | number {
-  if (!NUMERIC_COLUMN_FILTERS.has(column) || typeof value === 'number') return value
+function normalizeColumnFilterValue(
+  value: string | number,
+  isNumeric: boolean
+): string | number {
+  if (!isNumeric || typeof value === 'number') return value
   const numericValue = Number(value)
   return Number.isFinite(numericValue) ? numericValue : value
 }
@@ -223,10 +310,10 @@ function buildColumnFilterCondition(
   column: string,
   expression: string,
   filter: ColumnFilter,
-  addParam: (value: unknown) => string
+  addParam: (value: unknown) => string,
+  isNumeric = NUMERIC_COLUMN_FILTERS.has(column)
 ): string {
   const { operator, value } = filter
-  const isNumeric = NUMERIC_COLUMN_FILTERS.has(column)
 
   if (isNullCheckOperator(operator)) {
     return buildNullCheckSql(expression, operator, isNumeric, 'postgres')
@@ -234,7 +321,7 @@ function buildColumnFilterCondition(
   if (operator === 'in' && Array.isArray(value)) {
     if (value.length === 0) return ''
     return `${expression} IN (${value
-      .map((item) => addParam(normalizeColumnFilterValue(column, item)))
+      .map((item) => addParam(normalizeColumnFilterValue(item, isNumeric)))
       .join(', ')})`
   }
 
@@ -251,14 +338,14 @@ function buildColumnFilterCondition(
     (operator === '=' || operator === '!=') &&
     (typeof value === 'string' || typeof value === 'number')
   ) {
-    return `${expression} ${operator} ${addParam(normalizeColumnFilterValue(column, value))}`
+    return `${expression} ${operator} ${addParam(normalizeColumnFilterValue(value, isNumeric))}`
   }
 
   if (
     (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
     (typeof value === 'string' || typeof value === 'number')
   ) {
-    const comparison = `${expression} ${operator} ${addParam(normalizeColumnFilterValue(column, value))}`
+    const comparison = `${expression} ${operator} ${addParam(normalizeColumnFilterValue(value, isNumeric))}`
     // All summary column filters live in WHERE; mirror the live builder's
     // `includeEmpty` default for base WHERE columns (true).
     const includeEmpty = filter.includeEmpty ?? true
@@ -270,11 +357,12 @@ function buildColumnFilterCondition(
 
 export function buildSummaryQueryParts(
   params: CohortSearchParams,
-  totalCases: number
+  totalCases: number,
+  schema?: string
 ): BuildSummaryResult {
   void totalCases // The frequency denominator is per genome build, joined in as `bt.total`.
 
-  if (hasExtensionPredicate(params)) {
+  if (schema === undefined && extensionFilters(params).size > 0) {
     return { parts: emptyParts(), unavailable: true, unavailableReason: 'extension_predicate' }
   }
 
@@ -381,6 +469,8 @@ export function buildSummaryQueryParts(
       if (column === 'cohort_frequency') needsBuildTotals = true
     }
   }
+
+  if (schema !== undefined) whereParts.push(...extensionExistsConditions(params, schema, addParam))
 
   // Aggregate predicates (HAVING → WHERE over stored counts).
   // 0 means "no frequency filter" and rows without a frequency are kept — the

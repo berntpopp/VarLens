@@ -40,13 +40,13 @@ function toCount(value: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** Returns null when the predicate set is not materialisable (live fallback). */
+/** Returns null when the predicate set cannot be served from the summary. */
 export async function querySummaryPage(
   ctx: SummaryPageContext,
   params: CohortSearchParams,
   totalCases: number
 ): Promise<CohortPaginatedResult | null> {
-  const summary = buildSummaryQueryParts(params, totalCases)
+  const summary = buildSummaryQueryParts(params, totalCases, ctx.schema)
   if (summary.unavailable) return null
   const { whereParts, orderBy, values, keyset, needsBuildTotals } = summary.parts
   const buildTotalsJoin = summaryBuildTotalsJoin(ctx.casesTable)

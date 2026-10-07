@@ -16,13 +16,6 @@
       "reason": "existing large storage/import module; must not grow before responsibility split"
     },
     {
-      "path": "src/main/storage/postgres/PostgresCohortRepository.ts",
-      "lines": 1097,
-      "threshold": 600,
-      "category": "source",
-      "reason": "existing large storage/import module; grew for Sprint A PR-3 C4 — queryVariants now reads the materialised cohort_variant_summary via a summary-page path (querySummaryPage) with a live-aggregation fallback (queryLivePage), and getColumnMeta reads the deduped summary table directly; pure SQL builders are already extracted into postgres-cohort-summary-query.ts and the per-case reshape helpers into postgres-column-meta-cache.ts, so the residual growth is the repo's own orchestration (two read paths + cvs column-meta mapping) — further splitting the live/summary read paths into separate repository classes is a separate responsibility-split task. PR3-17 (C5) added two thin delegating accessors (queryVariantsWithStaleness, getSummaryStatus, ~26 lines) that forward to the extracted cohort-read-freshness module; the staleness/bootstrap policy itself lives outside this file so the repo only gains the seam, not the logic"
-    },
-    {
       "path": "src/main/workers/postgres-import-worker.ts",
       "lines": 1066,
       "threshold": 600,

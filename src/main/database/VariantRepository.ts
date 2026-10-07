@@ -19,7 +19,6 @@ import {
   type TriggerSnapshot
 } from './fts-trigger-management'
 import { mainLogger } from '../services/MainLogger'
-import { annotationSeverityRanks } from '../../shared/config/severity.config'
 
 /** Extended variant fields for multi-type import (SV/CNV/STR) */
 interface VariantExtensionFields {
@@ -33,7 +32,7 @@ interface VariantExtensionFields {
   _str?: StrExtensionRow
 }
 
-import { DATABASE_CONFIG } from '../../shared/config'
+import { DATABASE_CONFIG, annotationSeverityRanks } from '../../shared/config'
 import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import { VariantSearchService } from './VariantSearchService'
 import { VariantFrequencyService } from './VariantFrequencyService'

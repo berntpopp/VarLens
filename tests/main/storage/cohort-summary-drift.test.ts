@@ -661,6 +661,77 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     expect(filtered.data.map((v) => v.variant_key)).toEqual(['1:100:A:T'])
   }, 120_000)
 
+  it('page, extension-filtered page and export show the same representative row (#469)', async () => {
+    // One SV carried by two cases that annotate it differently, each with an
+    // extension row. The extension filter and the export used to aggregate the
+    // carriers live (MAX per column, MIN(gnomad_af), coordinate-only grouping).
+    const carriers = [
+      { name: 'ext-a', consequence: 'HIGH', gene: 'BRCA1', gnomad: 0.2, support: 12 },
+      { name: 'ext-b', consequence: 'MODIFIER', gene: 'ZZZ', gnomad: 0.01, support: 3 }
+    ]
+    for (const carrier of carriers) {
+      const caseId = await seedCase(carrier.name)
+      const variant = await probe.query<{ id: number }>(
+        `INSERT INTO "${schema}".variants
+           (case_id, chr, pos, end_pos, ref, alt, variant_type, gt_num, gene_symbol, consequence,
+            gnomad_af, impact_rank, clinvar_rank)
+         VALUES ($1, '7', 1000, 5000, 'N', '<DEL>', 'sv', '0/1', $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [
+          caseId,
+          carrier.gene,
+          carrier.consequence,
+          carrier.gnomad,
+          ...Object.values(annotationSeverityRanks({ consequence: carrier.consequence }))
+        ]
+      )
+      await probe.query(
+        `INSERT INTO "${schema}".variant_sv (variant_id, support) VALUES ($1, $2)`,
+        [variant.rows[0].id, carrier.support]
+      )
+      await inTransaction((client) =>
+        repo.incrementalAdd({ schema, client: client as never, caseId })
+      )
+    }
+    const cohort = new PostgresCohortRepository(pool, schema)
+    const representative = {
+      variant_key: '7:1000:N:<DEL>',
+      gene_symbol: 'BRCA1',
+      consequence: 'HIGH',
+      gnomad_af: 0.2, // the HIGH carrier's value, not the minimum
+      carrier_count: 2
+    }
+
+    const page = await cohort.queryVariants({})
+    expect(page.data).toEqual([expect.objectContaining(representative)])
+
+    // Only the MODIFIER carrier has support < 5: the variant matches through
+    // it, and is still shown, and counted, as the cohort row.
+    const filtered = await cohort.queryVariants({
+      column_filters: { 'sv.support': { operator: '<', value: 5 } }
+    })
+    expect(filtered.data).toEqual(page.data)
+    expect(filtered.total_count).toBe(1)
+    const none = await cohort.queryVariants({
+      column_filters: { 'sv.support': { operator: '>', value: 100 } }
+    })
+    expect(none.data).toEqual([])
+
+    for (const params of [{}, { column_filters: { 'sv.support': { operator: '<', value: 5 } } }]) {
+      const exported: Array<Record<string, unknown>> = []
+      for await (const row of cohort.streamCohortRows(params as never)) exported.push(row)
+      expect(exported).toEqual([
+        expect.objectContaining({ ...representative, total_cases: '2', cohort_frequency: 1 })
+      ])
+    }
+    // The annotation filter applies to the representative on every path.
+    const modifier = { consequences: ['MODIFIER'] }
+    expect((await cohort.queryVariants(modifier)).data).toEqual([])
+    const exportedModifier: unknown[] = []
+    for await (const row of cohort.streamCohortRows(modifier)) exportedModifier.push(row)
+    expect(exportedModifier).toEqual([])
+  }, 120_000)
+
   it('rebuild + N incremental ops + rebuild = byte-identical', async () => {
     // 1. Seed N cases + variants. Mix of shared/distinct coordinates, het/hom
     //    genotypes, and an annotated variant so the snapshot exercises every

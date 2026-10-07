@@ -218,15 +218,7 @@ export function buildExtensionExistsClauses(
   const fragments: string[] = []
   const params: (string | number)[] = []
 
-  let implicit: ExtensionTypeKey | null = null
-  if (byType.size === 1) {
-    const only = [...byType.keys()][0]
-    implicit = only
-    fragments.push(
-      `${cvsAlias}.variant_type = '${VARIANT_EXTENSION_REGISTRY[only].variantTypeValue}'`
-    )
-  }
-
+  const filteredTypes: ExtensionTypeKey[] = []
   for (const [typeKey, filters] of byType) {
     const def = VARIANT_EXTENSION_REGISTRY[typeKey]
     const alias = def.joinAlias
@@ -250,6 +242,16 @@ export function buildExtensionExistsClauses(
           AND v.variant_type = ${cvsAlias}.variant_type
           AND ${innerConditions.join(' AND ')}
       )`
+    )
+    filteredTypes.push(typeKey)
+  }
+
+  // A blank filter adds no predicate and must not narrow the type either
+  // (same rule as the PostgreSQL summary query).
+  const implicit = filteredTypes.length === 1 ? filteredTypes[0] : null
+  if (implicit !== null) {
+    fragments.unshift(
+      `${cvsAlias}.variant_type = '${VARIANT_EXTENSION_REGISTRY[implicit].variantTypeValue}'`
     )
   }
 
