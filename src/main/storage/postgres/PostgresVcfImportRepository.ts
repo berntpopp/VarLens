@@ -13,6 +13,9 @@ import {
   toNumericId
 } from './postgres-import-columns'
 import {
+  ImportSupersededError,
+  importGenerationParameter,
+  importGenerationUnchangedSql,
   inFencedImportTransaction,
   withExclusiveImportFence,
   type ExclusiveFenceOptions,
@@ -198,12 +201,32 @@ export class PostgresVcfImportRepository {
     return toNumericId((result.rows[0] as { watermark?: unknown } | undefined)?.watermark ?? 0)
   }
 
+  /**
+   * Publish a provisional case: flip it to `ready`. The flip is conditional
+   * in the statement itself — the case must still be `importing` and, with a
+   * `fence`, the import generation must be unchanged — so a replay, or a case
+   * recovery has cleaned up, is refused instead of silently published.
+   */
   async finishProvisionalImport(
     client: Pick<PoolClient, 'query'>,
     caseId: number,
     fileName: string,
-    importFileType: string
+    importFileType: string,
+    fence?: ImportFence
   ): Promise<void> {
+    const current =
+      fence === undefined ? '' : ` AND ${importGenerationUnchangedSql(fence.schema, 2)}`
+    const flipped = await client.query(
+      `UPDATE ${this.schemaName}."cases_all" SET import_status = 'ready',
+       import_variant_watermark = 0, import_is_new = FALSE
+       WHERE id = $1 AND import_status = 'importing'${current}`,
+      fence === undefined ? [caseId] : [caseId, importGenerationParameter(fence)]
+    )
+    if (flipped.rowCount !== 1) {
+      throw new ImportSupersededError(
+        `Import superseded: case ${caseId} is no longer a provisional case of this operation`
+      )
+    }
     const now = Date.now()
     await client.query(
       `INSERT INTO ${this.schemaName}."case_data_info"
@@ -212,12 +235,6 @@ export class PostgresVcfImportRepository {
        ON CONFLICT (case_id) DO UPDATE SET import_file_name = EXCLUDED.import_file_name,
          import_file_type = EXCLUDED.import_file_type, updated_at = EXCLUDED.updated_at`,
       [caseId, fileName, importFileType, now]
-    )
-    await client.query(
-      `UPDATE ${this.schemaName}."cases_all" SET import_status = 'ready',
-       import_variant_watermark = 0, import_is_new = FALSE
-       WHERE id = $1 AND import_status = 'importing'`,
-      [caseId]
     )
   }
 

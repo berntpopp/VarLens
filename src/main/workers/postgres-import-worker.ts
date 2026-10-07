@@ -350,7 +350,8 @@ export async function runImport(
             client as unknown as Pick<PoolClient, 'query'>,
             caseId,
             vcfFileName,
-            'vcf'
+            'vcf',
+            fence
           )
           throwIfCancelled()
           publicationCommitAttempted = true
@@ -726,7 +727,8 @@ export async function runImport(
               client as unknown as Pick<PoolClient, 'query'>,
               caseId,
               lastSuccessfulFileName,
-              'vcf'
+              'vcf',
+              fence
             )
             throwIfCancelled()
             publicationCommitAttempted = true
