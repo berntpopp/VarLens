@@ -120,11 +120,16 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
     caseName: string,
     lease: ImportLease | undefined,
     pauseBefore: number | 'end' | null = null,
-    barrier: Gate | null = null
+    barrier: Gate | null = null,
+    onClient: (client: Client) => void = () => undefined
   ): Promise<PostgresImportWorkerOutboundMessage[]> {
     const messages: PostgresImportWorkerOutboundMessage[] = []
     const deps: RunImportDeps = {
-      createClient: (config) => new Client(config),
+      createClient: (config) => {
+        const client = new Client(config)
+        onClient(client)
+        return client
+      },
       detectFormat,
       createMapperPipeline,
       statFile: (path) => ({ size: statSync(path).size }),
@@ -165,12 +170,17 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
    * provisional variant rows: it has taken the workspace and selected the
    * `importing` cases, and has deleted nothing yet.
    */
-  function openPausedOwner(): {
+  function openPausedOwner(
+    pauseOn: (text: string) => boolean = (text) =>
+      text.includes('DELETE FROM') && text.includes('"variants_all"')
+  ): {
     lease: Promise<ImportLease>
     recoveryStarted: Promise<void>
     resumeRecovery: () => void
+    connection: Client
   } {
     const real = new Client({ connectionString: PG_URL })
+    real.on('error', () => undefined)
     const barrier = gate()
     let paused = false
     const client = {
@@ -178,7 +188,7 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
       end: () => real.end(),
       query: async (sql: string | { text: string }, values?: unknown[]) => {
         const text = typeof sql === 'string' ? sql : sql.text
-        if (!paused && text.includes('DELETE FROM') && text.includes('"variants_all"')) {
+        if (!paused && pauseOn(text)) {
           paused = true
           barrier.reached.resolve()
           await barrier.resume.promise
@@ -189,7 +199,8 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
     return {
       lease: openImportLease(client as unknown as ImportLeaseClient, schema),
       recoveryStarted: barrier.reached.promise,
-      resumeRecovery: barrier.resume.resolve
+      resumeRecovery: barrier.resume.resolve,
+      connection: real
     }
   }
 
@@ -214,6 +225,18 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
       provisionalRows: Number(row.provisional_rows),
       frequencyRows: Number(row.frequency_rows),
       summaryRows: Number(row.summary_rows)
+    }
+  }
+
+  /** End a backend from outside and wait until PostgreSQL has removed it. */
+  async function terminateBackend(pid: number): Promise<void> {
+    await probe.query('SELECT pg_terminate_backend($1)', [pid])
+    const deadline = Date.now() + 15_000
+    for (;;) {
+      const alive = await probe.query('SELECT 1 FROM pg_stat_activity WHERE pid = $1', [pid])
+      if (alive.rows.length === 0) return
+      if (Date.now() > deadline) throw new Error(`backend ${pid} did not end`)
+      await new Promise((r) => setTimeout(r, 10))
     }
   }
 
@@ -346,5 +369,95 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
          FROM "${schema}"."variant_frequency"`
     )
     expect(frequency.rows[0]).toEqual({ lowest: '3', highest: '3' })
+  }, 120_000)
+
+  it('a worker whose backend is terminated inside a row-batch transaction leaves nothing listed or counted; the next import cleans up', async () => {
+    // Pause the worker with its second row batch copied but not committed.
+    const barrier = gate()
+    let workerPid = 0
+    let commits = 0
+    const worker = startWorker('terminated', undefined, null, null, (client) => {
+      client.on('error', () => undefined)
+      const send = client.query.bind(client) as (...args: unknown[]) => unknown
+      // Not async: a COPY is a stream that query() must hand back as it is.
+      ;(client as unknown as { query: unknown }).query = (...args: unknown[]) => {
+        // Commits: the fence for its own recovery, the provisional case,
+        // row batch 1, row batch 2.
+        if (args[0] !== 'COMMIT' || (commits += 1) !== 4) return send(...args)
+        workerPid = (client as unknown as { processID: number }).processID
+        barrier.reached.resolve()
+        return barrier.resume.promise.then(() => send(...args))
+      }
+    })
+    await barrier.reached.promise
+    await terminateBackend(workerPid)
+    barrier.resume.resolve()
+
+    const messages = await worker
+    expect(messages.at(-1)).toMatchObject({ type: 'error' })
+    expect(messages.some((m) => m.type === 'complete')).toBe(false)
+    // Its own cleanup could not run. What is left is a hidden case with the
+    // one committed row batch: not listed, not counted.
+    expect(await counts()).toEqual({
+      allCases: 1,
+      readyCases: 0,
+      provisionalRows: 1,
+      frequencyRows: 0,
+      summaryRows: 0
+    })
+
+    // The next import recovers the workspace first, then imports normally.
+    const next = await startWorker('after-termination', undefined)
+    expect(next.at(-1)).toMatchObject({ type: 'complete', result: { variantCount: ROWS } })
+    const after = await counts()
+    expect(after).toMatchObject({ allCases: 1, readyCases: 1, provisionalRows: ROWS })
+    const frequency = await probe.query<{ rows: string; lowest: string; highest: string }>(
+      `SELECT COUNT(*) AS rows, MIN(case_count) AS lowest, MAX(case_count) AS highest
+         FROM "${schema}"."variant_frequency"`
+    )
+    expect(frequency.rows[0]).toEqual({
+      rows: String(after.frequencyRows),
+      lowest: '1',
+      highest: '1'
+    })
+  }, 120_000)
+
+  it('recovery whose connection is killed while it holds the fence, after it superseded older imports, is completed by the next recovery', async () => {
+    const repo = new PostgresVcfImportRepository(schema)
+    await repo.beginProvisionalImport(probe as never, {
+      caseName: 'interrupted',
+      filePath: '/tmp/a.vcf.gz',
+      fileSize: 1,
+      genomeBuild: 'GRCh38'
+    })
+    // Stop recovery at its first statement inside the fence.
+    const owner = openPausedOwner((text) => text.includes("import_status = 'importing'"))
+    const failed = owner.lease.then(
+      () => null,
+      (error: unknown) => error
+    )
+    await owner.recoveryStarted
+    const held = await probe.query<{ mode: string }>(
+      `SELECT mode FROM pg_locks
+        WHERE locktype = 'advisory' AND granted AND objsubid = 2
+          AND classid = hashtext('varlens-import-fence')::oid
+          AND objid = (SELECT oid FROM pg_namespace WHERE nspname = $1)`,
+      [schema]
+    )
+    expect(held.rows).toEqual([{ mode: 'ExclusiveLock' }])
+    const superseded = await probe.query<{ value: string }>(
+      `SELECT value FROM "${schema}"."database_settings" WHERE key = 'import_generation'`
+    )
+
+    await terminateBackend((owner.connection as unknown as { processID: number }).processID)
+    owner.resumeRecovery()
+    expect(await failed).toBeInstanceOf(Error)
+    expect((await counts()).allCases).toBe(1) // nothing was cleaned yet
+
+    // The fence died with the session; the next owner recovers completely.
+    const next = await openCoordinator()
+    expect(next.lease.generation).toBe(Number(superseded.rows[0].value) + 1)
+    expect(await counts()).toEqual(NOTHING_LEFT)
+    await next.lease.close()
   }, 120_000)
 })
