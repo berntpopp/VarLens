@@ -566,9 +566,10 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     await expectAll(cohortPaths({ ...params, max_internal_af: 0.6 }), ok(rare))
     await expectAll(cohortPaths({ ...params, max_internal_af: 0 }), ok(grch38))
 
-    // The stored summary frequency is nullable on both backends. With the
-    // value missing, both summary-backed listings must keep the row. (The live
-    // PostgreSQL path recomputes the frequency and never sees a NULL.)
+    // SQLite reads the stored, nullable summary frequency: with the value
+    // missing its listing must keep the row. PostgreSQL derives the frequency
+    // from carrier_count on every read (summary and live path alike), so it
+    // never sees a NULL: blanking the unused column changes nothing there.
     const where = `chr = '${A.inGene.chr}' AND pos = ${A.inGene.pos} AND genome_build = 'GRCh38'`
     sqlite.db.exec(`UPDATE cohort_variant_summary SET cohort_frequency = NULL WHERE ${where}`)
     await pool.query(
@@ -577,7 +578,7 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     try {
       const paths = cohortPaths({ ...params, max_internal_af: 0.6 })
       expect(await paths['desktop cohort']).toEqual(ok(grch38))
-      expect(await paths['web cohort']).toEqual(ok(grch38))
+      expect(await paths['web cohort']).toEqual(ok(rare))
     } finally {
       sqlite.db.exec(`UPDATE cohort_variant_summary SET cohort_frequency = 1.0 WHERE ${where}`)
       await pool.query(
