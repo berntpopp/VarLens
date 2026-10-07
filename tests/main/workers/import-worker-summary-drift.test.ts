@@ -10,6 +10,7 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { isDeepStrictEqual } from 'node:util'
 
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
@@ -107,6 +108,77 @@ describe('import worker: per-file cohort summary upkeep', () => {
     )
     return messages
   }
+
+  /** What a reader of the summary saw when a file was reported done. */
+  interface FileObservation {
+    caseName: string
+    stale: boolean
+    exact: boolean
+  }
+
+  /**
+   * Runs a session one row per insert transaction and calls `midFile` after
+   * the first committed row of the file at `fileIndex` — where another
+   * connection sees a half-inserted case. Nothing is asserted inside the
+   * worker's callbacks; the observations are returned.
+   */
+  async function runSessionWithMidFileWrite(
+    files: StartMessage['files'],
+    midFile: () => void | Promise<void>,
+    options: { fileIndex?: number; cancelAfterWrite?: boolean } = {}
+  ): Promise<{ messages: WorkerMessage[]; observed: FileObservation[] }> {
+    const messages: WorkerMessage[] = []
+    const observed: FileObservation[] = []
+    let written = false
+    let failure: unknown
+    await runImportSession(
+      { type: 'start', files, dbPath, throttleMs: 0, batchSize: 1 },
+      {
+        postMessage: (m) => {
+          messages.push(m)
+          if (m.type === 'file-complete') {
+            observed.push({
+              caseName: m.result.caseName,
+              stale: summaryMeta(db, 'is_stale') === '1',
+              exact: isDeepStrictEqual(snapshotSummary(db), referenceSummary(db))
+            })
+          }
+          const reached = m.type === 'progress' && m.phase === 'inserting'
+          if (!reached || written || m.fileIndex !== (options.fileIndex ?? 0)) return
+          written = true
+          try {
+            void midFile()
+          } catch (e) {
+            failure = e
+          }
+        }
+      },
+      () => written && options.cancelAfterWrite === true
+    )
+    if (failure !== undefined) throw failure
+    return { messages, observed }
+  }
+
+  /** A reader is never shown a wrong summary that claims to be current. */
+  const expectNeverSilentlyWrong = (observed: FileObservation[]): void => {
+    for (const o of observed) expect(o.stale || o.exact, `after ${o.caseName}`).toBe(true)
+  }
+
+  const expectSettledExact = (): void => {
+    expect(snapshotSummary(db)).toEqual(referenceSummary(db))
+    expect(summaryMeta(db, 'is_stale')).toBe('0')
+    expect(summaryMeta(db, 'import_session_open')).toBeUndefined()
+  }
+
+  const carriersAt = (pos: number): number | undefined =>
+    (
+      db
+        .prepare(
+          `SELECT carrier_count FROM cohort_variant_summary
+           WHERE pos = ? AND genome_build = 'GRCh38'`
+        )
+        .get(pos) as { carrier_count: number } | undefined
+    )?.carrier_count
 
   const statuses = (messages: WorkerMessage[]): string[] => {
     const done = messages.find((m) => m.type === 'complete')
@@ -338,6 +410,49 @@ describe('import worker: per-file cohort summary upkeep', () => {
     expect(summary.variants).toContainEqual(
       expect.objectContaining({ pos: 100, gene_symbol: 'AAB', carrier_count: 4 })
     )
+  })
+
+  it('does not count a half-imported case twice when a transcript switch lands mid-file (#461)', async () => {
+    await seedAnnotatedCohort()
+
+    // S1's first row (pos 100) is committed, the rest of S1 is not, when the
+    // user switches the transcript of S0's variant at the same coordinate.
+    const { messages, observed } = await runSessionWithMidFileWrite(
+      [request('S1'), request('S2')],
+      () => {
+        const service = new DatabaseService(dbPath)
+        try {
+          const s0 = db
+            .prepare(
+              `SELECT v.id FROM variants v JOIN cases c ON c.id = v.case_id
+               WHERE c.name = 'S0' AND v.pos = 100`
+            )
+            .get() as { id: number }
+          service.transcripts.insertTranscriptAndSwitch(s0.id, {
+            transcript_id: 'NM_9',
+            gene_symbol: 'ZZZ',
+            consequence: 'HIGH',
+            func: 'stop_gained',
+            cdna: 'c.9',
+            aa_change: null,
+            hpo_sim_score: null,
+            moi: null,
+            is_selected: 0
+          })
+        } finally {
+          service.close()
+        }
+      }
+    )
+
+    expect(statuses(messages)).toEqual(['S1:success', 'S2:success'])
+    expect(observed.map((o) => o.caseName)).toEqual(['S1', 'S2'])
+    expectNeverSilentlyWrong(observed)
+    expectSettledExact()
+    expect(carriersAt(100)).toBe(4) // S0, OLD, S1, S2 — S1 once
+    expect(
+      db.prepare('SELECT gene_symbol FROM cohort_variant_summary WHERE pos = 100').get()
+    ).toEqual({ gene_symbol: 'ZZZ' })
   })
 
   it('rebuilds a stale summary once at session start, then continues incrementally', async () => {

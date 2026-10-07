@@ -16,15 +16,19 @@
  * by idx_variants_gene).
  *
  * Call inside the transaction that edits the variant. A stale or missing
- * summary is left alone: the pending full rebuild covers it.
+ * summary is left alone: the pending full rebuild covers it. While an import
+ * session is open the summary is not patched but flagged stale (see
+ * {@link applyVariantAnnotationChange}); the session notices and rebuilds.
  */
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import {
   CHECK_TABLE_EXISTS_SQL,
+  MARK_STALE_SQL,
   geneBurdenInsertSql,
   perCaseAnnotationFlagsSql,
   variantSummaryInsertSql
 } from '../../shared/sql/cohort-summary-rebuild'
+import { isImportSessionOpen } from './cohort-summary-case-add'
 import { isCohortSummaryStale } from './cohort-summary-case-removal'
 
 export interface SummaryCoordinate {
@@ -81,6 +85,16 @@ export function applyVariantAnnotationChange(
   geneAfter: string | null
 ): void {
   if (!isCohortSummaryMaintained(db)) return
+  if (isImportSessionOpen(db)) {
+    // An import session is writing (or died writing). Recomputing here would
+    // (a) count the carriers of a half-inserted case, which the session then
+    // adds a second time, and (b) scan `variants` on this — the Electron main
+    // — thread, because a bulk import drops the coordinate and gene indexes.
+    // Building the index first would be the same scan plus a sort, so the edit
+    // is O(1) instead: flag the summary and let the session rebuild at its end.
+    db.exec(MARK_STALE_SQL)
+    return
+  }
   recomputeSummaryCoordinate(db, coordinate)
   if (geneBefore !== geneAfter) recomputeGeneBurden(db, [geneBefore, geneAfter])
 }

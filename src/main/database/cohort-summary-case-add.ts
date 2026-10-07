@@ -26,6 +26,10 @@
  * stale or interrupted at session start is flagged stale and rebuilt once
  * before the first file; if that rebuild fails the flag stays and the session
  * is not exact.
+ * Writers outside the session never patch the summary while the marker is
+ * set — a half-inserted case is visible to them and would be counted twice —
+ * they flag it stale instead (cohort-summary-coordinate-recompute.ts); the
+ * session sees the flag at its next file and stops merging.
  * Any failure falls back to the old behaviour: mark stale, rebuild at the end
  * — and so does a session whose remaining files are cheaper to rebuild once
  * than to merge one by one ({@link UpkeepPolicy}).
@@ -218,7 +222,18 @@ export function openImportSummarySession(
           })()
           return
         }
+        // IMMEDIATE: the staleness check below must not be a snapshot older
+        // than the write lock.
         db.transaction(() => {
+          if (isCohortSummaryStale(db)) {
+            // Flagged from outside the session (an edit that could not patch
+            // the summary while files are in flight): stop merging onto it.
+            // The summary is already stale, so publishing the case here keeps
+            // it in the rebuild at session end.
+            exact = false
+            s.markCaseReady.run(caseId)
+            return
+          }
           const row = s.caseBuild.get(caseId) as { genome_build: string | null } | undefined
           if (row?.genome_build == null) throw new Error(`case ${caseId} has no genome build`)
           const params = { caseId, build: row.genome_build }
@@ -239,7 +254,7 @@ export function openImportSummarySession(
           s.insertNewVariantSummary.run({ build: params.build })
           applyPerCaseFlags()
           s.markCaseReady.run(caseId)
-        })()
+        }).immediate()
       } catch (e) {
         degrade('add case', e)
       }
@@ -251,7 +266,8 @@ export function openImportSummarySession(
 
     finish() {
       try {
-        if (!exact) options.rebuild()
+        // Stale without `exact` having dropped: flagged after the last file.
+        if (!exact || isCohortSummaryStale(db)) options.rebuild()
         else {
           db.exec('ANALYZE cohort_variant_summary')
           db.exec('ANALYZE gene_burden_summary')
