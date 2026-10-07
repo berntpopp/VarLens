@@ -2,13 +2,15 @@
 /**
  * Issue #461: switching (or adding and switching) a variant's selected
  * transcript rewrites gene_symbol / consequence / func / cdna / aa_change /
- * transcript on the variant row. cohort_variant_summary holds the MAX() of
- * each of those per coordinate and gene_burden_summary counts per gene, so
- * both must follow in the same transaction and equal a fresh rebuild.
+ * transcript on the variant row. cohort_variant_summary shows the annotation
+ * of the most severe carrier row per coordinate (#469) and gene_burden_summary
+ * counts per gene, so both must follow in the same transaction and equal a
+ * fresh rebuild.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { DatabaseService } from '../../../src/main/database'
+import { impactRank } from '../../../src/shared/config/severity.config'
 import { MARK_STALE_SQL } from '../../../src/shared/sql/cohort-summary-rebuild'
 import { referenceSummary, snapshotSummary } from '../workers/support/summary-reference'
 
@@ -73,8 +75,8 @@ describe('transcript switch keeps the cohort summary equal to a rebuild (#461)',
       db()
         .prepare(
           `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, consequence, func, cdna,
-             aa_change, transcript, gt_num, variant_type)
-           VALUES (?, 'chr1', ?, 'A', ?, ?, ?, ?, ?, ?, ?, '0/1', 'snv')`
+             aa_change, transcript, impact_rank, gt_num, variant_type)
+           VALUES (?, 'chr1', ?, 'A', ?, ?, ?, ?, ?, ?, ?, ?, '0/1', 'snv')`
         )
         .run(
           caseId,
@@ -85,7 +87,8 @@ describe('transcript switch keeps the cohort summary equal to a rebuild (#461)',
           selected.func,
           selected.cdna,
           selected.aa,
-          selected.id
+          selected.id,
+          impactRank(selected.consequence)
         ).lastInsertRowid
     )
     const insert = db().prepare(
@@ -138,9 +141,12 @@ describe('transcript switch keeps the cohort summary equal to a rebuild (#461)',
 
     expect(summaryRow(100)).toMatchObject({
       gene_symbol: 'GENEB',
-      consequence: 'MODERATE', // MAX('HIGH', 'MODERATE') as text, like the rebuild
+      // The HIGH carrier row represents the variant, whole: not a mix (#469).
+      consequence: 'HIGH',
+      impact_rank: 4,
       func: 'stop_gained',
       cdna: 'c.9A>G',
+      aa_change: 'p.K3*',
       transcript: 'NM_B',
       carrier_count: 2
     })
@@ -157,7 +163,7 @@ describe('transcript switch keeps the cohort summary equal to a rebuild (#461)',
     expectExact()
   })
 
-  it('lowers the representative annotation when the last holder of a maximum switches away', () => {
+  it('lowers the representative annotation when the most severe carrier switches away', () => {
     service.transcripts.switchSelectedTranscript(v1, 'NM_0')
     expect(summaryRow(100)).toMatchObject({ gene_symbol: 'GENEA', transcript: 'NM_A' })
     expectExact()

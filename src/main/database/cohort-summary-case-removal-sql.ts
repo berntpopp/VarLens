@@ -2,29 +2,20 @@
  * SQL for the incremental case removal in cohort-summary-case-removal.ts.
  *
  * Temp tables (per connection, cleared per case):
- *   removed_case_rows        — the case's deduped contribution per summary key
- *   removed_case_recompute   — coordinates whose MAX columns must be recomputed
+ *   removed_case_rows        — the case's best row and genotype per summary key
+ *   removed_case_recompute   — coordinates whose representative must be recomputed
  *   removed_case_gene_rows   — the case's row count per gene
  *   removed_case_gene_coords — the case's distinct coordinates per gene
  *   removed_case_gene_lost   — per gene, coordinates no remaining variant keeps
  */
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
+import {
+  REPRESENTATIVE_COLUMNS,
+  representativeColumnList,
+  representativeOrderBy,
+  sameRepresentative
+} from '../../shared/sql/cohort-representative'
 import { perCaseAnnotationFlagsSql } from '../../shared/sql/cohort-summary-rebuild'
-
-/** Columns the rebuild aggregates with MAX() across carriers (see variantSummaryInsertSql). */
-export const MAX_COLUMNS = [
-  'gene_symbol',
-  'cdna',
-  'aa_change',
-  'consequence',
-  'func',
-  'clinvar',
-  'gnomad_af',
-  'cadd',
-  'transcript',
-  'omim_mim_number',
-  'end_pos'
-] as const
 
 const HET = "('0/1','1/0','0|1','1|0')"
 const HOM = "('1/1','1|1')"
@@ -32,7 +23,7 @@ const HOM = "('1/1','1|1')"
 export const CASE_REMOVAL_TEMP_TABLES_SQL = `
   CREATE TEMP TABLE IF NOT EXISTS removed_case_rows (
     chr TEXT, pos INTEGER, ref TEXT, alt TEXT, variant_type TEXT, genome_build TEXT,
-    ${MAX_COLUMNS.join(', ')}, het INTEGER, hom INTEGER
+    ${REPRESENTATIVE_COLUMNS.join(', ')}, het INTEGER, hom INTEGER
   );
   CREATE TEMP TABLE IF NOT EXISTS removed_case_recompute (
     chr TEXT NOT NULL, pos INTEGER NOT NULL, ref TEXT NOT NULL, alt TEXT NOT NULL,
@@ -59,28 +50,32 @@ export const CLEAR_TEMP_TABLES_SQL = `
   DELETE FROM temp.removed_case_gene_lost;
 `
 
-/** The case's per-key contribution, deduped exactly like the rebuild's first stage. */
+/** The case's per-key contribution: its best row and genotype, as the rebuild's first stage. */
 const CAPTURE_ROWS_SQL = `
   INSERT INTO temp.removed_case_rows
-  SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
-    ${MAX_COLUMNS.map((col) => `MAX(v.${col})`).join(', ')},
-    CASE WHEN MAX(v.gt_num) IN ${HET} THEN 1 ELSE 0 END,
-    CASE WHEN MAX(v.gt_num) IN ${HOM} THEN 1 ELSE 0 END
-  FROM variants v
-  JOIN cases c ON c.id = v.case_id
-  WHERE v.case_id = ?
-  GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build`
+  SELECT d.chr, d.pos, d.ref, d.alt, d.variant_type, d.genome_build,
+    ${representativeColumnList('d')},
+    CASE WHEN d.gt_num IN ${HET} THEN 1 ELSE 0 END,
+    CASE WHEN d.gt_num IN ${HOM} THEN 1 ELSE 0 END
+  FROM (
+    SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
+      ${representativeColumnList('v')},
+      MAX(v.gt_num) OVER case_key AS gt_num,
+      ROW_NUMBER() OVER (case_key ORDER BY ${representativeOrderBy('v', 'sqlite')}) AS rn
+    FROM variants v
+    JOIN cases c ON c.id = v.case_id
+    WHERE v.case_id = ?
+    WINDOW case_key AS (PARTITION BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build)
+  ) d
+  WHERE d.rn = 1`
 
 const SUMMARY_KEY_JOIN = `s.chr = k.chr AND s.pos = k.pos AND s.ref = k.ref AND s.alt = k.alt
     AND s.variant_type = k.variant_type AND s.genome_build IS k.genome_build`
 
-/** The case's value cannot have been the stored maximum. */
-const unaffected = (col: string): string => `(k.${col} IS NULL OR k.${col} < s.${col})`
-
 /**
- * Coordinates whose MAX columns may change: the case provided a stored maximum
- * and no single remaining carrier row of the same key holds all of them.
- * Keys losing their last carrier are simply dropped (no recompute).
+ * Coordinates whose representative may change: the case's best row IS the
+ * stored representative and no remaining carrier row of the same key equals
+ * it. Keys losing their last carrier are simply dropped (no recompute).
  */
 const MARK_RECOMPUTE_SQL = `
   INSERT OR IGNORE INTO temp.removed_case_recompute (chr, pos, ref, alt)
@@ -88,12 +83,12 @@ const MARK_RECOMPUTE_SQL = `
   FROM temp.removed_case_rows k
   JOIN cohort_variant_summary s ON ${SUMMARY_KEY_JOIN}
   WHERE s.carrier_count > 1
-    AND NOT (${MAX_COLUMNS.map(unaffected).join(' AND ')})
+    AND ${sameRepresentative('k', 's', 'sqlite')}
     AND NOT EXISTS (
       SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id AND rc.import_status = 'ready'
       WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
         AND r.variant_type = k.variant_type AND rc.genome_build IS k.genome_build
-        AND ${MAX_COLUMNS.map((col) => `(${unaffected(col)} OR r.${col} = k.${col})`).join('\n        AND ')}
+        AND ${sameRepresentative('r', 's', 'sqlite')}
     )`
 
 const RECOMPUTE_FILTER = `

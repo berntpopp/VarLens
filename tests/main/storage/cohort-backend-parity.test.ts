@@ -40,6 +40,7 @@ import {
   applyAnnotationFlagsGlobal,
   applyAnnotationFlagsPerCase
 } from '../../../src/main/storage/postgres/cohort-annotation-flags-sql'
+import { clinvarRank, impactRank } from '../../../src/shared/config/severity.config'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
@@ -158,6 +159,63 @@ const FIXTURE: FixtureCase[] = [
   }
 ]
 
+/**
+ * A third case that annotates shared variants differently (#469):
+ *  - 1:100 (carried HIGH / Pathogenic by parity-a and parity-b) as MODIFIER with
+ *    another gene, a higher CADD and no ClinVar value: it must NOT become the
+ *    representative, in any column;
+ *  - 3:300 (carried LOW / Likely benign by parity-b) as MODERATE with another
+ *    gene: it becomes the representative, whole, and its removal must give the
+ *    row back to parity-b.
+ */
+const DIFFERING: FixtureCase = {
+  name: 'parity-c',
+  genomeBuild: 'GRCh38',
+  variants: [
+    baseVariant({
+      chr: '1',
+      pos: 100,
+      gene_symbol: 'BRCA1-AS1',
+      consequence: 'MODIFIER',
+      func: 'intron_variant',
+      clinvar: null,
+      cadd: 40
+    }),
+    baseVariant({
+      chr: '3',
+      pos: 300,
+      ref: 'G',
+      alt: 'A',
+      gene_symbol: 'MYH7B',
+      consequence: 'MODERATE',
+      func: 'missense_variant',
+      clinvar: null,
+      cadd: 1
+    })
+  ]
+}
+
+/** Transcripts the third case's variants are switched to. */
+const SWITCH_AT_100 = {
+  transcript_id: 'ENST00000000001',
+  gene_symbol: 'AAAS',
+  consequence: 'HIGH',
+  func: 'frameshift_variant',
+  cdna: 'c.1del',
+  aa_change: 'p.M1fs',
+  hpo_sim_score: null,
+  moi: null,
+  is_selected: 0
+}
+const SWITCH_AT_300 = {
+  ...SWITCH_AT_100,
+  transcript_id: 'ENST00000000003',
+  gene_symbol: 'ZZZ3',
+  func: 'stop_gained',
+  cdna: 'c.3C>T',
+  aa_change: 'p.Q1*'
+}
+
 const variantKey = (v: CohortVariant): string => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`
 
 /** Stable cross-backend ordering for set-equality assertions. */
@@ -229,8 +287,8 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       await probe.query(
         `INSERT INTO "${schema}".variants
            (case_id, chr, pos, ref, alt, variant_type, end_pos, gene_symbol, consequence,
-            func, clinvar, gnomad_af, cadd, gt_num)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+            func, clinvar, gnomad_af, cadd, gt_num, impact_rank, clinvar_rank)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
         [
           caseId,
           v.chr,
@@ -245,7 +303,10 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
           v.clinvar,
           v.gnomad_af,
           v.cadd,
-          v.gt_num
+          v.gt_num,
+          // What the import pipeline stores next to the raw strings (#469).
+          impactRank(v.consequence),
+          clinvarRank(v.clinvar)
         ]
       )
     }
@@ -548,17 +609,25 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
   it('(f) SQLite: a case with a differing annotation, a transcript switch and its removal keep the maintained summary equal to a fresh rebuild (#461, #460)', async () => {
     const snapshot = (): SummarySnapshot => snapshotSummary(sqlite.database)
     const rebuilt = (): SummarySnapshot => referenceSummary(sqlite.database)
-    const at100 = (): Record<string, unknown> =>
+    const at = (pos: number): Record<string, unknown> =>
       sqlite.database
         .prepare(
           `SELECT gene_symbol, consequence, func, clinvar, cadd, transcript, carrier_count
-           FROM cohort_variant_summary WHERE chr = '1' AND pos = 100`
+           FROM cohort_variant_summary WHERE pos = ?`
         )
-        .get() as Record<string, unknown>
+        .get(pos) as Record<string, unknown>
+    const variantOf = (caseId: number, pos: number): number =>
+      (
+        sqlite.database
+          .prepare('SELECT id FROM variants WHERE case_id = ? AND pos = ?')
+          .get(caseId, pos) as { id: number }
+      ).id
 
-    // Differing annotation: a third carrier of 1:100:A:T annotated with another
-    // gene, a lower impact string, a higher CADD and no ClinVar value, merged
-    // by the import worker's per-file path. Representative = MAX() per column.
+    // Differing annotation, merged by the import worker's per-file path. The
+    // representative is the most severe carrier row, whole. The old rule (a
+    // bytewise MAX() per column) gave 1:100 consequence = 'MODIFIER' with
+    // func = 'stop_gained', gene 'BRCA1-AS1' and CADD 40: a row no carrier has,
+    // hidden from the cohort filter impact = HIGH (#469).
     const upkeep = openImportSummarySession(sqlite.database, {
       forceRebuild: false,
       rebuild: () => sqlite.cohortSummary.rebuild(),
@@ -566,69 +635,66 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
         throw new Error(warning)
       }
     })
-    const third = seedSqliteCase({
-      name: 'parity-c',
-      genomeBuild: 'GRCh38',
-      variants: [
-        baseVariant({
-          chr: '1',
-          pos: 100,
-          gene_symbol: 'BRCA1-AS1',
-          consequence: 'MODIFIER',
-          func: 'intron_variant',
-          clinvar: null,
-          cadd: 40
-        })
-      ]
-    })
+    const third = seedSqliteCase(DIFFERING)
     upkeep.addCase(third)
     upkeep.finish()
-    expect(at100()).toMatchObject({
-      gene_symbol: 'BRCA1-AS1',
-      consequence: 'MODIFIER',
-      func: 'stop_gained',
-      clinvar: 'Pathogenic',
-      cadd: 40,
-      carrier_count: 3
-    })
-    expect(snapshot()).toEqual(rebuilt())
-    expect(sqlite.cohort.getCohortSummary().unique_variants).toBe(3)
-
-    // Transcript switch on the new carrier: it stops holding the gene and
-    // consequence maxima, which fall back to the other carriers' values.
-    const switched = (
-      sqlite.database.prepare('SELECT id FROM variants WHERE case_id = ?').get(third) as {
-        id: number
-      }
-    ).id
-    sqlite.transcripts.insertTranscriptAndSwitch(switched, {
-      transcript_id: 'ENST00000000001',
-      gene_symbol: 'AAAS',
-      consequence: 'HIGH',
-      func: 'frameshift_variant',
-      cdna: 'c.1del',
-      aa_change: 'p.M1fs',
-      hpo_sim_score: null,
-      moi: null,
-      is_selected: 0
-    })
-    expect(at100()).toMatchObject({
+    const highCarrier = {
       gene_symbol: 'BRCA1',
       consequence: 'HIGH',
       func: 'stop_gained',
-      transcript: 'ENST00000000001',
-      cadd: 40
+      clinvar: 'Pathogenic',
+      cadd: 32.5,
+      transcript: null
+    }
+    expect(at(100)).toMatchObject({ ...highCarrier, carrier_count: 3 })
+    expect(at(300)).toMatchObject({
+      gene_symbol: 'MYH7B',
+      consequence: 'MODERATE',
+      func: 'missense_variant',
+      clinvar: null,
+      cadd: 1,
+      carrier_count: 2
+    })
+    expect(snapshot()).toEqual(rebuilt())
+    expect(sqlite.cohort.getCohortSummary().unique_variants).toBe(3)
+    // The cohort filter impact = HIGH finds the variant again.
+    expect(
+      sqlite.cohort.getCohortVariants({ consequences: ['HIGH'] }).data.map((v) => v.variant_key)
+    ).toEqual(['1:100:A:T'])
+
+    // Transcript switches on the new carrier. At 1:100 it becomes HIGH too, but
+    // the ClinVar Pathogenic carriers stay more severe; at 3:300 it is the
+    // representative already and the row follows its new annotation.
+    sqlite.transcripts.insertTranscriptAndSwitch(variantOf(third, 100), SWITCH_AT_100)
+    expect(at(100)).toMatchObject({ ...highCarrier, carrier_count: 3 })
+    expect(snapshot()).toEqual(rebuilt())
+    sqlite.transcripts.insertTranscriptAndSwitch(variantOf(third, 300), SWITCH_AT_300)
+    expect(at(300)).toMatchObject({
+      gene_symbol: 'ZZZ3',
+      consequence: 'HIGH',
+      func: 'stop_gained',
+      transcript: 'ENST00000000003',
+      cadd: 1
     })
     expect(snapshot()).toEqual(rebuilt())
 
-    // Removing the carrier that holds the CADD and transcript maxima.
+    // Removing the carrier that supplies the representative of 3:300.
     await deleteCasesIncrementally(sqlite.database, [third], {
       deletingAll: false,
       isCancelled: () => false,
       onProgress: () => undefined,
       summary: openCaseSummaryRemoval(sqlite.database)
     })
-    expect(at100()).toMatchObject({ gene_symbol: 'BRCA1', cadd: 32.5, transcript: null })
+    expect(at(100)).toMatchObject({ ...highCarrier, carrier_count: 2 })
+    expect(at(300)).toMatchObject({
+      gene_symbol: 'MYH7',
+      consequence: 'LOW',
+      func: 'synonymous_variant',
+      clinvar: 'Likely benign',
+      cadd: 5,
+      transcript: null,
+      carrier_count: 1
+    })
     expect(snapshot()).toEqual(rebuilt())
     expect(sqlite.cohort.getCohortSummary().unique_variants).toBe(3)
   }, 120_000)
@@ -636,7 +702,8 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
   it('(f) PG: the same sequence leaves PG summary rows equal to SQLite’s after every step', async () => {
     const COLUMNS = `chr, pos, ref, alt, variant_type, genome_build, end_pos, gene_symbol, cdna,
        aa_change, consequence, func, clinvar, gnomad_af, cadd, transcript, omim_mim_number,
-       carrier_count, het_count, hom_count, has_star, has_comment, acmg_best, variant_key`
+       impact_rank, clinvar_rank, carrier_count, het_count, hom_count, has_star, has_comment,
+       acmg_best, variant_key`
     const ORDER = 'chr, pos, ref, alt, variant_type, genome_build'
     const NUMERIC = ['pos', 'end_pos', 'carrier_count', 'het_count', 'hom_count']
     const normalise = (row: Record<string, unknown>): Record<string, unknown> => ({
@@ -691,23 +758,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     }
     await expectSameSummary('the shared fixture')
 
-    // 1. Differing annotation: a third carrier of 1:100:A:T with another gene, a
-    //    lower impact string, a higher CADD and no ClinVar value.
-    const differing: FixtureCase = {
-      name: 'parity-c',
-      genomeBuild: 'GRCh38',
-      variants: [
-        baseVariant({
-          chr: '1',
-          pos: 100,
-          gene_symbol: 'BRCA1-AS1',
-          consequence: 'MODIFIER',
-          func: 'intron_variant',
-          clinvar: null,
-          cadd: 40
-        })
-      ]
-    }
+    // 1. Differing annotation (see DIFFERING).
     const upkeep = openImportSummarySession(sqlite.database, {
       forceRebuild: false,
       rebuild: () => sqlite.cohortSummary.rebuild(),
@@ -715,41 +766,73 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
         throw new Error(warning)
       }
     })
-    const sqliteThird = seedSqliteCase(differing)
+    const sqliteThird = seedSqliteCase(DIFFERING)
     upkeep.addCase(sqliteThird)
     upkeep.finish()
-    const pgThird = await seedPgCase(differing)
+    const pgThird = await seedPgCase(DIFFERING)
     await expectSameSummary('adding a case with a differing annotation')
 
-    // 2. Transcript switch on the new carrier, to a transcript of another gene.
-    const transcript = {
-      transcript_id: 'ENST00000000001',
-      gene_symbol: 'AAAS',
-      consequence: 'HIGH',
-      func: 'frameshift_variant',
-      cdna: 'c.1del',
-      aa_change: 'p.M1fs',
-      hpo_sim_score: null,
-      moi: null,
-      is_selected: 0
-    }
-    const sqliteVariant = (
-      sqlite.database.prepare('SELECT id FROM variants WHERE case_id = ?').get(sqliteThird) as {
-        id: number
+    // The scenario of #469 on PostgreSQL: carriers HIGH, HIGH, MODIFIER give a
+    // HIGH row that is one carrier's annotation, and impact = HIGH returns it.
+    const pgAt100 = await probe.query(
+      `SELECT gene_symbol, consequence, func, clinvar, cadd, impact_rank, clinvar_rank
+         FROM "${schema}".cohort_variant_summary WHERE pos = 100`
+    )
+    expect(pgAt100.rows).toEqual([
+      {
+        gene_symbol: 'BRCA1',
+        consequence: 'HIGH',
+        func: 'stop_gained',
+        clinvar: 'Pathogenic',
+        cadd: 32.5,
+        impact_rank: 4,
+        clinvar_rank: 15
       }
-    ).id
-    sqlite.transcripts.insertTranscriptAndSwitch(sqliteVariant, transcript)
-    const pgVariant = await probe.query<{ id: number }>(
-      `SELECT id FROM "${schema}".variants WHERE case_id = $1`,
-      [pgThird]
-    )
-    await new PostgresTranscriptsRepository(pool, schema).insertTranscriptAndSwitch(
-      Number(pgVariant.rows[0].id),
-      transcript as never
-    )
-    await expectSameSummary('a transcript switch')
+    ])
+    const highOnPg = await pgCohort.queryVariants({ consequences: ['HIGH'] })
+    expect(highOnPg.data.map((v) => v.variant_key)).toEqual(['1:100:A:T'])
+    expect(
+      sqlite.cohort.getCohortVariants({ consequences: ['HIGH'] }).data.map((v) => v.variant_key)
+    ).toEqual(['1:100:A:T'])
 
-    // 3. Incremental removal of the carrier that holds the CADD and transcript maxima.
+    // 2. Transcript switches on the new carrier: one that does not change the
+    //    representative (1:100) and one that rewrites it (3:300).
+    const pgTranscripts = new PostgresTranscriptsRepository(pool, schema)
+    for (const [pos, transcript] of [
+      [100, SWITCH_AT_100],
+      [300, SWITCH_AT_300]
+    ] as const) {
+      const sqliteVariant = (
+        sqlite.database
+          .prepare('SELECT id FROM variants WHERE case_id = ? AND pos = ?')
+          .get(sqliteThird, pos) as { id: number }
+      ).id
+      sqlite.transcripts.insertTranscriptAndSwitch(sqliteVariant, transcript)
+      const pgVariant = await probe.query<{ id: number }>(
+        `SELECT id FROM "${schema}".variants WHERE case_id = $1 AND pos = $2`,
+        [pgThird, pos]
+      )
+      await pgTranscripts.insertTranscriptAndSwitch(
+        Number(pgVariant.rows[0].id),
+        transcript as never
+      )
+      await expectSameSummary(`a transcript switch at ${pos}`)
+    }
+    const pgAt300 = await probe.query(
+      `SELECT gene_symbol, consequence, func, transcript, impact_rank
+         FROM "${schema}".cohort_variant_summary WHERE pos = 300`
+    )
+    expect(pgAt300.rows).toEqual([
+      {
+        gene_symbol: 'ZZZ3',
+        consequence: 'HIGH',
+        func: 'stop_gained',
+        transcript: 'ENST00000000003',
+        impact_rank: 4
+      }
+    ])
+
+    // 3. Incremental removal of the carrier that supplies the representative of 3:300.
     await deleteCasesIncrementally(sqlite.database, [sqliteThird], {
       deletingAll: false,
       isCancelled: () => false,

@@ -5,18 +5,19 @@
  * `gene_burden_summary` from every remaining variant. This removes only the
  * deleted case's contribution, inside the case's delete transaction:
  *
- * Before the delete, the case's own per-coordinate contribution (its deduped
- * MAX values and het/hom flag — the same per-case dedupe the rebuild does) and
+ * Before the delete, the case's own per-coordinate contribution (its best row
+ * by the representative order and its het/hom flag — the rebuild's per-case
+ * step) and
  * its per-gene row counts/coordinates are copied into temp tables.
  *
  * After the delete:
- *  - variant summary: a row keeps its MAX-aggregated annotation columns when
- *    the case's value was below the stored maximum (or NULL), or when some
- *    remaining carrier row still holds every value the case provided — then
- *    only carrier/het/hom counts are decremented (rows reaching 0 carriers are
- *    dropped). Otherwise the coordinate is recomputed from the remaining
- *    variants with the full rebuild's own INSERT-SELECT, restricted by key,
- *    followed by the rebuild's per-case annotation flag step for those keys.
+ *  - variant summary: a row keeps its representative annotation unless the
+ *    case's best row WAS the representative and no remaining carrier row equals
+ *    it — then only carrier/het/hom counts are decremented (rows reaching 0
+ *    carriers are dropped). Otherwise the coordinate is recomputed from the
+ *    remaining variants with the full rebuild's own INSERT-SELECT, restricted
+ *    by key, followed by the rebuild's per-case annotation flag step for those
+ *    keys.
  *    The cohort frequency needs no upkeep although its denominator (the
  *    build's case count) changed: readers derive it (cohort-frequency-sql.ts).
  *  - gene burden: variant_count -= the case's rows, affected_case_count -= 1,

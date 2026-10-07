@@ -4,13 +4,27 @@
  * Used by CohortSummaryService (main thread), import-worker, delete-worker,
  * and rebuild-summary-worker. Single source of truth to avoid SQL drift.
  */
+import {
+  REPRESENTATIVE_COLUMNS,
+  representativeColumnList,
+  representativeOrderBy
+} from './cohort-representative'
+
+const HET = "('0/1','1/0','0|1','1|0')"
+const HOM = "('1/1','1|1')"
+const SUMMARY_KEY = ['chr', 'pos', 'ref', 'alt', 'variant_type', 'genome_build'] as const
 
 /**
  * INSERT-SELECT that (re)computes cohort_variant_summary rows from `variants`.
- * `variantFilter` is appended after the `JOIN cases` of the per-case dedupe
- * step (e.g. a `WHERE (v.chr, v.pos, v.ref, v.alt) IN (...)` restriction);
- * the empty string recomputes every coordinate. One template for the full
+ * `variantFilter` is appended after the `JOIN cases` of the per-case step
+ * (e.g. a `WHERE (v.chr, v.pos, v.ref, v.alt) IN (...)` restriction); the
+ * empty string recomputes every coordinate. One template for the full
  * rebuild and the per-coordinate incremental path keeps the two in lockstep.
+ *
+ * Per summary key the annotation columns and the two severity ranks are those
+ * of ONE carrier row, the first in the representative order (#469,
+ * cohort-representative.ts). A case counts once per key whatever number of
+ * rows it has there: `case_rows` keeps its best row and its genotype.
  *
  * `cohort_frequency` is deliberately not written (it stays NULL): readers
  * derive it from carrier_count and the build's case count — see
@@ -19,18 +33,13 @@
 export function variantSummaryInsertSql(variantFilter = ''): string {
   return `
   INSERT INTO cohort_variant_summary (
-    chr, pos, ref, alt, end_pos, gene_symbol, cdna, aa_change,
-    consequence, func, clinvar, gnomad_af, cadd,
-    transcript, omim_mim_number,
+    chr, pos, ref, alt, ${REPRESENTATIVE_COLUMNS.join(', ')},
     carrier_count, het_count, hom_count,
     has_star, has_comment, acmg_best,
     variant_key, variant_type, genome_build
   )
   SELECT
-    d.chr, d.pos, d.ref, d.alt, d.end_pos,
-    d.gene_symbol, d.cdna, d.aa_change,
-    d.consequence, d.func, d.clinvar, d.gnomad_af, d.cadd,
-    d.transcript, d.omim_mim_number,
+    d.chr, d.pos, d.ref, d.alt, ${representativeColumnList('d')},
     d.carrier_count, d.het_count, d.hom_count,
     CASE WHEN va.starred = 1 THEN 1 ELSE 0 END,
     CASE WHEN va.global_comment IS NOT NULL AND va.global_comment != '' THEN 1 ELSE 0 END,
@@ -38,32 +47,28 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
     d.chr || ':' || d.pos || ':' || d.ref || ':' || d.alt,
     d.variant_type, d.genome_build
   FROM (
-    WITH deduped AS (
-      SELECT v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type,
-        c.genome_build,
-        MAX(v.gene_symbol) AS gene_symbol, MAX(v.cdna) AS cdna,
-        MAX(v.aa_change) AS aa_change, MAX(v.consequence) AS consequence,
-        MAX(v.func) AS func, MAX(v.clinvar) AS clinvar,
-        MAX(v.gnomad_af) AS gnomad_af, MAX(v.cadd) AS cadd,
-        MAX(v.transcript) AS transcript, MAX(v.omim_mim_number) AS omim_mim_number,
-        MAX(v.gt_num) AS gt_num,
-        MAX(v.end_pos) AS end_pos
+    WITH case_rows AS (
+      SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build, v.case_id,
+        ${representativeColumnList('v')},
+        MAX(v.gt_num) OVER case_key AS gt_num,
+        ROW_NUMBER() OVER (case_key ORDER BY ${representativeOrderBy('v', 'sqlite')}) AS case_rn
       FROM variants v
       JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'${variantFilter}
-      GROUP BY v.chr, v.pos, v.ref, v.alt, v.case_id, v.variant_type, c.genome_build
+      WINDOW case_key AS (
+        PARTITION BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build, v.case_id
+      )
+    ),
+    key_rows AS (
+      SELECT r.*,
+        COUNT(*) OVER summary_key AS carrier_count,
+        SUM(CASE WHEN r.gt_num IN ${HET} THEN 1 ELSE 0 END) OVER summary_key AS het_count,
+        SUM(CASE WHEN r.gt_num IN ${HOM} THEN 1 ELSE 0 END) OVER summary_key AS hom_count,
+        ROW_NUMBER() OVER (summary_key ORDER BY ${representativeOrderBy('r', 'sqlite')}) AS key_rn
+      FROM case_rows r
+      WHERE r.case_rn = 1
+      WINDOW summary_key AS (PARTITION BY ${SUMMARY_KEY.map((column) => `r.${column}`).join(', ')})
     )
-    SELECT chr, pos, ref, alt, variant_type, genome_build,
-      MAX(end_pos) AS end_pos,
-      MAX(gene_symbol) AS gene_symbol, MAX(cdna) AS cdna,
-      MAX(aa_change) AS aa_change, MAX(consequence) AS consequence,
-      MAX(func) AS func, MAX(clinvar) AS clinvar,
-      MAX(gnomad_af) AS gnomad_af, MAX(cadd) AS cadd,
-      MAX(transcript) AS transcript, MAX(omim_mim_number) AS omim_mim_number,
-      COUNT(*) AS carrier_count,
-      SUM(CASE WHEN gt_num IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END) AS het_count,
-      SUM(CASE WHEN gt_num IN ('1/1','1|1') THEN 1 ELSE 0 END) AS hom_count
-    FROM deduped
-    GROUP BY chr, pos, ref, alt, variant_type, genome_build
+    SELECT * FROM key_rows WHERE key_rn = 1
   ) d
   LEFT JOIN variant_annotations va
     ON va.chr = d.chr AND va.pos = d.pos AND va.ref = d.ref AND va.alt = d.alt;
@@ -198,30 +203,37 @@ export const MARK_STALE_SQL = `
 export const CHECK_TABLE_EXISTS_SQL =
   "SELECT COUNT(*) as c FROM sqlite_master WHERE type='table' AND name='cohort_variant_summary'"
 
+/**
+ * Legacy per-case add of CohortSummaryService.incrementalAdd: counters only
+ * for known variants, the case's best row for new ones. Its caller flags the
+ * summary stale, so the next rebuild settles the representative.
+ */
 export const INCREMENTAL_ADD_SQL = `
   INSERT INTO cohort_variant_summary (
-    chr, pos, ref, alt, end_pos, gene_symbol, cdna, aa_change,
-    consequence, func, clinvar, gnomad_af, cadd,
-    transcript, omim_mim_number,
+    chr, pos, ref, alt, ${REPRESENTATIVE_COLUMNS.join(', ')},
     carrier_count, het_count, hom_count,
     has_star, has_comment, acmg_best,
     variant_key, variant_type, genome_build
   )
   SELECT
-    v.chr, v.pos, v.ref, v.alt, MAX(v.end_pos),
-    MAX(v.gene_symbol), MAX(v.cdna), MAX(v.aa_change),
-    MAX(v.consequence), MAX(v.func), MAX(v.clinvar),
-    MAX(v.gnomad_af), MAX(v.cadd), MAX(v.transcript), MAX(v.omim_mim_number),
+    d.chr, d.pos, d.ref, d.alt, ${representativeColumnList('d')},
     1,
-    CASE WHEN MAX(v.gt_num) IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END,
-    CASE WHEN MAX(v.gt_num) IN ('1/1','1|1') THEN 1 ELSE 0 END,
+    CASE WHEN d.gt_num IN ${HET} THEN 1 ELSE 0 END,
+    CASE WHEN d.gt_num IN ${HOM} THEN 1 ELSE 0 END,
     0, 0, NULL,
-    v.chr || ':' || v.pos || ':' || v.ref || ':' || v.alt,
-    v.variant_type, c.genome_build
-  FROM variants v
-  JOIN cases c ON c.id = v.case_id
-  WHERE v.case_id = ?
-  GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build
+    d.chr || ':' || d.pos || ':' || d.ref || ':' || d.alt,
+    d.variant_type, d.genome_build
+  FROM (
+    SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
+      ${representativeColumnList('v')},
+      MAX(v.gt_num) OVER case_key AS gt_num,
+      ROW_NUMBER() OVER (case_key ORDER BY ${representativeOrderBy('v', 'sqlite')}) AS rn
+    FROM variants v
+    JOIN cases c ON c.id = v.case_id
+    WHERE v.case_id = ?
+    WINDOW case_key AS (PARTITION BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build)
+  ) d
+  WHERE d.rn = 1
   ON CONFLICT(chr, pos, ref, alt, variant_type, genome_build) DO UPDATE SET
     carrier_count = cohort_variant_summary.carrier_count + 1,
     het_count = cohort_variant_summary.het_count + excluded.het_count,

@@ -3,10 +3,10 @@
  * (issue #461: a transcript switch rewrites gene_symbol / consequence / func /
  * cdna / aa_change / transcript).
  *
- * `cohort_variant_summary` stores, per coordinate, the NULL-safe MAX() of each
- * annotation column over all carrier rows — the rule of the full rebuild
- * (`variantSummaryInsertSql`). An edited row may raise a maximum or have been
- * the only holder of one, so the coordinate's rows are recomputed from
+ * `cohort_variant_summary` shows, per coordinate, the annotation of its most
+ * severe carrier row (#469, shared/sql/cohort-representative.ts) — the rule of
+ * the full rebuild (`variantSummaryInsertSql`). An edited row may become that
+ * row or stop being it, so the coordinate's rows are recomputed from
  * `variants` with the rebuild's own INSERT-SELECT restricted to that
  * coordinate, and its annotation flags re-derived the same way. Carrier counts
  * come out unchanged because the row set did not change.
