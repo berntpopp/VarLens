@@ -417,6 +417,23 @@ describe('useShellLifecycle', () => {
       expect(ctx.refreshCases).toHaveBeenCalledTimes(1)
     })
 
+    it('reloads from the job snapshot when the completion event of its own batch is lost', () => {
+      // The web adapter then settles the wizard's promise by polling, but the
+      // shell only hears about the end through the job.
+      const ctx = setup('run-1')
+      ctx.emitJob(job({ params: { runId: 'run-1' }, progress: { current: 8, total: 8 } }))
+      expect(ctx.refreshCases).not.toHaveBeenCalled()
+
+      ctx.emitJob(job({ params: { runId: 'run-1' }, status: 'completed' }))
+      expect(ctx.refreshCases).toHaveBeenCalledTimes(1)
+      expect(ctx.incrementDataGeneration).toHaveBeenCalledTimes(1)
+
+      // A completion event that arrives late after all does not reload again.
+      ctx.emitComplete({ runId: 'run-1', succeeded: 8, failed: 0, skipped: 0, details: [] })
+      ctx.emitJob(job({ params: { runId: 'run-1' }, status: 'completed' }))
+      expect(ctx.refreshCases).toHaveBeenCalledTimes(1)
+    })
+
     it('ignores other kinds of jobs', () => {
       const ctx = setup()
       ctx.emitJob(job({ kind: 'case_delete', status: 'completed' }))

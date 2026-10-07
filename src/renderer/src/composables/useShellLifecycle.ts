@@ -113,6 +113,8 @@ export function useShellLifecycle({
       // Consume ownership here, after accepting the event. ImportWizard uses
       // its own run ID, so listener order cannot suppress its terminal update.
       importStore.clearBatchRun(result.runId)
+      // The job snapshot may already have reloaded for this run (see below).
+      if (finishedOwnRuns.has(result.runId)) return
       finishedOwnRuns.add(result.runId)
       void handleBatchImportComplete()
     })
@@ -129,10 +131,21 @@ export function useShellLifecycle({
     return api.jobs.onChanged((job: Job) => {
       if (job.kind !== 'import_batch') return
       const runId = (job.params as { runId?: unknown } | undefined)?.runId
+      const active = job.status === 'queued' || job.status === 'running'
       if (typeof runId === 'string') {
-        if (importStore.isCurrentBatchRun(runId) || finishedOwnRuns.has(runId)) return
+        if (finishedOwnRuns.has(runId)) return
+        if (importStore.isCurrentBatchRun(runId)) {
+          // Our own batch reports through its run events while it runs. Its
+          // end is taken from the job as well: the completion event can be
+          // lost (the wizard's promise then settles by polling), and the
+          // reload must not depend on it.
+          if (active) return
+          finishedOwnRuns.add(runId)
+          void handleBatchImportComplete()
+          return
+        }
       }
-      if (job.status === 'queued' || job.status === 'running') {
+      if (active) {
         const done = job.progress?.current ?? 0
         if (done > (followedJobProgress.get(job.id) ?? 0)) {
           followedJobProgress.set(job.id, done)
