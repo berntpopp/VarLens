@@ -1,99 +1,64 @@
-import { ref, watch, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
+import { useQuery } from '@pinia/colada'
 import type { TranscriptAnnotation, TranscriptInsertRow } from '../../../shared/types/transcript'
-import { useApiService } from './useApiService'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { unwrapIpcResult } from '../../../shared/types/errors'
+import { queryApi } from '../queries/gate'
+import { refetchAfterWrite } from '../queries/invalidation'
+import { queryKeys } from '../queries/keys'
+import { transcriptsQuery } from '../queries/transcripts'
+import { formatError } from '../utils/ipc-result'
 
 /**
- * Composable for loading and switching variant transcripts.
+ * The transcripts of one variant, and switching the selected one.
  *
- * @param variantId - reactive variant ID (null when no variant selected)
- * @returns transcripts list, loading state, and switch function
+ * Reads come from the query cache (`queries/transcripts.ts`) and follow the
+ * variant passed in; `null` reads nothing. A switch resolves once the list has
+ * been refetched.
  */
 export function useTranscripts(variantId: Ref<number | null>) {
-  const { api } = useApiService()
-  const transcripts = ref<TranscriptAnnotation[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-  let currentToken = 0
+  // While another variant loads, the previous list stays in place (flagged as
+  // loading) so the details panel does not collapse and grow again.
+  const {
+    data,
+    asyncStatus,
+    error: loadError
+  } = useQuery(() => ({
+    ...transcriptsQuery(variantId.value),
+    placeholderData: (previous: TranscriptAnnotation[] | undefined) => previous
+  }))
+  const transcripts = computed<TranscriptAnnotation[]>(() =>
+    variantId.value === null ? [] : (data.value ?? [])
+  )
+  const loading = computed(() => asyncStatus.value === 'loading')
 
-  async function loadTranscripts(id: number): Promise<void> {
-    const token = ++currentToken
-    if (!api) return
-    loading.value = true
-    error.value = null
-    try {
-      const result = unwrapIpcResult(await api.transcripts.list(id))
-      if (token !== currentToken || id !== variantId.value) return
-      transcripts.value = result
-    } catch (e) {
-      if (token !== currentToken || id !== variantId.value) return
-      error.value =
-        e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)
-      transcripts.value = []
-    } finally {
-      if (token === currentToken && id === variantId.value) {
-        loading.value = false
-      }
-    }
-  }
-
-  async function switchTranscript(transcriptId: string): Promise<boolean> {
-    if (!api || variantId.value === null) return false
-    const targetVariantId = variantId.value
-    try {
-      unwrapIpcResult(await api.transcripts.switch(targetVariantId, transcriptId))
-      // Reload to get updated state if variant hasn't changed
-      if (variantId.value === targetVariantId) {
-        await loadTranscripts(targetVariantId)
-      }
-      return true
-    } catch (e) {
-      if (variantId.value === targetVariantId) {
-        error.value =
-          e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)
-      }
-      return false
-    }
-  }
-
-  async function insertAndSwitch(transcript: TranscriptInsertRow): Promise<boolean> {
-    if (!api || variantId.value === null) return false
-    const targetVariantId = variantId.value
-    try {
-      unwrapIpcResult(await api.transcripts.insertAndSwitch(targetVariantId, transcript))
-      if (variantId.value === targetVariantId) {
-        await loadTranscripts(targetVariantId)
-      }
-      return true
-    } catch (e) {
-      if (variantId.value === targetVariantId) {
-        error.value =
-          e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)
-      }
-      return false
-    }
-  }
-
-  watch(
-    variantId,
-    async (newId) => {
-      if (newId !== null) {
-        await loadTranscripts(newId)
-      } else {
-        currentToken++
-        transcripts.value = []
-        loading.value = false
-        error.value = null
-      }
-    },
-    { immediate: true }
+  const writeError = ref<string | null>(null)
+  watch(variantId, () => (writeError.value = null))
+  const error = computed(
+    () => writeError.value ?? (loadError.value === null ? null : formatError(loadError.value))
   )
 
-  return {
-    transcripts,
-    loading,
-    error,
-    switchTranscript,
-    insertAndSwitch
+  /** Run a write for the current variant; false if it failed or none is selected. */
+  async function write(run: (variantId: number) => Promise<unknown>): Promise<boolean> {
+    const target = variantId.value
+    if (target === null) return false
+    const key = queryKeys.transcripts(target)
+    try {
+      unwrapIpcResult(await run(target))
+      await refetchAfterWrite(key)
+      return true
+    } catch (e) {
+      if (variantId.value === target) writeError.value = formatError(e)
+      return false
+    }
   }
+
+  function switchTranscript(transcriptId: string): Promise<boolean> {
+    return write((target) => queryApi().transcripts.switch(target, transcriptId))
+  }
+
+  function insertAndSwitch(transcript: TranscriptInsertRow): Promise<boolean> {
+    return write((target) => queryApi().transcripts.insertAndSwitch(target, transcript))
+  }
+
+  return { transcripts, loading, error, switchTranscript, insertAndSwitch }
 }

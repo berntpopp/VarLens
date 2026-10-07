@@ -9,55 +9,51 @@
  * Used by VariantDetailsPanel to fetch and display enrichment data.
  */
 
-import { ref, computed } from 'vue'
-import type {
-  VepFetchResult,
-  MyVariantFetchResult,
-  SpliceAIFetchResult,
-  MyVariantScores,
-  SpliceAIScores
-} from '../../../shared/types/api-enrichment'
+import { computed, nextTick, shallowRef } from 'vue'
+import { useQuery } from '@pinia/colada'
+import type { MyVariantScores, SpliceAIScores } from '../../../shared/types/api-enrichment'
 import type { VepTranscriptConsequence, VepColocatedVariant } from '../../../shared/types/vep'
-import { useApiService } from './useApiService'
+import {
+  myvariantQuery,
+  spliceaiQuery,
+  vepQuery,
+  type EnrichmentTarget
+} from '../queries/enrichment'
+import { canQueryFeature } from '../queries/gate'
 import { useCapabilityStore } from '../stores/capabilityStore'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { formatError } from '../utils/ipc-result'
 
 export function useVepEnrichment() {
-  const { api } = useApiService()
   // VEP / MyVariant / SpliceAI are external lookups, `pending` in web until the
-  // admin egress policy lands (parity manifest): skip a disabled provider.
+  // admin egress policy lands (parity manifest): a disabled provider is skipped.
   const capabilities = useCapabilityStore()
 
-  function formatError(error: unknown, fallback: string): string {
-    if (isIpcError(error)) {
-      return error.userMessage ?? error.message
-    }
-    return error instanceof Error ? error.message : fallback
-  }
+  /** The variant the user asked to annotate; nothing is fetched before that. */
+  const requested = shallowRef<EnrichmentTarget | null>(null)
+  const vep = useQuery(() => vepQuery(requested.value))
+  const myvariant = useQuery(() => myvariantQuery(requested.value))
+  const spliceai = useQuery(() => spliceaiQuery(requested.value))
 
-  // VEP data
-  const vepData = ref<VepFetchResult | null>(null)
-  const vepLoading = ref(false)
-  const vepError = ref<string | null>(null)
+  const vepData = computed(() => vep.data.value ?? null)
+  // A failing MyVariant or SpliceAI lookup only leaves its scores empty.
+  const myvariantData = computed(() => myvariant.data.value ?? null)
+  const spliceaiData = computed(() => spliceai.data.value ?? null)
 
-  // MyVariant data (REVEL, AlphaMissense)
-  const myvariantData = ref<MyVariantFetchResult | null>(null)
-  const myvariantLoading = ref(false)
-
-  // SpliceAI data
-  const spliceaiData = ref<SpliceAIFetchResult | null>(null)
-  const spliceaiLoading = ref(false)
-
-  // Generation counter to guard against stale async results
-  let fetchGeneration = 0
-
-  // Combined loading state
+  const vepLoading = computed(() => vep.asyncStatus.value === 'loading')
+  const myvariantLoading = computed(() => myvariant.asyncStatus.value === 'loading')
+  const spliceaiLoading = computed(() => spliceai.asyncStatus.value === 'loading')
   const isLoading = computed(
     () => vepLoading.value || myvariantLoading.value || spliceaiLoading.value
   )
 
-  // Combined error
-  const error = computed(() => vepError.value)
+  const vepError = computed<string | null>(() => {
+    if (requested.value === null) return null
+    const unavailable = capabilities.capabilityReason('vepEnrichment')
+    if (unavailable !== null) return unavailable
+    if (vep.error.value !== null) return formatError(vep.error.value, 'VEP fetch failed')
+    return vepData.value !== null && !vepData.value.success ? vepData.value.error : null
+  })
+  const error = vepError
 
   // Computed properties from vepData
   const isOffline = computed(() => {
@@ -121,85 +117,23 @@ export function useVepEnrichment() {
   )
   const spliceaiMaxDelta = computed<number | null>(() => spliceaiScores.value?.max_delta ?? null)
 
-  /**
-   * Clear all enrichment data (call on variant change).
-   * Increments the generation counter so any in-flight fetchVep()
-   * from a previous variant will discard its results.
-   */
+  /** Forget the request (call on variant change); a late answer is not shown. */
   function clearData(): void {
-    fetchGeneration++
-    vepData.value = null
-    vepLoading.value = false
-    vepError.value = null
-    myvariantData.value = null
-    myvariantLoading.value = false
-    spliceaiData.value = null
-    spliceaiLoading.value = false
+    requested.value = null
   }
 
-  /**
-   * Fetch all enrichment data for a variant in parallel
-   */
+  /** Annotate a variant with every enabled provider; resolves when all are done. */
   async function fetchVep(chr: string, pos: number, ref: string, alt: string): Promise<void> {
-    if (!api) return
-
-    // Capture current generation so we can detect if the variant changed mid-flight
-    const thisGeneration = ++fetchGeneration
-
-    // Reset state
-    vepLoading.value = true
-    myvariantLoading.value = true
-    spliceaiLoading.value = true
-    vepError.value = null
-    vepData.value = null
-    myvariantData.value = null
-    spliceaiData.value = null
-
-    // Fetch all enabled providers in parallel
-    const vepReason = capabilities.capabilityReason('vepEnrichment')
-    const [vepResult, myvariantResult, spliceaiResult] = await Promise.allSettled([
-      vepReason === null ? api.vep.fetch(chr, pos, ref, alt) : Promise.reject(new Error(vepReason)),
-      capabilities.canUse('myvariantEnrichment') ? api.myvariant.fetch(chr, pos, ref, alt) : null,
-      capabilities.canUse('spliceaiEnrichment') ? api.spliceai.fetch(chr, pos, ref, alt) : null
+    const target = { chr, pos, ref, alt }
+    requested.value = target
+    await nextTick()
+    if (requested.value !== target) return
+    // An explicit refresh ignores `enabled`, so the gates are checked here too.
+    await Promise.all([
+      canQueryFeature('vepEnrichment') && vep.refresh(),
+      canQueryFeature('myvariantEnrichment') && myvariant.refresh(),
+      canQueryFeature('spliceaiEnrichment') && spliceai.refresh()
     ])
-
-    // Discard results if the variant changed while we were fetching
-    if (fetchGeneration !== thisGeneration) return
-
-    // Process VEP result
-    if (vepResult.status === 'fulfilled') {
-      try {
-        vepData.value = unwrapIpcResult(vepResult.value)
-        if (!vepData.value.success) {
-          vepError.value = vepData.value.error
-        }
-      } catch (error) {
-        vepError.value = formatError(error, 'VEP fetch failed')
-      }
-    } else {
-      vepError.value = formatError(vepResult.reason, 'VEP fetch failed')
-    }
-    vepLoading.value = false
-
-    // Process myvariant result
-    if (myvariantResult.status === 'fulfilled' && myvariantResult.value !== null) {
-      try {
-        myvariantData.value = unwrapIpcResult(myvariantResult.value)
-      } catch {
-        myvariantData.value = null
-      }
-    }
-    myvariantLoading.value = false
-
-    // Process SpliceAI result
-    if (spliceaiResult.status === 'fulfilled' && spliceaiResult.value !== null) {
-      try {
-        spliceaiData.value = unwrapIpcResult(spliceaiResult.value)
-      } catch {
-        spliceaiData.value = null
-      }
-    }
-    spliceaiLoading.value = false
   }
 
   return {
