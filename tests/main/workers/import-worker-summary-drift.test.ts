@@ -17,6 +17,8 @@ import { runMigrations } from '../../../src/main/database/migrations'
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
 import { MARK_STALE_SQL } from '../../../src/shared/sql/cohort-summary-rebuild'
 import { runImportSession } from '../../../src/main/workers/import-worker'
+import { openSummaryRemovalForDelete } from '../../../src/main/workers/delete-operations'
+import { rebuildCohortSummary } from '../../../src/main/workers/worker-db'
 import type { MainMessage, WorkerMessage } from '../../../src/shared/types/import-worker'
 import { referenceSummary, snapshotSummary, summaryMeta } from './support/summary-reference'
 
@@ -453,6 +455,66 @@ describe('import worker: per-file cohort summary upkeep', () => {
     expect(
       db.prepare('SELECT gene_symbol FROM cohort_variant_summary WHERE pos = 100').get()
     ).toEqual({ gene_symbol: 'ZZZ' })
+  })
+
+  it('does not count a half-imported case twice when a full rebuild lands mid-file', async () => {
+    await seedAnnotatedCohort()
+
+    // A manual rebuild, a delete job's rebuild or a startup rebuild: it counts
+    // S1's committed first row and reports the summary current.
+    const { messages, observed } = await runSessionWithMidFileWrite(
+      [request('S1'), request('S2')],
+      () => rebuildCohortSummary(db)
+    )
+
+    expect(statuses(messages)).toEqual(['S1:success', 'S2:success'])
+    expectNeverSilentlyWrong(observed)
+    expectSettledExact()
+    expect(carriersAt(100)).toBe(4)
+    expect(carriersAt(400)).toBe(1)
+  })
+
+  it('leaves no phantom carrier when the half-imported case is then cancelled', async () => {
+    await seedAnnotatedCohort()
+
+    const { messages } = await runSessionWithMidFileWrite(
+      [request('S1'), request('S2')],
+      () => rebuildCohortSummary(db),
+      { cancelAfterWrite: true }
+    )
+
+    expect(statuses(messages)).toEqual(['S1:skipped', 'S2:skipped'])
+    expect(db.prepare("SELECT 1 FROM cases WHERE name = 'S1'").get()).toBeUndefined()
+    expectSettledExact()
+    expect(carriersAt(100)).toBe(2) // S0 and OLD; the rebuild had counted S1 too
+  })
+
+  it('makes a case delete rebuild instead of patching while a file is in flight', async () => {
+    await seedAnnotatedCohort()
+    const old = db.prepare("SELECT id FROM cases WHERE name = 'OLD'").get() as { id: number }
+    let patchedMidSession: boolean | undefined
+
+    const { messages, observed } = await runSessionWithMidFileWrite(
+      [request('S1'), request('S2')],
+      () => {
+        // The delete worker's decision, then its fallback: delete, rebuild.
+        patchedMidSession = openSummaryRemovalForDelete(db, false) !== null
+        db.exec(MARK_STALE_SQL)
+        db.prepare('DELETE FROM case_variant_annotations WHERE case_id = ?').run(old.id)
+        db.prepare('DELETE FROM variants WHERE case_id = ?').run(old.id)
+        db.prepare('DELETE FROM cases WHERE id = ?').run(old.id)
+        rebuildCohortSummary(db)
+      }
+    )
+
+    expect(patchedMidSession).toBe(false)
+    expect(statuses(messages)).toEqual(['S1:success', 'S2:success'])
+    expectNeverSilentlyWrong(observed)
+    expectSettledExact()
+    expect(carriersAt(100)).toBe(3) // S0, S1, S2
+    // With no session open the delete patches the summary again.
+    expect(openSummaryRemovalForDelete(db, false)).not.toBeNull()
+    expect(openSummaryRemovalForDelete(db, true)).toBeNull()
   })
 
   it('rebuilds a stale summary once at session start, then continues incrementally', async () => {

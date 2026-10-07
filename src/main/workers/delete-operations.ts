@@ -1,6 +1,10 @@
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { VariantFrequencyService } from '../database/VariantFrequencyService'
-import type { CaseSummaryRemoval } from '../database/cohort-summary-case-removal'
+import { isImportSessionOpen } from '../database/cohort-summary-case-add'
+import {
+  openCaseSummaryRemoval,
+  type CaseSummaryRemoval
+} from '../database/cohort-summary-case-removal'
 
 /**
  * Delete operations extracted from delete-worker for testability.
@@ -28,6 +32,23 @@ export interface IncrementalDeleteOptions {
 export interface IncrementalDeleteResult {
   deleted: number
   cancelled: boolean
+}
+
+/**
+ * Incremental summary upkeep for a delete job, or null when the job must end
+ * with one full rebuild instead: delete-all, a stale or missing summary, or an
+ * import session that is open (or died open). The removal recomputes
+ * coordinates from the remaining variants, which include the half-inserted
+ * case of a running import; that case would then be counted a second time
+ * when the session merges it (cohort-summary-case-add.ts).
+ */
+export function openSummaryRemovalForDelete(
+  db: DatabaseType,
+  deletingAll: boolean
+): CaseSummaryRemoval | null {
+  if (deletingAll) return null
+  const removal = openCaseSummaryRemoval(db)
+  return removal !== null && isImportSessionOpen(db) ? null : removal
 }
 
 const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))

@@ -26,10 +26,18 @@
  * stale or interrupted at session start is flagged stale and rebuilt once
  * before the first file; if that rebuild fails the flag stays and the session
  * is not exact.
- * Writers outside the session never patch the summary while the marker is
- * set — a half-inserted case is visible to them and would be counted twice —
- * they flag it stale instead (cohort-summary-coordinate-recompute.ts); the
- * session sees the flag at its next file and stops merging.
+ * Writers outside the session (insert batches commit one by one, so they see
+ * a half-inserted case) can therefore not make the session count it twice:
+ *  - incremental writers never patch the summary while the marker is set —
+ *    they flag it stale instead (transcript switch:
+ *    cohort-summary-coordinate-recompute.ts; case delete:
+ *    `openSummaryRemovalForDelete`, which falls back to a full rebuild); the
+ *    session sees the flag in its next merge transaction and stops merging;
+ *  - a full rebuild clears the marker, which the session notices in its next
+ *    write transaction (`keepSessionOpen`): it flags the summary stale again
+ *    and stops merging.
+ * In both cases one rebuild at the session's end restores exactness, and a
+ * session that dies first leaves the stale flag or the marker behind.
  * Any failure falls back to the old behaviour: mark stale, rebuild at the end
  * — and so does a session whose remaining files are cheaper to rebuild once
  * than to merge one by one ({@link UpkeepPolicy}).
@@ -64,9 +72,18 @@ export interface ImportSummarySession {
    */
   addCase(caseId: number, filesAfterThis?: number): void
   /**
+   * Delete a case of this session that never reached {@link addCase}
+   * (cancelled or failed mid-file). Its rows are in no summary the session
+   * wrote, but a full rebuild from outside may have counted them: that is
+   * detected here, in the delete's transaction.
+   */
+  discardCase(deleteCase: () => void): void
+  /**
    * Call inside every transaction that inserts variants. A full rebuild from
    * outside the session clears the open-session marker; this puts it back
-   * together with the rows that rebuild did not see.
+   * together with the rows that rebuild did not see — and, because such a
+   * rebuild counted whatever part of the current case was committed, flags
+   * the summary stale and ends incremental upkeep for the session.
    */
   keepSessionOpen(): void
   /** Orderly session end: rebuild if upkeep was abandoned, ANALYZE, clear the marker. */
@@ -121,6 +138,7 @@ const NO_SUMMARY: ImportSummarySession = {
   isExact: () => false,
   replaceCase: (_caseId, deleteCase) => deleteCase(),
   addCase: () => undefined,
+  discardCase: (deleteCase) => deleteCase(),
   keepSessionOpen: () => undefined,
   finish: () => undefined
 }
@@ -159,6 +177,24 @@ export function openImportSummarySession(
     exact = !isCohortSummaryStale(db)
   } catch (e) {
     degrade('session start', e)
+  }
+
+  /**
+   * Must run inside a write transaction. The marker is only ever removed by a
+   * completed full rebuild (UPDATE_META_SQL), so finding it gone means one ran
+   * since the session's last write. That rebuild saw the committed part of the
+   * case in flight and reported the summary current: merging the case would
+   * count it twice, deleting it would leave a phantom carrier. Either way the
+   * summary is flagged again, atomically with the write that makes it wrong.
+   */
+  const keepSessionOpen = (): void => {
+    if (!stmts || stmts.keepSessionOpen.run().changes === 0) return
+    db.exec(MARK_STALE_SQL)
+    if (!exact) return
+    exact = false
+    options.onWarning(
+      'Cohort summary was rebuilt outside the import session; rebuilding at session end'
+    )
   }
 
   let removal: CaseSummaryRemoval | null = null
@@ -225,6 +261,7 @@ export function openImportSummarySession(
         // IMMEDIATE: the staleness check below must not be a snapshot older
         // than the write lock.
         db.transaction(() => {
+          keepSessionOpen()
           if (isCohortSummaryStale(db)) {
             // Flagged from outside the session (an edit that could not patch
             // the summary while files are in flight): stop merging onto it.
@@ -260,9 +297,15 @@ export function openImportSummarySession(
       }
     },
 
-    keepSessionOpen() {
-      stmts?.keepSessionOpen.run()
+    discardCase(deleteCase) {
+      if (!stmts) return deleteCase()
+      db.transaction(() => {
+        keepSessionOpen()
+        deleteCase()
+      }).immediate()
     },
+
+    keepSessionOpen,
 
     finish() {
       try {

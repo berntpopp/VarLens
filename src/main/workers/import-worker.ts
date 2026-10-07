@@ -245,7 +245,7 @@ export async function runImportSession(
           if (isCancelled()) {
             // Cancelled mid-file: the case holds only part of its file. Remove
             // it rather than reporting a truncated case as a successful import.
-            stmts.deleteCase.run(caseId)
+            summary.discardCase(() => stmts.deleteCase.run(caseId))
             results.push({
               filePath: file.filePath,
               fileName,
@@ -307,7 +307,7 @@ export async function runImportSession(
           }
           port.postMessage(fileCompleteMsg)
         } catch (importError) {
-          stmts.deleteCase.run(caseId)
+          summary.discardCase(() => stmts.deleteCase.run(caseId))
           throw importError
         }
       } catch (error) {
