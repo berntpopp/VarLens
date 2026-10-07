@@ -8,7 +8,12 @@ import { DATABASE_CONFIG } from '../../shared/config'
 import { detectFormat } from '../import/format-detection'
 import { resolveBatchSize } from '../import/bounded-batcher'
 import { openImportSummarySession } from '../database/cohort-summary-case-add'
-import { openWorkerDatabase, rebuildFts, rebuildCohortSummary } from './worker-db'
+import {
+  checkpointBetweenFiles,
+  openWorkerDatabase,
+  rebuildFts,
+  rebuildCohortSummary
+} from './worker-db'
 import {
   finalizeInterruptedImportFts,
   postTerminalMessageAfterCleanup,
@@ -265,6 +270,7 @@ export async function runImportSession(
           // The file's rows are committed and it was not cancelled: merge it
           // into the cohort summary before anyone is told the file is done.
           summary.addCase(caseId)
+          checkpointBetweenFiles(db)
 
           const elapsed = Date.now() - startTime
 
