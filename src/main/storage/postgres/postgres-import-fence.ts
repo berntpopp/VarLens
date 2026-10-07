@@ -214,8 +214,26 @@ async function advanceImportGeneration(client: Queryable, schema: string): Promi
  * nothing was written. The caller owns COMMIT / ROLLBACK afterwards.
  *
  * The generation is read in its own statement, after the lock is held, so
- * that under READ COMMITTED it sees every recovery that held the fence
- * before. Inside one statement the read could precede the lock.
+ * that under READ COMMITTED it sees every generation committed before the
+ * lock was granted. Inside one statement the read could precede the lock.
+ *
+ * Why this is sufficient, whatever the lock queue does:
+ *  - a transaction that read the old generation took the fence before that
+ *    read. Recovery requests the fence exclusively only after its advance
+ *    has committed, so it waits for that transaction: a shared holder blocks
+ *    the cleanup.
+ *  - a transaction that takes the fence later reads the committed advance
+ *    and is refused here.
+ *
+ * Whether `pg_try_advisory_xact_lock_shared` is refused while an exclusive
+ * request is only WAITING is not part of that argument, and the manual does
+ * not promise it: "This will either obtain the lock immediately and return
+ * true, or return false without waiting if the lock cannot be acquired
+ * immediately" (PostgreSQL docs, 9.28.10 "Advisory Lock Functions"; 13.3.5
+ * "Advisory Locks" says nothing about queue order either). PostgreSQL does
+ * refuse it today (a request that conflicts with a waiter queues behind it;
+ * observed on 18.3 in postgres-import-fence-locks.test.ts), which only means
+ * recovery is not delayed by transactions that would be refused anyway.
  */
 export async function beginFencedImportTransaction(
   client: Queryable,
