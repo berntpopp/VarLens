@@ -36,7 +36,6 @@ describe('Migration v38: drop the cohort_frequency index', () => {
   })
 
   it('a new database has the column but no index on it', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBeGreaterThanOrEqual(38)
     expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
     expect(summaryIndexes()).not.toContain('idx_cvs_cohort_freq')
     expect(summaryColumns()).toContain('cohort_frequency')
@@ -67,5 +66,17 @@ describe('Migration v38: drop the cohort_frequency index', () => {
     // Re-running is a no-op.
     runMigrations(db)
     expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
+  })
+
+  it('is the step from 37 to 38 exactly: a database already at 38 is not touched by it', () => {
+    // Same index, but on a database that has the v38 step behind it. If the
+    // drop were gated on any other version it would disappear here too.
+    db.exec('CREATE INDEX idx_cvs_cohort_freq ON cohort_variant_summary(cohort_frequency)')
+    db.pragma('user_version = 38')
+
+    runMigrations(db)
+
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
+    expect(summaryIndexes()).toContain('idx_cvs_cohort_freq')
   })
 })
