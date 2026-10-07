@@ -4,7 +4,8 @@ import {
   buildPaddedPanelIntervals,
   mergeOverlappingIntervals,
   PanelRegionsUnavailableError,
-  resolvePanelGeneRegions
+  resolvePanelGeneRegions,
+  resolvePanelGeneStatus
 } from '../../../src/shared/filters/panel-intervals'
 import { ErrorCode } from '../../../src/shared/types/errors'
 
@@ -107,5 +108,79 @@ describe('resolvePanelGeneRegions', () => {
       expect(typed.userMessage).toContain('GRCh37')
       expect(typed.userMessage).toMatch(/cannot be applied/)
     }
+  })
+})
+
+describe('resolvePanelGeneStatus', () => {
+  const coordinates = { chromosome: '7', start_pos: 100, end_pos: 200 }
+  const lookup =
+    (mapped: string[]) =>
+    (hgncIds: string[]): Map<string, typeof coordinates> =>
+      new Map(hgncIds.filter((id) => mapped.includes(id)).map((id) => [id, coordinates]))
+
+  it('lists the genes without coordinates for the build, sorted by symbol', () => {
+    expect(
+      resolvePanelGeneStatus(
+        [
+          { hgnc_id: 'HGNC:3', symbol: 'ZNF1' },
+          { hgnc_id: 'HGNC:1', symbol: 'BRCA1' },
+          { hgnc_id: 'HGNC:2', symbol: 'ABC1' }
+        ],
+        'GRCh37',
+        lookup(['HGNC:1'])
+      )
+    ).toEqual({
+      genomeBuild: 'GRCh37',
+      totalGenes: 3,
+      unmappedCount: 2,
+      unmappedGenes: [
+        { hgncId: 'HGNC:2', symbol: 'ABC1' },
+        { hgncId: 'HGNC:3', symbol: 'ZNF1' }
+      ]
+    })
+  })
+
+  it('counts a gene shared by several panels once', () => {
+    const status = resolvePanelGeneStatus(
+      [
+        { hgnc_id: 'HGNC:9', symbol: 'TTN' },
+        { hgnc_id: 'HGNC:9', symbol: 'TTN' },
+        { hgnc_id: 'HGNC:1', symbol: 'BRCA1' }
+      ],
+      'GRCh38',
+      lookup(['HGNC:1'])
+    )
+    expect(status.totalGenes).toBe(2)
+    expect(status.unmappedGenes).toEqual([{ hgncId: 'HGNC:9', symbol: 'TTN' }])
+  })
+
+  it('reports nothing unmapped when every gene resolves, and for a panel without genes', () => {
+    expect(
+      resolvePanelGeneStatus([{ hgnc_id: 'HGNC:1', symbol: 'BRCA1' }], 'GRCh38', lookup(['HGNC:1']))
+    ).toEqual({ genomeBuild: 'GRCh38', totalGenes: 1, unmappedCount: 0, unmappedGenes: [] })
+    expect(resolvePanelGeneStatus([], 'GRCh38', lookup([]))).toEqual({
+      genomeBuild: 'GRCh38',
+      totalGenes: 0,
+      unmappedCount: 0,
+      unmappedGenes: []
+    })
+  })
+
+  it('reports a fully unmapped panel instead of throwing', () => {
+    const status = resolvePanelGeneStatus(
+      [{ hgnc_id: 'HGNC:1', symbol: 'BRCA1' }],
+      'T2T-CHM13',
+      lookup([])
+    )
+    expect(status.unmappedCount).toBe(status.totalGenes)
+  })
+
+  it('queries the coordinate lookup for exactly the requested build', () => {
+    const builds: string[] = []
+    resolvePanelGeneStatus([{ hgnc_id: 'HGNC:1', symbol: 'BRCA1' }], 'GRCh37', (ids, build) => {
+      builds.push(build)
+      return lookup([])(ids)
+    })
+    expect(builds).toEqual(['GRCh37'])
   })
 })

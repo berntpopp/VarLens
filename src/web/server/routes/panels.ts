@@ -4,6 +4,7 @@ import {
   PanelAppSearchSchema,
   PanelCreateSchema,
   PanelIdSchema,
+  PanelResolutionStatusSchema,
   PanelUpdateSchema,
   StringDbGenerateSchema,
   ValidateSymbolsSchema
@@ -35,6 +36,21 @@ export function buildPanelOverrides(): Record<string, OverrideHandler> {
           return { error: 'invalid-panel-id' }
         }
         return await getPanelWithGenes(validated.data, () => session)
+      }
+    },
+
+    // Which active-panel genes have no coordinates for the build (the warning
+    // next to a panel-filtered table). Validated like desktop, then the same
+    // read-executor task.
+    'panels:resolutionStatus': {
+      async handle(args, _request, reply, { session }) {
+        const validated = PanelResolutionStatusSchema.safeParse(args[0])
+        if (!validated.success) {
+          return badRequest(reply, 'invalid-panel-resolution-status', 'Invalid request')
+        }
+        return await session
+          .getReadExecutor()
+          .execute({ type: 'panels:resolutionStatus', params: [validated.data] })
       }
     },
 

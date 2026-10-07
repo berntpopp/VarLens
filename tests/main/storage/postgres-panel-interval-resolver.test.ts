@@ -169,6 +169,94 @@ describe('PostgresPanelIntervalResolver', () => {
   })
 })
 
+describe('PostgresPanelIntervalResolver.getResolutionStatus', () => {
+  beforeEach(() => {
+    geneReferenceMocks.getCoordinatesForGenes.mockReset()
+    geneReferenceMocks.getCoordinatesForGenes.mockImplementation(
+      (hgncIds: string[]) =>
+        new Map(
+          hgncIds
+            .filter((id) => id === 'HGNC:1100')
+            .map((id) => [id, { chromosome: '17', start_pos: 1, end_pos: 2 }])
+        )
+    )
+  })
+
+  const PANEL_GENES = {
+    rows: [
+      { hgnc_id: 'HGNC:9', symbol: 'ZZZ1' },
+      { hgnc_id: 'HGNC:1100', symbol: 'BRCA1' },
+      { hgnc_id: 'HGNC:8', symbol: 'AAA1' }
+    ]
+  }
+
+  it('uses the build of the case and names the unmapped genes in symbol order', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ genome_build: 'GRCh37' }] })
+      .mockResolvedValueOnce(PANEL_GENES)
+    const resolver = new PostgresPanelIntervalResolver({ query } as never, 'tenant')
+
+    expect(await resolver.getResolutionStatus({ panelIds: [3, 4], caseId: 42 })).toEqual({
+      genomeBuild: 'GRCh37',
+      totalGenes: 3,
+      unmappedCount: 2,
+      unmappedGenes: [
+        { hgncId: 'HGNC:8', symbol: 'AAA1' },
+        { hgncId: 'HGNC:9', symbol: 'ZZZ1' }
+      ]
+    })
+    expect(sqlOf(query.mock.calls[0])).toContain('FROM "tenant"."cases" WHERE id = $1')
+    expect(query.mock.calls[0][1]).toEqual([42])
+    expect(sqlOf(query.mock.calls[1])).toContain('FROM "tenant"."panel_genes"')
+    expect(query.mock.calls[1][1]).toEqual([[3, 4]])
+    expect(geneReferenceMocks.getCoordinatesForGenes).toHaveBeenCalledWith(
+      expect.arrayContaining(['HGNC:9', 'HGNC:1100', 'HGNC:8']),
+      'GRCh37'
+    )
+  })
+
+  it('prefers the requested build (cohort view) and skips the case lookup', async () => {
+    const query = vi.fn().mockResolvedValueOnce(PANEL_GENES)
+    const resolver = new PostgresPanelIntervalResolver({ query } as never, 'public')
+
+    const status = await resolver.getResolutionStatus({
+      panelIds: [3],
+      caseId: 42,
+      genomeBuild: 'T2T-CHM13'
+    })
+
+    expect(status.genomeBuild).toBe('T2T-CHM13')
+    expect(query).toHaveBeenCalledTimes(1)
+  })
+
+  it('defaults to GRCh38 for an unknown case and runs no gene query without panels', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] })
+    const resolver = new PostgresPanelIntervalResolver({ query } as never, 'public')
+
+    expect(await resolver.getResolutionStatus({ panelIds: [], caseId: 7 })).toEqual({
+      genomeBuild: 'GRCh38',
+      totalGenes: 0,
+      unmappedCount: 0,
+      unmappedGenes: []
+    })
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(geneReferenceMocks.getCoordinatesForGenes).not.toHaveBeenCalled()
+  })
+
+  it('propagates a gene reference failure instead of reporting "all mapped"', async () => {
+    geneReferenceMocks.getCoordinatesForGenes.mockImplementation(() => {
+      throw new Error('gene reference unavailable')
+    })
+    const query = vi.fn().mockResolvedValueOnce(PANEL_GENES)
+    const resolver = new PostgresPanelIntervalResolver({ query } as never, 'public')
+
+    await expect(
+      resolver.getResolutionStatus({ panelIds: [3], genomeBuild: 'GRCh38' })
+    ).rejects.toThrow('gene reference unavailable')
+  })
+})
+
 describe('shared numeric column-filter keys', () => {
   it('match the numeric PostgreSQL column definitions plus the cohort aggregates', () => {
     const postgresNumeric = Object.values(POSTGRES_VARIANT_COLUMN_DEFINITIONS)

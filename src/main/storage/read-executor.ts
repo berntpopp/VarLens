@@ -1,6 +1,7 @@
 import type { SortItem, VariantFilter } from '../../shared/types/database'
 import type { VariantPageRequest } from '../../shared/types/variant-paging'
 import type { CohortSearchParams } from '../../shared/types/cohort'
+import type { PanelResolutionRequest } from '../../shared/types/panels'
 import type { ValidatedCaseSearchParams } from '../../shared/types/ipc-schemas'
 import type { VariantCoords, VariantKey } from '../ipc/handlers/annotations-logic'
 import type { AuditQueryParams } from './audit-log-types'
@@ -83,6 +84,7 @@ export type StorageReadTask =
   | { type: 'panels:get'; params: [panelId: number] }
   | { type: 'panels:getGenes'; params: [panelId: number] }
   | { type: 'panels:activeForCase'; params: [caseId: number] }
+  | { type: 'panels:resolutionStatus'; params: [request: PanelResolutionRequest] }
   | { type: 'gene-lists:list'; params: [] }
   | { type: 'gene-lists:getGenes'; params: [listId: number] }
   | { type: 'region-files:list'; params: [] }

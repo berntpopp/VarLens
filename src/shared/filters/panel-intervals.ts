@@ -16,7 +16,9 @@
  *   regions" here would show every variant while the user believes a panel is
  *   active.
  * - Some genes have coordinates → their regions; genes without coordinates in
- *   that build are left out.
+ *   that build are left out of the restriction. The query still runs, so the
+ *   left-out genes are reported separately by {@link resolvePanelGeneStatus}
+ *   (`panels:resolutionStatus`) and shown to the user as a warning.
  *
  * Matching a variant against a region is an OVERLAP test, written identically
  * in every query builder:
@@ -24,7 +26,7 @@
  *   chr = region.chr AND pos <= region.end AND COALESCE(end_pos, pos) >= region.start
  */
 import { ErrorCode } from '../types/errors'
-import type { GenomicInterval } from '../types/panels'
+import type { GenomicInterval, PanelResolutionStatus } from '../types/panels'
 
 /** Padding applied around each panel gene when the filter does not carry one. */
 export const DEFAULT_PANEL_PADDING_BP = 5000
@@ -142,4 +144,65 @@ export function resolvePanelGeneRegions(
   const intervals = buildPaddedPanelIntervals(coordinates.values(), paddingBp, chrPrefix)
   if (intervals.length === 0) throw new PanelRegionsUnavailableError(hgncIds.length, genomeBuild)
   return intervals
+}
+
+/**
+ * The genome build a resolution-status request refers to: the explicitly
+ * selected build (cohort view), else the build of the case (case view), else
+ * the default — the same order the variant and cohort queries use.
+ */
+export function panelStatusGenomeBuild(
+  requestedBuild: string | null | undefined,
+  caseBuild: string | null | undefined
+): string {
+  if (requestedBuild != null && requestedBuild !== '') return requestedBuild
+  if (caseBuild != null && caseBuild !== '') return caseBuild
+  return DEFAULT_PANEL_GENOME_BUILD
+}
+
+/** The slice of a `panel_genes` row that the resolution status needs. */
+export interface PanelGeneIdentity {
+  hgnc_id: string
+  symbol: string
+}
+
+/** Code-unit ordering: identical on every backend, platform and locale. */
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+/**
+ * Report which genes of the active panel(s) have no coordinates in
+ * `genomeBuild` — the genes {@link resolvePanelGeneRegions} leaves out. Uses
+ * the same coordinate lookup, so "unmapped" here is exactly "not restricted
+ * on" there. Never throws for unmapped genes: a fully unmapped panel is
+ * reported as `unmappedCount === totalGenes`.
+ *
+ * @param genes Every gene row of the active panel(s); a gene that is in
+ *              several panels is counted once.
+ */
+export function resolvePanelGeneStatus(
+  genes: readonly PanelGeneIdentity[],
+  genomeBuild: string,
+  getCoordinates: PanelGeneCoordinateLookup
+): PanelResolutionStatus {
+  const symbolByHgncId = new Map<string, string>()
+  for (const gene of genes) {
+    const known = symbolByHgncId.get(gene.hgnc_id)
+    if (known === undefined || compareText(gene.symbol, known) < 0) {
+      symbolByHgncId.set(gene.hgnc_id, gene.symbol)
+    }
+  }
+  const hgncIds = [...symbolByHgncId.keys()]
+  const mapped = hgncIds.length === 0 ? new Map() : getCoordinates(hgncIds, genomeBuild)
+  const unmappedGenes = hgncIds
+    .filter((hgncId) => !mapped.has(hgncId))
+    .map((hgncId) => ({ hgncId, symbol: symbolByHgncId.get(hgncId) as string }))
+    .sort((a, b) => compareText(a.symbol, b.symbol) || compareText(a.hgncId, b.hgncId))
+  return {
+    genomeBuild,
+    totalGenes: hgncIds.length,
+    unmappedCount: unmappedGenes.length,
+    unmappedGenes
+  }
 }

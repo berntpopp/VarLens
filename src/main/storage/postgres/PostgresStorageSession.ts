@@ -18,6 +18,7 @@ import { PostgresHealthDiagnostics } from './PostgresHealthDiagnostics'
 import type { PostgresHealthDiagnosticResult } from './PostgresHealthDiagnostics'
 import { PostgresImportExecutor } from './PostgresImportExecutor'
 import { PostgresOverviewRepository } from './PostgresOverviewRepository'
+import { PostgresPanelIntervalResolver } from './postgres-panel-interval-resolver'
 import { PostgresPanelsRepository } from './PostgresPanelsRepository'
 import { PostgresReadExecutor } from './PostgresReadExecutor'
 import { PostgresShortlistService } from './PostgresShortlistService'
@@ -183,6 +184,7 @@ export class PostgresStorageSession implements StorageSession {
       annotations,
       commentsMetrics,
       panels,
+      panelStatus: new PostgresPanelIntervalResolver(options.pool, options.config.schema),
       filterPresets,
       shortlist,
       analysisGroups,

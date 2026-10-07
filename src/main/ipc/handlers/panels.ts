@@ -6,6 +6,7 @@ import {
   PanelGenesSchema,
   PanelActivateSchema,
   PanelDeactivateSchema,
+  PanelResolutionStatusSchema,
   ValidateSymbolsSchema,
   AutocompleteSchema,
   PanelDuplicateSchema,
@@ -234,6 +235,24 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
           .execute({ type: 'panels:activeForCase', params: [validated.data] })
       }
       return getActivePanelsForCase(validated.data, getDb)
+    })
+  })
+
+  ipcMain.handle('panels:resolutionStatus', async (_event, request: unknown) => {
+    return wrapHandler(async () => {
+      const validated = PanelResolutionStatusSchema.safeParse(request)
+      if (!validated.success) {
+        mainLogger.error(
+          `Invalid panels:resolutionStatus request: ${validated.error.message}`,
+          'panels'
+        )
+        throw new Error('Invalid panel resolution status request')
+      }
+      // Both backends serve this through their read executor.
+      return await getDbManager()
+        .getCurrentSession()
+        .getReadExecutor()
+        .execute({ type: 'panels:resolutionStatus', params: [validated.data] })
     })
   })
 

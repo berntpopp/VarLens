@@ -1,6 +1,7 @@
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
 import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
+import { panelStatusGenomeBuild } from '../../../shared/filters/panel-intervals'
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
 
 export class SqliteReadExecutor implements StorageReadExecutor {
@@ -299,6 +300,25 @@ export class SqliteReadExecutor implements StorageReadExecutor {
 
       case 'panels:activeForCase':
         return this.databaseService.panels.getActivePanelsForCase(task.params[0])
+
+      case 'panels:resolutionStatus': {
+        // Main thread on purpose: one indexed read per panel gene against the
+        // gene reference DB the main process already holds open.
+        const [request] = task.params
+        // A raw read, not `cases.getCase`: an unknown case falls back to the
+        // default build exactly as on PostgreSQL instead of throwing.
+        const caseRow =
+          request.genomeBuild === undefined && request.caseId !== undefined
+            ? (this.databaseService.database
+                .prepare('SELECT genome_build FROM cases WHERE id = ?')
+                .get(request.caseId) as { genome_build: string | null } | undefined)
+            : undefined
+        return this.databaseService.panels.getResolutionStatus(
+          request.panelIds,
+          panelStatusGenomeBuild(request.genomeBuild, caseRow?.genome_build),
+          getGeneReferenceDb()
+        )
+      }
 
       case 'gene-lists:list':
         if (this.dbPool !== null)

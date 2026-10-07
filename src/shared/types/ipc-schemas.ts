@@ -621,6 +621,16 @@ export const PanelActivateSchema = z.object({
 })
 
 /**
+ * Schema for panels:resolutionStatus — which active-panel genes have no
+ * coordinates for the genome build (case's build, or the cohort's selection).
+ */
+export const PanelResolutionStatusSchema = z.object({
+  panelIds: z.array(z.number().int().positive()).max(1000),
+  caseId: z.number().int().positive().optional(),
+  genomeBuild: z.string().min(1).max(64).optional()
+})
+
+/**
  * Schema for deactivating a panel on a case
  */
 export const PanelDeactivateSchema = z.object({

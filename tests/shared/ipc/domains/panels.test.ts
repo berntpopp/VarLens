@@ -120,6 +120,12 @@ describe('panels preload domain behavior', () => {
         updated_at: 1000000
       })
       .mockResolvedValueOnce({ success: true, path: '/tmp/export.bed' })
+      .mockResolvedValueOnce({
+        genomeBuild: 'GRCh37',
+        totalGenes: 2,
+        unmappedCount: 1,
+        unmappedGenes: [{ hgncId: 'HGNC:2', symbol: 'GENE2' }]
+      })
 
     vi.doMock('electron', () => ({
       ipcRenderer: { invoke }
@@ -300,6 +306,16 @@ describe('panels preload domain behavior', () => {
       networkType: 'physical'
     })
     expect(invoke).toHaveBeenNthCalledWith(17, 'panels:export-bed', 1, 'GRCh38', 5000)
+
+    // resolutionStatus: the request object is forwarded untouched
+    await expect(api.resolutionStatus({ panelIds: [1], caseId: 7 })).resolves.toMatchObject({
+      unmappedCount: 1,
+      unmappedGenes: [{ hgncId: 'HGNC:2', symbol: 'GENE2' }]
+    })
+    expect(invoke).toHaveBeenNthCalledWith(18, 'panels:resolutionStatus', {
+      panelIds: [1],
+      caseId: 7
+    })
   })
 
   it('preload index preserves panels transport results when exposing window.api', async () => {

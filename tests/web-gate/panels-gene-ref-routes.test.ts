@@ -64,6 +64,39 @@ describe('web gene panel routes', () => {
     expect(reply.code).toHaveBeenCalledWith(400)
   })
 
+  test('panels:resolutionStatus validates the request and runs the read-executor task', async () => {
+    const { deps, reply, execute } = makeDeps()
+    const result = await buildPanelOverrides()['panels:resolutionStatus'].handle(
+      [{ panelIds: [3, 4], caseId: 9 }],
+      request as never,
+      reply as never,
+      deps
+    )
+    expect(reply.code).not.toHaveBeenCalled()
+    expect(execute).toHaveBeenCalledWith({
+      type: 'panels:resolutionStatus',
+      params: [{ panelIds: [3, 4], caseId: 9 }]
+    })
+    expect(result).toEqual({
+      task: { type: 'panels:resolutionStatus', params: [{ panelIds: [3, 4], caseId: 9 }] }
+    })
+  })
+
+  test('panels:resolutionStatus rejects a malformed request with 400', async () => {
+    for (const bad of [undefined, { panelIds: ['x'] }, { panelIds: [1], caseId: -1 }]) {
+      const { deps, reply, execute } = makeDeps()
+      reply.code = vi.fn()
+      await buildPanelOverrides()['panels:resolutionStatus'].handle(
+        [bad],
+        request as never,
+        reply as never,
+        deps
+      )
+      expect(reply.code).toHaveBeenCalledWith(400)
+      expect(execute).not.toHaveBeenCalled()
+    }
+  })
+
   test('gene-lists:setGenes rejects symbols the gene reference does not know', async () => {
     const { deps, reply, writeExecute } = makeDeps()
     reply.code = vi.fn()

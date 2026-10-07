@@ -28,11 +28,17 @@ import type { Pool } from 'pg'
 import {
   DEFAULT_PANEL_GENOME_BUILD,
   DEFAULT_PANEL_PADDING_BP,
-  resolvePanelGeneRegions
+  panelStatusGenomeBuild,
+  resolvePanelGeneRegions,
+  resolvePanelGeneStatus
 } from '../../../shared/filters/panel-intervals'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
 import type { VariantFilter } from '../../../shared/types/database'
-import type { GenomicInterval } from '../../../shared/types/panels'
+import type {
+  GenomicInterval,
+  PanelResolutionRequest,
+  PanelResolutionStatus
+} from '../../../shared/types/panels'
 import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
 import { mainLogger } from '../../services/MainLogger'
 import { quoteIdentifier } from './identifiers'
@@ -118,6 +124,39 @@ export class PostgresPanelIntervalResolver {
         chrPrefix: result.rows[0]?.chr?.startsWith('chr') ?? false
       }
     })
+  }
+
+  /**
+   * Which genes of the requested panels have no coordinates in the genome
+   * build and are therefore left out of the resolved regions. Read-only
+   * counterpart of the resolution above (`panels:resolutionStatus`): same
+   * panel-gene set, same build precedence, same coordinate lookup, and the
+   * same answer as `PanelRepository.getResolutionStatus` on SQLite.
+   */
+  async getResolutionStatus(request: PanelResolutionRequest): Promise<PanelResolutionStatus> {
+    let caseBuild: string | null = null
+    if (request.genomeBuild === undefined && request.caseId !== undefined) {
+      const caseResult = await this.pool.query<{ genome_build: string | null }>(
+        `SELECT genome_build FROM ${this.schemaName}."cases" WHERE id = $1`,
+        [request.caseId]
+      )
+      caseBuild = caseResult.rows[0]?.genome_build ?? null
+    }
+    const genomeBuild = panelStatusGenomeBuild(request.genomeBuild, caseBuild)
+    const genes =
+      request.panelIds.length === 0
+        ? []
+        : (
+            await this.pool.query<{ hgnc_id: string; symbol: string }>(
+              `SELECT DISTINCT hgnc_id, symbol
+               FROM ${this.schemaName}."panel_genes"
+               WHERE panel_id = ANY($1::bigint[])`,
+              [request.panelIds]
+            )
+          ).rows
+    return resolvePanelGeneStatus(genes, genomeBuild, (hgncIds, build) =>
+      getGeneReferenceDb().getCoordinatesForGenes(hgncIds, build)
+    )
   }
 
   private async resolve<T extends PanelRequest>(

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
+const geneReference = vi.hoisted(() => ({ getCoordinatesForGenes: vi.fn() }))
+vi.mock('../../../src/main/database/geneReferenceLoader', () => ({
+  getGeneReferenceDb: () => geneReference
+}))
+
 import { SqliteReadExecutor } from '../../../src/main/storage/sqlite/SqliteReadExecutor'
 import type { ValidatedCaseSearchParams } from '../../../src/shared/types/ipc-schemas'
 
@@ -205,5 +210,62 @@ describe('SqliteReadExecutor', () => {
       expected
     )
     expect(databaseService.transcripts.getVariantTranscripts).toHaveBeenCalledWith(42)
+  })
+
+  describe('panels:resolutionStatus', () => {
+    const expected = { genomeBuild: 'x', totalGenes: 1, unmappedCount: 0, unmappedGenes: [] }
+
+    function makeExecutor(caseBuild: string | null | undefined): {
+      executor: SqliteReadExecutor
+      getResolutionStatus: ReturnType<typeof vi.fn>
+      prepare: ReturnType<typeof vi.fn>
+    } {
+      const getResolutionStatus = vi.fn().mockReturnValue(expected)
+      const prepare = vi.fn().mockReturnValue({
+        get: vi
+          .fn()
+          .mockReturnValue(caseBuild === undefined ? undefined : { genome_build: caseBuild })
+      })
+      const databaseService = { panels: { getResolutionStatus }, database: { prepare } }
+      return {
+        executor: new SqliteReadExecutor(databaseService as never, null),
+        getResolutionStatus,
+        prepare
+      }
+    }
+
+    it('resolves against the genome build of the case', async () => {
+      const { executor, getResolutionStatus } = makeExecutor('GRCh37')
+
+      await expect(
+        executor.execute({
+          type: 'panels:resolutionStatus',
+          params: [{ panelIds: [3], caseId: 9 }]
+        })
+      ).resolves.toBe(expected)
+      expect(getResolutionStatus).toHaveBeenCalledWith([3], 'GRCh37', geneReference)
+    })
+
+    it('prefers the requested build and does not read the case', async () => {
+      const { executor, getResolutionStatus, prepare } = makeExecutor('GRCh37')
+
+      await executor.execute({
+        type: 'panels:resolutionStatus',
+        params: [{ panelIds: [3], caseId: 9, genomeBuild: 'GRCh38' }]
+      })
+      expect(getResolutionStatus).toHaveBeenCalledWith([3], 'GRCh38', geneReference)
+      expect(prepare).not.toHaveBeenCalled()
+    })
+
+    it('falls back to GRCh38 for an unknown case or a case without a build', async () => {
+      for (const caseBuild of [undefined, null]) {
+        const { executor, getResolutionStatus } = makeExecutor(caseBuild)
+        await executor.execute({
+          type: 'panels:resolutionStatus',
+          params: [{ panelIds: [3], caseId: 9 }]
+        })
+        expect(getResolutionStatus).toHaveBeenCalledWith([3], 'GRCh38', geneReference)
+      }
+    })
   })
 })

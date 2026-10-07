@@ -108,6 +108,7 @@ import type { PerfSnapshot } from './perf'
 import type { CasesDomainContract } from '../ipc/domains/cases'
 import type { DatabaseDomainContract } from '../ipc/domains/database'
 import type { DebugApi } from '../ipc/domains/debug'
+import type { PanelsDomainContract } from '../ipc/domains/panels'
 import type { JobsApi } from '../ipc/domains/jobs'
 import type { ReferenceServicesApi } from '../ipc/domains/reference-services'
 import type { CaseMetadataDomainContract } from '../ipc/domains/case-metadata'
@@ -690,6 +691,7 @@ export interface PanelsAPI {
   ) => Promise<IpcResult<{ success: boolean }>>
   deactivate: (caseId: number, panelId: number) => Promise<IpcResult<{ success: boolean }>>
   activeForCase: (caseId: number) => Promise<IpcResult<ActivePanelRow[]>>
+  resolutionStatus: PanelsDomainContract['resolutionStatus']
   validateSymbols: (symbols: string[]) => Promise<IpcResult<GeneValidationResult[]>>
   autocomplete: (query: string, limit?: number) => Promise<IpcResult<GeneAutocompleteResult[]>>
   searchPanelApp: (

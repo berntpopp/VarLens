@@ -10,6 +10,7 @@ import type { PostgresCommentsMetricsRepository } from './PostgresCommentsMetric
 import type { PostgresExportRepository } from './PostgresExportRepository'
 import type { PostgresFilterPresetsRepository } from './PostgresFilterPresetsRepository'
 import type { PostgresOverviewRepository } from './PostgresOverviewRepository'
+import type { PostgresPanelIntervalResolver } from './postgres-panel-interval-resolver'
 import type { PostgresPanelsRepository } from './PostgresPanelsRepository'
 import type { PostgresShortlistService } from './PostgresShortlistService'
 import type { PostgresTagsRepository } from './PostgresTagsRepository'
@@ -51,6 +52,7 @@ interface PostgresReadExecutorRepositories {
     | 'getGeneListGenes'
     | 'listRegionFiles'
   >
+  panelStatus: Pick<PostgresPanelIntervalResolver, 'getResolutionStatus'>
   filterPresets: Pick<PostgresFilterPresetsRepository, 'listPresets'>
   shortlist: Pick<PostgresShortlistService, 'getShortlist'>
   analysisGroups: Pick<
@@ -243,6 +245,9 @@ export class PostgresReadExecutor implements StorageReadExecutor {
 
       case 'panels:activeForCase':
         return await this.repositories.panels.getActivePanelsForCase(task.params[0])
+
+      case 'panels:resolutionStatus':
+        return await this.repositories.panelStatus.getResolutionStatus(task.params[0])
 
       case 'gene-lists:list':
         return await this.repositories.panels.listGeneLists()

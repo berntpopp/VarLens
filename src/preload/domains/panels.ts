@@ -15,6 +15,7 @@ export function createPanelsApi(): PanelsDomainContract {
       ipcRenderer.invoke('panels:activate', { caseId, panelId, paddingBp }),
     deactivate: (caseId, panelId) => ipcRenderer.invoke('panels:deactivate', { caseId, panelId }),
     activeForCase: (caseId) => ipcRenderer.invoke('panels:active-for-case', caseId),
+    resolutionStatus: (request) => ipcRenderer.invoke('panels:resolutionStatus', request),
     validateSymbols: (symbols) => ipcRenderer.invoke('panels:validate-symbols', { symbols }),
     autocomplete: (query, limit) => ipcRenderer.invoke('panels:autocomplete', { query, limit }),
     searchPanelApp: (keyword, region) =>
