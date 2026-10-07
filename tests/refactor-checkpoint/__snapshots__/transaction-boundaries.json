@@ -68,6 +68,11 @@
       "assignedTo": "seedTransaction"
     },
     {
+      "file": "src/main/database/severity-rank-migration.ts",
+      "callerFunction": "migrateSeverityRanks",
+      "assignedTo": null
+    },
+    {
       "file": "src/main/database/user-roles-migration.ts",
       "callerFunction": "migrateUserRoles",
       "assignedTo": "rebuild"
