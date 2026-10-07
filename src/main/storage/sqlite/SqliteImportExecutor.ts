@@ -171,6 +171,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
             capturedElapsed = msg.result.elapsed
             capturedSkipped = msg.result.skipped ?? 0
             capturedSkipReasons = msg.result.skipReasons ?? []
+            this.invalidateCohortMetadata()
           },
           onComplete: (msg) => {
             this.workerClient = null
@@ -237,6 +238,19 @@ export class SqliteImportExecutor implements StorageImportExecutor {
         reject(err instanceof Error ? err : new Error(String(err)))
       }
     })
+  }
+
+  /**
+   * The worker merged the imported case into the cohort summary (without ever
+   * flagging it stale), so the cohort filter metadata cached from the summary
+   * on the main connection is out of date.
+   */
+  private invalidateCohortMetadata(): void {
+    try {
+      this.getDatabaseService().cohort.invalidateColumnMetaCache()
+    } catch {
+      // The database was closed meanwhile; its cache went with it.
+    }
   }
 
   async importMultiFile(

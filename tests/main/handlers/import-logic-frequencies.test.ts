@@ -29,6 +29,12 @@ vi.mock('../../../src/main/ipc/handlers/import-logic-append', () => ({
   )
 }))
 
+// The append ends with a cohort summary rebuild in a worker thread; that is
+// covered by import-logic-multifile-summary.test.ts.
+vi.mock('../../../src/main/ipc/handlers/cohort-logic', () => ({
+  spawnRebuildWorker: vi.fn(async () => undefined)
+}))
+
 const { startMultiFileImport } = await import('../../../src/main/ipc/handlers/import-logic')
 
 function toVariant([chr, pos, ref, alt]: Coord): ReturnType<typeof makeVariant> {

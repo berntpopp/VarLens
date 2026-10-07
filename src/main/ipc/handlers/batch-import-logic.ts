@@ -22,14 +22,25 @@ import type { FileImportRequest } from '../../../shared/types/import-worker'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { BatchFileComplete, BatchProgress, DuplicateChoice } from '../../../shared/types/api'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
+import { BatchFileEventReporter } from './batch-import-file-events'
+import {
+  invalidateCohortReadCaches,
+  settleCohortSummaryAfterImport,
+  type EmitCohortStale
+} from './cohort-summary-settle'
 
 /** Callbacks for emitting events to the renderer during batch import. */
 export interface BatchImportCallbacks {
   onProgress?: (data: BatchProgress) => void
   onComplete?: (data: BatchImportResult) => void
-  /** One file imported; its case is committed and visible. */
+  /** One file is done (imported, skipped or failed); an imported case is visible now. */
   onFileComplete?: (data: BatchFileComplete) => void
-  onCohortStale?: (data: { is_stale: boolean }) => void
+  /**
+   * The cohort summary is out of date and being rebuilt, then current again.
+   * Not part of a normal batch: the import worker keeps the summary exact
+   * after every file. Only fires when that upkeep failed.
+   */
+  onCohortStale?: EmitCohortStale
 }
 
 // Track current batch import for cancellation
@@ -106,7 +117,9 @@ interface BatchImportParams {
  * The actual worker run is enqueued on the shared {@link jobRunner} under the
  * `import_batch` kind, which enforces single-flight (message "A batch import is
  * already in progress") and routes cancellation to {@link ImportWorkerClient.cancel}.
- * `callbacks.onCohortStale` and the per-file IPC emissions are unchanged.
+ *
+ * The cohort is not flagged stale for the batch: the worker merges each file
+ * into the cohort summary before it reports the file done.
  */
 export async function startBatchImport(
   getDb: () => DatabaseService,
@@ -115,10 +128,9 @@ export async function startBatchImport(
   stripText: string | undefined,
   callbacks: BatchImportCallbacks
 ): Promise<BatchImportResult> {
+  let db: DatabaseService | undefined
   try {
-    const db = getDb()
-
-    callbacks.onCohortStale?.({ is_stale: true })
+    db = getDb()
 
     // Build FileImportRequest array with duplicate info
     const checkResult = checkDuplicates(db, filePaths, stripText)
@@ -130,6 +142,7 @@ export async function startBatchImport(
       duplicateStrategy
     }))
 
+    const database = db
     const handle = jobRunner.enqueue<BatchImportParams, BatchImportResult>(
       'import_batch',
       { files },
@@ -138,7 +151,7 @@ export async function startBatchImport(
         workerClient = client
         ctx.registerCancel(() => client.cancel())
         try {
-          return await runBatchWorker(db, p.files, callbacks, client)
+          return await runBatchWorker(database, p.files, callbacks, client)
         } finally {
           if (workerClient === client) workerClient = null
         }
@@ -147,6 +160,8 @@ export async function startBatchImport(
     return await handle.result
   } catch (error) {
     mainLogger.error(`batch-import:start error: ${error}`, 'import')
+    // A worker that died mid-batch may have left the summary behind.
+    if (db !== undefined) await settleCohortSummaryAfterImport(db, callbacks.onCohortStale)
     return {
       succeeded: 0,
       failed: filePaths.length,
@@ -168,9 +183,7 @@ function formatBatchImportError(error: unknown): string {
 
 /**
  * Run the import worker for a prepared batch and resolve to the aggregated
- * result. The progress / completion / cohort-stale emissions are identical to
- * the pre-JobRunner path; only the single-flight gate and cancellation hook
- * moved up into {@link startBatchImport}.
+ * result, reporting every imported, skipped and failed file on the way.
  */
 function runBatchWorker(
   db: DatabaseService,
@@ -178,6 +191,12 @@ function runBatchWorker(
   callbacks: BatchImportCallbacks,
   client: ImportWorkerClient
 ): Promise<BatchImportResult> {
+  const fileEvents = new BatchFileEventReporter(files, (event) => {
+    // An imported file changed the summary the cohort filter metadata is
+    // cached from; drop it before the renderer is told to refresh.
+    if (event.status === 'success') invalidateCohortReadCaches(db)
+    callbacks.onFileComplete?.(event)
+  })
   return new Promise((resolve, reject) => {
     client.start({
       files,
@@ -185,6 +204,7 @@ function runBatchWorker(
       encryptionKey: db.getEncryptionKey(),
       throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
       onProgress: (msg) => {
+        fileEvents.reached(msg.fileIndex)
         const progress: BatchProgress = {
           currentIndex: msg.fileIndex,
           totalFiles: msg.totalFiles,
@@ -200,21 +220,13 @@ function runBatchWorker(
         callbacks.onProgress?.(progress)
       },
       onFileComplete: (msg) => {
-        // The worker reports imported files only; skipped and failed ones
-        // surface in the final result.
-        callbacks.onFileComplete?.({
-          index: msg.fileIndex,
-          totalFiles: files.length,
-          fileName: basename(files[msg.fileIndex]?.filePath ?? '') || 'unknown',
-          caseName: msg.result.caseName,
-          status: 'success',
-          caseId: msg.result.caseId,
-          variantCount: msg.result.variantCount
-        })
+        fileEvents.imported(msg)
       },
       onComplete: (msg) => {
-        // Internal variant frequency counts are maintained inside the import
-        // worker (per case, on the worker's write connection).
+        // Internal variant frequency counts and the cohort summary are
+        // maintained inside the import worker (per case, on the worker's
+        // write connection).
+        fileEvents.finish(msg.results)
 
         // Send final progress
         callbacks.onProgress?.({
@@ -223,8 +235,6 @@ function runBatchWorker(
           currentFileName: '',
           overallPercent: 100
         })
-
-        callbacks.onCohortStale?.({ is_stale: false })
 
         // Build a plain-data result object. Use JSON round-trip to
         // guarantee structured-clone compatibility.
@@ -245,15 +255,21 @@ function runBatchWorker(
           })
         )
 
-        // Notify renderer globally that import completed
-        callbacks.onComplete?.(batchResult)
-
-        resolve(batchResult)
+        // Normally a no-op beyond dropping cached metadata. If the worker's
+        // summary upkeep fell back and left the summary stale, the renderer
+        // learns it here and the batch ends once the rebuild has run.
+        void settleCohortSummaryAfterImport(db, callbacks.onCohortStale).finally(() => {
+          // Notify renderer globally that import completed
+          callbacks.onComplete?.(batchResult)
+          resolve(batchResult)
+        })
       },
       onError: (msg) => {
         if (msg.fileIndex === -1) {
           // Fatal error
           reject(new Error(msg.error))
+        } else {
+          fileEvents.failed(msg.fileIndex, msg.error)
         }
       }
     })

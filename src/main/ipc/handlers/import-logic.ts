@@ -17,6 +17,7 @@ import { ConflictError } from '../errors'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
 import { VariantFrequencyService } from '../../database/VariantFrequencyService'
+import { rebuildCohortSummaryAfterAppend, type EmitCohortStale } from './cohort-summary-settle'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { StorageImportFileFilters } from '../../storage/import-executor'
 import type { StorageSession } from '../../storage/session'
@@ -68,6 +69,8 @@ export interface ImportCallbacks {
     filePath?: string
     fileName?: string
   }) => void
+  /** A multi-file append rebuilds the cohort summary: stale, progress, current. */
+  onCohortStale?: EmitCohortStale
 }
 
 /** Result of a successful import. */
@@ -195,7 +198,8 @@ export interface MultiFileImportResult {
  *   1. Rebuild FTS index + restore FTS triggers (single pass across all appends)
  *   2. Recompute case variant_count from the variants table atomically
  *   3. Update variant_frequency table
- *   4. Mark cohort_variant_summary as stale (UI/rebuild-worker triggers recompute)
+ *   4. Rebuild the cohort summary (only when files were appended: the worker
+ *      keeps it exact for the first file, the appends are not merged into it)
  *
  * A case-level genome-build lock is enforced: every subsequent file must
  * match the build detected from the first file's header (or match the
@@ -408,8 +412,8 @@ async function startMultiFileImportSqlite(
   // ── End-of-session housekeeping ────────────────────────────────
   // Order matters: refresh variant_count first (it's the authoritative total
   // of the variants table for this case), then update cross-case frequency
-  // counts, then mark the cohort summary stale so the next cohort access
-  // triggers a rebuild. We do this ONCE per session, not per file.
+  // counts, then bring the cohort summary up to date. We do this ONCE per
+  // session, not per file.
   try {
     db.variants.recalculateCaseVariantCount(caseId)
   } catch (e) {
@@ -437,18 +441,11 @@ async function startMultiFileImportSqlite(
     }
   }
 
-  // Mark cohort summary stale so the next cohort access recomputes it.
-  // Triggered only when we actually appended files — the first-file worker
-  // already handles staleness for single-file imports.
+  // The worker merged the first file into the cohort summary; the appended
+  // files went in behind its back, so the summary is out of date for this
+  // case. Flag it and rebuild before the import is reported done.
   if (files.length > 1) {
-    try {
-      db.cohortSummary.markStale()
-    } catch (e) {
-      mainLogger.warn(
-        `Failed to mark cohort summary stale: ${e instanceof Error ? e.message : String(e)}`,
-        'import'
-      )
-    }
+    await rebuildCohortSummaryAfterAppend(db, callbacks.onCohortStale)
   }
 
   return {

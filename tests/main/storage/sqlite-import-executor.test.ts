@@ -14,12 +14,14 @@ describe('SqliteImportExecutor', () => {
       start,
       cancel: vi.fn()
     }
+    const invalidateColumnMetaCache = vi.fn()
     const executor = new SqliteImportExecutor({
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
           getEncryptionKey: () => 'secret',
-          variants: { updateFrequencies: vi.fn() }
+          variants: { updateFrequencies: vi.fn() },
+          cohort: { invalidateColumnMetaCache }
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -50,6 +52,9 @@ describe('SqliteImportExecutor', () => {
       fileIndex: 0,
       result: { caseId: 7, caseName: 'Imported', variantCount: 3, skipped: 0, elapsed: 5 }
     })
+    // The worker merged the case into the cohort summary: metadata cached
+    // from it on the main connection is dropped, and nothing is flagged stale.
+    expect(invalidateColumnMetaCache).toHaveBeenCalledTimes(1)
     callbacks.onComplete({
       type: 'complete',
       results: {
