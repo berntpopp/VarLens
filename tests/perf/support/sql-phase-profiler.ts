@@ -52,6 +52,8 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
 
   // Per-file exact summary upkeep (src/main/database/cohort-summary-case-add-sql.ts).
   [/^UPDATE cohort_variant_summary SET carrier_count/i, 'cohort_add_counts'],
+  [/^INSERT INTO temp\.added_case_coords/i, 'cohort_add_dedupe'],
+  [/^UPDATE cohort_variant_summary SET gene_symbol = CASE/i, 'cohort_add_maxima'],
   [/^INSERT INTO cohort_variant_summary/i, 'cohort_add_upsert'],
   [/^UPDATE cohort_variant_summary/i, 'cohort_add_flags'],
   [/^INSERT INTO temp\.added_case_gene_coords/i, 'gene_add_capture'],

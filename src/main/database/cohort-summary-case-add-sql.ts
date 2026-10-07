@@ -25,11 +25,36 @@ export const IS_IMPORT_SESSION_OPEN_SQL = `
   SELECT 1 FROM cohort_summary_meta
   WHERE key = '${IMPORT_SESSION_OPEN_KEY}' AND value = '1'`
 
+/**
+ * cohort_variant_summary's declared column types: the staged values must carry
+ * the same affinity as the stored ones for the MAX comparison to be the one
+ * the full rebuild makes.
+ */
+const MAX_COLUMN_TYPES: Record<(typeof MAX_COLUMNS)[number], string> = {
+  gene_symbol: 'TEXT',
+  cdna: 'TEXT',
+  aa_change: 'TEXT',
+  consequence: 'TEXT',
+  func: 'TEXT',
+  clinvar: 'TEXT',
+  gnomad_af: 'REAL',
+  cadd: 'REAL',
+  transcript: 'TEXT',
+  omim_mim_number: 'TEXT',
+  end_pos: 'INTEGER'
+}
+
 export const CASE_ADD_TEMP_TABLES_SQL = `
   CREATE TEMP TABLE IF NOT EXISTS added_case_gene_coords (
     gene_symbol TEXT NOT NULL, chr TEXT NOT NULL, pos INTEGER NOT NULL,
     ref TEXT NOT NULL, alt TEXT NOT NULL,
     row_count INTEGER NOT NULL, state INTEGER NOT NULL
+  );
+  CREATE TEMP TABLE IF NOT EXISTS added_case_coords (
+    chr TEXT NOT NULL, pos INTEGER NOT NULL, ref TEXT NOT NULL, alt TEXT NOT NULL,
+    variant_type TEXT NOT NULL,
+    ${MAX_COLUMNS.map((col) => `${col} ${MAX_COLUMN_TYPES[col]}`).join(', ')},
+    het INTEGER NOT NULL, hom INTEGER NOT NULL, summary_rowid INTEGER
   );
   CREATE TEMP TABLE IF NOT EXISTS replaced_case_flag_coords (
     chr TEXT NOT NULL, pos INTEGER NOT NULL, ref TEXT NOT NULL, alt TEXT NOT NULL,
@@ -104,14 +129,41 @@ export const UPSERT_GENE_BURDEN_SQL = `
 /** NULL-safe MAX merge: aggregate MAX() ignores NULL, scalar max() does not. */
 const mergeMax = (col: string): string =>
   `${col} = CASE
-      WHEN excluded.${col} IS NULL THEN cohort_variant_summary.${col}
+      WHEN d.${col} IS NULL THEN cohort_variant_summary.${col}
       WHEN cohort_variant_summary.${col} IS NULL
-        OR excluded.${col} > cohort_variant_summary.${col} THEN excluded.${col}
+        OR d.${col} > cohort_variant_summary.${col} THEN d.${col}
       ELSE cohort_variant_summary.${col} END`
 
 const raisesMax = (col: string): string =>
-  `(excluded.${col} IS NOT NULL AND (cohort_variant_summary.${col} IS NULL
-      OR excluded.${col} > cohort_variant_summary.${col}))`
+  `(d.${col} IS NOT NULL AND (cohort_variant_summary.${col} IS NULL
+      OR d.${col} > cohort_variant_summary.${col}))`
+
+/**
+ * The rebuild's per-case dedupe (MAX of every annotation column and of gt_num
+ * per coordinate and type) for the added case, computed ONCE, together with
+ * the rowid of the summary row it lands on (NULL: no case had this variant
+ * yet). All three merge statements below are driven by it, so the case's
+ * variants are grouped once and the summary's primary key is probed once per
+ * coordinate.
+ */
+export const CAPTURE_CASE_COORDS_SQL = `
+  INSERT INTO temp.added_case_coords (
+    chr, pos, ref, alt, variant_type, ${MAX_COLUMNS.join(', ')}, het, hom, summary_rowid
+  )
+  SELECT d.chr, d.pos, d.ref, d.alt, d.variant_type,
+    ${MAX_COLUMNS.map((col) => `d.${col}`).join(', ')}, d.het, d.hom, s.rowid
+  FROM (
+    SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type,
+      ${MAX_COLUMNS.map((col) => `MAX(v.${col}) AS ${col}`).join(', ')},
+      CASE WHEN MAX(v.gt_num) IN ${HET} THEN 1 ELSE 0 END AS het,
+      CASE WHEN MAX(v.gt_num) IN ${HOM} THEN 1 ELSE 0 END AS hom
+    FROM variants v
+    WHERE v.case_id = @caseId
+    GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type
+  ) d
+  LEFT JOIN cohort_variant_summary s
+    ON s.chr = d.chr AND s.pos = d.pos AND s.ref = d.ref AND s.alt = d.alt
+    AND s.variant_type = d.variant_type AND s.genome_build = @build`
 
 /**
  * Step 1 of the merge: carrier/het/hom += the case's deduped contribution on
@@ -125,26 +177,22 @@ export const INCREMENT_CARRIERS_SQL = `
     carrier_count = carrier_count + 1,
     het_count = het_count + d.het,
     hom_count = hom_count + d.hom
-  FROM (
-    SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type,
-      CASE WHEN MAX(v.gt_num) IN ${HET} THEN 1 ELSE 0 END AS het,
-      CASE WHEN MAX(v.gt_num) IN ${HOM} THEN 1 ELSE 0 END AS hom
-    FROM variants v
-    WHERE v.case_id = @caseId
-    GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type
-  ) d
-  WHERE cohort_variant_summary.chr = d.chr AND cohort_variant_summary.pos = d.pos
-    AND cohort_variant_summary.ref = d.ref AND cohort_variant_summary.alt = d.alt
-    AND cohort_variant_summary.variant_type = d.variant_type
-    AND cohort_variant_summary.genome_build = @build`
+  FROM temp.added_case_coords d
+  WHERE cohort_variant_summary.rowid = d.summary_rowid`
+
+/** Step 2: a NULL-safe MAX merge, only on the rows where the case raises one. */
+export const MERGE_VARIANT_MAXIMA_SQL = `
+  UPDATE cohort_variant_summary SET
+    ${MAX_COLUMNS.map(mergeMax).join(',\n    ')}
+  FROM temp.added_case_coords d
+  WHERE cohort_variant_summary.rowid = d.summary_rowid
+    AND (${MAX_COLUMNS.map(raisesMax).join('\n    OR ')})`
 
 /**
- * Step 2, after INCREMENT_CARRIERS_SQL: the rebuild's per-case dedupe (MAX of
- * every annotation column and of gt_num) for this case only, then either a
- * new row (1 carrier, flags from variant_annotations like the rebuild's LEFT
- * JOIN) or, only where the case raises a stored maximum, a NULL-safe MAX merge.
+ * Step 3: the variants no case had yet become new rows — 1 carrier, flags
+ * from variant_annotations like the rebuild's LEFT JOIN.
  */
-export const UPSERT_VARIANT_SUMMARY_SQL = `
+export const INSERT_NEW_VARIANT_SUMMARY_SQL = `
   INSERT INTO cohort_variant_summary (
     chr, pos, ref, alt, variant_type, genome_build, variant_key,
     ${MAX_COLUMNS.join(', ')},
@@ -157,21 +205,10 @@ export const UPSERT_VARIANT_SUMMARY_SQL = `
     CASE WHEN va.starred = 1 THEN 1 ELSE 0 END,
     CASE WHEN va.global_comment IS NOT NULL AND va.global_comment != '' THEN 1 ELSE 0 END,
     va.acmg_classification
-  FROM (
-    SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type,
-      ${MAX_COLUMNS.map((col) => `MAX(v.${col}) AS ${col}`).join(', ')},
-      CASE WHEN MAX(v.gt_num) IN ${HET} THEN 1 ELSE 0 END AS het,
-      CASE WHEN MAX(v.gt_num) IN ${HOM} THEN 1 ELSE 0 END AS hom
-    FROM variants v
-    WHERE v.case_id = @caseId
-    GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type
-  ) d
+  FROM temp.added_case_coords d
   LEFT JOIN variant_annotations va
     ON va.chr = d.chr AND va.pos = d.pos AND va.ref = d.ref AND va.alt = d.alt
-  WHERE true
-  ON CONFLICT(chr, pos, ref, alt, variant_type, genome_build) DO UPDATE SET
-    ${MAX_COLUMNS.map(mergeMax).join(',\n    ')}
-  WHERE ${MAX_COLUMNS.map(raisesMax).join('\n    OR ')}`
+  WHERE d.summary_rowid IS NULL`
 
 /** Coordinates the case about to be replaced has per-case annotations on. */
 export const CAPTURE_REPLACED_FLAG_COORDS_SQL = `

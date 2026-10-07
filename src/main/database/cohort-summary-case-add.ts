@@ -162,8 +162,11 @@ export function openImportSummarySession(
             s.resolveGeneCoords.run(params)
           }
           s.upsertGeneBurden.run({ build: params.build })
-          s.incrementCarriers.run(params)
-          s.upsertVariantSummary.run(params)
+          db.exec('DELETE FROM temp.added_case_coords')
+          s.captureCaseCoords.run(params)
+          s.incrementCarriers.run()
+          s.mergeVariantMaxima.run()
+          s.insertNewVariantSummary.run({ build: params.build })
           applyPerCaseFlags()
         })()
       } catch (e) {
@@ -194,7 +197,9 @@ function prepareAddStatements(db: DatabaseType) {
     resolveGeneCoords: db.prepare(sql.RESOLVE_GENE_COORDS_SQL),
     upsertGeneBurden: db.prepare(sql.UPSERT_GENE_BURDEN_SQL),
     incrementCarriers: db.prepare(sql.INCREMENT_CARRIERS_SQL),
-    upsertVariantSummary: db.prepare(sql.UPSERT_VARIANT_SUMMARY_SQL),
+    captureCaseCoords: db.prepare(sql.CAPTURE_CASE_COORDS_SQL),
+    mergeVariantMaxima: db.prepare(sql.MERGE_VARIANT_MAXIMA_SQL),
+    insertNewVariantSummary: db.prepare(sql.INSERT_NEW_VARIANT_SUMMARY_SQL),
     captureReplacedFlagCoords: db.prepare(sql.CAPTURE_REPLACED_FLAG_COORDS_SQL),
     resetReplacedFlags: db.prepare(sql.RESET_REPLACED_FLAGS_SQL),
     hasPerCaseAnnotations: db.prepare(sql.HAS_PER_CASE_ANNOTATIONS_SQL)
