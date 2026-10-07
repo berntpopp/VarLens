@@ -20,7 +20,7 @@ vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', ()
   }
 }))
 
-import { runImport } from '../../../src/main/workers/postgres-import-worker'
+import { runImportBehindHealthyFence as runImport } from './support/healthy-import-fence'
 import { POSTGRES_IMPORT_CANCELLATION_MESSAGE } from '../../../src/shared/types/postgres-import-worker'
 
 const TOTAL_ROWS = 5_000

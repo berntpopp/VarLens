@@ -28,7 +28,8 @@ vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', ()
 }))
 
 import { setRecordBytes } from '../../../src/main/import/bounded-batcher'
-import { runImport, type RunImportDeps } from '../../../src/main/workers/postgres-import-worker'
+import type { RunImportDeps } from '../../../src/main/workers/postgres-import-worker'
+import { runImportBehindHealthyFence as runImport } from './support/healthy-import-fence'
 import { ErrorCode } from '../../../src/shared/types/errors'
 import type {
   PostgresImportWorkerOutboundMessage,

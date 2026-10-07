@@ -12,6 +12,15 @@ import {
   VARIANT_TRANSCRIPT_COPY_COLUMNS,
   toNumericId
 } from './postgres-import-columns'
+import {
+  ImportSupersededError,
+  importGenerationParameter,
+  importGenerationUnchangedSql,
+  inFencedImportTransaction,
+  withExclusiveImportFence,
+  type ExclusiveFenceOptions,
+  type ImportFence
+} from './postgres-import-fence'
 import { profilePhase, profileCount } from './postgres-import-profile'
 
 // ---------------------------------------------------------------------------
@@ -84,6 +93,12 @@ export interface PostgresProvisionalImport {
 interface ProvisionalCleanupOptions {
   restoreReady?: boolean
   preserveNewCase?: boolean
+  /**
+   * The operation the cleanup belongs to. A worker cleaning up its own case
+   * passes it, so every cleanup transaction is fenced; recovery passes none,
+   * because it holds the fence exclusively.
+   */
+  fence?: ImportFence
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +116,7 @@ function pickColumns<T extends string>(
   return out
 }
 
-async function inTransaction<T>(
+async function inUnfencedTransaction<T>(
   client: Pick<PoolClient, 'query'>,
   operation: () => Promise<T>
 ): Promise<T> {
@@ -128,7 +143,7 @@ async function inTransaction<T>(
 export class PostgresVcfImportRepository {
   private readonly schemaName: string
 
-  constructor(schema: string) {
+  constructor(private readonly schema: string) {
     this.schemaName = quoteIdentifier(schema)
   }
 
@@ -186,12 +201,32 @@ export class PostgresVcfImportRepository {
     return toNumericId((result.rows[0] as { watermark?: unknown } | undefined)?.watermark ?? 0)
   }
 
+  /**
+   * Publish a provisional case: flip it to `ready`. The flip is conditional
+   * in the statement itself — the case must still be `importing` and, with a
+   * `fence`, the import generation must be unchanged — so a replay, or a case
+   * recovery has cleaned up, is refused instead of silently published.
+   */
   async finishProvisionalImport(
     client: Pick<PoolClient, 'query'>,
     caseId: number,
     fileName: string,
-    importFileType: string
+    importFileType: string,
+    fence?: ImportFence
   ): Promise<void> {
+    const current =
+      fence === undefined ? '' : ` AND ${importGenerationUnchangedSql(fence.schema, 2)}`
+    const flipped = await client.query(
+      `UPDATE ${this.schemaName}."cases_all" SET import_status = 'ready',
+       import_variant_watermark = 0, import_is_new = FALSE
+       WHERE id = $1 AND import_status = 'importing'${current}`,
+      fence === undefined ? [caseId] : [caseId, importGenerationParameter(fence)]
+    )
+    if (flipped.rowCount !== 1) {
+      throw new ImportSupersededError(
+        `Import superseded: case ${caseId} is no longer a provisional case of this operation`
+      )
+    }
     const now = Date.now()
     await client.query(
       `INSERT INTO ${this.schemaName}."case_data_info"
@@ -201,12 +236,6 @@ export class PostgresVcfImportRepository {
          import_file_type = EXCLUDED.import_file_type, updated_at = EXCLUDED.updated_at`,
       [caseId, fileName, importFileType, now]
     )
-    await client.query(
-      `UPDATE ${this.schemaName}."cases_all" SET import_status = 'ready',
-       import_variant_watermark = 0, import_is_new = FALSE
-       WHERE id = $1 AND import_status = 'importing'`,
-      [caseId]
-    )
   }
 
   async cleanupProvisionalImport(
@@ -214,6 +243,13 @@ export class PostgresVcfImportRepository {
     provisional: PostgresProvisionalImport,
     options: ProvisionalCleanupOptions = {}
   ): Promise<void> {
+    const inTransaction = <T>(
+      queryable: Pick<PoolClient, 'query'>,
+      operation: () => Promise<T>
+    ): Promise<T> =>
+      options.fence === undefined
+        ? inUnfencedTransaction(queryable, operation)
+        : inFencedImportTransaction(queryable, options.fence, operation)
     while (true) {
       const deleted = await inTransaction(client, () =>
         client.query(
@@ -243,7 +279,36 @@ export class PostgresVcfImportRepository {
     })
   }
 
-  async recoverInterruptedImports(client: Pick<PoolClient, 'query'>): Promise<void> {
+  /**
+   * Remove what interrupted imports left behind, and supersede them: the
+   * import generation is advanced, so a worker of an older operation that is
+   * still running can no longer write. Returns the new generation.
+   *
+   * Holds the import fence exclusively (a session-level lock) while it
+   * deletes. `client` must therefore be a connection the caller owns: the
+   * import worker's or the batch coordinator's. The fence is released before
+   * this returns; on an error the caller ends the connection.
+   *
+   * A pass that fails is not undone: older operations stay superseded, and
+   * `importing` cases it did not reach stay hidden until the next pass
+   * (postgres-import-fence.ts, "What a recovery that does not finish ...").
+   */
+  async recoverInterruptedImports(
+    client: Pick<PoolClient, 'query'>,
+    options: ExclusiveFenceOptions = {}
+  ): Promise<number> {
+    return withExclusiveImportFence(
+      client,
+      this.schema,
+      async (generation) => {
+        await this.cleanupInterruptedImports(client)
+        return generation
+      },
+      options
+    )
+  }
+
+  private async cleanupInterruptedImports(client: Pick<PoolClient, 'query'>): Promise<void> {
     const result = await client.query(
       `SELECT id, import_variant_watermark, import_is_new
        FROM ${this.schemaName}."cases_all"

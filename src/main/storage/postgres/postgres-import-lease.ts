@@ -9,6 +9,10 @@
  *  - A single-file import takes it on the worker's own connection.
  *  - A parallel batch takes it once, on the batch coordinator's control
  *    connection, and passes that backend's pid to its workers as their lease.
+ *
+ * The lock decides who may start. What a worker that is already running may
+ * still write once its coordinator is lost is decided by the import fence
+ * (postgres-import-fence.ts); the lease carries the generation for it.
  */
 import { PostgresVcfImportRepository } from './PostgresVcfImportRepository'
 interface Queryable {
@@ -74,6 +78,8 @@ export interface ImportLeaseClient extends Queryable {
 export interface ImportLease {
   /** Backend that owns the workspace import lock; workers verify it. */
   holderPid: number
+  /** Import generation of this batch; every worker transaction verifies it. */
+  generation: number
   /** Clean up after every worker has exited, then release the workspace. */
   close: () => Promise<void>
 }
@@ -84,25 +90,29 @@ export interface ImportLease {
  * worker starts. `close` runs the recovery again, which removes the
  * provisional rows of files that were cancelled or crashed, and ends the
  * connection, which releases the lock.
+ *
+ * Lock order: workspace import lock, then the fence (inside each recovery).
+ * Recovery's wait for the fence is bounded; see postgres-import-fence.ts.
  */
 export async function openImportLease(
   client: ImportLeaseClient,
   schema: string
 ): Promise<ImportLease> {
   const repository = new PostgresVcfImportRepository(schema)
-  const recover = (): Promise<void> => repository.recoverInterruptedImports(client as never)
+  const recover = (): Promise<number> => repository.recoverInterruptedImports(client as never)
   await client.connect()
   try {
     // Recovery may wait for a dying worker's backend to release its rows.
     await client.query('SET statement_timeout = 0')
     await client.query('SET lock_timeout = 0')
     await acquireWorkspaceImportLock(client, schema)
-    await recover()
+    const generation = await recover()
     const pidResult = await client.query('SELECT pg_backend_pid() AS pid')
     const holderPid = Number((pidResult.rows[0] as { pid?: unknown } | undefined)?.pid)
     if (!Number.isInteger(holderPid)) throw new Error('Could not determine the lease backend pid')
     return {
       holderPid,
+      generation,
       close: async () => {
         try {
           await recover()

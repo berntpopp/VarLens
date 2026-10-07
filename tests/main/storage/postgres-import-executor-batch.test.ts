@@ -44,6 +44,9 @@ function setup(lockFree = true) {
       sql.push(text)
       if (text.includes('pg_try_advisory_lock')) return { rows: [{ locked: lockFree }] }
       if (text.includes('pg_backend_pid')) return { rows: [{ pid: 4242 }] }
+      // Each recovery advances the import generation (the fence's own
+      // statements are covered in postgres-import-fence.test.ts).
+      if (text.includes("'import_generation'")) return { rows: [{ generation: '9' }] }
       return { rows: [] }
     }),
     end: vi.fn(async () => {
@@ -93,7 +96,7 @@ describe('PostgresImportExecutor.openBatch', () => {
       expect(worker.message).toMatchObject({
         mode: 'single-file',
         schema: 'tenant',
-        lease: { holderPid: 4242 }
+        lease: { holderPid: 4242, generation: 9 }
       })
     }
     workers[1].complete(12)
@@ -160,6 +163,7 @@ describe('PostgresImportExecutor.openBatch', () => {
         query: vi.fn(async (text: string) => {
           if (text.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] }
           if (text.includes('pg_backend_pid')) return { rows: [{ pid: 4242 }] }
+          if (text.includes("'import_generation'")) return { rows: [{ generation: '9' }] }
           return { rows: [] }
         }),
         end: vi.fn(async () => undefined)

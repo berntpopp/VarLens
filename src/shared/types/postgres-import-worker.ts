@@ -78,8 +78,10 @@ export interface PostgresImportWorkerStartMessage {
    * already recovered interrupted imports, so the worker does neither: taking
    * the lock would fail, and recovery would delete its siblings' in-flight
    * provisional cases. The worker only verifies that the lock is really held.
+   * `generation` is the import generation after that recovery: every
+   * transaction of the worker is refused once a later recovery replaced it.
    */
-  lease?: { holderPid: number }
+  lease?: { holderPid: number; generation: number }
 }
 
 export interface PostgresImportWorkerCancelMessage {
