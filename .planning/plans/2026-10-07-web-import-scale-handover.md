@@ -65,13 +65,12 @@ Use `VARLENS_PG_IMPORT_PROFILE=1` and compare per-phase ratios.
   were green when each stage was committed (integration: 6,168 unit tests).
 - Full gated PostgreSQL suite (`make web-gate-postgres-tests`) on integration: 222 passed,
   1 failed; that test was fixed (`b533d4d5`). **The full suite has not been re-run since,
-  and not at all after `d0f63f68`.**
-- **Open at handover:** a 100-sample run on the fixed integration build (schema
-  `web_dev_import_f2`, results in `.planning/artifacts/perf/batch-import/final2-parallel4-100.json`
-  and `pg-import-profile/`) followed by an 8-file overwrite batch. Before `d0f63f68` the
-  integrated build regressed to 758 s for 100 samples (per-sample 2.2 → 11.5 s) and
-  overwrite imports failed with "Query read timeout". Confirm both are gone: expect a flat
-  per-sample interval and 8 × `success`.
+  and not at all after `d0f63f68`.** Run it first.
+- Confirmed after `d0f63f68` (integration build, 4 workers): 100 samples in 387 s with a
+  flat interval (3.2 s → 3.6 s; the regressed build needed 758 s), and an 8-file overwrite
+  batch finished 8 × `success` (115 s). The stage 2 build without gene aggregates did the
+  same 100 samples in about 270 s: publication is serial and now costs ~3.7 s per sample
+  (summary upsert 2.3–4 s, variant frequency 0.8 s), so it bounds throughput.
 - Chrome check done on the live-updates build with 12 files: welcome button, copy, case
   names, per-file sidebar updates, cohort counts. Not checked: cancel mid-batch, a second
   user, dark-theme polish, the jobs toggle, desktop.
@@ -116,10 +115,9 @@ Use `VARLENS_PG_IMPORT_PROFILE=1` and compare per-phase ratios.
 - PostgreSQL: dev container on port 55434 (`.env.postgres.local` in each worktree).
   Throwaway test database for gated tests: `varlens_import_ux`
   (`VARLENS_PG_URL=…/varlens_import_ux VARLENS_RUN_POSTGRES_E2E=1 VARLENS_RECOVERY_KEY_DIR=/tmp/varlens-bench-keys`).
-- Scratch schemas in `varlens_dev` created by this work, safe to drop:
-  `web_dev_import_ux`, `web_dev_import_ux_p`, `web_dev_import_b0` … `b3`,
-  `web_dev_import_ui1`, `web_dev_import_f1`, `web_dev_import_f2`. `b0` is the sequential
-  baseline used for result comparison; `b3` holds 100 exomes on the old schema.
+- All scratch schemas of this work (`web_dev_import_*` in `varlens_dev`) were dropped on
+  2026-10-07 and the test server was stopped. The throwaway database `varlens_import_ux`
+  still exists for gated tests; drop it when the work is finished.
 - Test server: port 8797 (8787 belongs to another session). Start with
   `VARLENS_PG_SCHEMA=<schema> VARLENS_WEB_PORT=8797 VARLENS_METRICS_PORT=9097 VARLENS_RECOVERY_KEY_DIR=/tmp/varlens-bench-keys VARLENS_LOG_LEVEL=warn node out/web/server.cjs`
   after sourcing `.env.postgres.local` and `.env.web.local`; send stdout to a file on disk.
