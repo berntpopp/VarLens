@@ -348,8 +348,11 @@ export function openImportSummarySession(
 
     finish() {
       try {
-        // Stale without `exact` having dropped: flagged after the last file.
-        if (!exact || isCohortSummaryStale(db)) options.rebuild()
+        // Stale without `exact` having dropped: flagged after the last file
+        // by an edit outside the session, which told the renderer "stale".
+        // Announce it here too, so the import reports "current" afterwards.
+        if (exact && isCohortSummaryStale(db)) abandon()
+        if (!exact) options.rebuild()
         else {
           db.exec('ANALYZE cohort_variant_summary')
           db.exec('ANALYZE gene_burden_summary')

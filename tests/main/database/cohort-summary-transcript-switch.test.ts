@@ -249,4 +249,49 @@ describe('transcript switch keeps the cohort summary equal to a rebuild (#461)',
     service.transcripts.switchSelectedTranscript(v1, 'NM_B')
     expect(snapshotSummary(db())).toEqual(before)
   })
+
+  describe('reporting that the summary went stale', () => {
+    const SESSION_OPEN =
+      "INSERT OR REPLACE INTO cohort_summary_meta (key, value) VALUES ('import_session_open', '1')"
+
+    it('reports nothing when the switch patched the summary', () => {
+      expect(service.transcripts.switchSelectedTranscript(v1, 'NM_B')).toEqual({
+        cohortSummaryStale: false
+      })
+      expectExact()
+    })
+
+    it('reports the flag it set while an import session is open', () => {
+      db().exec(SESSION_OPEN)
+
+      // Nobody else tells the renderer: the caller has to.
+      expect(service.transcripts.switchSelectedTranscript(v1, 'NM_B')).toEqual({
+        cohortSummaryStale: true
+      })
+      expect(service.cohortSummary.getStatus().is_stale).toBe(true)
+    })
+
+    it('reports it for insertTranscriptAndSwitch too', () => {
+      db().exec(SESSION_OPEN)
+      const result = service.transcripts.insertTranscriptAndSwitch(v1, {
+        transcript_id: 'NM_NEW',
+        gene_symbol: 'GENEN',
+        consequence: 'HIGH',
+        func: 'stop_gained',
+        cdna: null,
+        aa_change: null,
+        hpo_sim_score: null,
+        moi: null,
+        is_selected: 0
+      })
+      expect(result).toEqual({ cohortSummaryStale: true })
+    })
+
+    it('reports nothing for a summary that was stale already', () => {
+      db().exec(MARK_STALE_SQL)
+      expect(service.transcripts.switchSelectedTranscript(v1, 'NM_B')).toEqual({
+        cohortSummaryStale: false
+      })
+    })
+  })
 })

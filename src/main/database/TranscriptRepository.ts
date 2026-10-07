@@ -6,6 +6,10 @@ import {
   type TranscriptInsertRow
 } from '../../shared/types/transcript'
 
+export interface TranscriptSwitchOutcome {
+  cohortSummaryStale: boolean
+}
+
 export class TranscriptRepository extends BaseRepository {
   public onSummaryChanged?: () => void
   getVariantTranscripts(variantId: number): TranscriptAnnotation[] {
@@ -54,8 +58,12 @@ export class TranscriptRepository extends BaseRepository {
     }))
   }
 
-  switchSelectedTranscript(variantId: number, transcriptId: string): void {
-    this.runTransaction(() => {
+  /**
+   * `cohortSummaryStale`: the switch could not patch the cohort summary (an
+   * import session is open) and flagged it stale instead.
+   */
+  switchSelectedTranscript(variantId: number, transcriptId: string): TranscriptSwitchOutcome {
+    return this.runTransaction(() => {
       this.execRun(
         this.kysely
           .updateTable('variant_transcripts')
@@ -131,15 +139,19 @@ export class TranscriptRepository extends BaseRepository {
 
       // The cohort summary holds a representative copy of these columns per
       // coordinate and counts per gene: keep both exact in this transaction.
-      if (before !== undefined) {
+      const cohortSummaryStale =
+        before !== undefined &&
         applyVariantAnnotationChange(this.db, before, before.gene_symbol, denormalized.gene_symbol)
-      }
       this.onSummaryChanged?.()
+      return { cohortSummaryStale }
     })
   }
 
-  insertTranscriptAndSwitch(variantId: number, transcript: TranscriptInsertRow): void {
-    this.runTransaction(() => {
+  insertTranscriptAndSwitch(
+    variantId: number,
+    transcript: TranscriptInsertRow
+  ): TranscriptSwitchOutcome {
+    return this.runTransaction(() => {
       this.execRun(
         this.kysely
           .insertInto('variant_transcripts')
@@ -158,7 +170,7 @@ export class TranscriptRepository extends BaseRepository {
           .onConflict((oc) => oc.doNothing())
       )
 
-      this.switchSelectedTranscript(variantId, transcript.transcript_id)
+      return this.switchSelectedTranscript(variantId, transcript.transcript_id)
     })
   }
 }

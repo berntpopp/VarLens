@@ -21,6 +21,28 @@ import type { DomainHandlerDependencies, DomainHandlers } from '../../handlers-c
 
 export type TranscriptsHandlers = DomainHandlers<TranscriptsDomainContract>
 
+/** What a transport is told beyond the IPC result. */
+export interface TranscriptsEvents {
+  /**
+   * A switch landed while an import session was open (SQLite): the cohort
+   * summary could not be patched and is flagged stale until that session
+   * rebuilds it. Nothing else reports this edit to the renderer.
+   */
+  onCohortSummaryStale?: () => void
+}
+
+/** Storage result of a switch: the IPC result plus the storage-side notice. */
+interface SwitchWriteResult {
+  success: boolean
+  cohortSummaryStale?: boolean
+}
+
+function reportSwitch(result: unknown, events: TranscriptsEvents): { success: boolean } {
+  const { success, cohortSummaryStale } = result as SwitchWriteResult
+  if (cohortSummaryStale === true) events.onCohortSummaryStale?.()
+  return { success }
+}
+
 export async function listTranscripts(
   variantId: unknown,
   getSession: () => StorageSession
@@ -40,7 +62,8 @@ export async function listTranscripts(
 export async function switchTranscript(
   variantId: unknown,
   transcriptId: unknown,
-  getSession: () => StorageSession
+  getSession: () => StorageSession,
+  events: TranscriptsEvents = {}
 ): Promise<{ success: boolean }> {
   const validatedVariantId = TranscriptVariantIdSchema.safeParse(variantId)
   const validatedTranscriptId = TranscriptIdSchema.safeParse(transcriptId)
@@ -48,16 +71,18 @@ export async function switchTranscript(
     throw new InvalidParametersError('Invalid parameters')
   }
   const session = getSession()
-  return (await session.getWriteExecutor().execute({
+  const result = await session.getWriteExecutor().execute({
     type: 'transcripts:switch',
     params: [validatedVariantId.data, validatedTranscriptId.data]
-  })) as { success: boolean }
+  })
+  return reportSwitch(result, events)
 }
 
 export async function insertAndSwitchTranscript(
   variantId: unknown,
   transcript: unknown,
-  getSession: () => StorageSession
+  getSession: () => StorageSession,
+  events: TranscriptsEvents = {}
 ): Promise<{ success: boolean }> {
   const validatedVariantId = TranscriptVariantIdSchema.safeParse(variantId)
   const validatedTranscript = TranscriptInsertRowSchema.safeParse(transcript)
@@ -66,18 +91,22 @@ export async function insertAndSwitchTranscript(
   }
 
   const session = getSession()
-  return (await session.getWriteExecutor().execute({
+  const result = await session.getWriteExecutor().execute({
     type: 'transcripts:insertAndSwitch',
     params: [validatedVariantId.data, validatedTranscript.data as TranscriptInsertRow]
-  })) as { success: boolean }
+  })
+  return reportSwitch(result, events)
 }
 
-export function createTranscriptsHandlers(deps: DomainHandlerDependencies): TranscriptsHandlers {
+export function createTranscriptsHandlers(
+  deps: DomainHandlerDependencies,
+  events: TranscriptsEvents = {}
+): TranscriptsHandlers {
   return {
     list: (variantId: number) => listTranscripts(variantId, deps.getSession),
     switch: (variantId: number, transcriptId: string) =>
-      switchTranscript(variantId, transcriptId, deps.getSession),
+      switchTranscript(variantId, transcriptId, deps.getSession, events),
     insertAndSwitch: (variantId: number, transcript: TranscriptInsertRow) =>
-      insertAndSwitchTranscript(variantId, transcript, deps.getSession)
+      insertAndSwitchTranscript(variantId, transcript, deps.getSession, events)
   }
 }

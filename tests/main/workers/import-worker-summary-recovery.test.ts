@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
 import { rebuildCohortSummaryCancellable } from '../../../src/main/workers/cancellable-summary-rebuild'
 import { rebuildCohortSummary } from '../../../src/main/workers/worker-db'
+import { MARK_STALE_SQL } from '../../../src/shared/sql/cohort-summary-rebuild'
 import { referenceSummary, snapshotSummary, summaryMeta } from './support/summary-reference'
 import {
   openSummarySessionHarness,
@@ -178,5 +179,25 @@ describe('import worker: cohort summary recovery', () => {
     // a crash from there on is still recognised as an unfinished session.
     expect(markerAfterBatch).toEqual(['1', '1', '1'])
     expect(summaryMeta(h.db, 'import_session_open')).toBeUndefined()
+  })
+
+  it('announces a summary flagged stale after the last file, before it rebuilds', async () => {
+    await h.run([h.file('A', [variantAt(100, 'AAA')])])
+
+    // An edit on the main connection (a transcript switch) could only flag the
+    // summary while the session was open; it lands after the last merge.
+    const messages = await h.run([h.file('B', [variantAt(200, 'BBB')])], {
+      onMessage: (m) => {
+        if (m.type === 'file-complete') h.db.exec(MARK_STALE_SQL)
+      }
+    })
+
+    // The renderer was told "stale" by that edit: only a worker that says so
+    // too makes the main process report "current" once the rebuild is done.
+    const types = messages.map((m) => m.type)
+    expect(types.filter((t) => t === 'summary-stale')).toHaveLength(1)
+    expect(types.indexOf('summary-stale')).toBeLessThan(types.indexOf('complete'))
+    expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+    expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
   })
 })

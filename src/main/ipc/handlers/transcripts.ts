@@ -1,5 +1,6 @@
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 import { wrapHandler } from '../errorHandler'
+import { safeEmit } from '../utils/safeEmit'
 import type { HandlerDependencies } from '../types'
 import { createTranscriptsHandlers, type TranscriptsHandlers } from './transcripts-logic'
 
@@ -14,9 +15,14 @@ export function registerTranscriptHandlers({
   getDbManager
 }: Pick<HandlerDependencies, 'ipcMain' | 'getDbManager'> & Partial<HandlerDependencies>): void {
   const getHandlers = (): TranscriptsHandlers =>
-    createTranscriptsHandlers({
-      getSession: () => getDbManager().getCurrentSession()
-    })
+    createTranscriptsHandlers(
+      { getSession: () => getDbManager().getCurrentSession() },
+      {
+        // The running import says "current again" once it has rebuilt
+        // (cohort-summary-case-add.ts `finish`, batch/single-file settle).
+        onCohortSummaryStale: () => safeEmit('cohort:summaryRebuilt', { is_stale: true })
+      }
+    )
 
   ipcMain.handle('transcripts:list', async (_event, variantId: unknown) => {
     return wrapHandler(() => getHandlers().list(variantId as number))

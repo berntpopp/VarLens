@@ -76,15 +76,17 @@ export function recomputeGeneBurden(db: DatabaseType, genes: Iterable<string | n
 
 /**
  * A variant row at `coordinate` had its annotation rewritten; its gene went
- * from `geneBefore` to `geneAfter`.
+ * from `geneBefore` to `geneAfter`. Returns true when the summary could not
+ * be patched and was flagged stale instead: the caller owes the renderer a
+ * cohort-stale event, since nobody else will send one for this edit.
  */
 export function applyVariantAnnotationChange(
   db: DatabaseType,
   coordinate: SummaryCoordinate,
   geneBefore: string | null,
   geneAfter: string | null
-): void {
-  if (!isCohortSummaryMaintained(db)) return
+): boolean {
+  if (!isCohortSummaryMaintained(db)) return false
   if (isImportSessionOpen(db)) {
     // An import session is writing (or died writing). Recomputing here would
     // (a) count the carriers of a half-inserted case, which the session then
@@ -93,8 +95,9 @@ export function applyVariantAnnotationChange(
     // Building the index first would be the same scan plus a sort, so the edit
     // is O(1) instead: flag the summary and let the session rebuild at its end.
     db.exec(MARK_STALE_SQL)
-    return
+    return true
   }
   recomputeSummaryCoordinate(db, coordinate)
   if (geneBefore !== geneAfter) recomputeGeneBurden(db, [geneBefore, geneAfter])
+  return false
 }
