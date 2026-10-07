@@ -1,0 +1,137 @@
+name: Windows signing rehearsal
+
+# Manual dry run of the release's Windows signing pipeline. Runs everything
+# release.yml's `sign-windows` job runs — extraction of the promoted app,
+# the electron-builder signing hook, the NSIS re-wrap, latest.yml, and every
+# signature and payload verification — against a real Build run's installers,
+# on a real Windows runner, with a throwaway self-signed certificate.
+#
+# It spends no eSigner quota, needs no secret, creates no release and
+# publishes nothing. Use it before the first signed release, and after any
+# change to electron-builder, the signing scripts or the Windows targets.
+# Spec: .planning/specs/2026-10-06-windows-sign-all-executables.md
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: 'Run id of a Build workflow run that uploaded installers-windows-latest (push to main or workflow_dispatch)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    name: Rehearse Windows signing
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read # required to read another workflow run's artifacts
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      # The scripts must come from the commit the installers were built from:
+      # electron-builder names the re-wrapped installers after that commit's
+      # package.json version.
+      - name: Resolve the Build run's commit
+        id: build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::build_run_id must be a numeric run id"
+            exit 1
+          fi
+          SHA=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${BUILD_RUN_ID}" --jq '.head_sha')
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::could not resolve the commit of run ${BUILD_RUN_ID}"
+            exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the Build run's commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
+        with:
+          ref: ${{ steps.build.outputs.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Download Windows installers from the Build run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # actions/download-artifact@v8.0.1
+        with:
+          name: installers-windows-latest
+          path: promoted/win
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify promoted artifacts
+        id: promoted
+        shell: bash
+        env:
+          BUILD_SHA: ${{ steps.build.outputs.sha }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          node scripts/release/verify-promoted-artifacts.mjs promoted/win win "$VERSION" "$BUILD_SHA"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install packaging dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Create a throwaway certificate
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert `
+            -Subject 'CN=VarLens signing rehearsal (NOT A RELEASE)' `
+            -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
+          "VARLENS_SELFSIGN_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
+
+      - name: Rehearse signing and re-wrap (no quota)
+        shell: bash
+        env:
+          VARLENS_WINDOWS_SIGNING: selfsigned
+          VERSION: ${{ steps.promoted.outputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/release/rewrap-windows.mjs --promoted promoted/win --version "$VERSION" \
+            --out "$RUNNER_TEMP/rehearsal/out" --work "$RUNNER_TEMP/rehearsal/work"
+
+      # Same independent re-inspection release.yml performs on what it uploads.
+      - name: Inspect every executable in every Windows artifact
+        shell: bash
+        env:
+          VERSION: ${{ steps.promoted.outputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/release/verify-latest-yml.mjs "$RUNNER_TEMP/rehearsal/out/latest.yml" "$RUNNER_TEMP/rehearsal/out"
+          node scripts/release/verify-windows-signatures.mjs --dir "$RUNNER_TEMP/rehearsal/out" \
+            --version "$VERSION" --work "$RUNNER_TEMP/inspect" --require-signed \
+            --transport "promoted/win/Varlens-Setup-${VERSION}.zip" \
+            --report "$RUNNER_TEMP/windows-executables.json" \
+            --markdown "$RUNNER_TEMP/windows-executables.md"
+          {
+            echo "### Windows signing rehearsal passed"
+            echo
+            echo "Signed with a throwaway self-signed certificate — nothing here is publishable, and no eSigner quota was used."
+            echo
+            cat "$RUNNER_TEMP/windows-executables.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Assert an Authenticode signature on every executable
+        shell: pwsh
+        run: ./scripts/release/assert-authenticode.ps1 -Report "$env:RUNNER_TEMP/windows-executables.json" -Rehearsal
+
+      - name: Discard the throwaway certificate
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:VARLENS_SELFSIGN_THUMBPRINT) {
+            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$env:VARLENS_SELFSIGN_THUMBPRINT" -DeleteKey -ErrorAction SilentlyContinue
+          }
