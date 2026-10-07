@@ -44,6 +44,40 @@ describe('JobRunner — Sprint A D2', () => {
     expect(cancelFn).toHaveBeenCalled()
   })
 
+  it('a handler that RESOLVES after its signal was aborted ends as cancelled, and still delivers its result', async () => {
+    // Batch import and export stop cooperatively and return a partial result
+    // instead of throwing; that must not be reported as "completed".
+    const runner = new JobRunner()
+    const events: string[] = []
+    runner.onLifecycle((j) => events.push(j.status))
+    let release: () => void = () => {}
+    const handle = runner.enqueue('import_batch', {}, async (ctx) => {
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return { succeeded: 2, cancelled: ctx.signal.aborted }
+    })
+
+    await runner.cancel(handle.id)
+    release()
+
+    await expect(handle.result).resolves.toEqual({ succeeded: 2, cancelled: true })
+    const job = runner.get(handle.id)
+    expect(job?.status).toBe('cancelled')
+    expect(job?.error).toBeNull()
+    expect(job?.finishedAt).not.toBeNull()
+    expect(events).toEqual(['queued', 'running', 'cancelled'])
+    // The single-flight slot is released like for any other terminal status.
+    expect(() => runner.enqueue('import_batch', {}, async () => 0)).not.toThrow()
+  })
+
+  it('a handler that resolves without being cancelled still ends as completed', async () => {
+    const runner = new JobRunner()
+    const handle = runner.enqueue('import_batch', {}, async () => ({ cancelled: false }))
+    await handle.result
+    expect(runner.get(handle.id)?.status).toBe('completed')
+  })
+
   it('onLifecycle fires for queued → running → completed', async () => {
     const runner = new JobRunner()
     const events: string[] = []
