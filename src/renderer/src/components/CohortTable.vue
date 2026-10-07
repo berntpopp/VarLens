@@ -100,7 +100,6 @@
       @acmg-evidence-click="handleAcmgEvidenceClick"
       @comment-click="handleCommentClick"
       @navigate-to-case="handleNavigateToCase"
-      @load-carriers="handleLoadCarriers"
       @column-filters-change="handleColumnFiltersChange"
       @deselect="emit('deselect')"
     />
@@ -138,7 +137,7 @@ import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivate
 import { useOffsetPagination } from '../composables/useOffsetPagination'
 import { useCohortData } from '../composables/useCohortData'
 import { useFilters } from '../composables/useFilters'
-import { useCarriers } from '../composables/useCarriers'
+import { invalidateCarriers } from '../queries/carriers'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useCohortAnnotationLoader } from '../composables/useCohortAnnotationLoader'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
@@ -203,7 +202,6 @@ const {
   deactivate
 } = useCohortData()
 const { filters, searchTerm, selectedImpactPresets, clearAllFilters, clearFilter } = useFilters()
-const { loadCarriers, reloadExpanded: reloadExpandedCarriers } = useCarriers()
 const {
   isGlobalStarred,
   getGlobalAcmgClassification,
@@ -573,10 +571,6 @@ const handleNavigateToCase = (payload: { caseId: number; item: CohortVariant }) 
   })
 }
 
-const handleLoadCarriers = async (variant: CohortVariant) => {
-  await loadCarriers(variant)
-}
-
 // Hydrate annotations for the visible rows (page-change guarded, debounced)
 const { hydrate: hydrateAnnotations } = useCohortAnnotationLoader()
 watch(variants, (newVariants) => {
@@ -661,7 +655,7 @@ watch(
       // and metadata.
       stopRebuildTimer(true)
       void requestReload()
-      void reloadExpandedCarriers(variants.value)
+      invalidateCarriers()
       void fetchSupportedCohortSummary()
       void fetchSupportedCohortColumnMeta()
     }
@@ -701,7 +695,7 @@ const refresh = async () => {
     invalidateAndReload()
   ])
   // The case set may have changed: cached carrier lists can name deleted cases.
-  await reloadExpandedCarriers(variants.value)
+  invalidateCarriers()
 }
 defineExpose({ refresh, softRefresh })
 </script>

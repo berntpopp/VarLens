@@ -4,7 +4,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
-import { flushPromises, withSetup } from '../../utils/test-helpers'
+import { flushPromises } from '../../utils/test-helpers'
+import { withQueries } from '../helpers/with-queries'
 import { createMockApi } from '../../utils/mock-api'
 import {
   buildPanelUnmappedGenesWarning,
@@ -65,6 +66,10 @@ describe('buildPanelUnmappedGenesWarning', () => {
 
 describe('usePanelResolutionStatus', () => {
   let app: { unmount: () => void } | undefined
+  const withSetup = <T>(composable: () => T): [T, { unmount: () => void }] => {
+    const host = withQueries(composable)
+    return [host.result, host]
+  }
   let resolutionStatus: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
@@ -142,6 +147,7 @@ describe('usePanelResolutionStatus', () => {
     const panelIds = ref([3])
     const [state, mounted] = withSetup(() => usePanelResolutionStatus({ panelIds, caseId: 1 }))
     app = mounted
+    await flushPromises()
     panelIds.value = [5]
     await flushPromises()
 

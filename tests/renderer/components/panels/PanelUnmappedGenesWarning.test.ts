@@ -10,7 +10,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, h, inject, ref } from 'vue'
-import { createPinia, setActivePinia } from 'pinia'
+import type { Pinia } from 'pinia'
+import { createQueryPinia, queryPlugins } from '../../helpers/with-queries'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -86,10 +87,11 @@ function statusOf(symbols: string[], build = 'GRCh38'): PanelResolutionStatus {
 describe('PanelUnmappedGenesWarning', () => {
   let resolutionStatus: ReturnType<typeof vi.fn>
   let wrapper: VueWrapper | undefined
+  let pinia: Pinia
 
   beforeEach(() => {
     localStorage.clear()
-    setActivePinia(createPinia())
+    pinia = createQueryPinia()
     _resetPanelManagerState()
     window.api = createMockApi()
     resolutionStatus = window.api.panels.resolutionStatus as unknown as ReturnType<typeof vi.fn>
@@ -109,7 +111,10 @@ describe('PanelUnmappedGenesWarning', () => {
         return () => h(child)
       }
     })
-    return mount(Host, { attachTo: document.body, global: { plugins: [vuetify] } })
+    return mount(Host, {
+      attachTo: document.body,
+      global: { plugins: [vuetify, ...queryPlugins(pinia)] }
+    })
   }
 
   it('renders nothing while every gene of the panel is mapped', async () => {
@@ -180,7 +185,10 @@ describe('PanelUnmappedGenesWarning', () => {
     state.selectedCaseId.value = 42
     wrapper = mount(CaseView, {
       attachTo: document.body,
-      global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } }
+      global: {
+        plugins: [vuetify, ...queryPlugins(pinia)],
+        provide: { [AppStateKey as symbol]: state }
+      }
     })
     await flushPromises()
     expect(resolutionStatus).not.toHaveBeenCalled()
@@ -205,7 +213,10 @@ describe('PanelUnmappedGenesWarning', () => {
     })
     wrapper = mount(CohortView, {
       attachTo: document.body,
-      global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: createAppState() } }
+      global: {
+        plugins: [vuetify, ...queryPlugins(pinia)],
+        provide: { [AppStateKey as symbol]: createAppState() }
+      }
     })
     await flushPromises()
     expect(resolutionStatus).not.toHaveBeenCalled()

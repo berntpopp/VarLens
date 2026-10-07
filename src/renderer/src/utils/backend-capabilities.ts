@@ -24,6 +24,7 @@ export type CapabilityPath =
   | 'cohort.query'
   | 'cohort.summary'
   | 'cohort.columnMeta'
+  | 'cohort.carriers'
   | 'workflow.tags'
   | 'workflow.annotations'
   | 'workflow.panels'
@@ -53,6 +54,7 @@ export const LABELS: Record<CapabilityPath, string> = {
   'cohort.query': 'cohort queries',
   'cohort.summary': 'cohort summary',
   'cohort.columnMeta': 'cohort column metadata',
+  'cohort.carriers': 'cohort carriers',
   'workflow.tags': 'tags',
   'workflow.annotations': 'annotations',
   'workflow.panels': 'panels',

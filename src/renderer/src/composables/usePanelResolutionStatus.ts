@@ -13,13 +13,12 @@
  *   - the shared `SlimFilterToolbar` renders `PanelUnmappedGenesWarning`,
  *     which reads the warning through `usePanelUnmappedGenesWarning()`.
  */
-import { computed, inject, onActivated, provide, ref, toValue, watch } from 'vue'
-import type { ComputedRef, InjectionKey, MaybeRefOrGetter, Ref } from 'vue'
-import { unwrapIpcResult } from '../../../shared/types/errors'
+import { computed, inject, onActivated, provide, toValue, watch } from 'vue'
+import type { ComputedRef, InjectionKey, MaybeRefOrGetter } from 'vue'
+import { useQuery, useQueryCache } from '@pinia/colada'
 import type { PanelResolutionRequest, PanelResolutionStatus } from '../../../shared/types/panels'
-import { logService } from '../services/LogService'
-import { formatError } from '../utils/ipc-result'
-import { useApiService } from './useApiService'
+import { queryKeys } from '../queries/keys'
+import { panelResolutionQuery } from '../queries/panels'
 import { usePanelManager } from './usePanelManager'
 
 /** Unmapped gene symbols named inline before the list is cut with "+N more". */
@@ -55,9 +54,9 @@ export interface PanelUnmappedGenesWarning {
 }
 
 export interface PanelResolutionState {
-  status: Ref<PanelResolutionStatus | null>
+  status: ComputedRef<PanelResolutionStatus | null>
   /** True when the last status request for the current scope failed. */
-  failed: Ref<boolean>
+  failed: ComputedRef<boolean>
   warning: ComputedRef<PanelUnmappedGenesWarning | null>
 }
 
@@ -101,54 +100,24 @@ function toRequest(scope: PanelResolutionScope): PanelResolutionRequest | null {
 }
 
 /**
- * Track the resolution status of `scope`. Re-queries when the scope changes,
- * when the panel list is reloaded (every panel edit does that) and when a
- * kept-alive view is shown again. A changed scope clears the previous answer
- * at once, so a warning never outlives the panel / case / build it describes.
+ * Track the resolution status of `scope`: a query keyed by the scope
+ * (`queries/panels.ts`), so a changed scope never shows the answer for the
+ * previous panel, case or build. It is asked again when the panel list is
+ * reloaded (every panel edit does that) and when a kept-alive view is shown
+ * again.
  */
 export function usePanelResolutionStatus(scope: PanelResolutionScope): PanelResolutionState {
-  const { api } = useApiService()
+  const cache = useQueryCache()
   const { panels } = usePanelManager()
-  const status = ref<PanelResolutionStatus | null>(null)
-  const failed = ref(false)
-  const requestKey = computed(() => JSON.stringify(toRequest(scope)))
-  let generation = 0
+  const query = useQuery(() => panelResolutionQuery(toRequest(scope)))
+  const failed = computed(() => query.status.value === 'error')
+  const status = computed(() => (failed.value ? null : (query.data.value ?? null)))
 
-  async function refresh(): Promise<void> {
-    const current = ++generation
-    const request = toRequest(scope)
-    if (request === null || api === undefined) {
-      status.value = null
-      failed.value = false
-      return
-    }
-    try {
-      const result = unwrapIpcResult(await api.panels.resolutionStatus(request))
-      if (current !== generation) return
-      status.value = result
-      failed.value = false
-    } catch (error) {
-      if (current !== generation) return
-      status.value = null
-      failed.value = true
-      logService.warn(
-        `Failed to load gene panel resolution status: ${formatError(error)}`,
-        'panels'
-      )
-    }
+  function refresh(): void {
+    void cache.invalidateQueries({ key: queryKeys.panelResolutionRoot() }).catch(() => undefined)
   }
-
-  watch(
-    requestKey,
-    () => {
-      status.value = null
-      failed.value = false
-      void refresh()
-    },
-    { immediate: true }
-  )
-  watch(panels, () => void refresh())
-  onActivated(() => void refresh())
+  watch(panels, refresh)
+  onActivated(refresh)
 
   const warning = computed<PanelUnmappedGenesWarning | null>(() => {
     if (failed.value) {

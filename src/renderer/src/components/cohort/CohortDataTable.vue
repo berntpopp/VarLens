@@ -171,10 +171,8 @@
       <!-- Expandable row with carrier details -->
       <template #expanded-row="{ columns, item }">
         <CarrierExpandedRow
-          :carriers="getCarriers(item.variant_key) ?? []"
-          :error="hasCarrierError(item.variant_key)"
+          :variant="item"
           :colspan="columns.length"
-          @retry="emit('load-carriers', item)"
           @navigate-to-case="(caseId) => emit('navigate-to-case', { caseId, item })"
         />
       </template>
@@ -192,7 +190,6 @@ import type { AcmgClassification } from '../../../../shared/config/domain.config
 import type { SortItem } from '../../composables/useOffsetPagination'
 import { useTableScroll } from '../../composables/useTableScroll'
 import { useTableRowProps } from '../../composables/useTableRowProps'
-import { useCarriers } from '../../composables/useCarriers'
 import { useCohortRenderRows } from './useCohortRenderRows'
 import {
   PositionCell,
@@ -209,6 +206,7 @@ import {
   LinkOutsCell
 } from '../table-cells'
 import CarrierExpandedRow from './CarrierExpandedRow.vue'
+import { useDatabaseStore } from '../../stores/databaseStore'
 import AcmgQuickMenu from '../table-cells/AcmgQuickMenu.vue'
 import { provideAcmgQuickMenu } from '../table-cells/acmg-quick-menu'
 import { useResultSetKeys } from '../table-state/useResultSetKeys'
@@ -268,7 +266,6 @@ const emit = defineEmits<{
   'acmg-evidence-click': [item: CohortVariant]
   'comment-click': [item: CohortVariant]
   'navigate-to-case': [payload: { caseId: number; item: CohortVariant }]
-  'load-carriers': [variant: CohortVariant]
   'column-filters-change': [filters: ColumnFiltersParam | undefined]
   deselect: []
 }>()
@@ -298,13 +295,12 @@ const { getRowProps } = useTableRowProps<CohortVariant>({
   selectedId: ref(props.selectedVariantKey),
   getItemId: (item: CohortVariant) => item.variant_key
 })
-const {
-  expandedRows,
-  getCarriers,
-  hasCarriers,
-  hasCarrierError,
-  clearCache: clearCarrierCache
-} = useCarriers()
+// Expanded rows (variant keys). Each expanded row loads its own carriers.
+const expandedRows = ref<string[]>([])
+watch(
+  () => useDatabaseStore().revision,
+  () => (expandedRows.value = [])
+)
 // Fresh <tr>s per result set (moved rows are layout shifts); expanded stays by variant_key
 const { rowKey, keyedModel } = useResultSetKeys(() => props.variants, 'variant_key')
 const expandedKeys = keyedModel(expandedRows)
@@ -521,19 +517,6 @@ watch(selectedIndex, async (newIndex) => {
   pendingScrollBehavior.value = 'smooth'
 })
 
-// Expanded rows: ask the parent orchestrator to load carriers (it owns the IPC
-// call and updates the carrier cache via useCarriers).
-watch(expandedRows, (newExpandedKeys) => {
-  for (const key of newExpandedKeys) {
-    if (!hasCarriers(key)) {
-      const variant = props.variants.find((v) => v.variant_key === key)
-      if (variant) {
-        emit('load-carriers', variant)
-      }
-    }
-  }
-})
-
 // Initialize scroll sync after component mounts
 onMounted(async () => {
   await nextTick()
@@ -578,13 +561,8 @@ const columnActiveFilters = computed<ActiveFilter[]>(() => {
   ).filter((f) => f.id.startsWith('col:'))
 })
 
-// Expose refresh method and column filter state for parent to call
-const refresh = (): void => {
-  clearCarrierCache()
-}
-
+// Expose column filter state for the parent
 defineExpose({
-  refresh,
   columnActiveFilters,
   clearColumnFilter,
   clearAllColumnFilters,

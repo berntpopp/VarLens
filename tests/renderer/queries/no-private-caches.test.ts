@@ -19,6 +19,7 @@ const MIGRATED = [
   'composables/useTranscripts.ts',
   'composables/useProteinData.ts',
   'composables/useVepEnrichment.ts',
+  'composables/usePanelResolutionStatus.ts',
   'queries/column-meta.ts',
   'queries/filter-options.ts',
   'queries/filter-presets.ts',
@@ -30,9 +31,12 @@ const MIGRATED = [
   'queries/transcripts.ts',
   'queries/protein.ts',
   'queries/enrichment.ts',
+  'queries/carriers.ts',
+  'queries/panels.ts',
   'components/filters/ExtensionColumnFilters.vue',
   'components/filters/ExtensionColumnControl.vue',
-  'components/CaseDataInfoTab.vue'
+  'components/CaseDataInfoTab.vue',
+  'components/cohort/CarrierExpandedRow.vue'
 ]
 
 /** Module-level state (column 0): a ref, a collection, or anything reassigned. */
