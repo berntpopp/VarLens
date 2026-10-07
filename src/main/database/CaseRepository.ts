@@ -98,9 +98,14 @@ export class CaseRepository extends BaseRepository {
     return existingNames
   }
 
+  /** Published cases only: one still being imported is no case yet (v40). */
   getAllCases(): Case[] {
     return this.execAll<Case>(
-      this.kysely.selectFrom('cases').selectAll().orderBy('created_at', 'desc')
+      this.kysely
+        .selectFrom('cases')
+        .selectAll()
+        .where('import_status', '=', 'ready')
+        .orderBy('created_at', 'desc')
     )
   }
 

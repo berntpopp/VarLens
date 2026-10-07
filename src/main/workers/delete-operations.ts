@@ -1,6 +1,10 @@
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { VariantFrequencyService } from '../database/VariantFrequencyService'
-import type { CaseSummaryRemoval } from '../database/cohort-summary-case-removal'
+import { isImportSessionOpen } from '../database/cohort-summary-case-add'
+import {
+  openCaseSummaryRemoval,
+  type CaseSummaryRemoval
+} from '../database/cohort-summary-case-removal'
 
 /**
  * Delete operations extracted from delete-worker for testability.
@@ -30,6 +34,23 @@ export interface IncrementalDeleteResult {
   cancelled: boolean
 }
 
+/**
+ * Incremental summary upkeep for a delete job, or null when the job must end
+ * with one full rebuild instead: delete-all, a stale or missing summary, or an
+ * import session that is open (or died open). The removal recomputes
+ * coordinates from the remaining variants, which include the half-inserted
+ * case of a running import; that case would then be counted a second time
+ * when the session merges it (cohort-summary-case-add.ts).
+ */
+export function openSummaryRemovalForDelete(
+  db: DatabaseType,
+  deletingAll: boolean
+): CaseSummaryRemoval | null {
+  if (deletingAll) return null
+  const removal = openCaseSummaryRemoval(db)
+  return removal !== null && isImportSessionOpen(db) ? null : removal
+}
+
 const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
 
 /** Ids of every case, used to drive a cancellable delete-all. */
@@ -55,7 +76,11 @@ export async function deleteCasesIncrementally(
   const frequencies = new VariantFrequencyService(db)
   const deleteCase = db.prepare('DELETE FROM cases WHERE id = ?')
   const summary = options.summary ?? null
+  const isUnpublished = db.prepare("SELECT 1 FROM cases WHERE id = ? AND import_status != 'ready'")
   const deleteOne = db.transaction((caseId: number): number => {
+    // A case that was never published is in no frequency count and no
+    // summary row (import-worker.ts publishCase): only its rows go.
+    if (isUnpublished.get(caseId) !== undefined) return deleteCase.run(caseId).changes
     if (!options.deletingAll) frequencies.decrementFrequencies(caseId, false)
     summary?.beforeDelete(caseId)
     const changes = deleteCase.run(caseId).changes

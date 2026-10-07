@@ -164,11 +164,28 @@ export const RECOUNT_UNIQUE_VARIANTS_SQL = `
   VALUES ('${UNIQUE_VARIANT_COUNT_KEY}', CAST((${COUNT_UNIQUE_VARIANTS_SQL}) AS TEXT));
 `
 
-/** Last step of every full rebuild, in its transaction. */
+/**
+ * Meta key: an import session is maintaining the summary incrementally
+ * (src/main/database/cohort-summary-case-add.ts). Left behind by a session
+ * that died, it means "the summary may not match the variants".
+ */
+export const IMPORT_SESSION_OPEN_KEY = 'import_session_open'
+
+/**
+ * Last step of every full rebuild, in its transaction.
+ *
+ * The rebuild made the summary match every variant committed so far, so it
+ * also settles an unfinished import session: the marker goes, or every app
+ * start would rebuild again until the next import. A session that is still
+ * running puts the marker back with its next write (see `keepSessionOpen` in
+ * cohort-summary-case-add.ts), in the transaction that makes the summary
+ * incomplete again.
+ */
 export const UPDATE_META_SQL = `
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('last_rebuilt_at', CAST(strftime('%s', 'now') AS TEXT));
-${RECOUNT_UNIQUE_VARIANTS_SQL}  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
+${RECOUNT_UNIQUE_VARIANTS_SQL}  DELETE FROM cohort_summary_meta WHERE key = '${IMPORT_SESSION_OPEN_KEY}';
+  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('is_stale', '0');
 `
 

@@ -1027,6 +1027,40 @@ describe('postgres-import-worker — C3 import wiring', () => {
     )
   })
 
+  it('reports a cancel that arrives while waiting for the summary lock as a cancel', async () => {
+    const queries: string[] = []
+    const client = makeClient(queries)
+    let cancelledWhileWaiting = false
+    const originalQuery = client.query
+    client.query = vi.fn(async (sql: string | { text: string }, params?: unknown[]) => {
+      const text = typeof sql === 'string' ? sql : sql.text
+      if (text.includes('pg_try_advisory_xact_lock')) {
+        // Another import is publishing; the user cancels this one meanwhile.
+        cancelledWhileWaiting = true
+        return { rows: [{ locked: false }] }
+      }
+      return originalQuery(sql, params)
+    })
+    const messages: unknown[] = []
+
+    await runVcfSingleFile(client, messages, {
+      isCancellationRequested: () => cancelledWhileWaiting
+    })
+
+    expect(queries).toContain('ROLLBACK')
+    expect(queries.some((query) => query.includes("import_status = 'ready'"))).toBe(false)
+    // Not `{ type: 'error' }` with the lock's internal wording.
+    expect(messages.some((m) => (m as { type: string }).type === 'error')).toBe(false)
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: 'complete',
+        result: expect.objectContaining({
+          errors: [POSTGRES_IMPORT_CANCELLATION_MESSAGE]
+        })
+      })
+    )
+  })
+
   it('rolls back single-file visibility when cancellation arrives before publication commit', async () => {
     const queries: string[] = []
     const client = makeClient(queries)

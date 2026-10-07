@@ -101,13 +101,17 @@ export class VariantFrequencyService {
   /**
    * Recompute all variant_frequency counts from scratch.
    * Used after bulk deletion operations where incremental updates aren't possible.
+   * Counts published cases only: a case still being imported is counted by
+   * {@link updateFrequencies} when it is published, not before.
    */
   recomputeAllFrequencies(): void {
     this.db.exec('DELETE FROM variant_frequency')
     this.db.exec(`
       INSERT INTO variant_frequency (chr, pos, ref, alt, case_count)
-      SELECT chr, pos, ref, alt, COUNT(DISTINCT case_id)
-      FROM variants GROUP BY chr, pos, ref, alt
+      SELECT v.chr, v.pos, v.ref, v.alt, COUNT(DISTINCT v.case_id)
+      FROM variants v
+      JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'
+      GROUP BY v.chr, v.pos, v.ref, v.alt
     `)
   }
 }

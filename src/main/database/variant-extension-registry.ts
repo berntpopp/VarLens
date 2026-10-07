@@ -241,6 +241,7 @@ export function buildExtensionExistsClauses(
     fragments.push(
       `EXISTS (
         SELECT 1 FROM variants v
+        JOIN cases vc ON vc.id = v.case_id AND vc.import_status = 'ready'
         JOIN ${def.table} ${alias} ON ${alias}.${def.variantIdColumn} = v.id
         WHERE v.chr = ${cvsAlias}.chr
           AND v.pos = ${cvsAlias}.pos

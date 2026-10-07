@@ -313,13 +313,13 @@ export async function executeSqliteWriteTask(
       })
       return undefined
 
+    // `cohortSummaryStale` is for the transport (transcripts-logic.ts), which
+    // tells the renderer and keeps it out of the IPC result.
     case 'transcripts:switch':
-      repos.transcripts.switchSelectedTranscript(...task.params)
-      return { success: true }
+      return { success: true, ...repos.transcripts.switchSelectedTranscript(...task.params) }
 
     case 'transcripts:insertAndSwitch':
-      repos.transcripts.insertTranscriptAndSwitch(...task.params)
-      return { success: true }
+      return { success: true, ...repos.transcripts.insertTranscriptAndSwitch(...task.params) }
   }
 
   const exhaustive: never = task

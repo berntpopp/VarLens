@@ -250,6 +250,8 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
           consequence: 'MODERATE'
         }
       ])
+      // A published case: a provisional one would be an interrupted import.
+      workerDb.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?").run(caseId)
       workerDb.close()
 
       // 2. Attempt to import with duplicateStrategy: 'overwrite' but with a non-existent file

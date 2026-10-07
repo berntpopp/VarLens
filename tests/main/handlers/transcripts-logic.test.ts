@@ -160,4 +160,36 @@ describe('transcripts-logic', () => {
       })
     })
   })
+
+  describe('cohort summary flagged stale by a switch', () => {
+    const sessionReturning = (result: unknown): StorageSession =>
+      ({ getWriteExecutor: () => ({ execute: vi.fn().mockResolvedValue(result) }) }) as never
+
+    it('tells the transport once and keeps the flag out of the IPC result', async () => {
+      const onCohortSummaryStale = vi.fn()
+      const handlers = createTranscriptsHandlers(
+        { getSession: () => sessionReturning({ success: true, cohortSummaryStale: true }) },
+        { onCohortSummaryStale }
+      )
+
+      await expect(handlers.switch(42, 'NM_000059.4')).resolves.toStrictEqual({ success: true })
+      expect(onCohortSummaryStale).toHaveBeenCalledTimes(1)
+
+      await expect(handlers.insertAndSwitch(42, sampleTranscript)).resolves.toStrictEqual({
+        success: true
+      })
+      expect(onCohortSummaryStale).toHaveBeenCalledTimes(2)
+    })
+
+    it('stays silent when the switch kept the summary exact', async () => {
+      const onCohortSummaryStale = vi.fn()
+      const handlers = createTranscriptsHandlers(
+        { getSession: () => sessionReturning({ success: true }) },
+        { onCohortSummaryStale }
+      )
+
+      await expect(handlers.switch(42, 'NM_000059.4')).resolves.toStrictEqual({ success: true })
+      expect(onCohortSummaryStale).not.toHaveBeenCalled()
+    })
+  })
 })

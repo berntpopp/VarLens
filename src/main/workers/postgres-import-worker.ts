@@ -234,6 +234,15 @@ export async function runImport(
   const throwIfCancelled = (): void => {
     if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
   }
+  /** Wait for the summary write lock; a cancel during the wait ends as a cancel. */
+  const lockSummary = async (queryable: Pick<PoolClient, 'query'>): Promise<void> => {
+    try {
+      await lockSummaryForWrite(queryable, start.schema, isCancelled)
+    } catch (error) {
+      throwIfCancelled()
+      throw error
+    }
+  }
 
   try {
     batchSize = resolveBatchSize(start.batchSize, POSTGRES_JSON_IMPORT_BATCH_SIZE)
@@ -379,11 +388,7 @@ export async function runImport(
           )
           if (totalInserted > 0) {
             await profilePhase('pub-lock-wait', () =>
-              lockSummaryForWrite(
-                client as unknown as Pick<PoolClient, 'query'>,
-                start.schema,
-                isCancelled
-              )
+              lockSummary(client as unknown as Pick<PoolClient, 'query'>)
             )
             await profilePhase('pub-variant-frequency', () =>
               rebuildVariantFrequencyForCase(
@@ -521,11 +526,7 @@ export async function runImport(
       )
 
       await profilePhase('pub-lock-wait', () =>
-        lockSummaryForWrite(
-          client as unknown as Pick<PoolClient, 'query'>,
-          start.schema,
-          isCancelled
-        )
+        lockSummary(client as unknown as Pick<PoolClient, 'query'>)
       )
       await rebuildVariantFrequencyForCase(
         client as unknown as Pick<PoolClient, 'query'>,
@@ -784,11 +785,7 @@ export async function runImport(
               [totalVariantCount, caseId]
             )
             await profilePhase('pub-lock-wait', () =>
-              lockSummaryForWrite(
-                client as unknown as Pick<PoolClient, 'query'>,
-                start.schema,
-                isCancelled
-              )
+              lockSummary(client as unknown as Pick<PoolClient, 'query'>)
             )
             await profilePhase('pub-variant-frequency', () =>
               rebuildVariantFrequencyForCase(

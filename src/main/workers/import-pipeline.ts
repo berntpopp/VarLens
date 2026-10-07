@@ -27,12 +27,16 @@ import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
 import { DROP_FTS_TRIGGERS } from './worker-db'
 export { DROP_FTS_TRIGGERS }
 
-export { DROP_INDEXES, RECREATE_INDEXES } from './import-index-sql'
+export { DROP_INDEXES, RECREATE_INDEXES, keepsIndexesForSession } from './import-index-sql'
 
 import { createMapperPipeline } from './import-mapper-pipeline'
 export { createMapperPipeline, parseHeader } from './import-mapper-pipeline'
 
-export function prepareStatements(db: DatabaseType) {
+/**
+ * @param inInsertTransaction runs inside every variant insert transaction,
+ *   after its rows (the import session re-asserts its open marker there).
+ */
+export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => void) {
   const insertVariantStmt = db.prepare(`
     INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, omim_mim_number,
       consequence, gnomad_af, cadd, clinvar, gt_num, func, qual,
@@ -234,6 +238,7 @@ export function prepareStatements(db: DatabaseType) {
         )
       }
     }
+    inInsertTransaction?.()
   })
 
   /**

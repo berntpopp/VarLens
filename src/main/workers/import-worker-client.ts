@@ -17,6 +17,8 @@ export interface ImportWorkerCallbacks {
   batchSize?: number
   onProgress: (msg: Extract<WorkerMessage, { type: 'progress' }>) => void
   onFileComplete: (msg: Extract<WorkerMessage, { type: 'file-complete' }>) => void
+  /** The worker flagged the cohort summary stale; it rebuilds before `onComplete`. */
+  onSummaryStale?: () => void
   onComplete: (msg: Extract<WorkerMessage, { type: 'complete' }>) => void
   onError: (msg: Extract<WorkerMessage, { type: 'error' }>) => void
 }
@@ -66,6 +68,9 @@ export class ImportWorkerClient {
         case 'file-complete':
           partialCaseId = null
           callbacks.onFileComplete(msg)
+          break
+        case 'summary-stale':
+          callbacks.onSummaryStale?.()
           break
         case 'complete':
           callbacks.onComplete(msg)

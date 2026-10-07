@@ -1,14 +1,15 @@
 // @vitest-environment node
 /**
- * Session end of the SQLite import worker: the planner statistics must cover
- * the indexes the session dropped for the bulk insert.
+ * Session-level housekeeping of the SQLite import worker: which indexes a
+ * session drops for its inserts, planner statistics that cover them afterwards,
+ * and a write-ahead log that does not grow with every file.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
@@ -29,12 +30,12 @@ const SESSION_INDEXES = [
   'idx_variants_case_chr_rank'
 ]
 
-describe('import worker: session end', () => {
+describe('import worker: session housekeeping', () => {
   let dir: string
   let dbPath: string
   let db: DatabaseType
 
-  const fileFor = (name: string, variants: number): string => {
+  const fileFor = (name: string, variants: number, filler = ''): string => {
     const path = join(dir, `${name}.json`)
     const rows = Array.from({ length: variants }, (_, i) => ({
       chr: 'chr1',
@@ -44,19 +45,24 @@ describe('import worker: session end', () => {
       gene_symbol: `GENE${i % 50}`,
       gt_num: '0/1',
       consequence: 'MODERATE',
-      func: 'missense_variant'
+      func: 'missense_variant',
+      cdna: `c.${i}A>G${filler}`
     }))
     writeFileSync(path, JSON.stringify({ variants: rows }))
     return path
   }
 
-  async function runSession(files: StartMessage['files']): Promise<WorkerMessage[]> {
+  async function runSession(
+    files: StartMessage['files'],
+    onFileComplete: () => void = () => undefined
+  ): Promise<WorkerMessage[]> {
     const messages: WorkerMessage[] = []
     await runImportSession(
       { type: 'start', files, dbPath } as StartMessage,
       {
         postMessage: (m) => {
           messages.push(m)
+          if (m.type === 'file-complete') onFileComplete()
         }
       },
       () => false
@@ -90,5 +96,61 @@ describe('import worker: session end', () => {
       ).map((r) => r.idx)
     )
     for (const index of SESSION_INDEXES) expect(analysed, index).toContain(index)
+  })
+
+  it('keeps the indexes for a few files into a larger cohort, drops them for a bulk load', async () => {
+    const hasGeneIndex = (): boolean =>
+      db.prepare(`SELECT 1 FROM sqlite_master WHERE name = 'idx_variants_gene'`).get() !== undefined
+    const seen: boolean[] = []
+    const names = ['A', 'B', 'C', 'D']
+
+    // Bulk load into an empty database: dropped while the files are inserted.
+    await runSession(
+      names.map((name) => ({
+        filePath: fileFor(name, 50),
+        caseName: name
+      })) as StartMessage['files'],
+      () => seen.push(hasGeneIndex())
+    )
+    expect(seen).toEqual([false, false, false, false])
+    expect(hasGeneIndex()).toBe(true)
+
+    // One file into four cases: left in place.
+    seen.length = 0
+    await runSession([{ filePath: fileFor('E', 50), caseName: 'E' }] as StartMessage['files'], () =>
+      seen.push(hasGeneIndex())
+    )
+    expect(seen).toEqual([true])
+
+    // Two files into five cases: a bulk load again.
+    seen.length = 0
+    await runSession(
+      ['F', 'G'].map((name) => ({
+        filePath: fileFor(name, 50),
+        caseName: name
+      })) as StartMessage['files'],
+      () => seen.push(hasGeneIndex())
+    )
+    expect(seen).toEqual([false, false])
+    expect(hasGeneIndex()).toBe(true)
+    expect(db.prepare('SELECT COUNT(*) AS c FROM variants').get()).toEqual({ c: 350 })
+  })
+
+  it('checkpoints between files so the WAL stays bounded', async () => {
+    // A few MiB of WAL per file.
+    const filler = 'x'.repeat(600)
+    const files = ['A', 'B', 'C', 'D', 'E', 'F'].map((name) => ({
+      filePath: fileFor(name, 3000, filler),
+      caseName: name
+    })) as StartMessage['files']
+
+    const walSizes: number[] = []
+    await runSession(files, () => walSizes.push(statSync(`${dbPath}-wal`).size))
+
+    expect(walSizes).toHaveLength(files.length)
+    expect(walSizes[0]).toBeGreaterThan(1024 * 1024)
+    // Without checkpoints the log grows by at least one file's pages per file
+    // (6x the first file here); with them it is overwritten from the start.
+    expect(Math.max(...walSizes)).toBeLessThan(walSizes[0] * 3)
   })
 })
