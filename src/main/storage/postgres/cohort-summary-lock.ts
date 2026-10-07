@@ -58,6 +58,28 @@ export async function lockSummaryForWrite(
   }
 }
 
+/**
+ * Wait for the write lock, but only for `waitMs`. Returns whether it was
+ * taken. For an interactive write that must not queue behind a long lock
+ * holder (a running rebuild, a batch of publications): on `false` the caller
+ * commits its own change and leaves the derived tables to a later reconcile.
+ */
+export async function lockSummaryForWriteWithin(
+  client: Queryable,
+  schema: string,
+  waitMs: number
+): Promise<boolean> {
+  const deadline = Date.now() + waitMs
+  let delay = LOCK_POLL_START_MS
+  for (;;) {
+    if (await tryLockSummaryForWrite(client, schema)) return true
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) return false
+    await new Promise((resolve) => setTimeout(resolve, Math.min(delay, remaining)))
+    delay = Math.min(LOCK_POLL_MAX_MS, delay * 2)
+  }
+}
+
 /** Take the write lock only if it is free. Call inside a transaction. */
 export async function tryLockSummaryForWrite(client: Queryable, schema: string): Promise<boolean> {
   const result = await client.query<{ locked: boolean }>(

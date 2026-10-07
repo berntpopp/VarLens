@@ -22,6 +22,12 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
+import {
+  awaitBackgroundRebuild,
+  prepareCohortRead,
+  readCohortSummaryStatus
+} from '../../../src/main/storage/postgres/cohort-read-freshness'
+import { lockSummaryForWrite } from '../../../src/main/storage/postgres/cohort-summary-lock'
 import { PostgresTranscriptsRepository } from '../../../src/main/storage/postgres/PostgresTranscriptsRepository'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
@@ -320,6 +326,93 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
 
     await remove(c)
     await expectUniqueVariants(0)
+  }, 120_000)
+
+  it('a transcript switch never queues behind a busy summary: it commits and the summary is rebuilt later (#461)', async () => {
+    const add = (caseId: number): Promise<void> =>
+      inTransaction((client) => repo.incrementalAdd({ schema, client: client as never, caseId }))
+    const first = await seedCase('busy-a')
+    const second = await seedCase('busy-b')
+    const hidden = await seedCase('busy-hidden')
+    const annotation = { gene_symbol: 'BRCA1', consequence: 'HIGH', func: 'stop_gained' }
+    const firstVariant = await seedAnnotated(first, annotation)
+    await seedAnnotated(second, annotation)
+    const hiddenVariant = await seedAnnotated(hidden, annotation)
+    await add(first)
+    await add(second)
+    await probe.query(
+      `UPDATE "${schema}".cases_all SET import_status = 'importing' WHERE id = $1`,
+      [hidden]
+    )
+    const maintainedBefore = await snapshotSummary()
+    const transcript = {
+      transcript_id: 'ENST00000000009',
+      gene_symbol: 'ZZZ9',
+      consequence: 'MODIFIER',
+      func: 'intron_variant',
+      cdna: 'c.9A>T',
+      aa_change: null,
+      hpo_sim_score: null,
+      moi: null,
+      is_selected: 0
+    }
+    const isStale = async (): Promise<boolean> =>
+      (await readCohortSummaryStatus({ pool, schema })).is_stale
+
+    // Another writer (a publishing import, a rebuild) holds the summary lock.
+    const holder = new Client({ connectionString: PG_URL })
+    await holder.connect()
+    await holder.query('BEGIN')
+    await lockSummaryForWrite(holder, schema)
+    try {
+      const transcripts = new PostgresTranscriptsRepository(pool, schema, {
+        summaryLockWaitMs: 300
+      })
+
+      // A hidden case has no summary rows: nothing to flag, nothing to wait for.
+      await transcripts.insertTranscriptAndSwitch(hiddenVariant, transcript as never)
+      expect(await isStale()).toBe(false)
+
+      const started = Date.now()
+      await expect(
+        transcripts.insertTranscriptAndSwitch(firstVariant, transcript as never)
+      ).resolves.toEqual({ success: true })
+      expect(Date.now() - started).toBeLessThan(5_000)
+
+      // The user's change is committed although the summary could not be touched …
+      const variant = await probe.query(
+        `SELECT gene_symbol, consequence, transcript FROM "${schema}".variants WHERE id = $1`,
+        [firstVariant]
+      )
+      expect(variant.rows[0]).toEqual({
+        gene_symbol: 'ZZZ9',
+        consequence: 'MODIFIER',
+        transcript: 'ENST00000000009'
+      })
+      // … which is left as it was and flagged for a rebuild.
+      expect(await snapshotSummary()).toEqual(maintainedBefore)
+      expect(await isStale()).toBe(true)
+    } finally {
+      await holder.query('ROLLBACK')
+      await holder.end()
+    }
+
+    // The next cohort read reconciles: afterwards maintained == rebuild.
+    await prepareCohortRead({ pool, schema })
+    await awaitBackgroundRebuild(schema)
+    expect(await isStale()).toBe(false)
+    expect(await rowAt100()).toMatchObject({ gene_symbol: 'ZZZ9', consequence: 'MODIFIER' })
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
+    expect(await snapshotGeneTables()).toEqual(await rebuiltGeneTables())
+
+    // With the lock free again a switch maintains the summary in place.
+    await new PostgresTranscriptsRepository(pool, schema).insertTranscriptAndSwitch(firstVariant, {
+      ...transcript,
+      transcript_id: 'ENST00000000010',
+      gene_symbol: 'AAA1'
+    } as never)
+    expect(await isStale()).toBe(false)
+    expect(await snapshotSummary()).toEqual(await rebuiltSummary())
   }, 120_000)
 
   async function rowAt100(): Promise<Record<string, unknown>> {

@@ -33,7 +33,7 @@ import type { Pool, PoolClient } from 'pg'
 import { mainLogger } from '../../services/MainLogger'
 import { PostgresCohortSummaryRepository } from './PostgresCohortSummaryRepository'
 import { lockSummaryForWrite, tryLockSummaryForWrite } from './cohort-summary-lock'
-import { getCohortSummaryState } from './cohort-summary-state-sql'
+import { getCohortSummaryState, summaryIsStaleSql } from './cohort-summary-state-sql'
 
 const DEFAULT_SYNC_REBUILD_MAX_CASES = 50
 /** A background rebuild of a large cohort may legitimately run this long. */
@@ -114,7 +114,7 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
        (NOT EXISTS (SELECT 1 FROM ${tbl('cohort_gene_summary')} LIMIT 1)
         AND EXISTS (SELECT 1 FROM ${tbl('cohort_variant_summary')}
                      WHERE gene_symbol IS NOT NULL LIMIT 1)) AS gene_summary_missing,
-       s.is_stale,
+       ${summaryIsStaleSql(tbl, 's')} AS is_stale,
        (SELECT COUNT(*)::bigint FROM ${tbl('cases')}) AS total_cases
      FROM ${tbl('cohort_summary_state')} s
      WHERE s.id = 1`

@@ -34,7 +34,11 @@ import {
   rebuildGeneSummary,
   removeCaseFromGeneSummary
 } from './cohort-gene-summary-sql'
-import { getCohortSummaryState, markCohortSummaryStale } from './cohort-summary-state-sql'
+import {
+  consumeSummaryRebuildRequests,
+  getCohortSummaryState,
+  markCohortSummaryStale
+} from './cohort-summary-state-sql'
 import {
   countAddedCoordinatesSql,
   recountUniqueVariants,
@@ -120,6 +124,10 @@ export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvis
 export class PostgresCohortSummaryRepository {
   async rebuild({ schema, client }: ScopedClient): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
+
+    // Requests left by writers that could not get the lock: this rebuild
+    // serves the ones it can see (before it reads the variants).
+    await consumeSummaryRebuildRequests({ schema, client })
 
     // DELETE, not TRUNCATE: TRUNCATE takes ACCESS EXCLUSIVE and blocks every
     // cohort reader until the rebuild commits. With DELETE, readers keep the

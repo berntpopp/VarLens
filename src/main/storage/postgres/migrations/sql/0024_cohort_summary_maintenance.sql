@@ -64,3 +64,17 @@ UPDATE "__schema__"."cohort_summary_state"
          ) unique_coordinates
        )
  WHERE id = 1;
+
+-- Rebuild requests from writers that must not wait for the summary write lock.
+-- An interactive change (a transcript switch) waits a few seconds for the
+-- lock; when a rebuild or a batch of publications keeps it longer, the change
+-- is committed anyway and a row is inserted here instead of maintaining the
+-- derived tables. The state row cannot carry that flag: the lock holder
+-- updates it, so writing to it would wait for the holder after all. Readers
+-- treat a pending request like is_stale; rebuild() deletes the requests it
+-- serves (cohort-summary-state-sql.ts).
+CREATE TABLE IF NOT EXISTS "__schema__"."cohort_summary_rebuild_requests" (
+  id BIGSERIAL PRIMARY KEY,
+  reason TEXT NOT NULL,
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
